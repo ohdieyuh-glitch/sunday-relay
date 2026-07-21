@@ -52,8 +52,8 @@ export interface RelayState {
   createMission: (draft: MissionDraft) => RelayResult<string>;
   selectMission: (id: string | null) => void;
   deleteMission: (id: string) => void;
-  /** Seeds a pre-recorded mission (labeled Recorded in the UI). */
-  addMission: (mission: RelayMission) => void;
+  /** Seeds a pre-recorded mission (forced recorded, gate re-verified — R3). */
+  addMission: (mission: RelayMission) => RelayResult<null>;
   generateHandoff: (missionId: string) => RelayResult<null>;
   ingestImplementationReport: (missionId: string, text: string) => RelayResult<null>;
   generateReviewBrief: (missionId: string) => RelayResult<null>;
@@ -66,6 +66,15 @@ export interface RelayState {
 
 const ok: RelayResult<null> = { ok: true, value: null };
 const fail = (...errors: string[]): { ok: false; errors: string[] } => ({ ok: false, errors });
+
+/** R6: an artifact stamped for another mission must not be misfiled here.
+ * Artifacts without a missionId (hand-written) are tolerated. */
+const missionMismatch = (artifactMissionId: string | undefined, missionId: string) =>
+  artifactMissionId && artifactMissionId !== missionId
+    ? fail(
+        `This artifact was produced for mission \`${artifactMissionId}\`, not this mission (\`${missionId}\`) — check which mission you meant.`,
+      )
+    : null;
 
 /** In-memory fallback keeps the store working where localStorage is absent
  * (tests, SSR-ish tooling) without touching any shared storage helper. */
@@ -139,11 +148,29 @@ export const useRelayStore = create<RelayState>()(
             activeMissionId: s.activeMissionId === id ? null : s.activeMissionId,
           })),
 
-        addMission: (mission) =>
+        addMission: (mission) => {
+          const existing = get().missions.find((m) => m.id === mission.id);
+          if (existing?.verification) {
+            return fail('A verified mission with this id exists — verified missions are immutable.');
+          }
+          // A seeded verification record must be REPRODUCED by the gate from
+          // the seeded artifacts, or it is fabricated and refused (R3).
+          if (mission.verification) {
+            const gate = verifyMission({ ...mission, verification: undefined });
+            if (!gate.ok) {
+              return fail(
+                'Seeded mission carries a verification record the gate does not reproduce:',
+                ...gate.checks.filter((c) => !c.ok).map((c) => `${c.label}: ${c.detail}`),
+              );
+            }
+          }
+          const seeded: RelayMission = { ...mission, recorded: true };
           set((s) => ({
-            missions: [...s.missions.filter((m) => m.id !== mission.id), mission],
-            activeMissionId: mission.id,
-          })),
+            missions: [...s.missions.filter((m) => m.id !== mission.id), seeded],
+            activeMissionId: seeded.id,
+          }));
+          return ok;
+        },
 
         generateHandoff: (missionId) =>
           withMission(missionId, (m, at) => {
@@ -163,6 +190,8 @@ export const useRelayStore = create<RelayState>()(
             }
             const parsed = parseImplementationReport(text, at);
             if (!parsed.ok) return parsed;
+            const mismatch = missionMismatch(parsed.value.missionId, m.id);
+            if (mismatch) return mismatch;
             return {
               ok: true,
               value: logged(
@@ -177,11 +206,14 @@ export const useRelayStore = create<RelayState>()(
 
         generateReviewBrief: (missionId) =>
           withMission(missionId, (m, at) => {
+            if (m.reviewBrief) return fail('Review brief already generated.');
             const brief = generateReviewBrief(m, at);
             if (!brief.ok) return brief;
+            // 'review-brief' stage: generating the brief is NOT a custody
+            // transfer — the review event fires when a review is ingested (R5).
             return {
               ok: true,
-              value: logged(m, at, 'review', 'Review brief generated for the independent reviewer.', {
+              value: logged(m, at, 'review-brief', 'Review brief generated for the independent reviewer.', {
                 reviewBrief: brief.value,
               }),
             };
@@ -197,6 +229,8 @@ export const useRelayStore = create<RelayState>()(
             }
             const parsed = parseReview(text, at);
             if (!parsed.ok) return parsed;
+            const mismatch = missionMismatch(parsed.value.missionId, m.id);
+            if (mismatch) return mismatch;
             return {
               ok: true,
               value: logged(
@@ -232,6 +266,8 @@ export const useRelayStore = create<RelayState>()(
             if (m.evidence) return fail('Evidence already recorded — the repair report is frozen.');
             const parsed = parseRepairReport(text, at);
             if (!parsed.ok) return parsed;
+            const mismatch = missionMismatch(parsed.value.missionId, m.id);
+            if (mismatch) return mismatch;
             return {
               ok: true,
               value: logged(
@@ -252,6 +288,8 @@ export const useRelayStore = create<RelayState>()(
             }
             const parsed = parseTestEvidence(text, at);
             if (!parsed.ok) return parsed;
+            const mismatch = missionMismatch(parsed.value.missionId, m.id);
+            if (mismatch) return mismatch;
             return {
               ok: true,
               value: logged(

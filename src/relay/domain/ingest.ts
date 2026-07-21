@@ -29,8 +29,22 @@ export function extractLabeledJson(text: string, label: string): RelayResult<unk
   const labeled = new RegExp('```json\\s+relay:' + label + '\\s*\\n([\\s\\S]*?)```').exec(trimmed);
   if (labeled) return parseJson(labeled[1], `relay:${label} block`);
 
-  const anyJsonBlocks = [...trimmed.matchAll(/```json[^\n]*\n([\s\S]*?)```/g)];
-  if (anyJsonBlocks.length === 1) return parseJson(anyJsonBlocks[0][1], 'json block');
+  const anyJsonBlocks = [...trimmed.matchAll(/```json([^\n]*)\n([\s\S]*?)```/g)];
+  if (anyJsonBlocks.length === 1) {
+    // R4: a lone block explicitly labeled for a DIFFERENT relay artifact is a
+    // wrong paste, not a forgotten label — reject instead of misfiling it.
+    const info = anyJsonBlocks[0][1].trim();
+    const otherLabel = /^relay:(\S+)/.exec(info)?.[1];
+    if (otherLabel && otherLabel !== label) {
+      return {
+        ok: false,
+        errors: [
+          `This block is labeled \`relay:${otherLabel}\` but \`relay:${label}\` was expected — check which artifact you are pasting.`,
+        ],
+      };
+    }
+    return parseJson(anyJsonBlocks[0][2], 'json block');
+  }
   if (anyJsonBlocks.length > 1) {
     return {
       ok: false,
@@ -191,6 +205,7 @@ export function parseImplementationReport(
   if (!isRecord(extracted.value)) return { ok: false, errors: ['Report must be a JSON object.'] };
   const obj = extracted.value;
   const e = new FieldErrors();
+  const missionId = readString(e, obj, 'missionId', { required: false });
   const agent = readString(e, obj, 'agent', { required: true });
   const summary = readString(e, obj, 'summary', { required: true });
   const changedFiles = readStringArray(e, obj, 'changedFiles', { required: true });
@@ -199,7 +214,7 @@ export function parseImplementationReport(
   if (e.errors.length > 0) return { ok: false, errors: e.errors };
   return {
     ok: true,
-    value: { receivedAt: at, agent: agent!, summary: summary!, changedFiles, commands, notes },
+    value: { receivedAt: at, agent: agent!, summary: summary!, changedFiles, commands, notes, missionId },
   };
 }
 
@@ -212,6 +227,7 @@ export function parseReview(text: string, at: IsoTimestamp): RelayResult<ReviewR
   if (!isRecord(extracted.value)) return { ok: false, errors: ['Review must be a JSON object.'] };
   const obj = extracted.value;
   const e = new FieldErrors();
+  const missionId = readString(e, obj, 'missionId', { required: false });
   const reviewer = readString(e, obj, 'reviewer', { required: true });
   const verdict = readString(e, obj, 'verdict', { required: true });
   if (verdict !== undefined && !VERDICTS.includes(verdict as ReviewVerdict)) {
@@ -256,10 +272,21 @@ export function parseReview(text: string, at: IsoTimestamp): RelayResult<ReviewR
       });
     });
   }
+  // R2: a negative verdict with nothing enumerated is unrepairable — it would
+  // let a vacuous repair outweigh the reviewer's standing objection.
+  if (verdict === 'changes-requested' && Array.isArray(rawFindings) && findings.length === 0 && e.errors.length === 0) {
+    e.add('findings', 'must list at least one finding when the verdict is changes-requested.');
+  }
   if (e.errors.length > 0) return { ok: false, errors: e.errors };
   return {
     ok: true,
-    value: { receivedAt: at, reviewer: reviewer!, verdict: verdict as ReviewVerdict, findings },
+    value: {
+      receivedAt: at,
+      reviewer: reviewer!,
+      verdict: verdict as ReviewVerdict,
+      findings,
+      missionId,
+    },
   };
 }
 
@@ -269,6 +296,7 @@ export function parseRepairReport(text: string, at: IsoTimestamp): RelayResult<R
   if (!isRecord(extracted.value)) return { ok: false, errors: ['Repair report must be a JSON object.'] };
   const obj = extracted.value;
   const e = new FieldErrors();
+  const missionId = readString(e, obj, 'missionId', { required: false });
   const agent = readString(e, obj, 'agent', { required: true });
   const summary = readString(e, obj, 'summary', { required: true });
   const changedFiles = readStringArray(e, obj, 'changedFiles', { required: true });
@@ -297,7 +325,7 @@ export function parseRepairReport(text: string, at: IsoTimestamp): RelayResult<R
   if (e.errors.length > 0) return { ok: false, errors: e.errors };
   return {
     ok: true,
-    value: { receivedAt: at, agent: agent!, summary: summary!, resolvedFindings, changedFiles },
+    value: { receivedAt: at, agent: agent!, summary: summary!, resolvedFindings, changedFiles, missionId },
   };
 }
 
@@ -307,11 +335,12 @@ export function parseTestEvidence(text: string, at: IsoTimestamp): RelayResult<T
   if (!isRecord(extracted.value)) return { ok: false, errors: ['Test evidence must be a JSON object.'] };
   const obj = extracted.value;
   const e = new FieldErrors();
+  const missionId = readString(e, obj, 'missionId', { required: false });
   const entries = readEvidenceEntries(e, obj, 'entries', { required: true });
   if (entries.length === 0 && e.errors.length === 0) {
     e.add('entries', 'must contain at least one command run.');
   }
   const note = readString(e, obj, 'note', { required: false });
   if (e.errors.length > 0) return { ok: false, errors: e.errors };
-  return { ok: true, value: { receivedAt: at, entries, note } };
+  return { ok: true, value: { receivedAt: at, entries, note, missionId } };
 }

@@ -64,6 +64,26 @@ export function verifyMission(mission: RelayMission): GateResult {
         : 'Review requested changes but no repair report was ingested.',
     });
 
+    // R2 backstop: changes-requested with nothing enumerated is unrepairable —
+    // a vacuous repair must never outweigh the reviewer's standing objection.
+    // (Ingestion rejects such reviews; this guards artifacts from other paths.)
+    if (review.findings.length === 0) {
+      checks.push({
+        id: 'findings-resolved',
+        label: 'Every review finding resolved',
+        ok: false,
+        detail:
+          'Review verdict is changes-requested but no findings are enumerated — nothing concrete was repaired. A fresh review is required.',
+      });
+      checks.push({
+        id: 'evidence-present',
+        label: 'Test evidence recorded',
+        ok: Boolean(evidence && evidence.entries.length > 0),
+        detail: evidence ? `${evidence.entries.length} command run(s).` : 'No test evidence ingested.',
+      });
+      return { ok: false, checks };
+    }
+
     const resolvedIds = new Set((repair?.resolvedFindings ?? []).map((r) => r.id));
     const findingIds = new Set(review.findings.map((f) => f.id));
     const unresolved = review.findings.filter((f) => !resolvedIds.has(f.id)).map((f) => f.id);

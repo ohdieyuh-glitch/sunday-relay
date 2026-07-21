@@ -81,6 +81,7 @@ export function generateImplementerHandoff(
       'implementation-report',
       JSON.stringify(
         {
+          missionId: mission.id,
           agent: '<what actually ran, e.g. "Claude Code (Fable 5)">',
           summary: '<what you implemented and how>',
           changedFiles: ['<repo-relative/path.ts>'],
@@ -133,6 +134,7 @@ export function generateReviewBrief(mission: RelayMission, at: IsoTimestamp): Re
       'review',
       JSON.stringify(
         {
+          missionId: mission.id,
           reviewer: '<what actually reviewed, e.g. "OpenAI Codex">',
           verdict: 'approved | changes-requested',
           findings: [
@@ -187,6 +189,7 @@ export function generateRepairTask(mission: RelayMission, at: IsoTimestamp): Rel
       'repair-report',
       JSON.stringify(
         {
+          missionId: mission.id,
           agent: '<what actually ran>',
           summary: '<what you repaired and how>',
           resolvedFindings: findingIds.map((id) => ({
@@ -205,6 +208,7 @@ export function generateRepairTask(mission: RelayMission, at: IsoTimestamp): Rel
     `${fence}json relay:test-evidence`,
     JSON.stringify(
       {
+        missionId: mission.id,
         entries: [
           { command: 'npm run typecheck', status: 'pass', output: '<real output tail>' },
           { command: 'npx vitest run', status: 'pass', output: '<real output tail>' },

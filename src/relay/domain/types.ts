@@ -22,9 +22,13 @@ export type RelayStageId =
 
 export type RelayResult<T> = { ok: true; value: T } | { ok: false; errors: string[] };
 
+/** Ledger events cover the 8 golden-path stages plus the optional
+ * review-brief generation, which is NOT a custody transfer (R5). */
+export type LedgerStage = RelayStageId | 'review-brief';
+
 export interface LedgerEvent {
   at: IsoTimestamp;
-  stage: RelayStageId;
+  stage: LedgerStage;
   summary: string;
 }
 
@@ -64,6 +68,8 @@ export interface GeneratedBrief {
 
 export interface ImplementationReport {
   receivedAt: IsoTimestamp;
+  /** Mission this artifact was produced for; ingestion rejects a mismatch (R6). */
+  missionId?: string;
   /** What actually ran, e.g. "Claude Code (Fable 5)". */
   agent: string;
   summary: string;
@@ -75,6 +81,8 @@ export interface ImplementationReport {
 
 export interface ReviewReport {
   receivedAt: IsoTimestamp;
+  /** Mission this artifact was produced for; ingestion rejects a mismatch (R6). */
+  missionId?: string;
   /** What actually reviewed, e.g. "OpenAI Codex". */
   reviewer: string;
   verdict: ReviewVerdict;
@@ -89,6 +97,8 @@ export interface RepairResolution {
 
 export interface RepairReport {
   receivedAt: IsoTimestamp;
+  /** Mission this artifact was produced for; ingestion rejects a mismatch (R6). */
+  missionId?: string;
   agent: string;
   summary: string;
   resolvedFindings: RepairResolution[];
@@ -97,6 +107,8 @@ export interface RepairReport {
 
 export interface TestEvidence {
   receivedAt: IsoTimestamp;
+  /** Mission this artifact was produced for; ingestion rejects a mismatch (R6). */
+  missionId?: string;
   entries: EvidenceEntry[];
   note?: string;
 }
