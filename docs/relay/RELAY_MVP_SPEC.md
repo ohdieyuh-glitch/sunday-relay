@@ -59,9 +59,9 @@ completion as proof.**
 
 ```
 User objective
-→ Canonical Task Contract (owned RelayTask, pre-execution checks)
 → Prompt Architect Blueprint (simulated | imported | live-adapter later)
 → accept-blueprint checkpoint (Guided)
+→ Canonical Task Contract (owned RelayTask, pre-execution checks)
 → compiled Claude-Code-role responsibility contract (AgentHandoffPackage)
 → implementation report (ingested as unverified claim)
 → Relay-executed deterministic verification (EvidenceBundle)
@@ -72,6 +72,12 @@ User objective
 → Canonical Project Ledger update
 → Final Audit Report (the one verified completion report)
 ```
+
+Ordering note: the task is created AFTER blueprint acceptance because the
+Canonical Task Contract derives from the accepted Blueprint's
+`taskBreakdown` — a deliberate refinement of the addendum's literal
+ordering, recorded as ADR-020 and reflected identically in ARCHITECTURE §5,
+PROTOCOL §2.3, and TEST_STRATEGY §11.
 
 ### 4.1 The three Architect sources (Decision 2)
 1. **Simulated Architect** — deterministic Phase-1 harness.
@@ -106,10 +112,12 @@ role; one Reviewer role; one automatic revision; Guided Mode only; local
 simulation adapters; budget policy that stops before overrun.
 
 Excluded (non-goals for MVP): Autopilot; real cross-agent parallelism;
-adaptive/learned routing; Hermes; skill compilation; Digital Twins;
-subscription-aware routing; agent debate; production deployment;
-push-to-main; unrestricted shell; **any live coding-agent adapter before
-the isolated worktree manager exists and passes its safety tests.**
+adaptive/learned routing; autonomous provider switching (recovery in MVP
+detects and STOPS — it never reassigns to another provider); Hermes; skill
+compilation; Digital Twins; subscription-aware routing; agent debate;
+production deployment; push-to-main; unrestricted shell; **any live
+coding-agent adapter before the isolated worktree manager exists and
+passes its safety tests.**
 
 ## 6. Guided Mode behavior (Decision 4)
 
@@ -137,7 +145,9 @@ Any condition false → `checkpoint_required`. The Revision Contract records
 every condition's evaluation (PROTOCOL §4.4). After the one repair: rerun
 deterministic verification; rerun the Reviewer check when policy requires;
 complete only when CompletionPolicy is satisfied; otherwise stop at
-`checkpoint_required` / `blocked` / `failed`. **Never a second automatic
+`checkpoint_required` / `blocked` / `failed` (run status becomes
+`checkpoint_required` or `failed`; `blocked` is the task status / audit
+outcome — see PROTOCOL §2.3 blocked-mapping). **Never a second automatic
 repair.**
 
 ## 7. Completion requirements

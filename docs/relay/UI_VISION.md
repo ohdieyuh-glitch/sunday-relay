@@ -109,7 +109,10 @@ accepted decision / agent claim / unverified finding / historical /
 superseded clearly distinguished — never one giant Markdown blob) · Agent
 Handoff Package (the responsibility contract: target agent, role, objective,
 context supplied, allowed/protected files, acceptance criteria, required
-evidence, budget, stopping condition, package version) · Files Changed ·
+evidence, budget, stopping condition, package version — every restriction
+shown WITH its true enforcement level, Enforced / Advisory / Unsupported,
+never implying technical enforcement the adapter does not provide) ·
+Files Changed ·
 Diff · Commands · Test Evidence (Passed / Failed / Pending / Unavailable /
 Unverified / Requires approval, visually distinct) · Independent Review ·
 Cost & Usage · Task Ownership · Failure Recovery · Disagreement Record ·

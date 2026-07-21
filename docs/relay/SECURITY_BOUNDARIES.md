@@ -9,7 +9,7 @@
 | --- | --- | --- | --- |
 | Client → Core | relay-core | CLI/UI input | CommandEnvelope schema validation; commands cannot mutate state directly |
 | Adapter → Core | relay-core | ALL agent reports | ReportEnvelope ingested as `unverified-claim`; promotion only by relay-core |
-| Import → Core | relay-core | imported Blueprints, manual reviews, pasted reports | `external-artifact` / `manual` provenance; human `accept-*` command required for promotion |
+| Import → Core | relay-core | imported Blueprints, manual reviews, pasted reports | `external-artifact` / `manual` provenance; Blueprints promoted only by the human `accept-blueprint` command; manual reviews and imported reports stay `unverified-claim` and promote only through relay-core CompletionPolicy evaluation (policy must admit `manual`) |
 | Core → Provider | provider tool / gateway | compiled packages | minimum sufficient context; no secrets in packages |
 | Core → Ledger | relay-ledger | — | sole appender; append-only; typed events only |
 | Local ↔ Cloud dispatch | — | — | strictly separate paths (§5); never mixed in one dispatch |
@@ -32,7 +32,7 @@ content never executes anything by itself.
 - **Cloud execution:** provider credentials live server-side only (Railway
   env vars), per AGENTS.md §5.2. Relay Core never holds them; the
   CloudDispatchGateway implementation outside core uses them.
-- **No-secret-output tests** (TEST_STRATEGY §secrets) assert that events,
+- **No-secret-output tests** (TEST_STRATEGY §8, No-secret-output) assert that events,
   packages, reports, audit reports, and CLI output never contain values
   matching known credential shapes, and that the secret-redactor
   conventions of this repo are honored at every Relay output surface.
@@ -67,6 +67,12 @@ content never executes anything by itself.
   NEW compiled package with the same (or narrower) restrictions — recovery
   never widens permissions, never inherits a session, and never bypasses
   checkpoint requirements.
+- **Skill permissions (reserved):** future Aquala Skills compile into
+  package restrictions (permittedTools / prohibitedActions / required
+  approvals) that carry the same enforced/advisory/unsupported
+  classification and can only NARROW — never widen — an adapter's
+  permissions; no critical organizational procedure lives only inside a
+  provider-specific prompt.
 
 ## 5. Spend-authorization layering (Decision 1)
 

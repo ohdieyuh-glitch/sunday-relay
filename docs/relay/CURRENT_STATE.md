@@ -1,7 +1,9 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-21 ~17:30 UTC**.
+> boundary. Last updated: **2026-07-21 21:12 UTC** (post-audit fixes after
+> the usage-limit interruption; both audit lenses now pass-with-fixes,
+> all fixes applied).
 
 ## Phase
 
@@ -19,7 +21,7 @@ implemented in this phase, by design.
 | PROTOCOL.md | `relay.protocol.v1` contracts + Prompt-2/deferred markings |
 | SECURITY_BOUNDARIES.md | Trust boundaries, credentials, isolation, enforcement matrix, threats |
 | TEST_STRATEGY.md | Planned tests per prompt + first deterministic demo scenarios |
-| DECISIONS.md | ADR-001…019 + dependency analysis (zero dependencies added) |
+| DECISIONS.md | ADR-001…020 + dependency analysis (zero dependencies added) |
 | UI_VISION.md | Permanent visual direction (locked earlier, commit cec62dd) |
 | SESSION_LOG.md | Append-only phase journal |
 
@@ -73,12 +75,18 @@ None in flight — Phase 1 closes with this commit.
 ## Next prompt
 
 **Prompt 2 — Relay Protocol, Domain Model, and Deterministic Run State
-Machine**: implement `src/relay/protocol` (envelopes, enums, validators,
-versioning) and the deterministic relay-core state machines (RelayRun,
-RelayTask, ledger events + promotion, in-memory ledger behind a repository
-port) with the Prompt-2-marked contracts of PROTOCOL.md, the state-machine/
-ledger/claims/coordination tests of TEST_STRATEGY.md §§1–6, and extended
-boundary tests. No adapters, no CLI, no persistence, no UI, no paid calls.
+Machine**: implement everything PROTOCOL.md marks Prompt 2 — the
+`src/relay/protocol` envelopes/enums/validators/versioning; the
+deterministic relay-core state machines (RelayRun incl. blocked-mapping and
+derived provenanceProfile, RelayTask, ledger events + claim promotion,
+in-memory ledger behind a repository port); relay-coordination's
+pre-execution battery (incl. `invalidated-by-decision`), leases, and
+claims; minimal relay-handoff compilation (AgentHandoffPackage,
+HandoffCompilationRecord, Revision Contract with all 15 recorded
+evaluations); CompletionPolicy evaluation (low-risk preset);
+relay-recovery's repeated-failure/no-progress detection functions; plus
+TEST_STRATEGY §§1–6 and the §8 Prompt-2 purity walk over the new module
+roots. No adapters, no CLI, no persistence, no UI, no paid calls.
 
 ## Known blockers
 
@@ -101,6 +109,8 @@ and results in this phase.
 
 ## Branch / worktree
 
-`../sunday-relay` worktree, branch `feature/relay-yc-demo`. Last commit at
-time of writing: see `git log` — Phase 1 closes with the docs commits
-(c0a959f, ccebea5, 36ebc0e, + this one).
+`../sunday-relay` worktree, branch `feature/relay-yc-demo`. Phase 1 docs
+commits: c0a959f (protocol+architecture), ccebea5 (spec+security), 36ebc0e
+(tests+ADRs), b8359e2 (state/log/supersessions/AGENTS §7), then the final
+audit-fix lock commit (`docs(relay): lock expanded Relay architecture` —
+see `git log`).

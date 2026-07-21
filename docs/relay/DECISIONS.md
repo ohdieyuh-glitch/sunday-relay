@@ -151,6 +151,19 @@ patterns as seeds; mark RELAY_STATUS.md and RELAY_INTEGRATION.md
 superseded with headers, not deletion. Consequences: history and demo
 value preserved; no ambiguity about what is authoritative.
 
+## ADR-020 — Task creation follows blueprint acceptance
+Context: the addendum's literal workflow reads "objective → Canonical Task
+Contract → Prompt Architect Blueprint", but the Canonical Task Contract
+derives from the accepted Blueprint's `taskBreakdown`, and the run state
+machine orders phases blueprint → handoff → implementation. Decision: the
+owned RelayTask is created AFTER `accept-blueprint`; blueprint reports are
+run-level (no taskId/packageId — PROTOCOL §1.3). This is a deliberate
+refinement of the addendum's literal ordering, applied identically in
+RELAY_MVP_SPEC §4, ARCHITECTURE §5, PROTOCOL §2.3, TEST_STRATEGY §11.
+Consequences: tasks always trace to an accepted blueprint; no phantom
+architect-phase task is needed; the founder may re-order only by amending
+this ADR.
+
 ## Dependency analysis (Decision requirement — no dependencies added this phase)
 
 | Proposed dependency | Why considered | Existing equivalent | Security/maintenance | Verdict |

@@ -11,7 +11,10 @@
 ## 0. Conventions
 
 - **Ids** are opaque strings with stable prefixes: `prj_ run_ tsk_ pkg_ evt_
-  evd_ bnd_ rpt_ blu_ vrf_ flr_ dcn_ apr_ oqn_ use_ aud_ clm_ asn_`.
+  evd_ bnd_ rpt_ blu_ vrf_ flr_ dcn_ apr_ oqn_ use_ aud_ clm_ asn_ dsg_
+  pol_ hcr_ ckp_`. Exempt from the prefix convention: client-generated
+  `commandId` and `queryId` (any unique string; the server treats them as
+  opaque correlation values).
 - **Timestamps** are ISO-8601 UTC.
 - **`protocolVersion`** (`"relay.protocol.v1"`) appears in every envelope.
   Versioning behavior: additive optional fields do not bump the version;
@@ -38,6 +41,13 @@
   adapter → core, import → core) is schema-validated at relay-protocol; agent
   and imported content is additionally TRUST-validated by relay-core
   (promotion, §3). Schema-valid ≠ accepted.
+- **`ledgerVersion` vs `contextVersion`**: `ledgerVersion` on a package/
+  record = the project ledger version at compile/append time.
+  `contextVersion` = the ledger version at which the entity's CONSUMED
+  context was selected. Both are assigned by the producing module
+  (relay-handoff for packages, relay-core for tasks). They are equal in the
+  sequential MVP and diverge only when compilation deliberately pins an
+  earlier context snapshot.
 
 ## 1. Envelopes (all Prompt 2)
 
@@ -72,17 +82,24 @@ Producer: relay-ledger (sole appender), on behalf of relay-core decisions.
 Consumer: clients, projections, audit.
 
 ### 1.3 ReportEnvelope — adapter/import → relay-core
-Required: `protocolVersion, reportId, projectId, runId, taskId, packageId
-(the handoff being answered), reportType (blueprint | implementation |
-review | repair | verification-output), agentIdentity {adapterId, role,
-displayName, sessionRef?}, provenance, submittedAt, payload`.
+Required: `protocolVersion, reportId, projectId, runId, reportType
+(blueprint | implementation | review | repair | verification-output),
+agentIdentity {adapterId, role, displayName, sessionRef?}, provenance,
+submittedAt, payload`.
+Required for every reportType EXCEPT `blueprint`: `taskId, packageId (the
+handoff being answered)`. Blueprint reports are RUN-level: no task exists
+yet (the task derives from the accepted blueprint — §2.3 phase order), so
+they bind to `runId` + a run awaiting its blueprint; an imported blueprint
+binds the same way via the `import-blueprint` command.
 Optional: `usage {estimated|actual tokens/cost}, notes`.
 - **Always ingested as `classification: unverified-claim`.** `agentIdentity`
   is assigned by the ADAPTER/session layer, never trusted from report text
   (Decision 3). `sessionRef` is an opaque safe reference — never a
   credential.
-- Mission/task binding: `packageId` + `taskId` must match an outstanding
-  package (carries forward the prototype's cross-mission rejection).
+- Binding: for task-level reports, `packageId` + `taskId` must match an
+  outstanding package (carries forward the prototype's cross-mission
+  rejection); for blueprint reports, `runId` must match a run in the
+  `blueprint` phase.
 Producer: connectors (incl. manual-import path). Consumer: relay-core.
 
 ### 1.4 Query / ReadModel envelopes — client → relay-core (read-only)
@@ -112,8 +129,10 @@ The append-only sequence of EventEnvelopes for a project plus the
 **current-state projection** derived from canonical events only. Required
 behaviors: gap-free monotonic `sequence`; projection rebuildable from events
 alone; six-way classification on every event; claims NEVER enter the
-projection until promoted (§3). Storage engine is deferred (Prompt 4:
-relay-storage; Prompt 2 uses in-memory ledger behind the same interface).
+projection until promoted (§3). Storage engine is deferred to the
+persistence prompt (relay-storage — after the simulation harness and CLI;
+see CURRENT_STATE.md); Prompt 2 uses an in-memory ledger behind the same
+repository interface.
 
 ### 2.3 RelayRun (Prompt 2)
 Required: `runId, projectId, createdAt, status: RunStatus, phase: RunPhase,
@@ -133,6 +152,20 @@ State machine (Prompt 2, deterministic, illegal transitions rejected):
 - `repairCount` may never exceed 1 (Decision 4); the transition
   `review → repair` requires ALL Guided-Mode auto-repair conditions
   (RELAY_MVP_SPEC §Guided Mode) else `checkpoint_required`.
+- **`blocked` mapping:** RunStatus has no `blocked` value. When the run's
+  task enters task-level `blocked`, the run transitions to
+  `checkpoint_required`; the Final Audit Report outcome (§5.4) may still be
+  `blocked` to describe WHY the run stopped. Founder Decision 4's "stop at
+  checkpoint_required, blocked, or failed" reads as: run status
+  `checkpoint_required` or `failed`, with task status / audit outcome
+  carrying `blocked`.
+- **`provenanceProfile` is derived, never client-set:** `simulated` when
+  every non-user-command activity in the run carries provenance
+  `simulated`; `live` when every such activity is `live`; otherwise
+  `mixed` (any `imported`/`manual` content, or any mixture, yields
+  `mixed`). Human commands/approvals do not count as activity. The MVP's
+  first real workflow (imported Blueprint + live agents) is therefore
+  `mixed` and rendered as such.
 
 ### 2.4 RelayTask (Prompt 2)
 Required: `taskId, projectId, runId, objective, category, status: TaskStatus,
@@ -145,8 +178,10 @@ Pre-execution checks (Prompt 2, relay-coordination): duplicate active task,
 equivalent task, already completed, superseded, dependencies incomplete,
 files unclaimed/conflicting, stale `contextVersion` (< current
 ledgerVersion for consumed state), `baseRevision` no longer current, lease
-expired, assignment/session invalid. Each failure → typed ErrorEnvelope +
-event.
+expired, assignment/session invalid, **newer accepted decision invalidates
+the task** (a DecisionRecord accepted after the task's `contextVersion`
+that conflicts with its objective/constraints → error
+`invalidated-by-decision`). Each failure → typed ErrorEnvelope + event.
 Lease semantics: `leaseExpiresAt` set on assignment; expiry emits
 `task-lease-expired` and returns the task to `queued` (crash recovery — no
 permanent locks). One owner at a time, enforced.
@@ -315,7 +350,12 @@ carries a static minimal form: `adapterId, provider, roles[], displayName`),
 `AgentCapabilityObservation`, `ComputeResource`, `SubscriptionCapacity`,
 `AqualaSkill`, `SkillCompilationTarget`, `FailureRecoveryPackage`,
 `DeploymentRecord`, `ProjectSnapshot` (interface reserved; audit report is
-NOT a snapshot), session/workspace repositories (relay-storage phase).
+NOT a snapshot), session/workspace repositories (relay-storage phase),
+`ProjectRequirement` and `ArchitectureRecord` (documented-future — land
+with the ledger-enrichment/persistence prompt; in the MVP their sufficient
+subset is carried by `RelayProject.constraints[]`, `DecisionRecord`, and
+the accepted Blueprint's content — the ledger's System-1 record list is
+satisfied without dedicated entities until then).
 
 ## 7. Ownership summary
 

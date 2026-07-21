@@ -74,6 +74,9 @@
   execution when consumed state moved past N; `baseRevision` drift detected.
 - **Superseded task / dependency blocking** — superseded tasks are
   `obsolete`; unmet dependencies hold tasks out of `assigned`.
+- **Invalidated by decision** — a DecisionRecord accepted after the task's
+  `contextVersion` that conflicts with the task refuses execution with
+  `invalidated-by-decision` (PROTOCOL §2.4).
 
 ## 6. Recovery & failure (Prompt 2 detection; recovery later)
 
@@ -96,9 +99,12 @@
 
 - **Relay-core purity** — `src/relay/{protocol,core,ledger,coordination,handoff,routing,verification,recovery}/**`
   import no fusion-engine, server, session-store, react, zustand, browser
-  APIs, or node-fs (fs confined to storage/cli/connectors); extends
-  `relay-boundary.test.ts`'s walk to the new roots in the same change that
-  relocates the prototype — never weakened as a drive-by (AGENTS.md §5.4).
+  APIs, or node-fs (fs confined to storage/cli/connectors). Timing:
+  **Prompt 2** adds a purity walk over the NEW roots only (prototype
+  folders explicitly excluded, existing `relay-boundary.test.ts`
+  untouched); the later prototype-relocation prompt rewrites the walk to
+  cover all of `src/relay/**` with only `prototype/`, `storage/`, `cli/`,
+  `connectors/` exemptions — never weakened as a drive-by (AGENTS.md §5.4).
 - **CLI/core boundary** — cli imports only relay-protocol (+ rendering);
   no state-transition/completion/routing/policy/promotion logic in clients
   (source-level assertion, mirroring Decision 9).

@@ -55,3 +55,68 @@ prototype — no relocation this phase), `relay.html`, `vite.config.mts`,
 **Exact next step:** *Prompt 2 — Relay Protocol, Domain Model, and
 Deterministic Run State Machine* (scope pinned in CURRENT_STATE.md §Next
 prompt and PROTOCOL.md's Prompt-2 markings).
+
+---
+
+## 2026-07-21 — Phase 1 resume after usage-limit interruption (audit + fixes)
+
+**Timestamp:** 2026-07-21 ~20:40 → 21:15 UTC.
+
+**Resume context:** the session usage limit interrupted the two-lens
+adversarial audit of the Phase-1 docs (acceptance lens completed;
+consistency lens died mid-run). All Phase-1 docs were already committed
+(b8359e2); no partial/uncommitted work existed.
+
+**Recovery inspection:** repo root `~/sunday-relay`, branch
+`feature/relay-yc-demo`, clean tree, cec62dd + full docs/relay/ set
+present and committed. Stopping point identified as "audit findings not
+yet applied".
+
+**Audit results (both lenses pass-with-fixes; all findings verified then
+fixed):**
+- Acceptance lens (10 findings): blueprint reports are now run-level
+  (no taskId/packageId — PROTOCOL §1.3); MVP workflow order aligned
+  (task AFTER accept-blueprint, recorded as **ADR-020**);
+  ProjectRequirement + ArchitectureRecord classified in PROTOCOL §6;
+  skill-permissions subsection added to SECURITY §4; disagreement seam
+  added to ARCHITECTURE §7/§8; autonomous-provider-switching non-goal
+  added to MVP_SPEC §5; prompt-numbering contradiction removed
+  (PROTOCOL §2.2); boundary-walk timing split (TEST_STRATEGY §8);
+  id-prefix list completed + commandId/queryId exemption (PROTOCOL §0);
+  enforcement-level display added to UI_VISION §5 detail views.
+- Consistency lens (9 findings): run-level `blocked` mapping defined
+  (task blocked → run checkpoint_required; audit outcome may be blocked)
+  and aligned across PROTOCOL/MVP_SPEC/ARCHITECTURE; import-row promotion
+  rule corrected (only accept-blueprint is a human accept command; manual
+  reviews promote via CompletionPolicy); `contextVersion` vs
+  `ledgerVersion` defined (PROTOCOL §0); `provenanceProfile` derivation
+  rule defined (imported+live ⇒ mixed); `invalidated-by-decision`
+  pre-execution check restored + TEST_STRATEGY §5 case; ADR count
+  corrected to 001…020; dangling §secrets cross-reference fixed;
+  ARCHITECTURE §6 DONE node relabeled (audit precedes terminal
+  completed); CURRENT_STATE §Next prompt expanded to the full Prompt-2
+  module scope.
+
+**Founder decisions applied:** 1–14 of the resume prompt (identical to
+Decision Lock 1–10) — no deviations.
+
+**Documents updated this entry:** PROTOCOL.md, ARCHITECTURE.md,
+RELAY_MVP_SPEC.md, SECURITY_BOUNDARIES.md, TEST_STRATEGY.md, DECISIONS.md
+(+ADR-020), UI_VISION.md (enforcement display — visual direction itself
+unchanged), CURRENT_STATE.md, SESSION_LOG.md (this entry).
+**Deliberately preserved:** prototype code untouched; superseded headers
+unchanged; AGENTS.md §7 unchanged; no dependencies; no code.
+
+**Commands / tests (this resume):**
+- `npx vitest run src/relay/relay-boundary.test.ts` — **7/7 passed**.
+- `npx vitest run src/relay` — **49/49 passed** (7 files).
+- `npm run typecheck` — clean (exit 0).
+- Full suite not re-run for the doc-only audit fixes; last full run this
+  phase (after AGENTS.md/root-doc edits): **1638/1638 passed** (328s).
+- No provider/paid calls, no credential access, no deployment, no push.
+
+**Known issues:** none blocking. Prompt-2 schedule pressure for July 24
+remains the tracked risk (CURRENT_STATE §Known risks).
+
+**Exact next step:** *Prompt 2 — Relay Protocol, Domain Model, and
+Deterministic Run State Machine* per CURRENT_STATE §Next prompt.

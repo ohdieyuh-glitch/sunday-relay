@@ -169,10 +169,10 @@ sequenceDiagram
   participant V as relay-verification
   participant R as ReviewerAdapter (simulated / Codex later)
   U->>C: create-run + submit-objective
-  C->>A: architect handoff (or import-blueprint)
-  A-->>C: Blueprint (claim / external-artifact)
+  C->>A: architect request (run-level - no task exists yet)
+  A-->>C: Blueprint report bound to runId (claim / external-artifact)
   U->>C: accept-blueprint (Guided checkpoint)
-  C->>C: create owned RelayTask (pre-execution checks)
+  C->>C: create owned RelayTask from Blueprint taskBreakdown (pre-execution checks)
   C->>I: compiled AgentHandoffPackage (ledger+context versions)
   I-->>C: implementation report (unverified claim)
   C->>V: execute deterministic checks
@@ -203,8 +203,8 @@ flowchart TD
   RUN --> VER[deterministic re-verification]
   VER --> RREV[re-review when policy requires]
   RREV --> OK{CompletionPolicy satisfied?}
-  OK -->|yes| DONE[completed -> final audit]
-  OK -->|no| STOP[checkpoint_required / blocked / failed\nNEVER a second automatic repair]
+  OK -->|yes| DONE[completed-path -> final audit]
+  OK -->|no| STOP[run: checkpoint_required or failed\ntask/audit may record blocked\nNEVER a second automatic repair]
 ```
 
 ## 7. Subsystem responsibilities (summary)
@@ -226,6 +226,8 @@ flowchart TD
   requirement, Final Audit Report.
 - **relay-recovery** — failure records, repeated-failure/no-progress
   detection; future recovery packages and reassignment (seam only).
+  Disagreement records (PROTOCOL §5.2) are ledger data in the MVP; the
+  future resolution engine belongs to relay-core (see §8).
 - **relay-connectors** — adapter INTERFACES (Architect / CodingAgent /
   Reviewer / Verification) + simulation adapters; future local/cloud
   adapters. Simulation adapters state which policies they simulate vs
@@ -247,6 +249,11 @@ flowchart TD
   relay-routing behind the same assignment interface.
 - **Recovery** — FailureRecord carries the raw material; recovery package
   compilation + reassignment plug into relay-recovery.
+- **Disagreement resolution** — DisagreementRecord schema ships in Prompt 2
+  (relay-protocol); competing proposals and the named decision authority
+  are preserved as ledger events; the future resolution engine slots into
+  relay-core with escalation to human checkpoints — never an open-ended
+  debate loop.
 - **Portable Aquala Skills** — provider-neutral skill source compiled into
   provider formats; reserved as a relay-handoff/relay-routing consumer;
   no critical procedure lives only in provider prompts.
