@@ -100,7 +100,9 @@ function Ledger({ mission }: { mission: RelayMission }) {
   );
 }
 
-function MissionView({ mission }: { mission: RelayMission }) {
+/** Exported for the DOM-less render smoke test: server rendering only sees a
+ * zustand store's INITIAL state, so tests pass the mission explicitly. */
+export function MissionView({ mission }: { mission: RelayMission }) {
   const stage = RELAY_STAGES.find((s) => s.id === currentStage(mission));
   return (
     <div className="relay-mission">
