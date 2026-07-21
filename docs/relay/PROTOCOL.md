@@ -1,0 +1,330 @@
+# Relay Protocol — `relay.protocol.v1` (specification)
+
+> Status: **locked for implementation** (Phase 1 architecture lock,
+> 2026-07-21). This document SPECIFIES contracts; nothing here is implemented
+> yet. "Prompt 2" marks contracts implemented by *Prompt 2 — Relay Protocol,
+> Domain Model, and Deterministic Run State Machine*; later work is marked
+> "deferred (Prompt N/phase)". Runtime schema validation is part of Prompt 2
+> for every Prompt-2 contract (hand-rolled validators per repo convention —
+> no schema dependency).
+
+## 0. Conventions
+
+- **Ids** are opaque strings with stable prefixes: `prj_ run_ tsk_ pkg_ evt_
+  evd_ bnd_ rpt_ blu_ vrf_ flr_ dcn_ apr_ oqn_ use_ aud_ clm_ asn_`.
+- **Timestamps** are ISO-8601 UTC.
+- **`protocolVersion`** (`"relay.protocol.v1"`) appears in every envelope.
+  Versioning behavior: additive optional fields do not bump the version;
+  removed/retyped fields or changed semantics bump to `v2` with a migration
+  note here. Consumers reject unknown protocol versions.
+- **Enums** (shared, Prompt 2):
+  - `Provenance = simulated | live | imported | manual` — how an activity or
+    artifact actually originated. Never inferred, always stamped by the
+    producer and preserved end-to-end (truthfulness requirement).
+  - `Classification = canonical | historical | derived | external-artifact |
+    unverified-claim | verified-evidence` — System 1 six-way taxonomy.
+  - `Enforcement = enforced | advisory | unsupported` (Decision 5).
+  - `Role = architect | coding-agent | reviewer | verification`.
+  - `RunStatus = created | active | paused | checkpoint_required | completed
+    | failed | cancelled`.
+  - `RunPhase = blueprint | handoff | implementation | verification | review
+    | repair | final_verification | final_review | audit`.
+  - `TaskStatus = proposed | queued | assigned | working | waiting |
+    reviewing | revision_required | blocked | checkpoint_required |
+    completed | failed | cancelled | obsolete`.
+  - `EvidenceStatus = passed | failed | pending | unavailable | unverified |
+    requires_approval`.
+- **Validation boundary**: every envelope crossing a boundary (client → core,
+  adapter → core, import → core) is schema-validated at relay-protocol; agent
+  and imported content is additionally TRUST-validated by relay-core
+  (promotion, §3). Schema-valid ≠ accepted.
+
+## 1. Envelopes (all Prompt 2)
+
+### 1.1 CommandEnvelope — client/CLI → relay-core
+Required: `protocolVersion, commandId, commandType, issuedAt, actor
+{kind: user|client|system, id}, payload`.
+Optional: `idempotencyKey` (dedupe window; same key → same result),
+`correlationId`, `expectedLedgerVersion` (optimistic concurrency — command
+rejected with `ledger-version-conflict` if the ledger moved).
+Producer: clients. Consumer: relay-core only. Commands never mutate state
+directly; accepted commands emit events.
+Command types (MVP set): `create-project, create-run, submit-objective,
+import-blueprint, accept-blueprint, compile-handoff, submit-report (manual
+import path), request-verification, pause-run, resume-run, cancel-run,
+respond-checkpoint {approve|reject}, answer-open-question, set-budget,
+assign-agent, approve-completion`.
+
+### 1.2 EventEnvelope — relay-core/ledger → everyone (the ONLY UI/CLI feed)
+Required: `protocolVersion, eventId, sequence, at, projectId, source
+(relay-core | architect | coding-agent | reviewer | verification | system |
+user), kind, provenance, classification, payload`.
+Optional: `runId, taskId, correlationId (causing command/report), refs
+{ledgerVersion, contextVersion, packageId, evidenceIds[], blueprintId, ...}`.
+- `sequence` is the **monotonic per-project ledger version** — gap-free,
+  assigned only by relay-ledger on append. `ledgerVersion` of a project ==
+  highest appended `sequence`.
+- Events are **append-only**; there is no delete/update event mutation.
+  Supersession/obsolescence is expressed by NEW events.
+- Payloads are **typed per kind** (no prose-only events). Human-readable
+  terminal lines are DERIVED at render time by clients from kind+payload.
+Producer: relay-ledger (sole appender), on behalf of relay-core decisions.
+Consumer: clients, projections, audit.
+
+### 1.3 ReportEnvelope — adapter/import → relay-core
+Required: `protocolVersion, reportId, projectId, runId, taskId, packageId
+(the handoff being answered), reportType (blueprint | implementation |
+review | repair | verification-output), agentIdentity {adapterId, role,
+displayName, sessionRef?}, provenance, submittedAt, payload`.
+Optional: `usage {estimated|actual tokens/cost}, notes`.
+- **Always ingested as `classification: unverified-claim`.** `agentIdentity`
+  is assigned by the ADAPTER/session layer, never trusted from report text
+  (Decision 3). `sessionRef` is an opaque safe reference — never a
+  credential.
+- Mission/task binding: `packageId` + `taskId` must match an outstanding
+  package (carries forward the prototype's cross-mission rejection).
+Producer: connectors (incl. manual-import path). Consumer: relay-core.
+
+### 1.4 Query / ReadModel envelopes — client → relay-core (read-only)
+Query: `{protocolVersion, queryId, queryType, params}`. ReadModel response:
+`{protocolVersion, queryId, readModelType, asOfLedgerVersion, data}`.
+Read models (MVP): `project-brain, run-status, task-detail, handoff-detail,
+evidence-detail, event-feed (paged), usage-summary, audit-report`.
+Clients contain no workflow logic (Decision 9): read models are computed by
+relay-core/projections and returned serialized.
+
+### 1.5 ErrorEnvelope
+`{protocolVersion, code, message, details[], retryable, correlationId}`.
+Codes are stable strings (`ledger-version-conflict`, `illegal-transition`,
+`duplicate-task`, `stale-context`, `budget-exceeded`, `validation-failed`,
+`checkpoint-required`, `not-found`, `immutable`, ...).
+
+## 2. Ledger & run contracts
+
+### 2.1 RelayProject (Prompt 2)
+Required: `projectId, name, createdAt, objective (current), ledgerVersion`.
+Optional: `repository {path, defaultBranch}, constraints[], securityNotes`.
+Producer: `create-project`. Consumer: everything. The project OWNS the
+ledger; agents/providers never do.
+
+### 2.2 ProjectLedger (Prompt 2)
+The append-only sequence of EventEnvelopes for a project plus the
+**current-state projection** derived from canonical events only. Required
+behaviors: gap-free monotonic `sequence`; projection rebuildable from events
+alone; six-way classification on every event; claims NEVER enter the
+projection until promoted (§3). Storage engine is deferred (Prompt 4:
+relay-storage; Prompt 2 uses in-memory ledger behind the same interface).
+
+### 2.3 RelayRun (Prompt 2)
+Required: `runId, projectId, createdAt, status: RunStatus, phase: RunPhase,
+objective, mode ("guided" only in MVP), taskIds[], budget {maxUsd?,
+maxTokens?, maxRuntimeMs?}, repairCount (0|1), provenanceProfile
+(simulated | live | mixed)`.
+Optional: `pausedAt, completedAt, checkpoint {id, reason, requestedAt},
+finalAuditId`.
+State machine (Prompt 2, deterministic, illegal transitions rejected):
+- `created → active(blueprint)`; phases advance strictly:
+  `blueprint → handoff → implementation → verification → review →
+  [completed-path | repair → final_verification → final_review] → audit`.
+- `active ↔ paused` (user); any state except terminal → `cancelled` (user);
+  `active → checkpoint_required` (core decision) → `active` (approve) |
+  `failed/cancelled` (reject); terminal states (`completed, failed,
+  cancelled`) are frozen — post-terminal commands rejected `immutable`.
+- `repairCount` may never exceed 1 (Decision 4); the transition
+  `review → repair` requires ALL Guided-Mode auto-repair conditions
+  (RELAY_MVP_SPEC §Guided Mode) else `checkpoint_required`.
+
+### 2.4 RelayTask (Prompt 2)
+Required: `taskId, projectId, runId, objective, category, status: TaskStatus,
+ownerAssignmentId | null, dependencies[], claimedFiles[], acceptanceCriteria[],
+completionPolicyId, contextVersion, baseRevision (git rev the task is
+grounded on), createdAt, updatedAt, priority`.
+Optional: `leaseExpiresAt, supersededBy, completionEvidenceRefs[],
+claimedResources[]`.
+Pre-execution checks (Prompt 2, relay-coordination): duplicate active task,
+equivalent task, already completed, superseded, dependencies incomplete,
+files unclaimed/conflicting, stale `contextVersion` (< current
+ledgerVersion for consumed state), `baseRevision` no longer current, lease
+expired, assignment/session invalid. Each failure → typed ErrorEnvelope +
+event.
+Lease semantics: `leaseExpiresAt` set on assignment; expiry emits
+`task-lease-expired` and returns the task to `queued` (crash recovery — no
+permanent locks). One owner at a time, enforced.
+
+### 2.5 TaskAssignment (Prompt 2)
+Required: `assignmentId, taskId, role, adapterId, assignedAt, provenance`.
+Optional: `sessionRef (opaque), leaseExpiresAt, endedAt, endReason`.
+Reviewer-independence is STRUCTURAL: independence checks compare
+`TaskAssignment.adapterId`/session lineage, not report-body strings
+(Decision 3). Producer: relay-routing (manual/default assignment in MVP).
+
+### 2.6 FileClaim / ResourceClaim (FileClaim Prompt 2; ResourceClaim schema-only Prompt 2, enforcement deferred)
+Required: `claimId, taskId, path|resource, claimedAt, expiresAt, status
+(active | released | expired)`.
+Claims expire and recover; enforcement level is declared per adapter
+(Decision 5): advisory in manual/simulated paths, enforced by the worktree
+manager for local live adapters (deferred phase).
+
+## 3. Claims, promotion, evidence
+
+### 3.1 Claim promotion (Prompt 2 — the trust boundary)
+Every ReportEnvelope ingest emits `claim-recorded` (classification
+`unverified-claim`). ONLY relay-core may emit `claim-accepted` /
+`claim-rejected`. Acceptance criteria come from CompletionPolicy + the
+specific claim type (e.g. an implementer's "findings resolved" claim is
+accepted only when re-verification evidence + required re-review support
+it). Accepted content is re-emitted as canonical/verified events; the
+original claim remains in history untouched. **No agent report ever mutates
+the projection directly.**
+
+### 3.2 EvidenceRecord (Prompt 2)
+One observed check result, produced by relay-verification (never by the
+agent under evaluation).
+Required: `evidenceId, taskId, runId, source (relay-verification adapter id),
+evidenceType (command | diff | artifact | reviewer-verdict | health-check),
+command?, exitCode?, outputExcerpt, executedAt, environment {os, node,
+cwd}, repoRevision, verificationStatus: EvidenceStatus, verifier,
+provenance`.
+Optional: `artifactRef, integrity {sha256?, sizeBytes?}, expiresAt`.
+Agent-submitted command lists (prototype pattern) are stored as
+`unverified-claim` report content — they are NOT EvidenceRecords.
+Freshness = `repoRevision` + `executedAt`, never ingestion time.
+
+### 3.3 EvidenceBundle (Prompt 2)
+Required: `bundleId, taskId, runId, evidenceIds[], collectedAt,
+overallStatus: EvidenceStatus, repoRevision`.
+A bundle is coherent: all records pinned to the same `repoRevision` (or the
+bundle is `unverified`).
+
+### 3.4 VerificationRecord (Prompt 2)
+Result of evaluating an EvidenceBundle against a CompletionPolicy.
+Required: `verificationId, taskId, runId, policyId, bundleId, at, outcome
+(passed | failed | pending | unavailable), checks[] {id, label, status:
+EvidenceStatus, detail}`.
+Represents pass AND fail — failed verifications are recorded events feeding
+`revision_required / checkpoint_required / blocked`, never discarded.
+(Prototype's success-only record is explicitly corrected.)
+
+### 3.5 CompletionPolicy (Prompt 2: low-risk preset + interface; high-risk documented only)
+Required: `policyId, riskLevel (low | high), requiredEvidence[]
+{evidenceType, command?, mustPass}, requiresIndependentReview (bool),
+requiresHumanApproval (bool), enforcementRequirements[] {control,
+minimumLevel: Enforcement}`.
+Low-risk preset (MVP): targeted checks + typecheck pass, expected diff
+exists, independent review required, no human approval. High-risk preset:
+documented shape only (needs deployment/migration evidence types that do
+not exist in MVP; `unavailable` blocks completion when required).
+
+### 3.6 ReviewerVerdict (Prompt 2)
+Required: `reportId (source), reviewerAssignmentId, verdict (approved |
+changes_requested), findings[] {id, severity (critical|major|minor), title,
+detail, recommendation?}, independent (bool — computed by relay-core from
+assignments, never self-declared), provenance`.
+`changes_requested` with zero findings is invalid (carried from prototype
+R2). Manual/imported reviews carry `provenance: manual|imported` and are
+labeled as such; they satisfy an independent-review policy only if the
+policy admits manual review (Decision 3).
+
+## 4. Blueprint & handoff contracts
+
+### 4.1 Blueprint artifact (Prompt 2)
+The Prompt Architect's output (Decision 2).
+Required: `blueprintId, projectId, runId, version (int, per run), source
+(simulated | imported | live-adapter), architectIdentity {adapterId?,
+displayName, sessionRef?}, submittedAt, content {objectiveRestatement,
+approach, taskBreakdown[], acceptanceCriteria[], risks[], constraints[]},
+provenance`.
+Imported blueprints (ChatGPT/founder-authored) are UNTRUSTED external input:
+schema-validated, recorded as `external-artifact`, and promoted to canonical
+only via `accept-blueprint` (a human command in Guided Mode). No provider
+hardcoding in the contract.
+
+### 4.2 AgentHandoffPackage (Prompt 2)
+Required: `packageId, protocolVersion, projectId, runId, taskId,
+targetAdapterId, role, objective, responsibilityBoundary, contextRefs[]
+(ledger refs, artifact refs — references not embeddings), requiredInputs[],
+permittedTools[] {name, enforcement}, permittedFiles[] {pattern,
+enforcement}, prohibitedActions[] {action, enforcement}, dependencies[],
+acceptanceCriteria[], requiredEvidence[], budget {maxUsd?, maxTokens?},
+stoppingCondition {deadline?, maxRuntimeMs?, description}, expectedReportType,
+contextVersion, ledgerVersion, idempotencyKey`.
+Every restriction carries its Enforcement level explicitly (Decision 5) —
+the compiler must not emit a restriction without one.
+
+### 4.3 HandoffCompilationRecord (Prompt 2)
+Required: `recordId, packageId, compiledAt, ledgerVersion, contextVersion,
+inputRefs[] (exact ledger events/artifacts consumed), compilerVersion`.
+Makes every package reproducible/auditable.
+
+### 4.4 Revision Contract (Prompt 2)
+The single bounded repair instruction (Decision 4).
+Required: `packageId (new package), parentPackageId, findingsTargeted[]
+(ReviewerVerdict finding ids), narrowScope {sameTask: true, sameFiles:
+true, sameAssignment: true}, conditionsChecked[] {condition, satisfied}` —
+all 15 Guided-Mode conditions recorded with their evaluation at compile
+time. If any is false the contract is not compiled; run →
+`checkpoint_required`.
+
+## 5. Failure, disagreement, usage, audit
+
+### 5.1 FailureRecord (Prompt 2)
+Required: `failureId, taskId, runId, at, signal (repeated-command-failure |
+repeated-test-failure | no-progress | agent-blocked | session-unavailable |
+tool-unavailable | budget | other), attempts[] {at, packageId, summaryRef},
+commandRefs[], evidenceRefs[], constraintsSnapshot[], stoppingCondition`.
+Carries the raw material a future FailureRecoveryPackage compiles from
+(recovery compilation itself deferred). Repeated-identical-failure and
+no-progress detection are Prompt-2 deterministic functions over these
+records.
+
+### 5.2 DisagreementRecord (schema-only Prompt 2; engine deferred)
+Required: `disagreementId, projectId, taskId?, participants[], proposals[]
+{by, summary, evidenceRefs[]}, category, risk, decisionAuthority, status
+(open | resolved | escalated)`.
+Optional: `resolutionMethod, finalDecisionRef`.
+
+### 5.3 Usage record (Prompt 2)
+Required: `usageId, runId, taskId?, adapterId, at, kind (estimated |
+actual), tokens?, usd?, runtimeMs?`.
+Budget/stop-before-dispatch checks are computed over these (relay-core;
+enforcement wiring deferred to the checkpoint/cost phase). Cloud dispatch
+additionally passes SpendAuthorizationPort (ARCHITECTURE §hybrid; Decision 1)
+— both the Relay budget AND the Sunday global breaker must approve.
+
+### 5.4 Final Audit Report (Prompt 2)
+Required: `auditId, runId, projectId, at, outcome (verified-complete |
+failed | cancelled | blocked), objective, blueprintRef, taskRefs[],
+verificationRefs[], reviewRefs[], repairCount, evidenceBundleRefs[],
+usageSummary {estimatedUsd?, actualUsd?, tokens?}, checkpoints[]
+{id, reason, response}, provenanceProfile, unresolvedQuestions[]`.
+Producer: relay-verification (final audit step). Consumer: clients (the
+"one verified completion report"), ledger (canonical). An audit can record
+failure — it is not a success certificate.
+
+### 5.5 DecisionRecord / ApprovalRecord / OpenQuestion (Prompt 2, minimal)
+DecisionRecord: `decisionId, at, title, decision, rationale,
+rejectedAlternatives[], decidedBy, supersededBy?`.
+ApprovalRecord: `approvalId, checkpointId, runId, at, actor, response
+(approve | reject), note?`.
+OpenQuestion: `questionId, at, question, raisedBy, status (open |
+answered), answerRef?`.
+
+## 6. Deferred contracts (documented here, NOT in Prompt 2)
+`AgentProfile` (schema lands with relay-routing manual assignment — Prompt 2
+carries a static minimal form: `adapterId, provider, roles[], displayName`),
+`AgentCapabilityObservation`, `ComputeResource`, `SubscriptionCapacity`,
+`AqualaSkill`, `SkillCompilationTarget`, `FailureRecoveryPackage`,
+`DeploymentRecord`, `ProjectSnapshot` (interface reserved; audit report is
+NOT a snapshot), session/workspace repositories (relay-storage phase).
+
+## 7. Ownership summary
+
+| Contract | Producer | Sole mutator | Validated at |
+| --- | --- | --- | --- |
+| Commands | clients | — (immutable) | relay-protocol |
+| Events | relay-ledger | append-only | relay-protocol |
+| Reports | connectors/import | — (immutable claims) | relay-protocol + relay-core promotion |
+| Run/Task state | relay-core | relay-core | state machine guards |
+| Evidence | relay-verification | relay-verification | relay-protocol |
+| Promotion | relay-core | relay-core | CompletionPolicy |
+| Audit | relay-verification | append-only | relay-protocol |
