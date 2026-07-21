@@ -1,0 +1,670 @@
+/* ==========================================================================
+   Sunday Relay — scoped styles (.relay-* only).
+   Consumes Sunday's obsidian tokens from src/styles/global.css read-only:
+   --bg --surface --surface-solid --border --border-strong --text --text-dim
+   --text-faint --gold-400 --gold-glow --ok --danger --warn --radius-*
+   --font --font-brand --hairline --elev-1.
+   ========================================================================== */
+
+.relay-app {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+/* ----- header ----- */
+
+.relay-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px clamp(16px, 4vw, 40px) 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.relay-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.relay-wordmark {
+  font-family: var(--font-brand);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.22em;
+  background: linear-gradient(100deg, var(--gold-100), var(--gold-400) 60%, var(--gold-600));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.relay-tagline {
+  font-size: 12px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
+.relay-nav {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.relay-nav select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 7px 10px;
+}
+
+.relay-main {
+  flex: 1;
+  width: min(1080px, 100%);
+  margin: 0 auto;
+  padding: 26px clamp(16px, 4vw, 40px) 80px;
+}
+
+/* ----- mission head ----- */
+
+.relay-mission-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 18px;
+  margin-bottom: 26px;
+  flex-wrap: wrap;
+}
+
+.relay-mission-head h2 {
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.relay-stage-now {
+  font-size: 12px;
+  color: var(--gold-400);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.relay-badge {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 9px;
+}
+
+.relay-badge.verified {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+/* ----- the custody rail (signature) -----
+   A relay track: zones name the ROLE holding the baton for each leg; the
+   current node carries the baton pulse; the final node is the gate diamond. */
+
+.relay-rail {
+  list-style: none;
+  display: flex;
+  padding: 18px 0 26px;
+  margin: 0 0 26px;
+  border-bottom: 1px solid var(--hairline);
+  overflow-x: auto;
+}
+
+.relay-rail-stage {
+  flex: 1;
+  min-width: 86px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+/* track segment: from each node to the next */
+.relay-rail-stage:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: calc(18px + 20px + 9px); /* zone row + gap + node half */
+  left: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--border);
+  z-index: 0;
+}
+
+.relay-rail-stage.is-done:not(:last-child)::after {
+  background: linear-gradient(90deg, var(--gold-400), var(--gold-600));
+}
+
+.relay-rail-zone {
+  height: 18px;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.relay-rail-stage.is-current .relay-rail-zone {
+  color: var(--gold-400);
+}
+
+.relay-rail-node {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: var(--surface-solid);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--bg);
+  position: relative;
+  z-index: 1;
+}
+
+.relay-rail-node.is-gate {
+  border-radius: 4px;
+  transform: rotate(45deg);
+}
+
+.relay-rail-node.is-gate > * {
+  transform: rotate(-45deg);
+}
+
+.relay-rail-stage.is-done .relay-rail-node {
+  background: var(--gold-400);
+  border-color: var(--gold-400);
+}
+
+.relay-rail-stage.is-current .relay-rail-node {
+  border-color: var(--gold-400);
+  box-shadow: 0 0 0 0 var(--gold-glow);
+  animation: relay-baton 2.2s ease-out infinite;
+}
+
+@keyframes relay-baton {
+  0% {
+    box-shadow: 0 0 0 0 var(--gold-glow);
+  }
+  70% {
+    box-shadow: 0 0 0 12px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .relay-rail-stage.is-current .relay-rail-node {
+    animation: none;
+    box-shadow: 0 0 0 4px var(--gold-glow);
+  }
+}
+
+.relay-rail-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+.relay-rail-stage.is-current .relay-rail-label {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.relay-rail-stage.is-ahead .relay-rail-label {
+  color: var(--text-faint);
+}
+
+/* ----- work area ----- */
+
+.relay-workarea {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 22px;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .relay-workarea {
+    grid-template-columns: 1fr;
+  }
+}
+
+.relay-stage-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ----- cards ----- */
+
+.relay-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  box-shadow: var(--elev-1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.relay-card h2,
+.relay-card h3 {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.relay-card p {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.relay-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.relay-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.relay-agent {
+  font-size: 11px;
+  color: var(--gold-400);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.relay-dim {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* ----- buttons ----- */
+
+.relay-btn {
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 9px 16px;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.relay-btn:hover:not(:disabled) {
+  border-color: var(--gold-400);
+}
+
+.relay-btn.primary {
+  background: linear-gradient(120deg, var(--gold-600), var(--gold-400));
+  border-color: transparent;
+  color: #0b0a12;
+  font-weight: 700;
+}
+
+.relay-btn.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.relay-btn.ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+
+.relay-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ----- forms / ingest ----- */
+
+.relay-form label,
+.relay-ingest-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 0.03em;
+}
+
+.relay-form input,
+.relay-form textarea,
+.relay-ingest textarea {
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-solid);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.relay-form input:focus-visible,
+.relay-form textarea:focus-visible,
+.relay-ingest textarea:focus-visible {
+  outline: 2px solid var(--gold-400);
+  outline-offset: 1px;
+}
+
+.relay-errors {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* ----- markdown brief ----- */
+
+.relay-markdown {
+  border-top: 1px solid var(--hairline);
+  padding-top: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.relay-markdown h1 {
+  font-size: 15px;
+}
+
+.relay-markdown h2,
+.relay-markdown h3 {
+  font-size: 13px;
+  margin-top: 14px;
+}
+
+.relay-markdown pre {
+  background: var(--surface-solid);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+.relay-markdown ul,
+.relay-markdown ol {
+  padding-left: 20px;
+}
+
+/* ----- findings ----- */
+
+.relay-findings {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.relay-findings li {
+  display: flex;
+  gap: 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.relay-findings li.is-resolved {
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+
+.relay-findings strong {
+  font-size: 13px;
+}
+
+.relay-findings p {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.relay-sev {
+  align-self: flex-start;
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 3px 9px;
+  border: 1px solid currentColor;
+}
+
+.relay-sev.is-critical {
+  color: var(--danger);
+}
+
+.relay-sev.is-major {
+  color: var(--warn);
+}
+
+.relay-sev.is-minor {
+  color: var(--text-dim);
+}
+
+.relay-verdict.is-approved {
+  color: var(--ok);
+}
+
+.relay-verdict.is-changes-requested {
+  color: var(--warn);
+}
+
+.relay-resolved {
+  color: var(--ok) !important;
+}
+
+/* ----- files & evidence ----- */
+
+.relay-files {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.relay-files code,
+.relay-evidence code {
+  font-size: 12px;
+  background: var(--surface-solid);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+
+.relay-evidence {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.relay-evidence li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.relay-evidence-status {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  align-self: center;
+}
+
+.relay-evidence li.is-pass .relay-evidence-status {
+  color: var(--ok);
+}
+
+.relay-evidence li.is-fail .relay-evidence-status {
+  color: var(--danger);
+}
+
+.relay-evidence pre {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+/* ----- gate ----- */
+
+.relay-gate.is-open {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+.relay-gate-state {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.relay-gate-state.ok {
+  color: var(--ok);
+}
+
+.relay-checks {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.relay-checks li {
+  display: flex;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.relay-checks li > span {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+}
+
+.relay-checks li.is-ok > span {
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 50%, transparent);
+}
+
+.relay-checks li.is-fail > span {
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
+}
+
+.relay-checks p {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.relay-sealed {
+  color: var(--ok);
+  font-size: 12px;
+}
+
+/* ----- ledger ----- */
+
+.relay-ledger {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  position: sticky;
+  top: 20px;
+}
+
+.relay-ledger h2 {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 14px;
+}
+
+.relay-ledger ol {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.relay-ledger li {
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+}
+
+.relay-ledger-stage {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold-400);
+}
+
+.relay-ledger p {
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 3px 0;
+}
+
+.relay-ledger time {
+  font-size: 10px;
+  color: var(--text-faint);
+}
