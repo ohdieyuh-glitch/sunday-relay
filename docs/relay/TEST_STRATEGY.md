@@ -1,5 +1,18 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **Implementation sync (Prompt 2, 2026-07-21):** §§1–6 and §8's Prompt-2
+> purity walk are implemented — 62 new tests across
+> `src/relay/protocol/protocol.test.ts`, `src/relay/core/run-machine.test.ts`,
+> `src/relay/core/task-machine.test.ts`, `src/relay/ledger/ledger.test.ts`,
+> and `src/relay/relay-core-boundary.test.ts` (protocol validation incl.
+> every command/report family, full + one-revision run lifecycles,
+> checkpoint/pause/resume/cancel, terminal protection, revision limits 0/1,
+> event ordering + idempotency, append-only ledger + replay determinism,
+> claim recording/promotion/rejection, task invariants + staleness
+> primitives + lease recovery, boundary + security invariants incl.
+> credential-shape and hidden-reasoning scans). §7 budget wiring, §9
+> adapter/simulation, and §11 demo scenarios land with the next prompts.
+
 > Status: **locked** (Phase 1 architecture lock, 2026-07-21). Framework:
 > vitest, mocked/deterministic, **zero paid provider calls ever** (repo
 > rule). Tests land with the prompt that implements the behavior; the

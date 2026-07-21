@@ -1,16 +1,38 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-21 21:12 UTC** (post-audit fixes after
-> the usage-limit interruption; both audit lenses now pass-with-fixes,
-> all fixes applied).
+> boundary. Last updated: **2026-07-21 22:17 UTC** (Prompt 2 complete —
+> protocol, domain model, ledger foundation, and deterministic run state
+> machine implemented and verified; see SESSION_LOG.md for exact results).
 
 ## Phase
 
-**Phase 1 — Architecture Lock** (this phase): founder decisions 1–10
-accepted and encoded into the authoritative documentation set. No Relay
-Core, CLI, adapters, simulation workflow, runtime persistence, or UI was
-implemented in this phase, by design.
+**Prompt 2 — Protocol and State Machine: COMPLETE** (2026-07-21 22:17 UTC).
+Implemented: `relay.protocol.v1` (versioned envelopes for commands /
+reports / events / queries, branded ids, enums, structured errors, strict
+hand-rolled runtime validation with hidden-reasoning rejection); the
+Prompt-2 contract set (RelayProject/Run/Task, TaskAssignment, File/Resource
+claims, Blueprint, AgentHandoffPackage + CompilationRecord +
+RevisionContract, Evidence Record/Bundle, VerificationRecord,
+CompletionPolicy, ReviewerVerdict, Failure/Decision/Approval/OpenQuestion/
+Usage records, FinalAuditReport, Checkpoint + budget/loop/permission policy
+shapes; DisagreementRecord schema-only; ProjectRequirement/
+ArchitectureRecord interface-only per PROTOCOL §6); the deterministic
+RelayRun status×phase machine (centralized `transitionRun`: golden path,
+one-revision path, 15-condition checkpoint escalation, honest-failure stop,
+terminal protection, completion guard requiring Relay-produced passing
+verification + independent approval); RelayTask transition validation with
+owner/evidence/finding invariants, staleness + decision-invalidation
+primitives, lease-expiry recovery; the append-only ledger foundation
+(gap-free monotonic sequences, frozen envelopes, idempotency, deterministic
+replay projection, claim record/promote/reject with exactly-once
+promotion); storage ports + volatile test-only in-memory adapters (explicit
+`acknowledgeVolatile` guard); deterministic test factories.
+**Not implemented (by design):** CLI, adapters, simulation workflow,
+handoff-compiler behavior, coordination wiring, persistence, UI.
+
+**Prior phase — Phase 1 Architecture Lock (complete, commit 59b14e8):**
+founder decisions 1–10 encoded into this documentation set.
 
 ## Authoritative documents (docs/relay/)
 
@@ -74,19 +96,23 @@ None in flight — Phase 1 closes with this commit.
 
 ## Next prompt
 
-**Prompt 2 — Relay Protocol, Domain Model, and Deterministic Run State
-Machine**: implement everything PROTOCOL.md marks Prompt 2 — the
-`src/relay/protocol` envelopes/enums/validators/versioning; the
-deterministic relay-core state machines (RelayRun incl. blocked-mapping and
-derived provenanceProfile, RelayTask, ledger events + claim promotion,
-in-memory ledger behind a repository port); relay-coordination's
-pre-execution battery (incl. `invalidated-by-decision`), leases, and
-claims; minimal relay-handoff compilation (AgentHandoffPackage,
-HandoffCompilationRecord, Revision Contract with all 15 recorded
-evaluations); CompletionPolicy evaluation (low-risk preset);
-relay-recovery's repeated-failure/no-progress detection functions; plus
-TEST_STRATEGY §§1–6 and the §8 Prompt-2 purity walk over the new module
-roots. No adapters, no CLI, no persistence, no UI, no paid calls.
+**Prompt 3 — Task Ownership, Duplicate-Work Prevention, and Structured
+Handoff Compiler**: wire relay-coordination's pre-execution battery
+(duplicate/equivalent/completed/superseded task detection, file-claim
+conflicts, stale context/base-revision/decision checks — the primitives
+from Prompt 2 — into dispatch), lease bookkeeping over the stores, and
+implement relay-handoff's compiler behavior: compile AgentHandoffPackage +
+HandoffCompilationRecord from ledger refs at pinned versions, role-specific
+package composition, Revision Contract compilation with real evaluation of
+the 15 Guided-Mode conditions, CompletionPolicy evaluation (low-risk
+preset), and relay-recovery's repeated-failure/no-progress detection
+functions over FailureRecords. Tests per TEST_STRATEGY §§5–7. Still no
+adapters, no CLI, no persistence, no UI, no paid calls.
+
+Remaining carried-over Prompt-2 notes: budget stop-before-dispatch wiring
+(TEST_STRATEGY §7) lands with the compiler/checkpoint work; CompletionPolicy
+evaluation and FailureRecord detection functions were deferred to Prompt 3
+with the compiler since they operate on compiled dispatches.
 
 ## Known blockers
 

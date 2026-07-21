@@ -1,0 +1,124 @@
+import { describe, expect, it } from 'vitest';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+
+/**
+ * Relay Core boundary tests (TEST_STRATEGY §8, Prompt-2 scope): the NEW
+ * module roots only — the prototype keeps its own existing boundary test
+ * (relay-boundary.test.ts), which stays untouched. Dependency direction and
+ * security invariants are asserted at the source level, matching the repo
+ * convention.
+ */
+
+const root = process.cwd();
+const relay = (p: string) => join(root, 'src', 'relay', p);
+
+const CORE_ROOTS = ['protocol', 'core', 'ledger', 'storage', 'testing'] as const;
+
+function walk(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) return walk(full);
+    return /\.(ts|tsx)$/.test(name) ? [full] : [];
+  });
+}
+
+const files = CORE_ROOTS.flatMap((r) => walk(relay(r)));
+const read = (f: string) => readFileSync(f, 'utf8');
+
+const FORBIDDEN_EVERYWHERE: Array<[RegExp, string]> = [
+  [/from\s+['"]@\/fusion-engine|from\s+['"].*\/fusion-engine/, 'fusion-engine'],
+  [/from\s+['"].*server\//, 'server implementation'],
+  [/from\s+['"]@\/state\/|from\s+['"].*\/state\/session/, 'Sunday session store'],
+  [/from\s+['"]@\/components\//, 'Sunday UI components'],
+  [/from\s+['"]react['"]|from\s+['"]react-dom/, 'React'],
+  [/from\s+['"]zustand/, 'zustand'],
+  [/from\s+['"]@supabase|from\s+['"].*supabaseAuthClient/, 'Supabase implementation'],
+  [/from\s+['"]openai['"]|from\s+['"]@anthropic/, 'provider SDKs'],
+  [/process\.env\.(OPENAI|ANTHROPIC|SUPABASE)/, 'provider credential environment variables'],
+];
+
+describe('relay-core boundary (new module roots)', () => {
+  it('finds the new roots and their sources', () => {
+    expect(files.length).toBeGreaterThan(10);
+  });
+
+  it('no core module imports forbidden provider/server/UI/orchestration modules', () => {
+    for (const file of files) {
+      const content = read(file);
+      for (const [pattern, why] of FORBIDDEN_EVERYWHERE) {
+        expect(pattern.test(content), `${file} must not reference ${why}`).toBe(false);
+      }
+    }
+  });
+
+  it('relay-protocol depends on nothing above it (no core/ledger/storage/connectors imports)', () => {
+    for (const file of walk(relay('protocol'))) {
+      const content = read(file);
+      expect(/from\s+['"]\.\.\/(core|ledger|storage|connectors|cli)/.test(content), `${file} imports upward`).toBe(false);
+    }
+  });
+
+  it('relay-core and relay-ledger depend only on protocol + storage INTERFACES (never the in-memory adapter)', () => {
+    const productionFiles = [...walk(relay('core')), ...walk(relay('ledger'))].filter((f) => !f.endsWith('.test.ts'));
+    for (const file of productionFiles) {
+      const content = read(file);
+      expect(/from\s+['"]\.\.\/storage\/memory/.test(content), `${file} imports the volatile adapter`).toBe(false);
+      expect(/from\s+['"]node:/.test(content), `${file} uses node builtins in pure logic`).toBe(false);
+    }
+  });
+
+  it('browser APIs stay out of core logic (headless requirement)', () => {
+    for (const file of files.filter((f) => !f.endsWith('.test.ts'))) {
+      const content = read(file);
+      expect(/\b(document|window|localStorage|navigator)\./.test(content), `${file} touches browser APIs`).toBe(false);
+    }
+  });
+
+  it('the in-memory adapter cannot masquerade as durable production storage', () => {
+    const memory = read(relay('storage/memory.ts'));
+    expect(memory).toContain("durability: 'volatile-test-only'");
+    expect(memory).toContain('acknowledgeVolatile');
+  });
+});
+
+describe('L — security invariants', () => {
+  const CREDENTIAL_FIELD = /\b(apiKey|api_key|accessToken|access_token|refreshToken|clientSecret|privateKey|password|bearer)\b\s*[:?]/;
+
+  it('no credential-shaped field exists in any serializable core contract', () => {
+    for (const file of files.filter((f) => !f.endsWith('.test.ts'))) {
+      expect(CREDENTIAL_FIELD.test(read(file)), `${file} declares a credential-shaped field`).toBe(false);
+    }
+  });
+
+  it('session references are opaque by contract (documented, no token material)', () => {
+    const contracts = read(relay('protocol/contracts.ts'));
+    expect(contracts).toContain('NEVER credentials');
+    expect(contracts).not.toMatch(/token\s*:/i);
+  });
+
+  it('error messages carry codes and safe details, never environment dumps', () => {
+    const errors = read(relay('protocol/errors.ts'));
+    expect(errors).toContain('never secrets');
+    expect(/process\.env/.test(errors)).toBe(false);
+  });
+
+  it('hidden-reasoning rejection is wired into report and event parsing', () => {
+    const envelopes = read(relay('protocol/envelopes.ts'));
+    expect(envelopes.match(/rejectHiddenReasoning/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it('the prototype UI cannot become the source of canonical state (no core imports from prototype)', () => {
+    for (const file of files) {
+      const content = read(file);
+      expect(/from\s+['"]\.\.\/(domain|state)\//.test(content), `${file} imports prototype modules`).toBe(false);
+      expect(/RelayApp|StagePanel|PipelineRail/.test(content), `${file} references prototype UI`).toBe(false);
+    }
+  });
+
+  it('no Sunday model-orchestration logic enters Relay Core', () => {
+    for (const file of files) {
+      expect(/from\s+['"]@\/core\//.test(read(file)), `${file} imports Sunday app core`).toBe(false);
+    }
+  });
+});

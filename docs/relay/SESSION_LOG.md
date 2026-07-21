@@ -120,3 +120,68 @@ remains the tracked risk (CURRENT_STATE §Known risks).
 
 **Exact next step:** *Prompt 2 — Relay Protocol, Domain Model, and
 Deterministic Run State Machine* per CURRENT_STATE §Next prompt.
+
+---
+
+## 2026-07-21 — Prompt 2: Protocol, Domain Model, Ledger Foundation, Run State Machine
+
+**Timestamp:** 2026-07-21 ~21:55 → 22:20 UTC.
+
+**Objective:** implement the first executable Relay foundation — versioned
+protocol contracts, runtime validation, domain models, minimal canonical
+ledger, deterministic RelayRun/RelayTask machines, structured errors,
+test-only in-memory repositories, comprehensive deterministic tests. No
+CLI/adapters/simulation/persistence/UI.
+
+**Preflight:** clean tree at 59b14e8 (Phase 1 complete); CURRENT_STATE
+named this phase; conventions confirmed (vitest, hand-rolled validators,
+prefix ids, ISO UTC, RelayResult pattern). No discrepancies.
+
+**Files created:** `src/relay/protocol/` — version.ts, errors.ts, ids.ts,
+enums.ts, validate.ts, contracts.ts, envelopes.ts, index.ts,
+protocol.test.ts · `src/relay/core/` — run-machine.ts, task-machine.ts,
+index.ts, run-machine.test.ts, task-machine.test.ts · `src/relay/ledger/`
+— ledger.ts, projection.ts, promotion.ts, index.ts, ledger.test.ts ·
+`src/relay/storage/` — interfaces.ts, memory.ts, index.ts ·
+`src/relay/testing/` — factories.ts · `src/relay/relay-core-boundary.test.ts`.
+**Files modified:** docs/relay/PROTOCOL.md + TEST_STRATEGY.md
+(implementation-sync headers), CURRENT_STATE.md, SESSION_LOG.md (this
+entry). **Prototype untouched;** existing relay-boundary.test.ts untouched.
+
+**Architecture decisions applied:** documented status×phase run model wins
+over the prompt's flat state list (PROTOCOL.md authoritative; run-level
+blocked = checkpoint_required); additive command set (`dispatch-task`,
+`dispatch-revision`, `cancel-run` reason); dotted event-kind taxonomy with
+required safeSummary; provenance stays the documented four values with
+`dispatchPath` on usage records covering live_local/live_cloud; strict
+schemas with designated `metadata` escape hatch; hidden-reasoning denylist
+on untrusted payloads; ADR-009 hand-rolled validators; ADR-016 in-memory
+first behind ports.
+
+**Dependencies:** none added (zod/state-machine/CLI frameworks all
+avoided; existing vitest + TS only).
+
+**Tests run (exact):**
+- `npx vitest run src/relay` — **111/111 passed** (12 files: 62 new
+  Prompt-2 tests + 49 prototype tests).
+- `npx vitest run` (full repository) — **1700/1700 passed** (174s).
+- `npm run typecheck` — clean. `npm run build` — green.
+  `npm run backend:build` — green.
+**Failures + repair (one each, then green):** (1) event immutability —
+appendEvent returned the pre-freeze envelope while the store froze a copy;
+fixed by freezing the stored envelope itself. (2) boundary test flagged
+ledger.test.ts for importing the volatile adapter; scoped the
+adapter-import ban to production files (tests legitimately use it).
+
+**Security:** no provider calls, no paid calls, no credential access, no
+secret material in fixtures (asserted by the credential-shape scan), no
+deployment, no push to main.
+
+**Known issues:** budget stop-before-dispatch wiring, CompletionPolicy
+evaluation, and FailureRecord detection functions deliberately ride with
+Prompt 3 (they operate on compiled dispatches). Prototype relocation to
+`src/relay/prototype/` remains deferred.
+
+**Exact next step:** *Prompt 3 — Task Ownership, Duplicate-Work
+Prevention, and Structured Handoff Compiler* (scope pinned in
+CURRENT_STATE.md §Next prompt).

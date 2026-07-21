@@ -1,5 +1,24 @@
 # Relay Protocol — `relay.protocol.v1` (specification)
 
+> **Implementation sync (Prompt 2, 2026-07-21):** the Prompt-2 contracts
+> below are now implemented in `src/relay/protocol` (envelopes, ids, enums,
+> validators), `src/relay/core` (run/task machines), `src/relay/ledger`
+> (append/projection/promotion), `src/relay/storage` (ports + volatile
+> test adapters). Implementation deltas, all additive: command set gained
+> `dispatch-task` and `dispatch-revision` (the run-internal EXECUTE/APPLY
+> intents) and `cancel-run` requires a `reason`; the event `kind` taxonomy
+> is formalized as dotted categories (`run.* architect.* handoff.* agent.*
+> reviewer.* verification.* ledger.* task.* file_claim.* usage.* budget.*
+> policy.* audit.*` — the §3.1 names map to `ledger.claim_recorded` /
+> `ledger.claim_promoted` / `ledger.claim_rejected`); events carry a
+> required `safeSummary`; ids gained `art_ ses_ wsp_` prefixes; the
+> prompt-level `live_local`/`live_cloud` provenance aliases are represented
+> as provenance `live` + a `dispatchPath` field on usage records (Decision 1
+> keeps the pipes structurally separate). Unknown envelope fields are
+> rejected (strict schemas); unknown external data survives only in
+> designated `metadata` fields; hidden-reasoning fields are rejected on all
+> untrusted payloads.
+
 > Status: **locked for implementation** (Phase 1 architecture lock,
 > 2026-07-21). This document SPECIFIES contracts; nothing here is implemented
 > yet. "Prompt 2" marks contracts implemented by *Prompt 2 — Relay Protocol,
