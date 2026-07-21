@@ -1,3 +1,15 @@
+> **SUPERSEDED — historical reference only.**
+> Superseded by: `docs/relay/` (authoritative set: RELAY_MVP_SPEC.md,
+> ARCHITECTURE.md, PROTOCOL.md, SECURITY_BOUNDARIES.md, TEST_STRATEGY.md,
+> DECISIONS.md, CURRENT_STATE.md, SESSION_LOG.md, UI_VISION.md).
+> Date: 2026-07-21. Reason: founder architecture contract (Phase 1
+> Architecture Lock) reclassified the golden-path web app this document
+> describes as the **Relay Protocol Prototype** — a design seed and demo
+> artifact, not the Relay architecture. Statements below about scope,
+> isolation, storage keys, and checkpoint status describe the prototype
+> as of 2026-07-21 morning and are no longer maintained. Current truth:
+> `docs/relay/CURRENT_STATE.md`.
+
 # Sunday Relay — Build Status (YC demo, July 24)
 
 > Living status doc for the `feature/relay-yc-demo` branch. Updated at every

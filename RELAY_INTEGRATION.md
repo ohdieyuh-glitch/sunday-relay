@@ -1,3 +1,16 @@
+> **SUPERSEDED — historical reference only.**
+> Superseded by: `docs/relay/ARCHITECTURE.md` (placement, boundaries,
+> hybrid execution) and `docs/relay/SECURITY_BOUNDARIES.md` (dispatch,
+> credentials, spend layering). Date: 2026-07-21. Reason: Phase 1
+> Architecture Lock. In particular, §5 below (agent dispatch via the
+> Railway backend) is superseded by the hybrid local/cloud execution
+> architecture: its guarantees (Supabase auth, global spend breaker,
+> server-side keys) are preserved for Aquala-funded cloud dispatch via
+> `SpendAuthorizationPort`/`CloudDispatchGateway` implemented OUTSIDE
+> Relay Core, while local execution uses native provider auth with no
+> credentials in Relay state (founder Decision 1). §4's in-app mount plan
+> is superseded by the clients-of-Relay-Core model (Decision 9).
+
 # Sunday Relay — Integration Requirements
 
 How the `feature/relay-yc-demo` branch integrates with the rest of Sunday,
