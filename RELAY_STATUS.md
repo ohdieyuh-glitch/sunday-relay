@@ -41,25 +41,31 @@ seed mission is labeled **Recorded** in the UI.
 
 ## Status
 
-| Checkpoint | State |
-| --- | --- |
-| 1. Docs scaffold (this file + RELAY_INTEGRATION.md) | ✅ done |
-| 2. Domain: types + stage machine + tests | ⏳ next |
-| 3. Brief generators + artifact parsers + tests | not started |
-| 4. Verification gate + tests | not started |
-| 5. Relay store (zustand, isolated persistence) + tests | not started |
-| 6. UI (pipeline rail, stage panels, ledger) + `relay.html` entry | not started |
-| 7. Recorded demo mission seed + isolation boundary test | not started |
-| 8. Full verification gate (typecheck / vitest / build / backend:build) | not started |
+| Checkpoint | Commit | State |
+| --- | --- | --- |
+| 1. Docs scaffold (this file + RELAY_INTEGRATION.md) | 034ff92 | ✅ |
+| 2. Domain: types + stage machine + tests | 4983feb | ✅ |
+| 3. Brief generators + artifact parsers + tests | 550aeb4 | ✅ |
+| 4. Verification gate + tests | ca7a61d | ✅ |
+| 5. Relay store (zustand, isolated persistence) + tests | 0fb12a2 | ✅ |
+| 6. UI (custody rail, stage panels, ledger) + `relay.html` entry | 3f8bb21 | ✅ |
+| 7a. Isolation boundary test | cdab20a | ✅ |
+| 7b. Recorded demo mission (real dogfood run: Relay on Relay) | — | ⏳ in progress — independent adversarial review of the gate code is running now |
+| 8. Full verification (typecheck / vitest / build / backend:build) + demo script | — | not started |
 
 ## Changed files (cumulative)
 
-- `RELAY_STATUS.md` (new)
-- `RELAY_INTEGRATION.md` (new)
+- `RELAY_STATUS.md`, `RELAY_INTEGRATION.md` (new, relay-owned)
+- `relay.html` (new entry page)
+- `vite.config.mts` (**only shared-file edit** — additive rollup `input` block)
+- `src/relay/domain/` — `types.ts`, `stages.ts`, `briefs.ts`, `ingest.ts`, `gate.ts` (+ tests)
+- `src/relay/state/store.ts` (+ tests)
+- `src/relay/` — `main.tsx`, `RelayApp.tsx`, `PipelineRail.tsx`, `StagePanel.tsx`, `relay.css`, `relay-boundary.test.ts`
 
 ## Tests
 
-- None yet (domain tests land with checkpoint 2).
+- 36 relay tests across 5 files (stage machine, briefs+ingestion, gate, store, isolation boundary), all green.
+- `npm run typecheck` clean; `npm run build` green with relay entry chunks; `/relay.html` serves 200 on the dev server.
 
 ## Blockers
 
