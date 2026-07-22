@@ -8,6 +8,7 @@ import { buildPresentationFrames } from './presentation';
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 import { detectRenderOptions, renderAudit, renderEvent, renderManualTask, welcome, badge, type RenderOptions } from './render';
 import { buildCompetitiveFrames, competitiveJson } from './competitive';
+import { buildMissionControlFrames } from './mission-control';
 import { EXIT, exitCodeForFinalStatus } from './exit-codes';
 import { runWorkspaceVerification, workspaceDoctorReport } from '../workspace';
 import { createRandomIdFactory } from '../protocol/ids';
@@ -112,7 +113,9 @@ export function parseCli(argv: string[]): ParsedCli {
     }
     if (first === 'demo') {
       if (!second) return { command: 'demo', ...base, error: 'demo requires a scenario name (e.g. relay demo repair).' };
-      if (!SCENARIOS[second]) return { command: 'demo', ...base, error: `Unknown scenario "${second}". Known: ${Object.keys(SCENARIOS).join(', ')}.` };
+      // mission-control is a presentation OVER the competitive scenario.
+      if (second === 'mission-control') return { command: 'demo', scenario: 'mission-control', ...base };
+      if (!SCENARIOS[second]) return { command: 'demo', ...base, error: `Unknown scenario "${second}". Known: ${Object.keys(SCENARIOS).join(', ')}, mission-control.` };
       return { command: 'demo', scenario: second, ...base };
     }
     if (first === 'run') {
@@ -153,6 +156,7 @@ export const HELP_TEXT = [
   '  relay claude contract-verify   offline adapter proof (no provider call)',
   '  relay claude run --fixture safe-edit --confirm-live   REAL Claude Code proof',
   '  relay demo competitive         Mission Contract + Claude/Codex proof (SIMULATED)',
+  '  relay demo mission-control     modes + Relay Dog + Reviewer gate + Live Terminal',
   '  relay version | relay help',
   '',
   'Options: --json --no-color --plain --quiet',
@@ -460,32 +464,36 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return runClaudeCli(parsed, io);
     case 'demo':
     case 'run': {
-      const definition = SCENARIOS[parsed.scenario!];
+      // mission-control renders over a real competitive run.
+      const isMissionControl = parsed.scenario === 'mission-control';
+      const isCompetitive = parsed.scenario === 'competitive';
+      const runScenarioName = isMissionControl ? 'competitive' : parsed.scenario!;
+      const definition = SCENARIOS[runScenarioName];
       const objective = parsed.objective ?? definition.displayObjective;
       const outcome = runScenarioToCompletion({
-        scenarioName: parsed.scenario!,
+        scenarioName: runScenarioName,
         objective,
         maxCost: parsed.maxCost,
         autoAcceptBlueprint: parsed.autoAcceptBlueprint,
         render,
       });
       // Presentation mode: renderer-only milestones + pacing. Auto-enabled
-      // for the yc and competitive scenarios unless JSON/quiet was requested.
-      const isCompetitive = parsed.scenario === 'competitive';
-      const presentation = !parsed.json && !parsed.quiet && (parsed.presentation || parsed.scenario === 'yc' || isCompetitive);
+      // for yc / competitive / mission-control unless JSON/quiet was requested.
+      const presentation = !parsed.json && !parsed.quiet && (parsed.presentation || parsed.scenario === 'yc' || isCompetitive || isMissionControl);
       const nowIso = new Date().toISOString();
       if (parsed.json) {
-        // Competitive JSON carries the serializable mission bundle projection.
-        const payload = isCompetitive
+        const payload = isCompetitive || isMissionControl
           ? { ...(outcome.json as object), mission: competitiveJson(outcome.app, nowIso) }
           : outcome.json;
         io.out(JSON.stringify(payload));
       } else if (parsed.quiet) {
         io.out(`${outcome.finalStatus} (exit ${outcome.exitCode})`);
       } else if (presentation) {
-        const frames = isCompetitive
-          ? buildCompetitiveFrames(outcome.app, render, nowIso)
-          : buildPresentationFrames(outcome.app, render);
+        const frames = isMissionControl
+          ? buildMissionControlFrames(outcome.app, render, nowIso)
+          : isCompetitive
+            ? buildCompetitiveFrames(outcome.app, render, nowIso)
+            : buildPresentationFrames(outcome.app, render);
         const pace = parsed.pace ?? (io.isTTY ? 2500 : 0);
         for (const frame of frames) {
           frame.lines.forEach((line) => io.out(line));

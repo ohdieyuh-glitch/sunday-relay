@@ -1,5 +1,21 @@
 # Sunday Relay — Architecture (authoritative)
 
+> **Implementation sync (Prompt 8.2, 2026-07-22):** Mission Control adds two
+> browser-safe layers. `src/relay/mission/` gains four pure engines — modes
+> (mode policy, immutable autonomous consent, boundary stops), dog
+> (deterministic event-driven activity), entitlement (reviewer entitlement +
+> the output-visibility state machine + structural reviewer independence), and
+> terminal (in-process read model with dedup/ordering/gap detection + redaction
+> + structured exchanges) — plus credential-handle (a reference that never
+> holds a value). `src/relay/ui/` is the graphical Mission Control: React
+> components (`MissionControl`, `LiveTerminal`, `RelayDog`) that PROJECT Relay
+> Core state via `ui/data.ts` (runs the competitive scenario in-process) and
+> SUBMIT commands — no second engine, no client-side workflow. Boundary tests:
+> mission engines and `ui/` never import `node:`/child_process/workspace/the
+> Claude adapter; adapters never call the dog/mode/entitlement/consent engines;
+> `main.tsx` renders `<MissionControl />` and the Vite build proves no Node
+> import leaks into the browser bundle. See MISSION_CONTROL.md.
+
 > **Implementation sync (Prompt 8.1, 2026-07-23):** `src/relay/mission/` is a
 > new PURE, browser-safe projection layer (a leaf: imports protocol types
 > only — never Relay Core internals, adapters, the CLI, Node, or

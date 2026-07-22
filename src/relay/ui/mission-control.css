@@ -1,0 +1,137 @@
+/* Relay Mission Control (Prompt 8.2) — near-black, bone-white, restrained
+   Sunday gold, terminal density. Desktop + mobile responsive. Honors
+   reduced motion. No generic AI-gradient dashboard. */
+
+.relay-mc {
+  --mc-bg: #07080b;
+  --mc-panel: #0c0e13;
+  --mc-line: #1c2230;
+  --mc-text: #ece7dd;
+  --mc-dim: #8b8578;
+  --mc-gold: #d9a441;
+  --mc-green: #6fbf73;
+  --mc-red: #d66a5a;
+  background: var(--mc-bg);
+  color: var(--mc-text);
+  font-family: 'Fira Code', ui-monospace, monospace;
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.relay-visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+.relay-mc-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px; border-bottom: 1px solid var(--mc-line);
+}
+.relay-wordmark { font-weight: 700; letter-spacing: 0.18em; }
+.relay-wordmark-sm { font-weight: 700; letter-spacing: 0.12em; font-size: 12px; }
+.relay-tagline { color: var(--mc-dim); margin-left: 10px; font-size: 12px; }
+.relay-dim { color: var(--mc-dim); }
+
+.relay-mc-main { max-width: 920px; margin: 0 auto; padding: 18px; }
+.relay-mc-primary { border: 1px solid var(--mc-line); border-radius: 6px; padding: 16px; background: var(--mc-panel); }
+.relay-mc-mission { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.relay-mc-title { font-size: 18px; margin: 0; font-weight: 600; }
+
+.relay-verdict { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--mc-line); }
+.relay-verdict--verified_complete { color: var(--mc-green); border-color: var(--mc-green); }
+.relay-verdict--blocked, .relay-verdict--needs_human { color: var(--mc-gold); border-color: var(--mc-gold); }
+.relay-verdict--failed { color: var(--mc-red); border-color: var(--mc-red); }
+
+.relay-mc-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.relay-chip { font-size: 12px; padding: 2px 8px; border: 1px solid var(--mc-line); border-radius: 4px; color: var(--mc-dim); }
+.relay-chip--sim { color: var(--mc-gold); border-color: var(--mc-gold); }
+.relay-chip--auto { color: var(--mc-gold); border-color: var(--mc-gold); margin-left: 8px; }
+
+.relay-mc-teamdog { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 12px 0; }
+.relay-mc-team { display: flex; gap: 8px; flex-wrap: wrap; }
+.relay-role { font-size: 12px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--mc-line); }
+.relay-role--architect { color: #c9b8e8; }
+.relay-role--coding { color: #9ec9e8; }
+.relay-role--reviewer { color: var(--mc-gold); }
+
+.relay-dog { display: flex; align-items: center; gap: 10px; }
+.relay-dog-art { margin: 0; font-size: 12px; line-height: 1.15; color: var(--mc-text); }
+.relay-dog-label { color: var(--mc-gold); font-weight: 500; letter-spacing: 0.06em; font-size: 12px; }
+.relay-dog-metrics { font-size: 11px; margin-left: 8px; }
+.relay-dog--complete .relay-dog-label { color: var(--mc-green); }
+.relay-dog--failed .relay-dog-label, .relay-dog--blocked .relay-dog-label { color: var(--mc-red); }
+@keyframes relay-dog-step { 0%,100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+.relay-dog--moving .relay-dog-art { animation: relay-dog-step 0.9s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .relay-dog--moving .relay-dog-art { animation: none; } }
+
+.relay-mc-proof { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--mc-dim); margin: 10px 0; }
+.relay-mc-latest { font-size: 12px; margin: 6px 0 12px; }
+
+.relay-mc-modes { display: flex; gap: 8px; flex-wrap: wrap; }
+.relay-btn { font-family: inherit; font-size: 12px; padding: 6px 12px; border-radius: 4px; border: 1px solid var(--mc-line); background: transparent; color: var(--mc-text); cursor: pointer; min-height: 32px; }
+.relay-btn.primary { border-color: var(--mc-gold); color: var(--mc-gold); }
+.relay-btn.ghost { color: var(--mc-dim); }
+.relay-btn:focus-visible, .relay-term-btn:focus-visible, .relay-filter:focus-visible { outline: 2px solid var(--mc-gold); outline-offset: 2px; }
+
+.relay-term-btn { font-family: inherit; font-size: 13px; padding: 4px 10px; border: 1px solid var(--mc-line); border-radius: 4px; background: transparent; color: var(--mc-text); cursor: pointer; min-height: 30px; min-width: 44px; display: inline-flex; align-items: center; gap: 4px; }
+.relay-term-btn--active .relay-term-mark { color: var(--mc-green); }
+.relay-term-btn--waiting { border-color: var(--mc-gold); }
+.relay-term-btn--waiting .relay-term-mark { color: var(--mc-gold); }
+.relay-term-btn--failure { border-color: var(--mc-red); }
+.relay-term-btn--failure .relay-term-mark { color: var(--mc-red); }
+
+.relay-consent { border: 1px solid var(--mc-gold); border-radius: 6px; padding: 16px; margin-top: 16px; background: var(--mc-panel); }
+.relay-consent h2 { margin: 0 0 8px; font-size: 15px; }
+.relay-consent h3 { font-size: 12px; color: var(--mc-dim); margin: 12px 0 6px; letter-spacing: 0.04em; }
+.relay-access-list { list-style: none; padding: 0; margin: 0; font-size: 12px; }
+.relay-access-list li { padding: 2px 0; }
+.relay-consent-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+.relay-mc-sections { margin-top: 16px; display: grid; gap: 8px; }
+.relay-mc-sections details { border: 1px solid var(--mc-line); border-radius: 6px; padding: 10px 14px; background: var(--mc-panel); }
+.relay-mc-sections summary { cursor: pointer; font-weight: 500; }
+.relay-mc-sections ul { margin: 8px 0 0; padding-left: 18px; font-size: 12px; }
+
+/* Live Terminal */
+.relay-terminal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: flex; justify-content: flex-end; z-index: 40; }
+.relay-terminal { background: var(--mc-bg, #07080b); color: var(--mc-text, #ece7dd); border-left: 1px solid var(--mc-line, #1c2230); width: min(520px, 100%); height: 100vh; overflow-y: auto; padding: 14px 16px; font-family: 'Fira Code', ui-monospace, monospace; font-size: 13px; }
+.relay-terminal--full { width: 100%; border-left: none; }
+.relay-terminal-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--mc-line, #1c2230); padding-bottom: 8px; }
+.relay-terminal-close { min-width: 44px; }
+.relay-terminal-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; margin: 10px 0; font-size: 12px; }
+.relay-terminal-meta div { display: flex; gap: 6px; }
+.relay-terminal-meta dt { color: #8b8578; margin: 0; }
+.relay-terminal-meta dd { margin: 0; }
+.relay-conn--live { color: #6fbf73; }
+.relay-conn--reconnecting { color: #d9a441; }
+.relay-conn--offline { color: #d66a5a; }
+.relay-terminal-filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+.relay-filter { font-family: inherit; font-size: 11px; padding: 3px 8px; border: 1px solid #1c2230; border-radius: 4px; background: transparent; color: #8b8578; cursor: pointer; min-height: 28px; }
+.relay-filter.is-active { color: #d9a441; border-color: #d9a441; }
+.relay-terminal-filters-spacer { flex: 1; }
+.relay-terminal-feed { list-style: none; margin: 8px 0; padding: 0; }
+.relay-tev { padding: 4px 0; border-bottom: 1px solid rgba(28,34,48,0.5); }
+.relay-tev-seq { color: #8b8578; margin-right: 6px; }
+.relay-tag { font-size: 10px; padding: 1px 5px; border-radius: 3px; border: 1px solid #1c2230; margin-right: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.relay-tag--reviewer { color: #d9a441; }
+.relay-tag--coding-agent { color: #9ec9e8; }
+.relay-tag--architect { color: #c9b8e8; }
+.relay-tev-headline { }
+.relay-tev-summary { margin: 2px 0 0 26px; color: #b8b2a6; font-size: 12px; }
+.relay-tev--blocking .relay-tev-headline { color: #d9a441; }
+.relay-tev--warning .relay-tev-headline { color: #d9a441; }
+.relay-exchanges { margin-top: 10px; border-top: 1px solid #1c2230; padding-top: 8px; }
+.relay-exchange { margin: 8px 0; }
+.relay-exchange-route { color: #d9a441; font-size: 12px; }
+.relay-exchange-title { margin: 2px 0; font-size: 12px; }
+.relay-exchange-lines { margin: 0; font-size: 12px; color: #b8b2a6; white-space: pre-wrap; }
+
+/* Mobile: Live Terminal becomes a full-screen page; controls stack. */
+@media (max-width: 640px) {
+  .relay-terminal-overlay { justify-content: stretch; }
+  .relay-terminal { width: 100%; border-left: none; }
+  .relay-terminal-meta { grid-template-columns: 1fr; }
+  .relay-mc-teamdog { flex-direction: column; align-items: flex-start; }
+  .relay-mc-modes { flex-direction: row; }
+}

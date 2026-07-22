@@ -1,5 +1,17 @@
 # Sunday Relay — UI Vision (permanent direction)
 
+> **Implementation sync (Prompt 8.2, 2026-07-22):** a first graphical surface
+> now exists — **Mission Control** (`src/relay/ui/`, rendered by `main.tsx`) —
+> built to this direction: near-black background, bone-white text, restrained
+> Sunday-gold accent, terminal density; compact with progressive disclosure;
+> desktop side-panel/drawer + mobile full-screen terminal; accessible
+> (aria-labels, aria-live run state, keyboard, `prefers-reduced-motion`). It
+> is a PROJECTION of Relay Core state (mode, dog, live terminal, reviewer
+> gate, access) and submits commands only — it owns no decision. This does not
+> supersede the locked direction below; the parked Prompt-1 prototype
+> (`RelayApp`) is untouched. See MISSION_CONTROL.md. Note: the production
+> network transport for the Live Terminal is NOT implemented (in-process only).
+
 > Status: **visual direction locked; production UI NOT built.** This document
 > records the founder's UI contract and the two visual-reference images
 > (desktop + mobile, received 2026-07-21) so any future implementation phase

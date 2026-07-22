@@ -77,7 +77,7 @@ describe('relay-core boundary (new module roots)', () => {
   it('CLI is a thin client: only the app facade, read-model types, protocol, workspace facade, and its own modules', () => {
     // '../workspace' (the composition-root facade) is the ONLY workspace
     // import the CLI may use — internals are asserted below.
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/claude-code|\.\.\/mission|node:util|node:readline)['"]/;
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/claude-code|\.\.\/mission|node:util|node:readline)['"]/;
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
       const imports = [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
@@ -203,6 +203,43 @@ describe('Workspace boundaries (Prompt 7)', () => {
     for (const name of ['main.tsx', 'RelayApp.tsx', 'StagePanel.tsx', 'PipelineRail.tsx']) {
       const content = read(relay(name));
       expect(/from\s+['"].*\/workspace/.test(content), `${name} imports workspace code`).toBe(false);
+    }
+  });
+});
+
+describe('Mission Control boundaries (Prompt 8.2)', () => {
+  const missionDir = relay('mission');
+  const uiDir = relay('ui');
+  const uiFiles = walk(uiDir).filter((f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'));
+
+  it('the mode / dog / entitlement / terminal / credential engines are pure (no Node)', () => {
+    for (const name of ['modes.ts', 'dog.ts', 'entitlement.ts', 'terminal.ts', 'credential-handle.ts']) {
+      const content = read(join(missionDir, name));
+      expect(/from\s+['"]node:/.test(content), `${name} imports node builtins`).toBe(false);
+      expect(/child_process/.test(content), `${name} references child_process`).toBe(false);
+    }
+  });
+
+  it('credential handles never hold secret values (no raw password/token fields)', () => {
+    const ch = read(join(missionDir, 'credential-handle.ts'));
+    // The value field never exists; only names/scopes/policy are stored.
+    expect(/credentialValue|passwordValue|rawToken|secretValue\s*:/.test(ch)).toBe(false);
+    expect(ch.toLowerCase()).toContain('never contains the credential value');
+  });
+
+  it('the graphical UI projects from Relay Core / mission — never Node, adapters, or workspace', () => {
+    for (const file of uiFiles) {
+      const content = read(file);
+      expect(/from\s+['"]node:/.test(content), `${file} imports node builtins`).toBe(false);
+      expect(/child_process/.test(content), `${file} references child_process`).toBe(false);
+      expect(/from\s+['"].*\/(workspace|connectors\/claude-code)/.test(content), `${file} imports Node-only adapters/workspace`).toBe(false);
+    }
+  });
+
+  it('adapters cannot control dog speed, mode, entitlement, or release', () => {
+    for (const file of walk(relay('connectors')).filter((f) => !f.endsWith('.test.ts'))) {
+      const content = read(file);
+      expect(/computeDogActivity|selectMode|computeOutputVisibility|entitlementPolicy|buildAutonomousConsent/.test(content), `${file} controls mission-control policy`).toBe(false);
     }
   });
 });

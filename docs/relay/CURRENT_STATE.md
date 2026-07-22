@@ -1,15 +1,72 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-23 (Prompt 8.1 complete — YC competitive
-> proof layer).** The July 24 product demo is `npm run relay:yc`;
-> `npm run relay:competitive` is the deterministic full-workforce proof
-> (Mission Contract + Claude + Codex + finding + repair + verdict); and
-> `npm run relay:claude:live` is the real single-agent proof.
+> boundary. Last updated: **2026-07-22 (Prompt 8.2 complete — Mission Control,
+> operational modes, Relay Dog, live terminal, reviewer release gate).** The
+> July 24 product demo is `npm run relay:yc`; `npm run relay:mission-control`
+> is the graphical product surface (deterministic projection); `npm run
+> relay:competitive` is the deterministic full-workforce proof (Mission
+> Contract + Claude + Codex + finding + repair + verdict); and `npm run
+> relay:claude:live` is the real single-agent proof.
 
 ## Phase
 
-**Prompt 8.1 — YC Competitive Proof Layer: COMPLETE** (2026-07-23). The
+**Prompt 8.2 — Mission Control, Operational Modes, Relay Dog, Live Terminal,
+and Pro/Max Reviewer Gate: COMPLETE** (2026-07-22). The final major
+product-facing phase before the July 24 demo — a graphical Mission Control
+surface plus four Relay-Core-owned systems, all built as PURE, browser-safe
+projections/policies (no second engine, no client-side workflow):
+- **Operational Modes** (`mission/modes.ts`) — guided/semi/autonomous as
+  canonical policies (steps/repairs/spend/ask/credential defaults). Relay Core
+  owns the mode; the UI submits, never decides. Autonomous escalation needs an
+  immutable consent event (bounded scope; `'*'`/`'all'` rejected); reduction is
+  immediate; 17 boundary stop-actions; autonomous never bypasses the reviewer
+  or a Manual Task. CLI `/mode`.
+- **Secure Access** (`mission/credential-handle.ts`) — a `CredentialHandle`
+  that NEVER holds the value; secret-shaped keys/values rejected; no
+  raw-password storage; scope/expire/revoke; MFA/user-presence →
+  `requires_manual_task`; summary carries names/scopes only. NOT a full
+  encrypted vault (deferred). CLI `/access`.
+- **Relay Dog** (`mission/dog.ts`) — 16 deterministic event-driven states;
+  terminal/boundary → phase → speed; `sprinting` requires sustained
+  architect+coding coordination (SYNC HIGH); speed is a pure function of
+  meaningful events (never token stream / adapter / UI / fabricated);
+  reduced-motion honored; ASCII + React frames. CLI `/dog` (`motion on|off`).
+- **Live Terminal** (`mission/terminal.ts` + `ui/LiveTerminal.tsx`) — a
+  read-only projection of structured responsibility exchanges over existing
+  events; in-process stream with dedup/ordering/gap detection/reconnect;
+  redaction + "Private reasoning omitted."; the `[>_]` button (aria "Open Live
+  Terminal", active/waiting/failure dot); desktop drawer + mobile full-screen.
+  Production WebSocket NOT implemented (in-process only). CLI `/terminal`.
+- **Reviewer entitlement + release gate** (`mission/entitlement.ts`) —
+  RelayEntitlement (free/pro/max/enterprise) separate from mode; pro/max unlock
+  an independent Reviewer; the output-visibility state machine
+  (working→held_for_verification→held_for_review→revision_required→
+  approved_for_release→released; blocked) is Relay-Core-owned and never
+  releases before the required independent review + CompletionPolicy;
+  independence is structural; reviewer package excludes transcript/secrets.
+  CLI `/reviewer`.
+- **Mission Control UI** (`ui/`) — compact, progressive-disclosure React
+  surface in the Relay identity (near-black/bone/Sunday-gold/terminal density),
+  desktop + mobile, accessible + reduced-motion; projects Relay Core via
+  `ui/data.ts` and submits commands only; `main.tsx` renders it; the Vite
+  build proves it is browser-safe.
+- **Demo:** `npm run relay:mission-control` / `relay demo mission-control` —
+  deterministic projection of modes/consent/dog/reviewer-gate/exchanges/
+  terminal/access, 80-column, no ANSI, clean JSON, exit 0, stable across runs.
+  Reviewer labeled SIMULATED (external Codex not active); terminal transport
+  in-process; state volatile.
+- **Regression:** `relay:yc:verify`, `relay:manual:verify`,
+  `relay:workspace:verify` passed twice each; `relay:claude:contract-verify`
+  30/30; `relay:competitive` and `relay:mission-control` deterministic (exit
+  0). Relay suite 413/413 (35 files); full suite 2002/2002 (153 files);
+  typecheck + frontend + backend + relay builds green. NO provider call.
+- **Docs:** MODES.md, RELAY_DOG.md, LIVE_TERMINAL.md, REVIEWER_GATE.md,
+  MISSION_CONTROL.md (new) + sync blockquotes across RELAY_MVP_SPEC/
+  ARCHITECTURE/PROTOCOL/SECURITY_BOUNDARIES/UI_VISION/CLI/TEST_STRATEGY,
+  YC_DEMO_RUNBOOK §11, CURRENT_STATE, SESSION_LOG.
+
+**Prior phase — Prompt 8.1 — YC Competitive Proof Layer: COMPLETE** (2026-07-23). The
 minimum missing competitive structures + presentation so the YC demo
 visibly proves Relay is provider-neutral mission control ABOVE the agents —
 not another coding agent. Built as PURE, browser-safe PROJECTIONS over
@@ -353,6 +410,11 @@ founder decisions 1–10 encoded into this documentation set.
 | TEST_STRATEGY.md | Planned tests per prompt + first deterministic demo scenarios |
 | DECISIONS.md | ADR-001…020 + dependency analysis (zero dependencies added) |
 | UI_VISION.md | Permanent visual direction (locked earlier, commit cec62dd) |
+| MISSION_CONTROL.md | Graphical product surface; projection layer; truthful status (Prompt 8.2) |
+| MODES.md | Operational modes (guided/semi/autonomous), consent, boundary stops (Prompt 8.2) |
+| RELAY_DOG.md | Deterministic event-driven activity indicator (Prompt 8.2) |
+| LIVE_TERMINAL.md | Structured-exchange read model; in-process transport (Prompt 8.2) |
+| REVIEWER_GATE.md | Entitlement + output-visibility release gate (Prompt 8.2) |
 | SESSION_LOG.md | Append-only phase journal |
 
 Superseded (historical, headers added): root `RELAY_STATUS.md`,
@@ -418,7 +480,9 @@ verified-complete loop against real agents.
 
 **Superseded next-prompt records:** *Real Claude Code Local Adapter* — DONE
 (Prompt 8, live smoke passed). *YC Competitive Proof Layer* — DONE
-(Prompt 8.1).
+(Prompt 8.1). *Mission Control, Operational Modes, Relay Dog, Live Terminal,
+Reviewer Release Gate* — DONE (Prompt 8.2). The Reviewer surfaced there is a
+deterministic SIMULATION; the Real Codex adapter below makes it live.
 
 **Superseded next-prompt record (pre-Prompt-7): Post-YC Durable Local
 Persistence and Real Cross-Process Resume** — implement the relay-storage

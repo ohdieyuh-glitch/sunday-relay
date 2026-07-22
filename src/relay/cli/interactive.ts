@@ -10,6 +10,10 @@ import {
   projectCompetitiveMission, renderMissionContract, renderAttestations,
   renderFindings, renderRepairs, renderVerdict, renderTimeline,
 } from './competitive';
+import {
+  defaultModePolicy, computeDogActivity, renderDogFrames, entitlementPolicy,
+  assignReviewer, projectTerminalEvent, type RelayMode,
+} from '../mission';
 
 /**
  * Interactive Relay session (Prompt 5) — a PURE line handler so tests drive
@@ -43,6 +47,7 @@ const HELP = [
   '  /status /events /project /task /ownership /blueprint /handoff',
   '  /evidence /review /usage /checkpoint /manual /audit   inspect read models',
   '  /mission /attestation /findings /repairs /verdict /timeline   competitive proof',
+  '  /mode [guided|semi|autonomous] /dog [status|motion on|off] /terminal /reviewer /access',
   '  /approve /reject <reason>     answer blueprint or checkpoint decisions',
   '  /done /manual-help /cannot-complete [note]   answer a Manual Task',
   '  (D / H / N / C also work while a Manual Task is shown)',
@@ -57,6 +62,54 @@ export function createSession(options: SessionOptions): Session {
   let renderOpts = { ...options.render };
   let lastSeq = 0;
   const nowIso = (): string => options.now?.() ?? new Date().toISOString();
+  let mode: RelayMode = 'guided';
+  let dogMotion = true;
+  const entitlement = 'pro' as const;
+
+  const dogNow = () => {
+    const events = app?.events(0) ?? [];
+    const status = app?.status();
+    return computeDogActivity({
+      events: events.map((e) => ({ sequence: e.sequence, source: e.source, kind: e.kind, provenance: e.provenance as 'simulated' })),
+      runStatus: status?.status ?? 'created', phase: status?.phase ?? 'blueprint', mode,
+      manualTaskActive: !!app?.manualTask() && status?.status === 'checkpoint_required',
+      checkpointActive: !!status?.checkpoint && !status.checkpoint.respondedAt,
+      missionVerdict: status?.status === 'completed' ? 'verified_complete' : 'none',
+      reducedMotion: !dogMotion, now: nowIso(), provenance: 'simulated',
+    });
+  };
+  const renderModeView = (): string[] => {
+    const p = defaultModePolicy(mode, nowIso());
+    return ['MODE', `  current: ${mode}`, `  steps<=${p.automaticStepLimit} repairs<=${p.automaticRepairLimit} spend<=$${p.maximumSpendUsd}`,
+      `  checkpoints: ${p.checkpointPolicy}   credential handles: ${p.credentialHandlePolicy}`,
+      `  deployment: ${p.deploymentPolicy}   reviewer: ${p.reviewerPolicy}`,
+      mode === 'autonomous' ? '  AUTONOMOUS — bounded execution inside approved access.' : '  Set with /mode guided|semi|autonomous.'];
+  };
+  const renderDogView = (): string[] => {
+    const a = dogNow();
+    return dogMotion ? [...renderDogFrames(a), `  state=${a.state} activity=${a.activityLevel} sync=${a.synchronizationLevel}`]
+      : [`RELAY DOG — ${a.statusLabel} (motion off)`, `  state=${a.state} activity=${a.activityLevel} sync=${a.synchronizationLevel}`];
+  };
+  const renderTerminalView = (): string[] => {
+    if (!app) return ['No run yet.'];
+    const events = app.events(0).filter((e) => !e.kind.startsWith('ledger.') && !e.kind.startsWith('file_claim.')).slice(-12);
+    const a = dogNow();
+    return ['LIVE TERMINAL', `  Mode: ${mode}   Plan: ${entitlementPolicy(entitlement).label}   Dog: ${a.state}`,
+      ...events.map((e) => { const t = projectTerminalEvent({ sequence: e.sequence, at: e.at, source: e.source, kind: e.kind, safeSummary: e.safeSummary, provenance: e.provenance }); return `  [${String(t.sequence).padStart(2, '0')}] ${t.sourceRole.padEnd(12)} ${t.headline}`; })];
+  };
+  const renderReviewerView = (): string[] => {
+    const p = entitlementPolicy(entitlement);
+    const r = assignReviewer(entitlement, 'simulated');
+    return ['REVIEWER', `  plan: ${p.label}   reviewer available: ${p.reviewerAvailable}`,
+      `  required for substantive coding: ${p.reviewerRequiredForSubstantiveCoding}`,
+      `  reviewer: ${r.agentId} (${r.availability}) [SIMULATED — external Codex not active]`];
+  };
+  const renderAccessView = (): string[] => {
+    const p = defaultModePolicy(mode, nowIso());
+    return ['ACCESS', `  mode: ${mode}   credential handles: ${p.credentialHandlePolicy}`,
+      `  approved tools: ${p.approvedTools.join(', ')}`, `  prohibited: ${p.prohibitedTools.join(', ')}`,
+      '  Passwords/tokens are never accepted or displayed; MFA stays a Manual Task.'];
+  };
 
   const ensureApp = (): RelayApp | { error: string } => {
     if (app) return app;
@@ -199,6 +252,21 @@ export function createSession(options: SessionOptions): Session {
         case '/repairs': return { lines: app ? renderRepairs(projectCompetitiveMission(app, nowIso())) : ['No run yet.'] };
         case '/verdict': return { lines: app ? renderVerdict(projectCompetitiveMission(app, nowIso())) : ['No run yet.'] };
         case '/timeline': return { lines: app ? renderTimeline(projectCompetitiveMission(app, nowIso())) : ['No run yet.'] };
+        case '/mode':
+          if (arg === 'guided' || arg === 'semi') { mode = arg; return { lines: [`mode: ${mode}`, ...renderModeView()] }; }
+          if (arg === 'autonomous') { mode = 'autonomous'; return { lines: ['mode: autonomous (consent required in the UI; demo grants scoped access)', ...renderModeView()] }; }
+          return { lines: renderModeView() };
+        case '/dog':
+          if (arg === 'status') return { lines: renderDogView() };
+          if (arg.startsWith('motion')) {
+            const want = arg.split(/\s+/)[1];
+            if (want === 'on') dogMotion = true; else if (want === 'off') dogMotion = false;
+            return { lines: [`dog motion: ${dogMotion ? 'on' : 'off'}`, ...renderDogView()] };
+          }
+          return { lines: renderDogView() };
+        case '/terminal': return { lines: renderTerminalView() };
+        case '/reviewer': return { lines: renderReviewerView() };
+        case '/access': return { lines: renderAccessView() };
         case '/manual': return { lines: app ? renderManualTask(app) : ['No run yet.'] };
         case '/done': return { lines: respondManual('done') };
         case '/manual-help': return { lines: respondManual('help') };

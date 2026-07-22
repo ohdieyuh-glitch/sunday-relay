@@ -108,3 +108,27 @@ those agents running for real inside Relay's isolated boundary. The agents
 are replaceable; the mission, governance, and evidence stay with Relay."
 Do NOT claim Codex is connected, and do NOT run `relay:claude:live` during
 the deterministic segment.
+
+## 11. OPTIONAL Mission Control surface (Prompt 8.2 — product view)
+
+**`npm run relay:mission-control` — the graphical product story, in the terminal:**
+- Deterministic projection of the whole operator surface: the three
+  operational **modes** (guided/semi/autonomous) + the autonomous **consent**
+  screen, the **Relay Dog** activity states, the reviewer **entitlement +
+  release gate** (working → held → review → approved → released), the
+  structured **live-terminal** exchanges (ARCHITECT → CODING AGENT, …), and
+  the **secure-access** summary (service/scope names only — never values).
+- 80-column, no ANSI, clean JSON, exit 0, deterministic across runs, no
+  provider call. The graphical React surface is the same projection
+  (`npm run build` bundles it browser-safe).
+- Truthful labels on camera: the **Reviewer is a SIMULATION** and the
+  **external Codex is NOT active**; the live-terminal **production transport is
+  NOT implemented** (in-process only); all state is **volatile** (no durable
+  persistence yet); Secure Access holds **credential handles that never carry a
+  value** — a full encrypted vault is a future phase, and MFA is a Manual Task.
+
+On-camera framing: "This is Mission Control — the operator watches the mission,
+picks how much autonomy to grant, and Relay decides what that permits. Output
+can't ship until the review Relay requires actually happens — even in
+autonomous. The dog only runs when real coordinated work is happening." Do NOT
+claim the reviewer is a live Codex, and do NOT imply the terminal is networked.

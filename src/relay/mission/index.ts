@@ -21,3 +21,28 @@ export {
 export { evaluateMissionVerdict, claimedCompleteVerdict, type MissionVerdictInput } from './verdict';
 export { buildMissionTimeline, type TimelineEventInput, type TimelineContext } from './timeline';
 export { projectMission, type MissionProjectionInput, type MissionProjectionBundle } from './read-models';
+export {
+  RELAY_MODES, defaultModePolicy, selectMode, buildAutonomousConsent,
+  validateAutonomousAccess, actionRequiresStop, AUTONOMOUS_STOP_ACTIONS, SEMI_STOP_ACTIONS,
+  type RelayMode, type RelayModePolicy, type AutonomousConsent, type AutonomousAccessGrant,
+  type ModeTransition, type BoundaryAction,
+} from './modes';
+export {
+  createCredentialHandle, handleIsActive, revokeHandle, evaluateHandleAccess, accessSummary,
+  type CredentialHandle, type CredentialHandleInput, type HandleCapability, type HandleAccessResult,
+} from './credential-handle';
+export {
+  DOG_STATES, computeDogActivity, renderDogFrames, DOG_FRAME,
+  type DogState, type RelayDogActivity, type DogComputeInput, type DogEventInput,
+} from './dog';
+export {
+  ENTITLEMENTS, entitlementPolicy, computeOutputVisibility, reviewerIsIndependent,
+  assignReviewer, buildReviewerPackage, OUTPUT_VISIBILITIES,
+  type RelayEntitlement, type EntitlementPolicy, type OutputVisibility,
+  type ReviewerProfile, type ReviewerPackage, type ReleaseGateInput,
+} from './entitlement';
+export {
+  projectTerminalEvent, redactTerminalText, createInProcessTerminalStream, buildAgentExchanges,
+  type RelayTerminalEvent, type RelayTerminalReadModel, type ConnectionState,
+  type TerminalProvenanceLabel, type ProjectTerminalEventInput, type AgentExchange, type TerminalStream,
+} from './terminal';

@@ -1,5 +1,24 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **Implementation sync (Prompt 8.2, 2026-07-22):** Mission Control tests.
+> `src/relay/mission/mission-control.test.ts` (19) covers the mode policy +
+> escalation-consent/reduction + boundary stops, credential-handle secret
+> rejection + `requires_manual_task`, the deterministic dog states incl. the
+> sprinting architect+coding coordination requirement and meaningful-event
+> filter, reviewer independence + the output-visibility state machine (no
+> release before required review + policy; autonomous never bypasses), and the
+> terminal read model (dedup/ordering/gap detection/reconnect + redaction +
+> reasoning omission). `src/relay/cli/mission-control.test.ts` covers the
+> `demo mission-control` frames (truthful labels, 80-column, no ANSI, no
+> secret) + the interactive `/mode /dog /terminal /reviewer /access`.
+> `src/relay/ui/mission-control.test.tsx` (7) is DOM-less SSR
+> (`renderToStaticMarkup`): data projection from Relay Core, MissionControl +
+> LiveTerminal + RelayDog render every safe state, the accessible terminal
+> button, reduced motion, and no secret/hidden-reasoning leak. Boundary tests
+> gained a Mission Control suite (mission engines + `ui/` are pure/browser-safe;
+> adapters can't drive dog/mode/entitlement/consent; the handle holds no value).
+> All green with NO provider call.
+
 > **Implementation sync (Prompt 8.1, 2026-07-23):** mission projection tests
 > in `src/relay/mission/mission.test.ts` (pure: mission validation +
 > revisioning + binding-digest staleness + secret rejection; attestation

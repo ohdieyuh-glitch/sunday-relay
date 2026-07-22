@@ -7,10 +7,14 @@ import '@fontsource/fira-code/700.css';
 // Sunday design tokens (read-only reuse) + Relay-scoped styles.
 import '@/styles/global.css';
 import './relay.css';
-import { RelayApp } from './RelayApp';
+import './ui/mission-control.css';
+import { MissionControl } from './ui/MissionControl';
 
+// Prompt 8.2: the primary Relay surface is Mission Control, projecting from
+// Relay Core. The earlier custody-rail prototype (RelayApp) remains in the
+// tree, parked, for the protocol demonstration.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <RelayApp />
+    <MissionControl />
   </StrictMode>,
 );

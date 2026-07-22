@@ -1,5 +1,17 @@
 # Sunday Relay CLI (Prompt 5) — simulation demo surface
 
+> **Mission Control (Prompt 8.2, 2026-07-22):** `npm run relay:mission-control`
+> / `relay demo mission-control` renders the deterministic Mission Control
+> projection — the three operational modes + autonomous consent, the Relay Dog
+> activity states, the reviewer entitlement + release gate, the structured
+> live-terminal exchanges, and the secure-access summary (names/scopes, never
+> values) — at 80 columns, no ANSI, clean JSON, exit 0, no provider call. The
+> interactive session adds `/mode`, `/dog` (`motion on|off`), `/terminal`,
+> `/reviewer`, and `/access`. The Reviewer is labeled SIMULATED (external Codex
+> not active) and the terminal transport is in-process (production WebSocket
+> NOT implemented). See MISSION_CONTROL.md, MODES.md, RELAY_DOG.md,
+> LIVE_TERMINAL.md, REVIEWER_GATE.md.
+
 > **What is real:** the Relay Core workflow — protocol, run state machine,
 > ledger, ownership, eligibility, Handoff Compiler, Relay-controlled
 > verification, CompletionPolicy, claim promotion, Final Audit Report.

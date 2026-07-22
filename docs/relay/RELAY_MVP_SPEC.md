@@ -1,5 +1,25 @@
 # Sunday Relay — MVP Specification (authoritative)
 
+> **Implementation sync (Prompt 8.2, 2026-07-22):** Mission Control lands as
+> the graphical product surface plus four Relay-Core-owned systems (all pure,
+> browser-safe, boundary-tested). **Operational Modes** (guided/semi/
+> autonomous) are canonical policies, not UI preferences — the UI submits a
+> mode command, Relay Core decides; autonomous escalation needs immutable
+> consent, reduction is immediate, and autonomous never bypasses the reviewer
+> or a Manual Task. **Secure Access** stores CredentialHandles that never hold
+> a value (no raw-password storage; scope/expire/revoke; MFA stays a Manual
+> Task) — a full encrypted vault is deferred. The **Relay Dog** is a
+> deterministic event-driven activity indicator (speed never from token
+> streams, adapters, or fabrication; reduced-motion honored). The **Live
+> Terminal** projects structured responsibility exchanges from existing events
+> (dedup/ordering/gap detection/reconnect; no hidden reasoning or secrets;
+> production WebSocket NOT implemented — in-process transport only). The
+> **Reviewer entitlement + release gate** (free/pro/max/enterprise, separate
+> from mode) owns an output-visibility state machine so output cannot release
+> before the required independent review + CompletionPolicy. No billing/Stripe,
+> no real Codex (Reviewer is SIMULATED), no provider call. See MISSION_CONTROL,
+> MODES, RELAY_DOG, LIVE_TERMINAL, REVIEWER_GATE.
+
 > **Implementation sync (Prompt 8.1, 2026-07-23):** the competitive proof
 > layer adds `src/relay/mission/` — pure, browser-safe PROJECTIONS over
 > canonical state (not a second source of truth): the Mission Contract

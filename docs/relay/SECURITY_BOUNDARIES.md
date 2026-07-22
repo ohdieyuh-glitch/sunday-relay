@@ -1,5 +1,30 @@
 # Sunday Relay — Security Boundaries (authoritative)
 
+> **Implementation sync (Prompt 8.2, 2026-07-22):** Mission Control preserves
+> every boundary. **Secure Access:** a `CredentialHandle` is a reference to
+> approved access that NEVER contains the credential value — `createCredential
+> Handle` rejects secret-shaped keys (password/token/api_key/cookie/recovery/…)
+> and secret-shaped values; there is no raw-password storage and mode config
+> never accepts password values. Handles scope/expire/revoke; access needing
+> multi-factor or user presence returns `requires_manual_task` (MFA stays a
+> Manual Task). This is NOT a full encrypted vault — that is explicitly
+> deferred. **Modes:** Relay Core owns the mode; a client submits a command but
+> never decides permissions; autonomous escalation requires an immutable
+> consent event (bounded scope; `'*'`/`'all'` rejected), reduction is
+> immediate, and autonomous can neither bypass the reviewer gate nor a Manual
+> Task. **Dog:** speed is a pure function of meaningful events — never a token
+> stream, never adapter/UI-set, never fabricated. **Live Terminal + reviewer
+> package:** never expose hidden chain-of-thought/private reasoning (only
+> "Private reasoning omitted."), provider/platform system prompts, passwords,
+> keys, tokens, cookies, recovery codes, secret env values, raw handles, or
+> unredacted stack traces; the reviewer package excludes the transcript.
+> **Release gate:** the output-visibility state machine is Relay-Core-owned;
+> output cannot release before the required independent review + CompletionPolicy;
+> reviewer independence is structural (distinct agent/session/adapter/group) and
+> an adapter cannot mark itself independent, release its own work, raise its
+> autonomy, grant credential access, control the dog, fabricate events, or
+> reveal secrets (all boundary-tested). No provider call; no billing.
+
 > **Implementation sync (Prompt 8.1, 2026-07-23):** the mission projection
 > layer strengthens truthfulness: agent completion statements stay UNVERIFIED
 > claims; "Reviewed by Codex" cannot exist without a Codex execution

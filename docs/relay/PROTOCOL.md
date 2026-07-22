@@ -1,5 +1,16 @@
 # Relay Protocol — `relay.protocol.v1` (specification)
 
+> **Implementation sync (Prompt 8.2, 2026-07-22):** Mission Control adds NO
+> new protocol envelopes, commands, or event kinds. Modes, credential handles,
+> the dog activity, the terminal read model, entitlement, and output
+> visibility are module-local SERIALIZABLE read-model PROJECTIONS in
+> `src/relay/mission/` derived from existing canonical contracts + the
+> append-only event ledger. Mode escalation consent and boundary stops are
+> policy values, not envelopes. Dog speed, terminal ordering, and output
+> visibility are pure functions of the existing event stream. A CredentialHandle
+> is a reference (names/scopes/policy) and by construction carries no credential
+> value; provenance reuses the existing `simulated`/`live` values.
+
 > **Implementation sync (Prompt 8.1, 2026-07-23):** the competitive proof
 > layer adds NO new protocol envelopes, commands, or event kinds. The
 > mission structures (RelayMissionContract, RelayExecutionAttestation,

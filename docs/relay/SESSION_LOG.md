@@ -873,3 +873,83 @@ deferred per COMPETITIVE_FEATURE_COVERAGE.md.
 
 **Exact next step:** *Real Codex Independent Reviewer Adapter* behind the
 reviewer port, per CURRENT_STATE §Next prompt.
+
+---
+
+## 2026-07-22 — Prompt 8.2: Mission Control, Operational Modes, Relay Dog, Live Terminal, and Pro/Max Reviewer Gate
+
+**Prompt objective:** the final major product-facing implementation phase
+before the July 24 YC demonstration — a graphical Mission Control surface plus
+four Relay-Core-owned systems (operational modes, secure access, the Relay Dog
+activity engine, the live terminal, and the reviewer entitlement + release
+gate), built as PURE, browser-safe projections/policies with no second engine
+and no client-side workflow logic.
+
+**Built (all in `src/relay/mission/` unless noted):**
+- `modes.ts` — guided/semi/autonomous canonical policies; `selectMode`
+  (autonomous escalation requires an immutable consent event; reduction
+  immediate); `buildAutonomousConsent`/`validateAutonomousAccess` (rejects
+  `'*'`/`'all'`); `AUTONOMOUS_STOP_ACTIONS` (17) / `SEMI_STOP_ACTIONS` /
+  `actionRequiresStop`.
+- `credential-handle.ts` — `CredentialHandle` that never holds a value;
+  secret-shaped key/value rejection; `revokeHandle`; `evaluateHandleAccess`
+  (→ `requires_manual_task` for MFA/presence); `accessSummary` (names/scopes).
+- `dog.ts` — 16 deterministic states; `computeDogActivity` (terminal/boundary
+  → phase → speed; `sprinting` needs architectAndCoding && level≥70 &&
+  sync≥60; meaningful-event filter excludes ledger/file_claim/usage/
+  phase_changed); `renderDogFrames`/`DOG_FRAME`; reduced motion.
+- `entitlement.ts` — entitlement policy; `computeOutputVisibility` state
+  machine (working→held_for_verification→held_for_review→revision_required→
+  approved_for_release→released; blocked); `reviewerIsIndependent` (structural);
+  `assignReviewer`; `buildReviewerPackage` (excludes transcript/secrets).
+- `terminal.ts` — `redactTerminalText`, `projectTerminalEvent` ("Private
+  reasoning omitted."), `createInProcessTerminalStream` (loadSince dedup/
+  ordering/gap detection + connect/reconnect/disconnect), `buildAgentExchanges`.
+- UI: `ui/{data.ts,MissionControl.tsx,LiveTerminal.tsx,RelayDog.tsx,
+  mission-control.css}` — compact, progressive-disclosure, Relay identity,
+  desktop + mobile, accessible + reduced-motion; projects Relay Core, submits
+  commands only. `main.tsx` renders `<MissionControl />`.
+- CLI: `cli/mission-control.ts` (`buildMissionControlFrames`), `demo
+  mission-control` in `cli/main.ts`, `/mode /dog /terminal /reviewer /access`
+  in `cli/interactive.ts`; `package.json` `relay:mission-control`.
+
+**Tests:** `mission/mission-control.test.ts` (19), `cli/mission-control.test.ts`,
+`ui/mission-control.test.tsx` (7, DOM-less SSR), plus a Mission Control boundary
+suite in `relay-core-boundary.test.ts` (mission engines + `ui/` pure/
+browser-safe; adapters can't drive dog/mode/entitlement/consent; the handle
+holds no value; CLI allowlist gains `./mission-control`).
+
+**Dependencies:** none added.
+
+**Verification (exact):** `npm run relay:mission-control` renders modes/consent/
+dog/reviewer-gate/exchanges/terminal/access at 80 columns, no ANSI, clean JSON,
+exit 0, byte-identical across two runs, no secret-shaped output. `relay:yc:verify`,
+`relay:manual:verify`, `relay:workspace:verify` passed **twice each**;
+`relay:claude:contract-verify` 30/30; `relay:competitive` exit 0. Relay suite
+**413/413** (35 files); full suite **2002/2002** (153 files); typecheck +
+frontend + backend + relay builds green. **NO provider call anywhere.** Fixes
+(≤5-iteration budget): two boundary assertions (CLI allowlist missing
+`./mission-control`; credential-handle phrase match case-normalized) — both real
+boundary-test corrections, not code weakenings.
+
+**Security / truthfulness:** CredentialHandles never carry a value (no
+raw-password storage; mode config rejects password values); not a full
+encrypted vault (deferred); MFA stays a Manual Task. Relay Core owns mode +
+consent + output visibility + dog + reviewer independence; adapters cannot
+raise autonomy, grant credentials, control the dog, mark themselves
+independent, release their own work, bypass review, fabricate events, or reveal
+secrets (boundary-tested). The Live Terminal never shows hidden reasoning
+(only "Private reasoning omitted."), system prompts, or secrets; production
+WebSocket transport NOT implemented (in-process only). The Reviewer is a
+deterministic SIMULATION (external Codex not active); no billing/Stripe; all
+state volatile (no durable persistence). No provider/paid call, no deployment,
+no push.
+
+**Docs:** MODES.md, RELAY_DOG.md, LIVE_TERMINAL.md, REVIEWER_GATE.md,
+MISSION_CONTROL.md (new) + sync blockquotes across RELAY_MVP_SPEC/ARCHITECTURE/
+PROTOCOL/SECURITY_BOUNDARIES/UI_VISION/CLI/TEST_STRATEGY, YC_DEMO_RUNBOOK §11,
+CURRENT_STATE, this log.
+
+**Exact next step:** *Real Codex Independent Reviewer Adapter* behind the
+reviewer port, per CURRENT_STATE §Next prompt — makes the reviewer gate's
+approval come from a live independent agent with its own Execution Attestation.
