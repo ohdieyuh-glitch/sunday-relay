@@ -3,6 +3,9 @@ import * as readline from 'node:readline';
 import { RELAY_PROTOCOL_VERSION } from '../protocol/version';
 import { createRelayApp, SCENARIOS, type RelayApp } from '../core/app';
 import { createSession } from './interactive';
+import { buildPresentationFrames } from './presentation';
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 import { detectRenderOptions, renderAudit, renderEvent, welcome, badge, type RenderOptions } from './render';
 import { EXIT, exitCodeForFinalStatus } from './exit-codes';
 
@@ -33,6 +36,9 @@ export interface ParsedCli {
   maxCost?: number;
   untilStopped: boolean;
   autoAcceptBlueprint: boolean;
+  presentation: boolean;
+  pace?: number;
+  compact: boolean;
   json: boolean;
   noColor: boolean;
   plain: boolean;
@@ -51,6 +57,9 @@ export function parseCli(argv: string[]): ParsedCli {
         'max-cost': { type: 'string' },
         'until-stopped': { type: 'boolean', default: false },
         'auto-accept-blueprint': { type: 'boolean', default: false },
+        presentation: { type: 'boolean', default: false },
+        pace: { type: 'string' },
+        compact: { type: 'boolean', default: false },
         json: { type: 'boolean', default: false },
         'no-color': { type: 'boolean', default: false },
         plain: { type: 'boolean', default: false },
@@ -58,12 +67,18 @@ export function parseCli(argv: string[]): ParsedCli {
         help: { type: 'boolean', default: false },
       },
     });
+    const pace = values.pace !== undefined ? Number(values.pace) : undefined;
     const base = {
       json: values.json === true, noColor: values['no-color'] === true,
       plain: values.plain === true, quiet: values.quiet === true,
       untilStopped: values['until-stopped'] === true,
       autoAcceptBlueprint: values['auto-accept-blueprint'] === true,
+      presentation: values.presentation === true,
+      pace, compact: values.compact === true,
     };
+    if (pace !== undefined && (!Number.isFinite(pace) || pace < 0)) {
+      return { command: 'help', ...base, pace: undefined, error: '--pace must be a non-negative number of milliseconds.' };
+    }
     const [first, second] = positionals;
     if (values.help || first === 'help') return { command: 'help', ...base };
     if (first === 'version') return { command: 'version', ...base };
@@ -88,7 +103,7 @@ export function parseCli(argv: string[]): ParsedCli {
   } catch (err) {
     return {
       command: 'help', json: false, noColor: true, plain: true, quiet: false,
-      untilStopped: false, autoAcceptBlueprint: false,
+      untilStopped: false, autoAcceptBlueprint: false, presentation: false, compact: false,
       error: err instanceof Error ? err.message : String(err),
     };
   }
@@ -117,6 +132,8 @@ export interface DemoOutcome {
   lines: string[];
   finalStatus: string;
   json?: unknown;
+  /** The composed app (read models only) for presentation rendering. */
+  app: RelayApp;
 }
 
 export function runScenarioToCompletion(input: {
@@ -139,12 +156,12 @@ export function runScenarioToCompletion(input: {
     ids: input.ids,
     now: input.now,
   });
-  if (!created.ok) return { exitCode: EXIT.usage, lines: [created.error.message], finalStatus: 'error' };
+  if (!created.ok) return { exitCode: EXIT.usage, lines: [created.error.message], finalStatus: 'error', app: null as unknown as RelayApp };
   const app: RelayApp = created.value;
   emit(welcome(render, scenarioName));
   const objective = input.objective ?? `Demonstrate the "${scenarioName}" Relay scenario.`;
   const started = app.start(objective);
-  if (!started.ok) return { exitCode: EXIT.internalError, lines: [...lines, started.error.message], finalStatus: 'error' };
+  if (!started.ok) return { exitCode: EXIT.internalError, lines: [...lines, started.error.message], finalStatus: 'error', app };
 
   let seq = 0;
   const drain = () => {
@@ -207,7 +224,7 @@ export function runScenarioToCompletion(input: {
     events: app.events(0),
     usage: app.usage(),
   };
-  return { exitCode, lines, finalStatus, json: jsonPayload };
+  return { exitCode, lines, finalStatus, json: jsonPayload, app };
 }
 
 /* ------------------------------ doctor ----------------------------- */
@@ -247,7 +264,7 @@ export function doctorReport(io: CliIo): { lines: string[]; exitCode: number } {
 
 /* ------------------------------- main ------------------------------ */
 
-export function runCli(argv: string[], io: CliIo = defaultIo): number {
+export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
   const parsed = parseCli(argv);
   const render = detectRenderOptions(
     { json: parsed.json, 'no-color': parsed.noColor, plain: parsed.plain, quiet: parsed.quiet },
@@ -281,16 +298,32 @@ export function runCli(argv: string[], io: CliIo = defaultIo): number {
     }
     case 'demo':
     case 'run': {
+      const definition = SCENARIOS[parsed.scenario!];
+      const objective = parsed.objective ?? definition.displayObjective;
       const outcome = runScenarioToCompletion({
         scenarioName: parsed.scenario!,
-        objective: parsed.objective,
+        objective,
         maxCost: parsed.maxCost,
         autoAcceptBlueprint: parsed.autoAcceptBlueprint,
         render,
       });
-      if (parsed.json) io.out(JSON.stringify(outcome.json));
-      else if (!parsed.quiet) outcome.lines.forEach((line) => io.out(line));
-      else io.out(`${outcome.finalStatus} (exit ${outcome.exitCode})`);
+      // Presentation mode: renderer-only milestones + pacing. Auto-enabled
+      // for the yc scenario unless JSON/quiet output was requested.
+      const presentation = !parsed.json && !parsed.quiet && (parsed.presentation || parsed.scenario === 'yc');
+      if (parsed.json) {
+        io.out(JSON.stringify(outcome.json));
+      } else if (parsed.quiet) {
+        io.out(`${outcome.finalStatus} (exit ${outcome.exitCode})`);
+      } else if (presentation) {
+        const frames = buildPresentationFrames(outcome.app, render);
+        const pace = parsed.pace ?? (io.isTTY ? 2500 : 0);
+        for (const frame of frames) {
+          frame.lines.forEach((line) => io.out(line));
+          if (pace > 0 && frame !== frames[frames.length - 1]) await sleep(pace);
+        }
+      } else {
+        outcome.lines.forEach((line) => io.out(line));
+      }
       return outcome.exitCode;
     }
     case 'interactive': {
@@ -317,5 +350,7 @@ export function runCli(argv: string[], io: CliIo = defaultIo): number {
 
 /* Bundled entry */
 if (require.main === module) {
-  process.exitCode = runCli(process.argv.slice(2));
+  void runCli(process.argv.slice(2)).then((code) => {
+    process.exitCode = code;
+  });
 }

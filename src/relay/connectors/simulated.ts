@@ -42,6 +42,9 @@ export interface ScenarioConfig {
   tokensPerStep?: number;
   /** Files the simulated implementation claims to change (never real). */
   changedFiles?: string[];
+  /** Presentation fixture: the reviewer's blocking finding content (still
+   * SIMULATED — deterministic scenario data, never a real review). */
+  reviewerFinding?: { id: string; title: string; detail: string; recommendation?: string };
 }
 
 const SIM_NOTICE = 'SIMULATED run — no real repository was read or modified; no real commands were executed.';
@@ -233,7 +236,13 @@ export function createSimulatedReviewer(scenario: ScenarioConfig): ReviewerAdapt
           ? []
           : configured === 'insufficient_evidence'
             ? [{ id: 'R-EVIDENCE', severity: 'major' as const, title: 'Insufficient evidence', detail: 'Simulated reviewer: the evidence bundle does not support the claims.', recommendation: 'Produce the missing verification evidence.' }]
-            : [{ id: 'R1', severity: 'major' as const, title: 'Simulated defect', detail: 'Simulated reviewer found a deterministic defect in the claimed implementation.', recommendation: 'Apply the focused simulated fix.' }];
+            : [{
+                id: scenario.reviewerFinding?.id ?? 'R1',
+                severity: 'major' as const,
+                title: scenario.reviewerFinding?.title ?? 'Simulated defect',
+                detail: scenario.reviewerFinding?.detail ?? 'Simulated reviewer found a deterministic defect in the claimed implementation.',
+                recommendation: scenario.reviewerFinding?.recommendation ?? 'Apply the focused simulated fix.',
+              }];
       const verdict = configured === 'approved' ? 'approved' : 'changes_requested';
       const raw = {
         protocolVersion: RELAY_PROTOCOL_VERSION,

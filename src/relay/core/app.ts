@@ -27,6 +27,11 @@ export interface ScenarioDefinition {
   configOverrides?: Partial<OrchestratorConfig>;
   /** Demo choreography markers consumed by the CLI demo runner. */
   choreography?: 'duplicate' | 'stale' | 'pause-resume' | 'cancel';
+  /** Presentation fixture content (displayed context only — the simulator
+   * never claims the real feature was implemented). */
+  displayObjective?: string;
+  taskObjective?: string;
+  claimedFiles?: string[];
 }
 
 export const SCENARIOS: Record<string, ScenarioDefinition> = {
@@ -87,6 +92,58 @@ export const SCENARIOS: Record<string, ScenarioDefinition> = {
     scenario: { usdPerStep: 0.01 },
     choreography: 'cancel',
   },
+  yc: {
+    name: 'yc',
+    description: 'YC presentation preset — golden path with one bounded repair (SIMULATED).',
+    scenario: {
+      failingCheckAttempt1: 'anonymous spend-control proof',
+      reviewerAttempt1: 'changes_requested',
+      reviewerAttempt2: 'approved',
+      usdPerStep: 0.02,
+      changedFiles: ['src/access/anonymous-policy.ts', 'src/access/spend-boundary.ts'],
+      reviewerFinding: {
+        id: 'SEC-1',
+        title: 'Anonymous spend-boundary bypass',
+        detail: 'Anonymous traffic could bypass an account-level spend boundary.',
+        recommendation: 'Enforce the account-level spend boundary for anonymous sessions and prove it with the spend-control tests.',
+      },
+    },
+    displayObjective: "Finish Sunday's anonymous live-access activation safely and prepare it for production verification.",
+    taskObjective: 'Demonstrate Relay orchestration for the anonymous live-access activation (SIMULATED — the real activation is NOT performed).',
+    claimedFiles: ['src/access/anonymous-policy.ts', 'src/access/spend-boundary.ts'],
+  },
+};
+
+/** YC presentation completion policy: 13 product-relevant simulated checks.
+ * Deterministic scenario data — labeled SIMULATED end-to-end. */
+const YC_COMPLETION_POLICY: CompletionPolicy = {
+  policyId: 'pol_yc-presentation' as PolicyId,
+  riskLevel: 'low',
+  requiredEvidence: [
+    { evidenceType: 'command', command: 'anonymous access-policy tests', mustPass: true },
+    { evidenceType: 'command', command: 'anonymous spend-control proof', mustPass: true },
+    { evidenceType: 'command', command: 'rate-limit tests', mustPass: true },
+    { evidenceType: 'command', command: 'HMAC token-scope tests', mustPass: true },
+    { evidenceType: 'command', command: 'emergency-stop test', mustPass: true },
+    { evidenceType: 'command', command: 'session-ownership tests', mustPass: true },
+    { evidenceType: 'command', command: 'zero-dispatch auth tests', mustPass: true },
+    { evidenceType: 'command', command: 'typecheck', mustPass: true },
+    { evidenceType: 'command', command: 'build', mustPass: true },
+    { evidenceType: 'command', command: 'migration dry-run check', mustPass: true },
+    { evidenceType: 'command', command: 'config validation', mustPass: true },
+    { evidenceType: 'command', command: 'targeted regression tests', mustPass: true },
+    { evidenceType: 'diff', mustPass: true },
+  ],
+  requiresIndependentReview: true,
+  requiresHumanApproval: false,
+  enforcementRequirements: [],
+  acceptedProvenance: ['simulated'],
+};
+
+SCENARIOS.yc.configOverrides = {
+  completionPolicy: YC_COMPLETION_POLICY,
+  budget: { maxUsd: 2, warningAtFraction: 0.8, missingEstimate: 'checkpoint' },
+  costEstimatePerStep: { usd: 0.02 },
 };
 
 export interface RelayAppOptions {
@@ -227,8 +284,8 @@ export function createRelayApp(options: RelayAppOptions): RelayResult<RelayApp> 
       const setup = orchestrator.setup({
         projectName: 'Sunday Relay Demo',
         objective,
-        taskObjective: taskObjective ?? `Demonstrate Relay orchestration for: ${objective} (SIMULATED — the real feature is NOT implemented)`,
-        claimedFiles: ['src/sim/feature.ts'],
+        taskObjective: taskObjective ?? definition.taskObjective ?? `Demonstrate Relay orchestration for: ${objective} (SIMULATED — the real feature is NOT implemented)`,
+        claimedFiles: definition.claimedFiles ?? ['src/sim/feature.ts'],
         equivalenceKey: `sim:${definition.name}`,
       });
       if (!setup.ok) return setup;

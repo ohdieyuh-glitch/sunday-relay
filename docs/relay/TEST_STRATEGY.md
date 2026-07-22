@@ -1,5 +1,14 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **Implementation sync (Prompt 6, 2026-07-22):** YC presentation tests in
+> `src/relay/cli/yc.test.ts` (scenario registration/objective, one repair +
+> same-session + independence through the real orchestrator, 26 evidence
+> records with exactly one failure, presentation frame ordering incl. the
+> Project Brain/Handoff/Repair moments, 80-column safety, simulation
+> labeling, renderer-only pacing, honest failure frames, repeatable
+> semantics, clean JSON) + `scripts/relay-yc-verify.mjs` (bundled
+> double-run semantic acceptance, exit 0 gate).
+
 > **Implementation sync (Prompt 4, 2026-07-22):** §9 adapter contracts and
 > §11 demonstration scenarios are implemented — 20 new tests:
 > `src/relay/connectors/simulated.test.ts` (adapter contracts: provenance,

@@ -75,7 +75,7 @@ describe('relay-core boundary (new module roots)', () => {
   });
 
   it('CLI is a thin client: only the app facade, read-model types, protocol, and its own modules', () => {
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|node:util|node:readline)['"]/;
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|node:util|node:readline)['"]/;
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
       const imports = [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);

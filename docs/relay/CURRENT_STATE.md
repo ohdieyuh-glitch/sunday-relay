@@ -1,12 +1,32 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-22 07:25 UTC** (Prompt 5 complete —
-> terminal CLI demo surface; see SESSION_LOG.md and CLI.md).
+> boundary. Last updated: **2026-07-22 09:05 UTC** (Prompt 6 complete —
+> YC demo hardening; the July 24 demo is `npm run relay:yc`).
 
 ## Phase
 
-**Prompt 5 — Terminal CLI Client (July 24 demo surface): COMPLETE**
+**Prompt 6 — YC Demo Hardening and Presentation Preset: COMPLETE**
+(2026-07-22 09:05 UTC). Added on top of the unchanged workflow:
+- **`yc` scenario** in the registry: presentation objective ("Finish
+  Sunday's anonymous live-access activation safely…"), 13-check simulated
+  completion policy (12 pass + `anonymous spend-control proof` fails on
+  attempt 1; 13 pass after the single repair), product-relevant reviewer
+  finding (SEC-1 anonymous spend-boundary bypass) — all deterministic
+  fixture data, labeled SIMULATED; the real activation is never claimed.
+- **Presentation mode** (renderer-only): milestone frames (opening/
+  objective/brain/blueprint/owner/handoff/attempt/verify/review/repair/
+  re-verify/audit/complete), `--presentation --pace <ms> --compact`,
+  ~2.5 s default pacing on TTY (≈40 s total), 80-column safe, mascot
+  optional, honest STOPPED SAFELY frame for non-success, exit codes
+  unchanged, full event feed still queryable.
+- **Commands:** `npm run relay:yc` (exit 0 only on completion) ·
+  `npm run relay:yc:verify` (double-run semantic acceptance, passed twice).
+- **Docs:** YC_DEMO_RUNBOOK.md (recording checklist, recovery = rerun —
+  no false resume claims) + YC_VIDEO_SCRIPT.md (~80 s founder narration
+  distinguishing the real engine from simulated agents).
+
+**Prior phase — Prompt 5 — Terminal CLI Client (July 24 demo surface): COMPLETE**
 (2026-07-22 07:25 UTC). Implemented in `src/relay/cli` + the core client
 seams `src/relay/core/{read-models,app}.ts`:
 - **Serializable client boundary** — read models (status, event feed,
@@ -186,7 +206,8 @@ None in flight — Phase 1 closes with this commit.
 
 ## Next prompt
 
-**Prompt 6 — Durable Local Persistence and Real Cross-Process Resume**:
+**Post-YC: Durable Local Persistence and Real Cross-Process Resume**
+(NOT authorized by Prompt 6 — begins only after the July 24 recording):
 implement the relay-storage file-backed repositories per ADR-016 —
 append-only JSONL event log + JSON projections under a project-local
 `.relay/` directory using node builtins only, behind the existing storage

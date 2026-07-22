@@ -385,3 +385,53 @@ handler); blueprint rejection maps to canonical run cancellation.
 
 **Exact next step:** *Prompt 6 — Durable Local Persistence and Real
 Cross-Process Resume* per CURRENT_STATE §Next prompt.
+
+---
+
+## 2026-07-22 — Prompt 6: YC Demo Hardening and Presentation Preset
+
+**Timestamp:** 2026-07-22 ~08:20 → 09:10 UTC.
+
+**Objective:** presentation-grade July 24 demonstration on the existing
+CLI/orchestrator — no architecture expansion, no persistence, no live
+adapters.
+
+**Preflight:** clean at 6ef0dd8; repair/checkpoint/duplicate demos +
+doctor verified live; CLI tests 12/12.
+
+**Files created:** `src/relay/cli/presentation.ts` (renderer-only
+milestone frames), `src/relay/cli/yc.test.ts`,
+`scripts/relay-yc-verify.mjs`, `docs/relay/YC_DEMO_RUNBOOK.md`,
+`docs/relay/YC_VIDEO_SCRIPT.md`.
+**Files modified:** connectors/simulated.ts (+reviewerFinding fixture
+seam), core/app.ts (+yc scenario, YC 13-check policy, definition
+presentation fields), cli/main.ts (+--presentation/--pace/--compact,
+async runCli with renderer-only sleep between frames, DemoOutcome.app),
+package.json (+relay:yc, relay:yc:verify), CLI.md, TEST_STRATEGY.md,
+CURRENT_STATE.md, SESSION_LOG.md. **Core workflow, protocol, and exit
+semantics untouched.**
+
+**Verification (exact):** `npm run relay:yc:verify` **passed twice**
+(≈34 checks/run: completed + exit 0, exactly one repair, same-session
+resume, independent reviewer, promotions all evidence-backed, milestone
+ordering, monotonic sequences, clean JSON, no secrets, no repo
+modifications, stable semantics across runs). Bundled `demo yc --pace 0`
+manually reviewed at 80/100/120 columns — no clipped critical lines, no
+dumps, final screen persists. Relay suite **239/239** (17 CLI tests incl.
+5 new YC tests); full repository **1828/1828**; typecheck + frontend +
+backend + relay builds green. *(Counts recorded after the final run
+below.)* Failures: 2 root causes — YC policy const declared after use
+(moved), catch-branch missing new parse fields (added). One focused fix
+each.
+
+**Security:** no provider/paid calls, no credentials, no shell/Git through
+Relay, no repository modification by the demo (verified programmatically),
+no deployment, no push.
+
+**Known limitations:** presentation evidence split assumes equal per-attempt
+check counts (true by policy construction, asserted in tests); recovery
+after terminal loss = deterministic rerun (volatile storage — documented,
+never claimed otherwise).
+
+**Exact next step:** record the YC video per YC_DEMO_RUNBOOK.md; then
+*Post-YC: Durable Local Persistence and Real Cross-Process Resume*.

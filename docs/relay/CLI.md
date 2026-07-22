@@ -64,9 +64,25 @@ Core decides what approval permits.
 WORKING`, `CHECKPOINT`, `COMPLETE`, …) derives from the real run state;
 off in JSON/plain/non-TTY modes and via `/mascot off`.
 
+## YC presentation preset (Prompt 6)
+
+`npm run relay:yc` — the authoritative July 24 demonstration: the `yc`
+scenario (golden path, product-relevant presentation content) rendered in
+presentation mode (milestone frames, ~2.5 s pacing on a TTY, ~40 s total).
+`relay demo yc --presentation --pace <ms>` controls pacing; `--pace 0` for
+instant/CI runs; `--json` stays clean machine output. Presentation is
+RENDERER-ONLY: filtering and pacing never change state, sequencing,
+outcomes, or exit codes. `npm run relay:yc:verify` runs the bundled demo
+twice and checks semantic acceptance (completed, exit 0, exactly one
+repair, same-session resume, independent reviewer, audit + simulation
+notice, clean JSON, stable milestone ordering, no repo modifications).
+See YC_DEMO_RUNBOOK.md and YC_VIDEO_SCRIPT.md.
+
 ## July 24 demonstration sequence
 
 ```bash
+npm run relay:yc                  # THE YC demo (presentation mode, exit 0)
+npm run relay:yc:verify           # acceptance verification (run before takes)
 npm run relay -- demo repair      # golden path: 1 failing check → review →
                                   # ONE same-session repair → approval → audit (exit 0)
 npm run relay -- demo checkpoint  # unsafe repair → Guided stop (exit 5)
