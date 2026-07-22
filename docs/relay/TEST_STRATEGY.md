@@ -1,5 +1,19 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **Implementation sync (Prompt 3, 2026-07-21):** §§5–7 and the coordination
+> scope are implemented — 90 new tests: ownership/lease boundaries
+> (`coordination/ownership.test.ts`), duplicate-work/dependency/staleness
+> (`coordination/checks.test.ts`), file+resource claims incl. hostile-path
+> rejection (`coordination/claims.test.ts`), the 28-check pre-execution
+> battery (`coordination/eligibility.test.ts`), compiler/validation/revision
+> (`handoff/handoff.test.ts`), completion-policy + evidence-quality + budget
+> (`verification/verification.test.ts`), 15-condition repair decision +
+> repeated-failure/no-progress/recovery (`recovery/recovery.test.ts`), the
+> nine Section-24 integration scenarios
+> (`relay-coordination-scenarios.test.ts`), and the extended boundary walk
+> (no shell/Git/fs, no provider reassignment). Remaining: §9
+> adapter/simulation and §11 demo-scenario wiring (Prompt 4).
+
 > **Implementation sync (Prompt 2, 2026-07-21):** §§1–6 and §8's Prompt-2
 > purity walk are implemented — 62 new tests across
 > `src/relay/protocol/protocol.test.ts`, `src/relay/core/run-machine.test.ts`,

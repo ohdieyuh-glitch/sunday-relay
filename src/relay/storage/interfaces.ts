@@ -1,8 +1,9 @@
 import type { RelayResult } from '../protocol/errors';
 import type { EventEnvelope, ReportEnvelope } from '../protocol/envelopes';
 import type {
-  AgentSessionReference, ArtifactReference, EvidenceBundle, EvidenceRecord,
-  RelayProject, RelayRun, RelayTask, UsageRecord,
+  AgentHandoffPackage, AgentSessionReference, ArtifactReference, EvidenceBundle,
+  EvidenceRecord, FailureRecord, FileClaim, HandoffCompilationRecord,
+  RelayProject, RelayRun, RelayTask, ResourceClaim, TaskAssignment, UsageRecord,
 } from '../protocol/contracts';
 import type { ProjectId, RunId, TaskId } from '../protocol/ids';
 
@@ -34,6 +35,12 @@ export interface RelayStores {
   runs: KeyedStorePort<RelayRun>;
   events: EventStorePort;
   tasks: KeyedStorePort<RelayTask>;
+  assignments: KeyedStorePort<TaskAssignment>;
+  fileClaims: KeyedStorePort<FileClaim>;
+  resourceClaims: KeyedStorePort<ResourceClaim>;
+  packages: KeyedStorePort<AgentHandoffPackage>;
+  compilations: KeyedStorePort<HandoffCompilationRecord>;
+  failures: KeyedStorePort<FailureRecord>;
   reports: KeyedStorePort<ReportEnvelope>;
   evidence: KeyedStorePort<EvidenceRecord>;
   evidenceBundles: KeyedStorePort<EvidenceBundle>;

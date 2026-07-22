@@ -13,7 +13,10 @@ import { join } from 'node:path';
 const root = process.cwd();
 const relay = (p: string) => join(root, 'src', 'relay', p);
 
-const CORE_ROOTS = ['protocol', 'core', 'ledger', 'storage', 'testing'] as const;
+const CORE_ROOTS = [
+  'protocol', 'core', 'ledger', 'storage', 'testing',
+  'coordination', 'handoff', 'verification', 'recovery',
+] as const;
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -56,6 +59,24 @@ describe('relay-core boundary (new module roots)', () => {
     for (const file of walk(relay('protocol'))) {
       const content = read(file);
       expect(/from\s+['"]\.\.\/(core|ledger|storage|connectors|cli)/.test(content), `${file} imports upward`).toBe(false);
+    }
+  });
+
+  it('coordination/handoff/verification/recovery contain no shell, Git, or filesystem execution', () => {
+    for (const root of ['coordination', 'handoff', 'verification', 'recovery']) {
+      for (const file of walk(relay(root)).filter((f) => !f.endsWith('.test.ts'))) {
+        const content = read(file);
+        expect(/child_process|execSync|spawn\(|simple-git|isomorphic-git/.test(content), `${file} executes processes`).toBe(false);
+        expect(/from\s+['"]node:/.test(content), `${file} uses node builtins`).toBe(false);
+        expect(/readFileSync|writeFileSync|\bfs\./.test(content), `${file} touches the filesystem`).toBe(false);
+      }
+    }
+  });
+
+  it('recovery contains no provider-reassignment implementation', () => {
+    for (const file of walk(relay('recovery')).filter((f) => !f.endsWith('.test.ts'))) {
+      const content = read(file);
+      expect(/reassignToProvider|switchProvider|dispatchToOtherAgent/.test(content), `${file} implements reassignment`).toBe(false);
     }
   });
 

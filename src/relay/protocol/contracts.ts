@@ -14,7 +14,7 @@ import {
   arr, bool, freeId, id, iso, lit, metadata, num, objectOf, rejectHiddenReasoning,
   str, versionNum, type Check,
 } from './validate';
-import { ENFORCEMENT_LEVELS, EVIDENCE_STATUSES, FINDING_SEVERITIES } from './enums';
+import { ENFORCEMENT_LEVELS, EVIDENCE_STATUSES, FINDING_SEVERITIES, ROLES } from './enums';
 
 /* ================================================================== */
 /* A. FULLY IMPLEMENTED (Prompt 2) — internal entities                 */
@@ -40,6 +40,10 @@ export interface BudgetPolicy {
   maxUsd?: number;
   maxTokens?: number;
   maxRuntimeMs?: number;
+  /** Fraction of a ceiling that triggers a warning (0–1). */
+  warningAtFraction?: number;
+  /** How a missing cost estimate is handled (Prompt 3 budget evaluator). */
+  missingEstimate?: 'allow' | 'checkpoint' | 'deny';
 }
 
 /** Decision 4: at most one automatic revision. */
@@ -99,6 +103,11 @@ export interface RelayTask {
   createdAt: string;
   updatedAt: string;
   priority: number;
+  /** Deterministic structured dedup key (Prompt 3) — NEVER a semantic
+   * equivalence claim; duplicate detection compares these keys only. */
+  equivalenceKey?: string;
+  /** Marks this task as a revision of an existing one (not a duplicate). */
+  revisionOf?: TaskId;
   leaseExpiresAt?: string;
   supersededBy?: TaskId;
   completionEvidenceRefs?: BundleId[];
@@ -122,17 +131,21 @@ export interface TaskAssignment {
 export interface FileClaim {
   claimId: ClaimId;
   taskId: TaskId;
+  /** Normalized repository-relative path (coordination/claims.ts). */
   path: string;
+  /** read = shared; write = exclusive. */
+  mode: 'read' | 'write';
   claimedAt: string;
   expiresAt: string;
   status: 'active' | 'released' | 'expired';
 }
 
-/** Schema-only in Prompt 2 (enforcement deferred). */
 export interface ResourceClaim {
   claimId: ClaimId;
   taskId: TaskId;
+  /** Explicit stable resource key — never inferred from natural language. */
   resource: string;
+  mode: 'exclusive' | 'shared';
   claimedAt: string;
   expiresAt: string;
   status: 'active' | 'released' | 'expired';
@@ -250,6 +263,12 @@ export interface AgentHandoffPackage {
   expectedReportType: ReportType;
   contextVersion: ContextVersion;
   ledgerVersion: LedgerVersion;
+  /** Repository revision the package context was pinned to. */
+  baseRevision: string;
+  createdAt: string;
+  /** Package freshness bound — dispatch after this is stale. */
+  expiresAt?: string;
+  correlationId?: string;
   idempotencyKey: IdempotencyKey;
 }
 
@@ -275,6 +294,23 @@ export interface RevisionContract {
   findingsTargeted: string[];
   narrowScope: { sameTask: true; sameFiles: true; sameAssignment: true };
   conditionsChecked: RevisionCondition[];
+  /** Narrow-repair payload (Prompt 3 compiler) — never broadens the task. */
+  taskId?: TaskId;
+  failureEvidenceRefs?: EvidenceId[];
+  requiredCorrection?: string;
+  behaviorToPreserve?: string[];
+  allowedFiles?: string[];
+  protectedPaths?: string[];
+  verificationToRerun?: string[];
+  budgetRemaining?: BudgetPolicy;
+  stoppingCondition?: StoppingCondition;
+  ledgerVersion?: LedgerVersion;
+  contextVersion?: ContextVersion;
+  baseRevision?: string;
+  provenance?: Provenance;
+  expiresAt?: string;
+  correlationId?: string;
+  idempotencyKey?: IdempotencyKey;
 }
 
 /* ----- evidence & verification ----- */
@@ -337,6 +373,12 @@ export interface CompletionPolicy {
   requiresIndependentReview: boolean;
   requiresHumanApproval: boolean;
   enforcementRequirements: Array<{ control: string; minimumLevel: Enforcement }>;
+  /** Which evidence provenance satisfies this policy. Absent = live only:
+   * a live policy never silently accepts simulation evidence; a simulation
+   * policy declares ['simulated'] explicitly. */
+  acceptedProvenance?: Provenance[];
+  /** Verifier identities allowed to produce satisfying evidence. */
+  allowedVerifiers?: string[];
 }
 
 export interface ReviewFinding {
@@ -565,7 +607,7 @@ export const checkAgentHandoffPackage: Check = objectOf({
     runId: id('run'),
     taskId: id('tsk'),
     targetAdapterId: str(),
-    role: lit('architect', 'coding-agent', 'reviewer', 'verification'),
+    role: lit(...ROLES),
     objective: str(),
     responsibilityBoundary: str(),
     contextRefs: arr(str()),
@@ -578,7 +620,13 @@ export const checkAgentHandoffPackage: Check = objectOf({
     requiredEvidence: arr(str()),
     budget: objectOf({
       required: {},
-      optional: { maxUsd: num({ min: 0 }), maxTokens: num({ int: true, min: 0 }), maxRuntimeMs: num({ int: true, min: 0 }) },
+      optional: {
+        maxUsd: num({ min: 0 }),
+        maxTokens: num({ int: true, min: 0 }),
+        maxRuntimeMs: num({ int: true, min: 0 }),
+        warningAtFraction: num({ min: 0 }),
+        missingEstimate: lit('allow', 'checkpoint', 'deny'),
+      },
     }),
     stoppingCondition: objectOf({
       required: { description: str() },
@@ -587,8 +635,11 @@ export const checkAgentHandoffPackage: Check = objectOf({
     expectedReportType: lit('blueprint', 'implementation', 'review', 'repair', 'verification-output'),
     contextVersion: versionNum(),
     ledgerVersion: versionNum(),
+    baseRevision: str(),
+    createdAt: iso(),
     idempotencyKey: freeId(),
   },
+  optional: { expiresAt: iso(), correlationId: freeId() },
 });
 
 export const checkRevisionContract: Check = objectOf({

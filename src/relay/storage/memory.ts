@@ -1,8 +1,9 @@
 import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
 import type { EventEnvelope, ReportEnvelope } from '../protocol/envelopes';
 import type {
-  AgentSessionReference, ArtifactReference, EvidenceBundle, EvidenceRecord,
-  RelayProject, RelayRun, RelayTask, UsageRecord,
+  AgentHandoffPackage, AgentSessionReference, ArtifactReference, EvidenceBundle,
+  EvidenceRecord, FailureRecord, FileClaim, HandoffCompilationRecord,
+  RelayProject, RelayRun, RelayTask, ResourceClaim, TaskAssignment, UsageRecord,
 } from '../protocol/contracts';
 import type { ProjectId } from '../protocol/ids';
 import type { EventStorePort, KeyedStorePort, RelayStores } from './interfaces';
@@ -103,6 +104,12 @@ export function createInMemoryRelayStores(opts: { acknowledgeVolatile: true }): 
   const runs = new InMemoryKeyedStore<RelayRun>();
   const events = new InMemoryEventStore();
   const tasks = new InMemoryKeyedStore<RelayTask>();
+  const assignments = new InMemoryKeyedStore<TaskAssignment>();
+  const fileClaims = new InMemoryKeyedStore<FileClaim>();
+  const resourceClaims = new InMemoryKeyedStore<ResourceClaim>();
+  const packages = new InMemoryKeyedStore<AgentHandoffPackage>();
+  const compilations = new InMemoryKeyedStore<HandoffCompilationRecord>();
+  const failures = new InMemoryKeyedStore<FailureRecord>();
   const reports = new InMemoryKeyedStore<ReportEnvelope>();
   const evidence = new InMemoryKeyedStore<EvidenceRecord>();
   const evidenceBundles = new InMemoryKeyedStore<EvidenceBundle>();
@@ -114,6 +121,12 @@ export function createInMemoryRelayStores(opts: { acknowledgeVolatile: true }): 
     runs,
     events,
     tasks,
+    assignments,
+    fileClaims,
+    resourceClaims,
+    packages,
+    compilations,
+    failures,
     reports,
     evidence,
     evidenceBundles,
@@ -122,7 +135,11 @@ export function createInMemoryRelayStores(opts: { acknowledgeVolatile: true }): 
     usage,
     durability: 'volatile-test-only',
     resetAllForTest() {
-      for (const store of [projects, runs, tasks, reports, evidence, evidenceBundles, sessionRefs, artifacts, usage]) {
+      for (const store of [
+        projects, runs, tasks, assignments, fileClaims, resourceClaims, packages,
+        compilations, failures, reports, evidence, evidenceBundles, sessionRefs,
+        artifacts, usage,
+      ]) {
         (store as InMemoryKeyedStore<unknown>).resetForTest();
       }
       events.resetForTest();

@@ -22,7 +22,14 @@ export type Classification = (typeof CLASSIFICATIONS)[number];
 export const ENFORCEMENT_LEVELS = ['enforced', 'advisory', 'unsupported'] as const;
 export type Enforcement = (typeof ENFORCEMENT_LEVELS)[number];
 
-export const ROLES = ['architect', 'coding-agent', 'reviewer', 'verification'] as const;
+export const ROLES = [
+  'architect',
+  'coding-agent',
+  'reviewer',
+  'security-reviewer',
+  'operations',
+  'verification',
+] as const;
 export type Role = (typeof ROLES)[number];
 
 export const EVENT_SOURCES = [

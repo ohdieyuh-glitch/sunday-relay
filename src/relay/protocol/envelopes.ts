@@ -58,7 +58,13 @@ export interface CommandEnvelope<T extends CommandType = CommandType> {
 
 const budgetShape = objectOf({
   required: {},
-  optional: { maxUsd: num({ min: 0 }), maxTokens: num({ int: true, min: 0 }), maxRuntimeMs: num({ int: true, min: 0 }) },
+  optional: {
+    maxUsd: num({ min: 0 }),
+    maxTokens: num({ int: true, min: 0 }),
+    maxRuntimeMs: num({ int: true, min: 0 }),
+    warningAtFraction: num({ min: 0 }),
+    missingEstimate: lit('allow', 'checkpoint', 'deny'),
+  },
 });
 
 /** Per-command payload shapes. Invalid combinations fail here (e.g.
@@ -283,7 +289,7 @@ export const RELAY_EVENT_KINDS = [
   'run.failed', 'run.checkpoint_required', 'run.checkpoint_responded',
   // architect
   'architect.started', 'architect.blueprint_created', 'architect.blueprint_imported',
-  'architect.blueprint_accepted', 'architect.failed',
+  'architect.blueprint_accepted', 'architect.revision_created', 'architect.failed',
   // handoff
   'handoff.created', 'handoff.validated', 'handoff.dispatched', 'handoff.received', 'handoff.failed',
   // agent

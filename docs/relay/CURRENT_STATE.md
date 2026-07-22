@@ -1,13 +1,56 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-21 22:17 UTC** (Prompt 2 complete —
-> protocol, domain model, ledger foundation, and deterministic run state
-> machine implemented and verified; see SESSION_LOG.md for exact results).
+> boundary. Last updated: **2026-07-22 02:15 UTC** (Prompt 3 complete —
+> coordination and Handoff Compiler; see SESSION_LOG.md for exact results).
 
 ## Phase
 
-**Prompt 2 — Protocol and State Machine: COMPLETE** (2026-07-21 22:17 UTC).
+**Prompt 3 — Coordination and Handoff Compiler: COMPLETE** (2026-07-22
+02:15 UTC). Implemented in `src/relay/{coordination,handoff,verification,recovery}`:
+- **Task ownership + leases** — one active owner enforced; assign/renew/
+  release/transfer/expire/inspect; expiry never silently transfers; history
+  append-only; idempotent assignment; boundary-exact lease expiry (expired
+  AT the instant).
+- **Duplicate-work prevention** — structured equivalence/idempotency keys
+  only (no semantic claims); active/completed/superseded/obsolete/revision/
+  retry outcomes with conflicting-task references.
+- **Dependency validation** — completion-with-evidence required; cancelled/
+  failed/obsolete never count; supersession chains followed; self/circular
+  rejected; stale dependencies checkpoint.
+- **File/resource claims** — safe path normalization (absolute/traversal/
+  null-byte rejected), shared-read vs exclusive-write, parent/child
+  conflicts, expiry/release lifecycle, idempotent reacquisition.
+- **Version/staleness validation** — ledger/context/base-revision/decision-
+  currency/handoff/evidence freshness with current | stale_but_revalidatable
+  | stale_blocking | unavailable | invalid; missing revisions honest.
+- **Pre-execution battery** — one `evaluateDispatchEligibility` (28 checks,
+  structured multi-check result, never dispatches or mutates).
+- **Handoff Compiler** — role-specific packages (architect/coding-agent/
+  reviewer/security-reviewer/operations) from canonical structured state
+  with explicit context selection + exclusion records, artifacts as
+  references, pinned ledger/context/base revisions, deterministic +
+  idempotent; HandoffCompilationRecord; validation (association, owner,
+  staleness, protected-path conflicts, credential-shape, unbounded
+  packages, enforcement minimums).
+- **CompletionPolicy evaluation** — low-risk preset; Relay-produced
+  evidence only; unavailable≠passed, unverified≠failed; provenance policy
+  (live never silently accepts simulated); verifier allowlist; independent
+  review + unresolved-finding gates; unsupported enforcement blocks or
+  checkpoints by risk.
+- **Budget stop-before-dispatch** — usd/token/runtime/loop ceilings, no
+  rounding bypass, warning threshold, missing-estimate policy
+  (allow/checkpoint/deny), estimated-vs-actual preserved.
+- **Guided one-repair decision** — all 15 founder conditions individually
+  evaluated + recorded; limit denial; RevisionContract compilation (narrow,
+  task identity preserved, claims never expanded, no second repair).
+- **Repeated-failure / no-progress detection** — safe structured
+  fingerprints (no secrets; deterministic, not cryptographic); conservative
+  no-progress (insufficient_data honest); **bounded recovery decision**
+  (continue/compile_revision/checkpoint/blocked/fail_run; no provider
+  reassignment).
+
+**Prior phase — Prompt 2 — Protocol and State Machine: COMPLETE** (2026-07-21 22:17 UTC).
 Implemented: `relay.protocol.v1` (versioned envelopes for commands /
 reports / events / queries, branded ids, enums, structured errors, strict
 hand-rolled runtime validation with hidden-reasoning rejection); the
@@ -96,8 +139,19 @@ None in flight — Phase 1 closes with this commit.
 
 ## Next prompt
 
-**Prompt 3 — Task Ownership, Duplicate-Work Prevention, and Structured
-Handoff Compiler**: wire relay-coordination's pre-execution battery
+**Prompt 4 — Deterministic Simulation Harness and Full Relay Vertical
+Slice**: implement the simulation adapters (Architect / CodingAgent /
+Reviewer / Verification) behind the connector ports — every output stamped
+`provenance: simulated`, each adapter declaring simulated-vs-enforced
+policies — plus the orchestrator loop that wires commands → state machine →
+coordination battery → compiler → simulated execution → evidence →
+completion → promotion → final audit, exercising TEST_STRATEGY §9 adapter
+contracts and the four §11 demonstration scenarios end-to-end (golden path
+with one repair; checkpoint escalation; duplicate/stale prevention; honest
+failure). Still no CLI (next after), no real adapters, no persistence, no
+paid calls.
+
+**Superseded next-prompt record (Prompt 3, now complete):** wire relay-coordination's pre-execution battery
 (duplicate/equivalent/completed/superseded task detection, file-claim
 conflicts, stale context/base-revision/decision checks — the primitives
 from Prompt 2 — into dispatch), lease bookkeeping over the stores, and

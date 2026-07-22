@@ -185,3 +185,73 @@ Prompt 3 (they operate on compiled dispatches). Prototype relocation to
 **Exact next step:** *Prompt 3 — Task Ownership, Duplicate-Work
 Prevention, and Structured Handoff Compiler* (scope pinned in
 CURRENT_STATE.md §Next prompt).
+
+---
+
+## 2026-07-22 — Prompt 3: Coordination, Handoff Compiler, Completion Policy, Bounded Recovery
+
+**Timestamp:** 2026-07-21 ~23:50 → 2026-07-22 02:20 UTC.
+
+**Objective:** the deterministic coordination layer — task ownership +
+leases, duplicate-work prevention, dependency validation, file/resource
+claims, staleness validation, the centralized 28-check pre-execution
+battery, the provider-neutral Handoff Compiler with role-specific
+composition, low-risk CompletionPolicy evaluation, budget
+stop-before-dispatch, the Guided one-repair decision + RevisionContract
+compilation, repeated-failure/no-progress detection, and bounded recovery
+decisions. No orchestrator loop, no adapters, no shell/Git, no CLI/UI.
+
+**Preflight:** clean tree at ba2122d (Prompt 2 complete per
+CURRENT_STATE.md); no discrepancies between this prompt and PROTOCOL.md
+beyond additive deltas recorded in the PROTOCOL sync note.
+
+**Files created:** `src/relay/coordination/` — ownership.ts, checks.ts,
+claims.ts, eligibility.ts, index.ts + 4 test files ·
+`src/relay/handoff/` — compiler.ts, validation.ts, revision.ts, index.ts,
+handoff.test.ts · `src/relay/verification/` — completion.ts, budget.ts,
+index.ts, verification.test.ts · `src/relay/recovery/` — repair.ts,
+detection.ts, decision.ts, index.ts, recovery.test.ts ·
+`src/relay/relay-coordination-scenarios.test.ts` (Section-24 scenarios 1–9).
+**Files modified:** protocol contracts/enums/envelopes (additive deltas per
+PROTOCOL sync note), storage interfaces + memory (6 new stores), testing
+factories (9 new builders), relay-core-boundary.test.ts (walk extended to
+the four new roots + no-shell/no-Git/no-reassignment assertions),
+PROTOCOL.md, TEST_STRATEGY.md, CURRENT_STATE.md, SESSION_LOG.md.
+**Prototype untouched.**
+
+**Decisions applied:** structured-keys-only duplicate detection (no
+semantic claims); read=shared/write=exclusive claims with segment-safe
+parent/child conflicts; staleness → checkpoint (explicit revalidation),
+structural handoff defects → denied; live completion policies never
+silently accept simulated evidence; budget basis = max(actual, estimated)
+per dimension, no rounding bypass; the 15 repair conditions share one
+canonical name list (FIFTEEN_CONDITIONS) across evaluator and contract;
+recovery can at most compile the single revision — no provider
+reassignment exists anywhere.
+
+**Dependencies:** none added (hashing = djb2 test fingerprint, explicitly
+NOT a security signature).
+
+**Tests run (exact):**
+- `npx vitest run src/relay` — **201/201 passed** (18 files: 90 new
+  Prompt-3 tests + 111 prior).
+- `npx vitest run` (full repository) — **1790/1790 passed** (138 files).
+- `npm run typecheck` — clean. `npm run build` + `npm run backend:build` —
+  green.
+**Failures + repairs (one focused fix each, then green):** (1)
+checkAgentHandoffPackage hardcoded the pre-Prompt-3 role list → switched to
+the ROLES enum; (2) eligibility cascades — assignment-matches and
+handoff-valid double-reported missing-owner/staleness, and the strict
+budget schema rejected the new warningAtFraction field → checks scoped +
+schema extended.
+
+**Security:** no provider/paid calls, no credential access, no shell/Git
+execution, no repository file edited by any agent, no deployment, no push.
+
+**Known limitations:** enforcement of file claims remains advisory until
+the worktree manager; DuplicateWorkDecision's retry policy is a caller
+flag pending the orchestrator; high-risk CompletionPolicy execution still
+deferred (contracts validate).
+
+**Exact next step:** *Prompt 4 — Deterministic Simulation Harness and Full
+Relay Vertical Slice* (scope pinned in CURRENT_STATE.md §Next prompt).

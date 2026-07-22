@@ -1,5 +1,25 @@
 # Relay Protocol — `relay.protocol.v1` (specification)
 
+> **Implementation sync (Prompt 3, 2026-07-21):** the coordination layer is
+> implemented in `src/relay/{coordination,handoff,verification,recovery}`.
+> Additive contract deltas: Role enum gained `security-reviewer` +
+> `operations`; RelayTask gained `equivalenceKey` (structured dedup key —
+> Relay makes NO semantic-equivalence claims) and `revisionOf`; FileClaim
+> gained `mode: read|write` (read=shared, write=exclusive) and ResourceClaim
+> `mode: exclusive|shared`; AgentHandoffPackage gained required
+> `baseRevision` + `createdAt` and optional `expiresAt`/`correlationId`;
+> RevisionContract gained the optional narrow-repair payload (evidence refs,
+> allowed/protected files, behaviorToPreserve, verification to rerun, budget
+> remaining, pinned versions); CompletionPolicy gained `acceptedProvenance`
+> (absent = live-only — a live policy never silently accepts simulation
+> evidence) and `allowedVerifiers`; BudgetPolicy gained `warningAtFraction`
+> + `missingEstimate: allow|checkpoint|deny`; event kind
+> `architect.revision_created` added. Structured decisions
+> (DuplicateWorkDecision, DependencyDecision, DispatchEligibilityResult,
+> CompletionPolicyResult, BudgetDecision, AutomaticRepairDecision,
+> RepeatedFailureDecision, NoProgressDecision, RecoveryDecision) are
+> implementation types in those modules.
+
 > **Implementation sync (Prompt 2, 2026-07-21):** the Prompt-2 contracts
 > below are now implemented in `src/relay/protocol` (envelopes, ids, enums,
 > validators), `src/relay/core` (run/task machines), `src/relay/ledger`

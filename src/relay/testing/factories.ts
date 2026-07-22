@@ -2,10 +2,12 @@ import { RELAY_PROTOCOL_VERSION } from '../protocol/version';
 import { PREFIXES, type Branded, type IdFactory, type IdPrefix } from '../protocol/ids';
 import type { CommandEnvelope, CommandType, ReportEnvelope } from '../protocol/envelopes';
 import type {
-  Blueprint, CompletionPolicy, FinalAuditReport, RelayRun, RelayTask,
-  ReviewerVerdictRecord, RevisionContract, VerificationRecord,
+  AgentHandoffPackage, Blueprint, CompletionPolicy, EvidenceRecord, FileClaim,
+  FinalAuditReport, PermissionPolicy, RelayProject, RelayRun, RelayTask,
+  ReviewerVerdictRecord, RevisionContract, TaskAssignment, UsageRecord,
+  VerificationRecord,
 } from '../protocol/contracts';
-import type { ReportType } from '../protocol/enums';
+import type { Provenance, ReportType, Role } from '../protocol/enums';
 
 /**
  * Deterministic test factories — the ONLY place tests mint ids/time.
@@ -219,6 +221,115 @@ export function makePolicy(overrides: Partial<CompletionPolicy> = {}): Completio
     requiresIndependentReview: true,
     requiresHumanApproval: false,
     enforcementRequirements: [],
+    ...overrides,
+  };
+}
+
+export function makeProject(overrides: Partial<RelayProject> = {}): RelayProject {
+  return {
+    projectId: fixedId('prj'),
+    name: 'Sim project',
+    createdAt: T0,
+    objective: 'Prove coordination.',
+    ledgerVersion: 1 as RelayProject['ledgerVersion'],
+    ...overrides,
+  };
+}
+
+export function makeAssignment(overrides: Partial<TaskAssignment> = {}): TaskAssignment {
+  return {
+    assignmentId: fixedId('asn'),
+    taskId: fixedId('tsk'),
+    role: 'coding-agent' as Role,
+    adapterId: 'sim-coding-agent',
+    assignedAt: T0,
+    provenance: 'simulated' as Provenance,
+    leaseExpiresAt: '2026-07-21T23:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeFileClaim(overrides: Partial<FileClaim> = {}): FileClaim {
+  return {
+    claimId: fixedId('clm'),
+    taskId: fixedId('tsk'),
+    path: 'src/sim/feature.ts',
+    mode: 'write',
+    claimedAt: T0,
+    expiresAt: '2026-07-21T23:00:00.000Z',
+    status: 'active',
+    ...overrides,
+  };
+}
+
+export function makeEvidence(overrides: Partial<EvidenceRecord> = {}): EvidenceRecord {
+  return {
+    evidenceId: fixedId('evd'),
+    taskId: fixedId('tsk'),
+    runId: fixedId('run'),
+    source: 'sim-verification',
+    evidenceType: 'command',
+    command: 'npx vitest run',
+    exitCode: 0,
+    outputExcerpt: 'all green',
+    executedAt: T0,
+    environment: { os: 'linux', node: '20', cwd: '/sim' },
+    repoRevision: 'rev-abc123',
+    verificationStatus: 'passed',
+    verifier: 'sim-verification',
+    provenance: 'simulated',
+    ...overrides,
+  };
+}
+
+export function makeUsage(overrides: Partial<UsageRecord> = {}): UsageRecord {
+  return {
+    usageId: fixedId('use', `u${Math.abs(JSON.stringify(overrides).length)}`),
+    runId: fixedId('run'),
+    adapterId: 'sim-coding-agent',
+    at: T0,
+    kind: 'actual',
+    ...overrides,
+  };
+}
+
+export function makePermissionPolicy(overrides: Partial<PermissionPolicy> = {}): PermissionPolicy {
+  return {
+    permittedTools: [{ value: 'editor', enforcement: 'advisory' }],
+    permittedFiles: [],
+    prohibitedActions: [{ value: 'network-egress', enforcement: 'advisory' }],
+    protectedPaths: [{ pattern: '.git', enforcement: 'enforced' }],
+    ...overrides,
+  };
+}
+
+export function makePackage(overrides: Partial<AgentHandoffPackage> = {}): AgentHandoffPackage {
+  return {
+    packageId: fixedId('pkg'),
+    protocolVersion: RELAY_PROTOCOL_VERSION,
+    projectId: fixedId('prj'),
+    runId: fixedId('run'),
+    taskId: fixedId('tsk'),
+    targetAdapterId: 'sim-coding-agent',
+    role: 'coding-agent',
+    objective: 'Implement the simulated feature.',
+    responsibilityBoundary: 'Implement within claimed files only.',
+    contextRefs: [],
+    requiredInputs: [],
+    permittedTools: [{ value: 'editor', enforcement: 'advisory' }],
+    permittedFiles: [{ value: 'src/sim/feature.ts', enforcement: 'advisory' }],
+    prohibitedActions: [{ value: 'protected:.git', enforcement: 'enforced' }],
+    dependencies: [],
+    acceptanceCriteria: ['simulated checks pass'],
+    requiredEvidence: ['targeted test results'],
+    budget: { maxUsd: 1 },
+    stoppingCondition: { description: 'stop after report', maxRuntimeMs: 60000 },
+    expectedReportType: 'implementation',
+    contextVersion: 1 as AgentHandoffPackage['contextVersion'],
+    ledgerVersion: 1 as AgentHandoffPackage['ledgerVersion'],
+    baseRevision: 'rev-abc123',
+    createdAt: T0,
+    idempotencyKey: 'pkg-key-1' as AgentHandoffPackage['idempotencyKey'],
     ...overrides,
   };
 }
