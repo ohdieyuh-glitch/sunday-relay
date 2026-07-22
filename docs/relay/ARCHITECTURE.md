@@ -1,5 +1,17 @@
 # Sunday Relay — Architecture (authoritative)
 
+> **Implementation sync (Prompt 7, 2026-07-22):** `src/relay/workspace/` is
+> the new isolated-worktree + safe-execution boundary (WORKSPACE_SECURITY.md
+> is its authoritative spec). Dependency direction: workspace depends on
+> protocol + coordination path-normalization only; Relay Core, connectors,
+> and clients NEVER import the workspace implementation (boundary-tested) —
+> the CLI reaches it solely through the composition root for
+> `relay workspace doctor|verify`. All Node process/filesystem access in
+> `src/relay` now lives exclusively inside this module. Core integration is
+> deferred by design: scenarios carry `workspaceProfile: 'simulated'`; the
+> future Claude Code adapter phase wires `local_isolated` through the
+> provider-neutral `WorkspaceService` ports.
+
 > Status: **locked** (Phase 1 architecture lock, 2026-07-21), incorporating
 > all ten founder decisions. Companion documents: `PROTOCOL.md` (contracts),
 > `RELAY_MVP_SPEC.md` (product scope), `SECURITY_BOUNDARIES.md`,

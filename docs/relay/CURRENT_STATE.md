@@ -1,13 +1,52 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-22 13:05 UTC** (Prompt 6.1 complete —
-> Manual Task checkpoint experience; the July 24 demo is `npm run relay:yc`,
-> with `npm run relay:manual` as the supporting Manual Task demo).
+> boundary. Last updated: **2026-07-22 15:30 UTC** (Prompt 7 complete —
+> isolated worktree execution foundation; the July 24 demo remains
+> `npm run relay:yc` with `npm run relay:manual` as the supporting demo;
+> commit 94ccb59 is the known-good recording fallback).
 
 ## Phase
 
-**Prompt 6.1 — Manual Task Checkpoint Experience: COMPLETE**
+**Prompt 7 — Isolated Worktree Manager and Safe Local Execution Foundation:
+COMPLETE** (2026-07-22 15:30 UTC). The security boundary required BEFORE
+Relay may control a real Claude Code session — real local infrastructure
+(`provenance: live`), no provider calls, agents still simulated:
+- **Module:** `src/relay/workspace/` behind provider-neutral ports
+  (`WorkspaceManagerPort` / `WorkspaceInspectionPort` /
+  `CommandExecutionPort`, composed by `createLocalWorkspaceService`). All
+  `child_process`/fs access in `src/relay` is confined here
+  (boundary-tested); Core/connectors/prototype never import it; the CLI
+  reaches only the composition root.
+- **Worktrees:** validated non-bare sources, pinned revisions, run-specific
+  validated branches (`relay/run/<token>`, injection rejected), roots
+  outside tracked trees (symlink/traversal/nesting rejected),
+  verify-before-trust creation, idempotent requests, conflicting reuse
+  refused, source worktree inspect-only with unexpected-change →
+  `checkpoint_required`.
+- **Enforcement:** repository-specific protected paths (+ baseline `.git`),
+  segment-safe matching, task file-claim checking (claimed / unclaimed /
+  protected / symlink-escape; worst wins), flagged workspaces stop
+  execution, claims never auto-expand.
+- **Runner:** `spawn(exe, args, {shell:false})`, executable allowlist +
+  hard denylist (no shells, push, reset, clean, merge, publish, deploy,
+  credential tools), env allowlist minus secret-named keys, bounded
+  runtime/output, cancellation + process-group termination with honest
+  confirmed/unconfirmed reporting, secret-shape sanitization, idempotent
+  results, live evidence + `workspace.*` events (protocol-validated).
+- **Cleanup:** preserve-first policies; removal needs explicit
+  authorization AND policy permission; dirty worktrees never force-removed;
+  source/unknown paths refused.
+- **Surface:** `relay workspace doctor` (truthful; agents/providers still
+  unavailable) · `npm run relay:workspace:verify` (30-check throwaway-
+  fixture proof, passed twice) · `workspaceProfile: 'simulated'` on all
+  existing scenarios (`local_isolated` reserved for the adapter phase).
+- **Docs:** WORKSPACE_SECURITY.md (authoritative spec) + sync blockquotes
+  in PROTOCOL/ARCHITECTURE/SECURITY_BOUNDARIES/TEST_STRATEGY + CLI.md.
+- **Demos preserved:** `relay:yc:verify` and `relay:manual:verify` both
+  passed twice post-change; YC semantics untouched.
+
+**Prior phase — Prompt 6.1 — Manual Task Checkpoint Experience: COMPLETE**
 (2026-07-22 13:05 UTC). The final bounded product addition before the
 July 24 recording, built ON the existing checkpoint architecture (no second
 checkpoint state, engine, or store — the single `RelayRun.checkpoint` slot
@@ -252,8 +291,19 @@ None in flight — Phase 1 closes with this commit.
 
 ## Next prompt
 
-**Post-YC: Durable Local Persistence and Real Cross-Process Resume**
-(NOT authorized by Prompt 6 — begins only after the July 24 recording):
+**Real Claude Code Local Adapter** — dispatch a real local Claude Code
+session inside a prepared isolated workspace under the Prompt-7 boundary:
+the adapter implements the existing `CodingAgentAdapterPort` against the
+`WorkspaceService` ports (`local_isolated` profile), with the workspace
+module's protected paths, command policy, bounded runner, evidence, and
+conservative cleanup as the enforcement envelope; sessions remain opaque
+references; every report still enters as an unverified claim through
+`parseReport`; no provider API keys in Relay state. Gated by the founder's
+safety review; the YC recording (July 23 night) uses the existing simulated
+demos regardless.
+
+**Superseded next-prompt record (pre-Prompt-7): Durable Local Persistence
+and Real Cross-Process Resume** (begins after the adapter phase):
 implement the relay-storage file-backed repositories per ADR-016 —
 append-only JSONL event log + JSON projections under a project-local
 `.relay/` directory using node builtins only, behind the existing storage

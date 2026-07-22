@@ -1,5 +1,22 @@
 # Sunday Relay — Security Boundaries (authoritative)
 
+> **Implementation sync (Prompt 7, 2026-07-22):** the first ENFORCED local
+> execution boundary shipped in `src/relay/workspace/` — real isolated Git
+> worktrees (pinned revisions, validated run branches, roots outside any
+> tracked tree), protected-path + file-claim detection that stops automatic
+> work (`checkpoint_required`, no silent acceptance, no automatic claim
+> expansion), a `shell: false` argument-array command runner behind an
+> allowlist + hard denylist (no push/reset/clean/merge/publish/deploy, no
+> shells), environment-allowlist inheritance that strips secret-named keys,
+> bounded runtime/output with honest termination reporting, secret-shape
+> output sanitization, and conservative preserve-first cleanup that can
+> never touch the source worktree or an unregistered path. The source
+> repository is inspect-only (worktree bookkeeping under `.git` disclosed in
+> WORKSPACE_SECURITY.md §4). Enforcement level: detection + refusal to
+> continue (live-local provenance), truthfully distinct from simulated
+> agents and from unavailable live providers. Full spec + threat coverage:
+> WORKSPACE_SECURITY.md.
+
 > Status: **locked** (Phase 1 architecture lock, 2026-07-21). Companion to
 > `ARCHITECTURE.md` (hybrid execution) and `PROTOCOL.md` (contracts).
 

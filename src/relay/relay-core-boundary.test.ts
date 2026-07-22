@@ -75,7 +75,9 @@ describe('relay-core boundary (new module roots)', () => {
   });
 
   it('CLI is a thin client: only the app facade, read-model types, protocol, and its own modules', () => {
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|node:util|node:readline)['"]/;
+    // '../workspace' (the composition-root index ONLY) is the sanctioned
+    // workspace surface for `relay workspace doctor|verify` (Prompt 7).
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|node:util|node:readline)['"]/;
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
       const imports = [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
@@ -125,6 +127,58 @@ describe('relay-core boundary (new module roots)', () => {
     const memory = read(relay('storage/memory.ts'));
     expect(memory).toContain("durability: 'volatile-test-only'");
     expect(memory).toContain('acknowledgeVolatile');
+  });
+});
+
+describe('Workspace boundaries (Prompt 7)', () => {
+  const workspaceDir = relay('workspace');
+  const workspaceFiles = walk(workspaceDir).filter((f) => !f.endsWith('.test.ts'));
+  const PURE_WORKSPACE_MODULES = ['contracts.ts', 'protected-paths.ts', 'command-policy.ts', 'output-sanitizer.ts', 'cleanup.ts'];
+  const NODE_WORKSPACE_MODULES = ['repository-inspector.ts', 'worktree-manager.ts', 'command-runner.ts', 'index.ts', 'doctor.ts', 'verify-harness.ts', 'workspace-evidence.ts'];
+
+  it('pure workspace modules never touch Node process/filesystem APIs', () => {
+    for (const name of PURE_WORKSPACE_MODULES) {
+      const content = read(join(workspaceDir, name));
+      expect(/from\s+['"]node:/.test(content), `${name} imports node builtins`).toBe(false);
+      expect(/child_process|execFileSync|spawn\(/.test(content), `${name} touches processes`).toBe(false);
+    }
+  });
+
+  it('process access exists ONLY inside the workspace Node modules', () => {
+    const allRelayFiles = [...files, ...walk(relay(CLI_ROOT)), ...walk(relay('connectors'))].filter((f) => !f.endsWith('.test.ts'));
+    for (const file of allRelayFiles) {
+      expect(/node:child_process|child_process/.test(read(file)), `${file} accesses child_process outside the workspace module`).toBe(false);
+    }
+    const withProcessAccess = workspaceFiles.filter((f) => /node:child_process/.test(read(f)));
+    for (const file of withProcessAccess) {
+      expect(NODE_WORKSPACE_MODULES.some((name) => file.endsWith(name)), `${file} is not a sanctioned process module`).toBe(true);
+    }
+  });
+
+  it('browser-safe modules and Core never import the workspace implementation', () => {
+    for (const file of [...files, ...walk(relay('connectors'))].filter((f) => !f.endsWith('.test.ts'))) {
+      expect(/from\s+['"].*\/workspace(\/|['"])/.test(read(file)), `${file} imports the workspace module`).toBe(false);
+    }
+    const prototypeFiles = ['main.tsx', 'RelayApp.tsx', 'StagePanel.tsx', 'PipelineRail.tsx'].map((f) => relay(f));
+    for (const file of prototypeFiles) {
+      expect(/workspace/.test(read(file)), `${file} references the workspace module`).toBe(false);
+    }
+  });
+
+  it('the CLI reaches the workspace ONLY through the composition root, never submodules', () => {
+    for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
+      expect(/from\s+['"]\.\.\/workspace\//.test(read(file)), `${file} bypasses the workspace composition root`).toBe(false);
+    }
+  });
+
+  it('the command policy denies shells, push, and destructive git by construction', () => {
+    const policy = read(join(workspaceDir, 'command-policy.ts'));
+    for (const denied of ["'bash'", "'sh'", "'powershell'", "'rm'", "'push'", "'reset'", "'clean'", "'merge'"]) {
+      expect(policy.includes(denied), `command policy must deny ${denied}`).toBe(true);
+    }
+    const runner = read(join(workspaceDir, 'command-runner.ts'));
+    expect(runner).toContain('shell: false');
+    expect(runner).not.toMatch(/shell:\s*true/);
   });
 });
 

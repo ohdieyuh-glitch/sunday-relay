@@ -514,3 +514,89 @@ as `cancelled` — never fakes completion.
 **Exact next step:** record the YC video per YC_DEMO_RUNBOOK.md (main demo
 `npm run relay:yc`; supporting `npm run relay:manual`); then *Post-YC:
 Durable Local Persistence and Real Cross-Process Resume*.
+
+---
+
+## 2026-07-22 — Prompt 7: Isolated Worktree Manager and Safe Local Execution Foundation
+
+**Timestamp:** 2026-07-22 ~14:20 → 15:30 UTC.
+
+**Objective:** build the security boundary required before Relay may
+control a real Claude Code session — real isolated Git worktrees, protected
+paths, file-claim enforcement, safe bounded command execution, evidence,
+and conservative cleanup. Deadline-critical: the YC video records July 23
+night; commit 94ccb59 is the known-good recording fallback, and the YC and
+Manual Task demonstrations must retain their semantic outcomes. No Claude
+Code adapter this prompt; no provider calls.
+
+**Preflight:** clean at 94ccb59; `relay:yc:verify` and
+`relay:manual:verify` passed; relay suite 279/279; git 2.39.5 (worktrees
+supported), node v22.23.1.
+
+**Architecture:** new `src/relay/workspace/` boundary behind
+provider-neutral ports (`WorkspaceManagerPort`, `WorkspaceInspectionPort`,
+`CommandExecutionPort`; combined `WorkspaceService`, composed only by
+`createLocalWorkspaceService`). Pure policy modules (contracts,
+protected-paths, command-policy, output-sanitizer, cleanup) carry zero Node
+imports; Node access (repository-inspector, worktree-manager,
+command-runner, doctor, verify-harness, index) is confined to the module
+(boundary-tested: no `child_process` anywhere else in `src/relay`; Core,
+connectors, and the browser prototype never import workspace; the CLI uses
+the composition root only). Workspace evidence/events are
+`provenance: live` — live LOCAL enforcement, explicitly distinguished from
+simulated agents and from still-unavailable live providers.
+`WORKSPACE_PROFILES` (`none|simulated|local_isolated`) added to protocol
+enums; every existing scenario stays `simulated`.
+
+**Files created:** `src/relay/workspace/{contracts,protected-paths,
+command-policy,output-sanitizer,repository-inspector,worktree-manager,
+command-runner,workspace-evidence,cleanup,doctor,verify-harness,index}.ts`,
+`src/relay/workspace/{policy,workspace}.test.ts`,
+`docs/relay/WORKSPACE_SECURITY.md`.
+**Files modified:** protocol `enums.ts` (+WORKSPACE_PROFILES) +
+`envelopes.ts` (+`workspace.*` event family, EventRefs.workspaceId) +
+`protocol.test.ts` (family check), `core/app.ts` (+workspaceProfile
+label), `cli/main.ts` (+`workspace doctor|verify` commands, help, doctor
+line, JSON workspaceProfile), `cli/cli.test.ts` (parse coverage),
+`relay-core-boundary.test.ts` (+workspace boundary suite, CLI allowlist),
+`package.json` (+relay:workspace:verify), docs (PROTOCOL / ARCHITECTURE /
+SECURITY_BOUNDARIES / TEST_STRATEGY sync blockquotes, CLI.md,
+CURRENT_STATE.md, this log).
+
+**Dependencies:** none added (node:child_process/fs/os/path only).
+
+**Verification (exact):** `npm run relay:workspace:verify` **passed twice**
+(30 checks/run: pinned isolated worktree, idempotent reuse, source
+byte-identical end-to-end, approved command, push rejected, claimed change
+allowed, protected change stops execution, timeout/cancel confirmed
+terminations, output limit, secret sanitization, conservative cleanup +
+refusals, protocol-valid events, live-local evidence, no secret shapes,
+fixture removed). `relay:yc:verify` **passed twice** and
+`relay:manual:verify` **passed twice** after the change. Relay suite
+**314/314** (29 files; 35 new workspace tests + boundary/CLI additions);
+full repository **1903/1903** (147 files); typecheck + frontend + backend +
+relay builds green. `relay workspace doctor` truthful (agents unavailable,
+adapters DEFERRED, push prohibited), exit 0. Failures + repairs (one per
+root cause): `git rev-parse --git-common-dir` returns absolute paths in
+worktrees (joined unconditionally → ENOENT) → isAbsolute branch; dangling
+symlink escapes missed because `existsSync` follows links → lstat-based
+detection with deleted-file exemption; git "Preparing worktree" stderr
+leaked to the terminal (execFileSync default) → explicit piped stdio.
+
+**Security:** no provider/paid calls; no credentials read (secret-named env
+keys stripped before inheritance — tested); no shell execution anywhere
+(`shell: false` + metacharacter rejection); push/reset/clean/merge/publish
+denied by policy and tested; source repositories inspect-only (worktree
+bookkeeping under `.git` disclosed in WORKSPACE_SECURITY.md §4); all
+fixture repositories confined to tmpdir and removed; no deployment; no
+push; the real Sunday repository was never used as a workspace source.
+
+**Known limitations:** volatile workspace registry (durable persistence is
+a later phase; on-disk worktrees survive and are manually inspectable);
+run branches retained after worktree removal; no cancellation during the
+bounded synchronous worktree creation; claim enforcement is detective
+(inspect + stop), not OS-level sandboxing — reported truthfully.
+
+**Exact next step:** record the YC video (July 23 night — simulated demos,
+fallback 94ccb59); then *Real Claude Code Local Adapter* inside the
+Prompt-7 workspace boundary, per CURRENT_STATE §Next prompt.

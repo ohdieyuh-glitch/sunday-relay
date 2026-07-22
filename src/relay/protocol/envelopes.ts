@@ -3,7 +3,7 @@ import { relayError, fail, ok, type RelayResult } from './errors';
 import type {
   BlueprintId, CheckpointId, ClaimId, ContextVersion, EventId, LedgerVersion,
   ManualRequestId, ManualTaskId, PackageId, ProjectId, QuestionId, ReportId,
-  RunId, SessionRefId, TaskId,
+  RunId, SessionRefId, TaskId, WorkspaceRefId,
 } from './ids';
 import type { Classification, EventSource, Provenance, ReportType, Role } from './enums';
 import {
@@ -317,6 +317,11 @@ export const RELAY_EVENT_KINDS = [
   'file_claim.created', 'file_claim.released', 'file_claim.expired',
   // usage & policy
   'usage.updated', 'budget.warning', 'budget.exceeded', 'permission.denied', 'policy.checkpoint_required',
+  // workspace (Prompt 7 — live local worktree infrastructure)
+  'workspace.validated', 'workspace.created', 'workspace.reused',
+  'workspace.inspected', 'workspace.source_changed', 'workspace.change_flagged',
+  'workspace.command_started', 'workspace.command_completed', 'workspace.command_rejected',
+  'workspace.cancelled', 'workspace.preserved', 'workspace.cleaned', 'workspace.cleanup_refused',
   // manual task (Prompt 6.1)
   'manual.action_requested', 'manual.request_validated', 'manual.request_rejected',
   'manual.task_created', 'manual.response_recorded',
@@ -339,6 +344,7 @@ export interface EventRefs {
   questionId?: QuestionId;
   manualTaskId?: ManualTaskId;
   manualRequestId?: ManualRequestId;
+  workspaceId?: WorkspaceRefId;
   evidenceIds?: string[];
 }
 
@@ -400,6 +406,7 @@ const eventShape: Shape = {
         questionId: id('oqn'),
         manualTaskId: id('mtk'),
         manualRequestId: id('mrq'),
+        workspaceId: id('wsp'),
         evidenceIds: arr(str()),
       },
     }),

@@ -202,7 +202,7 @@ describe('events and queries', () => {
   });
 
   it('kind taxonomy covers every documented category', () => {
-    for (const prefix of ['run.', 'architect.', 'handoff.', 'agent.', 'reviewer.', 'verification.', 'ledger.', 'task.', 'file_claim.', 'usage.', 'budget.', 'policy.', 'manual.', 'audit.']) {
+    for (const prefix of ['run.', 'architect.', 'handoff.', 'agent.', 'reviewer.', 'verification.', 'ledger.', 'task.', 'file_claim.', 'usage.', 'budget.', 'policy.', 'manual.', 'workspace.', 'audit.']) {
       expect(RELAY_EVENT_KINDS.some((k) => k.startsWith(prefix)), `kinds for ${prefix}`).toBe(true);
     }
   });

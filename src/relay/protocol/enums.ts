@@ -127,6 +127,12 @@ export type ReportType = (typeof REPORT_TYPES)[number];
 export const RISK_LEVELS = ['low', 'high'] as const;
 export type RiskLevel = (typeof RISK_LEVELS)[number];
 
+/** Workspace execution profile (Prompt 7). Existing simulation scenarios
+ * stay 'simulated'; 'local_isolated' is the live-local worktree foundation
+ * (real Git worktrees + policy-restricted commands — NOT live AI agents). */
+export const WORKSPACE_PROFILES = ['none', 'simulated', 'local_isolated'] as const;
+export type WorkspaceProfile = (typeof WORKSPACE_PROFILES)[number];
+
 /** Manual Task (Prompt 6.1) — why Relay needs the human. Additive enum;
  * categories beyond the bounded deterministic scenario carry no special
  * behavior yet (only sign_in/provide_credential force a security notice). */
