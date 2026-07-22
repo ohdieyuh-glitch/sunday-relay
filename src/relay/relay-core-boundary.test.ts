@@ -77,7 +77,7 @@ describe('relay-core boundary (new module roots)', () => {
   it('CLI is a thin client: only the app facade, read-model types, protocol, workspace facade, and its own modules', () => {
     // '../workspace' (the composition-root facade) is the ONLY workspace
     // import the CLI may use — internals are asserted below.
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/claude-code|node:util|node:readline)['"]/;
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/claude-code|\.\.\/mission|node:util|node:readline)['"]/;
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
       const imports = [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
@@ -203,6 +203,52 @@ describe('Workspace boundaries (Prompt 7)', () => {
     for (const name of ['main.tsx', 'RelayApp.tsx', 'StagePanel.tsx', 'PipelineRail.tsx']) {
       const content = read(relay(name));
       expect(/from\s+['"].*\/workspace/.test(content), `${name} imports workspace code`).toBe(false);
+    }
+  });
+});
+
+describe('Mission projection boundaries (Prompt 8.1)', () => {
+  const missionDir = relay('mission');
+  const missionFiles = walk(missionDir).filter((f) => !f.endsWith('.test.ts'));
+
+  it('the mission layer is a PURE projection — no Node, no child_process, no fs', () => {
+    for (const file of missionFiles) {
+      const content = read(file);
+      expect(/from\s+['"]node:/.test(content), `${file} imports node builtins`).toBe(false);
+      expect(/child_process|readFileSync|writeFileSync|spawn\(/.test(content), `${file} touches Node process/fs`).toBe(false);
+    }
+  });
+
+  it('the mission layer does not import Relay Core internals, adapters, or the CLI', () => {
+    for (const file of missionFiles) {
+      const content = read(file);
+      expect(/from\s+['"]\.\.\/(core|connectors|cli|workspace|ledger|coordination|handoff|recovery|storage)\//.test(content), `${file} imports Relay internals — mission must stay a leaf projection`).toBe(false);
+      expect(/fusion-engine|from\s+['"]react|@supabase/.test(content), `${file} imports app/UI/backend`).toBe(false);
+    }
+  });
+
+  it('Relay Core, protocol, and ledger never import the mission projection', () => {
+    for (const file of files) {
+      expect(/from\s+['"].*\/mission/.test(read(file)), `${file} imports the mission projection`).toBe(false);
+    }
+  });
+
+  it('adapters cannot resolve findings, promote evidence, or decide mission completion', () => {
+    for (const file of [...walk(relay('connectors')).filter((f) => !f.endsWith('.test.ts'))]) {
+      const content = read(file);
+      expect(/from\s+['"].*\/mission/.test(content), `${file} — adapters cannot own mission verdicts`).toBe(false);
+      expect(/evaluateMissionVerdict|resolveFinding|buildMissionContract/.test(content), `${file} decides mission completion`).toBe(false);
+    }
+  });
+
+  it('the mission layer stays secret-free and separates requested from actual identity', () => {
+    const attestation = read(join(missionDir, 'attestation.ts'));
+    expect(attestation).toContain('requestedAgentId');
+    expect(attestation).toContain('actualAgentId');
+    expect(attestation).toContain('fallback');
+    const CREDENTIAL_FIELD = /\b(apiKey|accessToken|refreshToken|clientSecret|privateKey|password|bearer)\b\s*[:?]/;
+    for (const file of missionFiles) {
+      expect(CREDENTIAL_FIELD.test(read(file)), `${file} declares a credential-shaped field`).toBe(false);
     }
   });
 });

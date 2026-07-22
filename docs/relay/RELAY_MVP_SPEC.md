@@ -1,5 +1,20 @@
 # Sunday Relay — MVP Specification (authoritative)
 
+> **Implementation sync (Prompt 8.1, 2026-07-23):** the competitive proof
+> layer adds `src/relay/mission/` — pure, browser-safe PROJECTIONS over
+> canonical state (not a second source of truth): the Mission Contract
+> (revisioned, binding-digest staleness), immutable Execution Attestations
+> (requested-vs-actual identity, visible authorized fallback, live/simulated
+> provenance), the linked Review/Finding/Repair ledger (evidence + re-review
+> gate resolution; no scope/claim expansion), a deterministic mission verdict
+> engine (the eight verdicts; agent claims are never evidence; approval never
+> bypasses a missing test), and a mission timeline over the existing event
+> stream. `npm run relay:competitive` (SIMULATED Claude Implementer + Codex
+> Reviewer) reaches VERIFIED COMPLETE through the REAL orchestrator; the real
+> Claude path stays `npm run relay:claude:live`. See MISSION_CONTRACT.md,
+> EXECUTION_ATTESTATION.md, REVIEW_REPAIR_LEDGER.md,
+> COMPETITIVE_FEATURE_COVERAGE.md.
+
 > Status: **locked** (Phase 1 architecture lock, 2026-07-21). Product scope
 > for the first powerful Relay version. Contracts: `PROTOCOL.md`.
 > Architecture: `ARCHITECTURE.md`.

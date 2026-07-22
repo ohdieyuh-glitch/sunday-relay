@@ -1,14 +1,61 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-23 (Prompt 8 complete — real Claude Code
-> local adapter; live smoke passed).** The July 24 product demo remains
-> `npm run relay:yc` (simulated); `npm run relay:claude:live` is the optional
-> LIVE proof of one real Claude Code agent inside Relay's boundary.
+> boundary. Last updated: **2026-07-23 (Prompt 8.1 complete — YC competitive
+> proof layer).** The July 24 product demo is `npm run relay:yc`;
+> `npm run relay:competitive` is the deterministic full-workforce proof
+> (Mission Contract + Claude + Codex + finding + repair + verdict); and
+> `npm run relay:claude:live` is the real single-agent proof.
 
 ## Phase
 
-**Prompt 8 — Real Claude Code Local Adapter and Live Isolated Coding Proof: COMPLETE**
+**Prompt 8.1 — YC Competitive Proof Layer: COMPLETE** (2026-07-23). The
+minimum missing competitive structures + presentation so the YC demo
+visibly proves Relay is provider-neutral mission control ABOVE the agents —
+not another coding agent. Built as PURE, browser-safe PROJECTIONS over
+existing canonical state (`src/relay/mission/`) — no second source of truth,
+no second workflow engine (the competitive scenario reuses the Prompt-4
+orchestrator's real golden path):
+- **Mission Contract** (`mission.ts`) — revisioned projection from
+  project/blueprint/task/policy; deterministic validation; binding-digest
+  staleness (binding changes stale handoffs, display changes do not);
+  secret/hidden-reasoning rejection; CLI `/mission`.
+- **Execution Attestation** (`attestation.ts`) — immutable requested-vs-
+  actual identity; launch-request ≠ proof; failed launch cannot attest;
+  visible policy-authorized fallback that never inherits the requested
+  identity; live/simulated provenance from the adapter descriptor; no
+  "Reviewed by Codex" without a Codex attestation; CLI `/attestation`.
+- **Review/Finding/Repair ledger** (`review-repair.ts`) — linked records;
+  blocking findings create scope-locked repairs; resolution needs post-repair
+  evidence AND an approving re-review (never an agent claim); no scope/claim
+  expansion; iteration limit; CLI `/findings` `/repairs`.
+- **Mission verdict engine** (`verdict.ts`) — the eight deterministic
+  verdicts (not aliases); agent claims are never evidence; approval never
+  bypasses a missing/failed required test; missing review/evidence/
+  attestation blocks verified_complete; CLI `/verdict`.
+- **Mission timeline** (`timeline.ts`) — ordered, attributable projection
+  over the existing event stream with requested-vs-actual identity,
+  provenance, attempt, and revision; finding/repair/resolution spliced once;
+  failure path representable; CLI `/timeline`.
+- **Competitive golden path** — `relay demo competitive` /
+  `npm run relay:competitive`: Mission Contract → CLAIMED COMPLETE →
+  independent Codex review finds the IPv6 /128 rotation bypass (CHANGES
+  REQUIRED) → F-1 + R-1 → repair claim (finding open) → 6/6 Relay
+  verification → Codex re-review approves → F-1 resolved → VERIFIED COMPLETE.
+  Truthful labels: Claude Implementer + Codex Reviewer are deterministic
+  SIMULATIONS here; external Codex not active; real Claude via
+  `relay:claude:live`. No provider call.
+- **19-feature coverage matrix** — `COMPETITIVE_FEATURE_COVERAGE.md`
+  (implemented / partially_implemented / deferred, honestly assessed).
+- **Regression:** `relay:yc:verify`, `relay:manual:verify`,
+  `relay:workspace:verify`, `relay:claude:contract-verify` all pass
+  (twice where required); relay suite 379/379; full suite 1968/1968;
+  typecheck + all builds green.
+- **Docs:** MISSION_CONTRACT.md, EXECUTION_ATTESTATION.md,
+  REVIEW_REPAIR_LEDGER.md, COMPETITIVE_FEATURE_COVERAGE.md (new) + sync
+  blockquotes across the authoritative set + CLI.md + YC_DEMO_RUNBOOK §10.
+
+**Prior phase — Prompt 8 — Real Claude Code Local Adapter and Live Isolated Coding Proof: COMPLETE**
 (2026-07-23; Gate A offline + Gate B live smoke both passed). One real local
 Claude Code coding agent connected to the Prompt-7 isolated-worktree boundary
 behind the existing provider-neutral `CodingAgentAdapter` port:
@@ -359,16 +406,19 @@ None in flight — Phase 1 closes with this commit.
 
 **Real Codex Independent Reviewer Adapter** — a live, independent reviewer
 behind the existing reviewer port, so a live run can REQUIRE and satisfy
-independent review (the Prompt-8 low-risk fixture deliberately does not).
-Independence is structural (distinct adapter/session lineage from the coding
-agent), the reviewer verdict is an unverified claim gated by Relay, and the
-same safety boundaries (isolated workspace, no push/deploy, credential-free
-core, spend controls per Decision 1) apply unweakened. Only then does a live
-run demonstrate the full Architect → Claude → independent Codex → review →
-bounded repair → audit loop against real agents.
+independent review AND produce a real reviewer Execution Attestation (the
+Prompt-8.1 competitive proof simulates it). Independence is structural
+(distinct adapter/session lineage from the coding agent), the reviewer
+verdict is an unverified claim gated by Relay, real findings feed the
+Prompt-8.1 Review/Finding/Repair ledger, and the same safety boundaries
+(isolated workspace, no push/deploy, credential-free core, spend controls
+per Decision 1) apply unweakened. Only then does a live run demonstrate the
+full Architect → Claude → independent Codex → review → bounded repair →
+verified-complete loop against real agents.
 
-**Superseded next-prompt record (pre-Prompt-8): Real Claude Code Local
-Adapter** — DONE in Prompt 8 (live smoke passed).
+**Superseded next-prompt records:** *Real Claude Code Local Adapter* — DONE
+(Prompt 8, live smoke passed). *YC Competitive Proof Layer* — DONE
+(Prompt 8.1).
 
 **Superseded next-prompt record (pre-Prompt-7): Post-YC Durable Local
 Persistence and Real Cross-Process Resume** — implement the relay-storage

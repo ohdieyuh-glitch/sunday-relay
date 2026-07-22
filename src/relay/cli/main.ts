@@ -7,6 +7,7 @@ import { buildPresentationFrames } from './presentation';
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 import { detectRenderOptions, renderAudit, renderEvent, renderManualTask, welcome, badge, type RenderOptions } from './render';
+import { buildCompetitiveFrames, competitiveJson } from './competitive';
 import { EXIT, exitCodeForFinalStatus } from './exit-codes';
 import { runWorkspaceVerification, workspaceDoctorReport } from '../workspace';
 import { createRandomIdFactory } from '../protocol/ids';
@@ -151,6 +152,7 @@ export const HELP_TEXT = [
   '  relay claude doctor            truthful Claude Code capability + auth report',
   '  relay claude contract-verify   offline adapter proof (no provider call)',
   '  relay claude run --fixture safe-edit --confirm-live   REAL Claude Code proof',
+  '  relay demo competitive         Mission Contract + Claude/Codex proof (SIMULATED)',
   '  relay version | relay help',
   '',
   'Options: --json --no-color --plain --quiet',
@@ -468,14 +470,22 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
         render,
       });
       // Presentation mode: renderer-only milestones + pacing. Auto-enabled
-      // for the yc scenario unless JSON/quiet output was requested.
-      const presentation = !parsed.json && !parsed.quiet && (parsed.presentation || parsed.scenario === 'yc');
+      // for the yc and competitive scenarios unless JSON/quiet was requested.
+      const isCompetitive = parsed.scenario === 'competitive';
+      const presentation = !parsed.json && !parsed.quiet && (parsed.presentation || parsed.scenario === 'yc' || isCompetitive);
+      const nowIso = new Date().toISOString();
       if (parsed.json) {
-        io.out(JSON.stringify(outcome.json));
+        // Competitive JSON carries the serializable mission bundle projection.
+        const payload = isCompetitive
+          ? { ...(outcome.json as object), mission: competitiveJson(outcome.app, nowIso) }
+          : outcome.json;
+        io.out(JSON.stringify(payload));
       } else if (parsed.quiet) {
         io.out(`${outcome.finalStatus} (exit ${outcome.exitCode})`);
       } else if (presentation) {
-        const frames = buildPresentationFrames(outcome.app, render);
+        const frames = isCompetitive
+          ? buildCompetitiveFrames(outcome.app, render, nowIso)
+          : buildPresentationFrames(outcome.app, render);
         const pace = parsed.pace ?? (io.isTTY ? 2500 : 0);
         for (const frame of frames) {
           frame.lines.forEach((line) => io.out(line));

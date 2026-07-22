@@ -80,3 +80,31 @@ Rules for the live segment:
 - `relay claude doctor` is a safe truthful pre-check (no model call).
 - If the live proof stops safely, that is an honest outcome — do not retry
   the provider call repeatedly on stage.
+
+## 10. `relay:claude:live` vs `relay:competitive` — say which is which
+
+Two distinct proofs. Label them separately on camera; never conflate them.
+
+**`npm run relay:claude:live` — the REAL agent proof (Prompt 8):**
+- Real Claude Code, its own local subscription, an isolated Git worktree.
+- One real edit to one claimed file; Relay independently inspects and runs
+  the verification itself.
+- NO independent Reviewer (the low-risk fixture does not require one — the
+  audit says so explicitly).
+- Run it in its own terminal (nested Claude is not assumed safe).
+
+**`npm run relay:competitive` — the WORKFORCE orchestration proof (Prompt 8.1):**
+- Deterministic full mission: Mission Contract, Claude Implementer, Codex
+  Independent Reviewer, a high-severity finding, a scope-locked repair,
+  evidence, and a Relay VERIFIED COMPLETE verdict.
+- The Claude Implementer and Codex Reviewer are deterministic SIMULATIONS in
+  this presentation; the EXTERNAL CODEX CONNECTION IS NOT ACTIVE.
+- No provider call; instant with `--pace 0`, paced (~2.5s/frame) on a TTY.
+
+On-camera framing: "This (competitive) is the full workforce Relay governs —
+mission, specialized agents, independent review, repair, evidence, and a
+Relay verdict, shown deterministically. And this (claude:live) is one of
+those agents running for real inside Relay's isolated boundary. The agents
+are replaceable; the mission, governance, and evidence stay with Relay."
+Do NOT claim Codex is connected, and do NOT run `relay:claude:live` during
+the deterministic segment.

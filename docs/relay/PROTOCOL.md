@@ -1,5 +1,15 @@
 # Relay Protocol — `relay.protocol.v1` (specification)
 
+> **Implementation sync (Prompt 8.1, 2026-07-23):** the competitive proof
+> layer adds NO new protocol envelopes, commands, or event kinds. The
+> mission structures (RelayMissionContract, RelayExecutionAttestation,
+> RelayReview/Finding/Repair, MissionVerdict, TimelineEntry) are module-local
+> SERIALIZABLE read-model PROJECTIONS in `src/relay/mission/contracts.ts`,
+> derived from existing canonical contracts + the append-only event ledger.
+> Attestation and verdict provenance reuse the existing `simulated`/`live`
+> provenance; identity separation (requested vs actual) is a projection over
+> handoff/assignment/audit identities, never a stored credential.
+
 > **Implementation sync (Prompt 8, 2026-07-23):** the live Claude Code
 > adapter adds `agent.*` event kinds only (live_dispatch_requested,
 > live_approved, process_started, initialized, activity_observed,

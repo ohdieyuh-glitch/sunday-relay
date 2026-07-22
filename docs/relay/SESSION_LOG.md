@@ -789,3 +789,87 @@ live Architect adapter remain unimplemented by design.
 
 **Exact next step:** *Real Codex Independent Reviewer Adapter* behind the
 reviewer port, per CURRENT_STATE §Next prompt.
+
+---
+
+## 2026-07-23 — Prompt 8.1: YC Competitive Proof Layer
+
+**Timestamp:** 2026-07-23 (from commit 749e0ca).
+
+**Objective:** add the minimum missing competitive structures + presentation
+so the YC demo visibly proves Relay is provider-neutral mission control above
+the agents — Mission Contract, requested-vs-actual Execution Attestation,
+Finding/Repair ledger, deterministic mission verdicts, mission timeline, a
+competitive golden path, and the 19-feature coverage matrix. No second
+workflow engine; no live provider call.
+
+**Preflight:** clean at 749e0ca; `relay:claude:contract-verify` 30/30,
+`relay:workspace:verify`, `relay:yc:verify`, `relay:manual:verify` all exit
+0; relay suite 342/342.
+
+**Mapping (no duplication):** every requested structure is a PROJECTION over
+existing canonical state — Mission Contract ← project/blueprint/task/
+CompletionPolicy/budget/loop; Attestation ← handoff/assignment/audit
+identities + session/evidence + adapter provenance; Review/Finding/Repair ←
+ReviewerVerdict + ReviewFinding + RevisionContract + evidence; Verdict ←
+evaluateCompletionPolicy + reviews + attestations + findings; Timeline ← the
+append-only event ledger. The competitive scenario reuses the Prompt-4
+orchestrator's real verify→review→changes_requested→repair→re-verify→
+approve→audit flow.
+
+**Architecture (as landed):** new PURE, browser-safe leaf module
+`src/relay/mission/{contracts,mission,attestation,review-repair,verdict,
+timeline,read-models,index}.ts` — imports protocol types only; never Relay
+Core internals, adapters, CLI, Node, or child_process (boundary-tested). A
+pure deterministic digest (no node:crypto) keeps the whole module reusable by
+a future graphical Mission Control. Relay Core stays the source of truth; the
+CLI renders read models only.
+
+**Files created:** `src/relay/mission/*` (8 modules + `mission.test.ts`),
+`src/relay/cli/competitive.ts` + `competitive.test.ts`,
+`docs/relay/{MISSION_CONTRACT,EXECUTION_ATTESTATION,REVIEW_REPAIR_LEDGER,
+COMPETITIVE_FEATURE_COVERAGE}.md`.
+**Files modified:** `core/app.ts` (+`competitive` scenario + 6-check policy;
+the anonymous rate-limit proof fails on attempt 1 due to the IPv6 bypass, so
+the orchestrator can compile the revision — matching the YC-proven flow),
+`cli/main.ts` (+competitive presentation/JSON, help), `cli/interactive.ts`
+(+`/mission /attestation /findings /repairs /verdict /timeline`),
+`relay-core-boundary.test.ts` (+Mission projection suite; CLI allowlist +
+`./competitive` + `../mission`), `package.json` (+`relay:competitive`), docs
+(RELAY_MVP_SPEC/ARCHITECTURE/PROTOCOL/SECURITY_BOUNDARIES/TEST_STRATEGY sync,
+CLI.md, YC_DEMO_RUNBOOK §10, CURRENT_STATE, this log).
+
+**Dependencies:** none added.
+
+**Verification (exact):** `npm run relay:competitive` reaches MISSION
+VERDICT: VERIFIED COMPLETE, exit 0 (F-1 resolved, R-1 resolved, both agents
+attested, no fallback, timeline finding_created/repair_created/
+finding_resolved exactly once, 80-column, no ANSI, clean JSON, stable across
+runs). Mission tests 24, competitive CLI tests 8. `relay:yc:verify`,
+`relay:manual:verify`, `relay:workspace:verify` passed **twice each**;
+`relay:claude:contract-verify` 30/30. Relay suite **379/379** (32 files);
+full suite **1968/1968** (150 files); typecheck + frontend + backend + relay
+builds green. **NO provider call anywhere.** Failures + repairs (one per root
+cause): the review-driven repair needed failed verification evidence to
+compile the RevisionContract (added `failingCheckAttempt1` on the IPv6
+rate-limit proof — coherent narrative, matches YC); a test helper misused
+RelayReview where ReviewInput was required (fixed the fixtures); the timeline
+spliced finding_resolved 3× because the reviewer emits duplicate
+verdict events (guarded on flags, splice once at completion).
+
+**Security:** no provider/paid calls; no deployment; no push; no Supabase/
+Railway/Vercel changes; no production auth/rate-limit/spend-breaker changes
+(the competitive mission is deterministic scenario DATA, not real code); no
+secrets/tokens/streams/hidden reasoning in any read model or attestation
+(asserted); no unbounded review loop (iteration limit enforced); no claim
+treated as proof (verdict engine); the Sunday repo was never used as a live
+source.
+
+**Known limitations:** volatile (no durable mission/attestation/verdict
+store); the competitive mission uses a fixed spec (operator authoring is
+post-YC); the Codex reviewer is a deterministic simulation (external Codex
+not active); features 7/8/11/15/16/18 are partially implemented and 13/14/19
+deferred per COMPETITIVE_FEATURE_COVERAGE.md.
+
+**Exact next step:** *Real Codex Independent Reviewer Adapter* behind the
+reviewer port, per CURRENT_STATE §Next prompt.

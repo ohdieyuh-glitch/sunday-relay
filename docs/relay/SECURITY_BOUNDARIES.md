@@ -1,5 +1,19 @@
 # Sunday Relay — Security Boundaries (authoritative)
 
+> **Implementation sync (Prompt 8.1, 2026-07-23):** the mission projection
+> layer strengthens truthfulness: agent completion statements stay UNVERIFIED
+> claims; "Reviewed by Codex" cannot exist without a Codex execution
+> attestation; a fallback is always visible, must be policy-authorized, and
+> may never inherit the requested agent's identity; simulated vs live
+> provenance is carried verbatim from the adapter descriptor (a simulated run
+> never yields a live attestation); a reviewer approval never substitutes for
+> a missing or failed required test; blocking findings and the repair/review
+> iteration limit prevent verified completion and unbounded loops. Mission
+> text rejects secret-shaped and hidden-reasoning content; attestations carry
+> no credentials, streams, private prompts, or auth data (digests are over
+> safe bounded summaries only). Adapters cannot resolve findings, promote
+> evidence, or decide mission completion (boundary-tested).
+
 > **Implementation sync (Prompt 8, 2026-07-23):** the live Claude Code
 > adapter runs under the enforced Prompt-7 boundaries plus: the approved
 > auth profile is `claude_local_subscription` (Claude's own OAuth) — Relay

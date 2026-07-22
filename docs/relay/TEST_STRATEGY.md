@@ -1,5 +1,20 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **Implementation sync (Prompt 8.1, 2026-07-23):** mission projection tests
+> in `src/relay/mission/mission.test.ts` (pure: mission validation +
+> revisioning + binding-digest staleness + secret rejection; attestation
+> requested-vs-actual + launch-proof + fallback authorization/identity +
+> immutability + stable digest; review/finding/repair rules incl.
+> evidence+re-review resolution and scope/claim-expansion rejection;
+> deterministic eight verdicts incl. approval-without-tests and
+> missing-attestation/review/evidence; ordered attributable timeline +
+> failure path) and `src/relay/cli/competitive.test.ts` (the real
+> orchestrator through the `competitive` scenario reaching verified_complete;
+> review/repair/evidence not skippable; both agents attested; stable semantic
+> outcome; 80-column presentation; clean JSON). Boundary tests gained the
+> Mission projection suite (pure leaf; core/adapters never import it;
+> secret-free). End-to-end: `npm run relay:competitive` (no provider call).
+
 > **Implementation sync (Prompt 8, 2026-07-23):** Claude Code adapter tests
 > in `src/relay/connectors/claude-code/claude-code.test.ts` (pure modules:
 > environment stripping, permission compilation incl. no-Bash/no-skip-flag,

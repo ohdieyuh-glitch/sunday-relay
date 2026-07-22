@@ -140,6 +140,56 @@ export const SCENARIOS: Record<string, ScenarioDefinition> = {
     taskObjective: 'Demonstrate Relay orchestration for the anonymous live-access activation (SIMULATED — the real activation is NOT performed).',
     claimedFiles: ['src/access/anonymous-policy.ts', 'src/access/spend-boundary.ts'],
   },
+  competitive: {
+    name: 'competitive',
+    description: 'Competitive proof — Mission Contract, Claude Implementer, Codex Independent Reviewer, finding, repair, verified completion (SIMULATED).',
+    scenario: {
+      // The anonymous rate-limit proof fails on attempt 1 BECAUSE of the
+      // IPv6 rotation bypass; the INDEPENDENT REVIEWER identifies the /128
+      // root cause, driving the one bounded repair (/64 aggregation), after
+      // which all 30/30 pass.
+      failingCheckAttempt1: '30/30 anonymous rate-limit proof',
+      reviewerAttempt1: 'changes_requested',
+      reviewerAttempt2: 'approved',
+      usdPerStep: 0.02,
+      changedFiles: ['src/access/anonymous-policy.ts', 'src/access/ipv6-identity.ts', 'src/access/spend-boundary.ts'],
+      reviewerFinding: {
+        id: 'F-1',
+        title: 'IPv6 /128 rotation bypass',
+        detail: 'The implementation identifies an IPv6 client by its complete /128 address. One client can rotate addresses inside the same /64 and avoid the intended anonymous identity limit.',
+        recommendation: 'Aggregate IPv6 anonymous identities at the /64 boundary before applying the rate and spending policies.',
+      },
+    },
+    displayObjective: 'Protect anonymous live access and prove one actor cannot bypass the rate limit or spending controls.',
+    taskObjective: 'Demonstrate provider-neutral mission-control orchestration for anonymous access protection (SIMULATED — Claude Implementer and Codex Reviewer are deterministic simulations; no external Codex connection is active).',
+    claimedFiles: ['src/access/anonymous-policy.ts', 'src/access/ipv6-identity.ts', 'src/access/spend-boundary.ts'],
+  },
+};
+
+/** Competitive proof completion policy: 6 blocking product-relevant checks,
+ * independent review required. Deterministic scenario data, labeled
+ * SIMULATED end-to-end. */
+const COMPETITIVE_COMPLETION_POLICY: CompletionPolicy = {
+  policyId: 'pol_competitive-proof' as PolicyId,
+  riskLevel: 'low',
+  requiredEvidence: [
+    { evidenceType: 'command', command: '30/30 anonymous rate-limit proof', mustPass: true },
+    { evidenceType: 'command', command: '40/40 session proof', mustPass: true },
+    { evidenceType: 'command', command: '23/23 spending proof', mustPass: true },
+    { evidenceType: 'command', command: 'TypeScript build', mustPass: true },
+    { evidenceType: 'command', command: 'file-claim policy', mustPass: true },
+    { evidenceType: 'command', command: 'protected-path policy', mustPass: true },
+  ],
+  requiresIndependentReview: true,
+  requiresHumanApproval: false,
+  enforcementRequirements: [],
+  acceptedProvenance: ['simulated'],
+};
+
+SCENARIOS.competitive.configOverrides = {
+  completionPolicy: COMPETITIVE_COMPLETION_POLICY,
+  budget: { maxUsd: 2, warningAtFraction: 0.8, missingEstimate: 'checkpoint' },
+  costEstimatePerStep: { usd: 0.02 },
 };
 
 /** YC presentation completion policy: 13 product-relevant simulated checks.

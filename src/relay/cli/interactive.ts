@@ -6,6 +6,10 @@ import {
   renderManualTask, renderManualTaskHelp, renderReview, renderStatus,
   renderTask, renderUsage, welcome, type RenderOptions,
 } from './render';
+import {
+  projectCompetitiveMission, renderMissionContract, renderAttestations,
+  renderFindings, renderRepairs, renderVerdict, renderTimeline,
+} from './competitive';
 
 /**
  * Interactive Relay session (Prompt 5) — a PURE line handler so tests drive
@@ -38,6 +42,7 @@ const HELP = [
   '  /start /step /continue        drive the workflow through Relay Core',
   '  /status /events /project /task /ownership /blueprint /handoff',
   '  /evidence /review /usage /checkpoint /manual /audit   inspect read models',
+  '  /mission /attestation /findings /repairs /verdict /timeline   competitive proof',
   '  /approve /reject <reason>     answer blueprint or checkpoint decisions',
   '  /done /manual-help /cannot-complete [note]   answer a Manual Task',
   '  (D / H / N / C also work while a Manual Task is shown)',
@@ -51,6 +56,7 @@ export function createSession(options: SessionOptions): Session {
   let app: RelayApp | null = null;
   let renderOpts = { ...options.render };
   let lastSeq = 0;
+  const nowIso = (): string => options.now?.() ?? new Date().toISOString();
 
   const ensureApp = (): RelayApp | { error: string } => {
     if (app) return app;
@@ -187,6 +193,12 @@ export function createSession(options: SessionOptions): Session {
         case '/review': return { lines: app ? renderReview(app) : ['No run yet.'] };
         case '/usage': return { lines: app ? renderUsage(app) : ['No run yet.'] };
         case '/checkpoint': return { lines: app ? renderCheckpoint(app) : ['No run yet.'] };
+        case '/mission': return { lines: app ? renderMissionContract(projectCompetitiveMission(app, nowIso())) : ['No run yet.'] };
+        case '/attestation': return { lines: app ? renderAttestations(projectCompetitiveMission(app, nowIso())) : ['No run yet.'] };
+        case '/findings': return { lines: app ? renderFindings(projectCompetitiveMission(app, nowIso())) : ['No run yet.'] };
+        case '/repairs': return { lines: app ? renderRepairs(projectCompetitiveMission(app, nowIso())) : ['No run yet.'] };
+        case '/verdict': return { lines: app ? renderVerdict(projectCompetitiveMission(app, nowIso())) : ['No run yet.'] };
+        case '/timeline': return { lines: app ? renderTimeline(projectCompetitiveMission(app, nowIso())) : ['No run yet.'] };
         case '/manual': return { lines: app ? renderManualTask(app) : ['No run yet.'] };
         case '/done': return { lines: respondManual('done') };
         case '/manual-help': return { lines: respondManual('help') };

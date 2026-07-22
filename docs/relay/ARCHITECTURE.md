@@ -1,5 +1,17 @@
 # Sunday Relay — Architecture (authoritative)
 
+> **Implementation sync (Prompt 8.1, 2026-07-23):** `src/relay/mission/` is a
+> new PURE, browser-safe projection layer (a leaf: imports protocol types
+> only — never Relay Core internals, adapters, the CLI, Node, or
+> child_process; boundary-tested). It projects the Mission Contract,
+> Execution Attestations, the Review/Finding/Repair ledger, deterministic
+> mission verdicts, and the mission timeline from EXISTING canonical state —
+> no second source of truth and no second workflow engine (the competitive
+> scenario reuses the Prompt-4 orchestrator's real golden path). Relay Core
+> owns mission status/revision/staleness/verdict; the CLI renders read models
+> only. Read models are ANSI/secret-free for reuse by a future graphical
+> Mission Control. See COMPETITIVE_FEATURE_COVERAGE.md.
+
 > **Implementation sync (Prompt 8, 2026-07-23):** the real Claude Code local
 > adapter is implemented in `src/relay/connectors/claude-code/`, behind the
 > existing provider-neutral `CodingAgentAdapter` port (Relay Core never

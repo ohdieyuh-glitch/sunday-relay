@@ -33,6 +33,7 @@ npm run relay:test           # relay vitest suite
 | `relay claude contract-verify` | offline adapter proof against a fake Claude (no provider call) | 0 / 8 |
 | `relay claude run --fixture safe-edit --confirm-live` | REAL Claude Code live proof (explicit) | 0 / 3 / 5 |
 | `relay claude inspect` / `relay claude cancel` | live-run inspection / cancellation (volatile, process-local) | 0 |
+| `relay demo competitive` | Mission Contract + Claude Implementer + Codex Reviewer + finding + repair + verified completion (SIMULATED) | 0 |
 | `relay version` / `relay help` | identity / usage | 0 |
 
 Global options: `--json` (clean machine JSON, no ANSI, no mascot),
@@ -66,6 +67,23 @@ demo commands) record a system-actor acceptance instead — honestly labeled.
 **Checkpoints:** `checkpoint_required` renders the reason and options;
 `/approve` / `/reject` issue the real `respond-checkpoint` command — Relay
 Core decides what approval permits.
+
+**Competitive proof (Prompt 8.1):** `npm run relay:competitive` (=
+`relay demo competitive`) runs the deterministic mission-control proof
+through the REAL orchestrator: Mission Contract locked (revision 1, 5
+requirements, 6 blocking criteria, Claude Implementer, Codex Independent
+Reviewer) → implementation CLAIMED COMPLETE → Relay verification → the
+independent Codex review finds the IPv6 /128 rotation bypass (CHANGES
+REQUIRED) → finding F-1 + repair R-1 (scope-locked) → repair claim (finding
+stays open) → Relay verification 6/6 PASS → Codex re-review approves → the
+completion engine reaches MISSION VERDICT: VERIFIED COMPLETE. The Claude
+Implementer and Codex Reviewer are deterministic SIMULATIONS in this
+presentation; no external Codex is connected; the real Claude path stays
+`npm run relay:claude:live`. Interactive inspection: `/mission`,
+`/attestation`, `/findings`, `/repairs`, `/verdict`, `/timeline`. JSON mode
+returns the serializable mission bundle (no ANSI/mascot/secrets). See
+MISSION_CONTRACT.md, EXECUTION_ATTESTATION.md, REVIEW_REPAIR_LEDGER.md,
+COMPETITIVE_FEATURE_COVERAGE.md.
 
 **Manual Tasks (Prompt 6.1):** when a validated checkpoint carries a Manual
 Task, the CLI shows it automatically (title · why Relay stopped · three-to-
