@@ -1,5 +1,24 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **Implementation sync (Prompt 8, 2026-07-23):** Claude Code adapter tests
+> in `src/relay/connectors/claude-code/claude-code.test.ts` (pure modules:
+> environment stripping, permission compilation incl. no-Bash/no-skip-flag,
+> prompt compilation incl. transcript exclusion + report marker + narrow
+> revision, strict report parsing, incremental stream parsing incl. hidden-
+> reasoning omission + malformed/unknown tolerance, session capture/resume
+> incl. wrong-id + second-repair rejection, auth API-key rejection) plus the
+> full OFFLINE contract harness `runClaudeContractVerification()` (30 checks:
+> end-to-end fixture proof via a deterministic fake Claude with real edits,
+> inspection rejection, timeout, cancellation, no provider call). Boundary
+> tests gained the Claude adapter suite (core never imports it; no claim
+> mutation/promotion/worktree creation; no fusion-engine/server/UI; no
+> skip-permissions/Bash-by-default; env stripping; simulation adapters
+> unchanged) and updated the workspace "only these spawn" rule to include
+> the approved Claude runner. End-to-end offline:
+> `npm run relay:claude:contract-verify`. The live smoke
+> (`npm run relay:claude:live`) is explicit and NEVER part of automated
+> regression.
+
 > **Implementation sync (Prompt 7, 2026-07-22):** workspace security tests
 > in `src/relay/workspace/policy.test.ts` (pure: segment-safe protected
 > paths, claim classification with no expansion, hostile path shapes,

@@ -1,5 +1,21 @@
 # Sunday Relay — Architecture (authoritative)
 
+> **Implementation sync (Prompt 8, 2026-07-23):** the real Claude Code local
+> adapter is implemented in `src/relay/connectors/claude-code/`, behind the
+> existing provider-neutral `CodingAgentAdapter` port (Relay Core never
+> imports it; boundary-tested). It runs Claude ONLY inside a ready Prompt-7
+> isolated workspace (cwd), with a credential-stripped environment, tool
+> restrictions (no Bash/network/MCP), `--safe-mode`/`--strict-mcp-config`
+> settings+MCP isolation, bounded runtime/output, cancellation, and
+> hidden-reasoning omission. The agent report is an unverified claim; Relay
+> independently inspects the worktree and runs verification (`node --test`)
+> through the Prompt-7 command runner. Only the workspace module and this
+> adapter use `child_process`. The live proof is explicit
+> (`npm run relay:claude:live`, `--confirm-live`) and never part of tests,
+> builds, or CI. Codex reviewer, Hermes, and durable persistence remain
+> unavailable; the simulated YC workflow is unchanged. See
+> CLAUDE_CODE_ADAPTER.md.
+
 > **Implementation sync (Prompt 7, 2026-07-22):** the isolated worktree and
 > safe local execution foundation is implemented in `src/relay/workspace/`
 > — the ONLY Node process/filesystem zone in Relay, composed solely by

@@ -58,3 +58,25 @@ every step SIMULATED, and no repository files are modified."
 - [ ] Final RELAY COMPLETE screen held ≥ 3 seconds
 - [ ] SIMULATED disclosure visible in-frame at the start and the end
 - [ ] Narration matches docs/relay/YC_VIDEO_SCRIPT.md
+
+## 9. OPTIONAL live Claude proof (Prompt 8 — separate segment, separate label)
+The guaranteed product demo remains `npm run relay:yc` (simulated agents,
+full Architect → Claude → independent Codex → review → repair → audit).
+Optionally open the video with a short LIVE proof of one real Claude Code
+agent inside Relay's isolated worktree:
+
+```bash
+cd /home/kaisinrogodfree5/sunday-relay
+npm run relay:claude:live        # REAL Claude call — separate terminal, own segment
+```
+
+Rules for the live segment:
+- Run it in its OWN terminal (nested Claude-in-Claude is not assumed safe).
+- Label it clearly as the LIVE proof, distinct from the SIMULATED workflow.
+- It shows: real Claude session, isolated worktree, one real edit, Relay
+  independent inspection, Relay-run verification, live audit.
+- On camera the audit says "Independent reviewer: not required by the
+  low-risk policy" — never claim Codex reviewed the live result.
+- `relay claude doctor` is a safe truthful pre-check (no model call).
+- If the live proof stops safely, that is an honest outcome — do not retry
+  the provider call repeatedly on stage.

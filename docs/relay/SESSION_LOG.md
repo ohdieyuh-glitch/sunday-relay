@@ -687,3 +687,105 @@ enforcement is detective (inspect + stop), not OS sandboxing.
 **Exact next step:** record the YC video (July 23 night — simulated demos,
 fallback 94ccb59); then *Real Claude Code Local Adapter* executing inside
 this workspace boundary, per CURRENT_STATE §Next prompt.
+
+---
+
+## 2026-07-23 — Prompt 8: Real Claude Code Local Adapter and Live Isolated Coding Proof
+
+**Timestamp:** 2026-07-23 (Gate A offline build/verify → Gate B live smoke).
+
+**Objective:** connect ONE real local Claude Code coding agent to the
+Prompt-7 isolated-worktree boundary behind the existing provider-neutral
+`CodingAgentAdapter` port — no Codex, no durable persistence, no history
+rewrite, the simulated demos preserved.
+
+**Preflight:** clean at 2044fbb; `relay:workspace:verify`, `relay:yc:verify`,
+`relay:manual:verify` all passed; relay suite 316/316. Installed Claude
+probed read-only: `/home/kaisinrogodfree5/.local/bin/claude` → v2.1.217;
+`-p`/`--output-format stream-json`/`-r`/`--session-id`/`--permission-mode`/
+`--tools`/`--allowedTools`/`--disallowedTools`/`--json-schema`/`--safe-mode`/
+`--strict-mcp-config` present; NO `--max-turns`. `claude auth status`:
+first-party `claude.ai` OAuth, subscription `max` = approved
+`claude_local_subscription`; no provider API-key env vars; Sunday repo has
+CLAUDE.md but no `.claude/settings*`/`.mcp.json`/hooks. No material
+incompatibility (turn-capping unavailable → bounded by runtime/output/calls).
+
+**Architecture (as landed):** `src/relay/connectors/claude-code/` implements
+the port; Relay Core never imports it (boundary-tested). Only the workspace
+module and this adapter's process runner use `child_process`. Claude runs
+ONLY inside a ready isolated worktree (cwd), `shell:false`, credential-
+stripped env (ANTHROPIC_API_KEY/AUTH_TOKEN/base-URL/Bedrock/Vertex removed),
+tool-restricted (Read/Glob/Grep/Edit; Bash/network/MCP forbidden),
+`--safe-mode`+`--strict-mcp-config` isolation, bounded runtime (6m)/output
+(1MiB/256KiB), SIGTERM→SIGKILL with honest termination, cancellation,
+hidden-reasoning dropped+counted, no `--dangerously-skip-permissions`. The
+Agent Execution Report (`RELAY_AGENT_EXECUTION_REPORT_V1` marker) is an
+unverified claim; Relay independently inspects the worktree and runs
+`node --test` via the Prompt-7 runner (live evidence), then a low-risk
+CompletionPolicy (accepted provenance live, no reviewer). Session UUID
+captured + stored with association only (never tokens); explicit exact-id
+resume; wrong-id and second-repair rejected. The sync port `execute` refuses
+live launch so no test/build/sim run ever calls Claude.
+
+**Files created:** `src/relay/connectors/claude-code/{contracts,
+capability-probe,config,environment,permission-compiler,prompt-compiler,
+process-runner,stream-parser,event-normalizer,report-parser,session-manager,
+adapter,live-runner,doctor,fixture,fake-executable,contract-verify,index,
+claude-code.test}.ts`, `docs/relay/CLAUDE_CODE_ADAPTER.md`,
+`docs/relay/LIVE_CLAUDE_DEMO.md`.
+**Files modified:** protocol `envelopes.ts` (+11 `agent.*` live event kinds)
++ `protocol.test.ts` (family check), `cli/main.ts` (+`claude
+doctor|run|inspect|cancel|contract-verify`, approval screen, manual-task
+stop), `relay-core-boundary.test.ts` (+Claude adapter suite; CLI facade
+allowance; workspace "only these spawn" now includes the Claude runner;
+simulation-adapter connector checks scoped away from claude-code),
+`package.json` (+relay:claude:contract-verify, relay:claude:live), docs
+(ARCHITECTURE/PROTOCOL/SECURITY_BOUNDARIES/TEST_STRATEGY sync, CLI.md,
+YC_DEMO_RUNBOOK §9, CURRENT_STATE, this log).
+
+**Dependencies:** none added (no Claude Agent SDK — the installed CLI covers
+every required capability; node:child_process/fs/os/path only).
+
+**Gate A (offline, no provider call):** `relay claude doctor` truthful
+(exe found, v2.1.217, auth ready local-subscription max, API-key env no,
+Codex/Hermes/durable unavailable). `npm run relay:claude:contract-verify`
+**30/30 PASS twice** — full pipeline against the deterministic fake Claude
+(end-to-end fixture proof with real edits → inspection → Relay verification →
+live audit; plus malformed line, missing init/session, wrong-task,
+max-turns, execution error, timeout, cancellation, output overflow, hidden-
+reasoning omission, session capture/duplicate/resume/wrong-id/second-repair).
+Relay suite **342/342**; boundary suite green; workspace/yc/manual verify
+**twice each**; typecheck + frontend/backend/relay builds green; full suite
+**1931/1931**. The no-`--confirm-live` path shows the approval screen and
+makes NO live call (verified).
+
+**Gate B (explicit live smoke — user-run, separate terminal):**
+`npm run relay:claude:live` → LIVE CLAUDE CODE RUN screen (confirmed via
+`--confirm-live`) → real Claude session started → execution report received
+(claim, not proof) → RELAY INSPECTION: 1 claimed file changed
+(`src/normalize.js`), 0 protected files changed, source worktree unchanged →
+RELAY VERIFICATION [PASS] Tests / File-claim / Protected-path / Source-
+worktree protection → FINAL AUDIT "Live Claude Code execution verified;
+Independent reviewer: not required by the selected low-risk CompletionPolicy"
+→ RELAY COMPLETE. First attempt; no repair; one live Claude call consumed.
+Post-Gate-B non-provider regressions re-run green (typecheck, relay 342,
+four verifiers, build, full suite 1931); the working repo was untouched by
+the separate live run and no fixture/workspace residue remained.
+
+**Security:** live subscription auth via Claude's own OAuth (never read,
+stored, or printed); API-key/third-party env stripped from the child;
+`shell:false` throughout; no Bash/network/MCP/deploy/push/commit tools; no
+`--dangerously-skip-permissions`; hidden reasoning never surfaced; the agent
+report gated by Relay's independent inspection + Relay-run verification; no
+deployment, no push, no source-repository modification; the real Sunday repo
+never used as a live source; temp fixtures under tmpdir, cleaned.
+
+**Known limitations:** no `--max-turns` on this CLI (bounded by
+runtime/output/2-call ceiling); volatile sessions + workspace registry (no
+durable cross-process resume); edit path-scoping advisory (inspection is the
+enforced gate); nested Claude-in-Claude not assumed safe (live smoke run in
+a separate terminal); Codex reviewer, Hermes, durable persistence, and the
+live Architect adapter remain unimplemented by design.
+
+**Exact next step:** *Real Codex Independent Reviewer Adapter* behind the
+reviewer port, per CURRENT_STATE §Next prompt.

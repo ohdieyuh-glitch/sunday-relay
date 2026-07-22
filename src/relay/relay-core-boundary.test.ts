@@ -77,7 +77,7 @@ describe('relay-core boundary (new module roots)', () => {
   it('CLI is a thin client: only the app facade, read-model types, protocol, workspace facade, and its own modules', () => {
     // '../workspace' (the composition-root facade) is the ONLY workspace
     // import the CLI may use — internals are asserted below.
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|node:util|node:readline)['"]/;
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/claude-code|node:util|node:readline)['"]/;
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
       const imports = [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
@@ -88,7 +88,9 @@ describe('relay-core boundary (new module roots)', () => {
       expect(/from\s+['"]\.\.\/(ledger|coordination|handoff|verification|recovery)\//.test(content), `${file} imports workflow internals`).toBe(false);
       expect(/from\s+['"]\.\.\/core\/(run-machine|task-machine|orchestrator|read-models)/.test(content), `${file} imports core internals directly`).toBe(false);
       expect(/from\s+['"]\.\.\/storage\//.test(content), `${file} imports storage directly`).toBe(false);
-      expect(/from\s+['"]\.\.\/connectors\//.test(content), `${file} imports adapters directly`).toBe(false);
+      // Simulation adapters are off-limits; the Claude adapter facade is the
+      // one approved connector composition root.
+      expect(/from\s+['"]\.\.\/connectors\/(simulated|ports|index)/.test(content), `${file} imports simulation adapters directly`).toBe(false);
       // Workspace: facade only — never the Node internals, never child_process.
       expect(/from\s+['"]\.\.\/workspace\/(worktree-manager|command-runner|repository-inspector|cleanup|command-policy|protected-paths|output-sanitizer|workspace-evidence|verify-harness|doctor)/.test(content), `${file} imports workspace internals — CLI may only use the facade`).toBe(false);
       expect(/child_process/.test(content), `${file} spawns processes — only the workspace module may`).toBe(false);
@@ -146,29 +148,33 @@ describe('Workspace boundaries (Prompt 7)', () => {
     }
   });
 
-  it('Relay Core, protocol, ledger, connectors never import the workspace implementation or child_process', () => {
+  const isClaudeAdapter = (f: string): boolean => f.includes(join('connectors', 'claude-code'));
+
+  it('Relay Core, protocol, ledger never import the workspace implementation or child_process', () => {
     for (const file of files) {
       const content = read(file);
       expect(/from\s+['"].*\/workspace\//.test(content), `${file} imports workspace internals`).toBe(false);
       expect(/child_process/.test(content), `${file} references child_process`).toBe(false);
     }
-    for (const file of walk(relay('connectors')).filter((f) => !f.endsWith('.test.ts'))) {
+    // Simulation adapters (connectors except the approved Claude adapter)
+    // never touch workspaces or spawn processes.
+    for (const file of walk(relay('connectors')).filter((f) => !f.endsWith('.test.ts') && !isClaudeAdapter(f))) {
       const content = read(file);
-      expect(/from\s+['"].*\/workspace/.test(content), `${file} — adapters cannot create worktrees`).toBe(false);
-      expect(/child_process|createWorktree|createWorkspaceService/.test(content), `${file} — adapters cannot spawn processes or manage worktrees`).toBe(false);
+      expect(/from\s+['"].*\/workspace/.test(content), `${file} — simulation adapters cannot access workspaces`).toBe(false);
+      expect(/child_process|createWorktree|createWorkspaceService/.test(content), `${file} — simulation adapters cannot spawn or manage worktrees`).toBe(false);
     }
   });
 
-  it('only the workspace module spawns processes inside src/relay', () => {
+  it('only the workspace module and the approved Claude adapter spawn processes inside src/relay', () => {
     const allRelayFiles = [
       ...files,
       ...walk(relay('cli')),
-      ...walk(relay('connectors')),
+      ...walk(relay('connectors')).filter((f) => !isClaudeAdapter(f)),
       ...walk(relay('domain')),
       ...walk(relay('state')),
     ].filter((f) => !f.endsWith('.test.ts'));
     for (const file of allRelayFiles) {
-      expect(/child_process/.test(read(file)), `${file} uses child_process outside the workspace boundary`).toBe(false);
+      expect(/child_process/.test(read(file)), `${file} uses child_process outside the workspace / Claude adapter boundary`).toBe(false);
     }
     // and the workspace implementation actually enforces shell: false
     const runner = read(join(workspaceDir, 'command-runner.ts'));
@@ -201,9 +207,75 @@ describe('Workspace boundaries (Prompt 7)', () => {
   });
 });
 
+describe('Claude Code adapter boundaries (Prompt 8)', () => {
+  const claudeDir = relay(join('connectors', 'claude-code'));
+  const claudeFiles = walk(claudeDir).filter((f) => !f.endsWith('.test.ts'));
+
+  it('Relay Core never imports the Claude adapter; the adapter only implements the port', () => {
+    for (const file of files) {
+      expect(/from\s+['"].*connectors\/claude-code/.test(read(file)), `${file} imports the Claude adapter`).toBe(false);
+    }
+    // The adapter conforms to the CodingAgentAdapter port (structural).
+    const adapter = read(join(claudeDir, 'adapter.ts'));
+    expect(adapter).toContain('CodingAgentAdapterPort');
+    expect(adapter).toContain("provenance: 'live'");
+  });
+
+  it('the Claude adapter cannot mutate FileClaims, promote claims, or create source worktrees', () => {
+    for (const file of claudeFiles) {
+      const content = read(file);
+      expect(/acquireFileClaim|promoteClaim|recordClaim/.test(content), `${file} touches claims/promotion`).toBe(false);
+      expect(/createWorktree|removeWorktree|worktree-manager/.test(content), `${file} creates worktrees directly`).toBe(false);
+      expect(/from\s+['"].*\/(run-machine|orchestrator|task-machine)/.test(content), `${file} drives Relay Core`).toBe(false);
+    }
+  });
+
+  it('the Claude adapter never imports fusion-engine, server, or browser UI', () => {
+    for (const file of claudeFiles) {
+      const content = read(file);
+      expect(/fusion-engine|from\s+['"].*server\//.test(content), `${file} imports backend`).toBe(false);
+      expect(/from\s+['"]react|from\s+['"]zustand|@supabase/.test(content), `${file} imports UI/provider SDKs`).toBe(false);
+    }
+  });
+
+  it('no adapter source contains dangerous flags, generic Bash, push, deploy, or publish by default', () => {
+    for (const file of claudeFiles) {
+      const content = read(file);
+      expect(/dangerously-skip-permissions/.test(content), `${file} references skip-permissions`).toBe(false);
+    }
+    // Bash is on the forbidden-tools list, never the allowed list.
+    const perms = read(join(claudeDir, 'permission-compiler.ts'));
+    expect(perms).toContain("'Bash'");
+    expect(perms).toMatch(/FORBIDDEN_TOOLS/);
+    // Only the process runner spawns the Claude executable; it is shell-free.
+    const runner = read(join(claudeDir, 'process-runner.ts'));
+    expect(runner).toContain('shell: false');
+    expect(runner).not.toMatch(/shell:\s*true/);
+  });
+
+  it('the adapter strips API-key / provider credentials from the child environment', () => {
+    const env = read(join(claudeDir, 'environment.ts'));
+    expect(env).toContain('ANTHROPIC_API_KEY');
+    expect(env).toContain('ANTHROPIC_AUTH_TOKEN');
+    expect(env).toContain('CLAUDE_CODE_USE_BEDROCK');
+  });
+
+  it('browser prototype modules cannot import the Claude adapter', () => {
+    for (const name of ['main.tsx', 'RelayApp.tsx', 'StagePanel.tsx', 'PipelineRail.tsx']) {
+      expect(/from\s+['"].*connectors\/claude-code/.test(read(relay(name))), `${name} imports the Claude adapter`).toBe(false);
+    }
+  });
+
+  it('simulation adapters remain unchanged (no live/child_process leakage)', () => {
+    const simulated = read(relay(join('connectors', 'simulated.ts')));
+    expect(/child_process|connectors\/claude-code/.test(simulated)).toBe(false);
+    expect(simulated).toContain("provenance: 'simulated'");
+  });
+});
+
 describe('Manual Task boundaries (Prompt 6.1)', () => {
   const cliFiles = walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'));
-  const connectorFiles = walk(relay('connectors')).filter((f) => !f.endsWith('.test.ts'));
+  const connectorFiles = walk(relay('connectors')).filter((f) => !f.endsWith('.test.ts') && !f.includes(join('connectors', 'claude-code')));
 
   it('the CLI never decides manual-task safety, verification, or resume', () => {
     for (const file of cliFiles) {

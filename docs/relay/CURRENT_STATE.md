@@ -1,13 +1,62 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-22 17:10 UTC** (Prompt 7 complete —
-> isolated worktree execution foundation; the July 24 demo remains
-> `npm run relay:yc`, with `npm run relay:manual` as the supporting demo).
+> boundary. Last updated: **2026-07-23 (Prompt 8 complete — real Claude Code
+> local adapter; live smoke passed).** The July 24 product demo remains
+> `npm run relay:yc` (simulated); `npm run relay:claude:live` is the optional
+> LIVE proof of one real Claude Code agent inside Relay's boundary.
 
 ## Phase
 
-**Prompt 7 — Isolated Worktree Manager and Safe Local Execution Foundation: COMPLETE**
+**Prompt 8 — Real Claude Code Local Adapter and Live Isolated Coding Proof: COMPLETE**
+(2026-07-23; Gate A offline + Gate B live smoke both passed). One real local
+Claude Code coding agent connected to the Prompt-7 isolated-worktree boundary
+behind the existing provider-neutral `CodingAgentAdapter` port:
+- **Module:** `src/relay/connectors/claude-code/` — capability probe, auth
+  classification, settings/MCP risk detection, credential-stripping
+  environment, permission compiler, prompt compiler, shell-free bounded
+  process runner, incremental stream-json parser, event normalizer, strict
+  report parser, session manager (capture + explicit resume), the adapter
+  (implements the port; sync `execute` refuses live launch), the live-run
+  orchestrator, doctor, safe-edit fixture, deterministic fake executable,
+  and the offline contract harness. Relay Core never imports it
+  (boundary-tested).
+- **Authentication:** approved profile `claude_local_subscription` (Claude's
+  own OAuth; verified `claude.ai` first-party, subscription `max`). Relay
+  never reads/stores/prints credentials; API-key/Bedrock/Vertex/base-URL env
+  vars are stripped; an API-key source triggers a Manual Task, not an
+  API-billed run.
+- **Execution:** Claude runs ONLY inside a ready isolated worktree (cwd),
+  `shell:false`, tool-restricted (Read/Glob/Grep/Edit; no Bash/network/MCP),
+  `--safe-mode`+`--strict-mcp-config` isolation, bounded runtime/output,
+  cancellation, hidden-reasoning omission, no `--dangerously-skip-
+  permissions`. This CLI (v2.1.217) has no `--max-turns`; bounded by
+  runtime/output/2-call ceiling (disclosed).
+- **Trust:** the Agent Execution Report is an unverified claim; Relay
+  independently inspects the worktree (claimed/protected/unclaimed/symlink/
+  source) and runs `node --test` through the Prompt-7 command runner
+  producing live evidence; a low-risk CompletionPolicy (accepted provenance
+  live, no reviewer) then evaluates. Session UUID captured + stored with
+  association only (never tokens); one focused repair resumes the exact
+  session (wrong id / second repair rejected).
+- **Commands:** `relay claude doctor` (truthful, no model call),
+  `npm run relay:claude:contract-verify` (30-check offline pipeline proof
+  via a fake Claude, no provider call), `npm run relay:claude:live` (the
+  explicit REAL proof; `--confirm-live`, never in tests/CI).
+- **Gate B live smoke (passed):** real Claude session started → one claimed
+  file (`src/normalize.js`) changed → 0 protected/unclaimed changes → source
+  fixture unchanged → Relay-run `node --test` PASS → live Final Audit
+  "verified-complete", "Independent reviewer: not required by the low-risk
+  policy" → RELAY COMPLETE. No deployment, push, credential access, API-key
+  use, or source modification; temp fixture cleaned.
+- **Regression:** `relay:yc:verify`, `relay:manual:verify`,
+  `relay:workspace:verify`, and `relay:claude:contract-verify` all pass;
+  relay suite 342/342; full suite 1931/1931; typecheck + all builds green.
+- **Docs:** CLAUDE_CODE_ADAPTER.md + LIVE_CLAUDE_DEMO.md (new) + sync
+  blockquotes in ARCHITECTURE/PROTOCOL/SECURITY_BOUNDARIES/TEST_STRATEGY,
+  CLI.md, YC_DEMO_RUNBOOK.md §9.
+
+**Prior phase — Prompt 7 — Isolated Worktree Manager and Safe Local Execution Foundation: COMPLETE**
 (2026-07-22 17:10 UTC). The security boundary required before Relay may
 control a real Claude Code session — REAL local infrastructure
 (`provenance: live`, verifier `relay-workspace`), alongside the untouched
@@ -308,15 +357,18 @@ None in flight — Phase 1 closes with this commit.
 
 ## Next prompt
 
-**Real Claude Code Local Adapter** — a live coding-agent adapter that
-executes INSIDE the Prompt-7 workspace boundary: dispatch prepares an
-isolated workspace from the handoff (claims → policy input), the local
-Claude Code session runs confined to that worktree, its commands route
-through the approved command policy, all changes pass the inspection gate
-(claimed/protected/symlink) before any report is trusted, and evidence
-carries true live provenance distinct from the workspace infrastructure's.
-Safety gates from SECURITY_BOUNDARIES.md and WORKSPACE_SECURITY.md apply
-unweakened; no push, no deployment, spend controls per Decision 1.
+**Real Codex Independent Reviewer Adapter** — a live, independent reviewer
+behind the existing reviewer port, so a live run can REQUIRE and satisfy
+independent review (the Prompt-8 low-risk fixture deliberately does not).
+Independence is structural (distinct adapter/session lineage from the coding
+agent), the reviewer verdict is an unverified claim gated by Relay, and the
+same safety boundaries (isolated workspace, no push/deploy, credential-free
+core, spend controls per Decision 1) apply unweakened. Only then does a live
+run demonstrate the full Architect → Claude → independent Codex → review →
+bounded repair → audit loop against real agents.
+
+**Superseded next-prompt record (pre-Prompt-8): Real Claude Code Local
+Adapter** — DONE in Prompt 8 (live smoke passed).
 
 **Superseded next-prompt record (pre-Prompt-7): Post-YC Durable Local
 Persistence and Real Cross-Process Resume** — implement the relay-storage

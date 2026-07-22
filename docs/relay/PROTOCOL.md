@@ -1,5 +1,18 @@
 # Relay Protocol — `relay.protocol.v1` (specification)
 
+> **Implementation sync (Prompt 8, 2026-07-23):** the live Claude Code
+> adapter adds `agent.*` event kinds only (live_dispatch_requested,
+> live_approved, process_started, initialized, activity_observed,
+> process_completed, process_failed, process_timed_out, process_cancelled,
+> session_resume_requested, malformed_output) — all `provenance: live`,
+> source `coding-agent`/`relay-core`/`system`, classification
+> `unverified-claim` for agent activity. The Agent Execution Report is a
+> module-local marker schema (`RELAY_AGENT_EXECUTION_REPORT_V1`), parsed
+> strictly and treated as an unverified claim; Relay workspace inspection is
+> the authoritative changed-path source. Claude session ids are stored as
+> plain strings with association only — never credentials. No new command
+> types or envelope contracts were required.
+
 > **Implementation sync (Prompt 7, 2026-07-22):** workspace foundation
 > contracts live in `src/relay/workspace/contracts.ts` (module-local, not
 > yet protocol-envelope types — they cross no external boundary this

@@ -307,6 +307,11 @@ export const RELAY_EVENT_KINDS = [
   // agent
   'agent.session_started', 'agent.session_resumed', 'agent.report_created',
   'agent.blocked', 'agent.completed', 'agent.failed',
+  // live coding agent (Prompt 8 — real Claude Code local adapter)
+  'agent.live_dispatch_requested', 'agent.live_approved', 'agent.process_started',
+  'agent.initialized', 'agent.activity_observed', 'agent.process_completed',
+  'agent.process_failed', 'agent.process_timed_out', 'agent.process_cancelled',
+  'agent.session_resume_requested', 'agent.malformed_output',
   // reviewer
   'reviewer.started', 'reviewer.verdict_created', 'reviewer.completed', 'reviewer.failed',
   // verification

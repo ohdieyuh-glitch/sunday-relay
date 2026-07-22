@@ -29,6 +29,10 @@ npm run relay:test           # relay vitest suite
 | `relay doctor` | read-only truthful environment checks | 0 / 8 |
 | `relay workspace doctor` | isolated-worktree capability checks (live local) | 0 / 8 |
 | `relay workspace verify` | deterministic workspace security verification on a throwaway fixture repo | 0 / 8 |
+| `relay claude doctor` | truthful Claude Code capability + auth report (no model call) | 0 / 8 |
+| `relay claude contract-verify` | offline adapter proof against a fake Claude (no provider call) | 0 / 8 |
+| `relay claude run --fixture safe-edit --confirm-live` | REAL Claude Code live proof (explicit) | 0 / 3 / 5 |
+| `relay claude inspect` / `relay claude cancel` | live-run inspection / cancellation (volatile, process-local) | 0 |
 | `relay version` / `relay help` | identity / usage | 0 |
 
 Global options: `--json` (clean machine JSON, no ANSI, no mascot),
@@ -121,6 +125,24 @@ truthfully (agent execution and all provider adapters remain UNAVAILABLE).
 This is REAL local infrastructure (`provenance: live`) — it is not part of
 the recorded YC simulation and does not alter any demo scenario. See
 WORKSPACE_SECURITY.md.
+
+## Live Claude Code adapter (Prompt 8 — live local, explicit approval)
+
+`relay claude doctor` reports installed capabilities + a safe auth
+classification (no model call, no secrets). `npm run relay:claude:contract-
+verify` (= `relay claude contract-verify`) proves the ENTIRE adapter offline
+against a deterministic fake Claude — stream parsing, session capture +
+explicit resume, workspace inspection, Relay verification, cancellation,
+timeout, hidden-reasoning omission — with no provider call. `npm run
+relay:claude:live` (= `relay claude run --fixture safe-edit --confirm-live`)
+makes a REAL Claude Code call: it builds a throwaway fixture, runs Claude in
+an isolated worktree, inspects the result independently, runs `node --test`
+itself, and produces a live Final Audit ("Independent reviewer: not required
+by the low-risk policy" — never a Codex claim). The live command is NOT part
+of any test, build, doctor, verification, or CI, and requires
+`--confirm-live` (approval is never inferred from a TTY). Uses the local
+Claude subscription; never reads or stores credentials; strips API-key env.
+See CLAUDE_CODE_ADAPTER.md and LIVE_CLAUDE_DEMO.md.
 
 ## July 24 demonstration sequence
 

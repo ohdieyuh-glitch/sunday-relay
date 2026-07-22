@@ -9,6 +9,11 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 import { detectRenderOptions, renderAudit, renderEvent, renderManualTask, welcome, badge, type RenderOptions } from './render';
 import { EXIT, exitCodeForFinalStatus } from './exit-codes';
 import { runWorkspaceVerification, workspaceDoctorReport } from '../workspace';
+import { createRandomIdFactory } from '../protocol/ids';
+import {
+  checkLivePrerequisites, classifyClaudeAuth, claudeDoctorReport, DEFAULT_LIVE_LIMITS,
+  probeClaudeCapabilities, runClaudeContractVerification, runClaudeProof,
+} from '../connectors/claude-code';
 
 /**
  * Relay CLI entry (Prompt 5). Thin client: parses arguments, composes the
@@ -31,8 +36,11 @@ const defaultIo: CliIo = {
 };
 
 export interface ParsedCli {
-  command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace';
+  command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude';
   workspaceAction?: 'doctor' | 'verify';
+  claudeAction?: 'doctor' | 'run' | 'inspect' | 'cancel' | 'contract-verify';
+  fixture?: string;
+  confirmLive: boolean;
   scenario?: string;
   objective?: string;
   maxCost?: number;
@@ -67,6 +75,8 @@ export function parseCli(argv: string[]): ParsedCli {
         plain: { type: 'boolean', default: false },
         quiet: { type: 'boolean', default: false },
         help: { type: 'boolean', default: false },
+        fixture: { type: 'string' },
+        'confirm-live': { type: 'boolean', default: false },
       },
     });
     const pace = values.pace !== undefined ? Number(values.pace) : undefined;
@@ -77,6 +87,7 @@ export function parseCli(argv: string[]): ParsedCli {
       autoAcceptBlueprint: values['auto-accept-blueprint'] === true,
       presentation: values.presentation === true,
       pace, compact: values.compact === true,
+      confirmLive: values['confirm-live'] === true,
     };
     if (pace !== undefined && (!Number.isFinite(pace) || pace < 0)) {
       return { command: 'help', ...base, pace: undefined, error: '--pace must be a non-negative number of milliseconds.' };
@@ -90,6 +101,13 @@ export function parseCli(argv: string[]): ParsedCli {
         return { command: 'workspace', ...base, error: 'workspace requires an action: doctor or verify.' };
       }
       return { command: 'workspace', workspaceAction: second, ...base };
+    }
+    if (first === 'claude') {
+      const actions = ['doctor', 'run', 'inspect', 'cancel', 'contract-verify'];
+      if (!second || !actions.includes(second)) {
+        return { command: 'claude', ...base, error: 'claude requires an action: doctor, run, inspect, cancel, or contract-verify.' };
+      }
+      return { command: 'claude', claudeAction: second as ParsedCli['claudeAction'], fixture: values.fixture, ...base };
     }
     if (first === 'demo') {
       if (!second) return { command: 'demo', ...base, error: 'demo requires a scenario name (e.g. relay demo repair).' };
@@ -112,6 +130,7 @@ export function parseCli(argv: string[]): ParsedCli {
     return {
       command: 'help', json: false, noColor: true, plain: true, quiet: false,
       untilStopped: false, autoAcceptBlueprint: false, presentation: false, compact: false,
+      confirmLive: false,
       error: err instanceof Error ? err.message : String(err),
     };
   }
@@ -129,6 +148,9 @@ export const HELP_TEXT = [
   '  relay doctor                   read-only environment checks',
   '  relay workspace doctor         isolated-worktree capability checks (live local)',
   '  relay workspace verify         deterministic workspace security verification',
+  '  relay claude doctor            truthful Claude Code capability + auth report',
+  '  relay claude contract-verify   offline adapter proof (no provider call)',
+  '  relay claude run --fixture safe-edit --confirm-live   REAL Claude Code proof',
   '  relay version | relay help',
   '',
   'Options: --json --no-color --plain --quiet',
@@ -285,6 +307,98 @@ export function doctorReport(io: CliIo): { lines: string[]; exitCode: number } {
   };
 }
 
+/* --------------------------- claude commands ----------------------- */
+
+async function runClaudeCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const now = () => new Date().toISOString();
+  const out = (...lines: string[]) => lines.forEach((line) => io.out(line));
+
+  if (parsed.claudeAction === 'doctor') {
+    const report = claudeDoctorReport(now());
+    if (parsed.json) io.out(JSON.stringify({ report: report.lines.slice(1), exitCode: report.exitCode }));
+    else report.lines.forEach((line) => io.out(line));
+    return report.exitCode;
+  }
+
+  if (parsed.claudeAction === 'contract-verify') {
+    io.out('RELAY CLAUDE ADAPTER CONTRACT VERIFICATION (offline — no provider call)');
+    const { checks, failures } = await runClaudeContractVerification();
+    for (const check of checks) io.out(`  [${check.ok ? 'PASS' : 'FAIL'}] ${check.name}${check.detail ? ` — ${check.detail}` : ''}`);
+    if (failures > 0) {
+      io.out(`\nCLAUDE CONTRACT VERIFICATION FAILED: ${failures} check(s).`);
+      return EXIT.doctorFailure;
+    }
+    io.out('\nCLAUDE CONTRACT VERIFICATION PASSED — adapter proven with no provider call.');
+    return EXIT.completed;
+  }
+
+  if (parsed.claudeAction === 'inspect' || parsed.claudeAction === 'cancel') {
+    // Live sessions are volatile and process-local: a fresh CLI process has
+    // no active live run to inspect or cancel. Reported truthfully.
+    io.out(parsed.claudeAction === 'inspect'
+      ? 'No active live Claude run in this process (live sessions are volatile and not durably stored).'
+      : 'No active live Claude run to cancel in this process.');
+    return EXIT.completed;
+  }
+
+  // claudeAction === 'run': the explicit live proof.
+  const fixture = parsed.fixture ?? 'safe-edit';
+  if (fixture !== 'safe-edit') {
+    io.out(`Only the "safe-edit" fixture is supported for the live proof (got "${fixture}").`);
+    return EXIT.usage;
+  }
+  const caps = probeClaudeCapabilities(now());
+  const auth = classifyClaudeAuth(now(), caps.executablePath);
+
+  const prereq = checkLivePrerequisites({
+    capabilities: caps, authApproved: auth.approvedForLiveRun, authLoggedIn: auth.loggedIn,
+    authSourceClass: auth.sourceClass, settingsRisk: 'clean', approvalGranted: parsed.confirmLive,
+  });
+  const turnLimitLine = `  unlimited (bounded by ${Math.round(DEFAULT_LIVE_LIMITS.maxRuntimeMs / 60_000)}-minute runtime and output limits)`;
+  if (!prereq.ready) {
+    // Manual Task-shaped stop — simple steps, no live call, no secrets.
+    out('MANUAL TASK', '', 'Relay needs your help.', '', prereq.manualTitle, '',
+      'Why Relay stopped:', `  ${prereq.manualReason}`);
+    if (!parsed.confirmLive && caps.executablePath && auth.approvedForLiveRun) {
+      out('', 'LIVE CLAUDE CODE RUN', '',
+        'This will use your existing Claude Code account.', '',
+        'Workspace:', '  Isolated Relay worktree',
+        'Source repository:', '  Will not be modified',
+        'Deployment:', '  Disabled', 'Git push:', '  Prohibited',
+        'Maximum agent turns:', turnLimitLine,
+        'Files Claude may change:', '  src/normalize.js', '',
+        'To proceed, re-run with --confirm-live (approval is never inferred from a TTY).');
+    }
+    return EXIT.checkpointRequired;
+  }
+
+  // Approved live run — show the confirmation screen, then run for real.
+  out('LIVE CLAUDE CODE RUN', '',
+    'This will use your existing Claude Code account.', '',
+    'Workspace:', '  Isolated Relay worktree',
+    'Source repository:', '  Will not be modified',
+    'Deployment:', '  Disabled', 'Git push:', '  Prohibited',
+    'Maximum agent turns:', turnLimitLine,
+    'Files Claude may change:', '  src/normalize.js', '',
+    'Confirmed via --confirm-live.');
+
+  const proof = await runClaudeProof({
+    executablePath: caps.executablePath!, capabilities: caps, now, ids: createRandomIdFactory(),
+  });
+  if (parsed.json) {
+    io.out(JSON.stringify({
+      exitCode: proof.exitCode, sessionCaptured: proof.sessionCaptured,
+      filesChanged: proof.filesChanged, protectedChanges: proof.protectedChanges,
+      inspectionAssessment: proof.inspectionAssessment, sourceUnchanged: proof.sourceUnchanged,
+      verificationPassed: proof.verificationPassed, completionOutcome: proof.completionOutcome,
+      audit: proof.audit,
+    }));
+  } else {
+    proof.lines.forEach((line) => io.out(line));
+  }
+  return proof.exitCode;
+}
+
 /* ------------------------------- main ------------------------------ */
 
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
@@ -340,6 +454,8 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       io.out('\nWORKSPACE VERIFICATION PASSED — isolation, policy, and cleanup proven.');
       return EXIT.completed;
     }
+    case 'claude':
+      return runClaudeCli(parsed, io);
     case 'demo':
     case 'run': {
       const definition = SCENARIOS[parsed.scenario!];

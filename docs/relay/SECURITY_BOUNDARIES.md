@@ -1,5 +1,23 @@
 # Sunday Relay — Security Boundaries (authoritative)
 
+> **Implementation sync (Prompt 8, 2026-07-23):** the live Claude Code
+> adapter runs under the enforced Prompt-7 boundaries plus: the approved
+> auth profile is `claude_local_subscription` (Claude's own OAuth) — Relay
+> never reads, stores, or prints credentials; `ANTHROPIC_API_KEY`,
+> `ANTHROPIC_AUTH_TOKEN`, base-URL, Bedrock, and Vertex vars are stripped
+> from the child environment and an API-key/third-party source triggers a
+> Manual Task instead of an API-billed run. Claude runs shell-free
+> (`shell:false`) inside the isolated worktree with tool restrictions (no
+> Bash/network/MCP/deploy/push), `--safe-mode`+`--strict-mcp-config`
+> settings/MCP isolation, bounded runtime/output, and cancellation;
+> `--dangerously-skip-permissions` is never used (boundary-tested). Hidden
+> reasoning is dropped, not stored. The agent report is an unverified claim
+> gated by Relay's independent workspace inspection and Relay-run
+> verification. Live proof requires explicit `--confirm-live` (never
+> inferred from a TTY) and never runs in tests/CI. Edit path-scoping is
+> disclosed as advisory (inspection is the enforced control). See
+> CLAUDE_CODE_ADAPTER.md.
+
 > **Implementation sync (Prompt 7, 2026-07-22):** the workspace execution
 > boundary is now REAL local enforcement (`provenance: live`, verifier
 > `relay-workspace`) — see WORKSPACE_SECURITY.md for the full policy set.
