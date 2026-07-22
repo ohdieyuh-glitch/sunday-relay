@@ -52,6 +52,11 @@ export interface DispatchEligibilityInput {
   usage: readonly UsageRecord[];
   costEstimate: { usd?: number; tokens?: number; runtimeMs?: number } | null;
   currentLedgerVersion: number;
+  /** Sequence of the last CANONICAL-affecting event. Handoff staleness is
+   * judged against this when supplied — historical bookkeeping events
+   * (incl. the package's own handoff.created) never invalidate a package;
+   * canonical decisions/promotions do. Falls back to currentLedgerVersion. */
+  lastCanonicalLedgerVersion?: number;
   currentRepositoryRevision?: string;
   decisionsSinceContext?: ReadonlyArray<{ decision: DecisionRecord; conflictsWithTask: boolean }>;
   repeatedFailure?: RepeatedFailureDecision;
@@ -138,8 +143,16 @@ export function evaluateDispatchEligibility(input: DispatchEligibilityInput): Di
   );
   push('resource-claims-clear', foreignResourceConflicts.length === 0, 'blocked', foreignResourceConflicts.length ? `Resource conflicts: ${foreignResourceConflicts.map((c) => c.resource).join(', ')}` : 'No resource conflicts.');
 
-  const ledgerFresh = validateLedgerVersion(handoff?.ledgerVersion, input.currentLedgerVersion);
-  push('ledger-current', ledgerFresh.status === 'current', 'checkpoint_required', ledgerFresh.detail);
+  const effectiveLedgerVersion = input.lastCanonicalLedgerVersion ?? input.currentLedgerVersion;
+  const ledgerCurrent = handoff !== null && (handoff.ledgerVersion as number) >= effectiveLedgerVersion;
+  push(
+    'ledger-current',
+    ledgerCurrent,
+    'checkpoint_required',
+    ledgerCurrent
+      ? `Package ledger v${handoff?.ledgerVersion} covers canonical v${effectiveLedgerVersion}.`
+      : `Package pinned at ledger v${handoff?.ledgerVersion} but canonical state moved to v${effectiveLedgerVersion} — never silently dispatched.`,
+  );
   const contextFresh = validateLedgerVersion(handoff?.contextVersion, task.contextVersion as number, { revalidatable: true });
   push('context-current', contextFresh.status === 'current', 'checkpoint_required', contextFresh.detail);
   const revisionFresh = validateBaseRevision(handoff?.baseRevision, input.currentRepositoryRevision);
@@ -151,7 +164,9 @@ export function evaluateDispatchEligibility(input: DispatchEligibilityInput): Di
   if (handoff && assignment) {
     const handoffValidation = validateHandoffPackage({
       pkg: handoff, run, task, assignment,
-      currentLedgerVersion: input.currentLedgerVersion,
+      // Agree with the canonical-aware ledger-current rule above: a package
+      // that saw all canonical state validates as current.
+      currentLedgerVersion: (handoff.ledgerVersion as number) >= effectiveLedgerVersion ? (handoff.ledgerVersion as number) : effectiveLedgerVersion,
       currentBaseRevision: input.currentRepositoryRevision,
       now: currentTime,
       // Staleness is reported by the dedicated ledger/base-revision checks

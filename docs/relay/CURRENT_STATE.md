@@ -1,12 +1,36 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-22 02:15 UTC** (Prompt 3 complete —
-> coordination and Handoff Compiler; see SESSION_LOG.md for exact results).
+> boundary. Last updated: **2026-07-22 05:15 UTC** (Prompt 4 complete —
+> simulation harness and orchestrated vertical slice; see SESSION_LOG.md).
 
 ## Phase
 
-**Prompt 3 — Coordination and Handoff Compiler: COMPLETE** (2026-07-22
+**Prompt 4 — Simulation Harness and Full Relay Vertical Slice: COMPLETE**
+(2026-07-22 05:15 UTC). Implemented in `src/relay/connectors` +
+`src/relay/core/orchestrator.ts`:
+- **Four simulation adapters** behind provider-neutral ports (Architect /
+  CodingAgent / Reviewer / Verification): deterministic from an explicit
+  ScenarioConfig, provenance `simulated` hard-wired, reports re-validated
+  through the same schema gate as real input, sessions minted + resumed for
+  the single repair, truthful enforcement declarations, no live-execution
+  claims anywhere.
+- **Workflow orchestrator**: a bounded step engine (one legal action per
+  step; runUntilStopped hard-capped) driving the REAL machine, eligibility
+  battery, compiler, verification, completion, promotion, and audit;
+  budget-gated before every adapter dispatch; core-raised checkpoints via
+  the new `raise-checkpoint` intent; command path with duplicate-delivery
+  idempotency; commands/reports/events/evidence/usage/audits persisted in
+  the in-memory stores (volatile — honestly non-durable).
+- **Vertical-slice scenarios green**: direct success · golden path with one
+  same-session repair · checkpoint escalation (failed founder condition) ·
+  duplicate + stale-revision prevention with zero agent invocation · honest
+  failure ×3 (still-failing repair / unavailable verification / live-only
+  policy rejecting simulated evidence) · budget hard-stop + warning ·
+  pause/resume/cancel/idempotency/terminal protection/checkpoint approval.
+- **Run the demo scenarios:** `npx vitest run src/relay/relay-vertical-slice.test.ts`.
+
+**Prior phase — Prompt 3 — Coordination and Handoff Compiler: COMPLETE** (2026-07-22
 02:15 UTC). Implemented in `src/relay/{coordination,handoff,verification,recovery}`:
 - **Task ownership + leases** — one active owner enforced; assign/renew/
   release/transfer/expire/inspect; expiry never silently transfers; history
@@ -139,8 +163,18 @@ None in flight — Phase 1 closes with this commit.
 
 ## Next prompt
 
-**Prompt 4 — Deterministic Simulation Harness and Full Relay Vertical
-Slice**: implement the simulation adapters (Architect / CodingAgent /
+**Prompt 5 — Relay CLI (terminal client of Relay Core)**: implement
+`src/relay/cli` as a THIN client per UI_VISION.md — `node:util.parseArgs`,
+esbuild-bundled like the backend (`dist-relay/cli.cjs`); commands to create
+a project/run, drive the simulated vertical slice, respond to checkpoints,
+pause/resume/cancel, and inspect run status / event feed / handoff /
+evidence / audit via serializable read models; renders normalized events
+with truthful provenance labels (SIMULATED badges) and enforcement levels;
+zero workflow logic in the client (boundary-tested); scenario walkthroughs
+of TEST_STRATEGY §11 runnable from the terminal — the July 24 demo surface.
+No real adapters, no persistence, no UI beyond the terminal, no paid calls.
+
+**Superseded next-prompt record (Prompt 4, now complete):** implement the simulation adapters (Architect / CodingAgent /
 Reviewer / Verification) behind the connector ports — every output stamped
 `provenance: simulated`, each adapter declaring simulated-vs-enforced
 policies — plus the orchestrator loop that wires commands → state machine →

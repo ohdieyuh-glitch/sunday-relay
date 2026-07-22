@@ -1,5 +1,19 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **Implementation sync (Prompt 4, 2026-07-22):** §9 adapter contracts and
+> §11 demonstration scenarios are implemented — 20 new tests:
+> `src/relay/connectors/simulated.test.ts` (adapter contracts: provenance,
+> role, association, determinism, malformed-input rejection via the same
+> schema gate as real input, independence, no credential shapes) and
+> `src/relay/relay-vertical-slice.test.ts` (direct success; §11.1 golden
+> path with one same-session repair; §11.2 checkpoint escalation; §11.3
+> duplicate + stale-revision prevention with zero agent invocation; §11.4
+> honest failure ×3 incl. unavailable verification and live-only policy
+> rejecting simulated evidence; budget hard-stop + warning; pause/resume/
+> cancel/duplicate-command idempotency/terminal protection/checkpoint
+> approval). Run scenarios with:
+> `npx vitest run src/relay/relay-vertical-slice.test.ts`.
+
 > **Implementation sync (Prompt 3, 2026-07-21):** §§5–7 and the coordination
 > scope are implemented — 90 new tests: ownership/lease boundaries
 > (`coordination/ownership.test.ts`), duplicate-work/dependency/staleness

@@ -1,9 +1,10 @@
 import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
-import type { EventEnvelope, ReportEnvelope } from '../protocol/envelopes';
+import type { CommandEnvelope, EventEnvelope, ReportEnvelope } from '../protocol/envelopes';
 import type {
   AgentHandoffPackage, AgentSessionReference, ArtifactReference, EvidenceBundle,
-  EvidenceRecord, FailureRecord, FileClaim, HandoffCompilationRecord,
-  RelayProject, RelayRun, RelayTask, ResourceClaim, TaskAssignment, UsageRecord,
+  EvidenceRecord, FailureRecord, FileClaim, FinalAuditReport,
+  HandoffCompilationRecord, RelayProject, RelayRun, RelayTask, ResourceClaim,
+  TaskAssignment, UsageRecord,
 } from '../protocol/contracts';
 import type { ProjectId } from '../protocol/ids';
 import type { EventStorePort, KeyedStorePort, RelayStores } from './interfaces';
@@ -116,6 +117,8 @@ export function createInMemoryRelayStores(opts: { acknowledgeVolatile: true }): 
   const sessionRefs = new InMemoryKeyedStore<AgentSessionReference>();
   const artifacts = new InMemoryKeyedStore<ArtifactReference>();
   const usage = new InMemoryKeyedStore<UsageRecord>();
+  const commands = new InMemoryKeyedStore<CommandEnvelope>();
+  const audits = new InMemoryKeyedStore<FinalAuditReport>();
   return {
     projects,
     runs,
@@ -133,12 +136,14 @@ export function createInMemoryRelayStores(opts: { acknowledgeVolatile: true }): 
     sessionRefs,
     artifacts,
     usage,
+    commands,
+    audits,
     durability: 'volatile-test-only',
     resetAllForTest() {
       for (const store of [
         projects, runs, tasks, assignments, fileClaims, resourceClaims, packages,
         compilations, failures, reports, evidence, evidenceBundles, sessionRefs,
-        artifacts, usage,
+        artifacts, usage, commands, audits,
       ]) {
         (store as InMemoryKeyedStore<unknown>).resetForTest();
       }

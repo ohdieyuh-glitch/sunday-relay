@@ -24,6 +24,7 @@ import { TERMINAL_RUN_STATUSES } from '../protocol/enums';
 
 export type RunIntent =
   | { intent: 'begin' }
+  | { intent: 'raise-checkpoint'; reason: string }
   | { intent: 'record-blueprint'; blueprint: Blueprint }
   | { intent: 'record-report'; reportType: 'implementation' | 'repair'; reportId: ReportId; provenance: Provenance }
   | { intent: 'record-verification'; verification: VerificationRecord; provenance: Provenance }
@@ -284,6 +285,19 @@ export function transitionRun(input: RunTransitionInput): RelayResult<RunTransit
 
   /* ---------- internal intents ---------- */
   switch (action.intent) {
+    case 'raise-checkpoint': {
+      // Core-raised checkpoint (budget stop, adapter failure, unsatisfiable
+      // completion, ...) — legal from any active state.
+      if (run.status !== 'active') return illegal(run, 'Checkpoints are raised from an active run.');
+      const checkpointId = ids.next('ckp');
+      const next: RelayRun = {
+        ...run,
+        status: 'checkpoint_required',
+        checkpoint: { checkpointId, runId: run.runId, reason: action.reason, requestedAt: now },
+      };
+      events.push(stamp(draft(run, 'run.checkpoint_required', action.reason, { refs: { checkpointId } })));
+      return ok({ run: next, events, requiredActions });
+    }
     case 'begin': {
       if (run.status !== 'created') return illegal(run, 'begin is only valid on a created run.');
       const next: RelayRun = { ...run, status: 'active', phase: 'blueprint' };

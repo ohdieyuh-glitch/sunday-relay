@@ -255,3 +255,70 @@ deferred (contracts validate).
 
 **Exact next step:** *Prompt 4 — Deterministic Simulation Harness and Full
 Relay Vertical Slice* (scope pinned in CURRENT_STATE.md §Next prompt).
+
+---
+
+## 2026-07-22 — Prompt 4: Simulation Harness and Orchestrated Vertical Slice
+
+**Timestamp:** 2026-07-22 ~04:20 → 05:20 UTC.
+
+**Objective:** first executable end-to-end Relay workflow on deterministic
+simulation adapters behind the provider-neutral connector ports, driven by
+a real orchestrator over the accepted machine/ledger/coordination/handoff/
+verification/recovery systems. No CLI/UI, no real adapters, no persistence,
+no shell/Git, no paid calls.
+
+**Preflight:** clean tree at 274a474; Prompt 3 complete per CURRENT_STATE;
+relay 201/201 verified live; no doc/code discrepancies.
+
+**Files created:** `src/relay/connectors/` — ports.ts, simulated.ts,
+index.ts, simulated.test.ts · `src/relay/core/orchestrator.ts` ·
+`src/relay/relay-vertical-slice.test.ts`.
+**Files modified:** run-machine.ts (+`raise-checkpoint` intent),
+storage interfaces + memory (+commands/audits stores), contracts.ts
+(FinalAuditReport optional audit-detail fields incl. simulationNotice),
+eligibility.ts (+`lastCanonicalLedgerVersion` — see decision below),
+core/index.ts, connectors/index.ts, PROTOCOL.md, TEST_STRATEGY.md,
+CURRENT_STATE.md, SESSION_LOG.md. **Prototype untouched.**
+
+**Key decisions:** (1) Handoff ledger staleness is judged against the last
+CANONICAL-affecting event — a package's own `handoff.created` bookkeeping
+event can never invalidate it, while canonical decisions/promotions still
+do (the strict rule made every compiled package instantly stale). (2) The
+machine's `record-verification` emits the authoritative
+`verification.completed`; the orchestrator drops the adapter's duplicate of
+that concept. (3) `runUntilStopped` treats max-steps exhaustion as an
+honest stop (`max-steps-reached`), not an internal error. (4) Reviewer
+"insufficient evidence" maps to `changes_requested` + `insufficient-evidence`
+finding — the protocol verdict enum is unchanged. (5) Scenario auto-accept
+of blueprints is a recorded system command (actor `scenario-auto-approve`),
+provenance-honest.
+
+**Dependencies:** none added.
+
+**Tests run (exact):**
+- `npx vitest run src/relay` — **221/221 passed** (22 files: 20 new
+  Prompt-4 tests + 201 prior; Prompt 2+3 regressions all green).
+- `npx vitest run` (full repository) — **1810/1810 passed** (140 files).
+- `npm run typecheck` — clean. `npm run build` + `npm run backend:build` —
+  green.
+**Failures + repairs (one focused fix per root cause, then green):**
+(1) instant package staleness → canonical-aware ledger-current rule;
+(2) duplicate `verification.completed` emission → orchestrator drops the
+adapter copy; (3) budget hard-stop missing its `budget.exceeded` event in
+the handoff phase → budget gate added before eligibility; (4) max-steps
+error semantics → honest stop reason (+ stale-revision test stops at step 4).
+
+**Security:** no provider/paid calls, no credentials/secrets, no shell/Git
+execution, no real repository file modified by any agent, no deployment,
+no push. Simulation is impossible to mistake for live: provenance
+`simulated` end-to-end, audit `simulationNotice` mandatory when not live,
+live-only completion policies reject simulated evidence (tested).
+
+**Known limitations:** in-memory stores are volatile (durable persistence
+is a later phase — no crash-recovery claim made); blueprint auto-accept is
+scenario-only (interactive acceptance arrives with the CLI); reviewer
+adapter maps extended verdict vocabulary onto the two protocol verdicts.
+
+**Exact next step:** *Prompt 5 — Relay CLI (terminal client of Relay
+Core)* per CURRENT_STATE §Next prompt — the July 24 demo surface.

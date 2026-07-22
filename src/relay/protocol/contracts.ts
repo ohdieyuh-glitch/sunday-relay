@@ -490,6 +490,24 @@ export interface FinalAuditReport {
   checkpoints: Array<{ id: CheckpointId; reason: string; response?: 'approve' | 'reject' }>;
   provenanceProfile: ProvenanceProfile;
   unresolvedQuestions: QuestionId[];
+  /** Prompt-4 additive audit detail (all optional). */
+  identities?: { architect?: string; codingAgent?: string; reviewer?: string; verification?: string };
+  sessionRefs?: SessionRefId[];
+  handoffPackageRefs?: PackageId[];
+  blueprintVersion?: number;
+  ledgerVersion?: LedgerVersion;
+  contextVersion?: ContextVersion;
+  baseRevision?: string;
+  ownershipHistory?: Array<{ assignmentId: AssignmentId; adapterId: string; role: Role; endReason?: string }>;
+  fileClaimPaths?: string[];
+  reportRefs?: ReportId[];
+  completionPolicyId?: PolicyId;
+  claimPromotions?: Array<{ claimId: ClaimId; decision: 'promoted' | 'rejected' | 'pending' }>;
+  failureRefs?: FailureId[];
+  remainingIssues?: string[];
+  completionReason?: string;
+  /** Mandatory honesty note whenever provenanceProfile !== 'live'. */
+  simulationNotice?: string;
 }
 
 /* ================================================================== */

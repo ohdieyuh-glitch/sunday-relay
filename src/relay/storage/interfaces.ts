@@ -1,9 +1,10 @@
 import type { RelayResult } from '../protocol/errors';
-import type { EventEnvelope, ReportEnvelope } from '../protocol/envelopes';
+import type { CommandEnvelope, EventEnvelope, ReportEnvelope } from '../protocol/envelopes';
 import type {
   AgentHandoffPackage, AgentSessionReference, ArtifactReference, EvidenceBundle,
-  EvidenceRecord, FailureRecord, FileClaim, HandoffCompilationRecord,
-  RelayProject, RelayRun, RelayTask, ResourceClaim, TaskAssignment, UsageRecord,
+  EvidenceRecord, FailureRecord, FileClaim, FinalAuditReport,
+  HandoffCompilationRecord, RelayProject, RelayRun, RelayTask, ResourceClaim,
+  TaskAssignment, UsageRecord,
 } from '../protocol/contracts';
 import type { ProjectId, RunId, TaskId } from '../protocol/ids';
 
@@ -47,6 +48,8 @@ export interface RelayStores {
   sessionRefs: KeyedStorePort<AgentSessionReference>;
   artifacts: KeyedStorePort<ArtifactReference>;
   usage: KeyedStorePort<UsageRecord>;
+  commands: KeyedStorePort<CommandEnvelope>;
+  audits: KeyedStorePort<FinalAuditReport>;
   /** Truthful labeling: volatile stores never masquerade as durable. */
   readonly durability: 'volatile-test-only';
 }

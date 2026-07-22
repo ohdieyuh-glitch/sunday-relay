@@ -1,5 +1,22 @@
 # Relay Protocol — `relay.protocol.v1` (specification)
 
+> **Implementation sync (Prompt 4, 2026-07-22):** the simulation harness and
+> orchestrated vertical slice are implemented in `src/relay/connectors`
+> (ports + four deterministic simulation adapters, provenance `simulated`
+> hard-wired) and `src/relay/core/orchestrator.ts` (bounded step engine).
+> Additive deltas: run-machine intent `raise-checkpoint` (core-raised
+> checkpoints for budget stops, adapter failures, unsatisfied completion);
+> RelayStores gained `commands` + `audits`; FinalAuditReport gained the
+> optional Prompt-4 audit-detail fields (identities, sessionRefs, package/
+> report refs, ownership history, claim promotions, completionReason, and
+> the mandatory-when-not-live `simulationNotice`). Handoff ledger staleness
+> is judged against the last CANONICAL-affecting version (historical
+> bookkeeping events — incl. a package's own handoff.created — never
+> invalidate it; canonical decisions/promotions do), surfaced as
+> `lastCanonicalLedgerVersion` on the eligibility input. Reviewer
+> "insufficient evidence" maps to `changes_requested` + an
+> `insufficient-evidence` finding (the verdict enum is unchanged).
+
 > **Implementation sync (Prompt 3, 2026-07-21):** the coordination layer is
 > implemented in `src/relay/{coordination,handoff,verification,recovery}`.
 > Additive contract deltas: Role enum gained `security-reviewer` +
