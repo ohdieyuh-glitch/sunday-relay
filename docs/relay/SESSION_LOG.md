@@ -600,3 +600,90 @@ bounded synchronous worktree creation; claim enforcement is detective
 **Exact next step:** record the YC video (July 23 night — simulated demos,
 fallback 94ccb59); then *Real Claude Code Local Adapter* inside the
 Prompt-7 workspace boundary, per CURRENT_STATE §Next prompt.
+
+---
+
+## 2026-07-22 — Prompt 7 (final): workspace foundation re-implemented and landed
+
+**Timestamp:** 2026-07-22 ~15:45 → 17:15 UTC.
+
+**Supersession note (append-only honesty):** the previous entry describes
+the Prompt-7 implementation committed as 3946727. That implementation was
+intentionally removed from the working tree before this session continued;
+this entry describes the REPLACEMENT implementation that supersedes it in
+the follow-up commit. The prior code remains reachable in git history at
+3946727 only. Naming/scope deltas against the prior entry: the composition
+root is `createWorkspaceService` (not `createLocalWorkspaceService`);
+workspace profiles live in `workspace/contracts.ts` (module-local, not
+protocol enums); `core/app.ts` and `cli/cli.test.ts` are untouched this
+time; the verification harness runs 23 checks; the output-limit policy
+terminates the process on stream overflow.
+
+**Architecture (as landed):** `src/relay/workspace/` behind
+`WorkspaceManagerPort` / `WorkspaceInspectionPort` / `CommandExecutionPort`
+(combined `WorkspaceService`, composed only by `createWorkspaceService`).
+Pure browser-safe modules: contracts, protected-paths (segment-safe,
+claim-never-expands, protection-beats-claims), command-policy (allowlist
+with absolute denylist, env allowlist ∩ secret-name denylist),
+output-sanitizer (byte bounding + secret-shape redaction), cleanup
+(authorization-always-required decisions). Node zone: repository-inspector
+(fixed-executable git, porcelain-z parsing, repo-root validation),
+worktree-manager (root/branch validation, create/verify/remove, no force),
+command-runner (`spawn shell:false`, SIGTERM→SIGKILL, honest
+termination_unconfirmed), workspace-evidence (live provenance, verifier
+`relay-workspace`, no absolute paths), doctor, verify-harness, index.
+
+**Files created:** `src/relay/workspace/{contracts,protected-paths,
+command-policy,output-sanitizer,repository-inspector,worktree-manager,
+command-runner,workspace-evidence,cleanup,doctor,verify-harness,index}.ts`,
+`src/relay/workspace/{policy,workspace}.test.ts`,
+`docs/relay/WORKSPACE_SECURITY.md` (rewritten for this implementation).
+**Files modified:** protocol `envelopes.ts` (+`workspace.*` event family,
+`EventRefs.workspaceId`) + `protocol.test.ts` (family check),
+`cli/main.ts` (+`workspace doctor|verify`, help),
+`relay-core-boundary.test.ts` (+Workspace boundary suite; CLI allowlist
+gains the workspace facade only; CLI child_process ban),
+`package.json` (+`relay:workspace:verify`), docs (PROTOCOL / ARCHITECTURE /
+SECURITY_BOUNDARIES / TEST_STRATEGY sync blockquotes, CLI.md,
+CURRENT_STATE.md, this log).
+
+**Dependencies:** none added (node:child_process/fs/os/path only).
+
+**Verification (exact):** `npm run relay:workspace:verify` **passed twice**
+(23 checks/run: baseline fixture repo → pinned isolated worktree outside
+the source → idempotent reuse → source unchanged → approved command exit 0
+→ git push and bash rejected → claimed change allowed → protected change
+flagged + workspace checkpoint → timeout with termination_confirmed →
+cancellation honored → flagged workspace preserved despite authorized
+cleanup → clean workspace removed when authorized → double-cleanup refused
+→ source pristine at pinned revision → live secret-free evidence → fixture
+fully removed). `relay:yc:verify` **passed twice** and
+`relay:manual:verify` **passed twice** after the change (scenario configs
+and adapters untouched). Relay suite **316/316** (29 files; 32 new
+workspace tests + boundary additions); typecheck + frontend + backend +
+relay builds green; `relay workspace doctor` truthful, exit 0. Full-suite
+count recorded in the commit gate below. Failures + repairs (one per root
+cause): arrow-function `=>` in the harness's `node -e` fixtures tripped the
+metacharacter rejection (fixtures rewritten without metacharacters — the
+policy was right); branch validator accepted `a/./b` (segment rule
+tightened); boundary regex flagged the simulated adapters' truthful
+`worktree-isolation` enforcement LABEL (regex narrowed to real
+spawn/import patterns).
+
+**Security:** no provider/paid calls; no credentials read; secret-named
+env keys stripped at approval AND at child-env construction (tested); no
+shell execution anywhere; push/reset/clean/checkout/merge/worktree/config/
+-c/--force/publish denied by policy and tested; source repositories
+inspect-only; fixtures confined to tmpdir and removed; no deployment; no
+push; the Sunday repository was never used as a workspace source.
+
+**Known limitations:** volatile workspace registry (orphaned worktrees
+after a crash need manual `git worktree remove`); run branches preserved
+after removal; no cancellation during synchronous worktree creation;
+grandchildren detaching from the process group may outlive termination —
+reported as `termination_unconfirmed`, never claimed dead; claim
+enforcement is detective (inspect + stop), not OS sandboxing.
+
+**Exact next step:** record the YC video (July 23 night — simulated demos,
+fallback 94ccb59); then *Real Claude Code Local Adapter* executing inside
+this workspace boundary, per CURRENT_STATE §Next prompt.

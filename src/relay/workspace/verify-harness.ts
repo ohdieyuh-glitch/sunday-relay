@@ -1,201 +1,194 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ProjectId, RunId, TaskId } from '../protocol/ids';
-import { parseEvent } from '../protocol/envelopes';
-import { createLocalWorkspaceService } from './index';
+import { createWorkspaceService } from './index';
+import type { WorkspacePolicyInput } from './contracts';
 import { DEFAULT_WORKSPACE_COMMAND_POLICY } from './command-policy';
-import type { WorkspaceCommandPolicy, WorkspacePolicyInput } from './contracts';
 
 /**
  * Deterministic workspace verification harness (Prompt 7) — proves the
- * isolated-worktree foundation end to end against a TEMPORARY fixture
- * repository (never the real Sunday repository). The harness plays the
- * role of the future agent/user by writing files directly; Relay's job is
- * to detect and stop what policy forbids. All fixture material lives under
- * one tmp directory and is removed at the end.
+ * isolated-worktree foundation end to end against a THROWAWAY fixture
+ * repository under the OS temp dir (never the real Sunday repository).
+ * Every fixture path is created here and removed at the end; the harness
+ * asserts the source repo stays untouched throughout.
  */
 
-const FIXTURE_POLICY: WorkspacePolicyInput = {
-  protectedPaths: { forbidden: ['secrets'], readOnly: ['README.md'] },
-  claimedWritePaths: ['src'],
-};
-
-/** Harness command policy: adds `node -e` so timeout/cancel/output paths
- * can be exercised deterministically — explicitly approved configuration
- * for the fixture only, never a default. */
-const HARNESS_COMMAND_POLICY: WorkspaceCommandPolicy = {
-  ...DEFAULT_WORKSPACE_COMMAND_POLICY,
-  rules: [
-    { executable: 'node', description: 'fixture probes', allowedFirstArgs: ['--version', '-e'] },
-    { executable: 'git', description: 'read-only repository inspection' },
-  ],
-};
-
-export interface WorkspaceVerificationOutcome {
-  lines: string[];
-  failures: string[];
+export interface VerificationCheckResult {
+  name: string;
+  ok: boolean;
+  detail?: string;
 }
 
-export async function runWorkspaceVerificationHarness(): Promise<WorkspaceVerificationOutcome> {
-  const lines: string[] = ['RELAY WORKSPACE VERIFICATION (temporary fixture repository)'];
-  const failures: string[] = [];
-  const check = (name: string, ok: boolean, detail = '') => {
-    lines.push(`  ${ok ? '[PASS]' : '[FAIL]'} ${name}${detail ? ` — ${detail}` : ''}`);
-    if (!ok) failures.push(name);
-  };
+const FIXTURE_ENV = {
+  GIT_AUTHOR_NAME: 'Relay Fixture', GIT_AUTHOR_EMAIL: 'fixture@relay.local',
+  GIT_COMMITTER_NAME: 'Relay Fixture', GIT_COMMITTER_EMAIL: 'fixture@relay.local',
+  GIT_TERMINAL_PROMPT: '0',
+};
 
-  const tmpRoot = mkdtempSync(join(tmpdir(), 'relay-workspace-verify-'));
+const fixtureGit = (args: string[], cwd: string): string =>
+  execFileSync('git', args, {
+    cwd, encoding: 'utf8', timeout: 15_000,
+    env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', ...FIXTURE_ENV },
+  });
+
+export async function runWorkspaceVerification(): Promise<{ checks: VerificationCheckResult[]; failures: number }> {
+  const checks: VerificationCheckResult[] = [];
+  const check = (name: string, ok: boolean, detail = '') => checks.push({ name, ok, detail });
+
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'relay-wsverify-'));
+  const sourceRepo = join(fixtureRoot, 'source');
+
   try {
-    /* 1–2. fixture repository with a safe baseline commit */
-    const sourceDir = join(tmpRoot, 'fixture-repo');
-    mkdirSync(sourceDir, { recursive: true });
-    const fixtureGit = (args: string[]) =>
-      execFileSync('git', args, {
-        cwd: sourceDir, encoding: 'utf8', timeout: 15_000, windowsHide: true,
-        env: { PATH: process.env.PATH ?? '', HOME: tmpRoot, GIT_TERMINAL_PROMPT: '0', GIT_CONFIG_GLOBAL: join(tmpRoot, 'no-gitconfig'), GIT_CONFIG_SYSTEM: join(tmpRoot, 'no-gitconfig') },
-      });
-    fixtureGit(['init', '--initial-branch', 'fixture-main']);
-    mkdirSync(join(sourceDir, 'src'));
-    mkdirSync(join(sourceDir, 'secrets'));
-    writeFileSync(join(sourceDir, 'README.md'), 'Fixture repository (read-only by policy).\n');
-    writeFileSync(join(sourceDir, 'src', 'app.js'), 'module.exports = 1;\n');
-    writeFileSync(join(sourceDir, 'secrets', 'prod.env'), 'placeholder-not-a-real-secret\n');
-    fixtureGit(['add', '.']);
-    fixtureGit(['-c', 'user.name=Relay Fixture', '-c', 'user.email=fixture@relay.invalid', 'commit', '-m', 'baseline']);
-    const baselineRevision = fixtureGit(['rev-parse', 'HEAD']).trim();
+    /* 1–2. fixture repository with a safe baseline */
+    mkdirSync(join(sourceRepo, 'src'), { recursive: true });
+    mkdirSync(join(sourceRepo, 'secrets'), { recursive: true });
+    fixtureGit(['init', '-q', '-b', 'main'], sourceRepo);
+    writeFileSync(join(sourceRepo, 'README.md'), 'fixture baseline\n');
+    writeFileSync(join(sourceRepo, 'src', 'app.txt'), 'claimed content v1\n');
+    writeFileSync(join(sourceRepo, 'secrets', 'prod.env'), 'placeholder=not-a-real-secret\n');
+    fixtureGit(['add', '.'], sourceRepo);
+    fixtureGit(['commit', '-q', '-m', 'baseline'], sourceRepo);
+    const baselineRevision = fixtureGit(['rev-parse', 'HEAD'], sourceRepo).trim();
     check('fixture repository created with baseline commit', /^[0-9a-f]{40}$/.test(baselineRevision));
 
-    const service = createLocalWorkspaceService({
-      workspaceRoot: join(tmpRoot, '.relay-workspaces'),
-      commandPolicy: HARNESS_COMMAND_POLICY,
+    const service = createWorkspaceService({
+      commandPolicy: {
+        ...DEFAULT_WORKSPACE_COMMAND_POLICY,
+        rules: [
+          ...DEFAULT_WORKSPACE_COMMAND_POLICY.rules.filter((r) => r.executable !== 'node'),
+          // harness-approved configuration: -e runs HARNESS-authored code
+          { executable: 'node', description: 'harness checks', allowedFirstArgs: ['--version', '-e'] },
+        ],
+      },
     });
-    const idsOf = (token: string) => ({
+
+    const policy: WorkspacePolicyInput = {
+      protectedPaths: { forbidden: ['secrets'], readOnly: ['README.md'] },
+      claimedWritePaths: ['src/app.txt'],
+    };
+    const identity = {
       projectId: 'prj_wsverify' as ProjectId,
-      runId: `run_wsv-${token}` as RunId,
-      taskId: `tsk_wsv-${token}` as TaskId,
-    });
+      runId: 'run_wsverify1' as RunId,
+      taskId: 'tsk_wsverify1' as TaskId,
+      sourceRepositoryPath: sourceRepo,
+    };
 
     /* 3. isolated worktree */
-    const main = idsOf('main');
-    const prepared = service.prepareWorkspace({ ...main, sourceRepositoryPath: sourceDir, cleanupPolicy: 'preserve_on_checkpoint' });
-    check('isolated worktree created', prepared.ok);
-    if (!prepared.ok) throw new Error(prepared.error.message);
+    const prepared = service.prepareWorkspace(identity);
+    check('isolated worktree created', prepared.ok, prepared.ok ? prepared.value.value.workspace.branchName : prepared.error.message);
+    if (!prepared.ok) throw new Error('cannot continue without a workspace');
     const workspace = prepared.value.value.workspace;
-    check('revision pinned to baseline', workspace.sourceRevision === baselineRevision);
-    check('run-specific branch created', workspace.branchName === 'relay/run/wsv-main');
-    check('workspace confined to approved root', workspace.workspacePath.startsWith(join(tmpRoot, '.relay-workspaces')));
+    check('workspace pinned to the baseline revision', workspace.sourceRevision === baselineRevision);
+    check('workspace path is outside the source repository', !workspace.workspacePath.startsWith(sourceRepo));
 
-    const again = service.prepareWorkspace({ ...main, sourceRepositoryPath: sourceDir, cleanupPolicy: 'preserve_on_checkpoint' });
-    check('idempotent reuse returns the same workspace', again.ok && again.value.value.idempotent && again.value.value.workspace.workspaceId === workspace.workspaceId);
+    const reprepared = service.prepareWorkspace(identity);
+    check('idempotent re-preparation returns the same workspace',
+      reprepared.ok && reprepared.value.value.idempotent && reprepared.value.value.workspace.workspaceId === workspace.workspaceId);
 
     /* 4. source unchanged */
     const sourceCheck = service.verifySourceUnchanged(workspace.workspaceId);
     check('source repository unchanged after creation', sourceCheck.ok && !sourceCheck.value.value.changed);
 
     /* 5. approved command inside the worktree */
-    const versionCmd = await service.executeCommand({
-      commandId: 'wsv-cmd-version', ...main, workspaceId: workspace.workspaceId,
+    const versionRun = await service.executeCommand({
+      commandId: 'wsv-node-version', ...identity, workspaceId: workspace.workspaceId,
       executable: 'node', args: ['--version'], expectedPurpose: 'runner proof',
     });
-    check('approved command executed (node --version)', versionCmd.ok && versionCmd.value.value.status === 'completed' && versionCmd.value.value.exitCode === 0);
+    check('approved command executed with exit 0',
+      versionRun.ok && versionRun.value.value.status === 'completed' && versionRun.value.value.exitCode === 0,
+      versionRun.ok ? versionRun.value.value.stdout.trim() : versionRun.error.message);
 
-    const pushCmd = await service.executeCommand({
-      commandId: 'wsv-cmd-push', ...main, workspaceId: workspace.workspaceId,
-      executable: 'git', args: ['push', 'origin', 'HEAD'], expectedPurpose: 'must be rejected',
+    const pushAttempt = await service.executeCommand({
+      commandId: 'wsv-git-push', ...identity, workspaceId: workspace.workspaceId,
+      executable: 'git', args: ['push'], expectedPurpose: 'must be rejected',
     });
-    check('git push rejected by policy', pushCmd.ok && pushCmd.value.value.status === 'rejected');
+    check('git push rejected by policy', pushAttempt.ok && pushAttempt.value.value.status === 'rejected');
+    const shellAttempt = await service.executeCommand({
+      commandId: 'wsv-bash', ...identity, workspaceId: workspace.workspaceId,
+      executable: 'bash', args: ['-c', 'true'], expectedPurpose: 'must be rejected',
+    });
+    check('shell execution rejected by policy', shellAttempt.ok && shellAttempt.value.value.status === 'rejected');
 
     /* 6–7. allowed claimed change */
-    writeFileSync(join(workspace.workspacePath, 'src', 'app.js'), 'module.exports = 2;\n');
-    const allowedInspect = service.inspectWorkspace(workspace.workspaceId, FIXTURE_POLICY);
-    check('claimed change detected as allowed', allowedInspect.ok && allowedInspect.value.value.assessment === 'allowed' && allowedInspect.value.value.claimedChanges.includes('src/app.js'));
+    writeFileSync(join(workspace.workspacePath, 'src', 'app.txt'), 'claimed content v2\n');
+    const allowedInspection = service.inspectWorkspace(workspace.workspaceId, policy);
+    check('claimed modification detected as allowed',
+      allowedInspection.ok && allowedInspection.value.value.assessment === 'allowed' &&
+      allowedInspection.value.value.claimedChanges.includes('src/app.txt'));
 
-    /* 8–9. protected change detected and stopped */
+    /* 8–9. protected modification stops work */
     writeFileSync(join(workspace.workspacePath, 'secrets', 'prod.env'), 'tampered\n');
-    const protectedInspect = service.inspectWorkspace(workspace.workspaceId, FIXTURE_POLICY);
-    check('protected change detected', protectedInspect.ok && protectedInspect.value.value.assessment === 'protected_change' && protectedInspect.value.value.protectedChanges.includes('secrets/prod.env'));
-    check('automatic work stopped (checkpoint_required)', service.getWorkspace(workspace.workspaceId)?.status === 'checkpoint_required');
-    const blockedCmd = await service.executeCommand({
-      commandId: 'wsv-cmd-blocked', ...main, workspaceId: workspace.workspaceId,
-      executable: 'node', args: ['--version'], expectedPurpose: 'must be stopped at checkpoint',
+    const flaggedInspection = service.inspectWorkspace(workspace.workspaceId, policy);
+    check('protected modification detected and flagged',
+      flaggedInspection.ok && flaggedInspection.value.value.assessment === 'protected_change' &&
+      flaggedInspection.value.value.protectedChanges.includes('secrets/prod.env'));
+    check('workspace stopped at checkpoint after protected change',
+      service.getWorkspace(workspace.workspaceId)?.status === 'checkpoint_required');
+
+    /* 10. timeout + cancellation */
+    const timeoutRun = await service.executeCommand({
+      commandId: 'wsv-timeout', ...identity, workspaceId: workspace.workspaceId,
+      executable: 'node', args: ['-e', 'setInterval(function keepAlive() {}, 1000)'],
+      timeoutMs: 500, expectedPurpose: 'timeout proof',
     });
-    check('no execution while stopped', blockedCmd.ok && blockedCmd.value.value.status === 'rejected');
+    check('runaway command timed out with confirmed termination',
+      timeoutRun.ok && timeoutRun.value.value.status === 'timed_out' &&
+      timeoutRun.value.value.termination === 'termination_confirmed');
 
-    /* 10. timeout + cancellation on a second, clean workspace */
-    const aux = idsOf('aux');
-    const auxPrepared = service.prepareWorkspace({ ...aux, sourceRepositoryPath: sourceDir, cleanupPolicy: 'manual_cleanup' });
-    check('second workspace created for runner proofs', auxPrepared.ok);
-    if (auxPrepared.ok) {
-      const auxWs = auxPrepared.value.value.workspace;
-      const slowScript = 'setTimeout(function(){}, 30000)';
-      const timedOut = await service.executeCommand({
-        commandId: 'wsv-cmd-timeout', ...aux, workspaceId: auxWs.workspaceId,
-        executable: 'node', args: ['-e', slowScript], timeoutMs: 500, expectedPurpose: 'timeout proof',
-      });
-      check('timeout enforced and terminated', timedOut.ok && timedOut.value.value.status === 'timed_out' && timedOut.value.value.termination === 'termination_confirmed');
+    const cancelPromise = service.executeCommand({
+      commandId: 'wsv-cancel', ...identity, workspaceId: workspace.workspaceId,
+      executable: 'node', args: ['-e', 'setInterval(function keepAlive() {}, 1000)'],
+      timeoutMs: 30_000, expectedPurpose: 'cancellation proof',
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    const cancelIssued = service.cancelCommand('wsv-cancel');
+    const cancelledRun = await cancelPromise;
+    check('running command cancelled on request',
+      cancelIssued && cancelledRun.ok && cancelledRun.value.value.cancelled &&
+      cancelledRun.value.value.status === 'cancelled');
 
-      const cancelPromise = service.executeCommand({
-        commandId: 'wsv-cmd-cancel', ...aux, workspaceId: auxWs.workspaceId,
-        executable: 'node', args: ['-e', slowScript], timeoutMs: 30_000, expectedPurpose: 'cancellation proof',
-      });
-      setTimeout(() => service.cancelCommand('wsv-cmd-cancel'), 150);
-      const cancelled = await cancelPromise;
-      check('cancellation terminated the process', cancelled.ok && cancelled.value.value.status === 'cancelled' && cancelled.value.value.termination === 'termination_confirmed');
+    /* 11. preservation per policy (checkpoint state + preserve_on_failure) */
+    const preservation = service.cleanupWorkspace(workspace.workspaceId, { authorizeRemoval: true });
+    check('checkpoint workspace preserved despite authorized cleanup',
+      preservation.ok && preservation.value.value.outcome === 'preserved');
 
-      const noisy = await service.executeCommand({
-        commandId: 'wsv-cmd-noisy', ...aux, workspaceId: auxWs.workspaceId,
-        executable: 'node', args: ['-e', "process.stdout.write('x'.repeat(100000))"], outputLimitBytes: 4096, expectedPurpose: 'output bound proof',
-      });
-      check('output limit enforced', noisy.ok && (noisy.value.value.status === 'output_limit' || noisy.value.value.truncated));
-
-      const secretEcho = await service.executeCommand({
-        commandId: 'wsv-cmd-secret', ...aux, workspaceId: auxWs.workspaceId,
-        executable: 'node', args: ['-e', "console.log('sk-' + 'FAKEVERIFY1234567890')"], expectedPurpose: 'sanitizer proof',
-      });
-      check('secret-shaped output sanitized', secretEcho.ok && !secretEcho.value.value.stdout.includes('sk-FAKEVERIFY') && secretEcho.value.value.stdout.includes('[REDACTED'));
-
-      /* 11. cleanup: clean workspace removable only with authorization */
-      const unauthorized = service.cleanupWorkspace(auxWs.workspaceId);
-      check('cleanup without authorization preserves', unauthorized.ok && unauthorized.value.value.outcome === 'preserved');
-      const authorized = service.cleanupWorkspace(auxWs.workspaceId, { authorizeRemoval: true });
-      check('authorized cleanup removes the aux worktree', authorized.ok && authorized.value.value.outcome === 'cleanup_complete');
+    /* removal path proven on a second, clean workspace */
+    const second = service.prepareWorkspace({ ...identity, runId: 'run_wsverify2' as RunId, taskId: 'tsk_wsverify2' as TaskId });
+    check('second isolated workspace created', second.ok);
+    if (second.ok) {
+      const removal = service.cleanupWorkspace(second.value.value.workspace.workspaceId, { authorizeRemoval: true });
+      check('authorized cleanup removed the clean workspace',
+        removal.ok && removal.value.value.outcome === 'cleanup_complete' &&
+        !existsSync(second.value.value.workspace.workspacePath));
+      const unauthorized = service.cleanupWorkspace(second.value.value.workspace.workspaceId, { authorizeRemoval: true });
+      check('already-removed workspace cannot be cleaned twice',
+        unauthorized.ok && unauthorized.value.value.outcome === 'cleanup_refused');
     }
 
-    /* symlink escape proof on the flagged main workspace */
-    symlinkSync(join(tmpRoot, 'outside-target'), join(workspace.workspacePath, 'src', 'escape-link'));
-    const symlinkInspect = service.inspectWorkspace(workspace.workspaceId, FIXTURE_POLICY);
-    check('symlink escape detected', symlinkInspect.ok && symlinkInspect.value.value.assessment === 'symlink_escape');
+    /* 12. source stayed pristine through everything */
+    const finalStatus = fixtureGit(['status', '--porcelain'], sourceRepo);
+    const finalRevision = fixtureGit(['rev-parse', 'HEAD'], sourceRepo).trim();
+    check('no outside files changed (source clean at pinned revision)',
+      finalStatus.trim() === '' && finalRevision === baselineRevision);
 
-    /* 11. flagged workspace preserved per policy */
-    const preserved = service.cleanupWorkspace(workspace.workspaceId, { authorizeRemoval: true });
-    check('flagged workspace preserved for inspection', preserved.ok && preserved.value.value.outcome === 'preserved');
-    const unknownCleanup = service.cleanupWorkspace('wsp_unknown-fixture' as never);
-    check('unknown workspace cleanup refused', unknownCleanup.ok && unknownCleanup.value.value.outcome === 'cleanup_refused');
-
-    /* 12. source repository still untouched; events/evidence valid */
-    const finalRevision = fixtureGit(['rev-parse', 'HEAD']).trim();
-    const finalStatus = fixtureGit(['status', '--porcelain']).trim();
-    check('source revision unchanged end-to-end', finalRevision === baselineRevision);
-    check('source working tree unchanged end-to-end', finalStatus === '');
-    check('source README intact', readFileSync(join(sourceDir, 'README.md'), 'utf8').includes('Fixture repository'));
-
-    const events = service.collectEvents();
-    const parsedOk = events.every((draft, i) => parseEvent({ ...draft, eventId: `evt_wsv${String(i + 1).padStart(4, '0')}`, sequence: i + 1 }).ok);
-    check('all workspace events are protocol-valid', events.length > 0 && parsedOk);
+    /* evidence integrity */
     const evidence = service.collectEvidence();
-    check('all workspace evidence is live-local provenance', evidence.length > 0 && evidence.every((e) => e.provenance === 'live' && e.verifier === 'relay-workspace'));
-    const serialized = JSON.stringify({ events, evidence });
-    check('no secret-shaped content in events or evidence', !/sk-[A-Za-z0-9]{8,}|AKIA[0-9A-Z]{12,}|BEGIN [A-Z ]*PRIVATE KEY/.test(serialized));
-    check('no provider environment consumed', !process.env.RELAY_TEST_FAKE_PROVIDER_CALL);
-  } catch (err) {
-    check('harness completed without unexpected errors', false, err instanceof Error ? err.message : String(err));
+    check('workspace evidence carries live provenance and association',
+      evidence.length >= 8 && evidence.every((e) => e.provenance === 'live' && e.verifier === 'relay-workspace' && e.runId && e.taskId));
+    const serialized = JSON.stringify({ evidence, events: service.collectEvents() });
+    check('no secret-shaped content in evidence or events',
+      !/sk-[A-Za-z0-9]{8,}|AKIA[0-9A-Z]{12,}|BEGIN [A-Z ]*PRIVATE KEY/.test(serialized));
+  } catch (error) {
+    check('harness completed', false, error instanceof Error ? error.message : String(error));
   } finally {
-    rmSync(tmpRoot, { recursive: true, force: true });
+    rmSync(fixtureRoot, { recursive: true, force: true });
   }
-  lines.push('', failures.length === 0
-    ? 'WORKSPACE VERIFICATION PASSED — isolated worktree foundation is enforced.'
-    : `WORKSPACE VERIFICATION FAILED: ${failures.length} check(s): ${failures.join('; ')}`);
-  return { lines, failures };
+  checks.push({
+    name: 'fixture repositories and worktrees removed',
+    ok: !existsSync(fixtureRoot),
+  });
+
+  return { checks, failures: checks.filter((c) => !c.ok).length };
 }

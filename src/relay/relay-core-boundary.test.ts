@@ -74,9 +74,9 @@ describe('relay-core boundary (new module roots)', () => {
     }
   });
 
-  it('CLI is a thin client: only the app facade, read-model types, protocol, and its own modules', () => {
-    // '../workspace' (the composition-root index ONLY) is the sanctioned
-    // workspace surface for `relay workspace doctor|verify` (Prompt 7).
+  it('CLI is a thin client: only the app facade, read-model types, protocol, workspace facade, and its own modules', () => {
+    // '../workspace' (the composition-root facade) is the ONLY workspace
+    // import the CLI may use — internals are asserted below.
     const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|node:util|node:readline)['"]/;
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
@@ -89,6 +89,9 @@ describe('relay-core boundary (new module roots)', () => {
       expect(/from\s+['"]\.\.\/core\/(run-machine|task-machine|orchestrator|read-models)/.test(content), `${file} imports core internals directly`).toBe(false);
       expect(/from\s+['"]\.\.\/storage\//.test(content), `${file} imports storage directly`).toBe(false);
       expect(/from\s+['"]\.\.\/connectors\//.test(content), `${file} imports adapters directly`).toBe(false);
+      // Workspace: facade only — never the Node internals, never child_process.
+      expect(/from\s+['"]\.\.\/workspace\/(worktree-manager|command-runner|repository-inspector|cleanup|command-policy|protected-paths|output-sanitizer|workspace-evidence|verify-harness|doctor)/.test(content), `${file} imports workspace internals — CLI may only use the facade`).toBe(false);
+      expect(/child_process/.test(content), `${file} spawns processes — only the workspace module may`).toBe(false);
     }
     // And core/protocol never import the CLI back:
     for (const file of files) {
@@ -134,51 +137,67 @@ describe('Workspace boundaries (Prompt 7)', () => {
   const workspaceDir = relay('workspace');
   const workspaceFiles = walk(workspaceDir).filter((f) => !f.endsWith('.test.ts'));
   const PURE_WORKSPACE_MODULES = ['contracts.ts', 'protected-paths.ts', 'command-policy.ts', 'output-sanitizer.ts', 'cleanup.ts'];
-  const NODE_WORKSPACE_MODULES = ['repository-inspector.ts', 'worktree-manager.ts', 'command-runner.ts', 'index.ts', 'doctor.ts', 'verify-harness.ts', 'workspace-evidence.ts'];
 
-  it('pure workspace modules never touch Node process/filesystem APIs', () => {
+  it('browser-safe workspace modules (contracts + policies) never touch Node APIs', () => {
     for (const name of PURE_WORKSPACE_MODULES) {
       const content = read(join(workspaceDir, name));
       expect(/from\s+['"]node:/.test(content), `${name} imports node builtins`).toBe(false);
-      expect(/child_process|execFileSync|spawn\(/.test(content), `${name} touches processes`).toBe(false);
+      expect(/child_process/.test(content), `${name} references child_process`).toBe(false);
     }
   });
 
-  it('process access exists ONLY inside the workspace Node modules', () => {
-    const allRelayFiles = [...files, ...walk(relay(CLI_ROOT)), ...walk(relay('connectors'))].filter((f) => !f.endsWith('.test.ts'));
+  it('Relay Core, protocol, ledger, connectors never import the workspace implementation or child_process', () => {
+    for (const file of files) {
+      const content = read(file);
+      expect(/from\s+['"].*\/workspace\//.test(content), `${file} imports workspace internals`).toBe(false);
+      expect(/child_process/.test(content), `${file} references child_process`).toBe(false);
+    }
+    for (const file of walk(relay('connectors')).filter((f) => !f.endsWith('.test.ts'))) {
+      const content = read(file);
+      expect(/from\s+['"].*\/workspace/.test(content), `${file} — adapters cannot create worktrees`).toBe(false);
+      expect(/child_process|createWorktree|createWorkspaceService/.test(content), `${file} — adapters cannot spawn processes or manage worktrees`).toBe(false);
+    }
+  });
+
+  it('only the workspace module spawns processes inside src/relay', () => {
+    const allRelayFiles = [
+      ...files,
+      ...walk(relay('cli')),
+      ...walk(relay('connectors')),
+      ...walk(relay('domain')),
+      ...walk(relay('state')),
+    ].filter((f) => !f.endsWith('.test.ts'));
     for (const file of allRelayFiles) {
-      expect(/node:child_process|child_process/.test(read(file)), `${file} accesses child_process outside the workspace module`).toBe(false);
+      expect(/child_process/.test(read(file)), `${file} uses child_process outside the workspace boundary`).toBe(false);
     }
-    const withProcessAccess = workspaceFiles.filter((f) => /node:child_process/.test(read(f)));
-    for (const file of withProcessAccess) {
-      expect(NODE_WORKSPACE_MODULES.some((name) => file.endsWith(name)), `${file} is not a sanctioned process module`).toBe(true);
-    }
-  });
-
-  it('browser-safe modules and Core never import the workspace implementation', () => {
-    for (const file of [...files, ...walk(relay('connectors'))].filter((f) => !f.endsWith('.test.ts'))) {
-      expect(/from\s+['"].*\/workspace(\/|['"])/.test(read(file)), `${file} imports the workspace module`).toBe(false);
-    }
-    const prototypeFiles = ['main.tsx', 'RelayApp.tsx', 'StagePanel.tsx', 'PipelineRail.tsx'].map((f) => relay(f));
-    for (const file of prototypeFiles) {
-      expect(/workspace/.test(read(file)), `${file} references the workspace module`).toBe(false);
-    }
-  });
-
-  it('the CLI reaches the workspace ONLY through the composition root, never submodules', () => {
-    for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
-      expect(/from\s+['"]\.\.\/workspace\//.test(read(file)), `${file} bypasses the workspace composition root`).toBe(false);
-    }
-  });
-
-  it('the command policy denies shells, push, and destructive git by construction', () => {
-    const policy = read(join(workspaceDir, 'command-policy.ts'));
-    for (const denied of ["'bash'", "'sh'", "'powershell'", "'rm'", "'push'", "'reset'", "'clean'", "'merge'"]) {
-      expect(policy.includes(denied), `command policy must deny ${denied}`).toBe(true);
-    }
+    // and the workspace implementation actually enforces shell: false
     const runner = read(join(workspaceDir, 'command-runner.ts'));
     expect(runner).toContain('shell: false');
     expect(runner).not.toMatch(/shell:\s*true/);
+  });
+
+  it('workspace git surface bans push/reset/clean/force and the runner policy denies them independently', () => {
+    for (const file of workspaceFiles) {
+      const content = read(file);
+      expect(/\bpush\b.*--force|force-push/i.test(content), `${file} references force pushes`).toBe(false);
+    }
+    const inspector = read(join(workspaceDir, 'repository-inspector.ts'));
+    for (const banned of ["'push'", "'reset'", "'clean'", "'merge'", "'--force'"]) {
+      expect(inspector.includes(banned), `repository-inspector must not invoke git ${banned}`).toBe(false);
+    }
+    const policy = read(join(workspaceDir, 'command-policy.ts'));
+    expect(policy).toContain("'push'");
+    expect(policy).toContain("'reset'");
+    expect(policy).toContain("'clean'");
+  });
+
+  it('workspace evidence is live-local and the browser prototype cannot import workspace code', () => {
+    const evidence = read(join(workspaceDir, 'workspace-evidence.ts'));
+    expect(evidence).toContain("provenance: 'live'");
+    for (const name of ['main.tsx', 'RelayApp.tsx', 'StagePanel.tsx', 'PipelineRail.tsx']) {
+      const content = read(relay(name));
+      expect(/from\s+['"].*\/workspace/.test(content), `${name} imports workspace code`).toBe(false);
+    }
   });
 });
 

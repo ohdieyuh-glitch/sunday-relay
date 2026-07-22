@@ -1,594 +1,552 @@
-import { lstatSync, readlinkSync, realpathSync } from 'node:fs';
-import { dirname, join, resolve as resolvePath } from 'node:path';
+import { lstatSync, realpathSync } from 'node:fs';
+import { join, sep } from 'node:path';
 import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
-import { createRandomIdFactory, type IdFactory, type WorkspaceRefId } from '../protocol/ids';
 import type { EvidenceRecord } from '../protocol/contracts';
+import { createRandomIdFactory, type IdFactory, type WorkspaceRefId } from '../protocol/ids';
 import type { EventDraft } from '../protocol/envelopes';
-import { normalizeRepoPath } from '../coordination/claims';
 import type {
-  ChangeAssessment, CleanupResult, PrepareWorkspaceRequest, RelayWorkspace,
-  SourceInspection, WorkspaceCommandRequest, WorkspaceCommandResult,
-  WorkspaceInspection, WorkspaceOperationOutput, WorkspacePolicyInput,
-  WorkspaceService, WorkspaceCommandPolicy,
+  CleanupResult, PrepareWorkspaceRequest, RelayWorkspace, SourceInspection,
+  WorkspaceCommandResult, WorkspaceInspection,
+  WorkspaceOperationOutput, WorkspaceService,
 } from './contracts';
 import {
-  inspectSourceRepository, isWithin, readWorkingTreeStatus, runGit,
-  type SourceRepositoryInfo,
+  inspectRepositoryState, listWorktreeChanges, validateSourceRepository,
 } from './repository-inspector';
 import {
-  createWorktree, defaultBranchForRun, defaultWorkspaceRootFor,
-  ensureApprovedRoot, removeWorktree, validateBranchName,
+  createWorktree, deriveRunBranch, removeWorktree, resolveWorkspacePath,
+  resolveWorkspaceRoot, validateBranchName,
 } from './worktree-manager';
 import { classifyChangedPath, normalizePolicy, withBaselineProtection } from './protected-paths';
 import {
   buildChildEnvironment, DEFAULT_WORKSPACE_COMMAND_POLICY, evaluateCommandRequest,
 } from './command-policy';
-import { createCommandRunner, type CommandRunner } from './command-runner';
-import { sanitizeOutput } from './output-sanitizer';
-import {
-  buildWorkspaceEvent, buildWorkspaceEvidence, shortRevision,
-  type WorkspaceEvidenceContext,
-} from './workspace-evidence';
-import { decideCleanup } from './cleanup';
-
-/**
- * Workspace composition root (Prompt 7) — the ONLY module that assembles
- * Node process/filesystem operations behind the provider-neutral ports.
- * Registry is in-memory (volatile, truthfully labeled): workspaces die with
- * the process; the worktrees themselves persist on disk per cleanup policy.
- */
+import { runBoundedCommand, type RunningCommandHandle } from './command-runner';
+import { makeWorkspaceEvent, makeWorkspaceEvidence, WORKSPACE_VERIFIER } from './workspace-evidence';
+import { evaluateCleanup } from './cleanup';
+import type { WorkspaceCommandPolicy } from './contracts';
 
 export * from './contracts';
 export { DEFAULT_WORKSPACE_COMMAND_POLICY } from './command-policy';
-export { defaultWorkspaceRootFor } from './worktree-manager';
 export { workspaceDoctorReport } from './doctor';
-export { runWorkspaceVerificationHarness } from './verify-harness';
+export { runWorkspaceVerification } from './verify-harness';
 
-export interface LocalWorkspaceServiceOptions {
-  /** Absolute approved root; default: sibling `.relay-workspaces` of the source. */
-  workspaceRoot?: string;
-  commandPolicy?: WorkspaceCommandPolicy;
+/**
+ * Workspace composition root (Prompt 7) — the ONLY place Relay composes
+ * Node process/filesystem operations behind the provider-neutral ports.
+ * Everything it does is recorded as live-local evidence and normalized
+ * events. It never touches the source worktree, never uses a shell, and
+ * never runs a provider or coding agent.
+ */
+
+interface WorkspaceInternal {
+  workspace: RelayWorkspace;
+  sourceStateAtPin: { revision: string; branch: string; dirty: boolean };
+}
+
+export interface CreateWorkspaceServiceOptions {
   ids?: IdFactory;
   now?: () => string;
+  commandPolicy?: WorkspaceCommandPolicy;
 }
 
-interface RegisteredWorkspace {
-  workspace: RelayWorkspace;
-  source: SourceRepositoryInfo;
-  workspaceRealPath: string;
-  rootRealPath: string;
-  requestKey: string;
-}
-
-const requestKeyOf = (sourceRealPath: string, request: PrepareWorkspaceRequest): string =>
-  `${sourceRealPath}::${request.runId}::${request.taskId}`;
-
-export function createLocalWorkspaceService(options: LocalWorkspaceServiceOptions = {}): WorkspaceService {
+export function createWorkspaceService(options: CreateWorkspaceServiceOptions = {}): WorkspaceService {
   const ids = options.ids ?? createRandomIdFactory();
   const now = options.now ?? (() => new Date().toISOString());
   const commandPolicy = options.commandPolicy ?? DEFAULT_WORKSPACE_COMMAND_POLICY;
-  const runner: CommandRunner = createCommandRunner({ now });
 
-  const registry = new Map<string, RegisteredWorkspace>(); // by workspaceId
-  const byRequestKey = new Map<string, string>();
-  const byBranch = new Map<string, string>();
-  const commandCache = new Map<string, WorkspaceCommandResult>();
+  const registry = new Map<string, WorkspaceInternal>();
+  const byRequestKey = new Map<string, WorkspaceRefId>();
+  const byBranch = new Map<string, WorkspaceRefId>();
+  const runningCommands = new Map<string, RunningCommandHandle>();
+  const allEvidence: EvidenceRecord[] = [];
+  const allEvents: EventDraft[] = [];
 
-  const evidenceLog: EvidenceRecord[] = [];
-  const eventLog: EventDraft[] = [];
-
-  const ctxFor = (cwd: string): WorkspaceEvidenceContext => ({
-    ids,
-    now,
-    environment: { os: process.platform, node: process.version, cwd },
-  });
-
-  const record = (evidence: EvidenceRecord[], events: EventDraft[]) => {
-    evidenceLog.push(...evidence);
-    eventLog.push(...events);
+  const record = (events: EventDraft[], evidence: EvidenceRecord[]) => {
+    allEvents.push(...events);
+    allEvidence.push(...evidence);
   };
 
-  const entryOf = (workspaceId: WorkspaceRefId): RegisteredWorkspace | null => registry.get(workspaceId) ?? null;
-
-  /* ------------------------- prepare ------------------------------- */
-
-  function prepareWorkspace(request: PrepareWorkspaceRequest):
-    RelayResult<WorkspaceOperationOutput<{ workspace: RelayWorkspace; idempotent: boolean }>> {
-    const inspected = inspectSourceRepository(request.sourceRepositoryPath);
-    if (!inspected.ok) return inspected;
-    const source = inspected.value;
-    const ctx = ctxFor(source.rootPath);
-
-    const branchRequested = request.branchName ?? defaultBranchForRun(request.runId);
-    const branchChecked = validateBranchName(branchRequested);
-    if (!branchChecked.ok) return branchChecked;
-    const branchName = branchChecked.value;
-
-    /* idempotency: the same valid request returns the same workspace */
-    const key = requestKeyOf(source.rootPath, request);
-    const existingId = byRequestKey.get(key);
-    if (existingId) {
-      const existing = registry.get(existingId)!;
-      if (existing.workspace.branchName !== branchName) {
-        return fail(relayError('duplicate-task', 'This run/task already owns a workspace on a different branch — conflicting reuse is refused.'));
-      }
-      const events = [buildWorkspaceEvent(ctx, {
-        projectId: request.projectId, runId: request.runId, taskId: request.taskId,
-        kind: 'workspace.reused', workspaceId: existing.workspace.workspaceId,
-        safeSummary: `Workspace reused (idempotent request) on ${existing.workspace.branchName} at ${shortRevision(existing.workspace.sourceRevision)}.`,
-      })];
-      record([], events);
-      return ok({ value: { workspace: { ...existing.workspace }, idempotent: true }, events, evidence: [] });
-    }
-
-    const branchOwner = byBranch.get(branchName);
-    if (branchOwner) {
-      return fail(relayError('duplicate-task', `Branch "${branchName}" is assigned to another active workspace.`));
-    }
-
-    const root = ensureApprovedRoot(options.workspaceRoot ?? defaultWorkspaceRootFor(source.rootPath), source.rootPath);
-    if (!root.ok) return root;
-
-    const evidence: EvidenceRecord[] = [];
-    const events: EventDraft[] = [];
-    const workspaceId = ids.next('wsp');
-
-    evidence.push(buildWorkspaceEvidence(ctx, {
-      runId: request.runId, taskId: request.taskId, evidenceType: 'health-check',
-      outputExcerpt: `Source repository validated; revision pinned at ${source.revision}; base branch ${source.branch}; source dirty=${source.dirty} (uncommitted source changes are never copied).`,
-      repoRevision: source.revision, passed: true,
-    }));
-    events.push(buildWorkspaceEvent(ctx, {
-      projectId: request.projectId, runId: request.runId, taskId: request.taskId,
-      kind: 'workspace.validated', workspaceId,
-      safeSummary: `Source repository validated; revision pinned at ${shortRevision(source.revision)} (base ${source.branch}).`,
-      evidenceIds: [evidence[0].evidenceId],
-    }));
-
-    const created = createWorktree({
-      source, rootRealPath: root.value.rootRealPath,
-      projectToken: request.projectId, runToken: request.runId, taskToken: request.taskId,
-      branchName,
-    });
-    if (!created.ok) {
-      record(evidence, events);
-      return created;
-    }
-
-    const workspace: RelayWorkspace = {
-      workspaceId,
-      projectId: request.projectId,
-      runId: request.runId,
-      taskId: request.taskId,
-      sourceRepositoryPath: source.rootPath,
-      sourceRevision: source.revision,
-      baseBranch: source.branch,
-      sourceDirtyAtPin: source.dirty,
-      workspacePath: created.value.workspacePath,
-      branchName,
-      status: 'ready',
-      createdAt: now(),
-      cleanupPolicy: request.cleanupPolicy ?? 'preserve_on_failure',
-      provenance: 'live',
-    };
-
-    evidence.push(buildWorkspaceEvidence(ctx, {
-      runId: request.runId, taskId: request.taskId, evidenceType: 'health-check',
-      outputExcerpt: `Isolated worktree created on branch ${branchName} at pinned revision ${source.revision}; verified to point at the expected repository, revision, and branch; path confined to the approved workspace root.`,
-      repoRevision: source.revision, passed: true,
-    }));
-    events.push(buildWorkspaceEvent(ctx, {
-      projectId: request.projectId, runId: request.runId, taskId: request.taskId,
-      kind: 'workspace.created', workspaceId,
-      safeSummary: `Isolated worktree created on ${branchName} at ${shortRevision(source.revision)} (live local — SIMULATED agents are unaffected).`,
-      evidenceIds: [evidence[1].evidenceId],
-      payload: { branch: branchName, revision: source.revision },
-    }));
-
-    registry.set(workspaceId, {
-      workspace, source,
-      workspaceRealPath: created.value.workspaceRealPath,
-      rootRealPath: root.value.rootRealPath,
-      requestKey: key,
-    });
-    byRequestKey.set(key, workspaceId);
-    byBranch.set(branchName, workspaceId);
-    record(evidence, events);
-    return ok({ value: { workspace: { ...workspace }, idempotent: false }, events, evidence });
-  }
-
-  /* ---------------------- source protection ------------------------ */
-
-  function verifySourceUnchanged(workspaceId: WorkspaceRefId):
-    RelayResult<WorkspaceOperationOutput<SourceInspection>> {
-    const entry = entryOf(workspaceId);
-    if (!entry) return fail(relayError('not-found', 'Unknown workspace.', { entityIds: { workspaceId } }));
-    const ctx = ctxFor(entry.source.rootPath);
-    const current = inspectSourceRepository(entry.workspace.sourceRepositoryPath);
-    if (!current.ok) return current;
-    const changed =
-      current.value.revision !== entry.workspace.sourceRevision ||
-      current.value.branch !== entry.workspace.baseBranch;
-    const inspection: SourceInspection = {
-      revision: current.value.revision,
-      branch: current.value.branch,
-      dirty: current.value.dirty,
-      changed,
-      inspectedAt: now(),
-    };
-    const evidence = [buildWorkspaceEvidence(ctx, {
-      runId: entry.workspace.runId, taskId: entry.workspace.taskId, evidenceType: 'health-check',
-      outputExcerpt: changed
-        ? `Source repository CHANGED under the pinned workspace: pinned ${entry.workspace.sourceRevision} (${entry.workspace.baseBranch}), now ${current.value.revision} (${current.value.branch}). Revalidation required.`
-        : `Source worktree unchanged: still at pinned ${entry.workspace.sourceRevision} on ${entry.workspace.baseBranch}.`,
-      repoRevision: current.value.revision, passed: !changed,
-    })];
-    const events = [buildWorkspaceEvent(ctx, {
-      projectId: entry.workspace.projectId, runId: entry.workspace.runId, taskId: entry.workspace.taskId,
-      kind: changed ? 'workspace.source_changed' : 'workspace.inspected', workspaceId,
-      safeSummary: changed
-        ? `Source repository changed under the pinned run (now ${shortRevision(current.value.revision)}) — automatic work must stop for revalidation.`
-        : `Source repository verified unchanged at ${shortRevision(current.value.revision)}.`,
-      evidenceIds: [evidence[0].evidenceId],
-    })];
-    if (changed) entry.workspace.status = 'checkpoint_required';
-    record(evidence, events);
-    return ok({ value: inspection, events, evidence });
-  }
-
-  /* ------------------------- inspection ----------------------------- */
-
-  const symlinkEscapesOf = (entry: RegisteredWorkspace, relPaths: string[]): string[] => {
-    const escapes: string[] = [];
-    for (const rel of relPaths) {
-      const full = join(entry.workspaceRealPath, rel);
-      let parentReal: string;
-      try {
-        parentReal = realpathSync(dirname(full));
-      } catch {
-        escapes.push(rel); // unresolvable containing directory
-        continue;
-      }
-      if (!isWithin(entry.workspaceRealPath, parentReal)) {
-        escapes.push(rel);
-        continue;
-      }
-      // lstat (never follow): a deleted file is fine, a symlink is judged
-      // by its target — dangling links are judged by their textual target.
-      let isSymlink = false;
-      try {
-        isSymlink = lstatSync(full).isSymbolicLink();
-      } catch {
-        continue; // path deleted in this change — not an escape
-      }
-      if (!isSymlink) continue;
-      const target = resolvePath(dirname(full), readlinkSync(full));
-      let targetReal = target;
-      try {
-        targetReal = realpathSync(target);
-      } catch {
-        /* dangling symlink: keep the textual target */
-      }
-      if (!isWithin(entry.workspaceRealPath, targetReal)) escapes.push(rel);
-    }
-    return escapes;
+  const output = <T>(value: T, events: EventDraft[], evidence: EvidenceRecord[]): WorkspaceOperationOutput<T> => {
+    record(events, evidence);
+    return { value, events, evidence };
   };
 
-  function inspectWorkspace(workspaceId: WorkspaceRefId, policyInput: WorkspacePolicyInput):
-    RelayResult<WorkspaceOperationOutput<WorkspaceInspection>> {
-    const entry = entryOf(workspaceId);
-    if (!entry) return fail(relayError('not-found', 'Unknown workspace.', { entityIds: { workspaceId } }));
-    const ctx = ctxFor(entry.workspaceRealPath);
-    const normalized = normalizePolicy({
-      protectedPaths: withBaselineProtection(policyInput.protectedPaths),
-      claimedWritePaths: policyInput.claimedWritePaths,
-    });
-    if (!normalized.ok) {
-      return fail(relayError('validation-failed', 'Workspace policy input is invalid.', { details: normalized.errors }));
-    }
+  const getInternal = (workspaceId: WorkspaceRefId): WorkspaceInternal | null =>
+    registry.get(workspaceId) ?? null;
 
-    const head = runGit(['rev-parse', 'HEAD'], entry.workspaceRealPath);
-    const ref = runGit(['rev-parse', '--abbrev-ref', 'HEAD'], entry.workspaceRealPath);
-    const status = readWorkingTreeStatus(entry.workspaceRealPath);
-    if (!head.ok || !ref.ok || !status.ok) {
-      const inspection: WorkspaceInspection = {
-        workspaceId, revision: head.ok ? head.stdout.trim() : 'unknown',
-        branch: ref.ok ? ref.stdout.trim() : 'unknown',
-        clean: false, changedFiles: [], untrackedFiles: [], claimedChanges: [],
-        unclaimedChanges: [], protectedChanges: [], symlinkEscapes: [],
-        conflictState: 'unknown', assessment: 'unsupported_inspection', inspectedAt: now(),
-      };
-      return ok({ value: inspection, events: [], evidence: [] });
-    }
-
-    const allPaths = [...status.value.changedFiles, ...status.value.untrackedFiles];
-    const claimedChanges: string[] = [];
-    const unclaimedChanges: string[] = [];
-    const protectedChanges: string[] = [];
-    for (const raw of allPaths) {
-      const { path, classification } = classifyChangedPath(raw, normalized.policy);
-      if (classification === 'protected') protectedChanges.push(path);
-      else if (classification === 'claimed') claimedChanges.push(path);
-      else unclaimedChanges.push(path); // invalid shapes are never "allowed"
-    }
-    const validForSymlinkCheck = allPaths
-      .map((p) => normalizeRepoPath(p))
-      .filter((r): r is { ok: true; value: string } => r.ok)
-      .map((r) => r.value);
-    const symlinkEscapes = symlinkEscapesOf(entry, validForSymlinkCheck);
-
-    const clean = allPaths.length === 0;
-    const assessment: ChangeAssessment =
-      symlinkEscapes.length > 0 ? 'symlink_escape'
-        : protectedChanges.length > 0 ? 'protected_change'
-          : unclaimedChanges.length > 0 ? 'unclaimed_change'
-            : clean ? 'clean' : 'allowed';
-
-    const inspection: WorkspaceInspection = {
-      workspaceId,
-      revision: head.stdout.trim(),
-      branch: ref.stdout.trim(),
-      clean,
-      changedFiles: status.value.changedFiles,
-      untrackedFiles: status.value.untrackedFiles,
-      claimedChanges, unclaimedChanges, protectedChanges, symlinkEscapes,
-      conflictState: status.value.conflicted ? 'merge-conflict' : 'none',
-      assessment,
-      inspectedAt: now(),
-    };
-
-    const flagged = assessment === 'protected_change' || assessment === 'unclaimed_change' || assessment === 'symlink_escape';
-    const summary = clean
-      ? 'Workspace clean at the pinned revision.'
-      : `Workspace inspection: ${claimedChanges.length} claimed, ${unclaimedChanges.length} unclaimed, ${protectedChanges.length} protected change(s), ${symlinkEscapes.length} symlink escape(s).`;
-    const evidence = [buildWorkspaceEvidence(ctx, {
-      runId: entry.workspace.runId, taskId: entry.workspace.taskId, evidenceType: 'diff',
-      outputExcerpt: `${summary} Files: ${allPaths.slice(0, 20).join(', ') || '(none)'}`,
-      repoRevision: inspection.revision, passed: !flagged,
-    })];
-    const events = [buildWorkspaceEvent(ctx, {
-      projectId: entry.workspace.projectId, runId: entry.workspace.runId, taskId: entry.workspace.taskId,
-      kind: 'workspace.inspected', workspaceId,
-      safeSummary: summary, evidenceIds: [evidence[0].evidenceId],
-      payload: { assessment },
-    })];
-    if (flagged) {
-      entry.workspace.status = 'checkpoint_required';
-      events.push(buildWorkspaceEvent(ctx, {
-        projectId: entry.workspace.projectId, runId: entry.workspace.runId, taskId: entry.workspace.taskId,
-        kind: 'workspace.change_flagged', workspaceId,
-        safeSummary: `Workspace change flagged (${assessment}) — automatic work must stop; claims are never expanded automatically.`,
-        payload: { assessment, protectedChanges: protectedChanges.slice(0, 10), unclaimedChanges: unclaimedChanges.slice(0, 10) },
-      }));
-    } else if (!clean) {
-      entry.workspace.status = 'active';
-    } else if (entry.workspace.status === 'active' || entry.workspace.status === 'dirty') {
-      entry.workspace.status = 'ready';
-    }
-    entry.workspace.lastInspectedAt = inspection.inspectedAt;
-    record(evidence, events);
-    return ok({ value: inspection, events, evidence });
-  }
-
-  /* ------------------------- execution ------------------------------ */
-
-  async function executeCommand(request: WorkspaceCommandRequest):
-    Promise<RelayResult<WorkspaceOperationOutput<WorkspaceCommandResult>>> {
-    const entry = entryOf(request.workspaceId);
-    if (!entry) return fail(relayError('not-found', 'Unknown workspace.', { entityIds: { workspaceId: request.workspaceId } }));
-    const ctx = ctxFor(entry.workspaceRealPath);
-    const ws = entry.workspace;
-
-    const cached = commandCache.get(request.commandId);
-    if (cached) return ok({ value: cached, events: [], evidence: [] });
-
-    const finishRejected = (reasons: string[]): RelayResult<WorkspaceOperationOutput<WorkspaceCommandResult>> => {
-      const at = now();
-      const result: WorkspaceCommandResult = {
-        commandId: request.commandId, workspaceId: request.workspaceId, status: 'rejected',
-        executableLabel: String(request.executable).slice(0, 100),
-        redactedArgs: (Array.isArray(request.args) ? request.args : []).map((a) => sanitizeOutput(String(a)).text.slice(0, 100)),
-        exitCode: null, signal: null, stdout: '', stderr: '',
-        startedAt: at, completedAt: at, durationMs: 0,
-        timedOut: false, cancelled: false, truncated: false,
-        termination: 'not_required', grantedEnvironmentKeys: [],
-        rejectionReasons: reasons.slice(0, 10),
-        provenance: 'live', enforcement: 'enforced', evidenceRefs: [],
-      };
-      const evidence = [buildWorkspaceEvidence(ctx, {
-        runId: ws.runId, taskId: ws.taskId, evidenceType: 'command',
-        command: result.executableLabel,
-        outputExcerpt: `Command REJECTED by policy: ${reasons.join('; ')}`,
-        repoRevision: ws.sourceRevision, passed: false,
-      })];
-      result.evidenceRefs = [evidence[0].evidenceId];
-      const events = [buildWorkspaceEvent(ctx, {
-        projectId: ws.projectId, runId: ws.runId, taskId: ws.taskId,
-        kind: 'workspace.command_rejected', workspaceId: ws.workspaceId,
-        safeSummary: `Command "${result.executableLabel}" rejected by the approved-command policy.`,
-        evidenceIds: [evidence[0].evidenceId],
-      })];
-      commandCache.set(request.commandId, result);
-      record(evidence, events);
-      return ok({ value: result, events, evidence });
-    };
-
-    if (ws.status === 'checkpoint_required' || ws.status === 'cancelled' || ws.status === 'removed' || ws.status === 'failed') {
-      return finishRejected([`workspace is ${ws.status} — automatic execution is stopped`]);
-    }
-
-    const approval = evaluateCommandRequest(commandPolicy, request);
-    if (!approval.approved) return finishRejected(approval.reasons);
-
-    /* working directory: inside the workspace, symlink-resolved */
-    let cwd = entry.workspaceRealPath;
-    if (request.relativeWorkingDirectory !== undefined) {
-      const rel = normalizeRepoPath(request.relativeWorkingDirectory);
-      if (!rel.ok) return finishRejected([`working directory: ${rel.error.message}`]);
-      const candidate = join(entry.workspaceRealPath, rel.value);
-      try {
-        const real = realpathSync(candidate);
-        if (!isWithin(entry.workspaceRealPath, real) || !lstatSync(real).isDirectory()) {
-          return finishRejected(['working directory escapes the approved workspace']);
-        }
-        cwd = real;
-      } catch {
-        return finishRejected(['working directory does not exist inside the workspace']);
-      }
-    }
-
-    const env = buildChildEnvironment(process.env, approval.grantedEnvironmentKeys);
-    const startEvent = buildWorkspaceEvent(ctx, {
-      projectId: ws.projectId, runId: ws.runId, taskId: ws.taskId,
-      kind: 'workspace.command_started', workspaceId: ws.workspaceId,
-      safeSummary: `Approved command started: ${request.executable} ${request.args.join(' ')}`.slice(0, 200),
-    });
-    record([], [startEvent]);
-
-    const outcome = await runner.execute({
-      commandId: request.commandId,
-      executable: request.executable,
-      args: request.args,
-      cwd, env,
-      timeoutMs: approval.timeoutMs,
-      outputLimitBytes: approval.outputLimitBytes,
-    });
-
-    const stdout = sanitizeOutput(outcome.stdout).text;
-    const stderr = sanitizeOutput(outcome.stderr).text;
-    const result: WorkspaceCommandResult = {
-      commandId: request.commandId, workspaceId: request.workspaceId,
-      status: outcome.status,
-      executableLabel: request.executable,
-      redactedArgs: request.args.map((a) => sanitizeOutput(a).text),
-      exitCode: outcome.exitCode, signal: outcome.signal,
-      stdout, stderr,
-      startedAt: outcome.startedAt, completedAt: outcome.completedAt, durationMs: outcome.durationMs,
-      timedOut: outcome.timedOut, cancelled: outcome.cancelled, truncated: outcome.truncated,
-      termination: outcome.termination,
-      grantedEnvironmentKeys: approval.grantedEnvironmentKeys,
-      provenance: 'live', enforcement: 'enforced', evidenceRefs: [],
-    };
-    const evidence = [buildWorkspaceEvidence(ctx, {
-      runId: ws.runId, taskId: ws.taskId, evidenceType: 'command',
-      command: `${request.executable} ${result.redactedArgs.join(' ')}`.slice(0, 300),
-      exitCode: outcome.exitCode ?? undefined,
-      outputExcerpt: `status=${outcome.status} exit=${outcome.exitCode ?? '-'} signal=${outcome.signal ?? '-'} timedOut=${outcome.timedOut} cancelled=${outcome.cancelled} truncated=${outcome.truncated} termination=${outcome.termination}\n${stdout.slice(0, 500)}\n${stderr.slice(0, 300)}`,
-      repoRevision: ws.sourceRevision,
-      passed: outcome.status === 'completed',
-    })];
-    result.evidenceRefs = [evidence[0].evidenceId];
-    const events = [buildWorkspaceEvent(ctx, {
-      projectId: ws.projectId, runId: ws.runId, taskId: ws.taskId,
-      kind: outcome.cancelled ? 'workspace.cancelled' : 'workspace.command_completed',
-      workspaceId: ws.workspaceId,
-      safeSummary: `Command ${outcome.status}: ${request.executable} (exit=${outcome.exitCode ?? '-'}, ${outcome.durationMs}ms${outcome.truncated ? ', output truncated' : ''}).`,
-      evidenceIds: [evidence[0].evidenceId],
-      payload: { status: outcome.status },
-    })];
-    commandCache.set(request.commandId, result);
-    record(evidence, events);
-    return ok({ value: result, events, evidence });
-  }
-
-  /* -------------------------- cleanup ------------------------------- */
-
-  function cleanupWorkspace(workspaceId: WorkspaceRefId, cleanupOptions?: { authorizeRemoval?: boolean }):
-    RelayResult<WorkspaceOperationOutput<CleanupResult>> {
-    const refuse = (detail: string, ctxCwd: string, entry?: RegisteredWorkspace):
-      RelayResult<WorkspaceOperationOutput<CleanupResult>> => {
-      const result: CleanupResult = { workspaceId, outcome: 'cleanup_refused', detail, at: now() };
-      if (entry) {
-        const events = [buildWorkspaceEvent(ctxFor(ctxCwd), {
-          projectId: entry.workspace.projectId, runId: entry.workspace.runId, taskId: entry.workspace.taskId,
-          kind: 'workspace.cleanup_refused', workspaceId,
-          safeSummary: `Workspace cleanup refused: ${detail}`,
-        })];
-        record([], events);
-        return ok({ value: result, events, evidence: [] });
-      }
-      return ok({ value: result, events: [], evidence: [] });
-    };
-
-    const entry = entryOf(workspaceId);
-    if (!entry) return refuse('unknown workspace — only registered Relay workspaces can be cleaned', process.cwd());
-    const ws = entry.workspace;
-    const ctx = ctxFor(entry.source.rootPath);
-
-    /* identity + path safety before ANY destructive step */
-    if (!isWithin(entry.rootRealPath, entry.workspaceRealPath)) {
-      return refuse('workspace path is outside the approved root', entry.source.rootPath, entry);
-    }
-    if (entry.workspaceRealPath === entry.source.rootPath || isWithin(entry.workspaceRealPath, entry.source.rootPath)) {
-      return refuse('refusing to touch the source worktree', entry.source.rootPath, entry);
-    }
-    if (ws.status === 'removed') {
-      return ok({ value: { workspaceId, outcome: 'cleanup_complete', detail: 'workspace already removed', at: now() }, events: [], evidence: [] });
-    }
-
-    const decision = decideCleanup({
-      policy: ws.cleanupPolicy,
-      status: ws.status,
-      authorizeRemoval: cleanupOptions?.authorizeRemoval === true,
-    });
-
-    if (decision.action === 'preserve') {
-      ws.status = 'preserved';
-      const evidence = [buildWorkspaceEvidence(ctx, {
-        runId: ws.runId, taskId: ws.taskId, evidenceType: 'health-check',
-        outputExcerpt: `Workspace preserved for inspection: ${decision.reason}. Branch ${ws.branchName}, revision ${ws.sourceRevision}.`,
-        repoRevision: ws.sourceRevision, passed: true,
-      })];
-      const events = [buildWorkspaceEvent(ctx, {
-        projectId: ws.projectId, runId: ws.runId, taskId: ws.taskId,
-        kind: 'workspace.preserved', workspaceId,
-        safeSummary: `Workspace preserved (${decision.reason}).`,
-        evidenceIds: [evidence[0].evidenceId],
-      })];
-      record(evidence, events);
-      return ok({ value: { workspaceId, outcome: 'preserved', detail: decision.reason, at: now() }, events, evidence });
-    }
-
-    const removed = removeWorktree(entry.source.rootPath, entry.workspaceRealPath);
-    if (!removed.ok) {
-      const evidence = [buildWorkspaceEvidence(ctx, {
-        runId: ws.runId, taskId: ws.taskId, evidenceType: 'health-check',
-        outputExcerpt: `Workspace cleanup failed (worktree not removed; dirty worktrees are never force-removed): ${removed.error.message}`,
-        repoRevision: ws.sourceRevision, passed: false,
-      })];
-      record(evidence, []);
-      return ok({ value: { workspaceId, outcome: 'cleanup_failed', detail: removed.error.message, at: now() }, events: [], evidence });
-    }
-    ws.status = 'removed';
-    byBranch.delete(ws.branchName);
-    const evidence = [buildWorkspaceEvidence(ctx, {
-      runId: ws.runId, taskId: ws.taskId, evidenceType: 'health-check',
-      outputExcerpt: `Relay-created worktree removed (${decision.reason}). The run branch ${ws.branchName} is retained in the source repository for history.`,
-      repoRevision: ws.sourceRevision, passed: true,
-    })];
-    const events = [buildWorkspaceEvent(ctx, {
-      projectId: ws.projectId, runId: ws.runId, taskId: ws.taskId,
-      kind: 'workspace.cleaned', workspaceId,
-      safeSummary: `Relay-created worktree removed (${decision.reason}).`,
-      evidenceIds: [evidence[0].evidenceId],
-    })];
-    record(evidence, events);
-    return ok({ value: { workspaceId, outcome: 'cleanup_complete', detail: decision.reason, at: now() }, events, evidence });
-  }
+  const requestKey = (r: PrepareWorkspaceRequest, sourceRoot: string) =>
+    `${r.projectId}|${r.runId}|${r.taskId}|${sourceRoot}`;
 
   return {
-    prepareWorkspace,
-    getWorkspace: (workspaceId) => {
-      const entry = entryOf(workspaceId);
-      return entry ? { ...entry.workspace } : null;
+    /* ------------------------- preparation ------------------------- */
+    prepareWorkspace(request) {
+      const source = validateSourceRepository(request.sourceRepositoryPath);
+      if (!source.ok) return source;
+      const sourceRoot = source.value.root;
+
+      /* idempotency: the same valid request returns the same workspace */
+      const key = requestKey(request, sourceRoot);
+      const existingId = byRequestKey.get(key);
+      if (existingId) {
+        const existing = getInternal(existingId)!;
+        const event = makeWorkspaceEvent(existing.workspace, now(), 'workspace.reused',
+          'Workspace request repeated — returning the registered workspace (idempotent).');
+        return ok(output({ workspace: { ...existing.workspace }, idempotent: true }, [event], []));
+      }
+
+      const pinned = inspectRepositoryState(sourceRoot);
+      if (!pinned.ok) return pinned;
+
+      const branch = request.branchName !== undefined
+        ? validateBranchName(request.branchName)
+        : deriveRunBranch(request.runId);
+      if (!branch.ok) return branch;
+
+      /* conflicting reuse: a branch registered to a different run fails */
+      const branchOwner = byBranch.get(`${sourceRoot}|${branch.value}`);
+      if (branchOwner) {
+        return fail(relayError('duplicate-command',
+          `Branch ${branch.value} is registered to another active workspace — conflicting reuse refused.`));
+      }
+
+      const root = resolveWorkspaceRoot(sourceRoot);
+      if (!root.ok) return root;
+      const path = resolveWorkspacePath(root.value, request.projectId, request.runId);
+      if (!path.ok) return path;
+
+      const created = createWorktree({
+        sourceRoot, workspacePath: path.value, branchName: branch.value, revision: pinned.value.revision,
+      });
+      if (!created.ok) return created;
+
+      /* source must be untouched by creation */
+      const after = inspectRepositoryState(sourceRoot);
+      if (!after.ok) return after;
+      const sourceUntouched = after.value.revision === pinned.value.revision &&
+        after.value.branch === pinned.value.branch;
+
+      const at = now();
+      const workspace: RelayWorkspace = {
+        workspaceId: ids.next('wsp'),
+        projectId: request.projectId,
+        runId: request.runId,
+        taskId: request.taskId,
+        sourceRepositoryPath: sourceRoot,
+        sourceRevision: pinned.value.revision,
+        baseBranch: pinned.value.branch,
+        sourceDirtyAtPin: pinned.value.dirty,
+        workspacePath: created.value.workspacePath,
+        branchName: created.value.branchName,
+        status: 'ready',
+        createdAt: at,
+        cleanupPolicy: request.cleanupPolicy ?? 'preserve_on_failure',
+        provenance: 'live',
+      };
+      const internal: WorkspaceInternal = {
+        workspace,
+        sourceStateAtPin: { revision: pinned.value.revision, branch: pinned.value.branch, dirty: pinned.value.dirty },
+      };
+      registry.set(workspace.workspaceId, internal);
+      byRequestKey.set(key, workspace.workspaceId);
+      byBranch.set(`${sourceRoot}|${branch.value}`, workspace.workspaceId);
+
+      const events = [
+        makeWorkspaceEvent(workspace, at, 'workspace.validated',
+          `Source repository validated; revision pinned at ${pinned.value.revision.slice(0, 12)} on ${pinned.value.branch}.`),
+        makeWorkspaceEvent(workspace, at, 'workspace.created',
+          `Isolated worktree created on branch ${branch.value} (live local infrastructure).`),
+      ];
+      const evidence = [
+        makeWorkspaceEvidence({
+          ids, now: at, runId: workspace.runId, taskId: workspace.taskId,
+          label: 'source-revision-pinned', status: 'passed',
+          excerpt: `revision ${pinned.value.revision} pinned from branch ${pinned.value.branch}; source dirty=${pinned.value.dirty}`,
+          sourceRevision: pinned.value.revision,
+        }),
+        makeWorkspaceEvidence({
+          ids, now: at, runId: workspace.runId, taskId: workspace.taskId,
+          label: 'worktree-created', status: 'passed',
+          excerpt: `branch ${branch.value} at ${created.value.revision.slice(0, 12)}; path verified under the approved workspace root`,
+          sourceRevision: pinned.value.revision,
+        }),
+        makeWorkspaceEvidence({
+          ids, now: at, runId: workspace.runId, taskId: workspace.taskId,
+          label: 'source-worktree-untouched', status: sourceUntouched ? 'passed' : 'failed',
+          excerpt: sourceUntouched
+            ? 'source revision and branch unchanged by worktree creation'
+            : 'source repository state changed during creation — investigate before continuing',
+          sourceRevision: pinned.value.revision,
+        }),
+      ];
+      return ok(output({ workspace: { ...workspace }, idempotent: false }, events, evidence));
     },
-    listWorkspaces: () => [...registry.values()].map((entry) => ({ ...entry.workspace })),
-    cleanupWorkspace,
-    inspectWorkspace,
-    verifySourceUnchanged,
-    executeCommand,
-    cancelCommand: (commandId) => runner.cancel(commandId),
-    collectEvidence: () => [...evidenceLog],
-    collectEvents: () => [...eventLog],
+
+    getWorkspace(workspaceId) {
+      const internal = getInternal(workspaceId);
+      return internal ? { ...internal.workspace } : null;
+    },
+
+    listWorkspaces() {
+      return [...registry.values()].map((w) => ({ ...w.workspace }));
+    },
+
+    /* -------------------------- inspection ------------------------- */
+    inspectWorkspace(workspaceId, policyInput) {
+      const internal = getInternal(workspaceId);
+      if (!internal) return fail(relayError('not-found', 'Workspace is not registered.'));
+      const { workspace } = internal;
+
+      const normalized = normalizePolicy({
+        protectedPaths: withBaselineProtection(policyInput.protectedPaths),
+        claimedWritePaths: policyInput.claimedWritePaths,
+      });
+      if (!normalized.ok) {
+        return fail(relayError('validation-failed', 'Workspace policy input is invalid.', { details: normalized.errors }));
+      }
+
+      const changes = listWorktreeChanges(workspace.workspacePath);
+      if (!changes.ok) return changes;
+      const revision = inspectRepositoryState(workspace.workspacePath);
+      if (!revision.ok) return revision;
+
+      const claimed: string[] = [];
+      const unclaimed: string[] = [];
+      const protectedChanges: string[] = [];
+      const symlinkEscapes: string[] = [];
+      const workspaceReal = realpathSync(workspace.workspacePath);
+
+      const allPaths = [...changes.value.changed, ...changes.value.untracked];
+      for (const raw of allPaths) {
+        const { path, classification } = classifyChangedPath(raw, normalized.policy);
+        /* symlink escape: a changed path that is a symlink resolving
+         * outside the workspace is worse than any classification */
+        try {
+          const absolute = join(workspaceReal, path);
+          if (lstatSync(absolute).isSymbolicLink()) {
+            const target = realpathSync(absolute);
+            if (target !== workspaceReal && !target.startsWith(workspaceReal + sep)) {
+              symlinkEscapes.push(path);
+              continue;
+            }
+          }
+        } catch { /* deleted paths cannot escape */ }
+        if (classification === 'protected' || classification === 'invalid') protectedChanges.push(path);
+        else if (classification === 'claimed') claimed.push(path);
+        else unclaimed.push(path);
+      }
+
+      const assessment: WorkspaceInspection['assessment'] =
+        symlinkEscapes.length > 0 ? 'symlink_escape'
+          : protectedChanges.length > 0 ? 'protected_change'
+            : unclaimed.length > 0 ? 'unclaimed_change'
+              : claimed.length > 0 ? 'allowed'
+                : 'clean';
+
+      const at = now();
+      const inspection: WorkspaceInspection = {
+        workspaceId: workspace.workspaceId,
+        revision: revision.value.revision,
+        branch: revision.value.branch,
+        clean: allPaths.length === 0,
+        changedFiles: changes.value.changed,
+        untrackedFiles: changes.value.untracked,
+        claimedChanges: claimed,
+        unclaimedChanges: unclaimed,
+        protectedChanges,
+        symlinkEscapes,
+        conflictState: changes.value.conflicted ? 'merge-conflict' : 'none',
+        assessment,
+        inspectedAt: at,
+      };
+
+      /* a bad change stops automatic work: dirty + flagged, never silent,
+       * and the task's claims are NEVER expanded to match */
+      workspace.lastInspectedAt = at;
+      if (assessment === 'symlink_escape' || assessment === 'protected_change') {
+        workspace.status = 'checkpoint_required';
+      } else if (assessment === 'unclaimed_change') {
+        workspace.status = 'dirty';
+      } else if (workspace.status === 'ready' || workspace.status === 'dirty') {
+        workspace.status = assessment === 'clean' ? workspace.status : 'active';
+      }
+
+      const events = [
+        makeWorkspaceEvent(workspace, at, 'workspace.inspected',
+          `Workspace inspected: ${assessment} (${allPaths.length} changed path(s)).`,
+          { assessment, changed: allPaths.length }),
+      ];
+      if (assessment !== 'clean' && assessment !== 'allowed') {
+        events.push(makeWorkspaceEvent(workspace, at, 'workspace.change_flagged',
+          assessment === 'protected_change'
+            ? 'A protected path changed — automatic work stops; claims are not expanded.'
+            : assessment === 'symlink_escape'
+              ? 'A symlink escaping the workspace was found — automatic work stops.'
+              : 'An unclaimed path changed — flagged for review; claims are not expanded.',
+          { assessment }));
+      }
+      const evidence = [
+        makeWorkspaceEvidence({
+          ids, now: at, runId: workspace.runId, taskId: workspace.taskId,
+          label: 'workspace-diff-inspection', evidenceType: 'diff',
+          status: assessment === 'clean' || assessment === 'allowed' ? 'passed' : 'failed',
+          excerpt: `assessment=${assessment}; claimed=${claimed.length} unclaimed=${unclaimed.length} protected=${protectedChanges.length} symlink-escapes=${symlinkEscapes.length}`,
+          sourceRevision: workspace.sourceRevision,
+        }),
+      ];
+      return ok(output(inspection, events, evidence));
+    },
+
+    verifySourceUnchanged(workspaceId) {
+      const internal = getInternal(workspaceId);
+      if (!internal) return fail(relayError('not-found', 'Workspace is not registered.'));
+      const { workspace, sourceStateAtPin } = internal;
+      const state = inspectRepositoryState(workspace.sourceRepositoryPath);
+      if (!state.ok) return state;
+      const at = now();
+      const changed = state.value.revision !== sourceStateAtPin.revision ||
+        state.value.branch !== sourceStateAtPin.branch;
+      const inspection: SourceInspection = {
+        revision: state.value.revision,
+        branch: state.value.branch,
+        dirty: state.value.dirty,
+        changed,
+        inspectedAt: at,
+      };
+      const events: EventDraft[] = [];
+      if (changed) {
+        /* never silently continue on a moved source */
+        workspace.status = 'checkpoint_required';
+        events.push(makeWorkspaceEvent(workspace, at, 'workspace.source_changed',
+          'Source repository changed since the revision was pinned — revalidation required before continuing.'));
+      }
+      const evidence = [
+        makeWorkspaceEvidence({
+          ids, now: at, runId: workspace.runId, taskId: workspace.taskId,
+          label: 'source-unchanged-check', status: changed ? 'failed' : 'passed',
+          excerpt: changed
+            ? `source moved from ${sourceStateAtPin.revision.slice(0, 12)} to ${state.value.revision.slice(0, 12)}`
+            : `source still at pinned ${sourceStateAtPin.revision.slice(0, 12)} on ${sourceStateAtPin.branch}`,
+          sourceRevision: workspace.sourceRevision,
+        }),
+      ];
+      return ok(output(inspection, events, evidence));
+    },
+
+    /* ------------------------ command execution -------------------- */
+    async executeCommand(request) {
+      const internal = getInternal(request.workspaceId);
+      if (!internal) return fail(relayError('not-found', 'Workspace is not registered.'));
+      const { workspace } = internal;
+      const at = now();
+
+      const finish = (result: WorkspaceCommandResult, events: EventDraft[], evidence: EvidenceRecord[]) =>
+        ok(output(result, events, evidence));
+
+      const approval = evaluateCommandRequest(commandPolicy, request);
+      const baseResult: Omit<WorkspaceCommandResult, 'status' | 'rejectionReasons'> = {
+        commandId: request.commandId,
+        workspaceId: request.workspaceId,
+        executableLabel: request.executable,
+        redactedArgs: request.args.map((a) => (a.length > 80 ? `${a.slice(0, 77)}…` : a)),
+        exitCode: null,
+        signal: null,
+        stdout: '',
+        stderr: '',
+        startedAt: at,
+        completedAt: at,
+        durationMs: 0,
+        timedOut: false,
+        cancelled: false,
+        truncated: false,
+        termination: 'not_required',
+        grantedEnvironmentKeys: approval.grantedEnvironmentKeys,
+        provenance: 'live',
+        enforcement: 'enforced',
+        evidenceRefs: [],
+      };
+
+      if (!approval.approved) {
+        const rejected: WorkspaceCommandResult = { ...baseResult, status: 'rejected', rejectionReasons: approval.reasons };
+        const events = [
+          makeWorkspaceEvent(workspace, at, 'workspace.command_rejected',
+            `Command rejected by policy: ${request.executable} (${approval.reasons.length} reason(s)).`,
+            { reasons: approval.reasons.slice(0, 5) }),
+        ];
+        const evidence = [
+          makeWorkspaceEvidence({
+            ids, now: at, runId: workspace.runId, taskId: workspace.taskId,
+            label: 'command-rejected', status: 'failed', evidenceType: 'command',
+            command: `${request.executable} ${request.args.join(' ')}`.slice(0, 200),
+            excerpt: approval.reasons.join('; ').slice(0, 500),
+            sourceRevision: workspace.sourceRevision,
+          }),
+        ];
+        rejected.evidenceRefs = evidence.map((e) => e.evidenceId);
+        return finish(rejected, events, evidence);
+      }
+
+      /* validated working directory: inside the workspace, no escapes */
+      let cwd = realpathSync(workspace.workspacePath);
+      if (request.relativeWorkingDirectory) {
+        const target = join(cwd, request.relativeWorkingDirectory);
+        let real: string;
+        try {
+          real = realpathSync(target);
+        } catch {
+          return fail(relayError('validation-failed', 'Working directory does not exist inside the workspace.'));
+        }
+        if (real !== cwd && !real.startsWith(cwd + sep)) {
+          return fail(relayError('permission-denied', 'Working directory escapes the workspace — refused.'));
+        }
+        cwd = real;
+      }
+
+      record([
+        makeWorkspaceEvent(workspace, at, 'workspace.command_started',
+          `Approved command started: ${request.executable} (purpose: ${request.expectedPurpose.slice(0, 80)}).`),
+      ], []);
+
+      const run = await runBoundedCommand(
+        {
+          executable: request.executable,
+          args: request.args,
+          cwd,
+          env: buildChildEnvironment(process.env, approval.grantedEnvironmentKeys),
+          timeoutMs: approval.timeoutMs,
+          outputLimitBytes: approval.outputLimitBytes,
+        },
+        now,
+        (handle) => runningCommands.set(request.commandId, handle),
+      );
+      runningCommands.delete(request.commandId);
+
+      const status: WorkspaceCommandResult['status'] = run.cancelled
+        ? 'cancelled'
+        : run.timedOut
+          ? 'timed_out'
+          : run.outputLimitHit
+            ? 'output_limit'
+            : run.exitCode === 0
+              ? 'completed'
+              : 'failed';
+
+      const result: WorkspaceCommandResult = {
+        ...baseResult,
+        status,
+        exitCode: run.exitCode,
+        signal: run.signal,
+        stdout: run.stdout,
+        stderr: run.stderr,
+        startedAt: run.startedAt,
+        completedAt: run.completedAt,
+        durationMs: run.durationMs,
+        timedOut: run.timedOut,
+        cancelled: run.cancelled,
+        truncated: run.truncated,
+        termination: run.termination,
+        ...(run.spawnError ? { rejectionReasons: [run.spawnError] } : {}),
+      };
+      const completedAt = now();
+      const events = [
+        makeWorkspaceEvent(workspace, completedAt,
+          run.cancelled ? 'workspace.cancelled' : 'workspace.command_completed',
+          run.cancelled
+            ? `Command cancelled (${result.termination.replace(/_/g, ' ')}).`
+            : `Command ${status}: ${request.executable} exit=${run.exitCode ?? '-'} in ${run.durationMs}ms.`,
+          { status, exitCode: run.exitCode, timedOut: run.timedOut }),
+      ];
+      const evidence = [
+        makeWorkspaceEvidence({
+          ids, now: completedAt, runId: workspace.runId, taskId: workspace.taskId,
+          label: 'command-result', evidenceType: 'command',
+          status: status === 'completed' ? 'passed' : 'failed',
+          command: `${request.executable} ${request.args.join(' ')}`.slice(0, 200),
+          exitCode: run.exitCode ?? undefined,
+          excerpt: `status=${status} exit=${run.exitCode ?? '-'} signal=${run.signal ?? '-'} timedOut=${run.timedOut} cancelled=${run.cancelled} truncated=${run.truncated} termination=${result.termination}`,
+          sourceRevision: workspace.sourceRevision,
+        }),
+      ];
+      result.evidenceRefs = evidence.map((e) => e.evidenceId);
+      if (status !== 'completed' && workspace.status === 'ready') workspace.status = 'active';
+      return finish(result, events, evidence);
+    },
+
+    cancelCommand(commandId) {
+      const handle = runningCommands.get(commandId);
+      if (!handle) return false;
+      return handle.cancel();
+    },
+
+    /* ---------------------------- cleanup --------------------------- */
+    cleanupWorkspace(workspaceId, options = {}) {
+      const internal = getInternal(workspaceId);
+      if (!internal) return fail(relayError('not-found', 'Unknown workspace — cleanup refused.'));
+      const { workspace } = internal;
+      const at = now();
+
+      const refusal = (detail: string): RelayResult<WorkspaceOperationOutput<CleanupResult>> => {
+        const result: CleanupResult = { workspaceId, outcome: 'cleanup_refused', detail, at };
+        const events = [makeWorkspaceEvent(workspace, at, 'workspace.cleanup_refused', `Cleanup refused: ${detail}`)];
+        return ok(output(result, events, []));
+      };
+
+      /* identity checks before anything destructive */
+      if (workspace.workspacePath === workspace.sourceRepositoryPath) {
+        return refusal('workspace path equals the source worktree.');
+      }
+      const root = resolveWorkspaceRoot(workspace.sourceRepositoryPath);
+      if (!root.ok) return root;
+      if (!workspace.workspacePath.startsWith(root.value + sep)) {
+        return refusal('workspace path is outside the approved Relay workspace root.');
+      }
+      for (const other of registry.values()) {
+        if (other.workspace.workspaceId !== workspaceId &&
+            other.workspace.workspacePath === workspace.workspacePath &&
+            other.workspace.status !== 'removed') {
+          return refusal('another registered workspace uses this path.');
+        }
+      }
+
+      const decision = evaluateCleanup(workspace, { authorizeRemoval: options.authorizeRemoval === true });
+      if (decision.action === 'refuse') return refusal(decision.reason);
+      if (decision.action === 'preserve') {
+        workspace.status = 'preserved';
+        const result: CleanupResult = { workspaceId, outcome: 'preserved', detail: decision.reason, at };
+        const events = [makeWorkspaceEvent(workspace, at, 'workspace.preserved', `Workspace preserved: ${decision.reason}`)];
+        const evidence = [
+          makeWorkspaceEvidence({
+            ids, now: at, runId: workspace.runId, taskId: workspace.taskId,
+            label: 'cleanup-decision', status: 'passed',
+            excerpt: `preserved — ${decision.reason}`,
+            sourceRevision: workspace.sourceRevision,
+          }),
+        ];
+        return ok(output(result, events, evidence));
+      }
+
+      const removed = removeWorktree(workspace.sourceRepositoryPath, workspace.workspacePath);
+      const outcome: CleanupResult = removed.ok
+        ? { workspaceId, outcome: 'cleanup_complete', detail: decision.reason, at }
+        : { workspaceId, outcome: 'cleanup_failed', detail: removed.error.message, at };
+      workspace.status = removed.ok ? 'removed' : workspace.status;
+      const events = [
+        makeWorkspaceEvent(workspace, at, removed.ok ? 'workspace.cleaned' : 'workspace.cleanup_refused',
+          removed.ok ? 'Relay-created worktree removed after verification.' : `Cleanup failed: ${removed.error.message}`),
+      ];
+      const evidence = [
+        makeWorkspaceEvidence({
+          ids, now: at, runId: workspace.runId, taskId: workspace.taskId,
+          label: 'cleanup-result', status: removed.ok ? 'passed' : 'failed',
+          excerpt: removed.ok ? 'worktree removed; path verified gone' : removed.error.message,
+          sourceRevision: workspace.sourceRevision,
+        }),
+      ];
+      return ok(output(outcome, events, evidence));
+    },
+
+    collectEvidence: () => [...allEvidence],
+    collectEvents: () => [...allEvents],
   };
 }
+
+export { WORKSPACE_VERIFIER };

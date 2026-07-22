@@ -27,8 +27,8 @@ npm run relay:test           # relay vitest suite
 | `relay demo <scenario>` | one deterministic scenario to its stop | final-state code |
 | `relay run --objective "<t>" [--scenario s] [--max-cost n] [--until-stopped] [--auto-accept-blueprint]` | custom displayed objective over a simulation profile | final-state code |
 | `relay doctor` | read-only truthful environment checks | 0 / 8 |
-| `relay workspace doctor` | isolated-worktree foundation checks (read-only, truthful) | 0 / 8 |
-| `relay workspace verify` | workspace security proof against a throwaway tmp fixture repo | 0 / 1 |
+| `relay workspace doctor` | isolated-worktree capability checks (live local) | 0 / 8 |
+| `relay workspace verify` | deterministic workspace security verification on a throwaway fixture repo | 0 / 8 |
 | `relay version` / `relay help` | identity / usage | 0 |
 
 Global options: `--json` (clean machine JSON, no ANSI, no mascot),
@@ -93,20 +93,6 @@ repair, same-session resume, independent reviewer, audit + simulation
 notice, clean JSON, stable milestone ordering, no repo modifications).
 See YC_DEMO_RUNBOOK.md and YC_VIDEO_SCRIPT.md.
 
-## Workspace foundation (Prompt 7 — live local, separate from the demos)
-
-`relay workspace doctor` reports the isolated-worktree foundation
-truthfully: live local worktree management and policy-restricted command
-execution (`shell: false`, bounded, secret-stripped environment), with
-Coding-Agent execution and all provider adapters still UNAVAILABLE/DEFERRED.
-`npm run relay:workspace:verify` proves the security model end to end
-against a THROWAWAY fixture repository under the OS tmpdir (never the real
-repository): pinned isolated worktree → source untouched → approved command
-→ `git push` rejected → claimed change allowed → protected change stops
-work → timeout/cancel/output-limit/sanitizer → conservative cleanup →
-fixture removed. Full spec: WORKSPACE_SECURITY.md. The YC and Manual Task
-demos are unchanged and stay fully simulated.
-
 ## Manual Task demonstration (Prompt 6.1 — separate from the YC demo)
 
 `npm run relay:manual` (equivalently `relay demo manual`) — a deterministic
@@ -120,6 +106,21 @@ semantic acceptance (completed, task completed + verified, 3–6 short steps,
 checkpoint association, no agent dispatch while stopped, event ordering,
 clean JSON, no secrets, no repo modifications). The main `npm run relay:yc`
 demonstration is unchanged.
+
+## Workspace foundation (Prompt 7 — live local, separate from the demos)
+
+`npm run relay:workspace:verify` (equivalently `relay workspace verify`)
+proves the isolated-worktree security foundation end to end against a
+throwaway fixture repository under the OS temp dir: pinned-revision
+worktree isolation, idempotent reuse, source-worktree immutability,
+allowlist-only shell-free command execution (push/shells rejected),
+claimed vs protected change detection, timeout + cancellation with honest
+termination reporting, conservative cleanup, live secret-free evidence,
+and full fixture removal. `relay workspace doctor` reports capabilities
+truthfully (agent execution and all provider adapters remain UNAVAILABLE).
+This is REAL local infrastructure (`provenance: live`) — it is not part of
+the recorded YC simulation and does not alter any demo scenario. See
+WORKSPACE_SECURITY.md.
 
 ## July 24 demonstration sequence
 
@@ -139,6 +140,6 @@ budget-stop` (exit 7), and the interactive session for blueprint approval.
 
 ## Exact next phase
 
-Real Claude Code Local Adapter — a real local Claude Code session dispatched
-inside a prepared isolated workspace (Prompt 7 foundation), per
-CURRENT_STATE.md. Durable persistence remains queued behind it.
+**Real Claude Code Local Adapter** — a live coding-agent adapter executing
+inside the Prompt-7 workspace boundary, per CURRENT_STATE.md. (Durable
+local persistence remains queued behind it.)

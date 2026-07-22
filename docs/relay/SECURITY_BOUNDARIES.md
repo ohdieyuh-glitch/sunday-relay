@@ -1,21 +1,18 @@
 # Sunday Relay — Security Boundaries (authoritative)
 
-> **Implementation sync (Prompt 7, 2026-07-22):** the first ENFORCED local
-> execution boundary shipped in `src/relay/workspace/` — real isolated Git
-> worktrees (pinned revisions, validated run branches, roots outside any
-> tracked tree), protected-path + file-claim detection that stops automatic
-> work (`checkpoint_required`, no silent acceptance, no automatic claim
-> expansion), a `shell: false` argument-array command runner behind an
-> allowlist + hard denylist (no push/reset/clean/merge/publish/deploy, no
-> shells), environment-allowlist inheritance that strips secret-named keys,
-> bounded runtime/output with honest termination reporting, secret-shape
-> output sanitization, and conservative preserve-first cleanup that can
-> never touch the source worktree or an unregistered path. The source
-> repository is inspect-only (worktree bookkeeping under `.git` disclosed in
-> WORKSPACE_SECURITY.md §4). Enforcement level: detection + refusal to
-> continue (live-local provenance), truthfully distinct from simulated
-> agents and from unavailable live providers. Full spec + threat coverage:
-> WORKSPACE_SECURITY.md.
+> **Implementation sync (Prompt 7, 2026-07-22):** the workspace execution
+> boundary is now REAL local enforcement (`provenance: live`, verifier
+> `relay-workspace`) — see WORKSPACE_SECURITY.md for the full policy set.
+> Enforced (not advisory): source-worktree immutability; worktree isolation
+> under the approved root; `.git` + policy-supplied protected paths;
+> file-claim change gating (no automatic claim expansion); allowlist-only
+> shell-free command execution (denylist above any custom policy: shells,
+> `git push/reset/clean/checkout/merge/worktree/config/-c/--force`, `rm`,
+> `npm publish/install`); provider-secret env exclusion by name pattern;
+> bounded runtime/output with honest termination reporting; conservative
+> authorization-required cleanup that can never target the source worktree
+> or an unregistered path. Live workspace enforcement is DISTINCT from live
+> provider execution, which remains unavailable.
 
 > Status: **locked** (Phase 1 architecture lock, 2026-07-21). Companion to
 > `ARCHITECTURE.md` (hybrid execution) and `PROTOCOL.md` (contracts).

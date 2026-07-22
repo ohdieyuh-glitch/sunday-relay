@@ -8,7 +8,7 @@ import { buildPresentationFrames } from './presentation';
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 import { detectRenderOptions, renderAudit, renderEvent, renderManualTask, welcome, badge, type RenderOptions } from './render';
 import { EXIT, exitCodeForFinalStatus } from './exit-codes';
-import { runWorkspaceVerificationHarness, workspaceDoctorReport } from '../workspace';
+import { runWorkspaceVerification, workspaceDoctorReport } from '../workspace';
 
 /**
  * Relay CLI entry (Prompt 5). Thin client: parses arguments, composes the
@@ -86,10 +86,10 @@ export function parseCli(argv: string[]): ParsedCli {
     if (first === 'version') return { command: 'version', ...base };
     if (first === 'doctor') return { command: 'doctor', ...base };
     if (first === 'workspace') {
-      if (second === 'doctor' || second === 'verify') {
-        return { command: 'workspace', workspaceAction: second, ...base };
+      if (second !== 'doctor' && second !== 'verify') {
+        return { command: 'workspace', ...base, error: 'workspace requires an action: doctor or verify.' };
       }
-      return { command: 'workspace', ...base, error: 'workspace requires an action: doctor | verify.' };
+      return { command: 'workspace', workspaceAction: second, ...base };
     }
     if (first === 'demo') {
       if (!second) return { command: 'demo', ...base, error: 'demo requires a scenario name (e.g. relay demo repair).' };
@@ -127,8 +127,8 @@ export const HELP_TEXT = [
   '       [--scenario <name>] [--max-cost <usd>] [--until-stopped]',
   '       [--auto-accept-blueprint]',
   '  relay doctor                   read-only environment checks',
-  '  relay workspace doctor         isolated-worktree foundation checks',
-  '  relay workspace verify         workspace security proof (tmp fixture)',
+  '  relay workspace doctor         isolated-worktree capability checks (live local)',
+  '  relay workspace verify         deterministic workspace security verification',
   '  relay version | relay help',
   '',
   'Options: --json --no-color --plain --quiet',
@@ -272,7 +272,7 @@ export function doctorReport(io: CliIo): { lines: string[]; exitCode: number } {
   checks.push(['Real Claude Code adapter', 'DEFERRED']);
   checks.push(['Real Codex adapter', 'DEFERRED']);
   checks.push(['Hermes adapter', 'DEFERRED']);
-  checks.push(['Worktree manager', 'live local isolated (see: relay workspace doctor)']);
+  checks.push(['Worktree manager', 'DEFERRED']);
   checks.push(['Production deployment', 'disabled']);
   checks.push(['Provider credentials accessed', 'no']);
   checks.push(['Terminal TTY', io.isTTY ? 'interactive' : 'non-interactive']);
@@ -320,16 +320,25 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return report.exitCode;
     }
     case 'workspace': {
+      // Live local workspace infrastructure — composed ONLY here; the CLI
+      // renders results and never makes workspace policy decisions.
       if (parsed.workspaceAction === 'doctor') {
         const report = workspaceDoctorReport();
-        if (parsed.json) io.out(JSON.stringify({ report: report.lines.slice(1), ready: report.ready }));
+        if (parsed.json) io.out(JSON.stringify({ report: report.lines.slice(1), exitCode: report.exitCode }));
         else report.lines.forEach((line) => io.out(line));
-        return report.ready ? EXIT.completed : EXIT.doctorFailure;
+        return report.exitCode;
       }
-      const outcome = await runWorkspaceVerificationHarness();
-      if (parsed.json) io.out(JSON.stringify({ report: outcome.lines.slice(1), failures: outcome.failures }));
-      else outcome.lines.forEach((line) => io.out(line));
-      return outcome.failures.length === 0 ? EXIT.completed : EXIT.internalError;
+      io.out('RELAY WORKSPACE VERIFICATION (live local, fixture repository only)');
+      const { checks, failures } = await runWorkspaceVerification();
+      for (const check of checks) {
+        io.out(`  [${check.ok ? 'PASS' : 'FAIL'}] ${check.name}${check.detail ? ` — ${check.detail}` : ''}`);
+      }
+      if (failures > 0) {
+        io.out(`\nWORKSPACE VERIFICATION FAILED: ${failures} check(s).`);
+        return EXIT.doctorFailure;
+      }
+      io.out('\nWORKSPACE VERIFICATION PASSED — isolation, policy, and cleanup proven.');
+      return EXIT.completed;
     }
     case 'demo':
     case 'run': {

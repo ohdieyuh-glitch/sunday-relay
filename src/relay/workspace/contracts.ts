@@ -27,10 +27,9 @@ export const CLEANUP_POLICIES = [
 ] as const;
 export type CleanupPolicy = (typeof CLEANUP_POLICIES)[number];
 
-/** Orchestrator-facing profile lives in the browser-safe protocol layer so
- * Relay Core never imports workspace code. Re-exported here for cohesion. */
-export { WORKSPACE_PROFILES } from '../protocol/enums';
-export type { WorkspaceProfile } from '../protocol/enums';
+/** Orchestrator-facing profile: existing scenarios stay 'simulated'. */
+export const WORKSPACE_PROFILES = ['none', 'simulated', 'local_isolated'] as const;
+export type WorkspaceProfile = (typeof WORKSPACE_PROFILES)[number];
 
 export interface RelayWorkspace {
   workspaceId: WorkspaceRefId;

@@ -1,83 +1,73 @@
 import { RELAY_PROTOCOL_VERSION } from '../protocol/version';
 import type { EvidenceRecord } from '../protocol/contracts';
-import type { EvidenceId, IdFactory, ProjectId, RunId, TaskId, WorkspaceRefId } from '../protocol/ids';
-import type { EventDraft, RelayEventKind } from '../protocol/envelopes';
-import { sanitizeOutput } from './output-sanitizer';
+import type { EvidenceId, IdFactory, RunId, TaskId } from '../protocol/ids';
+import type { EventDraft } from '../protocol/envelopes';
+import type { RelayWorkspace } from './contracts';
 
 /**
- * Workspace evidence and event builders (Prompt 7) — pure constructors.
- * Everything produced here is LIVE LOCAL infrastructure evidence
- * (provenance 'live', verifier 'relay-workspace'): real Git worktrees and
- * real policy-restricted processes, never live AI provider execution. All
- * excerpts pass the secret-shape sanitizer before storage.
+ * Workspace evidence + event production (Prompt 7). Everything the
+ * workspace infrastructure does becomes an objective EvidenceRecord with
+ * provenance 'live' (this is REAL local enforcement, distinguished from
+ * simulated agent execution and from future live provider execution) and a
+ * normalized event draft. No absolute filesystem paths and no secret
+ * values enter user-facing summaries.
  */
 
 export const WORKSPACE_VERIFIER = 'relay-workspace';
 
-export interface WorkspaceEvidenceContext {
-  ids: IdFactory;
-  now(): string;
-  environment: { os: string; node: string; cwd: string };
-}
-
 export interface WorkspaceEvidenceInput {
+  ids: IdFactory;
+  now: string;
   runId: RunId;
   taskId: TaskId;
-  evidenceType: 'command' | 'diff' | 'health-check';
-  outputExcerpt: string;
-  repoRevision: string;
-  passed: boolean;
+  label: string;
+  status: 'passed' | 'failed';
+  excerpt: string;
+  evidenceType?: EvidenceRecord['evidenceType'];
+  sourceRevision: string;
   command?: string;
   exitCode?: number;
 }
 
-export function buildWorkspaceEvidence(ctx: WorkspaceEvidenceContext, input: WorkspaceEvidenceInput): EvidenceRecord {
+export function makeWorkspaceEvidence(input: WorkspaceEvidenceInput): EvidenceRecord {
   return {
-    evidenceId: ctx.ids.next('evd') as EvidenceId,
+    evidenceId: input.ids.next('evd') as EvidenceId,
     taskId: input.taskId,
     runId: input.runId,
     source: WORKSPACE_VERIFIER,
-    evidenceType: input.evidenceType,
+    evidenceType: input.evidenceType ?? 'health-check',
     command: input.command,
     exitCode: input.exitCode,
-    outputExcerpt: sanitizeOutput(input.outputExcerpt).text.slice(0, 2000),
-    executedAt: ctx.now(),
-    environment: ctx.environment,
-    repoRevision: input.repoRevision,
-    verificationStatus: input.passed ? 'passed' : 'failed',
+    outputExcerpt: `${input.label}: ${input.excerpt}`.slice(0, 2000),
+    executedAt: input.now,
+    // No absolute paths: the workspace id is the address, not the location.
+    environment: { os: process.platform, node: process.versions.node, cwd: '[relay-workspace]' },
+    repoRevision: input.sourceRevision,
+    verificationStatus: input.status,
     verifier: WORKSPACE_VERIFIER,
     provenance: 'live',
   };
 }
 
-export interface WorkspaceEventInput {
-  projectId: ProjectId;
-  runId: RunId;
-  taskId?: TaskId;
-  kind: RelayEventKind;
-  safeSummary: string;
-  workspaceId: WorkspaceRefId;
-  evidenceIds?: string[];
-  payload?: Record<string, unknown>;
-}
-
-/** Normalized event draft. safeSummary never carries absolute paths —
- * workspaces are identified by id, branch, and short revision only. */
-export function buildWorkspaceEvent(ctx: WorkspaceEvidenceContext, input: WorkspaceEventInput): EventDraft {
+export function makeWorkspaceEvent(
+  workspace: Pick<RelayWorkspace, 'projectId' | 'runId' | 'taskId' | 'workspaceId'>,
+  now: string,
+  kind: EventDraft['kind'],
+  safeSummary: string,
+  payload: Record<string, unknown> = {},
+): EventDraft {
   return {
     protocolVersion: RELAY_PROTOCOL_VERSION,
-    at: ctx.now(),
-    projectId: input.projectId,
-    runId: input.runId,
-    taskId: input.taskId,
+    at: now,
+    projectId: workspace.projectId,
+    runId: workspace.runId,
+    taskId: workspace.taskId,
     source: 'system',
-    kind: input.kind,
+    kind,
     provenance: 'live',
     classification: 'historical',
-    safeSummary: sanitizeOutput(input.safeSummary).text.slice(0, 1000),
-    payload: input.payload ?? {},
-    refs: { workspaceId: input.workspaceId, ...(input.evidenceIds ? { evidenceIds: input.evidenceIds } : {}) },
+    safeSummary: safeSummary.slice(0, 1000),
+    payload,
+    refs: { workspaceId: workspace.workspaceId },
   };
 }
-
-export const shortRevision = (revision: string): string => revision.slice(0, 10);

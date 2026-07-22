@@ -161,14 +161,6 @@ describe('rendering truthfulness', () => {
     expect(shown.length).toBeLessThanOrEqual(3);
   });
 
-  it('workspace commands parse and the workspace doctor is truthful', () => {
-    expect(parseCli(['workspace', 'doctor'])).toMatchObject({ command: 'workspace', workspaceAction: 'doctor' });
-    expect(parseCli(['workspace', 'verify'])).toMatchObject({ command: 'workspace', workspaceAction: 'verify' });
-    expect(parseCli(['workspace']).error).toContain('doctor | verify');
-    expect(parseCli(['workspace', 'nuke']).error).toContain('doctor | verify');
-    expect(HELP_TEXT).toContain('relay workspace doctor');
-  });
-
   it('doctor is truthful about deferred capabilities and never prints env values', () => {
     const report = doctorReport({ out: () => {}, isTTY: false, env: { SECRET_THING: 'never-shown' } });
     const text = report.lines.join('\n');

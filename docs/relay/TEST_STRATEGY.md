@@ -1,21 +1,20 @@
 # Sunday Relay — Test Strategy (authoritative)
 
 > **Implementation sync (Prompt 7, 2026-07-22):** workspace security tests
-> in `src/relay/workspace/policy.test.ts` (pure: branch-name injection,
-> command allow/deny matrix incl. shells/push/reset/clean/force/metachars,
-> environment secret-stripping, segment-safe protected-path classification,
-> sanitizer, bounded output, cleanup decisions) and
-> `src/relay/workspace/workspace.test.ts` (real git fixtures under tmpdir:
-> repo validation, unborn/bare rejection, pinning, idempotent + conflicting
-> reuse, symlinked-root rejection, source-change detection, clean→allowed→
-> unclaimed→protected→symlink-escape walk without claim expansion, runner
-> completion/rejection/timeout/cancel/output-limit/sanitization/env
-> isolation, execution refusal when flagged, conservative cleanup incl.
-> dirty-worktree refusal and unknown-workspace refusal). Boundary additions
-> in `relay-core-boundary.test.ts` (workspace purity, child_process
-> confinement, no core/connector/prototype imports, CLI composition-root-
-> only access, denylist presence). End-to-end proof:
-> `npm run relay:workspace:verify` (30-check fixture harness, run twice).
+> in `src/relay/workspace/policy.test.ts` (pure: segment-safe protected
+> paths, claim classification with no expansion, hostile path shapes,
+> command allowlist/denylist incl. destructive git + shells + publication,
+> env secret blocking at two layers, output bounding + secret redaction,
+> branch-injection rejection, conservative cleanup decisions) and
+> `src/relay/workspace/workspace.test.ts` (integration on throwaway fixture
+> repos: repository validation, worktree lifecycle incl. idempotency +
+> conflicting reuse + dirty-source pinning + unexpected source change,
+> claimed/unclaimed/protected/symlink-escape inspection, live command
+> execution + rejection + cwd escape + env inheritance, cleanup safety,
+> live evidence integrity). Boundary tests gained the Workspace block
+> (Node containment, adapter/CLI restrictions, shell:false assertion).
+> End-to-end: `npm run relay:workspace:verify` (23-check deterministic
+> harness on a fixture repo, run twice per gate).
 
 > **Implementation sync (Prompt 6, 2026-07-22):** YC presentation tests in
 > `src/relay/cli/yc.test.ts` (scenario registration/objective, one repair +

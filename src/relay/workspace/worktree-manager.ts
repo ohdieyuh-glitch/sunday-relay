@@ -1,157 +1,160 @@
 import { existsSync, lstatSync, mkdirSync, realpathSync } from 'node:fs';
-import { dirname, isAbsolute, join } from 'node:path';
+import { dirname, isAbsolute, join, sep } from 'node:path';
 import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
-import { inspectSourceRepository, isWithin, runGit, type SourceRepositoryInfo } from './repository-inspector';
+import { runGit } from './repository-inspector';
 
 /**
- * Isolated worktree creation (Prompt 7). Real `git worktree add` against a
- * pinned revision, into an approved workspace root OUTSIDE any tracked
- * tree, on a run-specific validated branch. The source working tree is
- * never reset, cleaned, checked out, committed, merged, or pushed — Git
- * only records worktree bookkeeping inside the source `.git` directory,
- * which is inherent to worktrees and documented.
+ * Worktree lifecycle (Prompt 7). Real `git worktree` operations, confined
+ * to the approved Relay workspace root beside the source repository:
+ *
+ *   <realpath(parent-of-source)>/.relay-workspaces/<project-id>/<run-id>/
+ *
+ * The root is created 0o700, must never be a symlink, and every created
+ * path is verified by realpath containment before use. The source worktree
+ * is never touched: creation adds a NEW worktree at the pinned revision on
+ * a run-specific branch, and removal targets only Relay-created paths.
  */
 
-/** Git branch-name validation — allowlist shape, never `git check-ref-format`
- * on untrusted input (no process launch for validation). */
+export const WORKSPACE_ROOT_DIRNAME = '.relay-workspaces';
+
+/** Conservative branch-name validation (subset of git-check-ref-format).
+ * Rejects injection shapes outright: options (`-`), traversal, `@{`,
+ * spaces, control chars, lock suffixes, empty segments. */
 export function validateBranchName(name: string): RelayResult<string> {
-  if (typeof name !== 'string' || name.trim() === '') {
-    return fail(relayError('validation-failed', 'Branch name must be a non-empty string.'));
+  if (typeof name !== 'string' || name.length === 0 || name.length > 100) {
+    return fail(relayError('validation-failed', 'Branch name must be 1–100 chars.'));
   }
-  if (name.length > 200) return fail(relayError('validation-failed', 'Branch name is too long.'));
   if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(name)) {
-    return fail(relayError('validation-failed', 'Branch name contains characters outside the safe allowlist.'));
+    return fail(relayError('validation-failed', 'Branch name contains rejected characters.'));
   }
-  if (name.includes('..') || name.includes('//') || name.includes('@{')) {
-    return fail(relayError('validation-failed', 'Branch name contains a forbidden sequence.'));
-  }
-  if (name.endsWith('/') || name.endsWith('.') || name.endsWith('.lock')) {
-    return fail(relayError('validation-failed', 'Branch name has a forbidden ending.'));
-  }
-  if (name.split('/').some((segment) => segment === '' || segment.startsWith('-'))) {
-    return fail(relayError('validation-failed', 'Branch segments must be non-empty and must not start with "-".'));
+  if (name.includes('..') || name.includes('//') || name.includes('@{') ||
+      name.endsWith('/') || name.endsWith('.') || name.endsWith('.lock') ||
+      name.split('/').some((seg) => seg === '' || seg === '.' || seg === '..' ||
+        seg.startsWith('-') || seg.endsWith('.lock'))) {
+    return fail(relayError('validation-failed', 'Branch name shape is rejected.'));
   }
   return ok(name);
 }
 
-/** Deterministic default branch for a run: relay/run/<safe-run-token>. */
-export function defaultBranchForRun(runId: string): string {
-  const token = runId.replace(/^run_/, '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) || 'unnamed';
-  return `relay/run/${token}`;
+/** Deterministic run-specific branch: relay/run/<sanitized-run-token>. */
+export function deriveRunBranch(runId: string): RelayResult<string> {
+  const token = runId.replace(/^run_/, '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 40);
+  if (token.length === 0) return fail(relayError('validation-failed', 'Run id yields no safe branch token.'));
+  return validateBranchName(`relay/run/${token}`);
 }
 
-/** Conventional approved root: a sibling of the source repository, never
- * inside any tracked tree. Callers may override (tests use tmp roots). */
-export const defaultWorkspaceRootFor = (sourceRootPath: string): string =>
-  join(dirname(sourceRootPath), '.relay-workspaces');
-
-export interface ApprovedRootValidation {
-  rootRealPath: string;
-}
-
-/** Validate (and create if needed) the approved workspace root: absolute,
- * not a symlink, and disjoint from the source repository in both
- * directions. */
-export function ensureApprovedRoot(rawRoot: string, sourceRootRealPath: string): RelayResult<ApprovedRootValidation> {
-  if (typeof rawRoot !== 'string' || rawRoot.includes('\0') || !isAbsolute(rawRoot)) {
-    return fail(relayError('validation-failed', 'Workspace root must be an absolute path without null bytes.'));
+const safePathSegment = (raw: string): RelayResult<string> => {
+  const token = raw.replace(/[^A-Za-z0-9._-]/g, '');
+  if (token === '' || token === '.' || token === '..') {
+    return fail(relayError('validation-failed', `"${raw}" yields no safe path segment.`));
   }
-  if (existsSync(rawRoot) && lstatSync(rawRoot).isSymbolicLink()) {
-    return fail(relayError('validation-failed', 'Workspace root must not be a symlink.'));
-  }
+  return ok(token);
+};
+
+/** Resolve (and create) the approved workspace root for a source repo.
+ * Never inside the source tree; never behind a symlink. */
+export function resolveWorkspaceRoot(sourceRoot: string): RelayResult<string> {
+  const parent = dirname(sourceRoot);
+  let parentReal: string;
   try {
-    mkdirSync(rawRoot, { recursive: true, mode: 0o700 });
+    parentReal = realpathSync(parent);
   } catch {
-    return fail(relayError('validation-failed', 'Workspace root could not be created.'));
+    return fail(relayError('validation-failed', 'Workspace root parent cannot be canonicalized.'));
   }
-  const rootRealPath = realpathSync(rawRoot);
-  if (isWithin(sourceRootRealPath, rootRealPath)) {
-    return fail(relayError('validation-failed', 'Workspace root must not live inside the source repository.'));
+  const root = join(parentReal, WORKSPACE_ROOT_DIRNAME);
+  if (existsSync(root)) {
+    if (lstatSync(root).isSymbolicLink()) {
+      return fail(relayError('permission-denied', 'Workspace root is a symlink — refused.'));
+    }
+    if (!lstatSync(root).isDirectory()) {
+      return fail(relayError('validation-failed', 'Workspace root exists but is not a directory.'));
+    }
+  } else {
+    mkdirSync(root, { recursive: true, mode: 0o700 });
   }
-  if (isWithin(rootRealPath, sourceRootRealPath)) {
-    return fail(relayError('validation-failed', 'The source repository must not live inside the workspace root.'));
+  const rootReal = realpathSync(root);
+  if (rootReal === sourceRoot || rootReal.startsWith(sourceRoot + sep)) {
+    return fail(relayError('permission-denied', 'Workspace root may not live inside the source repository.'));
   }
-  return ok({ rootRealPath });
+  return ok(rootReal);
 }
 
-const PATH_TOKEN = /^[A-Za-z0-9_-]+$/;
-
-export interface CreateWorktreeInput {
-  source: SourceRepositoryInfo;
-  rootRealPath: string;
-  /** Path tokens under the root — validated (prefixed relay ids qualify). */
-  projectToken: string;
-  runToken: string;
-  taskToken: string;
-  branchName: string;
+/** Compute the per-run worktree path under the approved root. */
+export function resolveWorkspacePath(root: string, projectId: string, runId: string): RelayResult<string> {
+  const project = safePathSegment(projectId);
+  if (!project.ok) return project;
+  const run = safePathSegment(runId);
+  if (!run.ok) return run;
+  const path = join(root, project.value, run.value);
+  if (!path.startsWith(root + sep)) {
+    return fail(relayError('permission-denied', 'Workspace path escapes the approved root.'));
+  }
+  return ok(path);
 }
 
 export interface CreatedWorktree {
   workspacePath: string;
-  workspaceRealPath: string;
+  branchName: string;
+  revision: string;
 }
 
-export function branchExists(sourceRoot: string, branchName: string): boolean {
-  return runGit(['rev-parse', '--verify', '--quiet', `refs/heads/${branchName}`], sourceRoot).ok;
-}
-
-/** Create the isolated worktree and verify it points at the expected
- * repository, revision, and branch before reporting success. */
-export function createWorktree(input: CreateWorktreeInput): RelayResult<CreatedWorktree> {
-  const { source, rootRealPath, branchName } = input;
-  for (const token of [input.projectToken, input.runToken, input.taskToken]) {
-    if (!PATH_TOKEN.test(token.replace(/^[a-z]{3}_/, ''))) {
-      return fail(relayError('validation-failed', `Workspace path token "${token}" is not path-safe.`));
-    }
-  }
-  const workspacePath = join(rootRealPath, input.projectToken, input.runToken, input.taskToken);
-  if (!isWithin(rootRealPath, workspacePath)) {
-    return fail(relayError('validation-failed', 'Workspace path escaped the approved root.'));
-  }
+/** Create the isolated worktree at the pinned revision on a new branch,
+ * then verify it points at the expected repository and revision. */
+export function createWorktree(input: {
+  sourceRoot: string;
+  workspacePath: string;
+  branchName: string;
+  revision: string;
+}): RelayResult<CreatedWorktree> {
+  const { sourceRoot, workspacePath, branchName, revision } = input;
+  if (!isAbsolute(workspacePath)) return fail(relayError('validation-failed', 'Workspace path must be absolute.'));
   if (existsSync(workspacePath)) {
-    return fail(relayError('duplicate-task', 'Workspace path already exists — conflicting reuse is refused.'));
+    return fail(relayError('duplicate-command', 'Workspace path already exists — refusing to reuse an unregistered directory.'));
   }
-  if (branchExists(source.rootPath, branchName)) {
-    return fail(relayError('duplicate-task', `Branch "${branchName}" already exists — it cannot be reused for a new workspace.`));
+  if (!/^[0-9a-f]{7,40}$/i.test(revision)) {
+    return fail(relayError('validation-failed', 'Revision must be a commit hash.'));
+  }
+  const branchExists = runGit(['rev-parse', '--verify', '--quiet', `refs/heads/${branchName}`], sourceRoot);
+  if (branchExists.ok && branchExists.value.trim() !== '') {
+    return fail(relayError('duplicate-command', `Branch ${branchName} already exists — refusing reuse.`));
   }
   mkdirSync(dirname(workspacePath), { recursive: true, mode: 0o700 });
+  const added = runGit(['worktree', 'add', '-b', branchName, workspacePath, revision], sourceRoot);
+  if (!added.ok) return added;
 
-  const added = runGit(['worktree', 'add', '-b', branchName, workspacePath, source.revision], source.rootPath);
-  if (!added.ok) {
-    return fail(relayError('validation-failed', 'git worktree add failed.', { details: [added.stderr.slice(0, 300)] }));
+  /* verify: correct repo, revision, branch */
+  const head = runGit(['rev-parse', 'HEAD'], workspacePath);
+  if (!head.ok) return head;
+  const branch = runGit(['branch', '--show-current'], workspacePath);
+  if (!branch.ok) return branch;
+  const commonDir = runGit(['rev-parse', '--git-common-dir'], workspacePath);
+  if (!commonDir.ok) return commonDir;
+  const sourceGitDir = realpathSync(join(sourceRoot, '.git'));
+  const linkedCommon = realpathSync(commonDir.value.trim());
+  if (head.value.trim() !== revision || branch.value.trim() !== branchName || linkedCommon !== sourceGitDir) {
+    return fail(
+      relayError('validation-failed', 'Created worktree failed verification (repo/revision/branch mismatch).', {
+        details: [`head=${head.value.trim()}`, `branch=${branch.value.trim()}`],
+      }),
+    );
   }
-
-  /* verify before trusting */
-  const workspaceRealPath = realpathSync(workspacePath);
-  const head = runGit(['rev-parse', 'HEAD'], workspaceRealPath);
-  const ref = runGit(['rev-parse', '--abbrev-ref', 'HEAD'], workspaceRealPath);
-  const common = runGit(['rev-parse', '--git-common-dir'], workspaceRealPath);
-  // --git-common-dir may return an absolute path or one relative to cwd.
-  const commonRaw = common.stdout.trim();
-  const commonReal = common.ok
-    ? realpathSync(isAbsolute(commonRaw) ? commonRaw : join(workspaceRealPath, commonRaw))
-    : '';
-  const pointsAtSource = common.ok && isWithin(source.rootPath, commonReal);
-  if (!head.ok || head.stdout.trim() !== source.revision) {
-    return fail(relayError('validation-failed', 'Created worktree does not point at the pinned revision.'));
-  }
-  if (!ref.ok || ref.stdout.trim() !== branchName) {
-    return fail(relayError('validation-failed', 'Created worktree is not on the expected branch.'));
-  }
-  if (!pointsAtSource) {
-    return fail(relayError('validation-failed', 'Created worktree does not belong to the expected repository.'));
-  }
-  return ok({ workspacePath, workspaceRealPath });
+  return ok({ workspacePath, branchName, revision });
 }
 
-/** Remove a Relay-created worktree. Never forced: a dirty worktree makes
- * removal fail honestly rather than destroying changes. */
+/** Remove a Relay-created worktree (never forced, never the source). The
+ * caller has already validated registration and identity. */
 export function removeWorktree(sourceRoot: string, workspacePath: string): RelayResult<null> {
+  let real: string;
+  try {
+    real = realpathSync(workspacePath);
+  } catch {
+    return fail(relayError('not-found', 'Workspace path no longer exists.'));
+  }
+  if (real === sourceRoot) return fail(relayError('permission-denied', 'Refusing to remove the source worktree.'));
   const removed = runGit(['worktree', 'remove', workspacePath], sourceRoot);
-  if (!removed.ok) {
-    return fail(relayError('validation-failed', 'git worktree remove failed (dirty worktrees are never force-removed).', { details: [removed.stderr.slice(0, 300)] }));
+  if (!removed.ok) return removed;
+  if (existsSync(workspacePath)) {
+    return fail(relayError('validation-failed', 'Worktree removal reported success but the path remains.'));
   }
   return ok(null);
 }
-
-export { inspectSourceRepository };

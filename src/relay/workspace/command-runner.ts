@@ -1,19 +1,17 @@
-import { spawn } from 'node:child_process';
-import type { TerminationOutcome } from './contracts';
+import { spawn, type ChildProcess } from 'node:child_process';
+import { boundOutput, sanitizeOutput } from './output-sanitizer';
 
 /**
- * Bounded process runner (Prompt 7). spawn(executable, args) with
- * `shell: false` ALWAYS — no interpolation, no pipes, no substitution, no
- * redirects, no `bash -c` equivalents can ever exist here. Runtime and
- * output are hard-bounded; exceeding the output budget terminates the
- * process rather than pretending full output is available. Cancellation and
- * timeouts terminate the detached process group (SIGTERM, then SIGKILL),
- * and termination is only ever reported as confirmed when the close event
- * actually arrived.
+ * Bounded process runner (Prompt 7). Executes an ALREADY-APPROVED command
+ * as executable + argument array with `shell: false` — no interpolation,
+ * pipes, substitution, or redirects can exist. Runtime and both output
+ * streams are hard-bounded; exceeding a stream cap terminates the process
+ * (no unbounded capture, ever). Termination is escalated SIGTERM → SIGKILL
+ * and its confirmation is reported honestly: if the process cannot be
+ * confirmed dead, the result says so instead of claiming success.
  */
 
-export interface RunnerRequest {
-  commandId: string;
+export interface BoundedRunRequest {
   executable: string;
   args: string[];
   cwd: string;
@@ -22,155 +20,147 @@ export interface RunnerRequest {
   outputLimitBytes: number;
 }
 
-export interface RunnerOutcome {
-  status: 'completed' | 'failed' | 'timed_out' | 'cancelled' | 'output_limit';
+export interface BoundedRunOutcome {
   exitCode: number | null;
   signal: string | null;
   stdout: string;
   stderr: string;
-  truncated: boolean;
   timedOut: boolean;
   cancelled: boolean;
-  termination: TerminationOutcome;
+  truncated: boolean;
+  outputLimitHit: boolean;
+  termination: 'not_required' | 'termination_confirmed' | 'termination_unconfirmed';
   startedAt: string;
   completedAt: string;
   durationMs: number;
+  redactions: number;
+  spawnError?: string;
 }
 
-export interface CommandRunner {
-  execute(request: RunnerRequest): Promise<RunnerOutcome>;
-  /** True when a matching active process existed and stop was requested. */
-  cancel(commandId: string): boolean;
+export interface RunningCommandHandle {
+  cancel(): boolean;
 }
 
-export function createCommandRunner(clock: { now(): string } = { now: () => new Date().toISOString() }): CommandRunner {
-  const active = new Map<string, () => void>();
+const KILL_GRACE_MS = 2_000;
+const CONFIRM_WAIT_MS = 5_000;
 
-  const execute = (request: RunnerRequest): Promise<RunnerOutcome> =>
-    new Promise((resolveOutcome) => {
-      const startedAt = clock.now();
-      const startMs = Date.now();
-      let stdout = '';
-      let stderr = '';
-      let capturedBytes = 0;
-      let truncated = false;
-      let timedOut = false;
-      let cancelled = false;
-      let overflow = false;
-      let killRequested = false;
-      let closed = false;
-      let settled = false;
+export function runBoundedCommand(
+  request: BoundedRunRequest,
+  now: () => string,
+  onHandle?: (handle: RunningCommandHandle) => void,
+): Promise<BoundedRunOutcome> {
+  return new Promise((resolvePromise) => {
+    const startedAt = now();
+    const startMono = Date.now();
+    let stdout = '';
+    let stderr = '';
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    let timedOut = false;
+    let cancelled = false;
+    let outputLimitHit = false;
+    let killRequested = false;
+    let settled = false;
+    let child: ChildProcess;
 
-      const child = spawn(request.executable, request.args, {
+    const finish = (exitCode: number | null, signal: string | null, termination: BoundedRunOutcome['termination'], spawnError?: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutTimer);
+      clearTimeout(escalateTimer);
+      clearTimeout(confirmTimer);
+      const boundedOut = boundOutput(stdout, request.outputLimitBytes);
+      const boundedErr = boundOutput(stderr, request.outputLimitBytes);
+      const cleanOut = sanitizeOutput(boundedOut.text);
+      const cleanErr = sanitizeOutput(boundedErr.text);
+      resolvePromise({
+        exitCode,
+        signal,
+        stdout: cleanOut.text,
+        stderr: cleanErr.text,
+        timedOut,
+        cancelled,
+        truncated: boundedOut.truncated || boundedErr.truncated || outputLimitHit,
+        outputLimitHit,
+        termination,
+        startedAt,
+        completedAt: now(),
+        durationMs: Date.now() - startMono,
+        redactions: cleanOut.redactions + cleanErr.redactions,
+        spawnError,
+      });
+    };
+
+    let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+    let escalateTimer: ReturnType<typeof setTimeout> | undefined;
+    let confirmTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const requestKill = () => {
+      if (killRequested) return;
+      killRequested = true;
+      try {
+        child.kill('SIGTERM');
+      } catch { /* already gone */ }
+      escalateTimer = setTimeout(() => {
+        try {
+          child.kill('SIGKILL');
+        } catch { /* already gone */ }
+      }, KILL_GRACE_MS);
+      confirmTimer = setTimeout(() => {
+        // The process never reported exit: report the truth, not success.
+        finish(null, null, 'termination_unconfirmed');
+      }, KILL_GRACE_MS + CONFIRM_WAIT_MS);
+    };
+
+    try {
+      child = spawn(request.executable, request.args, {
         cwd: request.cwd,
         env: request.env,
         shell: false,
-        detached: true,
-        windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
+    } catch (error) {
+      finish(null, null, 'not_required', error instanceof Error ? error.message.slice(0, 200) : 'spawn failed');
+      return;
+    }
 
-      const killTree = (signal: NodeJS.Signals) => {
-        try {
-          if (child.pid) process.kill(-child.pid, signal);
-          else child.kill(signal);
-        } catch {
-          try {
-            child.kill(signal);
-          } catch {
-            /* already gone */
-          }
-        }
-      };
-      const requestStop = () => {
-        if (killRequested) return;
-        killRequested = true;
-        killTree('SIGTERM');
-        setTimeout(() => {
-          if (!closed) killTree('SIGKILL');
-        }, 1500).unref();
-      };
-
-      const timeoutTimer = setTimeout(() => {
-        timedOut = true;
-        requestStop();
-      }, request.timeoutMs);
-      timeoutTimer.unref();
-
-      active.set(request.commandId, () => {
+    onHandle?.({
+      cancel: () => {
+        if (settled) return false;
         cancelled = true;
-        requestStop();
-      });
-
-      const collect = (stream: 'out' | 'err') => (chunk: Buffer) => {
-        capturedBytes += chunk.length;
-        if (capturedBytes > request.outputLimitBytes) {
-          truncated = true;
-          if (!overflow) {
-            overflow = true;
-            requestStop();
-          }
-          return;
-        }
-        if (stream === 'out') stdout += chunk.toString('utf8');
-        else stderr += chunk.toString('utf8');
-      };
-      child.stdout?.on('data', collect('out'));
-      child.stderr?.on('data', collect('err'));
-
-      const finish = (exitCode: number | null, signal: string | null, termination: TerminationOutcome) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeoutTimer);
-        active.delete(request.commandId);
-        const status: RunnerOutcome['status'] = cancelled
-          ? 'cancelled'
-          : timedOut
-            ? 'timed_out'
-            : overflow
-              ? 'output_limit'
-              : exitCode === 0
-                ? 'completed'
-                : 'failed';
-        resolveOutcome({
-          status,
-          exitCode,
-          signal,
-          stdout: truncated ? `${stdout}\n[TRUNCATED: output limit reached]` : stdout,
-          stderr,
-          truncated,
-          timedOut,
-          cancelled,
-          termination,
-          startedAt,
-          completedAt: clock.now(),
-          durationMs: Date.now() - startMs,
-        });
-      };
-
-      child.on('error', (err) => {
-        stderr += `[spawn error] ${err.message}`;
-        finish(null, null, 'not_required');
-      });
-      child.on('close', (code, signal) => {
-        closed = true;
-        finish(code, signal, killRequested ? 'termination_confirmed' : 'not_required');
-      });
-
-      // Never claim termination that was not observed: if close never
-      // arrives after a kill, report termination_unconfirmed honestly.
-      setTimeout(() => {
-        if (!settled) finish(null, null, killRequested ? 'termination_unconfirmed' : 'not_required');
-      }, request.timeoutMs + 10_000).unref();
+        requestKill();
+        return true;
+      },
     });
 
-  return {
-    execute,
-    cancel(commandId) {
-      const stop = active.get(commandId);
-      if (!stop) return false;
-      stop();
-      return true;
-    },
-  };
+    child.on('error', (error) => {
+      finish(null, null, 'not_required', error.message.slice(0, 200));
+    });
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdoutBytes += chunk.byteLength;
+      if (stdoutBytes <= request.outputLimitBytes * 2) stdout += chunk.toString('utf8');
+      if (stdoutBytes > request.outputLimitBytes && !killRequested) {
+        outputLimitHit = true;
+        requestKill();
+      }
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderrBytes += chunk.byteLength;
+      if (stderrBytes <= request.outputLimitBytes * 2) stderr += chunk.toString('utf8');
+      if (stderrBytes > request.outputLimitBytes && !killRequested) {
+        outputLimitHit = true;
+        requestKill();
+      }
+    });
+
+    timeoutTimer = setTimeout(() => {
+      timedOut = true;
+      requestKill();
+    }, request.timeoutMs);
+
+    child.on('close', (code, signal) => {
+      finish(code, signal, killRequested ? 'termination_confirmed' : 'not_required');
+    });
+  });
 }

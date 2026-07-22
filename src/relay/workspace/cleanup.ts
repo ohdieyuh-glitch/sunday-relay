@@ -1,42 +1,54 @@
-import type { CleanupPolicy, WorkspaceStatus } from './contracts';
+import type { CleanupPolicy, RelayWorkspace, WorkspaceStatus } from './contracts';
 
 /**
- * Conservative cleanup decisions (Prompt 7) — pure policy. Removal happens
- * ONLY when explicitly authorized AND the workspace's cleanup policy
- * permits removal for its current status. Everything doubtful is
- * preserved; failure, checkpoint, and cancellation states default to
- * preservation so a human can inspect the workspace.
+ * Conservative cleanup decisions (Prompt 7) — PURE. Removal ALWAYS
+ * requires explicit authorization; the policy can only make preservation
+ * stricter, never looser. Failure, checkpoint, cancellation, and dirty
+ * states preserve by default so a human can inspect what happened.
  */
 
 export type CleanupDecision =
   | { action: 'preserve'; reason: string }
-  | { action: 'remove'; reason: string };
+  | { action: 'remove'; reason: string }
+  | { action: 'refuse'; reason: string };
 
-export function decideCleanup(input: {
-  policy: CleanupPolicy;
-  status: WorkspaceStatus;
-  authorizeRemoval: boolean;
-}): CleanupDecision {
-  const { policy, status, authorizeRemoval } = input;
+const PRESERVE_ON_TROUBLE: WorkspaceStatus[] = ['failed', 'cancelled', 'dirty', 'checkpoint_required'];
+const REMOVABLE_WHEN_AUTHORIZED: WorkspaceStatus[] = ['ready', 'active', 'completed', 'preserved'];
 
-  if (policy === 'preserve_always') {
-    return { action: 'preserve', reason: 'cleanup policy preserve_always' };
+export function evaluateCleanup(
+  workspace: Pick<RelayWorkspace, 'status' | 'cleanupPolicy'>,
+  options: { authorizeRemoval: boolean },
+): CleanupDecision {
+  const { status, cleanupPolicy } = workspace;
+  if (status === 'removed') return { action: 'refuse', reason: 'workspace is already removed.' };
+  if (!options.authorizeRemoval) {
+    return { action: 'preserve', reason: 'removal was not explicitly authorized — preserving conservatively.' };
   }
-  if (!authorizeRemoval) {
-    return { action: 'preserve', reason: 'removal not explicitly authorized — preserved for inspection' };
+  const policyPreserves = policyMandatesPreservation(cleanupPolicy, status);
+  if (policyPreserves) return { action: 'preserve', reason: policyPreserves };
+  if (!REMOVABLE_WHEN_AUTHORIZED.includes(status)) {
+    return { action: 'preserve', reason: `status "${status}" is preserved for inspection.` };
   }
-  const troubled: WorkspaceStatus[] = ['failed', 'cancelled', 'checkpoint_required', 'dirty'];
-  if (policy === 'preserve_on_failure' && (status === 'failed' || status === 'cancelled')) {
-    return { action: 'preserve', reason: `preserve_on_failure keeps a ${status} workspace` };
+  return { action: 'remove', reason: `authorized removal permitted by policy ${cleanupPolicy}.` };
+}
+
+function policyMandatesPreservation(policy: CleanupPolicy, status: WorkspaceStatus): string | null {
+  switch (policy) {
+    case 'preserve_always':
+      return 'policy preserve_always keeps every workspace.';
+    case 'preserve_on_failure':
+      return PRESERVE_ON_TROUBLE.includes(status)
+        ? `policy preserve_on_failure keeps a ${status} workspace for inspection.`
+        : null;
+    case 'preserve_on_checkpoint':
+      return status === 'checkpoint_required'
+        ? 'policy preserve_on_checkpoint keeps a checkpoint workspace for inspection.'
+        : null;
+    case 'remove_on_success':
+      return status === 'completed' || status === 'ready' || status === 'active'
+        ? null
+        : `policy remove_on_success preserves a ${status} workspace.`;
+    case 'manual_cleanup':
+      return null; // explicit authorization is the manual decision
   }
-  if (policy === 'preserve_on_checkpoint' && (status === 'checkpoint_required' || status === 'failed' || status === 'cancelled')) {
-    return { action: 'preserve', reason: `preserve_on_checkpoint keeps a ${status} workspace` };
-  }
-  if (policy === 'remove_on_success' && status !== 'completed' && status !== 'ready' && status !== 'active') {
-    return { action: 'preserve', reason: `remove_on_success does not remove a ${status} workspace` };
-  }
-  if (policy === 'manual_cleanup' && troubled.includes(status)) {
-    return { action: 'preserve', reason: `manual cleanup of a ${status} workspace requires inspection first — preserved` };
-  }
-  return { action: 'remove', reason: `authorized removal permitted by ${policy} for status ${status}` };
 }

@@ -191,9 +191,6 @@ export interface RelayApp {
   readonly scenarioName: string;
   readonly storageProfile: 'volatile-memory';
   readonly adapterProfile: 'simulation';
-  /** Prompt 7: scenario runs stay simulated; the live local_isolated
-   * workspace foundation is a separate surface (relay workspace doctor). */
-  readonly workspaceProfile: 'simulated';
   start(objective: string, taskObjective?: string): RelayResult<{ runId: RunId }>;
   step(): RelayResult<{ action: string; done: boolean; status: string }>;
   continueRun(): RelayResult<{ actions: string[]; stopReason: string; status: string }>;
@@ -316,7 +313,6 @@ export function createRelayApp(options: RelayAppOptions): RelayResult<RelayApp> 
     scenarioName: definition.name,
     storageProfile: 'volatile-memory',
     adapterProfile: 'simulation',
-    workspaceProfile: 'simulated',
 
     start(objective, taskObjective) {
       if (runId) return fail(relayError('duplicate-command', 'A run already exists in this volatile session.'));

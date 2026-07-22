@@ -1,19 +1,16 @@
 # Relay Protocol — `relay.protocol.v1` (specification)
 
-> **Implementation sync (Prompt 7, 2026-07-22):** the isolated worktree and
-> safe local execution foundation is implemented in `src/relay/workspace/`
-> (see WORKSPACE_SECURITY.md). Additive protocol deltas: event taxonomy
-> gained the `workspace.*` family (validated / created / reused / inspected /
-> source_changed / change_flagged / command_started / command_completed /
-> command_rejected / cancelled / preserved / cleaned / cleanup_refused);
-> `EventRefs` gained `workspaceId` (existing `wsp_` prefix); enums gained
-> `WORKSPACE_PROFILES` (`none | simulated | local_isolated`) — all existing
-> scenarios remain `simulated`. Workspace contracts (RelayWorkspace,
-> WorkspaceCommandRequest/Result, WorkspaceInspection, cleanup policies,
-> ports) live in `src/relay/workspace/contracts.ts`, NOT in the browser-safe
-> protocol layer, because they describe Node-side infrastructure. Workspace
-> evidence and events carry `provenance: live` — live LOCAL enforcement,
-> distinct from simulated agents and from (unavailable) live providers.
+> **Implementation sync (Prompt 7, 2026-07-22):** workspace foundation
+> contracts live in `src/relay/workspace/contracts.ts` (module-local, not
+> yet protocol-envelope types — they cross no external boundary this
+> phase). Additive protocol deltas: event taxonomy gained the `workspace.*`
+> family (validated / created / reused / inspected / source_changed /
+> change_flagged / command_started / command_completed / command_rejected /
+> cancelled / preserved / cleaned / cleanup_refused) and `EventRefs` gained
+> `workspaceId` (the existing `wsp_` prefix). Workspace events/evidence are
+> the first `provenance: live` producers — live LOCAL infrastructure,
+> distinguished from simulated agents and from future live provider
+> execution by verifier identity `relay-workspace`.
 
 > **Implementation sync (Prompt 6.1, 2026-07-22):** Manual Task checkpoints
 > are implemented in `src/relay/core/manual-task.ts` on the EXISTING
