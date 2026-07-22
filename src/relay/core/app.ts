@@ -1,0 +1,305 @@
+import { ok, fail, relayError, type RelayResult } from '../protocol/errors';
+import { RELAY_PROTOCOL_VERSION } from '../protocol/version';
+import { createRandomIdFactory, type IdFactory, type RunId } from '../protocol/ids';
+import type { Blueprint } from '../protocol/contracts';
+import { createOrchestrator, type Orchestrator, type OrchestratorConfig } from './orchestrator';
+import { createSimulatedAdapters, type ScenarioConfig } from '../connectors/simulated';
+import { createInMemoryRelayStores, type InMemoryRelayStores } from '../storage/memory';
+import type { CompletionPolicy, PermissionPolicy } from '../protocol/contracts';
+import type { PolicyId } from '../protocol/ids';
+import {
+  auditView, blueprintView, eventFeedView, evidenceView, handoffView,
+  projectBrainView, reviewView, runStatusView, taskOwnershipView, usageView,
+} from './read-models';
+
+/**
+ * Relay application facade (Prompt 5) — the ONE approved composition root
+ * for clients. Serializable commands in, serializable read models out; all
+ * workflow decisions stay in Relay Core. Storage is the volatile in-memory
+ * profile: state lives only while this process lives, and the facade says
+ * so (`storageProfile`). No provider access exists anywhere behind it.
+ */
+
+export interface ScenarioDefinition {
+  name: string;
+  description: string;
+  scenario: ScenarioConfig;
+  configOverrides?: Partial<OrchestratorConfig>;
+  /** Demo choreography markers consumed by the CLI demo runner. */
+  choreography?: 'duplicate' | 'stale' | 'pause-resume' | 'cancel';
+}
+
+export const SCENARIOS: Record<string, ScenarioDefinition> = {
+  direct: {
+    name: 'direct',
+    description: 'Direct success — no repair needed.',
+    scenario: { reviewerAttempt1: 'approved', usdPerStep: 0.01 },
+  },
+  repair: {
+    name: 'repair',
+    description: 'Golden path — one failing check, one bounded repair, approval.',
+    scenario: { failingCheckAttempt1: 'npx vitest run', reviewerAttempt1: 'changes_requested', reviewerAttempt2: 'approved', usdPerStep: 0.01 },
+  },
+  checkpoint: {
+    name: 'checkpoint',
+    description: 'Unsafe repair (protected file) — Guided Mode checkpoints.',
+    scenario: { failingCheckAttempt1: 'npx vitest run', reviewerAttempt1: 'changes_requested', usdPerStep: 0.01 },
+    configOverrides: { repairPlanFacts: { requiresProtectedFile: true } },
+  },
+  duplicate: {
+    name: 'duplicate',
+    description: 'Equivalent active task — dispatch denied, agent never invoked.',
+    scenario: { usdPerStep: 0.01 },
+    choreography: 'duplicate',
+  },
+  stale: {
+    name: 'stale',
+    description: 'Repository moved under a compiled handoff — checkpoint before dispatch.',
+    scenario: { usdPerStep: 0.01 },
+    choreography: 'stale',
+  },
+  failure: {
+    name: 'failure',
+    description: 'Honest failure — verification still fails after the single repair.',
+    scenario: { failingCheckAttempt1: 'npx vitest run', stillFailingAfterRepair: true, reviewerAttempt1: 'changes_requested', usdPerStep: 0.01 },
+  },
+  'budget-warning': {
+    name: 'budget-warning',
+    description: 'Budget warning threshold crossed; run still completes.',
+    scenario: { reviewerAttempt1: 'approved', usdPerStep: 0.05 },
+    configOverrides: { budget: { maxUsd: 1, warningAtFraction: 0.05 }, costEstimatePerStep: { usd: 0.04 } },
+  },
+  'budget-stop': {
+    name: 'budget-stop',
+    description: 'Hard budget stop before dispatch.',
+    scenario: { usdPerStep: 0.5 },
+    configOverrides: { budget: { maxUsd: 0.6, missingEstimate: 'allow' }, costEstimatePerStep: { usd: 0.5 } },
+  },
+  'pause-resume': {
+    name: 'pause-resume',
+    description: 'Pause mid-run, resume, complete.',
+    scenario: { reviewerAttempt1: 'approved', usdPerStep: 0.01 },
+    choreography: 'pause-resume',
+  },
+  cancel: {
+    name: 'cancel',
+    description: 'Operator cancellation mid-run.',
+    scenario: { usdPerStep: 0.01 },
+    choreography: 'cancel',
+  },
+};
+
+export interface RelayAppOptions {
+  scenarioName: string;
+  /** Interactive Guided Mode: blueprint awaits an explicit approval command. */
+  interactiveBlueprint?: boolean;
+  maxCostUsd?: number;
+  /** Deterministic seams for tests; production uses real clock/random ids. */
+  ids?: IdFactory;
+  now?: () => string;
+}
+
+export interface RelayApp {
+  readonly scenarioName: string;
+  readonly storageProfile: 'volatile-memory';
+  readonly adapterProfile: 'simulation';
+  start(objective: string, taskObjective?: string): RelayResult<{ runId: RunId }>;
+  step(): RelayResult<{ action: string; done: boolean; status: string }>;
+  continueRun(): RelayResult<{ actions: string[]; stopReason: string; status: string }>;
+  acceptBlueprint(): RelayResult<{ status: string }>;
+  rejectBlueprint(reason: string): RelayResult<{ status: string }>;
+  pause(): RelayResult<{ status: string }>;
+  resume(): RelayResult<{ status: string }>;
+  cancel(reason: string): RelayResult<{ status: string }>;
+  respondCheckpoint(response: 'approve' | 'reject', note?: string): RelayResult<{ status: string }>;
+  /** For the duplicate/stale demo choreography only. */
+  startSecondEquivalentRun(): RelayResult<{ runId: RunId }>;
+  moveBaseRevision(to: string): void;
+  status(): ReturnType<typeof runStatusView>;
+  events(sinceSequence?: number): ReturnType<typeof eventFeedView>;
+  brain(): ReturnType<typeof projectBrainView>;
+  task(): ReturnType<typeof taskOwnershipView>;
+  blueprint(): ReturnType<typeof blueprintView>;
+  handoff(): ReturnType<typeof handoffView>;
+  evidence(): ReturnType<typeof evidenceView>;
+  review(): ReturnType<typeof reviewView>;
+  usage(): ReturnType<typeof usageView> | null;
+  audit(): ReturnType<typeof auditView>;
+}
+
+/** The simulation profile's completion policy: simulated evidence is
+ * EXPLICITLY accepted (never silently), independent review required. */
+const SIMULATION_COMPLETION_POLICY: CompletionPolicy = {
+  policyId: 'pol_simulation-low-risk' as PolicyId,
+  riskLevel: 'low',
+  requiredEvidence: [{ evidenceType: 'command', command: 'npx vitest run', mustPass: true }],
+  requiresIndependentReview: true,
+  requiresHumanApproval: false,
+  enforcementRequirements: [],
+  acceptedProvenance: ['simulated'],
+};
+
+const SIMULATION_PERMISSION_POLICY: PermissionPolicy = {
+  permittedTools: [{ value: 'editor', enforcement: 'advisory' }],
+  permittedFiles: [],
+  prohibitedActions: [{ value: 'network-egress', enforcement: 'advisory' }],
+  protectedPaths: [{ pattern: '.git', enforcement: 'enforced' }],
+};
+
+export function createRelayApp(options: RelayAppOptions): RelayResult<RelayApp> {
+  const definition = SCENARIOS[options.scenarioName];
+  if (!definition) {
+    return fail(relayError('validation-failed', `Unknown scenario "${options.scenarioName}". Known: ${Object.keys(SCENARIOS).join(', ')}.`));
+  }
+  const stores: InMemoryRelayStores = createInMemoryRelayStores({ acknowledgeVolatile: true });
+  const ids = options.ids ?? createRandomIdFactory();
+  const now = options.now ?? (() => new Date().toISOString());
+  const adapters = createSimulatedAdapters(definition.scenario);
+  const config: OrchestratorConfig = {
+    completionPolicy: SIMULATION_COMPLETION_POLICY,
+    permissionPolicy: SIMULATION_PERMISSION_POLICY,
+    budget: { maxUsd: options.maxCostUsd ?? 1, warningAtFraction: 0.8, missingEstimate: 'checkpoint' },
+    loopPolicy: { maxAutomaticRevisions: 1 },
+    stoppingCondition: { description: 'stop after report', maxRuntimeMs: 60000 },
+    baseRevision: 'rev-sim-abc123',
+    leaseMs: 3_600_000,
+    costEstimatePerStep: { usd: 0.01 },
+    autoAcceptBlueprint: !options.interactiveBlueprint,
+    ...(definition.configOverrides ?? {}),
+    ...(options.maxCostUsd !== undefined ? { budget: { maxUsd: options.maxCostUsd, warningAtFraction: 0.8, missingEstimate: 'checkpoint' as const } } : {}),
+  };
+  const orchestrator: Orchestrator = createOrchestrator({ stores, adapters, ids, clock: { now }, config });
+
+  let runId: RunId | null = null;
+  let currentBlueprint: Blueprint | null = null;
+  let blueprintAccepted = false;
+  const verdicts: Parameters<typeof reviewView>[2] = [];
+  let commandSeq = 0;
+
+  const needRun = <T>(fn: (id: RunId) => T): T | RelayResult<never> =>
+    runId ? fn(runId) : fail(relayError('not-found', 'No run started yet — enter an objective first.'));
+
+  const userCommand = (commandType: string, payload: Record<string, unknown>): RelayResult<{ status: string }> => {
+    if (!runId) return fail(relayError('not-found', 'No run started yet.'));
+    const result = orchestrator.command({
+      protocolVersion: RELAY_PROTOCOL_VERSION,
+      commandId: `cli-${commandType}-${++commandSeq}`,
+      commandType,
+      issuedAt: now(),
+      actor: { kind: 'user', id: 'cli-operator' },
+      payload,
+      provenance: 'manual',
+    });
+    if (!result.ok) return result;
+    return ok({ status: result.value.run.status });
+  };
+
+  const trackArtifacts = () => {
+    // Blueprint + verdict tracking for read views (derived from stored reports).
+    if (!runId) return;
+    const reports = stores.reports.list().filter((r) => r.runId === runId);
+    const blueprintReport = reports.find((r) => r.reportType === 'blueprint');
+    if (blueprintReport && !currentBlueprint) {
+      const payload = blueprintReport.payload as { architectDisplayName: string; content: Blueprint['content'] };
+      currentBlueprint = {
+        blueprintId: (stores.runs.get(runId)?.blueprintId ?? 'blu_pending') as Blueprint['blueprintId'],
+        projectId: blueprintReport.projectId, runId, version: 1, source: 'simulated',
+        architectIdentity: { adapterId: blueprintReport.agentIdentity.adapterId, displayName: payload.architectDisplayName },
+        submittedAt: blueprintReport.submittedAt, content: payload.content, provenance: blueprintReport.provenance,
+      };
+    }
+    if (stores.runs.get(runId)?.phase !== 'blueprint') blueprintAccepted = true;
+    const reviewReports = reports.filter((r) => r.reportType === 'review');
+    while (verdicts.length < reviewReports.length) {
+      const report = reviewReports[verdicts.length];
+      const payload = report.payload as { verdict: 'approved' | 'changes_requested'; findings: [] };
+      verdicts.push({ verdict: payload.verdict, findings: payload.findings, independent: true, provenance: report.provenance, reportId: report.reportId });
+    }
+  };
+
+  const app: RelayApp = {
+    scenarioName: definition.name,
+    storageProfile: 'volatile-memory',
+    adapterProfile: 'simulation',
+
+    start(objective, taskObjective) {
+      if (runId) return fail(relayError('duplicate-command', 'A run already exists in this volatile session.'));
+      const setup = orchestrator.setup({
+        projectName: 'Sunday Relay Demo',
+        objective,
+        taskObjective: taskObjective ?? `Demonstrate Relay orchestration for: ${objective} (SIMULATED — the real feature is NOT implemented)`,
+        claimedFiles: ['src/sim/feature.ts'],
+        equivalenceKey: `sim:${definition.name}`,
+      });
+      if (!setup.ok) return setup;
+      runId = setup.value.run.runId;
+      return ok({ runId });
+    },
+
+    step() {
+      return needRun((id) => {
+        const result = orchestrator.step(id);
+        if (!result.ok) return result;
+        trackArtifacts();
+        return ok({ action: result.value.action, done: result.value.done, status: result.value.run.status });
+      }) as RelayResult<{ action: string; done: boolean; status: string }>;
+    },
+
+    continueRun() {
+      return needRun((id) => {
+        const result = orchestrator.runUntilStopped(id);
+        if (!result.ok) return result;
+        trackArtifacts();
+        return ok({ actions: result.value.actions, stopReason: result.value.stopReason, status: result.value.run.status });
+      }) as RelayResult<{ actions: string[]; stopReason: string; status: string }>;
+    },
+
+    acceptBlueprint() {
+      if (!currentBlueprint) return fail(relayError('not-found', 'No blueprint awaiting approval.'));
+      const accepted = userCommand('accept-blueprint', { runId, blueprintId: currentBlueprint.blueprintId });
+      if (accepted.ok) blueprintAccepted = true;
+      return accepted;
+    },
+    rejectBlueprint(reason) {
+      return userCommand('cancel-run', { runId, reason: `Blueprint rejected: ${reason}` });
+    },
+    pause: () => userCommand('pause-run', { runId }),
+    resume: () => userCommand('resume-run', { runId }),
+    cancel: (reason) => userCommand('cancel-run', { runId, reason }),
+    respondCheckpoint(response, note) {
+      const checkpoint = runId ? stores.runs.get(runId)?.checkpoint : null;
+      if (!checkpoint) return fail(relayError('not-found', 'No checkpoint awaiting a response.'));
+      return userCommand('respond-checkpoint', { runId, checkpointId: checkpoint.checkpointId, response, ...(note ? { note } : {}) });
+    },
+
+    startSecondEquivalentRun() {
+      const setup = orchestrator.setup({
+        projectName: 'Sunday Relay Demo',
+        objective: 'Second, equivalent objective (duplicate demonstration).',
+        taskObjective: 'Equivalent work under the same equivalence key.',
+        claimedFiles: ['src/sim/other.ts'],
+        equivalenceKey: `sim:${definition.name}`,
+      });
+      if (!setup.ok) return setup;
+      runId = setup.value.run.runId; // views now follow the second run
+      currentBlueprint = null;
+      blueprintAccepted = false;
+      return ok({ runId });
+    },
+    moveBaseRevision(to) {
+      config.baseRevision = to;
+    },
+
+    status: () => (runId ? runStatusView(stores, runId) : null),
+    events: (since = 0) => (runId ? eventFeedView(stores, runId, since) : []),
+    brain: () => (runId ? projectBrainView(stores, runId) : null),
+    task: () => (runId ? taskOwnershipView(stores, runId) : null),
+    blueprint: () => (runId ? blueprintView(stores, runId, currentBlueprint, blueprintAccepted) : null),
+    handoff: () => (runId ? handoffView(stores, runId) : null),
+    evidence: () => (runId ? evidenceView(stores, runId) : []),
+    review: () => (runId ? reviewView(stores, runId, verdicts) : []),
+    usage: () => (runId ? usageView(stores, runId) : null),
+    audit: () => (runId ? auditView(stores, runId) : null),
+  };
+  return ok(app);
+}

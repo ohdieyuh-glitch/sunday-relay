@@ -1,12 +1,35 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-22 05:15 UTC** (Prompt 4 complete —
-> simulation harness and orchestrated vertical slice; see SESSION_LOG.md).
+> boundary. Last updated: **2026-07-22 07:25 UTC** (Prompt 5 complete —
+> terminal CLI demo surface; see SESSION_LOG.md and CLI.md).
 
 ## Phase
 
-**Prompt 4 — Simulation Harness and Full Relay Vertical Slice: COMPLETE**
+**Prompt 5 — Terminal CLI Client (July 24 demo surface): COMPLETE**
+(2026-07-22 07:25 UTC). Implemented in `src/relay/cli` + the core client
+seams `src/relay/core/{read-models,app}.ts`:
+- **Serializable client boundary** — read models (status, event feed,
+  project brain, task/ownership, blueprint, handoff, evidence, review,
+  usage, checkpoint, final audit) + the ONE approved composition root
+  (`createRelayApp`): serializable commands in, read models out, zero
+  workflow logic client-side (boundary-tested both directions).
+- **CLI** (`dist-relay/cli.cjs`, esbuild like the backend): `relay` /
+  `demo <scenario>` / `run --objective` / `doctor` / `version` / `help`;
+  interactive slash-command session (pure line handler, TTY-free tests);
+  interactive Guided blueprint approval (canonical accept-blueprint) and
+  checkpoint responses; step/continue/pause/resume/cancel; 10 demo
+  scenarios incl. mid-run choreography for cancel/pause-resume/stale;
+  stable exit codes (0 never for incomplete work; budget stops = 7);
+  restrained gold ANSI with NO_COLOR/plain/ASCII fallback; optional 3-line
+  mascot bound to real run state; clean `--json` (no ANSI, no mascot);
+  truthful `doctor` (DEFERRED labels, no env values). Every screen shows
+  `[SIMULATED]` + `SESSION STORAGE: VOLATILE`; no durable-resume claims.
+- **Demo commands:** `npm run relay -- demo repair` (exit 0) ·
+  `demo checkpoint` (5) · `demo duplicate` (5) · `demo failure` (5) ·
+  `demo budget-stop` (7) · `demo cancel` (6) · `doctor` (0). See CLI.md.
+
+**Prior phase — Prompt 4 — Simulation Harness and Full Relay Vertical Slice: COMPLETE**
 (2026-07-22 05:15 UTC). Implemented in `src/relay/connectors` +
 `src/relay/core/orchestrator.ts`:
 - **Four simulation adapters** behind provider-neutral ports (Architect /
@@ -163,7 +186,19 @@ None in flight — Phase 1 closes with this commit.
 
 ## Next prompt
 
-**Prompt 5 — Relay CLI (terminal client of Relay Core)**: implement
+**Prompt 6 — Durable Local Persistence and Real Cross-Process Resume**:
+implement the relay-storage file-backed repositories per ADR-016 —
+append-only JSONL event log + JSON projections under a project-local
+`.relay/` directory using node builtins only, behind the existing storage
+ports; deterministic replay-on-load rebuilding projections from events;
+honest crash-recovery semantics (lease expiry on load, idempotent
+re-append); the CLI gains truthful `relay resume <run-id>` and the
+volatile-storage notice switches to the real storage profile; migration
+none (volatile data is disposable). Tests per TEST_STRATEGY (append-only on
+disk, replay determinism, corrupted-file honesty, no secrets in files). No
+real adapters yet, no worktree manager, no paid calls.
+
+**Superseded next-prompt record (Prompt 5, now complete):** implement
 `src/relay/cli` as a THIN client per UI_VISION.md — `node:util.parseArgs`,
 esbuild-bundled like the backend (`dist-relay/cli.cjs`); commands to create
 a project/run, drive the simulated vertical slice, respond to checkpoints,

@@ -322,3 +322,66 @@ adapter maps extended verdict vocabulary onto the two protocol verdicts.
 
 **Exact next step:** *Prompt 5 — Relay CLI (terminal client of Relay
 Core)* per CURRENT_STATE §Next prompt — the July 24 demo surface.
+
+---
+
+## 2026-07-22 — Prompt 5: Terminal CLI Client (July 24 demo surface)
+
+**Timestamp:** 2026-07-22 ~06:40 → 07:30 UTC.
+
+**Objective:** first user-facing terminal client on Relay Core + the
+simulation harness — thin client, serializable boundary, truthful
+simulation/volatile labeling, July 24 demo commands.
+
+**Preflight:** clean at 802cfb5; Prompt 4 verified live (scenarios 20/20);
+no read models existed → added at the core boundary, never in the CLI.
+
+**Files created:** `src/relay/core/read-models.ts`, `src/relay/core/app.ts`
+(composition root + scenario registry), `src/relay/cli/` — main.ts,
+interactive.ts, render.ts, exit-codes.ts, index.ts, cli.test.ts,
+`docs/relay/CLI.md`. **Files modified:** core/index.ts,
+relay-core-boundary.test.ts (CLI thin-client rules + composition-root
+exemption + import-precise prototype scan), package.json (additive
+scripts: relay:build / relay / relay:test), PROTOCOL/TEST_STRATEGY sync
+notes pending in doc? (No — CLI is a client; protocol unchanged),
+CURRENT_STATE.md, SESSION_LOG.md. **Prototype + protocol contracts
+untouched.**
+
+**Key decisions:** read models + facade live in core (Decision 9 — clients
+render only serializable data); `core/app.ts` is the ONE approved
+composition root (boundary test names it); interactive blueprint approval
+issues the canonical accept-blueprint command (auto-accept = recorded
+system actor, demo only); demo choreography for cancel/pause-resume/stale
+acts MID-run (a post-completion cancel would be a dishonest demo); exit
+codes never use 0 for incomplete work; facade type renamed conflict-free
+(RelayApp interface ≠ prototype component — boundary scan made
+import-precise).
+
+**Dependencies:** none added (node:util.parseArgs + node:readline;
+no CLI/color/spinner libraries).
+
+**Verification (exact):** relay suite **234/234** (24 files; 13 new CLI
+tests); full repository **1823/1823** (141 files); typecheck clean;
+frontend + backend + relay bundles green. Bundled CLI manually verified:
+help/version; `demo repair` → completed exit 0 with 1/1 repairs and
+simulation notice; checkpoint/duplicate/failure → 5; budget-stop → 7;
+cancel → 6; stale → 5; pause-resume → 0 with real mid-run pause; `--json`
+parses clean (no ANSI, no secret shapes); doctor truthful, exit 0; unknown
+scenario → exit 2.
+**Failures + repairs (one per root cause):** cancel/pause-resume/stale
+demos originally completed before choreography → mid-run stepping; CLI
+boundary walk flagged its own test file + the composition root + a name
+collision with the prototype component → walk scoped to production files,
+app.ts exemption named, prototype scan made import-precise; parseArgs
+`--max-cost -1` ambiguity → `=` syntax in test.
+
+**Security:** no provider/paid calls, no credentials/secrets (doctor
+prints names only — verified by test), no shell/Git by Relay, no real
+repository modification, no deployment, no push.
+
+**Known limitations:** volatile storage (no cross-process resume — CLI
+says so); interactive mode uses process readline (tested via the pure
+handler); blueprint rejection maps to canonical run cancellation.
+
+**Exact next step:** *Prompt 6 — Durable Local Persistence and Real
+Cross-Process Resume* per CURRENT_STATE §Next prompt.

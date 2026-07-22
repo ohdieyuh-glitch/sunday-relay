@@ -17,6 +17,7 @@ const CORE_ROOTS = [
   'protocol', 'core', 'ledger', 'storage', 'testing',
   'coordination', 'handoff', 'verification', 'recovery',
 ] as const;
+const CLI_ROOT = 'cli';
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -73,6 +74,26 @@ describe('relay-core boundary (new module roots)', () => {
     }
   });
 
+  it('CLI is a thin client: only the app facade, read-model types, protocol, and its own modules', () => {
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|node:util|node:readline)['"]/;
+    for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
+      const content = read(file);
+      const imports = [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
+      for (const imp of imports) {
+        expect(ALLOWED.test(`from '${imp}'`), `${file} imports ${imp} — CLI must stay a thin client`).toBe(true);
+      }
+      // No workflow internals ever:
+      expect(/from\s+['"]\.\.\/(ledger|coordination|handoff|verification|recovery)\//.test(content), `${file} imports workflow internals`).toBe(false);
+      expect(/from\s+['"]\.\.\/core\/(run-machine|task-machine|orchestrator|read-models)/.test(content), `${file} imports core internals directly`).toBe(false);
+      expect(/from\s+['"]\.\.\/storage\//.test(content), `${file} imports storage directly`).toBe(false);
+      expect(/from\s+['"]\.\.\/connectors\//.test(content), `${file} imports adapters directly`).toBe(false);
+    }
+    // And core/protocol never import the CLI back:
+    for (const file of files) {
+      expect(/from\s+['"].*\/cli\//.test(read(file)), `${file} imports the CLI`).toBe(false);
+    }
+  });
+
   it('recovery contains no provider-reassignment implementation', () => {
     for (const file of walk(relay('recovery')).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
@@ -81,7 +102,11 @@ describe('relay-core boundary (new module roots)', () => {
   });
 
   it('relay-core and relay-ledger depend only on protocol + storage INTERFACES (never the in-memory adapter)', () => {
-    const productionFiles = [...walk(relay('core')), ...walk(relay('ledger'))].filter((f) => !f.endsWith('.test.ts'));
+    // core/app.ts is the ONE approved composition root (Prompt 5): it may
+    // compose the volatile stores for the simulation profile.
+    const productionFiles = [...walk(relay('core')), ...walk(relay('ledger'))].filter(
+      (f) => !f.endsWith('.test.ts') && !f.endsWith('core/app.ts'),
+    );
     for (const file of productionFiles) {
       const content = read(file);
       expect(/from\s+['"]\.\.\/storage\/memory/.test(content), `${file} imports the volatile adapter`).toBe(false);
@@ -133,7 +158,7 @@ describe('L — security invariants', () => {
     for (const file of files) {
       const content = read(file);
       expect(/from\s+['"]\.\.\/(domain|state)\//.test(content), `${file} imports prototype modules`).toBe(false);
-      expect(/RelayApp|StagePanel|PipelineRail/.test(content), `${file} references prototype UI`).toBe(false);
+      expect(/from\s+['\"].*\/(RelayApp|StagePanel|PipelineRail)['\"]|StagePanel|PipelineRail/.test(content), `${file} references prototype UI`).toBe(false);
     }
   });
 
