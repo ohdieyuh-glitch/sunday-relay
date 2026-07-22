@@ -191,3 +191,36 @@ mascot animation, Digital Twins, or an IDE. This phase only documents the UI
 architecture, identifies the UI-facing data contracts above, confirms
 normalized events can power the interface, confirms all clients share one
 Relay Core, and reserves clean boundaries for future implementation.
+
+## 11. Manual Task placement (added Prompt 6.1, 2026-07-22 — future UI only)
+
+Manual Task is the user-facing form of a checkpoint that needs a human
+action. The CLI ships it now; this section reserves the graphical placement
+(still not built, per §10).
+
+**Desktop** — near the primary run controls:
+
+```
+[ Manual Task · 1 ]  [ Pause ]  [ Cancel ]
+```
+
+- Quiet or disabled when no task exists.
+- Restrained Sunday-gold outline when a task is active (never the only
+  indicator — the label carries the state, per §2).
+- Opens ONE focused task sheet; no permanent dashboard panel.
+- The `· 1` count badge is reserved for the future; the MVP exposes exactly
+  one active Manual Task per run.
+
+**Mobile** — a sticky action near the bottom of the active Relay run:
+
+```
+MANUAL TASK
+```
+
+**The Manual Task sheet/screen contains only:** title · why Relay stopped ·
+steps · expected result · security notice when needed · what Relay will do
+next · Done · I need help · I cannot do this · Cancel run.
+
+**Never placed on the Manual Task surface:** the full Blueprint, the entire
+Ledger, agent transcripts, the full event feed, large code diffs, or
+internal protocol data. It is a task card for a person, not a console.

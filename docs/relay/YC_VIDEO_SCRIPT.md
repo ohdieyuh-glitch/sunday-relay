@@ -27,6 +27,11 @@ anonymous spend control isn't proven."
 bounded repair — same agent, same session, same scope, nothing widened —
 then re-verifies everything and sends it back for independent review."
 
+**Supporting beat — Manual Task (one sentence, placed wherever it fits;
+Prompt 6.1)**
+"When Relay reaches something only a person should do, it stops and gives
+the user a few simple steps instead of guessing or bypassing security."
+
 **65–80 s** (FINAL AUDIT + RELAY COMPLETE)
 "Only now — evidence verified, review approved, every claim promoted with
 proof — does Relay mark the task complete, with a full audit trail.

@@ -2,8 +2,9 @@ import { createRelayApp, SCENARIOS, type RelayApp } from '../core/app';
 import type { IdFactory } from '../protocol/ids';
 import {
   badge, mascot, mascotStateFor, renderAudit, renderBlueprint, renderBrain,
-  renderCheckpoint, renderEvent, renderEvidence, renderHandoff, renderReview,
-  renderStatus, renderTask, renderUsage, welcome, type RenderOptions,
+  renderCheckpoint, renderEvent, renderEvidence, renderHandoff,
+  renderManualTask, renderManualTaskHelp, renderReview, renderStatus,
+  renderTask, renderUsage, welcome, type RenderOptions,
 } from './render';
 
 /**
@@ -36,8 +37,10 @@ const HELP = [
   '  <text>            set the objective and create the run (before start)',
   '  /start /step /continue        drive the workflow through Relay Core',
   '  /status /events /project /task /ownership /blueprint /handoff',
-  '  /evidence /review /usage /checkpoint /audit   inspect read models',
+  '  /evidence /review /usage /checkpoint /manual /audit   inspect read models',
   '  /approve /reject <reason>     answer blueprint or checkpoint decisions',
+  '  /done /manual-help /cannot-complete [note]   answer a Manual Task',
+  '  (D / H / N / C also work while a Manual Task is shown)',
   '  /pause /resume /cancel        run control',
   '  /scenario [name]              show or switch scenario (before start)',
   '  /mascot on|off  /color on|off|auto  /json on|off  /clear /help /exit',
@@ -77,13 +80,44 @@ export function createSession(options: SessionOptions): Session {
     return [`Run created for objective: ${objective}`, 'Use /continue (or /step) to proceed.', ...newEvents()];
   };
 
+  // D/H/N/C shortcuts stay inert unless a Manual Task is actually awaiting
+  // the user (never global one-letter commands).
+  const manualPromptActive = (): boolean => {
+    if (!app) return false;
+    const view = app.manualTask();
+    return app.status()?.status === 'checkpoint_required' && !!view && view.availableResponses.length > 0;
+  };
+
+  const respondManual = (response: 'done' | 'help' | 'cannot', note?: string): string[] => {
+    if (!app || !manualPromptActive()) return [`${badge('WAIT')} No manual task is awaiting a response.`];
+    if (response === 'help') {
+      const result = app.respondManualTask('help');
+      if (!result.ok) return [`${badge('FAIL')} ${result.error.message}`];
+      return [...renderManualTaskHelp(app), ...newEvents()];
+    }
+    const result = app.respondManualTask(response, note);
+    if (!result.ok) return [`${badge('FAIL')} ${result.error.message}`];
+    const lines = [...newEvents()];
+    const status = app.status();
+    if (response === 'done') {
+      if (status?.status === 'active') lines.push('', 'Relay checked the result. Use /continue to let it finish.');
+      else lines.push('', ...renderManualTask(app));
+    }
+    lines.push(...mascotLines());
+    return lines;
+  };
+
   const drive = (mode: 'step' | 'continue'): string[] => {
     if (!app) return [`${badge('WAIT')} No run yet — enter an objective first.`];
     const result = mode === 'step' ? app.step() : app.continueRun();
     if (!result.ok) return [`${badge('FAIL')} ${result.error.message}`];
     const lines = [...newEvents()];
     const status = app.status();
-    if (status?.checkpoint && !status.checkpoint.respondedAt) lines.push('', ...renderCheckpoint(app));
+    if (status?.checkpoint && !status.checkpoint.respondedAt) {
+      // A Manual Task shows itself automatically when the run stops there.
+      if (app.manualTask()) lines.push('', ...renderManualTask(app));
+      else lines.push('', ...renderCheckpoint(app));
+    }
     if (status?.status === 'active' && status.phase === 'blueprint' && app.blueprint()?.approvalStatus === 'awaiting-approval') {
       lines.push('', ...renderBlueprint(app), '', `${badge('WAIT')} Blueprint awaits your decision: /approve or /reject <reason>.`);
     }
@@ -114,6 +148,15 @@ export function createSession(options: SessionOptions): Session {
     handleLine(raw: string): SessionResult {
       const line = raw.trim();
       if (line === '') return { lines: [] };
+      // Manual Task choice shortcuts — ONLY while the prompt is active.
+      if (/^[dhnc]$/i.test(line) && manualPromptActive()) {
+        const letter = line.toLowerCase();
+        if (letter === 'd') return { lines: respondManual('done') };
+        if (letter === 'h') return { lines: respondManual('help') };
+        if (letter === 'n') return { lines: respondManual('cannot') };
+        const cancelled = app!.cancel('cancelled by user from the manual task prompt');
+        return { lines: cancelled.ok ? ['Cancelled.', ...newEvents()] : [`${badge('FAIL')} ${cancelled.error.message}`] };
+      }
       if (!line.startsWith('/')) {
         if (app) return { lines: [`${badge('INFO')} Run already exists — use /status, /continue, or /exit.`] };
         return { lines: startRun(line) };
@@ -144,6 +187,10 @@ export function createSession(options: SessionOptions): Session {
         case '/review': return { lines: app ? renderReview(app) : ['No run yet.'] };
         case '/usage': return { lines: app ? renderUsage(app) : ['No run yet.'] };
         case '/checkpoint': return { lines: app ? renderCheckpoint(app) : ['No run yet.'] };
+        case '/manual': return { lines: app ? renderManualTask(app) : ['No run yet.'] };
+        case '/done': return { lines: respondManual('done') };
+        case '/manual-help': return { lines: respondManual('help') };
+        case '/cannot-complete': return { lines: respondManual('cannot', arg || undefined) };
         case '/audit': return { lines: app ? renderAudit(app) : ['No run yet.'] };
         case '/approve': return { lines: respond('approve') };
         case '/reject': return { lines: respond('reject', arg || undefined) };

@@ -2,7 +2,8 @@ import { RELAY_PROTOCOL_VERSION, checkProtocolVersion } from './version';
 import { relayError, fail, ok, type RelayResult } from './errors';
 import type {
   BlueprintId, CheckpointId, ClaimId, ContextVersion, EventId, LedgerVersion,
-  PackageId, ProjectId, QuestionId, ReportId, RunId, SessionRefId, TaskId,
+  ManualRequestId, ManualTaskId, PackageId, ProjectId, QuestionId, ReportId,
+  RunId, SessionRefId, TaskId,
 } from './ids';
 import type { Classification, EventSource, Provenance, ReportType, Role } from './enums';
 import {
@@ -36,6 +37,7 @@ export const COMMAND_TYPES = [
   'resume-run',
   'cancel-run',
   'respond-checkpoint',
+  'respond-manual-task',
   'answer-open-question',
   'set-budget',
   'assign-agent',
@@ -110,6 +112,16 @@ const COMMAND_PAYLOADS: Record<CommandType, Check> = {
   'respond-checkpoint': objectOf({
     required: { runId: id('run'), checkpointId: id('ckp'), response: lit('approve', 'reject') },
     optional: { note: str() },
+  }),
+  // Cancel is NOT a manual-task response: it stays the canonical cancel-run.
+  'respond-manual-task': objectOf({
+    required: {
+      runId: id('run'),
+      checkpointId: id('ckp'),
+      manualTaskId: id('mtk'),
+      response: lit('done', 'help', 'cannot'),
+    },
+    optional: { note: str({ max: 2000 }) },
   }),
   'answer-open-question': objectOf({ required: { questionId: id('oqn'), answer: str() } }),
   'set-budget': objectOf({ required: { runId: id('run'), budget: budgetShape } }),
@@ -305,6 +317,12 @@ export const RELAY_EVENT_KINDS = [
   'file_claim.created', 'file_claim.released', 'file_claim.expired',
   // usage & policy
   'usage.updated', 'budget.warning', 'budget.exceeded', 'permission.denied', 'policy.checkpoint_required',
+  // manual task (Prompt 6.1)
+  'manual.action_requested', 'manual.request_validated', 'manual.request_rejected',
+  'manual.task_created', 'manual.response_recorded',
+  'manual.verification_started', 'manual.verification_passed',
+  'manual.verification_failed', 'manual.verification_unavailable',
+  'manual.task_completed', 'manual.task_cancelled',
   // audit
   'audit.report_created',
 ] as const;
@@ -319,6 +337,8 @@ export interface EventRefs {
   claimId?: ClaimId;
   checkpointId?: CheckpointId;
   questionId?: QuestionId;
+  manualTaskId?: ManualTaskId;
+  manualRequestId?: ManualRequestId;
   evidenceIds?: string[];
 }
 
@@ -378,6 +398,8 @@ const eventShape: Shape = {
         claimId: id('clm'),
         checkpointId: id('ckp'),
         questionId: id('oqn'),
+        manualTaskId: id('mtk'),
+        manualRequestId: id('mrq'),
         evidenceIds: arr(str()),
       },
     }),

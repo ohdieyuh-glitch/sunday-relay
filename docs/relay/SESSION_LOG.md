@@ -435,3 +435,82 @@ never claimed otherwise).
 
 **Exact next step:** record the YC video per YC_DEMO_RUNBOOK.md; then
 *Post-YC: Durable Local Persistence and Real Cross-Process Resume*.
+
+---
+
+## 2026-07-22 — Prompt 6.1: Manual Task Checkpoint Experience
+
+**Timestamp:** 2026-07-22 ~12:30 → 13:05 UTC.
+
+**Objective:** the final bounded product addition before the July 24
+recording — Manual Task as the extremely simple user-facing form of an
+EXISTING Relay checkpoint that requires a human action. No persistence, no
+live adapters, no CLI redesign, no second checkpoint engine, YC demo
+semantically untouched.
+
+**Preflight:** clean at fa57193; `relay:yc:verify` passed; `relay:yc`
+exit 0; `demo checkpoint` reached CHECKPOINT REQUIRED; relay suite 239/239.
+
+**Architecture:** ManualTask is a canonical payload on the existing
+`Checkpoint` (`Checkpoint.manualTask?`) — the single checkpoint slot IS the
+one-active-task-per-run enforcement. Flow: adapter returns untrusted
+`manualActionRequest: unknown` on its result port → protocol shape gate
+(`checkManualActionRequest`) → core semantic validation + compilation
+(`src/relay/core/manual-task.ts`, the ONLY compiler) → `raise-checkpoint`
+intent carries the task → `respond-manual-task {done|help|cannot}` command
+(cancel = canonical `cancel-run`) → Done recorded as a claim →
+`record-manual-verification` intent applies Relay's configured verification
+(passed → completed + core-approved resume; failed → needs_more_information,
+stopped; unavailable → honest disclosure + operator `/approve`).
+
+**Files created:** `src/relay/core/manual-task.ts`,
+`src/relay/core/manual-task.test.ts`, `src/relay/relay-manual-task.test.ts`,
+`src/relay/cli/manual.test.ts`, `scripts/relay-manual-verify.mjs`.
+**Files modified:** protocol `ids/enums/contracts/envelopes` (mtk_/mrq_
+prefixes; category/status enums; ManualActionRequest + ManualTask contracts;
+`respond-manual-task` command; `manual.*` event family; audit
+`manualTasks[]`), `core/run-machine.ts` (manual-task transitions incl.
+cancel/approve closure), `core/orchestrator.ts` (request interception,
+Done→verification, audit summary, `manualVerificationOutcomes` seam),
+`core/read-models.ts` (+manualTaskView), `core/app.ts` (+`manual` scenario,
+respondManualTask/manualTask facade, test-only overrides seam),
+`connectors/ports.ts` + `connectors/simulated.ts` (untrusted request seam),
+`cli/render.ts` (+renderManualTask/Help), `cli/interactive.ts` (/manual
+/done /manual-help /cannot-complete + prompt-scoped D/H/N/C + auto
+display), `cli/main.ts` (manual choreography, JSON `manualTask`),
+`package.json` (+relay:manual, relay:manual:verify), protocol.test.ts +
+relay-core-boundary.test.ts (additive), docs (PROTOCOL sync, CLI.md,
+UI_VISION §11, YC_VIDEO_SCRIPT supporting beat, CURRENT_STATE, this log).
+
+**Dependencies:** none added.
+
+**Verification (exact):** `npm run relay:manual:verify` passed (double-run
+semantic acceptance: completed + exit 0, task completed + verification
+passed, checkpoint association, 3–6 short steps, milestone ordering, no
+agent dispatch while stopped, monotonic sequences, clean JSON, no secrets,
+no repo modifications, stable semantics). `npm run relay:yc:verify`
+**passed twice after the change** (semantic outcome unchanged). Relay suite
+**279/279** (27 files; 40 new: 19 domain/machine, 8 lifecycle/ledger/audit,
+10 CLI, 3 additive boundary); full repository **1868/1868** (145 files);
+typecheck + frontend/backend build (`tsc -b && vite build`) + relay bundle
+green. Failures + repairs (one per root cause): full-output 80-column
+assertion caught pre-existing >80 event-feed lines → scoped to the Manual
+Task block (the spec's surface); two strict-build test-type errors (unused
+import, string vs event-kind union) → removed/widened.
+
+**Security:** manual requests treated as untrusted input end to end;
+rejected requests never rendered and their content never persisted;
+secret-shape/stack-trace/internal-id rejection tested; no secret values in
+CLI output, JSON, ledger, or audit (asserted); no provider/paid calls, no
+credentials, no shell/Git through Relay, no repository modification by
+demos (verified programmatically), no deployment, no push.
+
+**Known limitations:** volatile storage (manual tasks do not survive the
+process — CLI says so); `verifying` is never a resting status (verification
+applies synchronously); one Manual Task per run by design (count badge
+reserved in UI_VISION §11); operator `/approve` on a pending task closes it
+as `cancelled` — never fakes completion.
+
+**Exact next step:** record the YC video per YC_DEMO_RUNBOOK.md (main demo
+`npm run relay:yc`; supporting `npm run relay:manual`); then *Post-YC:
+Durable Local Persistence and Real Cross-Process Resume*.

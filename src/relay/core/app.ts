@@ -9,7 +9,8 @@ import type { CompletionPolicy, PermissionPolicy } from '../protocol/contracts';
 import type { PolicyId } from '../protocol/ids';
 import {
   auditView, blueprintView, eventFeedView, evidenceView, handoffView,
-  projectBrainView, reviewView, runStatusView, taskOwnershipView, usageView,
+  manualTaskView, projectBrainView, reviewView, runStatusView,
+  taskOwnershipView, usageView,
 } from './read-models';
 
 /**
@@ -26,7 +27,7 @@ export interface ScenarioDefinition {
   scenario: ScenarioConfig;
   configOverrides?: Partial<OrchestratorConfig>;
   /** Demo choreography markers consumed by the CLI demo runner. */
-  choreography?: 'duplicate' | 'stale' | 'pause-resume' | 'cancel';
+  choreography?: 'duplicate' | 'stale' | 'pause-resume' | 'cancel' | 'manual';
   /** Presentation fixture content (displayed context only — the simulator
    * never claims the real feature was implemented). */
   displayObjective?: string;
@@ -92,6 +93,33 @@ export const SCENARIOS: Record<string, ScenarioDefinition> = {
     scenario: { usdPerStep: 0.01 },
     choreography: 'cancel',
   },
+  manual: {
+    name: 'manual',
+    description: 'Manual Task — a protected setting needs the user; simple steps, then verified resume.',
+    scenario: {
+      reviewerAttempt1: 'approved',
+      usdPerStep: 0.01,
+      manualActionRequest: {
+        reason: 'This setting can affect production. Relay is not allowed to change it without you.',
+        requestedAction: 'Approve a protected setting',
+        category: 'protected_resource',
+        applicationOrLocation: 'Project settings',
+        proposedSteps: [
+          'Open the project settings.',
+          'Open "Access."',
+          'Review the requested change.',
+          'Choose "Approve."',
+          'Return to Relay.',
+          'Choose "Done."',
+        ],
+        expectedResult: 'The change shows as approved.',
+        verificationMethod: 'simulated-setting-check',
+      },
+    },
+    choreography: 'manual',
+    displayObjective: 'Demonstrate a Manual Task: Relay stops at a protected setting and asks the user for help (SIMULATED).',
+    taskObjective: 'Demonstrate the Manual Task checkpoint flow (SIMULATED — no real settings are read or changed).',
+  },
   yc: {
     name: 'yc',
     description: 'YC presentation preset — golden path with one bounded repair (SIMULATED).',
@@ -154,6 +182,9 @@ export interface RelayAppOptions {
   /** Deterministic seams for tests; production uses real clock/random ids. */
   ids?: IdFactory;
   now?: () => string;
+  /** Test-only deterministic overrides layered onto the registered scenario
+   * (e.g. a failing manual verification). The CLI never sets these. */
+  overrides?: { scenario?: Partial<ScenarioConfig>; config?: Partial<OrchestratorConfig> };
 }
 
 export interface RelayApp {
@@ -169,6 +200,8 @@ export interface RelayApp {
   resume(): RelayResult<{ status: string }>;
   cancel(reason: string): RelayResult<{ status: string }>;
   respondCheckpoint(response: 'approve' | 'reject', note?: string): RelayResult<{ status: string }>;
+  /** Manual Task responses (Prompt 6.1). Cancel stays the canonical cancel(). */
+  respondManualTask(response: 'done' | 'help' | 'cannot', note?: string): RelayResult<{ status: string }>;
   /** For the duplicate/stale demo choreography only. */
   startSecondEquivalentRun(): RelayResult<{ runId: RunId }>;
   moveBaseRevision(to: string): void;
@@ -182,6 +215,7 @@ export interface RelayApp {
   review(): ReturnType<typeof reviewView>;
   usage(): ReturnType<typeof usageView> | null;
   audit(): ReturnType<typeof auditView>;
+  manualTask(): ReturnType<typeof manualTaskView>;
 }
 
 /** The simulation profile's completion policy: simulated evidence is
@@ -211,7 +245,7 @@ export function createRelayApp(options: RelayAppOptions): RelayResult<RelayApp> 
   const stores: InMemoryRelayStores = createInMemoryRelayStores({ acknowledgeVolatile: true });
   const ids = options.ids ?? createRandomIdFactory();
   const now = options.now ?? (() => new Date().toISOString());
-  const adapters = createSimulatedAdapters(definition.scenario);
+  const adapters = createSimulatedAdapters({ ...definition.scenario, ...(options.overrides?.scenario ?? {}) });
   const config: OrchestratorConfig = {
     completionPolicy: SIMULATION_COMPLETION_POLICY,
     permissionPolicy: SIMULATION_PERMISSION_POLICY,
@@ -223,6 +257,7 @@ export function createRelayApp(options: RelayAppOptions): RelayResult<RelayApp> 
     costEstimatePerStep: { usd: 0.01 },
     autoAcceptBlueprint: !options.interactiveBlueprint,
     ...(definition.configOverrides ?? {}),
+    ...(options.overrides?.config ?? {}),
     ...(options.maxCostUsd !== undefined ? { budget: { maxUsd: options.maxCostUsd, warningAtFraction: 0.8, missingEstimate: 'checkpoint' as const } } : {}),
   };
   const orchestrator: Orchestrator = createOrchestrator({ stores, adapters, ids, clock: { now }, config });
@@ -328,6 +363,17 @@ export function createRelayApp(options: RelayAppOptions): RelayResult<RelayApp> 
       if (!checkpoint) return fail(relayError('not-found', 'No checkpoint awaiting a response.'));
       return userCommand('respond-checkpoint', { runId, checkpointId: checkpoint.checkpointId, response, ...(note ? { note } : {}) });
     },
+    respondManualTask(response, note) {
+      const checkpoint = runId ? stores.runs.get(runId)?.checkpoint : null;
+      if (!checkpoint?.manualTask) return fail(relayError('not-found', 'No manual task awaiting a response.'));
+      return userCommand('respond-manual-task', {
+        runId,
+        checkpointId: checkpoint.checkpointId,
+        manualTaskId: checkpoint.manualTask.manualTaskId,
+        response,
+        ...(note ? { note } : {}),
+      });
+    },
 
     startSecondEquivalentRun() {
       const setup = orchestrator.setup({
@@ -357,6 +403,7 @@ export function createRelayApp(options: RelayAppOptions): RelayResult<RelayApp> 
     review: () => (runId ? reviewView(stores, runId, verdicts) : []),
     usage: () => (runId ? usageView(stores, runId) : null),
     audit: () => (runId ? auditView(stores, runId) : null),
+    manualTask: () => (runId ? manualTaskView(stores, runId) : null),
   };
   return ok(app);
 }

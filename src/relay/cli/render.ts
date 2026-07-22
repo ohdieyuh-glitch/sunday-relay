@@ -239,6 +239,79 @@ export function renderCheckpoint(app: App): string[] {
   ];
 }
 
+/** Wrap text at a terminal-safe width (80-column recordings never clip). */
+const wrapText = (text: string, width = 78): string[] => {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let current = '';
+  for (const word of words) {
+    if ((current + ' ' + word).trim().length > width) {
+      lines.push(current.trim());
+      current = word;
+    } else current = `${current} ${word}`;
+  }
+  if (current.trim()) lines.push(current.trim());
+  return lines;
+};
+
+/** Manual Task screen (Prompt 6.1). Pure presentation of the read model —
+ * the CLI never decides safety, verification, or resume. Simple enough to
+ * follow without knowing any command. */
+export function renderManualTask(app: App): string[] {
+  const v = app.manualTask();
+  if (!v) return ['No manual task pending.'];
+  const lines: string[] = [
+    'MANUAL TASK',
+    '',
+    'Relay needs your help.',
+    '',
+    `${v.title}`,
+    '',
+    'Why Relay stopped:',
+    ...wrapText(v.whyRelayStopped).map((l) => `  ${l}`),
+  ];
+  const active = ['pending', 'user_marked_done', 'needs_more_information'].includes(v.status);
+  if (active) lines.push('  The run is stopped safely.');
+  lines.push('', 'Do this:', '');
+  v.steps.forEach((step: string, i: number) => lines.push(`  ${i + 1}. ${step}`));
+  if (v.securityNotice) {
+    lines.push('', 'Security note:', ...wrapText(v.securityNotice).map((l) => `  ${l}`));
+  }
+  lines.push('', 'What Relay will do next:', ...wrapText(v.whatRelayWillDoNext).map((l) => `  ${l}`));
+  if (v.verification.lastOutcome === 'failed') {
+    lines.push('', '  Relay could not confirm the result yet.', '  Try the steps again, then choose Done.');
+  }
+  if (v.verification.operatorConfirmationRequired) {
+    lines.push('', '  Relay cannot check this automatically.', '  Confirm what changed with /approve to continue.');
+  }
+  if (v.status === 'cannot_complete') {
+    lines.push('', '  You said you cannot do this. The work is stopped safely.', '  Options: /approve to close it, or /cancel to stop the run.');
+  }
+  if (v.status === 'completed') {
+    lines.push('', `${badge('PASS')} This manual task is complete.`);
+  }
+  if (v.availableResponses.includes('done')) {
+    lines.push(
+      '',
+      'Choose:',
+      '',
+      '  [D] Done',
+      '  [H] I need help',
+      '  [N] I cannot do this',
+      '  [C] Cancel run',
+    );
+  }
+  return lines;
+}
+
+/** Deterministic simpler guidance for "I need help" — compiled by Relay
+ * Core into the read model; the CLI only displays it. */
+export function renderManualTaskHelp(app: App): string[] {
+  const v = app.manualTask();
+  if (!v) return ['No manual task pending.'];
+  return ['HELP', '', ...v.helpText.map((l: string) => `  ${l}`), '', 'The run stays safely stopped while you decide.'];
+}
+
 export function renderAudit(app: App): string[] {
   const v = app.audit();
   if (!v) return ['No final audit yet (the run has not completed).'];

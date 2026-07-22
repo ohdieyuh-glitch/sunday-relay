@@ -6,7 +6,7 @@ import { createSession } from './interactive';
 import { buildPresentationFrames } from './presentation';
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-import { detectRenderOptions, renderAudit, renderEvent, welcome, badge, type RenderOptions } from './render';
+import { detectRenderOptions, renderAudit, renderEvent, renderManualTask, welcome, badge, type RenderOptions } from './render';
 import { EXIT, exitCodeForFinalStatus } from './exit-codes';
 
 /**
@@ -202,6 +202,17 @@ export function runScenarioToCompletion(input: {
     emit([`${badge('INFO')} Repository moved to a new revision under the compiled handoff…`]);
     app.moveBaseRevision('rev-moved-by-demo');
     doContinue();
+  } else if (definition.choreography === 'manual') {
+    // Manual Task demo: the run REALLY stopped at the checkpoint; the demo
+    // choreography plays the user choosing "Done", honestly labeled.
+    if (app.manualTask()) {
+      emit(['', ...renderManualTask(app)]);
+      emit(['', `${badge('INFO')} Demo choreography: the user completes the steps and chooses "Done".`]);
+      const responded = app.respondManualTask('done');
+      if (!responded.ok) emit([`${badge('FAIL')} ${responded.error.message}`]);
+      drain();
+      doContinue();
+    }
   }
 
   const status = app.status();
@@ -209,7 +220,8 @@ export function runScenarioToCompletion(input: {
   const audit = app.audit();
   if (audit) emit(['', ...renderAudit(app)]);
   if (status?.checkpoint && !status.checkpoint.respondedAt) {
-    emit(['', 'CHECKPOINT REQUIRED', `  ${status.checkpoint.reason}`, '  Automatic work has stopped.']);
+    if (app.manualTask()) emit(['', ...renderManualTask(app)]);
+    else emit(['', 'CHECKPOINT REQUIRED', `  ${status.checkpoint.reason}`, '  Automatic work has stopped.']);
   }
   const exitCode = exitCodeForFinalStatus(finalStatus, status?.checkpoint?.reason ?? null);
   const jsonPayload = {
@@ -221,6 +233,7 @@ export function runScenarioToCompletion(input: {
     exitCode,
     status,
     audit,
+    manualTask: app.manualTask(),
     events: app.events(0),
     usage: app.usage(),
   };

@@ -36,6 +36,8 @@ export type CheckpointId = Branded<'ckp'>;
 export type ArtifactId = Branded<'art'>;
 export type SessionRefId = Branded<'ses'>;
 export type WorkspaceRefId = Branded<'wsp'>;
+export type ManualTaskId = Branded<'mtk'>;
+export type ManualRequestId = Branded<'mrq'>;
 export type CommandId = Branded<'cmd-free'>;
 export type QueryId = Branded<'qry-free'>;
 export type CorrelationId = Branded<'cor-free'>;
@@ -51,7 +53,7 @@ export const PREFIXES = {
   bnd: 'bnd_', rpt: 'rpt_', blu: 'blu_', vrf: 'vrf_', flr: 'flr_', dcn: 'dcn_',
   apr: 'apr_', oqn: 'oqn_', use: 'use_', aud: 'aud_', clm: 'clm_', asn: 'asn_',
   dsg: 'dsg_', pol: 'pol_', hcr: 'hcr_', ckp: 'ckp_', art: 'art_', ses: 'ses_',
-  wsp: 'wsp_',
+  wsp: 'wsp_', mtk: 'mtk_', mrq: 'mrq_',
 } as const;
 
 export type IdPrefix = keyof typeof PREFIXES;

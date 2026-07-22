@@ -67,6 +67,11 @@ export interface CodingAgentResult {
   sessionRef: SessionRefId;
   usage: UsageRecord[];
   events: EventDraft[];
+  /** UNTRUSTED request for human action (Prompt 6.1). Deliberately typed
+   * `unknown`: an adapter can ASK for help but can never publish user
+   * instructions — Relay Core validates the shape and semantics and alone
+   * compiles the canonical ManualTask, or rejects the request. */
+  manualActionRequest?: unknown;
 }
 
 export interface CodingAgentAdapterPort {

@@ -34,8 +34,8 @@ Global options: `--json` (clean machine JSON, no ANSI, no mascot),
 color automatically; everything works in pure ASCII.
 
 Scenarios: `direct, repair, checkpoint, duplicate, stale, failure,
-budget-warning, budget-stop, pause-resume, cancel` (mapped 1:1 onto the
-Prompt-4 scenario configurations — the CLI holds no scenario logic).
+budget-warning, budget-stop, pause-resume, cancel, manual, yc` (mapped 1:1
+onto the scenario configurations — the CLI holds no scenario logic).
 
 **Exit codes:** 0 completed · 1 internal · 2 usage · 3 failed · 4 blocked ·
 5 checkpoint_required · 6 cancelled · 7 budget stop · 8 doctor failure ·
@@ -44,8 +44,9 @@ Prompt-4 scenario configurations — the CLI holds no scenario logic).
 ## Interactive commands
 
 `/help /start /step /continue /status /events /project /task /ownership
-/blueprint /handoff /evidence /review /usage /checkpoint /audit /approve
-/reject <reason> /pause /resume /cancel /scenario [name] /mascot on|off
+/blueprint /handoff /evidence /review /usage /checkpoint /manual /audit
+/approve /reject <reason> /done /manual-help /cannot-complete [note]
+/pause /resume /cancel /scenario [name] /mascot on|off
 /color on|off /json on|off /clear /exit` — plain text before a run starts
 becomes the objective. All state changes go through Relay Core commands;
 the CLI contains zero workflow logic (boundary-tested).
@@ -59,6 +60,18 @@ demo commands) record a system-actor acceptance instead — honestly labeled.
 **Checkpoints:** `checkpoint_required` renders the reason and options;
 `/approve` / `/reject` issue the real `respond-checkpoint` command — Relay
 Core decides what approval permits.
+
+**Manual Tasks (Prompt 6.1):** when a validated checkpoint carries a Manual
+Task, the CLI shows it automatically (title · why Relay stopped · three-to-
+six simple steps · what Relay will do next). `/manual` re-displays it;
+`/done`, `/manual-help`, `/cannot-complete [note]` issue the real
+`respond-manual-task` command, and `/cancel` stays the canonical run
+cancellation. While the task prompt is active, the single letters `D` `H`
+`N` `C` answer it (inert everywhere else). Done is recorded as a claim;
+Relay runs the configured verification and Relay Core alone decides whether
+the run resumes. When no verification exists, the CLI says so and operator
+`/approve` confirms. JSON mode returns the serializable Manual Task read
+model (no ANSI, no mascot, no secret values).
 
 **Mascot:** a 3-line ASCII pixel dog whose label (`LISTENING`, `AGENT
 WORKING`, `CHECKPOINT`, `COMPLETE`, …) derives from the real run state;
@@ -78,11 +91,26 @@ repair, same-session resume, independent reviewer, audit + simulation
 notice, clean JSON, stable milestone ordering, no repo modifications).
 See YC_DEMO_RUNBOOK.md and YC_VIDEO_SCRIPT.md.
 
+## Manual Task demonstration (Prompt 6.1 — separate from the YC demo)
+
+`npm run relay:manual` (equivalently `relay demo manual`) — a deterministic
+Manual Task scenario through the REAL core: the simulated agent requests a
+protected-setting approval → Relay validates the untrusted request →
+`checkpoint_required` with a canonical Manual Task → simple instructions →
+demo choreography answers "Done" (honestly labeled) → Relay verification
+passes → the run resumes and completes (exit 0). Instant by default;
+`--pace 0` accepted. `npm run relay:manual:verify` runs it twice and checks
+semantic acceptance (completed, task completed + verified, 3–6 short steps,
+checkpoint association, no agent dispatch while stopped, event ordering,
+clean JSON, no secrets, no repo modifications). The main `npm run relay:yc`
+demonstration is unchanged.
+
 ## July 24 demonstration sequence
 
 ```bash
 npm run relay:yc                  # THE YC demo (presentation mode, exit 0)
 npm run relay:yc:verify           # acceptance verification (run before takes)
+npm run relay:manual              # supporting demo: Manual Task stop → Done → verified resume (exit 0)
 npm run relay -- demo repair      # golden path: 1 failing check → review →
                                   # ONE same-session repair → approval → audit (exit 0)
 npm run relay -- demo checkpoint  # unsafe repair → Guided stop (exit 5)

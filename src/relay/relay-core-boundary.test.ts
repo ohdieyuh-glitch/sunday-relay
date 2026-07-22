@@ -128,6 +128,39 @@ describe('relay-core boundary (new module roots)', () => {
   });
 });
 
+describe('Manual Task boundaries (Prompt 6.1)', () => {
+  const cliFiles = walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'));
+  const connectorFiles = walk(relay('connectors')).filter((f) => !f.endsWith('.test.ts'));
+
+  it('the CLI never decides manual-task safety, verification, or resume', () => {
+    for (const file of cliFiles) {
+      const content = read(file);
+      expect(/from\s+['"]\.\.\/core\/manual-task/.test(content), `${file} imports the manual-task compiler`).toBe(false);
+      expect(/compileManualTask|validateManualTaskText|looksLikeSecret/.test(content), `${file} contains manual-task decision logic`).toBe(false);
+      expect(/record-manual-verification/.test(content), `${file} drives manual verification`).toBe(false);
+      expect(/validatedByRelay\s*:\s*true/.test(content), `${file} constructs a canonical ManualTask`).toBe(false);
+    }
+  });
+
+  it('adapters may request human help but never publish or compile user instructions', () => {
+    for (const file of connectorFiles) {
+      const content = read(file);
+      expect(/from\s+['"]\.\.\/(core|ledger|cli)\//.test(content), `${file} imports orchestration modules`).toBe(false);
+      expect(/compileManualTask/.test(content), `${file} compiles manual tasks`).toBe(false);
+      expect(/validatedByRelay/.test(content), `${file} claims relay validation`).toBe(false);
+    }
+    // The port keeps the request untrusted by construction.
+    expect(read(relay('connectors/ports.ts'))).toContain('manualActionRequest?: unknown');
+  });
+
+  it('the untrusted-request gate exists at the protocol boundary and in core', () => {
+    expect(read(relay('protocol/contracts.ts'))).toContain('checkManualActionRequest');
+    const compiler = read(relay('core/manual-task.ts'));
+    expect(compiler).toContain('checkManualActionRequest');
+    expect(compiler).toContain('rejected');
+  });
+});
+
 describe('L — security invariants', () => {
   const CREDENTIAL_FIELD = /\b(apiKey|api_key|accessToken|access_token|refreshToken|clientSecret|privateKey|password|bearer)\b\s*[:?]/;
 

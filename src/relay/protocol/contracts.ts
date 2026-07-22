@@ -2,19 +2,23 @@ import type {
   ApprovalId, ArtifactId, AssignmentId, AuditId, BlueprintId, BundleId,
   CheckpointId, ClaimId, CompilationRecordId, ContextVersion, DecisionId,
   DisagreementId, EvidenceId, FailureId, IdempotencyKey, LedgerVersion,
-  PackageId, PolicyId, ProjectId, QuestionId, ReportId, RunId, SessionRefId,
-  TaskId, UsageId, VerificationId, WorkspaceRefId,
+  ManualRequestId, ManualTaskId, PackageId, PolicyId, ProjectId, QuestionId,
+  ReportId, RunId, SessionRefId, TaskId, UsageId, VerificationId, WorkspaceRefId,
 } from './ids';
 import type {
   AuditOutcome, Classification, Enforcement, EvidenceStatus, FindingSeverity,
-  Provenance, ProvenanceProfile, ReportType, ReviewVerdict, RiskLevel, Role,
-  RunMode, RunPhase, RunStatus, TaskStatus,
+  ManualTaskCategory, ManualTaskStatus, Provenance, ProvenanceProfile,
+  ReportType, ReviewVerdict, RiskLevel, Role, RunMode, RunPhase, RunStatus,
+  TaskStatus,
 } from './enums';
 import {
   arr, bool, freeId, id, iso, lit, metadata, num, objectOf, rejectHiddenReasoning,
   str, versionNum, type Check,
 } from './validate';
-import { ENFORCEMENT_LEVELS, EVIDENCE_STATUSES, FINDING_SEVERITIES, ROLES } from './enums';
+import {
+  ENFORCEMENT_LEVELS, EVIDENCE_STATUSES, FINDING_SEVERITIES,
+  MANUAL_TASK_CATEGORIES, ROLES,
+} from './enums';
 
 /* ================================================================== */
 /* A. FULLY IMPLEMENTED (Prompt 2) — internal entities                 */
@@ -59,6 +63,70 @@ export interface Checkpoint {
   respondedAt?: string;
   response?: 'approve' | 'reject';
   approvalId?: ApprovalId;
+  /** Prompt 6.1: the canonical Manual Task carried by this checkpoint when
+   * the stop needs a human action. NEVER adapter-authored — only Relay Core
+   * compiles it from a validated ManualActionRequest. The single checkpoint
+   * slot is what enforces one active Manual Task per run. */
+  manualTask?: ManualTask;
+}
+
+/* ----- Manual Task (Prompt 6.1) ----- */
+
+/** UNTRUSTED external input: an adapter/workflow asking for human action.
+ * Validated at the protocol boundary (shape) and by Relay Core (semantics)
+ * before anything user-facing exists. Never rendered directly. */
+export interface ManualActionRequest {
+  requestId: ManualRequestId;
+  projectId: ProjectId;
+  runId: RunId;
+  relayTaskId: TaskId;
+  /** Adapter identity claiming the need — checked against the assignment. */
+  requestedBy: string;
+  reason: string;
+  requestedAction: string;
+  category: ManualTaskCategory;
+  applicationOrLocation: string;
+  proposedSteps: string[];
+  expectedResult: string;
+  /** Must name a verification Relay actually knows, or be absent. */
+  verificationMethod?: string;
+  requestedPermissions: string[];
+  createdAt: string;
+}
+
+/** CANONICAL user-facing task, compiled by Relay Core only (validatedByRelay
+ * is structurally always true). Text fields passed the deterministic
+ * simplicity/safety validation; no secret values are ever stored here. */
+export interface ManualTask {
+  manualTaskId: ManualTaskId;
+  projectId: ProjectId;
+  runId: RunId;
+  relayTaskId: TaskId;
+  checkpointId: CheckpointId;
+  title: string;
+  whyRelayStopped: string;
+  category: ManualTaskCategory;
+  applicationOrLocation: string;
+  steps: string[];
+  expectedResult: string;
+  proofRequired: boolean;
+  proofInstructions?: string;
+  securityNotice?: string;
+  whatRelayWillDoNext: string;
+  /** Deterministic simpler guidance shown on "I need help". */
+  helpText: string[];
+  status: ManualTaskStatus;
+  requestedBy: string;
+  validatedByRelay: true;
+  verificationAvailable: boolean;
+  canResumeAfterCompletion: boolean;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  cancelledAt?: string;
+  /** Recorded from "I cannot do this". */
+  blockerNote?: string;
+  lastVerificationOutcome?: 'passed' | 'failed' | 'unavailable';
 }
 
 export interface RelayRun {
@@ -508,6 +576,18 @@ export interface FinalAuditReport {
   completionReason?: string;
   /** Mandatory honesty note whenever provenanceProfile !== 'live'. */
   simulationNotice?: string;
+  /** Prompt-6.1 additive audit detail: Manual Task history for this run.
+   * Never contains secret values — only canonical summaries. */
+  manualTasks?: Array<{
+    manualTaskId: ManualTaskId;
+    title: string;
+    category: ManualTaskCategory;
+    status: ManualTaskStatus;
+    responses: string[];
+    verification: 'passed' | 'failed' | 'unavailable' | 'none';
+    resumedAfterCompletion: boolean;
+    blocking: boolean;
+  }>;
 }
 
 /* ================================================================== */
@@ -659,6 +739,31 @@ export const checkAgentHandoffPackage: Check = objectOf({
   },
   optional: { expiresAt: iso(), correlationId: freeId() },
 });
+
+/** ManualActionRequests are untrusted external input (SECURITY §1). Shape
+ * gate only — semantic safety (association, secrets, simplicity, policy)
+ * lives in relay-core, which alone compiles the canonical ManualTask. */
+export const checkManualActionRequest: Check = (value, field) => {
+  const shape = objectOf({
+    required: {
+      requestId: id('mrq'),
+      projectId: id('prj'),
+      runId: id('run'),
+      relayTaskId: id('tsk'),
+      requestedBy: str({ max: 200 }),
+      reason: str({ max: 2000 }),
+      requestedAction: str({ max: 500 }),
+      category: lit(...MANUAL_TASK_CATEGORIES),
+      applicationOrLocation: str({ max: 500 }),
+      proposedSteps: arr(str({ max: 2000 }), { minLen: 1 }),
+      expectedResult: str({ max: 2000 }),
+      requestedPermissions: arr(str({ max: 500 })),
+      createdAt: iso(),
+    },
+    optional: { verificationMethod: str({ max: 200 }) },
+  });
+  return [...shape(value, field), ...rejectHiddenReasoning(value, field)];
+};
 
 export const checkRevisionContract: Check = objectOf({
   required: {

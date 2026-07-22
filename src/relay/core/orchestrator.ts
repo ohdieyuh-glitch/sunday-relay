@@ -2,12 +2,13 @@ import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
 import { RELAY_PROTOCOL_VERSION } from '../protocol/version';
 import { parseCommand, type CommandEnvelope, type EventDraft, type ReportEnvelope } from '../protocol/envelopes';
 import type {
-  AgentHandoffPackage, Blueprint, BudgetPolicy, CompletionPolicy, FinalAuditReport,
-  LoopPolicy, PermissionPolicy, RelayProject, RelayRun, RelayTask,
+  AgentHandoffPackage, Blueprint, BudgetPolicy, CompletionPolicy, EvidenceRecord,
+  FinalAuditReport, LoopPolicy, PermissionPolicy, RelayProject, RelayRun, RelayTask,
   ReviewerVerdictRecord, RevisionContract, StoppingCondition, TaskAssignment,
 } from '../protocol/contracts';
-import type { ClaimId, ContextVersion, EventId, IdFactory, LedgerVersion, RunId, SessionRefId, TaskId } from '../protocol/ids';
+import type { ClaimId, ContextVersion, EventId, EvidenceId, IdFactory, LedgerVersion, RunId, SessionRefId, TaskId } from '../protocol/ids';
 import { transitionRun, type RunAction } from './run-machine';
+import { compileManualTask, looksLikeSecret } from './manual-task';
 import { appendEvent, currentLedgerVersion, listEvents } from '../ledger/ledger';
 import { promoteClaim, recordClaim } from '../ledger/promotion';
 import { assignTask } from '../coordination/ownership';
@@ -52,6 +53,9 @@ export interface OrchestratorConfig {
   /** Structured facts for the repair-condition evaluation (simulation
    * scenarios configure these; live adapters will derive them). */
   repairPlanFacts?: Partial<RepairPlanFacts>;
+  /** Manual-task verification outcome per Done attempt (Prompt 6.1) —
+   * deterministic scenario data; index = attempt number. Default: passed. */
+  manualVerificationOutcomes?: Array<'passed' | 'failed' | 'unavailable'>;
 }
 
 export interface Orchestrator {
@@ -161,6 +165,107 @@ export function createOrchestrator(deps: {
 
   const raiseCheckpoint = (run: RelayRun, reason: string): RelayResult<RelayRun> =>
     applyTransition(run, { intent: 'raise-checkpoint', reason }, {});
+
+  /* -------- Manual Task (Prompt 6.1) -------- */
+
+  const manualEvent = (
+    run: RelayRun, taskId: TaskId | undefined, kind: EventDraft['kind'],
+    safeSummary: string, extra: Partial<EventDraft> = {},
+  ): EventDraft => ({
+    protocolVersion: RELAY_PROTOCOL_VERSION, at: clock.now(), projectId: run.projectId,
+    runId: run.runId, taskId, source: 'relay-core', kind, provenance: 'simulated',
+    classification: 'historical', safeSummary, payload: {}, ...extra,
+  });
+
+  /** An adapter asked for human action. The request is UNTRUSTED: record
+   * it, let Relay Core validate/compile, and either raise the manual-task
+   * checkpoint or reject without ever surfacing the raw request. */
+  function handleManualActionRequest(
+    run: RelayRun, task: RelayTask, request: unknown,
+  ): RelayResult<{ action: string; run: RelayRun; done: boolean }> {
+    const recorded = persistEvents([
+      manualEvent(run, task.taskId, 'manual.action_requested',
+        'Agent requested human action (recorded as an untrusted request).',
+        { source: 'coding-agent', classification: 'unverified-claim' }),
+    ]);
+    if (!recorded.ok) return recorded;
+    const compiled = compileManualTask({
+      request, run, task,
+      expectedRequestedBy: adapters.codingAgent.descriptor.adapterId,
+      ids, now: clock.now(),
+    });
+    if (!compiled.ok) {
+      const reasons = (compiled.error.details ?? [compiled.error.message])
+        .slice(0, 10)
+        .map((reason) => (looksLikeSecret(reason) ? '[redacted]' : reason));
+      const rejectedEvent = persistEvents([
+        manualEvent(run, task.taskId, 'manual.request_rejected',
+          'Manual action request rejected — it will not be shown to the user.',
+          { classification: 'derived', payload: { reasons } }),
+      ]);
+      if (!rejectedEvent.ok) return rejectedEvent;
+      const checkpointed = raiseCheckpoint(
+        run,
+        'An agent requested human action, but the request was rejected as unsafe or malformed. Automatic work has stopped safely.',
+      );
+      if (!checkpointed.ok) return checkpointed;
+      return ok({ action: 'checkpoint:manual-request-rejected', run: checkpointed.value, done: true });
+    }
+    const { manualTask } = compiled.value;
+    const validated = persistEvents([
+      manualEvent(run, task.taskId, 'manual.request_validated',
+        'Manual action request validated — canonical manual task compiled.',
+        { classification: 'derived', payload: { category: manualTask.category } }),
+    ]);
+    if (!validated.ok) return validated;
+    const next = applyTransition(
+      run,
+      { intent: 'raise-checkpoint', reason: `Manual task required: ${manualTask.title}`, manualTask },
+      {},
+    );
+    if (!next.ok) return next;
+    return ok({ action: 'checkpoint:manual-task', run: next.value, done: true });
+  }
+
+  /** Done is a claim, not evidence: Relay runs the configured deterministic
+   * verification (or discloses that none exists) and the machine decides. */
+  function verifyManualTask(run: RelayRun): RelayResult<RelayRun> {
+    const task = run.checkpoint?.manualTask;
+    if (!task || task.status !== 'user_marked_done') return ok(run);
+    const attempt = listEvents(stores.events, run.projectId).filter(
+      (e) => e.kind === 'manual.verification_started' && e.refs?.manualTaskId === task.manualTaskId,
+    ).length;
+    const refs = { checkpointId: run.checkpoint!.checkpointId, manualTaskId: task.manualTaskId };
+    const started = persistEvents([
+      manualEvent(run, task.relayTaskId, 'manual.verification_started',
+        'Relay verification of the manual task started.', { refs }),
+    ]);
+    if (!started.ok) return started;
+    const outcome: 'passed' | 'failed' | 'unavailable' = !task.verificationAvailable
+      ? 'unavailable'
+      : config.manualVerificationOutcomes?.[attempt] ?? 'passed';
+    let evidenceId: EvidenceId | undefined;
+    if (outcome !== 'unavailable') {
+      const record: EvidenceRecord = {
+        evidenceId: ids.next('evd'),
+        taskId: task.relayTaskId, runId: run.runId,
+        source: adapters.verification.descriptor.adapterId,
+        evidenceType: 'health-check',
+        outputExcerpt: outcome === 'passed'
+          ? 'SIMULATED manual-task check: the configured verification confirmed the result.'
+          : 'SIMULATED manual-task check: the configured verification did not confirm the result.',
+        executedAt: clock.now(),
+        environment: { os: 'sim-linux', node: 'sim-20', cwd: '/simulated/workspace' },
+        repoRevision: config.baseRevision,
+        verificationStatus: outcome,
+        verifier: adapters.verification.descriptor.adapterId,
+        provenance: 'simulated',
+      };
+      stores.evidence.put(record.evidenceId, record);
+      evidenceId = record.evidenceId;
+    }
+    return applyTransition(run, { intent: 'record-manual-verification', outcome, evidenceId }, {});
+  }
 
   /** Budget gate before EVERY simulated agent dispatch. */
   function budgetGate(run: RelayRun, what: string): RelayResult<'allowed' | 'stopped'> {
@@ -380,6 +485,11 @@ export function createOrchestrator(deps: {
         bag(runId).claims.push(recorded.value.claimId);
         const next = applyTransition(run, { intent: 'record-report', reportType: isRepair ? 'repair' : 'implementation', reportId: result.value.report.reportId, provenance: result.value.report.provenance }, {});
         if (!next.ok) return next;
+        // Manual Task (Prompt 6.1): the agent may have asked for human
+        // action — handle inside this same step while the run is active.
+        if (result.value.manualActionRequest !== undefined) {
+          return handleManualActionRequest(next.value, ctx.task, result.value.manualActionRequest);
+        }
         return ok({ action: isRepair ? 'agent:repair-report' : 'agent:implementation-report', run: next.value, done: false });
       }
       const request: CommandEnvelope = {
@@ -626,6 +736,24 @@ export function createOrchestrator(deps: {
       remainingIssues: [],
       completionReason: 'CompletionPolicy satisfied with Relay-produced evidence and independent approval.',
       simulationNotice: run.provenanceProfile === 'live' ? undefined : 'SIMULATED workflow — no real repository was modified and no real commands were executed.',
+      ...(run.checkpoint?.manualTask
+        ? {
+            manualTasks: [
+              {
+                manualTaskId: run.checkpoint.manualTask.manualTaskId,
+                title: run.checkpoint.manualTask.title,
+                category: run.checkpoint.manualTask.category,
+                status: run.checkpoint.manualTask.status,
+                responses: listEvents(stores.events, run.projectId)
+                  .filter((e) => e.kind === 'manual.response_recorded' && e.refs?.manualTaskId === run.checkpoint!.manualTask!.manualTaskId)
+                  .map((e) => String((e.payload as { response?: unknown }).response ?? '')),
+                verification: run.checkpoint.manualTask.lastVerificationOutcome ?? 'none',
+                resumedAfterCompletion: run.checkpoint.manualTask.status === 'completed',
+                blocking: run.checkpoint.manualTask.status !== 'completed' && run.checkpoint.manualTask.status !== 'cancelled',
+              },
+            ],
+          }
+        : {}),
     };
     stores.audits.put(audit.auditId, audit);
     const latestVerification = { ...verification, checks: completion.requirements.map((r) => ({ id: r.requirement, label: r.requirement, status: 'passed' as const, detail: r.detail })) };
@@ -714,6 +842,13 @@ export function createOrchestrator(deps: {
       if (!run) return fail(relayError('not-found', 'Run not found.', { entityIds: { runId } }));
       const next = applyTransition(run, cmd, {});
       if (!next.ok) return next;
+      // A Done claim immediately enters Relay-controlled verification; the
+      // machine (never the client) decides whether the run resumes.
+      if (cmd.commandType === 'respond-manual-task' && (cmd.payload as { response?: unknown }).response === 'done') {
+        const verified = verifyManualTask(next.value);
+        if (!verified.ok) return verified;
+        return ok({ run: verified.value });
+      }
       return ok({ run: next.value });
     },
   };

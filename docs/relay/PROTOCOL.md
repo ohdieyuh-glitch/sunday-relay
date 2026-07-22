@@ -1,5 +1,24 @@
 # Relay Protocol — `relay.protocol.v1` (specification)
 
+> **Implementation sync (Prompt 6.1, 2026-07-22):** Manual Task checkpoints
+> are implemented in `src/relay/core/manual-task.ts` on the EXISTING
+> checkpoint architecture (no second checkpoint state or engine). Additive
+> deltas: id prefixes `mtk_` (ManualTask) + `mrq_` (ManualActionRequest);
+> `Checkpoint` gained optional `manualTask` (the canonical, core-compiled
+> user-facing task — one active per run via the single checkpoint slot);
+> command set gained `respond-manual-task {done|help|cannot}` (cancel stays
+> the canonical `cancel-run`); event taxonomy gained the `manual.*` family
+> (action_requested / request_validated / request_rejected / task_created /
+> response_recorded / verification_started / verification_passed / _failed /
+> _unavailable / task_completed / task_cancelled); run-machine intents
+> gained `record-manual-verification` and `raise-checkpoint` accepts the
+> compiled task; FinalAuditReport gained optional `manualTasks[]`.
+> ManualActionRequests are UNTRUSTED adapter input: shape-gated by
+> `checkManualActionRequest`, semantically validated + compiled by Relay
+> Core only (adapters can ask for help, never publish user instructions).
+> Done is a claim — Relay verification (or explicit operator confirmation
+> when verification is unavailable) decides completion and resume.
+
 > **Implementation sync (Prompt 4, 2026-07-22):** the simulation harness and
 > orchestrated vertical slice are implemented in `src/relay/connectors`
 > (ports + four deterministic simulation adapters, provenance `simulated`

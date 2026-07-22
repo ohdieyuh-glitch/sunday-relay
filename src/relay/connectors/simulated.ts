@@ -45,6 +45,12 @@ export interface ScenarioConfig {
   /** Presentation fixture: the reviewer's blocking finding content (still
    * SIMULATED — deterministic scenario data, never a real review). */
   reviewerFinding?: { id: string; title: string; detail: string; recommendation?: string };
+  /** Manual Task fixture (Prompt 6.1): content of the UNTRUSTED
+   * ManualActionRequest the simulated coding agent raises alongside its
+   * implementation report. Ids/identity are stamped from the dispatch
+   * context; Relay Core still validates everything — invalid fixtures are
+   * rejected exactly like invalid real requests. */
+  manualActionRequest?: Record<string, unknown>;
 }
 
 const SIM_NOTICE = 'SIMULATED run — no real repository was read or modified; no real commands were executed.';
@@ -206,6 +212,21 @@ export function createSimulatedCodingAgent(scenario: ScenarioConfig): CodingAgen
       const parsed = parseReport(raw);
       if (!parsed.ok) return parsed;
       const base = { projectId: pkg.projectId, runId: pkg.runId, taskId: task.taskId };
+      // Manual Task fixture: the adapter only ASKS — ids/identity stamped
+      // here, every content field stays untrusted until Relay Core validates.
+      const manualActionRequest =
+        scenario.manualActionRequest && !revision
+          ? {
+              requestId: context.ids.next('mrq'),
+              projectId: pkg.projectId,
+              runId: pkg.runId,
+              relayTaskId: task.taskId,
+              requestedBy: d.adapterId,
+              createdAt: context.now,
+              requestedPermissions: [],
+              ...scenario.manualActionRequest,
+            }
+          : undefined;
       return ok({
         report: parsed.value,
         sessionRef,
@@ -214,6 +235,7 @@ export function createSimulatedCodingAgent(scenario: ScenarioConfig): CodingAgen
           event(base, context, 'coding-agent', attempt === 1 ? 'agent.session_started' : 'agent.session_resumed', `Simulated session ${attempt === 1 ? 'started' : 'resumed'} (${sessionRef}).`),
           event(base, context, 'coding-agent', scenario.agentBlocked && !revision ? 'agent.blocked' : 'agent.report_created', scenario.agentBlocked && !revision ? 'Simulated agent blocked.' : `Simulated ${revision ? 'repair' : 'implementation'} report (attempt ${attempt}). Claims only — not evidence.`),
         ],
+        ...(manualActionRequest !== undefined ? { manualActionRequest } : {}),
       });
     },
   };

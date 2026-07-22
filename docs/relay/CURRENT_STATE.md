@@ -1,12 +1,58 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-22 09:05 UTC** (Prompt 6 complete —
-> YC demo hardening; the July 24 demo is `npm run relay:yc`).
+> boundary. Last updated: **2026-07-22 13:05 UTC** (Prompt 6.1 complete —
+> Manual Task checkpoint experience; the July 24 demo is `npm run relay:yc`,
+> with `npm run relay:manual` as the supporting Manual Task demo).
 
 ## Phase
 
-**Prompt 6 — YC Demo Hardening and Presentation Preset: COMPLETE**
+**Prompt 6.1 — Manual Task Checkpoint Experience: COMPLETE**
+(2026-07-22 13:05 UTC). The final bounded product addition before the
+July 24 recording, built ON the existing checkpoint architecture (no second
+checkpoint state, engine, or store — the single `RelayRun.checkpoint` slot
+carries the one active Manual Task per run):
+- **Untrusted request flow:** the coding-agent port gained
+  `manualActionRequest?: unknown` — an adapter may ASK for human help but
+  never publishes instructions. Relay shape-gates the request
+  (`checkManualActionRequest`, strict + hidden-reasoning rejection) and
+  `src/relay/core/manual-task.ts` semantically validates it (association,
+  run state, requester identity, safety-bypass/destructive/credential-into-
+  Relay denylists, permission truthfulness, known verification methods,
+  secret-shape + stack-trace rejection) and alone compiles the canonical
+  ManualTask. Rejected requests are never shown to the user (generic safe
+  checkpoint reason; content never persisted).
+- **Extreme simplicity, deterministically validated:** title ≤ 7 words,
+  why ≤ 2 short sentences, 3–6 one-action steps ≤ 90 chars, no jargon
+  denylist hits, no internal ids; core-compiled security notice for
+  credential categories, per-category deterministic help text, and an
+  always-present "what Relay will do next" line (honest when verification
+  is unavailable).
+- **Responses:** `respond-manual-task {done|help|cannot}` (+ canonical
+  `cancel-run`). Done records a CLAIM, then Relay runs the configured
+  deterministic verification (`manualVerificationOutcomes` seam): passed →
+  task completed + core-approved resume; failed → `needs_more_information`,
+  run stays stopped; unavailable → honestly disclosed, operator `/approve`
+  confirms. Machine intent `record-manual-verification`; supporting
+  health-check evidence recorded by Relay. No agent dispatch while a task
+  is pending or verifying.
+- **CLI:** automatic Manual Task screen at the checkpoint, `/manual`,
+  `/done`, `/manual-help`, `/cannot-complete [note]`, and D/H/N/C single
+  letters active ONLY at the task prompt; 80-column, plain/no-color/JSON
+  safe (JSON = serializable read model, no ANSI/mascot/secrets).
+- **Ledger + audit:** full `manual.*` event history (request → validation →
+  creation → responses → verification → completion/cancellation) and the
+  additive `FinalAuditReport.manualTasks[]` summary.
+- **Demo:** `npm run relay:manual` / `relay demo manual` — real core end to
+  end (stop → simple steps → Done → verified → resume → complete, exit 0);
+  `npm run relay:manual:verify` (double-run semantic acceptance, mirrors
+  the YC verifier). `npm run relay:yc` is semantically unchanged
+  (verified twice post-change).
+- **Docs:** UI_VISION §11 (future desktop/mobile placement),
+  YC_VIDEO_SCRIPT supporting sentence, CLI.md Manual Task sections,
+  PROTOCOL.md Prompt-6.1 sync.
+
+**Prior phase — Prompt 6 — YC Demo Hardening and Presentation Preset: COMPLETE**
 (2026-07-22 09:05 UTC). Added on top of the unchanged workflow:
 - **`yc` scenario** in the registry: presentation objective ("Finish
   Sunday's anonymous live-access activation safely…"), 13-check simulated

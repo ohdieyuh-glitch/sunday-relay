@@ -74,6 +74,7 @@ describe('commands', () => {
     'resume-run': { runId: fixedId('run') },
     'cancel-run': { runId: fixedId('run'), reason: 'operator stop' },
     'respond-checkpoint': { runId: fixedId('run'), checkpointId: fixedId('ckp'), response: 'approve' },
+    'respond-manual-task': { runId: fixedId('run'), checkpointId: fixedId('ckp'), manualTaskId: fixedId('mtk'), response: 'done' },
     'answer-open-question': { questionId: fixedId('oqn'), answer: 'yes' },
     'set-budget': { runId: fixedId('run'), budget: { maxUsd: 1 } },
     'assign-agent': { runId: fixedId('run'), role: 'reviewer', adapterId: 'sim-reviewer' },
@@ -95,6 +96,9 @@ describe('commands', () => {
       ['resume-run', {}], // no run reference
       ['cancel-run', { runId: fixedId('run') }], // no reason
       ['accept-blueprint', { runId: fixedId('run') }],
+      // cancel is NOT a manual-task response (canonical cancel-run only)
+      ['respond-manual-task', { runId: fixedId('run'), checkpointId: fixedId('ckp'), manualTaskId: fixedId('mtk'), response: 'cancel' }],
+      ['respond-manual-task', { runId: fixedId('run'), checkpointId: fixedId('ckp'), response: 'done' }], // no manual task ref
     ];
     for (const [type, payload] of bad) {
       const result = parseCommand(makeCommand(type as never, payload));
@@ -198,7 +202,7 @@ describe('events and queries', () => {
   });
 
   it('kind taxonomy covers every documented category', () => {
-    for (const prefix of ['run.', 'architect.', 'handoff.', 'agent.', 'reviewer.', 'verification.', 'ledger.', 'task.', 'file_claim.', 'usage.', 'budget.', 'policy.', 'audit.']) {
+    for (const prefix of ['run.', 'architect.', 'handoff.', 'agent.', 'reviewer.', 'verification.', 'ledger.', 'task.', 'file_claim.', 'usage.', 'budget.', 'policy.', 'manual.', 'audit.']) {
       expect(RELAY_EVENT_KINDS.some((k) => k.startsWith(prefix)), `kinds for ${prefix}`).toBe(true);
     }
   });

@@ -158,3 +158,51 @@ export function auditView(stores: RelayStores, runId: RunId) {
   const audit = stores.audits.list().find((a) => a.runId === runId);
   return audit ? clone(audit) : null;
 }
+
+/** Manual Task read model (Prompt 6.1). Serializable projection of the
+ * canonical task riding the run's checkpoint — never secrets, never the
+ * raw request. availableResponses is core policy, not a client decision. */
+export function manualTaskView(stores: RelayStores, runId: RunId) {
+  const run = runOf(stores, runId);
+  const task = run?.checkpoint?.manualTask;
+  if (!run || !task) return null;
+  const availableResponses =
+    task.status === 'pending' || task.status === 'needs_more_information'
+      ? ['done', 'help', 'cannot', 'cancel']
+      : task.status === 'user_marked_done'
+        ? ['help', 'cannot', 'cancel']
+        : task.status === 'cannot_complete'
+          ? ['cancel']
+          : [];
+  return clone({
+    manualTaskId: task.manualTaskId,
+    checkpointId: task.checkpointId,
+    runId: task.runId,
+    taskId: task.relayTaskId,
+    title: task.title,
+    whyRelayStopped: task.whyRelayStopped,
+    category: task.category,
+    applicationOrLocation: task.applicationOrLocation,
+    steps: task.steps,
+    expectedResult: task.expectedResult,
+    securityNotice: task.securityNotice ?? null,
+    whatRelayWillDoNext: task.whatRelayWillDoNext,
+    helpText: task.helpText,
+    status: task.status,
+    requestedBy: task.requestedBy,
+    validatedByRelay: task.validatedByRelay,
+    verification: {
+      available: task.verificationAvailable,
+      lastOutcome: task.lastVerificationOutcome ?? null,
+      operatorConfirmationRequired:
+        task.status === 'user_marked_done' && task.lastVerificationOutcome === 'unavailable',
+    },
+    availableResponses,
+    canResumeAfterCompletion: task.canResumeAfterCompletion,
+    blockerNote: task.blockerNote ?? null,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    completedAt: task.completedAt ?? null,
+    cancelledAt: task.cancelledAt ?? null,
+  });
+}

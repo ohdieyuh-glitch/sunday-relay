@@ -126,3 +126,41 @@ export type ReportType = (typeof REPORT_TYPES)[number];
 
 export const RISK_LEVELS = ['low', 'high'] as const;
 export type RiskLevel = (typeof RISK_LEVELS)[number];
+
+/** Manual Task (Prompt 6.1) — why Relay needs the human. Additive enum;
+ * categories beyond the bounded deterministic scenario carry no special
+ * behavior yet (only sign_in/provide_credential force a security notice). */
+export const MANUAL_TASK_CATEGORIES = [
+  'sign_in',
+  'provide_credential',
+  'approve_cost',
+  'approve_permission',
+  'protected_resource',
+  'destructive_action',
+  'external_dashboard',
+  'operating_system_permission',
+  'product_decision',
+  'agent_disagreement',
+  'unsupported_action',
+  'missing_information',
+  'other',
+] as const;
+export type ManualTaskCategory = (typeof MANUAL_TASK_CATEGORIES)[number];
+
+/** Manual Task lifecycle. `verifying` never rests (verification is applied
+ * synchronously by Relay Core after Done) and `expired` needs a clock policy
+ * (deferred) — both are intentionally absent from this MVP set. */
+export const MANUAL_TASK_STATUSES = [
+  'pending',
+  'user_marked_done',
+  'needs_more_information',
+  'completed',
+  'cannot_complete',
+  'cancelled',
+] as const;
+export type ManualTaskStatus = (typeof MANUAL_TASK_STATUSES)[number];
+
+/** Statuses in which the single per-run Manual Task still binds the run. */
+export const ACTIVE_MANUAL_TASK_STATUSES = [
+  'pending', 'user_marked_done', 'needs_more_information', 'cannot_complete',
+] as const;
