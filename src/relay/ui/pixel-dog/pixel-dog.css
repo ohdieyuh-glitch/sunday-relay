@@ -1,6 +1,6 @@
-/* Pixel Relay Dog — shared visual language for Entry Home + Workspace.
-   Motion is opt-in via .rpd--moving and always disabled under
-   prefers-reduced-motion. */
+/* Pixel Relay Dog — founder sprite: bone-white robot dog, dark visor, gold
+   eyes, gold collar, glowing perspective grid floor. Motion is opt-in via
+   .rpd--moving and always disabled under prefers-reduced-motion. */
 
 .rpd {
   margin: 0;
@@ -21,12 +21,15 @@
 .rpd-art {
   display: block;
   image-rendering: pixelated;
+  position: relative;
+  z-index: 1;
 }
 
 .rpd-marker {
   position: absolute;
   top: -6px;
   right: 0;
+  z-index: 2;
   font-family: 'Fira Code', ui-monospace, monospace;
   font-size: 14px;
   line-height: 1;
@@ -37,24 +40,26 @@
 .rpd-marker--question { color: #d9a441; }
 .rpd-marker--scan { color: #9ec9e8; }
 
-/* Perspective grid floor — early-network-computer horizon under the dog. */
+/* Glowing perspective grid floor — the system horizon under the dog. */
 .rpd-floor {
   position: absolute;
   left: 50%;
-  bottom: -14px;
-  width: 220px;
-  height: 44px;
-  transform: translateX(-50%) perspective(120px) rotateX(58deg);
+  bottom: -18px;
+  width: 300px;
+  max-width: 70vw;
+  height: 64px;
+  transform: translateX(-50%) perspective(140px) rotateX(58deg);
   transform-origin: center top;
   background-image:
-    linear-gradient(rgba(217, 164, 65, 0.28) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(217, 164, 65, 0.28) 1px, transparent 1px);
-  background-size: 18px 12px;
-  -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 30%, transparent 78%);
-  mask-image: radial-gradient(ellipse at 50% 0%, #000 30%, transparent 78%);
+    radial-gradient(ellipse at 50% 0%, rgba(217, 164, 65, 0.22), transparent 62%),
+    linear-gradient(rgba(217, 164, 65, 0.4) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(217, 164, 65, 0.4) 1px, transparent 1px);
+  background-size: 100% 100%, 22px 14px, 22px 14px;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 0%, #000 26%, transparent 76%);
+  mask-image: radial-gradient(ellipse at 50% 0%, #000 26%, transparent 76%);
   pointer-events: none;
 }
-.rpd--floored { padding-bottom: 18px; }
+.rpd--floored { padding-bottom: 22px; }
 
 .rpd-caption {
   display: flex;
@@ -97,8 +102,9 @@
   }
 }
 
-.rpd-mark {
-  display: inline-block;
+.rpd-markwrap {
+  display: inline-flex;
+  align-items: center;
   vertical-align: middle;
-  image-rendering: pixelated;
 }
+.rpd-markwrap .rpd-art { image-rendering: pixelated; }

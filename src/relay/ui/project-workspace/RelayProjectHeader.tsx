@@ -3,9 +3,10 @@ import { OUTPUT_STATE_LABEL } from './projections';
 import type { WorkspaceOutputState, WorkspaceProject } from './contracts';
 
 /**
- * Compact browser-app header for the Active Project Workspace. Product
- * identity + project identity + global controls. No marketing navigation —
- * the developer is inside the product supervising a configured project.
+ * Top application frame — founder-screenshot language: pixel dog mark +
+ * letterspaced SUNDAY RELAY at left, project identity with the outlined
+ * [ RLY / 001 ] chip in the center, system controls at right. No marketing
+ * navigation — the developer is inside the product.
  */
 export function RelayProjectHeader({
   project,
@@ -25,44 +26,31 @@ export function RelayProjectHeader({
   return (
     <header className="rpw-header">
       <div className="rpw-header-left">
-        <span className="rpw-mark" aria-hidden="true">
-          <RelayDogMark unit={2} />
+        <RelayDogMark unit={3} />
+        <span className="rpw-wordmark" aria-label="SUNDAY RELAY">
+          <span className="rpw-wordmark-sunday" aria-hidden="true">SUNDAY</span>{' '}
+          <span className="rpw-wordmark-relay" aria-hidden="true">RELAY</span>
         </span>
-        <span className="rpw-wordmark">SUNDAY RELAY</span>
-        <nav className="rpw-switcher" aria-label="Product switcher">
-          <button type="button" className="rpw-switch-btn" onClick={onReturnHome}>
-            ← RELAY HOME
-          </button>
-          <span className="rpw-switch-btn is-active" aria-current="page">
-            WORKSPACE
-          </span>
-        </nav>
+        <button type="button" className="rpw-switch-btn" onClick={onReturnHome}>
+          ← RELAY HOME
+        </button>
       </div>
 
       <div className="rpw-header-project" aria-label="Active project">
-        <span className="rpw-proj-cell">
-          <span className="rpw-key">PROJECT</span>
-          <span className="rpw-val rpw-proj-name">{project.name}</span>
-        </span>
-        <span className="rpw-proj-cell">
-          <span className="rpw-key">STATE</span>
-          <span className={`rpw-val rpw-state rpw-state--${outputState}`}>
-            {OUTPUT_STATE_LABEL[outputState]}
-          </span>
-        </span>
-        <span className="rpw-proj-cell">
-          <span className="rpw-key">REFERENCE</span>
-          <span className="rpw-val">{project.reference}</span>
+        <span className="rpw-proj-name">{project.name}</span>
+        <span className="rpw-ref-chip">{project.reference}</span>
+        <span className={`rpw-val rpw-state rpw-state--${outputState}`}>
+          {OUTPUT_STATE_LABEL[outputState]}
         </span>
       </div>
 
       <div className="rpw-header-right">
-        <button type="button" className="rpw-term-btn" onClick={onOpenTerminal} aria-label="Open Live Terminal">
-          <span aria-hidden="true">&gt;_</span>
-          <span className="rpw-term-btn-label">OPEN LIVE TERMINAL</span>
-        </button>
         <button type="button" className="rpw-head-btn" onClick={onOpenProjectSettings}>
           PROJECT SETTINGS
+        </button>
+        <button type="button" className="rpw-term-btn" onClick={onOpenTerminal} aria-label="Open Live Terminal">
+          <span aria-hidden="true">&gt;_</span>
+          <span className="rpw-term-btn-label">LIVE TERMINAL</span>
         </button>
         <span
           className={`rpw-mt-indicator${openManualTasks > 0 ? ' has-tasks' : ''}`}

@@ -1,5 +1,6 @@
 import { RelayProjectHeader } from './RelayProjectHeader';
 import { RelayWorkforceStrip } from './RelayWorkforceStrip';
+import { RelayConsole } from './RelayConsole';
 import { RelayProjectConversation } from './RelayProjectConversation';
 import { RelayLiveTerminalPanel } from './RelayLiveTerminalPanel';
 import { RelayProjectPhaseRail } from './RelayProjectPhaseRail';
@@ -15,9 +16,12 @@ import type { RelayProjectWorkspaceProps } from './contracts';
 
 /**
  * ACTIVE RELAY PROJECT WORKSPACE — the main operating screen for a
- * configured, intentionally started Relay project. The deployed browser
- * application projection of safe normalized Relay activity — NOT the CLI,
- * not a raw terminal, not a chatbot, not an analytics dashboard.
+ * configured, intentionally started Relay project, drawn to the founder
+ * screenshots: one framed system interface — header, continuous workforce
+ * strip, the RELAY CONSOLE as the dominant surface, the project
+ * conversation docked beneath it, one supporting status rail, and the Pixel
+ * Relay Dog on the glowing system floor. This is the deployed BROWSER
+ * APPLICATION — not the CLI, not a raw terminal, not a chatbot.
  *
  * Flow: Entry Home → Project Settings → THIS SCREEN.
  *
@@ -74,7 +78,8 @@ export function RelayProjectWorkspace(props: RelayProjectWorkspaceProps) {
       <div className="rpw-scanlines" aria-hidden="true" />
 
       <p className="rpw-visually-hidden" role="status" aria-live="polite">
-        Project {project.name}. State {OUTPUT_STATE_LABEL[outputState]}. Relay Dog {dogState.replace(/_/g, ' ')}.
+        Project {project.name}. State {OUTPUT_STATE_LABEL[outputState]}. Relay Dog{' '}
+        {dogState.replace(/_/g, ' ')}.
       </p>
 
       <RelayProjectHeader
@@ -89,47 +94,45 @@ export function RelayProjectWorkspace(props: RelayProjectWorkspaceProps) {
       <RelayWorkforceStrip workforce={workforce} mode={mode} phase={phase} />
 
       <main className="rpw-main">
+        {/* The Relay Dog sits centered between the workforce strip and the
+            Relay Console (founder direction). */}
+        <div className="rpw-dogzone">
+          <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} />
+        </div>
+        {completion.showVerifiedComplete ? (
+          <section className="rpw-completion rpw-completion--verified" aria-label="Mission verdict">
+            <p className="rpw-completion-verdict">
+              MISSION VERDICT — <strong>VERIFIED COMPLETE</strong>
+            </p>
+            <ul className="rpw-completion-evidence">
+              {completionState.evidence.map((e) => (
+                <li key={e}>{e}</li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          completionState.verdict === 'verified_complete' && (
+            <section className="rpw-completion rpw-completion--held" aria-label="Mission verdict held">
+              <p className="rpw-completion-verdict">COMPLETION HELD</p>
+              <ul className="rpw-completion-evidence">
+                {completion.blockers.map((b) => (
+                  <li key={b}>{b}</li>
+                ))}
+              </ul>
+            </section>
+          )
+        )}
+
+        <RelayManualTaskPanel
+          tasks={manualTasks}
+          onOpenManualTask={onOpenManualTask}
+          onApproveManualTask={onApproveManualTask}
+          onRejectManualTask={onRejectManualTask}
+        />
+
         <div className="rpw-workspace">
           <div className="rpw-col-primary">
-            <section className="rpw-mission" aria-labelledby="rpw-mission-heading">
-              <p className="rpw-syslabel">{project.reference} / ACTIVE MISSION</p>
-              <h1 id="rpw-mission-heading" className="rpw-h1">
-                {mission.title}
-              </h1>
-              <p className="rpw-mission-summary">{mission.summary}</p>
-            </section>
-
-            {completion.showVerifiedComplete ? (
-              <section className="rpw-completion rpw-completion--verified" aria-label="Mission verdict">
-                <p className="rpw-completion-verdict">
-                  MISSION VERDICT — <strong>VERIFIED COMPLETE</strong>
-                </p>
-                <ul className="rpw-completion-evidence">
-                  {completionState.evidence.map((e) => (
-                    <li key={e}>{e}</li>
-                  ))}
-                </ul>
-              </section>
-            ) : (
-              completionState.verdict === 'verified_complete' && (
-                <section className="rpw-completion rpw-completion--held" aria-label="Mission verdict held">
-                  <p className="rpw-completion-verdict">COMPLETION HELD</p>
-                  <ul className="rpw-completion-evidence">
-                    {completion.blockers.map((b) => (
-                      <li key={b}>{b}</li>
-                    ))}
-                  </ul>
-                </section>
-              )
-            )}
-
-            <RelayManualTaskPanel
-              tasks={manualTasks}
-              onOpenManualTask={onOpenManualTask}
-              onApproveManualTask={onApproveManualTask}
-              onRejectManualTask={onRejectManualTask}
-            />
-
+            <RelayConsole events={terminalEvents} handoffNetworkState={handoffNetworkState} />
             <RelayProjectConversation
               messages={projectMessages}
               onSendProjectMessage={onSendProjectMessage}
@@ -138,34 +141,38 @@ export function RelayProjectWorkspace(props: RelayProjectWorkspaceProps) {
             />
           </div>
 
-          <aside className="rpw-col-side">
-            <section className="rpw-dogpanel" aria-label="Relay Dog state">
-              <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} />
-            </section>
-
-            <RelayProjectPhaseRail
-              phase={phase}
-              researchEnabled={researchEnabled}
-              repairUsed={repairUsed}
-              blockingOpen={completion.blockers.length > 0 && !completion.showVerifiedComplete}
-              verified={completion.showVerifiedComplete}
-            />
-
-            <RelayVerificationSummary summary={verificationSummary} />
-
-            <RelayReviewerStatus
-              reviewerName={workforce.reviewer.name}
-              state={reviewerState}
-              findings={findings}
-              repairs={repairs}
-              onOpenFinding={onOpenFinding}
-              onOpenRepair={onOpenRepair}
-            />
-
-            <RelayResearchStatus state={researchState} onRequestResearch={onRequestResearch} />
-            <RelayProjectBrainStatus state={projectBrainState} />
+          <aside className="rpw-status" aria-label="System status">
+            <div className="rpw-status-block">
+              <RelayProjectPhaseRail
+                phase={phase}
+                researchEnabled={researchEnabled}
+                repairUsed={repairUsed}
+                blockingOpen={completion.blockers.length > 0 && !completion.showVerifiedComplete}
+                verified={completion.showVerifiedComplete}
+              />
+            </div>
+            <div className="rpw-status-block">
+              <RelayVerificationSummary summary={verificationSummary} />
+            </div>
+            <div className="rpw-status-block">
+              <RelayReviewerStatus
+                reviewerName={workforce.reviewer.name}
+                state={reviewerState}
+                findings={findings}
+                repairs={repairs}
+                onOpenFinding={onOpenFinding}
+                onOpenRepair={onOpenRepair}
+              />
+            </div>
+            <div className="rpw-status-block">
+              <RelayResearchStatus state={researchState} onRequestResearch={onRequestResearch} />
+            </div>
+            <div className="rpw-status-block">
+              <RelayProjectBrainStatus state={projectBrainState} />
+            </div>
           </aside>
         </div>
+
       </main>
 
       <RelayProjectFooter handoffNetworkState={handoffNetworkState} outputState={outputState} />
@@ -177,8 +184,12 @@ export function RelayProjectWorkspace(props: RelayProjectWorkspaceProps) {
             mission={mission}
             events={terminalEvents}
             handoffNetworkState={handoffNetworkState}
+            workforce={workforce}
+            mode={mode}
+            outputState={outputState}
             fullScreen={terminalFullScreen}
             onClose={onCloseTerminal}
+            onSendProjectMessage={onSendProjectMessage}
           />
         </div>
       )}

@@ -1,9 +1,10 @@
 /**
- * Pixel Relay Dog — the product mark and living state indicator shared by the
- * Relay Entry Home and the Active Project Workspace. Pure presentation: the
- * pose, label, and marker always arrive through props (normalized UI data).
- * The component never invents state from animation timing, never randomizes,
- * and honors reduced motion. SVG pixel grid, crisp edges, no external assets.
+ * Pixel Relay Dog — the product mark and living state indicator, drawn to the
+ * founder-approved sprite: bone-white robot dog, dark visor faceplate with
+ * two gold eyes, gold collar. Pure presentation: the pose, label, and marker
+ * always arrive through props (normalized UI data). The component never
+ * invents state from animation timing, never randomizes, and honors reduced
+ * motion. SVG pixel grid, crisp edges, no external assets.
  */
 
 export type PixelDogPose =
@@ -22,110 +23,108 @@ export interface RelayPixelDogProps {
   label: string;
   sublabel?: string;
   marker?: PixelDogMarker;
-  /** Pixel unit size; total art is 16×12 units. */
+  /** Pixel unit size; total art is 18×14 units. */
   unit?: number;
   /** Motion class applied only when true AND not reduced motion. */
   moving?: boolean;
   reducedMotion?: boolean;
-  /** Draw the perspective grid floor under the dog. */
+  /** Draw the glowing perspective grid floor under the dog. */
   floor?: boolean;
   className?: string;
 }
 
-/* 16×12 pixel grids. '.'=empty g=gold c=cream k=eye n=nose p=package */
+/* 18×14 pixel grids.
+   '.'=empty  w=bone white  s=shadow grey  d=dark visor  y=gold eye  c=gold collar */
+const HEAD = [
+  '.........ww..ww...',
+  '.........wwwwww...',
+  '........wwwwwwww..',
+  '........wddddddw..',
+  '........wdyydyyw..',
+  '........wwwwwwww..',
+];
+
 const POSES: Record<PixelDogPose, string[]> = {
   standing: [
-    '................',
-    '................',
-    '...........g..g.',
-    '...........gggg.',
-    '...........gkgg.',
-    'g..........gggn.',
-    'gg......ggggg...',
-    '.ggggggggggcc...',
-    '.ggggggggggg....',
-    '.gggggggggg.....',
-    '.gg......gg.....',
-    '.gg......gg.....',
+    ...HEAD,
+    '.w......ccwwww....',
+    '.ww..wwwwwwwwww...',
+    '..wwwwwwwwwwwww...',
+    '..swwwwwwwwwwss...',
+    '...wwwwwwwwwww....',
+    '...ww....ww..ww...',
+    '...ww....ww..ww...',
+    '...ss....ss..ss...',
   ],
   trotting: [
-    '................',
-    '................',
-    '...........g..g.',
-    '...........gggg.',
-    '...........gkgg.',
-    'g..........gggn.',
-    'gg......ggggg...',
-    '.ggggggggggcc...',
-    '.ggggggggggg....',
-    '.gggggggggg.....',
-    '..gg....gg......',
-    '.gg.......gg....',
+    ...HEAD,
+    '.w......ccwwww....',
+    '.ww..wwwwwwwwww...',
+    '..wwwwwwwwwwwww...',
+    '..swwwwwwwwwwss...',
+    '...wwwwwwwwwww....',
+    '..ww.....ww...ww..',
+    '.ww.......ww...ww.',
+    '..................',
   ],
   running: [
-    '................',
-    '................',
-    '...........g..g.',
-    '...........gggg.',
-    '...........gkgg.',
-    'g..........gggn.',
-    '.g......ggggg...',
-    '.ggggggggggcc...',
-    '.ggggggggggg....',
-    '.gggggggggg.....',
-    'gg........ggg...',
-    'g...........gg..',
+    ...HEAD,
+    '.w......ccwwww....',
+    '.ww..wwwwwwwwww...',
+    '..wwwwwwwwwwwww...',
+    '..swwwwwwwwwwss...',
+    '...wwwwwwwwwww....',
+    '..www....ww..www..',
+    '.ww........ww..ww.',
+    '..................',
   ],
   sitting: [
-    '................',
-    '................',
-    '..........g..g..',
-    '..........gggg..',
-    '..........gkgg..',
-    '..........gggn..',
-    '.......ggggg....',
-    '......gggggg....',
-    '.....gggggcc....',
-    '....gggggggg....',
-    '....gg...ggg....',
-    '....gg...gg.....',
+    ...HEAD,
+    '........ccwwww....',
+    '.......wwwwwww....',
+    '......wwwwwwww....',
+    '.....wwwwwwwww....',
+    '.....wwwwwwwww....',
+    '.....wwwwwwww.....',
+    '.....ww....ww.....',
+    '.....ss....ss.....',
   ],
   lying: [
-    '................',
-    '................',
-    '................',
-    '................',
-    '................',
-    '..........g..g..',
-    '..........gggg..',
-    '..........gkgn..',
-    '.ggggggggggggg..',
-    '.ggggggggggcc...',
-    '.gg......gg.....',
-    '................',
+    '..................',
+    '..................',
+    '..................',
+    ...HEAD.slice(0, 5),
+    '........ccwwww....',
+    '..wwwwwwwwwwwww...',
+    '..wwwwwwwwwwwww...',
+    '..swwwwwwwwwwws...',
+    '..ss.........ss...',
+    '..................',
   ],
   carrying: [
-    '................',
-    '....cccc........',
-    '....cggc...g..g.',
-    '....cccc...gggg.',
-    '...........gkgg.',
-    'g..........gggn.',
-    'gg......ggggg...',
-    '.ggggggggggcc...',
-    '.ggggggggggg....',
-    '.gggggggggg.....',
-    '.gg......gg.....',
-    '.gg......gg.....',
+    HEAD[0],
+    HEAD[1],
+    HEAD[2],
+    '...cccc.' + HEAD[3].slice(8),
+    '...cyyc.' + HEAD[4].slice(8),
+    '...cccc.' + HEAD[5].slice(8),
+    '.w......ccwwww....',
+    '.ww..wwwwwwwwww...',
+    '..wwwwwwwwwwwww...',
+    '..swwwwwwwwwwss...',
+    '...wwwwwwwwwww....',
+    '...ww....ww..ww...',
+    '...ww....ww..ww...',
+    '...ss....ss..ss...',
   ],
 };
 
 const PIXEL_FILL: Record<string, string> = {
-  g: '#d9a441',
-  c: '#ece7dd',
-  k: '#07080b',
-  n: '#8a5a24',
-  p: '#f2c66d',
+  w: '#ece9e2',
+  s: '#b9b5ab',
+  d: '#23262e',
+  y: '#f2c14e',
+  c: '#d9a441',
 };
 
 const MARKER_GLYPH: Record<Exclude<PixelDogMarker, 'none'>, string> = {
@@ -135,78 +134,12 @@ const MARKER_GLYPH: Record<Exclude<PixelDogMarker, 'none'>, string> = {
   scan: '▚',
 };
 
-export function RelayPixelDog({
-  pose,
-  label,
-  sublabel,
-  marker = 'none',
-  unit = 6,
-  moving = false,
-  reducedMotion = false,
-  floor = false,
-  className = '',
-}: RelayPixelDogProps) {
-  const grid = POSES[pose] ?? POSES.standing;
-  const w = 16 * unit;
-  const h = 12 * unit;
-  const animate = moving && !reducedMotion;
-
-  return (
-    <figure
-      className={`rpd rpd--${pose}${animate ? ' rpd--moving' : ''}${floor ? ' rpd--floored' : ''} ${className}`.trim()}
-      role="img"
-      aria-label={`Relay Dog: ${label}`}
-    >
-      <div className="rpd-stage">
-        {marker !== 'none' && (
-          <span className={`rpd-marker rpd-marker--${marker}`} aria-hidden="true">
-            {MARKER_GLYPH[marker]}
-          </span>
-        )}
-        <svg
-          className="rpd-art"
-          width={w}
-          height={h}
-          viewBox={`0 0 ${w} ${h}`}
-          shapeRendering="crispEdges"
-          aria-hidden="true"
-          focusable="false"
-        >
-          {grid.flatMap((row, y) =>
-            row.split('').map((ch, x) => {
-              const fill = PIXEL_FILL[ch];
-              if (!fill) return null;
-              return (
-                <rect
-                  key={`${x}-${y}`}
-                  x={x * unit}
-                  y={y * unit}
-                  width={unit}
-                  height={unit}
-                  fill={fill}
-                />
-              );
-            }),
-          )}
-        </svg>
-        {floor && <div className="rpd-floor" aria-hidden="true" />}
-      </div>
-      <figcaption className="rpd-caption">
-        <span className="rpd-label">{label}</span>
-        {sublabel && <span className="rpd-sublabel">{sublabel}</span>}
-      </figcaption>
-    </figure>
-  );
-}
-
-/** Tiny inline dog mark for headers — same pixel language, no caption. */
-export function RelayDogMark({ unit = 2 }: { unit?: number }) {
-  const grid = POSES.standing;
-  const w = 16 * unit;
-  const h = 12 * unit;
+function PixelGrid({ grid, unit }: { grid: string[]; unit: number }) {
+  const w = 18 * unit;
+  const h = 14 * unit;
   return (
     <svg
-      className="rpd-mark"
+      className="rpd-art"
       width={w}
       height={h}
       viewBox={`0 0 ${w} ${h}`}
@@ -224,5 +157,51 @@ export function RelayDogMark({ unit = 2 }: { unit?: number }) {
         }),
       )}
     </svg>
+  );
+}
+
+export function RelayPixelDog({
+  pose,
+  label,
+  sublabel,
+  marker = 'none',
+  unit = 6,
+  moving = false,
+  reducedMotion = false,
+  floor = false,
+  className = '',
+}: RelayPixelDogProps) {
+  const grid = POSES[pose] ?? POSES.standing;
+  const animate = moving && !reducedMotion;
+
+  return (
+    <figure
+      className={`rpd rpd--${pose}${animate ? ' rpd--moving' : ''}${floor ? ' rpd--floored' : ''} ${className}`.trim()}
+      role="img"
+      aria-label={`Relay Dog: ${label}`}
+    >
+      <div className="rpd-stage">
+        {marker !== 'none' && (
+          <span className={`rpd-marker rpd-marker--${marker}`} aria-hidden="true">
+            {MARKER_GLYPH[marker]}
+          </span>
+        )}
+        <PixelGrid grid={grid} unit={unit} />
+        {floor && <div className="rpd-floor" aria-hidden="true" />}
+      </div>
+      <figcaption className="rpd-caption">
+        <span className="rpd-label">{label}</span>
+        {sublabel && <span className="rpd-sublabel">{sublabel}</span>}
+      </figcaption>
+    </figure>
+  );
+}
+
+/** Tiny inline dog mark for headers — same pixel language, no caption. */
+export function RelayDogMark({ unit = 2 }: { unit?: number }) {
+  return (
+    <span className="rpd-markwrap" aria-hidden="true">
+      <PixelGrid grid={POSES.standing} unit={unit} />
+    </span>
   );
 }

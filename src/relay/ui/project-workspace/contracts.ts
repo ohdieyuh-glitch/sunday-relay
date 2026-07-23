@@ -154,6 +154,10 @@ export interface WorkspaceTerminalEvent {
   truth: EventTruthClass;
   headline: string;
   detail?: string;
+  /** Safe right-aligned operation summary for Terminal Mode, e.g.
+      "MODIFY src/lib/relay-store.ts" or "RUN required tests". Never a raw
+      command line, never output. */
+  meta?: string;
   /** True for preview fixture content. */
   fixture?: boolean;
 }

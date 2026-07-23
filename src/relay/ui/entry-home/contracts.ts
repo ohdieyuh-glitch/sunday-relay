@@ -222,9 +222,11 @@ export interface RelayEntryHomeProps {
   projectIdeaDraft: string;
   projectBriefDraft: ProjectBriefDraft | null;
   selectedRoute: ProjectRouteDefinition | null;
-  workforceRecommendation: WorkforceRecommendation;
-  researchRecommendation: ResearchRecommendation;
-  evidenceRecommendation: EvidenceRecommendation;
+  /** Optional since the founder simplification — workforce/research moved to
+      Project Settings; the deterministic logic remains for hosts that need it. */
+  workforceRecommendation?: WorkforceRecommendation;
+  researchRecommendation?: ResearchRecommendation;
+  evidenceRecommendation?: EvidenceRecommendation;
   guideMessages: GuideMessage[];
   guideStatus: GuideStatus;
   suggestedQuestions: string[];

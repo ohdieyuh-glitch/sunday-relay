@@ -240,22 +240,11 @@
 /* --------------------------------------------------------- start zone */
 
 .reh-start-zone {
-  display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
-  gap: clamp(20px, 3vw, 40px);
-  align-items: start;
-}
-.reh-start-left {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-}
-.reh-start-right {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  border-left: 1px solid var(--reh-gold-dim);
-  padding-left: clamp(16px, 2vw, 28px);
+  gap: 24px;
+  width: min(880px, 100%);
+  margin: 0 auto;
 }
 
 .reh-dog {
@@ -489,11 +478,12 @@
 
 .reh-route-list {
   list-style: none;
-  margin: 14px 0 0;
+  margin: 14px auto 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 10px;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  width: min(880px, 100%);
 }
 .reh-route {
   width: 100%;
@@ -547,9 +537,18 @@
 
 .reh-guide {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 1fr;
   gap: clamp(16px, 2.5vw, 28px);
   align-items: start;
+  width: min(880px, 100%);
+  margin: 0 auto;
+}
+/* Two columns only once a draft exists and there is room. */
+@media (min-width: 901px) {
+  .reh-guide:has(.reh-brief) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    width: 100%;
+  }
 }
 .reh-guide-chat {
   background: var(--reh-panel);
@@ -805,13 +804,6 @@
 /* -------------------------------------------------------------- mobile */
 
 @media (max-width: 900px) {
-  .reh-start-zone { grid-template-columns: 1fr; }
-  .reh-start-right {
-    border-left: none;
-    padding-left: 0;
-    border-top: 1px solid var(--reh-gold-dim);
-    padding-top: 18px;
-  }
   .reh-guide { grid-template-columns: 1fr; }
 }
 

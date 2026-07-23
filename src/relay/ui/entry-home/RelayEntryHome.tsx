@@ -3,8 +3,6 @@ import { RelayProjectStarter } from './RelayProjectStarter';
 import { RelayHomeDog } from './RelayHomeDog';
 import { RelayProjectRoutes } from './RelayProjectRoutes';
 import { RelayGuideChat } from './RelayGuideChat';
-import { RelayWorkforceRecommendation } from './RelayWorkforceRecommendation';
-import { RelayResearchPreview } from './RelayResearchPreview';
 import { RelayRecentProjects } from './RelayRecentProjects';
 import { RelayEntryFooter } from './RelayEntryFooter';
 import type { RelayEntryHomeProps } from './contracts';
@@ -12,13 +10,16 @@ import type { RelayEntryHomeProps } from './contracts';
 /**
  * RELAY ENTRY HOME — the authenticated in-product screen shown immediately
  * after switching from Sunday Alcatraz into Sunday Relay, BEFORE Project
- * Settings and BEFORE the Relay execution console.
+ * Settings and BEFORE the Active Project Workspace.
  *
- * Flow: Sunday Alcatraz → Relay Home → Project Settings → execution console.
+ * Flow: Sunday Alcatraz → Relay Home → Project Settings → workspace.
  *
- * This screen never starts execution, never fabricates activity, and never
- * decides policy — all state enters through props and all intent leaves
- * through callbacks. Browser-safe: no Node, no providers, no credentials.
+ * Deliberately calm and spacious: three immediate choices (start from an
+ * idea, choose a route, connect an existing project), the Ask Relay guide
+ * available without dominating, recent projects compact. Workforce and
+ * research configuration live in Project Settings, not here. This screen
+ * never starts execution, never fabricates activity, and never decides
+ * policy — state in via props, intent out via callbacks. Browser-safe.
  */
 export function RelayEntryHome(props: RelayEntryHomeProps) {
   const {
@@ -27,8 +28,6 @@ export function RelayEntryHome(props: RelayEntryHomeProps) {
     projectIdeaDraft,
     projectBriefDraft,
     selectedRoute,
-    workforceRecommendation,
-    researchRecommendation,
     guideMessages,
     guideStatus,
     suggestedQuestions,
@@ -66,39 +65,15 @@ export function RelayEntryHome(props: RelayEntryHomeProps) {
 
       <main className="reh-main">
         <div className="reh-start-zone">
-          <div className="reh-start-left">
-            <RelayHomeDog state={dogState} reducedMotion={reducedMotion} />
-            <RelayProjectStarter
-              projectIdeaDraft={projectIdeaDraft}
-              projectBriefDraft={projectBriefDraft}
-              onUpdateProjectIdea={onUpdateProjectIdea}
-              onBuildProjectBrief={onBuildProjectBrief}
-              onConnectExistingProject={onConnectExistingProject}
-              onOpenProjectSettings={onOpenProjectSettings}
-            />
-          </div>
-
-          <div className="reh-start-right">
-            <RelayWorkforceRecommendation recommendation={workforceRecommendation} />
-            <RelayResearchPreview recommendation={researchRecommendation} />
-            <section className="reh-nextstep" aria-labelledby="reh-nextstep-heading">
-              <h2 id="reh-nextstep-heading" className="reh-section-title">
-                NEXT STEP
-              </h2>
-              <p>
-                Review your project details, select your AI workforce, configure research, set
-                permissions, and define what Relay must prove before completion.
-              </p>
-              <button
-                type="button"
-                className="reh-btn reh-btn--primary"
-                disabled={!projectBriefDraft}
-                onClick={() => projectBriefDraft && onContinueToProjectSettings(projectBriefDraft)}
-              >
-                CONTINUE TO PROJECT SETTINGS
-              </button>
-            </section>
-          </div>
+          <RelayHomeDog state={dogState} reducedMotion={reducedMotion} />
+          <RelayProjectStarter
+            projectIdeaDraft={projectIdeaDraft}
+            projectBriefDraft={projectBriefDraft}
+            onUpdateProjectIdea={onUpdateProjectIdea}
+            onBuildProjectBrief={onBuildProjectBrief}
+            onConnectExistingProject={onConnectExistingProject}
+            onOpenProjectSettings={onOpenProjectSettings}
+          />
         </div>
 
         <RelayProjectRoutes

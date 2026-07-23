@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { RelayProjectWorkspace } from './RelayProjectWorkspace';
 import { WORKSPACE_FIXTURES, type WorkspaceFixtureKey } from './fixtures';
-import type { RelayProjectWorkspaceProps } from './contracts';
+import type { ProjectMessage, RelayProjectWorkspaceProps } from './contracts';
 
 /**
  * Workspace interaction tests (jsdom): every callback fires with the right
@@ -52,13 +52,47 @@ describe('workspace interactions', () => {
   it('approval-request decisions report their decision id', () => {
     const p = makeProps('waiting_for_user');
     render(createElement(RelayProjectWorkspace, p));
-    // Scope to the conversation: the Manual Task panel has its own APPROVE.
-    const conv = screen.getByLabelText('Project conversation');
+    // Scope to the conversation dock: the Manual Task panel has its own APPROVE.
+    const conv = screen.getByRole('region', { name: 'PROJECT CONVERSATION' });
     const buttons = Array.from(conv.querySelectorAll('button'));
     fireEvent.click(buttons.find((b) => b.textContent === 'APPROVE')!);
     expect(p.onApproveDecision).toHaveBeenCalledWith('fx-decision-deploy');
     fireEvent.click(buttons.find((b) => b.textContent === 'REJECT')!);
     expect(p.onRejectDecision).toHaveBeenCalledWith('fx-decision-deploy');
+  });
+
+  it('older pending approvals stay reachable behind newer messages (review finding)', () => {
+    const later: ProjectMessage[] = ['a', 'b', 'c'].map((t, i) => ({
+      messageId: `later-${i}`,
+      author: 'relay',
+      text: `Update ${t}`,
+      at: 'preview',
+      fixture: true,
+    }));
+    const p = makeProps('waiting_for_user', {
+      projectMessages: [...WORKSPACE_FIXTURES.waiting_for_user.projectMessages, ...later],
+    });
+    render(createElement(RelayProjectWorkspace, p));
+    const conv = screen.getByRole('region', { name: 'PROJECT CONVERSATION' });
+    const approve = Array.from(conv.querySelectorAll('button')).find(
+      (b) => b.textContent === 'APPROVE',
+    )!;
+    fireEvent.click(approve);
+    expect(p.onApproveDecision).toHaveBeenCalledWith('fx-decision-deploy');
+  });
+
+  it('Escape closes the Live Terminal (review finding)', () => {
+    const p = makeProps('verifying', { terminalOpen: true });
+    render(createElement(RelayProjectWorkspace, p));
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(p.onCloseTerminal).toHaveBeenCalled();
+  });
+
+  it('conversation quick actions send supervisory questions', () => {
+    const p = makeProps('implementing');
+    render(createElement(RelayProjectWorkspace, p));
+    fireEvent.click(screen.getByRole('button', { name: 'What is happening?' }));
+    expect(p.onSendProjectMessage).toHaveBeenCalledWith('What is happening?');
   });
 
   it('manual task review/approve/keep-blocked callbacks carry the task id', () => {

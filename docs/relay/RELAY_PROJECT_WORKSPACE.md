@@ -35,27 +35,36 @@ leaves through callbacks.**
 | **Workspace** | Supervise the running project: activity, evidence, review, Manual Tasks, completion. |
 | Relay CLI | Operator terminal; not this screen. |
 
-## Screen anatomy
+## Screen anatomy (founder-screenshot structure)
 
-1. **Application header** — Pixel Relay Dog mark, SUNDAY RELAY, ← RELAY HOME
-   switcher, PROJECT / STATE / REFERENCE (`RLY / 001`) cells, `[ >_ ] OPEN
-   LIVE TERMINAL`, PROJECT SETTINGS, `MT / n` Manual-Task indicator,
-   notifications, profile. No marketing navigation.
-2. **Project command strip** — PROMPT ARCHITECT (PLANNING / RESEARCHING /
-   PREPARING HANDOFF / WAITING) · CODING AGENT (READY / IMPLEMENTING /
-   VERIFYING / REPAIRING / WAITING) · REVIEWER (all nine states) · MODE
-   (GUIDED / SEMI / AUTONOMOUS) · PROJECT PHASE. Horizontal desktop strip;
-   horizontally scrollable system strip on mobile.
-3. **Primary column** — mission identity (`RLY / 001 / ACTIVE MISSION`,
-   editorial title), completion banner (gated — see below), Manual Tasks,
-   and the **Project Conversation**.
-4. **Side rail** (thin gold structural line) — Relay Dog panel, project
-   phase rail, Relay Verification summary, Independent Review (findings +
-   repairs), Project Research, Project Brain.
-5. **Live Terminal** — right drawer on desktop, full-screen on mobile
-   (`role="dialog"`, focus moves to the close control on open).
-6. **System footer** — HANDOFF NETWORK, PROJECT SAFETY, STATE, "Pass the
-   work. Keep the context."
+One framed system interface — never a dashboard of floating cards:
+
+1. **Top frame** — pixel dog mark + letterspaced SUNDAY RELAY (cream/gold),
+   center: project name + outlined `[ ● RLY / 001 ]` chip + state, right:
+   PROJECT SETTINGS, `>_ LIVE TERMINAL`, `MT / n`, notifications, profile.
+2. **Workforce strip** — one continuous horizontal strip with thin
+   dividers, compact labels, gold ■ status squares: PROMPT ARCHITECT ·
+   CODING AGENT · REVIEWER · MODE · PHASE. No rounded role cards.
+3. **RELAY CONSOLE** — the dominant chamfered gold-outlined surface:
+   `>_ RELAY CONSOLE` title, "Safe project activity and verified
+   coordination", LIVE/STANDBY indicator, and the chronological timeline —
+   icon column (● system · ✓ evidence · → claim · ◆ review · ! user) with a
+   thin gold connector, muted `HH:MM:SS`, gold role labels, cream activity
+   text, small truth tags. No message bubbles ever.
+4. **Project Conversation dock** — directly beneath the console frame:
+   recent exchange rows, decision APPROVE/REJECT, the `>_ Ask Relay about
+   this project…` input with SEND, and quick actions (What is happening? ·
+   Why is Relay waiting? · Explain the Reviewer finding · …).
+5. **Status rail** — ONE supporting panel with thin dividers: phase rail,
+   Relay verification, independent review (findings + repairs), research,
+   Project Brain. Manual Tasks and the completion banner sit above the
+   console when present.
+6. **System floor** — the pixel Relay Dog on the glowing perspective grid.
+7. **Footer bar** — outlined: ● HANDOFF NETWORK / ONLINE · `[ PASS THE
+   WORK. KEEP THE CONTEXT. ]` · ALL SYSTEMS GO (green, only when truly calm)
+   or the truthful state label.
+8. **Live Terminal full view** — the same console opened as a drawer
+   (desktop) / full screen (mobile), `role="dialog"` with focus management.
 
 ## Project Conversation vs Live Terminal
 

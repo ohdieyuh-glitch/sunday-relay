@@ -23,6 +23,8 @@ import {
   WORKSPACE_FIXTURE_KEYS,
 } from '../project-workspace';
 import type { ProjectMessage, WorkspaceFixtureKey } from '../project-workspace';
+import { AGENT_OPTIONS, RelayProjectSettings } from '../project-settings';
+import type { ProjectSettingsDraft } from '../project-settings';
 import './relay-preview.css';
 
 /**
@@ -90,10 +92,11 @@ export function RelayPreviewApp() {
   const [recentPopulated, setRecentPopulated] = useState(true);
   const [handoffDraft, setHandoffDraft] = useState<ProjectBriefDraft | null>(null);
   const [copiedNotice, setCopiedNotice] = useState(false);
+  // Recorded by Project Settings callbacks and restored on return (memory only).
+  const [savedSettingsDraft, setSavedSettingsDraft] = useState<ProjectSettingsDraft | null>(null);
 
   /* ---------------- workspace preview state (fixtures only) ----------- */
   const [fixtureKey, setFixtureKey] = useState<WorkspaceFixtureKey>('implementing');
-  const [terminalDrawerOpen, setTerminalDrawerOpen] = useState(false);
   const [extraWsMessages, setExtraWsMessages] = useState<ProjectMessage[]>([]);
 
   const category = selectedRoute?.category ?? null;
@@ -182,7 +185,10 @@ export function RelayPreviewApp() {
         setProjectBriefDraft((d) => (d ? { ...d, ...patch } : d))
       }
       onCopyProjectBrief={copyBrief}
-      onClearProjectBrief={() => setProjectBriefDraft(null)}
+      onClearProjectBrief={() => {
+        setProjectBriefDraft(null);
+        setHandoffDraft(null); // never prefill Settings from a cleared brief
+      }}
       onContinueToProjectSettings={continueToProjectSettings}
       onOpenRecentProject={(projectId) => navigate(`/relay/project/${projectId}`)}
       onOpenProjectSettings={() => navigate('/relay/project-settings')}
@@ -191,48 +197,34 @@ export function RelayPreviewApp() {
   );
 
   const projectSettings = (
-    <div className="rpv-settings">
-      <p className="rpv-settings-label">PROJECT SETTINGS / INTEGRATION BOUNDARY</p>
-      <h1>Project Settings</h1>
-      <p className="rpv-settings-copy">
-        This screen is the next step after the Relay Entry Home and the gate before the Active
-        Project Workspace. In this isolated frontend branch it is an explicit integration boundary:
-        the full Project Settings experience is built separately. The structured Project Brief
-        Draft below was received through
-        <code> onContinueToProjectSettings(projectBriefDraft)</code>.
-      </p>
-      {handoffDraft ? (
-        <pre className="rpv-settings-draft" aria-label="Received Project Brief Draft">
-          {JSON.stringify(handoffDraft, null, 2)}
-        </pre>
-      ) : (
-        <p className="rpv-settings-empty">
-          No draft received yet. Build a Project Brief on the Relay Home first.
-        </p>
-      )}
-      <div className="rpv-settings-actions">
-        <button type="button" className="reh-btn" onClick={() => navigate('/relay')}>
-          ← BACK TO RELAY HOME
-        </button>
-        <button
-          type="button"
-          className="reh-btn reh-btn--primary"
-          onClick={() => navigate('/relay/project/rly-001')}
-        >
-          PREVIEW ACTIVE WORKSPACE (FIXTURE) →
-        </button>
-      </div>
-    </div>
+    <RelayProjectSettings
+      brief={handoffDraft ?? projectBriefDraft}
+      agentOptions={AGENT_OPTIONS}
+      entitlement="pro"
+      initialDraft={savedSettingsDraft ?? undefined}
+      onSaveDraft={(d: ProjectSettingsDraft) => setSavedSettingsDraft(d)}
+      onStartProject={(d: ProjectSettingsDraft) => {
+        // Preview only: the callback records the typed draft and opens the
+        // fixture workspace. No mission actually starts.
+        setSavedSettingsDraft(d);
+        navigate('/relay/project/rly-001');
+      }}
+      onConnectRepository={() => {
+        // Future integration callback: repository/source selection.
+      }}
+      onBack={() => navigate('/relay')}
+    />
   );
 
   const fixture = WORKSPACE_FIXTURES[fixtureKey];
-  const terminalOpen = route.screen === 'workspace' && (route.terminal || terminalDrawerOpen);
+  // The `>_` control always switches into full Terminal Mode (founder direction).
+  const terminalOpen = route.screen === 'workspace' && route.terminal;
   const workspace = (
     <RelayProjectWorkspace
       {...fixture}
       projectMessages={[...fixture.projectMessages, ...extraWsMessages]}
       terminalOpen={terminalOpen}
-      terminalFullScreen={route.screen === 'workspace' && route.terminal ? true : mobileFrame}
+      terminalFullScreen
       onSendProjectMessage={(text) => {
         pushWsMessage('developer', text);
         pushWsMessage(
@@ -247,17 +239,10 @@ export function RelayPreviewApp() {
         pushWsMessage('relay', `Preview: decision ${decisionId} rejection recorded (fixture only — nothing executed).`)
       }
       onOpenTerminal={() => {
-        if (route.screen === 'workspace') {
-          if (mobileFrame) navigate(`/relay/project/${route.projectId}/terminal`);
-          else setTerminalDrawerOpen(true);
-        }
+        if (route.screen === 'workspace') navigate(`/relay/project/${route.projectId}/terminal`);
       }}
       onCloseTerminal={() => {
-        if (route.screen === 'workspace' && route.terminal) {
-          navigate(`/relay/project/${route.projectId}`);
-        } else {
-          setTerminalDrawerOpen(false);
-        }
+        if (route.screen === 'workspace') navigate(`/relay/project/${route.projectId}`);
       }}
       onOpenProjectSettings={() => navigate('/relay/project-settings')}
       onOpenManualTask={(taskId) =>

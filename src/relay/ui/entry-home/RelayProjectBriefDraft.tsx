@@ -28,19 +28,8 @@ export function RelayProjectBriefDraftPanel({
   onClearProjectBrief: () => void;
   onContinueToProjectSettings: (draft: ProjectBriefDraft) => void;
 }) {
-  if (!draft) {
-    return (
-      <aside className="reh-brief reh-brief--empty" aria-labelledby="reh-brief-heading">
-        <h2 id="reh-brief-heading" className="reh-section-title">
-          PROJECT BRIEF DRAFT
-        </h2>
-        <p className="reh-brief-empty-copy">
-          No draft yet. Describe your objective and press BUILD PROJECT BRIEF, or ask Relay to help
-          shape the idea.
-        </p>
-      </aside>
-    );
-  }
+  // Keep the Home screen calm: no empty placeholder panel before a draft exists.
+  if (!draft) return null;
 
   const textField = (
     label: string,

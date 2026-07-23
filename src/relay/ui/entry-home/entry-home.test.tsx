@@ -267,78 +267,36 @@ describe('project brief draft', () => {
   });
 });
 
-/* -------------------------------------------- prompt architect archetype */
+/* --------------------------------------------------- calm composition */
 
-describe('prompt architect expanded archetype', () => {
-  it('is described as continuous — research, Project Brain, and handoffs, not just prompts', () => {
+describe('simplified composition (founder feedback)', () => {
+  it('offers exactly the three primary entry paths without workforce/research panels', () => {
     const html = render();
-    expect(html).toContain('Plans the mission, continuously researches the project');
-    expect(html).toContain('Project Brain');
-    expect(html).toContain('Coding Agent handoff');
-    expect(html).toContain('Continuous project research');
-    expect(html).not.toContain('Writes prompts.');
+    expect(html).toContain('BUILD PROJECT BRIEF');
+    expect(html).toContain('CONNECT EXISTING PROJECT');
+    expect(html).toContain('OPEN PROJECT SETTINGS');
+    // Workforce and research configuration now live in Project Settings.
+    expect(html).not.toContain('RECOMMENDED WORKFORCE');
+    expect(html).not.toContain('PROJECT RESEARCH');
+    expect(html).not.toContain('NEXT STEP');
   });
 
-  it('workforce recommendation lists prompt generation and mission planning', () => {
+  it('Ask Relay is available but does not dominate — no draft panel before a draft exists', () => {
+    const html = render();
+    expect(html).toContain('ASK RELAY');
+    expect(html).not.toContain('PROJECT BRIEF DRAFT');
+  });
+
+  it('recommendation logic stays deterministic for Project Settings to consume', () => {
     const wf = buildWorkforceRecommendation(null);
     const architect = wf.roles.find((r) => r.role === 'prompt_architect')!;
     expect(architect.responsibilities).toContain('Prompt generation');
-    expect(architect.responsibilities).toContain('Mission planning');
     expect(architect.responsibilities).toContain('Project Brain development');
-    expect(architect.responsibilities).toContain('Coding Agent handoffs');
-    expect(architect.handoffLabel).toBe('MISSION + RESEARCH + HANDOFF');
-  });
-});
-
-/* -------------------------------------------------------------- research */
-
-describe('research preview', () => {
-  it('is NOT CONFIGURED and fabricates nothing', () => {
-    const html = render();
-    expect(html).toContain('PROJECT RESEARCH');
-    expect(html).toContain('NOT CONFIGURED');
-    expect(html).toContain('Nothing has been researched yet');
-    expect(html).not.toMatch(/research (complete|finished|found \d)/i);
-  });
-
-  it('research recommendation always reports not_configured pre-settings', () => {
     expect(buildResearchRecommendation(null).status).toBe('not_configured');
     expect(buildResearchRecommendation('authentication').updateSensitivity).toBe('high');
-  });
-});
-
-/* -------------------------------------------------------------- workforce */
-
-describe('recommended workforce', () => {
-  it('shows all four roles with truthful statuses and handoff arrows', () => {
-    const html = render();
-    expect(html).toContain('PROMPT ARCHITECT');
-    expect(html).toContain('CODING AGENT');
-    expect(html).toContain('REVIEWER');
-    expect(html).toContain('Sunday Alcatraz');
-    expect(html).toContain('Claude Code');
-    expect(html).toContain('Codex');
-    expect(html).toContain('RECOMMENDED');
-    expect(html).toContain('CONNECTED');
-    expect(html).toContain('AVAILABLE');
-    expect(html).toContain('VERIFIED IMPLEMENTATION');
-    expect(html).toContain('REVIEW EVIDENCE');
-    expect(html).toContain('Verified result');
-  });
-
-  it('never labels unavailable agents as connected', () => {
-    const html = render({
-      connectionStatuses: DEFAULT_CONNECTION_STATUSES,
-      workforceRecommendation: buildWorkforceRecommendation(null, {
-        promptArchitect: 'recommended',
-        codingAgent: 'sign_in_required',
-        reviewer: 'not_configured',
-      }),
-    });
-    expect(html).toContain('SIGN-IN REQUIRED');
-    for (const agent of ['Hermes', 'OpenClaw', 'Ophiuchus']) {
-      expect(html).not.toContain(agent);
-    }
+    // Truthful statuses remain typed data, never fabricated connections.
+    expect(DEFAULT_CONNECTION_STATUSES.codingAgent).toBe('connected');
+    expect(DEFAULT_CONNECTION_STATUSES.reviewer).toBe('available');
   });
 });
 

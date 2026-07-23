@@ -69,6 +69,7 @@ const ev = (
   truth: WorkspaceTerminalEvent['truth'],
   headline: string,
   detail?: string,
+  meta?: string,
 ): WorkspaceTerminalEvent => ({
   eventId,
   at,
@@ -76,6 +77,7 @@ const ev = (
   truth,
   headline,
   detail,
+  meta,
   fixture: true,
 });
 
@@ -160,6 +162,7 @@ const implementing: WorkspaceFixture = {
       'agent_claim',
       'Implementation report received.',
       'Awaiting Relay inspection.',
+      'MODIFY 2 FILES',
     ),
     ev(
       'fx-ev-impl-2',
@@ -210,7 +213,15 @@ const verifying: WorkspaceFixture = {
       'relay_evidence',
       'Two claimed files changed. No protected files changed.',
     ),
-    ev('fx-ev-ver-3', '2026-07-22T11:57:45Z', 'verification', 'relay_evidence', 'Typecheck passed.'),
+    ev(
+      'fx-ev-ver-3',
+      '2026-07-22T11:57:45Z',
+      'verification',
+      'relay_evidence',
+      'Typecheck passed.',
+      undefined,
+      'RUN typecheck',
+    ),
   ],
 };
 
@@ -239,7 +250,15 @@ const reviewing: WorkspaceFixture = {
   },
   terminalEvents: [
     ...BASE_EVENTS,
-    ev('fx-ev-rev-1', '2026-07-22T11:57:45Z', 'verification', 'relay_evidence', 'Required tests passed.'),
+    ev(
+      'fx-ev-rev-1',
+      '2026-07-22T11:57:45Z',
+      'verification',
+      'relay_evidence',
+      'Required tests passed.',
+      undefined,
+      'RUN required tests',
+    ),
     ev(
       'fx-ev-rev-2',
       '2026-07-22T11:57:53Z',

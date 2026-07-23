@@ -53,6 +53,15 @@ describe('product flow + application surface', () => {
     expect(html).toContain('RLY / 001');
     expect(html).toContain('RELAY HOME'); // return control
     expect(html).toContain('PROJECT SETTINGS');
+    // The RELAY CONSOLE is the dominant main surface (screenshot-inspired).
+    expect(html).toContain('RELAY CONSOLE');
+    expect(html).toContain('Safe project activity and verified coordination');
+    expect(html).toContain('rpw-console-feed');
+    // Timeline rows, not chat bubbles, and the bracketed footer statement.
+    expect(html).toContain('rpw-tev-icon');
+    expect(html).toContain('PASS THE WORK.');
+    expect(html).toContain('KEEP THE CONTEXT.');
+    expect(html).toContain('HANDOFF NETWORK');
     // No CLI shell prompt anywhere.
     expect(html).not.toMatch(/\$\s|(^|\W)bash|#!\/|~\/\w+ \$/);
     // No marketing navigation.
@@ -83,8 +92,10 @@ describe('workforce strip', () => {
     expect(html).toContain('Codex');
     expect(html).toContain('MODE');
     expect(html).toContain('SEMI');
-    expect(html).toContain('PROJECT PHASE');
-    expect(html).toContain('IMPLEMENTATION');
+    expect(html).toContain('PHASE');
+    expect(html).toContain('BUILD');
+    // Continuous strip with gold status squares, not cards.
+    expect(html).toContain('rpw-strip-square');
   });
 });
 
@@ -93,7 +104,7 @@ describe('workforce strip', () => {
 describe('project conversation', () => {
   it('is project-specific, distinct from the terminal, with no provider call', () => {
     const html = render('implementing');
-    expect(html).toContain('PROJECT CHANNEL');
+    expect(html).toContain('PROJECT CONVERSATION');
     expect(html).toContain('Ask Relay about this project…');
     expect(html).toContain('not the Live Terminal');
   });
@@ -109,10 +120,18 @@ describe('project conversation', () => {
 /* -------------------------------------------------------------- terminal */
 
 describe('live terminal', () => {
-  it('opens as an overlay with safe normalized events and truth labels', () => {
+  it('opens Terminal Mode with role panels, safe normalized events, and truth labels', () => {
     const html = render('verifying', { terminalOpen: true });
     expect(html).toContain('LIVE TERMINAL');
     expect(html).toContain('Close Live Terminal');
+    // Founder Terminal Mode structure: per-role panels + mission status row.
+    expect(html).toContain('PROMPT ARCHITECT');
+    expect(html).toContain('CODING AGENT');
+    expect(html).toContain('RELAY SYSTEM');
+    expect(html).toContain('MISSION IN PROGRESS');
+    expect(html).toContain('CONTEXT ID: msn-fixture-001');
+    expect(html).toContain('RUN typecheck'); // safe summarized op, never a raw command
+    // Truthfulness survives the restyle.
     expect(html).toContain('CLAIM — PENDING VERIFICATION');
     expect(html).toContain('VERIFIED EVIDENCE');
     expect(html).toContain('WORKSPACE INSPECTION');
@@ -223,6 +242,13 @@ describe('completion', () => {
     for (const key of WORKSPACE_FIXTURE_KEYS.filter((k) => k !== 'verified_complete')) {
       expect(render(key), key).not.toContain('MISSION VERDICT');
     }
+  });
+
+  it('footer claims ALL SYSTEMS GO only while genuinely progressing (review finding)', () => {
+    expect(render('implementing')).toContain('ALL SYSTEMS GO');
+    expect(render('verified_complete')).not.toContain('ALL SYSTEMS GO');
+    expect(render('waiting_for_user')).not.toContain('ALL SYSTEMS GO');
+    expect(render('revision_required')).not.toContain('ALL SYSTEMS GO');
   });
 
   it('a contradicted verdict is HELD, never displayed as complete', () => {

@@ -8,10 +8,10 @@ import type {
 } from './contracts';
 
 /**
- * Project command strip — Architect / Coding Agent / Reviewer / Mode /
- * Phase, expanding the screenshot's Architect · Coding Agent · Mode row
- * without crowding it. Horizontal on desktop; compact scrollable system
- * strip on mobile.
+ * Project command strip — one continuous horizontal system strip with thin
+ * dividers, compact labels, gold status squares (never large rounded cards),
+ * per the founder screenshots. Architect · Coding Agent · Reviewer · Mode ·
+ * Phase.
  */
 
 const ARCHITECT_LABEL: Record<ArchitectStatus, string> = {
@@ -30,10 +30,10 @@ const CODING_LABEL: Record<CodingAgentStatus, string> = {
 };
 
 const PHASE_LABEL: Record<ProjectPhase, string> = {
-  plan: 'PLANNING',
+  plan: 'PLAN',
   research: 'RESEARCH',
-  build: 'IMPLEMENTATION',
-  verify: 'VERIFICATION',
+  build: 'BUILD',
+  verify: 'VERIFY',
   review: 'REVIEW',
   repair: 'REPAIR',
   complete: 'COMPLETE',
@@ -48,33 +48,26 @@ export function RelayWorkforceStrip({
   mode: RelayWorkspaceMode;
   phase: ProjectPhase;
 }) {
+  const cell = (key: string, name: string, status: string, phaseCell = false) => (
+    <div className={`rpw-strip-cell${phaseCell ? ' rpw-strip-cell--phase' : ''}`}>
+      <span className="rpw-key">{key}</span>
+      <span className="rpw-strip-name">
+        <span className="rpw-strip-square" aria-hidden="true">
+          ■
+        </span>{' '}
+        {name}
+      </span>
+      <span className="rpw-strip-status">{status}</span>
+    </div>
+  );
+
   return (
     <div className="rpw-strip" role="group" aria-label="Project workforce and mode">
-      <div className="rpw-strip-cell">
-        <span className="rpw-key">PROMPT ARCHITECT</span>
-        <span className="rpw-strip-name">{workforce.promptArchitect.name}</span>
-        <span className="rpw-strip-status">{ARCHITECT_LABEL[workforce.promptArchitect.status]}</span>
-      </div>
-      <div className="rpw-strip-cell">
-        <span className="rpw-key">CODING AGENT</span>
-        <span className="rpw-strip-name">{workforce.codingAgent.name}</span>
-        <span className="rpw-strip-status">{CODING_LABEL[workforce.codingAgent.status]}</span>
-      </div>
-      <div className="rpw-strip-cell">
-        <span className="rpw-key">REVIEWER</span>
-        <span className="rpw-strip-name">{workforce.reviewer.name}</span>
-        <span className="rpw-strip-status">{REVIEWER_STATE_LABEL[workforce.reviewer.state]}</span>
-      </div>
-      <div className="rpw-strip-cell">
-        <span className="rpw-key">MODE</span>
-        <span className="rpw-strip-name">{mode.toUpperCase()}</span>
-        <span className="rpw-strip-status">RELAY</span>
-      </div>
-      <div className="rpw-strip-cell rpw-strip-cell--phase">
-        <span className="rpw-key">PROJECT PHASE</span>
-        <span className="rpw-strip-name">{PHASE_LABEL[phase]}</span>
-        <span className="rpw-strip-status">ACTIVE</span>
-      </div>
+      {cell('PROMPT ARCHITECT', workforce.promptArchitect.name, ARCHITECT_LABEL[workforce.promptArchitect.status])}
+      {cell('CODING AGENT', workforce.codingAgent.name, CODING_LABEL[workforce.codingAgent.status])}
+      {cell('REVIEWER', workforce.reviewer.name, REVIEWER_STATE_LABEL[workforce.reviewer.state])}
+      {cell('MODE', mode.toUpperCase(), 'RELAY')}
+      {cell('PHASE', PHASE_LABEL[phase], 'ACTIVE', true)}
     </div>
   );
 }

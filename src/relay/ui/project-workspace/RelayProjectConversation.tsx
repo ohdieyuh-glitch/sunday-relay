@@ -3,11 +3,23 @@ import type { ProjectMessage } from './contracts';
 
 /**
  * PROJECT CHANNEL — the developer's interactive conversation with Relay
- * about the ACTIVE project. Distinct from the Live Terminal (observational).
- * It never displays hidden reasoning, raw prompts, raw process output, or
- * secrets; agent text is never presented as verified evidence. Messages
- * leave through callbacks only — no provider is called from the browser.
+ * about the ACTIVE project, docked directly beneath the Relay Console.
+ * Interactive where the console is observational; never bubbles inside the
+ * activity console. It never displays hidden reasoning, raw prompts, raw
+ * process output, or secrets; agent text is never presented as verified
+ * evidence. Messages leave through callbacks only — no provider is called
+ * from the browser.
  */
+
+const QUICK_ACTIONS = [
+  'What is happening?',
+  'Why is Relay waiting?',
+  'Explain the Reviewer finding',
+  'What evidence passed?',
+  'What is the Prompt Architect researching?',
+  'Add a project requirement',
+];
+
 export function RelayProjectConversation({
   messages,
   onSendProjectMessage,
@@ -28,45 +40,59 @@ export function RelayProjectConversation({
     setInput('');
   };
 
+  // Show recent exchange plus EVERY pending approval request — an approval
+  // must never become unreachable because newer messages arrived.
+  const recent = messages.slice(-3);
+  const pendingDecisions = messages.filter(
+    (m) => m.kind === 'approval_request' && m.decisionId && !recent.includes(m),
+  );
+  const shown = [...pendingDecisions, ...recent];
+
   return (
     <section className="rpw-conversation" aria-labelledby="rpw-conv-heading">
-      <div className="rpw-panel-head">
-        <h2 id="rpw-conv-heading" className="rpw-section-title">
-          PROJECT CHANNEL
+      <div className="rpw-conv-head">
+        <h2 id="rpw-conv-heading" className="rpw-conv-title">
+          PROJECT CONVERSATION
         </h2>
-        <span className="rpw-panel-note">Interactive — supervise and direct the project</span>
+        <span className="rpw-conv-note">
+          Interactive — the console above is observational, not the Live Terminal input.
+        </span>
       </div>
 
-      <ol className="rpw-conv-messages" aria-label="Project conversation">
-        {messages.map((m) => (
-          <li key={m.messageId} className={`rpw-msg rpw-msg--${m.author}`}>
-            <span className="rpw-msg-author">{m.author === 'developer' ? 'YOU' : 'RELAY'}</span>
-            {m.fixture && <span className="rpw-fixture-tag">FIXTURE</span>}
-            <p className="rpw-msg-text">{m.text}</p>
-            <span className="rpw-msg-at">{m.at}</span>
-            {m.kind === 'approval_request' && m.decisionId && (
-              <span className="rpw-msg-decision">
-                <button
-                  type="button"
-                  className="rpw-btn rpw-btn--primary"
-                  onClick={() => onApproveDecision(m.decisionId!)}
-                >
-                  APPROVE
-                </button>
-                <button
-                  type="button"
-                  className="rpw-btn"
-                  onClick={() => onRejectDecision(m.decisionId!)}
-                >
-                  REJECT
-                </button>
-              </span>
-            )}
-          </li>
-        ))}
-      </ol>
+      {shown.length > 0 && (
+        <ol className="rpw-conv-messages" aria-label="Project conversation">
+          {shown.map((m) => (
+            <li key={m.messageId} className={`rpw-msg rpw-msg--${m.author}`}>
+              <span className="rpw-msg-author">{m.author === 'developer' ? 'YOU' : 'RELAY'}</span>
+              <span className="rpw-msg-text">{m.text}</span>
+              {m.fixture && <span className="rpw-fixture-tag">FIXTURE</span>}
+              {m.kind === 'approval_request' && m.decisionId && (
+                <span className="rpw-conv-decision">
+                  <button
+                    type="button"
+                    className="rpw-btn rpw-btn--primary"
+                    onClick={() => onApproveDecision(m.decisionId!)}
+                  >
+                    APPROVE
+                  </button>
+                  <button
+                    type="button"
+                    className="rpw-btn"
+                    onClick={() => onRejectDecision(m.decisionId!)}
+                  >
+                    REJECT
+                  </button>
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
 
       <div className="rpw-conv-input">
+        <span className="rpw-conv-prompt" aria-hidden="true">
+          &gt;_
+        </span>
         <label className="rpw-visually-hidden" htmlFor="rpw-conv-text">
           Ask Relay about this project
         </label>
@@ -80,13 +106,18 @@ export function RelayProjectConversation({
             if (e.key === 'Enter') send();
           }}
         />
-        <button type="button" className="rpw-btn rpw-btn--primary" onClick={send}>
+        <button type="button" className="rpw-btn rpw-btn--primary rpw-conv-send" onClick={send}>
           SEND
         </button>
       </div>
-      <p className="rpw-conv-scope">
-        Supervisory channel — this is not the Live Terminal and never launches agents directly.
-      </p>
+
+      <div className="rpw-conv-quick" aria-label="Quick questions">
+        {QUICK_ACTIONS.map((q) => (
+          <button key={q} type="button" className="rpw-quick" onClick={() => onSendProjectMessage(q)}>
+            {q}
+          </button>
+        ))}
+      </div>
     </section>
   );
 }

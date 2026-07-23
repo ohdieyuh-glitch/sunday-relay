@@ -2,6 +2,7 @@ export { RelayProjectWorkspace } from './RelayProjectWorkspace';
 export { RelayProjectHeader } from './RelayProjectHeader';
 export { RelayWorkforceStrip } from './RelayWorkforceStrip';
 export { RelayProjectConversation } from './RelayProjectConversation';
+export { RelayConsole } from './RelayConsole';
 export { RelayLiveTerminalPanel } from './RelayLiveTerminalPanel';
 export { RelayTerminalEvent } from './RelayTerminalEvent';
 export { RelayProjectPhaseRail } from './RelayProjectPhaseRail';

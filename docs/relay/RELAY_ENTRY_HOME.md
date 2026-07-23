@@ -39,33 +39,28 @@ network is STANDBY; the project state is UNCONFIGURED or DRAFT.
 
 ## What the screen contains
 
-1. **Product header** — Pixel Relay Dog mark, SUNDAY RELAY, product switcher
-   (ALCATRAZ ⇄ RELAY, Relay active), status cells `PROJECT / UNCONFIGURED`,
-   `RLY / HOME`, `HANDOFF NETWORK / STANDBY`, `[ >_ ] OPEN LIVE TERMINAL`,
-   PROJECT SETTINGS, notifications, profile. No marketing navigation.
-2. **Primary start area** — `RELAY HOME / ROUTE 000`, "What are we
-   building?", PROJECT OBJECTIVE textarea, BUILD PROJECT BRIEF,
-   CONNECT EXISTING PROJECT, OPEN PROJECT SETTINGS, readiness indicator.
-   Entering text never begins execution.
-3. **Relay Dog** — system guide + handoff indicator (pixel art, perspective
-   grid floor). Not a customer-service chatbot.
-4. **Project routes** — six numbered primary routes (01–06) + ten secondary
-   routes behind VIEW MORE PROJECT ROUTES. Selection prefills the objective
-   and category and recomputes workforce/research/evidence recommendations —
-   deterministically, in `recommendations.ts`. Never starts execution.
-5. **Recommended workforce** — Prompt Architect (Sunday Alcatraz,
-   RECOMMENDED) → Coding Agent (Claude Code, CONNECTED) → Reviewer (Codex,
-   AVAILABLE) → Relay (verified result). Statuses are truthful; only agents
-   with a real adapter may read CONNECTED.
-6. **Project research preview** — always NOT CONFIGURED here. Typed fields
-   only; no research occurs in this phase.
-7. **Ask Relay** — guidance chat (below).
-8. **Project Brief Draft** — the editable structured beginning prompt
-   (below).
-9. **Recent projects** — empty and populated states with truthful project
-   states; CONTINUE fires `onOpenRecentProject(projectId)`.
-10. **System footer** — HANDOFF NETWORK / STANDBY · "Pass the work. Keep the
-    context."
+Redesigned to the founder's direction: **visually calm and spacious, three
+immediate choices** — start from an idea, choose a route, connect an
+existing project. Workforce and research configuration moved to Project
+Settings (see RELAY_PROJECT_SETTINGS.md).
+
+1. **Product header** — Pixel Relay Dog mark (bone-white robot dog, gold
+   collar), SUNDAY RELAY, product switcher (ALCATRAZ ⇄ RELAY), status cells
+   `PROJECT / UNCONFIGURED`, `RLY / HOME`, `HANDOFF NETWORK / STANDBY`,
+   `[ >_ ] OPEN LIVE TERMINAL`, PROJECT SETTINGS, notifications, profile.
+   No marketing navigation.
+2. **Main start area** (single centered column) — Relay Dog on the glowing
+   grid floor, "What are we building?", PROJECT OBJECTIVE input, BUILD
+   PROJECT BRIEF · CONNECT EXISTING PROJECT · OPEN PROJECT SETTINGS,
+   readiness indicator. Entering text never begins execution.
+3. **Project routes** — six numbered selectable route rows (01–06) + ten
+   secondary behind VIEW MORE. Selection prefills the objective/category
+   deterministically. Never starts execution.
+4. **Ask Relay** — available without dominating; the Project Brief Draft
+   panel appears only once a draft exists.
+5. **Recent projects** — compact and secondary, truthful states.
+6. **System footer** — HANDOFF NETWORK / STANDBY · "Pass the work. Keep the
+   context."
 
 ## Ask Relay — purpose and restrictions
 
