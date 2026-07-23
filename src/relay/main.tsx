@@ -8,13 +8,18 @@ import '@fontsource/fira-code/700.css';
 import '@/styles/global.css';
 import './relay.css';
 import './ui/mission-control.css';
-import { MissionControl } from './ui/MissionControl';
+import './ui/pixel-dog/pixel-dog.css';
+import './ui/entry-home/relay-entry-home.css';
+import { RelayPreviewApp } from './ui/preview/RelayPreviewApp';
 
-// Prompt 8.2: the primary Relay surface is Mission Control, projecting from
-// Relay Core. The earlier custody-rail prototype (RelayApp) remains in the
-// tree, parked, for the protocol demonstration.
+// Isolated preview wiring (feature/relay-entry-home-claude): the entry now
+// renders the preview shell, whose default route is the Relay Entry Home —
+// the in-product screen between Sunday Alcatraz and Project Settings. The
+// execution console (MissionControl, Prompt 8.2) stays reachable at
+// #/relay/console. This is the branch's single integration change beyond
+// src/relay/ui/**; see docs/relay/RELAY_ENTRY_HOME.md for reconciliation.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MissionControl />
+    <RelayPreviewApp />
   </StrictMode>,
 );

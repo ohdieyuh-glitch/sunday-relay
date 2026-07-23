@@ -1,0 +1,126 @@
+/* Development preview shell — NOT part of any production component contract.
+   Provides the route switcher, the mobile frame, and the Project Settings
+   integration-boundary placeholder. */
+
+.rpv {
+  min-height: 100dvh;
+  background: #07080b;
+}
+
+.rpv-switcher {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(11, 13, 18, 0.95);
+  border: 1px solid #1c2230;
+  font-family: 'Fira Code', ui-monospace, monospace;
+}
+.rpv-switcher-tag {
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  color: #5d584e;
+}
+.rpv-switcher button {
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  padding: 5px 8px;
+  min-height: 28px;
+  background: transparent;
+  color: #8b8578;
+  border: 1px solid #1c2230;
+  cursor: pointer;
+}
+.rpv-switcher button[aria-pressed='true'] {
+  color: #d9a441;
+  border-color: #d9a441;
+}
+.rpv-switcher button:focus-visible {
+  outline: 2px solid #d9a441;
+  outline-offset: 2px;
+}
+
+.rpv-mobile-frame {
+  display: flex;
+  justify-content: center;
+  padding: 24px 0 64px;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.14) 0 1px, transparent 1px 3px),
+    #04050708;
+}
+.rpv-mobile-viewport {
+  width: 390px;
+  max-width: 100%;
+  border: 1px solid #1c2230;
+  box-shadow: 0 0 0 6px #0b0d12;
+  overflow: hidden;
+}
+
+.rpv-notice {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 60;
+  margin: 0;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 10px;
+  color: #6fbf73;
+  background: rgba(11, 13, 18, 0.95);
+  border: 1px solid #1c2230;
+  padding: 6px 10px;
+}
+.rpv-notice button {
+  font-family: inherit;
+  font-size: 9px;
+  background: transparent;
+  border: 0;
+  color: #8b8578;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.rpv-settings {
+  min-height: 100dvh;
+  background: #07080b;
+  color: #ece7dd;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  padding: clamp(20px, 4vw, 48px);
+}
+.rpv-settings-label {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: #d9a441;
+  margin: 0 0 10px;
+}
+.rpv-settings h1 {
+  font-family: 'Helvetica Neue', 'Inter', Arial, sans-serif;
+  font-size: clamp(26px, 4vw, 40px);
+  margin: 0 0 12px;
+}
+.rpv-settings-copy {
+  max-width: 68ch;
+  color: #8b8578;
+  font-size: 13px;
+}
+.rpv-settings-copy code { color: #d9a441; }
+.rpv-settings-draft {
+  background: #0b0d12;
+  border: 1px solid #1c2230;
+  padding: 14px;
+  font-size: 11px;
+  overflow-x: auto;
+  max-height: 50vh;
+  margin: 16px 0;
+}
+.rpv-settings-empty {
+  color: #5d584e;
+  font-size: 12px;
+  border: 1px dashed #1c2230;
+  padding: 18px;
+  margin: 16px 0;
+}
