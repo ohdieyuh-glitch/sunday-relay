@@ -8,8 +8,13 @@ selected or configured.
 Sunday Alcatraz
   → RELAY ENTRY HOME          (this screen)
     → Project Settings        (integration boundary in this branch)
-      → Active Relay Project Workspace / execution console
+      → Active Relay Project Workspace   (see RELAY_PROJECT_WORKSPACE.md)
 ```
+
+The Active Relay Project Workspace (`src/relay/ui/project-workspace/`) is
+the screen that opens after Project Settings is confirmed and the developer
+intentionally starts the project — the browser-application execution
+surface from the founder-provided screenshots.
 
 It is **not** a marketing website, not a landing page, not the execution
 console, and not Project Settings. The user is already signed in and inside
@@ -168,7 +173,8 @@ router changes):
 | --- | --- |
 | `#/relay` | Relay Entry Home (default) |
 | `#/relay/project-settings` | Project Settings integration boundary — displays the received draft JSON |
-| `#/relay/project/:projectId` | Active Project Workspace (placeholder until that phase lands) |
+| `#/relay/project/:projectId` | Active Relay Project Workspace (fixture states) |
+| `#/relay/project/:projectId/terminal` | Full-screen Live Terminal (mobile flow) |
 | `#/relay/console` | Existing execution console (Mission Control, Prompt 8.2) |
 
 The fixed bottom-right DEV PREVIEW switcher (screens, MOBILE frame at 390px,

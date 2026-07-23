@@ -124,3 +124,27 @@
   padding: 18px;
   margin: 16px 0;
 }
+
+.rpv-settings-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rpv-fixture-picker {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  border-left: 1px solid #1c2230;
+  padding-left: 6px;
+  max-width: 420px;
+}
+.rpv-fixture-picker button { font-size: 8px; }
+
+@media (max-width: 640px) {
+  .rpv-switcher {
+    left: 12px;
+    right: 12px;
+    flex-wrap: wrap;
+  }
+}

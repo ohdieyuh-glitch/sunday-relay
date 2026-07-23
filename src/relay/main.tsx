@@ -10,6 +10,7 @@ import './relay.css';
 import './ui/mission-control.css';
 import './ui/pixel-dog/pixel-dog.css';
 import './ui/entry-home/relay-entry-home.css';
+import './ui/project-workspace/relay-project-workspace.css';
 import { RelayPreviewApp } from './ui/preview/RelayPreviewApp';
 
 // Isolated preview wiring (feature/relay-entry-home-claude): the entry now
