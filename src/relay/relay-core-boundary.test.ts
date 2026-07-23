@@ -77,7 +77,7 @@ describe('relay-core boundary (new module roots)', () => {
   it('CLI is a thin client: only the app facade, read-model types, protocol, workspace facade, and its own modules', () => {
     // '../workspace' (the composition-root facade) is the ONLY workspace
     // import the CLI may use — internals are asserted below.
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer)|\.\.\/mission|node:util|node:readline)['"]/;
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer|supervised)|\.\.\/mission|node:util|node:readline)['"]/;
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
       const imports = [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
@@ -149,10 +149,11 @@ describe('Workspace boundaries (Prompt 7)', () => {
   });
 
   // The approved LIVE local adapters (Claude coding agent + Codex reviewer)
-  // may use the workspace facade and spawn processes; simulation adapters may
-  // not.
+  // and the Prompt-8.4 supervised composition over them may use the workspace
+  // facade and spawn processes; simulation adapters may not.
   const isClaudeAdapter = (f: string): boolean =>
-    f.includes(join('connectors', 'claude-code')) || f.includes(join('connectors', 'codex-reviewer'));
+    f.includes(join('connectors', 'claude-code')) || f.includes(join('connectors', 'codex-reviewer')) ||
+    f.includes(join('connectors', 'supervised'));
 
   it('Relay Core, protocol, ledger never import the workspace implementation or child_process', () => {
     for (const file of files) {
@@ -312,6 +313,59 @@ describe('Codex Reviewer boundaries (Prompt 8.3)', () => {
   });
 });
 
+describe('Supervised workflow boundaries (Prompt 8.4)', () => {
+  const supervisedDir = relay(join('connectors', 'supervised'));
+  const supervisedFiles = walk(supervisedDir).filter((f) => !f.endsWith('.test.ts'));
+  const supervisedProduction = supervisedFiles.filter((f) => !f.endsWith('verify-harness.ts'));
+
+  it('Relay Core, protocol, ledger, mission, and UI never import the supervised composition', () => {
+    for (const file of [...files, ...walk(relay('mission')), ...walk(relay('ui'))].filter(
+      (f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'),
+    )) {
+      expect(/from\s+['"].*connectors\/supervised/.test(read(file)), `${file} imports the supervised composition`).toBe(false);
+    }
+    for (const name of ['main.tsx', 'RelayApp.tsx', 'StagePanel.tsx', 'PipelineRail.tsx']) {
+      expect(/from\s+['"].*connectors\/supervised/.test(read(relay(name))), `${name} imports the supervised composition`).toBe(false);
+    }
+  });
+
+  it('the supervised runner composes the approved adapters — it never spawns processes itself', () => {
+    for (const file of supervisedFiles) {
+      expect(/child_process|spawnSync|execFileSync/.test(read(file)), `${file} spawns processes directly`).toBe(false);
+    }
+  });
+
+  it('NO fault injection: the runner never seeds defects or writes implementation content', () => {
+    for (const file of supervisedProduction) {
+      const content = read(file);
+      expect(content.includes('DEFECT_IMPLEMENTATION'), `${file} references a seeded defect`).toBe(false);
+      expect(/writeFileSync|appendFileSync/.test(content), `${file} writes files into the workspace`).toBe(false);
+      expect(content.includes('demo.fault_injected'), `${file} emits a fault-injection event`).toBe(false);
+    }
+  });
+
+  it('no demo.fault_injected event exists anywhere in Relay production sources', () => {
+    // Verify-harnesses may MENTION the event name only to assert its absence.
+    const productionFiles = [
+      ...files, ...walk(relay('connectors')), ...walk(relay('cli')),
+      ...walk(relay('mission')), ...walk(relay('workspace')),
+    ].filter((f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx') && !f.endsWith('verify-harness.ts'));
+    for (const file of productionFiles) {
+      expect(read(file).includes('demo.fault_injected'), `${file} contains a fault-injection event`).toBe(false);
+    }
+  });
+
+  it('verdicts come only from the parsed reviewer report and the Relay-owned gate', () => {
+    const runner = read(join(supervisedDir, 'live-runner.ts'));
+    expect(runner).toContain('report.verdict');
+    expect(runner).toContain('evaluateReviewerGate');
+    expect(runner).toContain('evaluateCompletionPolicy');
+    // The runner never decides release visibility itself (line-244 invariant
+    // also covers this for every connector file).
+    expect(runner.includes('computeOutputVisibility')).toBe(false);
+  });
+});
+
 describe('Mission projection boundaries (Prompt 8.1)', () => {
   const missionDir = relay('mission');
   const missionFiles = walk(missionDir).filter((f) => !f.endsWith('.test.ts'));
@@ -339,12 +393,14 @@ describe('Mission projection boundaries (Prompt 8.1)', () => {
   });
 
   it('adapters cannot resolve findings, promote evidence, or decide mission completion', () => {
-    // The live Codex reviewer MAY import the permitted mission surfaces
-    // (execution-attestation builder, the reviewer-gate composite, review/
-    // repair + entitlement contracts). Every other adapter stays out of the
-    // mission projection, and NO adapter may call the mission-completion
-    // deciders (verdict engine, finding resolution, mission-contract builder).
-    const isCodexReviewer = (f: string): boolean => f.includes(join('connectors', 'codex-reviewer'));
+    // The live Codex reviewer and the Prompt-8.4 supervised composition MAY
+    // import the permitted mission surfaces (execution-attestation builder,
+    // the reviewer-gate composite, review/repair + entitlement contracts).
+    // Every other adapter stays out of the mission projection, and NO adapter
+    // may call the mission-completion deciders (verdict engine, finding
+    // resolution, mission-contract builder).
+    const isCodexReviewer = (f: string): boolean =>
+      f.includes(join('connectors', 'codex-reviewer')) || f.includes(join('connectors', 'supervised'));
     for (const file of [...walk(relay('connectors')).filter((f) => !f.endsWith('.test.ts'))]) {
       const content = read(file);
       if (!isCodexReviewer(file)) {

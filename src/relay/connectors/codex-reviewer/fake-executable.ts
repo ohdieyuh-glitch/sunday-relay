@@ -41,6 +41,12 @@ export interface FakeReviewerSpec {
   verdict?: ReviewReportVerdict;
   summary?: string;
   findings?: ReviewReportFinding[];
+  /** Prompt 8.4 (supervised harness): the SCRIPTED verdict/findings the fake
+   * emits when resumed for a re-review — so the offline harness can simulate
+   * a genuine changes_required → repair → approved cycle with NO provider
+   * call. Defaults to `verdict`/`findings` when absent. */
+  resumeVerdict?: ReviewReportVerdict;
+  resumeFindings?: ReviewReportFinding[];
   /** For wrong_id_field: which field to corrupt and to what. */
   corruptField?: 'reviewId' | 'missionId' | 'taskId' | 'reviewedMissionRevision' | 'reviewedTaskRevision' | 'reviewedWorkspaceRevision';
   corruptValue?: string | number;
@@ -82,14 +88,16 @@ function parseContract(text) {
 
 function buildReport() {
   const c = parseContract(stdin);
+  const verdict = (isResume && SPEC.resumeVerdict) ? SPEC.resumeVerdict : (SPEC.verdict || 'changes_required');
+  const findings = (isResume && SPEC.resumeFindings !== undefined) ? SPEC.resumeFindings : (SPEC.findings || []);
   const report = {
     reviewId: c.reviewId, missionId: c.missionId, taskId: c.taskId,
     reviewedMissionRevision: c.missionRevision, reviewedTaskRevision: c.taskRevision,
     reviewedWorkspaceRevision: c.workspaceRevision,
     reviewerRole: 'independent_coding_reviewer',
-    verdict: SPEC.verdict || 'changes_required',
+    verdict: verdict,
     summary: SPEC.summary || 'Independent review of the changed dispatch guard.',
-    findings: SPEC.findings || [],
+    findings: findings,
     evidenceReviewed: ['git diff', 'node --test test/dispatch.test.js'],
     limitations: ['Reviewed only the claimed changed file.'],
   };

@@ -1127,3 +1127,161 @@ COMPETITIVE_FEATURE_COVERAGE (§4/§9/§10 sync), this log.
 Loop**: live Claude implementation → Relay verification → live Codex finding →
 exact Claude session repair → Relay re-verification → exact Codex session
 re-review → VERIFIED COMPLETE.
+
+---
+
+## 2026-07-22 — Prompt 8.4 GATE A PASSED: live supervised workflow offline-proven
+
+**Recovery note:** the prior laptop session powered off before any Prompt-8.4
+work reached disk — recovery inspection found HEAD at the 8.3 checkpoint
+9a74a10, a clean tree, no stashes, no untracked files, no `relay:supervised:*`
+scripts, and no supervised module. Gate A was therefore implemented from the
+clean checkpoint (nothing restarted, nothing lost).
+
+**Built (`src/relay/connectors/supervised/`):** a COMPOSITION over the two
+approved live adapters — it spawns no process, writes nothing into any
+workspace, and decides no verdict. Workflow: real Claude implementation
+(isolated worktree) → Relay inspection (claimed-only) → Relay-controlled
+verification (`node --test`, Relay-run) → output HELD → real independent
+Codex review (read-only, attested, independence Relay-computed) → **PATH A**
+genuine approval → CompletionPolicy (requires the independent review) →
+VERIFIED COMPLETE (exit 0); or **PATH B** genuine validated finding →
+F-1 + R-1 (linked, scope-locked) → the EXACT original Claude session resumes
+for ONE bounded repair (`--resume`, identity confirmed, attempt-2 report
+required) → Relay re-inspects + re-verifies → the EXACT original Codex
+session resumes for re-review (`resume <uuid>`, identity confirmed) →
+VERIFIED COMPLETE only after genuine approval. Honest stops: failing
+verification / needs_human / blocked / unapproving re-review (exit 3, single
+repair never exceeded); integrity rejections (exit 5): unclaimed or protected
+changes, reviewer file modification, wrong session on EITHER resume, invalid
+report/attestation/independence.
+
+**Prohibitions enforced structurally:** no planted defect, no fault
+injection, no `demo.fault_injected` anywhere in Relay production sources, no
+forced verdict, no manufactured finding, no misleading attribution — proven
+by the Prompt-8.4 boundary suite + source-level tests (runner has no
+workspace write, no `DEFECT_IMPLEMENTATION` reference, no child_process; the
+live fixture is the genuine safe-edit task with NO seeded defect). Offline
+fakes simulate approved/changes_required outcomes ONLY (permitted for
+orchestration testing): the fake Claude writes the CORRECT reference
+implementation; the scripted fake finding is labeled a SIMULATED reviewer
+outcome asserting no real defect. Additive fake-Codex extension:
+`resumeVerdict`/`resumeFindings` for per-attempt scripted outcomes.
+
+**Commands:** `npm run relay:supervised:contract-verify` (Gate A) ·
+`npm run relay:supervised:live` (Gate B, FOUNDER-INITIATED ONLY,
+`--confirm-live` required; 2 expected live calls, up to 4 with the single
+repair cycle). Combined prerequisites reuse both adapters' gates unweakened;
+the no-confirm run verifiably stops at exit 5 with the confirmation screen
+and makes no call.
+
+**Gate A verification (exact, NO provider call):**
+`relay:supervised:contract-verify` **47/47 (twice)** ending
+`READY FOR LIVE SUPERVISED WORKFLOW`; supervised + boundary tests 59/59;
+connectors + CLI 103/103; relay suite **462/462** (37 files); typecheck
+green; full suite **2051/2051** (155 files); frontend + backend + relay
+builds green; `relay:claude:contract-verify` and `relay:codex:contract-verify`
+still pass; `relay:yc:verify`, `relay:manual:verify`,
+`relay:workspace:verify`, `relay:competitive`, `relay:mission-control` all
+pass (exit 0).
+
+**Docs:** SUPERVISED_WORKFLOW.md (new, authoritative) + sync blockquotes in
+ARCHITECTURE/TEST_STRATEGY/CLI, CURRENT_STATE (phase + docs table + next
+prompt), this log. Uncommitted by instruction (no commit, no push this
+session).
+
+**GATE A: READY FOR LIVE SUPERVISED WORKFLOW.**
+
+**Exact next step:** Gate B — the founder runs, in a separate terminal:
+`npm run relay:supervised:live`. Both PATH A and PATH B are successful
+outcomes; after Gate B passes, commit
+`feat(relay): add live supervised implementation review and repair loop`,
+then proceed to Post-YC Durable Local Persistence.
+
+---
+
+## 2026-07-22 — Prompt 8.4 COMPLETE: Gate B live supervised workflow PASSED via PATH A
+
+**Gate B (founder-run, separate terminal, authoritative terminal output):**
+the FIRST `npm run relay:supervised:live` completed the full loop end to end
+with exactly **TWO live calls** (one Claude implementation, one Codex
+review). Observed: real Claude implementer launched in the isolated
+worktree; execution report received AS A CLAIM; Relay inspection — exactly
+one claimed file changed (`src/normalize.js`), zero protected changes,
+source worktree unchanged; Relay independently ran
+`node --test test/normalize.test.js` — PASS; output HELD FOR REVIEW; real
+Codex reviewer launched read-only; attestation — Requested/Actual
+Implementer: Claude Code, Requested/Actual Reviewer: Codex, sandbox read
+only, fallback none; the reviewer **GENUINELY returned APPROVED on first
+review**; CompletionPolicy evaluated the real evidence only after the
+approval; Final Audit outcome **verified-complete**, repairs used **0 of
+1**; RELAY COMPLETE. This is **PATH A: first-pass approval**. Claude
+completed the fixture correctly on its first implementation; no live repair
+was required and no live re-review occurred; no Finding or Repair record
+was created; no Claude or Codex resume happened; no defect was planted and
+no finding was manufactured. **The PATH-B conditional repair /
+exact-session re-review branch remains OFFLINE contract-proven, not
+live-proven** — it will be exercised live only if a future
+founder-authorized run genuinely elicits a blocking finding.
+
+**Accidental second invocation (audited from safe local evidence only —
+process table, Relay temp state, sanitized npm invocation logs, provider
+artifact FILENAMES/timestamps; no credential file read, no session id
+exposed, no provider call made):** while run 1 was executing, typed lines
+queued in the terminal. Evidence: npm ran `relay:supervised:live` at
+19:52:48 (run 1) and again at 19:53:57 (run 2); exactly two new Claude
+fixture-workspace session dirs (19:53, 19:54; ONE session file each — no
+resumes) and exactly two new Codex rollout files (19:53:24, 19:54:22)
+exist. **Outcome B for the second invocation: it did not stop at the
+confirmation screen — it ran to a second FULL PATH-A completion (2
+additional live calls) and cleaned up normally.** It is NOT Gate-B
+evidence; the first run is authoritative. A THIRD queued
+`npm run relay:supervised:live` never executed (no npm record, no
+artifacts — this is what Ctrl+C stopped), and an earlier typo'd
+`relay:supervised:live~` (19:51:04) was rejected by npm with zero calls.
+**Total live calls in the window: 4 (2 authoritative + 2
+accidental-complete); no uncertain calls.** Cleanup accounting: both
+completed runs removed their fixtures; no active Relay/Claude/Codex
+workflow process remained; one stale HALF-BUILT fixture scaffold
+(`/tmp/relay-claude-fixture-*`, 19:18:43 — pre-Gate-B, empty src/test, no
+commit, no workspace, correlating with NO provider artifact, i.e. an
+interrupted non-npm test process that never reached any launch) was
+inspected and removed; the source repository shows only the Prompt-8.4
+change set.
+
+**Path-A validation (terminal evidence + safe artifacts + code-path
+invariants):** Claude session captured (exactly one session file for run
+1's workspace — no second session, no resume); requested=actual implementer
+(Claude Code) and reviewer (Codex); associations
+project/mission/task/workspace/attempt correct by construction (the
+exit-0 path structurally requires launch verification, captured sessions,
+valid id-matched reports, `allowed` inspections, zero reviewer file
+changes, snapshot equality, source-unchanged, Relay-run verification bound
+to the reviewed workspace revision, structural independence, and
+CompletionPolicy satisfaction — proven on the identical code path by the
+47-check offline harness); reviewer read-only with pre/post snapshot
+equality; verdict `approved` genuine (parsed report; no forced verdict
+exists — boundary-tested); no Finding/Repair created; output released only
+at verified-complete; no fallback/deploy/push/source modification; run 1
+used the expected two-call PATH-A budget.
+
+**Post-Gate-B verification (exact, NO provider call):** typecheck green;
+supervised + Prompt-8.4 boundary tests 59/59;
+`relay:supervised:contract-verify` **47/47 (twice)** ending `READY FOR LIVE
+SUPERVISED WORKFLOW`; `relay:claude:contract-verify` and
+`relay:codex:contract-verify` PASS; `relay:workspace:verify`,
+`relay:yc:verify`, `relay:manual:verify` PASS; `relay:mission-control` and
+`relay:competitive` exit 0; `relay:test` **462/462**; frontend + backend +
+relay builds green; `npm test` **2051/2051** (155 files).
+
+**Docs:** SUPERVISED_WORKFLOW.md §Status (Gate-B PATH-A result + audited
+second invocation), CURRENT_STATE (phase COMPLETE, truthful PATH-A record,
+next prompt = durable persistence), CLI.md blockquote, this log.
+
+**Commit:** `feat(relay): add live supervised implementation review and
+repair loop` (no push).
+
+**Exact next step:** **Post-YC Durable Local Persistence and Real
+Cross-Process Resume** (ADR-016) — the workspace registry and
+Claude/Codex session records join that scope; durable reviewer/implementer
+recovery becomes possible only then.

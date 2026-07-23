@@ -1,5 +1,23 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **Implementation sync (Prompt 8.4, 2026-07-22):** supervised workflow
+> tests. `connectors/supervised/verify-harness.ts` is the Gate-A offline
+> contract verifier — deterministic fake executables for BOTH agents prove
+> the full loop: PATH A (genuine approval → verified-complete, released,
+> truthful attestations/identities), PATH B (scripted changes_required →
+> F-1/R-1 → exact-session Claude repair (attempt 2 confirmed) → Relay
+> re-verification → exact-session Codex re-review → resolution →
+> verified-complete only after approval), the repair limit (an unapproving
+> re-review stops safely — never a second repair), needs_human/blocked
+> holds, reviewer file-modification rejection, unclaimed-change stop before
+> any review, no-change stop, and wrong-session rejection on BOTH resumes —
+> 47 checks, NO provider call. `connectors/supervised/supervised.test.ts`
+> adds the combined prerequisite gate and source-level prohibition tests
+> (no workspace write, no seeded defect, no fault injection, no forced
+> verdict, no direct process spawn). `relay-core-boundary.test.ts` gained a
+> Prompt-8.4 suite: nothing above imports the composition; no
+> `demo.fault_injected` event exists anywhere in Relay production sources.
+
 > **Implementation sync (Prompt 8.3, 2026-07-22):** Codex reviewer tests.
 > `connectors/codex-reviewer/codex-reviewer.test.ts` covers environment
 > stripping, config-isolation risk, capability strategy selection, the reviewer

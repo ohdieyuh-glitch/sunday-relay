@@ -20,6 +20,9 @@ import {
   checkReviewPrerequisites, classifyCodexAuth, codexDoctorReport,
   probeCodexCapabilities, runCodexReviewerContractVerification, runCodexReviewProof,
 } from '../connectors/codex-reviewer';
+import {
+  checkSupervisedPrerequisites, runSupervisedContractVerification, runSupervisedProof,
+} from '../connectors/supervised';
 
 /**
  * Relay CLI entry (Prompt 5). Thin client: parses arguments, composes the
@@ -42,10 +45,11 @@ const defaultIo: CliIo = {
 };
 
 export interface ParsedCli {
-  command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude' | 'codex';
+  command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude' | 'codex' | 'supervised';
   workspaceAction?: 'doctor' | 'verify';
   claudeAction?: 'doctor' | 'run' | 'inspect' | 'cancel' | 'contract-verify';
   codexAction?: 'doctor' | 'run' | 'inspect' | 'cancel' | 'contract-verify';
+  supervisedAction?: 'run' | 'contract-verify';
   fixture?: string;
   confirmLive: boolean;
   scenario?: string;
@@ -123,6 +127,13 @@ export function parseCli(argv: string[]): ParsedCli {
       }
       return { command: 'codex', codexAction: second as ParsedCli['codexAction'], fixture: values.fixture, ...base };
     }
+    if (first === 'supervised') {
+      const actions = ['run', 'contract-verify'];
+      if (!second || !actions.includes(second)) {
+        return { command: 'supervised', ...base, error: 'supervised requires an action: run or contract-verify.' };
+      }
+      return { command: 'supervised', supervisedAction: second as ParsedCli['supervisedAction'], fixture: values.fixture, ...base };
+    }
     if (first === 'demo') {
       if (!second) return { command: 'demo', ...base, error: 'demo requires a scenario name (e.g. relay demo repair).' };
       // mission-control is a presentation OVER the competitive scenario.
@@ -170,6 +181,8 @@ export const HELP_TEXT = [
   '  relay codex doctor             truthful Codex reviewer capability + auth report',
   '  relay codex contract-verify    offline reviewer proof (no provider call)',
   '  relay codex run --fixture review-defect --confirm-live   REAL Codex review',
+  '  relay supervised contract-verify   offline full-workflow proof (no provider call)',
+  '  relay supervised run --fixture safe-edit --confirm-live   REAL supervised loop',
   '  relay demo competitive         Mission Contract + Claude/Codex proof (SIMULATED)',
   '  relay demo mission-control     modes + Relay Dog + Reviewer gate + Live Terminal',
   '  relay version | relay help',
@@ -522,6 +535,101 @@ async function runCodexCli(parsed: ParsedCli, io: CliIo): Promise<number> {
   return proof.exitCode;
 }
 
+/* ------------------------- supervised commands --------------------- */
+
+async function runSupervisedCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const now = () => new Date().toISOString();
+  const out = (...lines: string[]) => lines.forEach((line) => io.out(line));
+
+  if (parsed.supervisedAction === 'contract-verify') {
+    io.out('RELAY SUPERVISED WORKFLOW CONTRACT VERIFICATION (offline — no provider call)');
+    const { checks, failures } = await runSupervisedContractVerification();
+    for (const check of checks) io.out(`  [${check.ok ? 'PASS' : 'FAIL'}] ${check.name}${check.detail ? ` — ${check.detail}` : ''}`);
+    if (failures > 0) {
+      io.out(`\nSUPERVISED CONTRACT VERIFICATION FAILED: ${failures} check(s).`);
+      return EXIT.doctorFailure;
+    }
+    io.out('\nSUPERVISED CONTRACT VERIFICATION PASSED — full workflow proven with no provider call.');
+    io.out('\nREADY FOR LIVE SUPERVISED WORKFLOW');
+    return EXIT.completed;
+  }
+
+  // supervisedAction === 'run': the explicit founder-initiated live workflow.
+  const fixture = parsed.fixture ?? 'safe-edit';
+  if (fixture !== 'safe-edit') {
+    io.out(`Only the "safe-edit" fixture is supported for the supervised live workflow (got "${fixture}").`);
+    return EXIT.usage;
+  }
+  const claudeCaps = probeClaudeCapabilities(now());
+  const claudeAuth = classifyClaudeAuth(now(), claudeCaps.executablePath);
+  const codexCaps = probeCodexCapabilities(now());
+  const codexAuth = classifyCodexAuth(now(), codexCaps.executablePath);
+
+  const prereq = checkSupervisedPrerequisites({
+    claude: {
+      capabilities: claudeCaps, authApproved: claudeAuth.approvedForLiveRun,
+      authLoggedIn: claudeAuth.loggedIn, authSourceClass: claudeAuth.sourceClass,
+      settingsRisk: 'clean', approvalGranted: parsed.confirmLive,
+    },
+    codex: {
+      capabilities: codexCaps, authApproved: codexAuth.approvedForLiveReview,
+      authStatus: codexAuth.status, configRisk: 'clean', approvalGranted: parsed.confirmLive,
+    },
+  });
+
+  const workflowScreen = (footer: string): void => {
+    out('LIVE SUPERVISED WORKFLOW', '',
+      'This will use your existing local Claude Code and Codex accounts.', '',
+      'Implementer:', '  Claude Code (live)',
+      'Reviewer:', '  Codex (live, independent, read only)',
+      'Workspace:', '  Isolated Relay worktree',
+      'Source repository:', '  Will not be modified',
+      'Deployment:', '  Disabled', 'Git push:', '  Prohibited',
+      'Fallback:', '  Disabled',
+      'Fault injection:', '  None — every verdict is the reviewer\'s genuine report',
+      'Repairs:', '  At most ONE bounded repair, only on a genuine reviewer finding',
+      'Expected live calls:', '  2 (implementation + review); up to 4 with one repair cycle',
+      'Files Claude may change:', '  src/normalize.js', '',
+      footer);
+  };
+
+  if (!prereq.ready) {
+    out('MANUAL TASK', '', 'Relay needs your help.', '', prereq.manualTitle, '',
+      'Why Relay stopped:', `  ${prereq.manualReason}`);
+    const bothOtherwiseReady = !parsed.confirmLive &&
+      claudeCaps.executablePath && claudeAuth.approvedForLiveRun &&
+      codexCaps.executablePath && codexAuth.approvedForLiveReview && codexCaps.readOnlySandboxSupported;
+    if (bothOtherwiseReady) {
+      workflowScreen('To proceed, re-run with --confirm-live (approval is never inferred from a TTY).');
+    }
+    return EXIT.checkpointRequired;
+  }
+
+  workflowScreen('Confirmed via --confirm-live.');
+
+  const proof = await runSupervisedProof({
+    claude: { executablePath: claudeCaps.executablePath!, capabilities: claudeCaps },
+    codex: { executablePath: codexCaps.executablePath!, capabilities: codexCaps },
+    now, ids: createRandomIdFactory(),
+  });
+  if (parsed.json) {
+    io.out(JSON.stringify({
+      exitCode: proof.exitCode, path: proof.path, stopReason: proof.stopReason,
+      claudeSessionCaptured: proof.claudeSessionCaptured, codexSessionCaptured: proof.codexSessionCaptured,
+      claudeInvocations: proof.claudeInvocations, codexInvocations: proof.codexInvocations,
+      reviewVerdicts: proof.reviewVerdicts, reviewerIndependent: proof.reviewerIndependent,
+      filesChanged: proof.filesChanged, protectedChanges: proof.protectedChanges,
+      verificationsPassed: proof.verificationsPassed, repairDispatched: proof.repairDispatched,
+      findings: proof.findings, repairs: proof.repairs, outputVisibility: proof.outputVisibility,
+      completionOutcome: proof.completionOutcome, sourceUnchanged: proof.sourceUnchanged,
+      audit: proof.audit,
+    }));
+  } else {
+    proof.lines.forEach((line) => io.out(line));
+  }
+  return proof.exitCode;
+}
+
 /* ------------------------------- main ------------------------------ */
 
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
@@ -581,6 +689,8 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return runClaudeCli(parsed, io);
     case 'codex':
       return runCodexCli(parsed, io);
+    case 'supervised':
+      return runSupervisedCli(parsed, io);
     case 'demo':
     case 'run': {
       // mission-control renders over a real competitive run.

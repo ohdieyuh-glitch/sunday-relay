@@ -1,5 +1,24 @@
 # Sunday Relay CLI (Prompt 5) — simulation demo surface
 
+> **Supervised workflow (Prompt 8.4, 2026-07-22):** `relay supervised
+> contract-verify` / `npm run relay:supervised:contract-verify` — Gate A, the
+> offline proof of the FULL supervised loop (live Claude implementation →
+> Relay inspection → Relay-controlled verification → live independent Codex
+> review → PATH A genuine approval / PATH B genuine finding → ONE bounded
+> exact-session Claude repair → Relay re-verification → exact-session Codex
+> re-review) via deterministic fake executables for BOTH agents — 47 checks,
+> no provider call, ends `READY FOR LIVE SUPERVISED WORKFLOW`. `relay
+> supervised run --fixture safe-edit --confirm-live` /
+> `npm run relay:supervised:live` — Gate B, the explicit REAL supervised loop
+> (FOUNDER-INITIATED ONLY; never in tests/CI; `--confirm-live` required;
+> 2 expected live calls, up to 4 with the single repair cycle). No fault is
+> ever injected and no verdict is ever forced — both paths are genuine.
+> **Gate B PASSED via PATH A (2026-07-22):** real Claude implemented the
+> fixture correctly first-pass, Relay verified, real Codex genuinely
+> APPROVED on first review — verified-complete, 0 repairs, exactly 2 live
+> calls, RELAY COMPLETE. The PATH-B repair/re-review branch remains offline
+> contract-proven only. See SUPERVISED_WORKFLOW.md.
+
 > **Codex reviewer (Prompt 8.3, 2026-07-22):** `relay codex doctor` — truthful
 > Codex capability + auth report (no model call, no secrets). `relay codex
 > contract-verify` / `npm run relay:codex:contract-verify` — the offline

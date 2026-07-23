@@ -1,5 +1,21 @@
 # Sunday Relay — Architecture (authoritative)
 
+> **Implementation sync (Prompt 8.4, 2026-07-22):** the supervised live
+> workflow (`src/relay/connectors/supervised/`) COMPOSES the two approved
+> live adapters — Claude Code implementer + Codex independent reviewer —
+> over the Prompt-7 isolated workspace into the full loop: implementation →
+> Relay inspection → Relay-controlled verification → independent review →
+> PATH A (genuine approval → CompletionPolicy → verified-complete) or PATH B
+> (genuine finding → Finding/Repair records → ONE bounded exact-session
+> Claude repair → re-verification → exact-session Codex re-review →
+> verified-complete only on genuine approval). The composition spawns no
+> process itself, writes nothing into any workspace, and decides no verdict:
+> gate/independence/findings/visibility are Relay-owned
+> (`evaluateReviewerGate`), completion is `evaluateCompletionPolicy`, and
+> every verdict is the reviewer's parsed report — fault injection and forced
+> verdicts are prohibited and boundary-tested. Relay Core, mission, and UI
+> never import it. See SUPERVISED_WORKFLOW.md.
+
 > **Implementation sync (Prompt 8.3, 2026-07-22):** a second REAL local
 > adapter — the **Codex independent reviewer** (`src/relay/connectors/codex-
 > reviewer/`) — sits behind the provider-neutral `ReviewerAdapterPort`, beside
