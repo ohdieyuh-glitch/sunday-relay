@@ -2,6 +2,21 @@
    Provides the route switcher, the mobile frame, and the Project Settings
    integration-boundary placeholder. */
 
+/* The shared Sunday global stylesheet pins body { overflow: hidden } for the
+   fixed-viewport Alcatraz shell. The Relay screens are scrolling documents —
+   restore normal page scrolling. Loaded only by the Relay entry, so the
+   Alcatraz app is unaffected. */
+html,
+body,
+#root {
+  height: auto;
+  min-height: 100%;
+}
+body {
+  overflow: auto;
+  overscroll-behavior: auto;
+}
+
 .rpv {
   min-height: 100dvh;
   background: #07080b;
@@ -56,9 +71,11 @@
 .rpv-mobile-viewport {
   width: 390px;
   max-width: 100%;
+  height: 80vh;
   border: 1px solid #1c2230;
   box-shadow: 0 0 0 6px #0b0d12;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .rpv-notice {
