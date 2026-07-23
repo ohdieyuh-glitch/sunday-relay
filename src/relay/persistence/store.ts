@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
 import {
@@ -7,6 +7,7 @@ import {
   type RunMetadata, type RunSnapshot,
 } from './contracts';
 import { digestOf } from './integrity';
+import { sanitizePayload } from './redaction';
 import { ensureStateRoot, resolveRunDir, safeRunSegment } from './paths';
 import { appendEventLine, buildPersistedEvent, readJournal, type JournalReadResult } from './journal';
 import {
@@ -50,6 +51,11 @@ export interface StateStore {
   archiveRun(reference: string, at: string): RelayResult<{ from: string; to: string }>;
   quarantineRun(reference: string, reason: string, at: string): RelayResult<{ to: string }>;
   writeWorkspaceRecord(workspaceId: string, record: Record<string, unknown>): RelayResult<string>;
+  /** Project records (Prompt 8.6 CLI product) — safe drafts/settings under
+   * `<root>/projects/`, sanitized + atomic like everything else. */
+  writeProjectRecord(projectId: string, record: Record<string, unknown>): RelayResult<string>;
+  readProjectRecord(projectId: string): RelayResult<Record<string, unknown>>;
+  listProjectRecords(): Array<Record<string, unknown>>;
 }
 
 export function createStateStore(options: {
@@ -244,6 +250,39 @@ export function createStateStore(options: {
       const filePath = join(root, 'workspaces', `${segment.value}.json`);
       writeFileAtomic(filePath, JSON.stringify(record, null, 1));
       return ok(filePath);
+    },
+
+    writeProjectRecord(projectId, record) {
+      const segment = safeRunSegment(projectId);
+      if (!segment.ok) return segment;
+      const { payload } = sanitizePayload(record, { maxStringLength: 2000 });
+      const filePath = join(root, 'projects', `${segment.value}.json`);
+      writeFileAtomic(filePath, JSON.stringify({ schemaVersion: RELAY_STATE_SCHEMA_VERSION, ...payload }, null, 1));
+      return ok(filePath);
+    },
+
+    readProjectRecord(projectId) {
+      const segment = safeRunSegment(projectId);
+      if (!segment.ok) return segment;
+      const text = readTextIfExists(join(root, 'projects', `${segment.value}.json`));
+      if (text === null) return fail(relayError('not-found', 'No project record with that reference.'));
+      try {
+        return ok(JSON.parse(text) as Record<string, unknown>);
+      } catch {
+        return fail(relayError('validation-failed', 'Project record is unreadable.'));
+      }
+    },
+
+    listProjectRecords() {
+      const dir = join(root, 'projects');
+      if (!existsSync(dir)) return [];
+      const records: Array<Record<string, unknown>> = [];
+      for (const name of readdirSync(dir).filter((n) => n.endsWith('.json')).sort()) {
+        const text = readTextIfExists(join(dir, name));
+        if (text === null) continue;
+        try { records.push(JSON.parse(text) as Record<string, unknown>); } catch { /* skip unreadable */ }
+      }
+      return records;
     },
   };
   return store;

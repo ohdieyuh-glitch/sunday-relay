@@ -1,5 +1,22 @@
 # Sunday Relay — Security Boundaries (authoritative)
 
+> **Implementation sync (Prompt 8.6, 2026-07-22):** the CLI product adds a
+> single terminal rendering boundary (`cli/product/safety.ts`): inbound
+> text is stripped of ANSI/OSC/control injection, newline-bounded, secret-
+> shape redacted, session-UUID and email masked, hidden-reasoning replaced,
+> and provider-stream-shaped payloads rejected outright; free-text fields
+> are re-sanitized at render time. The draft flow never collects
+> credentials. `relay project run` and the recovery screens can never
+> launch a provider — live calls remain behind the founder-confirmed
+> supervised command. Contract-proven (security category, fake sentinels).
+>
+> **Finalized 2026-07-23:** the boundary now also folds a lone CR (0x0d) and
+> strips C1 controls (0x80–0x9f), and re-sanitizes workforce/settings/history
+> free-text at render time. The offline visual simulation advances ONLY through
+> the pure `reduceTick` over fixture events on an isolated temp state root — no
+> chat, no natural-language routing; zero provider/network calls; fixture timers
+> can never generate production events.
+
 > **Implementation sync (Prompt 8.5, 2026-07-22):** durable state adds a
 > write-time redactor (forbidden credential/stream/prompt keys dropped,
 > secret shapes replaced, hidden-reasoning markers stripped, output

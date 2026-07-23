@@ -1,5 +1,12 @@
 # Sunday Relay — Durable Local Persistence (Prompt 8.5, authoritative)
 
+> **CLI sync (Prompt 8.6, 2026-07-22):** the terminal product consumes this
+> store directly: project drafts persist as `projects/<id>.json` records
+> (sanitized, atomic), `relay home`/`relay projects` list durable records,
+> `relay recover` renders the recovery service's plan, and the CLI
+> survives restart (projects, runs, findings, budgets reload from the
+> canonical root). There is no CLI-specific state directory.
+
 Relay's run state now outlives the process. `src/relay/persistence/` is a
 durable, local, versioned, crash-safe foundation: after a restart Relay can
 reconstruct the truthful state of an interrupted project or supervised run

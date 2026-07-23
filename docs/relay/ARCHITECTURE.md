@@ -1,5 +1,17 @@
 # Sunday Relay — Architecture (authoritative)
 
+> **Implementation sync (Prompt 8.6, 2026-07-22):** the Relay CLI gained a
+> terminal PRODUCT layer (`src/relay/cli/product/`) — pure view-model
+> projections over CANONICAL state (durable project records + runs +
+> recovery plans from Prompt 8.5, safe normalized events), pure renderers
+> recreating the founder-approved mockups, a pure key reducer, and a thin
+> raw-mode IO shell. No second Relay Core, no CLI-only store, no policy in
+> renderers: the CLI never evaluates CompletionPolicy and never creates
+> findings. Product files may import only sibling product modules, the
+> persistence facade, and node fs/os/path/util
+> (boundary-tested); no adapter, workspace, or child_process access.
+> See RELAY_CLI_PRODUCT.md.
+
 > **Implementation sync (Prompt 8.5, 2026-07-22):** `src/relay/persistence/`
 > is the durable local state foundation: an append-only checksummed JSONL
 > journal per run (the single authority), digest-validated rotated snapshots

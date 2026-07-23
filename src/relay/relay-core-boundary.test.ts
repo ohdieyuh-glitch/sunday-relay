@@ -77,12 +77,21 @@ describe('relay-core boundary (new module roots)', () => {
   it('CLI is a thin client: only the app facade, read-model types, protocol, workspace facade, and its own modules', () => {
     // '../workspace' (the composition-root facade) is the ONLY workspace
     // import the CLI may use — internals are asserted below.
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer|supervised)|\.\.\/mission|\.\.\/persistence|node:util|node:readline)['"]/;
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control|product)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer|supervised)|\.\.\/mission|\.\.\/persistence|node:util|node:readline)['"]/;
+    // The Prompt-8.6 product shell is CLI-internal: its files may import ONLY
+    // each other, the persistence facade (canonical durable state), and the
+    // node builtins needed for the isolated demo state root — never `../main`
+    // (which carries the provider adapters), `../render` (Relay Core), adapters,
+    // Relay Core internals, or child_process. Keeping the allowlist this narrow
+    // is what enforces the spec's "zero provider-adapter imports under product/".
+    const PRODUCT_ALLOWED = /from\s+['"](\.\/[a-z-]+|\.\.\/\.\.\/persistence|node:(fs|os|path|util))['"]/;
+    const isProductFile = (f: string): boolean => f.includes(join('cli', 'product'));
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
       const imports = [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
       for (const imp of imports) {
-        expect(ALLOWED.test(`from '${imp}'`), `${file} imports ${imp} — CLI must stay a thin client`).toBe(true);
+        const allowed = isProductFile(file) ? PRODUCT_ALLOWED : ALLOWED;
+        expect(allowed.test(`from '${imp}'`), `${file} imports ${imp} — CLI must stay a thin client`).toBe(true);
       }
       // No workflow internals ever:
       expect(/from\s+['"]\.\.\/(ledger|coordination|handoff|verification|recovery)\//.test(content), `${file} imports workflow internals`).toBe(false);

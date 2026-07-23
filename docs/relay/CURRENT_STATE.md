@@ -15,7 +15,74 @@
 
 ## Phase
 
-**Prompt 8.5 — Durable Local Persistence and Crash-Safe Recovery
+**Prompt 8.6 — Relay CLI Product Shell and Live Mission Console: GATE A
+IMPLEMENTED** (2026-07-22). The Relay CLI became a terminal PRODUCT
+(`src/relay/cli/product/`) matching the founder-approved mockups:
+- **Two interfaces, one canonical state:** the CLI projects the same
+  durable store, recovery plans, findings/repairs/evidence, and normalized
+  events as the browser app — no second Relay Core, no CLI-only store, no
+  policy in renderers (the CLI never evaluates CompletionPolicy or creates
+  findings).
+- **Product surface:** bare `relay` opens the shell (legacy simulated
+  session → `relay session`); `relay home|projects`, `relay project
+  new|open|status|settings|workforce|research|run|terminal|tasks|findings|
+  evidence|history`, `relay recover [<ref>]`, `relay cli demo[,--plain]`,
+  `relay cli contract-verify`. Engineering commands unchanged.
+- **Mockup-faithful console:** pixel-dog header + SUNDAY RELAY wordmark +
+  `RLY / 001` badge + workforce strip; STREAM timeline view (mockup 1) and
+  bordered PANELS view (mockup 2) toggled by the corner `[>_]` badge (key
+  V); command bar; HANDOFF NETWORK footer with the walking Relay Dog
+  (pure f(canonical state, tick); moving states only; --reduced-motion/
+  NO_COLOR honored). Progress is never invented from elapsed time.
+- **Safety:** one rendering boundary (ANSI/OSC injection stripped, control
+  chars removed, newlines bounded, secret shapes redacted, session UUIDs +
+  emails masked, hidden-reasoning replaced, provider-stream payloads
+  rejected outright, paths ellipsized); draft flow collects no credential
+  material; `relay project run` renders the confirmation and defers to the
+  founder-confirmed supervised command; recovery screens make zero
+  provider calls.
+- **Offline demo:** `relay:cli:demo` (interactive, isolated temp state
+  root, fake adapters, OFFLINE DEMO labels, scripted architect → coding →
+  verification → review → F-1/R-1 → re-review → VERIFIED COMPLETE mission,
+  Manual Task, evidence, simulated-restart recovery) + `relay:cli:demo:
+  plain` (deterministic) + `relay:cli:contract-verify` (17 categories).
+- **Docs:** RELAY_CLI_PRODUCT.md (new) + sync blockquotes across
+  CLI/ARCHITECTURE/PROTOCOL/SECURITY_BOUNDARIES/TEST_STRATEGY/
+  LIVE_TERMINAL/RELAY_DOG/DURABLE_LOCAL_PERSISTENCE/SUPERVISED_WORKFLOW/
+  COMPETITIVE_FEATURE_COVERAGE + YC_DEMO_RUNBOOK §13.
+- **Hardening pass (2026-07-23):** a five-dimension adversarial review
+  (render/shell/safety/architecture/docs) drove fixes for CR + C1
+  terminal-injection in the safe boundary, a panels-view border off-by-one,
+  wide-char (CJK/fullwidth) width math, parseKeys escape/split/non-ASCII
+  handling, guaranteed terminal restoration on throw/signal/stdin-end + resize,
+  `relay project new|open|terminal` initial-screen routing, dedicated
+  non-interactive `project findings|tasks|evidence|history|settings|workforce|
+  research` surfaces, the [H]/[C]/Tab/command-bar reducer gaps, render-time
+  re-sanitization of workforce/settings/history, honored `--compact/--once/
+  --watch`, a narrowed product boundary allowlist, and the dog-track overrun —
+  each locked by `product-hardening.test.ts`.
+- **Visual correction (2026-07-23, founder screenshots):** the header logo
+  became a FOUR-LEGGED side pixel dog (was an upright humanoid) with LARGE/
+  SMALL/ASCII variants; the footer face glyph became a walking paw beside the
+  canonical `RELAY DOG · <STATE>` label; Sunday gold was dimmed from neon 178
+  to aged-brass 136 with a new `goldDim` (94) for structural
+  dividers/borders/command-bar (audited zero neon-gold on home/panels/stream),
+  amber softened 214→179. Console panel/stream structure already matched the
+  mockups. +8 dog/gold regression tests.
+- **Offline visual simulation (2026-07-23, founder scope-correction):**
+  `relay:cli:demo` now opens on an activation splash and, on ENTER/P, plays the
+  21-event fixture mission in real time (paced reveal ~2.1s/row, ≈42s at 1×) so
+  the founder can WATCH each role work — with play/pause/next/restart/speed
+  controls (keys + slash-commands), an active-event marker, footer HANDOFF +
+  Dog phase progression, and honest OFFLINE VISUAL SIMULATION labels. Playback
+  advances only through the pure `reduceTick`; no chat; zero provider calls.
+  +10 playback regression tests.
+- **Verification + Gate B (founder demo):** see SESSION_LOG for exact
+  results (typecheck green; `relay:cli:contract-verify` 68/68;
+  full suite 2131/2131; build + supervised + persistence
+  verifiers green). Gate B is the founder running `npm run relay:cli:demo`.
+
+**Prior phase — Prompt 8.5 — Durable Local Persistence and Crash-Safe Recovery
 Foundation: COMPLETE — GATE A + OFFLINE GATE B PASSED** (2026-07-22).
 Volatile run state replaced by `src/relay/persistence/`:
 - **Foundation:** append-only checksummed JSONL journal per run (the single
@@ -641,6 +708,7 @@ founder decisions 1–10 encoded into this documentation set.
 | LIVE_CODEX_REVIEW.md | Gate-B runbook for the explicit live Codex review (Prompt 8.3) |
 | SUPERVISED_WORKFLOW.md | Live supervised implementation → review → conditional repair loop (Prompt 8.4) |
 | DURABLE_LOCAL_PERSISTENCE.md | Durable local state + crash-safe recovery foundation (Prompt 8.5) |
+| RELAY_CLI_PRODUCT.md | Terminal product shell + live mission console (Prompt 8.6) |
 | ADR-016-DURABLE-LOCAL-PERSISTENCE.md | Finalized persistence architecture decision (Prompt 8.5) |
 | SESSION_LOG.md | Append-only phase journal |
 

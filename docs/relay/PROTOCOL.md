@@ -1,5 +1,11 @@
 # Relay Protocol — `relay.protocol.v1` (specification)
 
+> **Implementation sync (Prompt 8.6, 2026-07-22):** no protocol change. The
+> CLI product renders SAFE VIEW MODELS projected from canonical state and
+> normalized events; the durable journal and Live Terminal feeds are
+> unchanged. JSON output serializes view models only — never internal
+> provider objects.
+
 > **Implementation sync (Prompt 8.5, 2026-07-22):** `RELAY_EVENT_KINDS`
 > gained the safe persistence/recovery projection kinds
 > (`persistence.loaded`, `persistence.validated`, `snapshot.replayed`,

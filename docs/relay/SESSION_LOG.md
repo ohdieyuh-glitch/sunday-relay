@@ -1397,3 +1397,265 @@ stores (wiring the durable store behind those ports is queued).
 **Exact next step:** Real Cross-Process Provider Resume
 (founder-authorized live preflight + exact-session resume from persisted
 references), per CURRENT_STATE §Next prompt.
+
+---
+
+## 2026-07-23 — Prompt 8.6 HARDENING: adversarial review of the CLI product shell + fixes (GATE A re-proven)
+
+**Timestamp:** 2026-07-23 (continuation of the Prompt 8.6 terminal-product
+work recorded in CURRENT_STATE §Phase).
+
+**Prompt objective:** Finish the Relay CLI product shell
+(`src/relay/cli/product/`). Ran a five-dimension adversarial review
+(render-correctness, app/shell-correctness, safety boundary, architecture
+boundary, docs-vs-code) with per-finding refutation, then fixed every
+confirmed defect and locked each with a regression test. Zero provider
+calls throughout.
+
+**Confirmed defects fixed (review + two verifier-died-but-independently-
+probed safety items):**
+- **Safety boundary (`safety.ts`).** A lone carriage return (0x0d) and the
+  8-bit C1 control range (0x80–0x9f, single-byte CSI/OSC/ST) passed through
+  `safeText` verbatim — cursor-return spoofing + terminal injection through
+  the "single boundary," reachable via reviewer/provider free-text.
+  CONTROL_RE now covers 0x80–0x9f; a NEWLINE_RE folds CR/LF/NEL/LS/PS. Probed
+  before/after.
+- **Panels view border (`renderer.ts`).** `top` was spread to `inner`
+  (width-4), so every panel's top border rendered width+1 columns (a
+  protruding corner on all four role panels — the default YC-demo view). Now
+  spread to width-5 with a matching fill; demo output measured top=body=
+  bottom=78 on every panel.
+- **Wide-char width (`layout.ts`).** `visibleLength` counted only Hangul
+  Jamo + emoji as width 2, so CJK/Kana/Hangul/fullwidth project names broke
+  the "no line exceeds terminal width" guarantee. Added a wcwidth-lite
+  (`charWidth`): East Asian Wide/Fullwidth → 2, combining marks → 0.
+- **Key input (`shell.ts`).** `parseKeys` decomposed unrecognized/split
+  escape sequences (Delete/Home/End/PgUp/F-keys/split arrows) into a
+  spurious `escape` + printable hotkeys — pressing Delete mid-draft cancelled
+  the draft and fired navigation. Now consumes whole CSI/SS3 sequences,
+  drops incomplete partials, emits `escape` only for a lone ESC, and passes
+  printable non-ASCII (CJK/accented) through as typed characters.
+- **Terminal restoration (`shell.ts`).** Exceptions in the data/interval
+  handlers, SIGTERM/SIGHUP, and stdin end/error left the TTY in raw mode
+  with a hidden cursor. Handlers are now error-guarded; restore is
+  idempotent; SIGTERM/SIGHUP/uncaughtException/unhandledRejection +
+  stdin end/error all restore; SIGWINCH re-renders at the new width.
+  Process-level handlers attach only when the shell owns the real streams
+  (injected fake streams in tests never touch them).
+- **Project routing (`main.ts`, `commands.ts`, `app.ts`).**
+  `relay project new|open|terminal` all opened the shell at the home screen
+  (documented behavior + `--project` ref ignored). Now `new`→draft flow,
+  `open <ref>`→that project, `terminal`→console, via a new
+  `initialScreen`/`selectedProjectId` on ShellOptions.
+  `relay project tasks|findings|evidence|history|settings|workforce|research`
+  all rendered the generic status screen; a new `productProjectView` renders
+  each sub-surface's OWN canonical content (real `--json` shape too).
+- **Reducer affordances (`app.ts`).** [H] History was unreachable
+  (`h`→home); now `h` opens History on the project screen. [C] Connect was
+  advertised with no handler (now answers honestly); Tab had no handler (now
+  toggles the console view / advances selection); a console entry past 80
+  chars fell through to navigation (now stays in the command bar).
+- **Render-time sanitization (`app.ts`).** `workforceOf`, the settings kv
+  values, and the history events rendered durable-record/event free-text
+  without re-sanitizing (inconsistent with `projectHomeVM`); all now pass the
+  boundary. `finalizeDraft` re-sanitizes every free-text field on the write
+  path.
+- **Docs-truthfulness flags (`theme.ts`, `main.ts`).** `--compact` was inert
+  (now forces the 60–79 dense band); `--once` prints a single snapshot
+  instead of opening the shell; `--watch` live-re-renders read-only commands
+  in a TTY (Ctrl+C to leave).
+- **Boundary guard (`relay-core-boundary.test.ts`).** `PRODUCT_ALLOWED`
+  admitted `../main` (carries the provider adapters) and `../render` (Relay
+  Core), over-broadening the guard the spec relies on for "zero
+  provider-adapter imports under product/." Narrowed to siblings +
+  `../../persistence` + node builtins (confirmed no non-test product file
+  imports anything else).
+- **Dog track (`dog.ts`).** The bounce span used the short frame's length, so
+  the longer trot frame overran the track by one column; now sized by the
+  widest frame (probed 60 ticks × two widths).
+
+**Refuted (verifier ran, left as-is):** footer-dog "jitter" (arithmetic real,
+no visible defect), console command-bar single-letter routing (by design),
+`loadAppData` tasks:[] (the false-claim scenario is unreachable — no
+`waiting_for_user` lifecycle state exists), no-resize (now addressed via
+SIGWINCH anyway).
+
+**Verification (exact, NO provider call):** `typecheck` green;
+`relay:cli:contract-verify` **68/68** (17 categories); new
+`product-hardening.test.ts` **19/19**; product + boundary units **71/71**;
+full suite **2113/2113** (158 files, up from 2094 — +19 regression tests);
+frontend+backend+relay **build green**;
+`relay:supervised:contract-verify` **PASS** (still READY FOR LIVE);
+`relay:persistence:contract-verify` **PASS** (44 processes); plain demo
+panels measured top=body=bottom on every panel; new project sub-surfaces
+render live from a seeded temp state root.
+
+**Truthful remaining limitations (unchanged):** Ask Relay (natural-language
+input) is not configured; the Prompt Architect activity awaits a real
+Architect service; live mission events are not yet streamed into the CLI
+console from a running supervised process; real cross-process provider
+resume stays gated on the future founder-authorized phase. parseKeys drops
+an escape sequence split at the exact chunk boundary as a single benign
+Escape (no cross-chunk buffering); documented, not a regression.
+
+**Commit:** not committed (working tree on `feature/relay-yc-demo`;
+awaiting founder review). **Gate B** = founder running
+`npm run relay:cli:demo`.
+
+---
+
+## 2026-07-23 — Prompt 8.6 VISUAL CORRECTION: four-legged Relay Dog + dimmed aged-brass gold (founder screenshots)
+
+**Timestamp:** 2026-07-23 (continuation; presentation-only correction on top
+of canonical state — no Relay Core, orchestration, persistence, adapter,
+CompletionPolicy, or event-authority change).
+
+**Founder references:** five screenshots — the current CLI header (a
+humanoid-robot pixel logo), the authoritative browser Relay Dog (four-legged,
+side, big visored head + gold eyes + collar, "WANDERING / RELAY DOG"), and the
+authoritative header + stream + panels mockups (deep-black, restrained
+aged-brass gold, cream/gray hierarchy).
+
+**Corrections (theme + dog only; console structure already matched the mockups):**
+- **Relay Dog rewritten (`dog.ts`).** The header logo was an upright humanoid
+  (square head + torso + two arms + two legs). It is now a FOUR-LEGGED,
+  side-facing half-block pixel dog: two ears, a dark visor band with two
+  Sunday-gold eyes, a gold collar, a long horizontal body, a raised tail, and
+  four legs — LARGE (20×14) at full width, SMALL (14×10) at stacked/compact,
+  and a horizontal ASCII dog (still four-legged, never humanoid) for
+  no-Unicode/no-color. Rows are normalized to equal width so half-blocks never
+  misalign. The footer face glyph `<°ᴥ°>` was replaced by a walking PAW 🐾
+  (ASCII `oo`) beside the canonical `RELAY DOG · <STATE>` label; motion stays a
+  pure f(state, tick) and the renderer never decides the state.
+- **Gold dimmed (`theme.ts`, `contracts.ts`).** Primary `gold` 178 (neon) →
+  136 (aged brass); new `goldDim` = 94 (dark brass) reserved for structural
+  dividers, panel borders, and the command bar; `amber` 214 → 179 (softer).
+  Cream/gray now carry the hierarchy; gold is a restrained accent
+  (wordmark/eyes/collar/status squares/active states/route plate). Audited:
+  **zero `38;5;178` on home/panels/stream**; gold text = 136, structure = 94.
+- **Header composition (`renderer.ts`).** The logo column is now sized to the
+  widest dog row (was a hard-coded 13), so the taller dog grows without
+  colliding with the wordmark; compact width now shows the small dog (was
+  text-only); dividers/panel/command-bar borders use `goldDim`.
+
+**Verification (exact, NO provider call):** typecheck green;
+`relay:cli:contract-verify` **68/68** (incl. responsiveness 140→40 and the
+updated footer-dog accessibility check); product + hardening + boundary units
+green; full suite **2121/2121** (158 files, +8 dog/gold regression tests in
+`product-hardening.test.ts`); frontend+backend+relay **build green**; offline
+`relay:cli:demo` sequence intact (23 OFFLINE DEMO labels, architect research →
+coding → verify → F-1/R-1 → re-review → verified complete); rendered
+home/panels/stream measured with **0 lines over width** and **0 neon-gold
+codes**.
+
+**Boundary honored:** worked only in `/home/kaisinrogodfree5/sunday-relay`
+(branch `feature/relay-yc-demo`); did NOT touch `sunday-relay-claude-home`,
+the browser frontend, Relay Core, persistence, adapters, supervised workflow,
+CompletionPolicy, call budgets, or canonical event authority. Not committed;
+not pushed. Gate B = founder running `npm run relay:cli:demo`.
+
+---
+
+## 2026-07-23 — Prompt 8.6 OFFLINE VISUAL SIMULATION: timed, watchable active-mission playback (founder scope-correction)
+
+**Timestamp:** 2026-07-23 (presentation-only; no Relay Core, orchestration,
+persistence, adapter, CompletionPolicy, call-budget, or canonical
+event-authority change). The founder first asked for an interactive Relay chat,
+then CORRECTED the scope to a VISUAL active-mission simulation (no chat) that
+plays through role activity in real time so Relay visibly *looks* active.
+
+**What `npm run relay:cli:demo` now does:**
+- Opens on an **activation splash** (`OFFLINE VISUAL SIMULATION / FAKE ADAPTERS
+  / NO PROVIDER CALLS / NO REAL FILE CHANGES`, four-legged dog + start keys),
+  no longer sitting on the home screen.
+- `ENTER`/`P` steps into the live PANELS console and **plays the 21-event
+  fixture mission in real time**, revealing one canonical event at a paced
+  cadence (~2.1s/row at 1× via a 300ms tick, ≈42s total; ~29s at 1.5×, ~25s at
+  2×) — Architect (generate→research→Project Brain→handoff) → Coding
+  (inspect→edit→test→report) → Relay (claim→inspect→verify→hold) → Reviewer
+  (review→F-1) → Repair R-1 → re-verify → re-review → APPROVED → VERIFIED
+  COMPLETE. Simulated end-to-end through the real modules.
+- **Controls:** `ENTER` start · `P` play/pause · `N` next (one event) · `R`
+  restart · `1`/`2`/`3` speed · `V` panels/stream · plus slash-commands
+  `/play /pause /next /restart /speed 2x /panels /stream /status /findings
+  /evidence /tasks /research /mission /complete /help /quit`. A control bar
+  shows `▶ PLAYING · 1× … step 8/21`. `/complete` refuses to bypass the
+  simulated CompletionPolicy; natural-language input is honestly declined
+  (`Ask Relay is not configured for this visual simulation`).
+- The **currently-active event** is marked with a gold pointer in STREAM; the
+  active panel animates THINKING/WORKING dots; the **footer HANDOFF NETWORK**
+  status tracks the phase (STANDBY→ACTIVE→VERIFYING→REVIEWING→COMPLETE); the
+  **Relay Dog** state progresses and settles COMPLETE only at the end.
+
+**Architecture:** playback advances ONLY through the new pure
+`reduceTick(state, data) → {state, revealed}`; `AppState` gained `playing` +
+`speed`; a `demo-intro` screen + `reduceConsoleCommand` slash-command handler;
+the shell timer calls `reduceTick` (300ms in the demo, 600ms animation tick
+in the real shell, 200ms floor). Real missions never set
+`playing`, so fixture timers can never generate production activity, and the
+renderer still never decides mission truth. `product/` imports zero
+adapters/network (grep-verified) — the demo is pure fixtures on an isolated
+temp state root.
+
+**Verification (exact, NO provider call):** typecheck green;
+`relay:cli:contract-verify` **68/68**; product + hardening + boundary units
+green; full suite **2131/2131** (+10 playback regression tests); build green;
+`relay:cli:demo:plain` shows the splash + mid-playback + full sequence (28
+OFFLINE labels); end-to-end tick simulation revealed all 21 events in order and
+settled at COMPLETE. Worktree boundary honored (only `sunday-relay`); not
+committed; not pushed. Gate B = founder running `npm run relay:cli:demo`.
+
+---
+
+## 2026-07-23 — Prompt 8.6 crash recovery, finalization, and commit
+
+**Crash recovery.** The CLI-building session crashed before the final commit.
+A fresh session recovered on `feature/relay-yc-demo` at checkpoint `3929d94`
+with the complete Prompt 8.6 work intact on disk (16 `product/` files + docs
++ wiring, nothing staged). No destructive git command was used; nothing was
+restarted or redesigned; the founder-approved visual simulation was preserved
+byte-for-byte. A stray empty `.ts` file at the repo root (0 bytes, crash
+artifact) was deleted and never staged. The browser-frontend worktree
+(`sunday-relay-claude-home`) was not touched; its dev servers were left
+running.
+
+**Independent audit (read-only, 4 parallel auditors).** Docs truthfulness,
+code safety, approved-visual completeness, and staging hygiene were audited
+against the finished work. Zero blockers. All 18 founder-approved simulation
+behaviors verified implemented; all 9 required truthfulness facts verified
+recorded. Four documentation imprecisions found and corrected: ≈45s → ≈42s
+playback duration (matches `playbackMs=300 × stepTicks=7 × 20 reveals`),
+ENTER-enters-paused vs P-plays wording, stale `exit codes` entry in
+ARCHITECTURE's product allowlist description (the enforced `PRODUCT_ALLOWED`
+is siblings + persistence facade + node builtins only), and the tick-rate
+range (actual: 300ms demo / 600ms real shell / 200ms floor).
+
+**Recorded follow-ups (no code changed in this finalize phase; queued for
+Prompt 8.7+):**
+- `relay recover <ref>` persists recovery markers (`persistMarkers: true`,
+  mirroring the pre-existing `relay runs recover` semantics) although its
+  copy reads like inspection — consider a read-only default with an explicit
+  `--mark` flag, or clearer copy.
+- `shell.ts` fatal-error handler prints raw `err.message` without passing
+  `safeText()` — the one rendering path bypassing the single-gate claim.
+- Demo pacing constants (`playbackMs=300`, `stepTicks=7`, 21 fixture events
+  → ≈42s) are not locked by a test and can drift silently.
+- A few visible fixture texts are rendered but unasserted (Architect
+  "Generating implementation handoff…", Coding Agent "Inspecting claimed
+  files…", Relay "Context preserved. Handoff intact."); the demo timeline
+  exercises MODIFY but not the CREATE annotation; speed key `1` (reset to
+  1×) unasserted; demo-console `[Q]uit` label — a single `Q` returns home
+  (exit via `Q` again or Ctrl+C; always terminal-safe, matches what the
+  founder approved).
+- `runProductWatch` resolves exit 0 on Ctrl+C regardless of the underlying
+  command's exit code (interactive convenience path only).
+
+**Final verification (exact, NO provider call, run in this session):**
+typecheck green; `relay:cli:contract-verify` **68/68 PASS ×2**; focused
+product + hardening **51/51**; mission-control + cli + relay-core-boundary
+**73/73**; `relay:cli:demo:plain` deterministic, labeled, complete;
+persistence contract-verify **PASSED** + recovery drill **DURABLE LOCAL
+RECOVERY VERIFIED**; supervised/Claude/Codex contract-verify **PASSED** (all
+offline); `relay:test` **542/542**; `build` + `backend:build` + `relay:build`
+green; full suite green (see final report). Zero provider calls, zero
+network calls, zero deployments; not pushed.

@@ -1,5 +1,11 @@
 # Sunday Relay — Live Supervised Workflow (Prompt 8.4, authoritative)
 
+> **CLI sync (Prompt 8.6, 2026-07-22):** `relay project run` renders the
+> LIVE SUPERVISED RELAY WORKFLOW confirmation (expected 2 / max 4 calls,
+> retries + fallback disabled, source protected) and defers to the
+> founder-confirmed `relay supervised run --confirm-live`. The product
+> shell itself can never launch a provider.
+
 > **Persistence sync (Prompt 8.5, 2026-07-22):** the supervised runner now
 > records every significant boundary through optional persistence hooks
 > (absent hooks = the exact Prompt-8.4 volatile behavior). Call-budget

@@ -1,5 +1,19 @@
 # Sunday Relay — Relay Dog Activity Engine (authoritative)
 
+> **CLI sync (Prompt 8.6, 2026-07-22):** the terminal product renders the
+> Dog twice — a half-block pixel-art header logo (ASCII fallback) and a
+> footer dog that WALKS along a track purely as f(canonical dog state,
+> tick), moving ONLY for WANDERING/TROTTING/RUNNING/SPRINTING/CARRYING
+> HANDOFF and only when motion is allowed (TTY, no --reduced-motion).
+> Animation never implies unverified work.
+>
+> **Finalized 2026-07-23 (founder-approved):** the header logo is now a
+> FOUR-LEGGED side pixel dog (two ears, dark visor + gold eyes, gold collar,
+> horizontal body, raised tail, four legs; LARGE/SMALL/ASCII variants) — the
+> earlier upright-humanoid logo was corrected. The footer face glyph `<°ᴥ°>`
+> became a walking paw beside the canonical `RELAY DOG · <STATE>` label. The
+> renderer never decides dog state; COMPLETE only for `verified_complete`.
+
 > **Persistence sync (Prompt 8.5, 2026-07-22):** after a restart the Dog
 > derives from RECOVERED canonical state (never invented activity):
 > recovery_required → waiting_for_user; re-inspection/verification work →

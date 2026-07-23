@@ -57,7 +57,7 @@ export function resolveStateRoot(
 /** Create the root (0o700) and its fixed structure. */
 export function ensureStateRoot(root: string): void {
   for (const dir of [root, join(root, 'index'), join(root, 'runs'), join(root, 'workspaces'),
-    join(root, 'quarantine'), join(root, 'migrations'), join(root, 'archive')]) {
+    join(root, 'quarantine'), join(root, 'migrations'), join(root, 'archive'), join(root, 'projects')]) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
 }
