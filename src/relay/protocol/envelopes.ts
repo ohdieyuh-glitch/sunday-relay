@@ -314,6 +314,16 @@ export const RELAY_EVENT_KINDS = [
   'agent.session_resume_requested', 'agent.malformed_output',
   // reviewer
   'reviewer.started', 'reviewer.verdict_created', 'reviewer.completed', 'reviewer.failed',
+  // live independent reviewer (Prompt 8.3 — real Codex reviewer adapter)
+  'reviewer.dispatch_requested', 'reviewer.live_approval_recorded', 'reviewer.process_started',
+  'reviewer.initialization_verified', 'reviewer.session_created', 'reviewer.activity_observed',
+  'reviewer.diff_inspection_observed', 'reviewer.evidence_inspection_observed',
+  'reviewer.report_received', 'reviewer.process_completed', 'reviewer.process_failed',
+  'reviewer.process_timed_out', 'reviewer.process_cancelled', 'reviewer.output_malformed',
+  'reviewer.attestation_created', 'reviewer.finding_created', 'reviewer.verdict_accepted',
+  'reviewer.verdict_rejected',
+  // output visibility (Prompt 8.3 — reviewer gate transitions)
+  'output.held_for_review', 'output.revision_required', 'output.approved_for_release',
   // verification
   'verification.started', 'verification.check_passed', 'verification.check_failed', 'verification.completed',
   // ledger & coordination

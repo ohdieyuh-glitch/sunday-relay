@@ -1,5 +1,22 @@
 # Relay Protocol — `relay.protocol.v1` (specification)
 
+> **Implementation sync (Prompt 8.3, 2026-07-22):** the live Codex reviewer
+> adds normalized event kinds only (additive): `reviewer.dispatch_requested`,
+> `reviewer.live_approval_recorded`, `reviewer.process_started`,
+> `reviewer.initialization_verified`, `reviewer.session_created`,
+> `reviewer.activity_observed`, `reviewer.diff_inspection_observed`,
+> `reviewer.evidence_inspection_observed`, `reviewer.report_received`,
+> `reviewer.process_completed`/`_failed`/`_timed_out`/`_cancelled`,
+> `reviewer.output_malformed`, `reviewer.attestation_created`,
+> `reviewer.finding_created`, `reviewer.verdict_accepted`/`_rejected`, and the
+> `output.held_for_review`/`output.revision_required`/`output.approved_for_
+> release` visibility events. Reviewer events carry provenance `live` and
+> classification `unverified-claim`. The `RELAY_REVIEW_REPORT_V1` report is a
+> module-local serializable claim validated inside Relay (ids/revisions/
+> workspace-revision must match; secret + hidden-reasoning content rejected) —
+> never a stored credential or stream. The Reviewer Execution Attestation
+> reuses the Prompt-8.1 attestation shape.
+
 > **Implementation sync (Prompt 8.2, 2026-07-22):** Mission Control adds NO
 > new protocol envelopes, commands, or event kinds. Modes, credential handles,
 > the dog activity, the terminal read model, entitlement, and output

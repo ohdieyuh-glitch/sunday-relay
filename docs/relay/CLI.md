@@ -1,5 +1,18 @@
 # Sunday Relay CLI (Prompt 5) — simulation demo surface
 
+> **Codex reviewer (Prompt 8.3, 2026-07-22):** `relay codex doctor` — truthful
+> Codex capability + auth report (no model call, no secrets). `relay codex
+> contract-verify` / `npm run relay:codex:contract-verify` — the offline
+> reviewer pipeline proof via a deterministic fake Codex (58 checks including
+> the Gate-B login preflight — stderr + exit-0 recognition — no provider
+> call). `relay codex run --fixture review-defect --confirm-live` /
+> `npm run relay:codex:live` — the explicit REAL independent review (never in
+> tests/CI; `--confirm-live` required; approval never inferred from a TTY).
+> When Codex is not signed in, the live command stops with a "Sign in to Codex"
+> Manual Task and makes no call (and never asks for an API key). The successful
+> live review ends STOPPED SAFELY (exit 3) with a blocking finding — never
+> RELAY COMPLETE. See CODEX_REVIEWER_ADAPTER.md, LIVE_CODEX_REVIEW.md.
+
 > **Mission Control (Prompt 8.2, 2026-07-22):** `npm run relay:mission-control`
 > / `relay demo mission-control` renders the deterministic Mission Control
 > projection — the three operational modes + autonomous consent, the Relay Dog

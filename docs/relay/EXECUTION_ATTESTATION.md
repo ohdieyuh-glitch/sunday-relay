@@ -1,5 +1,17 @@
 # Relay Execution Attestation (Prompt 8.1)
 
+> **Implementation sync (Prompt 8.3, 2026-07-22):** the live Codex reviewer
+> produces a REAL Reviewer Execution Attestation via this same model
+> (`connectors/codex-reviewer/attestation.ts` → `buildExecutionAttestation`).
+> Requested and actual reviewer are both `codex`; launch is verified only after
+> supported initialization evidence (init record + captured session id); the
+> workspace is the read-only isolated worktree; provenance is `live`; there is
+> NO fallback (the reviewer never falls back to a simulation). Digests cover
+> safe bounded summaries only (review contract, observable activity, final
+> report) — never raw streams, hidden reasoning, credentials, or unrelated
+> source. Relay — not Codex — creates and validates the attestation; the
+> reviewer's report can never claim its own successful attestation.
+
 > An immutable projection that separates the agent Relay REQUESTED from the
 > agent that ACTUALLY ran, so Relay can prove — not assume — which agent did
 > the work. Implemented in `src/relay/mission/attestation.ts` (pure,

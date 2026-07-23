@@ -1,5 +1,16 @@
 # Sunday Relay — Live Terminal (authoritative)
 
+> **Implementation sync (Prompt 8.3, 2026-07-22):** during a live Codex review
+> the terminal projects REAL normalized `reviewer.*` events (provenance
+> `live`): Output held for independent review → RELAY → CODEX contract
+> delivered → CODEX session started → inspecting the actual changed files →
+> inspecting verification evidence → structured review report received →
+> reviewer execution attested → blocking finding created → repair obligation
+> created, output remains held. Hidden reasoning is never shown (the stream
+> parser drops it; only the omission count surfaces as "Private reasoning
+> omitted."), and no secrets/credentials/system prompts appear. The transport
+> is still the in-process read model (production WebSocket NOT implemented).
+
 > Added in Prompt 8.2 (2026-07-22). The Live Terminal is a **read-only
 > projection of structured responsibility exchanges** over the existing
 > normalized event stream — not a chat window, not a raw log, and never a

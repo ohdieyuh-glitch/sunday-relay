@@ -1,5 +1,20 @@
 # Sunday Relay — Reviewer Entitlement and Release Gate (authoritative)
 
+> **Implementation sync (Prompt 8.3, 2026-07-22):** the gate now has a REAL
+> independent reviewer. `evaluateReviewerGate` (`mission/reviewer-gate.ts`) is
+> the single Relay-owned composite that computes structural independence,
+> projects the finding/repair ledger, and derives the output-visibility state —
+> the live Codex reviewer adapter asks Relay for this decision and never makes
+> it itself. On a live Pro/Max review, coding output is held_for_verification,
+> then held_for_review; the REAL Codex reviewer receives the package, its
+> Execution Attestation and structured report must validate, and independence
+> must hold before the verdict maps to the gate: `approved` → approved_for_
+> release (then CompletionPolicy); `changes_required` → first-class findings +
+> linked repairs → revision_required; `blocked` → blocked; `needs_human` →
+> Manual Task, held. When Codex fails to launch, actual reviewer is unavailable,
+> NO fallback runs, output stays held_for_review, and the mission cannot become
+> verified_complete. See CODEX_REVIEWER_ADAPTER.md.
+
 > Added in Prompt 8.2 (2026-07-22). The release gate is the structural
 > guarantee that **output cannot reach the user before the review Relay
 > requires has actually happened** — regardless of mode, entitlement, or an

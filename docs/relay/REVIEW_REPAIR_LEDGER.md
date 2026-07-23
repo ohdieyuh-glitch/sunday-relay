@@ -1,5 +1,16 @@
 # Relay Review + Repair Ledger (Prompt 8.1)
 
+> **Implementation sync (Prompt 8.3, 2026-07-22):** the ledger now receives
+> findings from a REAL independent reviewer. The live Codex reviewer's
+> validated `RELAY_REVIEW_REPORT_V1` findings are mapped into the neutral
+> `ReviewInput` shape and projected through this ledger by the Relay-owned
+> `evaluateReviewerGate`: a blocking finding creates exactly one linked repair
+> obligation (scope-locked to the original claims, no scope/claim expansion),
+> and the finding stays open (output revision_required) until BOTH post-repair
+> evidence AND an approving re-review exist — never the reviewer's word. Repair
+> EXECUTION is not part of Prompt 8.3 (it arrives with the live Claude repair +
+> Codex re-review loop, Prompt 8.4).
+
 > Extends the existing ReviewerVerdict / ReviewFinding / RevisionContract
 > behavior into explicit, LINKED records so review findings become tracked
 > repair obligations that cannot close on an agent's word. Implemented in

@@ -1,5 +1,17 @@
 # Relay Competitive Feature Coverage (Prompt 8.1)
 
+> **Implementation sync (Prompt 8.3, 2026-07-22):** the "independent reviewer"
+> capability moves from SIMULATED to a REAL live provider. A live local Codex
+> reviewer now runs behind the provider-neutral Reviewer port — read-only,
+> isolated-workspace, attested by Relay, structurally independent from the
+> implementer, with no fallback — proven offline (`relay:codex:contract-verify`)
+> and LIVE via the explicit `relay:codex:live` Gate-B review (PASSED
+> 2026-07-22: one real Codex call, seeded defect found, verdict
+> changes_required, output held, stopped safely). The deterministic
+> Codex reviewer remains the demo/mission-control default; the competitive demo
+> still labels its reviewer SIMULATED. Live Claude repair + Codex re-review loop
+> (closing the workforce cycle) remains DEFERRED to Prompt 8.4.
+
 > The 19 founder-specified competitive features, mapped to what actually
 > exists in the codebase. Status is honest: a feature is `implemented` ONLY
 > when working code exists (a type or a doc entry alone is never
@@ -69,10 +81,11 @@ real Claude Code path.
 
 ### 4. Provider-Neutral Agent Adapter System — **implemented**
 - **Existing:** `src/relay/connectors/ports.ts` (provider-neutral ports),
-  simulated adapters (Prompt 4), **real Claude Code adapter** (Prompt 8).
-- **Missing:** real Codex/Hermes/OpenClaw/Ophiuchus adapters.
+  simulated adapters (Prompt 4), **real Claude Code adapter** (Prompt 8),
+  **real Codex reviewer adapter** (Prompt 8.3, Gate B live-proven).
+- **Missing:** real Hermes/OpenClaw/Ophiuchus adapters.
 - **YC relevance:** agents are replaceable behind one port.
-- **Post-YC:** real Codex reviewer adapter (next phase).
+- **Post-YC:** additional real provider adapters.
 - **Dependencies:** workspace isolation, protocol contracts.
 - **Security:** adapters can request but never self-attest/promote.
 
@@ -123,8 +136,8 @@ real Claude Code path.
   authorized fallback, live/simulated provenance; CLI `/attestation`.
 - **Missing:** attestation persistence (volatile); passport reference wiring.
 - **YC relevance:** "Reviewed by Codex" cannot exist without a Codex
-  attestation.
-- **Post-YC:** durable attestations; live reviewer attestation.
+  attestation — one now exists from the live Gate-B review (Prompt 8.3).
+- **Post-YC:** durable attestations.
 - **Dependencies:** ledger/audit identities, session capture.
 - **Security:** no credentials/streams/hidden reasoning; digests over safe
   summaries only.
@@ -134,9 +147,11 @@ real Claude Code path.
   Review/Finding/Repair records; blocking findings create repairs; evidence
   + re-review required to resolve; scope/claim expansion rejected; CLI
   `/findings` `/repairs`.
-- **Missing:** live Codex reviewer producing real findings (simulated today).
+- **Missing:** the live repair + re-review loop (Prompt 8.4); the live Codex
+  reviewer produced a real blocking finding (F-1 + linked R-1) in the Gate-B
+  proof, but no live repair/re-review has run yet.
 - **YC relevance:** findings become tracked repair obligations, not chat.
-- **Post-YC:** real Codex reviewer adapter.
+- **Post-YC:** live Claude repair + exact-session Codex re-review (Prompt 8.4).
 - **Dependencies:** ReviewerVerdict, RevisionContract, evidence.
 - **Security:** an agent "fixed it" claim never resolves a finding.
 

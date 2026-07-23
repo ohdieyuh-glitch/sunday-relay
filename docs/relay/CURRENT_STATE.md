@@ -1,17 +1,85 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-22 (Prompt 8.2 complete — Mission Control,
-> operational modes, Relay Dog, live terminal, reviewer release gate).** The
-> July 24 product demo is `npm run relay:yc`; `npm run relay:mission-control`
-> is the graphical product surface (deterministic projection); `npm run
-> relay:competitive` is the deterministic full-workforce proof (Mission
-> Contract + Claude + Codex + finding + repair + verdict); and `npm run
-> relay:claude:live` is the real single-agent proof.
+> boundary. Last updated: **2026-07-22 (Prompt 8.3 COMPLETE — real Codex
+> independent reviewer + live review attestation; Gate B live review PASSED
+> with exactly one Codex call).** The July 24 product demo is `npm run relay:yc`; `npm run
+> relay:mission-control` is the graphical product surface; `npm run
+> relay:competitive` is the deterministic full-workforce proof; `npm run
+> relay:claude:live` is the real single-agent proof; and `npm run
+> relay:codex:live` is the REAL independent-review proof (Gate B, founder-run).
 
 ## Phase
 
-**Prompt 8.2 — Mission Control, Operational Modes, Relay Dog, Live Terminal,
+**Prompt 8.3 — Real Codex Independent Reviewer Adapter and Live Review
+Attestation: COMPLETE — GATE A + GATE B PASSED** (2026-07-22). A
+second REAL local adapter — a live Codex INDEPENDENT REVIEWER — behind the
+existing provider-neutral `ReviewerAdapterPort`, connecting a different live
+provider to the Prompt-8.2 Reviewer Gate:
+- **Module:** `src/relay/connectors/codex-reviewer/` — capability probe (no
+  model call; strategy `exec_structured_review` selected because native
+  `codex exec review` lacks `--json`/`--output-schema`/`--sandbox`/`--cd`),
+  environment stripping (`codex_local_login`; no credential read; API-key
+  source → Manual Task), configuration isolation, read-only permission
+  compiler (`--sandbox read-only`, `--ignore-user-config/--ignore-rules/
+  --strict-config`; never a bypass/full-access flag), reviewer prompt compiler
+  (independence + untrusted implementer claim + `RELAY_REVIEW_REPORT_V1`
+  schema, no transcript), shell-free bounded process runner, incremental
+  JSON stream parser (hidden reasoning dropped), strict report parser
+  (id/revision matching, verdict/finding coherence, secret + hidden-reasoning
+  rejection), session manager (capture + exact-session re-review), Reviewer
+  Execution Attestation (Prompt-8.1 model, no fallback), adapter (sync
+  `review()` refuses live), live-runner (Gate B), doctor, fixture, fake
+  executable, offline verify-harness. Relay Core never imports it
+  (boundary-tested).
+- **Gate decision is Relay-owned:** the single composite `evaluateReviewerGate`
+  (`mission/reviewer-gate.ts`) computes structural independence, projects the
+  finding/repair ledger, and derives output visibility — the adapter never
+  decides independence, findings, or release.
+- **Truthfulness:** Relay — not Codex — decides launch verification, report
+  validity, independence, whether findings block, whether a repair is required,
+  and whether output stays held; no silent fallback to a simulated reviewer;
+  read-only with a before/after workspace gate (a reviewer file change fails
+  the review); no credential read/store/print; no deployment/push; no provider
+  call in any test/build/doctor/contract-verify.
+- **Live proof (Gate B):** `relay codex run --fixture review-defect
+  --confirm-live` / `npm run relay:codex:live` — seeded rate-limit `&&`-vs-`||`
+  defect on a throwaway fixture; expected verdict changes_required with a
+  blocking finding tied to AC-1; output held (revision_required); RELAY STOPPED
+  SAFELY (exit 3), never RELAY COMPLETE. **Gate B PASSED on 2026-07-22, on the
+  second command attempt, with exactly ONE live Codex call** (codex-cli
+  0.145.0, founder-run in a separate terminal). The first attempt stopped
+  BEFORE any provider launch (exit 5, no call consumed): the login probe used
+  `execFileSync`, which on success returns **stdout only**, while `codex login
+  status` prints `Logged in using ChatGPT` on **stderr** — a real login read
+  as empty output, classified `not_ready`, and incorrectly raised the "Sign in
+  to Codex" Manual Task. That defect was repaired before the passing attempt:
+  ONE canonical probe (`probeCodexLoginStatus` + `classifyCodexLoginOutput`:
+  `spawnSync` `shell:false`, both streams, sanitized, exit-0 required,
+  wording variations recognized, unified `buildCodexEnvironment` child env
+  with HOME/PATH/USER/LOGNAME/LANG/TMPDIR/XDG paths preserved) is shared
+  by doctor, the Gate-B preflight, live-launch eligibility, and the Manual
+  Task recheck. Live proof observed: real Codex reviewer launched and
+  verified; requested & actual reviewer both Codex; read-only sandbox; no
+  fallback; the live reviewer found the seeded defect ("Single active safety
+  control does not block dispatch"); verdict changes_required; finding F-1 +
+  repair R-1 created; output remained held; RELAY STOPPED SAFELY; no RELAY
+  COMPLETE claim. **No repair or re-review was performed in Prompt 8.3** (that
+  is Prompt 8.4); output correctly remained blocked. Durable Reviewer recovery
+  remains unavailable (needs persistence).
+- **Regression (Gate A + preflight repair):** `relay:codex:contract-verify`
+  58/58 (twice; includes 4 new login-preflight checks proving the
+  stderr/exit-0 behavior offline); codex-reviewer tests 29/29 (5 new probe
+  tests); `relay-core-boundary` 45/45; relay suite 448/448; full suite
+  2037/2037; typecheck + frontend + backend + relay builds green. NO provider
+  call.
+- **Docs:** CODEX_REVIEWER_ADAPTER.md, LIVE_CODEX_REVIEW.md (new) + sync
+  blockquotes across ARCHITECTURE/PROTOCOL/REVIEWER_GATE/EXECUTION_ATTESTATION/
+  REVIEW_REPAIR_LEDGER/LIVE_TERMINAL/RELAY_DOG/SECURITY_BOUNDARIES/
+  TEST_STRATEGY/CLI/COMPETITIVE_FEATURE_COVERAGE, YC_DEMO_RUNBOOK §12,
+  CURRENT_STATE, SESSION_LOG.
+
+**Prior phase — Prompt 8.2 — Mission Control, Operational Modes, Relay Dog, Live Terminal,
 and Pro/Max Reviewer Gate: COMPLETE** (2026-07-22). The final major
 product-facing phase before the July 24 demo — a graphical Mission Control
 surface plus four Relay-Core-owned systems, all built as PURE, browser-safe
@@ -415,6 +483,8 @@ founder decisions 1–10 encoded into this documentation set.
 | RELAY_DOG.md | Deterministic event-driven activity indicator (Prompt 8.2) |
 | LIVE_TERMINAL.md | Structured-exchange read model; in-process transport (Prompt 8.2) |
 | REVIEWER_GATE.md | Entitlement + output-visibility release gate (Prompt 8.2) |
+| CODEX_REVIEWER_ADAPTER.md | Real local Codex independent reviewer adapter (Prompt 8.3) |
+| LIVE_CODEX_REVIEW.md | Gate-B runbook for the explicit live Codex review (Prompt 8.3) |
 | SESSION_LOG.md | Append-only phase journal |
 
 Superseded (historical, headers added): root `RELAY_STATUS.md`,
@@ -466,23 +536,25 @@ None in flight — Phase 1 closes with this commit.
 
 ## Next prompt
 
-**Real Codex Independent Reviewer Adapter** — a live, independent reviewer
-behind the existing reviewer port, so a live run can REQUIRE and satisfy
-independent review AND produce a real reviewer Execution Attestation (the
-Prompt-8.1 competitive proof simulates it). Independence is structural
-(distinct adapter/session lineage from the coding agent), the reviewer
-verdict is an unverified claim gated by Relay, real findings feed the
-Prompt-8.1 Review/Finding/Repair ledger, and the same safety boundaries
-(isolated workspace, no push/deploy, credential-free core, spend controls
-per Decision 1) apply unweakened. Only then does a live run demonstrate the
-full Architect → Claude → independent Codex → review → bounded repair →
-verified-complete loop against real agents.
+**Prompt 8.4 — Live Claude Repair and Codex Re-review Loop** — close the
+workforce cycle: on a live changes_required review, dispatch a bounded live
+Claude REPAIR (the single Guided repair, scope-locked to the finding's claims)
+into the same isolated worktree, re-run Relay verification, then RESUME the
+exact Codex reviewer session for a re-review; a finding resolves only on
+post-repair evidence AND an approving re-review. The same safety boundaries
+(isolated workspace, no push/deploy, credential-free core, no fallback, spend
+controls per Decision 1) apply unweakened. Only then does a live run
+demonstrate the full Architect → Claude → independent Codex → review → bounded
+repair → verified-complete loop against real agents. Durable persistence
+(cross-process reviewer/session recovery) remains queued after it.
 
 **Superseded next-prompt records:** *Real Claude Code Local Adapter* — DONE
 (Prompt 8, live smoke passed). *YC Competitive Proof Layer* — DONE
 (Prompt 8.1). *Mission Control, Operational Modes, Relay Dog, Live Terminal,
-Reviewer Release Gate* — DONE (Prompt 8.2). The Reviewer surfaced there is a
-deterministic SIMULATION; the Real Codex adapter below makes it live.
+Reviewer Release Gate* — DONE (Prompt 8.2). *Real Codex Independent Reviewer
+Adapter and Live Review Attestation* — Gate A DONE (Prompt 8.3); Gate B (the
+explicit `relay:codex:live` review) is founder-run and currently blocked
+pending a local Codex login.
 
 **Superseded next-prompt record (pre-Prompt-7): Post-YC Durable Local
 Persistence and Real Cross-Process Resume** — implement the relay-storage

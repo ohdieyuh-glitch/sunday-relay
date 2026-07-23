@@ -46,3 +46,7 @@ export {
   type RelayTerminalEvent, type RelayTerminalReadModel, type ConnectionState,
   type TerminalProvenanceLabel, type ProjectTerminalEventInput, type AgentExchange, type TerminalStream,
 } from './terminal';
+export {
+  evaluateReviewerGate,
+  type ReviewerGateInput, type ReviewerGateResult, type IndependenceParty,
+} from './reviewer-gate';

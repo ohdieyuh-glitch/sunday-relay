@@ -1,5 +1,14 @@
 # Sunday Relay — Relay Dog Activity Engine (authoritative)
 
+> **Implementation sync (Prompt 8.3, 2026-07-22):** during a live Codex review
+> the dog is driven by the REAL `reviewer.*` event stream: it enters
+> `carrying_handoff` when review responsibility transfers, `reviewing` during
+> the live Codex session, and `stopped_safely` / `repairing`-pending when the
+> review returns changes_required — it NEVER enters `complete` for a
+> changes-required review. Speed stays a pure function of meaningful events
+> (never the token stream, never adapter-set), so a running/reviewing dog
+> truthfully means real independent-review work is happening.
+
 > Added in Prompt 8.2 (2026-07-22). The Relay Dog is a **deterministic,
 > event-driven activity indicator** — a truthful projection of real run
 > state, never decoration and never a fabricated animation. Source:

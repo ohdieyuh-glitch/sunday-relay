@@ -77,7 +77,7 @@ describe('relay-core boundary (new module roots)', () => {
   it('CLI is a thin client: only the app facade, read-model types, protocol, workspace facade, and its own modules', () => {
     // '../workspace' (the composition-root facade) is the ONLY workspace
     // import the CLI may use — internals are asserted below.
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/claude-code|\.\.\/mission|node:util|node:readline)['"]/;
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer)|\.\.\/mission|node:util|node:readline)['"]/;
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
       const imports = [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
@@ -148,7 +148,11 @@ describe('Workspace boundaries (Prompt 7)', () => {
     }
   });
 
-  const isClaudeAdapter = (f: string): boolean => f.includes(join('connectors', 'claude-code'));
+  // The approved LIVE local adapters (Claude coding agent + Codex reviewer)
+  // may use the workspace facade and spawn processes; simulation adapters may
+  // not.
+  const isClaudeAdapter = (f: string): boolean =>
+    f.includes(join('connectors', 'claude-code')) || f.includes(join('connectors', 'codex-reviewer'));
 
   it('Relay Core, protocol, ledger never import the workspace implementation or child_process', () => {
     for (const file of files) {
@@ -165,7 +169,7 @@ describe('Workspace boundaries (Prompt 7)', () => {
     }
   });
 
-  it('only the workspace module and the approved Claude adapter spawn processes inside src/relay', () => {
+  it('only the workspace module and the approved live adapters spawn processes inside src/relay', () => {
     const allRelayFiles = [
       ...files,
       ...walk(relay('cli')),
@@ -244,6 +248,70 @@ describe('Mission Control boundaries (Prompt 8.2)', () => {
   });
 });
 
+describe('Codex Reviewer boundaries (Prompt 8.3)', () => {
+  const codexDir = relay(join('connectors', 'codex-reviewer'));
+  const codexFiles = walk(codexDir).filter((f) => !f.endsWith('.test.ts'));
+  const missionDir = relay('mission');
+  const uiDir = relay('ui');
+
+  it('Relay Core, protocol, and ledger never import the Codex reviewer adapter', () => {
+    for (const file of files) {
+      const content = read(file);
+      expect(/from\s+['"].*connectors\/codex-reviewer/.test(content), `${file} imports the Codex adapter`).toBe(false);
+    }
+  });
+
+  it('browser-safe mission + UI code never imports the Codex reviewer (Node) adapter', () => {
+    for (const file of [...walk(missionDir), ...walk(uiDir)].filter((f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'))) {
+      const content = read(file);
+      expect(/from\s+['"].*connectors\/codex-reviewer/.test(content), `${file} imports the Codex adapter`).toBe(false);
+    }
+  });
+
+  it('never uses a sandbox-bypass, hook-bypass, full-access, or workspace-write flag', () => {
+    for (const file of codexFiles) {
+      // The permission compiler DECLARES the bypass flags in a FORBIDDEN_FLAGS
+      // denylist (to assert they are never emitted); scrub that declaration
+      // before checking that no code actually references a bypass flag.
+      const content = read(file).replace(/FORBIDDEN_FLAGS[\s\S]*?\] as const;/, '');
+      expect(/dangerously-bypass-approvals-and-sandbox|dangerously-bypass-hook-trust/.test(content), `${file} contains a bypass flag`).toBe(false);
+    }
+    // The permission compiler only ever selects the read-only sandbox and
+    // never enables workspace-write / danger-full-access / --add-dir / network
+    // (the FORBIDDEN_FLAGS denylist is scrubbed before checking usage).
+    const perms = read(join(codexDir, 'permission-compiler.ts')).replace(/FORBIDDEN_FLAGS[\s\S]*?\] as const;/, '');
+    expect(perms).toContain("'--sandbox', 'read-only'");
+    expect(perms).not.toMatch(/'--sandbox',\s*'workspace-write'|'--sandbox',\s*'danger-full-access'/);
+    expect(perms).not.toContain("'--add-dir'");
+  });
+
+  it('the read-only reviewer never approves release, marks itself independent, or decides the gate', () => {
+    for (const file of codexFiles) {
+      const content = read(file);
+      // Release / independence / finding decisions are Relay-owned: the
+      // connector may only call the single composite evaluateReviewerGate
+      // (never the primitives), and never the mode/dog/consent engines.
+      expect(/computeOutputVisibility|computeDogActivity|selectMode|buildAutonomousConsent|assignReviewer/.test(content), `${file} decides Relay policy itself`).toBe(false);
+    }
+    // The adapter descriptor cannot declare itself independent.
+    const adapter = read(join(codexDir, 'adapter.ts'));
+    expect(/marksIndependent|selfIndependent|independent:\s*true/.test(adapter)).toBe(false);
+  });
+
+  it('the environment filter strips explicit provider keys before the child runs', () => {
+    const env = read(join(codexDir, 'environment.ts'));
+    for (const name of ['OPENAI_API_KEY', 'AZURE_OPENAI_API_KEY', 'AWS_ACCESS_KEY_ID', 'OPENAI_BASE_URL']) {
+      expect(env.includes(name), `environment.ts must strip ${name}`).toBe(true);
+    }
+  });
+
+  it('capability / process / stream / report modules make no network claim and use shell:false', () => {
+    const runner = read(join(codexDir, 'process-runner.ts'));
+    expect(runner).toContain('shell: false');
+    expect(runner).not.toMatch(/shell:\s*true/);
+  });
+});
+
 describe('Mission projection boundaries (Prompt 8.1)', () => {
   const missionDir = relay('mission');
   const missionFiles = walk(missionDir).filter((f) => !f.endsWith('.test.ts'));
@@ -271,10 +339,18 @@ describe('Mission projection boundaries (Prompt 8.1)', () => {
   });
 
   it('adapters cannot resolve findings, promote evidence, or decide mission completion', () => {
+    // The live Codex reviewer MAY import the permitted mission surfaces
+    // (execution-attestation builder, the reviewer-gate composite, review/
+    // repair + entitlement contracts). Every other adapter stays out of the
+    // mission projection, and NO adapter may call the mission-completion
+    // deciders (verdict engine, finding resolution, mission-contract builder).
+    const isCodexReviewer = (f: string): boolean => f.includes(join('connectors', 'codex-reviewer'));
     for (const file of [...walk(relay('connectors')).filter((f) => !f.endsWith('.test.ts'))]) {
       const content = read(file);
-      expect(/from\s+['"].*\/mission/.test(content), `${file} — adapters cannot own mission verdicts`).toBe(false);
-      expect(/evaluateMissionVerdict|resolveFinding|buildMissionContract/.test(content), `${file} decides mission completion`).toBe(false);
+      if (!isCodexReviewer(file)) {
+        expect(/from\s+['"].*\/mission/.test(content), `${file} — adapters cannot own mission verdicts`).toBe(false);
+      }
+      expect(/evaluateMissionVerdict|resolveFinding|buildMissionContract|projectReviewLedger/.test(content), `${file} decides mission completion`).toBe(false);
     }
   });
 

@@ -1,5 +1,26 @@
 # Sunday Relay — Security Boundaries (authoritative)
 
+> **Implementation sync (Prompt 8.3, 2026-07-22):** the REAL Codex reviewer
+> runs under all Prompt-7 workspace boundaries plus: it is READ-ONLY
+> (`codex exec --sandbox read-only`, explicit `--cd <worktree>`), uses the
+> existing local Codex login (`codex_local_login`) — Relay never reads, stores,
+> copies, or prints the credential — and strips explicit provider sources
+> (`OPENAI_API_KEY`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID`, `AZURE_OPENAI_*`,
+> `AWS_ACCESS_KEY_ID/SECRET/SESSION`, `OPENAI_BASE_URL`, `CODEX_API_KEY/ACCESS_
+> TOKEN/BASE_URL`) from the child; an explicit API-key source triggers a Manual
+> Task, never an API-billed run (the value is never revealed). Configuration is
+> isolated (`--ignore-user-config`, `--ignore-rules`, `--strict-config`); hooks,
+> plugins, MCP, apps, network, and extra writable dirs are never enabled;
+> `--dangerously-bypass-approvals-and-sandbox` / `--dangerously-bypass-hook-
+> trust` are never used (boundary-tested). The Prompt-7 inspection runs before
+> AND after: a reviewer that changes ANY file fails the review-attestation gate.
+> The reviewer report is an UNVERIFIED claim (secret + hidden-reasoning content
+> rejected); Relay — not Codex — decides launch verification, report validity,
+> independence (structural), whether findings block, and whether output stays
+> held; there is NO silent fallback to a simulated reviewer. Live review needs
+> explicit `--confirm-live` (never inferred from a TTY) and never runs in
+> tests/CI. See CODEX_REVIEWER_ADAPTER.md.
+
 > **Implementation sync (Prompt 8.2, 2026-07-22):** Mission Control preserves
 > every boundary. **Secure Access:** a `CredentialHandle` is a reference to
 > approved access that NEVER contains the credential value — `createCredential

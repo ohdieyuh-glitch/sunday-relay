@@ -1,5 +1,19 @@
 # Sunday Relay — Architecture (authoritative)
 
+> **Implementation sync (Prompt 8.3, 2026-07-22):** a second REAL local
+> adapter — the **Codex independent reviewer** (`src/relay/connectors/codex-
+> reviewer/`) — sits behind the provider-neutral `ReviewerAdapterPort`, beside
+> the Claude coding-agent adapter. It is READ-ONLY, runs only inside a Prompt-7
+> isolated worktree, uses the local Codex login (no stored credential), streams
+> normalized `reviewer.*`/`output.*` events, and returns an unverified report
+> that Relay validates + attests. Relay Core never imports it (boundary-tested);
+> the two live adapters are the ONLY connector process-spawners. The
+> release/independence/finding decision is a single Relay-owned composite
+> `evaluateReviewerGate` in the mission layer (`mission/reviewer-gate.ts`), so
+> the adapter never decides the gate itself — mirroring how the coding-agent
+> live-runner asks for the single `evaluateCompletionPolicy`. See
+> CODEX_REVIEWER_ADAPTER.md, LIVE_CODEX_REVIEW.md.
+
 > **Implementation sync (Prompt 8.2, 2026-07-22):** Mission Control adds two
 > browser-safe layers. `src/relay/mission/` gains four pure engines — modes
 > (mode policy, immutable autonomous consent, boundary stops), dog

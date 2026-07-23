@@ -1,5 +1,28 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **Implementation sync (Prompt 8.3, 2026-07-22):** Codex reviewer tests.
+> `connectors/codex-reviewer/codex-reviewer.test.ts` covers environment
+> stripping, config-isolation risk, capability strategy selection, the reviewer
+> prompt compiler (independence/read-only/schema, no transcript), the read-only
+> permission compiler (never a bypass/full-access flag), the strict report
+> parser (id/revision matching, verdict/finding coherence, secret + hidden-
+> reasoning rejection, malformed → typed failure), the stream parser (session
+> capture, reasoning dropped, structural validity), the Reviewer Execution
+> Attestation, the reviewer gate + independence, and the adapter's sync
+> refusal. `connectors/codex-reviewer/verify-harness.ts` is the offline
+> contract verifier — a DETERMINISTIC FAKE Codex proving the full pipeline
+> (approved/changes_required/blocked/needs_human, missing init/session, wrong
+> ids/revisions, malformed/secret/hidden-reasoning, timeout, cancellation,
+> output overflow, process error, exact-session re-review + wrong session,
+> reviewer file-modification rejection, unauthorized-fallback + identity-
+> mismatch rejection) with NO provider call. `relay-core-boundary.test.ts`
+> gained a Prompt-8.3 suite (Relay Core never imports the Codex adapter;
+> browser-safe mission/UI never import it; no bypass/full-access/workspace-
+> write flag; read-only sandbox only; provider keys stripped; shell:false; the
+> adapter never decides the gate). `npm run relay:codex:contract-verify` runs
+> the offline proof; `relay:codex:live` is the explicit REAL Gate-B review
+> (never in tests/CI).
+
 > **Implementation sync (Prompt 8.2, 2026-07-22):** Mission Control tests.
 > `src/relay/mission/mission-control.test.ts` (19) covers the mode policy +
 > escalation-consent/reduction + boundary stops, credential-handle secret

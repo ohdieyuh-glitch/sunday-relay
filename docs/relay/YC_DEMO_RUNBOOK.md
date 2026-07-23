@@ -132,3 +132,27 @@ picks how much autonomy to grant, and Relay decides what that permits. Output
 can't ship until the review Relay requires actually happens — even in
 autonomous. The dog only runs when real coordinated work is happening." Do NOT
 claim the reviewer is a live Codex, and do NOT imply the terminal is networked.
+
+## 12. NOT for recording — the live Codex review (Prompt 8.3)
+
+Do **not** run the live Codex review during YC-demo recording. It is a
+separate, founder-approved engineering proof, not a demo beat.
+
+**`npm run relay:codex:live` — the REAL independent review (separate terminal):**
+- Relay assigns a fixture implementer's change to a DIFFERENT live provider
+  (Codex) as a READ-ONLY independent reviewer, inside an isolated worktree.
+- Relay — not Codex — decides launch verification, report validity,
+  independence, whether findings block, and whether output stays held. The
+  reviewer changes ZERO files; the source fixture is never modified; no
+  fallback; no deployment; no push.
+- On the seeded rate-limit defect the reviewer returns CHANGES REQUIRED with a
+  blocking finding; Relay creates the finding + repair and holds the output.
+  The proof ends **RELAY STOPPED SAFELY (exit 3)** — never RELAY COMPLETE.
+- Prerequisite: the local Codex must be **signed in** (`codex login`);
+  otherwise the command stops with a "Sign in to Codex" Manual Task and makes
+  no call. Relay never asks for an API key.
+
+If asked about competitive proof on camera, use `relay:competitive` (the
+deterministic full-workforce demo, reviewer labeled SIMULATED) — see §10/§11 —
+and describe the live Codex review only as an engineering milestone, without
+running it.

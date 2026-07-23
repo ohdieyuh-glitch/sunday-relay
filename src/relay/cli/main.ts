@@ -16,6 +16,10 @@ import {
   checkLivePrerequisites, classifyClaudeAuth, claudeDoctorReport, DEFAULT_LIVE_LIMITS,
   probeClaudeCapabilities, runClaudeContractVerification, runClaudeProof,
 } from '../connectors/claude-code';
+import {
+  checkReviewPrerequisites, classifyCodexAuth, codexDoctorReport,
+  probeCodexCapabilities, runCodexReviewerContractVerification, runCodexReviewProof,
+} from '../connectors/codex-reviewer';
 
 /**
  * Relay CLI entry (Prompt 5). Thin client: parses arguments, composes the
@@ -38,9 +42,10 @@ const defaultIo: CliIo = {
 };
 
 export interface ParsedCli {
-  command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude';
+  command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude' | 'codex';
   workspaceAction?: 'doctor' | 'verify';
   claudeAction?: 'doctor' | 'run' | 'inspect' | 'cancel' | 'contract-verify';
+  codexAction?: 'doctor' | 'run' | 'inspect' | 'cancel' | 'contract-verify';
   fixture?: string;
   confirmLive: boolean;
   scenario?: string;
@@ -111,6 +116,13 @@ export function parseCli(argv: string[]): ParsedCli {
       }
       return { command: 'claude', claudeAction: second as ParsedCli['claudeAction'], fixture: values.fixture, ...base };
     }
+    if (first === 'codex') {
+      const actions = ['doctor', 'run', 'inspect', 'cancel', 'contract-verify'];
+      if (!second || !actions.includes(second)) {
+        return { command: 'codex', ...base, error: 'codex requires an action: doctor, run, inspect, cancel, or contract-verify.' };
+      }
+      return { command: 'codex', codexAction: second as ParsedCli['codexAction'], fixture: values.fixture, ...base };
+    }
     if (first === 'demo') {
       if (!second) return { command: 'demo', ...base, error: 'demo requires a scenario name (e.g. relay demo repair).' };
       // mission-control is a presentation OVER the competitive scenario.
@@ -155,6 +167,9 @@ export const HELP_TEXT = [
   '  relay claude doctor            truthful Claude Code capability + auth report',
   '  relay claude contract-verify   offline adapter proof (no provider call)',
   '  relay claude run --fixture safe-edit --confirm-live   REAL Claude Code proof',
+  '  relay codex doctor             truthful Codex reviewer capability + auth report',
+  '  relay codex contract-verify    offline reviewer proof (no provider call)',
+  '  relay codex run --fixture review-defect --confirm-live   REAL Codex review',
   '  relay demo competitive         Mission Contract + Claude/Codex proof (SIMULATED)',
   '  relay demo mission-control     modes + Relay Dog + Reviewer gate + Live Terminal',
   '  relay version | relay help',
@@ -405,6 +420,108 @@ async function runClaudeCli(parsed: ParsedCli, io: CliIo): Promise<number> {
   return proof.exitCode;
 }
 
+/* --------------------------- codex commands ------------------------ */
+
+async function runCodexCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const now = () => new Date().toISOString();
+  const out = (...lines: string[]) => lines.forEach((line) => io.out(line));
+
+  if (parsed.codexAction === 'doctor') {
+    const report = codexDoctorReport(now());
+    if (parsed.json) io.out(JSON.stringify({ report: report.lines.slice(1), exitCode: report.exitCode }));
+    else report.lines.forEach((line) => io.out(line));
+    return report.exitCode;
+  }
+
+  if (parsed.codexAction === 'contract-verify') {
+    io.out('RELAY CODEX REVIEWER CONTRACT VERIFICATION (offline — no provider call)');
+    const { checks, failures } = await runCodexReviewerContractVerification();
+    for (const check of checks) io.out(`  [${check.ok ? 'PASS' : 'FAIL'}] ${check.name}${check.detail ? ` — ${check.detail}` : ''}`);
+    if (failures > 0) {
+      io.out(`\nCODEX CONTRACT VERIFICATION FAILED: ${failures} check(s).`);
+      return EXIT.doctorFailure;
+    }
+    io.out('\nCODEX CONTRACT VERIFICATION PASSED — reviewer proven with no provider call.');
+    return EXIT.completed;
+  }
+
+  if (parsed.codexAction === 'inspect' || parsed.codexAction === 'cancel') {
+    io.out(parsed.codexAction === 'inspect'
+      ? 'No active live Codex review in this process (reviewer sessions are volatile and not durably stored).'
+      : 'No active live Codex review to cancel in this process.');
+    return EXIT.completed;
+  }
+
+  // codexAction === 'run': the explicit live independent review.
+  const fixture = parsed.fixture ?? 'review-defect';
+  if (fixture !== 'review-defect') {
+    io.out(`Only the "review-defect" fixture is supported for the live review (got "${fixture}").`);
+    return EXIT.usage;
+  }
+  const caps = probeCodexCapabilities(now());
+  const auth = classifyCodexAuth(now(), caps.executablePath);
+  // The trusted Relay fixture supplies no hooks/plugins/MCP/custom provider.
+  const configRisk = 'clean' as const;
+
+  const prereq = checkReviewPrerequisites({
+    capabilities: caps, authApproved: auth.approvedForLiveReview, authStatus: auth.status,
+    configRisk, approvalGranted: parsed.confirmLive,
+  });
+
+  const reviewScreen = (footer: string): void => {
+    out('LIVE CODEX REVIEW', '',
+      'This will use your existing local Codex account.', '',
+      'Role:', '  Independent Coding Reviewer',
+      'Workspace:', '  Isolated Relay worktree',
+      'Access:', '  Read only',
+      'Files Codex may modify:', '  None',
+      'Source repository:', '  Will not be modified',
+      'Deployment:', '  Disabled', 'Git push:', '  Prohibited',
+      'Fallback Reviewer:', '  Disabled',
+      'Expected live calls:', '  1', '',
+      footer);
+  };
+
+  if (!prereq.ready) {
+    // Manual Task-shaped stop — simple steps, no live call, no secrets, never
+    // an API key. Sign-in help mirrors the required Manual Task copy.
+    out('MANUAL TASK', '', 'Relay needs your help.', '', prereq.manualTitle, '',
+      'Why Relay stopped:', `  ${prereq.manualReason}`);
+    if (prereq.manualTitle === 'Sign in to Codex') {
+      out('', 'Do this:', '  1. Open a new terminal.', '  2. Type `codex`.',
+        '  3. Complete the sign-in steps.', '  4. Close Codex when sign-in is finished.',
+        '  5. Return to Relay.', '  6. Choose "Done."', '',
+        'What Relay will do next:', '  Relay will check Codex again before starting the review.',
+        '', 'Do not paste an API key into Relay.');
+    }
+    if (!parsed.confirmLive && caps.executablePath && auth.approvedForLiveReview && caps.readOnlySandboxSupported) {
+      reviewScreen('To proceed, re-run with --confirm-live (approval is never inferred from a TTY).');
+    }
+    return EXIT.checkpointRequired;
+  }
+
+  // Approved live review — show the confirmation screen, then run for real.
+  reviewScreen('Confirmed via --confirm-live.');
+
+  const proof = await runCodexReviewProof({
+    executablePath: caps.executablePath!, capabilities: caps, now, ids: createRandomIdFactory(),
+  });
+  if (parsed.json) {
+    io.out(JSON.stringify({
+      exitCode: proof.exitCode, reviewId: proof.reviewId, sessionCaptured: proof.sessionCaptured,
+      launchVerified: proof.launchVerified, requestedReviewer: proof.requestedReviewer,
+      actualReviewer: proof.actualReviewer, reviewerIndependent: proof.reviewerIndependent,
+      preInspectionAssessment: proof.preInspectionAssessment, postInspectionAssessment: proof.postInspectionAssessment,
+      reviewerFileChanges: proof.reviewerFileChanges, sourceUnchanged: proof.sourceUnchanged,
+      verdict: proof.verdict, blockingFindings: proof.blockingFindings, outputVisibility: proof.outputVisibility,
+      fallbackOccurred: proof.fallbackOccurred, cleanupOutcome: proof.cleanupOutcome,
+    }));
+  } else {
+    proof.lines.forEach((line) => io.out(line));
+  }
+  return proof.exitCode;
+}
+
 /* ------------------------------- main ------------------------------ */
 
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
@@ -462,6 +579,8 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     }
     case 'claude':
       return runClaudeCli(parsed, io);
+    case 'codex':
+      return runCodexCli(parsed, io);
     case 'demo':
     case 'run': {
       // mission-control renders over a real competitive run.
