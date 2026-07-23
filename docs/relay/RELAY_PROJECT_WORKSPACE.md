@@ -184,13 +184,32 @@ VERIFIED COMPLETE. Every event/message carries `fixture: true` and renders a
 FIXTURE tag; preview acknowledgments say "fixture only — nothing executed."
 No fixture implies live activity.
 
+## Configured project state (before the first mission)
+
+`configured-state.ts` exports the pure `buildConfiguredWorkspaceState`: the
+honest workspace for a project just started from Project Settings. Nothing
+is fabricated — the console is empty on STANDBY ("No mission is running."),
+outputState is CONFIGURED, phase rail sits at PLAN with nothing complete,
+every agent is WAITING, verification has no checks, the Project Brain is
+empty, and research shows CONFIGURED — AWAITS FIRST MISSION (a dedicated
+`ResearchStatusKind`; never MONITORING/RESEARCHING before a mission). The
+input (`ConfiguredProjectStart`) is a neutral display shape — NOT the
+ProjectSettingsDraft — so this module stays independent of the settings
+module; hosts resolve ids to names (`configured-start.ts` in the preview
+today, Relay Core projections later). Locked by `configured-state.test.tsx`
+and `preview/configured-start.test.ts`.
+
 ## Preview
 
 `#/relay/project/rly-001` (workspace) and `#/relay/project/rly-001/terminal`
 (full-screen terminal), plus HOME / SETTINGS / CONSOLE routes. The DEV
 PREVIEW switcher gains a fixture picker on the workspace screen and a
-MOBILE frame toggle (390px). The switcher is a development tool only — not
-part of the production component contract.
+MOBILE frame toggle (390px). START PROJECT in Settings opens
+`#/relay/project/rly-002` — the configured-but-idle workspace built from
+the founder's actual draft (tagged CONFIGURED FROM SETTINGS in the
+switcher; the fixture picker applies only to the fixture project). The
+switcher is a development tool only — not part of the production component
+contract.
 
 ## Future Relay Core bindings
 

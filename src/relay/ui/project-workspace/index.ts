@@ -39,3 +39,5 @@ export {
   WORKSPACE_FIXTURE_KEYS,
 } from './fixtures';
 export type { WorkspaceFixture, WorkspaceFixtureKey } from './fixtures';
+export { buildConfiguredWorkspaceState, configuredReviewerState } from './configured-state';
+export type { ConfiguredProjectStart, ConfiguredWorkspaceState } from './configured-state';

@@ -3,13 +3,14 @@ import type { ResearchState } from './contracts';
 
 /**
  * Prompt Architect research automation status. Truthful states only:
- * NOT CONFIGURED / MONITORING APPROVED TOPICS / RESEARCHING / NEW KNOWLEDGE
- * AWAITING APPROVAL. Research requests leave through a callback; no research
- * runs in the browser.
+ * NOT CONFIGURED / CONFIGURED — AWAITS FIRST MISSION / MONITORING APPROVED
+ * TOPICS / RESEARCHING / NEW KNOWLEDGE AWAITING APPROVAL. Research requests
+ * leave through a callback; no research runs in the browser.
  */
 
 const STATUS_LABEL: Record<ResearchState['status'], string> = {
   not_configured: 'NOT CONFIGURED',
+  configured: 'CONFIGURED — AWAITS FIRST MISSION',
   monitoring: 'MONITORING APPROVED TOPICS',
   researching: 'RESEARCHING',
   awaiting_approval: 'NEW KNOWLEDGE AWAITING APPROVAL',

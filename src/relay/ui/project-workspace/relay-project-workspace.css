@@ -615,6 +615,7 @@
 }
 .rpw-research-status--researching { color: var(--rpw-gold); border-color: var(--rpw-gold-dim); }
 .rpw-research-status--awaiting_approval { color: var(--rpw-amber); border-color: rgba(224, 178, 92, 0.5); }
+.rpw-research-status--configured { color: var(--rpw-dim); }
 .rpw-research-note { font-size: 10px; color: var(--rpw-cream); margin: 8px 0; }
 .rpw-research-topics { list-style: none; margin: 8px 0; padding: 0; font-size: 10px; color: var(--rpw-dim); }
 .rpw-research-topics li::before { content: '▸ '; color: var(--rpw-gold); }

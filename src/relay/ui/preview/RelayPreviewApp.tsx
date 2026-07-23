@@ -21,10 +21,16 @@ import {
   RelayProjectWorkspace,
   WORKSPACE_FIXTURES,
   WORKSPACE_FIXTURE_KEYS,
+  buildConfiguredWorkspaceState,
 } from '../project-workspace';
-import type { ProjectMessage, WorkspaceFixtureKey } from '../project-workspace';
+import type {
+  ConfiguredWorkspaceState,
+  ProjectMessage,
+  WorkspaceFixtureKey,
+} from '../project-workspace';
 import { AGENT_OPTIONS, RelayProjectSettings } from '../project-settings';
 import type { ProjectSettingsDraft } from '../project-settings';
+import { configuredStartFromSettingsDraft } from './configured-start';
 import './relay-preview.css';
 
 /**
@@ -98,6 +104,9 @@ export function RelayPreviewApp() {
   /* ---------------- workspace preview state (fixtures only) ----------- */
   const [fixtureKey, setFixtureKey] = useState<WorkspaceFixtureKey>('implementing');
   const [extraWsMessages, setExtraWsMessages] = useState<ProjectMessage[]>([]);
+  // The honest configured-but-idle workspace built from the founder's
+  // actual START PROJECT draft (memory only; no mission runs).
+  const [startedProject, setStartedProject] = useState<ConfiguredWorkspaceState | null>(null);
 
   const category = selectedRoute?.category ?? null;
   const workforceRecommendation = useMemo(
@@ -205,9 +214,14 @@ export function RelayPreviewApp() {
       onSaveDraft={(d: ProjectSettingsDraft) => setSavedSettingsDraft(d)}
       onStartProject={(d: ProjectSettingsDraft) => {
         // Preview only: the callback records the typed draft and opens the
-        // fixture workspace. No mission actually starts.
+        // honest configured-but-idle workspace built from it. No mission
+        // actually starts — the console stays empty on STANDBY.
         setSavedSettingsDraft(d);
-        navigate('/relay/project/rly-001');
+        setStartedProject(
+          buildConfiguredWorkspaceState(configuredStartFromSettingsDraft(d, 'rly-002', 'RLY / 002')),
+        );
+        setExtraWsMessages([]);
+        navigate('/relay/project/rly-002');
       }}
       onConnectRepository={() => {
         // Future integration callback: repository/source selection.
@@ -216,13 +230,19 @@ export function RelayPreviewApp() {
     />
   );
 
-  const fixture = WORKSPACE_FIXTURES[fixtureKey];
+  // The started project (from the founder's actual draft) takes its own
+  // route; every other project id shows the labeled fixture scenarios.
+  const onStartedProject =
+    route.screen === 'workspace' &&
+    startedProject !== null &&
+    route.projectId === startedProject.project.projectId;
+  const wsState = onStartedProject ? startedProject : WORKSPACE_FIXTURES[fixtureKey];
   // The `>_` control always switches into full Terminal Mode (founder direction).
   const terminalOpen = route.screen === 'workspace' && route.terminal;
   const workspace = (
     <RelayProjectWorkspace
-      {...fixture}
-      projectMessages={[...fixture.projectMessages, ...extraWsMessages]}
+      {...wsState}
+      projectMessages={[...wsState.projectMessages, ...extraWsMessages]}
       terminalOpen={terminalOpen}
       terminalFullScreen
       onSendProjectMessage={(text) => {
@@ -326,7 +346,7 @@ export function RelayPreviewApp() {
             {recentPopulated ? 'RECENT: FIXTURES' : 'RECENT: EMPTY'}
           </button>
         )}
-        {route.screen === 'workspace' && (
+        {route.screen === 'workspace' && !onStartedProject && (
           <span className="rpv-fixture-picker" role="group" aria-label="Workspace fixture state">
             {WORKSPACE_FIXTURE_KEYS.map((k) => (
               <button
@@ -342,6 +362,9 @@ export function RelayPreviewApp() {
               </button>
             ))}
           </span>
+        )}
+        {route.screen === 'workspace' && onStartedProject && (
+          <span className="rpv-switcher-tag">CONFIGURED FROM SETTINGS</span>
         )}
       </nav>
     </div>

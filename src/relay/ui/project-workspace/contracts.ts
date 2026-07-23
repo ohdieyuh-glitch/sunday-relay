@@ -223,6 +223,8 @@ export interface VerificationSummary {
 
 export type ResearchStatusKind =
   | 'not_configured'
+  /** Enabled in Project Settings; nothing runs until the first mission. */
+  | 'configured'
   | 'monitoring'
   | 'researching'
   | 'awaiting_approval';

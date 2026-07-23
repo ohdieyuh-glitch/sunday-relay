@@ -92,7 +92,10 @@ agent/source/type/name, reviewer required by policy but unselected,
 unavailable agent selected) and warnings (sign-in needed, reviewer not
 independent, repository not connected, autonomous caveats). START PROJECT
 stays disabled while blockers exist and never claims execution — it invokes
-`onStartProject(draft)` with the fully-typed `ProjectSettingsDraft`.
+`onStartProject(draft)` with the fully-typed `ProjectSettingsDraft`. In the
+preview shell, START opens the configured-but-idle workspace built from the
+draft (see RELAY_PROJECT_WORKSPACE.md § Configured project state): console
+empty on STANDBY, everyone WAITING — no mission is fabricated.
 
 ## Contracts
 
