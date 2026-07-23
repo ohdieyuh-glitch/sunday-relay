@@ -77,7 +77,7 @@ describe('relay-core boundary (new module roots)', () => {
   it('CLI is a thin client: only the app facade, read-model types, protocol, workspace facade, and its own modules', () => {
     // '../workspace' (the composition-root facade) is the ONLY workspace
     // import the CLI may use — internals are asserted below.
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer|supervised)|\.\.\/mission|node:util|node:readline)['"]/;
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer|supervised)|\.\.\/mission|\.\.\/persistence|node:util|node:readline)['"]/;
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
       const imports = [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1]);
@@ -363,6 +363,79 @@ describe('Supervised workflow boundaries (Prompt 8.4)', () => {
     // The runner never decides release visibility itself (line-244 invariant
     // also covers this for every connector file).
     expect(runner.includes('computeOutputVisibility')).toBe(false);
+  });
+});
+
+describe('Durable persistence boundaries (Prompt 8.5)', () => {
+  const persistenceDir = relay('persistence');
+  const persistenceFiles = walk(persistenceDir).filter((f) => !f.endsWith('.test.ts'));
+  // Files that legitimately spawn processes: the READ-ONLY recovery git
+  // inspector and the offline restart-proof entries (harness/driver/drill).
+  const PROCESS_FILES = ['recovery-inspector.ts', 'verify-harness.ts', 'driver-main.ts', 'recovery-drill.ts'];
+  // Files that may reference connectors: the supervised bridge (types) and
+  // the offline restart-proof entries that drive fake supervised runs.
+  const CONNECTOR_FILES = ['supervised-recorder.ts', 'verify-harness.ts', 'driver-main.ts', 'recovery-drill.ts'];
+  const base = (f: string): string => f.split(/[\\/]/).pop() ?? f;
+
+  it('Relay Core, protocol, ledger, mission, and UI never import persistence', () => {
+    for (const file of [...files, ...walk(relay('mission')), ...walk(relay('ui'))].filter(
+      (f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'),
+    )) {
+      expect(/from\s+['"].*\/persistence/.test(read(file)), `${file} imports persistence`).toBe(false);
+    }
+  });
+
+  it('connectors never import persistence — the supervised runner sees only its own hooks interface', () => {
+    for (const file of walk(relay('connectors')).filter((f) => !f.endsWith('.test.ts'))) {
+      expect(/from\s+['"].*\/persistence/.test(read(file)), `${file} imports persistence`).toBe(false);
+    }
+  });
+
+  it('only the recovery inspector and offline restart-proof entries spawn processes', () => {
+    for (const file of persistenceFiles) {
+      if (PROCESS_FILES.includes(base(file))) continue;
+      expect(/child_process|execFileSync|spawnSync|spawn\(/.test(read(file)), `${file} spawns processes`).toBe(false);
+    }
+    // The recovery git surface is inspection-only.
+    const inspector = read(join(persistenceDir, 'recovery-inspector.ts'));
+    expect(inspector).toContain("'rev-parse'");
+    expect(inspector).toContain("'status'");
+    for (const banned of ["'push'", "'reset'", "'clean'", "'checkout'", "'commit'", "'merge'"]) {
+      expect(inspector.includes(banned), `recovery-inspector must not invoke git ${banned}`).toBe(false);
+    }
+  });
+
+  it('the recovery service can never launch a provider', () => {
+    const recovery = read(join(persistenceDir, 'recovery.ts'));
+    expect(/connectors\/(claude-code|codex-reviewer)|invokeReview|\.invoke\(|createClaudeCodeAdapter|createCodexReviewerAdapter/.test(recovery))
+      .toBe(false);
+    expect(recovery).toContain('requiresFounderAuthorizationForLiveCalls: true');
+  });
+
+  it('persistence production files stay out of the connectors except the approved bridge/proof entries', () => {
+    for (const file of persistenceFiles) {
+      if (CONNECTOR_FILES.includes(base(file))) continue;
+      expect(/from\s+['"].*\/connectors\//.test(read(file)), `${file} imports connectors`).toBe(false);
+    }
+  });
+
+  it('journal writes are always sanitized and the redaction denylist exists', () => {
+    const journal = read(join(persistenceDir, 'journal.ts'));
+    expect(journal).toContain('sanitizePayload');
+    const redaction = read(join(persistenceDir, 'redaction.ts'));
+    for (const marker of ['password', 'api[-_]?key', 'access[-_]?token', 'refresh[-_]?token', 'cookie', 'recovery[-_]?code']) {
+      expect(redaction.includes(marker), `redaction denylist must cover ${marker}`).toBe(true);
+    }
+    expect(redaction).toContain('chain[- ]of[- ]thought');
+  });
+
+  it('the state root never lives inside a Git repository and files use restrictive modes', () => {
+    const paths = read(join(persistenceDir, 'paths.ts'));
+    expect(paths).toContain("'.git'");
+    expect(paths).toContain('0o700');
+    const atomic = read(join(persistenceDir, 'atomic-file.ts'));
+    expect(atomic).toContain('0o600');
+    expect(atomic).toContain('renameSync');
   });
 });
 

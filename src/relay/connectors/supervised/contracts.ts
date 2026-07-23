@@ -32,12 +32,48 @@ export interface SupervisedAgentOptions<Caps, Limits> {
   limits?: Limits;
 }
 
+/** Durable-persistence boundaries the supervised runner records (Prompt
+ * 8.5). Call-budget consumption is carried by the *_authorized boundaries,
+ * recorded BEFORE the corresponding provider launch so a crash can never
+ * produce an unaccounted call. */
+export type SupervisedPersistenceBoundary =
+  | 'run_initialized'
+  | 'workspace_created'
+  | 'provider_launch_authorized'
+  | 'implementer_initialization_verified'
+  | 'implementer_report_received'
+  | 'workspace_inspected'
+  | 'verification_completed'
+  | 'reviewer_initialization_verified'
+  | 'review_received'
+  | 'finding_created'
+  | 'repair_created'
+  | 'session_resume_authorized'
+  | 'repair_received'
+  | 're_verification_completed'
+  | 're_review_received'
+  | 'completion_evaluated'
+  | 'verified_complete'
+  | 'stopped_safely'
+  | 'cleanup_completed';
+
+/** Persistence port the runner calls at each boundary. Implementations live
+ * OUTSIDE this module (the persistence bridge); payloads are sanitized by
+ * the persistence layer before any write. A throwing hook aborts the run —
+ * persistence integrity failures are never silently ignored. */
+export interface SupervisedPersistenceHooks {
+  record(boundary: SupervisedPersistenceBoundary, payload: Record<string, unknown>): void;
+}
+
 export interface SupervisedProofOptions {
   claude: SupervisedAgentOptions<ClaudeCodeCapabilityProfile, ClaudeLiveLimits>;
   codex: SupervisedAgentOptions<CodexReviewerCapabilityProfile, CodexReviewerLimits>;
   now: () => string;
   ids: IdFactory;
   baseEnv?: Record<string, string | undefined>;
+  /** Optional durable-persistence hooks (Prompt 8.5). When absent the run is
+   * volatile exactly as in Prompt 8.4. */
+  persistence?: SupervisedPersistenceHooks;
 }
 
 export interface SupervisedProofResult {

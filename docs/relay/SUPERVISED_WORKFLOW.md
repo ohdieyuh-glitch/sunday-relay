@@ -1,5 +1,15 @@
 # Sunday Relay — Live Supervised Workflow (Prompt 8.4, authoritative)
 
+> **Persistence sync (Prompt 8.5, 2026-07-22):** the supervised runner now
+> records every significant boundary through optional persistence hooks
+> (absent hooks = the exact Prompt-8.4 volatile behavior). Call-budget
+> consumption is persisted WITH launch/resume authorization BEFORE any
+> provider process starts, so a crash can never produce an unaccounted
+> call and a restart can never reset the budget. The live CLI wires the
+> recorder to the local state root; live commands remain
+> founder-confirmed. Crash recovery: `relay runs recover --run <ref>`
+> (zero provider calls). See DURABLE_LOCAL_PERSISTENCE.md.
+
 The supervised workflow closes the workforce loop against REAL agents: one
 live Claude Code implementer and one live Codex independent reviewer,
 composed by Relay over the Prompt-7 isolated workspace, the Prompt-8.1/8.2

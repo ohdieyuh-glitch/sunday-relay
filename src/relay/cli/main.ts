@@ -23,6 +23,10 @@ import {
 import {
   checkSupervisedPrerequisites, runSupervisedContractVerification, runSupervisedProof,
 } from '../connectors/supervised';
+import {
+  createStateStore, createSupervisedRunRecorder, recoverRun, resolveStateRoot,
+  runPersistenceContractVerification, runRecoveryDrill, stateDoctorReport,
+} from '../persistence';
 
 /**
  * Relay CLI entry (Prompt 5). Thin client: parses arguments, composes the
@@ -45,11 +49,17 @@ const defaultIo: CliIo = {
 };
 
 export interface ParsedCli {
-  command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude' | 'codex' | 'supervised';
+  command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude' | 'codex' | 'supervised'
+    | 'state' | 'runs' | 'persistence';
   workspaceAction?: 'doctor' | 'verify';
   claudeAction?: 'doctor' | 'run' | 'inspect' | 'cancel' | 'contract-verify';
   codexAction?: 'doctor' | 'run' | 'inspect' | 'cancel' | 'contract-verify';
   supervisedAction?: 'run' | 'contract-verify';
+  stateAction?: 'doctor';
+  runsAction?: 'list' | 'inspect' | 'recover' | 'archive';
+  persistenceAction?: 'contract-verify' | 'recovery-drill';
+  runRef?: string;
+  stateRoot?: string;
   fixture?: string;
   confirmLive: boolean;
   scenario?: string;
@@ -88,6 +98,8 @@ export function parseCli(argv: string[]): ParsedCli {
         help: { type: 'boolean', default: false },
         fixture: { type: 'string' },
         'confirm-live': { type: 'boolean', default: false },
+        run: { type: 'string' },
+        'state-root': { type: 'string' },
       },
     });
     const pace = values.pace !== undefined ? Number(values.pace) : undefined;
@@ -133,6 +145,30 @@ export function parseCli(argv: string[]): ParsedCli {
         return { command: 'supervised', ...base, error: 'supervised requires an action: run or contract-verify.' };
       }
       return { command: 'supervised', supervisedAction: second as ParsedCli['supervisedAction'], fixture: values.fixture, ...base };
+    }
+    if (first === 'state') {
+      if (second !== 'doctor') return { command: 'state', ...base, error: 'state requires an action: doctor.' };
+      return { command: 'state', stateAction: 'doctor', stateRoot: values['state-root'], ...base };
+    }
+    if (first === 'runs') {
+      const actions = ['list', 'inspect', 'recover', 'archive'];
+      if (!second || !actions.includes(second)) {
+        return { command: 'runs', ...base, error: 'runs requires an action: list, inspect, recover, or archive.' };
+      }
+      if (second !== 'list' && !values.run) {
+        return { command: 'runs', ...base, error: `runs ${second} requires --run <run-reference>.` };
+      }
+      return {
+        command: 'runs', runsAction: second as ParsedCli['runsAction'],
+        runRef: values.run, stateRoot: values['state-root'], ...base,
+      };
+    }
+    if (first === 'persistence') {
+      const actions = ['contract-verify', 'recovery-drill'];
+      if (!second || !actions.includes(second)) {
+        return { command: 'persistence', ...base, error: 'persistence requires an action: contract-verify or recovery-drill.' };
+      }
+      return { command: 'persistence', persistenceAction: second as ParsedCli['persistenceAction'], ...base };
     }
     if (first === 'demo') {
       if (!second) return { command: 'demo', ...base, error: 'demo requires a scenario name (e.g. relay demo repair).' };
@@ -183,6 +219,13 @@ export const HELP_TEXT = [
   '  relay codex run --fixture review-defect --confirm-live   REAL Codex review',
   '  relay supervised contract-verify   offline full-workflow proof (no provider call)',
   '  relay supervised run --fixture safe-edit --confirm-live   REAL supervised loop',
+  '  relay state doctor             durable state-directory health report',
+  '  relay runs list                safe summaries of persisted runs',
+  '  relay runs inspect --run <ref> truthful reconstructed run state',
+  '  relay runs recover --run <ref> validate + replay + plan (zero provider calls)',
+  '  relay runs archive --run <ref> archive a completed run (never deletes)',
+  '  relay persistence contract-verify   offline process-restart proof (no provider call)',
+  '  relay persistence recovery-drill    two-process crash recovery drill (offline)',
   '  relay demo competitive         Mission Contract + Claude/Codex proof (SIMULATED)',
   '  relay demo mission-control     modes + Relay Dog + Reviewer gate + Live Terminal',
   '  relay version | relay help',
@@ -607,11 +650,26 @@ async function runSupervisedCli(parsed: ParsedCli, io: CliIo): Promise<number> {
 
   workflowScreen('Confirmed via --confirm-live.');
 
-  const proof = await runSupervisedProof({
-    claude: { executablePath: claudeCaps.executablePath!, capabilities: claudeCaps },
-    codex: { executablePath: codexCaps.executablePath!, capabilities: codexCaps },
-    now, ids: createRandomIdFactory(),
+  // Prompt 8.5: live supervised runs persist durably to the local state root
+  // (journal + snapshots), so a crash is recoverable via `relay runs recover`.
+  const stateRoot = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
+  if (!stateRoot.ok) {
+    io.out(`Durable state root unavailable: ${stateRoot.error.message}`);
+    return EXIT.doctorFailure;
+  }
+  const recorder = createSupervisedRunRecorder({
+    store: createStateStore({ root: stateRoot.value.root }), now,
   });
+  let proof;
+  try {
+    proof = await runSupervisedProof({
+      claude: { executablePath: claudeCaps.executablePath!, capabilities: claudeCaps },
+      codex: { executablePath: codexCaps.executablePath!, capabilities: codexCaps },
+      now, ids: createRandomIdFactory(), persistence: recorder,
+    });
+  } finally {
+    recorder.release();
+  }
   if (parsed.json) {
     io.out(JSON.stringify({
       exitCode: proof.exitCode, path: proof.path, stopReason: proof.stopReason,
@@ -628,6 +686,103 @@ async function runSupervisedCli(parsed: ParsedCli, io: CliIo): Promise<number> {
     proof.lines.forEach((line) => io.out(line));
   }
   return proof.exitCode;
+}
+
+/* ------------------- durable state / runs / recovery ---------------- */
+
+function resolveCliStateRoot(parsed: ParsedCli, io: CliIo): { root: string } | { error: string } {
+  const resolved = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
+  if (!resolved.ok) return { error: resolved.error.message };
+  return { root: resolved.value.root };
+}
+
+function runStateCli(parsed: ParsedCli, io: CliIo): number {
+  const report = stateDoctorReport({
+    env: io.env as Record<string, string | undefined>,
+    overrideRoot: parsed.stateRoot, now: new Date().toISOString(),
+  });
+  if (parsed.json) io.out(JSON.stringify({ report: report.lines.slice(1), exitCode: report.exitCode }));
+  else report.lines.forEach((line) => io.out(line));
+  return report.exitCode === 0 ? EXIT.completed : EXIT.doctorFailure;
+}
+
+function runRunsCli(parsed: ParsedCli, io: CliIo): number {
+  const rootResult = resolveCliStateRoot(parsed, io);
+  if ('error' in rootResult) { io.out(rootResult.error); return EXIT.doctorFailure; }
+  const store = createStateStore({ root: rootResult.root });
+  const now = () => new Date().toISOString();
+
+  if (parsed.runsAction === 'list') {
+    const runs = store.listRuns();
+    if (parsed.json) { io.out(JSON.stringify({ runs })); return EXIT.completed; }
+    io.out('PERSISTED RELAY RUNS');
+    if (runs.length === 0) { io.out('  (none)'); return EXIT.completed; }
+    for (const run of runs) {
+      io.out(`  ${run.displayName.padEnd(32).slice(0, 32)} ${run.lifecycle.padEnd(20)} ${run.phase.padEnd(16)} ${run.updatedAt}` +
+        `${run.archived ? '  [archived]' : ''}${run.recoveryRequired ? '  [RECOVERY REQUIRED]' : ''}`);
+    }
+    return EXIT.completed;
+  }
+
+  const runRef = parsed.runRef!;
+  if (parsed.runsAction === 'archive') {
+    const archived = store.archiveRun(runRef, now());
+    io.out(archived.ok ? 'Run archived (evidence preserved; still inspectable).' : archived.error.message);
+    return archived.ok ? EXIT.completed : EXIT.doctorFailure;
+  }
+
+  // inspect (read-only) and recover (validation + replay + reconciliation +
+  // plan). NEITHER makes any provider call.
+  const report = recoverRun({ store, reference: runRef, now, persistMarkers: parsed.runsAction === 'recover' });
+  if (!report.ok) { io.out(report.error.message); return EXIT.doctorFailure; }
+  const value = report.value;
+  const state = value.loaded?.state ?? null;
+  if (parsed.json) {
+    io.out(JSON.stringify({
+      runRef, plan: value.plan, lifecycle: state?.run.lifecycle ?? null,
+      quarantined: value.quarantined, projectionEvents: value.projectionEvents,
+    }));
+    return value.plan.outcome === 'unrecoverable' ? EXIT.doctorFailure : EXIT.completed;
+  }
+  io.out(parsed.runsAction === 'recover' ? 'RELAY RUN RECOVERY (zero provider calls)' : 'RELAY RUN INSPECTION');
+  io.out(`  Mission:                ${state?.mission.objective ?? '(unavailable)'}`);
+  io.out(`  Lifecycle:              ${state?.run.lifecycle ?? 'corrupted'}`);
+  io.out(`  Phase:                  ${state?.run.phase ?? '-'}`);
+  io.out(`  Output visibility:      ${state?.run.outputVisibility ?? '-'}`);
+  io.out(`  Workspace:              ${value.plan.workspaceReconciliation}`);
+  io.out(`  Evidence:               ${state?.evidence.length ?? 0} record(s), ${value.plan.staleEvidenceIds.length} stale`);
+  io.out(`  Open findings:          ${value.plan.openFindingIds.join(', ') || 'none'}`);
+  io.out(`  Pending repairs:        ${value.plan.pendingRepairIds.join(', ') || 'none'}`);
+  io.out(`  Calls consumed:         ${value.plan.callBudget.consumed} of ${value.plan.callBudget.maxCalls}` +
+    ` (${value.plan.callBudget.remaining} remaining)`);
+  for (const [provider, readiness] of Object.entries(value.plan.sessionReadiness)) {
+    // Readiness classification only — raw provider session ids are never shown.
+    io.out(`  ${`${provider} session:`.padEnd(24)}${readiness}`);
+  }
+  io.out(`  Recovery plan:          ${value.plan.outcome}`);
+  for (const action of value.plan.nextPermittedActions) io.out(`    → ${action}`);
+  io.out('  Live calls:             require explicit founder authorization (never automatic after restart)');
+  for (const diagnostic of value.plan.diagnostics.slice(0, 6)) io.out(`  note: ${diagnostic}`);
+  return value.plan.outcome === 'unrecoverable' ? EXIT.doctorFailure : EXIT.completed;
+}
+
+async function runPersistenceCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  if (parsed.persistenceAction === 'contract-verify') {
+    io.out('RELAY PERSISTENCE CONTRACT VERIFICATION (offline — separate Node processes, no provider call)');
+    const { checks, failures, processesSpawned } = await runPersistenceContractVerification();
+    for (const check of checks) io.out(`  [${check.ok ? 'PASS' : 'FAIL'}] ${check.name}${check.detail ? ` — ${check.detail}` : ''}`);
+    io.out(`  (scenario steps ran across ${processesSpawned} separate Node processes)`);
+    if (failures > 0) {
+      io.out(`\nPERSISTENCE CONTRACT VERIFICATION FAILED: ${failures} check(s).`);
+      return EXIT.doctorFailure;
+    }
+    io.out('\nPERSISTENCE CONTRACT VERIFICATION PASSED — durable state and cross-process recovery proven with no provider call.');
+    return EXIT.completed;
+  }
+  // recovery-drill (Gate B — offline, two processes, zero provider calls)
+  const drill = await runRecoveryDrill();
+  drill.lines.forEach((line) => io.out(line));
+  return drill.exitCode === 0 ? EXIT.completed : EXIT.doctorFailure;
 }
 
 /* ------------------------------- main ------------------------------ */
@@ -691,6 +846,12 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return runCodexCli(parsed, io);
     case 'supervised':
       return runSupervisedCli(parsed, io);
+    case 'state':
+      return runStateCli(parsed, io);
+    case 'runs':
+      return runRunsCli(parsed, io);
+    case 'persistence':
+      return runPersistenceCli(parsed, io);
     case 'demo':
     case 'run': {
       // mission-control renders over a real competitive run.

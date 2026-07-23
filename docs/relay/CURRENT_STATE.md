@@ -1,20 +1,94 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-22 (Prompt 8.4 COMPLETE — Gate A offline
-> 47/47 twice + Gate B live PASSED via PATH A: real Claude implemented, Relay
-> verified, real Codex genuinely APPROVED on first review, verified-complete
-> with 0 repairs and exactly two live calls; PATH B remains offline-proven
-> only).** The July 24 product demo is `npm run relay:yc`; `npm run
-> relay:mission-control` is the graphical product surface; `npm run
-> relay:competitive` is the deterministic full-workforce proof; `npm run
-> relay:claude:live` is the real single-agent proof; `npm run
-> relay:codex:live` is the REAL independent-review proof; and `npm run
-> relay:supervised:live` is the REAL full-loop proof (founder-run only).
+> boundary. Last updated: **2026-07-22 (Prompt 8.5 COMPLETE — durable local
+> persistence + crash-safe recovery: Gate A 65-check offline restart proof
+> across ~44 separate Node processes (twice) + Gate B two-process recovery
+> drill (twice) — DURABLE LOCAL RECOVERY VERIFIED; zero provider calls; real
+> cross-process PROVIDER resume remains not live-proven).** The July 24
+> product demo is `npm run relay:yc`; `npm run relay:mission-control` is the
+> graphical product surface; `npm run relay:competitive` is the
+> deterministic full-workforce proof; `npm run relay:claude:live` is the
+> real single-agent proof; `npm run relay:codex:live` is the REAL
+> independent-review proof; and `npm run relay:supervised:live` is the REAL
+> full-loop proof (founder-run only, now durably persisted).
 
 ## Phase
 
-**Prompt 8.4 — Live Supervised Implementation, Independent Review, and
+**Prompt 8.5 — Durable Local Persistence and Crash-Safe Recovery
+Foundation: COMPLETE — GATE A + OFFLINE GATE B PASSED** (2026-07-22).
+Volatile run state replaced by `src/relay/persistence/`:
+- **Foundation:** append-only checksummed JSONL journal per run (the single
+  authority: schema version, monotonic gap-free sequences, state digests,
+  SANITIZED payloads), digest-validated snapshots reconstructable by
+  deterministic replay (rotated `snapshot.previous.json`; loader falls back
+  current → previous → replay-only; journal wins), atomic writes
+  (temp+fsync+rename, 0o600/0o700), owner-metadata run locks (live-owner
+  contention rejection; documented dead-owner reclaim with the stale lock
+  preserved), explicit backed-up deterministic migrations
+  (`relay-state.v0`→`v1` fixture; unknown FUTURE schemas rejected, never
+  guessed), quarantine for corruption (never silent discard), preserve-only
+  retention, archive-without-delete. State root: RELAY_STATE_HOME →
+  XDG_STATE_HOME/sunday-relay → `~/.local/state/sunday-relay` — NEVER the
+  Git repository, Downloads, temp, or credential dirs; run references are
+  containment-checked and symlinked run dirs rejected.
+- **Recovery service** (never launches a provider; boundary-tested):
+  validate journal + snapshot → replay → re-inspect the workspace
+  (read-only git + claimed-file digest comparison) → source-worktree
+  protection → classify persisted provider-session references
+  (`persisted_unverified` by default — a reference is NOT availability
+  proof) → reconcile the call budget from the journal → mark stale
+  evidence durably → produce a recovery plan
+  (inspection_only/ready_for_verification/ready_for_review/
+  ready_for_repair_authorization/ready_for_exact_claude_resume/
+  ready_for_exact_codex_resume/waiting_for_user/manual_action_required/
+  stopped_safely/unrecoverable) that ALWAYS requires explicit founder
+  authorization before any live call. Safe projection events only
+  (10 new protocol kinds); Relay Dog derives from recovered state.
+- **Supervised integration:** the 8.4 runner records 19 boundaries via
+  optional hooks (absent = exact 8.4 volatile behavior); call-budget
+  consumption persists WITH launch/resume authorization BEFORE any
+  provider start — a crash can never produce an unaccounted call and a
+  restart can never reset consumed/max/per-provider counts or the
+  automatic-retry prohibition. The live CLI wires the recorder to the
+  default state root; live commands remain founder-confirmed (none run
+  this phase).
+- **CLI:** `relay state doctor` · `relay runs list|inspect|recover|archive`
+  (readiness classifications shown, raw provider session ids never) ·
+  `npm run relay:persistence:contract-verify` (Gate A) ·
+  `npm run relay:persistence:recovery-drill` (Gate B).
+- **Gate A (exact, 2026-07-22, NO provider call):**
+  `relay:persistence:contract-verify` **65/65 (twice)** — 18 scenarios
+  across ~44 SEPARATE Node processes (empty state, PATH-A completion +
+  truthful reload, interrupts after Claude/finding/repair, budget survival
+  incl. fifth-call prohibition, workspace drift → stale evidence, source
+  change → safe stop, torn journal tail, corrupt snapshot fallback,
+  tampering → quarantine, duplicate idempotency, lock contention, stale
+  lock, migration + backup + future rejection, sentinel redaction sweep,
+  traversal/symlink rejection, archive). Persistence tests 22/22;
+  boundary + connectors + CLI 160/160; supervised contract 47/47 (twice);
+  claude/codex contract-verifies PASS; relay suite **491/491**; typecheck
+  green; frontend + backend + relay builds green; yc/manual/workspace
+  verifies + competitive + mission-control pass; full suite green (see
+  SESSION_LOG).
+- **Gate B (offline restart drill): PASSED twice** — process A crashes
+  after F-1/R-1 persist (exit 87, lock held, workspace on disk); fresh
+  process B validates the journal, reconstructs revision_required +
+  F-1/R-1 + `persisted_unverified` Claude session + 2-of-4 budget,
+  re-inspects the workspace, and plans ready_for_repair_authorization —
+  **DURABLE LOCAL RECOVERY VERIFIED**, zero provider calls.
+- **Docs:** DURABLE_LOCAL_PERSISTENCE.md +
+  ADR-016-DURABLE-LOCAL-PERSISTENCE.md (new) + sync blockquotes across
+  ARCHITECTURE/PROTOCOL/SECURITY_BOUNDARIES/TEST_STRATEGY/CLI/
+  EXECUTION_ATTESTATION/REVIEW_REPAIR_LEDGER/SUPERVISED_WORKFLOW/
+  LIVE_TERMINAL/RELAY_DOG/COMPETITIVE_FEATURE_COVERAGE, CURRENT_STATE,
+  SESSION_LOG.
+- **Remaining limitation (truthful):** real cross-process PROVIDER resume
+  (actually resuming a live Claude/Codex session from a persisted
+  reference after restart) is NOT live-proven — separate founder-authorized
+  phase. Multi-machine persistence and cloud sync out of scope.
+
+**Prior phase — Prompt 8.4 — Live Supervised Implementation, Independent Review, and
 Conditional Repair: COMPLETE — GATE A + GATE B (PATH A) PASSED**
 (2026-07-22). The full workforce loop composed over the two approved live
 adapters — `src/relay/connectors/supervised/`:
@@ -566,6 +640,8 @@ founder decisions 1–10 encoded into this documentation set.
 | CODEX_REVIEWER_ADAPTER.md | Real local Codex independent reviewer adapter (Prompt 8.3) |
 | LIVE_CODEX_REVIEW.md | Gate-B runbook for the explicit live Codex review (Prompt 8.3) |
 | SUPERVISED_WORKFLOW.md | Live supervised implementation → review → conditional repair loop (Prompt 8.4) |
+| DURABLE_LOCAL_PERSISTENCE.md | Durable local state + crash-safe recovery foundation (Prompt 8.5) |
+| ADR-016-DURABLE-LOCAL-PERSISTENCE.md | Finalized persistence architecture decision (Prompt 8.5) |
 | SESSION_LOG.md | Append-only phase journal |
 
 Superseded (historical, headers added): root `RELAY_STATUS.md`,
@@ -617,14 +693,22 @@ None in flight — Phase 1 closes with this commit.
 
 ## Next prompt
 
-**Post-YC Durable Local Persistence and Real Cross-Process Resume** — the
-relay-storage file-backed repositories per ADR-016 (append-only JSONL event
-log + JSON projections under a project-local `.relay/` directory, node
-builtins only, behind the existing storage ports; deterministic
-replay-on-load; honest crash-recovery semantics; truthful
-`relay resume <run-id>`). The workspace registry and the Claude/Codex
-session records join this scope — durable cross-process reviewer/implementer
-recovery becomes possible only then.
+**Real Cross-Process Provider Resume (founder-authorized)** — prove LIVE
+what persistence now makes possible: after a real interruption, a fresh
+Relay process recovers the durable run, the founder explicitly authorizes
+the plan's exact-session resume, and Relay actually resumes the persisted
+live Claude (repair) or Codex (re-review) session — with a live preflight
+that upgrades `persisted_unverified` to `resume_ready`/`resume_unavailable`
+truthfully, unchanged budgets, and every 8.4 safety boundary intact. Also
+queued: wiring the durable store behind the Prompt-2 relay-storage ports so
+the simulation orchestrator can persist (`relay resume <run-id>` for
+simulated runs), and Mission Control surfacing of `relay runs` state.
+
+**Superseded next-prompt record:** *Post-YC Durable Local Persistence* —
+DONE (Prompt 8.5): implemented at the state-home root (the earlier
+"project-local `.relay/`" sketch was refined by ADR-016 finalization); the
+workspace registry and Claude/Codex session references persist; recovery
+plans gate every resume behind explicit founder authorization.
 
 **Superseded next-prompt record:** *Prompt 8.4 — Live Supervised
 Implementation, Independent Review, and Conditional Repair* — COMPLETE

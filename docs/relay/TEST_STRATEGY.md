@@ -1,5 +1,22 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **Implementation sync (Prompt 8.5, 2026-07-22):** persistence tests.
+> `persistence/persistence.test.ts` covers storage-root resolution, path
+> traversal/symlink rejection, atomic writes + permissions, journal
+> append/sequence/checksum/torn-tail/tampering/gap/duplicate handling,
+> the lifecycle state machine, snapshot rotation + digest fallback, locks
+> (live contention + dead-owner reclaim), redaction, store index/archive/
+> quarantine, migrations (v0 fixture, backup, no-op, future rejection),
+> session-readiness classification, Relay Dog recovery mapping, retention
+> defaults, and budget durability. `persistence/verify-harness.ts` is the
+> Gate-A OFFLINE RESTART PROOF: 18 scenarios across ~44 SEPARATE Node
+> processes (esbuild-bundled driver, fake executables, isolated temp
+> state root, zero provider calls); `persistence/recovery-drill.ts` is the
+> two-process Gate-B drill ending `DURABLE LOCAL RECOVERY VERIFIED`.
+> `relay-core-boundary.test.ts` gained a Prompt-8.5 suite (nothing above
+> persistence imports it; recovery can never launch a provider; redaction
+> denylist required; restrictive modes required).
+
 > **Implementation sync (Prompt 8.4, 2026-07-22):** supervised workflow
 > tests. `connectors/supervised/verify-harness.ts` is the Gate-A offline
 > contract verifier — deterministic fake executables for BOTH agents prove

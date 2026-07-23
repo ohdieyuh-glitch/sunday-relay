@@ -1,5 +1,12 @@
 # Relay Execution Attestation (Prompt 8.1)
 
+> **Persistence sync (Prompt 8.5, 2026-07-22):** Execution Attestations are
+> persisted in run snapshots/journal payloads (sanitized, digest-checked)
+> and reconstruct on recovery; a persisted attestation remains exactly what
+> it was — proof of the recorded execution, never proof that a provider
+> session is still resumable (`persisted_unverified` until a
+> founder-authorized preflight). See DURABLE_LOCAL_PERSISTENCE.md.
+
 > **Implementation sync (Prompt 8.3, 2026-07-22):** the live Codex reviewer
 > produces a REAL Reviewer Execution Attestation via this same model
 > (`connectors/codex-reviewer/attestation.ts` → `buildExecutionAttestation`).

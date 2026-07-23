@@ -1,5 +1,13 @@
 # Sunday Relay — Live Terminal (authoritative)
 
+> **Persistence sync (Prompt 8.5, 2026-07-22):** the durable journal is NOT
+> the Live Terminal transcript. Recovery emits only safe normalized
+> projection events (persistence.loaded/validated, snapshot.replayed,
+> workspace.reconciled, evidence.marked_stale,
+> provider_session.persisted_unverified, recovery.plan_created,
+> run.recovery_required/recovery_ready/quarantined); missing terminal
+> dialogue is never reconstructed or invented.
+
 > **Implementation sync (Prompt 8.3, 2026-07-22):** during a live Codex review
 > the terminal projects REAL normalized `reviewer.*` events (provenance
 > `live`): Output held for independent review → RELAY → CODEX contract

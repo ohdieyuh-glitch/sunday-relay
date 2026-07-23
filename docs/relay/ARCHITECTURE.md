@@ -1,5 +1,21 @@
 # Sunday Relay — Architecture (authoritative)
 
+> **Implementation sync (Prompt 8.5, 2026-07-22):** `src/relay/persistence/`
+> is the durable local state foundation: an append-only checksummed JSONL
+> journal per run (the single authority), digest-validated rotated snapshots
+> reconstructable by deterministic replay, atomic writes, owner-metadata run
+> locks, explicit backed-up migrations, quarantine, and a recovery service
+> that validates → replays → re-inspects the workspace (read-only git) →
+> classifies persisted provider-session references → reconciles the call
+> budget → emits a plan ALWAYS requiring founder authorization before any
+> live call. State lives under `~/.local/state/sunday-relay` (or
+> RELAY_STATE_HOME / XDG_STATE_HOME) — never in the Git repository. The
+> supervised runner records boundaries through a hooks interface it defines
+> itself (connectors never import persistence); the persistence bridge,
+> CLI (`relay state|runs|persistence`), and offline restart proofs compose
+> it. Relay Core, mission, and UI never import it (boundary-tested). See
+> DURABLE_LOCAL_PERSISTENCE.md, ADR-016-DURABLE-LOCAL-PERSISTENCE.md.
+
 > **Implementation sync (Prompt 8.4, 2026-07-22):** the supervised live
 > workflow (`src/relay/connectors/supervised/`) COMPOSES the two approved
 > live adapters — Claude Code implementer + Codex independent reviewer —

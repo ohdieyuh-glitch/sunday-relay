@@ -35,7 +35,9 @@ import type { CodexReviewerCapabilityProfile } from '../codex-reviewer/contracts
 import { buildReviewerAttestation, REVIEWER_ROLE } from '../codex-reviewer/attestation';
 import { checkReviewPrerequisites } from '../codex-reviewer/live-runner';
 import type { ReviewerPromptContext } from '../codex-reviewer/reviewer-prompt-compiler';
-import type { SupervisedProofOptions, SupervisedProofResult } from './contracts';
+import type {
+  SupervisedPersistenceBoundary, SupervisedProofOptions, SupervisedProofResult,
+} from './contracts';
 
 /**
  * Live supervised workflow orchestrator (Prompt 8.4). Closes the workforce
@@ -202,6 +204,12 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
   const codexLimits = options.codex.limits ?? DEFAULT_REVIEWER_LIMITS;
   const lines: string[] = [];
   const emit = (...l: string[]): void => { for (const x of l) lines.push(x); };
+  /** Durable-persistence boundary recording (Prompt 8.5) — no-op when no
+   * hooks are attached (Prompt 8.4 behavior unchanged). A throwing hook
+   * aborts the run: persistence failures are never silently ignored. */
+  const persist = (boundary: SupervisedPersistenceBoundary, payload: Record<string, unknown>): void => {
+    options.persistence?.record(boundary, payload);
+  };
 
   const fixture = buildSafeEditFixture();
   const projectId = ids.next('prj') as ProjectId;
@@ -242,11 +250,29 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     result.stopReason = message;
     result.path = 'stopped';
     result.exitCode = exitCode;
+    persist('stopped_safely', {
+      stopReason: message, exitCode, lifecycleAfter: 'stopped_safely', phase: 'stopped',
+      visibilityAfter: result.outputVisibility,
+    });
     finish();
     return result;
   };
 
   try {
+    persist('run_initialized', {
+      runId, projectId, missionId, taskId,
+      displayName: 'Supervised safe-edit mission',
+      objective: MISSION_OBJECTIVE,
+      acceptanceCriteria: ACCEPTANCE_CRITERIA,
+      policyRefs: [SUPERVISED_COMPLETION_POLICY.policyId],
+      requestedWorkforce: [CLAUDE_ADAPTER_ID, CODEX_REVIEWER_ADAPTER_ID],
+      owner: CLAUDE_ADAPTER_ID,
+      mode: 'guided', phase: 'initialized',
+      maxCalls: claudeLimits.maxLiveCallsPerRun + codexLimits.maxLiveCallsPerRun,
+      providerBudgets: { claude: claudeLimits.maxLiveCallsPerRun, codex: codexLimits.maxLiveCallsPerRun },
+      claimedFiles: [fixture.claimedFile],
+      protectedPaths: fixture.protectedPaths.forbidden,
+    });
     emit(
       'SUNDAY RELAY — LIVE SUPERVISED WORKFLOW', '',
       badge('LIVE') + ' LIVE CLAUDE IMPLEMENTER',
@@ -268,6 +294,12 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     });
     if (!prepared.ok) return finishStopped(`Workspace preparation failed: ${prepared.error.message}`);
     const ws = prepared.value.value.workspace;
+    persist('workspace_created', {
+      workspaceId: ws.workspaceId, canonicalPath: ws.workspacePath,
+      sourceRepositoryPath: fixture.sourceRepo, sourceRevision: fixture.baselineRevision,
+      worktreeBranch: ws.branchName ?? '', claimedFiles: [fixture.claimedFile],
+      protectedPaths: fixture.protectedPaths.forbidden,
+    });
 
     const claudeAdapter = createClaudeCodeAdapter({ now, ids });
     const codexAdapter = createCodexReviewerAdapter({ now, ids });
@@ -298,6 +330,12 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     emit('CLAUDE CODE', '  Live implementation session started.', '');
     const implStartedAt = now();
     result.claudeInvocations += 1;
+    // Budget consumption is persisted BEFORE the launch — a crash between
+    // this record and the process start can never produce an unaccounted call.
+    persist('provider_launch_authorized', {
+      provider: 'claude', attempt: 1, purpose: 'implementation',
+      lifecycleAfter: 'implementation_running', phase: 'implementation',
+    });
     const implementation = await claudeAdapter.invoke({
       executablePath: options.claude.executablePath, capabilities: options.claude.capabilities,
       association: claudeAssoc, pkg, workspacePath: ws.workspacePath, toolPolicy,
@@ -308,6 +346,14 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     if (implementation.sessionId) {
       const captured = claudeAdapter.sessions.capture(claudeAssoc, implementation.sessionId);
       if (captured.ok) result.claudeSessionCaptured = implementation.sessionId;
+      persist('implementer_initialization_verified', {
+        sessionRef: {
+          provider: 'claude', adapterId: CLAUDE_ADAPTER_ID, relayRef: `claude-${runId}`,
+          providerSessionId: implementation.sessionId, attempt: 1,
+          executionAuthor: 'claude-code', independenceGroup: 'implementers',
+          initializationVerified: true, resumeEligible: true,
+        },
+      });
     }
     if (implementation.outcome.cancelled || implementation.outcome.timedOut || implementation.outcome.spawnError) {
       return finishStopped('Claude process did not complete normally.');
@@ -319,6 +365,10 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
       return finishStopped(`Claude report could not be trusted: ${implementation.report.error.message}`);
     }
     result.implementationReportAttempts.push(implementation.report.value.attempt);
+    persist('implementer_report_received', {
+      attempt: implementation.report.value.attempt, reportStatus: implementation.report.value.status,
+      lifecycleAfter: 'held_for_inspection', phase: 'inspection',
+    });
     emit('CLAUDE CODE', '  Execution report received.', '  This is a claim, not proof.', '');
 
     /* ---------------- 3. Relay inspection ---------------- */
@@ -339,6 +389,13 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
       `  ${insp1.protectedChanges.length} protected files changed.`,
       '  Source worktree unchanged.', '');
     result.outputVisibility = 'held_for_verification';
+    persist('workspace_inspected', {
+      revision: insp1.revision, assessment: insp1.assessment,
+      claimedChanges: insp1.claimedChanges, protectedChanges: insp1.protectedChanges,
+      workspacePath: ws.workspacePath, claimedFiles: [fixture.claimedFile],
+      lifecycleAfter: 'held_for_verification', phase: 'verification',
+      visibilityAfter: 'held_for_verification',
+    });
 
     /* ---------------- 4. Relay-controlled verification ---------------- */
     result.verificationRuns += 1;
@@ -349,6 +406,12 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     if (!verify1.ok) return finishStopped(`Verification could not run: ${verify1.error.message}`);
     const verified1 = verify1.value.value.status === 'completed';
     result.verificationsPassed.push(verified1);
+    persist('verification_completed', {
+      command: RELAY_VERIFY_COMMAND, passed: verified1, exitStatus: verified1 ? 0 : 1,
+      workspaceRevision: insp1.revision, criterionIds: ['AC-1'],
+      sourceActor: 'relay-workspace', verificationAuthority: 'relay-workspace',
+      ...(verified1 ? { lifecycleAfter: 'held_for_review' as const, visibilityAfter: 'held_for_review' as const, phase: 'review' } : {}),
+    });
     emit('RELAY VERIFICATION',
       `  ${badge(verified1 ? 'PASS' : 'FAIL')} ${RELAY_VERIFY_COMMAND}`,
       `  ${badge('PASS')} File-claim policy`,
@@ -404,6 +467,9 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     const preReview1 = snapshot(insp1);
     const review1StartedAt = now();
     result.codexInvocations += 1;
+    persist('provider_launch_authorized', {
+      provider: 'codex', attempt: 1, purpose: 'independent review', phase: 'review',
+    });
     const review1 = await codexAdapter.invokeReview({
       executablePath: options.codex.executablePath, capabilities: options.codex.capabilities,
       association: codexAssoc, promptContext: reviewContext, workspacePath: ws.workspacePath,
@@ -415,6 +481,14 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     if (review1.sessionId) {
       const captured = codexAdapter.sessions.capture(codexAssoc, review1.sessionId);
       if (captured.ok) result.codexSessionCaptured = review1.sessionId;
+      persist('reviewer_initialization_verified', {
+        sessionRef: {
+          provider: 'codex', adapterId: CODEX_REVIEWER_ADAPTER_ID, relayRef: reviewId,
+          providerSessionId: review1.sessionId, attempt: 1,
+          executionAuthor: 'codex', independenceGroup: 'reviewers',
+          initializationVerified: true, resumeEligible: true,
+        },
+      });
     }
     const launchVerified1 = review1.structurallyValid && !!review1.sessionId;
     if (review1.outcome.cancelled || review1.outcome.timedOut || review1.outcome.spawnError) {
@@ -466,6 +540,7 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
 
     /* needs_human short-circuits — a human decision is required. */
     if (report1.verdict === 'needs_human') {
+      persist('review_received', { verdict: 'needs_human', attempt: 1 });
       emit('INDEPENDENT REVIEW', '  NEEDS HUMAN', '  A human decision is required — output remains held.', '');
       return finishStopped('Reviewer requested a human decision — a Manual Task is required.', 3);
     }
@@ -498,6 +573,17 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     result.repairs = gate1.ledger.repairs;
     result.blockingFindingsOpen = gate1.blockingFindingsOpen;
     result.outputVisibility = report1.verdict === 'blocked' ? 'blocked' : gate1.visibility;
+    persist('review_received', {
+      verdict: report1.verdict, attempt: 1,
+      findings: gate1.ledger.findings, repairs: gate1.ledger.repairs,
+      attestation: reviewerAttestation1.value,
+      visibilityAfter: result.outputVisibility,
+      ...(report1.verdict === 'approved'
+        ? { lifecycleAfter: 'approved_for_release' as const, phase: 'completion' }
+        : report1.verdict === 'changes_required'
+          ? { lifecycleAfter: 'revision_required' as const, phase: 'repair-decision' }
+          : {}),
+    });
 
     const task: RelayTask = {
       taskId, projectId, runId, objective: MISSION_OBJECTIVE, category: 'implementation',
@@ -534,6 +620,7 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
         enforcementCapabilities: { 'worktree-isolation': 'enforced' },
       });
       result.completionOutcome = completion.outcome;
+      persist('completion_evaluated', { outcome: completion.outcome, safeSummary: completion.safeSummary });
       if (completion.outcome !== 'satisfied') {
         emit('COMPLETION POLICY', `  ${completion.safeSummary}`, '');
         return finishStopped('The completion policy is not satisfied — output is not released.', 3);
@@ -569,6 +656,11 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
         remainingIssues: [],
       };
       workspace.cleanupWorkspace(ws.workspaceId, { authorizeRemoval: true });
+      persist('cleanup_completed', { workspaceId: ws.workspaceId });
+      persist('verified_complete', {
+        repairCount: input.repairCount, auditOutcome: 'verified-complete',
+        lifecycleAfter: 'verified_complete', visibilityAfter: 'released', phase: 'complete',
+      });
       result.audit = audit;
       emit('FINAL AUDIT',
         '  Outcome: verified-complete',
@@ -605,6 +697,8 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
       `  Finding ${result.findings[0]?.findingId ?? 'F-1'} created.`,
       `  Repair ${result.repairs[0]?.repairId ?? 'R-1'} created.`,
       '  Output remains held.', '');
+    persist('finding_created', { findings: result.findings });
+    persist('repair_created', { repairs: result.repairs });
 
     /* -- 6. bounded repair: the EXACT original Claude session resumes -- */
     const resumePlan = claudeAdapter.sessions.prepareResume(claudeAssoc);
@@ -631,6 +725,11 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     emit('CLAUDE CODE', '  Exact original session resumed for ONE bounded repair.', '');
     result.claudeInvocations += 1;
     result.repairDispatched = true;
+    // Resume authorization + budget consumption persist BEFORE the launch.
+    persist('session_resume_authorized', {
+      provider: 'claude', attempt: 2, purpose: 'bounded repair',
+      lifecycleAfter: 'repair_authorized', phase: 'repair',
+    });
     const repair = await claudeAdapter.invoke({
       executablePath: options.claude.executablePath, capabilities: options.claude.capabilities,
       association: claudeAssoc, pkg, workspacePath: ws.workspacePath, toolPolicy,
@@ -642,6 +741,15 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     const confirmed = claudeAdapter.sessions.confirmResume(claudeAssoc, repair.sessionId);
     if (!confirmed.ok) return finishStopped(`Resumed implementer session rejected: ${confirmed.error.message}`);
     result.claudeResumeConfirmed = true;
+    persist('implementer_initialization_verified', {
+      sessionRef: {
+        provider: 'claude', adapterId: CLAUDE_ADAPTER_ID, relayRef: `claude-${runId}`,
+        providerSessionId: repair.sessionId, attempt: 2,
+        executionAuthor: 'claude-code', independenceGroup: 'implementers',
+        initializationVerified: true, resumeEligible: false,
+      },
+      lifecycleAfter: 'repair_running', phase: 'repair',
+    });
     if (repair.outcome.cancelled || repair.outcome.timedOut || repair.outcome.spawnError) {
       return finishStopped('Claude repair process did not complete normally.');
     }
@@ -651,6 +759,10 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     if (repair.report.value.attempt !== 2) {
       return finishStopped('Repair report did not acknowledge attempt 2 — refusing to continue.');
     }
+    persist('repair_received', {
+      attempt: 2, reportStatus: repair.report.value.status,
+      lifecycleAfter: 'held_for_inspection', phase: 're-inspection',
+    });
 
     /* -- 7. Relay re-inspection + re-verification -- */
     const inspect2 = workspace.inspectWorkspace(ws.workspaceId, policyInput);
@@ -662,6 +774,12 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     if (insp2.assessment !== 'allowed') {
       return finishStopped(`Post-repair inspection rejected the change (${insp2.assessment}). Workspace preserved.`);
     }
+    persist('workspace_inspected', {
+      revision: insp2.revision, assessment: insp2.assessment,
+      claimedChanges: insp2.claimedChanges, protectedChanges: insp2.protectedChanges,
+      workspacePath: ws.workspacePath, claimedFiles: [fixture.claimedFile],
+      lifecycleAfter: 'held_for_reverification', phase: 're-verification',
+    });
 
     const preRepairEvidenceIds = new Set(workspace.collectEvidence().map((e) => e.evidenceId));
     result.verificationRuns += 1;
@@ -675,6 +793,13 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     const postRepairEvidenceIds = workspace.collectEvidence()
       .map((e) => e.evidenceId).filter((id) => !preRepairEvidenceIds.has(id));
     result.postRepairEvidenceIds = postRepairEvidenceIds;
+    persist('re_verification_completed', {
+      command: RELAY_VERIFY_COMMAND, passed: verified2, exitStatus: verified2 ? 0 : 1,
+      workspaceRevision: insp2.revision, criterionIds: ['AC-1'],
+      sourceActor: 'relay-workspace', verificationAuthority: 'relay-workspace',
+      postRepairEvidenceIds,
+      ...(verified2 ? { lifecycleAfter: 'held_for_rereview' as const, visibilityAfter: 'held_for_review' as const, phase: 're-review' } : {}),
+    });
     emit('RELAY RE-VERIFICATION',
       `  ${badge(verified2 ? 'PASS' : 'FAIL')} ${RELAY_VERIFY_COMMAND}`, '');
     if (!verified2) {
@@ -697,6 +822,9 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     emit('CODEX REVIEWER', '  Exact original session resumed for re-review.', '');
     const review2StartedAt = now();
     result.codexInvocations += 1;
+    persist('session_resume_authorized', {
+      provider: 'codex', attempt: 2, purpose: 're-review', phase: 're-review',
+    });
     const review2 = await codexAdapter.invokeReview({
       executablePath: options.codex.executablePath, capabilities: options.codex.capabilities,
       association: codexAssoc, promptContext: reReviewContext, workspacePath: ws.workspacePath,
@@ -752,6 +880,7 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     result.reviewerAttestations.push(reviewerAttestation2.value);
 
     if (report2.verdict === 'needs_human') {
+      persist('re_review_received', { verdict: 'needs_human', attempt: 2 });
       emit('INDEPENDENT RE-REVIEW', '  NEEDS HUMAN', '  A human decision is required — output remains held.', '');
       return finishStopped('Re-reviewer requested a human decision — a Manual Task is required.', 3);
     }
@@ -770,6 +899,15 @@ export async function runSupervisedProof(options: SupervisedProofOptions): Promi
     result.repairs = gate2.ledger.repairs;
     result.blockingFindingsOpen = gate2.blockingFindingsOpen;
     result.outputVisibility = report2.verdict === 'blocked' ? 'blocked' : gate2.visibility;
+    persist('re_review_received', {
+      verdict: report2.verdict, attempt: 2,
+      findings: gate2.ledger.findings, repairs: gate2.ledger.repairs,
+      attestation: reviewerAttestation2.value,
+      visibilityAfter: result.outputVisibility,
+      ...(report2.verdict === 'approved' && gate2.blockingFindingsOpen === 0
+        ? { lifecycleAfter: 'approved_for_release' as const, phase: 'completion' }
+        : {}),
+    });
 
     if (report2.verdict === 'approved' && gate2.blockingFindingsOpen === 0) {
       emit('INDEPENDENT RE-REVIEW', '  APPROVED',

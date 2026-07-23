@@ -1,5 +1,17 @@
 # Sunday Relay CLI (Prompt 5) — simulation demo surface
 
+> **Durable persistence (Prompt 8.5, 2026-07-22):** `relay state doctor`,
+> `relay runs list`, `relay runs inspect --run <ref>`, `relay runs recover
+> --run <ref>` (validation + replay + workspace inspection + plan; ZERO
+> provider calls), `relay runs archive --run <ref>` (never deletes).
+> `npm run relay:persistence:contract-verify` — the 18-scenario offline
+> process-restart proof (65 checks, ~44 separate Node processes, no
+> provider call). `npm run relay:persistence:recovery-drill` — the
+> two-process crash-recovery drill ending `DURABLE LOCAL RECOVERY
+> VERIFIED`. Live supervised runs now persist durably to the local state
+> root; run references are shown, raw provider session ids are not. See
+> DURABLE_LOCAL_PERSISTENCE.md.
+
 > **Supervised workflow (Prompt 8.4, 2026-07-22):** `relay supervised
 > contract-verify` / `npm run relay:supervised:contract-verify` — Gate A, the
 > offline proof of the FULL supervised loop (live Claude implementation →

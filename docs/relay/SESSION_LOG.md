@@ -1285,3 +1285,115 @@ repair loop` (no push).
 Cross-Process Resume** (ADR-016) — the workspace registry and
 Claude/Codex session records join that scope; durable reviewer/implementer
 recovery becomes possible only then.
+
+---
+
+## 2026-07-22 — Prompt 8.5 COMPLETE: durable local persistence + crash-safe recovery (Gate A + offline Gate B PASSED)
+
+**Checkpoint verified:** HEAD ef12a27, `feature/relay-yc-demo`, clean tree,
+no stashes; the separate Codex UI worktrees were untouched.
+
+**Built (`src/relay/persistence/`):** the durable, local, versioned,
+crash-safe foundation replacing volatile run state. Append-only checksummed
+JSONL journal per run (schema `relay-state.v1`; monotonic gap-free
+sequences; previous/resulting state digests; payloads SANITIZED at write
+time); digest-validated snapshots derived by deterministic replay (rotated
+previous copy; loader falls back current → previous → replay-only; the
+journal is always authoritative); atomic writes (temp + fsync + rename;
+fsync'd journal appends; 0o600 files / 0o700 dirs); owner-metadata run
+locks (live-owner rejection; dead-owner reclaim ONLY, stale lock
+preserved); explicit deterministic migrations with full backup + rollback
+(v0 fixture → v1; future schemas rejected, never guessed; old schemas
+refuse to load without explicit migration); quarantine for corruption
+(records preserved, never silently discarded); preserve-only retention;
+archive-without-delete. State root: RELAY_STATE_HOME → XDG_STATE_HOME/
+sunday-relay → ~/.local/state/sunday-relay — never the Git repository/
+Downloads/temp/credential dirs; containment-checked references; symlinked
+run dirs rejected. Replay enforces the 18-state lifecycle machine (invalid
+transitions and over-budget authorizations rejected at append AND replay;
+duplicates idempotent — budgets never double-consume).
+
+**Recovery service** (`recovery.ts`, structurally unable to launch a
+provider — boundary-tested): journal/snapshot validation → replay →
+READ-ONLY workspace re-inspection (git rev-parse/status + claimed-file
+digest comparison) → source-worktree protection → provider-session
+classification (persisted_unverified | resume_ready | resume_unavailable |
+invalid | expired | manual_action_required; a persisted reference is NEVER
+availability proof) → call-budget reconciliation (journal wins) → durable
+stale-evidence marking → a recovery plan that ALWAYS requires explicit
+founder authorization before any live call. Ten new safe protocol event
+kinds project recovery to the Live Terminal (no reconstructed dialogue);
+Relay Dog derives from recovered canonical state (`dogStateForRecovery`).
+
+**Supervised integration:** the 8.4 runner records 19 boundaries through a
+hooks interface defined in its own contracts (connectors never import
+persistence); the persistence bridge (`supervised-recorder.ts`) maps
+boundaries to journal kinds, computes claimed-file digests, builds bounded
+evidence manifests, and holds the run lock for the run's lifetime.
+Call-budget consumption is carried BY the launch/resume authorization
+events, persisted BEFORE the provider process starts. The live CLI wires
+the recorder to the default state root; live commands remain
+founder-confirmed and none was run this phase.
+
+**CLI:** `relay state doctor`, `relay runs list|inspect|recover|archive`
+(session READINESS classifications shown; raw provider session ids never
+displayed), `relay persistence contract-verify|recovery-drill`; npm
+scripts `relay:persistence:contract-verify` / `relay:persistence:
+recovery-drill`.
+
+**Gate A (exact, NO provider call):**
+`relay:persistence:contract-verify` **65/65 (twice)** — 18 scenarios, each
+step in a SEPARATE Node process (~44 per run; esbuild-bundled driver, fake
+executables, isolated temp state root): S1 empty state; S2 PATH-A
+completion + truthful reload (2-call accounting, no resume proposed); S3
+interrupted after Claude (workspace match, evidence current, plan
+ready_for_review, recovery_required durably marked); S4 interrupted after
+finding (F-1/R-1/revision_required/persisted_unverified/2-of-4 budget,
+plan ready_for_repair_authorization); S5 interrupted after repair
+(held_for_rereview, ready_for_exact_codex_resume, 3-of-4); S6 budget
+survival (4-of-4 persists, fifth call prohibited, restart resets nothing);
+S7 drift (stale evidence, completion blocked); S8 source change (safe
+stop); S9 torn tail (last valid event, diagnostic, nothing invented); S10
+corrupt snapshot (previous-snapshot fallback); S11 tampering (checksum
+mismatch → quarantine); S12 duplicate event idempotency; S13 live lock
+contention; S14 stale-lock reclaim (preserved); S15 migration (backup,
+no-op, future rejection); S16 sentinel redaction sweep over every
+persisted artifact + 0o600; S17 traversal + symlink rejection; S18
+archive-without-delete (still inspectable). Persistence tests **22/22**;
+boundary + connectors + CLI **160/160**; `relay:supervised:contract-verify`
+**47/47 (twice, still `READY FOR LIVE SUPERVISED WORKFLOW`)**;
+claude/codex contract-verifies PASS; relay suite **491/491** (39 files);
+typecheck green; frontend + backend + relay builds green;
+yc/manual/workspace verifies + competitive + mission-control all pass;
+full suite green.
+
+**Gate B (offline restart drill, PASSED twice):** process A ran the
+offline fake supervised workflow and CRASHED (exit 87, lock held,
+workspace on disk) immediately after Finding + Repair persisted; a fresh
+process B loaded and validated the durable journal, reconstructed
+revision_required + open F-1 + linked R-1 + the exact Claude session as
+persisted_unverified + the 2-of-4 call budget, re-inspected the workspace
+(match), and generated ready_for_repair_authorization requiring explicit
+founder authorization — 10/10 steps, **DURABLE LOCAL RECOVERY VERIFIED**,
+zero provider calls across both processes, drill artifacts removed.
+
+**Docs:** DURABLE_LOCAL_PERSISTENCE.md + ADR-016-DURABLE-LOCAL-
+PERSISTENCE.md (new, authoritative) + sync blockquotes in ARCHITECTURE/
+PROTOCOL/SECURITY_BOUNDARIES/TEST_STRATEGY/CLI/EXECUTION_ATTESTATION/
+REVIEW_REPAIR_LEDGER/SUPERVISED_WORKFLOW/LIVE_TERMINAL/RELAY_DOG/
+COMPETITIVE_FEATURE_COVERAGE, CURRENT_STATE (phase + docs table + next
+prompt), this log.
+
+**Truthful remaining limitations:** real cross-process PROVIDER resume is
+NOT live-proven — persisted session references stay persisted_unverified
+until a separate founder-authorized phase performs a live preflight +
+resume; multi-machine persistence and cloud synchronization are out of
+scope; the simulation orchestrator still uses the volatile Prompt-2
+stores (wiring the durable store behind those ports is queued).
+
+**Commit:** `feat(relay): add durable local state and crash recovery`
+(no push).
+
+**Exact next step:** Real Cross-Process Provider Resume
+(founder-authorized live preflight + exact-session resume from persisted
+references), per CURRENT_STATE §Next prompt.

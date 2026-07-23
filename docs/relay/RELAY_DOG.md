@@ -1,5 +1,12 @@
 # Sunday Relay — Relay Dog Activity Engine (authoritative)
 
+> **Persistence sync (Prompt 8.5, 2026-07-22):** after a restart the Dog
+> derives from RECOVERED canonical state (never invented activity):
+> recovery_required → waiting_for_user; re-inspection/verification work →
+> verifying; exact-session resume offers → waiting_for_user;
+> unrecoverable → stopped_safely; verified_complete → complete
+> (`dogStateForRecovery`, tested).
+
 > **Implementation sync (Prompt 8.3, 2026-07-22):** during a live Codex review
 > the dog is driven by the REAL `reviewer.*` event stream: it enters
 > `carrying_handoff` when review responsibility transfers, `reviewing` during

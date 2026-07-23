@@ -1,5 +1,18 @@
 # Sunday Relay — Security Boundaries (authoritative)
 
+> **Implementation sync (Prompt 8.5, 2026-07-22):** durable state adds a
+> write-time redactor (forbidden credential/stream/prompt keys dropped,
+> secret shapes replaced, hidden-reasoning markers stripped, output
+> bounded) proven by artifact scans with fake sentinels; 0o700/0o600 file
+> modes; canonical path containment + symlink rejection for run
+> references; owner-metadata locks (no concurrent mutation or provider
+> authorization); checksum/tamper detection with quarantine (never silent
+> discard); and the invariant that a process restart NEVER authorizes a
+> provider launch — every recovery plan requires explicit founder
+> authorization, and persisted session references are
+> `persisted_unverified` until a founder-authorized preflight. See
+> DURABLE_LOCAL_PERSISTENCE.md.
+
 > **Implementation sync (Prompt 8.3, 2026-07-22):** the REAL Codex reviewer
 > runs under all Prompt-7 workspace boundaries plus: it is READ-ONLY
 > (`codex exec --sandbox read-only`, explicit `--cd <worktree>`), uses the

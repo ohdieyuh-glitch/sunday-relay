@@ -345,6 +345,13 @@ export const RELAY_EVENT_KINDS = [
   'manual.task_completed', 'manual.task_cancelled',
   // audit
   'audit.report_created',
+  // durable persistence + recovery (Prompt 8.5) — safe projections only;
+  // never reconstructed terminal dialogue, never raw provider streams.
+  'persistence.loaded', 'persistence.validated', 'snapshot.replayed',
+  'workspace.reconciled', 'evidence.marked_stale',
+  'provider_session.persisted_unverified',
+  'recovery.plan_created', 'run.recovery_required', 'run.recovery_ready',
+  'run.quarantined',
 ] as const;
 export type RelayEventKind = (typeof RELAY_EVENT_KINDS)[number];
 
