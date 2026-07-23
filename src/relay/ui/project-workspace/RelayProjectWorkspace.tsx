@@ -132,7 +132,11 @@ export function RelayProjectWorkspace(props: RelayProjectWorkspaceProps) {
 
         <div className="rpw-workspace">
           <div className="rpw-col-primary">
-            <RelayConsole events={terminalEvents} handoffNetworkState={handoffNetworkState} />
+            <RelayConsole
+              events={terminalEvents}
+              handoffNetworkState={handoffNetworkState}
+              onOpenTerminal={onOpenTerminal}
+            />
             <RelayProjectConversation
               messages={projectMessages}
               onSendProjectMessage={onSendProjectMessage}
@@ -188,6 +192,7 @@ export function RelayProjectWorkspace(props: RelayProjectWorkspaceProps) {
             mode={mode}
             outputState={outputState}
             fullScreen={terminalFullScreen}
+            reducedMotion={reducedMotion}
             onClose={onCloseTerminal}
             onSendProjectMessage={onSendProjectMessage}
           />

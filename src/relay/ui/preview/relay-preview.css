@@ -165,3 +165,6 @@ body {
     flex-wrap: wrap;
   }
 }
+
+/* ============== COLORWAY — MIDNIGHT (founder website photo) ============== */
+[data-relay-colorway='midnight'] .rpv { background: #1b2138; }

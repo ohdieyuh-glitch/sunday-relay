@@ -88,6 +88,15 @@ describe('workspace interactions', () => {
     expect(p.onCloseTerminal).toHaveBeenCalled();
   });
 
+  it('the `>_` beside the RELAY CONSOLE title opens the Live Terminal (founder report)', () => {
+    const p = makeProps('implementing');
+    render(createElement(RelayProjectWorkspace, p));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Open Live Terminal from the Relay Console' }),
+    );
+    expect(p.onOpenTerminal).toHaveBeenCalled();
+  });
+
   it('conversation quick actions send supervisory questions', () => {
     const p = makeProps('implementing');
     render(createElement(RelayProjectWorkspace, p));

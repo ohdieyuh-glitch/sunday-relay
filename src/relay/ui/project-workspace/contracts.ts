@@ -158,6 +158,9 @@ export interface WorkspaceTerminalEvent {
       "MODIFY src/lib/relay-store.ts" or "RUN required tests". Never a raw
       command line, never output. */
   meta?: string;
+  /** Step finished — Terminal Mode renders the green ✓ COMPLETE treatment.
+      Truthfulness is unchanged: an agent's "done" is still its claim. */
+  done?: boolean;
   /** True for preview fixture content. */
   fixture?: boolean;
 }

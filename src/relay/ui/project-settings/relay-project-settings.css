@@ -500,3 +500,20 @@
 @media (prefers-reduced-motion: reduce) {
   .rps * { transition: none !important; animation: none !important; }
 }
+
+/* ============== COLORWAY — MIDNIGHT (founder website photo) ============== */
+[data-relay-colorway='midnight'] .rps {
+  --rps-bg: #1b2138;
+  --rps-panel: #212845;
+  --rps-line: #39426b;
+  --rps-gold: #e0ab48;
+  --rps-gold-dim: rgba(224, 171, 72, 0.4);
+  --rps-cream: #f0ecdf;
+  --rps-dim: #a0a4bd;
+  --rps-faint: #737898;
+}
+[data-relay-colorway='midnight'] .rps-grid-bg {
+  background-image:
+    linear-gradient(rgba(158, 180, 232, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(158, 180, 232, 0.07) 1px, transparent 1px);
+}

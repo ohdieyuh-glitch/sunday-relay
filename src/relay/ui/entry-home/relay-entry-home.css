@@ -829,3 +829,21 @@
 @media (prefers-reduced-motion: reduce) {
   .reh * { transition: none !important; animation: none !important; }
 }
+
+/* ============== COLORWAY — MIDNIGHT (founder website photo) ============== */
+[data-relay-colorway='midnight'] .reh {
+  --reh-bg: #1b2138;
+  --reh-panel: #212845;
+  --reh-panel-2: #262e4e;
+  --reh-line: #39426b;
+  --reh-gold: #e0ab48;
+  --reh-gold-dim: rgba(224, 171, 72, 0.4);
+  --reh-cream: #f0ecdf;
+  --reh-dim: #a0a4bd;
+  --reh-faint: #737898;
+}
+[data-relay-colorway='midnight'] .reh-grid-bg {
+  background-image:
+    linear-gradient(rgba(158, 180, 232, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(158, 180, 232, 0.07) 1px, transparent 1px);
+}

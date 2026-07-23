@@ -12,10 +12,13 @@ export function RelayConsole({
   events,
   handoffNetworkState,
   subhead = 'Safe project activity and verified coordination',
+  onOpenTerminal,
 }: {
   events: WorkspaceTerminalEvent[];
   handoffNetworkState: HandoffNetworkState;
   subhead?: string;
+  /** When provided, the `>_` glyph beside the title opens Terminal Mode. */
+  onOpenTerminal?: () => void;
 }) {
   const live = handoffNetworkState === 'online';
   return (
@@ -23,7 +26,20 @@ export function RelayConsole({
       <header className="rpw-console-head">
         <div>
           <span className="rpw-console-title">
-            <span aria-hidden="true">&gt;_ </span>RELAY CONSOLE
+            {onOpenTerminal ? (
+              <button
+                type="button"
+                className="rpw-console-terminal-btn"
+                onClick={onOpenTerminal}
+                aria-label="Open Live Terminal from the Relay Console"
+                title="Open Live Terminal"
+              >
+                &gt;_
+              </button>
+            ) : (
+              <span aria-hidden="true">&gt;_ </span>
+            )}
+            RELAY CONSOLE
           </span>
           <span className="rpw-console-subhead">{subhead}</span>
         </div>

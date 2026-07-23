@@ -56,7 +56,7 @@ const PROJECT: WorkspaceProject = {
 };
 
 const MISSION: WorkspaceMission = {
-  missionId: 'msn-fixture-001',
+  missionId: 'rly_001_20260722_115712',
   title: 'Relay entry home and project workspace',
   summary:
     'Build the Relay Entry Home and the Active Project Workspace to the founder-approved visual direction.',
@@ -70,6 +70,7 @@ const ev = (
   headline: string,
   detail?: string,
   meta?: string,
+  done?: boolean,
 ): WorkspaceTerminalEvent => ({
   eventId,
   at,
@@ -78,6 +79,7 @@ const ev = (
   headline,
   detail,
   meta,
+  done,
   fixture: true,
 });
 
@@ -153,23 +155,98 @@ const implementing: WorkspaceFixture = {
   phase: 'build',
   outputState: 'implementing',
   dogState: 'running',
+  // The live-coding storyline (founder terminal photo): the Prompt Architect
+  // visibly thinks/researches/refines, the Coding Agent visibly creates,
+  // edits, and runs tests, Relay preserves context and compiles the handoff.
+  // Every agent line stays a CLAIM until Relay verifies it.
   terminalEvents: [
     ...BASE_EVENTS,
     ev(
-      'fx-ev-impl-1',
-      '2026-07-22T11:57:27Z',
-      'coding_agent',
-      'agent_claim',
-      'Implementation report received.',
-      'Awaiting Relay inspection.',
-      'MODIFY 2 FILES',
-    ),
-    ev(
-      'fx-ev-impl-2',
-      '2026-07-22T11:57:29Z',
+      'fx-ev-impl-a1',
+      '2026-07-22T11:57:21Z',
       'prompt_architect',
       'system_notice',
-      'Preparing context for the next bounded task.',
+      'generating implementation brief',
+      'Analyzing requirements, constraints, and system context…',
+    ),
+    ev(
+      'fx-ev-impl-a2',
+      '2026-07-22T11:57:29Z',
+      'research',
+      'system_notice',
+      'researching project details',
+      'Exploring codebase, dependencies, and architectural patterns…',
+    ),
+    ev(
+      'fx-ev-impl-a3',
+      '2026-07-22T11:57:41Z',
+      'prompt_architect',
+      'system_notice',
+      'refining handoff prompt',
+      'Optimizing clarity, scope, and success criteria…',
+    ),
+    ev(
+      'fx-ev-impl-a4',
+      '2026-07-22T11:57:49Z',
+      'prompt_architect',
+      'system_notice',
+      'handoff prompt ready',
+      'Passing to Coding Agent…',
+      undefined,
+      true,
+    ),
+    ev(
+      'fx-ev-impl-c1',
+      '2026-07-22T11:58:02Z',
+      'coding_agent',
+      'agent_claim',
+      'implementing auth module',
+      'Creating src/lib/auth.ts…',
+      'CREATE src/lib/auth.ts',
+    ),
+    ev(
+      'fx-ev-impl-c2',
+      '2026-07-22T11:58:18Z',
+      'coding_agent',
+      'agent_claim',
+      'editing relay-store.ts',
+      'Updating state management and types…',
+      'MODIFY src/lib/relay-store.ts',
+    ),
+    ev(
+      'fx-ev-impl-c3',
+      '2026-07-22T11:58:37Z',
+      'coding_agent',
+      'agent_claim',
+      'running tests',
+      'Executing unit and integration tests…',
+      'RUN npm test',
+    ),
+    ev(
+      'fx-ev-impl-c4',
+      '2026-07-22T11:58:52Z',
+      'coding_agent',
+      'agent_claim',
+      'all tests passing',
+      '12 passed, 0 failed',
+      undefined,
+      true,
+    ),
+    ev(
+      'fx-ev-impl-r1',
+      '2026-07-22T11:58:53Z',
+      'relay',
+      'system_notice',
+      'context preserved',
+      'Session state, decisions, and artifacts captured',
+    ),
+    ev(
+      'fx-ev-impl-r2',
+      '2026-07-22T11:58:53Z',
+      'relay',
+      'system_notice',
+      'handoff compiled',
+      'Architect → Coding Agent transition successful',
     ),
   ],
 };

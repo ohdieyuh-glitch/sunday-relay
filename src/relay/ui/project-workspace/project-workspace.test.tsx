@@ -129,7 +129,7 @@ describe('live terminal', () => {
     expect(html).toContain('CODING AGENT');
     expect(html).toContain('RELAY SYSTEM');
     expect(html).toContain('MISSION IN PROGRESS');
-    expect(html).toContain('CONTEXT ID: msn-fixture-001');
+    expect(html).toContain('CONTEXT ID: rly_001_20260722_115712');
     expect(html).toContain('RUN typecheck'); // safe summarized op, never a raw command
     // Truthfulness survives the restyle.
     expect(html).toContain('CLAIM — PENDING VERIFICATION');

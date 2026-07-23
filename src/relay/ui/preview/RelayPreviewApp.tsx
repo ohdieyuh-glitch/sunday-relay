@@ -31,6 +31,8 @@ import type {
 import { AGENT_OPTIONS, RelayProjectSettings } from '../project-settings';
 import type { ProjectSettingsDraft } from '../project-settings';
 import { configuredStartFromSettingsDraft } from './configured-start';
+import { COLORWAY_LABEL, applyRelayColorway, nextColorway } from './colorway';
+import type { RelayColorway } from './colorway';
 import './relay-preview.css';
 
 /**
@@ -89,6 +91,11 @@ let previewMessageSeq = 100;
 export function RelayPreviewApp() {
   const [route, navigate] = useHashRoute();
   const [mobileFrame, setMobileFrame] = useState(false);
+  // Colorway: OBSIDIAN (original) / MIDNIGHT (founder website photo).
+  const [colorway, setColorway] = useState<RelayColorway>('obsidian');
+  useEffect(() => {
+    applyRelayColorway(colorway, document.documentElement);
+  }, [colorway]);
 
   /* ---------------- entry-home state (preview host, memory only) ------ */
   const [projectIdeaDraft, setProjectIdeaDraft] = useState('');
@@ -340,6 +347,13 @@ export function RelayPreviewApp() {
         </button>
         <button type="button" onClick={() => setMobileFrame((v) => !v)} aria-pressed={mobileFrame}>
           {mobileFrame ? 'DESKTOP' : 'MOBILE'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setColorway((c) => nextColorway(c))}
+          aria-pressed={colorway !== 'obsidian'}
+        >
+          {COLORWAY_LABEL[colorway]}
         </button>
         {route.screen === 'home' && (
           <button type="button" onClick={() => setRecentPopulated((v) => !v)} aria-pressed={recentPopulated}>

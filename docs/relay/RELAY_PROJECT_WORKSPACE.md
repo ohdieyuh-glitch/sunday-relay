@@ -63,8 +63,24 @@ One framed system interface — never a dashboard of floating cards:
 7. **Footer bar** — outlined: ● HANDOFF NETWORK / ONLINE · `[ PASS THE
    WORK. KEEP THE CONTEXT. ]` · ALL SYSTEMS GO (green, only when truly calm)
    or the truthful state label.
-8. **Live Terminal full view** — the same console opened as a drawer
-   (desktop) / full screen (mobile), `role="dialog"` with focus management.
+8. **Live Terminal full view** — opened by the header `>_ LIVE TERMINAL`
+   control or the `>_` beside the RELAY CONSOLE title (founder report):
+   the founder-photo terminal window — traffic-light chrome, centered
+   SUNDAY RELAY brand, `● RLY / 001` chip, `● LIVE / MISSION IN PROGRESS`
+   status row, one outlined panel per role. PROMPT ARCHITECT pulses
+   `THINKING ●●●` over rows like "generating implementation brief /
+   researching project details / refining handoff prompt"; CODING AGENT
+   pulses `WORKING ●●●` over visible coding activity with right-aligned
+   safe operation summaries (`CREATE src/lib/auth.ts`, `MODIFY …`,
+   `RUN npm test`) and green `✓ COMPLETE` steps; RELAY SYSTEM shows
+   context preservation and the CONTEXT ID. A streaming cursor rides the
+   newest open row of a busy panel; the `>_` prompt row sends to the
+   Project Conversation with `⌘↵ SEND`. All motion honors reducedMotion
+   and `prefers-reduced-motion`. `role="dialog"` with focus management;
+   background scroll locks while open. Truthfulness is unchanged: agent
+   rows keep their CLAIM tags, `done` is a step marker (✓ COMPLETE) —
+   never `✓ VERIFIED`, and the scope line still says the view observes
+   and does not execute.
 
 ## Project Conversation vs Live Terminal
 
@@ -210,6 +226,15 @@ the founder's actual draft (tagged CONFIGURED FROM SETTINGS in the
 switcher; the fixture picker applies only to the fixture project). The
 switcher is a development tool only — not part of the production component
 contract.
+
+## Colorways
+
+Two founder colorways, switched by `data-relay-colorway` on the document
+root (`preview/colorway.ts`, toggle in the DEV PREVIEW switcher):
+**OBSIDIAN** (default — deep black + gold) and **MIDNIGHT** (the founder
+website photo — deep slate-indigo `#1b2138`, cream text, warm gold). Every
+module stylesheet keys its variable overrides from the attribute; the
+default palette is untouched when the attribute is absent.
 
 ## Future Relay Core bindings
 

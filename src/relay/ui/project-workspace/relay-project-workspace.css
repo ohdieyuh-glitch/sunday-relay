@@ -357,6 +357,24 @@
   letter-spacing: 0.26em;
   color: var(--rpw-gold);
 }
+/* The `>_` beside the title is the terminal control (founder direction). */
+.rpw-console-terminal-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--rpw-gold);
+  font: inherit;
+  letter-spacing: inherit;
+  padding: 2px 6px 2px 2px;
+  margin-right: 4px;
+  cursor: pointer;
+  min-height: 32px;
+}
+.rpw-console-terminal-btn:hover,
+.rpw-console-terminal-btn:focus-visible {
+  border-color: var(--rpw-gold-dim);
+  color: var(--rpw-gold-bright);
+}
+.rpw-console-terminal-btn:focus-visible { outline: 2px solid var(--rpw-gold); outline-offset: 1px; }
 .rpw-console-subhead {
   display: block;
   font-size: 10px;
@@ -717,6 +735,22 @@
 
 /* ---------------------------------------------------- TERMINAL MODE */
 
+/* The framed terminal window (founder photo): rounded dark frame with
+   traffic-light chrome, centered brand, RLY chip right. */
+.rpw-tm-window {
+  max-width: 1460px;
+  margin: 0 auto;
+  min-height: calc(100dvh - 28px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rpw-line);
+  border-radius: 14px;
+  background: var(--rpw-panel);
+  padding: 0 22px 14px;
+  overflow: hidden;
+}
+.rpw-terminal--full .rpw-tm-window { width: 100%; }
+
 .rpw-tm-titlebar {
   display: flex;
   align-items: center;
@@ -724,9 +758,69 @@
   gap: 12px;
   flex-wrap: wrap;
   border-bottom: 1px solid var(--rpw-line);
-  padding-bottom: 10px;
+  padding: 14px 0 12px;
 }
+.rpw-tm-lights { display: inline-flex; align-items: center; gap: 8px; }
+.rpw-tm-light { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.rpw-tm-light--r { background: #d9564a; }
+.rpw-tm-light--y { background: #e0b25c; }
+.rpw-tm-light--g { background: #58b862; }
 .rpw-tm-brand { display: inline-flex; align-items: center; gap: 10px; }
+.rpw-tm-titlebar-right { display: inline-flex; align-items: center; gap: 12px; }
+
+/* Busy activity dots — THINKING ●●● / WORKING ●●● (founder photo). */
+.rpw-tm-dots { display: inline-flex; gap: 3px; margin-left: 8px; }
+.rpw-tm-dots span {
+  animation: rpw-tm-dot 1.2s infinite ease-in-out;
+  font-size: 7px;
+  vertical-align: 2px;
+}
+.rpw-tm-dots span:nth-child(2) { animation-delay: 0.2s; }
+.rpw-tm-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes rpw-tm-dot {
+  0%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+.rpw-tmpanel-status--busy { color: var(--rpw-gold); }
+
+/* Streaming cursor on the newest open row of a busy panel. */
+.rpw-tm-cursor {
+  color: var(--rpw-gold);
+  margin-left: 4px;
+  animation: rpw-tm-blink 1s steps(1) infinite;
+}
+.rpw-tm-prompt { color: var(--rpw-gold); letter-spacing: 0.06em; }
+.rpw-tm-prompt-caret { animation: rpw-tm-blink 1s steps(1) infinite; }
+@keyframes rpw-tm-blink {
+  0%, 60% { opacity: 1; }
+  61%, 100% { opacity: 0; }
+}
+
+/* Rows land like live output: staggered reveal (capped at 12 rows). */
+@keyframes rpw-tm-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.rpw-tmrow { animation: rpw-tm-in 0.3s ease-out backwards; }
+.rpw-tmrow:nth-child(1) { animation-delay: 0.05s; }
+.rpw-tmrow:nth-child(2) { animation-delay: 0.18s; }
+.rpw-tmrow:nth-child(3) { animation-delay: 0.31s; }
+.rpw-tmrow:nth-child(4) { animation-delay: 0.44s; }
+.rpw-tmrow:nth-child(5) { animation-delay: 0.57s; }
+.rpw-tmrow:nth-child(6) { animation-delay: 0.7s; }
+.rpw-tmrow:nth-child(n + 7) { animation-delay: 0.8s; }
+
+/* Motion off: reduced-motion preference or the reducedMotion prop. */
+@media (prefers-reduced-motion: reduce) {
+  .rpw-tm-dots span,
+  .rpw-tm-cursor,
+  .rpw-tm-prompt-caret,
+  .rpw-tmrow { animation: none; }
+}
+.rpw-terminal--static .rpw-tm-dots span,
+.rpw-terminal--static .rpw-tm-cursor,
+.rpw-terminal--static .rpw-tm-prompt-caret,
+.rpw-terminal--static .rpw-tmrow { animation: none; }
 
 .rpw-tm-statusrow {
   display: flex;
@@ -756,7 +850,7 @@
   letter-spacing: 0.14em;
 }
 
-.rpw-tm-panels { display: flex; flex-direction: column; gap: 14px; padding: 8px 0; }
+.rpw-tm-panels { display: flex; flex-direction: column; gap: 10px; padding: 6px 0; }
 .rpw-tmpanel {
   border: 1px solid var(--rpw-gold-dim);
   border-radius: 8px;
@@ -768,7 +862,7 @@
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
-  padding: 12px 16px;
+  padding: 9px 16px;
   border-bottom: 1px solid var(--rpw-line);
 }
 .rpw-tmpanel-title {
@@ -803,8 +897,10 @@
   display: flex;
   gap: 12px;
   align-items: baseline;
-  padding: 9px 0;
+  padding: 6px 0;
 }
+/* Detail + truth tag share one compact sub-line (photo row density). */
+.rpw-tmrow-sub { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .rpw-tmrow-square { color: var(--rpw-gold); font-size: 9px; flex: 0 0 auto; }
 .rpw-tmrow--evidence .rpw-tmrow-square { color: var(--rpw-green); }
 .rpw-tmrow--user .rpw-tmrow-square { color: var(--rpw-amber); }
@@ -835,6 +931,10 @@
 }
 .rpw-tmrow-op { font-size: 10px; letter-spacing: 0.08em; color: var(--rpw-gold); overflow-wrap: anywhere; }
 .rpw-tmrow-verified { font-size: 10px; letter-spacing: 0.12em; color: var(--rpw-green); }
+/* Finished steps read green with a right-aligned ✓ COMPLETE (founder photo). */
+.rpw-tmrow--done .rpw-tmrow-headline { color: var(--rpw-green); }
+.rpw-tmrow--done .rpw-tmrow-square { color: var(--rpw-green); }
+.rpw-tmrow-complete { font-size: 10px; letter-spacing: 0.12em; color: var(--rpw-green); }
 
 .rpw-tm-input {
   display: flex;
@@ -897,3 +997,27 @@
 @media (prefers-reduced-motion: reduce) {
   .rpw * { transition: none !important; animation: none !important; }
 }
+
+/* ==========================================================================
+   COLORWAY — MIDNIGHT (founder website photo: deep slate-indigo screen,
+   cream text, warm gold accents). Activated by data-relay-colorway on the
+   document root; the default obsidian palette above is untouched.
+   ========================================================================== */
+[data-relay-colorway='midnight'] .rpw {
+  --rpw-bg: #1b2138;
+  --rpw-panel: #212845;
+  --rpw-panel-2: #262e4e;
+  --rpw-line: #39426b;
+  --rpw-gold: #e0ab48;
+  --rpw-gold-bright: #f5c65b;
+  --rpw-gold-dim: rgba(224, 171, 72, 0.45);
+  --rpw-cream: #f0ecdf;
+  --rpw-dim: #a0a4bd;
+  --rpw-faint: #737898;
+}
+[data-relay-colorway='midnight'] .rpw-grid-bg {
+  background-image:
+    linear-gradient(rgba(158, 180, 232, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(158, 180, 232, 0.07) 1px, transparent 1px);
+}
+[data-relay-colorway='midnight'] .rpw-tmpanel { background: rgba(33, 40, 69, 0.65); }
