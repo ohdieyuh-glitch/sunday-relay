@@ -1,5 +1,22 @@
 # Relay Protocol — `relay.protocol.v1` (specification)
 
+> **Implementation sync (Prompt 8.6, 2026-07-22):** no protocol change. The
+> CLI product renders SAFE VIEW MODELS projected from canonical state and
+> normalized events; the durable journal and Live Terminal feeds are
+> unchanged. JSON output serializes view models only — never internal
+> provider objects.
+
+> **Implementation sync (Prompt 8.5, 2026-07-22):** `RELAY_EVENT_KINDS`
+> gained the safe persistence/recovery projection kinds
+> (`persistence.loaded`, `persistence.validated`, `snapshot.replayed`,
+> `workspace.reconciled`, `evidence.marked_stale`,
+> `provider_session.persisted_unverified`, `recovery.plan_created`,
+> `run.recovery_required`, `run.recovery_ready`, `run.quarantined`). The
+> durable journal's own event schema (`relay-state.v1`) is a persistence
+> concern documented in DURABLE_LOCAL_PERSISTENCE.md — it is NOT part of
+> `relay.protocol.v1` envelopes; only the safe projections above surface to
+> clients.
+
 > **Implementation sync (Prompt 8.3, 2026-07-22):** the live Codex reviewer
 > adds normalized event kinds only (additive): `reviewer.dispatch_requested`,
 > `reviewer.live_approval_recorded`, `reviewer.process_started`,

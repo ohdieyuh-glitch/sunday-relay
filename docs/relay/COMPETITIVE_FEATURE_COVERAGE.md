@@ -1,5 +1,25 @@
 # Relay Competitive Feature Coverage (Prompt 8.1)
 
+> **Update (Prompt 8.6, 2026-07-22):** the Relay CLI is now a terminal
+> PRODUCT (home, project drafts, mission console matching the approved
+> mockups, Manual Tasks, findings/evidence, recovery) over the same
+> canonical state as the browser app — not a collection of npm scripts.
+> Ask-Relay natural-language input and live CLI event streaming remain
+> honestly not-configured. See RELAY_CLI_PRODUCT.md.
+>
+> **Finalized 2026-07-23 (founder-approved):** the CLI ships an OFFLINE VISUAL
+> SIMULATION (`relay cli demo`) that plays the Architect→Coding→Relay→Reviewer
+> mission in real time with playback controls — demonstration fixture activity,
+> clearly labeled offline, zero provider calls; the header dog is four-legged
+> and gold is restrained aged-brass. Ask-Relay NL input stays not-configured.
+
+> **Update (Prompt 8.5, 2026-07-22):** durable local persistence + crash
+> recovery is now IMPLEMENTED (journal/snapshots/locks/migrations/recovery
+> plans; offline restart-proven across separate processes). Real
+> cross-process PROVIDER resume remains not live-proven (persisted session
+> references classify `persisted_unverified` until a founder-authorized
+> phase). See DURABLE_LOCAL_PERSISTENCE.md.
+
 > **Implementation sync (Prompt 8.3, 2026-07-22):** the "independent reviewer"
 > capability moves from SIMULATED to a REAL live provider. A live local Codex
 > reviewer now runs behind the provider-neutral Reviewer port — read-only,

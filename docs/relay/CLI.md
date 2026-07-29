@@ -1,5 +1,37 @@
 # Sunday Relay CLI (Prompt 5) — simulation demo surface
 
+> **Terminal product shell (Prompt 8.6, 2026-07-22):** bare `relay` in a TTY
+> now opens the Relay PRODUCT shell (home, projects, drafts, the active
+> mission console with STREAM/PANELS views toggled by the corner `[>_]`
+> badge, Manual Tasks, findings, evidence, recovery). New commands: `relay
+> home|projects`, `relay project new|open|status|settings|workforce|
+> research|run|terminal|tasks|findings|evidence|history`, `relay recover
+> [<ref>]`, `relay cli demo` / `relay cli demo --plain` / `relay cli
+> contract-verify`; the legacy simulated session moved to `relay session`.
+> Every engineering command is unchanged. All rendering passes one safe
+> boundary (no hidden reasoning, raw streams, credentials, session ids,
+> or ANSI injection); non-TTY output is deterministic; `--reduced-motion`
+> and NO_COLOR are honored. See RELAY_CLI_PRODUCT.md.
+>
+> **Finalized 2026-07-23 (founder-approved).** `relay cli demo` is the OFFLINE
+> VISUAL SIMULATION: an activation splash steps (ENTER/P) into the live PANELS
+> console and plays the fixture mission in real time (P play/pause · N next · R
+> restart · 1/2/3 speed · slash-commands; ~42s at 1×) — zero provider/network
+> calls, no real file changes. The header dog is a four-legged side dog; gold is
+> restrained aged-brass. See SESSION_LOG for the exact hardening + visual passes.
+
+> **Durable persistence (Prompt 8.5, 2026-07-22):** `relay state doctor`,
+> `relay runs list`, `relay runs inspect --run <ref>`, `relay runs recover
+> --run <ref>` (validation + replay + workspace inspection + plan; ZERO
+> provider calls), `relay runs archive --run <ref>` (never deletes).
+> `npm run relay:persistence:contract-verify` — the 18-scenario offline
+> process-restart proof (65 checks, ~44 separate Node processes, no
+> provider call). `npm run relay:persistence:recovery-drill` — the
+> two-process crash-recovery drill ending `DURABLE LOCAL RECOVERY
+> VERIFIED`. Live supervised runs now persist durably to the local state
+> root; run references are shown, raw provider session ids are not. See
+> DURABLE_LOCAL_PERSISTENCE.md.
+
 > **Supervised workflow (Prompt 8.4, 2026-07-22):** `relay supervised
 > contract-verify` / `npm run relay:supervised:contract-verify` — Gate A, the
 > offline proof of the FULL supervised loop (live Claude implementation →

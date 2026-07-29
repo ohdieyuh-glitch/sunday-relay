@@ -156,3 +156,34 @@ If asked about competitive proof on camera, use `relay:competitive` (the
 deterministic full-workforce demo, reviewer labeled SIMULATED) — see §10/§11 —
 and describe the live Codex review only as an engineering milestone, without
 running it.
+
+
+## 13. Terminal product demo — OFFLINE VISUAL SIMULATION (Prompt 8.6, founder-approved)
+
+`npm run relay:cli:demo` — the OFFLINE VISUAL SIMULATION (fake adapters,
+zero provider/network calls, isolated temp state, no real file changes;
+founder-approved 2026-07-23). It opens on an **activation splash**
+(`OFFLINE VISUAL SIMULATION · FAKE ADAPTERS · NO PROVIDER CALLS · NO REAL
+FILE CHANGES`, the four-legged Relay Dog, and start keys). Press **ENTER**
+to step into the live PANELS console (paused on the first event), then **P**
+to play — or **P** from the splash to auto-play — and **watch the
+mission play in real time** (~42s at 1×): Prompt Architect generates →
+researches → prepares Project Brain → hands off; Coding Agent inspects →
+edits → runs fixture tests → reports a claim; Relay receives the claim →
+inspects → verifies evidence → holds output; Reviewer reviews → raises
+Finding F-1 → Repair R-1 → re-verify → re-review → APPROVED → VERIFIED
+COMPLETE. Controls: **P** play/pause · **N** next event · **R** restart ·
+**1/2/3** speed · **V** panels/stream · **Q** exit (plus `/play /pause /next
+/restart /speed 2x /panels /stream /status /findings …`). The active event
+is marked; the footer HANDOFF NETWORK status and the Relay Dog progress
+through the phases. Every screen stays labeled OFFLINE. This is
+DEMONSTRATION FIXTURE ACTIVITY — real mission activity still derives only
+from canonical Relay events (the real supervised Claude→Codex workflow was
+proven in Prompt 8.4; durable crash recovery in Prompt 8.5).
+`npm run relay:cli:demo:plain` prints the deterministic non-interactive
+walkthrough (splash + mid-playback + full sequence) for recordings.
+
+**Presenter note — mid-playback pause is safe:** press **P** to pause on any
+role and narrate; **N** to step one event at a time; **R** to restart from
+the Prompt Architect. Chatting is not part of this phase — natural-language
+input is honestly declined. No provider is ever called.

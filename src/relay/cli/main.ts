@@ -23,6 +23,15 @@ import {
 import {
   checkSupervisedPrerequisites, runSupervisedContractVerification, runSupervisedProof,
 } from '../connectors/supervised';
+import {
+  createStateStore, createSupervisedRunRecorder, recoverRun, resolveStateRoot,
+  runPersistenceContractVerification, runRecoveryDrill, stateDoctorReport,
+} from '../persistence';
+import {
+  detectCaps, findProjectRecord, loadAppData, productHome, productProjects, productProjectStatus,
+  productProjectView, productRecover, productRunConfirmation, runCliContractVerification,
+  runCliDemo, runProductShell, type ProjectView,
+} from './product';
 
 /**
  * Relay CLI entry (Prompt 5). Thin client: parses arguments, composes the
@@ -45,11 +54,25 @@ const defaultIo: CliIo = {
 };
 
 export interface ParsedCli {
-  command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude' | 'codex' | 'supervised';
+  command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude' | 'codex' | 'supervised'
+    | 'state' | 'runs' | 'persistence'
+    | 'home' | 'projects' | 'project' | 'recover' | 'cli' | 'session';
   workspaceAction?: 'doctor' | 'verify';
   claudeAction?: 'doctor' | 'run' | 'inspect' | 'cancel' | 'contract-verify';
   codexAction?: 'doctor' | 'run' | 'inspect' | 'cancel' | 'contract-verify';
   supervisedAction?: 'run' | 'contract-verify';
+  stateAction?: 'doctor';
+  runsAction?: 'list' | 'inspect' | 'recover' | 'archive';
+  persistenceAction?: 'contract-verify' | 'recovery-drill';
+  projectAction?: 'new' | 'open' | 'status' | 'settings' | 'workforce' | 'research' | 'run'
+    | 'terminal' | 'tasks' | 'findings' | 'evidence' | 'history' | 'repairs';
+  cliAction?: 'demo' | 'contract-verify';
+  projectRef?: string;
+  reducedMotion?: boolean;
+  watch?: boolean;
+  once?: boolean;
+  runRef?: string;
+  stateRoot?: string;
   fixture?: string;
   confirmLive: boolean;
   scenario?: string;
@@ -88,6 +111,12 @@ export function parseCli(argv: string[]): ParsedCli {
         help: { type: 'boolean', default: false },
         fixture: { type: 'string' },
         'confirm-live': { type: 'boolean', default: false },
+        run: { type: 'string' },
+        'state-root': { type: 'string' },
+        project: { type: 'string' },
+        'reduced-motion': { type: 'boolean', default: false },
+        watch: { type: 'boolean', default: false },
+        once: { type: 'boolean', default: false },
       },
     });
     const pace = values.pace !== undefined ? Number(values.pace) : undefined;
@@ -98,6 +127,7 @@ export function parseCli(argv: string[]): ParsedCli {
       autoAcceptBlueprint: values['auto-accept-blueprint'] === true,
       presentation: values.presentation === true,
       pace, compact: values.compact === true,
+      watch: values.watch === true, once: values.once === true,
       confirmLive: values['confirm-live'] === true,
     };
     if (pace !== undefined && (!Number.isFinite(pace) || pace < 0)) {
@@ -133,6 +163,55 @@ export function parseCli(argv: string[]): ParsedCli {
         return { command: 'supervised', ...base, error: 'supervised requires an action: run or contract-verify.' };
       }
       return { command: 'supervised', supervisedAction: second as ParsedCli['supervisedAction'], fixture: values.fixture, ...base };
+    }
+    if (first === 'state') {
+      if (second !== 'doctor') return { command: 'state', ...base, error: 'state requires an action: doctor.' };
+      return { command: 'state', stateAction: 'doctor', stateRoot: values['state-root'], ...base };
+    }
+    if (first === 'runs') {
+      const actions = ['list', 'inspect', 'recover', 'archive'];
+      if (!second || !actions.includes(second)) {
+        return { command: 'runs', ...base, error: 'runs requires an action: list, inspect, recover, or archive.' };
+      }
+      if (second !== 'list' && !values.run) {
+        return { command: 'runs', ...base, error: `runs ${second} requires --run <run-reference>.` };
+      }
+      return {
+        command: 'runs', runsAction: second as ParsedCli['runsAction'],
+        runRef: values.run, stateRoot: values['state-root'], ...base,
+      };
+    }
+    if (first === 'persistence') {
+      const actions = ['contract-verify', 'recovery-drill'];
+      if (!second || !actions.includes(second)) {
+        return { command: 'persistence', ...base, error: 'persistence requires an action: contract-verify or recovery-drill.' };
+      }
+      return { command: 'persistence', persistenceAction: second as ParsedCli['persistenceAction'], ...base };
+    }
+    if (first === 'home' || first === 'projects' || first === 'session') {
+      return { command: first, stateRoot: values['state-root'], reducedMotion: values['reduced-motion'], ...base };
+    }
+    if (first === 'project') {
+      const actions = ['new', 'open', 'status', 'settings', 'workforce', 'research', 'run',
+        'terminal', 'tasks', 'findings', 'evidence', 'history', 'repairs'];
+      if (!second || !actions.includes(second)) {
+        return { command: 'project', ...base, error: `project requires an action: ${actions.join(', ')}.` };
+      }
+      return {
+        command: 'project', projectAction: second as ParsedCli['projectAction'],
+        projectRef: values.project ?? positionals[2], stateRoot: values['state-root'],
+        reducedMotion: values['reduced-motion'], ...base,
+      };
+    }
+    if (first === 'recover') {
+      return { command: 'recover', runRef: values.run ?? positionals[1], stateRoot: values['state-root'], ...base };
+    }
+    if (first === 'cli') {
+      const actions = ['demo', 'contract-verify'];
+      if (!second || !actions.includes(second)) {
+        return { command: 'cli', ...base, error: 'cli requires an action: demo or contract-verify.' };
+      }
+      return { command: 'cli', cliAction: second as ParsedCli['cliAction'], reducedMotion: values['reduced-motion'], ...base };
     }
     if (first === 'demo') {
       if (!second) return { command: 'demo', ...base, error: 'demo requires a scenario name (e.g. relay demo repair).' };
@@ -183,6 +262,20 @@ export const HELP_TEXT = [
   '  relay codex run --fixture review-defect --confirm-live   REAL Codex review',
   '  relay supervised contract-verify   offline full-workflow proof (no provider call)',
   '  relay supervised run --fixture safe-edit --confirm-live   REAL supervised loop',
+  '  relay state doctor             durable state-directory health report',
+  '  relay runs list                safe summaries of persisted runs',
+  '  relay runs inspect --run <ref> truthful reconstructed run state',
+  '  relay runs recover --run <ref> validate + replay + plan (zero provider calls)',
+  '  relay runs archive --run <ref> archive a completed run (never deletes)',
+  '  relay persistence contract-verify   offline process-restart proof (no provider call)',
+  '  relay persistence recovery-drill    two-process crash recovery drill (offline)',
+  '  relay                          the Relay terminal product shell (interactive TTY)',
+  '  relay home | relay projects    product home / project list (durable state)',
+  '  relay project new|open|status|settings|workforce|research|tasks|findings|evidence|history|run',
+  '  relay recover [<run-ref>]      recovery status / plan (zero provider calls)',
+  '  relay cli demo                 OFFLINE terminal product demo (fake adapters)',
+  '  relay cli contract-verify      CLI product contract proof (no provider call)',
+  '  relay session                  legacy simulated interactive session',
   '  relay demo competitive         Mission Contract + Claude/Codex proof (SIMULATED)',
   '  relay demo mission-control     modes + Relay Dog + Reviewer gate + Live Terminal',
   '  relay version | relay help',
@@ -607,11 +700,26 @@ async function runSupervisedCli(parsed: ParsedCli, io: CliIo): Promise<number> {
 
   workflowScreen('Confirmed via --confirm-live.');
 
-  const proof = await runSupervisedProof({
-    claude: { executablePath: claudeCaps.executablePath!, capabilities: claudeCaps },
-    codex: { executablePath: codexCaps.executablePath!, capabilities: codexCaps },
-    now, ids: createRandomIdFactory(),
+  // Prompt 8.5: live supervised runs persist durably to the local state root
+  // (journal + snapshots), so a crash is recoverable via `relay runs recover`.
+  const stateRoot = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
+  if (!stateRoot.ok) {
+    io.out(`Durable state root unavailable: ${stateRoot.error.message}`);
+    return EXIT.doctorFailure;
+  }
+  const recorder = createSupervisedRunRecorder({
+    store: createStateStore({ root: stateRoot.value.root }), now,
   });
+  let proof;
+  try {
+    proof = await runSupervisedProof({
+      claude: { executablePath: claudeCaps.executablePath!, capabilities: claudeCaps },
+      codex: { executablePath: codexCaps.executablePath!, capabilities: codexCaps },
+      now, ids: createRandomIdFactory(), persistence: recorder,
+    });
+  } finally {
+    recorder.release();
+  }
   if (parsed.json) {
     io.out(JSON.stringify({
       exitCode: proof.exitCode, path: proof.path, stopReason: proof.stopReason,
@@ -628,6 +736,223 @@ async function runSupervisedCli(parsed: ParsedCli, io: CliIo): Promise<number> {
     proof.lines.forEach((line) => io.out(line));
   }
   return proof.exitCode;
+}
+
+/* ------------------- durable state / runs / recovery ---------------- */
+
+function resolveCliStateRoot(parsed: ParsedCli, io: CliIo): { root: string } | { error: string } {
+  const resolved = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
+  if (!resolved.ok) return { error: resolved.error.message };
+  return { root: resolved.value.root };
+}
+
+function runStateCli(parsed: ParsedCli, io: CliIo): number {
+  const report = stateDoctorReport({
+    env: io.env as Record<string, string | undefined>,
+    overrideRoot: parsed.stateRoot, now: new Date().toISOString(),
+  });
+  if (parsed.json) io.out(JSON.stringify({ report: report.lines.slice(1), exitCode: report.exitCode }));
+  else report.lines.forEach((line) => io.out(line));
+  return report.exitCode === 0 ? EXIT.completed : EXIT.doctorFailure;
+}
+
+function runRunsCli(parsed: ParsedCli, io: CliIo): number {
+  const rootResult = resolveCliStateRoot(parsed, io);
+  if ('error' in rootResult) { io.out(rootResult.error); return EXIT.doctorFailure; }
+  const store = createStateStore({ root: rootResult.root });
+  const now = () => new Date().toISOString();
+
+  if (parsed.runsAction === 'list') {
+    const runs = store.listRuns();
+    if (parsed.json) { io.out(JSON.stringify({ runs })); return EXIT.completed; }
+    io.out('PERSISTED RELAY RUNS');
+    if (runs.length === 0) { io.out('  (none)'); return EXIT.completed; }
+    for (const run of runs) {
+      io.out(`  ${run.displayName.padEnd(32).slice(0, 32)} ${run.lifecycle.padEnd(20)} ${run.phase.padEnd(16)} ${run.updatedAt}` +
+        `${run.archived ? '  [archived]' : ''}${run.recoveryRequired ? '  [RECOVERY REQUIRED]' : ''}`);
+    }
+    return EXIT.completed;
+  }
+
+  const runRef = parsed.runRef!;
+  if (parsed.runsAction === 'archive') {
+    const archived = store.archiveRun(runRef, now());
+    io.out(archived.ok ? 'Run archived (evidence preserved; still inspectable).' : archived.error.message);
+    return archived.ok ? EXIT.completed : EXIT.doctorFailure;
+  }
+
+  // inspect (read-only) and recover (validation + replay + reconciliation +
+  // plan). NEITHER makes any provider call.
+  const report = recoverRun({ store, reference: runRef, now, persistMarkers: parsed.runsAction === 'recover' });
+  if (!report.ok) { io.out(report.error.message); return EXIT.doctorFailure; }
+  const value = report.value;
+  const state = value.loaded?.state ?? null;
+  if (parsed.json) {
+    io.out(JSON.stringify({
+      runRef, plan: value.plan, lifecycle: state?.run.lifecycle ?? null,
+      quarantined: value.quarantined, projectionEvents: value.projectionEvents,
+    }));
+    return value.plan.outcome === 'unrecoverable' ? EXIT.doctorFailure : EXIT.completed;
+  }
+  io.out(parsed.runsAction === 'recover' ? 'RELAY RUN RECOVERY (zero provider calls)' : 'RELAY RUN INSPECTION');
+  io.out(`  Mission:                ${state?.mission.objective ?? '(unavailable)'}`);
+  io.out(`  Lifecycle:              ${state?.run.lifecycle ?? 'corrupted'}`);
+  io.out(`  Phase:                  ${state?.run.phase ?? '-'}`);
+  io.out(`  Output visibility:      ${state?.run.outputVisibility ?? '-'}`);
+  io.out(`  Workspace:              ${value.plan.workspaceReconciliation}`);
+  io.out(`  Evidence:               ${state?.evidence.length ?? 0} record(s), ${value.plan.staleEvidenceIds.length} stale`);
+  io.out(`  Open findings:          ${value.plan.openFindingIds.join(', ') || 'none'}`);
+  io.out(`  Pending repairs:        ${value.plan.pendingRepairIds.join(', ') || 'none'}`);
+  io.out(`  Calls consumed:         ${value.plan.callBudget.consumed} of ${value.plan.callBudget.maxCalls}` +
+    ` (${value.plan.callBudget.remaining} remaining)`);
+  for (const [provider, readiness] of Object.entries(value.plan.sessionReadiness)) {
+    // Readiness classification only — raw provider session ids are never shown.
+    io.out(`  ${`${provider} session:`.padEnd(24)}${readiness}`);
+  }
+  io.out(`  Recovery plan:          ${value.plan.outcome}`);
+  for (const action of value.plan.nextPermittedActions) io.out(`    → ${action}`);
+  io.out('  Live calls:             require explicit founder authorization (never automatic after restart)');
+  for (const diagnostic of value.plan.diagnostics.slice(0, 6)) io.out(`  note: ${diagnostic}`);
+  return value.plan.outcome === 'unrecoverable' ? EXIT.doctorFailure : EXIT.completed;
+}
+
+async function runPersistenceCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  if (parsed.persistenceAction === 'contract-verify') {
+    io.out('RELAY PERSISTENCE CONTRACT VERIFICATION (offline — separate Node processes, no provider call)');
+    const { checks, failures, processesSpawned } = await runPersistenceContractVerification();
+    for (const check of checks) io.out(`  [${check.ok ? 'PASS' : 'FAIL'}] ${check.name}${check.detail ? ` — ${check.detail}` : ''}`);
+    io.out(`  (scenario steps ran across ${processesSpawned} separate Node processes)`);
+    if (failures > 0) {
+      io.out(`\nPERSISTENCE CONTRACT VERIFICATION FAILED: ${failures} check(s).`);
+      return EXIT.doctorFailure;
+    }
+    io.out('\nPERSISTENCE CONTRACT VERIFICATION PASSED — durable state and cross-process recovery proven with no provider call.');
+    return EXIT.completed;
+  }
+  // recovery-drill (Gate B — offline, two processes, zero provider calls)
+  const drill = await runRecoveryDrill();
+  drill.lines.forEach((line) => io.out(line));
+  return drill.exitCode === 0 ? EXIT.completed : EXIT.doctorFailure;
+}
+
+/* ------------------------ product shell commands -------------------- */
+
+function productCaps(parsed: ParsedCli, io: CliIo): ReturnType<typeof detectCaps> {
+  return detectCaps({
+    argv: {
+      'no-color': parsed.noColor, plain: parsed.plain, json: parsed.json,
+      'reduced-motion': parsed.reducedMotion === true, compact: parsed.compact,
+    },
+    env: io.env as Record<string, string | undefined>,
+    isTTY: io.isTTY && process.stdin.isTTY === true,
+    columns: process.stdout.columns,
+  });
+}
+
+async function runProductCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const caps = productCaps(parsed, io);
+
+  if (parsed.command === 'cli') {
+    if (parsed.cliAction === 'contract-verify') {
+      io.out('RELAY CLI PRODUCT CONTRACT VERIFICATION (offline — fixtures, isolated state root, no provider call)');
+      const { checks, failures } = await runCliContractVerification(parseCli as never);
+      for (const check of checks) io.out(`  [${check.ok ? 'PASS' : 'FAIL'}] ${check.name}${check.detail ? ` — ${check.detail}` : ''}`);
+      if (failures > 0) {
+        io.out(`\nCLI CONTRACT VERIFICATION FAILED: ${failures} check(s).`);
+        return EXIT.doctorFailure;
+      }
+      io.out('\nCLI CONTRACT VERIFICATION PASSED — terminal product proven with no provider call.');
+      return EXIT.completed;
+    }
+    // cli demo — OFFLINE, fake adapters, isolated temp state root.
+    const demo = await runCliDemo({ caps, plain: parsed.plain || parsed.json || !caps.tty });
+    demo.lines.forEach((line) => io.out(line));
+    return demo.exitCode;
+  }
+
+  const rootResult = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
+  if (!rootResult.ok) { io.out(rootResult.error.message); return EXIT.doctorFailure; }
+  const store = createStateStore({ root: rootResult.value.root });
+  const emit = (result: { lines: string[]; json?: unknown; exitCode: number }): number => {
+    if (parsed.json) io.out(JSON.stringify(result.json ?? { lines: result.lines }));
+    else result.lines.forEach((line) => io.out(line));
+    return result.exitCode;
+  };
+  // Read-only commands honor --watch (live re-render in a TTY, Ctrl+C to
+  // leave) and --once (a single deterministic snapshot). --once is already the
+  // default for these, so it is only meaningful at the interactive entrypoints.
+  const respond = (produce: () => { lines: string[]; json?: unknown; exitCode: number }): number | Promise<number> =>
+    (parsed.watch && caps.tty && !parsed.json && !parsed.plain ? runProductWatch(produce, emit) : emit(produce()));
+
+  if (parsed.command === 'home') return respond(() => productHome(store, caps));
+  if (parsed.command === 'projects') return respond(() => productProjects(store, caps));
+  if (parsed.command === 'recover') return respond(() => productRecover(store, caps, parsed.runRef));
+
+  // relay project <action>
+  switch (parsed.projectAction) {
+    case 'new':
+    case 'open':
+    case 'terminal': {
+      // --once (or a non-TTY / plain / json context) prints a single snapshot
+      // instead of opening the interactive shell.
+      if (!caps.tty || parsed.json || parsed.plain || parsed.once) {
+        if (parsed.projectAction === 'new') {
+          io.out('`relay project new` is interactive. Run it in a TTY to open the draft flow.');
+          return caps.tty && parsed.once ? EXIT.completed : EXIT.usage;
+        }
+        return respond(() => productProjectStatus(store, caps, parsed.projectRef));
+      }
+      const data = loadAppData(store);
+      const selected = parsed.projectAction === 'new' ? null : findProjectRecord(store, parsed.projectRef);
+      const initialScreen = parsed.projectAction === 'new' ? 'new-project'
+        : parsed.projectAction === 'terminal' ? 'console' : 'project';
+      return runProductShell({
+        caps, data, store, playbackMs: 0, now: () => new Date().toISOString(),
+        initialScreen, selectedProjectId: selected?.projectId ?? null,
+      });
+    }
+    case 'status':
+      return respond(() => productProjectStatus(store, caps, parsed.projectRef));
+    case 'settings':
+    case 'workforce':
+    case 'research':
+    case 'tasks':
+    case 'findings':
+    case 'repairs':
+    case 'evidence':
+    case 'history':
+      return respond(() => productProjectView(store, caps, parsed.projectAction as ProjectView, parsed.projectRef));
+    case 'run':
+      return emit(productRunConfirmation(store, caps, parsed.projectRef));
+    default:
+      io.out('Unknown project action.');
+      return EXIT.usage;
+  }
+}
+
+/** --watch loop for read-only product commands: clear + re-render the same
+ * canonical projection on an interval, leaving cleanly on Ctrl+C (SIGINT).
+ * TTY-only; never touches raw mode, so the shell IO loop is unaffected. */
+function runProductWatch(
+  produce: () => { lines: string[]; json?: unknown; exitCode: number },
+  emit: (r: { lines: string[]; json?: unknown; exitCode: number }) => number,
+): Promise<number> {
+  return new Promise<number>((resolve) => {
+    let timer: NodeJS.Timeout | null = null;
+    let settled = false;
+    const paint = (): void => { process.stdout.write('\x1b[H\x1b[2J'); emit(produce()); process.stdout.write('\n[watching — Ctrl+C to exit]\n'); };
+    const stop = (): void => {
+      if (settled) return;
+      settled = true;
+      if (timer) { clearInterval(timer); timer = null; }
+      process.removeListener('SIGINT', stop);
+      try { process.stdout.write('\x1b[0m'); } catch { /* stream closed */ }
+      resolve(EXIT.completed);
+    };
+    process.on('SIGINT', stop);
+    paint();
+    timer = setInterval(paint, 2000);
+  });
 }
 
 /* ------------------------------- main ------------------------------ */
@@ -691,6 +1016,18 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return runCodexCli(parsed, io);
     case 'supervised':
       return runSupervisedCli(parsed, io);
+    case 'state':
+      return runStateCli(parsed, io);
+    case 'runs':
+      return runRunsCli(parsed, io);
+    case 'persistence':
+      return runPersistenceCli(parsed, io);
+    case 'home':
+    case 'projects':
+    case 'project':
+    case 'recover':
+    case 'cli':
+      return runProductCli(parsed, io);
     case 'demo':
     case 'run': {
       // mission-control renders over a real competitive run.
@@ -734,6 +1071,21 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return outcome.exitCode;
     }
     case 'interactive': {
+      // Bare `relay` opens the terminal PRODUCT shell (Prompt 8.6). The
+      // legacy simulated session remains available via `relay session`.
+      const caps = productCaps(parsed, io);
+      // --once prints a single home snapshot instead of opening the shell.
+      if (caps.tty && !parsed.json && !parsed.plain && !parsed.once) {
+        const rootResult = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
+        if (!rootResult.ok) { io.out(rootResult.error.message); return EXIT.doctorFailure; }
+        const store = createStateStore({ root: rootResult.value.root });
+        return runProductShell({
+          caps, data: loadAppData(store), store, playbackMs: 0, now: () => new Date().toISOString(),
+        });
+      }
+      return runProductCli({ ...parsed, command: 'home' }, io);
+    }
+    case 'session': {
       const session = createSession({
         render,
         scenarioName: parsed.scenario ?? 'repair',

@@ -1,5 +1,25 @@
 # Sunday Relay — Live Terminal (authoritative)
 
+> **CLI sync (Prompt 8.6, 2026-07-22):** the terminal product's mission
+> console renders the same normalized safe exchanges as the browser Live
+> Terminal — one canonical event model, two presentations (STREAM timeline
+> and PANELS console, `[>_]`/`V` toggle). The CLI adds no second event
+> system and never reconstructs missing dialogue.
+>
+> **Finalized 2026-07-23:** the OFFLINE demo now PLAYS the mission timeline in
+> real time (paced reveal via the pure `reduceTick`; play/pause/next/restart/
+> speed controls) — explicitly labeled OFFLINE VISUAL SIMULATION. Real mission
+> activity still derives ONLY from canonical normalized events; fixture timers
+> can never emit production events.
+
+> **Persistence sync (Prompt 8.5, 2026-07-22):** the durable journal is NOT
+> the Live Terminal transcript. Recovery emits only safe normalized
+> projection events (persistence.loaded/validated, snapshot.replayed,
+> workspace.reconciled, evidence.marked_stale,
+> provider_session.persisted_unverified, recovery.plan_created,
+> run.recovery_required/recovery_ready/quarantined); missing terminal
+> dialogue is never reconstructed or invented.
+
 > **Implementation sync (Prompt 8.3, 2026-07-22):** during a live Codex review
 > the terminal projects REAL normalized `reviewer.*` events (provenance
 > `live`): Output held for independent review → RELAY → CODEX contract

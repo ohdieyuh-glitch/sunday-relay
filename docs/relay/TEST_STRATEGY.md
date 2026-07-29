@@ -1,5 +1,41 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **Implementation sync (Prompt 8.6, 2026-07-22):** CLI product tests.
+> `cli/product/product.test.ts` covers parsing/routing (new + every
+> existing command), caps detection, width projection + ANSI-aware layout,
+> the safety boundary (injection, masking, streams), the key reducer
+> (navigation, view toggle, graceful Ctrl+C, draft flow, no fabricated
+> Ask-Relay answers), the Relay Dog (canonical-state animation gating),
+> and the deterministic plain demo. `cli/product/verify-harness.ts` is the
+> contract proof — 17 categories (~60 checks) over fixtures + an isolated
+> temp state root incl. durable restart reload and the recovery screen via
+> the REAL persistence service, zero provider calls
+> (`relay:cli:contract-verify`).
+>
+> **Finalized 2026-07-23:** `cli/product/product-hardening.test.ts` adds the
+> adversarial-review regressions, the dog/gold visual-correction tests, and the
+> offline visual-simulation playback tests (`reduceTick` pacing, play/pause/
+> next/restart/speed, active-row marker, footer phase, `/complete` cannot
+> bypass CompletionPolicy). Full suite 2131/2131; contract 68/68; 0 provider
+> calls.
+
+> **Implementation sync (Prompt 8.5, 2026-07-22):** persistence tests.
+> `persistence/persistence.test.ts` covers storage-root resolution, path
+> traversal/symlink rejection, atomic writes + permissions, journal
+> append/sequence/checksum/torn-tail/tampering/gap/duplicate handling,
+> the lifecycle state machine, snapshot rotation + digest fallback, locks
+> (live contention + dead-owner reclaim), redaction, store index/archive/
+> quarantine, migrations (v0 fixture, backup, no-op, future rejection),
+> session-readiness classification, Relay Dog recovery mapping, retention
+> defaults, and budget durability. `persistence/verify-harness.ts` is the
+> Gate-A OFFLINE RESTART PROOF: 18 scenarios across ~44 SEPARATE Node
+> processes (esbuild-bundled driver, fake executables, isolated temp
+> state root, zero provider calls); `persistence/recovery-drill.ts` is the
+> two-process Gate-B drill ending `DURABLE LOCAL RECOVERY VERIFIED`.
+> `relay-core-boundary.test.ts` gained a Prompt-8.5 suite (nothing above
+> persistence imports it; recovery can never launch a provider; redaction
+> denylist required; restrictive modes required).
+
 > **Implementation sync (Prompt 8.4, 2026-07-22):** supervised workflow
 > tests. `connectors/supervised/verify-harness.ts` is the Gate-A offline
 > contract verifier — deterministic fake executables for BOTH agents prove

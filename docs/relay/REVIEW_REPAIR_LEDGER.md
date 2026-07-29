@@ -1,5 +1,13 @@
 # Relay Review + Repair Ledger (Prompt 8.1)
 
+> **Persistence sync (Prompt 8.5, 2026-07-22):** Findings and Repairs
+> persist durably (linked ids, criteria, bounded evidence, required
+> actions, status) and reconstruct after a crash: an interrupted run
+> restores its open Finding, linked Repair, `revision_required`
+> visibility, and remaining call budget, and the recovery plan requires
+> explicit founder authorization before the bounded repair resumes. See
+> DURABLE_LOCAL_PERSISTENCE.md.
+
 > **Implementation sync (Prompt 8.3, 2026-07-22):** the ledger now receives
 > findings from a REAL independent reviewer. The live Codex reviewer's
 > validated `RELAY_REVIEW_REPORT_V1` findings are mapped into the neutral
