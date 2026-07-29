@@ -8,10 +8,21 @@ adapters, zero provider calls, zero network calls, no real file changes.
 The real Claude→Codex supervised workflow was proven separately in
 Prompt 8.4; durable crash recovery in Prompt 8.5.
 
+> **Post-separation note.** Sunday Relay is its own repository
+> (`ohdieyuh-glitch/sunday-relay`, checked out at
+> `/home/kaisinrogodfree5/sunday-relay-product`). The paths below are the
+> INDEPENDENT repository; `/home/kaisinrogodfree5/sunday-relay` is an Alcatraz
+> worktree and no Relay command is run there any more. The readiness check no
+> longer requires the retired `feature/relay-yc-demo` branch or the `9f8075f`
+> checkpoint — those named an Alcatraz branch and a commit that does not exist
+> in this object store. It now validates repository identity and the versioned
+> product baseline in `docs/relay/YC_DEMO_BASELINE.json`, so it behaves
+> identically on `main`, on any `relay/*` branch, and on a detached CI head.
+
 **The two founder commands (memorize these):**
 
 ```bash
-cd /home/kaisinrogodfree5/sunday-relay
+cd /home/kaisinrogodfree5/sunday-relay-product
 npm run relay:yc-demo:check    # preflight — read-only, exits 0 when READY
 npm run relay:yc-demo:cli      # honesty notice + the approved offline simulation
 ```
@@ -46,7 +57,7 @@ npm run relay:yc-demo:cli      # honesty notice + the approved offline simulatio
 Exact commands:
 
 ```bash
-cd /home/kaisinrogodfree5/sunday-relay
+cd /home/kaisinrogodfree5/sunday-relay-product
 npm run relay:yc-demo:check
 npm run relay:yc-demo:cli
 ```

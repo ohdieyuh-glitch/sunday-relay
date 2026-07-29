@@ -10,10 +10,28 @@
  * dependency-free (node builtins only).
  *
  * MODES
- *   local (default)  validate this repository's registry. If the companion
- *                    repository is present, also compare the two registries.
- *   --strict         CI mode: the companion repository is REQUIRED. A missing
- *                    or unreadable companion is a FAILURE, never a silent pass.
+ *   local (default)  validate this repository's registry and confirm every
+ *                    declared entry point and test reference exists on disk.
+ *   --strict         CI mode: the same rules, and a declared file that does
+ *                    not exist is a FAILURE rather than a warning.
+ *
+ * POST-SEPARATION NOTE — why there is no longer a "companion repository".
+ * This check was written when the website and the CLI lived in two separate
+ * Alcatraz WORKTREES, so proving parity meant comparing two copies of the
+ * registry across two checkouts. `--strict` REQUIRED that second checkout,
+ * and the default search paths pointed into the Alcatraz repository.
+ *
+ * Both surfaces now live in this one repository, so:
+ *   - requiring an Alcatraz checkout would be cross-product coupling, and
+ *     would fail outright in CI where no such path exists;
+ *   - the far stronger property is available here: every website and CLI
+ *     entry point and test reference the registry names must actually EXIST
+ *     in this tree. A registry that claims a capability whose file is gone is
+ *     exactly the drift this check is for.
+ *
+ * `--companion <path>` is still honoured when passed EXPLICITLY (useful for
+ * comparing against another Relay checkout), but it is never searched for by
+ * default and never required.
  *
  * Run:  npm run relay:surface-parity:check [-- --strict] [-- --companion <path>]
  */
@@ -198,20 +216,71 @@ export function compareRegistries(local, companion) {
   return { ok: failures.length === 0, failures };
 }
 
-/** Default companion locations, tried in order. */
-export const DEFAULT_COMPANION_PATHS = [
-  '../sunday-relay',
-  '../sunday-relay-claude-home',
-];
+/**
+ * Companion comparison is OPT-IN only. There are deliberately no default
+ * search paths: the previous defaults pointed at Alcatraz worktrees, which
+ * made a Relay check depend on the other product's checkout.
+ */
+export const DEFAULT_COMPANION_PATHS = [];
 
 export function findCompanion(repoRoot, explicit) {
-  const candidates = explicit ? [explicit] : DEFAULT_COMPANION_PATHS.map((p) => resolve(repoRoot, p));
-  for (const candidate of candidates) {
-    const path = resolve(candidate);
-    if (path === resolve(repoRoot)) continue;
-    if (existsSync(join(path, REGISTRY_RELATIVE_PATH))) return path;
+  if (!explicit) return null;
+  const path = resolve(explicit);
+  if (path === resolve(repoRoot)) return null;
+  return existsSync(join(path, REGISTRY_RELATIVE_PATH)) ? path : null;
+}
+
+/* ------------------------ declared-file existence ----------------------- */
+
+/**
+ * Both surfaces live in this repository now, so every entry point and test
+ * reference the registry declares must resolve to a real file. This is what
+ * replaces the cross-checkout comparison: it catches a registry that still
+ * claims a capability whose implementation or test has been deleted, renamed,
+ * or never landed.
+ */
+/**
+ * The registry declares entry points in several legitimate notations:
+ *   `src/relay/cli/product/app.ts`                 a source file
+ *   `src/relay/cli/product/app.ts#DRAFT_FIELDS`    a symbol within one
+ *   `relay mission budget`                         a CLI command
+ *   `relay (interactive) /pause`                   an interactive slash command
+ * Only the first two are FILE claims and only those are checked on disk.
+ * Commands are verified by the CLI's own command tests, not the filesystem.
+ * The discriminator is deliberately strict: a path never contains whitespace
+ * and always carries a file extension, while every command form contains a
+ * space. Matching on '/' alone would misread `relay (interactive) /pause`.
+ */
+/** `path/to/file.ts#symbol` → `path/to/file.ts`. */
+export const declaredPathOf = (declared) => declared.split('#')[0].trim();
+
+export const isFileClaim = (declared) =>
+  !/\s/.test(declared) && /\.[A-Za-z0-9]+$/.test(declaredPathOf(declared));
+
+export function verifyDeclaredFiles(repoRoot, registry) {
+  const failures = [];
+  let checked = 0;
+  const fields = [
+    ['websiteEntryPoints', 'missing-website-entry-file'],
+    ['cliEntryPoints', 'missing-cli-entry-file'],
+    ['websiteTestReferences', 'missing-website-test-file'],
+    ['cliTestReferences', 'missing-cli-test-file'],
+  ];
+  for (const capability of registry.capabilities ?? []) {
+    const id = capability.capabilityId ?? '(unnamed)';
+    for (const [field, rule] of fields) {
+      for (const declared of capability[field] ?? []) {
+        if (typeof declared !== 'string' || declared.trim() === '') continue;
+        if (!isFileClaim(declared)) continue;          // a CLI command, not a path
+        checked += 1;
+        const path = declaredPathOf(declared);
+        if (!existsSync(resolve(repoRoot, path))) {
+          failures.push({ capabilityId: id, rule, detail: `${field} names ${declared}, but ${path} does not exist` });
+        }
+      }
+    }
   }
-  return null;
+  return { ok: failures.length === 0, failures, checked };
 }
 
 /* --------------------------------- run ---------------------------------- */
@@ -236,26 +305,33 @@ export function runParityCheck(options) {
   const validation = validateRegistry(local.registry, { now });
   const failures = [...validation.failures];
 
-  const companion = findCompanion(repoRoot, companionPath);
-  if (companion) {
-    const companionLoaded = loadRegistry(companion);
-    if (!companionLoaded.ok) {
-      say(`  FAIL  companion registry unreadable: ${companionLoaded.error}`);
-      failures.push({ capabilityId: '(companion)', rule: 'companion-unreadable', detail: companionLoaded.error });
+  // Both surfaces are in THIS repository: every file the registry declares
+  // must exist here. This is the real parity evidence, and it never depends
+  // on another checkout.
+  const declared = verifyDeclaredFiles(repoRoot, local.registry);
+  failures.push(...declared.failures);
+  say(`  declared surface files: ${declared.checked - declared.failures.length}/${declared.checked} present`);
+
+  if (companionPath !== undefined) {
+    const companion = findCompanion(repoRoot, companionPath);
+    if (companion === null) {
+      say(`  FAIL  companion registry not found at ${companionPath}`);
+      failures.push({
+        capabilityId: '(companion)', rule: 'companion-unreadable',
+        detail: `no registry at the explicitly requested companion path ${companionPath}`,
+      });
     } else {
-      say(`  companion: ${companion}`);
-      failures.push(...compareRegistries(local, companionLoaded.value).failures);
+      const companionLoaded = loadRegistry(companion);
+      if (!companionLoaded.ok) {
+        say(`  FAIL  companion registry unreadable: ${companionLoaded.error}`);
+        failures.push({ capabilityId: '(companion)', rule: 'companion-unreadable', detail: companionLoaded.error });
+      } else {
+        say(`  companion (explicit): ${companion}`);
+        failures.push(...compareRegistries(local, companionLoaded.value).failures);
+      }
     }
-  } else if (strict) {
-    // STRICT MODE NEVER PASSES SILENTLY when the companion is unavailable.
-    say('  FAIL  companion repository not found — strict mode requires it');
-    failures.push({
-      capabilityId: '(companion)',
-      rule: 'companion-missing',
-      detail: 'strict mode requires the companion repository; parity cannot be proven without it',
-    });
   } else {
-    say('  companion: NOT FOUND — cross-repository parity NOT verified (local mode)');
+    say('  companion: not requested — both surfaces are verified in this repository');
   }
 
   for (const failure of failures) {

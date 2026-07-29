@@ -137,7 +137,7 @@ describe('PSP Agent ID — format', () => {
 
   it('rejects malformed, short, wrong-prefix and bad-checksum IDs', () => {
     expect(parsePspAgentId('not-an-id')).toEqual({ ok: false, reason: 'malformed' });
-    expect(parsePspAgentId('PSP-AGENT-1-RLY001-TOOSHORT-ABCD'))
+    expect(parsePspAgentId('PSP-AGENT-1-RLY001-TOOSHORT-ABCD')) // relay-boundary:allow-fixture — malformed-by-design PSP id, asserts rejection
       .toEqual({ ok: false, reason: 'malformed' });
     expect(parsePspAgentId(valid.replace(/.$/, '9')).ok).toBe(false);
     const tampered = parsePspAgentId(valid.slice(0, -4) + 'ZZZZ');

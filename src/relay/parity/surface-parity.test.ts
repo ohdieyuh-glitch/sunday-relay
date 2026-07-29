@@ -4,10 +4,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   compareRegistries,
+  declaredPathOf,
+  DEFAULT_COMPANION_PATHS,
   findCompanion,
+  isFileClaim,
   loadRegistry,
   runParityCheck,
   validateRegistry,
+  verifyDeclaredFiles,
   REGISTRY_RELATIVE_PATH,
 } from '../../../scripts/relay-surface-parity.mjs';
 import {
@@ -314,7 +318,32 @@ describe('cross-repository verification', () => {
     expect(rules(compareRegistries(local, otherChecksum))).toContain('manifest-checksum-mismatch');
   });
 
-  it('STRICT mode never passes when the companion repository is unavailable', () => {
+  /* -------------------- post-separation re-anchoring --------------------
+   * The companion-repository requirement was written when the website and
+   * the CLI lived in two separate ALCATRAZ worktrees. Both surfaces are now
+   * in this one repository, so requiring a second checkout would be
+   * cross-product coupling (and would fail outright in CI). Parity is proven
+   * here instead: every file the registry declares must exist in this tree.
+   * -------------------------------------------------------------------- */
+
+  it('never searches for a companion by default, and never points at Alcatraz', () => {
+    expect(DEFAULT_COMPANION_PATHS).toEqual([]);
+    expect(findCompanion(repoRoot)).toBeNull();
+    expect(findCompanion(repoRoot, undefined)).toBeNull();
+    const source = readFileSync(join(repoRoot, 'scripts/relay-surface-parity.mjs'), 'utf8');
+    const executable = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\n)\s*\/\/[^\n]*/g, '');
+    expect(executable).not.toContain('../sunday-relay');
+    expect(executable).not.toContain('turbo-broccoli');
+  });
+
+  it('STRICT mode passes in this repository with no companion checkout at all', () => {
+    const result = runParityCheck({ repoRoot, strict: true, now: NOW });
+    expect(rules(result)).not.toContain('companion-missing');
+    expect(result.ok).toBe(true);
+    expect(result.lines.join('\n')).toContain('both surfaces are verified in this repository');
+  });
+
+  it('an EXPLICIT companion path that does not exist is still a failure', () => {
     const result = runParityCheck({
       repoRoot,
       strict: true,
@@ -322,28 +351,56 @@ describe('cross-repository verification', () => {
       now: NOW,
     });
     expect(result.ok).toBe(false);
-    expect(rules(result)).toContain('companion-missing');
-    expect(result.lines.join('\n')).toContain('strict mode requires it');
+    expect(rules(result)).toContain('companion-unreadable');
   });
 
-  it('local mode says plainly that cross-repository parity was NOT verified', () => {
-    const result = runParityCheck({
-      repoRoot,
-      strict: false,
-      companionPath: join(repoRoot, 'this-companion-does-not-exist'),
-      now: NOW,
-    });
-    expect(result.lines.join('\n')).toContain('cross-repository parity NOT verified');
+  it('verifies every declared surface FILE exists, and says how many', () => {
+    const loaded = loadRegistry(repoRoot);
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    const declared = verifyDeclaredFiles(repoRoot, loaded.value.registry);
+    expect(declared.ok).toBe(true);
+    expect(declared.failures).toEqual([]);
+    expect(declared.checked).toBeGreaterThan(50);
+    const result = runParityCheck({ repoRoot, strict: true, now: NOW });
+    expect(result.lines.join('\n')).toContain(`${declared.checked}/${declared.checked} present`);
   });
 
-  it('loads this repository\'s registry and finds the companion when present', () => {
+  it('a registry naming a file that does not exist FAILS', () => {
+    const loaded = loadRegistry(repoRoot);
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    const registry = JSON.parse(JSON.stringify(loaded.value.registry)) as {
+      capabilities: Array<{ capabilityId: string; cliEntryPoints?: string[]; websiteEntryPoints?: string[] }>;
+    };
+    registry.capabilities[0].cliEntryPoints = ['src/relay/cli/this-file-was-deleted.ts'];
+    const declared = verifyDeclaredFiles(repoRoot, registry);
+    expect(declared.ok).toBe(false);
+    expect(declared.failures.map((f: { rule: string }) => f.rule)).toContain('missing-cli-entry-file');
+
+    registry.capabilities[0].websiteEntryPoints = ['src/relay/ui/gone.tsx'];
+    expect(verifyDeclaredFiles(repoRoot, registry).failures.map((f: { rule: string }) => f.rule))
+      .toContain('missing-website-entry-file');
+  });
+
+  it('distinguishes file claims from CLI command notations', () => {
+    // Real paths — checked on disk.
+    expect(isFileClaim('src/relay/cli/product/app.ts')).toBe(true);
+    expect(isFileClaim('src/relay/cli/product/app.ts#DRAFT_FIELDS')).toBe(true);
+    expect(declaredPathOf('src/relay/cli/product/app.ts#DRAFT_FIELDS')).toBe('src/relay/cli/product/app.ts');
+    // Commands — verified by the CLI's own tests, never by the filesystem.
+    // `relay (interactive) /pause` contains a slash, so a naive '/' rule
+    // would have mistaken it for a path.
+    expect(isFileClaim('relay mission budget')).toBe(false);
+    expect(isFileClaim('relay (interactive) /pause')).toBe(false);
+    expect(isFileClaim('relay (interactive) /done | /cannot-complete')).toBe(false);
+  });
+
+  it('loads this repository\'s registry', () => {
     const loaded = loadRegistry(repoRoot);
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
     expect(loaded.value.checksum).toMatch(/^[0-9a-f]{64}$/);
     expect(REGISTRY_RELATIVE_PATH.replace(/\\/g, '/')).toBe(RELAY_PARITY_REGISTRY_PATH);
-    // findCompanion returns null or a real path — never this repository itself.
-    const companion = findCompanion(repoRoot);
-    if (companion !== null) expect(companion).not.toBe(repoRoot);
   });
 });

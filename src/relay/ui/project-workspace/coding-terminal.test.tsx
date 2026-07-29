@@ -202,7 +202,7 @@ describe('3. secrets, control characters and ANSI output are sanitized', () => {
     lines: [
       line({ sequence: 0, text: `${ESC}[1;32mEdit${ESC}[0m src/normalize.js${BELL}` }),
       line({ sequence: 1, text: 'using sk-abcdefghijklmnopqrstuvwx to authenticate' }),
-      line({ sequence: 2, text: `OPENAI_API_KEY=sk-livekey123456789012 ${NUL}set` }),
+      line({ sequence: 2, text: `OPENAI_API_KEY=sk-livekey123456789012 ${NUL}set` }), // relay-boundary:allow-fixture — synthetic terminal text, asserts redaction
       line({ sequence: 3, text: 'wrote /home/founder/secret-project/src/normalize.js' }),
       line({ sequence: 4, text: 'session 3f8a1b2c-1111-2222-3333-444455556666 resumed' }),
     ],

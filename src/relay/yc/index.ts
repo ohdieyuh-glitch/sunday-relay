@@ -7,9 +7,12 @@
  */
 
 export {
-  runYcPreflight, ycDemoNotice,
-  YC_EXPECTED_BRANCH, YC_MINIMUM_COMMIT, YC_REQUIRED_SCRIPTS, YC_REQUIRED_DOCS,
+  runYcPreflight, ycDemoNotice, repositorySlug,
+  YC_EXPECTED_REPOSITORY, YC_FORBIDDEN_REPOSITORIES,
+  YC_BASELINE_PATH, YC_BASELINE_SCHEMA_VERSION,
+  YC_REQUIRED_SCRIPTS, YC_REQUIRED_DOCS,
   YC_PROOF_DOCS, YC_DEMO_LABELS,
+  type YcBaseline,
   type YcCheck, type YcCheckStatus, type YcGitResult, type YcPreflightDeps, type YcPreflightReport,
 } from './preflight';
 export { createNodePreflightDeps } from './node-deps';

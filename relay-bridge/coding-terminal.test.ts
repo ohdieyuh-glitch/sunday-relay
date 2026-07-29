@@ -116,7 +116,7 @@ describe('the capture sanitizes at the boundary', () => {
   it('scrubs ANSI, control characters, keys, env values, paths and session ids', () => {
     const c = capture();
     c.note({ kind: 'tool', truth: 'agent_claim', text: `${ESC}[1;32mEdit${ESC}[0m src/normalize.js${NUL}` });
-    c.note({ kind: 'notice', truth: 'system_notice', text: 'OPENAI_API_KEY=sk-abcdefghijklmnopqrst used' });
+    c.note({ kind: 'notice', truth: 'system_notice', text: 'OPENAI_API_KEY=sk-abcdefghijklmnopqrst used' }); // relay-boundary:allow-fixture — synthetic key text, asserts the bridge redacts it
     c.note({ kind: 'notice', truth: 'system_notice', text: 'wrote /home/founder/private/src/normalize.js' });
     c.setExternalSession('3f8a1b2c-1111-2222-3333-444455556666');
     c.setDiff(`${ESC}[31m-  const token = "sk-zzzzzzzzzzzzzzzzzzzz";${ESC}[0m`);

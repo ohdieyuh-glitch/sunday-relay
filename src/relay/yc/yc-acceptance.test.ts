@@ -3,9 +3,10 @@ import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  runYcPreflight, ycDemoNotice, YC_DEMO_LABELS, YC_EXPECTED_BRANCH, YC_MINIMUM_COMMIT,
+  runYcPreflight, ycDemoNotice, YC_DEMO_LABELS, repositorySlug,
+  YC_EXPECTED_REPOSITORY, YC_FORBIDDEN_REPOSITORIES, YC_BASELINE_PATH, YC_BASELINE_SCHEMA_VERSION,
   YC_REQUIRED_DOCS, YC_REQUIRED_SCRIPTS,
-  type YcPreflightDeps,
+  type YcBaseline, type YcPreflightDeps,
 } from './index';
 import {
   DEMO_LABELS, DEMO_PLAYBACK_MS, DEMO_SPLASH_LABELS, DEMO_STEP_TICKS,
@@ -33,9 +34,16 @@ interface FakeDepsRecord {
   pathsTouched: string[];
 }
 
+/** The real, versioned product baseline — the fake deps serve it verbatim so
+ * these tests exercise the document that actually ships. */
+const REAL_BASELINE = readFileSync(join(process.cwd(), 'docs/relay/YC_DEMO_BASELINE.json'), 'utf8');
+const REAL_REGISTRY = readFileSync(join(process.cwd(), 'src/relay/parity/relay-surface-capabilities.json'), 'utf8');
+
 function fakeDeps(overrides: Partial<{
   branch: string;
-  ancestorOk: boolean;
+  originUrl: string | null;
+  baselineJson: string | null;
+  registryJson: string | null;
   statusOutput: string;
   missingFiles: string[];
   packageJson: string | null;
@@ -54,11 +62,16 @@ function fakeDeps(overrides: Partial<{
   const deps: YcPreflightDeps = {
     runGit(args) {
       record.gitCalls.push([...args]);
+      if (args[0] === 'remote') {
+        const url = overrides.originUrl !== undefined
+          ? overrides.originUrl
+          : `https://github.com/${YC_EXPECTED_REPOSITORY}.git`;
+        return url === null ? { ok: false, stdout: '' } : { ok: true, stdout: url };
+      }
       if (args[0] === 'rev-parse' && args.includes('--abbrev-ref')) {
-        return { ok: true, stdout: overrides.branch ?? YC_EXPECTED_BRANCH };
+        return { ok: true, stdout: overrides.branch ?? 'main' };
       }
       if (args[0] === 'rev-parse') return { ok: true, stdout: 'abc1234' };
-      if (args[0] === 'merge-base') return { ok: overrides.ancestorOk ?? true, stdout: '' };
       if (args[0] === 'status') return { ok: true, stdout: overrides.statusOutput ?? '' };
       return { ok: false, stdout: '' };
     },
@@ -68,7 +81,14 @@ function fakeDeps(overrides: Partial<{
     },
     readTextFile(relPath) {
       record.pathsTouched.push(relPath);
-      return relPath === 'package.json' ? packageJson : null;
+      if (relPath === 'package.json') return packageJson;
+      if (relPath === YC_BASELINE_PATH) {
+        return overrides.baselineJson !== undefined ? overrides.baselineJson : REAL_BASELINE;
+      }
+      if (relPath === 'src/relay/parity/relay-surface-capabilities.json') {
+        return overrides.registryJson !== undefined ? overrides.registryJson : REAL_REGISTRY;
+      }
+      return null;
     },
     env: overrides.env ?? {},
     columns: overrides.columns ?? 120,
@@ -85,7 +105,7 @@ describe('YC preflight (Prompt 8.7 acceptance)', () => {
     const text = report.lines.join('\n');
     expect(text).toContain('SUNDAY RELAY — YC DEMO PREFLIGHT');
     expect(text).toContain('READY FOR FOUNDER ACCEPTANCE');
-    expect(text).toContain(YC_EXPECTED_BRANCH);
+    expect(text).toContain(YC_EXPECTED_REPOSITORY);
     expect(text).toContain('npm run relay:yc-demo:cli');
     expect(report.checks.every((c) => c.status !== 'FAIL')).toBe(true);
   });
@@ -95,7 +115,8 @@ describe('YC preflight (Prompt 8.7 acceptance)', () => {
     await runYcPreflight(deps);
     expect(record.gitCalls.length).toBeGreaterThan(0);
     for (const call of record.gitCalls) {
-      expect(['rev-parse', 'status', 'merge-base']).toContain(call[0]);
+      expect(['rev-parse', 'status', 'merge-base', 'remote']).toContain(call[0]);
+      if (call[0] === 'remote') expect(call).toEqual(['remote', 'get-url', 'origin']);
     }
   });
 
@@ -117,21 +138,200 @@ describe('YC preflight (Prompt 8.7 acceptance)', () => {
     expect(keys).toEqual(['columns', 'env', 'fileExists', 'readTextFile', 'runGit', 'runPlainDemo']);
   });
 
-  it('reports the wrong branch safely: nonzero exit, clear message, no throw', async () => {
-    const { deps, record } = fakeDeps({ branch: 'main' });
-    const report = await runYcPreflight(deps);
-    expect(report.exitCode).toBe(1);
-    const text = report.lines.join('\n');
-    expect(text).toContain(`expected ${YC_EXPECTED_BRANCH}`);
-    expect(text).toContain('NOT READY');
-    for (const call of record.gitCalls) expect(['rev-parse', 'status', 'merge-base']).toContain(call[0]);
+  /* ------------------- post-separation re-anchoring -------------------
+   * Readiness is a statement about the PRODUCT and the REPOSITORY, never
+   * about a branch or a commit. The old anchors (feature/relay-yc-demo,
+   * 9f8075f) named an Alcatraz branch and a commit absent from this object
+   * store, so they could never pass here and asserted nothing about Relay.
+   * ------------------------------------------------------------------ */
+
+  it('no longer requires any branch name or commit SHA anywhere in the engine', () => {
+    const engine = readFileSync(join(process.cwd(), 'src/relay/yc/preflight.ts'), 'utf8');
+    const executable = engine
+      .replace(/\/\*[\s\S]*?\*\//g, '')      // block comments may explain the history
+      .replace(/(^|\n)\s*\/\/[^\n]*/g, '');
+    expect(executable).not.toContain('feature/relay-yc-demo');
+    expect(executable).not.toContain('9f8075f');
+    expect(executable).not.toContain('merge-base');
+    // And the whole module — comments included — must not re-introduce them
+    // as exported constants.
+    expect(engine).not.toContain('YC_EXPECTED_BRANCH =');
+    expect(engine).not.toContain('YC_MINIMUM_COMMIT =');
   });
 
-  it('reports a missing checkpoint ancestor as blocking', async () => {
-    const { deps } = fakeDeps({ ancestorOk: false });
+  it('passes in the correct repository', async () => {
+    const { deps } = fakeDeps({ originUrl: `https://github.com/${YC_EXPECTED_REPOSITORY}.git` });
+    const report = await runYcPreflight(deps);
+    expect(report.exitCode).toBe(0);
+    expect(report.checks.find((c) => c.name === 'repository-identity')?.status).toBe('PASS');
+  });
+
+  it('FAILS in the Alcatraz repository, and says which product it found', async () => {
+    for (const forbidden of YC_FORBIDDEN_REPOSITORIES) {
+      const { deps } = fakeDeps({ originUrl: `https://github.com/${forbidden}.git` });
+      const report = await runYcPreflight(deps);
+      expect(report.exitCode, forbidden).toBe(1);
+      const identity = report.checks.find((c) => c.name === 'repository-identity');
+      expect(identity?.status).toBe('FAIL');
+      expect(identity?.detail).toContain('Sunday Alcatraz');
+      expect(report.lines.join('\n')).toContain('NOT READY');
+    }
+  });
+
+  it('FAILS when there is no origin at all — an unknown repository is never a pass', async () => {
+    const { deps } = fakeDeps({ originUrl: null });
     const report = await runYcPreflight(deps);
     expect(report.exitCode).toBe(1);
-    expect(report.lines.join('\n')).toContain(YC_MINIMUM_COMMIT);
+    expect(report.checks.find((c) => c.name === 'repository-identity')?.detail).toContain('no origin remote');
+  });
+
+  it('recognises every remote spelling of the same repository', () => {
+    for (const url of [
+      `https://github.com/${YC_EXPECTED_REPOSITORY}.git`,
+      `https://github.com/${YC_EXPECTED_REPOSITORY}`,
+      `git@github.com:${YC_EXPECTED_REPOSITORY}.git`,
+      `ssh://git@github.com/${YC_EXPECTED_REPOSITORY}.git`,
+    ]) {
+      expect(repositorySlug(url), url).toBe(YC_EXPECTED_REPOSITORY);
+    }
+    expect(repositorySlug('')).toBeNull();
+    expect(repositorySlug('not-a-url')).toBeNull();
+  });
+
+  it('is branch-independent: main, relay/* and a detached CI head all pass identically', async () => {
+    const reports = [];
+    for (const branch of ['main', 'relay/integration-stabilization', 'relay/fix-anything', 'HEAD']) {
+      const { deps } = fakeDeps({ branch });
+      const report = await runYcPreflight(deps);
+      expect(report.exitCode, branch).toBe(0);
+      reports.push(report.checks.filter((c) => c.status === 'FAIL').length);
+    }
+    expect(reports).toEqual([0, 0, 0, 0]);
+  });
+
+  it('names a detached CI head truthfully instead of calling it a branch', async () => {
+    const { deps } = fakeDeps({ branch: 'HEAD' });
+    const report = await runYcPreflight(deps);
+    const checkout = report.checks.find((c) => c.name === 'checkout');
+    expect(checkout?.status).toBe('INFO');
+    expect(checkout?.detail).toContain('detached HEAD');
+    expect(checkout?.detail).toContain('branch-independent');
+  });
+
+  it('FAILS when the product baseline document is missing or unreadable', async () => {
+    for (const baselineJson of [null, '{ not json']) {
+      const { deps } = fakeDeps({ baselineJson });
+      const report = await runYcPreflight(deps);
+      expect(report.exitCode).toBe(1);
+      expect(report.checks.find((c) => c.name === 'product-baseline')?.detail).toContain(YC_BASELINE_PATH);
+    }
+  });
+
+  it('FAILS on an unknown baseline schema version rather than guessing', async () => {
+    const baseline = { ...(JSON.parse(REAL_BASELINE) as YcBaseline), schemaVersion: 999 };
+    const { deps } = fakeDeps({ baselineJson: JSON.stringify(baseline) });
+    const report = await runYcPreflight(deps);
+    expect(report.exitCode).toBe(1);
+    expect(report.checks.find((c) => c.name === 'product-baseline')?.detail).toContain('schemaVersion');
+  });
+
+  it('FAILS when a baseline tries to re-point identity at another repository', async () => {
+    const baseline = JSON.parse(REAL_BASELINE) as YcBaseline;
+    baseline.repository.expectedNameWithOwner = 'ohdieyuh-glitch/turbo-broccoli';
+    const { deps } = fakeDeps({ baselineJson: JSON.stringify(baseline) });
+    const report = await runYcPreflight(deps);
+    expect(report.exitCode).toBe(1);
+    expect(report.checks.find((c) => c.name === 'product-baseline')?.detail).toContain('different repository');
+  });
+
+  it('FAILS when the official Relay Dog is missing', async () => {
+    const baseline = JSON.parse(REAL_BASELINE) as YcBaseline;
+    const dogFiles = baseline.requiredFiles.officialRelayDog;
+    expect(dogFiles.length).toBeGreaterThan(0);
+    const { deps } = fakeDeps({ missingFiles: [dogFiles[0]] });
+    const report = await runYcPreflight(deps);
+    expect(report.exitCode).toBe(1);
+    const check = report.checks.find((c) => c.name === 'product-baseline');
+    expect(check?.status).toBe('FAIL');
+    expect(check?.detail).toContain('officialRelayDog');
+  });
+
+  it('FAILS when the CLI entry point is missing', async () => {
+    const baseline = JSON.parse(REAL_BASELINE) as YcBaseline;
+    const { deps } = fakeDeps({ missingFiles: [baseline.requiredFiles.cliEntry[0]] });
+    const report = await runYcPreflight(deps);
+    expect(report.exitCode).toBe(1);
+    expect(report.checks.find((c) => c.name === 'product-baseline')?.detail).toContain('cliEntry');
+  });
+
+  it('FAILS when the website entry point is missing', async () => {
+    const baseline = JSON.parse(REAL_BASELINE) as YcBaseline;
+    const { deps } = fakeDeps({ missingFiles: [baseline.requiredFiles.websiteEntry[0]] });
+    const report = await runYcPreflight(deps);
+    expect(report.exitCode).toBe(1);
+    expect(report.checks.find((c) => c.name === 'product-baseline')?.detail).toContain('websiteEntry');
+  });
+
+  it('FAILS when a required demo contract fixture is missing', async () => {
+    const baseline = JSON.parse(REAL_BASELINE) as YcBaseline;
+    const { deps } = fakeDeps({ missingFiles: [baseline.requiredFiles.demoContractFixtures[0]] });
+    const report = await runYcPreflight(deps);
+    expect(report.exitCode).toBe(1);
+    expect(report.checks.find((c) => c.name === 'product-baseline')?.detail).toContain('demoContractFixtures');
+  });
+
+  it('FAILS when a baseline capability is absent from the parity registry', async () => {
+    const registry = JSON.parse(REAL_REGISTRY) as { capabilities: Array<{ capabilityId: string }> };
+    registry.capabilities = registry.capabilities.slice(1);
+    const dropped = (JSON.parse(REAL_REGISTRY) as typeof registry).capabilities[0].capabilityId;
+    const { deps } = fakeDeps({ registryJson: JSON.stringify(registry) });
+    const report = await runYcPreflight(deps);
+    expect(report.exitCode).toBe(1);
+    const check = report.checks.find((c) => c.name === 'surface-parity-registry');
+    expect(check?.status).toBe('FAIL');
+    expect(check?.detail).toContain(dropped);
+  });
+
+  it('FAILS when the capability registry itself is missing', async () => {
+    const { deps } = fakeDeps({ registryJson: null });
+    const report = await runYcPreflight(deps);
+    expect(report.exitCode).toBe(1);
+    expect(report.checks.find((c) => c.name === 'surface-parity-registry')?.detail).toContain('registry missing');
+  });
+
+  it('FAILS when the demo drops a truthful offline disclosure label', async () => {
+    for (const label of YC_DEMO_LABELS) {
+      const lines = plainWalkthrough(demoData(), plainCaps).map((l) => l.split(label).join('REDACTED'));
+      const { deps } = fakeDeps({ demoLines: lines });
+      const report = await runYcPreflight(deps);
+      expect(report.exitCode, label).toBe(1);
+      expect(report.checks.find((c) => c.name === 'plain-demo')?.detail, label).toContain(label);
+    }
+  });
+
+  it('the shipped baseline is internally consistent with the shipped registry', () => {
+    const baseline = JSON.parse(REAL_BASELINE) as YcBaseline;
+    const registry = JSON.parse(REAL_REGISTRY) as { capabilities: Array<{ capabilityId: string }> };
+    expect(baseline.schemaVersion).toBe(YC_BASELINE_SCHEMA_VERSION);
+    expect(baseline.repository.expectedNameWithOwner).toBe(YC_EXPECTED_REPOSITORY);
+    expect(baseline.repository.forbiddenNamesWithOwner).toEqual([...YC_FORBIDDEN_REPOSITORIES]);
+    expect(baseline.requiredCapabilityIds.length).toBe(registry.capabilities.length);
+    const ids = new Set(registry.capabilities.map((c) => c.capabilityId));
+    for (const id of baseline.requiredCapabilityIds) expect(ids.has(id), id).toBe(true);
+    expect([...baseline.demoDisclosure.labels]).toEqual([...YC_DEMO_LABELS]);
+    // The baseline is data, not an Alcatraz pin.
+    expect(REAL_BASELINE).not.toContain('9f8075f');
+    expect(REAL_BASELINE).not.toContain('feature/relay-yc-demo');
+  });
+
+  it('makes no provider call and starts no process while doing all of this', async () => {
+    const { deps, record } = fakeDeps();
+    const report = await runYcPreflight(deps);
+    expect(report.checks.find((c) => c.name === 'no-live-provider')?.status).toBe('PASS');
+    expect(report.checks.find((c) => c.name === 'no-deployment')?.status).toBe('PASS');
+    for (const call of record.gitCalls) {
+      expect(['rev-parse', 'status', 'remote']).toContain(call[0]);
+    }
   });
 
   it('reports a dirty tree as WARN (never blocking, never deleting) — Gate B runs pre-commit', async () => {
@@ -142,7 +342,7 @@ describe('YC preflight (Prompt 8.7 acceptance)', () => {
     expect(tree?.status).toBe('WARN');
     expect(tree?.detail).toContain('3 uncommitted change(s)');
     expect(tree?.detail).toContain('nothing is modified or deleted');
-    for (const call of record.gitCalls) expect(['rev-parse', 'status', 'merge-base']).toContain(call[0]);
+    for (const call of record.gitCalls) expect(['rev-parse', 'status', 'merge-base', 'remote']).toContain(call[0]);
   });
 
   it('reports the frontend as MANUAL VERIFICATION REQUIRED without inspecting it', async () => {
@@ -195,7 +395,20 @@ describe('YC preflight (Prompt 8.7 acceptance)', () => {
     const text = report.lines.join('\n');
     expect(text.includes('\x07')).toBe(false);
     expect(/\x1b\[2J/.test(text)).toBe(false);
-    expect(report.exitCode).toBe(1); // and it is still a branch mismatch
+    // The branch is reported, not gated, so a hostile branch name must not
+    // change the verdict either — it is scrubbed and the run still passes.
+    expect(report.exitCode).toBe(0);
+    expect(report.checks.find((c) => c.name === 'checkout')?.status).toBe('INFO');
+  });
+
+  it('scrubs a hostile origin URL and still refuses to call it the Relay repository', async () => {
+    const { deps } = fakeDeps({ originUrl: 'https://github.com/evil\x1b[2J\x07owner/repo.git' });
+    const report = await runYcPreflight(deps);
+    const text = report.lines.join('\n');
+    expect(text.includes('\x07')).toBe(false);
+    expect(/\x1b\[2J/.test(text)).toBe(false);
+    expect(report.exitCode).toBe(1);
+    expect(report.checks.find((c) => c.name === 'repository-identity')?.status).toBe('FAIL');
   });
 
   it('a thrown plain-demo error is scrubbed of absolute paths and secret shapes', async () => {

@@ -50,6 +50,7 @@ import type { PSPAgentImportRecord } from '../../psp';
 import { createFixtureEntitlementService } from '../../psp/psp-fixtures';
 import { COLORWAY_LABEL, RELAY_COLORWAYS, applyRelayColorway } from './colorway';
 import type { RelayColorway } from './colorway';
+import { IS_DEV_BUILD, siblingProductTarget } from './environment';
 import './relay-preview.css';
 
 /**
@@ -306,6 +307,10 @@ export function RelayPreviewApp() {
     setGuideMessages((m) => [...m, developer, reply]);
   };
 
+  // Resolved once: where (if anywhere) the Alcatraz sibling-product control
+  // should take the user. Reading it here keeps the render pure.
+  const alcatraz = useMemo(() => siblingProductTarget(), []);
+
   // Ask Relay → persisted project draft. Idempotent, guarded against
   // duplicate submits, recovers with a simple message on failure.
   const buildBrief = (objective: string) => {
@@ -378,9 +383,16 @@ export function RelayPreviewApp() {
       handoffNetworkState="standby"
       entitlement="pro"
       connectionStatuses={DEFAULT_CONNECTION_STATUSES}
-      onReturnToSunday={() => {
-        window.location.href = '/';
-      }}
+      // Sunday Alcatraz is an Aquala SIBLING PRODUCT, not a route of this
+      // application: this repository builds `relay.html` only, so the old
+      // `window.location.href = '/'` was a dead link. The control now
+      // navigates to a CONFIGURED external Alcatraz URL, and reports itself
+      // as unavailable when none is configured — never a broken link, and
+      // never a hardcoded domain this repository has no authority over.
+      onReturnToSunday={alcatraz.configured
+        ? () => { window.location.href = alcatraz.url; }
+        : undefined}
+      siblingProductUnavailableReason={alcatraz.configured ? undefined : alcatraz.reason}
       onSelectProjectRoute={(r) => {
         setSelectedRoute(r);
         setProjectIdeaDraft(r.objectiveTemplate);
@@ -671,6 +683,17 @@ export function RelayPreviewApp() {
         </p>
       )}
 
+      {/* DEVELOPMENT-ONLY TOOLING.
+          The chip and the switcher below are how the founder walks the whole
+          product flow in a browser, and they stay exactly as they are in a dev
+          build. They must never ship: a production bundle that renders a
+          "DEV PREVIEW" label presents development scaffolding as the product.
+          Gated on the build, not on a runtime flag, so the bundler drops the
+          markup entirely. `production-entry.test.tsx` fails in both
+          directions — if the label ships, and if the tooling disappears from
+          the dev build. */}
+      {IS_DEV_BUILD && (
+      <>
       <button
         type="button"
         className="rpv-devchip"
@@ -782,6 +805,8 @@ export function RelayPreviewApp() {
           </span>
         )}
       </nav>
+      </>
+      )}
     </div>
   );
 }

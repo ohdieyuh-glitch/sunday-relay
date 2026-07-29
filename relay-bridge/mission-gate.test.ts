@@ -58,7 +58,7 @@ describe('14. missing OpenAI configuration blocks every live role before dispatc
       throw new Error('no network call may happen in this test');
     }) as unknown) as typeof fetch;
 
-    const registry = registryWith({ OPENAI_API_KEY: 'present-but-not-live' });
+    const registry = registryWith({ OPENAI_API_KEY: 'present-but-not-live' }); // relay-boundary:allow-fixture — presence sentinel, not a key
     registry.start({ missionId: 'm-gate-2', objective: 'Normalize project names' });
     await settle();
 
@@ -105,7 +105,7 @@ describe('14. missing OpenAI configuration blocks every live role before dispatc
 
   it('the blocked message never contains a configuration VALUE', async () => {
     const registry = registryWith({
-      OPENAI_API_KEY: 'sk-supersecretvalue1234567890',
+      OPENAI_API_KEY: 'sk-supersecretvalue1234567890', // relay-boundary:allow-fixture — synthetic, asserts the gate never serializes it
       RELAY_PROMPT_ARCHITECT_MODE: 'off',
     });
     registry.start({ missionId: 'm-gate-6', objective: 'Normalize project names' });

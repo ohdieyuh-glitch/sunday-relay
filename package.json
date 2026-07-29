@@ -2,8 +2,11 @@
   "name": "sunday-relay",
   "version": "0.1.0",
   "private": true,
-  "description": "Sunday Relay \u2014 compound AI mission coordination and agent operations",
+  "description": "Sunday Relay — compound AI mission coordination and agent operations",
   "license": "MIT",
+  "bin": {
+    "relay": "dist-relay/cli.cjs"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ohdieyuh-glitch/sunday-relay.git"
@@ -18,7 +21,7 @@
     "typecheck": "tsc -b --noEmit && tsc -p relay-bridge/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "relay:build": "esbuild src/relay/cli/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay/cli.cjs --log-level=warning",
+    "relay:build": "esbuild src/relay/cli/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay/cli.cjs --banner:js=\"#!/usr/bin/env node\" --log-level=warning",
     "relay:bridge:build": "esbuild relay-bridge/server.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/server.cjs --log-level=warning",
     "relay:bridge": "npm run relay:bridge:build --silent && node dist-relay-bridge/server.cjs",
     "relay": "npm run relay:build --silent && node dist-relay/cli.cjs",

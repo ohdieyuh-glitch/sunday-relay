@@ -11,9 +11,65 @@
  * every effect arrives through {@link YcPreflightDeps}.
  */
 
-export const YC_EXPECTED_BRANCH = 'feature/relay-yc-demo';
-/** Prompt 8.6 checkpoint — the minimum commit the demo is proven against. */
-export const YC_MINIMUM_COMMIT = '9f8075f';
+/**
+ * Post-separation re-anchoring.
+ *
+ * This check used to pin an expected branch name and a minimum commit SHA.
+ * Both named the pre-separation ALCATRAZ branch and a commit that exists only
+ * in the Alcatraz object store, so after Sunday Relay became its own
+ * repository the check could never pass here — and it asserted nothing about
+ * the product anyway. (The exact retired values are recorded in
+ * docs/relay/YC_DEMO_RUNBOOK.md, not carried in this engine.)
+ *
+ * Readiness is now a statement about the PRODUCT and the REPOSITORY IDENTITY:
+ * the checkout is the independent Relay repository, the required product
+ * surfaces exist, the capability baseline is met, and the demo is offline and
+ * truthful. Nothing is branch-specific, so the check behaves identically on
+ * `main`, on any `relay/*` branch, and on a detached CI head — and it FAILS in
+ * the Alcatraz repository, which is the property the old branch pin was
+ * reaching for.
+ *
+ * The baseline itself is versioned data, not code: {@link YC_BASELINE_PATH}.
+ */
+
+/** Versioned product-baseline document read at preflight time. */
+export const YC_BASELINE_PATH = 'docs/relay/YC_DEMO_BASELINE.json';
+/** Schema version this engine understands. */
+export const YC_BASELINE_SCHEMA_VERSION = 1;
+
+/** Canonical Relay repository, and the sibling product that must never
+ * masquerade as it. Compiled in as the last line of defence so a baseline
+ * document cannot quietly re-point identity at another repository. */
+export const YC_EXPECTED_REPOSITORY = 'ohdieyuh-glitch/sunday-relay';
+export const YC_FORBIDDEN_REPOSITORIES = ['ohdieyuh-glitch/turbo-broccoli'] as const;
+
+export interface YcBaseline {
+  schemaVersion: number;
+  product: string;
+  repository: { expectedNameWithOwner: string; forbiddenNamesWithOwner: string[] };
+  requiredCapabilityIds: string[];
+  requiredFiles: Record<string, string[]>;
+  requiredChecks?: string[];
+  demoDisclosure: { labels: string[]; completionLine: string };
+}
+
+/** `https://github.com/owner/repo.git`, `git@github.com:owner/repo.git`,
+ * `ssh://git@github.com/owner/repo` → `owner/repo`. Returns null when the
+ * remote is absent or unparseable — an unknown origin is never a pass. */
+export function repositorySlug(remoteUrl: string): string | null {
+  const raw = remoteUrl.trim();
+  if (raw === '') return null;
+  const withoutScheme = raw
+    .replace(/^[a-z+]+:\/\//i, '')
+    .replace(/^[^@/]+@/, '')
+    .replace(/\.git$/i, '');
+  const path = withoutScheme.includes(':') && !withoutScheme.startsWith('/')
+    ? withoutScheme.slice(withoutScheme.indexOf(':') + 1)
+    : withoutScheme.replace(/^[^/]+\//, '');
+  const parts = path.split('/').filter(Boolean);
+  if (parts.length < 2) return null;
+  return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+}
 
 export const YC_REQUIRED_SCRIPTS = [
   'relay:cli:demo', 'relay:cli:demo:plain', 'relay:cli:contract-verify',
@@ -117,17 +173,76 @@ export async function runYcPreflight(deps: YcPreflightDeps): Promise<YcPreflight
     `  ${`${label}: ${value}`.padEnd(56)}${check ? ` ${stamp(check)}` : ''}`;
 
   /* ---------------------------- repository --------------------------- */
-  const branch = deps.runGit(['rev-parse', '--abbrev-ref', 'HEAD']);
-  const branchName = branch.ok ? scrub(branch.stdout) : '(unknown)';
-  const branchCheck = add('branch', branchName === YC_EXPECTED_BRANCH ? 'PASS' : 'FAIL',
-    branchName === YC_EXPECTED_BRANCH ? undefined : `expected ${YC_EXPECTED_BRANCH}, on ${branchName}`);
+  // IDENTITY, not branch. Passing depends on being in the independent Relay
+  // repository — never on which branch is checked out, so `main`, `relay/*`
+  // and a detached CI head all behave identically.
+  const remote = deps.runGit(['remote', 'get-url', 'origin']);
+  const slug = remote.ok ? repositorySlug(remote.stdout) : null;
+  const forbiddenHit = slug !== null && YC_FORBIDDEN_REPOSITORIES.includes(slug as typeof YC_FORBIDDEN_REPOSITORIES[number]);
+  const repoCheck = add('repository-identity',
+    slug === YC_EXPECTED_REPOSITORY ? 'PASS' : 'FAIL',
+    slug === YC_EXPECTED_REPOSITORY
+      ? `origin is ${YC_EXPECTED_REPOSITORY}`
+      : forbiddenHit
+        ? `origin is ${scrub(slug ?? '')} — that is Sunday Alcatraz, a different product. Run this from the Relay repository.`
+        : `origin is ${slug === null ? '(no origin remote)' : scrub(slug)}, expected ${YC_EXPECTED_REPOSITORY}`);
 
   const head = deps.runGit(['rev-parse', '--short', 'HEAD']);
   const headShort = head.ok ? scrub(head.stdout, 16) : '(unknown)';
-  const ancestor = deps.runGit(['merge-base', '--is-ancestor', YC_MINIMUM_COMMIT, 'HEAD']);
-  const checkpointCheck = add('checkpoint', ancestor.ok ? 'PASS' : 'FAIL',
-    ancestor.ok ? `${YC_MINIMUM_COMMIT} reachable from HEAD (${headShort})`
-      : `checkpoint ${YC_MINIMUM_COMMIT} is not an ancestor of HEAD (${headShort})`);
+  const branch = deps.runGit(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const branchName = branch.ok ? scrub(branch.stdout) : '(unknown)';
+  // Reported, never gated: a detached CI head is a normal place to run this.
+  const branchCheck = add('checkout', 'INFO',
+    branchName === 'HEAD'
+      ? `detached HEAD at ${headShort} — readiness is branch-independent`
+      : `${branchName} at ${headShort} — readiness is branch-independent`);
+
+  /* -------------------------- product baseline ----------------------- */
+  const baselineRaw = deps.readTextFile(YC_BASELINE_PATH);
+  let baseline: YcBaseline | null = null;
+  try { baseline = baselineRaw ? (JSON.parse(baselineRaw) as YcBaseline) : null; } catch { baseline = null; }
+
+  const baselineCheck = ((): YcCheck => {
+    if (baseline === null) return add('product-baseline', 'FAIL', `${YC_BASELINE_PATH} missing or unparseable`);
+    if (baseline.schemaVersion !== YC_BASELINE_SCHEMA_VERSION) {
+      return add('product-baseline', 'FAIL',
+        `baseline schemaVersion ${scrub(String(baseline.schemaVersion), 12)}, this check understands ${YC_BASELINE_SCHEMA_VERSION}`);
+    }
+    // A baseline may tighten identity but never re-point it at another repo.
+    if (baseline.repository?.expectedNameWithOwner !== YC_EXPECTED_REPOSITORY) {
+      return add('product-baseline', 'FAIL', 'baseline names a different repository than the compiled-in Relay identity');
+    }
+    const groups = Object.entries(baseline.requiredFiles ?? {});
+    const missing = groups.flatMap(([group, paths]) =>
+      (paths ?? []).filter((p) => !deps.fileExists(p)).map((p) => `${group}:${p}`));
+    if (missing.length > 0) {
+      return add('product-baseline', 'FAIL', `${missing.length} required product file(s) missing: ${scrub(missing.join(', '), 120)}`);
+    }
+    const fileCount = groups.reduce((n, [, paths]) => n + (paths ?? []).length, 0);
+    return add('product-baseline', 'PASS', `${fileCount} required product files present across ${groups.length} surfaces`);
+  })();
+
+  /* ------------------------ capability baseline ---------------------- */
+  const capabilityCheck = ((): YcCheck => {
+    const required = baseline?.requiredCapabilityIds ?? [];
+    if (required.length === 0) return add('surface-parity-registry', 'FAIL', 'baseline lists no required capabilities');
+    const registryRaw = deps.readTextFile('src/relay/parity/relay-surface-capabilities.json');
+    if (registryRaw === null) return add('surface-parity-registry', 'FAIL', 'website/CLI capability registry missing');
+    let ids: string[] = [];
+    let manifestVersion = '(unknown)';
+    try {
+      const parsed = JSON.parse(registryRaw) as { manifestVersion?: string; capabilities?: Array<{ capabilityId?: string }> };
+      manifestVersion = typeof parsed.manifestVersion === 'string' ? parsed.manifestVersion : '(unknown)';
+      ids = (parsed.capabilities ?? []).map((c) => c.capabilityId ?? '').filter(Boolean);
+    } catch {
+      return add('surface-parity-registry', 'FAIL', 'capability registry is not valid JSON');
+    }
+    const present = new Set(ids);
+    const absent = required.filter((id) => !present.has(id));
+    return absent.length === 0
+      ? add('surface-parity-registry', 'PASS', `${required.length}/${required.length} baseline capabilities in registry v${scrub(manifestVersion, 16)}`)
+      : add('surface-parity-registry', 'FAIL', `missing capabilities: ${scrub(absent.join(', '), 120)}`);
+  })();
 
   const status = deps.runGit(['status', '--porcelain']);
   const dirtyCount = status.ok ? status.stdout.split('\n').filter((l) => l.trim().length > 0).length : -1;
@@ -212,8 +327,10 @@ export async function runYcPreflight(deps: YcPreflightDeps): Promise<YcPreflight
   lines.push('(offline · read-only repo access · zero provider calls · zero network calls)');
   lines.push('');
   lines.push('REPOSITORY');
-  lines.push(row('Branch', branchCheck.status === 'PASS' ? branchName : branchCheck.detail ?? branchName, branchCheck));
-  lines.push(row('Checkpoint', checkpointCheck.detail ?? headShort, checkpointCheck));
+  lines.push(row('Identity', repoCheck.detail ?? 'unknown', repoCheck));
+  lines.push(row('Checkout', branchCheck.detail ?? branchName, branchCheck));
+  lines.push(row('Product baseline', baselineCheck.detail ?? 'unknown', baselineCheck));
+  lines.push(row('Capability baseline', capabilityCheck.detail ?? 'unknown', capabilityCheck));
   lines.push(row('Working tree', treeCheck.detail ?? 'unknown', treeCheck));
   lines.push('');
   lines.push('RELAY CORE');

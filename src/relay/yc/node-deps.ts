@@ -16,6 +16,22 @@ import type { YcGitResult, YcPreflightDeps } from './preflight';
 const READONLY_GIT_SUBCOMMANDS = new Set(['rev-parse', 'status', 'merge-base']);
 
 /**
+ * Argument vectors permitted in full, for subcommands whose OTHER forms write.
+ * `git remote get-url origin` reads the configured URL; `git remote
+ * add|set-url|rename|remove` mutate `.git/config`. Allowing `remote` by name
+ * would allow those too, so the readable form is matched EXACTLY — fixed
+ * length, element by element — and nothing else under `remote` is reachable.
+ */
+const EXACT_READONLY_GIT_FORMS: ReadonlyArray<readonly string[]> = [
+  ['remote', 'get-url', 'origin'],
+];
+
+const isExactReadonlyForm = (args: readonly string[]): boolean =>
+  EXACT_READONLY_GIT_FORMS.some(
+    (form) => form.length === args.length && form.every((part, i) => part === args[i]),
+  );
+
+/**
  * Minimal git environment. We never inherit the raw process env: that keeps
  * provider API keys out of the child (least privilege) AND — critically —
  * drops `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` / `GIT_CONFIG_*`,
@@ -52,7 +68,7 @@ export function createNodePreflightDeps(input: {
   const root = input.root ?? process.cwd();
   return {
     runGit(args): YcGitResult {
-      if (args.length === 0 || !READONLY_GIT_SUBCOMMANDS.has(args[0])) {
+      if (args.length === 0 || !(READONLY_GIT_SUBCOMMANDS.has(args[0]) || isExactReadonlyForm(args))) {
         return { ok: false, stdout: '' };
       }
       try {

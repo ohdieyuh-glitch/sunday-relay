@@ -15,12 +15,14 @@ export function RelayEntryHeader({
   productState,
   handoffNetworkState,
   onReturnToSunday,
+  siblingProductUnavailableReason,
   onOpenProjectSettings,
   onOpenTerminal,
 }: {
   productState: EntryProductState;
   handoffNetworkState: HandoffNetworkState;
-  onReturnToSunday: () => void;
+  onReturnToSunday?: () => void;
+  siblingProductUnavailableReason?: string;
   onOpenProjectSettings: () => void;
   onOpenTerminal: () => void;
 }) {
@@ -33,11 +35,18 @@ export function RelayEntryHeader({
         </span>
         <span className="reh-wordmark">SUNDAY RELAY</span>
         <nav className="reh-switcher" aria-label="Product switcher">
+          {/* Alcatraz stays visible as an Aquala sibling product — the
+              relationship is real. It is only CLICKABLE when a URL is
+              configured; otherwise it is disabled and says why, instead of
+              navigating to a route this repository does not build. */}
           <button
             type="button"
             className="reh-switch-btn"
             onClick={onReturnToSunday}
+            disabled={!onReturnToSunday}
+            aria-disabled={!onReturnToSunday}
             aria-pressed={false}
+            title={onReturnToSunday ? undefined : siblingProductUnavailableReason}
           >
             ALCATRAZ
           </button>
@@ -55,7 +64,12 @@ export function RelayEntryHeader({
           handoffNetworkState === 'online' ? 'ONLINE' : 'STANDBY'
         }`}
         items={[
-          { id: 'alcatraz', label: '← SUNDAY ALCATRAZ', onSelect: onReturnToSunday },
+          {
+            id: 'alcatraz',
+            label: '← SUNDAY ALCATRAZ',
+            onSelect: onReturnToSunday ?? (() => undefined),
+            hint: onReturnToSunday ? undefined : 'NOT CONFIGURED',
+          },
           { id: 'settings', label: 'PROJECT SETTINGS', onSelect: onOpenProjectSettings },
           { id: 'terminal', label: '>_ OPEN LIVE TERMINAL', onSelect: onOpenTerminal },
           {

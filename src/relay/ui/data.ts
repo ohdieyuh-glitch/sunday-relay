@@ -1,5 +1,9 @@
 import { createRelayApp } from '../core/app';
-import { projectCompetitiveMission } from '../cli/competitive';
+// The mission projection comes from the browser-safe shared seam, NEVER from
+// `../cli/competitive`: importing the CLI renderer drags the CLI product shell
+// — and through it the Node persistence layer — into the browser bundle.
+// `src/relay/shared/browser-boundary.test.ts` fails if that edge comes back.
+import { projectCompetitiveMission } from '../shared/competitive-mission';
 import {
   defaultModePolicy, computeDogActivity, entitlementPolicy, computeOutputVisibility,
   assignReviewer, reviewerIsIndependent, createInProcessTerminalStream,

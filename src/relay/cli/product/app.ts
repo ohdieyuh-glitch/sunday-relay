@@ -31,18 +31,43 @@ export type Screen =
  * draft directly (already typed), so the founder never types a response for it. */
 export interface DraftOption { label: string; value: string | number | boolean; }
 
-export interface DraftField {
+/** The value a draft field commits when the founder supplies nothing usable.
+ * Selects own typed domains (a boolean flag, a numeric limit), so a fallback is
+ * NOT always a string — it is whatever `ProjectDraft` stores for that key. */
+export type DraftFallback = string | number | boolean;
+
+interface DraftFieldBase {
   key: keyof ProjectDraft | 'done';
   label: string;
   hint: string;
   optional: boolean;
-  /** `select` = pick one of `options` (no typing); `text`/`list` = free text. */
-  kind: 'text' | 'list' | 'select';
-  options?: DraftOption[];
-  /** Which option is pre-highlighted for a `select`. */
-  defaultIndex?: number;
+}
+
+/** Free-text / comma-separated-list fields. The founder types the answer;
+ * Enter on an empty input commits `fallback` (always a string here, because
+ * `assignDraftValue` sanitizes and splits it as text). */
+export interface TypedDraftField extends DraftFieldBase {
+  kind: 'text' | 'list';
   fallback: string;
 }
+
+/** Pick-one fields: arrow/number keys move the cursor, Enter commits the
+ * highlighted option. `fallback` is the safe value the draft keeps when no
+ * option can be applied — it MUST equal `options[defaultIndex].value` and the
+ * matching default in `finalizeDraft`, so it can never silently change the
+ * product's behaviour. `draft-fallbacks.test.ts` locks both invariants. */
+export interface SelectDraftField extends DraftFieldBase {
+  kind: 'select';
+  options: DraftOption[];
+  /** Which option is pre-highlighted on entry/return. */
+  defaultIndex: number;
+  fallback: DraftFallback;
+}
+
+export type DraftField = TypedDraftField | SelectDraftField;
+
+/** Narrowing helper — `Array.prototype.filter` callers get a real type. */
+export const isSelectField = (f: DraftField): f is SelectDraftField => f.kind === 'select';
 
 /**
  * The project setup fields. Everything with a defined value set is a SELECT
@@ -52,45 +77,55 @@ export interface DraftField {
  */
 export const DRAFT_FIELDS: DraftField[] = [
   { key: 'name', label: 'Project name', hint: 'e.g. Sunday Relay Frontend', optional: false, kind: 'text', fallback: '' },
-  { key: 'projectType', label: 'Project type', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+  { key: 'projectType', label: 'Project type', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0, fallback: 'feature',
     options: [{ label: 'Feature', value: 'feature' }, { label: 'Interface', value: 'interface' }, { label: 'Application', value: 'application' }, { label: 'Review', value: 'review' }, { label: 'Fix', value: 'fix' }, { label: 'API', value: 'api' }] },
   { key: 'objective', label: 'Main objective', hint: 'one sentence', optional: false, kind: 'text', fallback: '' },
-  { key: 'existingProject', label: 'Existing project?', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+  // The narrower reading of an unanswered "existing project?" is that the
+  // founder is pointing Relay at code that already exists, so nothing is
+  // treated as greenfield by default.
+  { key: 'existingProject', label: 'Existing project?', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0, fallback: true,
     options: [{ label: 'Yes — existing repository', value: true }, { label: 'No — new project', value: false }] },
   { key: 'repositoryPath', label: 'Repository path', hint: 'path (optional — Enter to skip)', optional: true, kind: 'text', fallback: '' },
   { key: 'stack', label: 'Technical stack', hint: 'comma-separated (optional)', optional: true, kind: 'list', fallback: '' },
   { key: 'scopeSummary', label: 'Scope summary', hint: 'what is in scope (optional)', optional: true, kind: 'text', fallback: '' },
   { key: 'protectedAreas', label: 'Protected areas', hint: 'comma-separated paths (optional)', optional: true, kind: 'list', fallback: '' },
-  { key: 'productionImpact', label: 'Production impact', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+  // Safety-ordered domains: an unanswered impact/mode/research question always
+  // falls back to the LEAST permissive option, never the most capable one.
+  { key: 'productionImpact', label: 'Production impact', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0, fallback: 'none',
     options: [{ label: 'None', value: 'none' }, { label: 'Internal', value: 'internal' }, { label: 'External', value: 'external' }] },
-  { key: 'architect', label: 'Prompt Architect', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+  { key: 'architect', label: 'Prompt Architect', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0, fallback: 'Sunday Alcatraz',
     options: [{ label: 'Sunday Alcatraz', value: 'Sunday Alcatraz' }] },
-  { key: 'codingAgent', label: 'Coding Agent', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+  { key: 'codingAgent', label: 'Coding Agent', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0, fallback: 'Claude Code',
     options: [{ label: 'Claude Code', value: 'Claude Code' }] },
-  { key: 'reviewer', label: 'Reviewer', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+  // Falls back to a REVIEWER, never to 'None' — losing independent review must
+  // be an explicit founder choice, never the consequence of an empty answer.
+  { key: 'reviewer', label: 'Reviewer', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0, fallback: 'Codex',
     options: [{ label: 'Codex', value: 'Codex' }, { label: 'None — no independent review', value: '' }] },
-  { key: 'mode', label: 'Relay mode', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+  { key: 'mode', label: 'Relay mode', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0, fallback: 'GUIDED',
     options: [{ label: 'Guided', value: 'GUIDED' }, { label: 'Semi-autonomous', value: 'SEMI' }, { label: 'Autonomous', value: 'AUTONOMOUS' }] },
-  { key: 'researchPreference', label: 'Research preference', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+  { key: 'researchPreference', label: 'Research preference', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0, fallback: 'not_configured',
     options: [{ label: 'Not configured', value: 'not_configured' }, { label: 'Monitoring', value: 'monitoring' }, { label: 'Active', value: 'active' }] },
   { key: 'evidenceRequirements', label: 'Evidence requirements', hint: 'comma-separated (optional)', optional: true, kind: 'list', fallback: '' },
-  { key: 'runtimeLimitMinutes', label: 'Runtime limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 1,
+  // Budget ceilings are numbers, not strings. Each falls back to the option the
+  // flow already pre-highlights, which is also `finalizeDraft`'s default — an
+  // unanswered budget question can never widen a ceiling.
+  { key: 'runtimeLimitMinutes', label: 'Runtime limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 1, fallback: 30,
     options: [{ label: '15 minutes', value: 15 }, { label: '30 minutes', value: 30 }, { label: '60 minutes', value: 60 }, { label: '120 minutes', value: 120 }] },
-  { key: 'callLimit', label: 'Call limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 1,
+  { key: 'callLimit', label: 'Call limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 1, fallback: 4,
     options: [{ label: '2 calls', value: 2 }, { label: '4 calls', value: 4 }, { label: '6 calls', value: 6 }, { label: '8 calls', value: 8 }] },
-  { key: 'reviewLimit', label: 'Review limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+  { key: 'reviewLimit', label: 'Review limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0, fallback: 1,
     options: [{ label: '1 review', value: 1 }, { label: '2 reviews', value: 2 }, { label: '3 reviews', value: 3 }] },
-  { key: 'repairLimit', label: 'Repair limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+  { key: 'repairLimit', label: 'Repair limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0, fallback: 1,
     options: [{ label: '1 repair', value: 1 }, { label: '2 repairs', value: 2 }, { label: '3 repairs', value: 3 }] },
 ];
 
 /** The option index for a select field: the stored value's index, else the
  * field's default. Used to pre-highlight the right option on entry/return. */
 function selectIndexFor(field: DraftField, draft: Partial<ProjectDraft>): number {
-  if (field.kind !== 'select' || !field.options) return 0;
+  if (!isSelectField(field)) return 0;
   const current = draft[field.key as keyof ProjectDraft];
   const idx = field.options.findIndex((o) => o.value === current);
-  return idx >= 0 ? idx : field.defaultIndex ?? 0;
+  return idx >= 0 ? idx : field.defaultIndex;
 }
 
 /** Forbidden draft vocabulary — the flow never asks for credentials. */
@@ -343,8 +378,8 @@ function reduceDraftKey(state: AppState, key: KeyEvent, _data: AppData): AppStat
 
   // Select fields: choose an option (no typing). Arrows / number keys move the
   // cursor; Enter confirms the highlighted option; Backspace goes back.
-  if (field.kind === 'select') {
-    const options = field.options ?? [];
+  if (isSelectField(field)) {
+    const options = field.options;
     const cur = Math.min(Math.max(0, state.selection), Math.max(0, options.length - 1));
     switch (key.name) {
       case 'up': case 'k': case 'left':
@@ -354,7 +389,10 @@ function reduceDraftKey(state: AppState, key: KeyEvent, _data: AppData): AppStat
       case 'backspace':
         return goBack();
       case 'enter':
-        return advance({ ...state.draft, [field.key]: options[cur]?.value } as Partial<ProjectDraft>);
+        // The cursor always sits on a real option for every shipped field, so
+        // `fallback` is the safety net for the one case that would otherwise
+        // write `undefined` onto the draft: a select with no applicable option.
+        return advance({ ...state.draft, [field.key]: options[cur]?.value ?? field.fallback } as Partial<ProjectDraft>);
       default: {
         const n = key.char && /^[1-9]$/.test(key.char) ? Number(key.char) - 1 : -1;
         if (n >= 0 && n < options.length) return { ...state, selection: n };

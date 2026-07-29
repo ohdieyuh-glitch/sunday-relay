@@ -48,21 +48,27 @@ jobs:
       - name: CLI build
         run: npm run relay:build
 
-      - name: Relay bridge typecheck and build
-        run: |
-          if [ -f relay-bridge/tsconfig.json ]; then
-            npm run relay:bridge:build
-          else
-            echo "no relay-bridge in this tree — skipping"
-          fi
+      - name: Relay bridge build
+        run: npm run relay:bridge:build
+
+      # Parity is a REQUIREMENT, not an aspiration (governance §7). The
+      # registry and the checker both live in this tree now, so these steps no
+      # longer guard on their existence: a guard that skips when its own input
+      # disappears is a check that can be switched off by deleting a file while
+      # still reporting green. The gate below asserts registry and npm scripts
+      # agree BEFORE running them, so "registry present + script missing" and
+      # "script present + registry missing" fail loudly instead of skipping.
+      - name: Website/CLI parity gate (registry and scripts must agree)
+        run: node scripts/relay-parity-gate.mjs
 
       - name: Website/CLI parity
-        run: |
-          if [ -f scripts/relay-surface-parity.mjs ]; then
-            npm run relay:surface-parity:check
-          else
-            echo "no parity registry in this tree — skipping"
-          fi
+        run: npm run relay:surface-parity:check
+
+      - name: Website/CLI parity (strict)
+        run: npm run relay:surface-parity:check:strict
+
+      - name: YC/demo product readiness
+        run: npm run relay:yc-demo:check
 
       - name: CLI contract verification (offline, no provider call)
         run: npm run relay:cli:contract-verify

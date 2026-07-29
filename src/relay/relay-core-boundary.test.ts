@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, resolve, sep } from 'node:path';
 
 /**
  * Relay Core boundary tests (TEST_STRATEGY §8, Prompt-2 scope): the NEW
@@ -29,6 +29,52 @@ function walk(dir: string): string[] {
 
 const files = CORE_ROOTS.flatMap((r) => walk(relay(r)));
 const read = (f: string) => readFileSync(f, 'utf8');
+
+/* ------------------------------------------------------------------ *
+ * Structural import resolution.
+ *
+ * A substring rule like /from ['"].*\/persistence/ cannot tell
+ * `src/relay/persistence` — the NODE durable-state implementation, which no
+ * browser module may reach — apart from `src/relay/ui/app/persistence.ts`,
+ * the website's OWN localStorage adapter, which is exactly where browser
+ * state belongs. The two lineages independently picked the word
+ * "persistence", so the names collided when the repository was reunified.
+ *
+ * These helpers resolve a specifier to a real file and ask which MODULE ROOT
+ * it lands in, so the rule asserts the architectural fact it actually means
+ * and stays correct however a module is named.
+ * ------------------------------------------------------------------ */
+
+const RESOLVE_EXTS = ['', '.ts', '.tsx', '.mts', '.js', '/index.ts', '/index.tsx'];
+
+/** Resolve a relative specifier to an absolute file, or null for bare
+ * specifiers (npm packages, `node:` builtins) and unresolvable paths. */
+function resolveImport(fromFile: string, spec: string): string | null {
+  if (!spec.startsWith('.')) return null;
+  const base = resolve(dirname(fromFile), spec);
+  for (const ext of RESOLVE_EXTS) {
+    const candidate = base + ext;
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  }
+  return null;
+}
+
+/** Every relative import of a file, resolved to an absolute path. */
+function resolvedImportsOf(file: string): Array<{ spec: string; target: string }> {
+  const out: Array<{ spec: string; target: string }> = [];
+  for (const m of read(file).matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+    const target = resolveImport(file, m[1]);
+    if (target) out.push({ spec: m[1], target });
+  }
+  return out;
+}
+
+/** Real containment, not a name match. */
+const isInside = (target: string, dir: string): boolean =>
+  target === dir || target.startsWith(dir.endsWith(sep) ? dir : dir + sep);
+
+/** The Node durable-persistence implementation root. */
+const NODE_PERSISTENCE_DIR = relay('persistence');
 
 const FORBIDDEN_EVERYWHERE: Array<[RegExp, string]> = [
   [/from\s+['"]@\/fusion-engine|from\s+['"].*\/fusion-engine/, 'fusion-engine'],
@@ -77,7 +123,12 @@ describe('relay-core boundary (new module roots)', () => {
   it('CLI is a thin client: only the app facade, read-model types, protocol, workspace facade, and its own modules', () => {
     // '../workspace' (the composition-root facade) is the ONLY workspace
     // import the CLI may use — internals are asserted below.
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control|mission-economics|product)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer|supervised)|\.\.\/mission|\.\.\/persistence|\.\.\/yc|\.\.\/psp(\/psp-fixtures)?|node:util|node:readline)['"]/;
+    // `../shared` is the BROWSER-SAFE SEAM: pure projections both surfaces
+    // render. The CLI consuming it is the point — it is what stops the website
+    // from importing a CLI renderer to get the same bundle. It carries no
+    // provider, no persistence and no Node built-in (asserted by
+    // shared/browser-boundary.test.ts), so it does not widen the thin client.
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control|mission-economics|product)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer|supervised)|\.\.\/mission|\.\.\/shared(\/[a-z-]+)?|\.\.\/persistence|\.\.\/yc|\.\.\/psp(\/psp-fixtures)?|node:util|node:readline)['"]/;
     // The Prompt-8.6 product shell is CLI-internal: its files may import ONLY
     // each other, the persistence facade (canonical durable state), and the
     // node builtins needed for the isolated demo state root — never `../main`
@@ -395,12 +446,59 @@ describe('Durable persistence boundaries (Prompt 8.5)', () => {
   const CONNECTOR_FILES = ['supervised-recorder.ts', 'verify-harness.ts', 'driver-main.ts', 'recovery-drill.ts'];
   const base = (f: string): string => f.split(/[\\/]/).pop() ?? f;
 
-  it('Relay Core, protocol, ledger, mission, and UI never import persistence', () => {
-    for (const file of [...files, ...walk(relay('mission')), ...walk(relay('ui'))].filter(
-      (f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'),
-    )) {
-      expect(/from\s+['"].*\/persistence/.test(read(file)), `${file} imports persistence`).toBe(false);
+  it('Relay Core, protocol, ledger, mission, UI and the shared seam never import the Node persistence implementation', () => {
+    // Structural, not textual: an import is a violation when it RESOLVES into
+    // src/relay/persistence. `src/relay/ui/app/persistence.ts` — the website's
+    // own localStorage adapter — is a different module and is allowed.
+    const offenders: string[] = [];
+    for (const file of [
+      ...files,
+      ...walk(relay('mission')),
+      ...walk(relay('ui')),
+      ...walk(relay('shared')),
+    ].filter((f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'))) {
+      for (const { spec, target } of resolvedImportsOf(file)) {
+        if (isInside(target, NODE_PERSISTENCE_DIR)) offenders.push(`${file} imports ${spec}`);
+      }
     }
+    expect(offenders, 'these modules must never reach the Node persistence layer').toEqual([]);
+  });
+
+  it('the website keeps its own browser storage adapter, and it is NOT the Node layer', () => {
+    // The repaired rule must still permit the legitimate browser module — a
+    // guard against "fixing" the collision by deleting the website's storage.
+    const browserStore = join(relay('ui'), 'app', 'persistence.ts');
+    expect(existsSync(browserStore), 'the website browser storage adapter must exist').toBe(true);
+    expect(isInside(browserStore, NODE_PERSISTENCE_DIR)).toBe(false);
+    const src = read(browserStore);
+    expect(src).toContain('localStorage');
+    expect(/from\s+['"]node:/.test(src), 'the browser storage adapter must not use node: builtins').toBe(false);
+
+    const consumer = join(relay('ui'), 'app', 'store.ts');
+    const specs = resolvedImportsOf(consumer).map((i) => i.target);
+    expect(specs).toContain(browserStore);
+    expect(specs.some((t) => isInside(t, NODE_PERSISTENCE_DIR))).toBe(false);
+  });
+
+  it('no browser module reaches the Node persistence layer through a re-export chain', () => {
+    // A one-hop rule is defeated by a barrel that re-exports the Node layer.
+    // Walk transitively from the UI roots and assert the closure is clean.
+    const seen = new Set<string>();
+    const offenders: string[] = [];
+    const queue = walk(relay('ui')).filter((f) => !/\.test\.tsx?$/.test(f));
+    queue.push(...walk(relay('shared')).filter((f) => !/\.test\.tsx?$/.test(f)));
+    queue.forEach((f) => seen.add(f));
+    while (queue.length) {
+      const file = queue.shift()!;
+      for (const { spec, target } of resolvedImportsOf(file)) {
+        if (isInside(target, NODE_PERSISTENCE_DIR)) { offenders.push(`${file} → ${spec}`); continue; }
+        if (isInside(target, relay('cli'))) { offenders.push(`${file} → ${spec} (CLI surface)`); continue; }
+        if (seen.has(target) || /\.test\.tsx?$/.test(target)) continue;
+        seen.add(target);
+        queue.push(target);
+      }
+    }
+    expect(offenders, 'transitive browser closure must contain no CLI or Node persistence module').toEqual([]);
   });
 
   it('connectors never import persistence — the supervised runner sees only its own hooks interface', () => {
@@ -495,13 +593,35 @@ describe('YC demo acceptance boundaries (Prompt 8.7)', () => {
 
   it('the node deps run READ-ONLY git only — pinned allowlist, sanitized env, no mutation, no network, no writes', () => {
     const deps = read(NODE_DEPS);
-    // Pin the allowlist EXACTLY so adding a network-capable subcommand
-    // (fetch/pull/remote/worktree) can never pass silently.
+    // Pin the subcommand allowlist EXACTLY so a network-capable subcommand
+    // (fetch/pull/worktree) can never pass silently.
     expect(deps).toContain("new Set(['rev-parse', 'status', 'merge-base'])");
     for (const banned of ["'push'", "'reset'", "'clean'", "'checkout'", "'commit'", "'merge'", "'stash'",
-      "'restore'", "'fetch'", "'pull'", "'remote'", "'worktree'"]) {
+      "'restore'", "'fetch'", "'pull'", "'worktree'", "'ls-remote'", "'submodule'", "'config'"]) {
       expect(deps.includes(banned), `node-deps must not invoke git ${banned}`).toBe(false);
     }
+
+    // `remote` is the one subcommand allowed OUTSIDE that set, because the
+    // post-separation readiness check identifies the repository by its origin
+    // URL rather than by a branch name. It is also the one subcommand here
+    // whose other forms MUTATE (`remote add|set-url|rename|remove`), so it is
+    // NOT allowed by name: the full argument vector is matched element by
+    // element, with a fixed length, against a literal allowlist. That is a
+    // stricter contract than the old blanket ban on the word — it pins the
+    // exact three arguments that may ever be passed.
+    expect(deps).toContain("const EXACT_READONLY_GIT_FORMS");
+    expect(deps).toContain("['remote', 'get-url', 'origin']");
+    expect(deps).toContain('form.length === args.length');
+    expect(deps).toContain('form.every((part, i) => part === args[i])');
+    // The mutating forms must appear nowhere.
+    for (const mutation of ["'set-url'", "'add'", "'rename'", "'remove'", "'prune'", "'update'"]) {
+      expect(deps.includes(`'remote', ${mutation}`), `node-deps must not invoke git remote ${mutation}`).toBe(false);
+    }
+    // The exact-form allowlist must be the ONLY way past the subcommand gate:
+    // declared once, called once, inside the single guard.
+    expect(deps).toContain('const isExactReadonlyForm =');
+    expect(deps.match(/isExactReadonlyForm\(/g)?.length, 'exactly one call site').toBe(1);
+    expect(deps).toContain('READONLY_GIT_SUBCOMMANDS.has(args[0]) || isExactReadonlyForm(args)');
     // The git child must get an explicit SANITIZED env — never raw process.env
     // (which would leak provider keys and let GIT_DIR/GIT_WORK_TREE redirect
     // the "current repository" checks at another tree).

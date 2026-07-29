@@ -913,7 +913,29 @@ with the compiler since they operate on compiled dispatches.
 
 ## Known blockers
 
-None.
+**Post-separation integration (relay/integration-stabilization).** The three
+blockers recorded on the preservation commit `d0d5d65` are REPAIRED and are no
+longer blockers:
+
+| Blocker | State |
+| --- | --- |
+| Browser bundle reached the Node persistence layer through `ui/data.ts → cli/competitive.ts` | **Repaired.** The pure mission projection moved to `src/relay/shared/`; the browser graph now contains zero CLI modules, zero persistence modules and zero Node built-ins, locked by `src/relay/shared/browser-boundary.test.ts`. |
+| 12 × TS2741 `DraftField.fallback` in `src/relay/cli/product/app.ts` | **Repaired.** `DraftField` is a discriminated union; every select carries a domain-typed fallback equal to its default option and to `finalizeDraft`'s default. Zero type assertions, zero suppressed diagnostics. |
+| YC readiness pinned to `feature/relay-yc-demo` / `9f8075f` | **Repaired.** Re-anchored to repository identity plus the versioned baseline in `docs/relay/YC_DEMO_BASELINE.json`. |
+| `relay-core-boundary.test.ts` matched any `*/persistence` | **Repaired.** The rule resolves imports structurally, so the website's own `ui/app/persistence.ts` browser storage is allowed and only `src/relay/persistence` is forbidden. |
+
+**Open, non-blocking.** `FUSION_BASE_URL` — the bridge's architect leg can
+route a brief through a running Sunday Alcatraz backend, by URL only (no
+Alcatraz code imported, no Alcatraz secret read, empty by default). Governance
+§11 permits a typed integration; the founder should decide whether Relay keeps
+an Alcatraz-shaped architect leg. See `docs/relay/DEVELOPMENT_CONTRACTS.md`.
+
+**Transitional duplication, deliberately preserved.** Mission Economics exists
+byte-identically in the website and CLI lineages because they were built in
+separate worktrees. Both now live in one repository. Consolidation is NOT part
+of this stabilization: behaviour and byte identity are preserved, and the
+shared seam (`src/relay/shared/`) is where a later, focused PR should move the
+canonical economics module once this integration has merged.
 
 ## Known risks
 

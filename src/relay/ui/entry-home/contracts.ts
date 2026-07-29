@@ -236,7 +236,15 @@ export interface RelayEntryHomeProps {
   connectionStatuses: ConnectionStatuses;
   reducedMotion?: boolean;
 
-  onReturnToSunday: () => void;
+  /** Navigate to the Sunday Alcatraz SIBLING PRODUCT. Optional on purpose:
+   * Alcatraz is a separate Aquala product with its own deployment, and this
+   * repository builds `relay.html` only. When no Alcatraz URL is configured
+   * the control must present itself as unavailable rather than link to a
+   * route that does not exist here. */
+  onReturnToSunday?: () => void;
+  /** Why the sibling-product control is unavailable, shown to the user when
+   * `onReturnToSunday` is absent. */
+  siblingProductUnavailableReason?: string;
   onSelectProjectRoute: (route: ProjectRouteDefinition) => void;
   onUpdateProjectIdea: (text: string) => void;
   onBuildProjectBrief: (objective: string) => void;
