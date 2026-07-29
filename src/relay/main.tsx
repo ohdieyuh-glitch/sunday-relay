@@ -1,11 +1,12 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-// Same self-hosted Fira Code weights as the main app (400/500/700).
+// Self-hosted Fira Code weights (400/500/700).
 import '@fontsource/fira-code/400.css';
 import '@fontsource/fira-code/500.css';
 import '@fontsource/fira-code/700.css';
-// Sunday design tokens (read-only reuse) + Relay-scoped styles.
-import '@/styles/global.css';
+// Relay-owned design tokens + Relay-scoped styles. Relay is an independent
+// product: it carries its own token sheet and imports no other product's CSS.
+import './relay-tokens.css';
 import './relay.css';
 import './ui/mission-control.css';
 import './ui/pixel-dog/pixel-dog.css';

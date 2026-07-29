@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-relay
+dist-relay-bridge
+*.tsbuildinfo
+.DS_Store
+.env
+.env.*
+!.env.example
+.relay/
+coverage
+*.log

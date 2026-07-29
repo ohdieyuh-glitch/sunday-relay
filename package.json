@@ -1,0 +1,63 @@
+{
+  "name": "sunday-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sunday Relay — compound AI mission coordination and agent operations",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ohdieyuh-glitch/sunday-relay.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "relay:build": "esbuild src/relay/cli/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay/cli.cjs --log-level=warning",
+    "relay": "npm run relay:build --silent && node dist-relay/cli.cjs",
+    "relay:test": "vitest run src/relay",
+    "relay:yc": "npm run relay:build --silent && node dist-relay/cli.cjs demo yc --presentation",
+    "relay:yc:verify": "npm run relay:build --silent && node scripts/relay-yc-verify.mjs",
+    "relay:manual": "npm run relay:build --silent && node dist-relay/cli.cjs demo manual",
+    "relay:manual:verify": "npm run relay:build --silent && node scripts/relay-manual-verify.mjs",
+    "relay:workspace:verify": "npm run relay:build --silent && node dist-relay/cli.cjs workspace verify",
+    "relay:claude:contract-verify": "npm run relay:build --silent && node dist-relay/cli.cjs claude contract-verify",
+    "relay:claude:live": "npm run relay:build --silent && node dist-relay/cli.cjs claude run --fixture safe-edit --confirm-live",
+    "relay:codex:contract-verify": "npm run relay:build --silent && node dist-relay/cli.cjs codex contract-verify",
+    "relay:codex:live": "npm run relay:build --silent && node dist-relay/cli.cjs codex run --fixture review-defect --confirm-live",
+    "relay:supervised:contract-verify": "npm run relay:build --silent && node dist-relay/cli.cjs supervised contract-verify",
+    "relay:supervised:live": "npm run relay:build --silent && node dist-relay/cli.cjs supervised run --fixture safe-edit --confirm-live",
+    "relay:persistence:contract-verify": "npm run relay:build --silent && node dist-relay/cli.cjs persistence contract-verify",
+    "relay:persistence:recovery-drill": "npm run relay:build --silent && node dist-relay/cli.cjs persistence recovery-drill",
+    "relay:cli:demo": "npm run relay:build --silent && node dist-relay/cli.cjs cli demo",
+    "relay:cli:demo:plain": "npm run relay:build --silent && node dist-relay/cli.cjs cli demo --plain",
+    "relay:cli:contract-verify": "npm run relay:build --silent && node dist-relay/cli.cjs cli contract-verify",
+    "relay:competitive": "npm run relay:build --silent && node dist-relay/cli.cjs demo competitive",
+    "relay:mission-control": "npm run relay:build --silent && node dist-relay/cli.cjs demo mission-control"
+  },
+  "dependencies": {
+    "@fontsource/fira-code": "^5.2.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^26.1.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^5.2.0",
+    "esbuild": "^0.25.12",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.6.3",
+    "vite": "^6.4.3",
+    "vitest": "^4.1.10"
+  }
+}

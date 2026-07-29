@@ -1,0 +1,95 @@
+/* ==========================================================================
+   Sunday Relay — design tokens (Relay-owned)
+   Obsidian canvas · iridescent periwinkle · graphite glass
+
+   This file is Relay's OWN design foundation. Before the repository
+   separation, Relay read these tokens from the Sunday Alcatraz application
+   stylesheet (`@/styles/global.css`). Sunday Relay is now an independent
+   product with an independent repository, so it carries its own token sheet.
+
+   The values are the Aquala Technologies house tokens shared by both
+   products by design intent — Relay does NOT import, vendor or depend on
+   the Alcatraz application stylesheet, and nothing here describes Alcatraz
+   product behaviour.
+
+   Exactly the 21 tokens that Relay's own stylesheets consume are defined
+   here (plus `--edge-light`, which `--elev-1` composes). Relay's scoped
+   styles define everything else themselves — see `relay.css` and
+   `src/relay/ui/**`.
+   ========================================================================== */
+
+:root {
+  /* ---- brand channel: iridescent periwinkle (never gold) ---- */
+  --gold-100: #e6dcff;
+  --gold-400: #ad9beb;
+  --gold-600: #8a74cf;
+  --gold-glow: rgba(173, 155, 235, 0.45);
+
+  /* ---- obsidian canvas ---- */
+  --bg: #07080b;
+  --surface: rgba(20, 22, 30, 0.74);
+  --surface-solid: #111319;
+  --border: rgba(173, 155, 235, 0.15);
+  --border-strong: rgba(173, 155, 235, 0.34);
+
+  /* ---- text ---- */
+  --text: #f4efe3;
+  --text-dim: #b3ab97;
+  --text-faint: #7a7360;
+
+  /* ---- status ---- */
+  --ok: #79c48e;
+  --warn: #e8a25a;
+  --danger: #e06c5a;
+
+  /* ---- geometry ---- */
+  --radius-md: 16px;
+  --radius-sm: 10px;
+
+  /* ---- typography ---- */
+  --font:
+    'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', monospace;
+  --font-brand:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Inter, Roboto,
+    'Helvetica Neue', sans-serif;
+
+  /* ---- structure + depth ---- */
+  --hairline: rgba(255, 255, 255, 0.07);
+  --edge-light: rgba(255, 255, 255, 0.06);
+  --elev-1: 0 1px 0 var(--edge-light) inset, 0 8px 24px rgba(0, 0, 0, 0.34);
+}
+
+/* ==========================================================================
+   Minimal base — Relay owns its document shell.
+   Deliberately small: Relay's surfaces style themselves under `.relay-*`.
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100dvh;
+}
+
+::selection {
+  background: var(--gold-glow);
+  color: var(--text);
+}

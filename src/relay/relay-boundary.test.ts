@@ -3,11 +3,18 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Relay isolation contract (see RELAY_INTEGRATION.md):
- * - Relay code lives in src/relay/** + relay.html only.
+ * Relay isolation contract.
+ *
+ * Sunday Relay is an independent product in its own repository. The contract
+ * this file enforced while Relay was a tenant of the Sunday Alcatraz repo is
+ * kept as a PERMANENT guard, because the boundary still matters: Relay must
+ * never grow a dependency on Alcatraz's engine, server, session store or UI,
+ * and must never import another product's stylesheet.
+ *
+ * - Relay application code lives in src/relay/** + relay.html.
  * - Relay never imports the Alcatraz engine, server, or session store.
- * - The only shared-file edit is the vite rollup input for the relay entry.
- * Source-level assertions, matching the repo's boundary-test convention.
+ * - Relay styles itself from its OWN token sheet (src/relay/relay-tokens.css).
+ * Source-level assertions, matching the project's boundary-test convention.
  */
 
 const root = process.cwd();
@@ -47,9 +54,18 @@ describe('relay isolation boundary', () => {
     }
   });
 
-  it('only the entry imports the shared global stylesheet, read-only', () => {
-    const importers = files.filter(
+  it('never imports another product\'s stylesheet', () => {
+    // `.test.ts` files are excluded because this assertion names the forbidden
+    // specifier as a literal — the same convention the checks below use.
+    const foreign = files.filter(
       (f) => !f.endsWith('.test.ts') && readFileSync(f, 'utf8').includes("'@/styles/global.css'"),
+    );
+    expect(foreign).toEqual([]);
+  });
+
+  it('styles itself from its own token sheet, imported only by the entry', () => {
+    const importers = files.filter(
+      (f) => !f.endsWith('.test.ts') && readFileSync(f, 'utf8').includes("'./relay-tokens.css'"),
     );
     expect(importers).toEqual([join(relayDir, 'main.tsx')]);
   });
@@ -60,12 +76,12 @@ describe('relay isolation boundary', () => {
     expect(html).toContain('/src/relay/main.tsx');
   });
 
-  it('registers the relay entry in the vite build (the single shared-file edit)', () => {
+  it('registers the relay entry as the product build input', () => {
     const vite = readFileSync(join(root, 'vite.config.mts'), 'utf8');
     expect(vite).toContain("relay: fileURLToPath(new URL('./relay.html'");
   });
 
-  it('keeps status and integration docs present for the parallel Alcatraz session', () => {
+  it('keeps the historical status and integration records', () => {
     expect(readFileSync(join(root, 'RELAY_STATUS.md'), 'utf8')).toContain('Sunday Relay');
     expect(readFileSync(join(root, 'RELAY_INTEGRATION.md'), 'utf8')).toContain('Shared-file delta');
   });
