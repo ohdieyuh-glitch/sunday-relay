@@ -45,6 +45,15 @@ jobs:
       - name: Website build
         run: npm run build
 
+      # The production-bundle assertions in this file are gated on `dist/`
+      # existing, so during `npm test` — which runs before any build — they
+      # SKIP. Re-running them here, after the website build, is what actually
+      # proves the shipped bundle carries no development labelling. Without
+      # this step that guarantee would be a skipped test reported as green,
+      # which is the shape this integration set out to remove.
+      - name: Production entry (built bundle carries no development labelling)
+        run: npx vitest run src/relay/ui/preview/production-entry.test.tsx
+
       - name: CLI build
         run: npm run relay:build
 

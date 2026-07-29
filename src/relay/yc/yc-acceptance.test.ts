@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   runYcPreflight, ycDemoNotice, YC_DEMO_LABELS, repositorySlug,
   YC_EXPECTED_REPOSITORY, YC_FORBIDDEN_REPOSITORIES, YC_BASELINE_PATH, YC_BASELINE_SCHEMA_VERSION,
   YC_REQUIRED_DOCS, YC_REQUIRED_SCRIPTS,
-  type YcBaseline, type YcPreflightDeps,
+  type YcBaseline, type YcCheck, type YcPreflightDeps,
 } from './index';
 import {
   DEMO_LABELS, DEMO_PLAYBACK_MS, DEMO_SPLASH_LABELS, DEMO_STEP_TICKS,
@@ -674,24 +674,64 @@ describe('yc command CLI dispatch', () => {
     expect(parseCli(['yc', 'bogus']).error).toContain('yc requires an action');
   });
 
-  it('runCli yc check runs the real read-only preflight in this repo and exits 0', async () => {
+  /* These two run the REAL preflight against this checkout, so exactly one
+   * check is environment-dependent: `relay-build` asks whether
+   * `dist-relay/cli.cjs` has been produced yet, and `npm test` legitimately
+   * runs before `npm run relay:build` in a clean CI checkout. Asserting a bare
+   * `exitCode === 0` therefore made these tests depend on whether someone had
+   * built the CLI first — green locally, red in CI.
+   *
+   * They now assert something STRICTER instead: every product check passes,
+   * the exit code is exactly consistent with the checks (0 iff no FAIL), and
+   * `relay-build` is the ONLY check permitted to vary by environment. That
+   * catches a genuine readiness regression in either environment, which the
+   * old assertion could not do from a built tree. */
+  const BUILD_DEPENDENT = 'relay-build';
+  const cliIsBuilt = existsSync(join(process.cwd(), 'dist-relay', 'cli.cjs'));
+
+  it('runCli yc check runs the real read-only preflight in this repo', async () => {
     const { io, lines } = fakeIo({ PATH: process.env.PATH, HOME: process.env.HOME });
     const code = await runCli(['yc', 'check'], io);
     const text = lines.join('\n');
     expect(text).toContain('SUNDAY RELAY — YC DEMO PREFLIGHT');
-    expect(text).toContain('READY FOR FOUNDER ACCEPTANCE');
     expect(text).toContain('MANUAL VERIFICATION REQUIRED'); // frontend never inspected
-    expect(code).toBe(0);
+    expect(text).toContain(YC_EXPECTED_REPOSITORY);          // identity, not a branch
+    if (cliIsBuilt) {
+      expect(text).toContain('READY FOR FOUNDER ACCEPTANCE');
+      expect(code).toBe(0);
+    } else {
+      // The one honest reason a clean checkout is not yet recording-ready.
+      expect(text).toContain('NOT READY');
+      expect(text).toContain(BUILD_DEPENDENT);
+      expect(code).not.toBe(0);
+    }
   });
 
   it('runCli yc check --json emits the structured report and no text banner', async () => {
     const { io, lines } = fakeIo({ PATH: process.env.PATH, HOME: process.env.HOME });
     const code = await runCli(['yc', 'check', '--json'], io);
-    expect(code).toBe(0);
-    const parsed = JSON.parse(lines.join('\n')) as { checks: unknown[]; exitCode: number };
+    const raw = lines.join('\n');
+    expect(raw).not.toContain('SUNDAY RELAY — YC DEMO PREFLIGHT');
+
+    const parsed = JSON.parse(raw) as { checks: YcCheck[]; exitCode: number };
     expect(Array.isArray(parsed.checks)).toBe(true);
-    expect(parsed.exitCode).toBe(0);
-    expect(lines.join('\n')).not.toContain('SUNDAY RELAY — YC DEMO PREFLIGHT');
+    expect(parsed.checks.length).toBeGreaterThan(8);
+
+    // The JSON carries the PREFLIGHT's own exit code (0/1); the CLI maps that
+    // onto its exit-code vocabulary (EXIT.completed / EXIT.doctorFailure), so
+    // the two agree on READY-ness rather than on the number itself.
+    expect(parsed.exitCode === 0).toBe(code === 0);
+
+    // Exit code is exactly consistent with the checks.
+    const failures = parsed.checks.filter((c) => c.status === 'FAIL');
+    expect(parsed.exitCode === 0).toBe(failures.length === 0);
+
+    // Every PRODUCT check passes in this repository, whatever the build state.
+    expect(failures.map((c) => c.name).filter((n) => n !== BUILD_DEPENDENT)).toEqual([]);
+    for (const name of ['repository-identity', 'product-baseline', 'surface-parity-registry', 'plain-demo', 'documentation']) {
+      expect(parsed.checks.find((c) => c.name === name)?.status, name).toBe('PASS');
+    }
+    if (cliIsBuilt) expect(parsed.exitCode).toBe(0);
   });
 
   it('runCli yc demo prints the honesty notice BEFORE the offline simulation, exit 0', async () => {
