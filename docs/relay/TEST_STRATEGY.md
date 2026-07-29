@@ -1,5 +1,33 @@
 # Sunday Relay — Test Strategy (authoritative)
 
+> **CLI glitch regression (Prompt 8.7, 2026-07-23):** `product/glitch.test.ts`
+> is a pseudo-terminal harness (fake streams + fake clock) driving the REAL
+> shell loop and asserting LIFECYCLE (not snapshots): one first frame + alt-
+> screen enter once; zero repaints on the idle splash / while paused / after
+> COMPLETE; no per-frame `\x1b[2J`; one keypress → one repaint; exactly one
+> interval across play/pause/restart/speed churn; resize repaints once without
+> spawning a loop; idempotent teardown (timer cleared, cursor/SGR/alt-screen
+> restored once); Ctrl+C and fatal both restore; sanitized fatal message; two
+> sequential runs; deterministic per-width frame within terminal width. A real-
+> binary PTY probe additionally confirms the idle splash is byte-silent.
+
+> **Implementation sync (Prompt 8.7, 2026-07-23):** YC demo acceptance.
+> `yc/yc-acceptance.test.ts` (35 tests, provider-free) covers: preflight
+> exit-zero on valid state, read-only-git-only recording, repo-relative
+> path recording (frontend worktree untouched), safe wrong-branch /
+> missing-checkpoint / dirty-tree (WARN, non-destructive) / missing-script
+> / missing-doc / failing-demo reporting, MANUAL frontend status, no
+> secret/session-id/provider-stream shapes in output, control-byte
+> scrubbing of git values, npm command wiring (founder commands exist,
+> approved commands unchanged, no `--confirm-live` reachable), fixture
+> language (architect/coding/relay/reviewer/F-1/R-1/completion-only-at-
+> final-step), deterministic plain snapshot, PACING LOCK (300ms × 7 ticks
+> × 20 reveals (21 events − splash) = 42s exact + 15–60s bounds at every
+> speed + shell interval
+> floor + settle-at-COMPLETE), sanitized fatal path + terminal restoration
+> (fake streams), and `--watch` exit-code fidelity. A new boundary block
+> (`relay-core-boundary.test.ts`) locks the yc leaf-module rules.
+
 > **Implementation sync (Prompt 8.6, 2026-07-22):** CLI product tests.
 > `cli/product/product.test.ts` covers parsing/routing (new + every
 > existing command), caps detection, width projection + ANSI-aware layout,

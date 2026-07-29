@@ -1,22 +1,74 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-22 (Prompt 8.5 COMPLETE — durable local
-> persistence + crash-safe recovery: Gate A 65-check offline restart proof
-> across ~44 separate Node processes (twice) + Gate B two-process recovery
-> drill (twice) — DURABLE LOCAL RECOVERY VERIFIED; zero provider calls; real
-> cross-process PROVIDER resume remains not live-proven).** The July 24
-> product demo is `npm run relay:yc`; `npm run relay:mission-control` is the
-> graphical product surface; `npm run relay:competitive` is the
-> deterministic full-workforce proof; `npm run relay:claude:live` is the
-> real single-agent proof; `npm run relay:codex:live` is the REAL
-> independent-review proof; and `npm run relay:supervised:live` is the REAL
-> full-loop proof (founder-run only, now durably persisted).
+> boundary. Last updated: **2026-07-23 (Prompt 8.7 GATE A — YC demo
+> integration + acceptance: `relay:yc-demo:check` preflight +
+> `relay:yc-demo:cli` founder launcher + 35 acceptance tests + pacing lock
+> + fatal-path sanitization + finalized YC_DEMO_RUNBOOK; awaiting founder
+> Gate B acceptance before commit).** The YC video demo is
+> `npm run relay:yc-demo:check` then `npm run relay:yc-demo:cli` (the
+> founder-approved OFFLINE VISUAL SIMULATION), plus the browser frontend
+> from its separate session. Other proofs: `npm run relay:mission-control`
+> (graphical product surface), `npm run relay:competitive` (deterministic
+> full-workforce proof), `npm run relay:claude:live` (real single-agent
+> proof), `npm run relay:codex:live` (REAL independent-review proof),
+> `npm run relay:supervised:live` (REAL full-loop proof, founder-run only,
+> durably persisted).
 
 ## Phase
 
-**Prompt 8.6 — Relay CLI Product Shell and Live Mission Console: GATE A
-IMPLEMENTED** (2026-07-22). The Relay CLI became a terminal PRODUCT
+**Prompt 8.7 — YC Demo Integration, Acceptance, and Founder Runbook: GATE A
+IMPLEMENTED** (2026-07-23). Acceptance and launch reliability only — no new
+capability, no redesign:
+- **Demo preflight** (`npm run relay:yc-demo:check` → `relay yc check`):
+  read-only verification that the founder can record — branch, checkpoint
+  `9f8075f`-or-newer, tree status (dirty = WARN, never blocking or
+  destructive), relay build + demo scripts + contract verifier
+  availability, an IN-PROCESS plain-demo proof (exit 0 + offline labels +
+  VERIFIED COMPLETE), terminal width/color/NO_COLOR, 10 required docs, and
+  truthfulness statements. The browser frontend is always reported MANUAL
+  VERIFICATION REQUIRED — its worktree is structurally unreachable (leaf
+  module, repo-relative paths only). Exit 0 → READY FOR FOUNDER ACCEPTANCE.
+- **Founder launcher** (`npm run relay:yc-demo:cli` → `relay yc demo`):
+  honesty notice, then EXACTLY the approved offline simulation
+  (`relay cli demo`) — no second demo engine, zero provider/network calls,
+  terminal restored on every exit path.
+- **Module:** `src/relay/yc/` — pure import-free preflight engine +
+  `node-deps.ts` (the ONLY spawner: read-only git `rev-parse`/`status`/
+  `merge-base` allowlist) + boundary tests locking the leaf rules.
+- **Prompt 8.6 safety follow-ups closed:** shell fatal path routes
+  `err.message` through `safeText` (last unsanitized rendering path);
+  approved pacing test-locked (300ms × 7 ticks × 20 reveals = 42s exact,
+  15–60s bounds at every speed, settle-at-COMPLETE); key fixture language
+  asserted (offline labels, CLAIM PENDING VERIFICATION, verified evidence,
+  independent review, VERIFIED COMPLETE only at the final CompletionPolicy
+  step); `--watch` resolves the LAST produced exit code + rewrites
+  reset/cursor-show on exit. Recovery marker-write UX deferred (does not
+  affect the demo).
+- **Runbook:** YC_DEMO_RUNBOOK.md finalized — night-before check, exact CLI
+  launch, browser placeholder (PENDING FRONTEND SESSION CONFIRMATION),
+  20-step demonstration order, truthful demo language, product message,
+  failure recovery, stop conditions.
+- **CLI stability fix (2026-07-23, founder reported "the CLI keeps
+  glitching"):** root cause = the interactive shell repainted every 300 ms
+  FOREVER (even on the idle splash and after COMPLETE) and cleared the WHOLE
+  screen (`\x1b[2J`) before every redraw → constant flicker + busy CPU (a
+  stale pre-fix demo on pts/2 was burning 2.1% CPU for hours as living
+  proof). Fixed in `shell.ts` without touching the approved visuals:
+  single-writer frame-diffed redraw (one in-memory frame per write, home +
+  clear-to-EOL + clear-below, never a full-screen blank), the timer paints
+  only while genuinely animating (silent on splash / pause / COMPLETE),
+  alternate-screen buffer entered/left exactly once, idempotent cleanup on
+  every exit path, input ignored after cleanup, resize repaints once, and the
+  fatal message additionally collapses absolute paths. Locked by
+  `product/glitch.test.ts` (14 lifecycle tests) + a real-binary PTY probe
+  (idle splash byte-silent). Approved Dog / colors / splash / panels / stream
+  / controls / 42s sequence unchanged.
+- **Gate B (pending):** founder runs `relay:yc-demo:check` +
+  `relay:yc-demo:cli` and accepts; commit only after acceptance.
+
+**Prior phase — Prompt 8.6 — Relay CLI Product Shell and Live Mission
+Console: COMPLETE, committed `9f8075f`** (2026-07-22). The Relay CLI became a terminal PRODUCT
 (`src/relay/cli/product/`) matching the founder-approved mockups:
 - **Two interfaces, one canonical state:** the CLI projects the same
   durable store, recovery plans, findings/repairs/evidence, and normalized
@@ -757,9 +809,26 @@ repairs, commits 3277ffc/508fb92) remains a genuine artifact.
 
 ## Current work
 
-None in flight — Phase 1 closes with this commit.
+**Prompt 8.7 Gate A complete (2026-07-23)** — YC demo preflight, founder
+launcher, acceptance tests, safety follow-ups, and the finalized runbook
+are implemented and verified (see SESSION_LOG). Awaiting **founder Gate B
+acceptance** (`npm run relay:yc-demo:check` + `npm run relay:yc-demo:cli`);
+the Prompt 8.7 commit lands only after acceptance. The browser-frontend
+command + URL remain PENDING FRONTEND SESSION CONFIRMATION in the runbook.
 
 ## Next prompt
+
+**Remaining post-video work (after founder Gate B + the YC recording):**
+- Frontend integration (merge coordination with the separate frontend
+  session's branch).
+- Browser durable-state bindings (the browser app reading the canonical
+  persistence store).
+- Browser normalized event bindings (live mission events in the browser
+  console).
+- Ask Relay service (currently honestly declined in the CLI).
+- Real Prompt Architect service; real research automation.
+- Deferred Prompt 8.6 nit: `relay recover <ref>` marker-write UX
+  (read-only default + explicit `--mark`, or clearer copy).
 
 **Real Cross-Process Provider Resume (founder-authorized)** — prove LIVE
 what persistence now makes possible: after a real interruption, a fresh

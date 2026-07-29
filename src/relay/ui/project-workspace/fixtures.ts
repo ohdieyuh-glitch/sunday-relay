@@ -118,7 +118,7 @@ const BASE: Omit<WorkspaceFixture, 'fixtureLabel'> = {
   mode: 'semi',
   phase: 'build',
   outputState: 'implementing',
-  dogState: 'running',
+  dogState: 'implementing',
   handoffNetworkState: 'online',
   projectMessages: [
     msg(
@@ -154,7 +154,7 @@ const implementing: WorkspaceFixture = {
   },
   phase: 'build',
   outputState: 'implementing',
-  dogState: 'running',
+  dogState: 'implementing',
   // The live-coding storyline (founder terminal photo): the Prompt Architect
   // visibly thinks/researches/refines, the Coding Agent visibly creates,
   // edits, and runs tests, Relay preserves context and compiles the handoff.

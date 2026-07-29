@@ -1,5 +1,22 @@
 # Sunday Relay CLI (Prompt 5) — simulation demo surface
 
+> **YC demo acceptance (Prompt 8.7, 2026-07-23):** two founder commands.
+> `npm run relay:yc-demo:check` (`relay yc check`) — the read-only demo
+> preflight: expected branch + checkpoint (`9f8075f` or newer), tree
+> status (dirty = WARN, never blocking or destructive), build/script/doc
+> availability, an in-process plain-demo proof (exit 0 + offline labels +
+> VERIFIED COMPLETE), terminal width/color/NO_COLOR, and truthfulness
+> statements; the browser frontend is always reported MANUAL VERIFICATION
+> REQUIRED and its worktree is never inspected. Exits 0 → `READY FOR
+> FOUNDER ACCEPTANCE`. `npm run relay:yc-demo:cli` (`relay yc demo`) —
+> prints an honesty notice, then starts EXACTLY the approved offline
+> simulation (`relay cli demo`; no second demo engine). Both make zero
+> provider calls, zero network calls, no repository or user-state writes
+> (the offline demo uses an isolated, self-deleting temp state root), no
+> push, no deployment. The engine lives in `src/relay/yc/` (leaf module;
+> only `node-deps.ts` may spawn, and only read-only git with a sanitized
+> env). See YC_DEMO_RUNBOOK.md.
+
 > **Terminal product shell (Prompt 8.6, 2026-07-22):** bare `relay` in a TTY
 > now opens the Relay PRODUCT shell (home, projects, drafts, the active
 > mission console with STREAM/PANELS views toggled by the corner `[>_]`

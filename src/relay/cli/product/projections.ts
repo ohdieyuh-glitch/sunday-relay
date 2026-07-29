@@ -74,7 +74,9 @@ export function dogStateFrom(events: SafeEventVM[]): DogStateVM {
   if (/repair/i.test(last.primary)) return 'REPAIRING';
   if (last.symbol === 'handoff') return 'CARRYING HANDOFF';
   if (last.symbol === 'action') return 'WAITING FOR USER';
-  if (last.role === 'coding') return 'RUNNING';
+  // The coding agent doing the work is IMPLEMENTING — the explicit Milestone
+  // 4.5 state the website shows for the same situation.
+  if (last.role === 'coding') return 'IMPLEMENTING';
   if (last.role === 'architect') return 'TROTTING';
   return 'TROTTING';
 }

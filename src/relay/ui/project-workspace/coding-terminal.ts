@@ -1,0 +1,339 @@
+import {
+  sanitizeTerminalBlock,
+  sanitizeTerminalLabels,
+  sanitizeTerminalLine,
+} from '../app/terminal-sanitize';
+import type {
+  CodingTerminalAttestation,
+  CodingTerminalLine,
+  CodingTerminalPermissions,
+  CodingTerminalState,
+  CodingTerminalStatus,
+  CodingTerminalTest,
+  MissionClaim,
+} from '../app/contracts';
+import type { ProjectPhase } from './contracts';
+
+/**
+ * CODING AGENT TERMINAL — pure display projection.
+ *
+ * The renderer receives only what this function returns, and this function
+ * returns only what the bridge actually captured. There is no branch here
+ * that can produce a command, a filename, a tool call, a patch, or a progress
+ * message that Relay did not observe: absent facts become `null`, empty
+ * lists, or the single truthful waiting line.
+ *
+ * Everything is re-sanitized on the way out. The bridge already sanitized at
+ * capture; this is the second, independent pass that guarantees no ANSI,
+ * control character, credential, environment value, absolute path, or
+ * complete session identifier can reach the DOM even if persisted state was
+ * tampered with in localStorage.
+ */
+
+/** The exact sentence the terminal shows while Claude is running and no new
+    verified execution event has arrived. Never paraphrased. */
+export const CODING_TERMINAL_WAITING_MESSAGE =
+  'Claude Code is running. Awaiting the next verified execution event.';
+
+export const CODING_TERMINAL_EMPTY_MESSAGE =
+  'No Claude Code execution has run for this project yet.';
+
+const STATUS_LABEL: Record<CodingTerminalStatus, string> = {
+  waiting: 'WAITING',
+  live: 'LIVE',
+  complete: 'COMPLETE',
+  failed: 'FAILED',
+  cancelled: 'CANCELLED',
+};
+
+const PHASE_LABEL: Record<ProjectPhase, string> = {
+  plan: 'PLAN',
+  research: 'RESEARCH',
+  build: 'BUILD',
+  verify: 'VERIFY',
+  review: 'REVIEW',
+  repair: 'REPAIR',
+  complete: 'COMPLETE',
+};
+
+const TEST_STATUS_LABEL: Record<CodingTerminalTest['status'], string> = {
+  passed: 'PASSED',
+  failed: 'FAILED',
+  not_run: 'NOT RUN',
+};
+
+export interface CodingTerminalView {
+  /** False → the clean pre-mission empty state (no execution has happened). */
+  present: boolean;
+  status: CodingTerminalStatus;
+  statusLabel: string;
+  /** Relay's own shortened execution id — never an external session id. */
+  executionId: string;
+  externalSessionRedacted: string | null;
+  runtime: string;
+  /** Claude Code is authenticated by the local subscription login. */
+  billingLabel: 'SUBSCRIPTION';
+  projectLabel: string;
+  phaseLabel: string;
+  permissions: CodingTerminalPermissions;
+  permissionSummary: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  lines: CodingTerminalLine[];
+  /** Present only while the process is genuinely running. */
+  waitingMessage: string | null;
+  activeFile: string | null;
+  changedFiles: string[];
+  changedFileCount: number;
+  /** Exit status of the last command Relay itself ran. */
+  lastExitCode: number | null;
+  test: CodingTerminalTest | null;
+  testStatusLabel: string;
+  diff: string | null;
+  claim: MissionClaim | null;
+  attestation: CodingTerminalAttestation | null;
+  attestationLabel: string;
+  attested: boolean;
+  eventCount: number;
+}
+
+/** An empty, honest view — used before any Claude execution exists. */
+export function emptyCodingTerminalView(phase: ProjectPhase = 'plan'): CodingTerminalView {
+  return {
+    present: false,
+    status: 'waiting',
+    statusLabel: STATUS_LABEL.waiting,
+    executionId: '—',
+    externalSessionRedacted: null,
+    runtime: 'Claude Code (local CLI)',
+    billingLabel: 'SUBSCRIPTION',
+    projectLabel: '—',
+    phaseLabel: PHASE_LABEL[phase],
+    permissions: { allowedTools: [], allowedFiles: [], protectedPaths: [], deniedCapabilities: [] },
+    permissionSummary: 'No permission envelope has been compiled yet.',
+    startedAt: null,
+    endedAt: null,
+    lines: [],
+    waitingMessage: null,
+    activeFile: null,
+    changedFiles: [],
+    changedFileCount: 0,
+    lastExitCode: null,
+    test: null,
+    testStatusLabel: TEST_STATUS_LABEL.not_run,
+    diff: null,
+    claim: null,
+    attestation: null,
+    attestationLabel: 'NOT ATTESTED',
+    attested: false,
+    eventCount: 0,
+  };
+}
+
+function summarizePermissions(p: CodingTerminalPermissions): string {
+  if (p.allowedTools.length === 0 && p.allowedFiles.length === 0) {
+    return 'No permission envelope has been compiled yet.';
+  }
+  const parts: string[] = [];
+  if (p.allowedTools.length) parts.push(`tools ${p.allowedTools.join(', ')}`);
+  if (p.allowedFiles.length) parts.push(`write ${p.allowedFiles.join(', ')}`);
+  if (p.protectedPaths.length) parts.push(`${p.protectedPaths.length} protected path(s)`);
+  if (p.deniedCapabilities.length) parts.push(`no ${p.deniedCapabilities.join('/')}`);
+  return parts.join(' · ');
+}
+
+function attestationLabelFor(a: CodingTerminalAttestation | null): { label: string; attested: boolean } {
+  if (!a) return { label: 'NOT ATTESTED', attested: false };
+  if (a.fallbackOccurred) return { label: 'NOT ATTESTED — fallback occurred', attested: false };
+  if (!a.launchVerified) return { label: 'NOT ATTESTED — process never launched', attested: false };
+  if (!a.completionVerified) return { label: 'LAUNCH ONLY — no valid completion', attested: false };
+  return { label: 'EXECUTION ATTESTED', attested: true };
+}
+
+/**
+ * Build the terminal view from the persisted/polled terminal state.
+ *
+ * `terminal` is the bridge's captured read-model. When it is absent, no real
+ * Claude execution exists for this mission and the empty state is returned —
+ * the UI never fabricates a placeholder run.
+ */
+export function buildCodingTerminalView(input: {
+  terminal?: CodingTerminalState;
+  phase: ProjectPhase;
+}): CodingTerminalView {
+  const t = input.terminal;
+  if (!t) return emptyCodingTerminalView(input.phase);
+
+  const permissions: CodingTerminalPermissions = {
+    allowedTools: sanitizeTerminalLabels(t.permissions?.allowedTools ?? [], 40),
+    allowedFiles: sanitizeTerminalLabels(t.permissions?.allowedFiles ?? [], 120),
+    protectedPaths: sanitizeTerminalLabels(t.permissions?.protectedPaths ?? [], 120),
+    deniedCapabilities: sanitizeTerminalLabels(t.permissions?.deniedCapabilities ?? [], 40),
+  };
+
+  // Re-sanitize and re-order defensively: display order is the captured
+  // sequence, which is what survives persistence and refresh.
+  const lines: CodingTerminalLine[] = (t.lines ?? [])
+    .map((l) => {
+      const target = l.target ? sanitizeTerminalLine(l.target, 160) : undefined;
+      return {
+        sequence: l.sequence,
+        at: l.at,
+        kind: l.kind,
+        truth: l.truth,
+        text: sanitizeTerminalLine(l.text),
+        ...(target ? { target } : {}),
+      };
+    })
+    .filter((l) => l.text.length > 0)
+    .sort((a, b) => a.sequence - b.sequence);
+
+  const test: CodingTerminalTest | null = t.test
+    ? {
+        command: sanitizeTerminalLine(t.test.command, 200),
+        status: t.test.status,
+        exitCode: t.test.exitCode,
+        output: sanitizeTerminalBlock(t.test.output, { maxLines: 80 }),
+      }
+    : null;
+
+  const claim: MissionClaim | null = t.claim
+    ? {
+        summary: sanitizeTerminalLine(t.claim.summary),
+        filesChanged: sanitizeTerminalLabels(t.claim.filesChanged ?? [], 160),
+        checksRun: sanitizeTerminalLabels(t.claim.checksRun ?? [], 160),
+      }
+    : null;
+
+  const attestation = t.attestation ?? null;
+  const { label: attestationLabel, attested } = attestationLabelFor(attestation);
+  const changedFiles = sanitizeTerminalLabels(t.changedFiles ?? [], 160);
+
+  return {
+    present: true,
+    status: t.status,
+    statusLabel: STATUS_LABEL[t.status] ?? STATUS_LABEL.waiting,
+    executionId: sanitizeTerminalLine(t.executionId, 40) || '—',
+    externalSessionRedacted: t.externalSessionRedacted
+      ? sanitizeTerminalLine(t.externalSessionRedacted, 20)
+      : null,
+    runtime: sanitizeTerminalLine(t.runtime, 80) || 'Claude Code (local CLI)',
+    billingLabel: 'SUBSCRIPTION',
+    projectLabel: sanitizeTerminalLine(t.projectLabel, 120) || '—',
+    phaseLabel: PHASE_LABEL[input.phase],
+    permissions,
+    permissionSummary: summarizePermissions(permissions),
+    startedAt: t.startedAt ?? null,
+    endedAt: t.endedAt ?? null,
+    lines,
+    // Truthful only while the process is genuinely running.
+    waitingMessage: t.status === 'live' ? CODING_TERMINAL_WAITING_MESSAGE : null,
+    activeFile: t.activeFile ? sanitizeTerminalLine(t.activeFile, 160) : null,
+    changedFiles,
+    changedFileCount: changedFiles.length,
+    lastExitCode: test ? test.exitCode : null,
+    test,
+    testStatusLabel: TEST_STATUS_LABEL[test?.status ?? 'not_run'],
+    diff: t.diff ? sanitizeTerminalBlock(t.diff, { maxLines: 240 }) || null : null,
+    claim,
+    attestation,
+    attestationLabel,
+    attested,
+    eventCount: lines.length,
+  };
+}
+
+/* ------------------------------------------------------- role billing */
+
+/**
+ * The truthful default description of the Prompt Architect route.
+ *
+ * Sunday Alcatraz SELECTS and RECORDS the architect route (mode, provider,
+ * model, limits); the request itself leaves the Relay bridge directly for the
+ * OpenAI API. Saying "routed through" would claim a network hop that did not
+ * occur, so the coordination wording is used instead — and the backend's own
+ * receipt label overrides this whenever a request has actually happened.
+ */
+export const ARCHITECT_ROUTE_LABEL = 'Coordinated by Sunday Alcatraz';
+
+export interface RoleBillingRow {
+  roleKey: 'prompt_architect' | 'coding_agent' | 'reviewer';
+  /** Actor name, e.g. "ChatGPT". Never a claim about a model that did not run. */
+  actor: string;
+  role: string;
+  /** Runtime/provider facts, e.g. "Coordinated by Sunday Alcatraz". */
+  runtime: string;
+  /** Honest billing label — API PAID only after a proven successful request. */
+  billingLabel: string;
+  /** Execution status label — never "complete" without an attestation. */
+  statusLabel: string;
+  accessLabel?: string;
+}
+
+/**
+ * Truthful role presentation. A role is only ever labeled API PAID when a
+ * real, attested, api-billed request happened. Hermes runs on an Anthropic
+ * subscription and is READ ONLY — it is never described as a model and never
+ * shown as API PAID, and its subscription billing is not a blocker.
+ */
+export function buildRoleBilling(input: {
+  architectLabel?: string;
+  architectProvenance?: 'live' | 'simulated';
+  /** Set only when a real OpenAI request succeeded and was api-billed. */
+  architectApiBilled?: boolean;
+  /** The backend receipt's own route wording, when a request actually ran. */
+  architectCoordinationLabel?: string;
+  codingAttestation?: CodingTerminalAttestation | null;
+  reviewerProvider?: string | null;
+  reviewerModel?: string | null;
+  reviewerRan?: boolean;
+  reviewerApproved?: boolean;
+}): RoleBillingRow[] {
+  const coding = input.codingAttestation ?? null;
+  const codingAttested = Boolean(coding && coding.launchVerified && coding.completionVerified && !coding.fallbackOccurred);
+  const route = input.architectCoordinationLabel
+    ? sanitizeTerminalLine(input.architectCoordinationLabel, 120)
+    : ARCHITECT_ROUTE_LABEL;
+
+  return [
+    {
+      roleKey: 'prompt_architect',
+      actor: 'ChatGPT',
+      role: 'Prompt Architect',
+      runtime: input.architectLabel ? `${route} · ${sanitizeTerminalLine(input.architectLabel, 80)}` : route,
+      billingLabel: input.architectApiBilled === true ? 'API PAID' : 'NOT BILLED',
+      statusLabel:
+        input.architectApiBilled === true
+          ? 'REQUEST COMPLETED'
+          : input.architectProvenance === 'simulated'
+            ? 'NOT LIVE'
+            : 'NOT RUN',
+    },
+    {
+      roleKey: 'coding_agent',
+      actor: 'Claude Code',
+      role: 'Coding Agent',
+      runtime: 'Authenticated local runtime',
+      billingLabel: 'SUBSCRIPTION',
+      statusLabel: codingAttested ? 'EXECUTION ATTESTED' : coding ? 'NOT ATTESTED' : 'NOT RUN',
+    },
+    {
+      roleKey: 'reviewer',
+      actor: 'Hermes',
+      role: 'Reviewer',
+      // Provider/model are the values the real Hermes configuration resolved
+      // to — never a guess, and Hermes itself is never called a model.
+      runtime: [
+        'Hermes Agent runtime',
+        `${sanitizeTerminalLine(input.reviewerProvider ?? 'Anthropic', 40)} provider`,
+        input.reviewerModel ? sanitizeTerminalLine(input.reviewerModel, 60) : null,
+      ]
+        .filter((part): part is string => Boolean(part))
+        .join(' · '),
+      // Subscription-backed by design — never API PAID, and never a blocker.
+      billingLabel: 'SUBSCRIPTION',
+      statusLabel: input.reviewerRan ? (input.reviewerApproved ? 'APPROVED' : 'FINDINGS RETURNED') : 'NOT RUN',
+      accessLabel: 'READ ONLY',
+    },
+  ];
+}

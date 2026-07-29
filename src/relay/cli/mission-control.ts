@@ -2,11 +2,12 @@ import type { RelayApp } from '../core/app';
 import { style, badge, type RenderOptions } from './render';
 import { projectCompetitiveMission } from './competitive';
 import {
-  defaultModePolicy, buildAutonomousConsent, computeDogActivity, renderDogFrames,
+  defaultModePolicy, buildAutonomousConsent, computeDogActivity,
   entitlementPolicy, computeOutputVisibility, assignReviewer, reviewerIsIndependent,
   buildReviewerPackage, projectTerminalEvent, buildAgentExchanges,
   type RelayMode, type DogComputeInput,
 } from '../mission';
+import { officialDogRows } from './product';
 
 /**
  * Mission Control presentation (Prompt 8.2) — RENDERER + PROJECTION glue.
@@ -179,9 +180,15 @@ export function buildMissionControlFrames(app: RelayApp, opts: RenderOptions, no
   ]);
 
   /* --- dog + complete --- */
+  // The OFFICIAL Relay Dog — the shared sprite, never a second mascot. The
+  // mission domain owns the state; this renders the official visual for it.
   push('dog', [
     '', s.gold('RELAY DOG'),
-    ...renderDogFrames(finalDog).map((l) => `  ${l}`),
+    ...officialDogRows('standing', {
+      tty: true, color: opts.color, unicode: !opts.plain, width: opts.width,
+      reducedMotion: opts.plain, plain: opts.plain, json: opts.json,
+    }).map((l) => `  ${l}`),
+    `  RELAY DOG — ${finalDog.statusLabel}`,
     s.dim(`  activity=${finalDog.activityLevel} sync=${finalDog.synchronizationLevel} — derived from real events.`),
   ]);
   push('complete', [

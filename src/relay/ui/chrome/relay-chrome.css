@@ -1,0 +1,135 @@
+/* ==========================================================================
+   SHARED MOBILE CHROME — founder mobile header: brand left, one gold MENU
+   block right, everything else behind an accessible full-screen menu.
+   Scoped to .rmc-*. Themed via data-relay-colorway on the document root.
+   ========================================================================== */
+
+:root {
+  --rmc-bg: #07080b;
+  --rmc-panel: #0b0d12;
+  --rmc-line: #1c2230;
+  --rmc-text: #ece7dd;
+  --rmc-dim: #8b8578;
+  --rmc-gold: #d9a441;
+  --rmc-menu-bg: #d9a441;
+  --rmc-menu-ink: #07080b;
+  --rmc-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+[data-relay-colorway='midnight'] {
+  --rmc-bg: #1b2138;
+  --rmc-panel: #212845;
+  --rmc-line: #39426b;
+  --rmc-text: #f0ecdf;
+  --rmc-dim: #a0a4bd;
+  --rmc-gold: #e0ab48;
+  --rmc-menu-bg: #e0ab48;
+  --rmc-menu-ink: #1b2138;
+}
+[data-relay-colorway='manual'] {
+  --rmc-bg: var(--relay-manual-black, #070705);
+  --rmc-panel: var(--relay-manual-raised-black, #11110f);
+  --rmc-line: var(--relay-manual-graphite, #5d5c58);
+  --rmc-text: var(--relay-manual-cream, #eae8dc);
+  --rmc-dim: var(--relay-manual-cream-text-muted, #a5a39a);
+  --rmc-gold: var(--relay-manual-gold, #846622);
+  /* Signal gold is reserved for the primary MENU control (founder ref). */
+  --rmc-menu-bg: var(--relay-manual-signal, #e7c153);
+  --rmc-menu-ink: var(--relay-manual-ink, #0c0c0a);
+}
+
+/* The gold MENU block — hidden on desktop, the primary control on mobile. */
+.rmc-menu-btn {
+  display: none;
+  font-family: var(--rmc-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  min-height: 44px;
+  min-width: 72px;
+  padding: 10px 16px;
+  background: var(--rmc-menu-bg);
+  color: var(--rmc-menu-ink);
+  border: 1px solid var(--rmc-menu-bg);
+  cursor: pointer;
+}
+.rmc-menu-btn:focus-visible {
+  outline: 2px solid var(--rmc-text);
+  outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .rmc-menu-btn { display: inline-flex; align-items: center; justify-content: center; }
+}
+
+/* Full-screen menu dialog. */
+.rmc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: var(--rmc-bg);
+  color: var(--rmc-text);
+  font-family: var(--rmc-mono);
+  display: flex;
+  flex-direction: column;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px
+    calc(16px + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+}
+.rmc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--rmc-line);
+  padding-bottom: 12px;
+}
+.rmc-brand { display: inline-flex; align-items: center; gap: 10px; }
+.rmc-title { font-weight: 700; letter-spacing: 0.22em; font-size: 13px; }
+.rmc-close {
+  font-family: var(--rmc-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  min-height: 44px;
+  padding: 10px 14px;
+  background: transparent;
+  color: var(--rmc-text);
+  border: 1px solid var(--rmc-line);
+  cursor: pointer;
+}
+.rmc-close:focus-visible,
+.rmc-item:focus-visible {
+  outline: 2px solid var(--rmc-gold);
+  outline-offset: 2px;
+}
+.rmc-status {
+  margin: 10px 0 0;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--rmc-dim);
+}
+.rmc-nav { margin-top: 14px; }
+.rmc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rmc-item {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  font-family: var(--rmc-mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  min-height: 48px;
+  padding: 12px 14px;
+  background: var(--rmc-panel);
+  color: var(--rmc-text);
+  border: 1px solid var(--rmc-line);
+  cursor: pointer;
+}
+.rmc-item--static { cursor: default; color: var(--rmc-dim); }
+.rmc-item:disabled { opacity: 0.5; cursor: not-allowed; }
+.rmc-item-label { font-weight: 700; }
+.rmc-item-hint { font-size: 10px; letter-spacing: 0.12em; color: var(--rmc-dim); }
+
+@media (prefers-reduced-motion: reduce) {
+  .rmc-overlay, .rmc-item { transition: none !important; animation: none !important; }
+}

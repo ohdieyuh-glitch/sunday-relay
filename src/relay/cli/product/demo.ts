@@ -21,6 +21,11 @@ import { paint } from './theme';
  * simulated-restart recovery view).
  */
 
+/** Demo playback tick (ms). Locked with DEMO_STEP_TICKS by the Prompt-8.7
+ * acceptance tests: 300ms × 7 ticks × 20 reveals ≈ 42s at 1× — the
+ * founder-approved duration. Change requires re-approval. */
+export const DEMO_PLAYBACK_MS = 300;
+
 export function demoData(): AppData {
   return {
     projects: [DEMO_PROJECT],
@@ -48,7 +53,7 @@ export async function runCliDemo(input: { caps: CliCaps; plain: boolean }): Prom
       // Open on the activation splash and step into the live console on ENTER/P;
       // a fine 300ms tick drives dot animation, with reduceTick pacing reveals.
       const exitCode = await runProductShell({
-        caps: input.caps, data, store, playbackMs: 300, now, initialScreen: 'demo-intro',
+        caps: input.caps, data, store, playbackMs: DEMO_PLAYBACK_MS, now, initialScreen: 'demo-intro',
         selectedProjectId: DEMO_PROJECT.projectId,
       });
       return { lines: [], exitCode };

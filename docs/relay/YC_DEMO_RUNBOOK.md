@@ -1,189 +1,232 @@
-# YC Demo Runbook — Sunday Relay (July 24, 2026)
+# YC Demo Runbook — Sunday Relay
 
-## 1. Pre-recording checklist
-- [ ] `cd /home/kaisinrogodfree5/sunday-relay` (the `../sunday-relay` worktree)
-- [ ] `git status` clean, branch `feature/relay-yc-demo`
-- [ ] `npm run relay:yc:verify` → **VERIFICATION PASSED** (run it twice)
-- [ ] Terminal: dark background, **100×32** window (demo is safe at 80 cols)
-- [ ] Font: 16–18 pt monospace (Fira Code matches the brand)
-- [ ] Notifications off; no other terminal tabs visible
-- [ ] Shell prompt short (`PS1='> '` if needed)
+**Finalized for Prompt 8.7 (2026-07-23). The video uses TWO product
+surfaces:** the Relay **browser application** (owned by the separate
+frontend session) and the Relay **CLI product** (this repository). The CLI
+segment is the founder-approved **OFFLINE VISUAL SIMULATION** — fake
+adapters, zero provider calls, zero network calls, no real file changes.
+The real Claude→Codex supervised workflow was proven separately in
+Prompt 8.4; durable crash recovery in Prompt 8.5.
 
-## 2. Commands
-- Build: `npm run relay:build`
-- Verify (before every take): `npm run relay:yc:verify`
-- **Live demonstration (primary): `npm run relay:yc`** (~40 s paced)
-- Backup instant run: `npm run relay -- demo yc --pace 0`
-- Optional follow-ups: `npm run relay -- demo checkpoint` ·
-  `npm run relay -- demo duplicate` · `npm run relay -- doctor`
-
-## 3. Expected progression (in order)
-SUNDAY RELAY banner → SIMULATED + VOLATILE disclosure → OBJECTIVE →
-PROJECT BRAIN (canonical context) → PLAN (Blueprint V1) → TASK OWNER →
-HANDOFF PACKAGE (responsibility, pins, "never a transcript") → ATTEMPT 1 →
-RELAY VERIFICATION (12 passed, **[FAIL] anonymous spend-control proof**) →
-INDEPENDENT REVIEW (Anonymous spend-boundary bypass) → RELAY DECISION (one
-bounded repair, same session) → RE-VERIFICATION (13 passed, 0 failed) →
-INDEPENDENT REVIEW approved → FINAL AUDIT → **RELAY COMPLETE** screen
-(five [PASS] lines, mission summary, SIMULATED provenance). Exit code 0.
-
-## 4. Recovery if the terminal closes mid-take
-Session storage is **volatile** — there is nothing to resume and no
-recovery command. Simply reopen the terminal and run `npm run relay:yc`
-again; the scenario is deterministic and will reproduce the same
-progression (ids/timestamps differ; semantics identical — that is what
-`relay:yc:verify` proves).
-
-## 5. Backup prerecorded procedure
-Before the session, record one clean take of `npm run relay:yc` end-to-end
-(e.g. QuickTime/OBS screen recording). Keep the recording OUTSIDE the
-repository (e.g. `~/Recordings/`) — never commit captures. If the live run
-misbehaves on stage, play the backup.
-
-## 6. Simulation disclosure language (say this on camera)
-"What you're watching is Relay's real orchestration engine — the state
-machine, verification, review, and audit are all real. The agents
-themselves are deterministic simulators for this demo; the terminal labels
-every step SIMULATED, and no repository files are modified."
-
-## 7. Do NOT run during recording
-- Any command in the parent Sunday repo (deploys, migrations, live tests)
-- `npm run relay -- demo budget-stop` mid-take (nonzero exit reads as a crash)
-- `git` mutations, `npm install`, or editor windows over the terminal
-- Anything requiring credentials — the demo needs none
-
-## 8. Final recording checklist
-- [ ] `npm run relay:yc:verify` passed immediately before the take
-- [ ] One uninterrupted `npm run relay:yc` run captured
-- [ ] Final RELAY COMPLETE screen held ≥ 3 seconds
-- [ ] SIMULATED disclosure visible in-frame at the start and the end
-- [ ] Narration matches docs/relay/YC_VIDEO_SCRIPT.md
-
-## 9. OPTIONAL live Claude proof (Prompt 8 — separate segment, separate label)
-The guaranteed product demo remains `npm run relay:yc` (simulated agents,
-full Architect → Claude → independent Codex → review → repair → audit).
-Optionally open the video with a short LIVE proof of one real Claude Code
-agent inside Relay's isolated worktree:
+**The two founder commands (memorize these):**
 
 ```bash
 cd /home/kaisinrogodfree5/sunday-relay
-npm run relay:claude:live        # REAL Claude call — separate terminal, own segment
+npm run relay:yc-demo:check    # preflight — read-only, exits 0 when READY
+npm run relay:yc-demo:cli      # honesty notice + the approved offline simulation
 ```
 
-Rules for the live segment:
-- Run it in its OWN terminal (nested Claude-in-Claude is not assumed safe).
-- Label it clearly as the LIVE proof, distinct from the SIMULATED workflow.
-- It shows: real Claude session, isolated worktree, one real edit, Relay
-  independent inspection, Relay-run verification, live audit.
-- On camera the audit says "Independent reviewer: not required by the
-  low-risk policy" — never claim Codex reviewed the live result.
-- `relay claude doctor` is a safe truthful pre-check (no model call).
-- If the live proof stops safely, that is an honest outcome — do not retry
-  the provider call repeatedly on stage.
+---
 
-## 10. `relay:claude:live` vs `relay:competitive` — say which is which
+## A. Night-before check
 
-Two distinct proofs. Label them separately on camera; never conflate them.
+- [ ] Charge the laptop (and bring the charger).
+- [ ] Close unnecessary tabs, apps, and background processes.
+- [ ] Silence notifications (OS Do Not Disturb + browser + Slack/mail).
+- [ ] Terminal font 16–18 pt monospace; window ≥ **100×32** (demo is safe at
+      80 columns; below 80 press `V` for the linear stream view).
+- [ ] Browser zoom set and tested at recording resolution.
+- [ ] Confirm frontend mobile/desktop routes render (frontend session owns
+      this — get its confirmation, do not debug it from here).
+- [ ] Confirm the Relay Dog and assets load on both surfaces.
+- [ ] Confirm the Project Settings agent selectors work (Prompt Architect /
+      Coding Agent / Reviewer / Guided Mode) in the browser.
+- [ ] `npm run relay:yc-demo:check` → **READY FOR FOUNDER ACCEPTANCE**.
+- [ ] `npm run relay:yc-demo:cli` starts, plays, and `Q` exits cleanly.
+- [ ] Confirm CLI playback controls respond (P, N, R, 1/2/3, V).
+- [ ] Clear or hide sensitive terminal history (`clear`; short prompt:
+      `PS1='> '`).
+- [ ] Confirm the demonstration uses fixture data only (labels visible:
+      OFFLINE DEMO · VISUAL SIMULATION · FAKE ADAPTERS · NO PROVIDER CALLS).
+- [ ] Confirm no API key, credential, or account detail is visible anywhere
+      on screen (terminal, browser, editors, menu bar).
 
-**`npm run relay:claude:live` — the REAL agent proof (Prompt 8):**
-- Real Claude Code, its own local subscription, an isolated Git worktree.
-- One real edit to one claimed file; Relay independently inspects and runs
-  the verification itself.
-- NO independent Reviewer (the low-risk fixture does not require one — the
-  audit says so explicitly).
-- Run it in its own terminal (nested Claude is not assumed safe).
+## B. CLI launch
 
-**`npm run relay:competitive` — the WORKFORCE orchestration proof (Prompt 8.1):**
-- Deterministic full mission: Mission Contract, Claude Implementer, Codex
-  Independent Reviewer, a high-severity finding, a scope-locked repair,
-  evidence, and a Relay VERIFIED COMPLETE verdict.
-- The Claude Implementer and Codex Reviewer are deterministic SIMULATIONS in
-  this presentation; the EXTERNAL CODEX CONNECTION IS NOT ACTIVE.
-- No provider call; instant with `--pace 0`, paced (~2.5s/frame) on a TTY.
+Exact commands:
 
-On-camera framing: "This (competitive) is the full workforce Relay governs —
-mission, specialized agents, independent review, repair, evidence, and a
-Relay verdict, shown deterministically. And this (claude:live) is one of
-those agents running for real inside Relay's isolated boundary. The agents
-are replaceable; the mission, governance, and evidence stay with Relay."
-Do NOT claim Codex is connected, and do NOT run `relay:claude:live` during
-the deterministic segment.
+```bash
+cd /home/kaisinrogodfree5/sunday-relay
+npm run relay:yc-demo:check
+npm run relay:yc-demo:cli
+```
 
-## 11. OPTIONAL Mission Control surface (Prompt 8.2 — product view)
+The launcher prints an honesty notice, then opens the **activation splash**
+(four-legged Relay Dog + offline labels + start keys).
 
-**`npm run relay:mission-control` — the graphical product story, in the terminal:**
-- Deterministic projection of the whole operator surface: the three
-  operational **modes** (guided/semi/autonomous) + the autonomous **consent**
-  screen, the **Relay Dog** activity states, the reviewer **entitlement +
-  release gate** (working → held → review → approved → released), the
-  structured **live-terminal** exchanges (ARCHITECT → CODING AGENT, …), and
-  the **secure-access** summary (service/scope names only — never values).
-- 80-column, no ANSI, clean JSON, exit 0, deterministic across runs, no
-  provider call. The graphical React surface is the same projection
-  (`npm run build` bundles it browser-safe).
-- Truthful labels on camera: the **Reviewer is a SIMULATION** and the
-  **external Codex is NOT active**; the live-terminal **production transport is
-  NOT implemented** (in-process only); all state is **volatile** (no durable
-  persistence yet); Secure Access holds **credential handles that never carry a
-  value** — a full encrypted vault is a future phase, and MFA is a Manual Task.
+Controls:
 
-On-camera framing: "This is Mission Control — the operator watches the mission,
-picks how much autonomy to grant, and Relay decides what that permits. Output
-can't ship until the review Relay requires actually happens — even in
-autonomous. The dog only runs when real coordinated work is happening." Do NOT
-claim the reviewer is a live Codex, and do NOT imply the terminal is networked.
+| Key | Action |
+| --- | ------ |
+| `ENTER` | enter the live PANELS console (paused on the first event) |
+| `P` | play / pause (from the splash, `P` auto-plays) |
+| `N` | advance one event |
+| `R` | restart from the Prompt Architect |
+| `1` / `2` / `3` | playback speed (1× / 1.5× / 2×) |
+| `V` | toggle PANELS / STREAM |
+| `Q` | quit safely (terminal always restored) |
 
-## 12. NOT for recording — the live Codex review (Prompt 8.3)
+Playback is ≈42 s at 1× (test-locked). Slash commands also work:
+`/play /pause /next /restart /speed 2x /panels /stream /status /findings`.
 
-Do **not** run the live Codex review during YC-demo recording. It is a
-separate, founder-approved engineering proof, not a demo beat.
+## C. Browser launch
 
-**`npm run relay:codex:live` — the REAL independent review (separate terminal):**
-- Relay assigns a fixture implementer's change to a DIFFERENT live provider
-  (Codex) as a READ-ONLY independent reviewer, inside an isolated worktree.
-- Relay — not Codex — decides launch verification, report validity,
-  independence, whether findings block, and whether output stays held. The
-  reviewer changes ZERO files; the source fixture is never modified; no
-  fallback; no deployment; no push.
-- On the seeded rate-limit defect the reviewer returns CHANGES REQUIRED with a
-  blocking finding; Relay creates the finding + repair and holds the output.
-  The proof ends **RELAY STOPPED SAFELY (exit 3)** — never RELAY COMPLETE.
-- Prerequisite: the local Codex must be **signed in** (`codex login`);
-  otherwise the command stops with a "Sign in to Codex" Manual Task and makes
-  no call. Relay never asks for an API key.
+Do **not** invent the frontend command. Record the exact command and URL
+from the frontend session's final report before recording:
 
-If asked about competitive proof on camera, use `relay:competitive` (the
-deterministic full-workforce demo, reviewer labeled SIMULATED) — see §10/§11 —
-and describe the live Codex review only as an engineering milestone, without
-running it.
+```
+FRONTEND COMMAND:
+<PENDING FRONTEND SESSION CONFIRMATION>
 
+FRONTEND URL:
+<PENDING FRONTEND SESSION CONFIRMATION>
+```
 
-## 13. Terminal product demo — OFFLINE VISUAL SIMULATION (Prompt 8.6, founder-approved)
+Expected browser routes (verify with the frontend session):
 
-`npm run relay:cli:demo` — the OFFLINE VISUAL SIMULATION (fake adapters,
-zero provider/network calls, isolated temp state, no real file changes;
-founder-approved 2026-07-23). It opens on an **activation splash**
-(`OFFLINE VISUAL SIMULATION · FAKE ADAPTERS · NO PROVIDER CALLS · NO REAL
-FILE CHANGES`, the four-legged Relay Dog, and start keys). Press **ENTER**
-to step into the live PANELS console (paused on the first event), then **P**
-to play — or **P** from the splash to auto-play — and **watch the
-mission play in real time** (~42s at 1×): Prompt Architect generates →
-researches → prepares Project Brain → hands off; Coding Agent inspects →
-edits → runs fixture tests → reports a claim; Relay receives the claim →
-inspects → verifies evidence → holds output; Reviewer reviews → raises
-Finding F-1 → Repair R-1 → re-verify → re-review → APPROVED → VERIFIED
-COMPLETE. Controls: **P** play/pause · **N** next event · **R** restart ·
-**1/2/3** speed · **V** panels/stream · **Q** exit (plus `/play /pause /next
-/restart /speed 2x /panels /stream /status /findings …`). The active event
-is marked; the footer HANDOFF NETWORK status and the Relay Dog progress
-through the phases. Every screen stays labeled OFFLINE. This is
-DEMONSTRATION FIXTURE ACTIVITY — real mission activity still derives only
-from canonical Relay events (the real supervised Claude→Codex workflow was
-proven in Prompt 8.4; durable crash recovery in Prompt 8.5).
-`npm run relay:cli:demo:plain` prints the deterministic non-interactive
-walkthrough (splash + mid-playback + full sequence) for recordings.
+- Relay Entry Home
+- Project Settings
+- Active Project Workspace
+- Mobile preview
+- Optional Relay Manual colorway
 
-**Presenter note — mid-playback pause is safe:** press **P** to pause on any
-role and narrate; **N** to step one event at a time; **R** to restart from
-the Prompt Architect. Chatting is not part of this phase — natural-language
-input is honestly declined. No provider is ever called.
+## D. Demonstration order
+
+1. Begin in Sunday Alcatraz.
+2. Switch into Relay.
+3. Show Relay Home.
+4. Select one project route.
+5. Open Project Settings.
+6. Click Prompt Architect: **Sunday Alcatraz**.
+7. Click Coding Agent: **Claude Code**.
+8. Click Reviewer: **Codex**.
+9. Select **Guided Mode**.
+10. Show research and Project Brain options.
+11. Continue into the Active Workspace.
+12. Explain the browser Relay Console.
+13. Switch to the terminal.
+14. Start the approved offline simulation (`npm run relay:yc-demo:cli`).
+15. Let Prompt Architect generation and research appear.
+16. Show Coding Agent activity.
+17. Explain that agent statements remain **claims** until Relay verifies.
+18. Show Relay verification.
+19. Show independent Reviewer activity (Finding F-1 → Repair R-1 →
+    re-review → approval).
+20. End at **VERIFIED COMPLETE**.
+
+## E. Truthful demo language
+
+Approved explanation (say this over the CLI segment):
+
+> "This terminal sequence is an offline product simulation showing how
+> Relay presents a coordinated mission. The underlying real workflow has
+> already been tested separately with a real Claude Code implementation
+> and a real independent Codex review."
+
+Do **not** say:
+
+- "Claude is coding live" during the offline simulation
+- "Codex is reviewing live" during the offline simulation
+- "These are live provider calls"
+- "Relay deployed this project"
+- "This fixture is production work"
+
+## F. Product message
+
+Primary statement:
+
+> **Sunday Relay turns separate AI agents into one continuous, supervised,
+> independently verified workforce.**
+
+Supporting explanation:
+
+- Prompt Architect prepares the work and researches the project.
+- Coding Agent implements.
+- Relay preserves context and independently verifies evidence.
+- Reviewer approves or requires repair.
+- **Relay — not an individual agent — decides when the mission is verified
+  complete.**
+
+## G. Failure recovery (immediate, on camera if needed)
+
+**CLI does not open:**
+- `Ctrl+C`
+- rerun `npm run relay:yc-demo:cli`
+
+**CLI display looks corrupted (flicker, stale content, leftover from another run):**
+1. press `Q` or `Ctrl+C`
+2. wait for the shell prompt to return
+3. run `reset` ONLY if the terminal itself is still corrupted
+4. rerun `npm run relay:yc-demo:cli`
+
+(`reset` is never needed during normal operation — the CLI restores the
+terminal on every exit. A stale demo left running in another tab can also
+cause this; quit it there with `Q`/`Ctrl+C`.)
+
+**CLI is at the wrong step:**
+- press `R` (restart)
+- press `P` (play)
+
+**CLI playback is too fast:**
+- press `1` (back to 1×)
+
+**Panels do not fit:**
+- maximize the terminal
+- reduce terminal zoom once
+- press `V` for Stream mode
+
+**Frontend asset missing:**
+- refresh once
+- use the verified local preview route
+- do not debug live during recording
+- continue with the CLI segment when necessary
+
+**Frontend mobile view fails:**
+- use the verified desktop layout
+- do not spend the recording repairing CSS
+
+## H. Stop conditions — do NOT record until
+
+- [ ] CLI preflight passes (`relay:yc-demo:check` → READY)
+- [ ] CLI visual playback passes end-to-end (splash → VERIFIED COMPLETE)
+- [ ] Frontend visual review is approved by the founder/frontend session
+- [ ] Mobile **or** desktop fallback is selected
+- [ ] No broken Relay Dog asset is visible on either surface
+- [ ] Project Settings agent selectors work
+- [ ] The founder can reach the Active Workspace
+- [ ] The exact frontend command and URL are recorded in section C
+
+---
+
+# Appendix — other Relay proofs (NOT the primary video segment)
+
+## A1. Legacy simulated scenario (`npm run relay:yc`)
+
+The pre-8.6 deterministic scenario demo (SIMULATED banner, ~40 s,
+`relay:yc:verify` proves determinism). Superseded as the primary segment by
+the CLI product simulation above; still works as a backup narrative of the
+orchestration engine.
+
+## A2. Real proofs — separate segments, separate labels, not for the demo take
+
+- **`npm run relay:claude:live`** — ONE real Claude Code agent in Relay's
+  isolated worktree (Prompt 8). Run in its OWN terminal; label it LIVE;
+  never claim Codex reviewed it. `relay claude doctor` is the safe pre-check.
+- **`npm run relay:codex:live`** — the real independent Codex review proof
+  (Prompt 8.3). Ends **RELAY STOPPED SAFELY (exit 3)** on the seeded-defect
+  fixture — an honest outcome, not a demo beat. Requires `codex login`.
+- **`npm run relay:supervised:live`** — the full real Claude→Codex
+  supervised loop (Prompt 8.4, founder-authorized only).
+- Never run a live command during the recording take, and never retry a
+  provider call repeatedly on stage.
+
+## A3. Deterministic workforce/product surfaces (safe any time)
+
+- **`npm run relay:competitive`** — Mission Contract + simulated
+  Claude/Codex workforce proof (reviewer labeled SIMULATED).
+- **`npm run relay:mission-control`** — modes + consent + Relay Dog +
+  reviewer gate + live-terminal projection (deterministic, no ANSI).
+
+On-camera framing for any of these: the agents shown are deterministic
+simulations; the mission, governance, and evidence stay with Relay; the
+real provider proofs above were completed separately.

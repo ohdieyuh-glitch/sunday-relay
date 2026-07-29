@@ -1,5 +1,29 @@
 # Sunday Relay — Security Boundaries (authoritative)
 
+> **CLI stability hardening (Prompt 8.7, 2026-07-23):** the interactive
+> shell fatal path now also collapses absolute paths to `…/<basename>` (on
+> top of the safeText control-byte/secret/UUID/email redaction), so an fs
+> error can never leak a home directory or username; the message is printed
+> only after leaving the alternate screen, never sharing a write with an
+> ANSI control sequence. Rendering is single-writer and frame-diffed (one
+> complete frame per write, no per-frame full-screen blank, no idle repaint);
+> cleanup restores raw mode + cursor + SGR + alternate screen idempotently on
+> every exit path. See RELAY_CLI_PRODUCT.md § Rendering & terminal stability.
+
+> **Implementation sync (Prompt 8.7, 2026-07-23):** the YC demo module
+> (`src/relay/yc/`) is a LEAF: the pure preflight engine imports nothing;
+> only `node-deps.ts` may spawn a process, and only READ-ONLY git
+> (`rev-parse`/`status`/`merge-base` allowlist — mutation subcommands are
+> boundary-banned), with repo-relative paths only (no absolute paths, no
+> `..`, structurally unable to reach the frontend worktree, which is always
+> reported MANUAL VERIFICATION REQUIRED). No network APIs, no writes, no
+> provider adapters, no deployment tooling (all boundary-tested). Git-
+> provided values (branch names) are printable-ASCII scrubbed before
+> display. Prompt 8.6 follow-ups closed: the shell's fatal-error path now
+> routes `err.message` through `safeText` (the last unsanitized rendering
+> path), and `--watch` resolves the LAST produced exit code and rewrites
+> the terminal reset + cursor-show sequence on every exit.
+
 > **Implementation sync (Prompt 8.6, 2026-07-22):** the CLI product adds a
 > single terminal rendering boundary (`cli/product/safety.ts`): inbound
 > text is stripped of ANSI/OSC/control injection, newline-bounded, secret-

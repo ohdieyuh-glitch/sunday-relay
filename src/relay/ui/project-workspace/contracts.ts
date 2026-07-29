@@ -12,7 +12,7 @@
 
 /* ----------------------------------------------------------------- modes */
 
-export type RelayWorkspaceMode = 'guided' | 'semi' | 'autonomous';
+export type RelayWorkspaceMode = 'guided' | 'semi' | 'autonomous' | 'demo_simulation';
 
 export type ProjectPhase =
   | 'plan'
@@ -45,7 +45,8 @@ export type WorkspaceOutputState =
   | 'held_for_re_review'
   | 'waiting_for_user'
   | 'stopped_safely'
-  | 'verified_complete';
+  | 'verified_complete'
+  | 'demo_verified_complete';
 
 export type HandoffNetworkState = 'standby' | 'online';
 
@@ -78,6 +79,8 @@ export type WorkspaceDogState =
   | 'wandering'
   | 'trotting'
   | 'running'
+  /** The coding agent is actively implementing (Milestone 4.5 motion). */
+  | 'implementing'
   | 'sprinting'
   | 'carrying_handoff'
   | 'researching'
@@ -163,6 +166,8 @@ export interface WorkspaceTerminalEvent {
   done?: boolean;
   /** True for preview fixture content. */
   fixture?: boolean;
+  /** True only for the isolated browser Demo Simulation projection. */
+  simulated?: boolean;
 }
 
 /* ----------------------------------------------------------- manual task */
@@ -278,10 +283,19 @@ export interface RelayProjectWorkspaceProps {
   researchEnabled: boolean;
   /** Whether a repair cycle has occurred this mission. */
   repairUsed: boolean;
+  /** Claude Code — Coding Agent terminal view. Absent for fixtures and for
+      any project with no real coding execution; the component then renders
+      its own honest empty state. */
+  codingTerminal?: import('./coding-terminal').CodingTerminalView;
+  /** Truthful role / runtime / billing rows. Absent in fixture showcases. */
+  roleBilling?: import('./coding-terminal').RoleBillingRow[];
   terminalOpen: boolean;
   /** Mobile full-screen terminal presentation. */
   terminalFullScreen?: boolean;
   reducedMotion?: boolean;
+  /** Optional demo mission playback control, rendered above the console.
+      Absent in fixtures and the honest configured state. */
+  missionPlayback?: import('react').ReactNode;
 
   onSendProjectMessage: (text: string) => void;
   onApproveDecision: (decisionId: string) => void;

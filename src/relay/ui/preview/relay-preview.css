@@ -22,19 +22,57 @@ body {
   background: #07080b;
 }
 
+/* Dev preview zoom stage — the whole app scales via an inline `zoom` so the
+   founder can fit the entire page on screen. The fixed DEV controls sit
+   outside this stage and always stay full size. */
+.rpv-stage { display: block; }
+
+/* The developer controls open by default and collapse behind the persistent
+   DEV PREVIEW handle. The panel scrolls internally if it must. */
 .rpv-switcher {
   position: fixed;
   right: 12px;
-  bottom: 12px;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   z-index: 60;
-  display: flex;
+  display: none;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 6px 8px;
+  max-width: min(calc(100vw - 24px), 540px);
+  max-height: calc(100dvh - 96px);
+  overflow: auto;
   background: rgba(11, 13, 18, 0.95);
   border: 1px solid #1c2230;
   font-family: 'Fira Code', ui-monospace, monospace;
 }
+.rpv-switcher--open { display: flex; }
+.rpv-appearance,
+.rpv-zoom { display: inline-flex; align-items: center; gap: 6px; }
+
+/* The DEV PREVIEW label is the always-available, touch-safe panel toggle. */
+.rpv-devchip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 61;
+  min-height: 44px;
+  max-width: calc(100vw - 24px);
+  min-width: 132px;
+  padding: 5px 10px;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  background: rgba(11, 13, 18, 0.95);
+  color: #8b8578;
+  border: 1px solid #1c2230;
+  cursor: pointer;
+}
+.rpv-devchip span { margin-left: 6px; }
+.rpv-devchip:focus-visible { outline: 2px solid #d9a441; outline-offset: 2px; }
 .rpv-switcher-tag {
   font-size: 8px;
   letter-spacing: 0.16em;
@@ -168,3 +206,34 @@ body {
 
 /* ============== COLORWAY — MIDNIGHT (founder website photo) ============== */
 [data-relay-colorway='midnight'] .rpv { background: #1b2138; }
+
+/* Safe not-found / redirect state (never a stack trace). */
+.rpv-notfound {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px clamp(20px, 6vw, 80px);
+  background: #07080b;
+  color: #ece7dd;
+  font-family: 'Fira Code', ui-monospace, monospace;
+}
+.rpv-notfound-title { font-size: 18px; font-weight: 700; letter-spacing: 0.02em; margin: 0; }
+.rpv-notfound-detail { font-size: 13px; color: #8b8578; margin: 0; max-width: 46ch; }
+.rpv-notfound-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
+.rpv-notfound-btn {
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  min-height: 44px;
+  padding: 10px 16px;
+  background: transparent;
+  color: #ece7dd;
+  border: 1px solid #1c2230;
+  cursor: pointer;
+}
+.rpv-notfound-btn--primary { background: #d9a441; color: #07080b; border-color: #d9a441; font-weight: 700; }
+.rpv-notfound-btn:focus-visible { outline: 2px solid #d9a441; outline-offset: 2px; }
+[data-relay-colorway='manual'] .rpv-notfound { background: #070705; }

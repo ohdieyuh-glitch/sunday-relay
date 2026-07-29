@@ -77,14 +77,18 @@ describe('relay-core boundary (new module roots)', () => {
   it('CLI is a thin client: only the app facade, read-model types, protocol, workspace facade, and its own modules', () => {
     // '../workspace' (the composition-root facade) is the ONLY workspace
     // import the CLI may use — internals are asserted below.
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control|product)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer|supervised)|\.\.\/mission|\.\.\/persistence|node:util|node:readline)['"]/;
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control|mission-economics|product)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer|supervised)|\.\.\/mission|\.\.\/persistence|\.\.\/yc|\.\.\/psp(\/psp-fixtures)?|node:util|node:readline)['"]/;
     // The Prompt-8.6 product shell is CLI-internal: its files may import ONLY
     // each other, the persistence facade (canonical durable state), and the
     // node builtins needed for the isolated demo state root — never `../main`
     // (which carries the provider adapters), `../render` (Relay Core), adapters,
     // Relay Core internals, or child_process. Keeping the allowlist this narrow
     // is what enforces the spec's "zero provider-adapter imports under product/".
-    const PRODUCT_ALLOWED = /from\s+['"](\.\/[a-z-]+|\.\.\/\.\.\/persistence|node:(fs|os|path|util))['"]/;
+    // `../../psp` is the SHARED PSP Agent ID domain — the same byte-identical
+    // modules the website carries. It is pure, browser-safe and provider-free,
+    // so the product shell may consume it directly rather than growing a
+    // second, divergent implementation of the same entitlement rules.
+    const PRODUCT_ALLOWED = /from\s+['"](\.\/[a-z-]+|\.\.\/\.\.\/(persistence|psp)|node:(fs|os|path|util))['"]/;
     const isProductFile = (f: string): boolean => f.includes(join('cli', 'product'));
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);
@@ -180,12 +184,17 @@ describe('Workspace boundaries (Prompt 7)', () => {
   });
 
   it('only the workspace module and the approved live adapters spawn processes inside src/relay', () => {
+    // The YC preflight node-deps file (Prompt 8.7) is the one additional
+    // approved process spawner — READ-ONLY git only, asserted separately.
+    // Exempt it by FULL PATH so no other <dir>/node-deps.ts could escape.
+    const ycNodeDeps = relay(join('yc', 'node-deps.ts'));
     const allRelayFiles = [
       ...files,
       ...walk(relay('cli')),
       ...walk(relay('connectors')).filter((f) => !isClaudeAdapter(f)),
       ...walk(relay('domain')),
       ...walk(relay('state')),
+      ...walk(relay('yc')).filter((f) => f !== ycNodeDeps),
     ].filter((f) => !f.endsWith('.test.ts'));
     for (const file of allRelayFiles) {
       expect(/child_process/.test(read(file)), `${file} uses child_process outside the workspace / Claude adapter boundary`).toBe(false);
@@ -445,6 +454,93 @@ describe('Durable persistence boundaries (Prompt 8.5)', () => {
     const atomic = read(join(persistenceDir, 'atomic-file.ts'));
     expect(atomic).toContain('0o600');
     expect(atomic).toContain('renameSync');
+  });
+});
+
+describe('YC demo acceptance boundaries (Prompt 8.7)', () => {
+  const ycDir = relay('yc');
+  const NODE_DEPS = join(ycDir, 'node-deps.ts');
+  const ycFiles = walk(ycDir).filter((f) => !f.endsWith('.test.ts'));
+
+  it('the yc directory contains EXACTLY the known files (no nested dirs, no .js helpers)', () => {
+    // The strongest guard: a full inventory means a nested `yc/sub/node-deps.ts`,
+    // a `.js`/`.mjs` helper (invisible to the .ts-only walk), or any unknown
+    // file cannot slip past the assertions below.
+    const names = readdirSync(ycDir).sort();
+    expect(names).toEqual(['index.ts', 'node-deps.ts', 'preflight.ts', 'yc-acceptance.test.ts']);
+  });
+
+  it('yc is a LEAF module: no imports from the rest of Relay, and no dynamic import/require', () => {
+    for (const file of ycFiles) {
+      const content = read(file);
+      expect(/from\s+['"]\.\.\//.test(content), `${file} imports outside src/relay/yc`).toBe(false);
+      // Dynamic import()/require() would carry no `from` clause and evade the
+      // static allowlist — ban them outright (no yc file needs them).
+      expect(/\bimport\s*\(|\brequire\s*\(/.test(content), `${file} uses dynamic import()/require() — a boundary evasion`).toBe(false);
+      const YC_ALLOWED = /from\s+['"](\.\/[a-z-]+|node:(child_process|fs|path))['"]/;
+      for (const imp of [...content.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1])) {
+        expect(YC_ALLOWED.test(`from '${imp}'`), `${file} imports ${imp} — yc allows only siblings + node child_process/fs/path`).toBe(true);
+      }
+    }
+  });
+
+  it('the preflight engine is PURE (no imports at all) and only node-deps.ts may spawn', () => {
+    const preflight = read(join(ycDir, 'preflight.ts'));
+    expect(/from\s+['"]/.test(preflight), 'preflight.ts must stay import-free').toBe(false);
+    for (const file of ycFiles) {
+      if (file === NODE_DEPS) continue; // exempt by FULL PATH, not filename suffix
+      expect(/child_process|execFileSync|spawnSync|spawn\(/.test(read(file)), `${file} spawns processes`).toBe(false);
+    }
+  });
+
+  it('the node deps run READ-ONLY git only — pinned allowlist, sanitized env, no mutation, no network, no writes', () => {
+    const deps = read(NODE_DEPS);
+    // Pin the allowlist EXACTLY so adding a network-capable subcommand
+    // (fetch/pull/remote/worktree) can never pass silently.
+    expect(deps).toContain("new Set(['rev-parse', 'status', 'merge-base'])");
+    for (const banned of ["'push'", "'reset'", "'clean'", "'checkout'", "'commit'", "'merge'", "'stash'",
+      "'restore'", "'fetch'", "'pull'", "'remote'", "'worktree'"]) {
+      expect(deps.includes(banned), `node-deps must not invoke git ${banned}`).toBe(false);
+    }
+    // The git child must get an explicit SANITIZED env — never raw process.env
+    // (which would leak provider keys and let GIT_DIR/GIT_WORK_TREE redirect
+    // the "current repository" checks at another tree).
+    expect(deps).toContain('env: gitEnv(');
+    expect(deps).toContain('GIT_TERMINAL_PROMPT');
+    expect(/process\.env/.test(deps), 'node-deps must not inherit raw process.env into git').toBe(false);
+    for (const file of ycFiles) {
+      const content = read(file);
+      expect(/node:https?|node:net|node:tls|node:dgram|fetch\(|WebSocket|XMLHttpRequest/.test(content), `${file} reaches the network`).toBe(false);
+      // Ban BOTH sync and async fs writes — node:fs is allowed for reads only.
+      expect(/writeFileSync|appendFileSync|mkdirSync|rmSync|renameSync|unlinkSync|writeSync/.test(content), `${file} writes to disk (sync)`).toBe(false);
+      expect(/writeFile\(|appendFile\(|mkdir\(|rmdir\(|\brm\(|rename\(|unlink\(|createWriteStream|fs\/promises|\.promises\b/.test(content), `${file} writes to disk (async)`).toBe(false);
+    }
+  });
+
+  it('yc never references the frontend worktree, providers, or deployment', () => {
+    for (const file of ycFiles) {
+      const content = read(file);
+      expect(/claude-home|sunday-relay-claude|codex-home|codex-landing/.test(content), `${file} references the frontend worktree`).toBe(false);
+      expect(/connectors\/(claude-code|codex-reviewer|supervised)|createClaudeCodeAdapter|createCodexReviewerAdapter|--confirm-live/.test(content), `${file} can reach a provider adapter`).toBe(false);
+      // The preflight REPORTS "no deployment" truthfully — so ban the
+      // tooling, not the word: no deploy command can be invoked from yc.
+      expect(/vercel|netlify|docker push|npm publish|gh release|firebase deploy/i.test(content), `${file} references deployment tooling`).toBe(false);
+    }
+  });
+
+  it('nothing but cli/main.ts imports yc — core, protocol, ledger, mission, product, connectors, domain, state, ui', () => {
+    // main.ts is the ONE allowed importer (via the updated cli ALLOWED
+    // regex); every other root — including the prototype domain/state/ui —
+    // must stay clear so the yc leaf can never be pulled into another layer.
+    const consumers = [
+      ...files, ...walk(relay('mission')), ...walk(relay('connectors')),
+      ...walk(relay('workspace')), ...walk(relay('persistence')),
+      ...walk(relay(join('cli', 'product'))),
+      ...walk(relay('domain')), ...walk(relay('state')), ...walk(relay('ui')),
+    ].filter((f) => !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'));
+    for (const file of consumers) {
+      expect(/from\s+['"].*\/yc['"]|from\s+['"].*\/yc\//.test(read(file)), `${file} imports the yc module`).toBe(false);
+    }
   });
 });
 

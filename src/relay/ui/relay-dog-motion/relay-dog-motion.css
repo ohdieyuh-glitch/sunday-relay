@@ -1,0 +1,118 @@
+/* SUNDAY RELAY — MILESTONE 4.5
+   Relay Dog motion layers. Visual only: nothing here carries product meaning,
+   and each layer owns a different transform so patrol travel, facing, and the
+   activity animation never overwrite one another.
+
+   Palette stays the existing Relay language (bone, dark, muted gold). No
+   external assets, no added gradients, no glow, no neon. */
+
+.rdm {
+  position: relative;
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+  max-width: 100%;
+  /* The travel track never pushes the page — patrol cannot cause
+     horizontal scrolling. */
+  overflow-x: hidden;
+}
+
+/* Horizontal patrol position. Transform only — no layout thrash. */
+.rdm-travel {
+  display: inline-flex;
+  will-change: transform;
+}
+
+/* Direction. The artwork mirrors; text and glyphs are counter-flipped so no
+   label, caption, or marker is ever rendered backwards. */
+.rdm-facing {
+  display: inline-flex;
+}
+.rdm-facing--left {
+  transform: scaleX(-1);
+}
+.rdm-facing--left .rpd-caption,
+.rdm-facing--left .rpd-marker {
+  transform: scaleX(-1);
+}
+
+/* Activity body animation layer. */
+.rdm-body {
+  display: inline-flex;
+}
+
+/* ------------------------------------------------ waiting for the user */
+
+/* An attention-seeking bounce: noticeable, never violent, no drift, no
+   flashing and no colour change. */
+@keyframes rdm-attention-jump {
+  0%, 62%, 100% { transform: translateY(0); }
+  72% { transform: translateY(-9px); }
+  82% { transform: translateY(0); }
+  90% { transform: translateY(-4px); }
+}
+.rdm-body--waiting_for_user {
+  animation: rdm-attention-jump 1.5s ease-in-out infinite;
+}
+
+/* -------------------------------------------------------- implementing */
+
+/* The coding agent is actively implementing: the dog rises onto its hind
+   toes and stretches upward toward an implied vertical surface. The rise is
+   on this wrapper; the paw taps are on the artwork, so they compose. */
+@keyframes rdm-tiptoe-reach {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  30% { transform: translateY(-4px) scaleY(1.02); }
+  60% { transform: translateY(-5px) scaleY(1.02); }
+}
+@keyframes rdm-paw-scratch {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(2px, -2px); }
+}
+.rdm-body--implementing {
+  transform-origin: center bottom;
+  animation: rdm-tiptoe-reach 1.8s ease-in-out infinite;
+}
+/* The implementing pose is not a `moving` pose, so .rpd-art carries no
+   competing animation here. */
+.rdm-body--implementing .rpd-art {
+  animation: rdm-paw-scratch 0.36s steps(2, end) infinite;
+}
+
+/* ------------------------------------------------------ reduced motion */
+
+/* Under the user's system preference every loop stops and a compact status
+   label carries the meaning instead. The dog is never hidden. */
+.rdm-reduced-label {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: #8b8578;
+  pointer-events: none;
+}
+
+.rdm--reduced .rdm-body,
+.rdm--reduced .rdm-body--waiting_for_user,
+.rdm--reduced .rdm-body--implementing,
+.rdm--reduced .rdm-body--implementing .rpd-art {
+  animation: none;
+}
+/* The implementing pose still reads as "reaching up", just held still. */
+.rdm--reduced .rdm-body--implementing {
+  transform: translateY(-3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rdm-body,
+  .rdm-body--waiting_for_user,
+  .rdm-body--implementing,
+  .rdm-body--implementing .rpd-art {
+    animation: none;
+  }
+  .rdm-body--implementing {
+    transform: translateY(-3px);
+  }
+}
