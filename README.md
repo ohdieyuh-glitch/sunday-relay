@@ -6,7 +6,8 @@ coordinated, supervised and independently verified project workforce.**
 Sunday Relay is a product of Aquala Technologies. It is developed in this
 repository, independently of [Sunday Alcatraz](https://github.com/ohdieyuh-glitch/turbo-broccoli).
 Relay accepts Relay product work only; Alcatraz implementation does not belong
-here, and Relay implementation does not belong there.
+here, and Relay implementation does not belong there — see
+[`docs/REPOSITORY_GOVERNANCE.md`](docs/REPOSITORY_GOVERNANCE.md).
 
 ---
 
@@ -102,7 +103,7 @@ they are the honest provenance of this work.
 Branches use the `relay/*` namespace, every material change opens a pull
 request against `main` in this repository, and merges are **squash merges with
 founder authorization**. Relay changes never open pull requests against the
-Alcatraz repository.
+Alcatraz repository. See [`docs/REPOSITORY_GOVERNANCE.md`](docs/REPOSITORY_GOVERNANCE.md).
 
 ## License
 
