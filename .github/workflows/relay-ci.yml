@@ -1,0 +1,68 @@
+name: Relay CI
+
+# Sunday Relay's own CI. It is independent of Sunday Alcatraz CI, it never
+# deploys, and it never triggers an Alcatraz Railway or Vercel deployment.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relay-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify Relay
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Repository boundary scan
+        run: node scripts/relay-repository-boundary.mjs
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Website build
+        run: npm run build
+
+      - name: CLI build
+        run: npm run relay:build
+
+      - name: Relay bridge typecheck and build
+        run: |
+          if [ -f relay-bridge/tsconfig.json ]; then
+            npm run relay:bridge:build
+          else
+            echo "no relay-bridge in this tree — skipping"
+          fi
+
+      - name: Website/CLI parity
+        run: |
+          if [ -f scripts/relay-surface-parity.mjs ]; then
+            npm run relay:surface-parity:check
+          else
+            echo "no parity registry in this tree — skipping"
+          fi
+
+      - name: CLI contract verification (offline, no provider call)
+        run: npm run relay:cli:contract-verify
