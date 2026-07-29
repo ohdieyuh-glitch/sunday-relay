@@ -6,13 +6,14 @@ import { createStateStore } from '../../persistence';
 import { parseCli } from '../main';
 import { safeText } from './safety';
 import { visibleLength, divider } from './layout';
-import { footerDog, headerLogo } from './dog';
+import { footerDog, headerLogo, OFFICIAL_DOG_COLUMNS, OFFICIAL_DOG_ROWS } from './dog';
+import { OFFICIAL_RELAY_DOG_TERMINAL_TONE } from './official-relay-dog-sprite';
 import { parseKeys } from './shell';
 import { detectCaps, paint } from './theme';
 import { renderHeader, renderMissionConsole, renderPanel } from './renderer';
 import { missionConsoleVM } from './projections';
 import {
-  finalizeDraft, initialState, reduceKey, reduceTick, renderScreen,
+  DRAFT_FIELDS, finalizeDraft, initialState, reduceKey, reduceTick, renderScreen,
   type AppData, type AppState,
 } from './app';
 import { findProjectRecord, productProjectView } from './commands';
@@ -98,11 +99,21 @@ describe('dog — track never overruns its width at the bounce', () => {
 });
 
 describe('shell parseKeys — escape sequences never leak as spurious hotkeys', () => {
-  it('swallows Delete/Home/End/PgUp instead of emitting escape + printables', () => {
-    for (const seq of ['\x1b[3~', '\x1b[H', '\x1b[F', '\x1b[5~', '\x1b[6~']) {
-      const names = parseKeys(seq).map((k) => k.name);
-      expect(names, seq).not.toContain('escape');
-      expect(names.join(''), seq).not.toMatch(/[a-z0-9~[]/i);
+  it('maps Home/End/PgUp/PgDn to named scroll events and never leaks escape + printables', () => {
+    // Navigation keys map to named events (used for viewport scrolling)…
+    expect(parseKeys('\x1b[5~').map((k) => k.name)).toEqual(['pageup']);
+    expect(parseKeys('\x1b[6~').map((k) => k.name)).toEqual(['pagedown']);
+    expect(parseKeys('\x1b[H').map((k) => k.name)).toEqual(['home']);
+    expect(parseKeys('\x1b[F').map((k) => k.name)).toEqual(['end']);
+    expect(parseKeys('\x1bOH').map((k) => k.name)).toEqual(['home']);
+    expect(parseKeys('\x1bOF').map((k) => k.name)).toEqual(['end']);
+    // …Delete (`3~`) and other CSI keys are still swallowed entirely.
+    expect(parseKeys('\x1b[3~')).toEqual([]);
+    // In every case: no spurious Escape, and no raw byte leaks as a typed char.
+    for (const seq of ['\x1b[3~', '\x1b[H', '\x1b[F', '\x1b[5~', '\x1b[6~', '\x1bOH', '\x1bOF']) {
+      const keys = parseKeys(seq);
+      expect(keys.some((k) => k.name === 'escape'), seq).toBe(false);
+      expect(keys.some((k) => k.char !== undefined), seq).toBe(false);
     }
   });
   it('drops an incomplete CSI split across chunks without cancelling anything', () => {
@@ -210,43 +221,53 @@ describe('routing — non-interactive project sub-surfaces render real content',
   });
 });
 
-describe('Relay Dog — four-legged side dog, not a humanoid (founder correction)', () => {
-  it('the header logo is a wide multi-row pixel dog, never a 3-line face/humanoid', () => {
+describe('Relay Dog — the OFFICIAL front-facing voxel dog (one identity)', () => {
+  it('the header logo is the official sprite: upright ears, dark visor, amber eyes', () => {
     const logo = headerLogo(caps());
-    // A dog silhouette is taller than a face glyph and WIDER than it is tall.
-    expect(logo.length).toBeGreaterThanOrEqual(6);
+    // 18x14 sprite folded two pixel rows per line = 7 rows, 18 columns.
+    expect(logo.length).toBe(OFFICIAL_DOG_ROWS);
     const maxW = Math.max(...logo.map(visibleLength));
-    expect(maxW).toBeGreaterThan(logo.length); // horizontal body, not upright
+    expect(maxW).toBe(OFFICIAL_DOG_COLUMNS + 1); // + the one-column gutter
     const raw = logo.join('\n');
-    expect(raw).toContain('▀');                 // half-block pixel art
-    expect(raw).toContain('38;5;136');          // Sunday-gold eyes/collar (dim)
-    expect(raw).not.toContain('|\\_/|');        // not the old cat/humanoid face
+    expect(raw).toContain('▀');                              // half-block pixel art
+    expect(raw).toContain(`38;5;${OFFICIAL_RELAY_DOG_TERMINAL_TONE.y}`); // amber eyes
+    expect(raw).toContain(`48;5;${OFFICIAL_RELAY_DOG_TERMINAL_TONE.d}`); // dark visor band
+    expect(raw).toContain(`38;5;${OFFICIAL_RELAY_DOG_TERMINAL_TONE.w}`); // bone-white body
   });
 
-  it('the header dog shrinks at narrow widths but stays a pixel dog', () => {
-    const large = headerLogo(caps({ width: 130 }));
-    const small = headerLogo(caps({ width: 90 }));
-    expect(large.length).toBeGreaterThan(small.length); // large > small variant
-    expect(small.join('')).toContain('▀');
+  it('the header dog keeps ONE uniform scale and identical proportions at every width', () => {
+    const wide = headerLogo(caps({ width: 130 }));
+    const narrow = headerLogo(caps({ width: 90 }));
+    const mobile = headerLogo(caps({ width: 62 }));
+    // Same sprite, same rows, same columns — never a second, redrawn dog.
+    expect(narrow).toEqual(wide);
+    expect(mobile).toEqual(wide);
+    for (const logo of [wide, narrow, mobile]) {
+      expect(logo.length).toBe(OFFICIAL_DOG_ROWS);
+      expect(Math.max(...logo.map(visibleLength))).toBe(OFFICIAL_DOG_COLUMNS + 1);
+    }
   });
 
-  it('the no-Unicode fallback is a horizontal ASCII dog, not a humanoid, no ANSI', () => {
+  it('the no-Unicode fallback is the SAME official sprite folded to ASCII, no ANSI', () => {
     const ascii = headerLogo(caps({ color: false, unicode: false }));
     const raw = ascii.join('\n');
-    expect(raw).not.toContain('\x1b');          // plain
-    expect(raw).not.toContain('|\\_/|');        // not the old face
-    expect(raw).toContain('||');                // legs
-    const maxW = Math.max(...ascii.map((l) => l.length));
-    expect(maxW).toBeGreaterThan(ascii.length); // horizontal
+    expect(raw).not.toContain('\x1b');           // plain
+    expect(ascii.length).toBe(OFFICIAL_DOG_ROWS); // same proportions as the sprite
+    expect(raw).toContain('o');                   // the amber eyes survive the fold
+    expect(raw).toContain('=');                   // the visor band survives the fold
+    // The retired side dog's ASCII silhouette is gone for good.
+    expect(raw).not.toContain('/o \\___');
+    expect(raw).not.toContain('\\______\\');
   });
 
-  it('the footer mascot is a walking paw (canine), never a face', () => {
+  it('the footer carries the canonical state label and the official motion meaning', () => {
     const still = footerDog({ state: 'COMPLETE', tick: 0, caps: caps() });
-    const trot = footerDog({ state: 'TROTTING', tick: 3, caps: caps() });
-    expect(still.track).toContain('🐾');
-    expect(still.track).not.toMatch(/[°ᴥ]/);    // not the old <°ᴥ°> face
-    expect(still.label).toContain('RELAY DOG'); // canonical state label present
-    expect(trot.moving).toBe(true);
+    const patrol = footerDog({ state: 'WANDERING', tick: 3, caps: caps() });
+    const thinking = footerDog({ state: 'TROTTING', tick: 3, caps: caps() });
+    expect(still.label).toContain('RELAY DOG');
+    expect(still.track).not.toMatch(/[°ᴥ]/);     // not the old <°ᴥ°> face
+    expect(patrol.moving).toBe(true);            // idle patrols
+    expect(thinking.moving).toBe(false);         // thinking stops walking (4.5)
     expect(still.moving).toBe(false);
   });
 
@@ -399,5 +420,116 @@ describe('offline demo — timed visual mission simulation (founder scope)', () 
     expect(mid).toContain('▸');                                  // active pointer while in progress
     const done = strip(renderMissionConsole(mk(DEMO_TIMELINE.length), caps()));
     expect(done).not.toContain('▸');                             // no active pointer once complete
+  });
+});
+
+describe('project layer — selectable options, not typed responses (Prompt 8.7)', () => {
+  const data: AppData = { projects: [], events: [], tasks: [], findings: [], repairs: [], evidence: [], recovery: null, demo: false };
+  const strip2 = (lines: string[]): string => lines.join('\n')
+    // eslint-disable-next-line no-control-regex
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+
+  /** Open the draft and advance to the field with the given key (accepting
+   * defaults: Enter on selects, a placeholder on REQUIRED text fields so they
+   * don't block, fallback on optional text). */
+  const openAt = (key: string): AppState => {
+    let s = reduceKey(initialState(false), { name: 'n', char: 'n' }, data);
+    let guard = 0;
+    while (DRAFT_FIELDS[s.draftIndex] && DRAFT_FIELDS[s.draftIndex].key !== key && !s.draftReview && guard < 60) {
+      guard += 1;
+      const field = DRAFT_FIELDS[s.draftIndex];
+      if (field.kind === 'text' && !field.optional) s = reduceKey(s, { name: 'x', char: 'x' }, data);
+      s = reduceKey(s, { name: 'enter' }, data);
+    }
+    return s;
+  };
+
+  it('every discrete-value field is a SELECT (no typing); free-form fields stay text/list', () => {
+    const selects = DRAFT_FIELDS.filter((f) => f.kind === 'select').map((f) => f.key);
+    for (const key of ['projectType', 'existingProject', 'productionImpact', 'architect', 'codingAgent', 'reviewer', 'mode', 'researchPreference', 'callLimit']) {
+      expect(selects, key).toContain(key);
+    }
+    // Selects carry options and never require typing.
+    for (const f of DRAFT_FIELDS.filter((f) => f.kind === 'select')) {
+      expect(f.options && f.options.length > 0, `${f.key} needs options`).toBe(true);
+    }
+    // Free-form identity/scope fields remain typed.
+    for (const key of ['name', 'objective']) {
+      expect(DRAFT_FIELDS.find((f) => f.key === key)?.kind).toBe('text');
+    }
+  });
+
+  it('a select field renders a highlighted option list, not a text prompt', () => {
+    const s = openAt('mode');
+    const out = strip2(renderScreen(s, data, caps()));
+    expect(out).toContain('Guided');
+    expect(out).toContain('Semi-autonomous');
+    expect(out).toContain('Autonomous');
+    expect(out).toContain('▸');                    // a highlighted option
+    expect(out).toContain('[Enter] select');       // selection affordance, not a typed prompt
+    expect(out).not.toContain('type < then Enter');
+  });
+
+  it('arrow keys move the highlight and Enter commits the highlighted option', () => {
+    let s = openAt('mode');
+    expect(s.selection).toBe(0);                   // Guided (default)
+    s = reduceKey(s, { name: 'down' }, data);
+    expect(s.selection).toBe(1);                   // Semi-autonomous highlighted
+    const modeIndex = s.draftIndex;
+    s = reduceKey(s, { name: 'enter' }, data);     // commit Semi
+    expect(s.draft.mode).toBe('SEMI');
+    expect(s.draftIndex).toBeGreaterThan(modeIndex); // advanced
+  });
+
+  it('a number key jumps directly to an option', () => {
+    let s = openAt('callLimit');
+    s = reduceKey(s, { name: '3', char: '3' }, data); // 3rd option = 6 calls
+    expect(s.selection).toBe(2);
+    s = reduceKey(s, { name: 'enter' }, data);
+    expect(s.draft.callLimit).toBe(6);
+  });
+
+  it('Backspace on a select goes back to the previous field, keeping the earlier choice highlighted', () => {
+    let s = openAt('codingAgent');
+    // choose reviewer's neighbour path: go forward to reviewer, then back
+    const agentIndex = s.draftIndex;
+    s = reduceKey(s, { name: 'enter' }, data);       // commit Claude Code → reviewer
+    expect(DRAFT_FIELDS[s.draftIndex].key).toBe('reviewer');
+    s = reduceKey(s, { name: 'down' }, data);        // highlight "None"
+    s = reduceKey(s, { name: 'enter' }, data);       // commit reviewer = None → mode
+    s = reduceKey(s, { name: 'backspace' }, data);   // back to reviewer
+    expect(DRAFT_FIELDS[s.draftIndex].key).toBe('reviewer');
+    expect(s.selection).toBe(1);                     // the "None" choice is still highlighted
+    void agentIndex;
+  });
+
+  it('Enter-through-defaults yields the default selections (no typing anywhere)', () => {
+    let s = reduceKey(initialState(false), { name: 'n', char: 'n' }, data);
+    // type only the two free-text required fields; Enter through everything else
+    for (const ch of 'My Project') s = reduceKey(s, { name: ch.toLowerCase(), char: ch }, data);
+    s = reduceKey(s, { name: 'enter' }, data);       // name
+    s = reduceKey(s, { name: 'enter' }, data);       // projectType = feature (default select)
+    for (const ch of 'Ship it') s = reduceKey(s, { name: ch.toLowerCase(), char: ch }, data);
+    s = reduceKey(s, { name: 'enter' }, data);       // objective
+    while (!s.draftReview) s = reduceKey(s, { name: 'enter' }, data); // defaults for the rest
+    const draft = finalizeDraft(s.draft, '2026-07-26T00:00:00.000Z');
+    expect(draft.name).toBe('My Project');
+    expect(draft.projectType).toBe('feature');
+    expect(draft.architect).toBe('Sunday Alcatraz');
+    expect(draft.codingAgent).toBe('Claude Code');
+    expect(draft.reviewer).toBe('Codex');
+    expect(draft.mode).toBe('GUIDED');
+    expect(draft.existingProject).toBe(true);
+    expect(draft.callLimit).toBe(4);
+    expect(draft.runtimeLimitMinutes).toBe(30);
+  });
+
+  it('letters are inert on a select (they never leak into a typed response)', () => {
+    let s = openAt('mode');
+    const before = s.selection;
+    s = reduceKey(s, { name: 'x', char: 'x' }, data);
+    expect(s.selection).toBe(before);   // unchanged
+    expect(s.typed).toBe('');           // nothing typed
+    expect(DRAFT_FIELDS[s.draftIndex].key).toBe('mode'); // did not advance
   });
 });

@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { RelayDogMark } from '../pixel-dog';
+import { RelayMenuButton, RelayMobileMenu } from '../chrome';
 import { OUTPUT_STATE_LABEL } from './projections';
 import type { WorkspaceOutputState, WorkspaceProject } from './contracts';
 
 /**
  * Top application frame — founder-screenshot language: pixel dog mark +
  * letterspaced SUNDAY RELAY at left, project identity with the outlined
- * [ RLY / 001 ] chip in the center, system controls at right. No marketing
+ * [ RLY / 001 ] chip in the center, system controls at right. On mobile the
+ * right-side controls collapse behind the founder gold MENU block; the
+ * project route/status strip stays visible below the brand. No marketing
  * navigation — the developer is inside the product.
  */
 export function RelayProjectHeader({
@@ -23,6 +27,7 @@ export function RelayProjectHeader({
   onOpenProjectSettings: () => void;
   onOpenTerminal: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <header className="rpw-header">
       <div className="rpw-header-left">
@@ -35,6 +40,24 @@ export function RelayProjectHeader({
           ← RELAY HOME
         </button>
       </div>
+
+      <RelayMenuButton onOpen={() => setMenuOpen(true)} />
+      <RelayMobileMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        statusLine={`${project.reference} — ${OUTPUT_STATE_LABEL[outputState]}`}
+        items={[
+          { id: 'home', label: '← RELAY HOME', onSelect: onReturnHome },
+          { id: 'settings', label: 'PROJECT SETTINGS', onSelect: onOpenProjectSettings },
+          { id: 'terminal', label: '>_ LIVE TERMINAL', onSelect: onOpenTerminal },
+          {
+            id: 'manual-tasks',
+            label: 'MANUAL TASKS',
+            hint: `${openManualTasks} OPEN`,
+          },
+          { id: 'notifications', label: 'NOTIFICATIONS', hint: 'NONE' },
+        ]}
+      />
 
       <div className="rpw-header-project" aria-label="Active project">
         <span className="rpw-proj-name">{project.name}</span>

@@ -1,3 +1,9 @@
+import {
+  OFFICIAL_RELAY_DOG_ACTIVITY_MOTION,
+  OFFICIAL_RELAY_DOG_TRAVELLING_MOTIONS,
+  projectOfficialRelayDogActivity,
+} from './official-relay-dog-states';
+
 /**
  * Relay CLI product contracts (Prompt 8.6) — PURE view-model types for the
  * terminal product shell. Renderers accept ONLY these safe view models
@@ -80,13 +86,38 @@ export interface PanelVM {
 
 /* ------------------------------ dog --------------------------------- */
 
+/**
+ * The CLI's dog vocabulary is the website's vocabulary in display case
+ * ('CARRYING HANDOFF' <-> 'carrying_handoff'), so both surfaces name the same
+ * states. IMPLEMENTING is the explicit Milestone 4.5 state for "the coding
+ * agent is doing the work"; RUNNING and SPRINTING are the legacy values that
+ * mean the same thing.
+ */
 export type DogStateVM =
-  | 'WANDERING' | 'TROTTING' | 'RUNNING' | 'SPRINTING' | 'CARRYING HANDOFF'
+  | 'WANDERING' | 'TROTTING' | 'RUNNING' | 'IMPLEMENTING' | 'SPRINTING' | 'CARRYING HANDOFF'
   | 'RESEARCHING' | 'VERIFYING' | 'REVIEWING' | 'REPAIRING'
   | 'WAITING FOR USER' | 'STOPPED SAFELY' | 'COMPLETE';
 
-export const MOVING_DOG_STATES: readonly DogStateVM[] =
-  ['WANDERING', 'TROTTING', 'RUNNING', 'SPRINTING', 'CARRYING HANDOFF'];
+export const DOG_STATES: readonly DogStateVM[] = [
+  'WANDERING', 'TROTTING', 'RUNNING', 'IMPLEMENTING', 'SPRINTING', 'CARRYING HANDOFF',
+  'RESEARCHING', 'VERIFYING', 'REVIEWING', 'REPAIRING',
+  'WAITING FOR USER', 'STOPPED SAFELY', 'COMPLETE',
+];
+
+/**
+ * States in which the dog TRAVELS along its track. Derived from the shared
+ * official-dog semantics rather than restated here, so the CLI can never
+ * disagree with the website about which states walk. Under Milestone 4.5 only
+ * idle patrol and carrying a handoff travel: thinking, implementing, reviewing
+ * and the rest hold their ground and animate in place.
+ */
+export const MOVING_DOG_STATES: readonly DogStateVM[] = DOG_STATES.filter((state) =>
+  OFFICIAL_RELAY_DOG_TRAVELLING_MOTIONS.includes(
+    OFFICIAL_RELAY_DOG_ACTIVITY_MOTION[
+      projectOfficialRelayDogActivity(state.toLowerCase().replace(/ /g, '_'))
+    ],
+  ),
+);
 
 /* --------------------------- workforce ------------------------------ */
 

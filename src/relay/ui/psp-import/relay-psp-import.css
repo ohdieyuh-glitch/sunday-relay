@@ -1,0 +1,222 @@
+/**
+ * Relay Workspace -> Agents -> Import PSP Agent.
+ *
+ * Uses the existing Relay workspace surface language: charcoal plate, cream
+ * text, restrained gold accent, sharp terminal corners. Nothing here changes
+ * the surrounding workspace design.
+ */
+
+.rpsp {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid rgba(217, 164, 65, 0.22);
+  background: rgba(12, 13, 16, 0.72);
+  color: #ece9e2;
+  font-family: var(--rpw-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.rpsp-title {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  color: #d9a441;
+}
+
+.rpsp-sub,
+.rpsp-help {
+  margin: 0.2rem 0 0;
+  font-size: 0.72rem;
+  color: rgba(236, 233, 226, 0.62);
+}
+
+/* ------------------------------- agents ------------------------------- */
+
+.rpsp-agents {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.rpsp-agent {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1.4fr) minmax(5rem, 0.7fr) minmax(8rem, 1.6fr) auto;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid rgba(236, 233, 226, 0.1);
+  font-size: 0.74rem;
+}
+
+.rpsp-agent--empty {
+  display: block;
+  color: rgba(236, 233, 226, 0.55);
+}
+
+.rpsp-agent-name { color: #ece9e2; }
+.rpsp-agent-id,
+.rpsp-agent-roles,
+.rpsp-agent-source { color: rgba(236, 233, 226, 0.66); }
+.rpsp-agent-source { letter-spacing: 0.1em; color: #d9a441; }
+
+/* ------------------------------- import ------------------------------- */
+
+.rpsp-import {
+  border-top: 1px solid rgba(217, 164, 65, 0.2);
+  padding-top: 0.75rem;
+}
+
+.rpsp-import-title {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #ece9e2;
+}
+
+.rpsp-import-state {
+  margin: 0.25rem 0 0.6rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  color: #d9a441;
+}
+
+.rpsp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 34rem;
+}
+
+.rpsp-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  color: rgba(236, 233, 226, 0.75);
+}
+
+.rpsp-input {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgba(236, 233, 226, 0.24);
+  background: rgba(0, 0, 0, 0.45);
+  color: #ece9e2;
+  font-family: inherit;
+  font-size: 0.8rem;
+  /* Wide tracking so the masking dots read as a credential field. */
+  letter-spacing: 0.14em;
+}
+
+.rpsp-input:focus-visible {
+  outline: 2px solid #d9a441;
+  outline-offset: 1px;
+}
+
+.rpsp-btn {
+  align-self: flex-start;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid rgba(217, 164, 65, 0.5);
+  background: transparent;
+  color: #ece9e2;
+  font-family: inherit;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.rpsp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.rpsp-btn--primary { background: rgba(217, 164, 65, 0.16); color: #f2c14e; }
+.rpsp-btn:focus-visible { outline: 2px solid #d9a441; outline-offset: 2px; }
+
+.rpsp-validating { font-size: 0.74rem; color: rgba(236, 233, 226, 0.7); }
+
+/* ------------------------------ preview ------------------------------- */
+
+.rpsp-preview {
+  margin-top: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid rgba(217, 164, 65, 0.3);
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.rpsp-preview-name { margin: 0; font-size: 0.9rem; color: #f2c14e; }
+.rpsp-preview-creator {
+  margin: 0.1rem 0 0.6rem;
+  font-size: 0.72rem;
+  color: rgba(236, 233, 226, 0.62);
+}
+
+.rpsp-preview-facts,
+.rpsp-done-facts { margin: 0; display: grid; gap: 0.25rem; }
+
+.rpsp-preview-facts > div,
+.rpsp-done-facts > div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 12rem) 1fr;
+  gap: 0.5rem;
+  font-size: 0.74rem;
+}
+
+.rpsp-preview-facts dt,
+.rpsp-done-facts dt { color: rgba(236, 233, 226, 0.55); }
+.rpsp-preview-facts dd,
+.rpsp-done-facts dd { margin: 0; color: #ece9e2; }
+
+.rpsp-masked { letter-spacing: 0.1em; }
+
+.rpsp-warnings {
+  margin: 0.6rem 0 0;
+  padding-left: 1rem;
+  font-size: 0.74rem;
+  color: #f2c14e;
+}
+
+.rpsp-redemption {
+  margin: 0.6rem 0 0;
+  font-size: 0.74rem;
+  color: rgba(236, 233, 226, 0.8);
+}
+
+.rpsp-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+
+/* ------------------------------- states ------------------------------- */
+
+.rpsp-error {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.7rem;
+  border-left: 3px solid #e06c5a;
+  background: rgba(224, 108, 90, 0.08);
+}
+
+.rpsp-error-message { margin: 0; font-size: 0.78rem; color: #ece9e2; }
+.rpsp-error-next,
+.rpsp-error-id {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+  color: rgba(236, 233, 226, 0.68);
+}
+
+.rpsp-dim { color: rgba(236, 233, 226, 0.45); }
+
+.rpsp-done {
+  margin-top: 0.6rem;
+  padding: 0.7rem;
+  border-left: 3px solid #6fbf8b;
+  background: rgba(111, 191, 139, 0.07);
+}
+
+.rpsp-done-title { margin: 0 0 0.5rem; font-size: 0.82rem; color: #ece9e2; }
+
+/* ------------------------------- mobile ------------------------------- */
+
+@media (max-width: 720px) {
+  .rpsp-agent { grid-template-columns: 1fr; gap: 0.15rem; }
+  .rpsp-preview-facts > div,
+  .rpsp-done-facts > div { grid-template-columns: 1fr; gap: 0.05rem; }
+  .rpsp-actions { flex-direction: column; }
+  .rpsp-btn { align-self: stretch; text-align: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rpsp * { transition: none !important; animation: none !important; }
+}

@@ -32,6 +32,20 @@ import {
   productProjectView, productRecover, productRunConfirmation, runCliContractVerification,
   runCliDemo, runProductShell, type ProjectView,
 } from './product';
+import { createNodePreflightDeps, runYcPreflight, ycDemoNotice } from '../yc';
+import {
+  PSP_ARGUMENT_REFUSAL, runPspAgentImportCommand, type PspCredentialSource,
+} from './product';
+import { createUnavailableEntitlementService } from '../psp';
+// Development fixtures are imported from their own module (never through the
+// domain surface) so the production import path never reaches them at all.
+import { createFixtureEntitlementService } from '../psp/psp-fixtures';
+import {
+  buildMissionEconomicsFixture,
+  renderMissionBudget,
+  renderMissionEconomics,
+  renderMissionReceipts,
+} from './mission-economics';
 
 /**
  * Relay CLI entry (Prompt 5). Thin client: parses arguments, composes the
@@ -56,8 +70,17 @@ const defaultIo: CliIo = {
 export interface ParsedCli {
   command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude' | 'codex' | 'supervised'
     | 'state' | 'runs' | 'persistence'
-    | 'home' | 'projects' | 'project' | 'recover' | 'cli' | 'session';
+    | 'home' | 'projects' | 'project' | 'recover' | 'cli' | 'session' | 'yc' | 'agent' | 'mission';
   workspaceAction?: 'doctor' | 'verify';
+  agentAction?: 'import';
+  missionAction?: 'economics' | 'budget' | 'receipts';
+  /** True when a credential was pasted as an argument — refused, never used. */
+  credentialInArgv?: boolean;
+  stdinCredential?: boolean;
+  /** The NAME of an environment reference. Never the credential value. */
+  credentialEnv?: string;
+  assumeYes?: boolean;
+  workspaceId?: string;
   claudeAction?: 'doctor' | 'run' | 'inspect' | 'cancel' | 'contract-verify';
   codexAction?: 'doctor' | 'run' | 'inspect' | 'cancel' | 'contract-verify';
   supervisedAction?: 'run' | 'contract-verify';
@@ -67,6 +90,7 @@ export interface ParsedCli {
   projectAction?: 'new' | 'open' | 'status' | 'settings' | 'workforce' | 'research' | 'run'
     | 'terminal' | 'tasks' | 'findings' | 'evidence' | 'history' | 'repairs';
   cliAction?: 'demo' | 'contract-verify';
+  ycAction?: 'check' | 'demo';
   projectRef?: string;
   reducedMotion?: boolean;
   watch?: boolean;
@@ -117,6 +141,14 @@ export function parseCli(argv: string[]): ParsedCli {
         'reduced-motion': { type: 'boolean', default: false },
         watch: { type: 'boolean', default: false },
         once: { type: 'boolean', default: false },
+        // PSP Agent ID import. There is deliberately NO --psp-agent-id flag:
+        // a bearer credential must never reach argv, shell history, or the
+        // process table. The ID arrives by hidden prompt, stdin, or a NAMED
+        // environment reference (the name, never the value).
+        stdin: { type: 'boolean', default: false },
+        'credential-env': { type: 'string' },
+        yes: { type: 'boolean', default: false },
+        workspace: { type: 'string' },
       },
     });
     const pace = values.pace !== undefined ? Number(values.pace) : undefined;
@@ -133,8 +165,45 @@ export function parseCli(argv: string[]): ParsedCli {
     if (pace !== undefined && (!Number.isFinite(pace) || pace < 0)) {
       return { command: 'help', ...base, pace: undefined, error: '--pace must be a non-negative number of milliseconds.' };
     }
-    const [first, second] = positionals;
+    const [first, second, third] = positionals;
     if (values.help || first === 'help') return { command: 'help', ...base };
+    if (first === 'mission') {
+      const missionActions = ['economics', 'budget', 'receipts'] as const;
+      type MissionAction = (typeof missionActions)[number];
+      if (!missionActions.includes(second as MissionAction)) {
+        return {
+          command: 'mission',
+          ...base,
+          error: 'mission requires an action: economics, budget, or receipts.',
+        };
+      }
+      return {
+        command: 'mission',
+        missionAction: second as MissionAction,
+        ...base,
+        projectRef: third,
+      };
+    }
+
+    if (first === 'agent' || first === 'psp-agent') {
+      if (second !== 'import') {
+        return { command: 'agent', ...base, error: `${first} requires an action: import.` };
+      }
+      // A credential pasted as a positional argument is REFUSED, never used.
+      if (third !== undefined) {
+        return {
+          command: 'agent', agentAction: 'import', ...base,
+          credentialInArgv: true,
+        };
+      }
+      return {
+        command: 'agent', agentAction: 'import', ...base,
+        stdinCredential: values.stdin === true,
+        credentialEnv: values['credential-env'],
+        assumeYes: values.yes === true,
+        workspaceId: values.workspace,
+      };
+    }
     if (first === 'version') return { command: 'version', ...base };
     if (first === 'doctor') return { command: 'doctor', ...base };
     if (first === 'workspace') {
@@ -213,6 +282,13 @@ export function parseCli(argv: string[]): ParsedCli {
       }
       return { command: 'cli', cliAction: second as ParsedCli['cliAction'], reducedMotion: values['reduced-motion'], ...base };
     }
+    if (first === 'yc') {
+      const actions = ['check', 'demo'];
+      if (!second || !actions.includes(second)) {
+        return { command: 'yc', ...base, error: 'yc requires an action: check (demo preflight) or demo (offline launcher).' };
+      }
+      return { command: 'yc', ycAction: second as ParsedCli['ycAction'], reducedMotion: values['reduced-motion'], ...base };
+    }
     if (first === 'demo') {
       if (!second) return { command: 'demo', ...base, error: 'demo requires a scenario name (e.g. relay demo repair).' };
       // mission-control is a presentation OVER the competitive scenario.
@@ -275,6 +351,14 @@ export const HELP_TEXT = [
   '  relay recover [<run-ref>]      recovery status / plan (zero provider calls)',
   '  relay cli demo                 OFFLINE terminal product demo (fake adapters)',
   '  relay cli contract-verify      CLI product contract proof (no provider call)',
+  '  relay agent import             import a PSP agent with your PSP Agent ID',
+  '       (prompts with HIDDEN input; the ID is never accepted as an argument)',
+  '       [--stdin]                 read the ID from secure stdin instead',
+  '       [--credential-env NAME]   read it from a NAMED environment reference',
+  '       [--workspace <id>] [--yes]',
+  '  relay psp-agent import         same command, spelled out',
+  '  relay yc check                 YC demo preflight (read-only, no provider call)',
+  '  relay yc demo                  founder YC demo launcher (offline simulation only)',
   '  relay session                  legacy simulated interactive session',
   '  relay demo competitive         Mission Contract + Claude/Codex proof (SIMULATED)',
   '  relay demo mission-control     modes + Relay Dog + Reviewer gate + Live Terminal',
@@ -930,28 +1014,242 @@ async function runProductCli(parsed: ParsedCli, io: CliIo): Promise<number> {
   }
 }
 
+/* --------------------------- yc demo commands ----------------------- */
+
+/* ------------------------- PSP Agent ID import ------------------------- */
+
+/**
+ * Read a line from the terminal WITHOUT echoing it. Raw mode is entered for
+ * the duration of the read and restored on every exit path, including Ctrl+C
+ * and a thrown error, so a credential can never appear on screen and the
+ * terminal can never be left in raw mode.
+ *
+ * Returns null when echo cannot be suppressed — the caller then refuses to ask
+ * for the credential at all rather than asking for it in the clear.
+ */
+async function readHiddenLine(prompt: string): Promise<string | null> {
+  const input = process.stdin;
+  const output = process.stdout;
+  if (input.isTTY !== true || typeof input.setRawMode !== 'function') return null;
+
+  return new Promise<string | null>((resolve) => {
+    let buffer = '';
+    let settled = false;
+    output.write(prompt);
+    input.setRawMode(true);
+    input.resume();
+    input.setEncoding('utf8');
+
+    const finish = (value: string | null): void => {
+      if (settled) return;
+      settled = true;
+      input.removeListener('data', onData);
+      try { input.setRawMode(false); } catch { /* terminal already restored */ }
+      input.pause();
+      output.write('\n');
+      resolve(value);
+    };
+
+    const onData = (chunk: string): void => {
+      for (const ch of chunk) {
+        if (ch === '\r' || ch === '\n') { finish(buffer); buffer = ''; return; }
+        if (ch === '\x03') { finish(null); buffer = ''; return; }   // Ctrl+C
+        if (ch === '\x7f' || ch === '\b') { buffer = buffer.slice(0, -1); continue; }
+        // Control characters are dropped; nothing is ever echoed back.
+        if (ch >= ' ') buffer += ch;
+      }
+    };
+
+    input.on('data', onData);
+  });
+}
+
+/** Read a plain confirmation line (echoed — it is not a secret). */
+async function readConfirmation(prompt: string): Promise<boolean> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = await new Promise<string>((resolve) => rl.question(prompt, resolve));
+    return /^(y|yes)$/i.test(answer.trim());
+  } finally {
+    rl.close();
+  }
+}
+
+async function readAllStdin(): Promise<string> {
+  const chunks: string[] = [];
+  process.stdin.setEncoding('utf8');
+  for await (const chunk of process.stdin) chunks.push(chunk as string);
+  return chunks.join('');
+}
+
+/**
+ * MISSION ECONOMICS on the terminal. Renders the SAME shared projection the
+ * website renders, so both surfaces state the same mission truth. Read-only:
+ * it evaluates and prints, and never spends, mutates a budget, or calls a
+ * provider. A budget CHANGE goes through the validated change_budget command.
+ */
+async function runMissionCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const render = detectRenderOptions(parsed, io.env, io.isTTY);
+  if (parsed.error) {
+    io.out(parsed.error);
+    return EXIT.usage;
+  }
+
+  const fixture = buildMissionEconomicsFixture();
+  const options = { width: render.width ?? 80, plain: render.plain === true };
+
+  switch (parsed.missionAction) {
+    case 'economics':
+      for (const line of renderMissionEconomics(fixture.projection, options)) io.out(line);
+      return EXIT.completed;
+    case 'budget':
+      for (const line of renderMissionBudget(fixture.projection, fixture.evaluation, options)) {
+        io.out(line);
+      }
+      return EXIT.completed;
+    case 'receipts':
+      for (const line of renderMissionReceipts(fixture.receipts, options)) io.out(line);
+      return EXIT.completed;
+    default:
+      io.out('mission requires an action: economics, budget, or receipts.');
+      return EXIT.usage;
+  }
+}
+
+async function runAgentCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const caps = productCaps(parsed, io);
+
+  if (parsed.credentialInArgv === true) {
+    PSP_ARGUMENT_REFUSAL.forEach((line) => io.out(line));
+    return EXIT.usage;
+  }
+  if (parsed.agentAction !== 'import') {
+    io.out('agent requires an action: import.');
+    return EXIT.usage;
+  }
+
+  // NO PRODUCTION ENTITLEMENT BACKEND EXISTS. Ship on Sunday's purchase and
+  // trading service is not implemented, so the production boundary refuses
+  // every credential rather than inventing an entitlement. The deterministic
+  // fixture service is used ONLY when the developer opts in explicitly.
+  const useFixtures = io.env.RELAY_PSP_FIXTURES === '1';
+  const service = useFixtures
+    ? createFixtureEntitlementService()
+    : createUnavailableEntitlementService();
+  if (useFixtures) {
+    io.out('[DEVELOPMENT FIXTURES] Synthetic PSP entitlements — no marketplace, no purchase.');
+  }
+
+  const workspaceId = parsed.workspaceId ?? 'ws-relay-001';
+  const source: PspCredentialSource = parsed.stdinCredential === true
+    ? { kind: 'stdin', read: readAllStdin }
+    : parsed.credentialEnv !== undefined
+      ? {
+        kind: 'env',
+        name: parsed.credentialEnv,
+        read: (name) => (io.env as Record<string, string | undefined>)[name],
+      }
+      : { kind: 'interactive' };
+
+  let counter = 0;
+  const outcome = await runPspAgentImportCommand({
+    caps,
+    workspace: {
+      workspaceId,
+      userId: io.env.RELAY_USER_ID ?? 'user-holder',
+      importAllowed: true,
+      relayVersion: CLI_VERSION,
+      grantablePermissions: [
+        'workspace.read', 'workspace.write', 'mission.run', 'mission.review',
+      ],
+      installedPspIds: [],
+    },
+    service,
+    now: () => new Date().toISOString(),
+    importId: () => `imp-${++counter}`,
+    io: {
+      out: (line) => io.out(line),
+      readSecret: readHiddenLine,
+      confirm: readConfirmation,
+    },
+    source,
+    assumeYes: parsed.assumeYes === true,
+  });
+
+  return outcome.imported ? EXIT.completed : EXIT.usage;
+}
+
+async function runYcCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const caps = productCaps(parsed, io);
+  if (parsed.ycAction === 'check') {
+    const deps = createNodePreflightDeps({
+      env: io.env as Record<string, string | undefined>,
+      columns: io.isTTY ? process.stdout.columns : undefined,
+      // The plain-demo check runs IN-PROCESS through the same offline demo
+      // the founder will record — no subprocess, no provider, temp state.
+      runPlainDemo: async () => runCliDemo({ caps: { ...caps, tty: false }, plain: true }),
+    });
+    const report = await runYcPreflight(deps);
+    if (parsed.json) io.out(JSON.stringify({ checks: report.checks, exitCode: report.exitCode }));
+    else report.lines.forEach((line) => io.out(line));
+    return report.exitCode === 0 ? EXIT.completed : EXIT.doctorFailure;
+  }
+  // yc demo — the founder launcher: honesty notice, then EXACTLY the
+  // approved offline simulation (`relay cli demo`); never a second engine.
+  for (const line of ycDemoNotice(caps.unicode)) io.out(line);
+  const demo = await runCliDemo({ caps, plain: parsed.plain || parsed.json || !caps.tty });
+  demo.lines.forEach((line) => io.out(line));
+  return demo.exitCode;
+}
+
 /** --watch loop for read-only product commands: clear + re-render the same
  * canonical projection on an interval, leaving cleanly on Ctrl+C (SIGINT).
- * TTY-only; never touches raw mode, so the shell IO loop is unaffected. */
-function runProductWatch(
+ * TTY-only; never touches raw mode, so the shell IO loop is unaffected.
+ * Resolves with the LAST produced exit code (never masks a failing view),
+ * and always rewrites the terminal reset + cursor-show sequence on exit.
+ * The hooks are injectable for tests; production uses process defaults. */
+export function runProductWatch(
   produce: () => { lines: string[]; json?: unknown; exitCode: number },
   emit: (r: { lines: string[]; json?: unknown; exitCode: number }) => number,
+  hooks: {
+    intervalMs?: number;
+    write?: (text: string) => void;
+    signalSource?: {
+      on(event: 'SIGINT', listener: () => void): unknown;
+      removeListener(event: 'SIGINT', listener: () => void): unknown;
+    };
+  } = {},
 ): Promise<number> {
+  const write = hooks.write ?? ((text: string): void => { process.stdout.write(text); });
+  const signals = hooks.signalSource ?? process;
   return new Promise<number>((resolve) => {
     let timer: NodeJS.Timeout | null = null;
     let settled = false;
-    const paint = (): void => { process.stdout.write('\x1b[H\x1b[2J'); emit(produce()); process.stdout.write('\n[watching — Ctrl+C to exit]\n'); };
-    const stop = (): void => {
+    let lastCode: number = EXIT.completed;
+    const stop = (code?: number): void => {
       if (settled) return;
       settled = true;
       if (timer) { clearInterval(timer); timer = null; }
-      process.removeListener('SIGINT', stop);
-      try { process.stdout.write('\x1b[0m'); } catch { /* stream closed */ }
-      resolve(EXIT.completed);
+      signals.removeListener('SIGINT', onSigint);
+      try { write('\x1b[0m\x1b[?25h'); } catch { /* stream closed */ }
+      resolve(code ?? lastCode);
     };
-    process.on('SIGINT', stop);
+    const onSigint = (): void => stop();
+    const paint = (): void => {
+      try {
+        write('\x1b[H\x1b[2J');
+        lastCode = emit(produce());
+        write('\n[watching — Ctrl+C to exit]\n');
+      } catch { stop(EXIT.internalError); }
+    };
+    signals.on('SIGINT', onSigint);
     paint();
-    timer = setInterval(paint, 2000);
+    // Only arm the interval if the FIRST paint did not already settle (a
+    // synchronous throw on the first paint calls stop() while timer is still
+    // null; scheduling here unconditionally would orphan an uncancellable
+    // clear-screen loop that keeps the process alive). Guarded, not moved,
+    // so a later interval paint that throws is still cleared by stop().
+    if (!settled) timer = setInterval(paint, Math.max(200, hooks.intervalMs ?? 2000));
   });
 }
 
@@ -1028,6 +1326,12 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     case 'recover':
     case 'cli':
       return runProductCli(parsed, io);
+    case 'yc':
+      return runYcCli(parsed, io);
+    case 'agent':
+      return runAgentCli(parsed, io);
+    case 'mission':
+      return runMissionCli(parsed, io);
     case 'demo':
     case 'run': {
       // mission-control renders over a real competitive run.

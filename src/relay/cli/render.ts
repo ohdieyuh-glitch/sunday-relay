@@ -1,4 +1,5 @@
 import type { RelayApp } from '../core/app';
+import { officialDogRows } from './product';
 
 /**
  * Relay CLI rendering (Prompt 5) — UI_VISION-aligned: calm, terminal-first,
@@ -57,14 +58,24 @@ export const MASCOT_STATES: Record<string, string> = {
   cancelled: 'STOPPED SAFELY',
 };
 
+/**
+ * The OFFICIAL Relay Dog — the same front-facing voxel companion the website
+ * and the Relay CLI product shell draw. The art is never redrawn here: every
+ * pixel comes from the shared official sprite through the product renderer, so
+ * this surface can never grow a second mascot. The retired `|\_/|` `(o.o)`
+ * face is gone.
+ */
 export function mascot(stateLabel: string, opts: RenderOptions): string[] {
   if (!opts.mascot) return [];
   const s = style(opts);
-  return [
-    s.dim(' |\\_/|'),
-    s.dim(' (o.o)  ' + s.gold(`RELAY DOG - ${stateLabel}`)),
-    s.dim(' /| |\\'),
-  ];
+  const rows = officialDogRows('standing', {
+    tty: true, color: opts.color, unicode: !opts.plain, width: opts.width,
+    reducedMotion: opts.plain, plain: opts.plain, json: opts.json,
+  });
+  // The state label rides the visor row so the dog and its state read as one.
+  return rows.map((row, index) =>
+    index === 2 ? `${row}  ${s.gold(`RELAY DOG - ${stateLabel}`)}` : row,
+  );
 }
 
 export function mascotStateFor(status: string, phase: string): string {

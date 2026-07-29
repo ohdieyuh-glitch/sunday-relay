@@ -13,7 +13,9 @@ export type PixelDogPose =
   | 'running'
   | 'sitting'
   | 'lying'
-  | 'carrying';
+  | 'carrying'
+  /** Up on hind toes, front paws raised toward an implied work surface. */
+  | 'reaching';
 
 export type PixelDogMarker = 'none' | 'alert' | 'check' | 'question' | 'scan';
 
@@ -100,6 +102,20 @@ const POSES: Record<PixelDogPose, string[]> = {
     '..swwwwwwwwwwws...',
     '..ss.........ss...',
     '..................',
+  ],
+  /* Implementing: the dog is up on its hind toes, torso vertical, both front
+     paws lifted toward the work in front of it. Same head, collar, and
+     silhouette language as every other pose — only the stance changes. */
+  reaching: [
+    ...HEAD,
+    '.......cccwwww.ww.',
+    '........wwwwww.ww.',
+    '........wwwwwww...',
+    '.......swwwwwws...',
+    '........wwwwww....',
+    '........wwwwww....',
+    '........ww..ww....',
+    '........s....s....',
   ],
   carrying: [
     HEAD[0],

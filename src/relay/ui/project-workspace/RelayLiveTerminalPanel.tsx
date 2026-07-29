@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { RelayDogMark } from '../pixel-dog';
 import { RelayProjectFooter } from './RelayProjectFooter';
+import { RelayCodingAgentTerminal } from './RelayCodingAgentTerminal';
+import type { CodingTerminalView } from './coding-terminal';
 import { OUTPUT_STATE_LABEL, TRUTH_BADGE, formatEventTime } from './projections';
 import type {
   HandoffNetworkState,
@@ -190,6 +192,7 @@ export function RelayLiveTerminalPanel({
   workforce,
   mode,
   outputState,
+  codingTerminal,
   fullScreen = false,
   reducedMotion = false,
   onClose,
@@ -202,6 +205,9 @@ export function RelayLiveTerminalPanel({
   workforce: WorkforceAssignment;
   mode: RelayWorkspaceMode;
   outputState: WorkspaceOutputState;
+  /** When a real Claude Code execution exists, the CODING AGENT panel is the
+      full terminal surface instead of the summary role panel. */
+  codingTerminal?: CodingTerminalView;
   fullScreen?: boolean;
   reducedMotion?: boolean;
   onClose: () => void;
@@ -231,7 +237,11 @@ export function RelayLiveTerminalPanel({
     setInput('');
   };
 
-  const live = handoffNetworkState === 'online';
+  // Demo Simulation is a PRESENTATION SOURCE, never a different renderer: the
+  // original terminal (this component, these RolePanels) stays mounted and is
+  // fed projected simulated events. The mode alone marks the source truthfully.
+  const demo = mode === 'demo_simulation';
+  const live = !demo && handoffNetworkState === 'online';
   const missionLabel = ACTIVE_STATES.has(outputState)
     ? 'MISSION IN PROGRESS'
     : OUTPUT_STATE_LABEL[outputState];
@@ -250,7 +260,11 @@ export function RelayLiveTerminalPanel({
       className={`rpw-terminal${fullScreen ? ' rpw-terminal--full' : ''}${
         reducedMotion ? ' rpw-terminal--static' : ''
       }`}
-      aria-label="Live Terminal — safe normalized Relay events"
+      aria-label={
+        demo
+          ? 'Live Terminal — Demo Simulation source'
+          : 'Live Terminal — safe normalized Relay events'
+      }
       role="dialog"
       aria-modal="true"
       onKeyDown={(e) => {
@@ -266,7 +280,10 @@ export function RelayLiveTerminalPanel({
           </span>
           <span className="rpw-tm-brand">
             <RelayDogMark unit={2} />
-            <span className="rpw-wordmark-sm" aria-label="SUNDAY RELAY — LIVE TERMINAL">
+            <span
+              className="rpw-wordmark-sm"
+              aria-label={demo ? 'SUNDAY RELAY — DEMO TERMINAL' : 'SUNDAY RELAY — LIVE TERMINAL'}
+            >
               <span aria-hidden="true">SUNDAY RELAY</span>
             </span>
           </span>
@@ -280,7 +297,7 @@ export function RelayLiveTerminalPanel({
               type="button"
               className="rpw-btn rpw-terminal-close"
               onClick={onClose}
-              aria-label="Close Live Terminal"
+              aria-label={demo ? 'Return to Relay workspace' : 'Close Live Terminal'}
             >
               ✕ CLOSE
             </button>
@@ -290,7 +307,7 @@ export function RelayLiveTerminalPanel({
         <div className="rpw-tm-statusrow">
           <span className="rpw-tm-left">
             <span className={`rpw-tm-live rpw-tm-live--${live ? 'on' : 'off'}`}>
-              ● {live ? 'LIVE' : 'STANDBY'}
+              ● {demo ? 'DEMO SIMULATION' : live ? 'LIVE' : 'STANDBY'}
             </span>
             <span className="rpw-tm-mission">{missionLabel}</span>
           </span>
@@ -308,8 +325,9 @@ export function RelayLiveTerminalPanel({
           </span>
         </div>
         <p className="rpw-terminal-scope">
-          Normalized coordination events only — no raw process output, no hidden reasoning, no
-          credentials. This view observes; it does not execute.
+          {demo
+            ? 'Scripted visual work products only — no provider calls, no processes, no hidden reasoning. This view observes; it does not execute.'
+            : 'Normalized coordination events only — no raw process output, no hidden reasoning, no credentials. This view observes; it does not execute.'}
         </p>
 
         {events.length === 0 ? (
@@ -329,16 +347,20 @@ export function RelayLiveTerminalPanel({
               busy={architectBusy}
               events={architectEvents}
             />
-            <RolePanel
-              title="CODING AGENT"
-              chip={codingEvents.length > 0 ? 'ACTIVE' : 'IDLE'}
-              rightStatus={CODING_STATUS[workforce.codingAgent.status]}
-              busy={codingBusy}
-              events={codingEvents}
-            />
+            {codingTerminal ? (
+              <RelayCodingAgentTerminal view={codingTerminal} reducedMotion={reducedMotion} />
+            ) : (
+              <RolePanel
+                title="CODING AGENT"
+                chip={codingEvents.length > 0 ? 'ACTIVE' : 'IDLE'}
+                rightStatus={CODING_STATUS[workforce.codingAgent.status]}
+                busy={codingBusy}
+                events={codingEvents}
+              />
+            )}
             <RolePanel
               title="RELAY SYSTEM"
-              chip={live ? 'LIVE' : 'STANDBY'}
+              chip={demo ? 'DEMO' : live ? 'LIVE' : 'STANDBY'}
               rightStatus={OUTPUT_STATE_LABEL[outputState]}
               busy={false}
               events={relayEvents}

@@ -27,37 +27,71 @@ export type Screen =
   | 'findings' | 'evidence' | 'history' | 'recovery' | 'workforce'
   | 'research' | 'settings' | 'help' | 'demo-intro';
 
+/** One selectable option in a `select` draft field. The value is stored on the
+ * draft directly (already typed), so the founder never types a response for it. */
+export interface DraftOption { label: string; value: string | number | boolean; }
+
 export interface DraftField {
   key: keyof ProjectDraft | 'done';
   label: string;
   hint: string;
   optional: boolean;
-  kind: 'text' | 'yesno' | 'choice' | 'number' | 'list';
-  choices?: string[];
+  /** `select` = pick one of `options` (no typing); `text`/`list` = free text. */
+  kind: 'text' | 'list' | 'select';
+  options?: DraftOption[];
+  /** Which option is pre-highlighted for a `select`. */
+  defaultIndex?: number;
   fallback: string;
 }
 
+/**
+ * The project setup fields. Everything with a defined value set is a SELECT
+ * (arrow keys / number keys to choose, Enter to confirm) — mirroring the
+ * browser's click-to-select workforce and mode pickers. Only the genuinely
+ * free-form identity/scope fields (name, objective, paths, lists) are typed.
+ */
 export const DRAFT_FIELDS: DraftField[] = [
   { key: 'name', label: 'Project name', hint: 'e.g. Sunday Relay Frontend', optional: false, kind: 'text', fallback: '' },
-  { key: 'projectType', label: 'Project type', hint: 'feature / interface / application / review / fix / api', optional: false, kind: 'text', fallback: 'feature' },
+  { key: 'projectType', label: 'Project type', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+    options: [{ label: 'Feature', value: 'feature' }, { label: 'Interface', value: 'interface' }, { label: 'Application', value: 'application' }, { label: 'Review', value: 'review' }, { label: 'Fix', value: 'fix' }, { label: 'API', value: 'api' }] },
   { key: 'objective', label: 'Main objective', hint: 'one sentence', optional: false, kind: 'text', fallback: '' },
-  { key: 'existingProject', label: 'Existing project?', hint: 'y/n', optional: false, kind: 'yesno', fallback: 'y' },
-  { key: 'repositoryPath', label: 'Repository path', hint: 'path (optional)', optional: true, kind: 'text', fallback: '' },
+  { key: 'existingProject', label: 'Existing project?', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+    options: [{ label: 'Yes — existing repository', value: true }, { label: 'No — new project', value: false }] },
+  { key: 'repositoryPath', label: 'Repository path', hint: 'path (optional — Enter to skip)', optional: true, kind: 'text', fallback: '' },
   { key: 'stack', label: 'Technical stack', hint: 'comma-separated (optional)', optional: true, kind: 'list', fallback: '' },
   { key: 'scopeSummary', label: 'Scope summary', hint: 'what is in scope (optional)', optional: true, kind: 'text', fallback: '' },
   { key: 'protectedAreas', label: 'Protected areas', hint: 'comma-separated paths (optional)', optional: true, kind: 'list', fallback: '' },
-  { key: 'productionImpact', label: 'Production impact', hint: 'none / internal / external', optional: false, kind: 'choice', choices: ['none', 'internal', 'external'], fallback: 'none' },
-  { key: 'architect', label: 'Prompt Architect', hint: 'default Sunday Alcatraz', optional: false, kind: 'text', fallback: 'Sunday Alcatraz' },
-  { key: 'codingAgent', label: 'Coding Agent', hint: 'default Claude Code', optional: false, kind: 'text', fallback: 'Claude Code' },
-  { key: 'reviewer', label: 'Reviewer', hint: 'default Codex (empty = none)', optional: true, kind: 'text', fallback: 'Codex' },
-  { key: 'mode', label: 'Relay mode', hint: 'GUIDED', optional: false, kind: 'text', fallback: 'GUIDED' },
-  { key: 'researchPreference', label: 'Research preference', hint: 'not_configured / monitoring / active', optional: false, kind: 'choice', choices: ['not_configured', 'monitoring', 'active'], fallback: 'not_configured' },
+  { key: 'productionImpact', label: 'Production impact', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+    options: [{ label: 'None', value: 'none' }, { label: 'Internal', value: 'internal' }, { label: 'External', value: 'external' }] },
+  { key: 'architect', label: 'Prompt Architect', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+    options: [{ label: 'Sunday Alcatraz', value: 'Sunday Alcatraz' }] },
+  { key: 'codingAgent', label: 'Coding Agent', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+    options: [{ label: 'Claude Code', value: 'Claude Code' }] },
+  { key: 'reviewer', label: 'Reviewer', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+    options: [{ label: 'Codex', value: 'Codex' }, { label: 'None — no independent review', value: '' }] },
+  { key: 'mode', label: 'Relay mode', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+    options: [{ label: 'Guided', value: 'GUIDED' }, { label: 'Semi-autonomous', value: 'SEMI' }, { label: 'Autonomous', value: 'AUTONOMOUS' }] },
+  { key: 'researchPreference', label: 'Research preference', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+    options: [{ label: 'Not configured', value: 'not_configured' }, { label: 'Monitoring', value: 'monitoring' }, { label: 'Active', value: 'active' }] },
   { key: 'evidenceRequirements', label: 'Evidence requirements', hint: 'comma-separated (optional)', optional: true, kind: 'list', fallback: '' },
-  { key: 'runtimeLimitMinutes', label: 'Runtime limit (minutes)', hint: 'default 30', optional: false, kind: 'number', fallback: '30' },
-  { key: 'callLimit', label: 'Call limit', hint: 'default 4', optional: false, kind: 'number', fallback: '4' },
-  { key: 'reviewLimit', label: 'Review limit', hint: 'default 1', optional: false, kind: 'number', fallback: '1' },
-  { key: 'repairLimit', label: 'Repair limit', hint: 'default 1', optional: false, kind: 'number', fallback: '1' },
+  { key: 'runtimeLimitMinutes', label: 'Runtime limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 1,
+    options: [{ label: '15 minutes', value: 15 }, { label: '30 minutes', value: 30 }, { label: '60 minutes', value: 60 }, { label: '120 minutes', value: 120 }] },
+  { key: 'callLimit', label: 'Call limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 1,
+    options: [{ label: '2 calls', value: 2 }, { label: '4 calls', value: 4 }, { label: '6 calls', value: 6 }, { label: '8 calls', value: 8 }] },
+  { key: 'reviewLimit', label: 'Review limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+    options: [{ label: '1 review', value: 1 }, { label: '2 reviews', value: 2 }, { label: '3 reviews', value: 3 }] },
+  { key: 'repairLimit', label: 'Repair limit', hint: 'pick one', optional: false, kind: 'select', defaultIndex: 0,
+    options: [{ label: '1 repair', value: 1 }, { label: '2 repairs', value: 2 }, { label: '3 repairs', value: 3 }] },
 ];
+
+/** The option index for a select field: the stored value's index, else the
+ * field's default. Used to pre-highlight the right option on entry/return. */
+function selectIndexFor(field: DraftField, draft: Partial<ProjectDraft>): number {
+  if (field.kind !== 'select' || !field.options) return 0;
+  const current = draft[field.key as keyof ProjectDraft];
+  const idx = field.options.findIndex((o) => o.value === current);
+  return idx >= 0 ? idx : field.defaultIndex ?? 0;
+}
 
 /** Forbidden draft vocabulary — the flow never asks for credentials. */
 export const FORBIDDEN_DRAFT_FIELDS = ['password', 'api key', 'token', 'cookie', 'recovery code', 'secret'];
@@ -204,7 +238,7 @@ export function reduceKey(state: AppState, key: KeyEvent, data: AppData): AppSta
         : { ...next, previous: state.screen, screen: 'research' };
     case 'n':
       if (state.screen === 'home' || state.screen === 'projects') {
-        return { ...next, previous: state.screen, screen: 'new-project', draft: {}, draftIndex: 0, draftReview: false, typed: '' };
+        return { ...next, previous: state.screen, screen: 'new-project', draft: {}, draftIndex: 0, draftReview: false, typed: '', selection: 0 };
       }
       return next;
     case 'o':
@@ -262,6 +296,11 @@ function reduceConsoleCommand(next: AppState, typed: string, data: AppData): App
     : 'Ask Relay is not configured in the CLI yet. Type: help, status, findings, evidence, tasks, home, quit.' };
 }
 
+/** Ticks per fixture reveal at 1× speed. Locked with DEMO_PLAYBACK_MS by
+ * the Prompt-8.7 acceptance tests (7 × 300ms × 20 reveals ≈ 42s at 1× —
+ * the founder-approved duration). Change requires re-approval. */
+export const DEMO_STEP_TICKS = 7;
+
 /** Pure playback tick — the ONLY way the offline demo advances. Increments the
  * animation tick and, while `playing` on the console, reveals the next fixture
  * event once enough ticks have elapsed for the current speed. Real missions
@@ -271,7 +310,7 @@ export function reduceTick(state: AppState, data: AppData): { state: AppState; r
   let { timelineCount, playing } = state;
   let revealed = false;
   if (playing && state.screen === 'console' && timelineCount < data.events.length) {
-    const stepTicks = Math.max(1, Math.round(7 / (state.speed || 1)));
+    const stepTicks = Math.max(1, Math.round(DEMO_STEP_TICKS / (state.speed || 1)));
     if (tick % stepTicks === 0) { timelineCount += 1; revealed = true; }
   }
   if (timelineCount >= data.events.length) playing = false; // settle at COMPLETE
@@ -292,19 +331,47 @@ function reduceDraftKey(state: AppState, key: KeyEvent, _data: AppData): AppStat
     return state;
   }
   const field = DRAFT_FIELDS[state.draftIndex];
+  const advance = (draft: Partial<ProjectDraft>): AppState => {
+    const nextIndex = state.draftIndex + 1;
+    if (nextIndex >= DRAFT_FIELDS.length) return { ...state, draft, draftReview: true, typed: '' };
+    return { ...state, draft, draftIndex: nextIndex, typed: '', selection: selectIndexFor(DRAFT_FIELDS[nextIndex], draft) };
+  };
+  const goBack = (): AppState => {
+    const prevIndex = Math.max(0, state.draftIndex - 1);
+    return { ...state, draftIndex: prevIndex, typed: '', selection: selectIndexFor(DRAFT_FIELDS[prevIndex], state.draft) };
+  };
+
+  // Select fields: choose an option (no typing). Arrows / number keys move the
+  // cursor; Enter confirms the highlighted option; Backspace goes back.
+  if (field.kind === 'select') {
+    const options = field.options ?? [];
+    const cur = Math.min(Math.max(0, state.selection), Math.max(0, options.length - 1));
+    switch (key.name) {
+      case 'up': case 'k': case 'left':
+        return { ...state, selection: Math.max(0, cur - 1) };
+      case 'down': case 'j': case 'right':
+        return { ...state, selection: Math.min(options.length - 1, cur + 1) };
+      case 'backspace':
+        return goBack();
+      case 'enter':
+        return advance({ ...state.draft, [field.key]: options[cur]?.value } as Partial<ProjectDraft>);
+      default: {
+        const n = key.char && /^[1-9]$/.test(key.char) ? Number(key.char) - 1 : -1;
+        if (n >= 0 && n < options.length) return { ...state, selection: n };
+        return state; // letters / other keys are inert on a select
+      }
+    }
+  }
+
+  // Text / list fields: typed input.
   if (key.name === 'enter') {
     const raw = state.typed.trim();
-    if (raw === '<') {
-      return { ...state, draftIndex: Math.max(0, state.draftIndex - 1), typed: '' };
-    }
+    if (raw === '<') return goBack();
     const value = raw === '' ? field.fallback : raw;
     if (!field.optional && value === '') {
       return { ...state, message: `${field.label} is required.` };
     }
-    const draft = { ...state.draft, ...assignDraftValue(field, value) };
-    const nextIndex = state.draftIndex + 1;
-    if (nextIndex >= DRAFT_FIELDS.length) return { ...state, draft, draftReview: true, typed: '' };
-    return { ...state, draft, draftIndex: nextIndex, typed: '' };
+    return advance({ ...state.draft, ...assignDraftValue(field, value) });
   }
   if (key.name === 'backspace') return { ...state, typed: state.typed.slice(0, -1) };
   if (key.char && key.char.length === 1) return { ...state, typed: state.typed + key.char };
@@ -313,19 +380,10 @@ function reduceDraftKey(state: AppState, key: KeyEvent, _data: AppData): AppStat
 
 function assignDraftValue(field: DraftField, value: string): Partial<ProjectDraft> {
   const clean = safeText(value, { maxLength: 300 });
-  switch (field.kind) {
-    case 'yesno': return { [field.key]: /^y/i.test(clean) } as Partial<ProjectDraft>;
-    case 'number': {
-      const parsed = Number.parseInt(clean, 10);
-      return { [field.key]: Number.isFinite(parsed) && parsed > 0 ? parsed : Number.parseInt(field.fallback, 10) } as Partial<ProjectDraft>;
-    }
-    case 'list': return { [field.key]: clean === '' ? [] : clean.split(',').map((s) => s.trim()).filter(Boolean) } as Partial<ProjectDraft>;
-    case 'choice': {
-      const choice = (field.choices ?? []).includes(clean) ? clean : field.fallback;
-      return { [field.key]: choice } as Partial<ProjectDraft>;
-    }
-    default: return { [field.key]: clean } as Partial<ProjectDraft>;
+  if (field.kind === 'list') {
+    return { [field.key]: clean === '' ? [] : clean.split(',').map((s) => s.trim()).filter(Boolean) } as Partial<ProjectDraft>;
   }
+  return { [field.key]: clean } as Partial<ProjectDraft>;
 }
 
 /** Finalize a draft into a durable project record (called by the shell when
@@ -577,12 +635,27 @@ function renderDraftScreen(state: AppState, caps: CliCaps): string[] {
     return lines;
   }
   const field = DRAFT_FIELDS[state.draftIndex];
-  lines.push(p.dim(`Step ${state.draftIndex + 1} of ${DRAFT_FIELDS.length}${field.optional ? ' (optional — Enter to skip)' : ''}`), '');
+  lines.push(p.dim(`Step ${state.draftIndex + 1} of ${DRAFT_FIELDS.length}${field.optional ? ' (optional)' : ''}`), '');
   lines.push(p.boldTone('cream', field.label));
   lines.push(p.dim(`  ${field.hint}`));
   lines.push('');
-  lines.push(`  ${p.tone('gold', '>')} ${p.tone('cream', state.typed)}${p.tone('gold', '_')}`);
-  lines.push('', p.dim('[Enter] accept · type < then Enter to go back · [Esc] cancel safely'));
-  lines.push(p.dim('Never enter passwords, API keys, tokens, cookies, or recovery codes.'));
+  if (field.kind === 'select') {
+    // A selectable option list — the founder PICKS, never types a response.
+    const options = field.options ?? [];
+    const cur = Math.min(Math.max(0, state.selection), Math.max(0, options.length - 1));
+    const arrow = caps.unicode ? '▸' : '>';
+    options.forEach((option, i) => {
+      const chosen = i === cur;
+      const marker = chosen ? p.tone('gold', arrow) : ' ';
+      const num = p.dim(`${i + 1}`);
+      const label = chosen ? p.boldTone('cream', option.label) : p.tone('cream', option.label);
+      lines.push(`  ${marker} ${num}  ${label}`);
+    });
+    lines.push('', p.dim(`[Enter] select · ${caps.unicode ? '↑/↓' : 'up/down'} choose · 1-${Math.min(9, options.length)} jump · [Backspace] back · [Esc] cancel`));
+  } else {
+    lines.push(`  ${p.tone('gold', '>')} ${p.tone('cream', state.typed)}${p.tone('gold', '_')}`);
+    lines.push('', p.dim('[Enter] accept · type < then Enter to go back · [Esc] cancel safely'));
+    lines.push(p.dim('Never enter passwords, API keys, tokens, cookies, or recovery codes.'));
+  }
   return lines;
 }

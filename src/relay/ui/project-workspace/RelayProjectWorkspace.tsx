@@ -3,6 +3,8 @@ import { RelayWorkforceStrip } from './RelayWorkforceStrip';
 import { RelayConsole } from './RelayConsole';
 import { RelayProjectConversation } from './RelayProjectConversation';
 import { RelayLiveTerminalPanel } from './RelayLiveTerminalPanel';
+import { RelayCodingAgentTerminal } from './RelayCodingAgentTerminal';
+import { RelayRoleBilling } from './RelayRoleBilling';
 import { RelayProjectPhaseRail } from './RelayProjectPhaseRail';
 import { RelayManualTaskPanel } from './RelayManualTaskPanel';
 import { RelayReviewerStatus } from './RelayReviewerStatus';
@@ -11,8 +13,14 @@ import { RelayResearchStatus } from './RelayResearchStatus';
 import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
 import { RelayProjectFooter } from './RelayProjectFooter';
+import { RelayPspAgentImport } from '../psp-import';
 import { OUTPUT_STATE_LABEL, completionDisplay } from './projections';
 import type { RelayProjectWorkspaceProps } from './contracts';
+import type {
+  PSPAgentImportRecord,
+  PSPEntitlementServicePort,
+  PSPWorkspaceContext,
+} from '../../psp';
 
 /**
  * ACTIVE RELAY PROJECT WORKSPACE — the main operating screen for a
@@ -29,7 +37,27 @@ import type { RelayProjectWorkspaceProps } from './contracts';
  * never decides permissions or completion, never validates findings, never
  * generates canonical events, and never mutates Relay Core.
  */
-export function RelayProjectWorkspace(props: RelayProjectWorkspaceProps) {
+/**
+ * Relay Workspace -> Agents -> Import PSP Agent.
+ *
+ * Declared here rather than in `contracts.ts` and OPTIONAL by design: the
+ * Agents panel needs a workspace/actor context and an entitlement service
+ * port, and no production entitlement backend exists yet. A surface that can
+ * supply them (the preview app, and later the signed-in application) passes
+ * this prop; every other caller is unchanged and renders exactly as before.
+ */
+export interface RelayWorkspaceAgentsPanel {
+  workspace: PSPWorkspaceContext;
+  service: PSPEntitlementServicePort;
+  now: () => string;
+  importId: () => string;
+  importedAgents?: PSPAgentImportRecord[];
+  onImported?: (record: PSPAgentImportRecord) => void;
+}
+
+export function RelayProjectWorkspace(
+  props: RelayProjectWorkspaceProps & { agentsPanel?: RelayWorkspaceAgentsPanel },
+) {
   const {
     project,
     mission,
@@ -132,6 +160,13 @@ export function RelayProjectWorkspace(props: RelayProjectWorkspaceProps) {
 
         <div className="rpw-workspace">
           <div className="rpw-col-primary">
+            {props.missionPlayback}
+            {props.codingTerminal && (
+              <RelayCodingAgentTerminal view={props.codingTerminal} reducedMotion={reducedMotion} />
+            )}
+            {props.roleBilling && props.roleBilling.length > 0 && (
+              <RelayRoleBilling rows={props.roleBilling} />
+            )}
             <RelayConsole
               events={terminalEvents}
               handoffNetworkState={handoffNetworkState}
@@ -174,9 +209,20 @@ export function RelayProjectWorkspace(props: RelayProjectWorkspaceProps) {
             <div className="rpw-status-block">
               <RelayProjectBrainStatus state={projectBrainState} />
             </div>
+            {props.agentsPanel && (
+              <div className="rpw-status-block">
+                <RelayPspAgentImport
+                  workspace={props.agentsPanel.workspace}
+                  service={props.agentsPanel.service}
+                  now={props.agentsPanel.now}
+                  importId={props.agentsPanel.importId}
+                  importedAgents={props.agentsPanel.importedAgents}
+                  onImported={props.agentsPanel.onImported}
+                />
+              </div>
+            )}
           </aside>
         </div>
-
       </main>
 
       <RelayProjectFooter handoffNetworkState={handoffNetworkState} outputState={outputState} />
@@ -191,6 +237,7 @@ export function RelayProjectWorkspace(props: RelayProjectWorkspaceProps) {
             workforce={workforce}
             mode={mode}
             outputState={outputState}
+            codingTerminal={props.codingTerminal}
             fullScreen={terminalFullScreen}
             reducedMotion={reducedMotion}
             onClose={onCloseTerminal}

@@ -36,6 +36,7 @@ export function RelayTerminalEvent({ event }: { event: WorkspaceTerminalEvent })
         <span className={`rpw-tev-truth rpw-tev-truth--${badge.tone}`}>
           {badge.label}
           {event.fixture && <span className="rpw-fixture-tag">FIXTURE</span>}
+          {event.simulated && <span className="rpw-fixture-tag">SIMULATED</span>}
         </span>
       </div>
     </li>

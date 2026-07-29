@@ -278,10 +278,14 @@ export async function runCliContractVerification(parseCli: ParseCliFn): Promise<
       check('S14 plain: ASCII-only output', !/[^\x20-\x7e]/.test(plainOut.join('')));
       check('S14 symbols: text statuses accompany symbols (WORKING/COMPLETE/APPROVED)',
         strip(noColor).includes('COMPLETE') && strip(noColor).includes('APPROVED'));
-      const still = footerDog({ state: 'TROTTING', tick: 5, caps: caps({ reducedMotion: true }) });
-      const moving = footerDog({ state: 'TROTTING', tick: 5, caps: caps() });
+      // WANDERING is idle patrol — the one state that walks the track. Under
+      // Milestone 4.5, THINKING (trotting) deliberately stops walking.
+      const still = footerDog({ state: 'WANDERING', tick: 5, caps: caps({ reducedMotion: true }) });
+      const moving = footerDog({ state: 'WANDERING', tick: 5, caps: caps() });
       check('S14 reduced motion: dog is static; motion only when allowed AND state moves',
         !still.moving && !still.track.startsWith(' ') && moving.moving && moving.track.startsWith(' '));
+      check('S14 dog: thinking stops the patrol (Milestone 4.5 semantics)',
+        !footerDog({ state: 'TROTTING', tick: 5, caps: caps() }).moving);
       const complete = footerDog({ state: 'COMPLETE', tick: 5, caps: caps() });
       check('S14 dog: non-moving canonical state never animates', !complete.moving);
       const linear = renderScreen({ ...initialState(false), screen: 'console' },

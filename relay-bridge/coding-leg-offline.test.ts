@@ -1,0 +1,144 @@
+import { describe, it, expect } from 'vitest';
+import { runCodingMission } from './coding';
+import { resolveClaudeRuntime } from './claude-runtime';
+import { createRandomIdFactory } from '../src/relay/protocol/ids';
+import type { BridgeEventInput, CodingTerminalState } from './types';
+
+/**
+ * CODING LEG — OFFLINE END-TO-END.
+ *
+ * Runs the entire coding leg against the repo's own fake Claude executable:
+ * a real child process, a real isolated Git worktree, a real file edit, a
+ * real Relay inspection, a real `node --test` verification, and a real
+ * captured diff — with NO model provider, no network, and no spend.
+ *
+ * This is the proof that the terminal shows the same single execution that
+ * did the work: one process, one stream, and every terminal fact traceable
+ * to something that actually happened in this run.
+ */
+
+const runOffline = async (over: Partial<Parameters<typeof runCodingMission>[0]> = {}) => {
+  const now = () => new Date().toISOString();
+  const runtime = resolveClaudeRuntime('fake', now, true);
+  expect(runtime.ok).toBe(true);
+  if (!runtime.ok) throw new Error('fake runtime unavailable');
+
+  const events: BridgeEventInput[] = [];
+  const snapshots: CodingTerminalState[] = [];
+
+  const outcome = await runCodingMission({
+    handoff: {
+      objective: 'Implement normalizeProjectName so the existing tests pass.',
+      instructions: ['Trim, lowercase, and collapse separators.'],
+      acceptanceCriteria: ['The existing test suite passes when Relay runs it.'],
+      constraints: ['Edit only the claimed file.'],
+    },
+    executablePath: runtime.runtime.executablePath,
+    capabilities: runtime.runtime.capabilities,
+    now,
+    ids: createRandomIdFactory(),
+    emit: (e) => events.push(e),
+    publishTerminal: (t) => snapshots.push(t),
+    projectLabel: 'Relay controlled fixture (throwaway repository)',
+    ...over,
+  });
+
+  return { outcome, events, snapshots, final: snapshots[snapshots.length - 1] };
+};
+
+describe('the terminal is powered by the one process that did the work', () => {
+  it('captures a complete, truthful terminal from a single offline invocation', async () => {
+    const { outcome, final } = await runOffline();
+
+    expect(outcome.stopped).toBe(false);
+    expect(outcome.verificationPassed).toBe(true);
+    expect(final).toBeDefined();
+
+    // ---- one process, one stream
+    const sessionLines = final.lines.filter((l) => l.kind === 'session' && /session started/i.test(l.text));
+    expect(sessionLines.length).toBeGreaterThanOrEqual(1);
+    const processLines = final.lines.filter((l) => l.kind === 'process');
+    expect(processLines).toHaveLength(1);
+    expect(final.status).toBe('complete');
+
+    // ---- ordering is monotonic and gapless (this is what survives refresh)
+    expect(final.lines.map((l) => l.sequence)).toEqual(final.lines.map((_, i) => i));
+
+    // ---- real timing
+    expect(final.startedAt).toBeTruthy();
+    expect(final.endedAt).toBeTruthy();
+    expect(Date.parse(final.endedAt as string)).toBeGreaterThanOrEqual(Date.parse(final.startedAt as string));
+
+    // ---- REAL changed file from Relay inspection (not the claim)
+    expect(final.changedFiles).toEqual(['src/normalize.js']);
+
+    // ---- REAL captured diff, read from the isolated worktree
+    expect(final.diff).toBeTruthy();
+    expect(final.diff).toContain('src/normalize.js');
+    expect(final.diff).toContain('normalizeProjectName');
+
+    // ---- REAL verification Relay ran itself
+    expect(final.test?.command).toBe('node --test test/normalize.test.js');
+    expect(final.test?.status).toBe('passed');
+    expect(final.test?.exitCode).toBe(0);
+    expect(final.test?.output).toBeTruthy();
+
+    // ---- the agent's report is stored as a CLAIM
+    expect(final.claim).not.toBeNull();
+    expect(final.lines.some((l) => l.kind === 'claim' && l.truth === 'agent_claim')).toBe(true);
+
+    // ---- Relay's own findings are stored as EVIDENCE
+    expect(final.lines.some((l) => l.kind === 'inspection' && l.truth === 'relay_evidence')).toBe(true);
+    expect(final.lines.some((l) => l.kind === 'verification' && l.truth === 'relay_evidence')).toBe(true);
+
+    // ---- attestation reflects the process that actually ran
+    expect(final.attestation?.launchVerified).toBe(true);
+    expect(final.attestation?.completionVerified).toBe(true);
+    expect(final.attestation?.fallbackOccurred).toBe(false);
+    expect(final.attestation?.billingPath).toBe('subscription');
+
+    // ---- permissions are the compiled envelope, not a description
+    expect(final.permissions.allowedFiles).toEqual(['src/normalize.js']);
+    expect(final.permissions.protectedPaths).toContain('package.json');
+    expect(final.permissions.deniedCapabilities).toContain('Bash');
+    expect(final.billing).toBe('subscription');
+  }, 120_000);
+
+  it('leaks no secret, absolute path, or full session id into the captured terminal', async () => {
+    const { final } = await runOffline();
+    const serialized = JSON.stringify(final);
+    expect(serialized).not.toContain('/home/');
+    expect(serialized).not.toContain('/tmp/relay-claude-fixture');
+    expect(serialized).not.toMatch(/sk-[A-Za-z0-9_-]{16,}/);
+    expect(serialized).not.toContain(String.fromCharCode(27));
+    // The provider session id is only ever present as a redacted tail.
+    expect(serialized).not.toContain('bridge-fake-session');
+    expect(final.externalSessionRedacted).toMatch(/^…/);
+  }, 120_000);
+
+  it('publishes progressively, so a poll mid-run sees a live terminal', async () => {
+    const { snapshots } = await runOffline();
+    expect(snapshots.length).toBeGreaterThan(3);
+    // The first published snapshot is already an honest live state.
+    const firstLive = snapshots.find((s) => s.status === 'live');
+    expect(firstLive).toBeDefined();
+    expect(firstLive?.test).toBeNull();
+    expect(firstLive?.diff).toBeNull();
+    // Snapshots only ever grow — no line is ever rewritten or removed.
+    const lengths = snapshots.map((s) => s.lines.length);
+    for (let i = 1; i < lengths.length; i++) expect(lengths[i]).toBeGreaterThanOrEqual(lengths[i - 1]);
+  }, 120_000);
+});
+
+describe('cancellation stops the run without claiming anything', () => {
+  it('a cancel requested before the agent starts never launches a process', async () => {
+    const { outcome, final, snapshots } = await runOffline({ isCancelRequested: () => true });
+    expect(outcome.cancelled).toBe(true);
+    expect(outcome.stopped).toBe(true);
+    expect(outcome.verifiedComplete).toBe(false);
+    expect(outcome.claim).toBeNull();
+    // Nothing was captured because nothing ran — no fabricated terminal.
+    expect(snapshots).toHaveLength(0);
+    expect(final).toBeUndefined();
+  }, 120_000);
+});

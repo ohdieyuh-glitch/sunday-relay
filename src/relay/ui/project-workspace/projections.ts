@@ -68,6 +68,7 @@ export const OUTPUT_STATE_LABEL: Record<WorkspaceOutputState, string> = {
   waiting_for_user: 'WAITING FOR USER',
   stopped_safely: 'STOPPED SAFELY',
   verified_complete: 'VERIFIED COMPLETE',
+  demo_verified_complete: 'DEMO VERIFIED COMPLETE',
 };
 
 export const REVIEWER_STATE_LABEL: Record<ReviewerStateKind, string> = {
@@ -203,6 +204,7 @@ export const DOG_PRESENTATION: Record<WorkspaceDogState, DogPresentation> = {
   wandering: { pose: 'standing', marker: 'none', moving: true, label: 'WANDERING' },
   trotting: { pose: 'trotting', marker: 'none', moving: true, label: 'TROTTING' },
   running: { pose: 'running', marker: 'none', moving: true, label: 'RUNNING' },
+  implementing: { pose: 'reaching', marker: 'none', moving: false, label: 'IMPLEMENTING' },
   sprinting: { pose: 'running', marker: 'none', moving: true, label: 'SPRINTING' },
   carrying_handoff: { pose: 'carrying', marker: 'none', moving: true, label: 'CARRYING HANDOFF' },
   researching: { pose: 'sitting', marker: 'scan', moving: false, label: 'RESEARCHING' },

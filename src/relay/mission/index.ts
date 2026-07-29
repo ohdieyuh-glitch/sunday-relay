@@ -50,3 +50,16 @@ export {
   evaluateReviewerGate,
   type ReviewerGateInput, type ReviewerGateResult, type IndependenceParty,
 } from './reviewer-gate';
+export {
+  // Mission Economics (Milestone 5) — the SHARED core, byte-identical with
+  // the website. Re-exported here because the CLI boundary permits only the
+  // bare '../mission' barrel.
+  createCostReceipt, createAdjustment, markProvisional, finalizeReceipt,
+  disputeReceipt, voidReceipt, InMemoryCostReceiptRepository,
+  createMissionBudget, createBudgetApproval, applyApprovedIncrease,
+  evaluateMissionBudget, aggregateMissionEconomics, projectMissionEconomics,
+  formatMoney, money, moneyFromDecimalString, amountLabel,
+  type RelayMoney, type RelayCostReceipt, type RelayCostCategory,
+  type RelayMissionBudget, type RelayBudgetEvaluation,
+  type RelayMissionEconomics, type RelayMissionEconomicsProjection,
+} from './economics-barrel';

@@ -300,7 +300,7 @@ describe('relay dog', () => {
   };
 
   it('reflects the prop-driven state for every fixture', () => {
-    expect(dogFor('implementing')).toBe('RUNNING');
+    expect(dogFor('implementing')).toBe('IMPLEMENTING');
     expect(dogFor('verifying')).toBe('VERIFYING');
     expect(dogFor('reviewing')).toBe('REVIEWING');
     expect(dogFor('revision_required')).toBe('CARRYING HANDOFF');

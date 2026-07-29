@@ -1,0 +1,505 @@
+import type { ProjectBriefDraft } from '../entry-home/contracts';
+import type { ProjectSettingsDraft } from '../project-settings/contracts';
+import type { EventTruthClass, TerminalEventCategory } from '../project-workspace/contracts';
+
+/**
+ * RELAY BROWSER APPLICATION — domain contracts (single source of truth).
+ *
+ * These are the persisted records behind the product flow:
+ *   Entry Home → Ask Relay → Project Brief → Project Settings →
+ *   Active Workspace → Relay Console → Mission progression.
+ *
+ * Layering: contracts (here) → application services/store → persistence
+ * adapter → view components. The UI reuses the existing screen contracts
+ * (ProjectBriefDraft, ProjectSettingsDraft) rather than duplicating their
+ * schemas; this module adds identity, lifecycle, and mission records.
+ *
+ * The browser is never the policy authority: mission state only moves
+ * through the mission machine, and VERIFIED COMPLETE derives from the
+ * machine + completion policy — never from a component.
+ */
+
+/* ------------------------------------------------------------- project */
+
+export type RelayProjectStatus =
+  | 'draft' // brief exists, settings not confirmed
+  | 'configured' // settings confirmed, mission not started
+  | 'active' // mission in progress
+  | 'complete'; // mission verified complete
+
+export interface RelayProject {
+  id: string;
+  /** Route reference, e.g. "RLY / 002". */
+  reference: string;
+  name: string;
+  summary: string;
+  /** The founder's exact Ask Relay wording — always preserved verbatim. */
+  originalRequest: string;
+  status: RelayProjectStatus;
+  /** True for the deterministic demo path — demo events can never enter a
+      non-demo project (machine-enforced). */
+  demo: boolean;
+  createdAt: string;
+  updatedAt: string;
+  activeMissionId: string | null;
+}
+
+/* ------------------------------------------------- brief + settings */
+
+export interface StoredProjectBrief {
+  projectId: string;
+  /** The structured draft the screens already render. */
+  draft: ProjectBriefDraft;
+  approved: boolean;
+  generatedAt: string;
+  updatedAt: string;
+}
+
+export interface StoredProjectSettings {
+  projectId: string;
+  draft: ProjectSettingsDraft;
+  confirmed: boolean;
+  updatedAt: string;
+}
+
+/* -------------------------------------------------------- project brain */
+
+export interface ProjectBrain {
+  projectId: string;
+  projectSummary: string;
+  knownTechnologies: string[];
+  architectureNotes: string[];
+  decisions: string[];
+  constraints: string[];
+  assumptions: string[];
+  researchNotes: string[];
+  recentHandoffs: string[];
+  lastUpdatedAt: string;
+}
+
+/* ------------------------------------------------------------- mission */
+
+export type RelayMissionState =
+  | 'configured'
+  | 'ready'
+  | 'architect_working'
+  | 'handoff_ready'
+  | 'coding'
+  | 'claim_submitted'
+  | 'relay_verifying'
+  | 'reviewer_reviewing'
+  | 'repair_required'
+  | 'repair_in_progress'
+  | 're_verifying'
+  | 'approved'
+  | 'verified_complete'
+  // Live-mission terminal states — an honest failure or a safe cancellation.
+  // The demo path never enters these (its script ends at verified_complete).
+  | 'failed'
+  | 'cancelled';
+
+/**
+ * The backend's fine-grained orchestration phase for a live three-role
+ * mission. `RelayMissionState` above stays the coarse state the workspace
+ * renders; the phase travels alongside it so the console can report exactly
+ * where the mission is and, on a terminal failure, exactly which supported
+ * failure occurred. The browser never derives it — the backend is the
+ * authority and only reports a phase that was persisted before the next role
+ * was allowed to begin.
+ */
+export type MissionPhase =
+  | 'ready'
+  | 'preflight_checking'
+  | 'prompt_architect_queued'
+  | 'prompt_architect_working'
+  | 'handoff_ready'
+  | 'coding_agent_assigned'
+  | 'coding_agent_starting'
+  | 'coding'
+  | 'claim_submitted'
+  | 'relay_verifying'
+  | 'reviewer_assigned'
+  | 'reviewer_starting'
+  | 'reviewer_working'
+  | 'review_received'
+  | 'completion_deciding'
+  | 'verified_complete'
+  // supported terminal failures
+  | 'preflight_blocked'
+  | 'prompt_architect_failed'
+  | 'prompt_architect_output_invalid'
+  | 'dispatch_status_uncertain'
+  | 'coding_agent_failed'
+  | 'verification_failed'
+  | 'reviewer_launch_failed'
+  | 'review_incomplete'
+  | 'review_blocked'
+  | 'cancelled'
+  | 'timed_out';
+
+export type MissionRole = 'relay' | 'prompt_architect' | 'coding_agent' | 'reviewer';
+
+export interface RelayMission {
+  id: string;
+  projectId: string;
+  title: string;
+  objective: string;
+  state: RelayMissionState;
+  currentRole: MissionRole;
+  /** Index into the deterministic demo script; -1 for non-demo missions. */
+  currentStep: number;
+  demo: boolean;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  /** Live missions only — the structured architect handoff, the coding-agent
+      claim, and the last safe error, mirrored from the backend authority.
+      Absent for demo missions (which derive everything from the script). */
+  handoff?: MissionHandoff;
+  claim?: MissionClaim;
+  error?: MissionError;
+  /** Persisted Coding Agent terminal state, so a refresh restores the exact
+      terminal (ordered lines, diff, test result) without redispatching. */
+  terminal?: CodingTerminalState;
+  /** Live three-role missions — mirrored from the backend authority so a
+      refresh restores the whole role record without redispatching anything. */
+  phase?: MissionPhase;
+  missionRevision?: string;
+  handoffDigest?: string;
+  artifactDigest?: string;
+  architectReceipt?: MissionArchitectReceipt;
+  review?: MissionReview;
+  attestations?: MissionAttestationSummary[];
+}
+
+/* ------------------------------------------------ live mission wire types */
+
+/** The structured architect handoff a live mission produces. `objective`,
+    `instructions`, and `acceptanceCriteria` come from the real Prompt
+    Architect (Sunday Alcatraz); the browser only displays them. */
+export interface MissionHandoff {
+  objective: string;
+  instructions: string[];
+  constraints: string[];
+  acceptanceCriteria: string[];
+  /** Honest origin label, e.g. "Sunday Alcatraz (live)" or "Sunday Alcatraz
+      engine · offline models". Never claims a live model when one did not run. */
+  architectLabel: string;
+  architectProvenance: 'live' | 'simulated';
+}
+
+/** The coding agent's report — a CLAIM until Relay verifies it independently. */
+export interface MissionClaim {
+  summary: string;
+  filesChanged: string[];
+  checksRun: string[];
+}
+
+/** A safe, user-facing error — never a raw exception, path, or stack trace. */
+export interface MissionError {
+  code: string;
+  safeMessage: string;
+  retryable: boolean;
+}
+
+/* ------------------------------------------- three-role execution record */
+
+/**
+ * WHO ACTUALLY RAN. Mirrors the backend's execution attestation for one role.
+ * A role is credited only when its process/request verifiably launched AND
+ * completed with no fallback standing in for it. Never contains a credential,
+ * a full external id, or provider output.
+ */
+export interface MissionAttestationSummary {
+  role: 'prompt_architect' | 'coding_agent' | 'reviewer';
+  attestationId: string;
+  missionRevision?: string;
+  requestedActor: string;
+  actualActor: string;
+  actualRuntime: string;
+  provider?: string;
+  model?: string;
+  billingPath: 'api_billed' | 'subscription' | 'portal' | 'local' | 'simulated' | 'unknown';
+  launchVerified: boolean;
+  completionVerified: boolean;
+  fallbackOccurred: boolean;
+  startedAt: string;
+  completedAt?: string;
+  terminalReason?: string;
+}
+
+/** Safe receipt for the Prompt Architect provider request. `networkPath`
+    states the route that actually occurred — no view may claim a hop that did
+    not happen. */
+export interface MissionArchitectReceipt {
+  provider: 'openai';
+  model: string;
+  /** e.g. "Coordinated by Sunday Alcatraz · direct OpenAI request…" */
+  coordinationLabel: string;
+  networkPath: string;
+  billingPath: 'api_billed';
+  requestIdRedacted: string | null;
+  startedAt: string;
+  completedAt: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  inputDigest: string;
+  outputDigest: string;
+}
+
+export interface MissionReviewFinding {
+  findingId: string;
+  severity: 'blocking' | 'major' | 'minor' | 'informational';
+  requirement: string;
+  explanation: string;
+  evidence: string;
+  file?: string;
+  line?: number;
+  recommendedAction?: string;
+}
+
+/** The independent reviewer's validated verdict, bound to the exact artifact
+    digest Relay verified. Hermes is an agent RUNTIME, not a model, and runs
+    read-only on a subscription — never an API bill, never a blocker. */
+export interface MissionReview {
+  reviewer: 'Hermes';
+  runtime: string;
+  provider: string | null;
+  model: string | null;
+  billing: 'subscription';
+  verdict: 'approved' | 'changes_required' | 'unable_to_review';
+  summary: string;
+  findings: MissionReviewFinding[];
+  requirementsChecked: Array<{ requirement: string; status: 'passed' | 'failed' | 'uncertain'; evidence: string }>;
+  reviewedArtifactDigest: string;
+  startedAt: string;
+  completedAt: string;
+}
+
+/* ------------------------------------------- coding-agent terminal state */
+
+/**
+ * CODING AGENT TERMINAL — the truthful execution read-model for the ONE real
+ * Claude Code invocation that performs the mission.
+ *
+ * Every field is captured by the bridge from something that actually
+ * happened: the connector's normalized lifecycle events, Relay's independent
+ * workspace inspection, the Relay-run verification command, and the agent's
+ * own report (labeled a CLAIM). The browser only displays it. There is no
+ * field here that the UI is allowed to synthesize — when the bridge has not
+ * observed something yet, the value is null/empty and the terminal says so.
+ */
+export type CodingTerminalStatus = 'waiting' | 'live' | 'complete' | 'failed' | 'cancelled';
+
+/** Where a line genuinely came from. */
+export type CodingTerminalLineKind =
+  | 'session' // connector session lifecycle (started / initialized / resumed)
+  | 'tool' // real observed tool activity (Read/Edit/Grep … + named target)
+  | 'process' // process completed / failed / timed out / cancelled
+  | 'claim' // the agent's own report — a claim, never evidence
+  | 'inspection' // Relay's independent workspace inspection
+  | 'command' // a command Relay itself ran
+  | 'verification' // the result of Relay-run verification
+  | 'notice'; // a Relay system notice about the run
+
+export interface CodingTerminalLine {
+  /** Monotonic, assigned at capture — the persisted display order. */
+  sequence: number;
+  at: string;
+  kind: CodingTerminalLineKind;
+  /** Claims and evidence must never be presented with equal weight. */
+  truth: 'agent_claim' | 'relay_evidence' | 'system_notice';
+  text: string;
+  /** A real file/pattern the underlying event named. Never invented. */
+  target?: string;
+}
+
+/** The deterministic verification Relay ran itself (never the agent). */
+export interface CodingTerminalTest {
+  command: string;
+  status: 'passed' | 'failed' | 'not_run';
+  exitCode: number | null;
+  /** Bounded, sanitized tail of the real captured output. */
+  output: string;
+}
+
+/** The permission envelope actually compiled for this invocation. */
+export interface CodingTerminalPermissions {
+  allowedTools: string[];
+  allowedFiles: string[];
+  protectedPaths: string[];
+  deniedCapabilities: string[];
+}
+
+/** Who actually ran — mirrors the bridge's execution attestation. */
+export interface CodingTerminalAttestation {
+  attestationId: string;
+  launchVerified: boolean;
+  completionVerified: boolean;
+  fallbackOccurred: boolean;
+  billingPath: 'subscription' | 'api_billed' | 'local' | 'simulated' | 'unknown';
+}
+
+export interface CodingTerminalState {
+  /** Relay's OWN short execution id. Never an external session identifier. */
+  executionId: string;
+  /** Redacted tail of the provider session id, when one was captured. */
+  externalSessionRedacted: string | null;
+  /** Honest runtime label, e.g. "Claude Code (local CLI)". */
+  runtime: string;
+  /** Claude Code runs on the authenticated local subscription login. */
+  billing: 'subscription';
+  status: CodingTerminalStatus;
+  /** The controlled project the agent was allowed to touch. */
+  projectLabel: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  permissions: CodingTerminalPermissions;
+  lines: CodingTerminalLine[];
+  /** Last file a real tool event named. */
+  activeFile: string | null;
+  /** REAL changed files from Relay inspection — not the agent's claim. */
+  changedFiles: string[];
+  /** Real unified diff captured by Relay after the agent exited. */
+  diff: string | null;
+  test: CodingTerminalTest | null;
+  claim: MissionClaim | null;
+  attestation: CodingTerminalAttestation | null;
+}
+
+/** A normalized mission update from a live backend. The backend is the
+    authority for a live mission, so it returns the FULL ordered event list;
+    the store mirrors it (id-keyed by sequence). */
+export interface LiveMissionUpdate {
+  state: RelayMissionState;
+  /** Fine-grained backend orchestration phase (three-role missions). */
+  phase?: MissionPhase;
+  /** The contract revision every role executed against. */
+  missionRevision?: string;
+  currentRole: MissionRole;
+  currentStep?: number;
+  completedAt?: string | null;
+  events: Array<Omit<RelayEvent, 'id' | 'missionId' | 'demo'>>;
+  handoff?: MissionHandoff;
+  claim?: MissionClaim;
+  error?: MissionError;
+  /** Coding Agent terminal state for the single real Claude invocation.
+      Absent until the coding leg is reached. */
+  terminal?: CodingTerminalState;
+  /** Digest of the handoff Relay persisted and delivered. */
+  handoffDigest?: string;
+  /** Digest of the exact artifact Relay verified and the reviewer reviewed. */
+  artifactDigest?: string;
+  architectReceipt?: MissionArchitectReceipt;
+  review?: MissionReview;
+  /** One entry per role that has actually executed. */
+  attestations?: MissionAttestationSummary[];
+}
+
+/** Persisted mission event — the domain record the Relay Console projects
+    from. Claims and evidence are distinct truth classes; display text is
+    plain strings only (never HTML, never raw provider output). */
+export interface RelayEvent {
+  id: string;
+  missionId: string;
+  sequence: number;
+  at: string;
+  role: MissionRole;
+  category: TerminalEventCategory;
+  truth: EventTruthClass;
+  headline: string;
+  detail?: string;
+  /** Safe operation summary, e.g. "MODIFY src/lib/relay-store.ts". */
+  meta?: string;
+  done?: boolean;
+  findingId?: string;
+  repairId?: string;
+  /** The mission revision this event belongs to. */
+  missionRevision?: string;
+  /** Shortened/redacted reference to the execution the event describes —
+      never a full provider session or request id. */
+  executionRef?: string;
+  /** The execution attestation this event refers to, when there is one. */
+  attestationRef?: string;
+  /** The artifact digest this event refers to, when applicable. */
+  artifactRef?: string;
+  demo: boolean;
+}
+
+/* -------------------------------------------------------- persistence */
+
+export const RELAY_APP_SCHEMA_VERSION = 1;
+
+export interface RelayAppData {
+  schemaVersion: typeof RELAY_APP_SCHEMA_VERSION;
+  projects: RelayProject[];
+  briefs: Record<string, StoredProjectBrief>;
+  settings: Record<string, StoredProjectSettings>;
+  brains: Record<string, ProjectBrain>;
+  missions: Record<string, RelayMission>;
+  /** Events per mission id, ordered by sequence. */
+  events: Record<string, RelayEvent[]>;
+  activeProjectId: string | null;
+  colorway: 'obsidian' | 'midnight' | 'manual';
+  updatedAt: string;
+}
+
+export function emptyRelayAppData(): RelayAppData {
+  return {
+    schemaVersion: RELAY_APP_SCHEMA_VERSION,
+    projects: [],
+    briefs: {},
+    settings: {},
+    brains: {},
+    missions: {},
+    events: {},
+    activeProjectId: null,
+    colorway: 'obsidian',
+    updatedAt: new Date(0).toISOString(),
+  };
+}
+
+/* --------------------------------------------------- adapter boundary */
+
+/** The replaceable application boundary. The demo adapter is deterministic
+    and offline; the live adapter (`kind: 'live'`) implements the same
+    interface against the real Relay bridge (a server that runs the real
+    Sunday Alcatraz architect and Claude Code coding agent) without rewriting
+    the UI. Provider credentials NEVER live in an adapter — the live adapter
+    knows only a non-secret bridge URL. */
+export interface RelayApplicationAdapter {
+  /** Honest origin label: 'demo' = deterministic offline script; 'live' =
+      real backend-driven mission. Surfaced wherever origin matters. */
+  readonly kind: 'demo' | 'live';
+  createProjectBrief(request: string): ProjectBriefDraft;
+  prepareProjectBrain(input: {
+    projectId: string;
+    brief: ProjectBriefDraft;
+    settings: ProjectSettingsDraft | null;
+  }): ProjectBrain;
+  /** Deterministic next step for a demo mission. Returns the events to
+      append and the next state; null when the mission cannot advance (always
+      null for a live mission — live progression comes from polling). */
+  advanceMission(input: {
+    mission: RelayMission;
+    existingEvents: RelayEvent[];
+  }): { nextState: RelayMissionState; role: MissionRole; events: Omit<RelayEvent, 'id' | 'missionId' | 'sequence' | 'demo'>[] } | null;
+
+  /* -------- live adapters only (absent on the demo adapter) -------- */
+
+  /** Begin a real mission on the backend and return the initial authoritative
+      update. Idempotent by the mission id — a repeat call never dispatches a
+      second provider run. */
+  startMission?(input: {
+    mission: RelayMission;
+    project: RelayProject;
+    settings: StoredProjectSettings;
+  }): Promise<LiveMissionUpdate>;
+  /** Fetch the current authoritative mission state + full event list. */
+  pollMission?(input: { mission: RelayMission }): Promise<LiveMissionUpdate>;
+  /** Request safe cancellation of an in-flight mission. */
+  cancelMission?(input: { mission: RelayMission }): Promise<LiveMissionUpdate>;
+  /** Retry a failed mission (bounded server-side). */
+  retryMission?(input: { mission: RelayMission }): Promise<LiveMissionUpdate>;
+}

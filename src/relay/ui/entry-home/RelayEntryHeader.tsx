@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { RelayDogMark } from '../pixel-dog';
+import { RelayMenuButton, RelayMobileMenu } from '../chrome';
 import type { EntryProductState, HandoffNetworkState } from './contracts';
 
 /**
  * Compact authenticated product header for the Relay Entry Home. The user is
  * already inside the product — no marketing navigation, no sign-up, no
  * pricing. Left: identity + product switcher. Center: system status. Right:
- * terminal, settings, notifications, profile.
+ * terminal, settings, notifications, profile. On mobile the right-side
+ * controls collapse behind the founder gold MENU block; the status strip
+ * stays visible below the brand.
  */
 export function RelayEntryHeader({
   productState,
@@ -20,6 +24,7 @@ export function RelayEntryHeader({
   onOpenProjectSettings: () => void;
   onOpenTerminal: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <header className="reh-header">
       <div className="reh-header-left">
@@ -41,6 +46,26 @@ export function RelayEntryHeader({
           </button>
         </nav>
       </div>
+
+      <RelayMenuButton onOpen={() => setMenuOpen(true)} />
+      <RelayMobileMenu
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        statusLine={`RLY / HOME — HANDOFF NETWORK ${
+          handoffNetworkState === 'online' ? 'ONLINE' : 'STANDBY'
+        }`}
+        items={[
+          { id: 'alcatraz', label: '← SUNDAY ALCATRAZ', onSelect: onReturnToSunday },
+          { id: 'settings', label: 'PROJECT SETTINGS', onSelect: onOpenProjectSettings },
+          { id: 'terminal', label: '>_ OPEN LIVE TERMINAL', onSelect: onOpenTerminal },
+          {
+            id: 'project-state',
+            label: 'PROJECT',
+            hint: productState === 'draft' ? 'DRAFT' : 'UNCONFIGURED',
+          },
+          { id: 'notifications', label: 'NOTIFICATIONS', hint: 'NONE' },
+        ]}
+      />
 
       <div className="reh-header-status" aria-label="System status">
         <span className="reh-status-cell">

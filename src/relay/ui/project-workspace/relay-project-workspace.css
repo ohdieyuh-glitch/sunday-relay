@@ -334,6 +334,32 @@
 .rpw-mt-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .rpw-mt-resolved { font-size: 11px; color: var(--rpw-dim); margin: 0; }
 
+/* ------------------------------------------------- demo mission playback */
+
+.rpw-playback {
+  border: 1px solid var(--rpw-gold-dim);
+  background: rgba(11, 13, 18, 0.5);
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rpw-playback-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.rpw-playback-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--rpw-gold);
+  border: 1px solid var(--rpw-gold-dim);
+  padding: 3px 8px;
+}
+.rpw-playback-note { font-size: 10px; letter-spacing: 0.04em; color: var(--rpw-faint); }
+.rpw-playback-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.rpw-playback-actions .rpw-btn { min-height: 44px; }
+.rpw-playback-done { font-size: 12px; letter-spacing: 0.06em; color: var(--rpw-green); }
+.rpw-playback-error { font-size: 12px; letter-spacing: 0.04em; color: #d98b8b; }
+
 /* -------------------------------------------------------- relay console */
 
 .rpw-console {
@@ -972,19 +998,56 @@
   .rpw-status { border-left: 0; border-right: 0; }
 }
 
+/* Founder mobile header: brand left, gold MENU right, route/status strip
+   below. Desktop controls collapse behind the menu. */
+@media (max-width: 700px) {
+  .rpw-header {
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+    flex-wrap: wrap;
+  }
+  .rpw-header-right,
+  .rpw-header-left .rpw-switch-btn { display: none; }
+  .rpw-header-project {
+    order: 3;
+    flex-basis: 100%;
+    border-top: 1px solid var(--rpw-line);
+    padding-top: 8px;
+  }
+  /* Touch-safe targets for the controls that remain. */
+  .rpw-btn,
+  .rpw-head-btn,
+  .rpw-term-btn,
+  .rpw-switch-btn,
+  .rpw-icon-btn { min-height: 44px; }
+  .rpw-console-terminal-btn { min-height: 44px; min-width: 44px; }
+}
+
 @media (max-width: 640px) {
   .rpw { font-size: 13px; }
-  .rpw-header { padding: 10px 12px; }
+  .rpw-header { padding-left: 12px; padding-right: 12px; }
   .rpw-wordmark { letter-spacing: 0.22em; font-size: 13px; }
-  .rpw-header-project { order: 3; flex-basis: 100%; }
   .rpw-term-btn-label { display: none; }
-  .rpw-strip-cell { min-width: 118px; padding: 8px 12px; }
+  /* Compact workforce strip: horizontal scroll, no overlap, no clipping. */
+  .rpw-strip { -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
+  .rpw-strip-cell { min-width: 132px; padding: 8px 12px; overflow: hidden; }
+  .rpw-strip-name { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   /* Terminal is full-screen on mobile. */
   .rpw-terminal-overlay { justify-content: stretch; }
-  .rpw-terminal { width: 100%; border-left: none; }
+  .rpw-terminal {
+    width: 100%;
+    border-left: none;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  .rpw-tm-window { padding-left: 12px; padding-right: 12px; }
+  /* Words break only when unavoidable — never mid-word by default. */
+  .rpw-tmrow-headline,
+  .rpw-tmrow-detail { overflow-wrap: break-word; }
+  .rpw-tmrow-time { min-width: 52px; font-size: 10px; }
   .rpw-tev { gap: 12px; }
   .rpw-mt-actions .rpw-btn { flex: 1 1 auto; }
-  .rpw-footer { margin: 0 10px 12px; }
+  .rpw-footer { margin: 0 10px calc(12px + env(safe-area-inset-bottom, 0px)); }
+  /* The statement wraps deliberately: PASS THE WORK. / KEEP THE CONTEXT. */
+  .rpw-footer-gold { display: block; }
 }
 
 @media (max-width: 360px) {
@@ -1021,3 +1084,392 @@
     linear-gradient(90deg, rgba(158, 180, 232, 0.07) 1px, transparent 1px);
 }
 [data-relay-colorway='midnight'] .rpw-tmpanel { background: rgba(33, 40, 69, 0.65); }
+
+/* ==========================================================================
+   CLAUDE CODE — CODING AGENT TERMINAL
+   Black stage, cream text, muted gold accents, monospace. Editorial and
+   restrained: thin rules, square markers, no neon and no rounded cards.
+   ========================================================================== */
+.rcat {
+  border: 1px solid var(--rpw-line);
+  background: var(--rpw-panel);
+  font-family: var(--rpw-mono);
+  color: var(--rpw-cream);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.rcat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--rpw-line);
+  background: var(--rpw-panel-2);
+}
+.rcat-title {
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  color: var(--rpw-cream);
+}
+.rcat-square { color: var(--rpw-gold); }
+.rcat-role {
+  font-size: 0.64rem;
+  letter-spacing: 0.18em;
+  color: var(--rpw-dim);
+}
+.rcat-status {
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--rpw-line);
+  color: var(--rpw-dim);
+  margin-left: auto;
+}
+.rcat-status--live { color: var(--rpw-gold-bright); border-color: var(--rpw-gold-dim); }
+.rcat-status--complete { color: var(--rpw-green); border-color: rgba(111, 191, 115, 0.4); }
+.rcat-status--failed { color: var(--rpw-red); border-color: rgba(214, 106, 90, 0.4); }
+.rcat-status--cancelled { color: var(--rpw-amber); border-color: rgba(224, 178, 92, 0.4); }
+.rcat-status-dot { animation: rcat-pulse 1.6s ease-in-out infinite; }
+.rcat-billing {
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  color: var(--rpw-gold);
+  border: 1px solid var(--rpw-gold-dim);
+  padding: 0.12rem 0.4rem;
+}
+.rcat-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.25rem;
+  margin: 0;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--rpw-line);
+}
+.rcat-meta-cell { display: flex; gap: 0.4rem; align-items: baseline; min-width: 0; }
+.rcat-meta-cell dt {
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  color: var(--rpw-faint);
+}
+.rcat-meta-cell dd {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--rpw-cream);
+  overflow-wrap: anywhere;
+}
+.rcat-permissions {
+  margin: 0;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.64rem;
+  color: var(--rpw-dim);
+  border-bottom: 1px solid var(--rpw-line);
+  overflow-wrap: anywhere;
+}
+.rcat-key {
+  color: var(--rpw-gold);
+  letter-spacing: 0.14em;
+  font-size: 0.58rem;
+}
+.rcat-feed {
+  max-height: 22rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.5rem 0.85rem;
+  background: var(--rpw-bg);
+}
+.rcat-feed:focus-visible { outline: 1px solid var(--rpw-gold-dim); outline-offset: -1px; }
+.rcat-lines { list-style: none; margin: 0; padding: 0; }
+.rcat-line {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 0.55rem;
+  align-items: baseline;
+  padding: 0.22rem 0;
+  border-bottom: 1px solid rgba(28, 34, 48, 0.5);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+.rcat-line-time { color: var(--rpw-faint); font-size: 0.62rem; }
+.rcat-line-kind {
+  color: var(--rpw-gold);
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  min-width: 5.5rem;
+}
+.rcat-line-body { min-width: 0; overflow-wrap: anywhere; }
+.rcat-line-text { color: var(--rpw-cream); }
+.rcat-line-target { display: block; color: var(--rpw-dim); font-size: 0.62rem; }
+.rcat-line-truth {
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+  color: var(--rpw-faint);
+  white-space: nowrap;
+}
+.rcat-line--evidence .rcat-line-truth { color: var(--rpw-green); }
+.rcat-line--claim .rcat-line-truth { color: var(--rpw-amber); }
+.rcat-line--evidence .rcat-line-kind { color: var(--rpw-green); }
+.rcat-waiting {
+  margin: 0.5rem 0 0;
+  font-size: 0.68rem;
+  color: var(--rpw-dim);
+}
+.rcat-cursor {
+  color: var(--rpw-gold-bright);
+  margin-left: 0.25rem;
+  animation: rcat-blink 1.1s steps(2, start) infinite;
+}
+.rcat-feed-empty { margin: 0; }
+.rcat-dim { color: var(--rpw-dim); font-size: 0.64rem; margin: 0.25rem 0 0; overflow-wrap: anywhere; }
+.rcat-block {
+  padding: 0.6rem 0.85rem;
+  border-top: 1px solid var(--rpw-line);
+}
+.rcat-block-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  color: var(--rpw-gold);
+  font-weight: 500;
+}
+.rcat-block-tag { color: var(--rpw-faint); letter-spacing: 0.1em; margin-left: 0.4rem; }
+.rcat-claim-summary { margin: 0; font-size: 0.7rem; color: var(--rpw-cream); overflow-wrap: anywhere; }
+.rcat-command {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--rpw-cream);
+  overflow-wrap: anywhere;
+}
+.rcat-prompt { color: var(--rpw-gold); }
+.rcat-test-status { font-size: 0.58rem; letter-spacing: 0.14em; margin-left: 0.4rem; }
+.rcat-test-status--passed { color: var(--rpw-green); }
+.rcat-test-status--failed { color: var(--rpw-red); }
+.rcat-test-status--not_run { color: var(--rpw-faint); }
+.rcat-output,
+.rcat-diff {
+  margin: 0.4rem 0 0;
+  padding: 0.5rem;
+  background: var(--rpw-bg);
+  border: 1px solid var(--rpw-line);
+  color: var(--rpw-dim);
+  font-size: 0.62rem;
+  line-height: 1.5;
+  max-height: 18rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rcat-toggle {
+  background: transparent;
+  border: 1px solid var(--rpw-line);
+  color: var(--rpw-cream);
+  font-family: var(--rpw-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  padding: 0.3rem 0.55rem;
+  cursor: pointer;
+  min-height: 32px;
+}
+.rcat-toggle:hover { border-color: var(--rpw-gold-dim); color: var(--rpw-gold-bright); }
+.rcat-toggle--scroll { margin-left: auto; }
+.rcat-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  padding: 0.5rem 0.85rem;
+  border-top: 1px solid var(--rpw-line);
+  background: var(--rpw-panel-2);
+  font-size: 0.64rem;
+  color: var(--rpw-dim);
+}
+.rcat-foot-cell { display: inline-flex; gap: 0.35rem; align-items: baseline; overflow-wrap: anywhere; }
+.rcat-attested { color: var(--rpw-green); }
+.rcat-unattested { color: var(--rpw-amber); }
+.rcat-empty { padding: 1rem 0.85rem; }
+.rcat-empty p { margin: 0 0 0.3rem; font-size: 0.7rem; }
+
+@keyframes rcat-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes rcat-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ---- mission role billing (truthful role presentation) ---- */
+.rcat-roles {
+  border: 1px solid var(--rpw-line);
+  background: var(--rpw-panel);
+  font-family: var(--rpw-mono);
+}
+.rcat-roles-title {
+  margin: 0;
+  padding: 0.5rem 0.85rem;
+  border-bottom: 1px solid var(--rpw-line);
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  color: var(--rpw-gold);
+  font-weight: 500;
+}
+.rcat-role-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 0.75rem;
+  padding: 0.45rem 0.85rem;
+  border-bottom: 1px solid rgba(28, 34, 48, 0.6);
+  font-size: 0.64rem;
+}
+.rcat-role-row:last-child { border-bottom: none; }
+.rcat-role-actor { color: var(--rpw-cream); letter-spacing: 0.08em; }
+.rcat-role-name { color: var(--rpw-dim); }
+.rcat-role-runtime { color: var(--rpw-faint); overflow-wrap: anywhere; }
+.rcat-role-billing,
+.rcat-role-access {
+  font-size: 0.55rem;
+  letter-spacing: 0.14em;
+  border: 1px solid var(--rpw-line);
+  padding: 0.1rem 0.35rem;
+  color: var(--rpw-gold);
+}
+.rcat-role-access { color: var(--rpw-cyan); }
+.rcat-role-status { margin-left: auto; color: var(--rpw-dim); font-size: 0.58rem; letter-spacing: 0.12em; }
+
+@media (max-width: 700px) {
+  .rcat-line {
+    grid-template-columns: auto 1fr;
+    row-gap: 0.15rem;
+  }
+  .rcat-line-kind { min-width: 0; }
+  .rcat-line-truth { grid-column: 2; }
+  .rcat-feed { max-height: 16rem; }
+  .rcat-status { margin-left: 0; }
+  /* Touch-safe controls at the founder mobile minimum. */
+  .rcat-toggle { min-height: 44px; }
+  .rcat-toggle--scroll { margin-left: 0; }
+  .rcat-role-status { margin-left: 0; }
+  .rcat-meta { gap: 0 0.85rem; }
+  .rcat-foot { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rcat-cursor,
+  .rcat-status-dot { animation: none; }
+}
+.rcat--static .rcat-cursor,
+.rcat--static .rcat-status-dot { animation: none; }
+
+[data-relay-colorway='midnight'] .rcat,
+[data-relay-colorway='midnight'] .rcat-roles { background: rgba(33, 40, 69, 0.65); }
+
+/* ------------------------------------------------- mission economics (M5) */
+/* Compact economics summary. Existing workspace language: bone text, muted
+   gold accents, dark field. No new palette, no gradients, no glow. */
+
+.rpw-economics {
+  border: 1px solid #2a2d34;
+  padding: 14px;
+  margin-top: 12px;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+.rpw-economics-status {
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  margin: 6px 0 12px;
+  color: #d9a441;
+}
+.rpw-economics-status--ok { color: #8b8578; }
+.rpw-economics-status--warning { color: #e0b25c; }
+.rpw-economics-status--approval { color: #e0b25c; }
+.rpw-economics-status--hard-limit { color: #d98f8f; }
+
+.rpw-economics-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  margin: 0 0 14px;
+}
+.rpw-economics-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 20px;
+}
+.rpw-economics-term {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #8b8578;
+}
+.rpw-economics-value {
+  margin: 0;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 12px;
+  color: #ece9e2;
+  text-align: right;
+  word-break: break-word;
+}
+
+.rpw-economics-subtitle {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: #8b8578;
+  margin: 0 0 6px;
+}
+.rpw-economics-categories {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.rpw-economics-category {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: baseline;
+  font-size: 11px;
+}
+.rpw-economics-category-label { color: #8b8578; }
+.rpw-economics-category-actual {
+  font-family: 'Fira Code', ui-monospace, monospace;
+  color: #ece9e2;
+  text-align: right;
+}
+.rpw-economics-category-status {
+  grid-column: 1 / -1;
+  font-size: 10px;
+}
+
+.rpw-economics-notices {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.rpw-economics-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.rpw-economics-action {
+  min-height: 44px;
+  padding: 0 14px;
+  background: transparent;
+  border: 1px solid #2a2d34;
+  color: #d9a441;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+.rpw-economics-action:hover { border-color: #d9a441; }
+
+@media (min-width: 720px) {
+  .rpw-economics-categories { grid-template-columns: 1fr 1fr; gap: 2px 18px; }
+  .rpw-economics-category-status { grid-column: auto; }
+  .rpw-economics-category { grid-template-columns: minmax(0, 1fr) auto; }
+}

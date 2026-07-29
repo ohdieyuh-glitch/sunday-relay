@@ -126,17 +126,18 @@ describe('relay dog', () => {
   it('derives state from canonical events and animates only moving states', () => {
     expect(dogStateFrom(DEMO_TIMELINE.slice(0, 3))).toBe('RESEARCHING');
     expect(dogStateFrom(DEMO_TIMELINE)).toBe('COMPLETE');
-    const moving = footerDog({ state: 'SPRINTING', tick: 3, caps: caps() });
+    // Milestone 4.5: only idle patrol and carrying a handoff travel the track.
+    const moving = footerDog({ state: 'WANDERING', tick: 3, caps: caps() });
     expect(moving.moving).toBe(true);
     const still = footerDog({ state: 'WAITING FOR USER', tick: 3, caps: caps() });
     expect(still.moving).toBe(false);
-    const reduced = footerDog({ state: 'SPRINTING', tick: 3, caps: caps({ reducedMotion: true }) });
+    const reduced = footerDog({ state: 'WANDERING', tick: 3, caps: caps({ reducedMotion: true }) });
     expect(reduced.moving).toBe(false);
-    expect(footerDog({ state: 'SPRINTING', tick: 1, caps: caps() }).track)
-      .not.toBe(footerDog({ state: 'SPRINTING', tick: 4, caps: caps() }).track);
+    expect(footerDog({ state: 'WANDERING', tick: 1, caps: caps() }).track)
+      .not.toBe(footerDog({ state: 'WANDERING', tick: 4, caps: caps() }).track);
   });
 
-  it('renders the header logo with an ASCII fallback', () => {
+  it('renders the official dog header logo with an ASCII fallback', () => {
     expect(headerLogo(caps()).length).toBeGreaterThan(3);
     const ascii = headerLogo(caps({ color: false, unicode: false }));
     expect(ascii.join('')).not.toContain('\x1b');

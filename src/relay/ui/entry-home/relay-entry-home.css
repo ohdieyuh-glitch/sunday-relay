@@ -807,10 +807,34 @@
   .reh-guide { grid-template-columns: 1fr; }
 }
 
+/* Founder mobile header: brand left, gold MENU right, status strip below.
+   Desktop controls collapse behind the menu. */
+@media (max-width: 700px) {
+  .reh-header {
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    flex-wrap: wrap;
+  }
+  .reh-header-right,
+  .reh-switcher { display: none; }
+  .reh-header-status {
+    order: 3;
+    flex-basis: 100%;
+    border-top: 1px solid var(--reh-line);
+    padding-top: 8px;
+    flex-wrap: wrap;
+  }
+  /* Touch-safe targets for the controls that remain. */
+  .reh-btn,
+  .reh-head-btn,
+  .reh-term-btn,
+  .reh-switch-btn,
+  .reh-icon-btn { min-height: 44px; }
+}
+
 @media (max-width: 640px) {
   .reh { font-size: 13px; }
-  .reh-header { padding: 8px 12px; }
-  .reh-header-status { order: 3; flex-basis: 100%; gap: 10px; }
+  .reh-header { padding-left: 12px; padding-right: 12px; }
+  .reh-header-status { gap: 10px; }
   .reh-term-btn-label { display: none; }
   .reh-route-list { grid-template-columns: 1fr; }
   .reh-brief-grid { grid-template-columns: 1fr; }

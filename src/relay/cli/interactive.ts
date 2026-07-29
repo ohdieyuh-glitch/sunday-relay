@@ -11,9 +11,10 @@ import {
   renderFindings, renderRepairs, renderVerdict, renderTimeline,
 } from './competitive';
 import {
-  defaultModePolicy, computeDogActivity, renderDogFrames, entitlementPolicy,
+  defaultModePolicy, computeDogActivity, entitlementPolicy,
   assignReviewer, projectTerminalEvent, type RelayMode,
 } from '../mission';
+import { officialDogRows } from './product';
 
 /**
  * Interactive Relay session (Prompt 5) — a PURE line handler so tests drive
@@ -87,8 +88,15 @@ export function createSession(options: SessionOptions): Session {
   };
   const renderDogView = (): string[] => {
     const a = dogNow();
-    return dogMotion ? [...renderDogFrames(a), `  state=${a.state} activity=${a.activityLevel} sync=${a.synchronizationLevel}`]
-      : [`RELAY DOG — ${a.statusLabel} (motion off)`, `  state=${a.state} activity=${a.activityLevel} sync=${a.synchronizationLevel}`];
+    // The OFFICIAL Relay Dog — the same shared sprite the website and the
+    // product shell draw. The mission domain still owns the STATE; this only
+    // chooses the official visual for it.
+    const art = officialDogRows('standing', {
+      tty: true, color: true, unicode: true, width: 120,
+      reducedMotion: !dogMotion, plain: false, json: false,
+    });
+    return [...art, ` RELAY DOG — ${a.statusLabel}${dogMotion ? '' : ' (motion off)'}`,
+      `  state=${a.state} activity=${a.activityLevel} sync=${a.synchronizationLevel}`];
   };
   const renderTerminalView = (): string[] => {
     if (!app) return ['No run yet.'];
