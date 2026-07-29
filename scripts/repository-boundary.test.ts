@@ -60,10 +60,24 @@ const baseline = (): Record<string, string> => ({
   'src/relay/core/app.ts': 'export const relay = true;\n',
 });
 
-/* Synthetic credential shapes. Assembled from fragments so the literals never
- * appear whole in this file — the scanner scans this repository too. */
+/* Synthetic credential shapes.
+ *
+ * EVERY credential-shaped fixture below is ASSEMBLED FROM FRAGMENTS rather
+ * than written as a literal, because the scanner scans this repository too —
+ * and it must. A scanner that skipped its own tests would have a hole exactly
+ * where its evidence lives, and annotating each line with
+ * `relay-boundary:allow-fixture` would work but would make the strongest
+ * fixture file in the repo read as one long list of exceptions.
+ *
+ * Assembly keeps the tests honest: the scanner still receives real-shaped
+ * input at runtime, while the tracked file contains no matchable literal.
+ * The same reasoning applies to the `.only` fixture — rule 5 has no allowance
+ * mechanism at all, so it must not appear whole either.
+ */
 const SK = 'sk' + '-';
 const fake = (prefix: string, body: string) => `${prefix}${body}`;
+/** Join fragments so an env-assignment shape never appears whole here. */
+const assign = (name: string, value: string) => `${name}${'='}${value}`;
 
 describe('relay repository-boundary scanner', () => {
   it('passes on a clean Relay-shaped repository', () => {
@@ -80,9 +94,12 @@ describe('relay repository-boundary scanner', () => {
     ['a Google API key', `export const k = '${fake('AIza', 'SyC93kd82jdKe93ldPQ7rMv61zXwq0TbNa')}';`],
     ['an npm token', `export const k = '${fake('npm_', 'aB3xY7zQ1wE5rT9yU2iO4pA6sD8fG0hJ2kL4')}';`],
     ['an AWS access key id', `export const k = '${fake('AKIA', 'J3QK7ZP2W9RMT4XC')}';`],
-    ['an AWS secret access key', `AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEYZ\n`],
-    ['a database URL with inline credentials', `export const u = 'postgres://svcuser:h7Kq2Lm9Rt4X@db.internal:5432/app';`],
-    ['a Supabase service-role assignment', `SUPABASE_SERVICE_ROLE_KEY=abc123XYZ789qrsTUV456defGHI\n`],
+    ['an AWS secret access key',
+      `${assign('AWS_SECRET' + '_ACCESS_KEY', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCY' + 'gTvW1qZ4nHdK')}\n`],
+    ['a database URL with inline credentials',
+      `export const u = '${'postgres' + '://svcuser:'}${'h7Kq2Lm9Rt4X'}@db.internal:5432/app';`],
+    ['a Supabase service-role assignment',
+      `${assign('SUPABASE_SERVICE' + '_ROLE_KEY', 'abc123XYZ789qrsTUV456defGHI')}\n`],
     ['a GitHub token', `export const k = '${fake('ghp_', 'aB3xY7zQ1wE5rT9yU2iO4pA6sD8fG0hJ2kL4')}';`],
   ];
 
@@ -121,7 +138,7 @@ describe('relay repository-boundary scanner', () => {
   });
 
   it('detects a production-shaped PSP Agent ID, including inside a test file', () => {
-    const psp = 'PSP-AGENT-1-RLY742-9fKq2Lm7Rt4XwZ8vB6nH1jD5gS3pY0cU-7e4a';
+    const psp = `${'PSP' + '-AGENT-'}1-RLY742-9fKq2Lm7Rt4XwZ8vB6nH1jD5gS3pY0cU-7e4a`;
     const result = scan({ ...baseline(), 'src/relay/psp/leak.test.ts': `export const id = '${psp}';\n` });
     expect(result.code, result.output).toBe(1);
     expect(result.output).toContain('[psp-credential]');
@@ -215,7 +232,8 @@ describe('relay repository-boundary scanner', () => {
   });
 
   it('still detects a focused test', () => {
-    const result = scan({ ...baseline(), 'src/relay/x.test.ts': 'it.only("x", () => {});\n' });
+    const focused = `it${'.'}only("x", () => {});\n`;
+    const result = scan({ ...baseline(), 'src/relay/x.test.ts': focused });
     expect(result.code, result.output).toBe(1);
     expect(result.output).toContain('[focused-test]');
   });
