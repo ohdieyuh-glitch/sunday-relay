@@ -188,7 +188,13 @@ describe('every build-dependent test is re-run after its build', () => {
   it('the list of build-dependent tests is COMPLETE', () => {
     // Any other test that reads dist/ or dist-relay/ is build-dependent and
     // must be declared above, so the ledger cannot silently fall behind.
-    const declared = new Set(BUILD_DEPENDENT.map((entry) => entry.file));
+    //
+    // THIS FILE is the one honest exception: it NAMES the artifacts in the
+    // ledger's `needs` fields without ever reading one. The exception is
+    // exactly one path and the test below proves it earns it, so this cannot
+    // become a place to hide a genuinely build-dependent test.
+    const LEDGER = 'scripts/ci-test-accounting.test.ts';
+    const declared = new Set([...BUILD_DEPENDENT.map((entry) => entry.file), LEDGER]);
     const undeclared = testFiles.filter(
       (file) => !declared.has(file) && /['"`](\.\.\/)*dist(-relay|-relay-bridge)?['"`,/]/.test(sourceOf(file)),
     );
@@ -196,6 +202,19 @@ describe('every build-dependent test is re-run after its build', () => {
       undeclared,
       'this test reads a build artifact but is not in BUILD_DEPENDENT, so nothing guarantees CI re-runs it',
     ).toEqual([]);
+  });
+
+  it('the ledger itself reads no build artifact — it only names them', () => {
+    const self = sourceOf('scripts/ci-test-accounting.test.ts');
+    // It may mention `dist/...` inside a `needs:` string; it may not touch one.
+    for (const access of [
+      /existsSync\([^)]*dist/,
+      /readFileSync\([^)]*dist/,
+      /readdirSync\([^)]*dist/,
+      /join\([^)]*['"`]dist/,
+    ]) {
+      expect(access.test(self), `the ledger reads a build artifact via ${access}`).toBe(false);
+    }
   });
 });
 
