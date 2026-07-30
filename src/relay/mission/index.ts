@@ -58,8 +58,12 @@ export {
   disputeReceipt, voidReceipt, InMemoryCostReceiptRepository,
   createMissionBudget, createBudgetApproval, applyApprovedIncrease,
   evaluateMissionBudget, aggregateMissionEconomics, projectMissionEconomics,
-  formatMoney, money, moneyFromDecimalString, amountLabel,
+  formatMoney, money, moneyFromDecimalString, amountLabel, boundedLabel,
+  UNKNOWN_LABEL, NOT_AVAILABLE_LABEL, PENDING_LABEL, NOT_CONFIGURED_LABEL,
+  AT_LEAST_PREFIX, AT_MOST_PREFIX,
+  SIMULATED_DATA_LABEL, MIXED_DATA_LABEL, NO_DATA_LABEL,
   type RelayMoney, type RelayCostReceipt, type RelayCostCategory,
   type RelayMissionBudget, type RelayBudgetEvaluation,
   type RelayMissionEconomics, type RelayMissionEconomicsProjection,
+  type RelayEconomicsDataSource,
 } from './economics-barrel';

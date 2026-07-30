@@ -32,7 +32,7 @@ describe('A — ownership', () => {
 
   it('rejects a second active owner (one owner at a time)', () => {
     const first = assignTask(base());
-    if (!first.ok) return;
+    if (!first.ok) throw new Error(`assignTask failed: ${first.error.message}`);
     const second = assignTask({ ...base(), task: first.value.task, existingAssignments: [first.value.assignment], adapterId: 'other-agent' });
     expect(second.ok).toBe(false);
     if (!second.ok) expect(second.error.code).toBe('duplicate-task');
@@ -41,7 +41,7 @@ describe('A — ownership', () => {
   it('idempotent same assignment returns the original; conflicting key errors', () => {
     const input = { ...base(), idempotencyKey: 'assign-1' };
     const first = assignTask(input);
-    if (!first.ok) return;
+    if (!first.ok) throw new Error(`assignTask failed: ${first.error.message}`);
     const replay = assignTask({ ...input, existingAssignments: [first.value.assignment] });
     expect(replay.ok).toBe(true);
     if (replay.ok) expect(replay.value.assignment.assignmentId).toBe(first.value.assignment.assignmentId);
@@ -62,7 +62,7 @@ describe('A — ownership', () => {
 
   it('transfer supersedes the previous assignment and preserves history; renewal after transfer fails', () => {
     const first = assignTask(base());
-    if (!first.ok) return;
+    if (!first.ok) throw new Error(`assignTask failed: ${first.error.message}`);
     const transferred = transferTaskOwnership({
       ...base(),
       task: first.value.task,
@@ -84,7 +84,7 @@ describe('A — ownership', () => {
 
   it('release returns the task to queued with no owner and keeps the record historical', () => {
     const first = assignTask(base());
-    if (!first.ok) return;
+    if (!first.ok) throw new Error(`assignTask failed: ${first.error.message}`);
     const released = releaseTask({ task: first.value.task, assignment: first.value.assignment, now: NOW, reason: 'operator request' });
     expect(released.ok).toBe(true);
     if (!released.ok) return;

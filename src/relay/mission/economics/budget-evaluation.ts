@@ -27,7 +27,6 @@ import {
   compareMoney,
   subtractMoney,
   sumMoney,
-  zeroMoney,
   type RelayMoney,
 } from './money';
 import type { RelayCostCategory, RelayCostReceipt } from './cost-receipt-types';
@@ -56,6 +55,11 @@ export interface RelayBudgetCategoryEvaluation {
   readonly spent: RelayMoney | null;
   readonly remaining: RelayMoney | null;
   readonly limitReached: boolean;
+  /**
+   * True when a receipt in this category counts toward the limit but carries
+   * no amount. `spent` is then a LOWER bound and `remaining` an UPPER one.
+   */
+  readonly hasUnknownCost: boolean;
 }
 
 export interface RelayBudgetEvaluation {
@@ -64,11 +68,30 @@ export interface RelayBudgetEvaluation {
 
   readonly currency: string | null;
 
+  /** The configured limit, carried directly rather than reconstructed from
+      `remaining + projected` — a reconstruction that vanishes the moment
+      either side is honestly unknown. */
+  readonly totalLimit: RelayMoney | null;
+
   readonly finalizedActual: RelayMoney | null;
   readonly provisionalActual: RelayMoney | null;
   readonly pendingKnown: RelayMoney | null;
   /** True when at least one pending receipt has no amount at all. */
   readonly hasUnknownPendingCost: boolean;
+  /**
+   * True when at least one PROVISIONAL actual receipt has no amount. A
+   * provisional receipt counts toward the projection, so an unpriced one makes
+   * the projection incomplete exactly as an unpriced pending receipt does.
+   */
+  readonly hasUnknownProvisionalCost: boolean;
+  /** How many countable receipts carry no amount at all. */
+  readonly unpricedCountableReceipts: number;
+  /**
+   * False when ANY countable receipt is unpriced. `projectedTotal` is then a
+   * LOWER BOUND, `remainingBudget` an UPPER BOUND, and no surface may present
+   * either as the figure.
+   */
+  readonly projectedTotalComplete: boolean;
   readonly proposedCost: RelayMoney | null;
   readonly projectedTotal: RelayMoney | null;
   readonly remainingBudget: RelayMoney | null;
@@ -155,10 +178,14 @@ export function evaluateMissionBudget(
       missionId: input.missionId,
       ...(budget ? { budgetId: budget.budgetId } : {}),
       currency: null,
+      totalLimit: budget?.totalLimit ?? null,
       finalizedActual: null,
       provisionalActual: null,
       pendingKnown: null,
       hasUnknownPendingCost: receipts.some((r) => isPending(r) && r.amount === null),
+      hasUnknownProvisionalCost: receipts.some((r) => isProvisionalActual(r) && r.amount === null),
+      unpricedCountableReceipts: receipts.filter((r) => r.status !== 'voided' && r.amount === null).length,
+      projectedTotalComplete: false,
       proposedCost,
       projectedTotal: null,
       remainingBudget: null,
@@ -183,7 +210,20 @@ export function evaluateMissionBudget(
   const provisionalActual = sumMatching(countable, isProvisionalActual);
   const pendingKnown = sumMatching(countable, isPending);
   const hasUnknownPendingCost = countable.some((r) => isPending(r) && r.amount === null);
+  const hasUnknownProvisionalCost = countable.some((r) => isProvisionalActual(r) && r.amount === null);
   const disputed = countable.filter((r) => r.status === 'disputed');
+
+  /**
+   * Receipts that COUNT toward the projection but carry no amount. The
+   * previous evaluation tracked only unpriced PENDING receipts, so an
+   * unpriced provisional or finalized actual was dropped silently: it left no
+   * trace in the total, no trace in the status, and no notice for an operator.
+   * That is a silent undercount, and it is what this counts.
+   */
+  const unpricedCountable = countable.filter(
+    (r) => r.amount === null && r.status !== 'disputed' && (isPending(r) || isProvisionalActual(r) || isFinalizedActual(r)),
+  );
+  const projectedTotalComplete = unpricedCountable.length === 0;
 
   if (disputed.length > 0) {
     warnings.push(
@@ -192,6 +232,17 @@ export function evaluateMissionBudget(
   }
   if (hasUnknownPendingCost) {
     warnings.push('at least one pending receipt has no recorded amount — the projection is a lower bound');
+  }
+  if (hasUnknownProvisionalCost) {
+    warnings.push(
+      'at least one provisional receipt has no recorded amount — it counts toward the projection, so the projected total is a lower bound',
+    );
+  }
+  const unpricedFinalized = unpricedCountable.filter(isFinalizedActual).length;
+  if (unpricedFinalized > 0) {
+    warnings.push(
+      `${unpricedFinalized} finalized receipt(s) carry no amount — the recorded actual cost is incomplete`,
+    );
   }
 
   /* ---- projected total = finalized + provisional + known pending + proposed ---- */
@@ -202,11 +253,14 @@ export function evaluateMissionBudget(
   const projectedTotal = projectedSum.ok ? projectedSum.value : null;
   if (!projectedSum.ok) errors.push(projectedSum.error);
 
-  /* ---- remaining ---- */
+  /* ---- remaining ----
+   * NEVER `projectedTotal ?? zeroMoney(currency)`. Substituting zero for an
+   * unknown spend reported the WHOLE limit as remaining, which is the one
+   * number an operator acts on and the one they must not be given. Unknown
+   * spend means unknown remaining. */
   let remainingBudget: RelayMoney | null = null;
-  if (budget?.totalLimit && currency) {
-    const spent = projectedTotal ?? zeroMoney(currency);
-    const remaining = subtractMoney(budget.totalLimit, spent);
+  if (budget?.totalLimit && currency && projectedTotal !== null) {
+    const remaining = subtractMoney(budget.totalLimit, projectedTotal);
     if (remaining.ok) remainingBudget = remaining.value;
     else errors.push(remaining.error);
   }
@@ -256,6 +310,15 @@ export function evaluateMissionBudget(
         receipt.category === (category as RelayCostCategory) &&
         (isFinalizedActual(receipt) || isProvisionalActual(receipt)),
     );
+    // An unpriced receipt in this category makes its spend a lower bound.
+    const hasUnknownCost = countable.some(
+      (receipt) =>
+        receipt.category === (category as RelayCostCategory) &&
+        receipt.amount === null &&
+        receipt.status !== 'disputed' &&
+        (isFinalizedActual(receipt) || isProvisionalActual(receipt) || isPending(receipt)),
+    );
+
     let remaining: RelayMoney | null = null;
     let limitReached = false;
     if (spent) {
@@ -266,8 +329,14 @@ export function evaluateMissionBudget(
       if (limitReached) {
         blockingReasons.push(`the ${category} category limit has been reached`);
       }
-    } else {
-      remaining = limit;
+    }
+    // `remaining` stays NULL when nothing priced was recorded. Reporting the
+    // full limit there is the same fabricated zero as above: "no amount
+    // recorded" is not "nothing spent".
+    if (hasUnknownCost) {
+      warnings.push(
+        `the ${category} category has at least one unpriced receipt — its spend is a lower bound and its remaining allowance an upper one`,
+      );
     }
     categoryEvaluations.push({
       category: category as RelayCostCategory,
@@ -275,6 +344,7 @@ export function evaluateMissionBudget(
       spent,
       remaining,
       limitReached,
+      hasUnknownCost,
     });
   }
 
@@ -334,7 +404,7 @@ export function evaluateMissionBudget(
     hardLimitReached,
     approvalRequired,
     warningThresholdReached,
-    hasUnknownPendingCost,
+    projectedTotalComplete,
     proposedCostUnknown: Boolean(input.proposedCostUnknown),
     categoryLimitReached: categoryEvaluations.some((c) => c.limitReached),
     remainingBudget,
@@ -344,10 +414,14 @@ export function evaluateMissionBudget(
     missionId: input.missionId,
     ...(budget ? { budgetId: budget.budgetId } : {}),
     currency,
+    totalLimit: budget?.totalLimit ?? null,
     finalizedActual,
     provisionalActual,
     pendingKnown,
     hasUnknownPendingCost,
+    hasUnknownProvisionalCost,
+    unpricedCountableReceipts: unpricedCountable.length,
+    projectedTotalComplete,
     proposedCost,
     projectedTotal,
     remainingBudget,
@@ -380,7 +454,10 @@ function deriveStatus(input: {
   hardLimitReached: boolean;
   approvalRequired: boolean;
   warningThresholdReached: boolean;
-  hasUnknownPendingCost: boolean;
+  /** False when ANY countable receipt is unpriced — pending, provisional or
+      finalized. The previous signal covered only pending receipts, so an
+      unpriced provisional receipt still reported `under_budget`. */
+  projectedTotalComplete: boolean;
   proposedCostUnknown: boolean;
   categoryLimitReached: boolean;
   remainingBudget: RelayMoney | null;
@@ -388,15 +465,18 @@ function deriveStatus(input: {
   if (!input.budget || input.budget.totalLimit === null) return 'not_configured';
   if (input.hardLimitReached) {
     // Exhausted means nothing remains at all; hard_limit_reached means this
-    // operation cannot proceed. Both block, and they read differently.
+    // operation cannot proceed. Both block, and they read differently. A
+    // lower-bound projection that already breaches the limit still blocks —
+    // incomplete cost data may never make a breach look survivable.
     if (input.remainingBudget && BigInt(input.remainingBudget.amountMicros) <= 0n) return 'exhausted';
     return 'hard_limit_reached';
   }
   if (input.categoryLimitReached) return 'hard_limit_reached';
   if (input.approvalRequired) return 'approval_required';
   if (input.warningThresholdReached) return 'warning';
-  // Unknown cost only downgrades the status when nothing more serious applies.
-  if (input.hasUnknownPendingCost || input.proposedCostUnknown) return 'unknown_due_to_missing_cost';
+  // Unknown cost only downgrades the status when nothing more serious applies
+  // — but `under_budget` is a claim, and an incomplete total cannot support it.
+  if (!input.projectedTotalComplete || input.proposedCostUnknown) return 'unknown_due_to_missing_cost';
   return 'under_budget';
 }
 

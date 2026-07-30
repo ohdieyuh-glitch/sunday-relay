@@ -71,9 +71,29 @@ describe('CLI invocation is real', () => {
     expect(pkg.scripts['relay:build']).toContain('--banner:js="#!/usr/bin/env node"');
   });
 
+  /**
+   * BUILD-DEPENDENT, AND ACCOUNTED FOR.
+   *
+   * `npm test` runs before `npm run relay:build`, so in a clean checkout
+   * `dist-relay/cli.cjs` does not exist yet. This test used to `return`
+   * there — a guarantee reported as green without running, and one the CI
+   * report never mentioned while it counted two OTHER skipped tests.
+   *
+   * It no longer returns silently. The absent-build branch asserts that CI
+   * re-runs this exact file after the CLI build, which is the only place the
+   * claim can actually be proven; `scripts/ci-test-accounting.test.ts` holds
+   * the whole ledger of build-dependent tests.
+   */
   it('the built CLI actually runs and reports the Relay product', () => {
     const built = join(ROOT, 'dist-relay', 'cli.cjs');
-    if (!existsSync(built)) return;                 // build not present in this run
+    if (!existsSync(built)) {
+      const workflow = readFileSync(join(ROOT, '.github', 'workflows', 'relay-ci.yml'), 'utf8');
+      expect(
+        workflow.includes('docs/documentation-contract.test.ts'),
+        'this assertion needs dist-relay/cli.cjs, so CI must re-run this file after `npm run relay:build`',
+      ).toBe(true);
+      return;
+    }
     expect(readFileSync(built, 'utf8').startsWith('#!/usr/bin/env node')).toBe(true);
     const out = execFileSync('node', [built, 'version'], { cwd: ROOT, encoding: 'utf8' });
     expect(out).toContain('Relay CLI');
@@ -121,9 +141,22 @@ describe('CURRENT_STATE is truthful about the integration', () => {
     expect(current).toContain('Repaired');
   });
 
-  it('records the preserved transitional duplication rather than hiding it', () => {
-    expect(current).toContain('Transitional duplication');
+  /**
+   * This used to require the phrase "Transitional duplication" — the note
+   * saying Mission Economics existed byte-identically in two lineages. That
+   * stopped being true once both surfaces landed in one repository, so the
+   * test now requires the CORRECTED description AND requires the stale claim
+   * to be gone: a document may not describe a duplication that no longer
+   * exists, and a test may not require it to.
+   */
+  it('describes Mission Economics as ONE implementation, not a duplication', () => {
     expect(current).toContain('Mission Economics');
+    expect(current).toContain('ONE implementation');
+    expect(current).toMatch(/thin re-export/u);
+    expect(current).toMatch(/no second copy and nothing to keep in sync/u);
+    // The superseded wording must not survive as a live claim.
+    expect(current).not.toContain('Transitional duplication, deliberately preserved');
+    expect(current).not.toMatch(/Mission Economics exists\s+byte-identically/u);
   });
 });
 

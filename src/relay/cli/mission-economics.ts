@@ -16,7 +16,7 @@ import type {
   RelayCostReceipt,
   RelayMissionEconomicsProjection,
 } from '../mission';
-import { formatMoney } from '../mission';
+import { formatMoney, MIXED_DATA_LABEL, SIMULATED_DATA_LABEL } from '../mission';
 
 export interface EconomicsRenderOptions {
   /** Terminal width; the layout degrades gracefully when narrow. */
@@ -25,6 +25,37 @@ export interface EconomicsRenderOptions {
 }
 
 const NARROW = 60;
+
+/**
+ * SIMULATED-DATA DISCLOSURE.
+ *
+ * Every mission-economics command in this build renders a deterministic
+ * development fixture. Printing those figures without saying so presents
+ * development data as a real user mission, so the banner is emitted from the
+ * PROJECTION's own `dataSourceLabel` — derived from the receipts — and cannot
+ * be dropped by a caller that forgets a flag.
+ */
+function disclosureLines(
+  projection: RelayMissionEconomicsProjection,
+  options: EconomicsRenderOptions,
+): string[] {
+  if (projection.dataSourceLabel === null) return [];
+  const rule = '─'.repeat(Math.max(20, Math.min(options.width - 2, projection.dataSourceLabel.length + 4)));
+  return [
+    `  ${rule}`,
+    ...wrap(projection.dataSourceLabel, options.width, '  '),
+    ...(projection.dataSource === 'development_fixture'
+      ? wrap(
+        'No mission ran, no provider was called, and no money was spent. Relay has no live mission '
+        + 'economics source configured in this build.',
+        options.width,
+        '  ',
+      )
+      : []),
+    `  ${rule}`,
+    '',
+  ];
+}
 
 function line(label: string, value: string, options: EconomicsRenderOptions): string {
   if (options.width < NARROW) return `${label}:\n  ${value}`;
@@ -64,6 +95,7 @@ export function renderMissionEconomics(
   out.push('MISSION ECONOMICS');
   out.push(`  mission ${projection.missionId} · revision ${projection.missionRevision}`);
   out.push('');
+  out.push(...disclosureLines(projection, options));
   out.push(`  ${projection.statusLabel.toUpperCase()}`);
   out.push('');
 
@@ -107,6 +139,7 @@ export function renderMissionBudget(
   out.push('MISSION BUDGET');
   out.push(`  mission ${projection.missionId} · revision ${projection.missionRevision}`);
   out.push('');
+  out.push(...disclosureLines(projection, options));
   out.push(`  ${line('Budget', projection.budgetLabel, options)}`);
   out.push(`  ${line('Projected total', projection.projectedTotalLabel, options)}`);
   out.push(`  ${line('Remaining', projection.remainingLabel, options)}`);
@@ -147,6 +180,17 @@ export function renderMissionReceipts(
 ): string[] {
   const out: string[] = [];
   out.push('MISSION COST RECEIPTS');
+  // The disclosure is derived from the receipts themselves — the same rule the
+  // shared projection applies — so this listing cannot present a development
+  // fixture as a real user mission.
+  const fixtures = receipts.filter((r) => r.source === 'development_fixture').length;
+  if (fixtures > 0) {
+    const label = fixtures === receipts.length ? SIMULATED_DATA_LABEL : MIXED_DATA_LABEL;
+    const rule = '─'.repeat(Math.max(20, Math.min(options.width - 2, label.length + 4)));
+    out.push(`  ${rule}`);
+    out.push(...wrap(label, options.width, '  '));
+    out.push(`  ${rule}`);
+  }
   if (receipts.length === 0) {
     out.push(...wrap('No cost receipts recorded. This is not the same as $0.00 spent.', options.width, '  '));
     return out;
@@ -222,8 +266,10 @@ export function buildMissionEconomicsFixture() {
       category: entry.category,
       costClass: 'actual',
       status: 'finalized',
-      source: entry.agent ? 'provider_reported' : 'adapter_observed',
-      ...(entry.agent ? { providerUsageReferenceId: `usage-${entry.receiptId}` } : {}),
+      // DEVELOPMENT FIXTURE, declared as one. Claiming `provider_reported`
+      // here would have been a fabricated provenance in synthetic data, and it
+      // is what let the CLI present this ledger as a real mission.
+      source: 'development_fixture',
       ...(entry.agent ? { actualAgentId: entry.agent } : {}),
       amount: amount(entry.decimal),
       occurredAt: FIXTURE_AT,

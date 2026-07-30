@@ -23,9 +23,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to an immutable commit SHA. A mutable tag can be repointed by
+      # the action's owner (or by a compromised account) at any time, which
+      # would change what CI executes without changing anything here.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -56,6 +59,15 @@ jobs:
 
       - name: CLI build
         run: npm run relay:build
+
+      # Companion to the production-entry step above. The documentation
+      # contract asserts that the BUILT CLI actually runs and reports the
+      # Relay product; that needs `dist-relay/cli.cjs`, which `npm test` runs
+      # before producing. Re-running the file here is the only place the claim
+      # can be proven. `scripts/ci-test-accounting.test.ts` fails if a
+      # build-dependent test is ever added without a step like this one.
+      - name: Documentation contract (built CLI actually runs)
+        run: npx vitest run docs/documentation-contract.test.ts
 
       - name: Relay bridge build
         run: npm run relay:bridge:build

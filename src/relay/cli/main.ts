@@ -1095,6 +1095,12 @@ async function runMissionCli(parsed: ParsedCli, io: CliIo): Promise<number> {
     return EXIT.usage;
   }
 
+  // THERE IS NO LIVE MISSION ECONOMICS SOURCE IN THIS BUILD. These commands
+  // render a deterministic development fixture, and every renderer below
+  // carries that disclosure — derived from the receipts' own
+  // `development_fixture` source, so it cannot be dropped here. When a live
+  // source lands, the same renderers will show no banner, because the data
+  // will genuinely be live.
   const fixture = buildMissionEconomicsFixture();
   const options = { width: render.width ?? 80, plain: render.plain === true };
 

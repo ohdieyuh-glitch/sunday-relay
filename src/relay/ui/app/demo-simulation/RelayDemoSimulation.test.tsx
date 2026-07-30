@@ -140,7 +140,15 @@ describe('browser demo integration', () => {
     expect(window.location.hash).toBe('#/relay/project/rly-001');
   });
 
-  it('autoplay reaches DEMO VERIFIED COMPLETE and leaves it visible', async () => {
+  /**
+   * Drives the whole demo script through fake timers and re-renders the shell
+   * on every step, so its wall-clock cost scales with machine load rather than
+   * with anything it asserts. Under the FULL suite it exceeded vitest's 5s
+   * default and failed as a timeout — a red result that says nothing about the
+   * product. The timeout is explicit so a slow machine reports the real
+   * outcome instead.
+   */
+  it('autoplay reaches DEMO VERIFIED COMPLETE and leaves it visible', { timeout: 60_000 }, async () => {
     vi.useFakeTimers();
     render(createElement(RelayPreviewApp));
     fireEvent.click(playButton());

@@ -32,6 +32,16 @@ export interface MissionProjectionInput {
   /** Actual agents that ran (from audit identities). */
   actualImplementerId: string;
   actualReviewerId: string | null;
+  /** PSP Agent IDs, when the run carried them. Two roles sharing one PSP
+      Agent ID are the same entitlement, however their adapter ids differ. */
+  implementerPspId?: string | null;
+  reviewerPspId?: string | null;
+  /** Human identities, for a human-performed implementation or review. */
+  implementerHumanId?: string | null;
+  reviewerHumanId?: string | null;
+  /** The run the reviewer executed in, when it differs from `runId`. Sharing
+      a run is sharing a context, and is not an independent review. */
+  reviewerRunId?: string | null;
   implementerAdapterProvenance: Provenance;
   reviewerAdapterProvenance: Provenance;
   /** Execution facts (derived from events/audit — never a live call here). */
@@ -74,9 +84,100 @@ export interface MissionProjectionBundle {
     actualReviewer: string | null;
     reviewerLaunchVerified: boolean;
     fallbackOccurred: boolean;
+    /**
+     * TRUE only when independence was PROVEN. Reviewer identity that cannot
+     * be compared leaves this false and `reviewIndependence` `unknown`.
+     */
     independentReviewComplete: boolean;
+    reviewIndependence: RelayReviewIndependence;
+    reviewIndependenceReason: string;
   };
   errors: string[];
+}
+
+/* ------------------------------------------------------- independence */
+
+export type RelayReviewIndependence = 'independent' | 'not_independent' | 'unknown';
+
+export interface ReviewIndependenceInput {
+  actualImplementerId: string;
+  actualReviewerId: string | null;
+  implementerPspId?: string | null;
+  reviewerPspId?: string | null;
+  implementerHumanId?: string | null;
+  reviewerHumanId?: string | null;
+  implementerRunId?: string | null;
+  reviewerRunId?: string | null;
+}
+
+const identity = (value: string | null | undefined): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+};
+
+/**
+ * REVIEWER INDEPENDENCE.
+ *
+ * `independentReviewComplete` used to mean only "a review was approved and the
+ * reviewer was attested". Neither says the reviewer was a DIFFERENT party from
+ * the author, so a run in which one agent implemented and then reviewed its
+ * own work reported an independent review. Self-review is the single failure
+ * this field exists to rule out.
+ *
+ * Independence is now DERIVED from whatever identity evidence the run carries,
+ * and the three outcomes are kept distinct:
+ *
+ *   not_independent  a shared identity was found — same actual agent, same
+ *                    PSP Agent ID, same human, or the same run;
+ *   unknown          the identities cannot be compared. NOT independence:
+ *                    absence of evidence is not evidence of separation;
+ *   independent      every identity that BOTH sides carry differs.
+ */
+export function assessReviewIndependence(
+  input: ReviewIndependenceInput,
+): { independence: RelayReviewIndependence; reason: string } {
+  const implementer = identity(input.actualImplementerId);
+  const reviewer = identity(input.actualReviewerId);
+
+  if (reviewer === null) {
+    return { independence: 'unknown', reason: 'no reviewer identity was recorded — independence cannot be established' };
+  }
+  if (implementer === null) {
+    return { independence: 'unknown', reason: 'no implementer identity was recorded — independence cannot be established' };
+  }
+
+  const shared: Array<[string, string]> = [];
+  if (implementer === reviewer) shared.push(['actual agent', implementer]);
+
+  const implementerPsp = identity(input.implementerPspId);
+  const reviewerPsp = identity(input.reviewerPspId);
+  if (implementerPsp !== null && reviewerPsp !== null && implementerPsp === reviewerPsp) {
+    shared.push(['PSP Agent ID', implementerPsp]);
+  }
+
+  const implementerHuman = identity(input.implementerHumanId);
+  const reviewerHuman = identity(input.reviewerHumanId);
+  if (implementerHuman !== null && reviewerHuman !== null && implementerHuman === reviewerHuman) {
+    shared.push(['human identity', implementerHuman]);
+  }
+
+  const implementerRun = identity(input.implementerRunId);
+  const reviewerRun = identity(input.reviewerRunId);
+  if (implementerRun !== null && reviewerRun !== null && implementerRun === reviewerRun) {
+    shared.push(['run identity', implementerRun]);
+  }
+
+  if (shared.length > 0) {
+    return {
+      independence: 'not_independent',
+      reason: `the reviewer shares the author's ${shared.map(([kind, value]) => `${kind} (${value})`).join(' and ')} — a reviewer cannot independently review work it authored`,
+    };
+  }
+  return {
+    independence: 'independent',
+    reason: `the reviewer (${reviewer}) is a different party from the author (${implementer})`,
+  };
 }
 
 export function projectMission(input: MissionProjectionInput): MissionProjectionBundle {
@@ -139,6 +240,18 @@ export function projectMission(input: MissionProjectionInput): MissionProjection
   const requiredReviewApproved = input.reviews.some((r, i) => i > 0 && r.verdict === 'approved') ||
     (input.reviews.length === 1 && input.reviews[0].verdict === 'approved');
 
+  /* independence — a reviewer that authored the work reviews nothing */
+  const independence = assessReviewIndependence({
+    actualImplementerId: input.actualImplementerId,
+    actualReviewerId: input.actualReviewerId,
+    implementerPspId: input.implementerPspId,
+    reviewerPspId: input.reviewerPspId,
+    implementerHumanId: input.implementerHumanId,
+    reviewerHumanId: input.reviewerHumanId,
+    implementerRunId: input.runId,
+    reviewerRunId: input.reviewerRunId,
+  });
+
   const verdict = evaluateMissionVerdict({
     completionRule: input.spec.completionRule, runStatus: input.runStatus,
     implementationReported: input.implementationReported, requiredTestsPassed,
@@ -164,7 +277,14 @@ export function projectMission(input: MissionProjectionInput): MissionProjection
       implementerLaunchVerified: input.implementerLaunchVerified,
       requestedReviewer: input.requestedReviewerId, actualReviewer: input.actualReviewerId,
       reviewerLaunchVerified: input.reviewerLaunchVerified, fallbackOccurred: false,
-      independentReviewComplete: requiresReview ? (requiredReviewApproved && reviewerAttested) : requiredReviewApproved,
+      // An approved, attested review is necessary but NOT sufficient: the
+      // reviewer must also be PROVEN to be a different party from the author.
+      // `unknown` independence never reports a complete independent review.
+      independentReviewComplete:
+        independence.independence === 'independent'
+        && (requiresReview ? (requiredReviewApproved && reviewerAttested) : requiredReviewApproved),
+      reviewIndependence: independence.independence,
+      reviewIndependenceReason: independence.reason,
     },
     errors,
   };

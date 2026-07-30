@@ -88,7 +88,29 @@ export interface RelayMissionEconomics {
   readonly verifiedMissionCost: RelayMoney | null;
   readonly verifiedMissionCostReason: string;
 
+  /**
+   * WHERE THESE FIGURES CAME FROM, derived from the receipts themselves so no
+   * surface can present development data as a real mission by forgetting to
+   * pass a flag. `mixed` is reported rather than rounded to either side.
+   */
+  readonly dataSource: RelayEconomicsDataSource;
+
   readonly generatedAt: string;
+}
+
+export const RELAY_ECONOMICS_DATA_SOURCES = [
+  'no_data',
+  'live_mission',
+  'development_fixture',
+  'mixed',
+] as const;
+export type RelayEconomicsDataSource = (typeof RELAY_ECONOMICS_DATA_SOURCES)[number];
+
+function deriveDataSource(countable: readonly RelayCostReceipt[]): RelayEconomicsDataSource {
+  if (countable.length === 0) return 'no_data';
+  const fixture = countable.filter((r) => r.source === 'development_fixture').length;
+  if (fixture === 0) return 'live_mission';
+  return fixture === countable.length ? 'development_fixture' : 'mixed';
 }
 
 export interface AggregateMissionEconomicsInput {
@@ -200,6 +222,7 @@ export function aggregateMissionEconomics(
     budgetEvaluation,
     verifiedMissionCost: verified.cost,
     verifiedMissionCostReason: verified.reason,
+    dataSource: deriveDataSource(countable),
     generatedAt: input.generatedAt,
   };
 }

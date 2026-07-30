@@ -27,9 +27,19 @@ function git(args: string[]): string | null {
 }
 
 describe('repository identity', () => {
+  /**
+   * ENVIRONMENT-DEPENDENT, AND ACCOUNTED FOR. `git` may be absent in a
+   * tarball checkout, so this cannot assert the origin unconditionally — but
+   * it must never end with NO assertion either. The absent branch asserts
+   * that git really is unavailable, so a silent return can no longer stand in
+   * for a passing check. `scripts/ci-test-accounting.test.ts` holds the ledger.
+   */
   it('origin identifies sunday-relay', () => {
     const url = git(['remote', 'get-url', 'origin']);
-    if (url === null) return;                        // no git in this environment
+    if (url === null) {
+      expect(git(['rev-parse', '--is-inside-work-tree']), 'no origin URL, so git must genuinely be unavailable').toBeNull();
+      return;
+    }
     expect(repositorySlug(url)).toBe(YC_EXPECTED_REPOSITORY);
   });
 
@@ -39,7 +49,10 @@ describe('repository identity', () => {
       expect(YC_FORBIDDEN_REPOSITORIES).toContain(forbidden);
     }
     const url = git(['remote', 'get-url', 'origin']);
-    if (url === null) return;
+    if (url === null) {
+      expect(git(['rev-parse', '--is-inside-work-tree']), 'no origin URL, so git must genuinely be unavailable').toBeNull();
+      return;
+    }
     for (const forbidden of YC_FORBIDDEN_REPOSITORIES) {
       expect(repositorySlug(url)).not.toBe(forbidden);
     }

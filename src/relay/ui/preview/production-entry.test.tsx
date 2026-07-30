@@ -51,7 +51,28 @@ describe('production bundle', () => {
     ? readdirSync(distDir).filter((f) => f.endsWith('.js')).map((f) => join(distDir, f))
     : [];
 
-  it.runIf(bundles.length > 0)('contains no DEV PREVIEW label', () => {
+  /**
+   * BUILD-DEPENDENT, AND ACCOUNTED FOR.
+   *
+   * These assertions need `dist/`, which `npm test` runs before producing.
+   * `it.runIf` reported them as SKIPPED, which reads as "nothing to see" —
+   * so they now always run and assert in BOTH branches: either against the
+   * real bundle, or that CI re-runs this exact file after `npm run build`.
+   * `scripts/ci-test-accounting.test.ts` holds the ledger.
+   */
+  const requireCiRerun = () => {
+    const workflow = readFileSync(join(ROOT, '.github', 'workflows', 'relay-ci.yml'), 'utf8');
+    expect(
+      workflow.includes('src/relay/ui/preview/production-entry.test.tsx'),
+      'these assertions need dist/, so CI must re-run this file after `npm run build`',
+    ).toBe(true);
+  };
+
+  it('contains no DEV PREVIEW label', () => {
+    if (bundles.length === 0) {
+      requireCiRerun();
+      return;
+    }
     for (const bundle of bundles) {
       const code = readFileSync(bundle, 'utf8');
       expect(code.includes('DEV PREVIEW'), `${bundle} ships a DEV PREVIEW label`).toBe(false);
@@ -59,7 +80,11 @@ describe('production bundle', () => {
     }
   });
 
-  it.runIf(bundles.length > 0)('still identifies itself as Sunday Relay', () => {
+  it('still identifies itself as Sunday Relay', () => {
+    if (bundles.length === 0) {
+      requireCiRerun();
+      return;
+    }
     const all = bundles.map((b) => readFileSync(b, 'utf8')).join('');
     expect(all).toContain('SUNDAY RELAY');
   });

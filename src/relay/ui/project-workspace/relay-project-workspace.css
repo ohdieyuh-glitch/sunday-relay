@@ -1370,6 +1370,23 @@
   max-width: 100%;
   overflow-x: hidden;
 }
+/* SIMULATED-DATA DISCLOSURE — deliberately the most prominent thing in the
+   panel. Development-fixture figures must never read as a real user mission,
+   so the banner sits above the status line and carries its own frame. */
+.rpw-economics-provenance {
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.1em;
+  margin: 6px 0 10px;
+  padding: 6px 8px;
+  color: #e6c98a;
+  border: 1px solid rgba(217, 164, 65, 0.55);
+  border-radius: 2px;
+  background: rgba(217, 164, 65, 0.08);
+  overflow-wrap: anywhere;
+}
+
 .rpw-economics-status {
   font-family: 'Fira Code', ui-monospace, monospace;
   font-size: 11px;

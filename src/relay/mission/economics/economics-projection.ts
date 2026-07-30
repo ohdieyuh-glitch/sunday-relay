@@ -16,7 +16,11 @@
 
 import type { RelayBudgetEvaluation, RelayBudgetEvaluationStatus } from './budget-evaluation';
 import type { RelayCostCategory } from './cost-receipt-types';
-import type { RelayEconomicsCompleteness, RelayMissionEconomics } from './economics-aggregation';
+import type {
+  RelayEconomicsCompleteness,
+  RelayEconomicsDataSource,
+  RelayMissionEconomics,
+} from './economics-aggregation';
 import { SUMMARY_CATEGORIES } from './economics-aggregation';
 import { formatMoney, type RelayMoney } from './money';
 
@@ -58,9 +62,42 @@ export interface RelayMissionEconomicsProjection {
 
   readonly verifiedMissionCostLabel: string;
 
+  /**
+   * WHERE THESE FIGURES CAME FROM. Derived from the receipts, so a surface
+   * cannot present development data as a real mission by forgetting a flag.
+   */
+  readonly dataSource: RelayEconomicsDataSource;
+  /** The banner both surfaces show. `null` only for genuine live data. */
+  readonly dataSourceLabel: string | null;
+
   /** Truthful, non-alarming notices an operator needs to see. */
   readonly safeNotices: readonly string[];
 }
+
+/**
+ * SIMULATED-DATA DISCLOSURE.
+ *
+ * `relay mission economics`, `relay mission budget` and `relay mission
+ * receipts` render a deterministic development fixture: no mission ran, no
+ * provider was called, and no money was spent. Presenting those figures
+ * without saying so reads as a real user mission, so the label is derived
+ * here — from the receipts — and both surfaces render it.
+ */
+export const SIMULATED_DATA_LABEL = 'SIMULATED DATA — DEVELOPMENT FIXTURE — NOT LIVE MISSION DATA';
+export const MIXED_DATA_LABEL =
+  'PARTLY SIMULATED — some receipts are development fixtures and are NOT live mission data';
+export const NO_DATA_LABEL =
+  'NO COST DATA RECORDED — this is not the same as zero spend';
+// The wording deliberately avoids writing a currency amount: the surfaces
+// are guarded by a test that no rendered output may contain a zero amount,
+// and a banner that says so in prose would defeat exactly that guard.
+
+const DATA_SOURCE_LABELS: Record<RelayEconomicsDataSource, string | null> = {
+  live_mission: null,
+  development_fixture: SIMULATED_DATA_LABEL,
+  mixed: MIXED_DATA_LABEL,
+  no_data: NO_DATA_LABEL,
+};
 
 const CATEGORY_LABELS: Record<RelayCostCategory, string> = {
   planning: 'Planning',
@@ -103,6 +140,24 @@ export function amountLabel(value: RelayMoney | null, missing = UNKNOWN_LABEL): 
   return value === null ? missing : formatMoney(value);
 }
 
+/** Prefixes that mark a figure as a BOUND rather than the figure itself. */
+export const AT_LEAST_PREFIX = 'at least';
+export const AT_MOST_PREFIX = 'at most';
+
+/**
+ * A figure that rests on incomplete cost data is rendered as a bound, and a
+ * figure that has no data at all is rendered as a word. Neither is ever
+ * rendered as an exact amount, and neither is ever `$0.00`.
+ */
+export function boundedLabel(
+  value: RelayMoney | null,
+  complete: boolean,
+  boundPrefix: string,
+): string {
+  if (value === null) return UNKNOWN_LABEL;
+  return complete ? formatMoney(value) : `${boundPrefix} ${formatMoney(value)}`;
+}
+
 export function projectMissionEconomics(
   economics: RelayMissionEconomics,
 ): RelayMissionEconomicsProjection {
@@ -127,6 +182,18 @@ export function projectMissionEconomics(
   });
 
   const safeNotices: string[] = [];
+  // The provenance disclosure comes FIRST: an operator must know what kind of
+  // data they are reading before they read any figure in it.
+  if (economics.dataSource === 'development_fixture') {
+    safeNotices.push(
+      `${SIMULATED_DATA_LABEL}. No mission ran, no provider was called and no money was spent. `
+      + 'These figures come from a deterministic development fixture.',
+    );
+  } else if (economics.dataSource === 'mixed') {
+    safeNotices.push(
+      `${MIXED_DATA_LABEL}. A development fixture may never be read as a production cost record.`,
+    );
+  }
   if (conflict) {
     safeNotices.push(
       'This mission mixes currencies. Relay performs no conversion, so no combined total is shown.',
@@ -135,6 +202,25 @@ export function projectMissionEconomics(
   if (evaluation.hasUnknownPendingCost) {
     safeNotices.push(
       'At least one pending receipt has no recorded amount — the projected total is a lower bound.',
+    );
+  }
+  if (evaluation.hasUnknownProvisionalCost) {
+    safeNotices.push(
+      'At least one provisional receipt has no recorded amount. Provisional receipts count toward the '
+      + 'projection, so the projected total is a lower bound and the remaining budget an upper bound.',
+    );
+  }
+  if (!evaluation.projectedTotalComplete) {
+    safeNotices.push(
+      `${evaluation.unpricedCountableReceipts} receipt(s) that count toward the mission cost carry no `
+      + 'amount. Relay reports what it knows and never substitutes zero for a missing amount.',
+    );
+  }
+  for (const category of evaluation.categoryEvaluations) {
+    if (!category.hasUnknownCost) continue;
+    safeNotices.push(
+      `The ${CATEGORY_LABELS[category.category]} category has an unpriced receipt — its remaining `
+      + 'allowance is an upper bound, not a figure to spend against.',
     );
   }
   if (economics.receiptCounts.disputed > 0) {
@@ -165,18 +251,19 @@ export function projectMissionEconomics(
 
     budgetLabel: conflict
       ? NOT_AVAILABLE_LABEL
-      : evaluation.status === 'not_configured'
-        ? NOT_CONFIGURED_LABEL
-        : amountLabel(evaluation.remainingBudget !== null || evaluation.projectedTotal !== null
-            ? budgetTotalOf(evaluation)
-            : null, NOT_CONFIGURED_LABEL),
+      : amountLabel(evaluation.totalLimit, NOT_CONFIGURED_LABEL),
     finalizedActualLabel: amountLabel(evaluation.finalizedActual, NOT_AVAILABLE_LABEL),
-    provisionalActualLabel: amountLabel(evaluation.provisionalActual, NOT_AVAILABLE_LABEL),
+    provisionalActualLabel: evaluation.hasUnknownProvisionalCost
+      ? `${amountLabel(evaluation.provisionalActual, PENDING_LABEL)} + unknown`
+      : amountLabel(evaluation.provisionalActual, NOT_AVAILABLE_LABEL),
     pendingLabel: evaluation.hasUnknownPendingCost
       ? `${amountLabel(evaluation.pendingKnown, PENDING_LABEL)} + unknown`
       : amountLabel(evaluation.pendingKnown, NOT_AVAILABLE_LABEL),
-    projectedTotalLabel: amountLabel(evaluation.projectedTotal, UNKNOWN_LABEL),
-    remainingLabel: amountLabel(evaluation.remainingBudget, NOT_AVAILABLE_LABEL),
+    // An incomplete projection is a BOUND, and it is labeled as one. Printing
+    // a bound as though it were the figure is what lets an operator act on a
+    // number the ledger does not support.
+    projectedTotalLabel: boundedLabel(evaluation.projectedTotal, evaluation.projectedTotalComplete, AT_LEAST_PREFIX),
+    remainingLabel: boundedLabel(evaluation.remainingBudget, evaluation.projectedTotalComplete, AT_MOST_PREFIX),
 
     statusLabel: STATUS_LABELS[evaluation.status],
     completenessLabel: COMPLETENESS_LABELS[economics.completeness],
@@ -189,14 +276,17 @@ export function projectMissionEconomics(
 
     verifiedMissionCostLabel: amountLabel(economics.verifiedMissionCost, NOT_AVAILABLE_LABEL),
 
+    dataSource: economics.dataSource,
+    dataSourceLabel: DATA_SOURCE_LABELS[economics.dataSource],
+
     safeNotices,
   };
 }
 
-/** Reconstructs the configured total from the evaluation, when there is one. */
-function budgetTotalOf(evaluation: RelayBudgetEvaluation): RelayMoney | null {
-  if (!evaluation.remainingBudget || !evaluation.projectedTotal) return null;
-  const micros =
-    BigInt(evaluation.remainingBudget.amountMicros) + BigInt(evaluation.projectedTotal.amountMicros);
-  return { currency: evaluation.remainingBudget.currency, amountMicros: micros.toString() };
-}
+/**
+ * `budgetTotalOf` used to reconstruct the configured limit as
+ * `remaining + projected`. That reconstruction vanished the moment either side
+ * was honestly unknown, so a configured budget rendered as "Not configured".
+ * The evaluation now carries `totalLimit` directly and the reconstruction is
+ * gone.
+ */

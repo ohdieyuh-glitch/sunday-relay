@@ -52,10 +52,12 @@ export {
 } from './budget-evaluation';
 export {
   RELAY_ECONOMICS_COMPLETENESS,
+  RELAY_ECONOMICS_DATA_SOURCES,
   SUMMARY_CATEGORIES,
   aggregateMissionEconomics,
   type RelayMissionEconomics,
   type RelayEconomicsCompleteness,
+  type RelayEconomicsDataSource,
   type AggregateMissionEconomicsInput,
 } from './economics-aggregation';
 export {
@@ -63,7 +65,13 @@ export {
   NOT_AVAILABLE_LABEL,
   PENDING_LABEL,
   NOT_CONFIGURED_LABEL,
+  AT_LEAST_PREFIX,
+  AT_MOST_PREFIX,
+  SIMULATED_DATA_LABEL,
+  MIXED_DATA_LABEL,
+  NO_DATA_LABEL,
   amountLabel,
+  boundedLabel,
   projectMissionEconomics,
   type RelayMissionEconomicsProjection,
   type RelayEconomicsCategoryProjection,

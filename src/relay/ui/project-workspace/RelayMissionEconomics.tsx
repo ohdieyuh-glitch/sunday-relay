@@ -37,6 +37,19 @@ export function RelayMissionEconomics({
     >
       <h3 className="rpw-section-title">MISSION ECONOMICS</h3>
 
+      {/*
+        SIMULATED-DATA DISCLOSURE. Rendered from the shared projection's own
+        `dataSourceLabel`, which is derived from the receipts — so the website
+        and the CLI state the same thing about where these figures came from,
+        and neither can present development data as a real user mission by
+        omitting a flag. `null` only for genuine live mission data.
+      */}
+      {economics.dataSourceLabel !== null && (
+        <p className="rpw-economics-provenance" role="note">
+          {economics.dataSourceLabel}
+        </p>
+      )}
+
       <p className={`rpw-economics-status rpw-economics-status--${state}`} role="status">
         {economics.statusLabel}
       </p>
