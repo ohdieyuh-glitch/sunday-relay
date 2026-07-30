@@ -19,9 +19,11 @@ import {
 import {
   OFFICIAL_HOME_DOG_STATES,
   OFFICIAL_HOME_STATE_ACTIVITY,
+  OFFICIAL_RELAY_DOG_ACTIVITY_POSE,
   OFFICIAL_RELAY_DOG_STATE_PRESENTATION,
   OFFICIAL_WORKSPACE_DOG_STATES,
   officialRelayDogBehavior,
+  officialRelayDogView,
   officialRelayDogViewForState,
   projectOfficialRelayDogActivity,
 } from '../../shared/official-relay-dog-states';
@@ -187,5 +189,57 @@ describe('official Relay Dog — semantics mirror Milestone 4.5 exactly', () => 
     expect(officialRelayDogViewForState('waiting_for_user').attentionRequired).toBe(true);
     expect(officialRelayDogViewForState('waiting_for_user').motion).toBe('attention_jump');
     expect(officialRelayDogBehavior('error').attentionRequired).toBe(true);
+  });
+
+  /**
+   * The activity table is hand-written, so nothing MAKES it agree with the
+   * state presentation — this is what makes it agree.
+   *
+   * A surface with no workspace state (the CLI header) reads the activity
+   * table; a surface with one reads the presentation. If they disagree, the
+   * two surfaces draw different silhouettes for the same activity, which is
+   * the divergence parity exists to prevent. It has already happened once:
+   * `implementing` was moved to `reaching` in the presentation and left as
+   * `coding` here, and no test noticed.
+   */
+  it('every activity pose agrees with its same-named state presentation', () => {
+    // Several states legitimately share one activity while keeping their own
+    // silhouette: `running` and `sprinting` are legacy aliases for
+    // implementing that keep the running pose, and `stopped_safely` rests the
+    // dog rather than sitting like `complete`. Those are deliberate, so the
+    // rule is scoped to the state that NAMES the activity — the canonical one,
+    // where a drift is always a mistake.
+    const disagreements: string[] = [];
+    for (const state of OFFICIAL_WORKSPACE_DOG_STATES) {
+      const activity = projectOfficialRelayDogActivity(state);
+      if (state !== activity) continue;
+      const fromActivity = OFFICIAL_RELAY_DOG_ACTIVITY_POSE[activity];
+      const fromState = OFFICIAL_RELAY_DOG_STATE_PRESENTATION[state].pose;
+      if (fromActivity !== fromState) {
+        disagreements.push(`${state}: activity table=${fromActivity} state presentation=${fromState}`);
+      }
+    }
+    expect(
+      disagreements,
+      'a state and its same-named activity must describe the same silhouette',
+    ).toEqual([]);
+    // The rule is only worth having if it actually covers the states that
+    // matter, so prove the loop is not vacuous.
+    expect(
+      OFFICIAL_WORKSPACE_DOG_STATES.filter((s) => s === projectOfficialRelayDogActivity(s)).length,
+    ).toBeGreaterThanOrEqual(5);
+  });
+
+  it('implementing is the reaching pose in EVERY metadata source', () => {
+    // The regression that motivated the test above, pinned by name so a
+    // future edit to any one of these three fails here.
+    expect(OFFICIAL_RELAY_DOG_ACTIVITY_POSE.implementing).toBe('reaching');
+    expect(OFFICIAL_RELAY_DOG_STATE_PRESENTATION.implementing.pose).toBe('reaching');
+    expect(DOG_PRESENTATION.implementing.pose).toBe('reaching');
+    // Both entry points agree, whichever one a surface happens to call.
+    expect(officialRelayDogView('implementing').pose).toBe('reaching');
+    expect(officialRelayDogViewForState('implementing').pose).toBe('reaching');
+    // Still an activity, never an outcome.
+    expect(officialRelayDogViewForState('implementing').marker).not.toBe('check');
   });
 });

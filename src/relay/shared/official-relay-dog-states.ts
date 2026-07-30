@@ -222,8 +222,17 @@ export const OFFICIAL_RELAY_DOG_STATE_PRESENTATION: Record<
 
 /**
  * The pose to draw when only the ACTIVITY is known (a surface that has no
- * workspace state, e.g. the CLI header). Derived from the state presentation
- * above so the two can never disagree about what an activity looks like.
+ * workspace state, e.g. the CLI header). It must agree with the state
+ * presentation above, or one surface would draw a different silhouette from
+ * the other for the same activity — the exact divergence parity exists to
+ * prevent.
+ *
+ * This table is HAND-WRITTEN, not computed, so agreement is not automatic: it
+ * is pinned by `every activity pose agrees with the state presentation` in
+ * src/relay/ui/official-relay-dog/official-relay-dog.test.tsx. An earlier edit
+ * changed `implementing` in the presentation above without changing it here,
+ * and nothing caught it. Change one, change both, and let that test prove it.
+ *
  * `error` has no mapped workspace state today; it rests the dog rather than
  * inventing a new silhouette.
  */
@@ -235,7 +244,7 @@ export const OFFICIAL_RELAY_DOG_ACTIVITY_POSE: Record<
   thinking: 'trotting',
   waiting_for_user: 'sitting',
   researching: 'sitting',
-  implementing: 'coding',
+  implementing: 'reaching',
   handoff: 'carrying',
   verifying: 'standing',
   reviewing: 'sleeping',

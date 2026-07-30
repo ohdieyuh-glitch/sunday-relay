@@ -202,12 +202,17 @@ the same functions.
 - manifest **version** mismatch between repositories
 - manifest **checksum** mismatch between repositories
 
-### Cross-repository verification
+### Cross-surface verification
 
-The two repositories cannot import each other, so parity across them is proven
-by a **canonical versioned manifest** plus a **synchronized snapshot**: the
-registry is byte-identical, and the check compares manifest version and
-checksum with the companion repository.
+Both surfaces live in this one repository and read the **same** registry file,
+so there is no snapshot to synchronize and no companion checkout to compare
+against. Parity is proven by reading the canonical versioned manifest directly:
+`npm run relay:surface-parity:check:strict` resolves every declared path on
+disk and fails if a capability is implemented on one surface and not the other.
+
+*(Historical: this section previously described two repositories that could not
+import each other, reconciled by a synchronized byte-identical snapshot. That
+arrangement is superseded — the surfaces now share canonical modules directly.)*
 
 - **local mode** — if the companion is found, it is compared; if not, the check
   says plainly `cross-repository parity NOT verified` and does not pretend
@@ -246,8 +251,8 @@ BLOCKED — WEBSITE/CLI PARITY INCOMPLETE
 
 ## 6. Known gaps
 
-**None.** The registry currently validates clean in both repositories, and
-`npm run relay:surface-parity:check:strict` passes on both sides.
+**None.** The registry validates clean, and
+`npm run relay:surface-parity:check:strict` passes for both surfaces.
 
 ### Closed: mission pause / resume (was the milestone blocker)
 
@@ -315,11 +320,21 @@ which is which:
 | Domain | Location | Parity proof |
 |---|---|---|
 | Official Relay Dog sprite + states | `src/relay/shared/` — both surfaces' barrels re-export it | by construction: one module. Each surface's parity suite asserts its barrel resolves here and holds no local copy |
-| PSP Agent ID entitlement + import | `src/relay/psp/` in both | `PSP_DOMAIN_CHECKSUMS` |
-| Capability registry | `src/relay/parity/` in both | manifest version + checksum |
+| PSP Agent ID entitlement + import | `src/relay/psp/` — imported by both surfaces | `PSP_DOMAIN_CHECKSUMS` |
+| Capability registry | `src/relay/parity/` — read by both surfaces | manifest version + checksum |
 
-Where a domain still exists as two copies, each repository hashes its own and
-asserts the shared manifest, so a change on one surface that is not mirrored on
-the other fails immediately. Where a domain is a single shared module — as the
-Relay Dog now is — there is nothing to hash: the module graph is the proof, and
-`OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS` no longer exists.
+Sunday Relay is ONE repository. The website and the CLI are two product
+SURFACES inside it, not two checkouts, and they share the canonical Relay
+contracts and state directly — so a shared domain is a single module both
+surfaces import, never a copy either side has to keep in step.
+
+Where a domain is a single shared module — as the Relay Dog now is — there is
+nothing to hash: the module graph is the proof, and
+`OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS` no longer exists. Where a domain is still
+checksum-proven, the hash guards the domain's own content — it is not
+reconciling separate checkouts.
+
+What must stay equal is MISSION TRUTH and product semantics. Presentation is
+free to differ — the DOM and a terminal are different media — but the browser
+and Node runtime boundaries remain enforced regardless, so "shared" never means
+a surface may import code the other's runtime cannot execute.
