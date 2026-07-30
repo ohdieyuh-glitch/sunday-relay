@@ -204,13 +204,15 @@ export const OFFICIAL_RELAY_DOG_STATE_PRESENTATION: Record<
   wandering: { pose: 'standing', marker: 'none', moving: true, label: 'WANDERING' },
   trotting: { pose: 'trotting', marker: 'none', moving: true, label: 'TROTTING' },
   running: { pose: 'running', marker: 'none', moving: true, label: 'RUNNING' },
-  implementing: { pose: 'reaching', marker: 'none', moving: false, label: 'IMPLEMENTING' },
+  implementing: { pose: 'coding', marker: 'none', moving: false, label: 'IMPLEMENTING' },
   sprinting: { pose: 'running', marker: 'none', moving: true, label: 'SPRINTING' },
   carrying_handoff: { pose: 'carrying', marker: 'none', moving: true, label: 'CARRYING HANDOFF' },
   researching: { pose: 'sitting', marker: 'scan', moving: false, label: 'RESEARCHING' },
   verifying: { pose: 'standing', marker: 'question', moving: false, label: 'VERIFYING' },
-  reviewing: { pose: 'sitting', marker: 'question', moving: false, label: 'REVIEWING' },
-  repairing: { pose: 'trotting', marker: 'alert', moving: false, label: 'REPAIRING' },
+  // The review marker stays a QUESTION: a review in progress is neither an
+  // approval nor a verification, so it must never render as a check.
+  reviewing: { pose: 'sleeping', marker: 'question', moving: false, label: 'REVIEWING' },
+  repairing: { pose: 'digging', marker: 'alert', moving: false, label: 'REPAIRING' },
   waiting_for_user: { pose: 'sitting', marker: 'alert', moving: false, label: 'WAITING FOR USER' },
   stopped_safely: { pose: 'lying', marker: 'none', moving: false, label: 'STOPPED SAFELY' },
   complete: { pose: 'sitting', marker: 'check', moving: false, label: 'COMPLETE' },
@@ -231,11 +233,11 @@ export const OFFICIAL_RELAY_DOG_ACTIVITY_POSE: Record<
   thinking: 'trotting',
   waiting_for_user: 'sitting',
   researching: 'sitting',
-  implementing: 'reaching',
+  implementing: 'coding',
   handoff: 'carrying',
   verifying: 'standing',
-  reviewing: 'sitting',
-  repairing: 'trotting',
+  reviewing: 'sleeping',
+  repairing: 'digging',
   complete: 'sitting',
   error: 'lying',
 };
@@ -274,6 +276,19 @@ export const OFFICIAL_RELAY_DOG_ACTIVITY_MARKER: Record<
  *   scan            sweeps/scans in place (RESEARCHING)
  *   carry           moves while carrying the handoff
  *   halt            stopped, not working (ERROR)
+ *   sleep           curled and settled with the eyes shut, breathing slowly,
+ *                   an occasional ear or tail twitch, drifting Z marks
+ *                   (REVIEWING — waiting on a review, NOT its outcome)
+ *   dig             nose to the ground, front paws alternating into a
+ *                   disturbed patch, pausing to look into the hole
+ *                   (REPAIRING — uncovering the problem, NOT fixing it)
+ *   code_progression  seated at the keys, writing work that advances through
+ *                   basic -> intermediate -> advanced -> architecture and then
+ *                   restarts (IMPLEMENTING — writing, NOT completing)
+ *
+ * `work_scratch` is retained for the `reaching` pose so a surface that still
+ * draws the tippy-toe stance keeps a defined motion; `implementing` no longer
+ * selects it.
  */
 export type OfficialRelayDogMotion =
   | 'patrol'
@@ -282,7 +297,10 @@ export type OfficialRelayDogMotion =
   | 'work_scratch'
   | 'scan'
   | 'carry'
-  | 'halt';
+  | 'halt'
+  | 'sleep'
+  | 'dig'
+  | 'code_progression';
 
 export const OFFICIAL_RELAY_DOG_ACTIVITY_MOTION: Record<
   OfficialRelayDogActivity,
@@ -292,11 +310,11 @@ export const OFFICIAL_RELAY_DOG_ACTIVITY_MOTION: Record<
   thinking: 'still',
   waiting_for_user: 'attention_jump',
   researching: 'scan',
-  implementing: 'work_scratch',
+  implementing: 'code_progression',
   handoff: 'carry',
   verifying: 'still',
-  reviewing: 'still',
-  repairing: 'still',
+  reviewing: 'sleep',
+  repairing: 'dig',
   complete: 'still',
   error: 'halt',
 };

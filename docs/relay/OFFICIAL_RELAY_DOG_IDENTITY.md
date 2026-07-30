@@ -160,11 +160,12 @@ and `DOG_PRESENTATION` field for field.
 | `trotting` | `thinking` | **stops walking**; existing thinking behavior | `trotting` | in-place | static track, in-place frame |
 | `waiting_for_user` | `waiting_for_user` | stops walking, **jumps for attention** | `sitting` | attention animation | mark hops every other tick + `!` |
 | `researching` | `researching` | existing researching behavior | `sitting` | scan marker | sweeping frames |
-| `implementing` / `running` / `sprinting` | `implementing` | **tippy toes, stretched upward, front paws raised, repeatedly pawing at an implied vertical work surface** | `reaching` | reaching pose | raised mark + alternating scratch glyph |
-| `reviewing` | `reviewing` | existing reviewing behavior | `sitting` | question marker | static |
+| `implementing` | `implementing` | **seated at the keys, writing work that advances basic → intermediate → advanced → architecture, then restarts** | `coding` | coding pose + editor whose code progresses through four experience levels | seated mark + a four-step progression glyph |
+| `running` / `sprinting` | `implementing` | legacy aliases for implementing; they keep their travelling artwork | `running` | moving | travels the track |
+| `reviewing` | `reviewing` | **curled and settled with the eyes shut, breathing slowly, an occasional ear/tail twitch, drifting `z` marks** | `sleeping` | sleeping pose + drifting Z | grounded mark + drifting `z` |
 | `carrying_handoff` | `handoff` | carries the handoff | `carrying` | moving | travels the track |
 | `verifying` | `verifying` | verification | `standing` | question marker | static |
-| `repairing` | `repairing` | repair cycle | `trotting` | alert marker | static |
+| `repairing` | `repairing` | **nose to the ground, front paws alternating into a disturbed patch, pausing to look into the hole** | `digging` | digging pose + hole, mound and thrown clods | grounded mark + alternating scrape glyph |
 | `stopped_safely` | `complete` | finished, non-error rest | `lying` | still | static |
 | `complete` | `complete` | verified complete | `sitting` | check marker | static |
 | — | `error` | stopped, not working | `lying` | attention | static (no mapped state today) |
@@ -174,9 +175,22 @@ and `DOG_PRESENTATION` field for field.
 ### Motion meanings
 
 `patrol` · `still` · `attention_jump` · `work_scratch` · `scan` · `carry` ·
-`halt`. A graphical surface plays each as animation; a text terminal plays the
-same meaning with terminal-native frames. The meaning and the urgency are
-identical.
+`halt` · `sleep` · `dig` · `code_progression`. A graphical surface plays each as
+animation; a text terminal plays the same meaning with terminal-native frames.
+The meaning and the urgency are identical.
+
+`work_scratch` and the `reaching` pose are **retained**, with their website
+animation now bound to the pose (`.rpd--reaching`) rather than to the
+`implementing` activity. `implementing` selects `coding` / `code_progression`
+instead; nothing was deleted.
+
+**The three operational animations carry no outcome.** A sleeping dog does not
+mean a review approved, verification passed or independent review completed; a
+digging dog does not mean a repair succeeded; an editor showing advanced code —
+including the architecture view with its `RELEASE GATE` node — does not mean
+coding finished or release was granted. The animation receives the state and
+never decides it. `operational-animations.test.tsx` asserts that no operational
+state renders a check marker or any outcome word.
 
 ---
 
@@ -194,6 +208,16 @@ identical.
   and no longer exists.
 - The state **label** is always present as text — no state is ever conveyed by
   color or glyph alone.
+
+---
+
+### Identity version
+
+Adding the three operational poses moved the identity, so
+`OFFICIAL_RELAY_DOG_IDENTITY_VERSION` is **1.1.0** and
+`OFFICIAL_RELAY_DOG_MANIFEST_VERSION` is **1.1.0**. The seven original poses are
+byte-unchanged; `sleeping`, `digging` and `coding` were added alongside them, and
+`sleeping` reuses the head with only its amber eye row closed to visor dark.
 
 ---
 

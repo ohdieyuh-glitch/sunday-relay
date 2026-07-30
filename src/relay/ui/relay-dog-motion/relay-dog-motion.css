@@ -57,9 +57,13 @@
 
 /* -------------------------------------------------------- implementing */
 
-/* The coding agent is actively implementing: the dog rises onto its hind
-   toes and stretches upward toward an implied vertical surface. The rise is
-   on this wrapper; the paw taps are on the artwork, so they compose. */
+/* IMPLEMENTING now reads as WRITING CODE (the dog is seated at the keys), so
+   the tippy-toe reach no longer carries that ACTIVITY. The `reaching` pose and
+   its `work_scratch` motion are RETAINED — sprite art, state semantics and the
+   animation below all still exist — but the animation is now bound to the POSE
+   (`.rpd--reaching`) rather than to the implementing activity, so a surface that
+   draws the reach still gets its motion and nothing competes for the
+   implementing layer. The coding rules live in the operational block below. */
 @keyframes rdm-tiptoe-reach {
   0%, 100% { transform: translateY(0) scaleY(1); }
   30% { transform: translateY(-4px) scaleY(1.02); }
@@ -69,14 +73,28 @@
   0%, 100% { transform: translate(0, 0); }
   50% { transform: translate(2px, -2px); }
 }
-.rdm-body--implementing {
+.rpd--reaching {
   transform-origin: center bottom;
   animation: rdm-tiptoe-reach 1.8s ease-in-out infinite;
 }
-/* The implementing pose is not a `moving` pose, so .rpd-art carries no
-   competing animation here. */
-.rdm-body--implementing .rpd-art {
+.rpd--reaching .rpd-art {
   animation: rdm-paw-scratch 0.36s steps(2, end) infinite;
+}
+.rdm--reduced .rpd--reaching,
+.rdm--reduced .rpd--reaching .rpd-art {
+  animation: none;
+}
+.rdm--reduced .rpd--reaching {
+  transform: translateY(-3px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rpd--reaching,
+  .rpd--reaching .rpd-art {
+    animation: none;
+  }
+  .rpd--reaching {
+    transform: translateY(-3px);
+  }
 }
 
 /* ------------------------------------------------------ reduced motion */
@@ -100,10 +118,6 @@
 .rdm--reduced .rdm-body--implementing .rpd-art {
   animation: none;
 }
-/* The implementing pose still reads as "reaching up", just held still. */
-.rdm--reduced .rdm-body--implementing {
-  transform: translateY(-3px);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .rdm-body,
@@ -112,7 +126,364 @@
   .rdm-body--implementing .rpd-art {
     animation: none;
   }
+}
+
+/* ============================================================ operational
+   Three states the founder asked to read without the label: a review that
+   snoozes, a repair that digs, and coding that gets more advanced.
+
+   Every rule below is transform/opacity only, on a fixed small number of
+   nodes, so nothing triggers layout and the whole scene stays GPU-friendly on
+   a phone. No canvas, no WebGL, no video, no GIF, no JS timer. */
+
+/* The decor sits behind the dog in the same stacking context and never
+   intercepts pointer events, so it can never cover a mission control. */
+.rdo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------- REVIEWING: sleep */
+
+/* Slow breathing on the body wrapper. Deliberately small — a sleeping dog,
+   not a pulsing one. 5.4s puts the full settle/rise/twitch loop in the
+   approved 4–7s band. */
+@keyframes rdm-sleep-breathe {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  45% { transform: translateY(1px) scaleY(0.985); }
+}
+/* One small ear/tail flick per loop, late, so it reads as involuntary. */
+@keyframes rdm-sleep-twitch {
+  0%, 86%, 100% { transform: translateX(0) rotate(0deg); }
+  90% { transform: translateX(-0.5px) rotate(-0.6deg); }
+  94% { transform: translateX(0.5px) rotate(0.6deg); }
+}
+.rdm-body--reviewing {
+  transform-origin: center bottom;
+  animation: rdm-sleep-breathe 5.4s ease-in-out infinite;
+}
+.rdm-body--reviewing .rpd-art {
+  animation: rdm-sleep-twitch 5.4s ease-in-out infinite;
+}
+
+/* Z marks drift up and fade. Three of them, staggered across one loop. */
+@keyframes rdo-z-drift {
+  0% { opacity: 0; transform: translate(0, 0) scale(0.8); }
+  18% { opacity: 0.85; }
+  100% { opacity: 0; transform: translate(9px, -22px) scale(1.15); }
+}
+.rdo--sleep .rdo-z {
+  position: absolute;
+  left: 62%;
+  top: 34%;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1;
+  color: #a9a396;
+  opacity: 0;
+  animation: rdo-z-drift 5.4s ease-out infinite;
+}
+.rdo--sleep .rdo-z--2 { animation-delay: 1.8s; }
+.rdo--sleep .rdo-z--3 { animation-delay: 3.6s; }
+
+/* The review page resting beside the dog. Static scenery, no motion. */
+.rdo--sleep .rdo-page {
+  position: absolute;
+  left: 8%;
+  bottom: 12%;
+  width: 13px;
+  height: 9px;
+  background: #d8d4cb;
+  border-left: 2px solid #b9b5ab;
+  opacity: 0.75;
+}
+
+/* ------------------------------------------------------ REPAIRING: dig */
+
+/* The body drops and rocks forward with each scrape. 3.0s sits in the
+   approved 2.5–5s band, with a visible pause to look into the hole. */
+@keyframes rdm-dig-lunge {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  10%, 30%, 50% { transform: translateY(1.5px) rotate(-1.2deg); }
+  20%, 40% { transform: translateY(0.5px) rotate(-0.4deg); }
+  /* the look-into-the-hole beat */
+  68%, 80% { transform: translateY(2.5px) rotate(-2deg); }
+}
+/* Alternating paws: the artwork nudges left, then right, twice per loop. */
+@keyframes rdm-dig-paws {
+  0%, 100% { transform: translate(0, 0); }
+  12% { transform: translate(-2px, 1px); }
+  25% { transform: translate(0, 0); }
+  37% { transform: translate(2px, 1px); }
+  50% { transform: translate(0, 0); }
+  62% { transform: translate(-1.5px, 1px); }
+  /* held still while the dog inspects the hole */
+  70%, 100% { transform: translate(0, 0); }
+}
+.rdm-body--repairing {
+  transform-origin: center bottom;
+  animation: rdm-dig-lunge 3s ease-in-out infinite;
+}
+.rdm-body--repairing .rpd-art {
+  animation: rdm-dig-paws 3s steps(8, end) infinite;
+}
+
+/* The disturbed patch. Grows once and stays — the hole is being deepened. */
+.rdo--dig .rdo-hole {
+  position: absolute;
+  left: 26%;
+  bottom: 8%;
+  width: 22px;
+  height: 5px;
+  background: #2a2723;
+  border-radius: 50%;
+  opacity: 0.55;
+}
+.rdo--dig .rdo-mound {
+  position: absolute;
+  left: 52%;
+  bottom: 9%;
+  width: 12px;
+  height: 4px;
+  background: #6b6255;
+  border-radius: 50% 50% 0 0;
+  opacity: 0.7;
+}
+
+/* Clods thrown back past the flank. Five, small, and always inside .rdo —
+   `overflow: hidden` on the container guarantees nothing escapes. */
+@keyframes rdo-clod-fly {
+  0% { opacity: 0; transform: translate(0, 0) scale(1); }
+  12% { opacity: 0.9; }
+  100% { opacity: 0; transform: translate(14px, -9px) scale(0.6); }
+}
+.rdo--dig .rdo-clod {
+  position: absolute;
+  left: 40%;
+  bottom: 12%;
+  width: 2px;
+  height: 2px;
+  background: #6b6255;
+  opacity: 0;
+  animation: rdo-clod-fly 3s ease-out infinite;
+}
+.rdo--dig .rdo-clod--2 { animation-delay: 0.38s; left: 43%; }
+.rdo--dig .rdo-clod--3 { animation-delay: 1.12s; left: 38%; }
+.rdo--dig .rdo-clod--4 { animation-delay: 1.5s; left: 44%; }
+.rdo--dig .rdo-clod--5 { animation-delay: 1.9s; left: 41%; }
+
+/* ------------------------------------------------- IMPLEMENTING: coding */
+
+/* Seated at the keys: a small, steady typing bob plus paw taps. */
+@keyframes rdm-code-type {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+@keyframes rdm-code-paws {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(1px, -1px); }
+}
+.rdm-body--implementing {
+  transform-origin: center bottom;
+  animation: rdm-code-type 0.9s ease-in-out infinite;
+}
+.rdm-body--implementing .rpd-art {
+  animation: rdm-code-paws 0.3s steps(2, end) infinite;
+}
+
+/* The editor. Fixed size, its own scroll container, never grows the page. */
+.rdo--code .rdo-editor {
+  position: absolute;
+  right: 2%;
+  top: 6%;
+  width: 58%;
+  max-width: 190px;
+  height: 74%;
+  padding: 10px 6px 4px;
+  background: #14161b;
+  border: 1px solid #2b2f38;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.rdo--code .rdo-editor-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 6px;
+  background: #23262e;
+}
+
+/* All four levels are rendered once and stacked; CSS crossfades between them.
+   12s total (4 x 3s), inside the approved 8–15s band. Only `opacity` animates,
+   so no level ever reflows the editor. */
+.rdo--code .rdo-code {
+  position: absolute;
+  left: 6px;
+  top: 10px;
+  right: 4px;
+  margin: 0;
+  font-family: 'Fira Code', ui-monospace, monospace;
+  font-size: 6px;
+  line-height: 1.5;
+  white-space: pre;
+  color: #b9c4d6;
+  opacity: 0;
+  animation: rdo-code-level 12s linear infinite;
+}
+@keyframes rdo-code-level {
+  0%, 22% { opacity: 1; }
+  25%, 97% { opacity: 0; }
+  100% { opacity: 1; }
+}
+.rdo--code .rdo-code--basic { animation-delay: 0s; }
+.rdo--code .rdo-code--intermediate { animation-delay: 3s; }
+.rdo--code .rdo-code--advanced { animation-delay: 6s; }
+.rdo--code .rdo-code--architecture { animation-delay: 9s; color: #cbb887; }
+
+/* The reduced-motion editor renders one level, always visible. */
+.rdo--code-static .rdo-code {
+  opacity: 1;
+  animation: none;
+}
+
+/* ------------------------------------------------------ reduced motion */
+
+/* Every operational loop stops. The POSES still read — a curled dog with one
+   still Z, a forward-leaning dog at a static mound, a seated dog at a static
+   editor — so the state is legible without any movement at all. */
+.rdm--reduced .rdm-body--reviewing,
+.rdm--reduced .rdm-body--reviewing .rpd-art,
+.rdm--reduced .rdm-body--repairing,
+.rdm--reduced .rdm-body--repairing .rpd-art,
+.rdm--reduced .rdo-z,
+.rdm--reduced .rdo-clod,
+.rdm--reduced .rdo-code {
+  animation: none;
+}
+.rdm--reduced .rdo-z {
+  opacity: 0.8;
+  transform: translate(4px, -10px);
+}
+.rdm--reduced .rdo-code {
+  opacity: 1;
+}
+/* Held mid-dig so the pose still reads as digging, not standing. */
+.rdm--reduced .rdm-body--repairing {
+  transform: translateY(1.5px) rotate(-1.2deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rdm-body--reviewing,
+  .rdm-body--reviewing .rpd-art,
+  .rdm-body--repairing,
+  .rdm-body--repairing .rpd-art,
+  .rdo-z,
+  .rdo-clod,
+  .rdo-code {
+    animation: none;
+  }
+  .rdo-z {
+    opacity: 0.8;
+    transform: translate(4px, -10px);
+  }
+  .rdo-code {
+    opacity: 1;
+  }
+  .rdm-body--repairing {
+    transform: translateY(1.5px) rotate(-1.2deg);
+  }
+}
+
+/* ------------------------------------------------------------ responsive */
+
+/* Phones: the editor would crowd the dog, so it narrows and the code holds a
+   legible floor size rather than shrinking into illegibility. */
+@media (max-width: 480px) {
+  .rdo--code .rdo-editor {
+    width: 52%;
+    max-width: 132px;
+    height: 70%;
+  }
+  .rdo--code .rdo-code {
+    font-size: 5px;
+    line-height: 1.45;
+  }
+  .rdo--sleep .rdo-z {
+    font-size: 9px;
+  }
+}
+
+/* --------------------------------------------------------- a11y sentence */
+
+/* Visually hidden, still announced. The dog's own figure carries the short
+   uppercase label; this is the sentence that says what the dog is DOING. */
+.rdm-a11y-description {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ------------------------------------------------------------ transitions */
+
+/* Connected, not cinematic. Each operational state plays a single short ENTER
+   beat as its class arrives, alongside its own infinite loop, so the change of
+   state reads as one continuous dog rather than a hard cut. Fast on purpose:
+   the current state must be recognisable immediately. */
+
+/* CODING -> REVIEWING: the dog settles down and curls. */
+@keyframes rdm-enter-sleep {
+  0% { transform: translateY(-4px) scaleY(1.04); }
+  60% { transform: translateY(1px) scaleY(0.97); }
+  100% { transform: translateY(0) scaleY(1); }
+}
+/* REVIEWING -> REPAIRING: it wakes and drops toward the ground. */
+@keyframes rdm-enter-dig {
+  0% { transform: translateY(-3px) rotate(1.5deg); }
+  55% { transform: translateY(2.5px) rotate(-2.5deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+/* REPAIRING -> CODING: it comes back up to the keys. */
+@keyframes rdm-enter-code {
+  0% { transform: translateY(3px) rotate(-2deg); }
+  60% { transform: translateY(-2px) rotate(0.5deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
+.rdm-body--reviewing {
+  animation:
+    rdm-enter-sleep 0.42s ease-out 1 both,
+    rdm-sleep-breathe 5.4s ease-in-out infinite;
+}
+.rdm-body--repairing {
+  animation:
+    rdm-enter-dig 0.36s ease-out 1 both,
+    rdm-dig-lunge 3s ease-in-out infinite;
+}
+.rdm-body--implementing {
+  animation:
+    rdm-enter-code 0.36s ease-out 1 both,
+    rdm-code-type 0.9s ease-in-out infinite;
+}
+
+/* Enter beats are motion too — they stop under the preference. */
+.rdm--reduced .rdm-body--reviewing,
+.rdm--reduced .rdm-body--repairing,
+.rdm--reduced .rdm-body--implementing {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rdm-body--reviewing,
+  .rdm-body--repairing,
   .rdm-body--implementing {
-    transform: translateY(-3px);
+    animation: none;
   }
 }

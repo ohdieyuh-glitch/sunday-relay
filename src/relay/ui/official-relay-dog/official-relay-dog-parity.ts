@@ -25,14 +25,14 @@
  */
 
 /** Bumped whenever the shared file set changes shape (not on every edit). */
-export const OFFICIAL_RELAY_DOG_MANIFEST_VERSION = '1.0.0';
+export const OFFICIAL_RELAY_DOG_MANIFEST_VERSION = '1.1.0';
 
 /** sha256 of the byte-identical shared modules, lowercase hex. */
 export const OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS = {
   'official-relay-dog-sprite.ts':
-    '754c3933ba5d3168a370ddc395b4152689969e27bed5b45db40628a1fd9db070',
+    '6c815798597d8f1de5e33415c4e50471372435d97ea019039356587a9995cbe0',
   'official-relay-dog-states.ts':
-    '9c1fab841ebd004fb2b6bfdeabe7b2b97284e4c287e073647194dcced3ec3abb',
+    'cf95e69ce7989d0e63a3b911ccd1668c6c4cac013485b301a2c948b0b37315ef',
 } as const;
 
 export type OfficialRelayDogAssetName = keyof typeof OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS;

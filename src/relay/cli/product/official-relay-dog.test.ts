@@ -206,11 +206,11 @@ describe('official Relay Dog — state parity with the website', () => {
     }
   });
 
-  it('IMPLEMENTING is the tippy-toe reaching pose (paws at the work surface)', () => {
+  it('IMPLEMENTING is the coding pose (paws forward on the keys)', () => {
     const dog = footerDog({ state: 'IMPLEMENTING', tick: 1, caps: caps() });
     expect(dog.activity).toBe('implementing');
-    expect(dog.pose).toBe('reaching');
-    expect(dog.motion).toBe('work_scratch');
+    expect(dog.pose).toBe('coding');
+    expect(dog.motion).toBe('code_progression');
     expect(dog.label).toContain('IMPLEMENTING');
     // The scratch alternates frame to frame; the dog does not cross the track.
     const a = footerDog({ state: 'IMPLEMENTING', tick: 0, caps: caps() });
@@ -248,22 +248,28 @@ describe('official Relay Dog — state parity with the website', () => {
     expect(MOVING_DOG_STATES).not.toContain('TROTTING');
   });
 
-  it('RESEARCHING and REVIEWING preserve their existing meanings', () => {
+  it('RESEARCHING is unchanged; REVIEWING now snoozes', () => {
+    // RESEARCHING must be untouched by the operational-animation change.
     const research = footerDog({ state: 'RESEARCHING', tick: 1, caps: caps() });
     expect(research.activity).toBe('researching');
     expect(research.motion).toBe('scan');
     expect(research.pose).toBe('sitting');
+    // REVIEWING sleeps — and still never reads as an approval.
     const review = footerDog({ state: 'REVIEWING', tick: 1, caps: caps() });
     expect(review.activity).toBe('reviewing');
-    expect(review.pose).toBe('sitting');
+    expect(review.pose).toBe('sleeping');
+    expect(review.motion).toBe('sleep');
     expect(review.moving).toBe(false);
+    expect(review.label).toContain('REVIEWING');
+    expect(review.label).not.toContain('APPROVED');
+    expect(review.label).not.toContain('VERIFIED');
   });
 
-  it('handoff, verification, repair, complete and stopped-safely are preserved', () => {
+  it('handoff, verification, complete and stopped-safely are preserved; repair digs', () => {
     const expected: Array<[DogStateVM, string, string]> = [
       ['CARRYING HANDOFF', 'handoff', 'carrying'],
       ['VERIFYING', 'verifying', 'standing'],
-      ['REPAIRING', 'repairing', 'trotting'],
+      ['REPAIRING', 'repairing', 'digging'],
       ['COMPLETE', 'complete', 'sitting'],
       ['STOPPED SAFELY', 'complete', 'lying'],
     ];

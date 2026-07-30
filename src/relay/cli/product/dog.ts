@@ -180,7 +180,18 @@ export function dogStateLabel(state: DogStateVM): string {
  *   attention_jump  hops in place with an attention marker (WAITING FOR USER)
  *   work_scratch    stays put, front paws pawing at the work surface
  *   scan            stays put, sweeping
+ *   sleep           stays put and low, a drifting z (REVIEWING)
+ *   dig             stays put, alternating left/right paw scrapes (REPAIRING)
+ *   code_progression stays put, a four-step progression marker that advances
+ *                   basic -> intermediate -> advanced -> architecture and
+ *                   restarts (IMPLEMENTING)
  *   still / halt    static frame
+ *
+ * These are TEXT frames, deliberately. The website animates the dog sleeping,
+ * digging and writing code; the terminal carries the same MEANING in glyphs and
+ * the same canonical label, and never attempts to reproduce the graphics. The
+ * label is always present, so the state reads identically without color, without
+ * Unicode, under reduced motion and to a screen reader.
  */
 const MARK_UNICODE = { grounded: '▄▄', raised: '▀▀' } as const;
 const MARK_ASCII = { grounded: '^^', raised: '^^' } as const;
@@ -188,6 +199,18 @@ const SCRATCH_UNICODE = ['▚', '▞'] as const;
 const SCRATCH_ASCII = ['/', '\\'] as const;
 const SCAN_UNICODE = ['▘', '▝'] as const;
 const SCAN_ASCII = ['-', '='] as const;
+/** Drifting sleep marks — the terminal's Z. */
+const SLEEP_UNICODE = ['z', 'ᶻ'] as const;
+const SLEEP_ASCII = ['z', 'Z'] as const;
+/** Alternating paw scrapes into the ground. */
+const DIG_UNICODE = ['▖', '▗'] as const;
+const DIG_ASCII = ['\\', '/'] as const;
+/** Four coding experience levels, in order. Rising density = rising level;
+ *  it marks PROGRESS THROUGH THE WORK and never completion. */
+const CODE_LEVEL_UNICODE = ['▁', '▃', '▅', '▇'] as const;
+const CODE_LEVEL_ASCII = ['.', ':', '+', '#'] as const;
+/** How many coding experience levels the progression cycles through. */
+export const CLI_CODE_PROGRESSION_LEVELS = 4;
 
 export interface FooterDog {
   /** The dog mark positioned inside a fixed-width track. */
@@ -244,6 +267,20 @@ export function footerDog(input: {
       suffix = (caps.unicode ? SCRATCH_UNICODE : SCRATCH_ASCII)[input.tick % 2];
     } else if (view.motion === 'scan') {
       suffix = (caps.unicode ? SCAN_UNICODE : SCAN_ASCII)[input.tick % 2];
+    } else if (view.motion === 'sleep') {
+      // Curled and settled: the mark stays down and a z drifts beside it.
+      glyph = mark.grounded;
+      suffix = (caps.unicode ? SLEEP_UNICODE : SLEEP_ASCII)[input.tick % 2];
+    } else if (view.motion === 'dig') {
+      // Nose down, paws alternating into the ground.
+      glyph = mark.grounded;
+      suffix = (caps.unicode ? DIG_UNICODE : DIG_ASCII)[input.tick % 2];
+    } else if (view.motion === 'code_progression') {
+      // Seated at the keys; the marker advances through the four experience
+      // levels and restarts. Advancing a level is not completing the mission.
+      suffix = (caps.unicode ? CODE_LEVEL_UNICODE : CODE_LEVEL_ASCII)[
+        input.tick % CLI_CODE_PROGRESSION_LEVELS
+      ];
     }
   }
 

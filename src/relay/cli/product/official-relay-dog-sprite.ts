@@ -30,7 +30,7 @@
  */
 
 /** Bumped only when the dog's identity changes — never for a renderer tweak. */
-export const OFFICIAL_RELAY_DOG_IDENTITY_VERSION = '1.0.0';
+export const OFFICIAL_RELAY_DOG_IDENTITY_VERSION = '1.1.0';
 
 /** The art is a fixed 18x14 pixel grid. Both surfaces scale it by ONE uniform
  *  factor; independent width/height scaling is prohibited (it distorts the
@@ -81,7 +81,13 @@ export type OfficialRelayDogPose =
   | 'lying'
   | 'carrying'
   /** Up on hind toes, front paws raised toward an implied work surface. */
-  | 'reaching';
+  | 'reaching'
+  /** REVIEWING: curled and resting, eyes shut, while a review runs. */
+  | 'sleeping'
+  /** REPAIRING: leaning forward, nose down, paws at the disturbed ground. */
+  | 'digging'
+  /** CODING: seated at an implied keyboard, both front paws on the keys. */
+  | 'coding';
 
 /** The head block — ears, skull, visor band, amber eyes, muzzle. Shared by
  *  every pose except `carrying` (which adds the carried block) and `lying`
@@ -94,6 +100,14 @@ const HEAD = [
   '........wdyydyyw..',
   '........wwwwwwww..',
 ];
+
+/**
+ * The SAME head with the eyes shut: ears, skull, visor band and muzzle rows are
+ * byte-identical to HEAD, and only the amber eye row closes to visor dark. The
+ * dog is recognisably itself asleep — not a different dog, and not the retired
+ * side-profile silhouette.
+ */
+const HEAD_ASLEEP = [...HEAD.slice(0, 4), '........wddddddw..', ...HEAD.slice(5)];
 
 export const OFFICIAL_RELAY_DOG_POSES: Record<OfficialRelayDogPose, readonly string[]> = {
   standing: [
@@ -182,6 +196,51 @@ export const OFFICIAL_RELAY_DOG_POSES: Record<OfficialRelayDogPose, readonly str
     '...ww....ww..ww...',
     '...ww....ww..ww...',
     '...ss....ss..ss...',
+  ],
+  /* REVIEWING: the dog is curled and settled with its eyes shut while the
+     review runs. Calm, not broken and not celebratory — a review in progress
+     is neither approval nor verification, so this pose carries no check mark
+     and no success styling. The floating Z is a decoration layer, never art. */
+  sleeping: [
+    '..................',
+    '..................',
+    ...HEAD_ASLEEP,
+    '.....ccwwwwww.....',
+    '...wwwwwwwwwww....',
+    '..swwwwwwwwwwws...',
+    '..swwwwwwwwwwws...',
+    '...ww......ww.....',
+    '...ss......ss.....',
+  ],
+  /* REPAIRING: front of the body lowered with the nose toward the ground, rump
+     and tail raised behind, front paws down at the disturbed patch, hind legs
+     planted for balance. Eyes stay open and amber — the dog is investigating,
+     not resting. */
+  digging: [
+    '..................',
+    '...............www',
+    '..........wwwww.ww',
+    ...HEAD,
+    '.....ccwwwwwwwww..',
+    '...wwwwwwwwwwwww..',
+    '..swwwwwwwwwwwws..',
+    '..ww....ww...ww...',
+    '..ss....ss...ss...',
+  ],
+  /* CODING: seated square to the viewer with both front paws extended forward
+     onto an implied keyboard. The editor, the code and its experience levels
+     are decoration layers on the surface that renders them — never sprite art,
+     so the dog stays one identity across every level. */
+  coding: [
+    ...HEAD,
+    '.......ccwwwww....',
+    '......wwwwwwwww...',
+    '.....wwwwwwwwww...',
+    '.....wwwwwwwwww...',
+    '..wwwwwwwwwwwww...',
+    '..sswwwwwwwwws....',
+    '.....ww....ww.....',
+    '.....ss....ss.....',
   ],
 };
 

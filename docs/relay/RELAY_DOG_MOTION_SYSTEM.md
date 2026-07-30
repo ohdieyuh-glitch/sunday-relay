@@ -156,6 +156,33 @@ can never introduce page-level horizontal scrolling.
   wrapper and the paw taps animate the artwork, so the two compose instead of
   fighting.
 
+## Operational animations (reviewing · repairing · coding)
+
+Three states are animated so the operator can read them without the label:
+
+| Activity | Pose | Website motion | Loop | Reduced motion |
+|---|---|---|---|---|
+| `reviewing` | `sleeping` | slow breathing, a late ear/tail twitch, three staggered `z` marks drifting up and fading, a resting review page | 5.4s (4–7s band) | static curled pose, eyes shut, ONE still `z`, no breathing |
+| `repairing` | `digging` | body drops and rocks, front paws alternate left/right, five small clods thrown back, a hole and a mound, a beat spent looking into the hole | 3.0s (2.5–5s band) | static forward-leaning pose held mid-dig, static mound and hole, no particles |
+| `implementing` | `coding` | a compact editor whose code crossfades through four experience levels — basic → intermediate → advanced → architecture — then restarts | 12s (8–15s band) | one static composition (the intermediate level), no changing text |
+
+All three are **decoration plus pose**. The scenery lives in
+`RelayDogOperationalDecor`, is `aria-hidden`, has `pointer-events: none`, sits
+inside an `overflow: hidden` container, and is rendered behind the dog so it can
+never cover a mission control. The four code levels are rendered ONCE and
+switched by CSS `opacity` keyframes — there is no timer, no React state, no
+per-frame re-render and no DOM rewriting.
+
+Each state also plays one short (≤0.42s) enter beat as its class arrives, so
+coding → reviewing → repairing → coding reads as one continuous dog rather than
+a hard cut. The beats are fast on purpose: the current state must be
+recognisable immediately.
+
+**Truth boundary.** These animations receive the state; they never decide it. No
+operational state renders a check marker, and none of their accessible sentences
+name an outcome — "under review" is not "reviewed", "digging into" is not
+"repaired", "writing" is not "complete".
+
 ## Reduced motion
 
 `prefers-reduced-motion: reduce` is honoured from the system (watched at

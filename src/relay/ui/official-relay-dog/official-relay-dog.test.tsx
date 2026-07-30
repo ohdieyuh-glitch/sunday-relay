@@ -145,16 +145,18 @@ describe('official Relay Dog — semantics mirror Milestone 4.5 exactly', () => 
     }
   });
 
-  it('IMPLEMENTING is the tippy-toe reaching pose on the website too', () => {
+  it('IMPLEMENTING is the coding pose on the website too', () => {
     const view = officialRelayDogViewForState('implementing');
     expect(view.activity).toBe('implementing');
-    expect(view.pose).toBe('reaching');
-    expect(view.motion).toBe('work_scratch');
-    expect(DOG_PRESENTATION.implementing.pose).toBe('reaching');
-    // The reaching pose lifts the front paws off the body's baseline row.
-    const reaching = renderedGrid('reaching');
-    const standing = renderedGrid('standing');
-    expect(reaching).not.toEqual(standing);
+    expect(view.pose).toBe('coding');
+    expect(view.motion).toBe('code_progression');
+    expect(DOG_PRESENTATION.implementing.pose).toBe('coding');
+    // The coding pose puts both front paws forward on an implied keyboard, so
+    // it is a distinct silhouette from standing and from the retained reach.
+    expect(renderedGrid('coding')).not.toEqual(renderedGrid('standing'));
+    expect(renderedGrid('coding')).not.toEqual(renderedGrid('reaching'));
+    // `reaching` is retained as art with a defined motion, just not selected.
+    expect(renderedGrid('reaching')).not.toEqual(renderedGrid('standing'));
   });
 
   it('idle alone patrols; waiting asks for a human; error stops', () => {

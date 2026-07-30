@@ -132,11 +132,24 @@ describe('relay dog motion boundary', () => {
     expect(/@keyframes rdm-paw-scratch/u.test(css)).toBe(true);
   });
 
-  it('the implementing animation has no horizontal component', () => {
-    const implementing = css.slice(css.indexOf('@keyframes rdm-tiptoe-reach'));
-    const block = implementing.slice(0, implementing.indexOf('/* -------'));
-    // translateY / scaleY only — a translateX here would drift the dog.
-    expect(/translateX/u.test(block)).toBe(false);
+  it('no in-place activity animation has a horizontal component', () => {
+    // translateY / scaleY / rotate only — a translateX in any of these would
+    // drift the dog along the track and fight the patrol layer.
+    for (const name of [
+      'rdm-tiptoe-reach',
+      'rdm-paw-scratch',
+      'rdm-sleep-breathe',
+      'rdm-dig-lunge',
+      'rdm-code-type',
+      'rdm-enter-sleep',
+      'rdm-enter-dig',
+      'rdm-enter-code',
+    ]) {
+      const start = css.indexOf(`@keyframes ${name}`);
+      expect(start, `${name} keyframes are missing`).toBeGreaterThan(-1);
+      const block = css.slice(start, css.indexOf('}\n', css.indexOf('{', start + 12)) + 1);
+      expect(/translateX/u.test(block), `${name} drifts horizontally`).toBe(false);
+    }
   });
 
   it('the waiting jump has no horizontal component', () => {

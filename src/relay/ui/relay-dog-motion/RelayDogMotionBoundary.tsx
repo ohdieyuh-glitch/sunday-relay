@@ -7,8 +7,10 @@
  *   .rdm            motion boundary — measured track, clips overflow
  *     .rdm-travel   horizontal patrol position (translateX)
  *       .rdm-facing direction (scaleX, with text counter-flipped)
- *         .rdm-body activity animation (jump, tippy-toe reach)
+ *         .rdm-body activity animation (jump, sleep-breathe, dig, type)
  *           <RelayPixelDog/>  unchanged artwork, keeps its own bob
+ *   .rdo            operational scenery (Z marks, dirt, code editor) —
+ *                   decorative, aria-hidden, behind the dog, no pointer events
  *
  * The dog artwork, colorway, and silhouette are untouched — this component
  * only positions and animates the existing sprite.
@@ -18,6 +20,10 @@ import type { ReactNode } from 'react';
 
 import type { RelayDogBehavior } from './dog-behavior';
 import { useRelayDogPatrol } from './useRelayDogPatrol';
+import {
+  RelayDogOperationalDecor,
+  operationalActivityDescription,
+} from './RelayDogOperationalDecor';
 
 export interface RelayDogMotionBoundaryProps {
   behavior: RelayDogBehavior;
@@ -40,6 +46,7 @@ export function RelayDogMotionBoundary({
   });
 
   const effectiveReducedMotion = patrol.reducedMotion;
+  const description = operationalActivityDescription(behavior.activity);
   const activityClass = `rdm-body rdm-body--${behavior.activity}`;
   const facingClass = `rdm-facing rdm-facing--${patrol.direction}`;
 
@@ -54,6 +61,12 @@ export function RelayDogMotionBoundary({
       data-relay-dog-activity={behavior.activity}
       data-relay-dog-patrol={behavior.patrolEnabled && !effectiveReducedMotion ? 'on' : 'off'}
     >
+      {/* Scenery first so it paints BEHIND the dog and can never cover a
+          mission control. Decorative only — the meaning is in the text below. */}
+      <RelayDogOperationalDecor
+        activity={behavior.activity}
+        reducedMotion={effectiveReducedMotion}
+      />
       <div
         ref={patrol.dogRef}
         className="rdm-travel"
@@ -63,6 +76,11 @@ export function RelayDogMotionBoundary({
           <div className={activityClass}>{children}</div>
         </div>
       </div>
+      {/* The plain-language sentence for the three animated operational states.
+          It describes what the DOG is doing and never an outcome, so it cannot
+          imply that a review approved, a verification passed or a repair
+          succeeded. Visually hidden: the dog figure already shows the label. */}
+      {description && <span className="rdm-a11y-description">{description}</span>}
       {effectiveReducedMotion && (
         <span className="rdm-reduced-label">{behavior.reducedMotionFallback}</span>
       )}

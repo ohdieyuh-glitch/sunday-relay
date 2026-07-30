@@ -204,13 +204,15 @@ export const DOG_PRESENTATION: Record<WorkspaceDogState, DogPresentation> = {
   wandering: { pose: 'standing', marker: 'none', moving: true, label: 'WANDERING' },
   trotting: { pose: 'trotting', marker: 'none', moving: true, label: 'TROTTING' },
   running: { pose: 'running', marker: 'none', moving: true, label: 'RUNNING' },
-  implementing: { pose: 'reaching', marker: 'none', moving: false, label: 'IMPLEMENTING' },
+  implementing: { pose: 'coding', marker: 'none', moving: false, label: 'IMPLEMENTING' },
   sprinting: { pose: 'running', marker: 'none', moving: true, label: 'SPRINTING' },
   carrying_handoff: { pose: 'carrying', marker: 'none', moving: true, label: 'CARRYING HANDOFF' },
   researching: { pose: 'sitting', marker: 'scan', moving: false, label: 'RESEARCHING' },
   verifying: { pose: 'standing', marker: 'question', moving: false, label: 'VERIFYING' },
-  reviewing: { pose: 'sitting', marker: 'question', moving: false, label: 'REVIEWING' },
-  repairing: { pose: 'trotting', marker: 'alert', moving: false, label: 'REPAIRING' },
+  // The review marker stays a QUESTION: a review in progress is neither an
+  // approval nor a verification, so it must never render as a check.
+  reviewing: { pose: 'sleeping', marker: 'question', moving: false, label: 'REVIEWING' },
+  repairing: { pose: 'digging', marker: 'alert', moving: false, label: 'REPAIRING' },
   waiting_for_user: { pose: 'sitting', marker: 'alert', moving: false, label: 'WAITING FOR USER' },
   stopped_safely: { pose: 'lying', marker: 'none', moving: false, label: 'STOPPED SAFELY' },
   complete: { pose: 'sitting', marker: 'check', moving: false, label: 'COMPLETE' },
