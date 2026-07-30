@@ -35,10 +35,26 @@ const has = (p) => existsSync(resolve(root, p));
 
 const REGISTRY = 'src/relay/parity/relay-surface-capabilities.json';
 const CHECKER = 'scripts/relay-surface-parity.mjs';
-const REQUIRED_SCRIPTS = ['relay:surface-parity:check', 'relay:surface-parity:check:strict'];
 
-/** A tree is "the integrated product" once the Relay surfaces are both here. */
-const INTEGRATED_MARKERS = ['src/relay/ui', 'src/relay/cli'];
+/**
+ * The scripts must not merely EXIST — each must actually invoke the checker,
+ * and the strict one must actually pass `--strict`. A script named
+ * `relay:surface-parity:check` whose body is `echo ok` satisfies a
+ * presence-only test while comparing nothing: the same shape of hole as the
+ * `if [ -f … ]` guard this gate replaced.
+ */
+const REQUIRED_SCRIPTS = [
+  { name: 'relay:surface-parity:check', mustContain: ['relay-surface-parity.mjs'] },
+  { name: 'relay:surface-parity:check:strict', mustContain: ['relay-surface-parity.mjs', '--strict'] },
+];
+
+/**
+ * A tree is "the integrated product" once ANY Relay source is present. The
+ * historical-baseline skip is deliberately narrow: it applies only to a commit
+ * that carries no `src/relay` at all. Keying it on two specific subdirectories
+ * would let a rename quietly re-open the skip.
+ */
+const INTEGRATED_MARKERS = ['src/relay'];
 
 const problems = [];
 const note = (line) => console.log(`  ${line}`);
@@ -54,12 +70,28 @@ try {
 } catch {
   problems.push('package.json is missing or unreadable — cannot verify the parity scripts');
 }
-const missingScripts = REQUIRED_SCRIPTS.filter((name) => typeof scripts[name] !== 'string');
-const scriptsPresent = missingScripts.length === 0;
+
+/** A script is present only if it exists AND genuinely runs the checker. */
+const scriptProblems = [];
+for (const { name, mustContain } of REQUIRED_SCRIPTS) {
+  const body = scripts[name];
+  if (typeof body !== 'string' || body.trim() === '') {
+    scriptProblems.push(`${name} is missing`);
+    continue;
+  }
+  for (const token of mustContain) {
+    if (!body.includes(token)) {
+      scriptProblems.push(`${name} does not invoke ${token} (it runs: ${body})`);
+    }
+  }
+}
+const scriptsPresent = scriptProblems.length === 0;
 
 note(`registry: ${registryPresent ? REGISTRY : 'ABSENT'}`);
 note(`checker:  ${checkerPresent ? CHECKER : 'ABSENT'}`);
-note(`scripts:  ${scriptsPresent ? REQUIRED_SCRIPTS.join(', ') : `MISSING ${missingScripts.join(', ')}`}`);
+note(`scripts:  ${scriptsPresent
+  ? REQUIRED_SCRIPTS.map((s) => s.name).join(', ')
+  : `UNUSABLE — ${scriptProblems.join('; ')}`}`);
 
 const integrated = INTEGRATED_MARKERS.every((marker) => has(marker));
 
@@ -67,7 +99,7 @@ if (registryPresent && !(checkerPresent && scriptsPresent)) {
   problems.push(
     `the parity registry exists but its machinery does not: ${!checkerPresent ? `${CHECKER} is missing` : ''}`
     + `${!checkerPresent && !scriptsPresent ? ' and ' : ''}`
-    + `${!scriptsPresent ? `npm script(s) missing: ${missingScripts.join(', ')}` : ''}`
+    + `${!scriptsPresent ? `npm script(s) unusable: ${scriptProblems.join('; ')}` : ''}`
     + ' — a declared capability registry that nothing verifies is exactly the drift parity exists to catch',
   );
 }
@@ -82,13 +114,13 @@ if ((checkerPresent || scriptsPresent) && !registryPresent) {
 if (!registryPresent && !checkerPresent && !scriptsPresent) {
   if (integrated) {
     problems.push(
-      'this tree contains both Relay surfaces but no parity registry, checker or scripts — '
-      + 'parity cannot be skipped on the integrated product (governance §7)',
+      `this tree contains Relay source (${INTEGRATED_MARKERS.join(', ')}) but no parity registry, `
+      + 'checker or scripts — parity cannot be skipped on the integrated product (governance §7)',
     );
   } else {
     // A historical baseline commit from before the registry landed. Say so
     // explicitly; never let it read as a capability result.
-    note('SKIP — historical baseline commit: no Relay surfaces, no parity registry.');
+    note('SKIP — historical baseline commit: no Relay source, no parity registry.');
     note('       This is NOT a parity pass. No capability was compared.');
     process.exit(0);
   }
@@ -102,5 +134,6 @@ if (problems.length > 0) {
 }
 
 console.log('RELAY PARITY GATE: PASS');
-console.log('  registry, checker and npm scripts all present — parity runs for real below.');
+console.log('  registry and checker present; both npm scripts genuinely invoke the checker');
+console.log('  (and the strict script genuinely passes --strict) — parity runs for real below.');
 process.exit(0);

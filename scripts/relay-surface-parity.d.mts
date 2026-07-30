@@ -52,25 +52,73 @@ export function compareRegistries(
  */
 export function findCompanion(repoRoot: string, explicit?: string): string | null;
 
+/* ------------------------- founder exception policy --------------------- */
+
+export const FOUNDER_IDENTITIES: readonly string[];
+export const MAX_EXCEPTION_LIFETIME_DAYS: number;
+export const MIN_EXCEPTION_REASON_LENGTH: number;
+export const REQUIRED_CAPABILITIES: readonly string[];
+export const NON_EXEMPTIBLE_CAPABILITIES: readonly string[];
+
+/**
+ * Every reason the exception on `capability` is not a valid founder waiver.
+ * An empty list is the ONLY thing that grants exemption.
+ */
+export function validateException(
+  capability: unknown,
+  now: string,
+): Array<{ rule: string; detail: string }>;
+
+/* ------------------------ declaration classification -------------------- */
+
+export const COMMAND_PREFIX: RegExp;
+export const DECLARABLE_EXTENSIONS: readonly string[];
+export const ANCHOR_SEGMENT: RegExp;
+
+export type DeclarationClassification =
+  | { kind: 'file'; path: string; anchor: string | null }
+  | { kind: 'command'; command: string }
+  | { kind: 'invalid'; reason: string };
+
+/**
+ * Structural classification of one registry declaration. There is no silent
+ * third branch: a declaration is a `relay …` command, a well-formed file
+ * claim, or a FINDING. Whitespace can no longer demote a file claim.
+ */
+export function classifyDeclaration(declared: unknown): DeclarationClassification;
+
 /** `path/to/file.ts#symbol` → `path/to/file.ts`. */
 export function declaredPathOf(declared: string): string;
 
-/**
- * True when a registry entry point names a FILE rather than a CLI command.
- * Paths carry an extension and never contain whitespace; commands such as
- * `relay mission budget` and `relay (interactive) /pause` always do.
- */
+/** True when a declaration classifies as a FILE claim. */
 export function isFileClaim(declared: string): boolean;
 
+/** Resolves a declared path inside the repository, refusing escapes. */
+export function resolveInsideRepo(
+  repoRoot: string,
+  path: string,
+): { ok: true; full: string } | { ok: false; reason: string };
+
+/** Splits an anchor into every segment that must appear in the file. */
+export function anchorSegments(anchor: string): string[];
+
+/** Every anchor segment must be well-formed AND present in the file. */
+export function verifyAnchor(
+  content: string,
+  anchor: string,
+): { ok: true; segments: string[] } | { ok: false; reason: string };
+
 /**
- * Both surfaces live in this repository, so every entry point and test
- * reference the registry declares must resolve to a real file. `checked` is
- * how many file claims were examined (command notations are not files).
+ * Every declaration the registry makes must resolve in this repository: the
+ * file must exist inside the tree and any anchor must name something the file
+ * genuinely contains. Exception evidence is held to the same standard.
+ * `checked` counts file claims; `commands` counts `relay …` notations, which
+ * the CLI's own command tests verify.
  */
 export function verifyDeclaredFiles(
   repoRoot: string,
   registry: unknown,
-): ParityResult & { checked: number };
+): ParityResult & { checked: number; commands: number };
 
 export function runParityCheck(options: {
   repoRoot: string;

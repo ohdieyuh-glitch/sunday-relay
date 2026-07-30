@@ -217,7 +217,7 @@
       "websiteStatus": "tested",
       "cliStatus": "tested",
       "websiteEntryPoints": [
-        "src/relay/ui/project-settings/RelayProjectSettings.tsx#AGENT_OPTIONS"
+        "src/relay/ui/project-settings/RelayProjectSettings.tsx#agentOptions"
       ],
       "cliEntryPoints": [
         "relay project workforce",

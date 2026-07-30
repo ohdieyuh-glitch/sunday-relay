@@ -38,12 +38,37 @@ export type RelayParityClass =
 
 export type RelaySurfaceStatus = 'not_started' | 'planned' | 'implemented' | 'tested';
 
+/**
+ * A parity exception SUSPENDS the product's central promise, so every field
+ * here is mandatory and the checker validates each one. Partial compliance
+ * grants nothing: an exception exempts a capability only when it is valid in
+ * every respect. See `scripts/relay-surface-parity.mjs#validateException`.
+ */
 export interface RelaySurfaceException {
+  /** A real justification — placeholder-length strings are rejected. */
   reason: string;
-  /** Founder identity. A developer may not self-exempt a capability. */
+  /**
+   * The CANONICAL founder identity, from the checker's fixed allowlist. A
+   * generic word, an agent name, or an anonymous value is not an approval,
+   * and a developer may never self-exempt a capability.
+   */
   approvedBy: string;
+  /** ISO instant; may not be in the future. */
   approvedAt: string;
-  expiresAt?: string;
+  /**
+   * ISO instant; MUST be in the future and within the checker's bounded
+   * maximum lifetime. There is no permanent parity exception.
+   */
+  expiresAt: string;
+  /** Exactly the capabilityId this exception sits on. Never a wildcard. */
+  affectedCapability: string;
+  /** The surface that is genuinely absent. */
+  missingSurface: 'website' | 'cli';
+  /**
+   * Evidence references, in the same notation as entry points, each of which
+   * must resolve on disk. A waiver may not cite proof that does not exist.
+   */
+  evidence: string[];
 }
 
 export interface RelaySurfaceCapability {

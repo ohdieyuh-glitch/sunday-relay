@@ -230,30 +230,52 @@ describe('the parity check fails when it should', () => {
     expect(rules(result)).toContain('unapproved-exception');
   });
 
-  it('accepts a founder-approved exception with a reason and an approver', () => {
-    const result = check([capability({
+  /**
+   * This case used to ACCEPT `{reason, approvedBy: 'founder', approvedAt}`
+   * with no expiry — precisely the self-granted, permanent waiver the H-2
+   * review found. Exemption is now all-or-nothing; the full adversarial
+   * matrix lives in `parity-bypass.test.ts`.
+   */
+  it('accepts ONLY a complete founder exception, and rejects the old weak shape', () => {
+    const incomplete = check([capability({
       capabilityId: 'approved-exempt', parityClass: 'surface_specific',
       cliStatus: 'not_started', cliEntryPoints: [], cliTestReferences: [],
       exception: {
         reason: 'Browser viewport layout has no terminal equivalent.',
         approvedBy: 'founder',
         approvedAt: '2026-07-28T00:00:00.000Z',
+      } as RelaySurfaceCapability['exception'],
+    })]);
+    expect(incomplete.ok, 'a permanent, generically-approved exception must not pass').toBe(false);
+
+    const complete = check([capability({
+      capabilityId: 'approved-exempt', parityClass: 'surface_specific',
+      cliStatus: 'not_started', cliEntryPoints: [], cliTestReferences: [],
+      exception: {
+        reason: 'Browser viewport chrome has no meaningful terminal equivalent to render.',
+        approvedBy: 'founder:ohdieyuh-glitch',
+        approvedAt: '2026-07-20T00:00:00.000Z',
+        expiresAt: '2026-08-20T00:00:00.000Z',
+        affectedCapability: 'approved-exempt',
+        missingSurface: 'cli',
+        evidence: ['src/relay/ui/app/projection.ts'],
       },
     })]);
-    expect(result.ok).toBe(true);
+    expect(complete.failures, JSON.stringify(complete.failures)).toEqual([]);
+    expect(complete.ok).toBe(true);
   });
 
   it('fails an exception missing the founder identity or the reason', () => {
     expect(rules(check([capability({
       capabilityId: 'no-approver', parityClass: 'surface_specific',
       cliStatus: 'not_started', cliEntryPoints: [], cliTestReferences: [],
-      exception: { reason: 'x', approvedBy: '', approvedAt: '2026-07-01T00:00:00.000Z' },
+      exception: { reason: 'x', approvedBy: '', approvedAt: '2026-07-01T00:00:00.000Z' } as RelaySurfaceCapability['exception'],
     })]))).toContain('exception-approver');
 
     expect(rules(check([capability({
       capabilityId: 'no-reason', parityClass: 'surface_specific',
       cliStatus: 'not_started', cliEntryPoints: [], cliTestReferences: [],
-      exception: { reason: '   ', approvedBy: 'founder', approvedAt: '2026-07-01T00:00:00.000Z' },
+      exception: { reason: '   ', approvedBy: 'founder', approvedAt: '2026-07-01T00:00:00.000Z' } as RelaySurfaceCapability['exception'],
     })]))).toContain('exception-reason');
   });
 
@@ -265,7 +287,7 @@ describe('the parity check fails when it should', () => {
         reason: 'temporary', approvedBy: 'founder',
         approvedAt: '2026-01-01T00:00:00.000Z',
         expiresAt: '2026-06-01T00:00:00.000Z',
-      },
+      } as RelaySurfaceCapability['exception'],
     })]);
     expect(result.ok).toBe(false);
     expect(rules(result)).toContain('expired-exception');
