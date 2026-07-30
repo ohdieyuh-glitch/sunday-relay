@@ -7,12 +7,12 @@ import {
   officialRelayDogGrid,
   type OfficialRelayDogPixel,
   type OfficialRelayDogPose,
-} from './official-relay-dog-sprite';
+} from '../../shared/official-relay-dog-sprite';
 import {
   officialRelayDogViewForState,
   type OfficialRelayDogActivity,
   type OfficialRelayDogMotion,
-} from './official-relay-dog-states';
+} from '../../shared/official-relay-dog-states';
 
 /**
  * THE OFFICIAL RELAY DOG in the terminal.
@@ -23,10 +23,11 @@ import {
  * chest and short block legs, in bone/cream white with a shadow tone for the
  * dimensional surfaces.
  *
- * The art is NOT drawn here. Every pixel comes from the shared, byte-identical
- * `official-relay-dog-sprite` module — the same grids the website renders
- * through src/relay/ui/pixel-dog/RelayPixelDog.tsx — and every state meaning
- * comes from the shared `official-relay-dog-states` module, which mirrors the
+ * The art is NOT drawn here. Every pixel comes from the single shared
+ * `src/relay/shared/official-relay-dog-sprite` module — literally the same
+ * grids the website renders through src/relay/ui/pixel-dog/RelayPixelDog.tsx —
+ * and every state meaning comes from the shared
+ * `src/relay/shared/official-relay-dog-states` module, which mirrors the
  * website's Milestone 4.5 motion system. This file only decides how to paint
  * those pixels into a terminal.
  *

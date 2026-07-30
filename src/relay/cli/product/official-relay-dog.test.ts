@@ -1,5 +1,4 @@
-import { readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -23,32 +22,33 @@ import {
   OFFICIAL_RELAY_DOG_POSE_NAMES,
   OFFICIAL_RELAY_DOG_TERMINAL_TONE,
   OFFICIAL_RELAY_DOG_WIDTH,
-} from './official-relay-dog-sprite';
+} from '../../shared/official-relay-dog-sprite';
 import {
   OFFICIAL_RELAY_DOG_ACTIVITIES,
   OFFICIAL_RELAY_DOG_STATE_PRESENTATION,
   officialRelayDogViewForState,
   projectOfficialRelayDogActivity,
-} from './official-relay-dog-states';
+} from '../../shared/official-relay-dog-states';
+import { RETIRED_SIDE_PROFILE_DOG_MARKERS } from '../../shared/official-relay-dog-parity';
 import {
-  OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS,
-  OFFICIAL_RELAY_DOG_ASSET_NAMES,
-  RETIRED_SIDE_PROFILE_DOG_MARKERS,
-} from './official-relay-dog-parity';
+  OFFICIAL_RELAY_DOG_POSES as BARREL_POSES,
+  RETIRED_SIDE_PROFILE_DOG_MARKERS as BARREL_MARKERS,
+} from './index';
 import { renderHeader } from './renderer';
 import { visibleLength } from './layout';
 
 /**
  * OFFICIAL RELAY DOG — CLI parity suite.
  *
- * Proves the terminal draws the ONE official Relay Dog: the shared sprite is
- * byte-identical to the website's copy (checksums), the retired side-profile
- * dog is gone from every code path including the reduced-capability fallback,
- * the proportions are never stretched, and every state means on the terminal
- * exactly what it means on the website.
+ * Proves the terminal draws the ONE official Relay Dog: the sprite it renders
+ * IS the website's sprite (one shared module, no CLI copy), the retired
+ * side-profile dog is gone from every code path including the
+ * reduced-capability fallback, the proportions are never stretched, and every
+ * state means on the terminal exactly what it means on the website.
  */
 
 const productDir = join(process.cwd(), 'src', 'relay', 'cli', 'product');
+const sharedDir = join(process.cwd(), 'src', 'relay', 'shared');
 
 function caps(overrides: Partial<CliCaps> = {}): CliCaps {
   return {
@@ -62,13 +62,36 @@ const strip = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, '');
 /* ------------------------- canonical asset ---------------------------- */
 
 describe('official Relay Dog — canonical shared asset', () => {
-  it('the CLI copy of every shared module matches the cross-surface checksum', () => {
-    for (const name of OFFICIAL_RELAY_DOG_ASSET_NAMES) {
-      const bytes = readFileSync(join(productDir, name));
-      const digest = createHash('sha256').update(bytes).digest('hex');
-      expect(digest, `${name} diverged from the shared official Relay Dog asset`)
-        .toBe(OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS[name]);
+  /**
+   * There is no CLI copy to checksum any more. Identity holds by CONSTRUCTION:
+   * the terminal imports the same src/relay/shared modules the website's
+   * barrel does, so drift is not something a test has to catch after the fact
+   * — it is unrepresentable. These assertions keep it that way by failing the
+   * moment someone re-forks a product-local copy.
+   */
+  it('the CLI imports the SHARED dog modules and keeps no copy of its own', () => {
+    const barrel = readFileSync(join(productDir, 'index.ts'), 'utf8');
+    for (const module of ['sprite', 'states', 'parity']) {
+      expect(barrel, `the product barrel must take official-relay-dog-${module} from src/relay/shared`)
+        .toContain(`from '../../shared/official-relay-dog-${module}'`);
+      expect(barrel, `the product barrel re-forked a local official-relay-dog-${module}`)
+        .not.toContain(`from './official-relay-dog-${module}'`);
+      expect(
+        existsSync(join(productDir, `official-relay-dog-${module}.ts`)),
+        `a CLI-local copy of official-relay-dog-${module}.ts came back`,
+      ).toBe(false);
+      expect(
+        existsSync(join(sharedDir, `official-relay-dog-${module}.ts`)),
+        `the shared official-relay-dog-${module}.ts is missing`,
+      ).toBe(true);
     }
+  });
+
+  it('the CLI barrel exports the very same objects the shared module defines', () => {
+    // Reference identity, not deep equality: two copies could be equal, but
+    // only one module can be the same object.
+    expect(BARREL_POSES).toBe(OFFICIAL_RELAY_DOG_POSES);
+    expect(BARREL_MARKERS).toBe(RETIRED_SIDE_PROFILE_DOG_MARKERS);
   });
 
   it('the sprite is the 18x14 front-facing voxel dog with visor and amber eyes', () => {
@@ -93,7 +116,7 @@ describe('official Relay Dog — canonical shared asset', () => {
   });
 
   it('carries no element of the reference screenshot around the dog', () => {
-    const source = readFileSync(join(productDir, 'official-relay-dog-sprite.ts'), 'utf8');
+    const source = readFileSync(join(sharedDir, 'official-relay-dog-sprite.ts'), 'utf8');
     for (const foreign of ['Hermes', 'APPROVED', 'Approved', 'REVIEWER', 'data:image', 'base64']) {
       expect(source, `sprite imported "${foreign}" from the screenshot`).not.toContain(foreign);
     }

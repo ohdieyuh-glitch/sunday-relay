@@ -10,12 +10,10 @@
       "websiteStatus": "tested",
       "cliStatus": "tested",
       "websiteEntryPoints": [
-        "src/relay/ui/pixel-dog/RelayPixelDog.tsx",
-        "src/relay/ui/official-relay-dog/official-relay-dog-sprite.ts"
+        "src/relay/ui/pixel-dog/RelayPixelDog.tsx"
       ],
       "cliEntryPoints": [
-        "src/relay/cli/product/dog.ts",
-        "src/relay/cli/product/official-relay-dog-sprite.ts"
+        "src/relay/cli/product/dog.ts"
       ],
       "websiteTestReferences": [
         "src/relay/ui/official-relay-dog/official-relay-dog.test.tsx"
@@ -25,8 +23,8 @@
         "src/relay/cli/product/product-hardening.test.ts"
       ],
       "sharedDomainReferences": [
-        "official-relay-dog-sprite.ts",
-        "official-relay-dog-parity.ts"
+        "src/relay/shared/official-relay-dog-sprite.ts",
+        "src/relay/shared/official-relay-dog-parity.ts"
       ]
     },
     {
@@ -41,8 +39,7 @@
         "src/relay/ui/project-workspace/RelayWorkspaceDog.tsx"
       ],
       "cliEntryPoints": [
-        "src/relay/cli/product/dog.ts",
-        "src/relay/cli/product/official-relay-dog-states.ts"
+        "src/relay/cli/product/dog.ts"
       ],
       "websiteTestReferences": [
         "src/relay/ui/official-relay-dog/official-relay-dog.test.tsx",
@@ -52,7 +49,7 @@
         "src/relay/cli/product/official-relay-dog.test.ts"
       ],
       "sharedDomainReferences": [
-        "official-relay-dog-states.ts"
+        "src/relay/shared/official-relay-dog-states.ts"
       ]
     },
     {

@@ -3,13 +3,15 @@
  *
  * Sunday Relay has ONE official Relay Dog: the compact front-facing voxel
  * companion with upright ears, a dark charcoal visor band, two square amber
- * eyes, a cream/bone-white body and short block legs. The modules re-exported
- * here are byte-identical in the website/application and the CLI/terminal.
+ * eyes, a cream/bone-white body and short block legs. This barrel is the
+ * WEBSITE'S VIEW of that identity — the modules themselves live in
+ * src/relay/shared, the browser-safe seam, and the CLI/terminal imports the
+ * very same files. There is one copy, so the two surfaces cannot drift.
  *
  * The website's canonical RENDERER remains src/relay/ui/pixel-dog and its
  * canonical MOTION SYSTEM remains src/relay/ui/relay-dog-motion (Milestone
  * 4.5). This module does not replace either: it is the shared asset + shared
- * semantics both surfaces agree on, plus the checksums that prove it.
+ * semantics both surfaces agree on.
  */
 
 export {
@@ -25,7 +27,7 @@ export {
   officialRelayDogGrid,
   type OfficialRelayDogPixel,
   type OfficialRelayDogPose,
-} from './official-relay-dog-sprite';
+} from '../../shared/official-relay-dog-sprite';
 
 export {
   OFFICIAL_RELAY_DOG_ACTIVITIES,
@@ -54,13 +56,9 @@ export {
   type OfficialRelayDogView,
   type OfficialWorkspaceDogState,
   type OfficialHomeDogState,
-} from './official-relay-dog-states';
+} from '../../shared/official-relay-dog-states';
 
 export {
   OFFICIAL_RELAY_DOG_MANIFEST_VERSION,
-  OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS,
-  OFFICIAL_RELAY_DOG_ASSET_NAMES,
-  OFFICIAL_RELAY_DOG_ASSET_LOCATIONS,
   RETIRED_SIDE_PROFILE_DOG_MARKERS,
-  type OfficialRelayDogAssetName,
-} from './official-relay-dog-parity';
+} from '../../shared/official-relay-dog-parity';

@@ -45,9 +45,9 @@
       "src/relay/cli/product/index.ts"
     ],
     "officialRelayDog": [
-      "src/relay/cli/product/official-relay-dog-sprite.ts",
-      "src/relay/cli/product/official-relay-dog-states.ts",
-      "src/relay/ui/official-relay-dog/official-relay-dog-sprite.ts"
+      "src/relay/shared/official-relay-dog-sprite.ts",
+      "src/relay/shared/official-relay-dog-states.ts",
+      "src/relay/shared/official-relay-dog-parity.ts"
     ],
     "parityRegistry": [
       "src/relay/parity/relay-surface-capabilities.json",

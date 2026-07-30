@@ -33,7 +33,7 @@ import type {
   CodingTerminalStatus,
   CodingTerminalTest,
   MissionClaim,
-} from '../src/relay/ui/app/contracts';
+} from '../src/relay/mission/wire-contracts';
 
 /** Bounded so a pathological run can never produce unbounded terminal state. */
 export const MAX_TERMINAL_LINES = 300;

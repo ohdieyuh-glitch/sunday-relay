@@ -36,7 +36,7 @@ four long rectangular legs.**
 
 That dog is **retired**. It is gone from the header, the footer, the demo, the
 mission console, the interactive session and every reduced-capability
-fallback. `official-relay-dog-parity.ts` records its markers
+fallback. `src/relay/shared/official-relay-dog-parity.ts` records its markers
 (`LARGE_DOG`, `SMALL_DOG`, `ASCII_DOG`) and a test asserts none of them can
 come back.
 
@@ -47,11 +47,11 @@ come back.
 | | |
 |---|---|
 | **Canonical renderer of record** | `src/relay/ui/pixel-dog/RelayPixelDog.tsx` (website) |
-| **Canonical asset** | `official-relay-dog-sprite.ts` (pure data, no framework) |
-| **Canonical semantics** | `official-relay-dog-states.ts` (pure data, no framework) |
-| **Parity manifest** | `official-relay-dog-parity.ts` |
-| **Website location** | `src/relay/ui/official-relay-dog/` |
-| **CLI location** | `src/relay/cli/product/` |
+| **Canonical asset** | `src/relay/shared/official-relay-dog-sprite.ts` (pure data, no framework) |
+| **Canonical semantics** | `src/relay/shared/official-relay-dog-states.ts` (pure data, no framework) |
+| **Parity manifest** | `src/relay/shared/official-relay-dog-parity.ts` |
+| **Website barrel** | `src/relay/ui/official-relay-dog/index.ts` (re-export only) |
+| **CLI barrel** | `src/relay/cli/product/index.ts` (re-export only) |
 | **Grid** | 18 × 14 pixels |
 | **Poses** | `standing`, `trotting`, `running`, `sitting`, `lying`, `carrying`, `reaching` |
 
@@ -70,23 +70,34 @@ The xterm-256 mapping is part of the shared identity (each index is the
 nearest RGB match to the canonical hex), so a terminal renders the same dog
 rather than inventing its own palette.
 
-### Checksums
+### One copy, not two checksummed copies
 
-The two repositories cannot import each other, so the shared modules are
-carried as **byte-identical copies** and proven by checksum. The live digests
-live in `official-relay-dog-parity.ts` (`OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS`),
-and each repository has a test that hashes its own copies and asserts them.
+The sprite, the states and the parity manifest exist **once**, in
+`src/relay/shared/` — the browser-safe seam. The website barrel
+(`src/relay/ui/official-relay-dog/index.ts`) and the CLI barrel
+(`src/relay/cli/product/index.ts`) both re-export those same modules, so
+**identity holds by construction**: one module imported by two surfaces cannot
+drift into two mascots.
 
-Because the manifest is itself byte-identical on both sides, a change made on
-one surface and not mirrored on the other fails that surface's test
-immediately. There is no silent drift.
+This replaced an earlier arrangement in which each surface carried its own
+byte-identical copy, proven by `OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS`. Those
+digests are gone. They proved something strictly weaker than the module graph
+now proves, and they could only ever fail *after* someone forgot to recompute
+them. Each surface's parity suite instead asserts that its barrel resolves to
+`src/relay/shared/` and that no surface-local copy exists, so a future re-fork
+fails immediately.
 
-**Changing the dog is a deliberate two-repository action:**
+**Changing the dog is now a single deliberate edit:**
 
-1. change the art or the semantics,
-2. copy the changed file verbatim into the other repository,
-3. recompute both digests and update the manifest in **both** repositories,
-4. bump `OFFICIAL_RELAY_DOG_IDENTITY_VERSION` when the identity itself moved.
+1. change the art or the semantics in `src/relay/shared/`,
+2. bump `OFFICIAL_RELAY_DOG_IDENTITY_VERSION` when the identity itself moved,
+3. bump `OFFICIAL_RELAY_DOG_MANIFEST_VERSION` if the shared file set changed
+   shape.
+
+Both surfaces' parity suites still run against the change — the website's
+because it renders `RelayPixelDog` and compares pixels, the CLI's because it
+renders `officialDogRows()` — so a change that breaks either surface is caught
+without any copying step.
 
 ### The sprite is what the website actually draws
 
@@ -214,8 +225,12 @@ state renders a check marker or any outcome word.
 ### Identity version
 
 Adding the three operational poses moved the identity, so
-`OFFICIAL_RELAY_DOG_IDENTITY_VERSION` is **1.1.0** and
-`OFFICIAL_RELAY_DOG_MANIFEST_VERSION` is **1.1.0**. The seven original poses are
+`OFFICIAL_RELAY_DOG_IDENTITY_VERSION` is **1.1.0**.
+`OFFICIAL_RELAY_DOG_MANIFEST_VERSION` is **2.0.0** — the manifest version
+tracks the shape of the shared file set, and de-duplicating the per-surface
+copies into `src/relay/shared/` (and dropping the checksums with them) changed
+that shape. **The art and the semantics did not change**, which is why the
+identity version did not move with it. The seven original poses are
 byte-unchanged; `sleeping`, `digging` and `coding` were added alongside them, and
 `sleeping` reuses the head with only its amber eye row closed to visor dark.
 
@@ -240,13 +255,14 @@ the future feature extends the identity instead of replacing it.
 
 ## 8. Tests
 
-| Repository | Suite |
+| Surface | Suite |
 |---|---|
 | Website | `src/relay/ui/official-relay-dog/official-relay-dog.test.tsx` |
 | CLI | `src/relay/cli/product/official-relay-dog.test.ts` |
 | CLI | `src/relay/cli/product/product-hardening.test.ts` (header/footer) |
 
-Between them they assert: checksum parity, that the sprite equals what the
+Between them they assert: that each surface's barrel resolves to the single
+shared module and keeps no local copy, that the sprite equals what the
 website renders for every pose, the front-facing voxel features, the retired
 dog's absence from every capability path, no duplicate dog in a header, uniform
 scaling, transparency, sharp edges, header containment at desktop and mobile

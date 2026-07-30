@@ -96,6 +96,10 @@ const FORBIDDEN_DIRS: readonly ForbiddenDir[] = [
     why: 'provider connectors and server-only adapters',
     allow: PURE_CONNECTOR_CONTRACTS,
   },
+  {
+    prefix: 'src/relay/testing/',
+    why: 'the deterministic TEST FIXTURE surface — deterministicIds and testClock exist for tests, and a browser edge into them ships the whole fixture module in the product bundle',
+  },
   { prefix: 'relay-bridge/', why: 'the local Relay bridge SERVER' },
   { prefix: 'scripts/', why: 'repository tooling — boundary, parity and deployment scanners' },
 ];
@@ -416,6 +420,16 @@ describe('browser/Node dependency boundary', () => {
         expect(hits.map(format).join(''), 'browser entry reached a provider connector').toBe('');
       });
 
+      it('cannot reach the deterministic test fixtures', () => {
+        // relay-core-boundary.test.ts bans this edge too, but only for the
+        // CORE_ROOTS it walks — ui/, mission/, shared/ and the src/relay/*.tsx
+        // entries are not in that list. This walk starts at the real browser
+        // entry and follows the transitive closure, so it closes the gap for
+        // every browser root at once rather than for a hand-listed few.
+        const hits = violations.filter((v) => v.offender.startsWith('src/relay/testing/'));
+        expect(hits.map(format).join(''), 'browser entry reached the test fixtures').toBe('');
+      });
+
       it('cannot reach the bridge server or repository tooling', () => {
         const hits = violations.filter(
           (v) => v.offender.startsWith('relay-bridge/') || v.offender.startsWith('scripts/'),
@@ -577,6 +591,7 @@ describe('the guard catches every recognised graph form', () => {
   write('src/relay/yc/node-deps.ts', "export const git = () => 'git';\n");
   write('src/relay/connectors/claude-code/live-runner.ts', "export const live = () => 'provider';\n");
   write('src/relay/connectors/ports.ts', 'export type Port = { id: string };\n');
+  write('src/relay/testing/factories.ts', 'export const testClock = () => 0;\n');
   write('scripts/relay-repository-boundary.mjs', 'export const scan = () => true;\n');
   write('relay-bridge/server.ts', "export const serve = () => 'server';\n");
   write('src/relay/safe/index.ts', "export const safe = 'ok';\n");
@@ -717,6 +732,11 @@ describe('the guard catches every recognised graph form', () => {
     expect(offendersOf(bridge)).toContain('relay-bridge/server.ts');
     const tooling = entryFor('tooling', "export * from '../../scripts/relay-repository-boundary.mjs';\n");
     expect(offendersOf(tooling)).toContain('scripts/relay-repository-boundary.mjs');
+  });
+
+  it('catches the deterministic test fixtures', () => {
+    const entry = entryFor('fixtures', "import { testClock } from '../relay/testing/factories';\nexport const x = testClock;\n");
+    expect(offendersOf(entry)).toContain('src/relay/testing/factories.ts');
   });
 
   it('does NOT forbid a genuinely pure connector contract', () => {

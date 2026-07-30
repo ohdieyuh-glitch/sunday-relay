@@ -183,7 +183,7 @@ const completionKey = (missionId: string, artifactDigest: string, reviewDigest: 
 
 /* --------------------------------------------------------- the record */
 
-type StoredEvent = Omit<import('../src/relay/ui/app/contracts').RelayEvent, 'id' | 'missionId' | 'demo'>;
+type StoredEvent = Omit<import('../src/relay/mission/wire-contracts').RelayEvent, 'id' | 'missionId' | 'demo'>;
 
 interface MissionRecord {
   missionId: string;

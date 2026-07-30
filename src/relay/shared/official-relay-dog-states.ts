@@ -1,6 +1,8 @@
 /**
- * OFFICIAL RELAY DOG — canonical state semantics, shared verbatim by every
- * surface. Byte-identical in the website/application and the CLI/terminal.
+ * OFFICIAL RELAY DOG — canonical state semantics, the ONE copy every surface
+ * reads. It lives in src/relay/shared — the browser-safe seam — and the
+ * website/application and the CLI/terminal both import THIS file, so the two
+ * surfaces agree by construction rather than by comparing two copies.
  *
  * The website's Milestone 4.5 motion system is AUTHORITATIVE:
  *   src/relay/ui/relay-dog-motion/dog-behavior.ts   (behavior + priority)

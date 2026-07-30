@@ -16,9 +16,11 @@ export {
   canonicalStateName, dogStateLabel,
   OFFICIAL_DOG_SCALE, OFFICIAL_DOG_COLUMNS, OFFICIAL_DOG_ROWS, type FooterDog,
 } from './dog';
-export * from './official-relay-dog-sprite';
-export * from './official-relay-dog-states';
-export * from './official-relay-dog-parity';
+// The official Relay Dog is ONE identity: the terminal re-exports the very
+// same shared modules the website's barrel does. No CLI-local copy exists.
+export * from '../../shared/official-relay-dog-sprite';
+export * from '../../shared/official-relay-dog-states';
+export * from '../../shared/official-relay-dog-parity';
 export {
   homeVM, missionConsoleVM, projectHomeVM, recoveryVM, sanitizeEvent, dogStateFrom, PHASES,
 } from './projections';

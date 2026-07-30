@@ -356,6 +356,20 @@ export interface RevisionCondition {
   satisfied: boolean;
 }
 
+/**
+ * The founder-approved condition set, in evaluation order. It lives beside the
+ * contract it governs: `checkRevisionContract` pins `conditionsChecked` to a
+ * minimum of 15, and the repair evaluator must answer exactly these names, so
+ * the list and its rule stay in one place. Production code sources it from
+ * here — never from a test fixture module.
+ */
+export const FIFTEEN_CONDITIONS = [
+  'objective-evidence', 'narrow-unambiguous', 'same-agent-session', 'inside-task-objective',
+  'inside-file-claims', 'no-protected-file', 'no-new-permission', 'no-destructive-command',
+  'no-deployment', 'no-new-dependency', 'no-new-credentials', 'within-budget',
+  'no-budget-warning-checkpoint', 'no-unresolved-decision', 'no-conflict-with-canonical-decision',
+] as const;
+
 export interface RevisionContract {
   packageId: PackageId;
   parentPackageId: PackageId;

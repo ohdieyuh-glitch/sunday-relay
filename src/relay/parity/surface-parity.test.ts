@@ -102,16 +102,51 @@ describe('the capability parity registry', () => {
     }
   });
 
-  it('every referenced test file on THIS surface actually exists (no invented evidence)', () => {
-    // The registry is byte-identical in both repositories, but each repository
-    // can only verify its OWN surface's paths — the companion's files are not
-    // on this disk. Which surface this is, is detected from a marker directory.
-    const isWebsite = existsSync(join(repoRoot, 'src', 'relay', 'ui', 'official-relay-dog'));
+  /**
+   * WHICH SURFACE IS THIS CHECKOUT? The marker must be the thing that MAKES a
+   * surface a surface — its ENTRY POINT — not an incidental directory.
+   *
+   * The old marker was `existsSync('src/relay/ui/official-relay-dog')`, and it
+   * was silently dangerous: the test read "marker absent" as "therefore this
+   * is the CLI". A marker that stopped resolving for ANY reason — a rename, a
+   * de-duplication, a moved asset — would not fail. It would quietly switch to
+   * verifying the OTHER surface's paths and still report green, so a broken
+   * marker was indistinguishable from a real CLI-only checkout.
+   *
+   * Entry points cannot degrade that way: presence is asserted rather than
+   * inferred, absence of BOTH is a hard failure, and a checkout that carries
+   * both entry points (this one does — website and CLI ship from one tree) has
+   * BOTH surfaces' declared evidence verified rather than half of it skipped.
+   */
+  const SURFACE_ENTRIES = [
+    { surface: 'website' as const, entry: join('src', 'relay', 'main.tsx') },
+    { surface: 'cli' as const, entry: join('src', 'relay', 'cli', 'main.ts') },
+  ];
+  const presentSurfaces = SURFACE_ENTRIES
+    .filter(({ entry }) => existsSync(join(repoRoot, entry)))
+    .map(({ surface }) => surface);
+
+  it('detects the surfaces in this checkout from their entry points, never by inference', () => {
+    expect(
+      presentSurfaces,
+      `no surface entry point resolved (${SURFACE_ENTRIES.map((s) => s.entry).join(', ')}) — ` +
+      'the marker is broken, and "not the website" must never be read as "the CLI"',
+    ).not.toEqual([]);
+  });
+
+  it('every referenced test file on the surfaces PRESENT here exists (no invented evidence)', () => {
+    // A repository can only verify the paths it actually carries — a companion
+    // checkout's files are not on this disk. So verify exactly the surfaces
+    // whose entry points resolved, and refuse to guess about the rest.
+    expect(presentSurfaces, 'refusing to guess which surface to verify').not.toEqual([]);
     let verified = 0;
     for (const record of registry.capabilities) {
-      const refs = isWebsite
-        ? (record.websiteStatus === 'tested' ? record.websiteTestReferences : [])
-        : (record.cliStatus === 'tested' ? record.cliTestReferences : []);
+      const refs = [
+        ...(presentSurfaces.includes('website') && record.websiteStatus === 'tested'
+          ? record.websiteTestReferences : []),
+        ...(presentSurfaces.includes('cli') && record.cliStatus === 'tested'
+          ? record.cliTestReferences : []),
+      ];
       for (const ref of refs) {
         // Command entry points ("relay project run") are not file paths.
         if (!/\.(ts|tsx)$/.test(ref)) continue;

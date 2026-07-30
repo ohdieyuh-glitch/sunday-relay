@@ -55,7 +55,7 @@ import { buildAttestation, digest, type ExecutionAttestation } from './attestati
 import { createTerminalCapture, type TerminalCapture } from './coding-terminal';
 import { safeText } from './redact';
 import type { BridgeEventInput, RelayMissionState } from './types';
-import type { CodingTerminalState } from '../src/relay/ui/app/contracts';
+import type { CodingTerminalState } from '../src/relay/mission/wire-contracts';
 
 export interface CodingHandoff {
   objective: string;

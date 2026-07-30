@@ -4,7 +4,7 @@
  *
  * The browser application (and the bridge behind it) predates the Mission
  * Operations status model. Its authoritative mission record is the coarse
- * `RelayMissionState` union in `src/relay/ui/app/contracts.ts`, with the
+ * `RelayMissionState` union in `src/relay/mission/wire-contracts.ts`, with the
  * coding-terminal status and the reviewer verdict alongside it. This module
  * maps that EXISTING state into `AqualaOutcomeStatus` without collapsing the
  * four dimensions and without inventing facts the old state never asserted:
@@ -30,7 +30,7 @@ import type {
   CodingTerminalStatus,
   MissionReview,
   RelayMissionState,
-} from '../../ui/app/contracts';
+} from '../wire-contracts';
 import type { MissionStatus, MissionVerdict } from '../contracts';
 import {
   applyStatusTransition,

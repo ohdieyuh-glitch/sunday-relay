@@ -59,12 +59,22 @@ function resolveImport(fromFile: string, spec: string): string | null {
   return null;
 }
 
-/** Every relative import of a file, resolved to an absolute path. */
+/**
+ * Every relative import of a file, resolved to an absolute path — including
+ * INLINE `import('…')`. The inline form carries no `from` clause, so a rule
+ * that only matched `from '…'` would miss
+ * `await import('../testing/factories')` entirely; this repository already
+ * treats that form as "a boundary evasion" where it bans it in yc/ below.
+ * `\s*` rather than `\s+` because `from'./x'` needs no space to compile.
+ */
+const IMPORT_SPECIFIER = /from\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
+
 function resolvedImportsOf(file: string): Array<{ spec: string; target: string }> {
   const out: Array<{ spec: string; target: string }> = [];
-  for (const m of read(file).matchAll(/from\s+['"]([^'"]+)['"]/g)) {
-    const target = resolveImport(file, m[1]);
-    if (target) out.push({ spec: m[1], target });
+  for (const m of read(file).matchAll(IMPORT_SPECIFIER)) {
+    const spec = m[1] ?? m[2];
+    const target = spec ? resolveImport(file, spec) : null;
+    if (target) out.push({ spec, target });
   }
   return out;
 }
@@ -75,6 +85,9 @@ const isInside = (target: string, dir: string): boolean =>
 
 /** The Node durable-persistence implementation root. */
 const NODE_PERSISTENCE_DIR = relay('persistence');
+
+/** The deterministic TEST FIXTURE root. Production code may never reach it. */
+const TEST_FIXTURE_DIR = relay('testing');
 
 const FORBIDDEN_EVERYWHERE: Array<[RegExp, string]> = [
   [/from\s+['"]@\/fusion-engine|from\s+['"].*\/fusion-engine/, 'fusion-engine'],
@@ -120,6 +133,23 @@ describe('relay-core boundary (new module roots)', () => {
     }
   });
 
+  it('no core production module imports the deterministic test fixtures', () => {
+    // `src/relay/testing` is reachable from main.tsx and therefore ships in the
+    // browser bundle. A production import of it drags the whole fixture surface
+    // in and makes factories.ts's own "tests and production never mix" claim
+    // false. Resolution is structural (real containment), so the rule survives
+    // a rename of the fixture module. Test files are exempt — that is what the
+    // fixtures are for — and fixtures importing their own root are skipped.
+    const offenders: string[] = [];
+    for (const file of files.filter((f) => !f.endsWith('.test.ts'))) {
+      if (isInside(file, TEST_FIXTURE_DIR)) continue;
+      for (const { spec, target } of resolvedImportsOf(file)) {
+        if (isInside(target, TEST_FIXTURE_DIR)) offenders.push(`${file} imports ${spec}`);
+      }
+    }
+    expect(offenders, 'production code must never import the test fixture module').toEqual([]);
+  });
+
   it('CLI is a thin client: only the app facade, read-model types, protocol, workspace facade, and its own modules', () => {
     // '../workspace' (the composition-root facade) is the ONLY workspace
     // import the CLI may use — internals are asserted below.
@@ -139,7 +169,13 @@ describe('relay-core boundary (new module roots)', () => {
     // modules the website carries. It is pure, browser-safe and provider-free,
     // so the product shell may consume it directly rather than growing a
     // second, divergent implementation of the same entitlement rules.
-    const PRODUCT_ALLOWED = /from\s+['"](\.\/[a-z-]+|\.\.\/\.\.\/(persistence|psp)|node:(fs|os|path|util))['"]/;
+    // `../../shared/<module>` is the BROWSER-SAFE SEAM, and it is allowed for
+    // exactly the same reason: the official Relay Dog sprite, states and
+    // parity manifest live there as ONE copy that both surfaces import, which
+    // is what makes a second mascot unrepresentable rather than merely
+    // checksummed. Only flat single-segment modules are reachable, so the
+    // product shell cannot walk into a nested CLI-shaped subtree there.
+    const PRODUCT_ALLOWED = /from\s+['"](\.\/[a-z-]+|\.\.\/\.\.\/(persistence|psp|shared\/[a-z-]+)|node:(fs|os|path|util))['"]/;
     const isProductFile = (f: string): boolean => f.includes(join('cli', 'product'));
     for (const file of walk(relay(CLI_ROOT)).filter((f) => !f.endsWith('.test.ts'))) {
       const content = read(file);

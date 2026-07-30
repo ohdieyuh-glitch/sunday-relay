@@ -1,10 +1,10 @@
 /**
  * SUNDAY RELAY — Relay Dog OPERATIONAL DECOR.
  *
- * The scenery that makes the three operational states readable without the
- * label: drifting Z marks while a review runs, a disturbed patch and flying
- * dirt while a repair digs, and a small editor whose code advances through four
- * experience levels while the coding agent writes.
+ * The scenery that makes the operational states readable without the label:
+ * drifting Z marks while a review runs, and a disturbed patch and flying dirt
+ * while a repair digs. Implementing draws no scenery — the dog's own typing
+ * pose carries the state.
  *
  * Rules this component keeps:
  *
@@ -23,11 +23,6 @@
  */
 
 import type { RelayDogActivityKind } from './dog-behavior';
-import {
-  CODE_PROGRESSION,
-  CODE_PROGRESSION_STATIC_LEVEL,
-  codeProgressionLevel,
-} from './code-progression';
 
 /** Fixed particle counts — restrained on purpose, and the same every render. */
 const SLEEP_MARKS = 3;
@@ -69,45 +64,14 @@ function RepairDecor({ reducedMotion }: { reducedMotion: boolean }) {
   );
 }
 
-/**
- * CODING — a compact editor. All four levels are rendered ONCE and CSS crossfades
- * between them, so advancing a level costs no React work and no DOM rewriting.
- * Under reduced motion a single level is rendered and nothing changes.
- */
-function CodingDecor({ reducedMotion }: { reducedMotion: boolean }) {
-  if (reducedMotion) {
-    const level = codeProgressionLevel(CODE_PROGRESSION_STATIC_LEVEL);
-    return (
-      <div className="rdo rdo--code rdo--code-static" aria-hidden="true">
-        <div className="rdo-editor">
-          <span className="rdo-editor-bar" />
-          <pre className="rdo-code">{level.lines.join('\n')}</pre>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="rdo rdo--code" aria-hidden="true">
-      <div className="rdo-editor">
-        <span className="rdo-editor-bar" />
-        {CODE_PROGRESSION.map((level) => (
-          <pre key={level.level} className={`rdo-code rdo-code--${level.level}`}>
-            {level.lines.join('\n')}
-          </pre>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function RelayDogOperationalDecor({
   activity,
   reducedMotion = false,
 }: RelayDogOperationalDecorProps) {
   if (activity === 'reviewing') return <ReviewDecor reducedMotion={reducedMotion} />;
   if (activity === 'repairing') return <RepairDecor reducedMotion={reducedMotion} />;
-  if (activity === 'implementing') return <CodingDecor reducedMotion={reducedMotion} />;
-  // Every other activity keeps exactly the scenery it had before: none.
+  // Every other activity, IMPLEMENTING included, keeps exactly the scenery it
+  // had before: none.
   return null;
 }
 
@@ -125,10 +89,6 @@ export const OPERATIONAL_ACTIVITY_DESCRIPTION: Partial<Record<RelayDogActivityKi
   repairing: 'Relay Dog is digging into the project to repair an issue.',
   implementing: 'Relay Dog is writing and implementing code.',
 };
-
-/** The longer coding description, offered when a surface wants the detail. */
-export const CODING_PROGRESSION_DESCRIPTION =
-  'Relay Dog is progressing from basic implementation to advanced system architecture.';
 
 export function operationalActivityDescription(activity: RelayDogActivityKind): string | null {
   return OPERATIONAL_ACTIVITY_DESCRIPTION[activity] ?? null;

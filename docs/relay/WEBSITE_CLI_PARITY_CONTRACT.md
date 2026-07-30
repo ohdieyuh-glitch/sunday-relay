@@ -305,16 +305,21 @@ rather than being written twice. Two shapes appear below, and the table says
 which is which:
 
 - **one implementation, imported twice** — the capability registry, the PSP
-  domain and Mission Economics. Nothing to mirror;
-- **two byte-identical copies, checksum-proven** — the Relay Dog sprite and
-  states, which each surface renders in its own medium (DOM and terminal) and
-  which are asserted equal by digest.
+  domain, Mission Economics, and the Relay Dog sprite + states. Nothing to
+  mirror: each surface renders the same module in its own medium (DOM and
+  terminal), so there is no second copy that could diverge;
+- **two byte-identical copies, checksum-proven** — no domain is carried this
+  way any more. The Relay Dog was the last one, and it was de-duplicated into
+  `src/relay/shared/`.
 
 | Domain | Location | Parity proof |
 |---|---|---|
-| Official Relay Dog sprite + states | website `src/relay/ui/official-relay-dog/`, CLI `src/relay/cli/product/` | `OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS` |
+| Official Relay Dog sprite + states | `src/relay/shared/` — both surfaces' barrels re-export it | by construction: one module. Each surface's parity suite asserts its barrel resolves here and holds no local copy |
 | PSP Agent ID entitlement + import | `src/relay/psp/` in both | `PSP_DOMAIN_CHECKSUMS` |
 | Capability registry | `src/relay/parity/` in both | manifest version + checksum |
 
-Each repository hashes its own copies and asserts the shared manifest, so a
-change on one surface that is not mirrored on the other fails immediately.
+Where a domain still exists as two copies, each repository hashes its own and
+asserts the shared manifest, so a change on one surface that is not mirrored on
+the other fails immediately. Where a domain is a single shared module — as the
+Relay Dog now is — there is nothing to hash: the module graph is the proof, and
+`OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS` no longer exists.

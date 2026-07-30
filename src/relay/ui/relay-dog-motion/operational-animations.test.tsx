@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { RelayDogMotionBoundary } from './RelayDogMotionBoundary';
 import { RelayDogOperationalDecor, operationalActivityDescription } from './RelayDogOperationalDecor';
-import { CODE_PROGRESSION, CODE_PROGRESSION_SECONDS, CODE_PROGRESSION_STATIC_LEVEL } from './code-progression';
 import { projectWorkspaceDogBehavior } from './dog-behavior';
 import { RelayPixelDog } from '../pixel-dog';
 import { DOG_PRESENTATION } from '../project-workspace/projections';
@@ -18,7 +17,7 @@ import type { WorkspaceDogState } from '../project-workspace/contracts';
 
 /**
  * Relay Dog OPERATIONAL ANIMATIONS — reviewing sleeps, repairing digs, coding
- * writes progressively more advanced work.
+ * types at the keys with no code panel beside it.
  *
  * The load-bearing assertions here are the TRUTHFULNESS ones. An animation is
  * allowed to be charming; it is never allowed to say that a review approved,
@@ -243,7 +242,7 @@ describe('REPAIRING — the dog digs', () => {
 
 /* ================================================================= CODING */
 
-describe('CODING — the dog writes progressively more advanced code', () => {
+describe('CODING — the dog types at the keys, with no code panel', () => {
   it('maps implementing to the coding pose on both the state and the activity', () => {
     expect(DOG_PRESENTATION.implementing.pose).toBe('coding');
     const view = officialRelayDogViewForState('implementing');
@@ -252,120 +251,63 @@ describe('CODING — the dog writes progressively more advanced code', () => {
     expect(view.motion).toBe('code_progression');
   });
 
-  it('renders the dog at a keyboard with an editor', () => {
+  it('renders the dog at a keyboard, still typing', () => {
     const html = renderState('implementing');
     expect(html).toContain('rdm-body--implementing');
     expect(html).toContain('rpd--coding');
-    expect(html).toContain('rdo--code');
-    expect(html).toContain('rdo-editor');
     expect(css).toContain('@keyframes rdm-code-type');
+    expect(css).toContain('@keyframes rdm-code-paws');
   });
 
-  it('has FOUR named experience levels, in order, basic to architecture', () => {
-    expect(CODE_PROGRESSION.map((l) => l.level)).toEqual([
-      'basic',
-      'intermediate',
-      'advanced',
-      'architecture',
-    ]);
-    expect(CODE_PROGRESSION.map((l) => l.step)).toEqual([1, 2, 3, 4]);
-  });
-
-  it('each level is visibly more advanced than the one before it', () => {
-    const [basic, intermediate, advanced, architecture] = CODE_PROGRESSION;
-    // Basic: a variable and a simple condition.
-    expect(basic.lines.join('\n')).toMatch(/const|if \(/);
-    // Intermediate: types and a function.
-    expect(intermediate.lines.join('\n')).toMatch(/interface/);
-    expect(intermediate.lines.join('\n')).toMatch(/function/);
-    // Advanced: assertions and evidence.
-    expect(advanced.lines.join('\n')).toMatch(/assert/);
-    expect(advanced.lines.join('\n')).toMatch(/Trace|trace/);
-    // Architecture: the pipeline, not a single file.
-    expect(architecture.lines.join('\n')).toContain('PROMPT ARCHITECT');
-    expect(architecture.lines.join('\n')).toContain('REVIEWER');
-    expect(architecture.lines.join('\n')).toContain('RELEASE GATE');
-    // Later levels carry more structure than the first.
-    expect(advanced.lines.length).toBeGreaterThan(basic.lines.length);
-  });
-
-  it('renders every level at once and crossfades — no DOM rewriting per frame', () => {
-    const html = decor('implementing');
-    for (const level of CODE_PROGRESSION) {
-      expect(html, `${level.level} is not rendered`).toContain(`rdo-code--${level.level}`);
+  /**
+   * The founder removed the code panel that used to sit beside the dog. The
+   * dog stayed; the panel did not. These are the assertions that keep it gone
+   * — a decorative surface that draws code is exactly the kind of thing that
+   * grows back.
+   */
+  it('draws NO code panel: no editor, no code lines, no progression module', () => {
+    for (const reducedMotion of [false, true]) {
+      const html = renderState('implementing', reducedMotion);
+      for (const hook of ['rdo--code', 'rdo--code-static', 'rdo-editor', 'rdo-code']) {
+        expect(html, `implementing still renders "${hook}"`).not.toContain(hook);
+      }
     }
-    // The level change is pure CSS opacity, with a staggered delay per level.
-    expect(css).toContain('@keyframes rdo-code-level');
-    expect(css).toMatch(/\.rdo-code--intermediate\s*\{\s*animation-delay:\s*3s/);
-    expect(css).toMatch(/\.rdo-code--architecture\s*\{\s*animation-delay:\s*9s/);
+    // The decor renders nothing at all for implementing.
+    expect(decor('implementing')).toBe('');
+    expect(decor('implementing', true)).toBe('');
+    // No orphan styles or keyframes left behind to revive it.
+    for (const hook of [
+      'rdo--code',
+      'rdo-editor',
+      'rdo-code',
+      '@keyframes rdo-code-level',
+    ]) {
+      expect(css, `dead style "${hook}" survives`).not.toContain(hook);
+    }
+    expect(existsSync(join(dir, 'code-progression.ts')), 'code-progression.ts survives').toBe(false);
+    const decorSource = readFileSync(join(dir, 'RelayDogOperationalDecor.tsx'), 'utf8');
+    expect(decorSource).not.toContain('code-progression');
+    expect(readFileSync(join(dir, 'index.ts'), 'utf8')).not.toContain('code-progression');
   });
 
-  it('keeps the whole progression loop inside 8-15s', () => {
-    expect(CODE_PROGRESSION_SECONDS).toBeGreaterThanOrEqual(8);
-    expect(CODE_PROGRESSION_SECONDS).toBeLessThanOrEqual(15);
-    expect(css).toMatch(/animation:\s*rdo-code-level\s+12s/);
-  });
-
-  it('the levels are VISUAL ONLY — no level changes or completes mission state', () => {
+  it('the coding state is VISUAL ONLY — it never completes mission state', () => {
     const html = renderState('implementing');
     expect(html).toContain('IMPLEMENTING');
     for (const word of OUTCOME_WORDS) {
       expect(html, `coding must not render "${word}"`).not.toContain(word);
     }
     expect(html).not.toContain('rpd-marker--check');
-    // Showing a RELEASE GATE node draws the pipeline; it grants nothing.
-    const source = readFileSync(join(dir, 'code-progression.ts'), 'utf8');
-    expect(source).not.toMatch(/import .* from '\.\.\/\.\.\/mission/);
-    expect(source).not.toMatch(/\bimport\b/);
     const sentence = operationalActivityDescription('implementing');
     expect(sentence).toBe('Relay Dog is writing and implementing code.');
     expect(sentence).not.toMatch(/complete|finished|done|verified/i);
   });
 
-  it('the visual code contains NO credential-shaped string and no real key', () => {
-    const all = CODE_PROGRESSION.flatMap((l) => l.lines).join('\n');
-    const FORBIDDEN = [
-      /sk-[A-Za-z0-9]{8,}/,
-      /sk-ant-/,
-      /sk_(live|test)_/,
-      /AIza[0-9A-Za-z_-]{10,}/,
-      /gh[pousr]_[A-Za-z0-9]{10,}/,
-      /AKIA[0-9A-Z]{8,}/,
-      /npm_[A-Za-z0-9]{10,}/,
-      /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
-      /eyJ[A-Za-z0-9_-]{10,}\./,
-      /xox[baprs]-/,
-      /API_KEY|SECRET|PASSWORD|TOKEN|CREDENTIAL/i,
-      /Bearer\s+\S+/,
-      /https?:\/\//,
-      /process\.env/,
-    ];
-    for (const pattern of FORBIDDEN) {
-      expect(pattern.test(all), `visual code matched ${pattern}`).toBe(false);
-    }
-  });
-
-  it('the visual code is illustrative — never the user project source', () => {
-    const source = readFileSync(join(dir, 'code-progression.ts'), 'utf8');
-    // No filesystem, no fetch, no dynamic content: the lines are literals.
-    expect(source).not.toContain('readFileSync');
-    expect(source).not.toContain('fetch(');
-    expect(source).not.toContain('node:fs');
-    expect(source).not.toContain('import(');
-  });
-
-  it('reduced motion renders ONE static composition, not a changing editor', () => {
+  it('reduced motion holds a STATIC coding pose', () => {
     const html = renderState('implementing', true);
     expect(html).toContain('rdm--reduced');
     expect(html).toContain('rpd--coding');
-    expect(html).toContain('rdo--code-static');
-    // Exactly one level block, and it is the representative one.
-    expect((html.match(/rdo-code/g) ?? []).length).toBeGreaterThan(0);
-    for (const level of CODE_PROGRESSION) {
-      if (level.level === CODE_PROGRESSION_STATIC_LEVEL) continue;
-      expect(html).not.toContain(`rdo-code--${level.level}`);
-    }
-    expect(css).toMatch(/\.rdo--code-static \.rdo-code\s*\{[^}]*animation:\s*none/s);
+    // The reduced-motion fallback label still names the state in words.
+    expect(html).toContain(projectWorkspaceDogBehavior('implementing').reducedMotionFallback);
   });
 });
 
@@ -421,7 +363,7 @@ describe('OFFICIAL RELAY DOG identity survives all three states', () => {
    */
   it('the PSP recolour seam still reaches all three new poses', () => {
     const sprite = readFileSync(
-      join(dir, '..', 'official-relay-dog', 'official-relay-dog-sprite.ts'),
+      join(dir, '..', '..', 'shared', 'official-relay-dog-sprite.ts'),
       'utf8',
     );
     // Poses are PIXEL KEYS, never colours: a pose grid may only contain the
@@ -439,7 +381,7 @@ describe('OFFICIAL RELAY DOG identity survives all three states', () => {
   });
 
   it('the animation never touches agent identity or mission facts', () => {
-    for (const file of ['RelayDogOperationalDecor.tsx', 'code-progression.ts', 'RelayDogMotionBoundary.tsx']) {
+    for (const file of ['RelayDogOperationalDecor.tsx', 'RelayDogMotionBoundary.tsx']) {
       const source = readFileSync(join(dir, file), 'utf8');
       for (const forbidden of [
         'actualAgentId',
@@ -449,8 +391,8 @@ describe('OFFICIAL RELAY DOG identity survives all three states', () => {
         'budget',
         'pspId',
       ]) {
-        // `code-progression.ts` may DISPLAY the words as illustrative text, so
-        // only assignment/call shapes are forbidden.
+        // Only assignment/call shapes are forbidden — the animation may name a
+        // concept in a comment, it may never write one.
         expect(
           new RegExp(`${forbidden}\\s*[=:]\\s*[^\\s]`).test(source)
             && !source.includes('lines:'),
@@ -481,7 +423,7 @@ describe('REGRESSION — untouched states stay untouched', () => {
     }
   });
 
-  it('only the three operational states gained scenery', () => {
+  it('only reviewing and repairing carry scenery — no other state does', () => {
     for (const state of [
       'wandering', 'trotting', 'researching', 'carrying_handoff',
       'verifying', 'waiting_for_user', 'complete', 'stopped_safely',
@@ -537,7 +479,7 @@ describe('REGRESSION — untouched states stay untouched', () => {
     const names = [
       'rdm-sleep-breathe', 'rdm-sleep-twitch', 'rdo-z-drift',
       'rdm-dig-lunge', 'rdm-dig-paws', 'rdo-clod-fly',
-      'rdm-code-type', 'rdm-code-paws', 'rdo-code-level',
+      'rdm-code-type', 'rdm-code-paws',
       'rdm-enter-sleep', 'rdm-enter-dig', 'rdm-enter-code',
     ];
     for (const name of names) {
@@ -552,11 +494,11 @@ describe('REGRESSION — untouched states stay untouched', () => {
     // positioned inside it and clipped too.
     expect(css).toMatch(/\.rdm\s*\{[^}]*overflow-x:\s*hidden/s);
     expect(css).toMatch(/\.rdo\s*\{[^}]*overflow:\s*hidden/s);
-    // A phone breakpoint keeps the editor and the code legible rather than
-    // letting them shrink without bound.
+    // A phone breakpoint keeps the remaining scenery legible rather than
+    // letting it shrink without bound.
     expect(css).toContain('@media (max-width: 480px)');
     const phone = css.slice(css.indexOf('@media (max-width: 480px)'));
-    expect(phone).toContain('.rdo--code .rdo-editor');
+    expect(phone).toContain('.rdo--sleep .rdo-z');
     expect(phone).toMatch(/font-size:\s*[\d.]+px/);
   });
 });

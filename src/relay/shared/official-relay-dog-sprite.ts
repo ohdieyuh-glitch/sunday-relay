@@ -1,9 +1,11 @@
 /**
- * OFFICIAL RELAY DOG — the canonical sprite, shared verbatim by every surface.
+ * OFFICIAL RELAY DOG — the canonical sprite, the ONE copy every surface draws.
  *
- * Sunday Relay has ONE official Relay Dog. This module is the byte-identical
- * asset carried by both the Sunday Relay website/application and the Sunday
- * Relay CLI/terminal, so the two surfaces can never drift into two mascots.
+ * Sunday Relay has ONE official Relay Dog, and this is its single canonical
+ * asset. It lives in src/relay/shared — the browser-safe seam — and the Sunday
+ * Relay website/application and the Sunday Relay CLI/terminal both import THIS
+ * file. There is no second copy to drift from, so two mascots are not merely
+ * policed after the fact: they are unrepresentable.
  *
  * The official dog is the compact FRONT-FACING voxel companion: upright
  * rectangular ears, a block head, a dark charcoal visor band across the face

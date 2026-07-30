@@ -2,7 +2,7 @@ import {
   OFFICIAL_RELAY_DOG_ACTIVITY_MOTION,
   OFFICIAL_RELAY_DOG_TRAVELLING_MOTIONS,
   projectOfficialRelayDogActivity,
-} from './official-relay-dog-states';
+} from '../../shared/official-relay-dog-states';
 
 /**
  * Relay CLI product contracts (Prompt 8.6) — PURE view-model types for the

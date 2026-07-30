@@ -7,6 +7,9 @@ import type {
   ReviewerVerdictRecord, RevisionContract, TaskAssignment, UsageRecord,
   VerificationRecord,
 } from '../protocol/contracts';
+// Value import, deliberately NOT re-exported: the condition set is owned by the
+// protocol contract that pins it, and fixtures consume it like anything else.
+import { FIFTEEN_CONDITIONS } from '../protocol/contracts';
 import type { Provenance, ReportType, Role } from '../protocol/enums';
 
 /**
@@ -188,13 +191,6 @@ export function makeVerdict(
     ...overrides,
   };
 }
-
-export const FIFTEEN_CONDITIONS = [
-  'objective-evidence', 'narrow-unambiguous', 'same-agent-session', 'inside-task-objective',
-  'inside-file-claims', 'no-protected-file', 'no-new-permission', 'no-destructive-command',
-  'no-deployment', 'no-new-dependency', 'no-new-credentials', 'within-budget',
-  'no-budget-warning-checkpoint', 'no-unresolved-decision', 'no-conflict-with-canonical-decision',
-] as const;
 
 export function makeRevisionContract(
   overrides: Partial<RevisionContract> = {},

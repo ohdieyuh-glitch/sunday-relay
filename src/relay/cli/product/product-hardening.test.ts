@@ -7,7 +7,7 @@ import { parseCli } from '../main';
 import { safeText } from './safety';
 import { visibleLength, divider } from './layout';
 import { footerDog, headerLogo, OFFICIAL_DOG_COLUMNS, OFFICIAL_DOG_ROWS } from './dog';
-import { OFFICIAL_RELAY_DOG_TERMINAL_TONE } from './official-relay-dog-sprite';
+import { OFFICIAL_RELAY_DOG_TERMINAL_TONE } from '../../shared/official-relay-dog-sprite';
 import { parseKeys } from './shell';
 import { detectCaps, paint } from './theme';
 import { renderHeader, renderMissionConsole, renderPanel } from './renderer';

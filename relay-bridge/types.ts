@@ -1,13 +1,15 @@
 /**
- * Bridge wire types. The response shape is the browser's own
- * `LiveMissionUpdate` (imported type-only, so the wire and the store can
- * never drift). `BridgeEventInput` is what the orchestration emits before the
- * mission assigns a monotonic sequence + timestamp.
+ * Bridge wire types. The response shape is the shared mission wire contract
+ * `LiveMissionUpdate` (imported type-only, so the wire and the browser store
+ * can never drift — both read the same declaration). `BridgeEventInput` is
+ * what the orchestration emits before the mission assigns a monotonic
+ * sequence + timestamp.
  */
 
 import type {
   CodingTerminalLine,
   CodingTerminalState,
+  EventTruthClass,
   LiveMissionUpdate,
   MissionArchitectReceipt,
   MissionAttestationSummary,
@@ -19,8 +21,8 @@ import type {
   MissionReviewFinding,
   MissionRole,
   RelayMissionState,
-} from '../src/relay/ui/app/contracts';
-import type { EventTruthClass, TerminalEventCategory } from '../src/relay/ui/project-workspace/contracts';
+  TerminalEventCategory,
+} from '../src/relay/mission/wire-contracts';
 
 export type { LiveMissionUpdate, MissionClaim, MissionError, MissionHandoff, MissionRole, RelayMissionState };
 export type { MissionArchitectReceipt, MissionAttestationSummary, MissionPhase, MissionReview, MissionReviewFinding };

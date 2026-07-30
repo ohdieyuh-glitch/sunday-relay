@@ -1,6 +1,6 @@
 import type { RelayRun, RelayTask, ReviewerVerdictRecord, VerificationRecord } from '../protocol/contracts';
+import { FIFTEEN_CONDITIONS } from '../protocol/contracts';
 import type { BudgetDecision } from '../verification/budget';
-import { FIFTEEN_CONDITIONS } from '../testing/factories';
 
 /**
  * Guided Mode one-repair decision (Prompt 3, Decision 4 / RELAY_MVP_SPEC §6).

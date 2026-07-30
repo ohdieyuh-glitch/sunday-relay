@@ -293,82 +293,24 @@
   animation: rdm-code-paws 0.3s steps(2, end) infinite;
 }
 
-/* The editor. Fixed size, its own scroll container, never grows the page. */
-.rdo--code .rdo-editor {
-  position: absolute;
-  right: 2%;
-  top: 6%;
-  width: 58%;
-  max-width: 190px;
-  height: 74%;
-  padding: 10px 6px 4px;
-  background: #14161b;
-  border: 1px solid #2b2f38;
-  border-radius: 3px;
-  overflow: hidden;
-}
-.rdo--code .rdo-editor-bar {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 6px;
-  background: #23262e;
-}
-
-/* All four levels are rendered once and stacked; CSS crossfades between them.
-   12s total (4 x 3s), inside the approved 8–15s band. Only `opacity` animates,
-   so no level ever reflows the editor. */
-.rdo--code .rdo-code {
-  position: absolute;
-  left: 6px;
-  top: 10px;
-  right: 4px;
-  margin: 0;
-  font-family: 'Fira Code', ui-monospace, monospace;
-  font-size: 6px;
-  line-height: 1.5;
-  white-space: pre;
-  color: #b9c4d6;
-  opacity: 0;
-  animation: rdo-code-level 12s linear infinite;
-}
-@keyframes rdo-code-level {
-  0%, 22% { opacity: 1; }
-  25%, 97% { opacity: 0; }
-  100% { opacity: 1; }
-}
-.rdo--code .rdo-code--basic { animation-delay: 0s; }
-.rdo--code .rdo-code--intermediate { animation-delay: 3s; }
-.rdo--code .rdo-code--advanced { animation-delay: 6s; }
-.rdo--code .rdo-code--architecture { animation-delay: 9s; color: #cbb887; }
-
-/* The reduced-motion editor renders one level, always visible. */
-.rdo--code-static .rdo-code {
-  opacity: 1;
-  animation: none;
-}
+/* IMPLEMENTING draws no scenery: the typing pose above is the whole state. */
 
 /* ------------------------------------------------------ reduced motion */
 
 /* Every operational loop stops. The POSES still read — a curled dog with one
-   still Z, a forward-leaning dog at a static mound, a seated dog at a static
-   editor — so the state is legible without any movement at all. */
+   still Z, a forward-leaning dog at a static mound, a seated dog at the keys —
+   so the state is legible without any movement at all. */
 .rdm--reduced .rdm-body--reviewing,
 .rdm--reduced .rdm-body--reviewing .rpd-art,
 .rdm--reduced .rdm-body--repairing,
 .rdm--reduced .rdm-body--repairing .rpd-art,
 .rdm--reduced .rdo-z,
-.rdm--reduced .rdo-clod,
-.rdm--reduced .rdo-code {
+.rdm--reduced .rdo-clod {
   animation: none;
 }
 .rdm--reduced .rdo-z {
   opacity: 0.8;
   transform: translate(4px, -10px);
-}
-.rdm--reduced .rdo-code {
-  opacity: 1;
 }
 /* Held mid-dig so the pose still reads as digging, not standing. */
 .rdm--reduced .rdm-body--repairing {
@@ -381,16 +323,12 @@
   .rdm-body--repairing,
   .rdm-body--repairing .rpd-art,
   .rdo-z,
-  .rdo-clod,
-  .rdo-code {
+  .rdo-clod {
     animation: none;
   }
   .rdo-z {
     opacity: 0.8;
     transform: translate(4px, -10px);
-  }
-  .rdo-code {
-    opacity: 1;
   }
   .rdm-body--repairing {
     transform: translateY(1.5px) rotate(-1.2deg);
@@ -399,18 +337,9 @@
 
 /* ------------------------------------------------------------ responsive */
 
-/* Phones: the editor would crowd the dog, so it narrows and the code holds a
-   legible floor size rather than shrinking into illegibility. */
+/* Phones: the sleep mark holds a legible floor size rather than shrinking
+   into illegibility. */
 @media (max-width: 480px) {
-  .rdo--code .rdo-editor {
-    width: 52%;
-    max-width: 132px;
-    height: 70%;
-  }
-  .rdo--code .rdo-code {
-    font-size: 5px;
-    line-height: 1.45;
-  }
   .rdo--sleep .rdo-z {
     font-size: 9px;
   }

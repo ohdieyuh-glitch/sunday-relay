@@ -43,17 +43,6 @@ export {
 export {
   RelayDogOperationalDecor,
   OPERATIONAL_ACTIVITY_DESCRIPTION,
-  CODING_PROGRESSION_DESCRIPTION,
   operationalActivityDescription,
   type RelayDogOperationalDecorProps,
 } from './RelayDogOperationalDecor';
-export {
-  CODE_EXPERIENCE_LEVELS,
-  CODE_PROGRESSION,
-  CODE_LEVEL_SECONDS,
-  CODE_PROGRESSION_SECONDS,
-  CODE_PROGRESSION_STATIC_LEVEL,
-  codeProgressionLevel,
-  type CodeExperienceLevel,
-  type CodeProgressionLevel,
-} from './code-progression';

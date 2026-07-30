@@ -16,7 +16,7 @@ import {
 } from './status-model';
 import type { AqualaOutcomeStatus, AqualaReleasePolicy } from './status-model';
 import type { MissionStatus, MissionVerdict } from '../contracts';
-import type { CodingTerminalStatus, MissionReview, RelayMissionState } from '../../ui/app/contracts';
+import type { CodingTerminalStatus, MissionReview, RelayMissionState } from '../wire-contracts';
 
 /**
  * Compatibility adapter tests. The core property: every legacy state maps to

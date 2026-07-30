@@ -1,6 +1,5 @@
 /** @vitest-environment jsdom */
-import { readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
@@ -16,7 +15,7 @@ import {
   OFFICIAL_RELAY_DOG_POSES,
   OFFICIAL_RELAY_DOG_POSE_NAMES,
   OFFICIAL_RELAY_DOG_WIDTH,
-} from './official-relay-dog-sprite';
+} from '../../shared/official-relay-dog-sprite';
 import {
   OFFICIAL_HOME_DOG_STATES,
   OFFICIAL_HOME_STATE_ACTIVITY,
@@ -25,22 +24,23 @@ import {
   officialRelayDogBehavior,
   officialRelayDogViewForState,
   projectOfficialRelayDogActivity,
-} from './official-relay-dog-states';
+} from '../../shared/official-relay-dog-states';
+import { RETIRED_SIDE_PROFILE_DOG_MARKERS } from '../../shared/official-relay-dog-parity';
 import {
-  OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS,
-  OFFICIAL_RELAY_DOG_ASSET_NAMES,
-} from './official-relay-dog-parity';
+  OFFICIAL_RELAY_DOG_POSES as BARREL_POSES,
+  RETIRED_SIDE_PROFILE_DOG_MARKERS as BARREL_MARKERS,
+} from '.';
 
 /**
  * OFFICIAL RELAY DOG — website parity suite.
  *
  * The website's RelayPixelDog is the canonical RENDERER and Milestone 4.5 is
- * the canonical MOTION SYSTEM. This suite proves the shared, byte-identical
- * modules the CLI also carries still describe exactly what the website draws
- * and means. If either side moves without the other, this fails.
+ * the canonical MOTION SYSTEM. This suite proves the shared modules the CLI
+ * also imports still describe exactly what the website draws and means. If
+ * either side moves without the other, this fails.
  */
 
-const dir = join(process.cwd(), 'src', 'relay', 'ui', 'official-relay-dog');
+const barrelDir = join(process.cwd(), 'src', 'relay', 'ui', 'official-relay-dog');
 
 afterEach(cleanup);
 
@@ -70,12 +70,32 @@ function renderedGrid(pose: (typeof OFFICIAL_RELAY_DOG_POSE_NAMES)[number]): str
 /* --------------------------- shared asset ----------------------------- */
 
 describe('official Relay Dog — shared asset integrity', () => {
-  it('every shared module matches the cross-surface checksum', () => {
-    for (const name of OFFICIAL_RELAY_DOG_ASSET_NAMES) {
-      const digest = createHash('sha256').update(readFileSync(join(dir, name))).digest('hex');
-      expect(digest, `${name} diverged from the shared official Relay Dog asset`)
-        .toBe(OFFICIAL_RELAY_DOG_ASSET_CHECKSUMS[name]);
+  /**
+   * Identity used to be proved by hashing two hand-copied duplicates. It is
+   * now proved by CONSTRUCTION: there is ONE copy of the sprite, the states
+   * and the manifest, in src/relay/shared, and this barrel only re-exports it.
+   * These assertions are what make a future re-fork into per-surface copies
+   * fail immediately instead of silently reintroducing the drift risk.
+   */
+  it('the website barrel re-exports the SHARED modules, with no local copy', () => {
+    const barrel = readFileSync(join(barrelDir, 'index.ts'), 'utf8');
+    for (const module of ['sprite', 'states', 'parity']) {
+      expect(barrel, `the barrel must take official-relay-dog-${module} from src/relay/shared`)
+        .toContain(`from '../../shared/official-relay-dog-${module}'`);
+      expect(barrel, `the barrel re-forked a local official-relay-dog-${module}`)
+        .not.toContain(`from './official-relay-dog-${module}'`);
+      expect(
+        existsSync(join(barrelDir, `official-relay-dog-${module}.ts`)),
+        `a website-local copy of official-relay-dog-${module}.ts came back`,
+      ).toBe(false);
     }
+  });
+
+  it('the barrel exports the very same objects the shared module defines', () => {
+    // Reference identity, not deep equality: two copies could be equal, but
+    // only one module can be the same object.
+    expect(BARREL_POSES).toBe(OFFICIAL_RELAY_DOG_POSES);
+    expect(BARREL_MARKERS).toBe(RETIRED_SIDE_PROFILE_DOG_MARKERS);
   });
 });
 

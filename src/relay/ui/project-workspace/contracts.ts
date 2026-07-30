@@ -10,6 +10,8 @@
  * and never mutates Relay Core.
  */
 
+import type { EventTruthClass, TerminalEventCategory } from '../../mission/wire-contracts';
+
 /* ----------------------------------------------------------------- modes */
 
 export type RelayWorkspaceMode = 'guided' | 'semi' | 'autonomous' | 'demo_simulation';
@@ -124,30 +126,11 @@ export interface ProjectMessage {
 
 /* ------------------------------------------------------------- terminal */
 
-export type TerminalEventCategory =
-  | 'relay'
-  | 'prompt_architect'
-  | 'research'
-  | 'coding_agent'
-  | 'workspace_inspection'
-  | 'verification'
-  | 'reviewer'
-  | 'repair'
-  | 'manual_task'
-  | 'completion_engine'
-  | 'security'
-  | 'system';
-
-/**
- * Truthfulness class — the terminal must never present an agent's statement
- * with the same visual weight as Relay's own evidence.
- */
-export type EventTruthClass =
-  | 'agent_claim'
-  | 'relay_evidence'
-  | 'review_verdict'
-  | 'user_action_required'
-  | 'system_notice';
+/** The event category and truth class are DOMAIN vocabulary, not workspace
+    presentation: `RelayEvent` on the wire is described by the same two unions,
+    so they are declared in `mission/wire-contracts` and re-exported here. The
+    re-export keeps every existing `from './contracts'` import site working. */
+export type { EventTruthClass, TerminalEventCategory } from '../../mission/wire-contracts';
 
 export interface WorkspaceTerminalEvent {
   eventId: string;
