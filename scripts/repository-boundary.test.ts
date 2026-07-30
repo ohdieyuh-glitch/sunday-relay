@@ -119,11 +119,14 @@ describe('relay repository-boundary scanner', () => {
     expect(result.code, result.output).toBe(0);
   });
 
-  it('honours an explicit per-line allow-fixture annotation', () => {
+  it('honours a per-occurrence allow-fixture annotation on an obviously synthetic value', () => {
+    // The annotation exists for a value whose SHAPE cannot carry a marker
+    // word. It is honoured only in a test/fixture file, only for this
+    // occurrence, and only because the value is visibly non-random.
     const result = scan({
       ...baseline(),
       'src/relay/fixture.test.ts':
-        `export const k = '${fake(SK + 'proj-', 'abc123XYZ789qrsTUV456defGHI0mnoPQR')}'; // relay-boundary:allow-fixture\n`,
+        `export const k = '${fake('AKIA', 'QQQQQQQQQQQQQQQQ')}'; // relay-boundary:allow-fixture\n`,
     });
     expect(result.code, result.output).toBe(0);
   });
@@ -225,7 +228,12 @@ describe('relay repository-boundary scanner', () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain('NOT universal secret detection');
     expect(result.stdout).toMatch(/no committed credential matching \d+ known key\/token shapes/);
-    expect(result.stdout).toMatch(/no active deployment command in any workflow \(\d+ behaviours checked\)/);
+    // The banner names every surface actually read, so "no active deployment
+    // command" can never be printed about a surface that was not scanned.
+    expect(result.stdout).toMatch(
+      /no active deployment command in package scripts, shell wrappers or \.github workflows \(\d+ behaviours \+ any deployment action\)/,
+    );
+    expect(result.stdout).toContain('per occurrence, only in test/fixture files');
     expect(result.stdout).toMatch(/forbidden path patterns/);
     // The old banner asserted an absolute that the rules cannot support.
     expect(result.stdout).not.toContain('no deployment step in CI.');
@@ -279,7 +287,7 @@ describe('relay parity gate', () => {
   it('registry present and script missing FAILS', () => {
     const result = gateTree({ registry: true, checker: true, scripts: false, surfaces: true });
     expect(result.code, result.output).toBe(1);
-    expect(result.output).toContain('npm script(s) missing');
+    expect(result.output).toContain('npm script(s) unusable');
   });
 
   it('script present and registry missing FAILS', () => {

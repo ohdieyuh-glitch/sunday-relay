@@ -22,7 +22,7 @@ import { buildCodingTerminalView } from '../src/relay/ui/project-workspace/codin
 
 const LIVE_ENV: NodeJS.ProcessEnv = {
   RELAY_PROMPT_ARCHITECT_MODE: 'live',
-  OPENAI_API_KEY: 'sk-test-value-never-serialized', // relay-boundary:allow-fixture — synthetic, asserts it is never serialized
+  OPENAI_API_KEY: 'sk-FAKETESTNOTREAL-never-served', // relay-boundary:allow-fixture — synthetic, asserts it is never serialized
   OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-test',
 };
 const FUSION_ENV: NodeJS.ProcessEnv = { RELAY_PROMPT_ARCHITECT_MODE: 'fusion' };
