@@ -413,6 +413,31 @@ describe('OFFICIAL RELAY DOG identity survives all three states', () => {
     }
   });
 
+  /**
+   * PSP colourway customization is a documented FUTURE capability: a PSP may
+   * eventually override `OFFICIAL_RELAY_DOG_PALETTE`, and every pose must
+   * recolour with it. Three new poses are three new chances to hardcode a
+   * colour and quietly break that seam, so the seam is asserted directly.
+   */
+  it('the PSP recolour seam still reaches all three new poses', () => {
+    const sprite = readFileSync(
+      join(dir, '..', 'official-relay-dog', 'official-relay-dog-sprite.ts'),
+      'utf8',
+    );
+    // Poses are PIXEL KEYS, never colours: a pose grid may only contain the
+    // palette's key letters, so recolouring the palette recolours every pose.
+    for (const pose of ['sleeping', 'digging', 'coding'] as const) {
+      for (const row of OFFICIAL_RELAY_DOG_POSES[pose]) {
+        expect(/^[.wsdyc]+$/.test(row), `${pose} row "${row}" is not pure palette keys`).toBe(true);
+        expect(row, `${pose} hardcodes a colour`).not.toMatch(/#[0-9a-f]{3,6}/i);
+      }
+    }
+    // And there is exactly ONE palette to override.
+    expect(sprite).toContain('OFFICIAL_RELAY_DOG_PALETTE');
+    const paletteCount = (sprite.match(/OFFICIAL_RELAY_DOG_PALETTE\s*[:=]/g) ?? []).length;
+    expect(paletteCount, 'more than one palette definition would fork the identity').toBeLessThanOrEqual(1);
+  });
+
   it('the animation never touches agent identity or mission facts', () => {
     for (const file of ['RelayDogOperationalDecor.tsx', 'code-progression.ts', 'RelayDogMotionBoundary.tsx']) {
       const source = readFileSync(join(dir, file), 'utf8');
@@ -500,6 +525,26 @@ describe('REGRESSION — untouched states stay untouched', () => {
     expect(decorSource).not.toContain('useState');
     // Real canvas/WebGL USAGE, not the word in a comment.
     expect(decorSource).not.toMatch(/<canvas|getContext\(|WebGL/);
+    // No video and no raster animation, at any size.
+    expect(decorSource).not.toMatch(/<video|<img|\.gif|\.mp4|\.webm/i);
+    expect(css).not.toMatch(/url\([^)]*\.(gif|mp4|webm|png|jpe?g)/i);
+  });
+
+  it('every operational keyframe animates only compositor properties', () => {
+    // transform/opacity are composited; width/height/top/left/margin force
+    // layout on every frame, which is what makes a decorative loop expensive.
+    const LAYOUT = /\b(width|height|top|left|right|bottom|margin|padding|font-size)\s*:/;
+    const names = [
+      'rdm-sleep-breathe', 'rdm-sleep-twitch', 'rdo-z-drift',
+      'rdm-dig-lunge', 'rdm-dig-paws', 'rdo-clod-fly',
+      'rdm-code-type', 'rdm-code-paws', 'rdo-code-level',
+      'rdm-enter-sleep', 'rdm-enter-dig', 'rdm-enter-code',
+    ];
+    for (const name of names) {
+      const block = keyframes(name);
+      expect(block, `${name} is missing`).not.toBe('');
+      expect(LAYOUT.test(block), `${name} animates a layout property`).toBe(false);
+    }
   });
 
   it('the scene is responsive and cannot overflow horizontally', () => {
@@ -536,5 +581,52 @@ describe('TRANSITIONS between the three states feel connected', () => {
     expect(css).toMatch(
       /@media \(prefers-reduced-motion: reduce\)[^}]*\{[\s\S]*?\.rdm-body--reviewing[\s\S]*?animation:\s*none/,
     );
+  });
+
+  /**
+   * "Transitions must not delay the truthful state display." A transition is
+   * allowed to move the dog; it is not allowed to hide, fade in, or postpone
+   * the STATE the operator is being told.
+   */
+  it('the truthful state is displayed immediately, not animated in', () => {
+    for (const [state, label] of [
+      ['reviewing', 'REVIEWING'],
+      ['repairing', 'REPAIRING'],
+      ['implementing', 'IMPLEMENTING'],
+    ] as const) {
+      const html = renderState(state);
+      // The label is in the FIRST paint — no JS gate, no delay, no placeholder.
+      expect(html, `${state} must show its label immediately`).toContain(label);
+      expect(html, `${state} must not paint a transitional placeholder`).not.toMatch(/TRANSITION|LOADING|…&nbsp;/);
+      // Nothing is rendered hidden or fully transparent while a beat plays.
+      expect(html, `${state} paints hidden`).not.toMatch(/opacity:\s*0[^.]/);
+      expect(html, `${state} paints invisible`).not.toMatch(/visibility:\s*hidden/);
+    }
+  });
+
+  it('no enter beat animates opacity, so nothing fades in over the state', () => {
+    for (const name of ['rdm-enter-sleep', 'rdm-enter-dig', 'rdm-enter-code']) {
+      const block = keyframes(name);
+      expect(block, `${name} is missing`).not.toBe('');
+      expect(block, `${name} fades the dog in and delays the state`).not.toContain('opacity');
+      // Transform-only, which is what keeps the beat cheap AND non-hiding.
+      expect(block).toMatch(/transform:/);
+    }
+  });
+
+  it('every enter beat is shorter than the shortest state loop it accompanies', () => {
+    // A beat that outlasts its loop would read as the state's own motion.
+    const beats = [
+      ['rdm-enter-sleep', 'rdm-sleep-breathe'],
+      ['rdm-enter-dig', 'rdm-dig-lunge'],
+      ['rdm-enter-code', 'rdm-code-type'],
+    ] as const;
+    for (const [beat, loop] of beats) {
+      const beatSeconds = Number(css.match(new RegExp(`${beat}\\s+([\\d.]+)s`))?.[1]);
+      const loopSeconds = Number(css.match(new RegExp(`${loop}\\s+([\\d.]+)s`))?.[1]);
+      expect(Number.isFinite(beatSeconds), `${beat} has no duration`).toBe(true);
+      expect(Number.isFinite(loopSeconds), `${loop} has no duration`).toBe(true);
+      expect(beatSeconds, `${beat} outlasts ${loop}`).toBeLessThan(loopSeconds);
+    }
   });
 });
