@@ -84,7 +84,9 @@ this: a `surface_specific` record without a founder-approved exception fails.
 ## 3. The capability registry
 
 **Canonical file:** `src/relay/parity/relay-surface-capabilities.json`
-— **byte-identical in both repositories.**
+— **one file, read by both surfaces.** (It was previously described as
+"byte-identical in both repositories"; the surfaces now live in one
+repository, so there is one registry and no mirror to keep in step.)
 
 It is JSON so that one file is read by both the TypeScript tests and the
 dependency-free Node check script, with no build step and no second source of
@@ -101,9 +103,27 @@ type RelaySurfaceCapability = {
   websiteEntryPoints: string[];  cliEntryPoints: string[];
   websiteTestReferences: string[]; cliTestReferences: string[];
   sharedDomainReferences: string[];
-  exception?: { reason; approvedBy; approvedAt; expiresAt? };
+  exception?: {
+    reason;                                  // a real justification, not a placeholder
+    approvedBy;                              // the CANONICAL founder identity
+    approvedAt;                              // ISO, not in the future
+    expiresAt;                               // ISO, in the future — MANDATORY
+    affectedCapability;                      // exactly this capabilityId, no wildcard
+    missingSurface: 'website' | 'cli';       // the surface genuinely absent
+    evidence: string[];                      // must resolve on disk
+  };
 };
 ```
+
+**Exemption is all-or-nothing.** An exception grants an exemption only when it
+is valid in EVERY respect; partial compliance grants nothing. The previous rule
+accepted any non-empty `approvedBy` and treated `expiresAt` as optional, so
+`{reason: "x", approvedBy: "me", approvedAt: …}` was a self-granted, permanent
+waiver that the check reported as PASS. There is also a bounded maximum
+lifetime (90 days), and capabilities carrying **core mission truth** — the
+Relay Dog identity and state semantics, PSP import, mission contract and
+status, review, repair, approval, evidence inspection, and verified mission
+cost — cannot be exempted by any approval at all.
 
 **Statuses are evidence-based.** A capability is only `implemented` when a real
 entry point exists, and only `tested` when a named test asserts it. A test
@@ -161,8 +181,20 @@ the same functions.
 - missing entry points for an implemented capability
 - missing test references for a `tested` capability
 - unapproved `surface_specific` exceptions
-- exceptions missing a reason or a founder identity
-- **expired** exceptions
+- exceptions missing a reason, the canonical founder identity, a creation date,
+  an expiry date, the affected capability, the missing surface, or evidence
+- **expired** exceptions, exceptions with no expiry at all, and exceptions
+  whose lifetime exceeds the bounded maximum
+- wildcard exceptions, exceptions naming a different capability, exceptions
+  claiming the wrong surface is missing, and exceptions on capabilities that
+  carry core mission truth
+- declarations that are neither a `relay …` command nor a well-formed file
+  path — including a path that whitespace would previously have demoted to an
+  unchecked "command"
+- declared paths that escape the repository (absolute, `..`, or a symlink),
+  and anchors naming a symbol or text the file does not contain
+- a reference declared twice, one file claimed as BOTH surfaces' entry point,
+  and a surface whose every test reference also belongs to the other
 - divergent / unknown capability ids, domains, classes and statuses
 - duplicate capability records
 - a missing official Relay Dog identity record
@@ -255,15 +287,28 @@ immediately.
 
 ### Shared economics domain (Milestone 5)
 
-`src/relay/mission/economics/` is carried byte-identically by both repositories
-(11 dependency-free core modules). Both surfaces render the same
-`projectMissionEconomics` output, which is what makes economics parity real
-rather than described.
+`src/relay/mission/economics/` is ONE canonical implementation (dependency-free
+core modules) that both surfaces import. `src/relay/mission/economics-barrel.ts`
+is a thin re-export with no logic of its own, provided because the CLI boundary
+permits the `../mission` barrel but not a deep `../mission/economics` path.
+
+Both surfaces render the same `projectMissionEconomics` output, which is what
+makes economics parity real rather than described — including the
+`dataSourceLabel` that discloses development-fixture figures, and the
+`at least` / `at most` bounds that keep an incomplete total from reading as an
+exact one.
 
 ## 7. Shared domains
 
-Where both surfaces need the same rules, the rules live in a byte-identical
-shared domain rather than being written twice:
+Where both surfaces need the same rules, the rules live in a shared domain
+rather than being written twice. Two shapes appear below, and the table says
+which is which:
+
+- **one implementation, imported twice** — the capability registry, the PSP
+  domain and Mission Economics. Nothing to mirror;
+- **two byte-identical copies, checksum-proven** — the Relay Dog sprite and
+  states, which each surface renders in its own medium (DOM and terminal) and
+  which are asserted equal by digest.
 
 | Domain | Location | Parity proof |
 |---|---|---|

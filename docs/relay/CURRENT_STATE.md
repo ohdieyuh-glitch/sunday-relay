@@ -930,12 +930,13 @@ Alcatraz code imported, no Alcatraz secret read, empty by default). Governance
 §11 permits a typed integration; the founder should decide whether Relay keeps
 an Alcatraz-shaped architect leg. See `docs/relay/DEVELOPMENT_CONTRACTS.md`.
 
-**Transitional duplication, deliberately preserved.** Mission Economics exists
-byte-identically in the website and CLI lineages because they were built in
-separate worktrees. Both now live in one repository. Consolidation is NOT part
-of this stabilization: behaviour and byte identity are preserved, and the
-shared seam (`src/relay/shared/`) is where a later, focused PR should move the
-canonical economics module once this integration has merged.
+**Mission Economics is ONE implementation.** The earlier "transitional
+duplication, deliberately preserved" note is superseded and no longer
+describes the tree. `src/relay/mission/economics/` is the single canonical
+implementation, imported by both surfaces; `src/relay/mission/economics-barrel.ts`
+is a thin re-export with no logic of its own, provided because the CLI boundary
+permits the `../mission` barrel but not a deep `../mission/economics` path.
+There is no second copy and nothing to keep in sync.
 
 ## Known risks
 
@@ -947,10 +948,30 @@ canonical economics module once this integration has merged.
   rewrite) is deliberately deferred to a later prompt to keep this phase
   docs-only.
 
+## PR #2 integration-stabilization repairs (2026-07-30)
+
+The independent review of PR #2 at head `d21d383` returned five High and five
+Normal findings. All ten are repaired on branch
+`relay/integration-stabilization`; PR #2 remains OPEN and UNMERGED, and a
+SEPARATE session must perform the independent review of these repairs.
+
+| Finding | State | Where |
+|---|---|---|
+| H-1 fabricated reviewer / verification status | Repaired | `src/relay/ui/app/projection.ts`; reviewer state comes only from a real verdict, checks only from Relay's own recorded inspection and test results. `verified_complete` proves none of approval, verification, independent review or release. |
+| H-2 parity bypass | Repaired | `scripts/relay-surface-parity.mjs`, `scripts/relay-parity-gate.mjs`; all-or-nothing founder exceptions (canonical identity, mandatory expiry, bounded lifetime, no wildcard, cited evidence, non-exemptible core capabilities) and structural declaration parsing with repo containment and anchor resolution. |
+| H-3 browser/Node boundary evasion | Repaired | `src/relay/shared/browser-boundary.test.ts`; every recognised graph form, all eight module extensions, and server-only families incl. `workspace/`, `yc/`, `relay-bridge/`, `scripts/` and the connector runtimes. |
+| H-4 fixture-allowance laundering | Repaired | `scripts/relay-repository-boundary.mjs`; occurrence-scoped annotations, strict synthetic-value policy, refused in production/workflow/env files, exact matched line reported. |
+| H-5 deployment-detection regression | Repaired | `scripts/relay-repository-boundary.mjs`; command-position detection incl. `vercel --prod`, package scripts, shell wrappers, workflow→script indirection, and intent-matched deployment actions. |
+| N-1 unknown provisional cost | Repaired | `budget-evaluation.ts`, `economics-projection.ts`; unpriced provisional receipts make the projection incomplete, `projectedTotal === null` never becomes zero, bounds are labeled `at least` / `at most`. |
+| N-2 build-gated test accounting | Repaired | `scripts/ci-test-accounting.test.ts`; no `runIf`, no test that can end without asserting, every build-dependent test declared and re-run by an explicit CI step. |
+| N-3 reviewer independence | Repaired | `src/relay/mission/read-models.ts`; independence derived from actual agent, PSP Agent ID, human identity and run identity. Unknown is never independence. |
+| N-4 documentation accuracy | Repaired | this file, `MISSION_ECONOMICS.md`, `WEBSITE_CLI_PARITY_CONTRACT.md`, `economics-barrel.ts`. |
+| N-5 simulated CLI disclosure | Repaired | `src/relay/cli/mission-economics.ts` and the shared projection; the disclosure is derived from the receipts, so both surfaces state it and neither can omit it. |
+
 ## Verification status
 
 See SESSION_LOG.md entry 2026-07-21 (Phase 1) for the exact commands run
-and results in this phase.
+and results in that phase.
 
 ## Branch / worktree
 

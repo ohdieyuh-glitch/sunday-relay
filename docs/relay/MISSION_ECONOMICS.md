@@ -2,7 +2,13 @@
 
 Status: implemented (deterministic, shared website/CLI core, **no provider
 billing integration, no live pricing, no database persistence**)
-Shared domain: `src/relay/mission/economics/` — byte-identical in both repos
+Canonical implementation: `src/relay/mission/economics/` — ONE implementation,
+imported by both surfaces. `src/relay/mission/economics-barrel.ts` is a thin
+re-export of it (no logic), because the CLI boundary permits the `../mission`
+barrel but not a deep `../mission/economics` path. There is no second copy and
+nothing to keep in sync; the earlier "byte-identical in both repos" wording
+described the pre-separation state, when the surfaces lived in two
+repositories.
 Website surface: `src/relay/ui/project-workspace/RelayMissionEconomics.tsx`
 CLI surface: `relay mission economics|budget|receipts`
 
