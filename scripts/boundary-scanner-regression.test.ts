@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -43,20 +44,63 @@ const SCANNER = join(REPO_ROOT, 'scripts', 'relay-repository-boundary.mjs');
  */
 const REVIEWED_BASE_SHA = 'd21d383ab020a7039ee877d5270cd513470d943b';
 
+/**
+ * The pre-repair scanner is read from a FROZEN COPY rather than from git.
+ *
+ * `git show <sha>:<path>` worked locally and failed in CI, because
+ * `actions/checkout` performs a SHALLOW clone in which the base commit's tree
+ * is not available. A regression proof that only runs on a deep clone is
+ * exactly the environment-dependent shape this repository has already removed
+ * once from its YC tests, so the baseline is checked in instead.
+ *
+ * The copy is guarded two ways, and BOTH branches assert — a doctored
+ * "baseline" that flattered the repair would fail here:
+ *
+ *   - whenever the git object IS reachable, the copy must be byte-identical
+ *     to `git show <sha>:<path>`;
+ *   - always, its SHA-256 must equal the digest recorded below.
+ */
+const BASELINE_PATH = join('scripts', '__baseline__', 'relay-repository-boundary.d21d383.mjs');
+const BASELINE_SHA256 = '29d51a010c8deaa2982b77de86e9b8dbee04609859f4af28005f578871273f5f';
+
 let workspace: string;
 let baseScanner: string;
 
 beforeAll(() => {
   workspace = mkdtempSync(join(tmpdir(), 'relay-scanner-regression-'));
-  // The PRE-REPAIR scanner, taken verbatim from the reviewed commit, so the
-  // base/head comparison below is a measurement and not a transcription.
-  baseScanner = join(workspace, 'base-relay-repository-boundary.mjs');
-  const base = execFileSync(
-    'git',
-    ['show', `${REVIEWED_BASE_SHA}:scripts/relay-repository-boundary.mjs`],
-    { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 },
-  );
-  writeFileSync(baseScanner, base);
+  baseScanner = join(REPO_ROOT, BASELINE_PATH);
+});
+
+describe('the frozen baseline is genuinely the reviewed scanner', () => {
+  it('matches the recorded digest', () => {
+    const frozen = readFileSync(join(REPO_ROOT, BASELINE_PATH));
+    expect(createHash('sha256').update(frozen).digest('hex')).toBe(BASELINE_SHA256);
+  });
+
+  it('is byte-identical to the reviewed commit, whenever that commit is reachable', () => {
+    let fromGit: string | null = null;
+    try {
+      fromGit = execFileSync(
+        'git',
+        ['show', `${REVIEWED_BASE_SHA}:scripts/relay-repository-boundary.mjs`],
+        { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] },
+      );
+    } catch {
+      fromGit = null; // shallow clone — the object is not in this checkout
+    }
+
+    if (fromGit === null) {
+      // NOT a silent skip: assert the clone really is shallow, so a genuine
+      // "the baseline commit is gone" failure cannot hide in this branch.
+      const shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+      }).trim();
+      expect(shallow, 'the baseline commit is unreachable in a FULL clone').toBe('true');
+      return;
+    }
+    expect(readFileSync(join(REPO_ROOT, BASELINE_PATH), 'utf8')).toBe(fromGit);
+  });
 });
 afterAll(() => rmSync(workspace, { recursive: true, force: true }));
 
