@@ -9,11 +9,13 @@ import type {
   RepairTask,
   ReviewFinding,
   ReviewerStateKind,
+  VerificationCheck,
   WorkspaceDogState,
   WorkspaceOutputState,
   WorkspaceTerminalEvent,
 } from '../project-workspace/contracts';
 import type {
+  CodingTerminalState,
   MissionAttestationSummary,
   ProjectBrain,
   RelayEvent,
@@ -122,66 +124,152 @@ const ORDER: readonly M[] = [
 
 const atLeast = (state: M, floor: M) => ORDER.indexOf(state) >= ORDER.indexOf(floor);
 
+/* ------------------------------------------------------------------------ *
+ * LIVE REVIEW AND VERIFICATION TRUTH
+ *
+ * The rule, stated once and applied by every function below: a mission-state
+ * value is a POSITION IN THE MISSION MACHINE, never evidence about a role
+ * that did or did not run. `verified_complete` in particular proves none of
+ * the following, and nothing here derives them from it:
+ *
+ *   - reviewer approval — only a real reviewer VERDICT proves that;
+ *   - verification success — only Relay's own recorded inspection result and
+ *     its own recorded test result prove that;
+ *   - independent review having happened at all;
+ *   - release authorization — release is a separate authority which this
+ *     projection does not represent and must never imply.
+ *
+ * Cost, budget and economics are likewise a separate authority: no spend
+ * figure, budget status or receipt can move a reviewer state or a check.
+ *
+ * Missing evidence stays VISIBLY missing. An absent record renders `waiting`,
+ * `pending`, `not_run`, or an empty list — never a pass. The demo path keeps
+ * its ordinal-keyed sample content, which is labeled as sample content and
+ * can never enter a live mission (machine-enforced).
+ * ------------------------------------------------------------------------ */
+
+/** Set comparison of two file lists. Relay's inspection result and the
+    agent's claim are both records; the comparison is PERFORMED here rather
+    than asserted. */
+function sameFiles(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  const left = [...a].sort();
+  const right = [...b].sort();
+  return left.every((value, index) => value === right[index]);
+}
+
+/** Files Relay actually observed changing that fall under a protected path. */
+function protectedPathsTouched(terminal: CodingTerminalState): string[] {
+  const protectedPaths = terminal.permissions?.protectedPaths ?? [];
+  return terminal.changedFiles.filter((file) =>
+    protectedPaths.some((p) => file === p || file.startsWith(p.endsWith('/') ? p : `${p}/`)),
+  );
+}
+
 /**
- * Live-mission overlays are derived from REAL evidence events + records — never
- * from the state ordinal (which is what fabricates the demo's F-1/R-1). A live
- * mission with no reviewer has no findings/repairs; verification and completion
- * reflect only what Relay actually inspected and verified.
+ * Relay's verification evidence for a LIVE mission.
+ *
+ * Two distinct facts are kept distinct, because conflating them is the defect
+ * this function was repaired to remove:
+ *
+ *   - a `relay_evidence` inspection/verification EVENT proves the step RAN;
+ *   - the persisted coding terminal carries the step's RESULT — the real
+ *     changed-file list Relay read from the worktree, and the real status of
+ *     the verification command Relay itself executed.
+ *
+ * "It ran" is rendered `pending`. Only a recorded result is rendered
+ * `passed` or `failed`, and the result is recomputed here from the records
+ * rather than taken on trust from a headline or a state name.
  */
 function deriveLiveVerification(
   state: M,
   events: RelayEvent[],
+  mission: RelayMission,
   fallback: ConfiguredWorkspaceState['verificationSummary'],
 ): ConfiguredWorkspaceState['verificationSummary'] {
-  const hasInspection = events.some((e) => e.category === 'workspace_inspection' && e.truth === 'relay_evidence');
-  const hasVerification = events.some((e) => e.category === 'verification' && e.truth === 'relay_evidence');
-  if (state === 'verified_complete') {
-    return {
-      headline: 'Required checks passed under Relay verification.',
-      checks: [
-        { label: 'Claimed files match changed files', status: 'passed' },
-        { label: 'No protected files changed', status: 'passed' },
-        { label: 'Required tests', status: 'passed' },
-        { label: 'Source worktree unchanged', status: 'passed' },
-      ],
-    };
+  const inspectionRan = events.some((e) => e.category === 'workspace_inspection' && e.truth === 'relay_evidence');
+  const verificationRan = events.some((e) => e.category === 'verification' && e.truth === 'relay_evidence');
+  const terminal = mission.terminal ?? null;
+  /** The mission has reached the point where these checks were DUE. Before
+      that, saying "not run" would be noise rather than information. */
+  const due = atLeast(state, 'claim_submitted') || state === 'failed';
+
+  const checks: VerificationCheck[] = [];
+  const push = (label: string, status: VerificationCheck['status']) => checks.push({ label, status });
+
+  /* --------- Relay's own independent workspace inspection ------------- */
+  if (terminal && terminal.changedFiles.length > 0) {
+    if (terminal.claim) {
+      push(
+        'Claimed files match changed files',
+        sameFiles(terminal.claim.filesChanged, terminal.changedFiles) ? 'passed' : 'failed',
+      );
+    }
+    push('No protected files changed', protectedPathsTouched(terminal).length === 0 ? 'passed' : 'failed');
+  } else if (inspectionRan) {
+    push('Claimed files match changed files', 'pending');
+  } else if (due) {
+    push('Claimed files match changed files', 'not_run');
   }
-  if (state === 'failed') {
-    return {
-      headline: 'Relay stopped the mission before completion.',
-      checks: [
-        { label: 'Claimed-file / protected-path policy', status: hasInspection ? 'passed' : 'not_run' },
-        { label: 'Required tests', status: hasVerification ? 'failed' : 'not_run' },
-      ],
-    };
+
+  /* --------- the deterministic verification Relay itself ran ---------- */
+  if (terminal?.test) {
+    push('Required tests', terminal.test.status);
+  } else if (verificationRan) {
+    push('Required tests', 'pending');
+  } else if (due) {
+    push('Required tests', 'not_run');
   }
-  if (hasInspection || hasVerification || state === 'relay_verifying') {
-    return {
-      headline: 'Relay is verifying the coding-agent claim…',
-      checks: [
-        { label: 'Claimed files match changed files', status: hasInspection ? 'passed' : 'pending' },
-        { label: 'Required tests', status: hasVerification ? 'passed' : 'pending' },
-      ],
-    };
-  }
-  return fallback;
+
+  if (checks.length === 0) return fallback;
+
+  const failed = checks.some((c) => c.status === 'failed');
+  const pending = checks.some((c) => c.status === 'pending');
+  const allPassed = checks.every((c) => c.status === 'passed');
+
+  const headline = failed
+    ? 'Relay verification did not pass.'
+    : allPassed
+      ? 'Required checks passed under Relay verification.'
+      : pending
+        ? 'Relay recorded that it is verifying the coding-agent claim — no result yet.'
+        : 'Relay has not run these checks for this mission.';
+
+  return { headline, checks };
 }
 
 /**
- * Live completion evidence is assembled from what the backend actually
- * reported — the attestations, the review, and the artifact digest. A mission
- * with no independent review never claims one, and the evidence list never
- * describes a role that did not run.
+ * Live completion evidence. Every line is a RECORD — Relay's own evidence
+ * statements, verbatim, plus attested executions — rather than a sentence
+ * this module composed about work it cannot see. A mission that completed
+ * with no recorded evidence says exactly that, and never claims a review, a
+ * verification or a release it has no record of.
  */
-function deriveLiveCompletion(state: M, mission: RelayMission): ConfiguredWorkspaceState['completionState'] {
+function deriveLiveCompletion(
+  state: M,
+  mission: RelayMission,
+  events: RelayEvent[],
+): ConfiguredWorkspaceState['completionState'] {
   if (state !== 'verified_complete') return { verdict: 'not_complete', evidence: [] };
+
+  const evidence: string[] = events
+    .filter(
+      (e) =>
+        e.truth === 'relay_evidence' &&
+        (e.category === 'workspace_inspection' ||
+          e.category === 'verification' ||
+          e.category === 'completion_engine'),
+    )
+    .map((e) => e.headline);
+
+  if (evidence.length === 0) {
+    evidence.push('No Relay inspection or verification evidence is recorded for this mission.');
+  }
 
   const attested = (role: MissionAttestationSummary['role']) =>
     (mission.attestations ?? []).find(
       (a) => a.role === role && a.launchVerified && a.completionVerified && !a.fallbackOccurred,
     );
-  const evidence: string[] = ['Coding-agent claim verified independently by Relay-run tests.'];
-  evidence.push('Only the claimed file changed; the source worktree is protected.');
 
   const architect = attested('prompt_architect');
   if (architect) {
@@ -208,15 +296,33 @@ function deriveLiveCompletion(state: M, mission: RelayMission): ConfiguredWorksp
   return { verdict: 'verified_complete', evidence };
 }
 
-/** Reviewer display for a live mission comes from the real verdict, never
-    from the mission-state ordinal. */
-function deriveLiveReviewer(state: M, mission: RelayMission): ReviewerStateKind {
+/**
+ * Reviewer display for a LIVE mission. There is deliberately no fall-back to
+ * `REVIEWER[state]` here: that fall-back is what let a mission sitting in
+ * `approved`/`verified_complete` render an APPROVED reviewer with no reviewer
+ * verdict on record at all.
+ *
+ * Only a verdict produces an outcome state. Without one, the most this can
+ * say is that the reviewer has STARTED — and only when a reviewer execution
+ * was actually attested or a reviewer event was actually recorded.
+ */
+function deriveLiveReviewer(mission: RelayMission, events: RelayEvent[]): ReviewerStateKind {
   const review = mission.review;
-  if (!review) return REVIEWER[state];
-  if (review.findings.some((f) => f.severity === 'blocking') || review.verdict === 'changes_required') {
-    return 'changes_required';
+  if (review) {
+    if (review.verdict === 'changes_required' || review.findings.some((f) => f.severity === 'blocking')) {
+      return 'changes_required';
+    }
+    if (review.verdict === 'unable_to_review') return 'unavailable';
+    if (review.verdict === 'approved') return 'approved';
+    return 'reviewing';
   }
-  return review.verdict === 'approved' ? 'approved' : 'reviewing';
+
+  // No verdict on record. "The reviewer is running" is a PENDING status, and
+  // it too needs a record — an attested launch or a reviewer event.
+  const launched =
+    (mission.attestations ?? []).some((a) => a.role === 'reviewer' && a.launchVerified) ||
+    events.some((e) => e.category === 'reviewer');
+  return launched ? 'reviewing' : 'waiting';
 }
 
 function toTerminalEvent(e: RelayEvent): WorkspaceTerminalEvent {
@@ -300,7 +406,7 @@ export function deriveMissionProjection(
           ],
         }
       : base.verificationSummary
-    : deriveLiveVerification(s, events, base.verificationSummary);
+    : deriveLiveVerification(s, events, mission, base.verificationSummary);
 
   const architectStatus =
     s === 'architect_working' ? 'planning' : s === 'handoff_ready' ? 'preparing_handoff' : 'waiting';
@@ -358,7 +464,7 @@ export function deriveMissionProjection(
       codingAgent: { ...base.workforce.codingAgent, status: codingStatus },
       reviewer: {
         ...base.workforce.reviewer,
-        state: isDemo ? REVIEWER[s] : deriveLiveReviewer(s, mission),
+        state: isDemo ? REVIEWER[s] : deriveLiveReviewer(mission, events),
       },
     },
     phase: PHASE[s],
@@ -366,7 +472,7 @@ export function deriveMissionProjection(
     dogState: DOG[s],
     handoffNetworkState: s === 'configured' ? 'standby' : 'online',
     terminalEvents: events.map(toTerminalEvent),
-    reviewerState: isDemo ? REVIEWER[s] : deriveLiveReviewer(s, mission),
+    reviewerState: isDemo ? REVIEWER[s] : deriveLiveReviewer(mission, events),
     findings,
     repairs,
     verificationSummary,
@@ -393,7 +499,7 @@ export function deriveMissionProjection(
             ],
           }
         : { verdict: 'not_complete', evidence: [] }
-      : deriveLiveCompletion(s, mission),
+      : deriveLiveCompletion(s, mission, events),
     repairUsed: isDemo && atLeast(s, 'repair_in_progress'),
   };
 }
