@@ -57,13 +57,11 @@
 
 /* -------------------------------------------------------- implementing */
 
-/* IMPLEMENTING now reads as WRITING CODE (the dog is seated at the keys), so
-   the tippy-toe reach no longer carries that ACTIVITY. The `reaching` pose and
-   its `work_scratch` motion are RETAINED — sprite art, state semantics and the
-   animation below all still exist — but the animation is now bound to the POSE
-   (`.rpd--reaching`) rather than to the implementing activity, so a surface that
-   draws the reach still gets its motion and nothing competes for the
-   implementing layer. The coding rules live in the operational block below. */
+/* The tippy-toe reach is bound to the POSE (`.rpd--reaching`) rather than to an
+   activity, so any surface that draws the reaching sprite gets its motion —
+   including IMPLEMENTING, which draws that pose. This is the whole figure
+   rising and settling on its toes; the sprite's own paw work is added on top
+   of it, on the sprite layer, in the operational block below. */
 @keyframes rdm-tiptoe-reach {
   0%, 100% { transform: translateY(0) scaleY(1); }
   30% { transform: translateY(-4px) scaleY(1.02); }
@@ -129,42 +127,69 @@
 }
 
 /* ============================================================ operational
-   Three states the founder asked to read without the label: a review that
-   snoozes, a repair that digs, and coding that gets more advanced.
+   Five states the founder asked to read without the label: a review that lies
+   down and sleeps, a repair that digs the floor, implementing up on its tippy
+   toes with its paws raised, researching with a newspaper on its back, and
+   verifying with its tail going back and forth.
 
    Every rule below is transform/opacity only, on a fixed small number of
    nodes, so nothing triggers layout and the whole scene stays GPU-friendly on
    a phone. No canvas, no WebGL, no video, no GIF, no JS timer. */
 
 /* The decor sits behind the dog in the same stacking context and never
-   intercepts pointer events, so it can never cover a mission control. */
+   intercepts pointer events, so it can never cover a mission control.
+
+   It is sized to the DOG's own stage, not to the patrol track. The track is as
+   wide as the panel it sits in, so `inset: 0` stranded every percentage-placed
+   prop (the hole, the mound, the Z) far out in empty space to the right of the
+   dog. The stage is the 18x14 sprite at unit 6 — 108x84 — plus the stage's own
+   10px side and 6px top padding. Anchoring here puts the scenery back ON the
+   dog at any panel width, and `overflow: hidden` still guarantees no particle
+   escapes the intended area. */
 .rdo {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  width: 128px;
+  height: 90px;
   pointer-events: none;
   overflow: hidden;
 }
 
+/* WHICH LAYER MOVES, AND WHY IT MATTERS
+   ------------------------------------
+   `.rdm-body` wraps the WHOLE indicator — the sprite, its glowing floor and
+   its caption. Moving that layer moves the ground with the dog, so a dog that
+   rises on it does not appear to leave the floor at all: the whole picture
+   just shifts. Any motion that has to read AGAINST the ground — settling onto
+   it, rising off it, driving into it, a tail swinging across it — therefore
+   belongs on `.rpd-art`, the sprite alone. `.rdm-body` keeps the small
+   whole-unit beats: breathing, leaning in, the enter beats. */
+
 /* ------------------------------------------------------- REVIEWING: sleep */
 
-/* Slow breathing on the body wrapper. Deliberately small — a sleeping dog,
-   not a pulsing one. 5.4s puts the full settle/rise/twitch loop in the
-   approved 4–7s band. */
+/* Slow breathing of the whole figure. Deliberately small — a sleeping dog, not
+   a pulsing one. 5.4s puts the full settle/rise/twitch loop in the approved
+   4–7s band. */
 @keyframes rdm-sleep-breathe {
   0%, 100% { transform: translateY(0) scaleY(1); }
   45% { transform: translateY(1px) scaleY(0.985); }
 }
-/* One small ear/tail flick per loop, late, so it reads as involuntary. */
+/* The dog is LYING DOWN. The sprite settles onto its floor and STAYS there —
+   every stop of this loop is low and flattened, so there is no frame in which
+   the dog stands back up — with one small ear/tail flick late in the loop, so
+   it reads as involuntary rather than as waking. */
 @keyframes rdm-sleep-twitch {
-  0%, 86%, 100% { transform: translateX(0) rotate(0deg); }
-  90% { transform: translateX(-0.5px) rotate(-0.6deg); }
-  94% { transform: translateX(0.5px) rotate(0.6deg); }
+  0%, 86%, 100% { transform: translate(0, 5px) scaleY(0.9) rotate(0deg); }
+  90% { transform: translate(-0.5px, 5px) scaleY(0.9) rotate(-0.6deg); }
+  94% { transform: translate(0.5px, 5px) scaleY(0.9) rotate(0.6deg); }
 }
 .rdm-body--reviewing {
   transform-origin: center bottom;
   animation: rdm-sleep-breathe 5.4s ease-in-out infinite;
 }
 .rdm-body--reviewing .rpd-art {
+  transform-origin: center bottom;
   animation: rdm-sleep-twitch 5.4s ease-in-out infinite;
 }
 
@@ -188,6 +213,20 @@
 .rdo--sleep .rdo-z--2 { animation-delay: 1.8s; }
 .rdo--sleep .rdo-z--3 { animation-delay: 3.6s; }
 
+/* The ground the dog has settled onto: a low, wide resting patch under the
+   whole body. Static in both modes — with the loops stopped this is what still
+   says LYING DOWN rather than standing. */
+.rdo--sleep .rdo-rest {
+  position: absolute;
+  left: 14%;
+  bottom: 6%;
+  width: 74px;
+  height: 6px;
+  background: #2a2723;
+  border-radius: 50%;
+  opacity: 0.45;
+}
+
 /* The review page resting beside the dog. Static scenery, no motion. */
 .rdo--sleep .rdo-page {
   position: absolute;
@@ -202,8 +241,9 @@
 
 /* ------------------------------------------------------ REPAIRING: dig */
 
-/* The body drops and rocks forward with each scrape. 3.0s sits in the
-   approved 2.5–5s band, with a visible pause to look into the hole. */
+/* The whole figure leans in with each scrape — small, because the FLOOR is in
+   this layer and the ground must not tip. 3.0s sits in the approved 2.5–5s
+   band, with a visible pause to look into the hole. */
 @keyframes rdm-dig-lunge {
   0%, 100% { transform: translateY(0) rotate(0deg); }
   10%, 30%, 50% { transform: translateY(1.5px) rotate(-1.2deg); }
@@ -211,39 +251,45 @@
   /* the look-into-the-hole beat */
   68%, 80% { transform: translateY(2.5px) rotate(-2deg); }
 }
-/* Alternating paws: the artwork nudges left, then right, twice per loop. */
+/* THE DIG ITSELF, on the sprite, against the ground the sprite is standing on.
+   The earlier version moved the dog 1.5px and read as a shiver — the founder
+   could not tell what it was doing. Each stroke now drives the front end DOWN
+   into the floor, nose pitched over the hole, and rakes back: left paw, right
+   paw, left again, then a still beat to look into what it uncovered. */
 @keyframes rdm-dig-paws {
-  0%, 100% { transform: translate(0, 0); }
-  12% { transform: translate(-2px, 1px); }
-  25% { transform: translate(0, 0); }
-  37% { transform: translate(2px, 1px); }
-  50% { transform: translate(0, 0); }
-  62% { transform: translate(-1.5px, 1px); }
-  /* held still while the dog inspects the hole */
-  70%, 100% { transform: translate(0, 0); }
+  /* poised over the hole, nose already down — the loop starts and ends here */
+  0%, 100% { transform: translate(0, 1px) rotate(-2deg); }
+  12% { transform: translate(-4px, 4px) rotate(-5deg); }
+  25% { transform: translate(0, 1px) rotate(-2deg); }
+  37% { transform: translate(4px, 4px) rotate(-5deg); }
+  50% { transform: translate(0, 1px) rotate(-2deg); }
+  62% { transform: translate(-3.5px, 4px) rotate(-5deg); }
+  /* held nose-down in the hole while the dog inspects what it uncovered */
+  72%, 92% { transform: translate(0, 3px) rotate(-4deg); }
 }
 .rdm-body--repairing {
   transform-origin: center bottom;
   animation: rdm-dig-lunge 3s ease-in-out infinite;
 }
 .rdm-body--repairing .rpd-art {
+  transform-origin: 30% bottom;
   animation: rdm-dig-paws 3s steps(8, end) infinite;
 }
 
 /* The disturbed patch. Grows once and stays — the hole is being deepened. */
 .rdo--dig .rdo-hole {
   position: absolute;
-  left: 26%;
+  left: 14%;
   bottom: 8%;
-  width: 22px;
-  height: 5px;
+  width: 26px;
+  height: 6px;
   background: #2a2723;
   border-radius: 50%;
-  opacity: 0.55;
+  opacity: 0.6;
 }
 .rdo--dig .rdo-mound {
   position: absolute;
-  left: 52%;
+  left: 36%;
   bottom: 9%;
   width: 12px;
   height: 4px;
@@ -256,65 +302,228 @@
    `overflow: hidden` on the container guarantees nothing escapes. */
 @keyframes rdo-clod-fly {
   0% { opacity: 0; transform: translate(0, 0) scale(1); }
-  12% { opacity: 0.9; }
-  100% { opacity: 0; transform: translate(14px, -9px) scale(0.6); }
+  12% { opacity: 0.95; }
+  100% { opacity: 0; transform: translate(18px, -13px) scale(0.6); }
 }
 .rdo--dig .rdo-clod {
   position: absolute;
-  left: 40%;
+  left: 28%;
   bottom: 12%;
-  width: 2px;
-  height: 2px;
+  width: 3px;
+  height: 3px;
   background: #6b6255;
   opacity: 0;
   animation: rdo-clod-fly 3s ease-out infinite;
 }
-.rdo--dig .rdo-clod--2 { animation-delay: 0.38s; left: 43%; }
-.rdo--dig .rdo-clod--3 { animation-delay: 1.12s; left: 38%; }
-.rdo--dig .rdo-clod--4 { animation-delay: 1.5s; left: 44%; }
-.rdo--dig .rdo-clod--5 { animation-delay: 1.9s; left: 41%; }
+.rdo--dig .rdo-clod--2 { animation-delay: 0.38s; left: 31%; }
+.rdo--dig .rdo-clod--3 { animation-delay: 1.12s; left: 26%; }
+.rdo--dig .rdo-clod--4 { animation-delay: 1.5s; left: 32%; }
+.rdo--dig .rdo-clod--5 { animation-delay: 1.9s; left: 29%; }
 
-/* ------------------------------------------------- IMPLEMENTING: coding */
+/* -------------------------------------------- IMPLEMENTING: tippy toes */
 
-/* Seated at the keys: a small, steady typing bob plus paw taps. */
+/* UP ON ITS TIPPY TOES, front paws raised at the work in front of it.
+
+   The STANCE is the sprite: implementing draws the `reaching` pose, which is
+   already up on the hind toes with both forepaws lifted. The motion layers add
+   the life the pose cannot carry on its own:
+
+     `.rpd--reaching`  (above) — the whole figure rising and settling on its
+                        toes, 1.8s
+     `rdm-code-type`   — the figure's small effort beat
+     `rdm-code-paws`   — the sprite alone: held clear of the floor, pawing at
+                        the raised surface in front of it, 0.72s
+
+   Held clear on EVERY stop, so there is no frame in which the raised dog drops
+   flat, and on the sprite layer rather than the figure so the dog rises off the
+   floor it is standing on instead of taking the floor up with it.
+
+   The keyframe NAMES are kept (`rdm-code-*`): the motion boundary test pins
+   them, and implementing is still the activity they belong to. What they draw
+   has changed — the founder took the code panel away, and the dog that used to
+   sit at it stands up at the work instead. */
 @keyframes rdm-code-type {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-1px); }
 }
 @keyframes rdm-code-paws {
-  0%, 100% { transform: translate(0, 0); }
-  50% { transform: translate(1px, -1px); }
+  /* up on the toes, paws working at the raised surface */
+  0%, 100% { transform: translate(0, -2px) scaleY(1.02); }
+  25% { transform: translate(1.5px, -4px) scaleY(1.03); }
+  50% { transform: translate(0, -3px) scaleY(1.02); }
+  75% { transform: translate(1.5px, -5px) scaleY(1.03); }
 }
 .rdm-body--implementing {
   transform-origin: center bottom;
-  animation: rdm-code-type 0.9s ease-in-out infinite;
+  animation: rdm-code-type 1.4s ease-in-out infinite;
 }
 .rdm-body--implementing .rpd-art {
-  animation: rdm-code-paws 0.3s steps(2, end) infinite;
+  transform-origin: center bottom;
+  animation: rdm-code-paws 0.72s steps(4, end) infinite;
 }
 
-/* IMPLEMENTING draws no scenery: the typing pose above is the whole state. */
+/* IMPLEMENTING draws no scenery: the raised stance above is the whole state.
+   The code panel the founder removed is not coming back. */
+
+/* ------------------------------------------- RESEARCHING: the newspaper */
+
+/* The dog is READING: it sits still with a folded newspaper riding on its
+   back. The paper is the state — the body only breathes under it, slowly, so
+   the paper has something to ride on.
+
+   This is NOT the handoff. `handoff` is a DELIVERY: it draws a gold block in
+   the dog's mouth and the dog travels. This is newsprint grey, ruled with
+   print lines, angled across the back, and the dog stays put. */
+@keyframes rdm-read-settle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1.5px); }
+}
+/* On the SPRITE, at the same 4.2s period as the paper above it, so the two
+   rise and fall together and the newspaper never drifts off the back. */
+.rdm-body--researching .rpd-art {
+  transform-origin: center bottom;
+  animation: rdm-read-settle 4.2s ease-in-out infinite;
+}
+
+/* The paper rides the back: it rocks with the breath and never leaves it. */
+@keyframes rdo-news-ride {
+  0%, 100% { transform: rotate(-27deg) translateY(0); }
+  50% { transform: rotate(-24deg) translateY(-1.5px); }
+}
+.rdo--news .rdo-news {
+  position: absolute;
+  left: 24%;
+  top: 47%;
+  z-index: 2;
+  width: 32px;
+  height: 14px;
+  /* Newsprint: a grey sheet ruled with print lines. Scenery tones only — the
+     dog's own bone/gold palette is never restated here. */
+  background-color: #cfcabd;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    #8f8a7e 0 1px,
+    transparent 1px 3px
+  );
+  border-top: 1px solid #7d7869;
+  opacity: 0.92;
+  transform: rotate(-27deg);
+  transform-origin: center center;
+  animation: rdo-news-ride 4.2s ease-in-out infinite;
+}
+/* The fold down the middle of the sheet, so it reads as a folded newspaper
+   rather than a sheet of paper or a carried package. */
+.rdo--news .rdo-news::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: #7d7869;
+  opacity: 0.8;
+}
+/* The decor's own reduced-motion hook, for a surface that renders the scenery
+   outside the motion boundary: the paper is held on the back, not rocking. */
+.rdo--news.rdo--held .rdo-news {
+  animation: none;
+}
+
+/* -------------------------------------------- VERIFYING: the tail wags */
+
+/* The tail goes BACK AND FORTH. The tail is part of the sprite — the raised
+   block at the sprite's upper left — so the wag is drawn two ways at once: the
+   SPRITE swings about its front feet, which carries the tail end through the
+   widest travel, and the sweep the tail passes through is marked on each side
+   of it, alternating. Quick and light: a waiting dog, not an anxious one.
+
+   It swings the sprite and not the whole figure on purpose — at this speed a
+   tilting caption or a tilting floor would read as a fault, not a wag. */
+@keyframes rdm-tail-wag {
+  0%, 100% { transform: rotate(-2.6deg); }
+  50% { transform: rotate(2.6deg); }
+}
+.rdm-body--verifying .rpd-art {
+  /* The pivot sits at the front feet, so the TAIL END travels the furthest. */
+  transform-origin: 80% bottom;
+  animation: rdm-tail-wag 0.52s ease-in-out infinite;
+}
+
+/* The sweep marks flank the sprite's raised tail at the upper left. Each side
+   shows only while the tail is travelling toward it. */
+@keyframes rdo-wag-sweep {
+  0%, 100% { opacity: 0; }
+  40% { opacity: 0.7; }
+  60% { opacity: 0.55; }
+}
+.rdo--wag .rdo-wag {
+  position: absolute;
+  top: 48%;
+  width: 9px;
+  height: 2px;
+  background: #a9a396;
+  opacity: 0;
+  animation: rdo-wag-sweep 0.52s ease-in-out infinite;
+}
+.rdo--wag .rdo-wag--1 {
+  left: 3%;
+  transform: rotate(-24deg);
+}
+.rdo--wag .rdo-wag--2 {
+  left: 20%;
+  transform: rotate(24deg);
+  animation-delay: 0.26s;
+}
 
 /* ------------------------------------------------------ reduced motion */
 
-/* Every operational loop stops. The POSES still read — a curled dog with one
-   still Z, a forward-leaning dog at a static mound, a seated dog at the keys —
-   so the state is legible without any movement at all. */
+/* Every operational loop stops, and every state is HELD in the frame that
+   still tells the reader which state it is:
+     reviewing   — settled low on the ground, one still Z above it
+     repairing   — pitched down into the hole, mid-scrape, no flying dirt
+     implementing— held up on its toes, not standing flat
+     researching — the newspaper still on its back, not rocking
+     verifying   — the tail held over to one side, one sweep mark showing
+   Five states, five different silhouettes, with nothing moving at all. */
 .rdm--reduced .rdm-body--reviewing,
 .rdm--reduced .rdm-body--reviewing .rpd-art,
 .rdm--reduced .rdm-body--repairing,
 .rdm--reduced .rdm-body--repairing .rpd-art,
+.rdm--reduced .rdm-body--researching .rpd-art,
+.rdm--reduced .rdm-body--verifying .rpd-art,
 .rdm--reduced .rdo-z,
-.rdm--reduced .rdo-clod {
+.rdm--reduced .rdo-clod,
+.rdm--reduced .rdo-news,
+.rdm--reduced .rdo-wag {
   animation: none;
 }
 .rdm--reduced .rdo-z {
   opacity: 0.8;
   transform: translate(4px, -10px);
 }
-/* Held mid-dig so the pose still reads as digging, not standing. */
+/* Held mid-dig — the whole figure leaning in, and the sprite nose-down in the
+   hole with its paws back, so the pose still reads as digging, not standing. */
 .rdm--reduced .rdm-body--repairing {
   transform: translateY(1.5px) rotate(-1.2deg);
+}
+.rdm--reduced .rdm-body--repairing .rpd-art {
+  transform: translate(-4px, 4px) rotate(-5deg);
+}
+/* Held at the top of the reach, so the raised dog stays raised. The pose it is
+   drawn in is already the tippy-toe stance, so this only has to keep it there. */
+.rdm--reduced .rdm-body--implementing .rpd-art {
+  transform: translate(0, -4px) scaleY(1.03);
+}
+/* Held settled and flattened on the ground, so the dog is still lying down. */
+.rdm--reduced .rdm-body--reviewing .rpd-art {
+  transform: translate(0, 5px) scaleY(0.9);
+}
+/* Held with the tail carried over to one side, mid-wag. */
+.rdm--reduced .rdm-body--verifying .rpd-art {
+  transform: rotate(2.6deg);
+}
+.rdm--reduced .rdo-wag {
+  opacity: 0.7;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -322,8 +531,12 @@
   .rdm-body--reviewing .rpd-art,
   .rdm-body--repairing,
   .rdm-body--repairing .rpd-art,
+  .rdm-body--researching .rpd-art,
+  .rdm-body--verifying .rpd-art,
   .rdo-z,
-  .rdo-clod {
+  .rdo-clod,
+  .rdo-news,
+  .rdo-wag {
     animation: none;
   }
   .rdo-z {
@@ -332,6 +545,21 @@
   }
   .rdm-body--repairing {
     transform: translateY(1.5px) rotate(-1.2deg);
+  }
+  .rdm-body--repairing .rpd-art {
+    transform: translate(-4px, 4px) rotate(-5deg);
+  }
+  .rdm-body--implementing .rpd-art {
+    transform: translate(0, -4px) scaleY(1.03);
+  }
+  .rdm-body--reviewing .rpd-art {
+    transform: translate(0, 5px) scaleY(0.9);
+  }
+  .rdm-body--verifying .rpd-art {
+    transform: rotate(2.6deg);
+  }
+  .rdo-wag {
+    opacity: 0.7;
   }
 }
 
@@ -369,7 +597,11 @@
    state reads as one continuous dog rather than a hard cut. Fast on purpose:
    the current state must be recognisable immediately. */
 
-/* CODING -> REVIEWING: the dog settles down and curls. */
+/* These play on `.rdm-body`, the whole-figure layer, and each ends on that
+   layer's resting frame — the pose the new state is actually held in lives on
+   the sprite layer and is already in place when the beat finishes. */
+
+/* IMPLEMENTING -> REVIEWING: the dog comes down off its toes and settles. */
 @keyframes rdm-enter-sleep {
   0% { transform: translateY(-4px) scaleY(1.04); }
   60% { transform: translateY(1px) scaleY(0.97); }
@@ -381,7 +613,7 @@
   55% { transform: translateY(2.5px) rotate(-2.5deg); }
   100% { transform: translateY(0) rotate(0deg); }
 }
-/* REPAIRING -> CODING: it comes back up to the keys. */
+/* REPAIRING -> IMPLEMENTING: it comes back up onto its toes. */
 @keyframes rdm-enter-code {
   0% { transform: translateY(3px) rotate(-2deg); }
   60% { transform: translateY(-2px) rotate(0.5deg); }
@@ -400,7 +632,7 @@
 .rdm-body--implementing {
   animation:
     rdm-enter-code 0.36s ease-out 1 both,
-    rdm-code-type 0.9s ease-in-out infinite;
+    rdm-code-type 1.4s ease-in-out infinite;
 }
 
 /* Enter beats are motion too — they stop under the preference. */

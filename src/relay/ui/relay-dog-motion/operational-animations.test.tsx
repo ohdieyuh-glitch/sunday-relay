@@ -16,8 +16,14 @@ import {
 import type { WorkspaceDogState } from '../project-workspace/contracts';
 
 /**
- * Relay Dog OPERATIONAL ANIMATIONS — reviewing sleeps, repairing digs, coding
- * types at the keys with no code panel beside it.
+ * Relay Dog OPERATIONAL ANIMATIONS — the five states the founder asked to be
+ * readable without the label:
+ *
+ *   implementing — up on its tippy toes, paws raised, no code panel beside it
+ *   researching  — a newspaper riding on its back while it reads
+ *   verifying    — its tail going back and forth
+ *   reviewing    — lying down asleep, with the Z marks drifting up
+ *   repairing    — digging the floor, with the hole, the mound and the dirt
  *
  * The load-bearing assertions here are the TRUTHFULNESS ones. An animation is
  * allowed to be charming; it is never allowed to say that a review approved,
@@ -63,8 +69,38 @@ function renderState(state: WorkspaceDogState, reducedMotion = false): string {
   );
 }
 
-const decor = (activity: 'reviewing' | 'repairing' | 'implementing', reducedMotion = false) =>
-  renderToStaticMarkup(createElement(RelayDogOperationalDecor, { activity, reducedMotion }));
+const decor = (
+  activity: 'reviewing' | 'repairing' | 'implementing' | 'researching' | 'verifying',
+  reducedMotion = false,
+) => renderToStaticMarkup(createElement(RelayDogOperationalDecor, { activity, reducedMotion }));
+
+/** One CSS rule body, brace-balanced, for a selector that appears verbatim. */
+function ruleBody(selector: string): string {
+  const start = css.indexOf(`${selector} {`);
+  if (start < 0) return '';
+  const open = css.indexOf('{', start);
+  return css.slice(open + 1, css.indexOf('}', open));
+}
+
+/** Every vertical offset in a keyframes block, in px — `translateY(n)` and the
+ *  y of `translate(x, y)` alike. Positive is DOWN, as in CSS. */
+function verticalOffsets(name: string): number[] {
+  const block = keyframes(name);
+  return [
+    ...[...block.matchAll(/translateY\((-?[\d.]+)px\)/g)].map((m) => Number(m[1])),
+    ...[...block.matchAll(/translate\([^,)]+,\s*(-?[\d.]+)px\)/g)].map((m) => Number(m[1])),
+  ];
+}
+
+/** Every scaleY factor in a keyframes block. */
+function scaleYFactors(name: string): number[] {
+  return [...keyframes(name).matchAll(/scaleY\(([\d.]+)\)/g)].map((m) => Number(m[1]));
+}
+
+/** Every rotation in a keyframes block, in degrees. */
+function rotations(name: string): number[] {
+  return [...keyframes(name).matchAll(/rotate\((-?[\d.]+)deg\)/g)].map((m) => Number(m[1]));
+}
 
 /** Words that would assert an OUTCOME rather than an activity. */
 const OUTCOME_WORDS = [
@@ -79,7 +115,7 @@ const OUTCOME_WORDS = [
 
 /* ============================================================== REVIEWING */
 
-describe('REVIEWING — the dog snoozes', () => {
+describe('REVIEWING — the dog lies down and sleeps', () => {
   it('maps reviewing to the sleeping pose on both the state and the activity', () => {
     expect(DOG_PRESENTATION.reviewing.pose).toBe('sleeping');
     const view = officialRelayDogViewForState('reviewing');
@@ -121,6 +157,44 @@ describe('REVIEWING — the dog snoozes', () => {
     expect(seconds).toBeLessThanOrEqual(7);
   });
 
+  /**
+   * The founder asked for a dog that is LYING DOWN, not one that snoozes on
+   * its feet. The sleeping sprite is already curled with its eyes shut; what
+   * the motion layer owes is the settle onto the ground — and it must hold it
+   * for the WHOLE loop, so there is no frame in which the dog stands back up.
+   *
+   * It has to settle on the SPRITE layer. `.rdm-body` carries the dog's own
+   * floor and caption with it, so a settle there moves the ground down too and
+   * the dog never actually reaches it.
+   */
+  it('settles the dog down onto the ground and keeps it there', () => {
+    expect(css).toMatch(
+      /\.rdm-body--reviewing \.rpd-art\s*\{[^}]*animation:\s*rdm-sleep-twitch/s,
+    );
+    const offsets = verticalOffsets('rdm-sleep-twitch');
+    expect(offsets.length, 'the sleeping sprite declares no settle').toBeGreaterThan(0);
+    // Every stop is BELOW the standing baseline, by a visible amount.
+    for (const y of offsets) {
+      expect(y, `the sleep loop stands the dog back up at ${y}px`).toBeGreaterThanOrEqual(3);
+    }
+    // And it flattens rather than stretching — a dog on the floor, not sitting.
+    const scales = scaleYFactors('rdm-sleep-twitch');
+    expect(scales.length).toBeGreaterThan(0);
+    for (const s of scales) expect(s, 'the sleeping dog is not settled').toBeLessThan(0.95);
+    // The whole-figure breath stays small: the indicator breathes, the ground
+    // under it does not heave.
+    for (const y of verticalOffsets('rdm-sleep-breathe')) expect(Math.abs(y)).toBeLessThanOrEqual(2);
+  });
+
+  it('draws the ground the dog has settled onto, in both motion modes', () => {
+    for (const reducedMotion of [false, true]) {
+      expect(decor('reviewing', reducedMotion)).toContain('rdo-rest');
+    }
+    // Static scenery: the rest patch never animates, in either mode.
+    expect(css).toMatch(/\.rdo--sleep \.rdo-rest\s*\{(?:(?!\}).)*\}/su);
+    expect(ruleBody('.rdo--sleep .rdo-rest')).not.toContain('animation');
+  });
+
   it('the Z decoration is aria-hidden and carries no text meaning', () => {
     const html = decor('reviewing');
     expect(html).toContain('aria-hidden="true"');
@@ -142,7 +216,7 @@ describe('REVIEWING — the dog snoozes', () => {
 
   it('the accessible sentence describes the activity, never an outcome', () => {
     const sentence = operationalActivityDescription('reviewing');
-    expect(sentence).toBe('Relay Dog is snoozing while the mission is under review.');
+    expect(sentence).toBe('Relay Dog is lying down asleep while the mission is under review.');
     expect(sentence).toContain('under review');
     expect(sentence).not.toMatch(/reviewed|approved|verified|passed/i);
     expect(renderState('reviewing')).toContain('under review');
@@ -157,6 +231,10 @@ describe('REVIEWING — the dog snoozes', () => {
       .toBeGreaterThan(0);
     expect((html.match(/rdo-z--/g) ?? []).length).toBe(1);
     expect(css).toMatch(/\.rdm--reduced[^@]*\.rdo-z[^{]*\{[^}]*animation:\s*none/su);
+    // Held settled and flattened: still lying down with nothing moving.
+    expect(css).toMatch(
+      /\.rdm--reduced \.rdm-body--reviewing \.rpd-art\s*\{[^}]*transform:\s*translate\(0,\s*[\d.]+px\)\s*scaleY/s,
+    );
   });
 });
 
@@ -191,6 +269,34 @@ describe('REPAIRING — the dog digs', () => {
     const lunge = keyframes('rdm-dig-lunge');
     expect(lunge, 'rdm-dig-lunge is missing').not.toBe('');
     expect(lunge, 'no inspection pause').toMatch(/68%,\s*80%/);
+  });
+
+  /**
+   * The first dig moved 1.5px and read as a shiver — the founder could not
+   * tell what the animation was. A dig has to be big enough to see: the front
+   * end drives DOWN into the floor and the paws rake back a real distance.
+   */
+  it('digs hard enough to read as digging, not as a shiver', () => {
+    // The dig belongs to the SPRITE: the ground it is digging must not move
+    // with it, so the stroke lives on .rpd-art and not on the whole figure.
+    expect(css).toMatch(/\.rdm-body--repairing \.rpd-art\s*\{[^}]*animation:\s*rdm-dig-paws/s);
+    // Paws rake a real distance, both ways, rather than twitching.
+    const rakes = [...keyframes('rdm-dig-paws').matchAll(/translate\((-?[\d.]+)px/g)].map((m) =>
+      Number(m[1]),
+    );
+    expect(Math.max(...rakes.map(Math.abs)), 'the paw scrape is too small to see')
+      .toBeGreaterThanOrEqual(3);
+    // The front end drives DOWN into the floor on every stroke.
+    const drops = verticalOffsets('rdm-dig-paws').filter((y) => y > 0);
+    expect(drops.length, 'the dig never drives into the floor').toBeGreaterThan(0);
+    expect(Math.max(...drops), 'the dig is too shallow to read').toBeGreaterThanOrEqual(3);
+    // And the nose pitches over the hole, not a fraction of a degree.
+    const angles = rotations('rdm-dig-paws').map(Math.abs);
+    expect(Math.max(...angles), 'the dog barely leans into the hole').toBeGreaterThanOrEqual(4);
+    // The whole figure only leans in — its floor and label must not tip.
+    for (const a of rotations('rdm-dig-lunge')) {
+      expect(Math.abs(a), 'the whole scene tips with the dig').toBeLessThanOrEqual(2.5);
+    }
   });
 
   it('keeps the dig loop inside 2.5-5s', () => {
@@ -235,28 +341,72 @@ describe('REPAIRING — the dog digs', () => {
     expect(html).toContain('rdo-hole');
     expect(html).toContain('rdo-mound');
     expect((html.match(/rdo-clod/g) ?? []).length).toBe(0);
-    // The held pose still reads as digging rather than standing.
+    // The held pose still reads as digging rather than standing: the figure
+    // leans in and the sprite is held nose-down with its paws back.
     expect(css).toMatch(/\.rdm--reduced \.rdm-body--repairing\s*\{[^}]*transform:\s*translateY/s);
+    expect(css).toMatch(
+      /\.rdm--reduced \.rdm-body--repairing \.rpd-art\s*\{[^}]*transform:\s*translate\(-[\d.]+px,\s*[\d.]+px\)\s*rotate/s,
+    );
   });
 });
 
-/* ================================================================= CODING */
+/* ========================================================== IMPLEMENTING */
 
-describe('CODING — the dog types at the keys, with no code panel', () => {
-  it('maps implementing to the coding pose on both the state and the activity', () => {
-    expect(DOG_PRESENTATION.implementing.pose).toBe('coding');
+describe('IMPLEMENTING — the dog is up on its tippy toes, with no code panel', () => {
+  /**
+   * The founder's words: "the dog is on its tippy toes and its arms are up".
+   * That STANCE is sprite art, and the sprite already has it: `reaching` is the
+   * pose drawn up on the hind toes with both forepaws lifted. Implementing must
+   * be drawn in it — no motion layer can lift a seated dog's arms.
+   */
+  it('draws implementing in the tippy-toe, paws-raised pose', () => {
+    expect(DOG_PRESENTATION.implementing.pose).toBe('reaching');
     const view = officialRelayDogViewForState('implementing');
     expect(view.activity).toBe('implementing');
-    expect(view.pose).toBe('coding');
+    expect(view.pose).toBe('reaching');
+    // The motion NAME is shared identity, mirrored by the CLI and pinned by the
+    // parity capability — the website does not rename it from its own layer.
     expect(view.motion).toBe('code_progression');
+    // And it is the official sprite's raised stance, not a new drawing: the
+    // forepaws sit ABOVE the collar row rather than below it.
+    const reaching = OFFICIAL_RELAY_DOG_POSES.reaching;
+    const collarRow = reaching.findIndex((r) => r.includes('c'));
+    expect(collarRow, 'the reaching pose lost its collar').toBeGreaterThan(-1);
+    expect(reaching[collarRow], 'the raised forepaws are missing').toMatch(/ww\.$|\.ww\./);
   });
 
-  it('renders the dog at a keyboard, still typing', () => {
+  it('renders the dog in the reaching pose with its own raised-stance loop', () => {
     const html = renderState('implementing');
     expect(html).toContain('rdm-body--implementing');
-    expect(html).toContain('rpd--coding');
+    expect(html).toContain('rpd--reaching');
+    expect(html, 'implementing still draws the seated coding pose').not.toContain('rpd--coding');
     expect(css).toContain('@keyframes rdm-code-type');
     expect(css).toContain('@keyframes rdm-code-paws');
+    // The pose brings its own rise-and-settle with it.
+    expect(css).toMatch(/\.rpd--reaching\s*\{[^}]*animation:\s*rdm-tiptoe-reach/s);
+  });
+
+  /**
+   * The pose puts the dog on its toes; the motion has to KEEP it there. A loop
+   * that returns to the ground on every cycle is a bob, not a stance.
+   */
+  it('holds the dog clear of the floor for the whole loop, never flat', () => {
+    // The lift belongs to the SPRITE: on the figure layer it would take the
+    // dog's own floor up with it and the dog would never leave the ground.
+    expect(css).toMatch(/\.rdm-body--implementing \.rpd-art\s*\{[^}]*animation:\s*rdm-code-paws/s);
+    const offsets = verticalOffsets('rdm-code-paws');
+    expect(offsets.length, 'the implementing stance declares no rise').toBeGreaterThan(0);
+    for (const y of offsets) {
+      expect(y, `the implementing stance drops the dog flat at ${y}px`).toBeLessThanOrEqual(-2);
+    }
+    // It stretches upward onto its toes rather than squashing down.
+    const scales = scaleYFactors('rdm-code-paws');
+    expect(scales.length).toBeGreaterThan(0);
+    for (const s of scales) expect(s, 'the dog is not stretched up').toBeGreaterThan(1);
+    // The reach pushes higher than the held stance — paws working, not frozen.
+    expect(Math.min(...offsets), 'the paws never reach any higher').toBeLessThan(Math.max(...offsets));
+    // The whole-figure beat stays small: the ground under the dog holds still.
+    for (const y of verticalOffsets('rdm-code-type')) expect(Math.abs(y)).toBeLessThanOrEqual(2);
   });
 
   /**
@@ -298,26 +448,160 @@ describe('CODING — the dog types at the keys, with no code panel', () => {
     }
     expect(html).not.toContain('rpd-marker--check');
     const sentence = operationalActivityDescription('implementing');
-    expect(sentence).toBe('Relay Dog is writing and implementing code.');
+    expect(sentence).toBe('Relay Dog is up on its toes, paws raised, implementing the work.');
     expect(sentence).not.toMatch(/complete|finished|done|verified/i);
   });
 
-  it('reduced motion holds a STATIC coding pose', () => {
+  it('reduced motion holds the dog STILL, and still up on its toes', () => {
     const html = renderState('implementing', true);
     expect(html).toContain('rdm--reduced');
-    expect(html).toContain('rpd--coding');
+    expect(html).toContain('rpd--reaching');
     // The reduced-motion fallback label still names the state in words.
     expect(html).toContain(projectWorkspaceDogBehavior('implementing').reducedMotionFallback);
+    // Held at the top of the rise — a raised dog, not a standing one.
+    expect(css).toMatch(
+      /\.rdm--reduced \.rdm-body--implementing \.rpd-art\s*\{[^}]*transform:\s*translate\(0,\s*-[\d.]+px\)/s,
+    );
+  });
+});
+
+/* =========================================================== RESEARCHING */
+
+describe('RESEARCHING — the dog carries a newspaper on its back', () => {
+  it('draws the newspaper, on the dog, in both motion modes', () => {
+    for (const reducedMotion of [false, true]) {
+      const html = renderState('researching', reducedMotion);
+      expect(html, 'the newspaper is missing').toContain('rdo--news');
+      expect(html).toContain('rdo-news');
+      // On the DOG's own box, not stranded out in the patrol track.
+      expect(ruleBody('.rdo')).toMatch(/width:\s*\d+px/);
+      expect(ruleBody('.rdo')).toMatch(/height:\s*\d+px/);
+    }
+  });
+
+  it('the newspaper is decoration: aria-hidden, and it carries no words', () => {
+    const html = decor('researching');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html.indexOf('aria-hidden="true"')).toBeLessThan(html.indexOf('rdo-news'));
+    // A decorative sheet, never readable text that could be mistaken for a
+    // finding, a headline, or a result.
+    expect(html).not.toMatch(/>[^<]*[A-Za-z]{3}[^<]*</);
+  });
+
+  it('is NOT the handoff: a delivery and a reading are different states', () => {
+    const research = renderState('researching');
+    const handoff = renderState('carrying_handoff');
+    expect(DOG_PRESENTATION.researching.pose).toBe('sitting');
+    expect(DOG_PRESENTATION.carrying_handoff.pose).toBe('carrying');
+    // The handoff never grows a newspaper, and researching never travels.
+    expect(handoff, 'the handoff drew the newspaper').not.toContain('rdo--news');
+    expect(research).toContain('RESEARCHING');
+    expect(projectWorkspaceDogBehavior('researching').patrolEnabled).toBe(false);
+    // Newsprint tones only — the decor never restates the dog's gold.
+    expect(ruleBody('.rdo--news .rdo-news')).not.toContain('#d9a441');
+  });
+
+  it('reading is not a finding: no outcome, no check, no result', () => {
+    const html = renderState('researching');
+    expect(html).not.toContain('rpd-marker--check');
+    for (const word of OUTCOME_WORDS) {
+      expect(html, `researching must not render "${word}"`).not.toContain(word);
+    }
+    const sentence = operationalActivityDescription('researching');
+    expect(sentence).toBe('Relay Dog is reading up on the mission with a newspaper on its back.');
+    expect(sentence).not.toMatch(/found|proved|confirmed|verified|complete/i);
+  });
+
+  it('reduced motion holds the newspaper still, on the back', () => {
+    const html = renderState('researching', true);
+    expect(html).toContain('rdm--reduced');
+    expect(html).toContain('rdo-news');
+    expect(css).toMatch(/\.rdm--reduced[^@]*\.rdo-news[^{]*\{[^}]*animation:\s*none/su);
+    // The angle that puts it ON the back survives with the motion stopped.
+    expect(ruleBody('.rdo--news .rdo-news')).toMatch(/transform:\s*rotate\(-?[\d.]+deg\)/);
+  });
+});
+
+/* ============================================================= VERIFYING */
+
+describe('VERIFYING — the tail goes back and forth', () => {
+  it('wags: the body swings on the beat, and the sweep is marked both ways', () => {
+    const html = renderState('verifying');
+    expect(html).toContain('rdm-body--verifying');
+    expect(html).toContain('rdo--wag');
+    // Two sweeps: one for each side the tail travels to.
+    expect((html.match(/rdo-wag--/g) ?? []).length).toBe(2);
+    expect(keyframes('rdm-tail-wag'), 'rdm-tail-wag is missing').not.toBe('');
+    // The swing is on the SPRITE, pivoting at its front feet, so the tail end
+    // travels furthest — and the caption and floor do not tilt with it.
+    expect(css).toMatch(/\.rdm-body--verifying \.rpd-art\s*\{[^}]*animation:\s*rdm-tail-wag/s);
+    expect(ruleBody('.rdm-body--verifying .rpd-art')).toMatch(/transform-origin:\s*\d+%\s+bottom/);
+    const angles = rotations('rdm-tail-wag');
+    // BACK and FORTH — a negative angle and a positive one, not one lean.
+    expect(Math.min(...angles), 'the tail never travels one way').toBeLessThan(0);
+    expect(Math.max(...angles), 'the tail never travels the other way').toBeGreaterThan(0);
+    // Quick, the way a wag is quick.
+    const seconds = Number(css.match(/rdm-tail-wag\s+([\d.]+)s/)?.[1]);
+    expect(seconds).toBeGreaterThan(0.2);
+    expect(seconds).toBeLessThanOrEqual(1);
+  });
+
+  it('the wag never drifts the dog along the patrol track', () => {
+    expect(keyframes('rdm-tail-wag')).not.toContain('translateX');
+    expect(projectWorkspaceDogBehavior('verifying').patrolEnabled).toBe(false);
+  });
+
+  it('the sweep marks are decoration, aria-hidden, and few', () => {
+    const html = decor('verifying');
+    expect(html).toContain('aria-hidden="true"');
+    expect(html.indexOf('aria-hidden="true"')).toBeLessThan(html.indexOf('rdo-wag'));
+    expect((html.match(/rdo-wag--/g) ?? []).length).toBeLessThanOrEqual(4);
+  });
+
+  /**
+   * The most dangerous state on this list. A wagging dog reads as HAPPY, and
+   * happy must never be mistaken for PASSED — verification is still running.
+   */
+  it('a wagging tail NEVER means verification passed', () => {
+    const html = renderState('verifying');
+    expect(DOG_PRESENTATION.verifying.marker).toBe('question');
+    expect(DOG_PRESENTATION.verifying.marker).not.toBe('check');
+    expect(html).not.toContain('rpd-marker--check');
+    expect(html).toContain('VERIFYING');
+    for (const word of OUTCOME_WORDS) {
+      expect(html, `verifying must not render "${word}"`).not.toContain(word);
+    }
+    const sentence = operationalActivityDescription('verifying');
+    expect(sentence).toBe('Relay Dog is waiting with its tail wagging while verification runs.');
+    expect(sentence).not.toMatch(/verified|passed|approved|complete|success/i);
+    // And no green anywhere in the wag scenery — green is the check's colour.
+    expect(ruleBody('.rdo--wag .rdo-wag')).not.toMatch(/#6fbf73|green/i);
+  });
+
+  it('reduced motion holds ONE sweep and a tail carried to one side', () => {
+    const html = renderState('verifying', true);
+    expect(html).toContain('rdm--reduced');
+    expect((html.match(/rdo-wag--/g) ?? []).length).toBe(1);
+    expect(css).toMatch(/\.rdm--reduced[^@]*\.rdo-wag[^{]*\{[^}]*animation:\s*none/su);
+    expect(css).toMatch(
+      /\.rdm--reduced \.rdm-body--verifying \.rpd-art\s*\{[^}]*transform:\s*rotate/s,
+    );
   });
 });
 
 /* =============================================================== IDENTITY */
 
-describe('OFFICIAL RELAY DOG identity survives all three states', () => {
-  const states: WorkspaceDogState[] = ['reviewing', 'repairing', 'implementing'];
+describe('OFFICIAL RELAY DOG identity survives all five states', () => {
+  const states: WorkspaceDogState[] = [
+    'reviewing',
+    'repairing',
+    'implementing',
+    'researching',
+    'verifying',
+  ];
 
   it('every operational pose is the official 18x14 dog with the official palette', () => {
-    for (const pose of ['sleeping', 'digging', 'coding'] as const) {
+    for (const pose of ['sleeping', 'digging', 'reaching', 'sitting', 'standing'] as const) {
       const grid = OFFICIAL_RELAY_DOG_POSES[pose];
       expect(grid, pose).toHaveLength(14);
       for (const row of grid) expect(row.length, pose).toBe(18);
@@ -358,17 +642,17 @@ describe('OFFICIAL RELAY DOG identity survives all three states', () => {
   /**
    * PSP colourway customization is a documented FUTURE capability: a PSP may
    * eventually override `OFFICIAL_RELAY_DOG_PALETTE`, and every pose must
-   * recolour with it. Three new poses are three new chances to hardcode a
-   * colour and quietly break that seam, so the seam is asserted directly.
+   * recolour with it. Every pose an operational state draws is another chance
+   * to hardcode a colour and quietly break that seam, so it is asserted here.
    */
-  it('the PSP recolour seam still reaches all three new poses', () => {
+  it('the PSP recolour seam still reaches every operational pose', () => {
     const sprite = readFileSync(
       join(dir, '..', '..', 'shared', 'official-relay-dog-sprite.ts'),
       'utf8',
     );
     // Poses are PIXEL KEYS, never colours: a pose grid may only contain the
     // palette's key letters, so recolouring the palette recolours every pose.
-    for (const pose of ['sleeping', 'digging', 'coding'] as const) {
+    for (const pose of ['sleeping', 'digging', 'reaching', 'sitting', 'standing'] as const) {
       for (const row of OFFICIAL_RELAY_DOG_POSES[pose]) {
         expect(/^[.wsdyc]+$/.test(row), `${pose} row "${row}" is not pure palette keys`).toBe(true);
         expect(row, `${pose} hardcodes a colour`).not.toMatch(/#[0-9a-f]{3,6}/i);
@@ -423,29 +707,46 @@ describe('REGRESSION — untouched states stay untouched', () => {
     }
   });
 
-  it('only reviewing and repairing carry scenery — no other state does', () => {
+  /**
+   * Each state carries ONLY its own scenery. Four states have some; every
+   * other state has none, and implementing still has none at all — the code
+   * panel the founder removed cannot come back through another state's door.
+   */
+  it('each state carries only its own scenery, and no other state has any', () => {
+    const SCENERY = ['rdo--sleep', 'rdo--dig', 'rdo--news', 'rdo--wag', 'rdo--code'] as const;
+    const owned: Partial<Record<WorkspaceDogState, string>> = {
+      reviewing: 'rdo--sleep',
+      repairing: 'rdo--dig',
+      researching: 'rdo--news',
+      verifying: 'rdo--wag',
+    };
     for (const state of [
-      'wandering', 'trotting', 'researching', 'carrying_handoff',
-      'verifying', 'waiting_for_user', 'complete', 'stopped_safely',
+      'wandering', 'trotting', 'implementing', 'researching', 'carrying_handoff',
+      'verifying', 'reviewing', 'repairing', 'waiting_for_user', 'complete', 'stopped_safely',
     ] as WorkspaceDogState[]) {
       const html = renderState(state);
-      expect(html, state).not.toContain('rdo--sleep');
-      expect(html, state).not.toContain('rdo--dig');
-      expect(html, state).not.toContain('rdo--code');
+      for (const hook of SCENERY) {
+        if (owned[state] === hook) expect(html, `${state} lost ${hook}`).toContain(hook);
+        else expect(html, `${state} drew ${hook}`).not.toContain(hook);
+      }
     }
   });
 
   it('COMPLETE keeps its check and remains the only state that shows one', () => {
     expect(DOG_PRESENTATION.complete.marker).toBe('check');
     expect(renderState('complete')).toContain('rpd-marker--check');
-    for (const state of ['reviewing', 'repairing', 'implementing'] as WorkspaceDogState[]) {
+    for (const state of [
+      'reviewing', 'repairing', 'implementing', 'researching', 'verifying',
+    ] as WorkspaceDogState[]) {
       expect(renderState(state), state).not.toContain('rpd-marker--check');
     }
   });
 
   it('idle patrol still belongs to idle alone', () => {
     expect(projectWorkspaceDogBehavior('wandering').patrolEnabled).toBe(true);
-    for (const state of ['reviewing', 'repairing', 'implementing'] as WorkspaceDogState[]) {
+    for (const state of [
+      'reviewing', 'repairing', 'implementing', 'researching', 'verifying',
+    ] as WorkspaceDogState[]) {
       expect(projectWorkspaceDogBehavior(state).patrolEnabled, state).toBe(false);
     }
   });
@@ -480,6 +781,8 @@ describe('REGRESSION — untouched states stay untouched', () => {
       'rdm-sleep-breathe', 'rdm-sleep-twitch', 'rdo-z-drift',
       'rdm-dig-lunge', 'rdm-dig-paws', 'rdo-clod-fly',
       'rdm-code-type', 'rdm-code-paws',
+      'rdm-read-settle', 'rdo-news-ride',
+      'rdm-tail-wag', 'rdo-wag-sweep',
       'rdm-enter-sleep', 'rdm-enter-dig', 'rdm-enter-code',
     ];
     for (const name of names) {

@@ -229,10 +229,10 @@ describe('official Relay Dog — state parity with the website', () => {
     }
   });
 
-  it('IMPLEMENTING is the coding pose (paws forward on the keys)', () => {
+  it('IMPLEMENTING is the reaching pose (up on the toes, paws raised)', () => {
     const dog = footerDog({ state: 'IMPLEMENTING', tick: 1, caps: caps() });
     expect(dog.activity).toBe('implementing');
-    expect(dog.pose).toBe('coding');
+    expect(dog.pose).toBe('reaching');
     expect(dog.motion).toBe('code_progression');
     expect(dog.label).toContain('IMPLEMENTING');
     // The scratch alternates frame to frame; the dog does not cross the track.

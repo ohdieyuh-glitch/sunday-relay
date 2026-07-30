@@ -206,7 +206,7 @@ export const OFFICIAL_RELAY_DOG_STATE_PRESENTATION: Record<
   wandering: { pose: 'standing', marker: 'none', moving: true, label: 'WANDERING' },
   trotting: { pose: 'trotting', marker: 'none', moving: true, label: 'TROTTING' },
   running: { pose: 'running', marker: 'none', moving: true, label: 'RUNNING' },
-  implementing: { pose: 'coding', marker: 'none', moving: false, label: 'IMPLEMENTING' },
+  implementing: { pose: 'reaching', marker: 'none', moving: false, label: 'IMPLEMENTING' },
   sprinting: { pose: 'running', marker: 'none', moving: true, label: 'SPRINTING' },
   carrying_handoff: { pose: 'carrying', marker: 'none', moving: true, label: 'CARRYING HANDOFF' },
   researching: { pose: 'sitting', marker: 'scan', moving: false, label: 'RESEARCHING' },
