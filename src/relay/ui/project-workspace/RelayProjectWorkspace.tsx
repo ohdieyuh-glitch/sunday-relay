@@ -16,6 +16,7 @@ import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
 import { RelayProjectFooter } from './RelayProjectFooter';
 import { RelayPspAgentImport } from '../psp-import';
+import { RelayUsageBar, type RelayWorkspaceUsage } from '../usage';
 import {
   RelayFocusBackdrop,
   RelayFocusedPanel,
@@ -65,7 +66,16 @@ export interface RelayWorkspaceAgentsPanel {
 }
 
 export function RelayProjectWorkspace(
-  props: RelayProjectWorkspaceProps & { agentsPanel?: RelayWorkspaceAgentsPanel },
+  props: RelayProjectWorkspaceProps & {
+    agentsPanel?: RelayWorkspaceAgentsPanel;
+    /**
+     * Optional Usage Bar surface (view + open intent), passed through to the
+     * header and echoed compactly inside focused fullscreen panels. Optional
+     * for the same reason as `agentsPanel`: callers without a usage source
+     * render exactly as before.
+     */
+    usage?: RelayWorkspaceUsage;
+  },
 ) {
   const {
     project,
@@ -162,6 +172,13 @@ export function RelayProjectWorkspace(
           buttonRef={(node) => { expandRefs.current[panel] = node; }}
         />
         {content}
+        {/* The Usage Bar stays available in focused views: the backdrop
+            covers the header, so the focused shell pins a compact echo of
+            the SAME projected view beside the return control. Stateless, so
+            this is presentation, never a second usage authority. */}
+        {focused && props.usage !== undefined && (
+          <RelayUsageBar view={props.usage.bar} onOpen={props.usage.onOpenUsage} compact />
+        )}
         {focused && profile !== undefined && (
           <RelayAgentOperatingInspector projection={profile} />
         )}
@@ -183,6 +200,7 @@ export function RelayProjectWorkspace(
         project={project}
         outputState={outputState}
         openManualTasks={openTasks}
+        usage={props.usage}
         onReturnHome={onReturnHome}
         onOpenProjectSettings={onOpenProjectSettings}
         onOpenTerminal={onOpenTerminal}
