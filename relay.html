@@ -1,21 +1,30 @@
 <!doctype html>
-<html lang="en" data-theme="obsidian">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-    />
-    <meta name="theme-color" content="#07080b" />
-    <meta
-      name="description"
-      content="Sunday Relay — one mission, two agents, a verified result. Structured handoffs between Claude Code and Codex with a computed verification gate."
-    />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <title>Sunday Relay</title>
+    <!--
+      COMPATIBILITY ONLY — NOT A SECOND APPLICATION ENTRY.
+
+      Sunday Relay's canonical document is `index.html`, so the application
+      loads from the root URL `/`. This file exists solely because `/relay.html`
+      was the entry before that, and a link or bookmark to it must not 404.
+
+      It deliberately contains NO application markup and NO module script. A
+      second copy of the real document would be a copy that drifts: one entry
+      would gain a meta tag, a viewport rule or a favicon and the other would
+      not, and whichever one a customer opened would be the stale one. There is
+      exactly one Relay document, and this redirects to it.
+    -->
+    <meta http-equiv="refresh" content="0; url=/" />
+    <link rel="canonical" href="/" />
+    <script>
+      // Replace rather than assign, so the redirect does not trap the Back
+      // button on a page that only ever forwards.
+      window.location.replace('/');
+    </script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/relay/main.tsx"></script>
+    <p>Sunday Relay has moved to <a href="/">/</a>.</p>
   </body>
 </html>

@@ -11,7 +11,7 @@ import { join } from 'node:path';
  * never grow a dependency on Alcatraz's engine, server, session store or UI,
  * and must never import another product's stylesheet.
  *
- * - Relay application code lives in src/relay/** + relay.html.
+ * - Relay application code lives in src/relay/** + index.html.
  * - Relay never imports the Alcatraz engine, server, or session store.
  * - Relay styles itself from its OWN token sheet (src/relay/relay-tokens.css).
  * Source-level assertions, matching the project's boundary-test convention.
@@ -71,13 +71,16 @@ describe('relay isolation boundary', () => {
   });
 
   it('ships its own entry page wired to the relay main', () => {
-    const html = readFileSync(join(root, 'relay.html'), 'utf8');
+    // The CANONICAL document is `index.html` — Vite's normal root entry — so
+    // the deployed application loads from `/` with no host-specific rewrite.
+    const html = readFileSync(join(root, 'index.html'), 'utf8');
     expect(html).toContain('<title>Sunday Relay</title>');
     expect(html).toContain('/src/relay/main.tsx');
   });
 
-  it('registers the relay entry as the product build input', () => {
+  it('registers the canonical entry as the product build input', () => {
     const vite = readFileSync(join(root, 'vite.config.mts'), 'utf8');
+    expect(vite).toContain("main: fileURLToPath(new URL('./index.html'");
     expect(vite).toContain("relay: fileURLToPath(new URL('./relay.html'");
   });
 

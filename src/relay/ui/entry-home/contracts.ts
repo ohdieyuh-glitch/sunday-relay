@@ -238,7 +238,7 @@ export interface RelayEntryHomeProps {
 
   /** Navigate to the Sunday Alcatraz SIBLING PRODUCT. Optional on purpose:
    * Alcatraz is a separate Aquala product with its own deployment, and this
-   * repository builds `relay.html` only. When no Alcatraz URL is configured
+   * repository serves Relay itself at `/`. When no Alcatraz URL is configured
    * the control must present itself as unavailable rather than link to a
    * route that does not exist here. */
   onReturnToSunday?: () => void;
