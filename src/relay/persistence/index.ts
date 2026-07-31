@@ -35,3 +35,7 @@ export { stateDoctorReport } from './doctor';
 export { createSupervisedRunRecorder, type SupervisedRunRecorder } from './supervised-recorder';
 export { runPersistenceContractVerification, type PersistenceContractCheck } from './verify-harness';
 export { runRecoveryDrill } from './recovery-drill';
+export {
+  DURABLE_MISSIONS_DIR, createNodeDurableBacking, createNodeDurableMissionStore,
+  readPreviousDurableRecordText,
+} from './durable-mission-file';

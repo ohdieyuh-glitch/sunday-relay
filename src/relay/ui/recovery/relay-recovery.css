@@ -1,0 +1,129 @@
+/* ==========================================================================
+   RELAY MISSION RECOVERY — the compact unfinished-mission surface.
+   Scoped to .rrc-*. Same restrained language as the rest of Relay: near
+   black, cream, aged gold, thin borders, no neon, no oversized cards.
+   ========================================================================== */
+
+.rrc {
+  border: 1px solid var(--rmc-line);
+  border-left: 2px solid var(--rmc-gold);
+  background: var(--rmc-panel);
+  color: var(--rmc-text);
+  font-family: var(--rmc-mono);
+  padding: 12px 14px;
+  margin: 0 auto 12px;
+  max-width: 1240px;
+}
+.rrc--blocked { border-left-color: #d66a5a; }
+
+.rrc-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--rmc-line);
+  padding-bottom: 8px;
+}
+.rrc-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: var(--rmc-gold);
+}
+.rrc-class {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  border: 1px solid var(--rmc-line);
+  padding: 2px 7px;
+  color: var(--rmc-dim);
+}
+.rrc-class--ready_to_resume,
+.rrc-class--paused { color: var(--rmc-gold); border-color: var(--rmc-gold); }
+.rrc-class--awaiting_approval { color: #e0b25c; border-color: #e0b25c; }
+.rrc-class--record_corrupt,
+.rrc-class--unsupported_record_version,
+.rrc-class--cannot_resume_safely,
+.rrc-class--budget_blocked,
+.rrc-class--environment_requires_inspection,
+.rrc-class--execution_connection_lost { color: #d66a5a; border-color: #d66a5a; }
+.rrc-class--completed { color: #6fbf73; border-color: #6fbf73; }
+
+.rrc-summary {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.rrc-rows {
+  margin: 10px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 6px 18px;
+}
+.rrc-row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rrc-row dt {
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rmc-dim);
+}
+.rrc-row dd {
+  margin: 0;
+  font-size: 11px;
+  color: var(--rmc-text);
+  overflow-wrap: anywhere;
+}
+
+.rrc-provenance,
+.rrc-runtime-note {
+  margin: 10px 0 0;
+  padding: 6px 8px;
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--rmc-line);
+  color: var(--rmc-gold);
+}
+.rrc-runtime-note { color: var(--rmc-dim); }
+
+.rrc-diagnostics {
+  margin: 10px 0 0;
+  padding-left: 16px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--rmc-dim);
+}
+
+.rrc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.rrc-btn {
+  font-family: var(--rmc-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  padding: 8px 12px;
+  min-height: 40px;
+  background: transparent;
+  color: var(--rmc-text);
+  border: 1px solid var(--rmc-line);
+  cursor: pointer;
+}
+.rrc-btn:hover:not(:disabled) { border-color: var(--rmc-gold); color: var(--rmc-gold); }
+.rrc-btn:focus-visible { outline: 2px solid var(--rmc-gold); outline-offset: 2px; }
+.rrc-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.rrc-btn--primary { color: var(--rmc-gold); border-color: var(--rmc-gold); }
+.rrc-btn--stop { color: var(--rmc-dim); }
+
+@media (max-width: 700px) {
+  .rrc { margin-left: 10px; margin-right: 10px; }
+  .rrc-btn { min-height: 44px; flex: 1 1 auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rrc, .rrc-btn { transition: none; animation: none; }
+}
