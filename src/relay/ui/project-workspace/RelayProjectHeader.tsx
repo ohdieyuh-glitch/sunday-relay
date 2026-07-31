@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { RelayDogMark } from '../pixel-dog';
 import { RelayMenuButton, RelayMobileMenu } from '../chrome';
+import { RelayUsageBar, type RelayWorkspaceUsage } from '../usage';
 import { OUTPUT_STATE_LABEL } from './projections';
 import type { WorkspaceOutputState, WorkspaceProject } from './contracts';
 
@@ -16,6 +17,7 @@ export function RelayProjectHeader({
   project,
   outputState,
   openManualTasks,
+  usage,
   onReturnHome,
   onOpenProjectSettings,
   onOpenTerminal,
@@ -23,6 +25,8 @@ export function RelayProjectHeader({
   project: WorkspaceProject;
   outputState: WorkspaceOutputState;
   openManualTasks: number;
+  /** Optional Usage Bar surface — callers that omit it render as before. */
+  usage?: RelayWorkspaceUsage;
   onReturnHome: () => void;
   onOpenProjectSettings: () => void;
   onOpenTerminal: () => void;
@@ -66,6 +70,13 @@ export function RelayProjectHeader({
           {OUTPUT_STATE_LABEL[outputState]}
         </span>
       </div>
+
+      {/* The Usage Bar sits OUTSIDE .rpw-header-right on purpose: the right
+          cluster hides behind MENU on mobile, while usage stays reachable as
+          a compact top-navigation indicator at every width. */}
+      {usage !== undefined && (
+        <RelayUsageBar view={usage.bar} onOpen={usage.onOpenUsage} />
+      )}
 
       <div className="rpw-header-right">
         <button type="button" className="rpw-head-btn" onClick={onOpenProjectSettings}>

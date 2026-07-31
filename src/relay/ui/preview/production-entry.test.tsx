@@ -7,41 +7,31 @@ import { siblingProductTarget } from './environment';
  * Production-entry truthfulness.
  *
  * The Relay application shell doubles as the founder's full-flow preview
- * harness. That is useful and stays — but the shipped bundle used to render a
- * `DEV PREVIEW` chip and a route/fixture switcher unconditionally, so the
- * production build presented development scaffolding as the product. And the
- * ALCATRAZ sibling-product control navigated to `/`, a route this repository
- * does not build.
- *
- * These tests fail in BOTH directions: if development labelling reaches a
- * production build, and if the development tooling disappears from the source.
+ * harness. The preview switcher (routes, fixture states, Demo Simulation,
+ * appearance, zoom) was once build-gated out of production; founder
+ * direction (2026-07-31) ships it WITH the offline demo product — the
+ * deployed site is the walkable product tour, and the switcher is how a
+ * visitor walks it. These tests fail in BOTH directions: if the switcher
+ * stops shipping, and if a build gate quietly returns. The ALCATRAZ
+ * sibling-product control must still never navigate to `/`, a route this
+ * repository does not build.
  */
 
 const ROOT = resolve(__dirname, '..', '..', '..', '..');
 const shell = readFileSync(join(__dirname, 'RelayPreviewApp.tsx'), 'utf8');
 
-describe('development tooling is gated on the build', () => {
-  it('the DEV PREVIEW chip renders only under IS_DEV_BUILD', () => {
-    expect(shell).toContain('IS_DEV_BUILD');
-    // The chip markup must sit INSIDE the guard, not beside it.
-    const guardAt = shell.indexOf('{IS_DEV_BUILD && (');
-    const chipAt = shell.indexOf('rpv-devchip');
-    const navAt = shell.indexOf('Development preview switcher');
-    expect(guardAt).toBeGreaterThan(-1);
-    expect(chipAt).toBeGreaterThan(guardAt);
-    expect(navAt).toBeGreaterThan(guardAt);
-  });
-
-  it('development preview tooling still EXISTS — gating must not mean deleting', () => {
+describe('the preview switcher ships with the product (founder direction)', () => {
+  it('renders unconditionally — no build gate around the switcher', () => {
     expect(shell).toContain('rpv-devchip');
     expect(shell).toContain('Development preview switcher');
     expect(shell).toContain('DEV PREVIEW');
+    // The retired gate must not quietly return.
+    expect(shell).not.toContain('IS_DEV_BUILD');
   });
 
-  it('the gate is a build fact, not a runtime flag a user could flip', () => {
-    const env = readFileSync(join(__dirname, 'environment.ts'), 'utf8');
-    expect(env).toContain('import.meta.env');
-    expect(env).toContain('DEV');
+  it('remains collapsible behind its handle, so it never traps the product', () => {
+    expect(shell).toContain('aria-expanded={switcherOpen}');
+    expect(shell).toContain('aria-controls="relay-dev-preview-controls"');
   });
 });
 
@@ -101,16 +91,17 @@ describe('production bundle', () => {
     expect(html).not.toContain('id="root"');
   });
 
-  it('contains no DEV PREVIEW label', () => {
+  it('ships the preview switcher (founder direction, 2026-07-31)', () => {
     if (bundles.length === 0) {
       requireCiRerun();
       return;
     }
-    for (const bundle of bundles) {
-      const code = readFileSync(bundle, 'utf8');
-      expect(code.includes('DEV PREVIEW'), `${bundle} ships a DEV PREVIEW label`).toBe(false);
-      expect(code.includes('Development preview switcher'), `${bundle} ships the dev switcher`).toBe(false);
-    }
+    const all = bundles.map((b) => readFileSync(b, 'utf8')).join('');
+    expect(all.includes('DEV PREVIEW'), 'the preview switcher chip must ship').toBe(true);
+    expect(
+      all.includes('Development preview switcher'),
+      'the preview switcher nav must ship',
+    ).toBe(true);
   });
 
   it('still identifies itself as Sunday Relay', () => {

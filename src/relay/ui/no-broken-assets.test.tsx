@@ -114,6 +114,8 @@ describe('no broken-image placeholder is possible', () => {
       'preview/relay-preview.css',
       'chrome/relay-chrome.css',
       'pixel-dog/pixel-dog.css',
+      'usage/relay-usage.css',
+      'notifications/relay-notifications.css',
       'relay-manual-theme.css',
     ]) {
       const css = readFileSync(join(UI, f), 'utf8');

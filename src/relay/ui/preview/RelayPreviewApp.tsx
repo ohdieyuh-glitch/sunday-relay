@@ -50,7 +50,18 @@ import type { PSPAgentImportRecord } from '../../psp';
 import { createFixtureEntitlementService } from '../../psp/psp-fixtures';
 import { COLORWAY_LABEL, RELAY_COLORWAYS, applyRelayColorway } from './colorway';
 import type { RelayColorway } from './colorway';
-import { IS_DEV_BUILD, siblingProductTarget } from './environment';
+import { siblingProductTarget } from './environment';
+import {
+  EMPTY_USAGE_LATCH,
+  demoUsageSnapshot,
+  deriveUsageThresholdEvents,
+  offlineUsageSnapshot,
+  projectUsageBar,
+  projectUsageDetail,
+  type RelayUsageLatch,
+} from '../../usage';
+import { RelayUsageDetailPanel, type RelayWorkspaceUsage } from '../usage';
+import { RelayNotificationHost, useRelayNotificationCenter } from '../notifications';
 import './relay-preview.css';
 
 /**
@@ -67,10 +78,17 @@ import './relay-preview.css';
  * All domain state lives in the application store and persists through the
  * browser-demo adapter, so refresh and direct routes restore the exact
  * project and mission. The demo mission path is deterministic and offline —
- * no provider is ever called. The bottom-right DEV PREVIEW switcher — now
- * collapsible at every width behind its DEV PREVIEW handle, with a ZOOM control that
- * shrinks the whole app into view — is a development tool only, never part of
- * any production component contract.
+ * no provider is ever called. The bottom-right DEV PREVIEW switcher —
+ * collapsible at every width behind its handle, with a ZOOM control that
+ * shrinks the whole app into view — SHIPS with the offline demo product
+ * (founder direction, 2026-07-31): the deployed site is the walkable tour,
+ * and the switcher is how a visitor walks it. It drives presentation and the
+ * explicitly labeled Demo Simulation only, never mission execution.
+ *
+ * The shell also owns the ONE canonical usage snapshot (offline until a live
+ * source exists; SIMULATED only inside Demo Simulation), the ONE usage
+ * detail panel, and the ONE top-right notification host shared by every
+ * screen and fullscreen panel.
  *
  * The `rly-001` id remains the labeled design fixture (unchanged), so the
  * approved screenshots keep working; created projects are `rly-002+` and are
@@ -139,6 +157,37 @@ function writeDevZoom(zoom: number): void {
     window.localStorage.setItem(DEV_ZOOM_KEY, String(zoom));
   } catch {
     /* dev-only convenience — a storage failure must never break the app */
+  }
+}
+
+/**
+ * Which usage thresholds already notified, keyed per reset window — persisted
+ * so a browser refresh cannot fabricate a second threshold crossing. Storage
+ * failure degrades to session-only memory, never to a broken app.
+ */
+const USAGE_LATCH_KEY = 'sunday-relay.usage.notified-thresholds';
+
+function readUsageLatch(): RelayUsageLatch {
+  if (typeof window === 'undefined') return EMPTY_USAGE_LATCH;
+  try {
+    const raw = window.localStorage.getItem(USAGE_LATCH_KEY);
+    if (!raw) return EMPTY_USAGE_LATCH;
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((k) => typeof k === 'string')) {
+      return { keys: parsed };
+    }
+    return EMPTY_USAGE_LATCH;
+  } catch {
+    return EMPTY_USAGE_LATCH;
+  }
+}
+
+function writeUsageLatch(latch: RelayUsageLatch): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(USAGE_LATCH_KEY, JSON.stringify(latch.keys));
+  } catch {
+    /* memory-only fallback */
   }
 }
 
@@ -216,6 +265,61 @@ export function RelayPreviewApp() {
       window.clearInterval(interval);
     };
   }, [liveMissionId, store]);
+
+  /* --------------------- canonical usage + notifications -------------- */
+  /* ONE usage snapshot for the whole application. With no live usage source
+     the truthful snapshot is `offline` (everything unavailable — never 0%).
+     Only the founder-triggered Demo Simulation swaps in the SIMULATED
+     snapshot; ordinary navigation can never load it. */
+  const usageSnapshot = useMemo(
+    () =>
+      demoSimulation.state.active
+        ? demoUsageSnapshot({
+            stepIndex: demoSimulation.state.currentStepIndex,
+            nowIso: new Date().toISOString(),
+          })
+        : offlineUsageSnapshot(),
+    [demoSimulation.state.active, demoSimulation.state.currentStepIndex],
+  );
+  const [usageOpen, setUsageOpen] = useState(false);
+  const notificationCenter = useRelayNotificationCenter();
+  const usageLatchRef = useRef<RelayUsageLatch>(readUsageLatch());
+  const publishNotification = notificationCenter.publish;
+
+  /* Threshold crossings → top-right notifications, once per reset window.
+     The latch persists across refresh and routes, so neither can fabricate
+     a crossing; the dedupeKey suppresses same-render duplicates. */
+  useEffect(() => {
+    const derived = deriveUsageThresholdEvents(usageSnapshot, usageLatchRef.current);
+    if (derived.latch !== usageLatchRef.current) {
+      usageLatchRef.current = derived.latch;
+      writeUsageLatch(derived.latch);
+    }
+    for (const event of derived.events) {
+      publishNotification({
+        dedupeKey: event.key,
+        kind: event.kind,
+        title: event.title,
+        body: event.body,
+        simulated: usageSnapshot.provenance === 'simulated',
+        actions: [
+          { id: 'view-usage', label: 'VIEW USAGE', onSelect: () => setUsageOpen(true) },
+        ],
+      });
+    }
+  }, [usageSnapshot, publishNotification]);
+
+  const workspaceUsage: RelayWorkspaceUsage = useMemo(
+    () => ({
+      bar: projectUsageBar(usageSnapshot),
+      onOpenUsage: () => setUsageOpen(true),
+    }),
+    [usageSnapshot],
+  );
+  const usageDetailView = useMemo(
+    () => projectUsageDetail(usageSnapshot, new Date().toISOString()),
+    [usageSnapshot, usageOpen],
+  );
 
   /* ---------------- Entry Home host state (memory-only UI bits) ------- */
   const [projectIdeaDraft, setProjectIdeaDraft] = useState('');
@@ -525,6 +629,7 @@ export function RelayPreviewApp() {
       <RelayProjectWorkspace
         {...presentation}
         agentsPanel={agentsPanel}
+        usage={workspaceUsage}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -596,6 +701,7 @@ export function RelayPreviewApp() {
       <RelayProjectWorkspace
         {...presentation}
         agentsPanel={agentsPanel}
+        usage={workspaceUsage}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -683,16 +789,32 @@ export function RelayPreviewApp() {
         </p>
       )}
 
-      {/* DEVELOPMENT-ONLY TOOLING.
-          The chip and the switcher below are how the founder walks the whole
-          product flow in a browser, and they stay exactly as they are in a dev
-          build. They must never ship: a production bundle that renders a
-          "DEV PREVIEW" label presents development scaffolding as the product.
-          Gated on the build, not on a runtime flag, so the bundler drops the
-          markup entirely. `production-entry.test.tsx` fails in both
-          directions — if the label ships, and if the tooling disappears from
-          the dev build. */}
-      {IS_DEV_BUILD && (
+      {/* THE ONE APPLICATION-LEVEL USAGE SURFACE + NOTIFICATION HOST.
+          Siblings of the stage: they exist exactly once across every route,
+          fullscreen panel and terminal view, are never duplicated by a
+          screen, and stay full-size outside the dev ZOOM stage. */}
+      <RelayUsageDetailPanel
+        open={usageOpen}
+        view={usageDetailView}
+        onClose={() => setUsageOpen(false)}
+      />
+      <RelayNotificationHost
+        notifications={notificationCenter.visible}
+        queuedCount={notificationCenter.queuedCount}
+        onDismiss={notificationCenter.dismiss}
+        onPause={notificationCenter.pauseTimers}
+        onResume={notificationCenter.resumeTimers}
+      />
+
+      {/* THE PREVIEW SWITCHER — DELIBERATELY SHIPPED.
+          This panel (routes, fixture states, Demo Simulation, appearance,
+          zoom, mobile frame) began as development-only tooling and was once
+          build-gated out of production. Founder direction (2026-07-31):
+          the deployed offline demo IS the walkable product tour, so the
+          switcher ships with it. It remains collapsible behind its handle,
+          drives only presentation and the explicitly labeled Demo
+          Simulation, and `production-entry.test.tsx` now asserts it is
+          PRESENT in the production bundle. */}
       <>
       <button
         type="button"
@@ -806,7 +928,6 @@ export function RelayPreviewApp() {
         )}
       </nav>
       </>
-      )}
     </div>
   );
 }

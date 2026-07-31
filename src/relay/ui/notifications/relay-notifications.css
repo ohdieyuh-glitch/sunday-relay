@@ -1,0 +1,150 @@
+/* ==========================================================================
+   RELAY NOTIFICATIONS — the one top-right stack. Scoped to .rnt-*.
+   Near-black field, cream text, aged-gold accents, thin borders — the same
+   restrained technical language as the rest of Relay. Themed through the
+   shared chrome custom properties so colorways keep working.
+   ========================================================================== */
+
+:root {
+  --rnt-amber: #e0b25c;
+  --rnt-red: #d66a5a;
+  --rnt-green: #6fbf73;
+}
+
+.rnt-host {
+  position: fixed;
+  /* Below the header line so the Usage Bar and fullscreen return controls
+     stay clear; above the focused-panel context (62), below the mobile
+     menu (90). */
+  top: 64px;
+  right: 14px;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  width: min(340px, calc(100vw - 24px));
+  font-family: var(--rmc-mono);
+}
+
+.rnt-stack {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.rnt-toast {
+  background: var(--rmc-panel);
+  border: 1px solid var(--rmc-line);
+  border-left: 2px solid var(--rmc-gold);
+  color: var(--rmc-text);
+  padding: 10px 12px;
+  animation: rnt-in 220ms ease-out backwards;
+}
+.rnt-toast--warning { border-left-color: var(--rnt-amber); }
+.rnt-toast--critical { border-left-color: var(--rnt-red); }
+.rnt-toast--success { border-left-color: var(--rnt-green); }
+
+@keyframes rnt-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.rnt-toast-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.rnt-toast-kind {
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  color: var(--rmc-gold);
+}
+.rnt-toast--warning .rnt-toast-kind { color: var(--rnt-amber); }
+.rnt-toast--critical .rnt-toast-kind { color: var(--rnt-red); }
+.rnt-toast--success .rnt-toast-kind { color: var(--rnt-green); }
+.rnt-toast-sim {
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  color: var(--rmc-bg);
+  background: var(--rmc-dim);
+  padding: 1px 5px;
+}
+.rnt-toast-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--rmc-line);
+  color: var(--rmc-dim);
+  font-family: var(--rmc-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  padding: 3px 7px;
+  min-height: 28px;
+  cursor: pointer;
+}
+.rnt-toast-dismiss:hover { color: var(--rmc-text); border-color: var(--rmc-gold); }
+.rnt-toast-dismiss:focus-visible,
+.rnt-toast-action:focus-visible {
+  outline: 2px solid var(--rmc-gold);
+  outline-offset: 2px;
+}
+
+.rnt-toast-title {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.rnt-toast-body {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--rmc-dim);
+}
+.rnt-toast-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.rnt-toast-action {
+  background: transparent;
+  border: 1px solid var(--rmc-line);
+  color: var(--rmc-gold);
+  font-family: var(--rmc-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 5px 10px;
+  min-height: 32px;
+  cursor: pointer;
+}
+.rnt-toast-action:hover { border-color: var(--rmc-gold); }
+
+.rnt-queued {
+  margin: 0;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--rmc-dim);
+}
+
+/* Mobile: below the mobile header, inside safe areas, never past the edge. */
+@media (max-width: 700px) {
+  .rnt-host {
+    top: calc(96px + env(safe-area-inset-top, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
+    left: max(10px, env(safe-area-inset-left, 0px));
+    width: auto;
+    align-items: stretch;
+  }
+  .rnt-toast-dismiss { min-height: 44px; }
+  .rnt-toast-action { min-height: 44px; }
+}
+
+/* Reduced motion: no entrance animation — both channels. */
+@media (prefers-reduced-motion: reduce) {
+  .rnt-toast { animation: none; }
+}
+.rnt-host--static .rnt-toast { animation: none; }

@@ -1,0 +1,190 @@
+/* ==========================================================================
+   RELAY USAGE — Usage Bar + usage detail panel. Scoped to .rus-*.
+   Compact technical hierarchy on the shared chrome tokens: near-black,
+   cream, aged gold, thin borders, no neon, no oversized cards.
+   ========================================================================== */
+
+:root {
+  --rus-amber: #e0b25c;
+  --rus-red: #d66a5a;
+}
+
+/* ------------------------------------------------------------- usage bar */
+
+.rus-bar {
+  font-family: var(--rmc-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+  padding: 6px 10px;
+  min-height: 34px;
+  background: transparent;
+  color: var(--rmc-text);
+  border: 1px solid var(--rmc-line);
+  cursor: pointer;
+}
+.rus-bar:hover { border-color: var(--rmc-gold); color: var(--rmc-gold); }
+.rus-bar:focus-visible {
+  outline: 2px solid var(--rmc-gold);
+  outline-offset: 2px;
+}
+.rus-bar--demo { color: var(--rmc-gold); border-color: var(--rmc-gold); }
+.rus-bar--warning { color: var(--rus-amber); border-color: var(--rus-amber); }
+.rus-bar--critical { color: var(--rus-red); border-color: var(--rus-red); }
+
+/* The compact echo pinned inside a focused fullscreen panel, beside the
+   sticky return control. Only rendered while a panel is focused, so there is
+   never a second bar in the normal workspace. */
+.rus-bar--compact {
+  position: fixed;
+  top: 10px;
+  right: 56px;
+  z-index: 2;
+  background: var(--rmc-panel);
+}
+
+/* --------------------------------------------------------- detail drawer */
+
+.rus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 68; /* above focused-panel main (62), below notifications (70) */
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rus-panel {
+  background: var(--rmc-bg);
+  color: var(--rmc-text);
+  border-left: 1px solid var(--rmc-gold);
+  width: min(380px, 100%);
+  height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  font-family: var(--rmc-mono);
+}
+
+.rus-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--rmc-line);
+  padding-bottom: 8px;
+}
+.rus-panel-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  color: var(--rmc-gold);
+}
+.rus-panel-close {
+  background: transparent;
+  border: 1px solid var(--rmc-line);
+  color: var(--rmc-text);
+  font-family: var(--rmc-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 6px 10px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.rus-panel-close:hover { border-color: var(--rmc-gold); color: var(--rmc-gold); }
+.rus-panel-close:focus-visible {
+  outline: 2px solid var(--rmc-gold);
+  outline-offset: 2px;
+}
+
+.rus-provenance {
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
+  margin: 10px 0 0;
+  padding: 6px 8px;
+  color: var(--rmc-gold);
+  border: 1px solid var(--rmc-line);
+  overflow-wrap: anywhere;
+}
+
+.rus-section {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rmc-line);
+}
+.rus-section-title {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--rmc-text);
+}
+
+.rus-meter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.rus-meter-track {
+  flex: 1;
+  height: 6px;
+  border: 1px solid var(--rmc-line);
+  background: var(--rmc-panel);
+}
+.rus-meter-fill {
+  height: 100%;
+  background: var(--rmc-gold);
+  max-width: 100%;
+}
+.rus-meter-text {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--rmc-text);
+  white-space: nowrap;
+}
+
+.rus-rows { margin: 8px 0 0; display: flex; flex-direction: column; gap: 4px; }
+.rus-row { display: flex; justify-content: space-between; gap: 12px; }
+.rus-row dt {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rmc-dim);
+}
+.rus-row dd {
+  margin: 0;
+  font-size: 11px;
+  color: var(--rmc-text);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.rus-note {
+  margin: 8px 0 0;
+  font-size: 10px;
+  color: var(--rmc-dim);
+}
+
+/* ---------------------------------------------------------------- mobile */
+
+@media (max-width: 700px) {
+  .rus-bar { min-height: 44px; }
+  .rus-bar--compact { right: 60px; }
+  .rus-overlay { justify-content: stretch; }
+  .rus-panel { width: 100%; border-left: none; }
+  .rus-panel-close { min-height: 44px; }
+}
+
+/* Very narrow screens: the bar keeps only its lead word; the panel has the
+   detail. The full summary stays in the accessible name. */
+@media (max-width: 400px) {
+  .rus-bar { max-width: 44vw; overflow: hidden; text-overflow: ellipsis; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rus-bar,
+  .rus-panel { transition: none; animation: none; }
+}
