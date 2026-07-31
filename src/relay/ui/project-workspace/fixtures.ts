@@ -1,3 +1,4 @@
+import { operatingProfileFixtures, projectAgentOperatingProfiles } from '../../mission';
 import type {
   ManualTask,
   ProjectMessage,
@@ -110,6 +111,11 @@ const NO_TASKS: ManualTask[] = [];
 const BASE: Omit<WorkspaceFixture, 'fixtureLabel'> = {
   project: PROJECT,
   mission: MISSION,
+  // The four canonical operating components per Relay Dog. Present HERE
+  // because this fixture describes a project with a mission under way; the
+  // freshly-configured state in `configured-state.ts` deliberately omits
+  // them, because an agent with no mission has no operating profile to show.
+  operatingProfiles: projectAgentOperatingProfiles(operatingProfileFixtures()),
   workforce: {
     promptArchitect: { name: 'Sunday Alcatraz', status: 'waiting' },
     codingAgent: { name: 'Claude Code', status: 'ready' },

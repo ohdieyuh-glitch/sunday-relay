@@ -46,6 +46,11 @@ import {
   renderMissionEconomics,
   renderMissionReceipts,
 } from './mission-economics';
+import { renderAgentOperatingProfiles } from './agent-operating';
+// The SHARED projection — the same one the website's inspector renders.
+import {
+  RELAY_AGENT_ROLES, operatingProfileFixture, projectAgentOperatingProfiles,
+} from '../mission';
 
 /**
  * Relay CLI entry (Prompt 5). Thin client: parses arguments, composes the
@@ -72,7 +77,9 @@ export interface ParsedCli {
     | 'state' | 'runs' | 'persistence'
     | 'home' | 'projects' | 'project' | 'recover' | 'cli' | 'session' | 'yc' | 'agent' | 'mission';
   workspaceAction?: 'doctor' | 'verify';
-  agentAction?: 'import';
+  agentAction?: 'import' | 'profile';
+  /** Which agent's operating profile to print; all three when absent. */
+  role?: string;
   missionAction?: 'economics' | 'budget' | 'receipts';
   /** True when a credential was pasted as an argument — refused, never used. */
   credentialInArgv?: boolean;
@@ -186,8 +193,22 @@ export function parseCli(argv: string[]): ParsedCli {
     }
 
     if (first === 'agent' || first === 'psp-agent') {
+      // `agent profile` prints the four canonical operating components —
+      // Runtime, Mission Contract, Environment, Tools — from the SAME shared
+      // projection the website panels render.
+      if (second === 'profile') {
+        // Validated HERE, like every other sub-action, rather than inside the
+        // handler — an unknown role is a usage error, not a runtime surprise.
+        if (third !== undefined && !RELAY_AGENT_ROLES.includes(third as never)) {
+          return {
+            command: 'agent', agentAction: 'profile', ...base,
+            error: `Unknown agent role "${third}". Known: ${RELAY_AGENT_ROLES.join(', ')}.`,
+          };
+        }
+        return { command: 'agent', agentAction: 'profile', ...base, role: third };
+      }
       if (second !== 'import') {
-        return { command: 'agent', ...base, error: `${first} requires an action: import.` };
+        return { command: 'agent', ...base, error: `${first} requires an action: import or profile.` };
       }
       // A credential pasted as a positional argument is REFUSED, never used.
       if (third !== undefined) {
@@ -1129,8 +1150,27 @@ async function runAgentCli(parsed: ParsedCli, io: CliIo): Promise<number> {
     PSP_ARGUMENT_REFUSAL.forEach((line) => io.out(line));
     return EXIT.usage;
   }
+  // THE OPERATING PROFILE. Rendered from the shared projection, so this
+  // prints exactly what the website's inspector shows. No credential is read
+  // and no provider is contacted to produce it.
+  if (parsed.agentAction === 'profile') {
+    if (parsed.error) {
+      io.out(parsed.error);
+      return EXIT.usage;
+    }
+    const render = detectRenderOptions(parsed, io.env, io.isTTY);
+    const options = { width: render.width ?? 80, plain: render.plain === true };
+    const requested = parsed.role;
+    const roles = requested === undefined
+      ? RELAY_AGENT_ROLES
+      : RELAY_AGENT_ROLES.filter((role) => role === requested);
+    const projections = projectAgentOperatingProfiles(roles.map(operatingProfileFixture));
+    for (const line of renderAgentOperatingProfiles(projections, options)) io.out(line);
+    return EXIT.completed;
+  }
+
   if (parsed.agentAction !== 'import') {
-    io.out('agent requires an action: import.');
+    io.out('agent requires an action: import or profile.');
     return EXIT.usage;
   }
 

@@ -146,7 +146,7 @@ proof that does not exist, and a `relay …` command may not stand in for it,
 because no check resolves a command on disk. The registry currently holds
 **zero exceptions**, which is the state to keep.
 
-### Current records (24)
+### Current records (25)
 
 | Capability | Class | Website | CLI |
 |---|---|---|---|
@@ -177,6 +177,7 @@ because no check resolves a command on disk. The registry currently holds
 | Budget hard limit | functional_required | tested | tested |
 | Budget approval | functional_required | tested | tested |
 | Cost per verified mission | functional_required | tested | tested |
+| Agent operating profile (runtime, mission contract, environment, tools) | functional_required | tested | tested |
 
 ## 4. The parity check
 
@@ -193,8 +194,8 @@ the same functions.
 A passing strict run reports what it actually inspected, at manifest `1.2.0`:
 
 ```text
-  declared surface files: 190/190 present
-  declared CLI commands: 23 (verified by the CLI's own command tests)
+  declared surface files: 200/200 present
+  declared CLI commands: 24 (verified by the CLI's own command tests)
 ```
 
 The file total counts every declaration that resolved, across all five

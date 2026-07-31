@@ -1490,3 +1490,68 @@
   .rpw-economics-category-status { grid-column: auto; }
   .rpw-economics-category { grid-template-columns: minmax(0, 1fr) auto; }
 }
+
+/* ------------------------------------------ agent operating inspector */
+/* Four compact rows on each Relay Dog panel: Runtime, Mission Contract,
+   Environment, Tools. Deliberately small — no cards, no new navigation. */
+
+.rpw-operating {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rpw-line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.rpw-operating-disclosure {
+  margin: 0;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--rpw-gold);
+  text-transform: uppercase;
+}
+.rpw-operating-rows { margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.rpw-operating-row { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rpw-operating-key {
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rpw-muted, rgba(240, 235, 220, 0.55));
+}
+.rpw-operating-value {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--rpw-cream);
+  overflow-wrap: anywhere;
+}
+.rpw-operating-toggle {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rpw-gold);
+  cursor: pointer;
+}
+.rpw-operating-toggle:hover { text-decoration: underline; }
+.rpw-operating-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 0 0;
+  border-top: 1px dashed var(--rpw-line);
+}
+.rpw-operating-detail-line { margin: 0; display: flex; flex-direction: column; gap: 1px; }
+.rpw-operating-tools {
+  margin: 2px 0 0;
+  padding-left: 14px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--rpw-cream);
+}
