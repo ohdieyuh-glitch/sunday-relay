@@ -384,8 +384,8 @@ export function RelayPreviewApp() {
       entitlement="pro"
       connectionStatuses={DEFAULT_CONNECTION_STATUSES}
       // Sunday Alcatraz is an Aquala SIBLING PRODUCT, not a route of this
-      // application: this repository builds `relay.html` only, so the old
-      // `window.location.href = '/'` was a dead link. The control now
+      // application: `/` is Relay's own canonical entry, so the old
+      // `window.location.href = '/'` never reached Alcatraz. The control now
       // navigates to a CONFIGURED external Alcatraz URL, and reports itself
       // as unavailable when none is configured — never a broken link, and
       // never a hardcoded domain this repository has no authority over.

@@ -59,7 +59,7 @@ docs/relay                              the authoritative specification set
 ```bash
 npm install
 
-npm run dev                  # the Relay web surface (http://localhost:5173/relay.html)
+npm run dev                  # the Relay web surface (http://localhost:5173/)
 npm run relay                # the Relay CLI
 npm test                     # the full suite
 npm run typecheck            # application + bridge

@@ -122,9 +122,9 @@ describe('no broken-image placeholder is possible', () => {
     }
   });
 
-  it('the production favicon referenced by relay.html exists in public/', () => {
+  it('the production favicon referenced by index.html exists in public/', () => {
     const root = join(__dirname, '..', '..', '..');
-    const html = readFileSync(join(root, 'relay.html'), 'utf8');
+    const html = readFileSync(join(root, 'index.html'), 'utf8');
     expect(html).toContain('href="/icon.svg"');
     expect(existsSync(join(root, 'public', 'icon.svg'))).toBe(true);
     // Exactly one viewport declaration, mobile-hardened.

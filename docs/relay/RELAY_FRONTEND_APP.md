@@ -159,7 +159,7 @@ broken-image icon is impossible (test-locked).
 ## Founder demo
 
 - **Dev command:** `npm run dev`
-- **Local URL:** `http://localhost:5173/relay.html`
+- **Local URL:** `http://localhost:5173/` (`/relay.html` redirects here)
 - **Entry route:** `#/relay`
 - **Flow:** type a request in Ask Relay → BUILD PROJECT BRIEF → SEND TO
   PROJECT SETTINGS → confirm click-first settings (defaults: Sunday Alcatraz
@@ -172,7 +172,7 @@ broken-image icon is impossible (test-locked).
 - **Recovery:** malformed storage recovers to a clean empty state on next
   load; nothing crashes.
 - **Production preview:** `npm run build` then `npx vite preview --port 4173`,
-  open `http://localhost:4173/relay.html`.
+  open `http://localhost:4173/`.
 
 ## Founder commands — live two-connector demo
 
@@ -186,7 +186,7 @@ FUSION_ENABLE_LIVE_PROVIDERS=true ANTHROPIC_API_KEY=<key> PORT=3000 npm run back
 RELAY_BRIDGE_CONFIRM_LIVE=1 FUSION_BASE_URL=http://localhost:3000 npm run relay:bridge
 
 # 3. Frontend in LIVE mode
-VITE_RELAY_LIVE=1 npm run dev          # http://localhost:5173/relay.html
+VITE_RELAY_LIVE=1 npm run dev          # http://localhost:5173/
 
 # Health checks
 curl -s localhost:3000/health            # Alcatraz: liveProvidersEnabled?

@@ -13,8 +13,8 @@
  *
  * 2. `siblingProductTarget()` — where the Alcatraz control goes. Sunday
  *    Alcatraz is an Aquala SIBLING PRODUCT, not a route of this application:
- *    this repository builds `relay.html` only, so sending the browser to `/`
- *    was a dead link. Alcatraz stays visible as a sibling — the relationship
+ *    `/` is Relay's own canonical entry, so sending the browser there never
+ *    reached Alcatraz. Alcatraz stays visible as a sibling — the relationship
  *    is real and governance §11 permits documenting it — but the control is
  *    only actionable when a URL is actually configured.
  */
