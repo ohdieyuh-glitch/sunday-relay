@@ -1669,7 +1669,15 @@
 .rpw-focusable .rcat-head,
 .rpw-focusable .rpw-conv-head,
 .rpw-focusable .rpw-playback-head,
-.rpw-focusable .rpw-rail-head { padding-right: 36px; }
+.rpw-focusable .rpw-rail-head,
+/* Status-rail panels: their head row (or bare section title) also ends in a
+   right-aligned chip — WAITING, MONITORING — that sat under the control. */
+.rpw-focusable .rpw-panel-head,
+.rpw-focusable .rpw-section-title { padding-right: 36px; }
+
+/* Inside the compact status rail the control hugs the block corner so it
+   reads as part of the header line, not as a mark floating over content. */
+.rpw-status .rpw-expand-btn { top: -2px; right: -2px; }
 
 @media (max-width: 700px) {
   /* A full-height focused screen on mobile, with a touch-safe control. */

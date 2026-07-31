@@ -7,7 +7,6 @@ import { RelayProjectConversation } from './RelayProjectConversation';
 import { RelayLiveTerminalPanel } from './RelayLiveTerminalPanel';
 import { RelayCodingAgentTerminal } from './RelayCodingAgentTerminal';
 import { RelayRoleBilling } from './RelayRoleBilling';
-import { RelayProjectPhaseRail } from './RelayProjectPhaseRail';
 import { RelayManualTaskPanel } from './RelayManualTaskPanel';
 import { RelayReviewerStatus } from './RelayReviewerStatus';
 import { RelayVerificationSummary } from './RelayVerificationSummary';
@@ -86,8 +85,6 @@ export function RelayProjectWorkspace(
     researchState,
     projectBrainState,
     completionState,
-    researchEnabled,
-    repairUsed,
     terminalOpen,
     terminalFullScreen = false,
     reducedMotion = false,
@@ -266,17 +263,9 @@ export function RelayProjectWorkspace(
           </div>
 
           <aside className="rpw-status" aria-label="System status">
-            <div className="rpw-status-block">
-              {focusable('phase', (
-                <RelayProjectPhaseRail
-                  phase={phase}
-                  researchEnabled={researchEnabled}
-                  repairUsed={repairUsed}
-                  blockingOpen={completion.blockers.length > 0 && !completion.showVerifiedComplete}
-                  verified={completion.showVerifiedComplete}
-                />
-              ))}
-            </div>
+            {/* The phase list that used to sit here is gone (founder direction):
+                the workforce strip's PHASE cell already carries the live phase,
+                so the rail starts at verification. */}
             <div className="rpw-status-block">
               {focusable('verification', <RelayVerificationSummary summary={verificationSummary} />)}
             </div>

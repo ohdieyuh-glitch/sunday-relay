@@ -175,16 +175,12 @@ describe('live terminal', () => {
 /* ---------------------------------------------------------- phase rail */
 
 describe('phase rail', () => {
-  it('highlights only the active phase and locks COMPLETE while blocked', () => {
+  it('is no longer rendered in the status rail — the workforce strip PHASE cell carries the phase', () => {
     const html = render('revision_required');
-    expect(html).toContain('rpw-phase--locked');
-    expect((html.match(/rpw-phase--active/g) ?? []).length).toBe(1);
-  });
-
-  it('verified complete: COMPLETE active, nothing locked', () => {
-    const html = render('verified_complete');
-    expect(html).not.toContain('rpw-phase--locked');
-    expect(html).toContain('rpw-phase--active');
+    expect(html).not.toContain('rpw-phase-rail');
+    expect(html).not.toContain('Expand Phase panel');
+    // The live phase still reaches the user through the workforce strip.
+    expect(html).toContain('rpw-strip-cell--phase');
   });
 });
 
@@ -356,11 +352,10 @@ describe('responsive + accessibility conventions (source-level)', () => {
     expect(css).toContain(':focus-visible');
   });
 
-  it('semantic structure: dialog terminal, live regions, labels, aria-current phase', () => {
+  it('semantic structure: dialog terminal, live regions, labels', () => {
     const html = render('verifying', { terminalOpen: true });
     expect(html).toContain('role="dialog"');
     expect(html).toContain('aria-live="polite"');
-    expect(html).toContain('aria-current="step"');
     expect(html).toContain('<label');
   });
 });
