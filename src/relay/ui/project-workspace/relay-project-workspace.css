@@ -1561,3 +1561,124 @@
 @media (max-width: 700px) {
   .rpw-operating-toggle { min-height: 44px; }
 }
+
+/* ------------------------------------------- focused workspace panels */
+/* ONE expand control and ONE focused shell for every eligible panel.
+   Focus happens IN PLACE: the panel keeps its position in the DOM and is
+   lifted to fill the viewport, so nothing unmounts, no terminal is
+   duplicated and no scroll position is lost. */
+
+.rpw-focusable { position: relative; min-width: 0; }
+
+.rpw-expand-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  /* 32x32 interaction area around a ~15px icon, per the control spec. */
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  color: var(--rpw-faint);
+  cursor: pointer;
+  /* Subtle at rest; the transition is removed under reduced motion below. */
+  transition: color 120ms linear, border-color 120ms linear, background-color 120ms linear;
+}
+.rpw-expand-btn:hover {
+  color: var(--rpw-gold);
+  border-color: var(--rpw-line);
+  background: var(--rpw-panel-2);
+}
+/* Keyboard focus must be at least as visible as hover — never hover-only. */
+.rpw-expand-btn:focus-visible {
+  color: var(--rpw-gold-bright);
+  border-color: var(--rpw-gold);
+  outline: 2px solid var(--rpw-gold);
+  outline-offset: 1px;
+}
+.rpw-expand-icon { display: block; }
+
+/* The panel, lifted. Position is fixed so it fills the Relay viewport without
+   the panel leaving its place in the React tree. */
+.rpw-focusable[data-focused='true'] {
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  overflow: auto;
+  background: var(--rpw-bg);
+  border: 0;
+  /* Mobile safe areas — a return control under a notch is not reachable. */
+  padding:
+    calc(6px + env(safe-area-inset-top, 0px))
+    calc(6px + env(safe-area-inset-right, 0px))
+    calc(6px + env(safe-area-inset-bottom, 0px))
+    calc(6px + env(safe-area-inset-left, 0px));
+}
+/* The panel's own content takes the space it just gained. */
+.rpw-focusable[data-focused='true'] > *:not(.rpw-visually-hidden) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-width: none;
+}
+/* The return control stays visible and reachable while expanded. */
+.rpw-focusable[data-focused='true'] .rpw-expand-btn {
+  position: sticky;
+  top: 0;
+  align-self: flex-end;
+  color: var(--rpw-gold);
+  border-color: var(--rpw-line);
+  background: var(--rpw-panel);
+  flex: 0 0 auto;
+}
+
+.rpw-focus-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(4, 5, 8, 0.92);
+}
+
+/* THE STACKING CONTEXT THAT WOULD OTHERWISE BURY THE PANEL.
+   `.rpw > main` is `position: relative; z-index: 2`, which makes it a stacking
+   context — so a descendant at z-index 61 can never rise above a SIBLING of
+   main at z-index 60. Without this the focused panel renders underneath its
+   own backdrop: invisible, and its return control unclickable.
+   Raising main only while a panel is focused lifts the whole context above the
+   backdrop; the backdrop still covers the header, strip and footer, and the
+   focused panel is opaque and fills the viewport, so nothing behind it shows
+   through or can be clicked. */
+.rpw[data-panel-focused='true'] > main { z-index: 62; }
+
+/* A focused panel sits ABOVE the terminal overlay (z-index 40) so the two
+   can never fight; the terminal is itself an eligible panel. */
+
+/* THE CONTROL MUST NOT COVER WHAT THE PANEL ALREADY SHOWS.
+   These header rows put status, billing or a note hard against the right edge
+   (`.rcat-status` is `margin-left: auto`), which is exactly where the expand
+   control sits. Reserving the control's width keeps both readable. */
+.rpw-focusable .rpw-console-head,
+.rpw-focusable .rcat-head,
+.rpw-focusable .rpw-conv-head,
+.rpw-focusable .rpw-playback-head,
+.rpw-focusable .rpw-rail-head { padding-right: 36px; }
+
+@media (max-width: 700px) {
+  /* A full-height focused screen on mobile, with a touch-safe control. */
+  .rpw-expand-btn { min-height: 44px; min-width: 44px; }
+  .rpw-focusable[data-focused='true'] { padding-top: calc(4px + env(safe-area-inset-top, 0px)); }
+  /* Never a three-column layout inside a focused panel on a phone. */
+  .rpw-focusable[data-focused='true'] .rpw-workspace { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rpw-expand-btn { transition: none; }
+}

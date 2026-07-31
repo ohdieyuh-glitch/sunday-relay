@@ -1,3 +1,5 @@
+import { useCallback, useRef, useState } from 'react';
+
 import { RelayProjectHeader } from './RelayProjectHeader';
 import { RelayWorkforceStrip } from './RelayWorkforceStrip';
 import { RelayConsole } from './RelayConsole';
@@ -14,6 +16,13 @@ import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
 import { RelayProjectFooter } from './RelayProjectFooter';
 import { RelayPspAgentImport } from '../psp-import';
+import {
+  RelayFocusBackdrop,
+  RelayFocusedPanel,
+  RelayPanelExpandButton,
+  type RelayFocusablePanel,
+} from './RelayPanelFocus';
+import { RelayAgentOperatingInspector } from './RelayAgentOperatingInspector';
 import { OUTPUT_STATE_LABEL, completionDisplay } from './projections';
 import type { RelayProjectWorkspaceProps } from './contracts';
 import type {
@@ -100,8 +109,68 @@ export function RelayProjectWorkspace(
   const completion = completionDisplay({ completionState, reviewerState, findings, repairs });
   const openTasks = manualTasks.filter((t) => t.status === 'open').length;
 
+  /**
+   * WHICH PANEL IS FOCUSED — view state, and only view state.
+   *
+   * No mission, terminal or agent state lives here, and nothing is copied into
+   * a fullscreen-only store: focusing a panel changes one string. The panels
+   * themselves never leave the tree, so expanding one cannot restart an agent,
+   * duplicate a terminal or lose output.
+   */
+  const [requestedFocus, setRequestedFocus] = useState<RelayFocusablePanel | null>(null);
+  /**
+   * A PANEL THAT IS NOT RENDERED CANNOT BE FOCUSED. The Coding Agent panel
+   * exists only while there is a terminal view; if that goes away while it is
+   * focused, the stored id would leave a backdrop over an empty workspace with
+   * nothing to close. Focus is therefore derived, not merely stored.
+   */
+  const focusedPanel: RelayFocusablePanel | null =
+    requestedFocus === 'coding_agent' && props.codingTerminal === undefined ? null : requestedFocus;
+  const setFocusedPanel = setRequestedFocus;
+  const expandRefs = useRef<Partial<Record<RelayFocusablePanel, HTMLButtonElement | null>>>({});
+
+  const toggleFocus = useCallback((panel: RelayFocusablePanel) => {
+    setFocusedPanel((current) => (current === panel ? null : panel));
+  }, []);
+  const closeFocus = useCallback(() => setFocusedPanel(null), []);
+
+  /**
+   * Wraps a panel IN PLACE with the canonical expand control and focused
+   * shell. `agent` adds the four operating components to the focused view, so
+   * a focused agent shows what is running it without the workforce strip.
+   */
+  const focusable = (
+    panel: RelayFocusablePanel,
+    content: React.ReactNode,
+    agentRole?: 'prompt_architect' | 'coding_agent' | 'reviewer',
+  ) => {
+    const focused = focusedPanel === panel;
+    const profile = agentRole === undefined
+      ? undefined
+      : props.operatingProfiles?.find((p) => p.role === agentRole);
+    return (
+      <RelayFocusedPanel
+        panel={panel}
+        focused={focused}
+        onClose={closeFocus}
+        returnFocusTo={expandRefs.current[panel] ?? null}
+      >
+        <RelayPanelExpandButton
+          panel={panel}
+          focused={focused}
+          onToggle={toggleFocus}
+          buttonRef={(node) => { expandRefs.current[panel] = node; }}
+        />
+        {content}
+        {focused && profile !== undefined && (
+          <RelayAgentOperatingInspector projection={profile} />
+        )}
+      </RelayFocusedPanel>
+    );
+  };
+
   return (
-    <div className="rpw">
+    <div className="rpw" data-panel-focused={focusedPanel !== null ? 'true' : 'false'}>
       <div className="rpw-grid-bg" aria-hidden="true" />
       <div className="rpw-scanlines" aria-hidden="true" />
 
@@ -159,63 +228,77 @@ export function RelayProjectWorkspace(
           )
         )}
 
-        <RelayManualTaskPanel
-          tasks={manualTasks}
-          onOpenManualTask={onOpenManualTask}
-          onApproveManualTask={onApproveManualTask}
-          onRejectManualTask={onRejectManualTask}
-        />
+        {focusable('manual_tasks', (
+          <RelayManualTaskPanel
+            tasks={manualTasks}
+            onOpenManualTask={onOpenManualTask}
+            onApproveManualTask={onApproveManualTask}
+            onRejectManualTask={onRejectManualTask}
+          />
+        ))}
 
         <div className="rpw-workspace">
           <div className="rpw-col-primary">
             {props.missionPlayback}
-            {props.codingTerminal && (
-              <RelayCodingAgentTerminal view={props.codingTerminal} reducedMotion={reducedMotion} />
+            {props.codingTerminal && focusable(
+              'coding_agent',
+              <RelayCodingAgentTerminal view={props.codingTerminal} reducedMotion={reducedMotion} />,
+              'coding_agent',
             )}
             {props.roleBilling && props.roleBilling.length > 0 && (
               <RelayRoleBilling rows={props.roleBilling} />
             )}
-            <RelayConsole
-              events={terminalEvents}
-              handoffNetworkState={handoffNetworkState}
-              onOpenTerminal={onOpenTerminal}
-            />
-            <RelayProjectConversation
-              messages={projectMessages}
-              onSendProjectMessage={onSendProjectMessage}
-              onApproveDecision={onApproveDecision}
-              onRejectDecision={onRejectDecision}
-            />
+            {focusable('console', (
+              <RelayConsole
+                events={terminalEvents}
+                handoffNetworkState={handoffNetworkState}
+                onOpenTerminal={onOpenTerminal}
+              />
+            ))}
+            {focusable('conversation', (
+              <RelayProjectConversation
+                messages={projectMessages}
+                onSendProjectMessage={onSendProjectMessage}
+                onApproveDecision={onApproveDecision}
+                onRejectDecision={onRejectDecision}
+              />
+            ))}
           </div>
 
           <aside className="rpw-status" aria-label="System status">
             <div className="rpw-status-block">
-              <RelayProjectPhaseRail
-                phase={phase}
-                researchEnabled={researchEnabled}
-                repairUsed={repairUsed}
-                blockingOpen={completion.blockers.length > 0 && !completion.showVerifiedComplete}
-                verified={completion.showVerifiedComplete}
-              />
+              {focusable('phase', (
+                <RelayProjectPhaseRail
+                  phase={phase}
+                  researchEnabled={researchEnabled}
+                  repairUsed={repairUsed}
+                  blockingOpen={completion.blockers.length > 0 && !completion.showVerifiedComplete}
+                  verified={completion.showVerifiedComplete}
+                />
+              ))}
             </div>
             <div className="rpw-status-block">
-              <RelayVerificationSummary summary={verificationSummary} />
+              {focusable('verification', <RelayVerificationSummary summary={verificationSummary} />)}
             </div>
             <div className="rpw-status-block">
-              <RelayReviewerStatus
-                reviewerName={workforce.reviewer.name}
-                state={reviewerState}
-                findings={findings}
-                repairs={repairs}
-                onOpenFinding={onOpenFinding}
-                onOpenRepair={onOpenRepair}
-              />
+              {focusable('reviewer', (
+                <RelayReviewerStatus
+                  reviewerName={workforce.reviewer.name}
+                  state={reviewerState}
+                  findings={findings}
+                  repairs={repairs}
+                  onOpenFinding={onOpenFinding}
+                  onOpenRepair={onOpenRepair}
+                />
+              ), 'reviewer')}
             </div>
             <div className="rpw-status-block">
-              <RelayResearchStatus state={researchState} onRequestResearch={onRequestResearch} />
+              {focusable('prompt_architect', (
+                <RelayResearchStatus state={researchState} onRequestResearch={onRequestResearch} />
+              ), 'prompt_architect')}
             </div>
             <div className="rpw-status-block">
-              <RelayProjectBrainStatus state={projectBrainState} />
+              {focusable('project_brain', <RelayProjectBrainStatus state={projectBrainState} />)}
             </div>
             {props.agentsPanel && (
               <div className="rpw-status-block">
@@ -234,6 +317,10 @@ export function RelayProjectWorkspace(
       </main>
 
       <RelayProjectFooter handoffNetworkState={handoffNetworkState} outputState={outputState} />
+
+      {/* Makes the workspace inert to the pointer while a panel is focused.
+          `aria-modal` on the focused panel does the same for assistive tech. */}
+      <RelayFocusBackdrop focused={focusedPanel !== null} />
 
       {terminalOpen && (
         <div className="rpw-terminal-overlay">
