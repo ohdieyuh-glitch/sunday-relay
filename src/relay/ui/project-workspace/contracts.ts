@@ -11,6 +11,7 @@
  */
 
 import type { EventTruthClass, TerminalEventCategory } from '../../mission/wire-contracts';
+import type { RelayAgentOperatingProjection } from '../../mission';
 
 /* ----------------------------------------------------------------- modes */
 
@@ -246,6 +247,18 @@ export interface CompletionState {
 export interface RelayProjectWorkspaceProps {
   project: WorkspaceProject;
   mission: WorkspaceMission;
+  /**
+   * The four canonical operating components per Relay Dog — Runtime, Mission
+   * Contract, Environment, Tools — already projected.
+   *
+   * A PROP, not something this screen builds. All execution state enters
+   * through props, and an operating profile is execution state: which runtime
+   * is attached and which contract governs it are facts about a run, not
+   * decorations a panel may invent. A configured project that has not started
+   * a mission passes nothing, and the inspector correctly shows nothing —
+   * a placeholder mission is not a mission.
+   */
+  operatingProfiles?: readonly RelayAgentOperatingProjection[];
   workforce: WorkforceAssignment;
   mode: RelayWorkspaceMode;
   phase: ProjectPhase;

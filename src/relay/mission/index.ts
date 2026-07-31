@@ -67,3 +67,23 @@ export {
   type RelayMissionEconomics, type RelayMissionEconomicsProjection,
   type RelayEconomicsDataSource,
 } from './economics-barrel';
+export {
+  // Agent operating foundation — the four canonical components every Relay
+  // Dog has. Re-exported here for the same reason economics is: the CLI
+  // boundary permits only the bare '../mission' barrel, and BOTH surfaces
+  // must import the one projection rather than format their own labels.
+  RELAY_AGENT_ROLES, RELAY_OPERATING_COMPONENTS, RELAY_ROLE_TOOL_GRANTS,
+  RELAY_AGENT_ROLE_LABEL, RELAY_OPERATING_COMPONENT_LABEL,
+  NOT_CONNECTED_LABEL,
+  projectAgentOperatingProfile, projectAgentOperatingProfiles,
+  buildAgentOperatingProfile, missionContractReference,
+  runtimeReferenceFromAttestation, unknownRuntimeReference,
+  toolGrantsForRole, toolGrantsOutsidePolicy, toolGrantsWithinPolicy,
+  operatingProfileFixture, operatingProfileFixtures,
+  OPERATING_FIXTURE_CONTRACT, OPERATING_FIXTURE_ENVIRONMENT,
+  OPERATING_FIXTURE_MISSION, OPERATING_FIXTURE_MODE,
+  type RelayAgentOperatingProfile, type RelayAgentOperatingProjection,
+  type RelayAgentRole, type RelayOperatingComponent, type RelayOperatingRow,
+  type RelayRuntimeReference, type RelayMissionContractReference,
+  type RelayEnvironmentReference, type RelayToolGrant,
+} from './agent-operating';

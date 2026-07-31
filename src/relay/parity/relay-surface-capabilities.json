@@ -632,6 +632,35 @@
         "src/relay/mission/economics/economics-aggregation.ts",
         "src/relay/mission/economics/economics-projection.ts"
       ]
+    },
+    {
+      "capabilityId": "agent-operating-profile",
+      "name": "Agent operating profile (runtime, mission contract, environment, tools)",
+      "domain": "agent",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayAgentOperatingInspector.tsx#RelayAgentOperatingInspector",
+        "src/relay/ui/project-workspace/RelayWorkforceStrip.tsx#operating"
+      ],
+      "cliEntryPoints": [
+        "src/relay/cli/agent-operating.ts#renderAgentOperatingProfile",
+        "relay agent profile"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/project-workspace/agent-operating-inspector.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/agent-operating.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/agent-operating/operating-profile-types.ts#RelayAgentOperatingProfile",
+        "src/relay/mission/agent-operating/operating-profile-projection.ts#projectAgentOperatingProfile",
+        "src/relay/mission/agent-operating/operating-profile-tools.ts#RELAY_ROLE_TOOL_GRANTS",
+        "src/relay/mission/agent-operating/operating-profile-builder.ts#buildAgentOperatingProfile",
+        "src/relay/mission/agent-operating/agent-operating.test.ts"
+      ]
     }
   ]
 }

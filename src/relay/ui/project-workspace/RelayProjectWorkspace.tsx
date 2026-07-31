@@ -119,7 +119,15 @@ export function RelayProjectWorkspace(
         onOpenTerminal={onOpenTerminal}
       />
 
-      <RelayWorkforceStrip workforce={workforce} mode={mode} phase={phase} />
+      {/* The four canonical operating components per Relay Dog, from the SAME
+          projection `relay agent profile` prints. Simulated until a runtime is
+          actually attached, and the inspector says so. */}
+      <RelayWorkforceStrip
+        workforce={workforce}
+        mode={mode}
+        phase={phase}
+        operating={props.operatingProfiles}
+      />
 
       <main className="rpw-main">
         {/* The Relay Dog sits centered between the workforce strip and the

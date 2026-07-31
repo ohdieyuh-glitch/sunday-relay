@@ -33,7 +33,8 @@
     "budget-warning",
     "budget-hard-limit",
     "budget-approval",
-    "verified-mission-cost"
+    "verified-mission-cost",
+    "agent-operating-profile"
   ],
   "requiredFiles": {
     "websiteEntry": [
