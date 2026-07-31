@@ -7,11 +7,35 @@ import type {
   ReviewerVerdictRecord, RevisionContract, TaskAssignment, UsageRecord,
   VerificationRecord,
 } from '../protocol/contracts';
+// Value import, deliberately NOT re-exported: the condition set is owned by the
+// protocol contract that pins it, and fixtures consume it like anything else.
+import { FIFTEEN_CONDITIONS } from '../protocol/contracts';
 import type { Provenance, ReportType, Role } from '../protocol/enums';
 
 /**
  * Deterministic test factories — the ONLY place tests mint ids/time.
- * Production uses createRandomIdFactory; the two never mix.
+ *
+ * The application uses createRandomIdFactory. This module is BANNED from the
+ * production dependency graph: `src/relay/testing/` is a FORBIDDEN_DIR in
+ * src/relay/shared/browser-boundary.test.ts, so nothing reachable from the
+ * browser entry may import it, and a rule in
+ * src/relay/relay-core-boundary.test.ts forbids it across the nine core roots
+ * (protocol, core, ledger, storage, testing, coordination, handoff,
+ * verification, recovery).
+ *
+ * It is NOT banned repository-wide, and saying so would be false. Four Node-
+ * only OFFLINE HARNESSES import `deterministicIds` and `testClock` on purpose,
+ * because a contract-verification run has to be reproducible:
+ *
+ *   src/relay/persistence/driver-main.ts                  (recovery drill)
+ *   src/relay/connectors/claude-code/contract-verify.ts
+ *   src/relay/connectors/codex-reviewer/verify-harness.ts
+ *   src/relay/connectors/supervised/verify-harness.ts
+ *
+ * Each builds a throwaway temp directory and makes no provider call. They sit
+ * under connectors/ and persistence/, which the browser boundary already
+ * forbids, so none of them can reach the shipped application. A website,
+ * bridge or LIVE runtime import of this module remains forbidden.
  */
 
 export function deterministicIds(): IdFactory & { minted: string[] } {
@@ -188,13 +212,6 @@ export function makeVerdict(
     ...overrides,
   };
 }
-
-export const FIFTEEN_CONDITIONS = [
-  'objective-evidence', 'narrow-unambiguous', 'same-agent-session', 'inside-task-objective',
-  'inside-file-claims', 'no-protected-file', 'no-new-permission', 'no-destructive-command',
-  'no-deployment', 'no-new-dependency', 'no-new-credentials', 'within-budget',
-  'no-budget-warning-checkpoint', 'no-unresolved-decision', 'no-conflict-with-canonical-decision',
-] as const;
 
 export function makeRevisionContract(
   overrides: Partial<RevisionContract> = {},

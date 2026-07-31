@@ -23,9 +23,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to an immutable commit SHA. A mutable tag can be repointed by
+      # the action's owner (or by a compromised account) at any time, which
+      # would change what CI executes without changing anything here.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: npm
@@ -45,24 +48,53 @@ jobs:
       - name: Website build
         run: npm run build
 
+      # The production-bundle assertions run in EVERY vitest run, including the
+      # `npm test` above — nothing here is conditionally skipped. Without
+      # `dist/` they assert that this workflow re-runs their file after the
+      # website build; with `dist/` they assert against the real bundle. Only
+      # this step supplies the second branch, so removing it does not turn a
+      # test green, it turns the "no development labelling in the shipped
+      # bundle" claim into a promise nothing ever checks.
+      # `scripts/ci-test-accounting.test.ts` holds that ledger.
+      - name: Production entry (built bundle carries no development labelling)
+        run: npx vitest run src/relay/ui/preview/production-entry.test.tsx
+
       - name: CLI build
         run: npm run relay:build
 
-      - name: Relay bridge typecheck and build
-        run: |
-          if [ -f relay-bridge/tsconfig.json ]; then
-            npm run relay:bridge:build
-          else
-            echo "no relay-bridge in this tree — skipping"
-          fi
+      # Companion to the production-entry step above, and accounted for the
+      # same way. The documentation contract asserts that the BUILT CLI
+      # actually runs and reports the Relay product; that needs
+      # `dist-relay/cli.cjs`, which `npm test` runs before producing, so in
+      # that first run the assertion holds this workflow to re-running the
+      # file here. This step is where the built CLI is actually executed.
+      # `scripts/ci-test-accounting.test.ts` fails if a build-dependent test is
+      # ever added without a step like this one, and it also asserts that each
+      # re-run appears AFTER the build that produces its artifact.
+      - name: Documentation contract (built CLI actually runs)
+        run: npx vitest run docs/documentation-contract.test.ts
+
+      - name: Relay bridge build
+        run: npm run relay:bridge:build
+
+      # Parity is a REQUIREMENT, not an aspiration (governance §7). The
+      # registry and the checker both live in this tree now, so these steps no
+      # longer guard on their existence: a guard that skips when its own input
+      # disappears is a check that can be switched off by deleting a file while
+      # still reporting green. The gate below asserts registry and npm scripts
+      # agree BEFORE running them, so "registry present + script missing" and
+      # "script present + registry missing" fail loudly instead of skipping.
+      - name: Website/CLI parity gate (registry and scripts must agree)
+        run: node scripts/relay-parity-gate.mjs
 
       - name: Website/CLI parity
-        run: |
-          if [ -f scripts/relay-surface-parity.mjs ]; then
-            npm run relay:surface-parity:check
-          else
-            echo "no parity registry in this tree — skipping"
-          fi
+        run: npm run relay:surface-parity:check
+
+      - name: Website/CLI parity (strict)
+        run: npm run relay:surface-parity:check:strict
+
+      - name: YC/demo product readiness
+        run: npm run relay:yc-demo:check
 
       - name: CLI contract verification (offline, no provider call)
         run: npm run relay:cli:contract-verify

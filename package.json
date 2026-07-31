@@ -4,6 +4,9 @@
   "private": true,
   "description": "Sunday Relay — compound AI mission coordination and agent operations",
   "license": "MIT",
+  "bin": {
+    "relay": "dist-relay/cli.cjs"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ohdieyuh-glitch/sunday-relay.git"
@@ -15,12 +18,16 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc -b --noEmit && tsc -p relay-bridge/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "relay:build": "esbuild src/relay/cli/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay/cli.cjs --log-level=warning",
+    "relay:build": "esbuild src/relay/cli/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay/cli.cjs --banner:js=\"#!/usr/bin/env node\" --log-level=warning",
+    "relay:bridge:build": "esbuild relay-bridge/server.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/server.cjs --log-level=warning",
+    "relay:bridge": "npm run relay:bridge:build --silent && node dist-relay-bridge/server.cjs",
     "relay": "npm run relay:build --silent && node dist-relay/cli.cjs",
     "relay:test": "vitest run src/relay",
+    "relay:surface-parity:check": "node scripts/relay-surface-parity.mjs",
+    "relay:surface-parity:check:strict": "node scripts/relay-surface-parity.mjs --strict",
     "relay:yc": "npm run relay:build --silent && node dist-relay/cli.cjs demo yc --presentation",
     "relay:yc:verify": "npm run relay:build --silent && node scripts/relay-yc-verify.mjs",
     "relay:manual": "npm run relay:build --silent && node dist-relay/cli.cjs demo manual",
@@ -37,6 +44,8 @@
     "relay:cli:demo": "npm run relay:build --silent && node dist-relay/cli.cjs cli demo",
     "relay:cli:demo:plain": "npm run relay:build --silent && node dist-relay/cli.cjs cli demo --plain",
     "relay:cli:contract-verify": "npm run relay:build --silent && node dist-relay/cli.cjs cli contract-verify",
+    "relay:yc-demo:check": "npm run relay:build --silent && node dist-relay/cli.cjs yc check",
+    "relay:yc-demo:cli": "npm run relay:build --silent && node dist-relay/cli.cjs yc demo",
     "relay:competitive": "npm run relay:build --silent && node dist-relay/cli.cjs demo competitive",
     "relay:mission-control": "npm run relay:build --silent && node dist-relay/cli.cjs demo mission-control"
   },

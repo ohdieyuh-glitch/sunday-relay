@@ -66,7 +66,7 @@ export function RelayWorkforceStrip({
       {cell('PROMPT ARCHITECT', workforce.promptArchitect.name, ARCHITECT_LABEL[workforce.promptArchitect.status])}
       {cell('CODING AGENT', workforce.codingAgent.name, CODING_LABEL[workforce.codingAgent.status])}
       {cell('REVIEWER', workforce.reviewer.name, REVIEWER_STATE_LABEL[workforce.reviewer.state])}
-      {cell('MODE', mode.toUpperCase(), 'RELAY')}
+      {cell('MODE', mode.replace(/_/g, ' ').toUpperCase(), 'RELAY')}
       {cell('PHASE', PHASE_LABEL[phase], 'ACTIVE', true)}
     </div>
   );

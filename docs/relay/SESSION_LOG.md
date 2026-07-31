@@ -1659,3 +1659,148 @@ RECOVERY VERIFIED**; supervised/Claude/Codex contract-verify **PASSED** (all
 offline); `relay:test` **542/542**; `build` + `backend:build` + `relay:build`
 green; full suite green (see final report). Zero provider calls, zero
 network calls, zero deployments; not pushed.
+
+---
+
+## 2026-07-23 — Prompt 8.7 — YC demo integration, acceptance, and founder runbook (GATE A)
+
+Acceptance and launch reliability only, atop the Prompt 8.6 checkpoint
+`9f8075f`. No new capability, no redesign (NON-GOALS honored).
+
+**Demo preflight** — `npm run relay:yc-demo:check` (`relay yc check`).
+Read-only verification that the founder can record: expected branch,
+checkpoint `9f8075f`-or-newer (`git merge-base --is-ancestor`), tree status
+(dirty = WARN, never blocking or destructive), relay build + demo scripts +
+contract-verifier availability, an IN-PROCESS plain-demo proof (exit 0 +
+four offline labels + `Mission verified complete.`), terminal
+width/color/NO_COLOR, 10 required docs + 4 proof records, and truthfulness
+statements. The browser frontend is ALWAYS reported MANUAL VERIFICATION
+REQUIRED — its worktree is structurally unreachable (leaf module,
+repo-relative paths only). Exit 0 → `READY FOR FOUNDER ACCEPTANCE`.
+
+**Founder launcher** — `npm run relay:yc-demo:cli` (`relay yc demo`).
+Honesty notice, then EXACTLY the approved offline simulation
+(`relay cli demo`) — no second demo engine, zero provider/network calls,
+terminal restored on exit.
+
+**Module** — `src/relay/yc/`: import-free pure `preflight.ts` engine +
+`node-deps.ts` (the ONLY spawner: read-only git `rev-parse`/`status`/
+`merge-base` allowlist, sanitized minimal env — never inherits raw
+process.env, so provider keys and GIT_DIR/GIT_WORK_TREE cannot leak in or
+redirect the checks) + `index.ts`. New `relay-core-boundary.test.ts` block
+locks the leaf rules (exact file inventory, no dynamic import/require, no
+network, no sync-or-async fs writes, pinned git allowlist, no frontend/
+provider/deploy references, only main.ts may import yc).
+
+**Prompt 8.6 safety follow-ups closed:** shell fatal path routes
+`err.message` through `safeText` (last unsanitized rendering path);
+approved pacing test-locked (`DEMO_PLAYBACK_MS` 300 × `DEMO_STEP_TICKS` 7 ×
+20 reveals = 42s exact, 15–60s bounds at every speed, settle-at-COMPLETE);
+key fixture language asserted (offline labels, CLAIM PENDING VERIFICATION,
+verified evidence, independent review, VERIFIED COMPLETE only at the final
+CompletionPolicy step); `--watch` resolves the LAST produced exit code +
+rewrites reset/cursor-show on exit. Recovery marker-write UX deferred (does
+not affect the demo).
+
+**Runbook** — `YC_DEMO_RUNBOOK.md` finalized (sections A–H): night-before
+check, exact CLI launch, browser placeholder (`<PENDING FRONTEND SESSION
+CONFIRMATION>` — no invented command), 20-step demonstration order, truthful
+demo language (approved quote + five forbidden phrases), product message,
+failure recovery, stop conditions; appendix records the other (non-video)
+proofs.
+
+**Adversarial review (4 dimensions × refutation-verify, 14 agents):**
+0 blockers; 8 findings survived, 2 refuted, 20 nits. Fixed before this
+report: (1) `runProductWatch` first-paint-throw hang — the interval was
+armed after `stop()` already settled, orphaning an uncancellable
+clear-screen loop; now guarded `if (!settled)` and the test asserts no
+leaked interval. (2) git child inherited full `process.env` — now a
+sanitized minimal env (matches every other git spawner in the repo).
+(3) boundary tests only saw `from` imports and sync fs — added exact file
+inventory, dynamic-import/require ban, async-fs-write ban, pinned git
+allowlist, env-sanitization assertion, full-path node-deps exemption, and
+domain/state/ui consumer coverage. (4) `scrub()` now redacts secret shapes,
+session ids, emails, and absolute paths on the error path. (5) doc-truth
+precision: CLI.md/preflight "no writes" → "no repository or user-state
+writes (isolated self-deleting temp state)"; "never says live" → "the
+timeline never claims live provider activity"; TEST_STRATEGY 42s math →
+"20 reveals". (6) added CLI parse/dispatch + `--json` + sanitized-error
+acceptance tests. Refuted (no change): honesty-notice-invisible (the splash
++ every-screen labels carry the honesty content), watch-exit-code change
+(intended, documented, test-locked, and contract-correcting).
+
+**Verification (exact, NO provider call, this session):** `relay yc check`
+→ READY (exit 0) + `--json`; `relay:cli:contract-verify` **68/68 ×2**;
+`relay:cli:demo:plain` deterministic (exit 0); focused yc + boundary +
+product **154/154**; persistence contract-verify **PASSED** + recovery
+drill **DURABLE LOCAL RECOVERY VERIFIED**; supervised/claude/codex
+contract-verify **PASSED** (offline); `relay:test` **588/588**; typecheck
+green; `build` + `backend:build` + `relay:build` green (frontend `vite build`
+needed a memory-settle retry on this shared 2.7 GB box — an environment
+constraint, not a code issue: `tsc -b` and the esbuild bundles pass, and no
+8.7 change touches frontend bundle inputs); full suite **2177/2177**. Zero
+provider calls, zero network calls,
+zero deployments. Worktree boundary honored (only `sunday-relay`; the
+frontend worktree `sunday-relay-claude-home` never touched). NOT committed,
+NOT pushed — awaiting founder Gate B acceptance.
+
+---
+
+## 2026-07-23 — Prompt 8.7 — CLI glitch fix (founder: "the CLI keeps glitching")
+
+Recovery: branch `feature/relay-yc-demo`, HEAD `9f8075f`, all Prompt 8.7 work
+intact and uncommitted; one STALE `node dist-relay/cli.cjs cli demo` on pts/2
+(pid 2091, 4h+, 2.1% CPU continuous) — an old pre-fix demo, left running as
+living proof of the defect (not stopped; it is a foreground process on a
+terminal this session does not own; safe to clear with Q/Ctrl+C there or
+`kill 2091`).
+
+**Root cause (real product defect, reproduced on the real binary via a PTY
+probe):** the interactive shell's animation timer called `frame()` on EVERY
+300 ms tick unconditionally in a TTY, and `frame()` wrote `\x1b[H\x1b[2J`
+(home + WHOLE-SCREEN clear) before every redraw. Two consequences: (1) a
+full-screen blank-then-redraw every tick = visible flicker; (2) the timer
+never stopped — it repainted forever on the idle activation splash and after
+the mission settled at COMPLETE (the pts/2 process burning 2.1% CPU for hours).
+Contributing: no frame coalescing/diffing; no alternate screen (stale content
+after exit / across runs); the fatal path could print an absolute path.
+
+**Fix (in `shell.ts`, approved visuals untouched):**
+- Single-writer, frame-diffed redraw: assemble one complete frame in memory,
+  write it in ONE `stdout.write` = cursor-home + each line cleared to EOL +
+  clear-below. No `\x1b[2J` per frame → no flash. Skip the write entirely when
+  the frame is byte-identical to the last.
+- The timer paints only when a fixture event was revealed OR an animation is
+  actually running (`playing && !reducedMotion`). Idle splash, paused, and
+  settled-COMPLETE therefore paint NOTHING — no flicker, no busy CPU.
+- Alternate screen buffer entered once on start, left exactly once on exit
+  (restores the founder's terminal + scrollback; clean back-to-back runs).
+- Idempotent cleanup on every exit path (Q / Ctrl+C / SIGTERM / SIGHUP /
+  uncaught / stdin-end): clear the one timer, restore raw mode + cursor + SGR
+  + alt-screen once. Input ignored after cleanup begins; late ticks paint
+  nothing.
+- Resize recomputes width, blanks once, forces one redraw; never a second loop.
+- Fatal message: sanitized via safeText PLUS absolute-path collapse to
+  `…/<basename>`; printed after leaving the alt-screen, never sharing a write
+  with an ANSI sequence.
+- The resize listener now attaches to the output stream (real or injected) so
+  it is unit-testable; process-signal handlers stay gated on real ownership.
+
+**Tests:** new `product/glitch.test.ts` — a pseudo-terminal harness (fake
+streams + fake `vi` clock) driving the REAL shell loop, 14 lifecycle assertions
+(alt-enter once + one first frame; zero idle/paused/post-COMPLETE repaints;
+no per-frame `\x1b[2J`; one keypress → one repaint; exactly one interval across
+churn; resize repaints once; idempotent teardown; Ctrl+C + fatal restore;
+sanitized fatal; two sequential runs; deterministic per-width frame ≤ width).
+Real-binary PTY probe (Python `pty`): idle splash = **0 bytes/3s**, paused =
+**0 bytes/2.5s**, playback animates, alt enter+exit, cursor restored, **0**
+per-frame full-clears, clean Ctrl+C exit.
+
+**Verification (exact, NO provider call):** glitch 14/14; product+yc+boundary
+168/168; `relay:yc-demo:check` → READY (exit 0); `relay:cli:contract-verify`
+68/68 ×2; `relay:cli:demo:plain` exit 0; persistence contract + recovery drill
+PASSED; supervised/claude/codex contract-verify PASSED; `relay:test` 602/602;
+typecheck green; `relay:build` green; full suite + frontend/backend builds re-
+run below. Zero provider calls, zero network calls, zero real project changes.
+Approved simulation unchanged. NOT committed, NOT pushed — awaiting founder CLI
+stability review.

@@ -1,123 +1,27 @@
 import type { RelayApp } from '../core/app';
 import { style, badge, type RenderOptions } from './render';
-import { projectMission, type MissionProjectionBundle, type MissionSpec, type ReviewInput } from '../mission';
+import type { MissionProjectionBundle } from '../mission';
+import { projectCompetitiveMission } from '../shared/competitive-mission';
 
 /**
- * Competitive proof presentation (Prompt 8.1) — RENDERER + PROJECTION glue.
- * Runs on the completed `competitive` scenario's read models, projects the
- * mission bundle (Mission Contract, attestations, findings, repairs, verdict,
- * timeline) from canonical state, and renders the ordered competitive
- * progression. Truthful labels: the Claude Implementer and Codex Reviewer are
- * deterministic SIMULATIONS in this presentation; no external Codex is active;
- * the real Claude proof stays separately available via relay:claude:live.
+ * Competitive proof presentation (Prompt 8.1) — the TERMINAL RENDERER.
+ *
+ * The mission spec and the projection itself now live in
+ * `src/relay/shared/competitive-mission.ts`, because the website needs the
+ * same bundle and must not reach through this module into the CLI product
+ * shell (and from there into the Node persistence layer). This file renders
+ * that bundle for a terminal and nothing else.
+ *
+ * `COMPETITIVE_MISSION_SPEC`, `projectCompetitiveMission` and
+ * `competitiveJson` are re-exported unchanged so every existing CLI import
+ * keeps working and the rendered output is byte-identical.
+ *
+ * Truthful labels: the Claude Implementer and Codex Reviewer are deterministic
+ * SIMULATIONS in this presentation; no external Codex is active; the real
+ * Claude proof stays separately available via relay:claude:live.
  */
 
-export const COMPETITIVE_MISSION_SPEC: MissionSpec = {
-  title: 'Protect anonymous live access',
-  objective: 'Preserve anonymous access while preventing one actor from bypassing identity limits or spending controls.',
-  requirements: [
-    'Durable anonymous rate limiting',
-    'IPv6 identity aggregation',
-    'Global spending breaker remains active',
-    'Zero provider dispatch after a block',
-    'Existing authenticated behavior remains unchanged',
-  ],
-  constraints: [
-    'No pricing redesign',
-    'No authentication redesign',
-    'No new model providers',
-    'No production deployment',
-    'No Supabase migration',
-    'No Alcatraz engine changes',
-  ],
-  acceptanceCriteria: [
-    { id: 'AC-1', text: 'Anonymous rate-limit proof passes 30/30.', blocking: true },
-    { id: 'AC-2', text: 'Session proof passes 40/40.', blocking: true },
-    { id: 'AC-3', text: 'Spending proof passes 23/23.', blocking: true },
-    { id: 'AC-4', text: 'TypeScript build passes.', blocking: true },
-    { id: 'AC-5', text: 'A single actor cannot evade the anonymous identity limit through address rotation.', blocking: true },
-    { id: 'AC-6', text: 'Zero provider dispatch occurs after a block.', blocking: true },
-  ],
-  filesInScope: ['src/access/anonymous-policy.ts', 'src/access/ipv6-identity.ts', 'src/access/spend-boundary.ts'],
-  filesOutOfScope: ['src/pricing', 'src/auth'],
-  systemsInScope: ['anonymous access policy', 'spending breaker'],
-  systemsOutOfScope: ['Supabase migrations', 'Alcatraz engine', 'Production deployment', 'Model providers'],
-  assumptions: ['Existing authenticated flows are already covered by their own tests.'],
-  decisions: ['Anonymous identity is aggregated before policy application.'],
-  unresolvedQuestions: [],
-  requiredEvidence: [
-    '30/30 anonymous rate-limit proof', '40/40 session proof', '23/23 spending proof',
-    'TypeScript build', 'file-claim policy', 'protected-path policy',
-  ],
-  requiredReviewers: ['Codex — Independent Coding Reviewer'],
-  implementerRequirement: 'Claude Code',
-  reviewerRequirement: 'Codex — Independent Coding Reviewer',
-  maximumRepairIterations: 1,
-  maximumReviewRuns: 2,
-  maximumCostUsd: 2,
-  maximumRuntimeMinutes: 30,
-  completionRule: 'all_blocking_criteria_and_independent_review',
-  createdBy: 'relay-operator',
-};
-
-const AFFECTED_CRITERIA = ['AC-5'];
-
-/** Project the mission bundle from a completed competitive run's read
- * models. Pure data-in / bundle-out — no live call, no core mutation. */
-export function projectCompetitiveMission(app: RelayApp, now: string): MissionProjectionBundle {
-  const status = app.status();
-  const audit = app.audit();
-  const events = app.events(0);
-  const reviewsRaw = app.review();
-  const evidence = app.evidence();
-  const task = app.task();
-  const handoff = app.handoff();
-
-  const runId = status?.runId ?? 'run_unknown';
-  const taskId = status?.taskId ?? 'tsk_unknown';
-  const projectId = status?.projectId ?? 'prj_unknown';
-  const requestedImplementerId = handoff?.targetAdapterId ?? 'sim-coding-agent';
-  const actualImplementerId = audit?.identities?.codingAgent ?? 'sim-coding-agent';
-  const actualReviewerId = audit?.identities?.reviewer ?? 'sim-reviewer';
-  const eventKinds = events.map((e) => e.kind);
-
-  const reviews: ReviewInput[] = reviewsRaw.map((r) => ({
-    attempt: r.attempt,
-    verdict: r.verdict === 'approved' ? 'approved' : 'changes_requested',
-    reviewerAgentId: r.adapterId,
-    requestedReviewerAgentId: 'sim-reviewer',
-    independent: r.independent,
-    provenance: (r.provenance as MissionProjectionBundle['mission']['provenance']),
-    findings: r.findings.map((f) => ({ id: f.id, severity: f.severity, title: f.title, detail: f.detail, recommendation: f.recommendation })),
-  }));
-
-  const requiredCommands = COMPETITIVE_MISSION_SPEC.requiredEvidence;
-  const passedCommands = new Set(
-    evidence.filter((e) => e.status === 'passed' && e.command && requiredCommands.includes(e.command)).map((e) => e.command as string),
-  );
-  const passedEvidenceIds = evidence.filter((e) => e.status === 'passed').map((e) => e.evidenceId);
-
-  return projectMission({
-    spec: COMPETITIVE_MISSION_SPEC,
-    missionId: 'msn_competitive', projectId, taskId, runId, now, provenance: 'simulated',
-    requestedImplementerId, requestedReviewerId: 'sim-reviewer',
-    actualImplementerId, actualReviewerId,
-    implementerAdapterProvenance: 'simulated', reviewerAdapterProvenance: 'simulated',
-    implementerLaunchVerified: eventKinds.includes('agent.session_started'),
-    implementerCompletionSignal: eventKinds.includes('agent.report_created'),
-    reviewerLaunchVerified: reviewsRaw.length > 0,
-    implementerSessionId: audit?.sessionRefs?.[0] ?? null, workspaceId: null,
-    workspaceInspectionCompleted: false, verificationCompleted: eventKinds.includes('verification.completed'),
-    runStatus: status?.status ?? 'unknown',
-    reviews, originalClaimedFiles: (task?.claimedFiles ?? []).map((c) => c.path),
-    affectedCriterionIds: AFFECTED_CRITERIA, workspaceRevision: status?.baseRevision ?? 'rev-sim',
-    postRepairEvidenceIds: passedEvidenceIds,
-    allEvidence: evidence.map((e) => ({ evidenceId: e.evidenceId, status: e.status })),
-    requiredEvidenceCount: requiredCommands.length, passedEvidenceCount: passedCommands.size,
-    repairDispatched: (audit?.repairCount ?? 0) > 0, implementationReported: eventKinds.includes('agent.report_created'),
-    events: events.map((e) => ({ sequence: e.sequence, at: e.at, source: e.source, kind: e.kind, provenance: e.provenance as ReviewInput['provenance'], safeSummary: e.safeSummary })),
-  });
-}
+export { COMPETITIVE_MISSION_SPEC, projectCompetitiveMission, competitiveJson } from '../shared/competitive-mission';
 
 const VERDICT_LABEL: Record<string, string> = {
   claimed_complete: 'CLAIMED COMPLETE', reviewed: 'REVIEWED', approved: 'APPROVED',
@@ -331,9 +235,4 @@ export function renderTimeline(b: MissionProjectionBundle): string[] {
     lines.push(`     ${e.summary}`.slice(0, 78));
   }
   return lines;
-}
-
-/** Serializable JSON payload (no ANSI, no mascot, no secrets). */
-export function competitiveJson(app: RelayApp, now: string): MissionProjectionBundle {
-  return projectCompetitiveMission(app, now);
 }

@@ -1,0 +1,287 @@
+/* ==========================================================================
+   COLORWAY — RELAY MANUAL (internal id: manual · display: RELAY MANUAL)
+
+   Founder-provided black / cream / aged-gold reference (mobile screenshot):
+   deep near-black system areas, warm ivory technical-manual areas, dark
+   aged-brass typography, brighter muted signal gold for PRIMARY controls
+   only, black editorial type, graphite details, very subtle grids.
+
+   OPTIONAL third appearance — activated by data-relay-colorway="manual" on
+   the document root. The default (obsidian) and midnight colorways are
+   untouched. Semantic tokens are defined ONCE below; every override
+   consumes tokens — no scattered hex values in components.
+
+   Target visual ratio: ~45–55% black · 30–40% cream · 8–12% graphite ·
+   3–7% aged gold · <2% signal gold. Signal gold is rare by design.
+   ========================================================================== */
+
+[data-relay-colorway='manual'] {
+  /* Black system colors */
+  --relay-manual-black: #070705;
+  --relay-manual-stage: #0b0b09;
+  --relay-manual-raised-black: #11110f;
+  --relay-manual-ink: #0c0c0a;
+  /* Cream system colors */
+  --relay-manual-cream: #eae8dc;
+  --relay-manual-cream-panel: #f5f3e7;
+  --relay-manual-cream-muted: #c8c5b8;
+  --relay-manual-cream-text-muted: #a5a39a;
+  /* Graphite */
+  --relay-manual-graphite: #5d5c58;
+  --relay-manual-soft-gray: #a2a19e;
+  /* Aged gold */
+  --relay-manual-gold: #846622;
+  --relay-manual-gold-dark: #795c1c;
+  --relay-manual-gold-muted: #9d8e6b;
+  /* Signal gold — sparing: primary controls, active squares, menu block */
+  --relay-manual-signal: #e7c153;
+  --relay-manual-signal-soft: #dab456;
+  /* Grids */
+  --relay-manual-grid-dark: #1b1c17;
+  --relay-manual-grid-cream: #d6d3c4;
+}
+
+/* ------------------------------------------------------------------------
+   PREVIEW SHELL
+   ------------------------------------------------------------------------ */
+[data-relay-colorway='manual'] .rpv { background: var(--relay-manual-black); }
+
+/* ------------------------------------------------------------------------
+   ENTRY HOME — black system top (header + dog stage), ivory technical-manual
+   body (starter, routes, Ask Relay dialogue, brief, recent, footer).
+   ------------------------------------------------------------------------ */
+[data-relay-colorway='manual'] .reh {
+  --reh-bg: var(--relay-manual-stage);
+  --reh-panel: var(--relay-manual-raised-black);
+  --reh-panel-2: var(--relay-manual-raised-black);
+  --reh-line: var(--relay-manual-graphite);
+  --reh-gold: var(--relay-manual-gold-muted);
+  --reh-gold-dim: rgba(132, 102, 34, 0.45);
+  --reh-cream: var(--relay-manual-cream);
+  --reh-dim: var(--relay-manual-soft-gray);
+  --reh-faint: var(--relay-manual-cream-text-muted);
+}
+[data-relay-colorway='manual'] .reh-grid-bg {
+  background-image:
+    linear-gradient(rgba(27, 28, 23, 0.55) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(27, 28, 23, 0.55) 1px, transparent 1px);
+}
+[data-relay-colorway='manual'] .reh-header {
+  background: var(--relay-manual-black);
+  border-bottom-color: rgba(93, 92, 88, 0.5);
+}
+[data-relay-colorway='manual'] .reh-wordmark { color: var(--relay-manual-cream); }
+[data-relay-colorway='manual'] .reh-switch-btn.is-active {
+  background: var(--relay-manual-signal);
+  color: var(--relay-manual-ink);
+  border-color: var(--relay-manual-signal);
+}
+/* Ivory technical-manual surfaces: re-scope the semantic variables so every
+   descendant flips to ink-on-cream without per-component hex. */
+[data-relay-colorway='manual'] .reh-starter,
+[data-relay-colorway='manual'] .reh-routes,
+[data-relay-colorway='manual'] .reh-brief,
+[data-relay-colorway='manual'] .reh-recent,
+[data-relay-colorway='manual'] .reh-footer {
+  --reh-panel: var(--relay-manual-cream);
+  --reh-panel-2: var(--relay-manual-cream-panel);
+  --reh-line: var(--relay-manual-cream-muted);
+  --reh-cream: var(--relay-manual-ink);
+  --reh-dim: var(--relay-manual-graphite);
+  --reh-faint: var(--relay-manual-cream-text-muted);
+  --reh-gold: var(--relay-manual-gold);
+  --reh-gold-dim: rgba(132, 102, 34, 0.5);
+  background: var(--relay-manual-cream);
+  color: var(--relay-manual-ink);
+}
+/* The Ask Relay dialogue panel is the focused ivory surface. */
+[data-relay-colorway='manual'] .reh-guide {
+  --reh-panel: var(--relay-manual-cream-panel);
+  --reh-panel-2: var(--relay-manual-cream);
+  --reh-line: var(--relay-manual-cream-text-muted);
+  --reh-cream: var(--relay-manual-ink);
+  --reh-dim: var(--relay-manual-graphite);
+  --reh-faint: var(--relay-manual-cream-text-muted);
+  --reh-gold: var(--relay-manual-gold);
+  --reh-gold-dim: rgba(132, 102, 34, 0.5);
+  background: var(--relay-manual-cream-panel);
+  color: var(--relay-manual-ink);
+  border: 1px solid var(--relay-manual-ink);
+}
+[data-relay-colorway='manual'] .reh-guide input,
+[data-relay-colorway='manual'] .reh-starter textarea,
+[data-relay-colorway='manual'] .reh-brief input,
+[data-relay-colorway='manual'] .reh-brief textarea {
+  background: var(--relay-manual-cream-panel);
+  color: var(--relay-manual-ink);
+  border-color: var(--relay-manual-graphite);
+}
+/* Primary calls-to-action only carry signal gold. */
+[data-relay-colorway='manual'] .reh-starter .reh-btn--primary,
+[data-relay-colorway='manual'] .reh-brief .reh-btn--primary,
+[data-relay-colorway='manual'] .reh-guide .reh-btn--primary {
+  background: var(--relay-manual-signal);
+  color: var(--relay-manual-ink);
+  border-color: var(--relay-manual-signal);
+}
+
+/* ------------------------------------------------------------------------
+   PROJECT SETTINGS — the ivory technical manual itself: cream page, ink
+   type, aged-gold accents; black retained in the header band. Signal gold
+   appears only on the primary START/REVIEW actions.
+   ------------------------------------------------------------------------ */
+[data-relay-colorway='manual'] .rps {
+  --rps-bg: var(--relay-manual-cream);
+  --rps-panel: var(--relay-manual-cream-panel);
+  --rps-line: var(--relay-manual-cream-muted);
+  --rps-gold: var(--relay-manual-gold);
+  --rps-gold-dim: rgba(132, 102, 34, 0.5);
+  --rps-cream: var(--relay-manual-ink);
+  --rps-dim: var(--relay-manual-graphite);
+  --rps-faint: var(--relay-manual-cream-text-muted);
+}
+[data-relay-colorway='manual'] .rps-grid-bg {
+  background-image:
+    linear-gradient(rgba(214, 211, 196, 0.6) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(214, 211, 196, 0.6) 1px, transparent 1px);
+}
+[data-relay-colorway='manual'] .rps-header {
+  background: var(--relay-manual-black);
+  --rps-cream: var(--relay-manual-cream);
+  --rps-dim: var(--relay-manual-soft-gray);
+  --rps-faint: var(--relay-manual-cream-text-muted);
+  --rps-line: var(--relay-manual-graphite);
+  --rps-gold: var(--relay-manual-gold-muted);
+  color: var(--relay-manual-cream);
+}
+[data-relay-colorway='manual'] .rps .rps-btn--primary {
+  background: var(--relay-manual-signal);
+  color: var(--relay-manual-ink);
+  border-color: var(--relay-manual-signal);
+}
+@media (max-width: 980px) {
+  [data-relay-colorway='manual'] .rps-nav-actions {
+    background: rgba(245, 243, 231, 0.95);
+  }
+}
+
+/* ------------------------------------------------------------------------
+   ACTIVE WORKSPACE — black system frame (header, dog stage, RELAY CONSOLE,
+   terminal); ivory agent platforms (workforce strip), ivory dialogue dock
+   (project conversation), ivory status rail, ivory editorial footer with
+   "PASS THE WORK." in ink and "KEEP THE CONTEXT." in aged gold.
+   ------------------------------------------------------------------------ */
+[data-relay-colorway='manual'] .rpw {
+  --rpw-bg: var(--relay-manual-stage);
+  --rpw-panel: var(--relay-manual-raised-black);
+  --rpw-panel-2: var(--relay-manual-raised-black);
+  --rpw-line: rgba(93, 92, 88, 0.55);
+  --rpw-gold: var(--relay-manual-gold-muted);
+  --rpw-gold-bright: var(--relay-manual-signal-soft);
+  --rpw-gold-dim: rgba(157, 142, 107, 0.5);
+  --rpw-cream: var(--relay-manual-cream);
+  --rpw-dim: var(--relay-manual-soft-gray);
+  --rpw-faint: var(--relay-manual-cream-text-muted);
+}
+[data-relay-colorway='manual'] .rpw-grid-bg {
+  background-image:
+    linear-gradient(rgba(27, 28, 23, 0.55) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(27, 28, 23, 0.55) 1px, transparent 1px);
+}
+[data-relay-colorway='manual'] .rpw-header {
+  background: var(--relay-manual-black);
+  border-bottom-color: rgba(93, 92, 88, 0.5);
+}
+[data-relay-colorway='manual'] .rpw-wordmark-sunday { color: var(--relay-manual-cream); }
+[data-relay-colorway='manual'] .rpw-wordmark-relay { color: var(--relay-manual-signal-soft); }
+/* Agent platforms: ivory cells with ink identity, aged-gold squares. */
+[data-relay-colorway='manual'] .rpw-strip {
+  background: var(--relay-manual-cream);
+  border-bottom-color: var(--relay-manual-cream-muted);
+}
+[data-relay-colorway='manual'] .rpw-strip-cell {
+  --rpw-cream: var(--relay-manual-ink);
+  --rpw-gold: var(--relay-manual-gold);
+  --rpw-faint: var(--relay-manual-graphite);
+  --rpw-line: var(--relay-manual-cream-muted);
+  border-right-color: var(--relay-manual-cream-muted);
+  color: var(--relay-manual-ink);
+}
+[data-relay-colorway='manual'] .rpw-strip-cell--phase { background: var(--relay-manual-cream-panel); }
+/* The dialogue dock: focused ivory panel with ink border (founder ref). */
+[data-relay-colorway='manual'] .rpw-conversation {
+  --rpw-panel: var(--relay-manual-cream-panel);
+  --rpw-panel-2: var(--relay-manual-cream);
+  --rpw-line: var(--relay-manual-cream-text-muted);
+  --rpw-cream: var(--relay-manual-ink);
+  --rpw-dim: var(--relay-manual-graphite);
+  --rpw-faint: var(--relay-manual-cream-text-muted);
+  --rpw-gold: var(--relay-manual-gold);
+  --rpw-gold-dim: rgba(132, 102, 34, 0.5);
+  background: var(--relay-manual-cream-panel);
+  color: var(--relay-manual-ink);
+  border: 1px solid var(--relay-manual-ink);
+}
+[data-relay-colorway='manual'] .rpw-conversation input {
+  background: var(--relay-manual-cream-panel);
+  color: var(--relay-manual-ink);
+  border-color: var(--relay-manual-graphite);
+}
+[data-relay-colorway='manual'] .rpw-conversation .rpw-btn--primary {
+  background: var(--relay-manual-signal);
+  color: var(--relay-manual-ink);
+  border-color: var(--relay-manual-signal);
+}
+/* Status rail: ivory technical panels. */
+[data-relay-colorway='manual'] .rpw-status {
+  --rpw-panel: var(--relay-manual-cream);
+  --rpw-panel-2: var(--relay-manual-cream-panel);
+  --rpw-line: var(--relay-manual-cream-muted);
+  --rpw-cream: var(--relay-manual-ink);
+  --rpw-dim: var(--relay-manual-graphite);
+  --rpw-faint: var(--relay-manual-cream-text-muted);
+  --rpw-gold: var(--relay-manual-gold);
+  --rpw-gold-dim: rgba(132, 102, 34, 0.5);
+  background: var(--relay-manual-cream);
+  color: var(--relay-manual-ink);
+}
+[data-relay-colorway='manual'] .rpw-status input {
+  background: var(--relay-manual-cream-panel);
+  color: var(--relay-manual-ink);
+  border-color: var(--relay-manual-graphite);
+}
+/* Editorial footer: cream band, ink statement, aged-gold context line. */
+[data-relay-colorway='manual'] .rpw-footer {
+  --rpw-line: var(--relay-manual-cream-muted);
+  --rpw-gold: var(--relay-manual-gold);
+  background: var(--relay-manual-cream);
+  border-color: var(--relay-manual-ink);
+  color: var(--relay-manual-ink);
+}
+[data-relay-colorway='manual'] .rpw-footer-statement { color: var(--relay-manual-ink); }
+[data-relay-colorway='manual'] .rpw-footer-gold { color: var(--relay-manual-gold); }
+[data-relay-colorway='manual'] .rpw-footer-net { color: var(--relay-manual-ink); }
+/* Deep console + terminal stay black system surfaces. */
+[data-relay-colorway='manual'] .rpw-console { background: var(--relay-manual-stage); }
+[data-relay-colorway='manual'] .rpw-terminal { background: var(--relay-manual-black); }
+[data-relay-colorway='manual'] .rpw-tm-window {
+  background: var(--relay-manual-stage);
+  border-color: rgba(93, 92, 88, 0.5);
+}
+[data-relay-colorway='manual'] .rpw-tmpanel { background: rgba(17, 17, 15, 0.72); }
+/* Terminal footer inherits the black frame — not the cream editorial band. */
+[data-relay-colorway='manual'] .rpw-terminal .rpw-footer {
+  background: var(--relay-manual-raised-black);
+  color: var(--relay-manual-cream);
+  border-color: rgba(93, 92, 88, 0.5);
+  --rpw-gold: var(--relay-manual-gold-muted);
+}
+[data-relay-colorway='manual'] .rpw-terminal .rpw-footer-statement,
+[data-relay-colorway='manual'] .rpw-terminal .rpw-footer-net { color: var(--relay-manual-cream); }
+[data-relay-colorway='manual'] .rpw-terminal .rpw-footer-gold { color: var(--relay-manual-gold-muted); }
+/* Primary send action carries signal gold with ink text. */
+[data-relay-colorway='manual'] .rpw-tm-input .rpw-btn--primary {
+  background: var(--relay-manual-signal);
+  color: var(--relay-manual-ink);
+  border-color: var(--relay-manual-signal);
+}

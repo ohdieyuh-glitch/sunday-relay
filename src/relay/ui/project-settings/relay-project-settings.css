@@ -485,8 +485,9 @@
     position: sticky;
     bottom: 0;
     background: rgba(7, 8, 11, 0.95);
-    padding-bottom: 10px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   }
+  .rps-nav-actions .rps-btn { min-height: 44px; }
   .rps-nav-actions .rps-btn { flex: 1 1 auto; }
 }
 

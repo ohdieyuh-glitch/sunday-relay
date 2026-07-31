@@ -158,7 +158,13 @@ describe('rendering truthfulness', () => {
     expect(mascotStateFor('checkpoint_required', 'review')).toBe('CHECKPOINT');
     expect(mascot('LISTENING', RENDER_PLAIN)).toEqual([]); // disabled in plain mode
     const shown = mascot('LISTENING', { ...RENDER_PLAIN, mascot: true });
-    expect(shown.length).toBeLessThanOrEqual(3);
+    // The OFFICIAL Relay Dog: the shared 18x14 sprite folded to 7 terminal
+    // rows, carrying its state label — never the retired `|\_/|` (o.o) face.
+    expect(shown.length).toBe(7);
+    const raw = shown.join('\n');
+    expect(raw).toContain('RELAY DOG - LISTENING');
+    expect(raw).not.toContain('|\\_/|');
+    expect(raw).not.toContain('(o.o)');
   });
 
   it('doctor is truthful about deferred capabilities and never prints env values', () => {

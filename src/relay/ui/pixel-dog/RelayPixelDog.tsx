@@ -13,7 +13,15 @@ export type PixelDogPose =
   | 'running'
   | 'sitting'
   | 'lying'
-  | 'carrying';
+  | 'carrying'
+  /** Up on hind toes, front paws raised toward an implied work surface. */
+  | 'reaching'
+  /** REVIEWING: curled and resting, eyes shut, while a review runs. */
+  | 'sleeping'
+  /** REPAIRING: leaning forward, nose down, paws at the disturbed ground. */
+  | 'digging'
+  /** CODING: seated at an implied keyboard, both front paws on the keys. */
+  | 'coding';
 
 export type PixelDogMarker = 'none' | 'alert' | 'check' | 'question' | 'scan';
 
@@ -43,6 +51,9 @@ const HEAD = [
   '........wdyydyyw..',
   '........wwwwwwww..',
 ];
+
+/** The same head with the eyes shut — only the amber eye row closes. */
+const HEAD_ASLEEP = [...HEAD.slice(0, 4), '........wddddddw..', ...HEAD.slice(5)];
 
 const POSES: Record<PixelDogPose, string[]> = {
   standing: [
@@ -101,6 +112,20 @@ const POSES: Record<PixelDogPose, string[]> = {
     '..ss.........ss...',
     '..................',
   ],
+  /* Implementing: the dog is up on its hind toes, torso vertical, both front
+     paws lifted toward the work in front of it. Same head, collar, and
+     silhouette language as every other pose — only the stance changes. */
+  reaching: [
+    ...HEAD,
+    '.......cccwwww.ww.',
+    '........wwwwww.ww.',
+    '........wwwwwww...',
+    '.......swwwwwws...',
+    '........wwwwww....',
+    '........wwwwww....',
+    '........ww..ww....',
+    '........s....s....',
+  ],
   carrying: [
     HEAD[0],
     HEAD[1],
@@ -116,6 +141,45 @@ const POSES: Record<PixelDogPose, string[]> = {
     '...ww....ww..ww...',
     '...ww....ww..ww...',
     '...ss....ss..ss...',
+  ],
+  /* Reviewing: curled and settled, eyes shut. No check mark, no success
+     styling — a review in progress is not approval. */
+  sleeping: [
+    '..................',
+    '..................',
+    ...HEAD_ASLEEP,
+    '.....ccwwwwww.....',
+    '...wwwwwwwwwww....',
+    '..swwwwwwwwwwws...',
+    '..swwwwwwwwwwws...',
+    '...ww......ww.....',
+    '...ss......ss.....',
+  ],
+  /* Repairing: nose toward the ground, rump and tail raised, front paws down at
+     the disturbed patch. Eyes stay open — investigating, not resting. */
+  digging: [
+    '..................',
+    '...............www',
+    '..........wwwww.ww',
+    ...HEAD,
+    '.....ccwwwwwwwww..',
+    '...wwwwwwwwwwwww..',
+    '..swwwwwwwwwwwws..',
+    '..ww....ww...ww...',
+    '..ss....ss...ss...',
+  ],
+  /* Coding: seated square to the viewer, both front paws forward on an implied
+     keyboard. The editor and its experience levels are decoration layers. */
+  coding: [
+    ...HEAD,
+    '.......ccwwwww....',
+    '......wwwwwwwww...',
+    '.....wwwwwwwwww...',
+    '.....wwwwwwwwww...',
+    '..wwwwwwwwwwwww...',
+    '..sswwwwwwwwws....',
+    '.....ww....ww.....',
+    '.....ss....ss.....',
   ],
 };
 

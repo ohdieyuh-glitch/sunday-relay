@@ -64,11 +64,11 @@ describe('Section 24 — integration scenarios', () => {
       ids: deterministicIds(), now: NOW, leaseMs: 3_600_000, provenance: 'simulated',
     });
     expect(assigned.ok).toBe(true);
-    if (!assigned.ok) return;
+    if (!assigned.ok) throw new Error(`assignTask failed: ${assigned.error.message}`);
 
     const compiled = compileHandoff(compileInput({ task: assigned.value.task, assignment: assigned.value.assignment }));
     expect(compiled.ok).toBe(true);
-    if (!compiled.ok) return;
+    if (!compiled.ok) throw new Error(`compileHandoff failed: ${compiled.error.message}`);
 
     const eligibility = evaluateDispatchEligibility({
       project: makeProject(), run: makeRun({ status: 'active', phase: 'handoff' }),
@@ -92,7 +92,7 @@ describe('Section 24 — integration scenarios', () => {
 
   it('S3: file conflict prevented with conflict references', () => {
     const claimA = acquireFileClaim({ taskId: fixedId('tsk', 'A'), path: 'src/shared/core.ts', mode: 'write', existing: [], ids: deterministicIds(), now: NOW, leaseMs: 60_000 });
-    if (!claimA.ok) return;
+    if (!claimA.ok) throw new Error(`claim failed: ${claimA.error.message}`);
     const claimB = acquireFileClaim({ taskId: fixedId('tsk', 'B'), path: 'src/shared', mode: 'write', existing: [claimA.value.claim], ids: deterministicIds(), now: NOW, leaseMs: 60_000 });
     expect(claimB.ok).toBe(false);
     if (!claimB.ok) {
@@ -102,7 +102,7 @@ describe('Section 24 — integration scenarios', () => {
 
   it('S4: stale handoff prevented after the ledger advances', () => {
     const compiled = compileHandoff(compileInput());
-    if (!compiled.ok) return;
+    if (!compiled.ok) throw new Error(`compileHandoff failed: ${compiled.error.message}`);
     const eligibility = evaluateDispatchEligibility({
       project: makeProject(), run: makeRun({ status: 'active', phase: 'handoff' }),
       task: makeTask({ status: 'assigned', ownerAssignmentId: fixedId('asn') }),
@@ -141,7 +141,7 @@ describe('Section 24 — integration scenarios', () => {
     expect(decision.outcome).toBe('allowed');
 
     const compiled = compileHandoff(compileInput());
-    if (!compiled.ok) return;
+    if (!compiled.ok) throw new Error(`compileHandoff failed: ${compiled.error.message}`);
     const revision = compileRevisionContract({
       task: makeTask(), parentPackage: compiled.value.pkg, verdict, decision,
       failureEvidenceRefs: [fixedId('evd')], requiredCorrection: 'Fix R1.',
@@ -168,7 +168,7 @@ describe('Section 24 — integration scenarios', () => {
     expect(decision.outcome).toBe('checkpoint_required');
     expect(decision.failedConditions).toEqual(['no-protected-file']);
     const compiled = compileHandoff(compileInput());
-    if (!compiled.ok) return;
+    if (!compiled.ok) throw new Error(`compileHandoff failed: ${compiled.error.message}`);
     const revision = compileRevisionContract({
       task: makeTask(), parentPackage: compiled.value.pkg, verdict: makeVerdict('changes_requested'), decision,
       failureEvidenceRefs: [fixedId('evd')], requiredCorrection: 'x', behaviorToPreserve: [], verificationToRerun: [],
@@ -204,7 +204,7 @@ describe('Section 24 — integration scenarios', () => {
 
   it('S9: budget stops dispatch — projected overrun denies eligibility with budget evidence', () => {
     const compiled = compileHandoff(compileInput());
-    if (!compiled.ok) return;
+    if (!compiled.ok) throw new Error(`compileHandoff failed: ${compiled.error.message}`);
     const eligibility = evaluateDispatchEligibility({
       project: makeProject(), run: makeRun({ status: 'active', phase: 'handoff' }),
       task: makeTask({ status: 'assigned', ownerAssignmentId: fixedId('asn') }),

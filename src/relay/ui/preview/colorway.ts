@@ -1,18 +1,21 @@
 /**
- * Relay colorways. OBSIDIAN is the original deep-black + gold system look;
- * MIDNIGHT is the founder-photo website colorway — deep slate-indigo screen,
- * cream text, warm gold accents. Purely presentational: a data attribute on
- * the document root that the module stylesheets key their variable
- * overrides from. No persistence here — hosts decide where the choice lives.
+ * Relay appearances (colorways). RELAY ORIGINAL (obsidian) is the default
+ * deep-black + gold system look; MIDNIGHT is the founder-photo website
+ * colorway (slate-indigo); RELAY MANUAL is the founder black / cream /
+ * aged-gold technical-manual reference. Purely presentational: a data
+ * attribute on the document root that the module stylesheets key their
+ * variable overrides from. No persistence here — hosts decide where the
+ * choice lives (safe local preview state today).
  */
 
-export type RelayColorway = 'obsidian' | 'midnight';
+export type RelayColorway = 'obsidian' | 'midnight' | 'manual';
 
-export const RELAY_COLORWAYS: readonly RelayColorway[] = ['obsidian', 'midnight'];
+export const RELAY_COLORWAYS: readonly RelayColorway[] = ['obsidian', 'midnight', 'manual'];
 
 export const COLORWAY_LABEL: Record<RelayColorway, string> = {
-  obsidian: 'OBSIDIAN',
+  obsidian: 'RELAY ORIGINAL',
   midnight: 'MIDNIGHT',
+  manual: 'RELAY MANUAL',
 };
 
 /** Apply a colorway to the document root (default obsidian = no attribute). */

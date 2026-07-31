@@ -116,7 +116,7 @@ describe('H/J/K — claims, promotion, and canonical state', () => {
   it('a schema-valid report is recorded as an UNVERIFIED claim and canonical state does not move', () => {
     const recorded = recordClaim({ store: stores.events, ids, report: implReport(), at: clock.now() });
     expect(recorded.ok).toBe(true);
-    if (!recorded.ok) return;
+    if (!recorded.ok) throw new Error(`record failed: ${recorded.error.message}`);
     expect(recorded.value.event.classification).toBe('unverified-claim');
     const projection = projectLedger(listEvents(stores.events, projectId));
     expect(projection.claims[recorded.value.claimId].status).toBe('recorded');
@@ -126,7 +126,7 @@ describe('H/J/K — claims, promotion, and canonical state', () => {
 
   it('promotion requires passing Relay-produced verification; failed verification cannot promote', () => {
     const recorded = recordClaim({ store: stores.events, ids, report: implReport(), at: clock.now() });
-    if (!recorded.ok) return;
+    if (!recorded.ok) throw new Error(`record failed: ${recorded.error.message}`);
     const denied = promoteClaim({
       store: stores.events, ids, claimId: recorded.value.claimId, at: clock.now(),
       verification: makeVerification('failed'),
@@ -148,7 +148,7 @@ describe('H/J/K — claims, promotion, and canonical state', () => {
 
   it('promotion advances the ledger exactly once and duplicate promotion is idempotent per key', () => {
     const recorded = recordClaim({ store: stores.events, ids, report: implReport(), at: clock.now() });
-    if (!recorded.ok) return;
+    if (!recorded.ok) throw new Error(`record failed: ${recorded.error.message}`);
     const before = currentLedgerVersion(stores.events, projectId);
     const promote = (key: string) =>
       promoteClaim({
@@ -173,7 +173,7 @@ describe('H/J/K — claims, promotion, and canonical state', () => {
 
   it('rejected claims stay historical and cannot later be promoted', () => {
     const recorded = recordClaim({ store: stores.events, ids, report: implReport(), at: clock.now() });
-    if (!recorded.ok) return;
+    if (!recorded.ok) throw new Error(`record failed: ${recorded.error.message}`);
     const rejected = rejectClaim({ store: stores.events, ids, claimId: recorded.value.claimId, at: clock.now(), reason: 'unsupported' });
     expect(rejected.ok).toBe(true);
     if (rejected.ok) expect(rejected.value.classification).toBe('historical');
@@ -194,7 +194,7 @@ describe('H/J/K — claims, promotion, and canonical state', () => {
     expect(unknown.ok).toBe(false);
 
     const recorded = recordClaim({ store: stores.events, ids, report: implReport(), at: clock.now() });
-    if (!recorded.ok) return;
+    if (!recorded.ok) throw new Error(`record failed: ${recorded.error.message}`);
     promoteClaim({
       store: stores.events, ids, claimId: recorded.value.claimId, at: clock.now(),
       verification: makeVerification('passed'),

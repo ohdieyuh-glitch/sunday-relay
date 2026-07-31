@@ -3,7 +3,19 @@ export { RelayProjectHeader } from './RelayProjectHeader';
 export { RelayWorkforceStrip } from './RelayWorkforceStrip';
 export { RelayProjectConversation } from './RelayProjectConversation';
 export { RelayConsole } from './RelayConsole';
+export { RelayMissionPlayback } from './RelayMissionPlayback';
+export { RelayLiveMissionControl } from './RelayLiveMissionControl';
 export { RelayLiveTerminalPanel } from './RelayLiveTerminalPanel';
+export { RelayCodingAgentTerminal } from './RelayCodingAgentTerminal';
+export { RelayRoleBilling } from './RelayRoleBilling';
+export {
+  buildCodingTerminalView,
+  buildRoleBilling,
+  emptyCodingTerminalView,
+  CODING_TERMINAL_WAITING_MESSAGE,
+  CODING_TERMINAL_EMPTY_MESSAGE,
+} from './coding-terminal';
+export type { CodingTerminalView, RoleBillingRow } from './coding-terminal';
 export { RelayTerminalEvent } from './RelayTerminalEvent';
 export { RelayProjectPhaseRail } from './RelayProjectPhaseRail';
 export { RelayManualTaskPanel } from './RelayManualTaskPanel';

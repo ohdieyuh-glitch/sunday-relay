@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { evaluateAutomaticRepair, type RepairEvaluationInput, type RepairPlanFacts } from './repair';
 import { detectNoProgress, detectRepeatedFailure, failureFingerprint, type AttemptSummary } from './detection';
 import { decideRecovery, type RecoveryEvaluationInput } from './decision';
-import { FIFTEEN_CONDITIONS, fixedId, makeRun, makeTask, makeVerdict } from '../testing/factories';
+import { fixedId, makeRun, makeTask, makeVerdict } from '../testing/factories';
+import { FIFTEEN_CONDITIONS } from '../protocol/contracts';
 import type { BudgetDecision } from '../verification/budget';
 
 const okBudget: BudgetDecision = { outcome: 'allowed', reasons: [], actual: { usd: 0, tokens: 0, runtimeMs: 0 }, projected: {}, estimateMissing: false, safeSummary: 'ok' };

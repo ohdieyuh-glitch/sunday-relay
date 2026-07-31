@@ -43,6 +43,9 @@ src/relay/core, protocol, ledger,      Relay Core — pure, framework-free
              storage, coordination,     (no React, no zustand, no provider SDKs;
              handoff, verification      enforced by relay-core-boundary.test.ts)
 src/relay/mission                       Mission Operations
+src/relay/shared                        browser-safe seam both surfaces render
+                                        (no CLI renderer, no Node persistence;
+                                        enforced by browser-boundary.test.ts)
 src/relay/cli                           the terminal surface
 src/relay/ui                            the web surface
 src/relay/psp                           PSP Agent ID + entitlement
@@ -62,6 +65,12 @@ npm test                     # the full suite
 npm run typecheck            # application + bridge
 npm run build                # production build
 ```
+
+The documentation writes CLI commands as `relay <command>`. That invocation is
+real: `package.json` maps the `relay` bin to the built CLI, so after
+`npm run relay:build` (which `npm run relay` does for you) `npx relay …` works,
+as does `relay …` once the package is linked. Without a build, use
+`npm run relay -- <command>`.
 
 Offline, no-cost demonstrations (no provider is contacted, no file is changed):
 
@@ -92,6 +101,8 @@ dispatches to a provider.
 | `WEBSITE_CLI_PARITY_CONTRACT.md` | the two-surface guarantee |
 | `OFFICIAL_RELAY_DOG_IDENTITY.md`, `UI_VISION.md` | product identity |
 | `TEST_STRATEGY.md`, `DECISIONS.md` | how it is proven, and why |
+| `DEVELOPMENT_CONTRACTS.md` | what the repository separation carried, and what it deliberately did not |
+| `YC_DEMO_BASELINE.json` | the versioned product baseline the readiness check validates |
 
 `RELAY_STATUS.md` and `RELAY_INTEGRATION.md` at the repository root are
 **historical records** from the period when Relay was developed inside the

@@ -1,5 +1,16 @@
 # Sunday Relay — Terminal Product Shell (Prompt 8.6, authoritative)
 
+> **YC demo acceptance (Prompt 8.7, 2026-07-23):** two founder commands
+> wrap this product for the video — `npm run relay:yc-demo:check` (read-
+> only preflight; frontend always MANUAL VERIFICATION REQUIRED, worktree
+> never inspected) and `npm run relay:yc-demo:cli` (honesty notice + the
+> approved offline simulation; never a second demo engine). Follow-ups
+> closed: the shell fatal path routes `err.message` through `safeText`;
+> the approved pacing is test-locked (`DEMO_PLAYBACK_MS` 300 ×
+> `DEMO_STEP_TICKS` 7 × 20 reveals = 42s exact, bounded 15–60s at every
+> speed); `--watch` resolves the last produced exit code and always
+> rewrites reset + cursor-show on exit. See YC_DEMO_RUNBOOK.md.
+
 Relay has two primary interfaces projecting the SAME canonical state: the
 Relay browser application (built separately) and the **Relay CLI** — the
 terminal-native product for developers who supervise Relay from their
@@ -127,6 +138,50 @@ paths shorten with explicit ellipsis. Color is enhancement only: every
 symbol (● ✓ ! × → ■) has a text equivalent, `NO_COLOR` and `--no-color`
 are honored, `--reduced-motion` freezes all animation, and the terminal is
 always restored on exit (including Ctrl+C and errors).
+
+## Rendering & terminal stability (Prompt 8.7 hardening)
+
+The interactive shell (`shell.ts`) is one authoritative loop: **one** stdin
+listener, **one** playback/animation timer, **one** resize listener, **one**
+cursor/raw-mode/alternate-screen owner, and an idempotent cleanup path.
+
+- **No flicker.** A frame is assembled entirely in memory, then written in a
+  SINGLE `stdout.write` that homes the cursor, rewrites each line clearing to
+  end-of-line, and clears the tail below — it never blanks the whole screen
+  (`\x1b[2J`) per frame. (The old loop cleared the entire screen before every
+  redraw, which is the flash the founder saw.)
+- **No idle repaint / no busy CPU.** The frame is only written when it actually
+  changed (byte diff against the last frame), and the timer only paints while
+  something is genuinely animating — playback running, motion allowed. On the
+  idle activation splash, while paused, and after the mission settles at
+  COMPLETE, the timer paints nothing. (The old loop repainted every 300 ms
+  forever, burning CPU and flickering even after completion.)
+- **Alternate screen.** A real TTY enters the alternate screen buffer once on
+  start and leaves it exactly once on exit, so the demo has its own screen and
+  the founder's original terminal + scrollback are restored intact — no stale
+  frames after exit, clean back-to-back runs.
+- **One keypress → one action → at most one repaint.** Input queued after
+  cleanup begins is ignored; late timer ticks after exit paint nothing.
+- **Resize** recomputes the width, blanks once for the new geometry, and forces
+  a single redraw; it never spawns a second loop.
+- **Deterministic geometry.** ANSI-aware width math; no rendered line exceeds
+  the terminal width at any width (140/100/80/60/40, tested); status-label
+  length changes never resize panels.
+- **Cleanup is idempotent** and runs on every exit path (Q, Ctrl+C, SIGTERM,
+  SIGHUP, uncaught error, stdin end): clear the timer, restore raw mode, show
+  the cursor, reset SGR, leave the alternate screen — each exactly once. A
+  fatal message is sanitized (control bytes stripped; secret / session-id /
+  email / **absolute-path** shapes redacted) and printed on the restored
+  screen, never inside the alternate buffer.
+
+These are locked by `product/glitch.test.ts` — a pseudo-terminal harness
+(fake streams + fake clock) asserting lifecycle behavior, plus a real-binary
+PTY probe confirming the idle splash is byte-silent.
+
+**If the display ever looks corrupted:** press `Q` or `Ctrl+C`, wait for the
+prompt, and rerun `npm run relay:yc-demo:cli`. Only run `reset` if the
+terminal itself stays corrupted afterward — it is never needed during normal
+operation.
 
 ## Relay Dog
 

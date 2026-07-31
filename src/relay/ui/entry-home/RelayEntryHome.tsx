@@ -35,6 +35,7 @@ export function RelayEntryHome(props: RelayEntryHomeProps) {
     handoffNetworkState,
     reducedMotion = false,
     onReturnToSunday,
+    siblingProductUnavailableReason,
     onSelectProjectRoute,
     onUpdateProjectIdea,
     onBuildProjectBrief,
@@ -59,6 +60,7 @@ export function RelayEntryHome(props: RelayEntryHomeProps) {
         productState={productState}
         handoffNetworkState={handoffNetworkState}
         onReturnToSunday={onReturnToSunday}
+        siblingProductUnavailableReason={siblingProductUnavailableReason}
         onOpenProjectSettings={onOpenProjectSettings}
         onOpenTerminal={onOpenTerminal}
       />

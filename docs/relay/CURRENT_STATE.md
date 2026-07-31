@@ -1,22 +1,74 @@
 # Sunday Relay — Current State
 
 > The single source of truth for where Relay stands. Update at every phase
-> boundary. Last updated: **2026-07-22 (Prompt 8.5 COMPLETE — durable local
-> persistence + crash-safe recovery: Gate A 65-check offline restart proof
-> across ~44 separate Node processes (twice) + Gate B two-process recovery
-> drill (twice) — DURABLE LOCAL RECOVERY VERIFIED; zero provider calls; real
-> cross-process PROVIDER resume remains not live-proven).** The July 24
-> product demo is `npm run relay:yc`; `npm run relay:mission-control` is the
-> graphical product surface; `npm run relay:competitive` is the
-> deterministic full-workforce proof; `npm run relay:claude:live` is the
-> real single-agent proof; `npm run relay:codex:live` is the REAL
-> independent-review proof; and `npm run relay:supervised:live` is the REAL
-> full-loop proof (founder-run only, now durably persisted).
+> boundary. Last updated: **2026-07-23 (Prompt 8.7 GATE A — YC demo
+> integration + acceptance: `relay:yc-demo:check` preflight +
+> `relay:yc-demo:cli` founder launcher + 35 acceptance tests + pacing lock
+> + fatal-path sanitization + finalized YC_DEMO_RUNBOOK; awaiting founder
+> Gate B acceptance before commit).** The YC video demo is
+> `npm run relay:yc-demo:check` then `npm run relay:yc-demo:cli` (the
+> founder-approved OFFLINE VISUAL SIMULATION), plus the browser frontend
+> from its separate session. Other proofs: `npm run relay:mission-control`
+> (graphical product surface), `npm run relay:competitive` (deterministic
+> full-workforce proof), `npm run relay:claude:live` (real single-agent
+> proof), `npm run relay:codex:live` (REAL independent-review proof),
+> `npm run relay:supervised:live` (REAL full-loop proof, founder-run only,
+> durably persisted).
 
 ## Phase
 
-**Prompt 8.6 — Relay CLI Product Shell and Live Mission Console: GATE A
-IMPLEMENTED** (2026-07-22). The Relay CLI became a terminal PRODUCT
+**Prompt 8.7 — YC Demo Integration, Acceptance, and Founder Runbook: GATE A
+IMPLEMENTED** (2026-07-23). Acceptance and launch reliability only — no new
+capability, no redesign:
+- **Demo preflight** (`npm run relay:yc-demo:check` → `relay yc check`):
+  read-only verification that the founder can record — branch, checkpoint
+  `9f8075f`-or-newer, tree status (dirty = WARN, never blocking or
+  destructive), relay build + demo scripts + contract verifier
+  availability, an IN-PROCESS plain-demo proof (exit 0 + offline labels +
+  VERIFIED COMPLETE), terminal width/color/NO_COLOR, 10 required docs, and
+  truthfulness statements. The browser frontend is always reported MANUAL
+  VERIFICATION REQUIRED — its worktree is structurally unreachable (leaf
+  module, repo-relative paths only). Exit 0 → READY FOR FOUNDER ACCEPTANCE.
+- **Founder launcher** (`npm run relay:yc-demo:cli` → `relay yc demo`):
+  honesty notice, then EXACTLY the approved offline simulation
+  (`relay cli demo`) — no second demo engine, zero provider/network calls,
+  terminal restored on every exit path.
+- **Module:** `src/relay/yc/` — pure import-free preflight engine +
+  `node-deps.ts` (the ONLY spawner: read-only git `rev-parse`/`status`/
+  `merge-base` allowlist) + boundary tests locking the leaf rules.
+- **Prompt 8.6 safety follow-ups closed:** shell fatal path routes
+  `err.message` through `safeText` (last unsanitized rendering path);
+  approved pacing test-locked (300ms × 7 ticks × 20 reveals = 42s exact,
+  15–60s bounds at every speed, settle-at-COMPLETE); key fixture language
+  asserted (offline labels, CLAIM PENDING VERIFICATION, verified evidence,
+  independent review, VERIFIED COMPLETE only at the final CompletionPolicy
+  step); `--watch` resolves the LAST produced exit code + rewrites
+  reset/cursor-show on exit. Recovery marker-write UX deferred (does not
+  affect the demo).
+- **Runbook:** YC_DEMO_RUNBOOK.md finalized — night-before check, exact CLI
+  launch, browser placeholder (PENDING FRONTEND SESSION CONFIRMATION),
+  20-step demonstration order, truthful demo language, product message,
+  failure recovery, stop conditions.
+- **CLI stability fix (2026-07-23, founder reported "the CLI keeps
+  glitching"):** root cause = the interactive shell repainted every 300 ms
+  FOREVER (even on the idle splash and after COMPLETE) and cleared the WHOLE
+  screen (`\x1b[2J`) before every redraw → constant flicker + busy CPU (a
+  stale pre-fix demo on pts/2 was burning 2.1% CPU for hours as living
+  proof). Fixed in `shell.ts` without touching the approved visuals:
+  single-writer frame-diffed redraw (one in-memory frame per write, home +
+  clear-to-EOL + clear-below, never a full-screen blank), the timer paints
+  only while genuinely animating (silent on splash / pause / COMPLETE),
+  alternate-screen buffer entered/left exactly once, idempotent cleanup on
+  every exit path, input ignored after cleanup, resize repaints once, and the
+  fatal message additionally collapses absolute paths. Locked by
+  `product/glitch.test.ts` (14 lifecycle tests) + a real-binary PTY probe
+  (idle splash byte-silent). Approved Dog / colors / splash / panels / stream
+  / controls / 42s sequence unchanged.
+- **Gate B (pending):** founder runs `relay:yc-demo:check` +
+  `relay:yc-demo:cli` and accepts; commit only after acceptance.
+
+**Prior phase — Prompt 8.6 — Relay CLI Product Shell and Live Mission
+Console: COMPLETE, committed `9f8075f`** (2026-07-22). The Relay CLI became a terminal PRODUCT
 (`src/relay/cli/product/`) matching the founder-approved mockups:
 - **Two interfaces, one canonical state:** the CLI projects the same
   durable store, recovery plans, findings/repairs/evidence, and normalized
@@ -757,9 +809,26 @@ repairs, commits 3277ffc/508fb92) remains a genuine artifact.
 
 ## Current work
 
-None in flight — Phase 1 closes with this commit.
+**Prompt 8.7 Gate A complete (2026-07-23)** — YC demo preflight, founder
+launcher, acceptance tests, safety follow-ups, and the finalized runbook
+are implemented and verified (see SESSION_LOG). Awaiting **founder Gate B
+acceptance** (`npm run relay:yc-demo:check` + `npm run relay:yc-demo:cli`);
+the Prompt 8.7 commit lands only after acceptance. The browser-frontend
+command + URL remain PENDING FRONTEND SESSION CONFIRMATION in the runbook.
 
 ## Next prompt
+
+**Remaining post-video work (after founder Gate B + the YC recording):**
+- Frontend integration (merge coordination with the separate frontend
+  session's branch).
+- Browser durable-state bindings (the browser app reading the canonical
+  persistence store).
+- Browser normalized event bindings (live mission events in the browser
+  console).
+- Ask Relay service (currently honestly declined in the CLI).
+- Real Prompt Architect service; real research automation.
+- Deferred Prompt 8.6 nit: `relay recover <ref>` marker-write UX
+  (read-only default + explicit `--mark`, or clearer copy).
 
 **Real Cross-Process Provider Resume (founder-authorized)** — prove LIVE
 what persistence now makes possible: after a real interruption, a fresh
@@ -844,7 +913,30 @@ with the compiler since they operate on compiled dispatches.
 
 ## Known blockers
 
-None.
+**Post-separation integration (relay/integration-stabilization).** The three
+blockers recorded on the preservation commit `d0d5d65` are REPAIRED and are no
+longer blockers:
+
+| Blocker | State |
+| --- | --- |
+| Browser bundle reached the Node persistence layer through `ui/data.ts → cli/competitive.ts` | **Repaired.** The pure mission projection moved to `src/relay/shared/`; the browser graph now contains zero CLI modules, zero persistence modules and zero Node built-ins, locked by `src/relay/shared/browser-boundary.test.ts`. |
+| 12 × TS2741 `DraftField.fallback` in `src/relay/cli/product/app.ts` | **Repaired.** `DraftField` is a discriminated union; every select carries a domain-typed fallback equal to its default option and to `finalizeDraft`'s default. Zero type assertions, zero suppressed diagnostics. |
+| YC readiness pinned to `feature/relay-yc-demo` / `9f8075f` | **Repaired.** Re-anchored to repository identity plus the versioned baseline in `docs/relay/YC_DEMO_BASELINE.json`. |
+| `relay-core-boundary.test.ts` matched any `*/persistence` | **Repaired.** The rule resolves imports structurally, so the website's own `ui/app/persistence.ts` browser storage is allowed and only `src/relay/persistence` is forbidden. |
+
+**Open, non-blocking.** `FUSION_BASE_URL` — the bridge's architect leg can
+route a brief through a running Sunday Alcatraz backend, by URL only (no
+Alcatraz code imported, no Alcatraz secret read, empty by default). Governance
+§11 permits a typed integration; the founder should decide whether Relay keeps
+an Alcatraz-shaped architect leg. See `docs/relay/DEVELOPMENT_CONTRACTS.md`.
+
+**Mission Economics is ONE implementation.** The earlier "transitional
+duplication, deliberately preserved" note is superseded and no longer
+describes the tree. `src/relay/mission/economics/` is the single canonical
+implementation, imported by both surfaces; `src/relay/mission/economics-barrel.ts`
+is a thin re-export with no logic of its own, provided because the CLI boundary
+permits the `../mission` barrel but not a deep `../mission/economics` path.
+There is no second copy and nothing to keep in sync.
 
 ## Known risks
 
@@ -856,10 +948,53 @@ None.
   rewrite) is deliberately deferred to a later prompt to keep this phase
   docs-only.
 
+## PR #2 integration-stabilization repairs (2026-07-30)
+
+The independent review of PR #2 at head `d21d383` returned five High and five
+Normal findings. All ten are repaired on branch
+`relay/integration-stabilization`; PR #2 remains OPEN and UNMERGED, and a
+SEPARATE session must perform the independent review of these repairs.
+
+| Finding | State | Where |
+|---|---|---|
+| H-1 fabricated reviewer / verification status | Repaired | `src/relay/ui/app/projection.ts`; reviewer state comes only from a real verdict, checks only from Relay's own recorded inspection and test results. `verified_complete` proves none of approval, verification, independent review or release. |
+| H-2 parity bypass | Repaired | `scripts/relay-surface-parity.mjs`, `scripts/relay-parity-gate.mjs`; all-or-nothing founder exceptions (canonical identity, mandatory expiry, bounded lifetime, no wildcard, cited evidence, non-exemptible core capabilities) and structural declaration parsing with repo containment and anchor resolution. |
+| H-3 browser/Node boundary evasion | Repaired | `src/relay/shared/browser-boundary.test.ts`; every recognised graph form, all eight module extensions, and server-only families incl. `workspace/`, `yc/`, `relay-bridge/`, `scripts/` and the connector runtimes. |
+| H-4 fixture-allowance laundering | Repaired | `scripts/relay-repository-boundary.mjs`; occurrence-scoped annotations, strict synthetic-value policy, refused in production/workflow/env files, exact matched line reported. |
+| H-5 deployment-detection regression | Repaired | `scripts/relay-repository-boundary.mjs`; command-position detection incl. `vercel --prod`, package scripts, shell wrappers, workflow→script indirection, and intent-matched deployment actions. |
+| N-1 unknown provisional cost | Repaired | `budget-evaluation.ts`, `economics-projection.ts`; unpriced provisional receipts make the projection incomplete, `projectedTotal === null` never becomes zero, bounds are labeled `at least` / `at most`. |
+| N-2 build-gated test accounting | Repaired | `scripts/ci-test-accounting.test.ts`; no `runIf`, no test that can end without asserting, every build-dependent test declared and re-run by an explicit CI step. |
+| N-3 reviewer independence | Repaired | `src/relay/mission/read-models.ts`; independence derived from actual agent, PSP Agent ID, human identity and run identity. Unknown is never independence. |
+| N-4 documentation accuracy | Repaired | this file, `MISSION_ECONOMICS.md`, `WEBSITE_CLI_PARITY_CONTRACT.md`, `economics-barrel.ts`. |
+| N-5 simulated CLI disclosure | Repaired | `src/relay/cli/mission-economics.ts` and the shared projection; the disclosure is derived from the receipts, so both surfaces state it and neither can omit it. |
+
+## PR #2 second-review repairs (2026-07-30)
+
+The independent review of the repairs above, at head `2d067ae`, recorded
+0 Critical, 2 High, 3 Medium, 4 Low and 2 Informational findings. They were
+repaired by three bounded work packages with non-overlapping file ownership,
+each row below confirmed by the integrating lead against the real diff. The
+frozen baseline digest
+`29d51a010c8deaa2982b77de86e9b8dbee04609859f4af28005f578871273f5f` is
+unchanged. PR #2 remains OPEN and UNMERGED.
+
+| Finding | State | Where |
+|---|---|---|
+| HIGH-1 credential laundering past the boundary scanner | Repaired | `scripts/relay-repository-boundary.mjs`; two independent defects. `isObviouslySynthetic` returned true on the mere PRESENCE of the reserved token, so anything carrying it was waved through — the token is now stripped with the other markers and the RESIDUE is judged. `isTestOrFixtureFile` trusted a basename containing "fixture", so a production file could name itself into the exemption — fixture status is now structural (a `.test.` / `.spec.` file, or a test/fixture directory), never a name. |
+| HIGH-2 quoted-hash comment stripping | Repaired | `scripts/relay-repository-boundary.mjs`; `line.replace(/#.*$/, '')` erased executable content after a QUOTED `#`, so `echo "#" && vercel --prod` scanned clean while bash still ran the deployment. Replaced with a quote- and escape-aware lexer that opens a comment only at an unquoted word boundary. |
+| MEDIUM-1 deployment wrapper evasions | Repaired | `scripts/relay-repository-boundary.mjs`; five real deploy invocations evaded detection — `VAR=value` env prefixes, `timeout`, `./node_modules/.bin/`, `yarn`, and `npm exec --`. Repaired with normalized command-position detection over a runner/env-prefix set, plus path-basename resolution. |
+| MEDIUM-2 a required registry field that nothing verified | Repaired | `scripts/relay-surface-parity.mjs`, `src/relay/parity/relay-surface-capabilities.json`; documented in `docs/relay/WEBSITE_CLI_PARITY_CONTRACT.md`. `sharedDomainReferences` — REQUIRED, and the field naming the modules BOTH surfaces import — was absent from the field list the checker walked: 70 declarations carried in the registry, counted in no total and resolved by nothing, of which 5 PSP paths were broken and 2 anchors unresolvable. It is now verified generically through a declaration-field table, on the same terms as every other file claim (existence, `#anchor`, repository containment, no absolute path / `..` / symlink escape); the strict totals moved from 120/120 to 190/190 file claims beside 23 CLI commands. |
+| LOW-1 exception evidence could skip disk verification | Repaired | `scripts/relay-surface-parity.mjs`, `src/relay/parity/surface-capability-types.ts`; a `relay …` command notation cited as exception evidence was never resolved on disk, so a waiver could cite proof that does not exist. Command notation is now refused in both `validateException` and `verifyDeclaredFiles` (`command-notation-not-permitted`) and remains legitimate only in `cliEntryPoints` and `cliTestReferences`, where the CLI's own command tests verify it. The registry holds zero exceptions. |
+| MEDIUM-3 Node/TypeScript wrapper indirection | Repaired | `scripts/relay-repository-boundary.mjs`; a package script → `node` wrapper → `execSync('vercel --prod')` chain, invoked from a workflow, was never scanned at all. The scan now follows package-script-reachable `node <file>` entry points and their local imports — deliberately NOT a scan of every source file, which would be a different check with a different cost. |
+| LOW-2 active two-repository framing | Repaired | Four sites still described the one repository as two, in active (not historical) voice. `docs/relay/WEBSITE_CLI_PARITY_CONTRACT.md` — companion comparison is documented as OPT-IN via `--companion <path>`, never searched and never required; strict mode's addition is the `no-file-evidence` rule; the output line the doc quoted as the check's own words appeared nowhere in the implementation and is gone. `src/relay/psp/psp-parity.ts` — there is one `src/relay/psp/`, imported by both surfaces, so the digests guard the domain's content against unreviewed drift rather than reconciling a second checkout (checksum values and manifest version untouched). `src/relay/yc/preflight.ts`, `node-deps.ts`, `index.ts` — the browser surface is IN this repository; the check still reports MANUAL VERIFICATION REQUIRED, now for the true reason: it opens no browser, serves no page and reads no rendered route. `docs/relay/YC_DEMO_RUNBOOK.md` — the browser command and URL were left PENDING a separate frontend session's confirmation; they come from this repository's own `dev` / `build` + `preview` scripts, and the founder still records the exact command and printed URL by hand, because nothing verifies them automatically. The parity registry and its types carried the same wording and were corrected with the parity package. |
+| LOW-3 stale CI accounting comments | Repaired | `.github/workflows/relay-ci.yml`; the build-dependent assertions have not skipped since N-2 — they assert in both branches — so the comments now say what the re-run steps actually add, and `scripts/ci-test-accounting.test.ts` fails if the "skipped test reported as green" claim returns. |
+| LOW-4 unknown cost stored as under budget | Repaired | `src/relay/mission/economics/budget-evaluation.ts`; `budgetStatusFromEvaluation` mapped `unknown_due_to_missing_cost` and `currency_conflict` to `under_budget` in every reachable case — the `warningThresholdReached` arm of its ternary is unreachable for both, so an unknown ALWAYS stored "under budget". It now returns `null`: `RelayBudgetStatus` has no truthful "unknown", so no stored reading is derivable and the caller may not invent one. |
+| LOW-4 (same class, found during repair) unknown cost rendered as "within limit" | Repaired — LATENT, never user-visible | `src/relay/cli/mission-economics.ts`; the terminal printed `Hard limit  within limit` and `<category> limit  within limit` whenever no breach was detected, including for a ledger whose projected total was a lower bound or absent entirely. "Within limit" is a claim that a comparison happened, so it now requires a total that exists AND is complete; otherwise the line reads `UNKNOWN — the total is incomplete` or `UNKNOWN — no cost total recorded`, and per category `UNKNOWN — an unpriced receipt in this category` / `UNKNOWN — no cost recorded in this category`. A breach still prints `REACHED — blocked`. Latent because the only caller (`main.ts`) passes the fully priced development fixture, so no operator saw a false line. The test named `an unknown spend does not read as "within limit"` never rendered anything; it asserts the rendered line now. |
+
 ## Verification status
 
 See SESSION_LOG.md entry 2026-07-21 (Phase 1) for the exact commands run
-and results in this phase.
+and results in that phase.
 
 ## Branch / worktree
 

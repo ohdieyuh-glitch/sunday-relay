@@ -45,7 +45,7 @@ describe('environment filtering', () => {
   it('strips provider credentials and third-party secrets, keeps base vars', () => {
     const base = {
       PATH: '/usr/bin', HOME: '/home/u', LANG: 'C',
-      ANTHROPIC_API_KEY: 'sk-should-not-pass', ANTHROPIC_AUTH_TOKEN: 'tok',
+      ANTHROPIC_API_KEY: 'sk-should-not-pass', ANTHROPIC_AUTH_TOKEN: 'tok', // relay-boundary:allow-fixture — synthetic, asserts the adapter refuses it
       OPENAI_API_KEY: 'x', AWS_SECRET_ACCESS_KEY: 'y', MY_SERVICE_TOKEN: 'z',
     };
     const { env, grantedKeys, strippedKeys } = buildClaudeEnvironment(base);
