@@ -125,6 +125,28 @@ describe('YC demo runbook targets the independent repository', () => {
     expect(runbook).toContain('YC_DEMO_BASELINE.json');
     expect(existsSync(join(ROOT, 'docs/relay/YC_DEMO_BASELINE.json'))).toBe(true);
   });
+
+  /**
+   * The runbook used to hand the browser surface to "the separate frontend
+   * session", leaving its command and URL as PENDING THAT SESSION'S
+   * CONFIRMATION. The surface is in this repository and its dev/preview
+   * commands are declared in this package.json, so the operator was waiting on
+   * a checkout that does not exist. What survives the correction is the part
+   * that was always true: nothing verifies the browser automatically, so the
+   * founder records the command and the URL by hand.
+   */
+  it('does not hand the browser surface to a separate session or checkout', () => {
+    expect(runbook).not.toMatch(/frontend session/iu);
+    expect(runbook).not.toMatch(/PENDING FRONTEND SESSION CONFIRMATION/u);
+    expect(runbook).toMatch(/built from this repository/u);
+    // The manual-verification instruction must not have been lost with it.
+    expect(runbook).toMatch(/Do \*\*not\*\* invent the URL/u);
+    expect(runbook).toMatch(/never inspects the browser\s+surface/u);
+    // And the commands it names must be real scripts.
+    for (const script of ['dev', 'build', 'preview']) {
+      expect(pkg.scripts[script], `the runbook names \`${script}\``).toBeTruthy();
+    }
+  });
 });
 
 describe('CURRENT_STATE is truthful about the integration', () => {
@@ -157,6 +179,73 @@ describe('CURRENT_STATE is truthful about the integration', () => {
     // The superseded wording must not survive as a live claim.
     expect(current).not.toContain('Transitional duplication, deliberately preserved');
     expect(current).not.toMatch(/Mission Economics exists\s+byte-identically/u);
+  });
+});
+
+/**
+ * The parity contract used to quote an output line the checker never printed,
+ * and to describe a companion checkout as REQUIRED in CI when the checker only
+ * compares one if `--companion <path>` is passed. Documenting a string that
+ * does not exist is how a reader comes to believe in a guarantee nobody
+ * implemented, so the quotes are now pinned to the implementation.
+ */
+describe('the parity contract describes the checker that exists', () => {
+  const contract = read('docs/relay/WEBSITE_CLI_PARITY_CONTRACT.md');
+  const checker = read('scripts/relay-surface-parity.mjs');
+  // Markdown wraps a quoted line across sources lines; the STRING is what
+  // matters, not where the paragraph happened to break.
+  const unwrapped = contract.replace(/\s+/gu, ' ');
+
+  it('quotes only output and rule names the checker actually produces', () => {
+    for (const quoted of [
+      'companion: not requested — both surfaces are verified in this repository',
+      'companion-unreadable',
+      'no-file-evidence',
+    ]) {
+      expect(unwrapped, `the contract no longer quotes "${quoted}"`).toContain(quoted);
+      expect(checker, `"${quoted}" is documented but appears nowhere in the checker`).toContain(quoted);
+    }
+  });
+
+  it('quotes count lines the checker really prints — a stale total must fail', () => {
+    // The contract quotes the checker's own totals. A quoted number that has
+    // drifted is worse than no number, because it reads as a measurement. The
+    // checker is offline and read-only, so the honest guard is to ask it.
+    let output: string;
+    try {
+      output = execFileSync('node', ['scripts/relay-surface-parity.mjs'], { cwd: ROOT, encoding: 'utf8' });
+    } catch (err) {
+      // A parity FAILURE is another gate's business. The totals are printed
+      // either way, and this test compares only those.
+      output = String((err as { stdout?: string }).stdout ?? '');
+    }
+    const quoted = [...contract.matchAll(/^\s*(declared (?:surface files|CLI commands):.*)$/gmu)]
+      .map((match) => match[1].trim());
+    expect(quoted.length, 'the contract should quote both totals').toBe(2);
+    for (const line of quoted) {
+      expect(output, `the contract quotes "${line}", which the checker does not print`).toContain(line);
+    }
+  });
+
+  it('names sharedDomainReferences as a field that is VERIFIED, not merely declared', () => {
+    expect(unwrapped).toMatch(/sharedDomainReferences.{0,120}(verified|resolved)/iu);
+    // Command notation is legitimate in exactly two fields, and the doc must
+    // not imply it is accepted anywhere a file is claimed.
+    expect(unwrapped).toMatch(/command-notation-not-permitted/u);
+    expect(checker).toContain('command-notation-not-permitted');
+    for (const field of ['cliEntryPoints', 'cliTestReferences']) {
+      expect(unwrapped, `${field} is where command notation is legitimate`).toContain(field);
+    }
+  });
+
+  it('describes the companion comparison as opt-in, never as required', () => {
+    expect(contract).toMatch(/companion comparison is OPT-IN/u);
+    expect(contract).toMatch(/--companion <path>/u);
+    expect(contract).not.toMatch(/the companion is \*\*required\*\*/u);
+    expect(contract).not.toMatch(/companion repository is unavailable/u);
+    // …and the checker must still refuse an explicitly requested companion it
+    // cannot read, which is the part of the old claim that WAS true.
+    expect(checker).toMatch(/companion registry not found/u);
   });
 });
 

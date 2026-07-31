@@ -120,7 +120,7 @@ describe('YC preflight (Prompt 8.7 acceptance)', () => {
     }
   });
 
-  it('touches only repo-relative paths and NEVER the frontend worktree', async () => {
+  it('touches only repo-relative paths and NEVER a path outside this checkout', async () => {
     const { deps, record } = fakeDeps();
     await runYcPreflight(deps);
     expect(record.pathsTouched.length).toBeGreaterThan(0);
@@ -349,9 +349,21 @@ describe('YC preflight (Prompt 8.7 acceptance)', () => {
     const { deps } = fakeDeps();
     const report = await runYcPreflight(deps);
     const text = report.lines.join('\n');
+    const frontend = report.checks.find((c) => c.name === 'browser-frontend');
+
     expect(text).toContain('MANUAL VERIFICATION REQUIRED');
-    expect(text).toContain('separate frontend session');
-    expect(report.checks.find((c) => c.name === 'browser-frontend')?.status).toBe('MANUAL');
+    expect(frontend?.status).toBe('MANUAL');
+    // The reason must be the TRUE one: the browser surface is in this
+    // repository, and this check simply does not look at it. It is not owned
+    // by some other repository or session.
+    expect(frontend?.detail).toMatch(/not inspected by this check/u);
+    expect(text).toMatch(/never inspects the browser surface/u);
+    expect(text).toMatch(/record the exact frontend command \+ URL/iu);
+    for (const stale of ['separate frontend session', 'Worktree owned']) {
+      expect(text, `"${stale}" describes a repository split that does not exist`).not.toContain(stale);
+    }
+    // MANUAL is never allowed to read as verified.
+    expect(frontend?.status).not.toBe('PASS');
   });
 
   it('fails when a required npm demo script is missing', async () => {

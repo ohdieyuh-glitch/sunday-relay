@@ -108,17 +108,35 @@ export function verifyAnchor(
   anchor: string,
 ): { ok: true; segments: string[] } | { ok: false; reason: string };
 
+export interface DeclarationFieldSpec {
+  /** The registry field, or `exception.evidence`. */
+  field: string;
+  /** The rule-name fragment used when the declaration does not resolve. */
+  kind: string;
+  /**
+   * Whether a `relay …` COMMAND notation is legitimate here. Only the CLI's
+   * entry points and test references admit one; every other field declares
+   * FILES, and a command there would be verified by nothing.
+   */
+  commandsAllowed: boolean;
+}
+
+/** Every field the registry declares evidence in, including shared domain. */
+export const DECLARATION_FIELDS: readonly DeclarationFieldSpec[];
+export const EXCEPTION_EVIDENCE_FIELD: DeclarationFieldSpec;
+
 /**
  * Every declaration the registry makes must resolve in this repository: the
  * file must exist inside the tree and any anchor must name something the file
  * genuinely contains. Exception evidence is held to the same standard.
- * `checked` counts file claims; `commands` counts `relay …` notations, which
- * the CLI's own command tests verify.
+ * `checked` counts file claims inspected, `present` counts those that fully
+ * resolved, and `commands` counts `relay …` notations in the two fields where
+ * a command is legitimate — those the CLI's own command tests verify.
  */
 export function verifyDeclaredFiles(
   repoRoot: string,
   registry: unknown,
-): ParityResult & { checked: number; commands: number };
+): ParityResult & { checked: number; present: number; commands: number };
 
 export function runParityCheck(options: {
   repoRoot: string;

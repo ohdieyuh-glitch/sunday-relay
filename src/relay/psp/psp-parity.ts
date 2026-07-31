@@ -1,26 +1,23 @@
 /**
- * PSP AGENT ID — cross-surface domain parity manifest.
+ * PSP AGENT ID — domain integrity manifest.
  *
- * The website/application and the CLI/terminal live in separate worktrees, so
- * neither can import the other's files. The PSP domain is therefore carried as
- * BYTE-IDENTICAL copies, and these checksums are what prove the copies have
- * not diverged into two contradictory implementations of the same business
- * rules.
+ * There is ONE `src/relay/psp/`, and both product surfaces — the website and
+ * the CLI — import it directly. Nothing here reconciles separate checkouts;
+ * these digests guard the domain's own content against unreviewed drift.
  *
- * Each repository has a test that hashes its OWN copy of every module below
- * and asserts these digests. Because this manifest is itself byte-identical on
- * both sides, a rule changed on one surface and not mirrored on the other
- * fails that surface's test immediately.
+ * PSP identity is a credential domain: its import, entitlement and trace rules
+ * decide what a purchased agent is allowed to do. `psp-domain.test.ts` hashes
+ * every module listed below and asserts these digests, so a rule edited
+ * without a matching, deliberate manifest update fails immediately instead of
+ * landing unnoticed.
  *
- * Changing the domain is a deliberate two-repository action:
+ * Changing the domain is therefore a two-step, deliberate act:
  *   1. change the module,
- *   2. copy it verbatim into the other repository,
- *   3. recompute the digest and update this manifest in BOTH repositories,
- *   4. bump PSP_DOMAIN_MANIFEST_VERSION.
+ *   2. recompute its digest here and bump PSP_DOMAIN_MANIFEST_VERSION.
  *
  * `index.ts`, `psp-parity.ts` and the test files are deliberately NOT listed:
- * the surface re-export and this manifest are the only files allowed to differ
- * in incidental ways, and the tests are per-repository.
+ * the barrel re-export and this manifest carry no business rules, and a
+ * manifest cannot meaningfully checksum itself.
  *
  * PURE DATA — no imports.
  */
@@ -43,7 +40,8 @@ export const PSP_DOMAIN_MODULE_NAMES = Object.keys(
   PSP_DOMAIN_CHECKSUMS,
 ) as PSPDomainModuleName[];
 
-/** Where each surface keeps its copy. Nothing resolves these at runtime. */
+/** Where each surface reads the domain from — the same path twice, because
+ * there is one copy. Nothing resolves these at runtime. */
 export const PSP_DOMAIN_LOCATIONS = {
   website: 'src/relay/psp/',
   cli: 'src/relay/psp/',

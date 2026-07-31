@@ -129,12 +129,41 @@ export function renderMissionEconomics(
   return out;
 }
 
+/**
+ * A THRESHOLD LINE IS A CLAIM ABOUT MONEY.
+ *
+ * "within limit" and "not reached" both say the spend was compared against a
+ * figure and came in under it. That comparison needs a total that exists and
+ * is COMPLETE: an empty ledger has no total at all, and an unpriced receipt
+ * makes the projected total a LOWER BOUND. In either case the limit was not
+ * breached by what is known — which is not the same as being within it, and
+ * "within limit" is exactly the reassurance an operator would act on.
+ *
+ * The REACHED side stays authoritative: a lower bound that already breaches
+ * the limit still blocks, so a breach is never softened into an unknown.
+ *
+ * The `Approval` line below is deliberately NOT part of this. "not required"
+ * states what Relay is demanding right now, not a measurement of the spend,
+ * and it stays true when the cost is unknown.
+ */
+function budgetComparison(
+  evaluation: RelayBudgetEvaluation,
+): (reached: boolean, reachedLabel: string, withinLabel: string) => string {
+  const measured = evaluation.projectedTotal !== null && evaluation.projectedTotalComplete;
+  const unknown = evaluation.projectedTotal === null
+    ? 'UNKNOWN — no cost total recorded'
+    : 'UNKNOWN — the total is incomplete';
+  return (reached, reachedLabel, withinLabel) =>
+    reached ? reachedLabel : measured ? withinLabel : unknown;
+}
+
 /** MISSION BUDGET — the budget half, with the same semantics as the website. */
 export function renderMissionBudget(
   projection: RelayMissionEconomicsProjection,
   evaluation: RelayBudgetEvaluation,
   options: EconomicsRenderOptions,
 ): string[] {
+  const compared = budgetComparison(evaluation);
   const out: string[] = [];
   out.push('MISSION BUDGET');
   out.push(`  mission ${projection.missionId} · revision ${projection.missionRevision}`);
@@ -143,16 +172,24 @@ export function renderMissionBudget(
   out.push(`  ${line('Budget', projection.budgetLabel, options)}`);
   out.push(`  ${line('Projected total', projection.projectedTotalLabel, options)}`);
   out.push(`  ${line('Remaining', projection.remainingLabel, options)}`);
-  out.push(`  ${line('Warning threshold', projection.warning ? 'REACHED' : 'not reached', options)}`);
+  out.push(`  ${line('Warning threshold', compared(projection.warning, 'REACHED', 'not reached'), options)}`);
   out.push(`  ${line('Approval', projection.approvalRequired ? 'REQUIRED' : 'not required', options)}`);
-  out.push(`  ${line('Hard limit', projection.hardLimitReached ? 'REACHED — blocked' : 'within limit', options)}`);
+  out.push(`  ${line('Hard limit', compared(projection.hardLimitReached, 'REACHED — blocked', 'within limit'), options)}`);
   out.push(`  ${line('Repair cycles used', String(evaluation.repairCyclesUsed), options)}`);
   out.push(`  ${line('Retries used', String(evaluation.retriesUsed), options)}`);
 
   for (const category of evaluation.categoryEvaluations) {
-    out.push(
-      `  ${line(`  ${category.category} limit`, category.limitReached ? 'REACHED' : 'within limit', options)}`,
-    );
+    // Per category the same rule applies to that category's own spend, which
+    // is a lower bound when one of its receipts is unpriced and absent
+    // entirely when none was recorded.
+    const value = category.limitReached
+      ? 'REACHED'
+      : category.hasUnknownCost
+        ? 'UNKNOWN — an unpriced receipt in this category'
+        : category.spent === null
+          ? 'UNKNOWN — no cost recorded in this category'
+          : 'within limit';
+    out.push(`  ${line(`  ${category.category} limit`, value, options)}`);
   }
 
   if (evaluation.blockingReasons.length > 0) {

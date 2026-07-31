@@ -3,14 +3,17 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  anchorSegments,
   compareRegistries,
   declaredPathOf,
+  DECLARATION_FIELDS,
   DEFAULT_COMPANION_PATHS,
   findCompanion,
   isFileClaim,
   loadRegistry,
   runParityCheck,
   validateRegistry,
+  verifyAnchor,
   verifyDeclaredFiles,
   REGISTRY_RELATIVE_PATH,
 } from '../../../scripts/relay-surface-parity.mjs';
@@ -411,16 +414,129 @@ describe('cross-repository verification', () => {
     expect(rules(result)).toContain('companion-unreadable');
   });
 
-  it('verifies every declared surface FILE exists, and says how many', () => {
+  /**
+   * TRUTHFUL TOTALS — and the assertion that would have caught the field the
+   * checker never looked at.
+   *
+   * `sharedDomainReferences` is a REQUIRED field naming the canonical modules
+   * BOTH surfaces import, and it was absent from the checker's field list: 70
+   * declarations carried in the registry, counted in no total, verified by
+   * nothing, and 7 of them did not resolve. The printed "120/120 present" was
+   * a true statement about a population that silently excluded the field.
+   *
+   * The expected counts are recomputed here from the registry rather than
+   * pinned to a literal, so this stays honest as capabilities are added — but
+   * it walks EVERY declaring field. Dropping one from the checker again makes
+   * the totals disagree, and the floor below fails outright.
+   */
+  it('verifies every declared FILE, sharedDomainReferences included, and counts them truthfully', () => {
     const loaded = loadRegistry(repoRoot);
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
+
+    const fields = DECLARATION_FIELDS.map((spec: { field: string }) => spec.field);
+    expect(fields, 'the shared domain field must be verified like any other')
+      .toContain('sharedDomainReferences');
+
+    let expectedFiles = 0;
+    let expectedCommands = 0;
+    let sharedDeclarations = 0;
+    for (const record of registry.capabilities) {
+      for (const field of fields as Array<keyof RelaySurfaceCapability>) {
+        const declarations = (record[field] ?? []) as string[];
+        for (const declared of declarations) {
+          if (/^relay(\s|$)/.test(declared.trim())) expectedCommands += 1;
+          else expectedFiles += 1;
+        }
+      }
+      sharedDeclarations += record.sharedDomainReferences.length;
+    }
+    expect(sharedDeclarations, 'the registry declares no shared domain modules at all')
+      .toBeGreaterThan(0);
+
     const declared = verifyDeclaredFiles(repoRoot, loaded.value.registry);
-    expect(declared.ok).toBe(true);
     expect(declared.failures).toEqual([]);
-    expect(declared.checked).toBeGreaterThan(50);
+    expect(declared.ok).toBe(true);
+    expect(declared.checked, 'every declaring field must be counted').toBe(expectedFiles);
+    expect(declared.commands).toBe(expectedCommands);
+    // `present` and `checked` must describe the SAME population.
+    expect(declared.present).toBe(declared.checked);
+    // The pre-repair total was 120 file claims, because the 70 shared-domain
+    // declarations were invisible. A floor above that pins the repair.
+    expect(declared.checked, 'the shared domain declarations must be in the total')
+      .toBeGreaterThan(150);
+
     const result = runParityCheck({ repoRoot, strict: true, now: NOW });
-    expect(result.lines.join('\n')).toContain(`${declared.checked}/${declared.checked} present`);
+    const output = result.lines.join('\n');
+    expect(output).toContain(`declared surface files: ${declared.present}/${declared.checked} present`);
+    expect(output).toContain(`declared CLI commands: ${declared.commands}`);
+    // Nothing failed, so there is no failure line to print.
+    expect(output).not.toContain('declaration failures:');
+  });
+
+  /**
+   * The printed ratio used to be `checked - failures.length` over `checked`.
+   * A failure that never incremented `checked` — an unparseable declaration —
+   * was still subtracted from it, so the numerator and the denominator came
+   * from different populations and presence could be understated to zero.
+   */
+  it('the printed ratio never mixes populations, even when declarations are unparseable', () => {
+    const loaded = loadRegistry(repoRoot);
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    const broken = JSON.parse(JSON.stringify(loaded.value.registry)) as {
+      capabilities: Array<{ websiteEntryPoints?: string[] }>;
+    };
+    // Neither a command nor a path: counted in NEITHER `checked` nor `present`.
+    broken.capabilities[0].websiteEntryPoints = ['somewhere in the website'];
+    const declared = verifyDeclaredFiles(repoRoot, broken);
+    expect(declared.failures.map((f: { rule: string }) => f.rule)).toContain('unparseable-declaration');
+    expect(declared.present).toBeLessThanOrEqual(declared.checked);
+    expect(declared.present).toBe(declared.checked);
+    expect(declared.checked).toBeGreaterThan(150);
+  });
+
+  it('a registry naming a shared domain module that does not exist FAILS', () => {
+    const loaded = loadRegistry(repoRoot);
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    const broken = JSON.parse(JSON.stringify(loaded.value.registry)) as {
+      capabilities: Array<{ sharedDomainReferences?: string[] }>;
+    };
+    broken.capabilities[0].sharedDomainReferences = ['src/relay/shared/this-module-was-deleted.ts'];
+    const declared = verifyDeclaredFiles(repoRoot, broken);
+    expect(declared.ok).toBe(false);
+    expect(declared.failures.map((f: { rule: string }) => f.rule)).toContain('missing-shared-domain-file');
+
+    // A real shared module in the same slot passes — the rule is strict, not broken.
+    broken.capabilities[0].sharedDomainReferences = ['src/relay/shared/official-relay-dog-sprite.ts'];
+    expect(verifyDeclaredFiles(repoRoot, broken).ok).toBe(true);
+  });
+
+  /**
+   * The pause and resume shared-domain anchors were written `#intent:pause`
+   * and `#intent:resume`, which no file contains and which `ANCHOR_SEGMENT`
+   * cannot even admit — `:` is not a legal segment character. They resolved
+   * only because nothing checked the field. The repaired call form names the
+   * canonical intent list AND the intent, and both segments are verified.
+   */
+  it('the repaired mission pause/resume anchors name real, verified intents', () => {
+    const intentsPath = join('src', 'relay', 'mission', 'commands', 'command-types.ts');
+    const content = readFileSync(join(repoRoot, intentsPath), 'utf8');
+
+    for (const [id, intent] of [['mission-pause', 'pause'], ['mission-resume', 'resume']] as const) {
+      const record = registry.capabilities.find((c) => c.capabilityId === id)!;
+      const declared = record.sharedDomainReferences
+        .find((reference) => declaredPathOf(reference) === intentsPath.replace(/\\/g, '/'));
+      expect(declared, `${id} must declare the canonical command intent module`).toBeTruthy();
+
+      const anchor = declared!.split('#')[1];
+      expect(anchorSegments(anchor)).toEqual(['RELAY_MISSION_COMMAND_INTENTS', intent]);
+      expect(verifyAnchor(content, anchor).ok, `${id} anchor must resolve`).toBe(true);
+
+      // The pre-repair notation could never have resolved.
+      expect(verifyAnchor(content, `intent:${intent}`).ok).toBe(false);
+    }
   });
 
   it('a registry naming a file that does not exist FAILS', () => {

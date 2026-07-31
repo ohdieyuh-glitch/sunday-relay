@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -32,6 +32,14 @@ import { dirname, join, resolve } from 'node:path';
  * only in a temp directory deleted in `afterAll`, so this file contains no
  * matchable literal and the scanner stays honest when it scans itself.
  */
+
+/**
+ * Every case builds a throwaway git repository and runs one or two scanner
+ * processes; the differential runs both scanners over 55 shapes. The default
+ * 5s budget turns a busy machine into a boundary failure, which is a
+ * scheduling problem reported as a security finding.
+ */
+vi.setConfig({ testTimeout: 300_000, hookTimeout: 180_000 });
 
 const REPO_ROOT = resolve(__dirname, '..');
 const SCANNER = join(REPO_ROOT, 'scripts', 'relay-repository-boundary.mjs');
@@ -102,7 +110,11 @@ describe('the frozen baseline is genuinely the reviewed scanner', () => {
     expect(readFileSync(join(REPO_ROOT, BASELINE_PATH), 'utf8')).toBe(fromGit);
   });
 });
-afterAll(() => rmSync(workspace, { recursive: true, force: true }));
+// Every case builds a throwaway git repository, so the workspace holds
+// hundreds of them by the end. The default 10s hook budget is not enough to
+// remove that tree on a loaded machine, and a cleanup timeout fails the FILE
+// while every test in it passed — a confusing way to report a tidy-up problem.
+afterAll(() => rmSync(workspace, { recursive: true, force: true }), 180_000);
 
 interface RunResult { code: number; output: string }
 
@@ -133,6 +145,12 @@ function runScanner(script: string, cwd: string): RunResult {
 const scan = (files: Record<string, string>) => runScanner(SCANNER, repoWith(files));
 const scanWithBase = (files: Record<string, string>) => runScanner(baseScanner, repoWith(files));
 
+/** Both scanners over ONE repository — half the git work of scanning twice. */
+function scanBoth(files: Record<string, string>): { base: RunResult; head: RunResult } {
+  const dir = repoWith(files);
+  return { base: runScanner(baseScanner, dir), head: runScanner(SCANNER, dir) };
+}
+
 const baseline = (): Record<string, string> => ({
   'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { test: 'vitest run' } }, null, 2),
   'src/relay/core/app.ts': 'export const relay = true;\n',
@@ -146,6 +164,33 @@ const SYNTHETIC_AWS = `${AKIA}${'QQQQQQQQQQQQQQQQ'}`;      // 4 distinct chars �
 const REAL_ANTHROPIC = `${SK}${'ant-'}${'api03-9fKq2Lm7Rt4XwZ8vB6nH1jD5gS3pY0cU7eI4oA2mQ'}`;
 const ANNOTATION = 'relay-boundary:allow-fixture';
 const MENTION = 'relay-boundary:allow-mention';
+
+/**
+ * A high-entropy payload GENERATED AT RUNTIME from a fixed seed.
+ *
+ * HIGH-1a needs a value whose residue is genuinely key-like once the reserved
+ * token is stripped — that is precisely what the defect turned on. Committing
+ * such a value, even defanged, is what this repository refuses to do, so the
+ * tracked file holds only arithmetic and the scanner receives real-shaped
+ * input at run time.
+ */
+const ENTROPY_ALPHABET = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
+function entropyPayload(length: number, seed = 20260730): string {
+  let state = seed;
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    state = (state * 1103515245 + 12345) % 2147483648;
+    out += ENTROPY_ALPHABET[state % ENTROPY_ALPHABET.length];
+  }
+  return out;
+}
+const PAYLOAD = entropyPayload(44);
+/** The canonical reserved token. A marker word is not itself secret material. */
+const TOKEN = 'FAKETESTNOTREAL';
+/** The same usable-looking key with the token glued on in three positions. */
+const TOKEN_APPENDED = `${SK}ant-api03-${PAYLOAD}${TOKEN}`;
+const TOKEN_PREPENDED = `${SK}ant-${TOKEN}${PAYLOAD}`;
+const TOKEN_INSERTED = `${SK}ant-api03-${PAYLOAD.slice(0, 20)}${TOKEN}${PAYLOAD.slice(20)}`;
 
 /* ================================================================== H-4 */
 
@@ -271,6 +316,46 @@ describe('H-4 — the fixture allowance is per occurrence, not per file', () => 
   });
 });
 
+/* ================================================================ HIGH-1a */
+
+/**
+ * HIGH-1a — `isObviouslySynthetic` returned true the moment the RESERVED
+ * token appeared anywhere in the value, before it computed a residue at all.
+ * A real key with `FAKETESTNOTREAL` glued on therefore passed the strict
+ * synthetic policy, and an annotation laundered it — contradicting the
+ * scanner's own documented rule that "a genuine key with a marker glued on
+ * keeps its high-entropy residue and is still reported".
+ *
+ * These cases carry NO annotation, so the BASE scanner rejects them too. They
+ * are kept out of `FIXTURE_BYPASS_CASES` for exactly that reason: that suite
+ * asserts every case was a bypass the base accepted.
+ */
+describe('HIGH-1a — the reserved token is stripped, never trusted', () => {
+  const positions: Array<[string, string]> = [
+    ['appended after the payload', TOKEN_APPENDED],
+    ['prepended before the payload', TOKEN_PREPENDED],
+    ['inserted mid-payload', TOKEN_INSERTED],
+  ];
+
+  for (const [label, value] of positions) {
+    it(`reports a high-entropy key with the token ${label}`, () => {
+      const result = scan({ ...baseline(), 'src/relay/leak.ts': `export const k = '${value}';\n` });
+      expect(result.code, result.output).toBe(1);
+      expect(result.output).toContain('[secret]');
+    });
+  }
+
+  it('a value that is ONLY the token and padding stays allowed', () => {
+    // The repair must not break the convention it exists to protect: strip the
+    // token and the residue is padding, which is not key material.
+    const result = scan({
+      ...baseline(),
+      'src/relay/fixture.test.ts': `export const k = '${SK}${TOKEN}0000000000000000000000';\n`,
+    });
+    expect(result.code, result.output).toBe(0);
+  });
+});
+
 /**
  * The same measurement for the fixture allowance: each case is a bypass that
  * the BASE scanner accepted (exit 0 — the secret stayed committed) and the
@@ -306,6 +391,30 @@ const FIXTURE_BYPASS_CASES: Array<[string, Record<string, string>]> = [
   [
     'a realistic provider key annotated in a fixture file',
     { 'src/relay/fixture.test.ts': `export const k = '${REAL_ANTHROPIC}'; // ${ANNOTATION}\n` },
+  ],
+  // HIGH-1a — the reserved token glued onto a usable key, then annotated. The
+  // base scanner short-circuited on the token's mere presence and accepted all
+  // three positions.
+  [
+    'a high-entropy key with the reserved token appended, annotated',
+    { 'src/relay/fixture.test.ts': `export const k = '${TOKEN_APPENDED}'; // ${ANNOTATION}\n` },
+  ],
+  [
+    'a high-entropy key with the reserved token prepended, annotated',
+    { 'src/relay/fixture.test.ts': `export const k = '${TOKEN_PREPENDED}'; // ${ANNOTATION}\n` },
+  ],
+  [
+    'a high-entropy key with the reserved token inserted mid-value, annotated',
+    { 'src/relay/fixture.test.ts': `export const k = '${TOKEN_INSERTED}'; // ${ANNOTATION}\n` },
+  ],
+  // HIGH-1b — a shipping production module whose NAME contains "fixtures".
+  [
+    'a fixture annotation in a production module named fixtures.ts',
+    { 'src/relay/product/fixtures.ts': `export const k = '${SYNTHETIC_AWS}'; // ${ANNOTATION}\n` },
+  ],
+  [
+    'a fixture annotation in a production module named psp-fixtures.ts',
+    { 'src/relay/psp/psp-fixtures.ts': `export const k = '${SYNTHETIC_AWS}'; // ${ANNOTATION}\n` },
   ],
 ];
 
@@ -382,6 +491,286 @@ const ACTIVE_DEPLOY_CASES: Array<[string, Record<string, string>]> = [
   ['a run: block scalar', workflowWith('      - run: |\n          echo building\n          vercel --prod')],
   ['sh -c around a deploy', workflowWith('      - run: sh -c "npm run build && railway up"')],
   ['allow-mention on an executable command', workflowWith(`      - run: vercel --prod # ${MENTION}`)],
+
+  /* HIGH-2 — a quoted `#` used to erase the rest of the line. */
+  ['a double-quoted hash before the deploy', workflowWith('      - run: echo "#" && vercel --prod')],
+  ['a quoted hash mid-sentence before the deploy', workflowWith('      - run: echo "safe # text" ; vercel deploy')],
+  ['a hash inside a URL before the deploy', workflowWith('      - run: curl https://x.test/a#b && wrangler deploy')],
+  ['a run: block whose first line quotes a hash',
+    workflowWith('      - run: |\n          echo "#"\n          vercel --prod')],
+  [
+    'a package script using # as argument data',
+    { 'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: "node t.mjs --a='#top' && vercel --prod" } }, null, 2) },
+  ],
+
+  /* MEDIUM-1 — five real deploy forms that evaded command-position matching. */
+  ['a leading environment assignment', workflowWith('      - run: env VERCEL_ORG_ID=team_abc vercel --prod')],
+  ['a timeout wrapper', workflowWith('      - run: timeout 600 vercel --prod')],
+  ['a relative path into node_modules', workflowWith('      - run: ./node_modules/.bin/vercel --prod')],
+  ['yarn as the runner', workflowWith('      - run: yarn vercel --prod')],
+  ['npm exec with a separator', workflowWith('      - run: npm exec -- vercel --prod')],
+
+  /* A runner OPTION that takes a SEPARATE value. The option's value was
+   * mistaken for the command, so `sudo -u deploy vercel --prod` resolved to
+   * `deploy` and the deploy behind it was invisible. */
+  ['sudo with a separated user value', workflowWith('      - run: sudo -u deploy vercel --prod')],
+  ['env clearing the environment first', workflowWith('      - run: env -i vercel --prod')],
+  ['xargs with a replacement token', workflowWith('      - run: xargs -I {} vercel --prod')],
+  ['timeout with an attached signal value', workflowWith('      - run: timeout --signal=KILL 60 vercel --prod')],
+  ['nice with a separated adjustment', workflowWith('      - run: nice -n 10 vercel --prod')],
+  ['sudo with no option at all', workflowWith('      - run: sudo vercel --prod')],
+
+  /* MEDIUM-3 — a Node wrapper a package script or workflow step actually runs. */
+  [
+    'an ESM wrapper reached by a package script',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+    },
+  ],
+  [
+    'a CommonJS wrapper reached by a package script',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.cjs' } }, null, 2),
+      'scripts/ship.cjs': "const { execSync } = require('child_process');\nexecSync('railway up');\n",
+    },
+  ],
+  [
+    'a TypeScript wrapper reached by a package script',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.ts' } }, null, 2),
+      'scripts/ship.ts': "import cp from 'node:child_process';\ncp.execSync('netlify deploy --prod');\n",
+    },
+  ],
+  [
+    'the argument-array form of spawn inside a wrapper',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': "import { spawn } from 'node:child_process';\nspawn('vercel', ['--prod']);\n",
+    },
+  ],
+  [
+    'a workflow running a package script that runs a deploying wrapper',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+      ...workflowWith('      - run: npm run ship'),
+    },
+  ],
+  [
+    'a wrapper that delegates to a local helper',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': "import { go } from './deploy-impl.mjs';\ngo();\n",
+      'scripts/deploy-impl.mjs':
+        "import { execFileSync } from 'node:child_process';\n"
+        + "export const go = () => execFileSync('flyctl', ['deploy']);\n",
+    },
+  ],
+
+  /* MEDIUM-3a — the STATIC EDGES the follower could not see.
+   *
+   * MEDIUM-3 followed a `node <file>` entry point and then that file's
+   * relative imports, but only where the specifier sat behind `from`,
+   * `import(` or `require(`. A BARE SIDE-EFFECT IMPORT matched none of them,
+   * so one line hid an entire deployment:
+   *
+   *     // scripts/ship.mjs
+   *     import './deploy.mjs';     <- the scanner was blind to this edge
+   *
+   * Measured against the pre-repair head: the three `from`-clause forms were
+   * DETECTED and `import './b.mjs';` was MISSED. */
+  [
+    'a bare side-effect import reaching a deploy',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': "import './deploy.mjs';\n",
+      'scripts/deploy.mjs': "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+    },
+  ],
+  [
+    'a side-effect import chain one level deeper',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/a.mjs' } }, null, 2),
+      'scripts/a.mjs': "import './b.mjs';\n",
+      'scripts/b.mjs': "import './c.mjs';\n",
+      'scripts/c.mjs': "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+    },
+  ],
+  [
+    'a side-effect import reached through a workflow step',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': "import './deploy.mjs';\n",
+      'scripts/deploy.mjs': "import { execSync } from 'node:child_process';\nexecSync('railway up');\n",
+      ...workflowWith('      - run: npm run ship'),
+    },
+  ],
+  [
+    'an `export * from` re-export reaching a deploy',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': "export * from './deploy.mjs';\n",
+      'scripts/deploy.mjs':
+        "import { execSync } from 'node:child_process';\nexport const go = () => execSync('vercel --prod');\n",
+    },
+  ],
+  [
+    'a require() reaching a deploy in a .cjs wrapper',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.cjs' } }, null, 2),
+      'scripts/ship.cjs': "const { go } = require('./deploy.cjs');\ngo();\n",
+      'scripts/deploy.cjs':
+        "const { execSync } = require('child_process');\nmodule.exports.go = () => execSync('vercel --prod');\n",
+    },
+  ],
+  [
+    'a static await import() with a literal specifier reaching a deploy',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': "const m = await import('./deploy.mjs');\nm.go();\n",
+      'scripts/deploy.mjs':
+        "import { execSync } from 'node:child_process';\nexport const go = () => execSync('flyctl deploy');\n",
+    },
+  ],
+  [
+    'a substitution-free backtick specifier reaching a deploy',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': 'await import(`./deploy.mjs`);\n',
+      'scripts/deploy.mjs': "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+    },
+  ],
+  [
+    'a deploy inside a module cycle',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/a.mjs' } }, null, 2),
+      'scripts/a.mjs': "import './b.mjs';\nexport const a = 1;\n",
+      'scripts/b.mjs':
+        "import './a.mjs';\nimport { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+    },
+  ],
+
+  /* F1 — a shell KEYWORD in command position. `resolveCommand` skipped
+   * environment assignments and runners and then took the head word; `then`,
+   * `do` and `else` are none of those, so the KEYWORD became the resolved
+   * binary and every deploy behind it was invisible. A conditional deploy
+   * step is the most natural real shape there is. */
+  ['a deploy behind `then`', workflowWith('      - run: if true; then vercel --prod; fi')],
+  ['a deploy behind `do`', workflowWith('      - run: for i in 1 2 3; do railway up; done')],
+  ['a deploy behind `else`', workflowWith('      - run: if false; then echo x; else vercel --prod; fi')],
+  ['a deploy behind `eval`', workflowWith('      - run: eval vercel --prod')],
+  /* A compound command's CONDITION is itself a command, so `if vercel --prod`
+   * runs the deploy exactly as `then vercel --prod` does. */
+  ['a deploy as an `if` condition', workflowWith('      - run: if vercel --prod; then echo ok; fi')],
+  ['a deploy as a `while` condition', workflowWith('      - run: while railway up; do break; done')],
+  ['a deploy as an `until` condition', workflowWith('      - run: until vercel deploy; do sleep 1; done')],
+  [
+    'a deploy as an `if` condition in a shell wrapper',
+    { 'scripts/cond.sh': '#!/usr/bin/env bash\nif vercel --prod; then echo ok; fi\n' },
+  ],
+  [
+    'a deploy behind `then` in a shell wrapper',
+    { 'scripts/release.sh': '#!/usr/bin/env bash\nif [ "$CI" = "1" ]; then vercel --prod; fi\n' },
+  ],
+  [
+    'a deploy behind `then` in a package script',
+    {
+      'package.json': JSON.stringify(
+        { name: 'sunday-relay', scripts: { ship: 'if true; then vercel --prod; fi' } }, null, 2,
+      ),
+    },
+  ],
+
+  /* F2 — the RUNNER_PAIRS branch sliced two words and continued WITHOUT
+   * dropping the runner's own arguments, so the runner's flag became the
+   * binary. The one form under test, `npm exec -- vercel --prod`, passed only
+   * because `--` happens to be handled at the top of `dropRunnerArguments`. */
+  ['npm exec with a boolean flag', workflowWith('      - run: npm exec --yes -- vercel --prod')],
+  ['pnpm dlx with an attached package value', workflowWith('      - run: pnpm dlx --package=vercel vercel --prod')],
+  ['pnpm dlx with a separated package value', workflowWith('      - run: pnpm dlx --package vercel vercel --prod')],
+
+  /* F3 — a QUOTED entry path was split away from its `node`, so the wrapper
+   * was never queued: a silent pass, with no analyzability finding either. */
+  [
+    'a wrapper whose entry path is quoted',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: "node 'scripts/ship.mjs'" } }, null, 2),
+      'scripts/ship.mjs': "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+    },
+  ],
+
+  /* F7 — `docker://owner/name` matched no action pattern at all, so the one
+   * action form that can run anything was the one form never checked. */
+  ['a container deployment action', workflowWith('      - uses: docker://myorg/deployer:latest')],
+
+  /* F8 — a backslash path resolved to neither a binary nor a tracked file. */
+  ['a deploy binary named with backslashes', workflowWith('      - run: .\\node_modules\\.bin\\vercel --prod')],
+  [
+    'a wrapper named with backslashes',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node .\\scripts\\ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+    },
+  ],
+
+  /* ITEM A — `createRequire` was the last module-loading indirection the
+   * follower did not know. A reachable wrapper passed in silence while
+   * reaching a real deploy through it. */
+  [
+    'a createRequire binding reaching a deploy',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/s.mjs' } }, null, 2),
+      'scripts/s.mjs':
+        "import { createRequire } from 'node:module';\n"
+        + 'const r = createRequire(import.meta.url);\n'
+        + "r('./deploy.cjs');\n",
+      'scripts/deploy.cjs': "const { execSync } = require('child_process');\nexecSync('vercel --prod');\n",
+    },
+  ],
+  [
+    'a createRequire called inline, with no binding',
+    {
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/s.mjs' } }, null, 2),
+      'scripts/s.mjs':
+        "import { createRequire } from 'node:module';\ncreateRequire(import.meta.url)('./deploy.cjs');\n",
+      'scripts/deploy.cjs': "const { execSync } = require('child_process');\nexecSync('railway up');\n",
+    },
+  ],
+
+  /* ITEM B — the three real publish forms, pinned in a WRAPPER, the position
+   * where `allow-mention` is refused. Anchoring the patterns to a resolved
+   * command head must not quietly cost their detection. */
+  ['docker push in a shell wrapper', { 'scripts/p.sh': '#!/usr/bin/env bash\ndocker push myorg/app:latest\n' }],
+  ['npm publish in a shell wrapper', { 'scripts/p.sh': '#!/usr/bin/env bash\nnpm publish\n' }],
+  ['gh release create in a shell wrapper', { 'scripts/p.sh': '#!/usr/bin/env bash\ngh release create v1\n' }],
+
+  /* AN UNKNOWN WRAPPER WORD. Resolution only skips runners it knows about, so
+   * one unrecognised word in front of a deploy hid it. `xvfb-run docker push`
+   * was a REGRESSION from anchoring the pattern rules; `xvfb-run vercel
+   * --prod` was never caught by anything, because the binary rules had always
+   * been head-position-only. */
+  /* FINDING A — `yarn publish` in all five positions the differential found.
+   *
+   * Anchoring the pattern rules at the head of a RESOLVED command stripped the
+   * runner first, and `yarn` IS a runner word, so `yarn publish` resolved to
+   * `publish` and the publish pattern could not match. Publishing this package
+   * is a founder-authorized action, and it went invisible in every surface
+   * while the banner still claimed coverage. The suite stayed green because
+   * every publish fixture was `npm publish` or `pnpm publish` — and neither
+   * `npm` nor `pnpm` is a runner word on its own. */
+  ['yarn publish', { 'scripts/p.sh': '#!/usr/bin/env bash\nyarn publish\n' }],
+  ['yarn publish with a flag', { 'scripts/p.sh': '#!/usr/bin/env bash\nyarn publish --access public\n' }],
+  ['yarn publish behind sudo', { 'scripts/p.sh': '#!/usr/bin/env bash\nsudo yarn publish\n' }],
+  ['yarn publish behind a shell keyword', { 'scripts/p.sh': '#!/usr/bin/env bash\nif true; then yarn publish; fi\n' }],
+  ['yarn publish inside sh -c', { 'scripts/p.sh': '#!/usr/bin/env bash\nbash -c "yarn publish"\n' }],
+
+  ['a deploy behind an unknown wrapper', { 'scripts/w.sh': '#!/usr/bin/env bash\nxvfb-run docker push x\n' }],
+  ['a deploy binary behind an unknown wrapper', { 'scripts/w.sh': '#!/usr/bin/env bash\nxvfb-run vercel --prod\n' }],
+  [
+    'a deploy binary behind an arbitrary unknown word',
+    { 'scripts/w.sh': '#!/usr/bin/env bash\nsomeunknownwrapper vercel --prod\n' },
+  ],
 ];
 
 describe('H-5 — active deployment behaviour is detected wherever it lives', () => {
@@ -442,6 +831,319 @@ describe('H-5 — documentation, prose and inert samples are NOT deployment', ()
     });
     expect(result.code, result.output).toBe(0);
   });
+
+  /* The repairs widen what counts as executable. Each widening gets a matching
+   * negative control, or the rule becomes "these words are forbidden". */
+
+  it('a GENUINE unquoted trailing comment is still inert (HIGH-2)', () => {
+    const result = scan({
+      ...baseline(),
+      ...workflowWith('      - run: npm test # this repository never runs vercel --prod'),
+    });
+    expect(result.code, `a real comment was read as executable:\n${result.output}`).toBe(0);
+  });
+
+  it('the same wrappers around a harmless command stay clean (MEDIUM-1)', () => {
+    const controls = [
+      '      - run: env NODE_ENV=production npm run build',
+      '      - run: timeout 600 npm test',
+      '      - run: ./node_modules/.bin/vitest run',
+      '      - run: yarn install --frozen-lockfile',
+      '      - run: npm exec -- tsc --noEmit',
+    ];
+    for (const step of controls) {
+      const result = scan({ ...baseline(), ...workflowWith(step) });
+      expect(result.code, `${step}\n${result.output}`).toBe(0);
+    }
+  });
+
+  it('a reachable wrapper that only DOCUMENTS a deploy command passes (MEDIUM-3)', () => {
+    const result = scan({
+      ...baseline(),
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { verify: 'node scripts/verify.mjs' } }, null, 2),
+      'scripts/verify.mjs':
+        '// Relay never deploys. We do not run `vercel --prod`.\n'
+        + "export const documented = 'vercel --prod';\n",
+    });
+    expect(result.code, `documentation inside a wrapper was read as a command:\n${result.output}`).toBe(0);
+  });
+
+  it('an unreferenced tracked script is NOT scanned as a deployment path (MEDIUM-3)', () => {
+    // The bound that keeps this rule from failing on the repository's own
+    // tooling — including the frozen baseline this suite depends on.
+    const result = scan({
+      ...baseline(),
+      'scripts/unreferenced.mjs': "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+    });
+    expect(result.code, result.output).toBe(0);
+  });
+
+  it('a side-effect import reaching a DOCUMENTATION-only module passes (MEDIUM-3a)', () => {
+    // Following the edge must not make the reached file's prose executable.
+    const result = scan({
+      ...baseline(),
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { verify: 'node scripts/verify.mjs' } }, null, 2),
+      'scripts/verify.mjs': "import './notes.mjs';\n",
+      'scripts/notes.mjs':
+        '// Relay never deploys. We do not run `vercel --prod`, and never `railway up`.\n'
+        + "export const documented = 'vercel --prod';\n",
+    });
+    expect(result.code, `documentation behind a side-effect import was read as a command:\n${result.output}`)
+      .toBe(0);
+  });
+
+  it('mutually-importing modules with no deploy stay clean and terminate (MEDIUM-3a)', () => {
+    // Cycle protection is what makes side-effect edges safe to follow at all.
+    const started = Date.now();
+    const result = scan({
+      ...baseline(),
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/a.mjs' } }, null, 2),
+      'scripts/a.mjs': "import './b.mjs';\nexport const a = 1;\n",
+      'scripts/b.mjs': "import './a.mjs';\nexport const b = 2;\n",
+    });
+    expect(result.code, result.output).toBe(0);
+    expect(Date.now() - started, 'the cyclic scan did not terminate promptly').toBeLessThan(20_000);
+  }, 30_000);
+
+  it('a vendor named FIRST inside a string is not a command (F5)', () => {
+    // The most consequential false positive in the scan: `checkDeployLine`
+    // treats a wrapper line as executable, and deliberately refuses to honour
+    // `allow-mention` there — so these lines could not be committed AT ALL,
+    // in a repository whose own audit scripts grep for exactly these names.
+    const inert = [
+      'grep -R "vercel" .',
+      'echo "vercel is never used here"',
+      'command -v vercel >/dev/null',
+      "grep -R 'railway up' .",
+    ];
+    for (const line of inert) {
+      const result = scan({
+        ...baseline(),
+        'scripts/audit.sh': `#!/usr/bin/env bash\nset -euo pipefail\n${line}\n`,
+      });
+      expect(result.code, `${line} was reported, and no annotation can silence it:\n${result.output}`).toBe(0);
+    }
+  });
+
+  it('quote transparency does not hide a real command (F5)', () => {
+    // The other direction of the same change. `sh -c "vercel --prod"` has no
+    // separator inside it to split on, and is resolved instead by `sh` being
+    // a runner and `-c` being one of its arguments.
+    const active = [
+      'sh -c "npm run build && railway up"',
+      'sh -c "vercel --prod"',
+      "sh -c 'railway up'",
+      'bash -eu -o pipefail -c "vercel --prod"',
+      'echo `vercel --prod`',
+      'echo $(vercel --prod)',
+    ];
+    for (const line of active) {
+      const result = scan({
+        ...baseline(),
+        'scripts/run.sh': `#!/usr/bin/env bash\nset -euo pipefail\n${line}\n`,
+      });
+      expect(result.code, `${line} was hidden by quote handling:\n${result.output}`).toBe(1);
+      expect(result.output).toContain('[ci-deploy]');
+    }
+  });
+
+  it('a keyword skip does not make the next word a command (F1)', () => {
+    const controls = [
+      '      - run: if true; then npm test; fi',
+      '      - run: for f in src/*; do echo "$f"; done',
+      '      - run: if false; then echo x; else npm run build; fi',
+      '      - run: while npm test; do break; done',
+      '      - run: until npm run build; do sleep 1; done',
+      '      - name: Fail if vercel is configured anywhere\n        run: npm test',
+    ];
+    for (const step of controls) {
+      const result = scan({ ...baseline(), ...workflowWith(step) });
+      expect(result.code, `${step}\n${result.output}`).toBe(0);
+    }
+  });
+
+  it('the guards that CHECK for a deploy CLI stay committable (F1)', () => {
+    // `if`, `while` and `until` are keywords now, so the condition of a
+    // compound command is read. These are the lines a repository writes to
+    // prove it cannot deploy, in a wrapper — the position where
+    // `allow-mention` is refused, so a false positive is uncommittable.
+    const guards = [
+      'if ! command -v vercel; then exit 1; fi',
+      'if [ -x vercel ]; then exit 1; fi',
+      'if which vercel; then exit 1; fi',
+      'if grep -q "vercel" .; then exit 1; fi',
+    ];
+    for (const line of guards) {
+      const result = scan({
+        ...baseline(),
+        'scripts/guard.sh': `#!/usr/bin/env bash\nset -euo pipefail\n${line}\n`,
+      });
+      expect(result.code, `${line} was flagged, and no annotation can silence it:\n${result.output}`).toBe(0);
+    }
+  });
+
+  it('a `node <file>` entry into the FROZEN baseline is reported, not dropped (F9)', () => {
+    // Excluding the frozen baseline as a scan TARGET is right; excluding it in
+    // SILENCE is the same class of quiet pass F3 was.
+    const result = scan({
+      ...baseline(),
+      'package.json': JSON.stringify(
+        { name: 'sunday-relay', scripts: { ship: 'node scripts/__baseline__/relay-repository-boundary.d21d383.mjs' } },
+        null,
+        2,
+      ),
+      'scripts/__baseline__/relay-repository-boundary.d21d383.mjs':
+        "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+    });
+    expect(result.code, `a path through the frozen baseline passed in silence:\n${result.output}`).toBe(1);
+    expect(result.output).toContain('[deploy-analyzability]');
+    expect(result.output).toContain('frozen baseline copy');
+    expect(result.output).not.toContain('[ci-deploy]');
+  });
+
+  it('a publish command named INSIDE A STRING is not a command (ITEM B)', () => {
+    // The same F5 false positive, surviving in the pattern matcher. These are
+    // wrapper lines, so `allow-mention` is refused on them — a finding here
+    // could not be silenced, and the repository could not commit its own
+    // publish audit. Both bare and annotated must be clean.
+    const inert = [
+      'echo "docker push x"',
+      'echo "we never npm publish here"',
+      'grep -q "gh release create" .',
+    ];
+    for (const line of inert) {
+      for (const suffix of ['', ` # ${MENTION}`]) {
+        const result = scan({
+          ...baseline(),
+          'scripts/audit.sh': `#!/usr/bin/env bash\nset -euo pipefail\n${line}${suffix}\n`,
+        });
+        expect(result.code, `${line}${suffix} was reported:\n${result.output}`).toBe(0);
+      }
+    }
+  });
+
+  it('looking past an unknown wrapper does not flag a DATA command', () => {
+    // The widening is only safe because `echo`, `grep` and the lookup
+    // builtins are excluded. Each line below sits in a wrapper, where
+    // `allow-mention` is refused — a finding here would be uncommittable.
+    // The UNQUOTED forms are the point: a rule keyed on quotes alone would
+    // report every one of them.
+    const inert = [
+      'echo we never npm publish here',
+      'echo vercel is never used here',
+      'grep -R vercel .',
+      'grep -q docker push .',
+      'if which vercel; then exit 1; fi',
+      'command -v vercel >/dev/null',
+      'test -x vercel',
+      'find . -name vercel',
+    ];
+    for (const line of inert) {
+      const result = scan({
+        ...baseline(),
+        'scripts/audit.sh': `#!/usr/bin/env bash\nset -euo pipefail\n${line}\n`,
+      });
+      expect(result.code, `${line} was reported, and no annotation can silence it:\n${result.output}`).toBe(0);
+    }
+  });
+
+  it('createRequire loading a HARMLESS module is not a finding (ITEM A)', () => {
+    const result = scan({
+      ...baseline(),
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/s.mjs' } }, null, 2),
+      'scripts/s.mjs':
+        "import { createRequire } from 'node:module';\n"
+        + 'const r = createRequire(import.meta.url);\n'
+        + "r('./helper.cjs');\n",
+      'scripts/helper.cjs': 'module.exports.go = () => 1;\n',
+    });
+    expect(result.code, result.output).toBe(0);
+  });
+
+  it('a wrapper of regex literals and prose does not detonate the scan (ITEM A)', () => {
+    // The masker's own regression: a quote inside a character class opened a
+    // "string" that ran past a block-comment opener, so the comment was read
+    // as code. It reported findings against the scanner's own documentation.
+    const result = scan({
+      ...baseline(),
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/s.mjs' } }, null, 2),
+      'scripts/s.mjs':
+        'const quoted = /[\'"]/g;\n'
+        + '/**\n'
+        + ' * A computed specifier looks like import(target); an alias is r(name).\n'
+        + ' */\n'
+        + 'export const ok = Boolean(quoted);\n',
+    });
+    expect(result.code, `the masker read documentation as code:\n${result.output}`).toBe(0);
+  });
+
+  it('a COMPUTED specifier is reported, not guessed and not passed (MEDIUM-3a)', () => {
+    // `execSync(c)` with a computed `c` was already reported; `await import(m)`
+    // with a computed `m` passed in SILENCE, hiding a whole module subtree and
+    // every command in it behind one variable. Same silent-pass class as F3
+    // and F9. The scan still must not GUESS which file was meant.
+    const result = scan({
+      ...baseline(),
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': 'const n = 1;\nawait import(`./deploy-${n}.mjs`);\n',
+      'scripts/deploy-1.mjs': "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+    });
+    expect(result.code, `a computed specifier passed in silence:\n${result.output}`).toBe(1);
+    expect(result.output).toContain('[deploy-analyzability]');
+    expect(result.output).toContain('builds its module specifier at runtime');
+    expect(result.output).not.toContain('[ci-deploy]');
+  });
+
+  it('a LITERAL dynamic specifier is followed rather than reported (MEDIUM-3a)', () => {
+    // Reporting every `import(` would be an easy way to look thorough while
+    // resolving nothing. A literal must still resolve to the real module.
+    const result = scan({
+      ...baseline(),
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs': "const m = await import('./deploy.mjs');\nm.go();\n",
+      'scripts/deploy.mjs':
+        "import { execSync } from 'node:child_process';\nexport const go = () => execSync('vercel --prod');\n",
+    });
+    expect(result.code, result.output).toBe(1);
+    expect(result.output).toContain('[ci-deploy]');
+    expect(result.output).toContain('scripts/deploy.mjs');
+    expect(result.output).not.toContain('builds its module specifier at runtime');
+  });
+
+  it('a computed specifier written in PROSE is not a finding (MEDIUM-3a)', () => {
+    const result = scan({
+      ...baseline(),
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs':
+        '// A computed specifier looks like import(target) or require(base + name).\n'
+        + "export const documented = 'call import(x) to load it';\n",
+    });
+    expect(result.code, `documentation was read as a computed specifier:\n${result.output}`).toBe(0);
+  });
+
+  it('a side-effect import in an UNREFERENCED module is still not scanned (MEDIUM-3a)', () => {
+    // The widening changes which EDGES are followed, never which files are
+    // ROOTS. This is the bound that keeps the scan off the repository's own
+    // tooling and off the frozen baseline.
+    const result = scan({
+      ...baseline(),
+      'scripts/unreferenced.mjs': "import './unreferenced-impl.mjs';\n",
+      'scripts/unreferenced-impl.mjs': "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n",
+    });
+    expect(result.code, result.output).toBe(0);
+  });
+
+  it('a command a reachable wrapper builds at runtime is reported, not passed (MEDIUM-3)', () => {
+    const result = scan({
+      ...baseline(),
+      'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { ship: 'node scripts/ship.mjs' } }, null, 2),
+      'scripts/ship.mjs':
+        "import { execSync } from 'node:child_process';\n"
+        + 'execSync(`${process.env.RELAY_TARGET} --prod`);\n',
+    });
+    expect(result.code, result.output).toBe(1);
+    expect(result.output).toContain('[deploy-analyzability]');
+  });
 });
 
 /* ---------------------------------------------- base vs head coverage */
@@ -459,9 +1161,7 @@ describe('H-5 — the head scanner detects everything the base scanner did', () 
     let caughtByHead = 0;
 
     for (const [label, files] of ACTIVE_DEPLOY_CASES) {
-      const tree = { ...baseline(), ...files };
-      const base = scanWithBase(tree);
-      const head = scan(tree);
+      const { base, head } = scanBoth({ ...baseline(), ...files });
       if (base.code === 1) caughtByBase += 1;
       if (head.code === 1) caughtByHead += 1;
       if (base.code === 1 && head.code !== 1) missedByHead.push(label);
@@ -484,6 +1184,87 @@ describe('H-5 — the head scanner detects everything the base scanner did', () 
     expect(caughtByHead, 'the head scanner must catch every active deployment case').toBe(total);
     expect(newlyCaughtByHead.length, 'the head scanner must add coverage, not just match').toBeGreaterThan(0);
   }, 120_000);
+
+  /**
+   * THE DIFFERENTIAL INVARIANT — head must catch everything BASE caught.
+   *
+   * `ACTIVE_DEPLOY_CASES` proves head catches every case in the corpus, and
+   * that base misses some of them. What it could not prove is coverage OUTSIDE
+   * the corpus, and that is exactly where `yarn publish` was lost: it was
+   * never a fixture, so nothing failed when it broke.
+   *
+   * This corpus is deliberately BROAD and mechanical rather than curated —
+   * every deploy binary and every pattern vendor, bare and behind the runner
+   * and keyword forms that resolution has to see through. The assertion is one
+   * sentence: if the frozen baseline reports a shape, the head must report it
+   * too. A repair may add coverage and may remove a false positive, but it may
+   * never silently drop a detection the reviewed scanner already had.
+   */
+  const DIFFERENTIAL_CORPUS = [
+    // Deploy binaries, bare.
+    'vercel --prod', 'vercel deploy', 'railway up', 'flyctl deploy', 'netlify deploy --prod',
+    'wrangler deploy', 'surge ./dist example.com', 'heroku container:release web', 'vc --prod',
+    // Pattern vendors and subcommands.
+    'fly deploy', 'fly launch', 'aws s3 sync ./dist s3://b', 'aws lambda update-function-code',
+    'gcloud app deploy', 'gcloud run deploy svc', 'az webapp up', 'docker push myorg/app',
+    'docker buildx build . --push', 'kubectl apply -f k8s/', 'kubectl rollout restart d/x',
+    'helm install relay ./c', 'helm upgrade relay ./c', 'terraform apply', 'pulumi up',
+    'serverless deploy', 'sst deploy', 'firebase deploy', 'eb deploy', 'now --prod',
+    'supabase db push', 'supabase migration up', 'supabase link',
+    // Publishing is deployment by another name — the family finding A broke.
+    'npm publish', 'pnpm publish', 'yarn publish', 'bun publish',
+    'npm publish --access public', 'yarn publish --access public',
+    'gh release create v1', 'git push origin gh-pages',
+    'curl -X POST https://api.render.com/deploy/srv-a',
+    // The same shapes behind everything resolution must see through.
+    'sudo yarn publish', 'sudo docker push x', 'env CI=1 vercel --prod', 'timeout 600 vercel --prod',
+    'npx vercel --prod', 'yarn vercel --prod', 'npm exec -- vercel --prod',
+    'if true; then yarn publish; fi', 'if true; then vercel --prod; fi',
+    'for i in 1; do railway up; done', 'bash -c "yarn publish"', 'sh -c "vercel --prod"',
+    './node_modules/.bin/vercel --prod', 'xvfb-run docker push x',
+  ];
+
+  it('head detects every shape the frozen baseline detects', () => {
+    // The comparison runs in a WORKFLOW STEP, because that is the only surface
+    // the frozen baseline reads at all. Running it in a shell wrapper — where
+    // the baseline detects nothing — would make the invariant vacuous, which
+    // is a way of writing a green test that proves nothing.
+    const lostByHead: string[] = [];
+    const missedInWrapper: string[] = [];
+    let caughtByBase = 0;
+    let caughtByHead = 0;
+
+    for (const line of DIFFERENTIAL_CORPUS) {
+      const both = scanBoth({ ...baseline(), ...workflowWith(`      - run: ${line}`) });
+      const base = both.base.code === 1;
+      const head = both.head.code === 1;
+      if (base) caughtByBase += 1;
+      if (head) caughtByHead += 1;
+      if (base && !head) lostByHead.push(line);
+
+      // The SAME shape in a shell wrapper. The baseline is blind here, so this
+      // half is a pure head-coverage assertion — and it is the half that would
+      // have failed the moment `yarn publish` broke.
+      const wrapped = { ...baseline(), 'scripts/differential.sh': `#!/usr/bin/env bash\n${line}\n` };
+      if (scan(wrapped).code !== 1) missedInWrapper.push(line);
+    }
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `\nDIFFERENTIAL — ${DIFFERENTIAL_CORPUS.length} shapes in a workflow step:`
+      + ` base caught ${caughtByBase}, head caught ${caughtByHead}`
+      + (lostByHead.length ? `\n  LOST BY HEAD (${lostByHead.length}):\n    ${lostByHead.join('\n    ')}` : '')
+      + (missedInWrapper.length
+        ? `\n  MISSED IN A WRAPPER (${missedInWrapper.length}):\n    ${missedInWrapper.join('\n    ')}`
+        : ''),
+    );
+
+    expect(lostByHead, 'the head scanner LOST detections the frozen baseline had').toEqual([]);
+    expect(missedInWrapper, 'these deployment shapes are not detected in a shell wrapper').toEqual([]);
+    expect(caughtByBase, 'the comparison must run on a surface the baseline actually reads')
+      .toBeGreaterThan(0);
+    expect(caughtByHead).toBe(DIFFERENTIAL_CORPUS.length);
+  }, 600_000);
 
   it('base and head agree that prose is not deployment', () => {
     const tree = {

@@ -9,8 +9,8 @@ import type { YcGitResult, YcPreflightDeps } from './preflight';
  * subprocess it may ever start is READ-ONLY git — rev-parse, status,
  * merge-base — inside the CURRENT repository. No push, no reset, no
  * network, no provider binary, no write of any kind, and never a path
- * outside this checkout (the browser-frontend worktree is structurally
- * unreachable: relative paths only, no `..`).
+ * outside this checkout: every read is relative with no `..`, so any other
+ * tree on the machine is structurally unreachable from here.
  */
 
 const READONLY_GIT_SUBCOMMANDS = new Set(['rev-parse', 'status', 'merge-base']);
@@ -36,7 +36,8 @@ const isExactReadonlyForm = (args: readonly string[]): boolean =>
  * provider API keys out of the child (least privilege) AND — critically —
  * drops `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` / `GIT_CONFIG_*`,
  * which would otherwise override `cwd` and silently point the "current
- * repository" checks at another tree (including the frontend worktree).
+ * repository" checks at another checkout on the machine — including one the
+ * founder never meant this command to read.
  * Mirrors the sanitized env every other git spawner in this repo uses.
  */
 function gitEnv(env: Record<string, string | undefined>): Record<string, string> {

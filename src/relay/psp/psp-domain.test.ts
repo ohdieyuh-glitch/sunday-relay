@@ -85,11 +85,17 @@ function workspace(overrides: Partial<PSPWorkspaceContext> = {}): PSPWorkspaceCo
 
 /* ----------------------------- shared domain ---------------------------- */
 
-describe('PSP domain — shared byte-identical modules', () => {
-  it('every module matches the cross-surface checksum', () => {
+/**
+ * There is ONE `src/relay/psp/`, and both surfaces — the website and the CLI —
+ * import it. The checksums below reconcile no second checkout: they pin this
+ * domain's own content, so a change to a module that both surfaces depend on
+ * cannot land without the digest being updated and reviewed with it.
+ */
+describe('PSP domain — one module set, pinned against unreviewed drift', () => {
+  it('every module matches its recorded checksum', () => {
     for (const name of PSP_DOMAIN_MODULE_NAMES) {
       const digest = createHash('sha256').update(readFileSync(join(dir, name))).digest('hex');
-      expect(digest, `${name} diverged from the shared PSP domain`)
+      expect(digest, `${name} changed without a reviewed update to its recorded checksum`)
         .toBe(PSP_DOMAIN_CHECKSUMS[name]);
     }
   });

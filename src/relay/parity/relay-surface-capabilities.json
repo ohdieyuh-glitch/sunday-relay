@@ -1,6 +1,6 @@
 {
   "manifestVersion": "1.2.0",
-  "description": "Sunday Relay website/CLI capability parity registry. Byte-identical in both repositories. Statuses are evidence-based: a capability is only 'implemented' when a real entry point exists, and only 'tested' when a named test asserts it.",
+  "description": "Sunday Relay website/CLI capability parity registry. Sunday Relay is ONE repository; the website and the CLI are two surfaces of it that share the canonical domain modules directly, and every declaration below is verified against this tree. Statuses are evidence-based: a capability is only 'implemented' when a real entry point exists, and only 'tested' when a named test asserts it.",
   "capabilities": [
     {
       "capabilityId": "relay-dog-identity",
@@ -76,11 +76,11 @@
         "src/relay/psp/psp-domain.test.ts"
       ],
       "sharedDomainReferences": [
-        "psp-agent-id.ts",
-        "psp-entitlement.ts",
-        "psp-import.ts",
-        "psp-errors.ts",
-        "psp-trace.ts"
+        "src/relay/psp/psp-agent-id.ts",
+        "src/relay/psp/psp-entitlement.ts",
+        "src/relay/psp/psp-import.ts",
+        "src/relay/psp/psp-errors.ts",
+        "src/relay/psp/psp-trace.ts"
       ]
     },
     {
@@ -152,7 +152,7 @@
         "src/relay/cli/cli.test.ts"
       ],
       "sharedDomainReferences": [
-        "src/relay/mission/commands/command-types.ts#intent:pause",
+        "src/relay/mission/commands/command-types.ts#RELAY_MISSION_COMMAND_INTENTS(pause)",
         "src/relay/mission/commands/command-executor.ts",
         "src/relay/mission/commands/command-checkpoint.ts"
       ]
@@ -180,7 +180,7 @@
         "src/relay/cli/cli.test.ts"
       ],
       "sharedDomainReferences": [
-        "src/relay/mission/commands/command-types.ts#intent:resume",
+        "src/relay/mission/commands/command-types.ts#RELAY_MISSION_COMMAND_INTENTS(resume)",
         "src/relay/mission/commands/command-executor.ts"
       ]
     },

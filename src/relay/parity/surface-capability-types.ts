@@ -1,10 +1,13 @@
 /**
  * SUNDAY RELAY — WEBSITE/CLI CAPABILITY PARITY REGISTRY (types).
  *
- * The registry itself is JSON — `relay-surface-capabilities.json`, byte-
- * identical in the website and CLI repositories — so that ONE file is read by
- * both the TypeScript tests and the dependency-free Node check script, with no
- * build step and no second source of truth.
+ * Sunday Relay is ONE repository. The website and the CLI are two SURFACES of
+ * it, sharing the canonical domain modules directly, so there is one registry
+ * and nothing to keep in sync across checkouts.
+ *
+ * The registry itself is JSON — `relay-surface-capabilities.json` — so that
+ * ONE file is read by both the TypeScript tests and the dependency-free Node
+ * check script, with no build step and no second source of truth.
  *
  * These types describe that file. See docs/relay/WEBSITE_CLI_PARITY_CONTRACT.md
  * for the contract they enforce.
@@ -65,8 +68,11 @@ export interface RelaySurfaceException {
   /** The surface that is genuinely absent. */
   missingSurface: 'website' | 'cli';
   /**
-   * Evidence references, in the same notation as entry points, each of which
-   * must resolve on disk. A waiver may not cite proof that does not exist.
+   * Evidence references, each of which must resolve on disk: a file path, or
+   * `path#anchor` where the anchor names something the file genuinely
+   * contains. A waiver may not cite proof that does not exist — so unlike a
+   * CLI entry point, evidence may NOT be a `relay …` command notation, which
+   * nothing in this check resolves against the filesystem.
    */
   evidence: string[];
 }
@@ -80,12 +86,23 @@ export interface RelaySurfaceCapability {
   websiteStatus: RelaySurfaceStatus;
   cliStatus: RelaySurfaceStatus;
 
+  /**
+   * FILE claims. A `relay …` command notation is legitimate only in the two
+   * CLI fields, where the CLI's own command tests are what verify it; in every
+   * other field a command notation is a declaration nothing resolves on disk.
+   */
   websiteEntryPoints: string[];
   cliEntryPoints: string[];
 
   websiteTestReferences: string[];
   cliTestReferences: string[];
 
+  /**
+   * The canonical modules BOTH surfaces import — the reason the website and
+   * the CLI can agree at all. Required, and verified on exactly the same terms
+   * as every other file claim: the file must exist inside this repository and
+   * any anchor must name something it genuinely contains.
+   */
   sharedDomainReferences: string[];
 
   exception?: RelaySurfaceException;
@@ -97,7 +114,7 @@ export interface RelaySurfaceCapabilityRegistry {
   capabilities: RelaySurfaceCapability[];
 }
 
-/** Where the canonical registry lives in BOTH repositories. */
+/** Where the single canonical registry lives, for both surfaces. */
 export const RELAY_PARITY_REGISTRY_PATH = 'src/relay/parity/relay-surface-capabilities.json';
 
 /** A surface counts as PRESENT once it is implemented or tested. */

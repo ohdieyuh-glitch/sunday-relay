@@ -5,10 +5,12 @@
  * demo, terminal capabilities, and required documentation. It reads the
  * repository read-only (no repo or user-state writes; the injected offline
  * plain-demo uses an isolated, self-deleting temp state root), makes zero
- * provider calls and zero network calls, and it NEVER
- * inspects the separate browser-frontend worktree (that surface is always
- * reported as MANUAL VERIFICATION REQUIRED). This module imports nothing —
- * every effect arrives through {@link YcPreflightDeps}.
+ * provider calls and zero network calls, and it NEVER inspects the browser
+ * surface. That surface lives in this repository (`src/relay/ui/`, built by
+ * `npm run build`), but nothing here opens a browser, serves a page or reads a
+ * rendered route — so the frontend is always reported as MANUAL VERIFICATION
+ * REQUIRED rather than claimed as checked. This module imports nothing — every
+ * effect arrives through {@link YcPreflightDeps}.
  */
 
 /**
@@ -122,8 +124,8 @@ export interface YcGitResult { ok: boolean; stdout: string }
 export interface YcPreflightDeps {
   /** Read-only git (rev-parse / status / merge-base only). */
   runGit(args: readonly string[]): YcGitResult;
-  /** Existence check for a REPO-RELATIVE path (never absolute, never the
-   * frontend worktree). */
+  /** Existence check for a REPO-RELATIVE path (never absolute, never outside
+   * this checkout). */
   fileExists(relPath: string): boolean;
   /** Read a repo-relative text file, or null. */
   readTextFile(relPath: string): string | null;
@@ -310,7 +312,7 @@ export async function runYcPreflight(deps: YcPreflightDeps): Promise<YcPreflight
 
   /* --------------------------- frontend ------------------------------ */
   const frontendCheck = add('browser-frontend', 'MANUAL',
-    'MANUAL VERIFICATION REQUIRED — worktree owned by the separate frontend session (never inspected by this check)');
+    'MANUAL VERIFICATION REQUIRED — the browser surface is not inspected by this check');
 
   /* ---------------------------- safety -------------------------------- */
   // Structural statements, enforced by the boundary + acceptance tests:
@@ -357,8 +359,9 @@ export async function runYcPreflight(deps: YcPreflightDeps): Promise<YcPreflight
   lines.push('');
   lines.push('BROWSER FRONTEND');
   lines.push('  Status: MANUAL VERIFICATION REQUIRED');
-  lines.push('  Worktree owned by separate frontend session (never inspected by this check)');
-  lines.push('  Record the exact frontend command + URL from that session before the video.');
+  lines.push('  This check never inspects the browser surface: it opens no browser, serves no');
+  lines.push('  page and reads no rendered route, so it can prove nothing about the frontend.');
+  lines.push('  Verify it by hand and record the exact frontend command + URL before the video.');
   lines.push('');
   lines.push('DEMO TRUTHFULNESS');
   lines.push(`  Offline simulation labeled: ${demoOutput.includes('VISUAL SIMULATION') ? 'yes (verified in plain output)' : 'NOT VERIFIED'}`);

@@ -673,10 +673,13 @@ describe('YC demo acceptance boundaries (Prompt 8.7)', () => {
     }
   });
 
-  it('yc never references the frontend worktree, providers, or deployment', () => {
+  it('yc never references another checkout on the machine, providers, or deployment', () => {
     for (const file of ycFiles) {
       const content = read(file);
-      expect(/claude-home|sunday-relay-claude|codex-home|codex-landing/.test(content), `${file} references the frontend worktree`).toBe(false);
+      // These names are OTHER CHECKOUTS, not a frontend repository: Relay's
+      // browser surface is in this tree. The rule is that the yc leaf may
+      // never name a path outside this checkout.
+      expect(/claude-home|sunday-relay-claude|codex-home|codex-landing/.test(content), `${file} references another checkout on the machine`).toBe(false);
       expect(/connectors\/(claude-code|codex-reviewer|supervised)|createClaudeCodeAdapter|createCodexReviewerAdapter|--confirm-live/.test(content), `${file} can reach a provider adapter`).toBe(false);
       // The preflight REPORTS "no deployment" truthfully — so ban the
       // tooling, not the word: no deploy command can be invoked from yc.

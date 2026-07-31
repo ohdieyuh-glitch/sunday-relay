@@ -404,6 +404,7 @@ export function evaluateMissionBudget(
     hardLimitReached,
     approvalRequired,
     warningThresholdReached,
+    projectedTotal,
     projectedTotalComplete,
     proposedCostUnknown: Boolean(input.proposedCostUnknown),
     categoryLimitReached: categoryEvaluations.some((c) => c.limitReached),
@@ -454,6 +455,14 @@ function deriveStatus(input: {
   hardLimitReached: boolean;
   approvalRequired: boolean;
   warningThresholdReached: boolean;
+  /**
+   * The projected total itself, NOT merely a flag about it. Null when nothing
+   * priced was recorded and nothing was proposed — an empty ledger, or one
+   * whose every receipt is unpriced. Completeness alone cannot stand in for
+   * this: `projectedTotalComplete` is `unpricedCountable.length === 0`, which
+   * is VACUOUSLY true when there are no receipts at all.
+   */
+  projectedTotal: RelayMoney | null;
   /** False when ANY countable receipt is unpriced — pending, provisional or
       finalized. The previous signal covered only pending receipts, so an
       unpriced provisional receipt still reported `under_budget`. */
@@ -475,20 +484,49 @@ function deriveStatus(input: {
   if (input.approvalRequired) return 'approval_required';
   if (input.warningThresholdReached) return 'warning';
   // Unknown cost only downgrades the status when nothing more serious applies
-  // — but `under_budget` is a claim, and an incomplete total cannot support it.
-  if (!input.projectedTotalComplete || input.proposedCostUnknown) return 'unknown_due_to_missing_cost';
+  // — but `under_budget` is a claim, and neither an incomplete total nor an
+  // ABSENT one can support it. A budget with zero receipts has no total to
+  // compare against its limit, and "no cost recorded" is not "$0.00 spent";
+  // reporting it as under budget states a comparison Relay never performed.
+  if (
+    input.projectedTotal === null ||
+    !input.projectedTotalComplete ||
+    input.proposedCostUnknown
+  ) {
+    return 'unknown_due_to_missing_cost';
+  }
   return 'under_budget';
 }
 
-/** The budget status to STORE, derived from an evaluation. */
+/**
+ * The budget status to STORE, derived from an evaluation — or `null` when the
+ * evaluation supports no stored status at all.
+ *
+ * `unknown_due_to_missing_cost` and `currency_conflict` are not budget states.
+ * They are Relay saying it does not know where this mission stands: an
+ * incomplete total, or two currencies that cannot be added. Neither can be
+ * turned into a reading of the budget without inventing the missing figure.
+ *
+ * This function used to map both to `evaluation.warningThresholdReached ?
+ * 'warning' : 'under_budget'`. In both cases `warningThresholdReached` is
+ * necessarily false — the currency-conflict evaluation hardcodes it, and
+ * {@link deriveStatus} returns `warning` before it ever reaches the
+ * unknown-cost branch — so that ternary ALWAYS stored `under_budget`. Missing
+ * cost data was recorded as a positive claim that the mission was within
+ * budget, which is the one thing this layer exists to prevent.
+ *
+ * `RelayBudgetStatus` has no truthful member for "unknown", so the honest
+ * answer is that no status is derivable. A caller must keep the budget's
+ * existing stored status and disclose `evaluation.status` beside it — an
+ * unknown never becomes a reading, and `null` never becomes `under_budget`.
+ */
 export function budgetStatusFromEvaluation(
   evaluation: RelayBudgetEvaluation,
-): RelayBudgetStatus {
+): RelayBudgetStatus | null {
   switch (evaluation.status) {
     case 'currency_conflict':
     case 'unknown_due_to_missing_cost':
-      // Neither is a budget state; the stored budget keeps its own reading.
-      return evaluation.warningThresholdReached ? 'warning' : 'under_budget';
+      return null;
     case 'not_configured':
       return 'not_configured';
     case 'under_budget':

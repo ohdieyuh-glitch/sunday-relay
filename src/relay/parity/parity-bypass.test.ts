@@ -231,6 +231,40 @@ describe('BYPASS A — the founder exception could be self-granted and permanent
     expect(rules({ failures: result })).toContain('exception-missing-surface');
   });
 
+  /**
+   * BYPASS A2 — a fabricated COMMAND satisfied the evidence requirement.
+   *
+   * Evidence was classified with the same classifier as an entry point, and a
+   * `relay …` notation is deliberately never resolved on disk (the CLI's own
+   * command tests verify commands). So an invented command was accepted as the
+   * proof that suspends parity — a string nothing in this repository would
+   * ever look for. Evidence is the one field where command notation can never
+   * be legitimate.
+   */
+  it('a FABRICATED command cannot satisfy exception evidence', () => {
+    const fabricated = 'relay this-command-does-not-exist --fabricated';
+    // It really is a command notation — that is what made it skippable.
+    expect(classifyDeclaration(fabricated).kind).toBe('command');
+
+    const evidence = [fabricated];
+    expect(rules({ failures: validateException(exemptCandidate(validException({ evidence })), NOW) }))
+      .toContain('exception-evidence');
+
+    // And the declared-file pass refuses it too, rather than counting it as a
+    // verified command.
+    const declared = verifyDeclaredFiles(repoRoot, {
+      capabilities: [exemptCandidate(validException({ evidence }))],
+    });
+    expect(declared.ok).toBe(false);
+    expect(declared.failures.map((f: { rule: string }) => f.rule)).toContain('command-notation-not-permitted');
+    expect(declared.commands, 'a fabricated command must not be counted as verified').toBe(0);
+
+    // The whole waiver fails, so the parity gap it was hiding reappears.
+    const result = check([exemptCandidate(validException({ evidence }))]);
+    expect(result.ok).toBe(false);
+    expect(rules(result)).toContain('missing-cli-implementation');
+  });
+
   it('evidence is mandatory, must resolve, and may not be cited twice', () => {
     expect(rules({ failures: validateException(exemptCandidate(validException({ evidence: [] })), NOW) }))
       .toContain('exception-evidence');
@@ -403,6 +437,120 @@ describe('BYPASS B — whitespace could demote a file claim to an unchecked "com
     });
     // `src/relay/ui/app` is a directory; naming it with an extension fails.
     expect(declared.ok).toBe(false);
+  });
+});
+
+/* ==================================================================== C */
+
+describe('BYPASS C — a REQUIRED declaration field was verified by nothing', () => {
+  /**
+   * `sharedDomainReferences` names the canonical modules BOTH surfaces import.
+   * It is required by the contract, and the checker's field list simply did
+   * not contain it: 70 declarations were carried, counted in no total, and
+   * checked by nothing. Seven did not resolve — five were BARE FILENAMES with
+   * no directory, and two used an anchor notation the checker cannot even
+   * express. A field that is declared but never verified reads exactly like
+   * evidence and is not evidence.
+   */
+  const shared = (sharedDomainReferences: string[]) => ({
+    capabilities: [capability({ capabilityId: 'shared-domain-case', sharedDomainReferences })],
+  });
+  const sharedRules = (sharedDomainReferences: string[]) =>
+    verifyDeclaredFiles(repoRoot, shared(sharedDomainReferences))
+      .failures.map((f: { rule: string }) => f.rule);
+
+  it('a shared domain module that does not exist FAILS', () => {
+    const declared = verifyDeclaredFiles(repoRoot, shared(['src/relay/shared/never-existed.ts']));
+    expect(declared.ok, 'an unverified required field is not evidence').toBe(false);
+    expect(declared.failures.map((f: { rule: string }) => f.rule)).toContain('missing-shared-domain-file');
+  });
+
+  it('a shared domain module that DOES exist passes, and is counted', () => {
+    const declared = verifyDeclaredFiles(repoRoot, shared([
+      'src/relay/shared/official-relay-dog-sprite.ts',
+      'src/relay/mission/economics/money.ts',
+    ]));
+    expect(declared.failures, JSON.stringify(declared.failures)).toEqual([]);
+    expect(declared.ok).toBe(true);
+    // 2 shared + the capability's own website entry and both test references.
+    expect(declared.checked).toBe(5);
+    expect(declared.present).toBe(5);
+  });
+
+  it('a shared domain ANCHOR the file does not contain FAILS', () => {
+    expect(sharedRules(['src/relay/mission/economics/money.ts#thisSymbolWasNeverDefined']))
+      .toContain('missing-declared-anchor');
+    // The exact pre-repair notation: ANCHOR_SEGMENT admits no ":", so
+    // `#intent:pause` could never have resolved against any file.
+    expect(sharedRules(['src/relay/mission/commands/command-types.ts#intent:pause']))
+      .toContain('missing-declared-anchor');
+    // The repaired call form resolves both segments.
+    expect(sharedRules(['src/relay/mission/commands/command-types.ts#RELAY_MISSION_COMMAND_INTENTS(pause)']))
+      .toEqual([]);
+    expect(sharedRules(['src/relay/mission/commands/command-types.ts#RELAY_MISSION_COMMAND_INTENTS(resume)']))
+      .toEqual([]);
+  });
+
+  it('a BARE filename that resolves to nothing FAILS', () => {
+    // The five PSP declarations exactly as the registry carried them. They
+    // classify as file claims — they were simply never checked.
+    for (const bare of [
+      'psp-agent-id.ts', 'psp-entitlement.ts', 'psp-import.ts', 'psp-errors.ts', 'psp-trace.ts',
+    ]) {
+      expect(classifyDeclaration(bare).kind, bare).toBe('file');
+      expect(sharedRules([bare]), bare).toContain('missing-shared-domain-file');
+    }
+    // The repaired declarations resolve.
+    expect(sharedRules([
+      'src/relay/psp/psp-agent-id.ts', 'src/relay/psp/psp-entitlement.ts',
+      'src/relay/psp/psp-import.ts', 'src/relay/psp/psp-errors.ts', 'src/relay/psp/psp-trace.ts',
+    ])).toEqual([]);
+  });
+
+  it('traversal, absolute paths and NUL bytes are refused in the shared domain field too', () => {
+    for (const path of [
+      '../outside.ts',
+      'src/relay/../../outside.ts',
+      '/etc/passwd.ts',
+      'src/relay/\0evil.ts',
+    ]) {
+      expect(sharedRules([path]), path).toContain('unsafe-declared-path');
+    }
+  });
+
+  /**
+   * A `relay …` notation is verified by the CLI's own command tests, never by
+   * the filesystem — so it is only legitimate where the evidence genuinely IS
+   * a command. Allowing it in a FILE field is a way to declare something no
+   * check will ever look for.
+   */
+  it('a COMMAND notation is refused everywhere it is not legitimate', () => {
+    expect(sharedRules(['relay mission budget'])).toContain('command-notation-not-permitted');
+
+    const fileFields = ['websiteEntryPoints', 'websiteTestReferences', 'sharedDomainReferences'] as const;
+    for (const field of fileFields) {
+      const declared = verifyDeclaredFiles(repoRoot, {
+        capabilities: [capability({ capabilityId: `cmd-in-${field}`, [field]: ['relay project status'] })],
+      });
+      expect(declared.failures.map((f: { rule: string }) => f.rule), field)
+        .toContain('command-notation-not-permitted');
+    }
+
+    // The two CLI fields still accept commands — that is where they belong.
+    for (const field of ['cliEntryPoints', 'cliTestReferences'] as const) {
+      const declared = verifyDeclaredFiles(repoRoot, {
+        capabilities: [capability({
+          capabilityId: `cmd-in-${field}`,
+          // Both CLI fields start as file claims, so the command counted below
+          // is exactly the one under test.
+          cliEntryPoints: ['src/relay/cli/main.ts'],
+          cliTestReferences: ['src/relay/cli/cli.test.ts'],
+          [field]: ['relay project status'],
+        })],
+      });
+      expect(declared.failures, field).toEqual([]);
+      expect(declared.commands, field).toBe(1);
+    }
   });
 });
 

@@ -2,8 +2,10 @@
  * YC demo acceptance module (Prompt 8.7) — public surface for `main.ts`.
  * A leaf module: it imports NOTHING from the rest of Relay; the CLI wires
  * the offline plain demo in as an injected dependency. Read-only by
- * construction — the preflight can never start a provider, deploy, push,
- * write, or inspect the separate browser-frontend worktree.
+ * construction — the preflight can never start a provider, deploy, push or
+ * write, and it never inspects the browser surface: that surface is in this
+ * repository, but nothing here renders or serves it, so it stays MANUAL
+ * VERIFICATION REQUIRED rather than being reported as checked.
  */
 
 export {

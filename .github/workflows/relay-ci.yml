@@ -48,24 +48,29 @@ jobs:
       - name: Website build
         run: npm run build
 
-      # The production-bundle assertions in this file are gated on `dist/`
-      # existing, so during `npm test` — which runs before any build — they
-      # SKIP. Re-running them here, after the website build, is what actually
-      # proves the shipped bundle carries no development labelling. Without
-      # this step that guarantee would be a skipped test reported as green,
-      # which is the shape this integration set out to remove.
+      # The production-bundle assertions run in EVERY vitest run, including the
+      # `npm test` above — nothing here is conditionally skipped. Without
+      # `dist/` they assert that this workflow re-runs their file after the
+      # website build; with `dist/` they assert against the real bundle. Only
+      # this step supplies the second branch, so removing it does not turn a
+      # test green, it turns the "no development labelling in the shipped
+      # bundle" claim into a promise nothing ever checks.
+      # `scripts/ci-test-accounting.test.ts` holds that ledger.
       - name: Production entry (built bundle carries no development labelling)
         run: npx vitest run src/relay/ui/preview/production-entry.test.tsx
 
       - name: CLI build
         run: npm run relay:build
 
-      # Companion to the production-entry step above. The documentation
-      # contract asserts that the BUILT CLI actually runs and reports the
-      # Relay product; that needs `dist-relay/cli.cjs`, which `npm test` runs
-      # before producing. Re-running the file here is the only place the claim
-      # can be proven. `scripts/ci-test-accounting.test.ts` fails if a
-      # build-dependent test is ever added without a step like this one.
+      # Companion to the production-entry step above, and accounted for the
+      # same way. The documentation contract asserts that the BUILT CLI
+      # actually runs and reports the Relay product; that needs
+      # `dist-relay/cli.cjs`, which `npm test` runs before producing, so in
+      # that first run the assertion holds this workflow to re-running the
+      # file here. This step is where the built CLI is actually executed.
+      # `scripts/ci-test-accounting.test.ts` fails if a build-dependent test is
+      # ever added without a step like this one, and it also asserts that each
+      # re-run appears AFTER the build that produces its artifact.
       - name: Documentation contract (built CLI actually runs)
         run: npx vitest run docs/documentation-contract.test.ts
 

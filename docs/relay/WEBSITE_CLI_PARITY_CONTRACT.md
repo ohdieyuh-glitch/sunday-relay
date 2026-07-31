@@ -100,9 +100,12 @@ type RelaySurfaceCapability = {
   parityClass: 'functional_required'|'semantic_visual_required'|'surface_specific';
   websiteStatus: 'not_started'|'planned'|'implemented'|'tested';
   cliStatus:     'not_started'|'planned'|'implemented'|'tested';
+  // Every field below is resolved on disk. `relay …` command notation is
+  // legitimate ONLY in cliEntryPoints and cliTestReferences; in any other
+  // field it is a failure, because nothing resolves a command on disk.
   websiteEntryPoints: string[];  cliEntryPoints: string[];
   websiteTestReferences: string[]; cliTestReferences: string[];
-  sharedDomainReferences: string[];
+  sharedDomainReferences: string[];          // REQUIRED, and verified like the rest
   exception?: {
     reason;                                  // a real justification, not a placeholder
     approvedBy;                              // the CANONICAL founder identity
@@ -110,7 +113,8 @@ type RelaySurfaceCapability = {
     expiresAt;                               // ISO, in the future — MANDATORY
     affectedCapability;                      // exactly this capabilityId, no wildcard
     missingSurface: 'website' | 'cli';       // the surface genuinely absent
-    evidence: string[];                      // must resolve on disk
+    evidence: string[];                      // FILES (or file#anchor) that resolve
+                                             // on disk — never a `relay …` command
   };
 };
 ```
@@ -129,6 +133,18 @@ cost — cannot be exempted by any approval at all.
 entry point exists, and only `tested` when a named test asserts it. A test
 verifies that every referenced test file on the local surface actually exists,
 so evidence cannot be invented.
+
+**A declared field that nothing verifies is not evidence.** Every declaration
+in the record above is resolved against this repository — the file must exist,
+sit inside the repository (no absolute path, no `..`, no symlink escape), and
+any `#anchor` must name something the file genuinely contains. That includes
+`sharedDomainReferences`, which is REQUIRED and names the modules both
+surfaces import: it was declared in the registry and walked by nothing, so its
+entries were carried, totalled nowhere and never resolved. It is checked now.
+An exception's `evidence` is held to the same terms — a waiver may not cite
+proof that does not exist, and a `relay …` command may not stand in for it,
+because no check resolves a command on disk. The registry currently holds
+**zero exceptions**, which is the state to keep.
 
 ### Current records (24)
 
@@ -167,12 +183,26 @@ so evidence cannot be invented.
 ```bash
 npm run relay:surface-parity:check           # local mode
 npm run relay:surface-parity:check:strict    # strict CI mode
-node scripts/relay-surface-parity.mjs --strict --companion <path>
+node scripts/relay-surface-parity.mjs --strict --companion <path>   # opt-in
 ```
 
 Deterministic, dependency-free (node builtins only), and implemented **once**
 in `scripts/relay-surface-parity.mjs` — the npm script and the test suite use
 the same functions.
+
+A passing strict run reports what it actually inspected, at manifest `1.2.0`:
+
+```text
+  declared surface files: 190/190 present
+  declared CLI commands: 23 (verified by the CLI's own command tests)
+```
+
+The file total counts every declaration that resolved, across all five
+declaration fields plus any exception evidence. It rose when
+`sharedDomainReferences` joined the fields the checker walks — those
+declarations existed before and were counted in nothing.
+`docs/documentation-contract.test.ts` holds both quoted lines to what the
+checker really prints, so a stale number fails rather than reassures.
 
 ### It detects
 
@@ -191,6 +221,17 @@ the same functions.
 - declarations that are neither a `relay …` command nor a well-formed file
   path — including a path that whitespace would previously have demoted to an
   unchecked "command"
+- a `relay …` command notation in a field that declares FILES
+  (`command-notation-not-permitted`). A command is verified by the CLI's own
+  command tests, not by this check, so command notation is legitimate **only**
+  in `cliEntryPoints` and `cliTestReferences`. Anywhere else — the website's
+  own surface, `sharedDomainReferences`, or an exception's evidence — it
+  declares something nothing on disk will ever be asked to produce
+- a `sharedDomainReferences` entry that does not resolve. The field is REQUIRED
+  and names the modules BOTH surfaces import, but it was absent from the field
+  list the checker walked: its declarations were carried in the registry,
+  counted in no total and inspected by nothing. It is now resolved on exactly
+  the same terms as every other file claim
 - declared paths that escape the repository (absolute, `..`, or a symlink),
   and anchors naming a symbol or text the file does not contain
 - a reference declared twice, one file claimed as BOTH surfaces' entry point,
@@ -199,8 +240,9 @@ the same functions.
 - duplicate capability records
 - a missing official Relay Dog identity record
 - a missing PSP Agent ID import record
-- manifest **version** mismatch between repositories
-- manifest **checksum** mismatch between repositories
+- when — and only when — a companion registry is passed with `--companion`:
+  a manifest **version** mismatch, or a manifest **checksum** mismatch, between
+  this repository's registry and that file
 
 ### Cross-surface verification
 
@@ -210,16 +252,26 @@ against. Parity is proven by reading the canonical versioned manifest directly:
 `npm run relay:surface-parity:check:strict` resolves every declared path on
 disk and fails if a capability is implemented on one surface and not the other.
 
-*(Historical: this section previously described two repositories that could not
-import each other, reconciled by a synchronized byte-identical snapshot. That
-arrangement is superseded — the surfaces now share canonical modules directly.)*
+- **companion comparison is OPT-IN.** It runs only when `--companion <path>` is
+  passed explicitly. No path is searched by default, and no run requires one —
+  there is no second checkout to reconcile. When the flag is absent the check
+  says so (`companion: not requested — both surfaces are verified in this
+  repository`) and verifies both surfaces from the one registry, which is the
+  whole check, not a degraded version of it.
+- **an explicitly requested companion must be readable.** Passing
+  `--companion <path>` is a claim that a registry is there; a missing or
+  unreadable file at that path is a FAILURE (`companion-unreadable`), never a
+  silent skip. Version and checksum mismatches are then reported as failures
+  too.
+- **strict mode (CI)** adds one rule the local run only warns about: a registry
+  that declares **no verifiable file evidence at all** is a FAILURE
+  (`no-file-evidence`), because `0/0 present` must never read as a pass.
 
-- **local mode** — if the companion is found, it is compared; if not, the check
-  says plainly `cross-repository parity NOT verified` and does not pretend
-  otherwise.
-- **strict mode (CI)** — the companion is **required**. A missing or unreadable
-  companion is a FAILURE. **The check never silently passes when the companion
-  repository is unavailable.**
+*(Historical: this section previously described two repositories that could not
+import each other, reconciled by a synchronized byte-identical snapshot, and
+said the companion was REQUIRED in CI. That arrangement is superseded — the
+surfaces now share canonical modules directly, and the bullets above describe
+what the checker actually does.)*
 
 ---
 

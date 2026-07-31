@@ -11,8 +11,18 @@
 > sequential runs; deterministic per-width frame within terminal width. A real-
 > binary PTY probe additionally confirms the idle splash is byte-silent.
 
-> **Implementation sync (Prompt 8.7, 2026-07-23):** YC demo acceptance.
-> `yc/yc-acceptance.test.ts` (35 tests, provider-free) covers: preflight
+> **Implementation sync (Prompt 8.7, 2026-07-23) — DATED RECORD, not a
+> current claim.** What follows describes `yc/yc-acceptance.test.ts` as it
+> stood on that date; the file has grown well past the 35 tests named below.
+> Two items are SUPERSEDED. "frontend worktree untouched" recorded the
+> assertion that every path the check records is repo-relative — no absolute
+> path, nothing outside this checkout — and both Relay surfaces live in this
+> one repository, so there is no frontend worktree to leave untouched. The
+> "wrong-branch / missing-checkpoint" cases went with the retired branch and
+> checkpoint pin — readiness is now repository identity plus the versioned
+> product baseline — and no longer exist in the file.
+>
+> `yc/yc-acceptance.test.ts` (35 tests, provider-free) covered: preflight
 > exit-zero on valid state, read-only-git-only recording, repo-relative
 > path recording (frontend worktree untouched), safe wrong-branch /
 > missing-checkpoint / dirty-tree (WARN, non-destructive) / missing-script

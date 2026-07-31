@@ -1,12 +1,14 @@
 # YC Demo Runbook — Sunday Relay
 
 **Finalized for Prompt 8.7 (2026-07-23). The video uses TWO product
-surfaces:** the Relay **browser application** (owned by the separate
-frontend session) and the Relay **CLI product** (this repository). The CLI
-segment is the founder-approved **OFFLINE VISUAL SIMULATION** — fake
-adapters, zero provider calls, zero network calls, no real file changes.
-The real Claude→Codex supervised workflow was proven separately in
-Prompt 8.4; durable crash recovery in Prompt 8.5.
+surfaces of ONE product:** the Relay **browser application** and the Relay
+**CLI product**. Both are built from this repository — the browser surface
+from `src/relay/ui/`, the CLI from `src/relay/cli/` — so nothing in this
+runbook depends on another checkout. The CLI segment is the
+founder-approved **OFFLINE VISUAL SIMULATION** — fake adapters, zero
+provider calls, zero network calls, no real file changes. The real
+Claude→Codex supervised workflow was proven separately in Prompt 8.4;
+durable crash recovery in Prompt 8.5.
 
 > **Post-separation note.** Sunday Relay is its own repository
 > (`ohdieyuh-glitch/sunday-relay`, checked out at
@@ -18,6 +20,9 @@ Prompt 8.4; durable crash recovery in Prompt 8.5.
 > in this object store. It now validates repository identity and the versioned
 > product baseline in `docs/relay/YC_DEMO_BASELINE.json`, so it behaves
 > identically on `main`, on any `relay/*` branch, and on a detached CI head.
+> BOTH Relay surfaces — browser and CLI — live in this one repository; there
+> is no separate Relay frontend checkout. (Sunday Alcatraz is a genuinely
+> different repository, which is what the sibling worktree above is.)
 
 **The two founder commands (memorize these):**
 
@@ -37,8 +42,10 @@ npm run relay:yc-demo:cli      # honesty notice + the approved offline simulatio
 - [ ] Terminal font 16–18 pt monospace; window ≥ **100×32** (demo is safe at
       80 columns; below 80 press `V` for the linear stream view).
 - [ ] Browser zoom set and tested at recording resolution.
-- [ ] Confirm frontend mobile/desktop routes render (frontend session owns
-      this — get its confirmation, do not debug it from here).
+- [ ] Confirm the browser routes render at both mobile and desktop widths.
+      This is a HUMAN check: `relay:yc-demo:check` never inspects the browser
+      surface, so nothing has verified it for you. Do not debug CSS on the
+      night before the take.
 - [ ] Confirm the Relay Dog and assets load on both surfaces.
 - [ ] Confirm the Project Settings agent selectors work (Prompt Architect /
       Coding Agent / Reviewer / Guided Mode) in the browser.
@@ -82,18 +89,25 @@ Playback is ≈42 s at 1× (test-locked). Slash commands also work:
 
 ## C. Browser launch
 
-Do **not** invent the frontend command. Record the exact command and URL
-from the frontend session's final report before recording:
+The browser surface is built from this repository. `package.json` declares
+`dev` (`vite`) for the development server and `build` + `preview` (`vite
+build`, `vite preview`) for the production bundle — the same bundle CI
+asserts carries no development labelling.
+
+Do **not** invent the URL. Vite prints it on start; record the one YOUR
+machine prints, from the command you will actually run on the day, and write
+both here before recording:
 
 ```
 FRONTEND COMMAND:
-<PENDING FRONTEND SESSION CONFIRMATION>
+<RECORD THE COMMAND YOU RAN — e.g. `npm run dev`, or `npm run build && npm run preview`>
 
 FRONTEND URL:
-<PENDING FRONTEND SESSION CONFIRMATION>
+<RECORD THE URL THAT COMMAND PRINTED ON THIS MACHINE>
 ```
 
-Expected browser routes (verify with the frontend session):
+Expected browser routes (open each one yourself — no Relay command checks
+them):
 
 - Relay Entry Home
 - Project Settings
@@ -200,7 +214,8 @@ cause this; quit it there with `Q`/`Ctrl+C`.)
 
 - [ ] CLI preflight passes (`relay:yc-demo:check` → READY)
 - [ ] CLI visual playback passes end-to-end (splash → VERIFIED COMPLETE)
-- [ ] Frontend visual review is approved by the founder/frontend session
+- [ ] Frontend visual review is approved by the founder — a human judgement;
+      no Relay command asserts it
 - [ ] Mobile **or** desktop fallback is selected
 - [ ] No broken Relay Dog asset is visible on either surface
 - [ ] Project Settings agent selectors work

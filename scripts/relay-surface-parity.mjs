@@ -10,8 +10,10 @@
  * dependency-free (node builtins only).
  *
  * MODES
- *   local (default)  validate this repository's registry and confirm every
- *                    declared entry point and test reference resolves on disk.
+ *   local (default)  validate this repository's registry and confirm that every
+ *                    declaration resolves on disk — each surface's entry points
+ *                    and test references, the SHARED DOMAIN modules both
+ *                    surfaces import, and any exception's cited evidence.
  *                    A missing or unresolvable declaration is a FAILURE here
  *                    too — parity is not advisory in either mode.
  *   --strict         CI mode. Adds the one thing CI must refuse that a local
@@ -224,7 +226,19 @@ export function validateException(capability, now) {
     fail('exception-missing-surface', 'the exception claims the CLI is missing, but it is implemented');
   }
 
-  /* -------------------------------- evidence -------------------------- */
+  /* -------------------------------- evidence -------------------------- *
+   * A waiver may not cite proof that does not exist — so evidence must be a
+   * FILE claim, and `verifyDeclaredFiles` then resolves it on disk.
+   *
+   * THE BYPASS THIS CLOSES. Evidence was classified with the same classifier
+   * as an entry point, and a `relay …` notation is deliberately NOT checked
+   * against the filesystem (the CLI's own command tests verify commands). So
+   * `relay this-command-does-not-exist --fabricated` satisfied the evidence
+   * requirement with zero verification: an invented string was accepted as the
+   * proof that suspends the product's central promise. Evidence is the one
+   * place a command notation can never be legitimate, because nothing else in
+   * this check will ever look for it.
+   * --------------------------------------------------------------------- */
   const evidence = exception.evidence;
   if (!Array.isArray(evidence) || evidence.length === 0) {
     fail('exception-evidence', 'exception must cite at least one evidence reference');
@@ -236,7 +250,15 @@ export function validateException(capability, now) {
         fail('exception-evidence', `evidence ${JSON.stringify(declared)}: ${classified.reason}`);
         continue;
       }
-      const key = classified.kind === 'file' ? `${classified.path}#${classified.anchor ?? ''}` : classified.command;
+      if (classified.kind !== 'file') {
+        fail(
+          'exception-evidence',
+          `evidence ${JSON.stringify(declared)} is a "relay …" command notation, which no check resolves on disk`
+          + ' — a waiver must cite a file that exists',
+        );
+        continue;
+      }
+      const key = `${classified.path}#${classified.anchor ?? ''}`;
       if (seen.has(key)) {
         fail('exception-evidence', `evidence ${JSON.stringify(declared)} is cited more than once`);
       }
@@ -416,9 +438,16 @@ export function validateRegistry(registry, options = {}) {
 /* --------------------------- companion compare -------------------------- */
 
 /**
- * The two repositories cannot import each other, so parity across them is
- * proven by comparing the byte-identical registry: same manifest version, same
- * checksum. A divergence is a failure — never a silent pass.
+ * Compares this registry against ANOTHER Relay checkout's copy: same manifest
+ * version, same checksum. A divergence is a failure — never a silent pass.
+ *
+ * This is OPT-IN and is never part of proving parity here. Sunday Relay is ONE
+ * repository, and the website and the CLI are two SURFACES of it that share
+ * the canonical modules directly, so nothing has to be duplicated across
+ * checkouts for them to agree. (Superseded framing: when the two surfaces
+ * lived in separate worktrees that could not import each other, comparing two
+ * copies of the registry was the only available proof.) Parity is proven here
+ * by `verifyDeclaredFiles` — every declaration resolving in this tree.
  */
 export function compareRegistries(local, companion) {
   const failures = [];
@@ -609,34 +638,66 @@ export function verifyAnchor(content, anchor) {
 }
 
 /**
+ * Every field in which the registry declares evidence, and whether a `relay …`
+ * COMMAND notation is legitimate there.
+ *
+ * A command is verified by the CLI's own command tests, NOT by this check, so
+ * a field that admits commands admits a declaration nothing here inspects on
+ * disk. That is only defensible where the evidence genuinely is a command: the
+ * CLI's entry points and its test references. Everywhere else — the website's
+ * own surface, the shared domain modules both surfaces import, and the
+ * evidence a founder exception cites — the declaration is a FILE claim, and a
+ * command notation there is a way to declare something no check will look for.
+ */
+export const DECLARATION_FIELDS = Object.freeze([
+  Object.freeze({ field: 'websiteEntryPoints', kind: 'website-entry', commandsAllowed: false }),
+  Object.freeze({ field: 'cliEntryPoints', kind: 'cli-entry', commandsAllowed: true }),
+  Object.freeze({ field: 'websiteTestReferences', kind: 'website-test', commandsAllowed: false }),
+  Object.freeze({ field: 'cliTestReferences', kind: 'cli-test', commandsAllowed: true }),
+  Object.freeze({ field: 'sharedDomainReferences', kind: 'shared-domain', commandsAllowed: false }),
+]);
+
+/** Exception evidence is held to the file-claim rules, in its own field. */
+export const EXCEPTION_EVIDENCE_FIELD = Object.freeze({
+  field: 'exception.evidence', kind: 'exception-evidence', commandsAllowed: false,
+});
+
+/**
  * Both surfaces live in this repository, so every declaration the registry
  * makes must resolve here: the file must exist, inside the repository, and
  * any anchor must name something the file genuinely contains. Exception
  * evidence is validated on exactly the same terms as any other declaration —
  * a waiver may not cite proof that does not exist.
+ *
+ * THE UNVERIFIED FIELD THIS CLOSES. The field list was written from the two
+ * surfaces' entry points and tests, and `sharedDomainReferences` — a REQUIRED
+ * field, and the one that names the modules BOTH surfaces import — was never
+ * in it. Seventy declarations were carried in the registry, printed nowhere in
+ * the totals, and checked by nothing; seven of them did not resolve at all.
+ * A field that is declared but never verified reads exactly like evidence and
+ * is not evidence.
+ *
+ * `checked` counts file claims that were inspected, `present` counts those
+ * that fully resolved, and `commands` counts `relay …` notations in the two
+ * fields where a command is legitimate.
  */
 export function verifyDeclaredFiles(repoRoot, registry) {
   const failures = [];
   let checked = 0;
+  let present = 0;
   let commands = 0;
-  const fields = [
-    ['websiteEntryPoints', 'website-entry'],
-    ['cliEntryPoints', 'cli-entry'],
-    ['websiteTestReferences', 'website-test'],
-    ['cliTestReferences', 'cli-test'],
-  ];
 
   for (const capability of registry.capabilities ?? []) {
     const id = capability.capabilityId ?? '(unnamed)';
     const declarations = [];
-    for (const [field, kind] of fields) {
-      for (const declared of capability[field] ?? []) declarations.push([field, kind, declared]);
+    for (const spec of DECLARATION_FIELDS) {
+      for (const declared of capability[spec.field] ?? []) declarations.push([spec, declared]);
     }
     for (const declared of capability.exception?.evidence ?? []) {
-      declarations.push(['exception.evidence', 'exception-evidence', declared]);
+      declarations.push([EXCEPTION_EVIDENCE_FIELD, declared]);
     }
 
-    for (const [field, kind, declared] of declarations) {
+    for (const [{ field, kind, commandsAllowed }, declared] of declarations) {
       const classified = classifyDeclaration(declared);
 
       if (classified.kind === 'invalid') {
@@ -648,8 +709,26 @@ export function verifyDeclaredFiles(repoRoot, registry) {
         continue;
       }
       if (classified.kind === 'command') {
+        if (!commandsAllowed) {
+          failures.push({
+            capabilityId: id,
+            rule: 'command-notation-not-permitted',
+            detail: `${field} names the command ${JSON.stringify(declared)}, but ${field} declares FILES — `
+              + 'a command notation here is never resolved on disk by anything',
+          });
+          continue;
+        }
         commands += 1;
         continue; // verified by the CLI's own command tests, not the filesystem
+      }
+      if (classified.kind !== 'file') {
+        // No silent third branch: an unrecognised classification is a finding.
+        failures.push({
+          capabilityId: id,
+          rule: 'unclassified-declaration',
+          detail: `${field}: ${JSON.stringify(declared)} classified as "${classified.kind}", which this check cannot verify`,
+        });
+        continue;
       }
 
       checked += 1;
@@ -666,7 +745,10 @@ export function verifyDeclaredFiles(repoRoot, registry) {
         });
         continue;
       }
-      if (classified.anchor === null) continue;
+      if (classified.anchor === null) {
+        present += 1;
+        continue;
+      }
 
       let content;
       try {
@@ -686,10 +768,12 @@ export function verifyDeclaredFiles(repoRoot, registry) {
           rule: 'missing-declared-anchor',
           detail: `${field} names ${declared}, but ${anchored.reason}`,
         });
+        continue;
       }
+      present += 1;
     }
   }
-  return { ok: failures.length === 0, failures, checked, commands };
+  return { ok: failures.length === 0, failures, checked, present, commands };
 }
 
 /* --------------------------------- run ---------------------------------- */
@@ -717,10 +801,21 @@ export function runParityCheck(options) {
   // Both surfaces are in THIS repository: every file the registry declares
   // must exist here. This is the real parity evidence, and it never depends
   // on another checkout.
+  //
+  // TRUTHFUL ARITHMETIC. The ratio below used to be `checked - failures.length`
+  // over `checked`. Failures that never incremented `checked` — an unparseable
+  // declaration, a command in a file-claim field — were still subtracted from
+  // it, so the numerator and the denominator came from different populations
+  // and presence could be understated to zero or below. `present` is counted
+  // where a declaration actually resolves, so the two numbers describe the same
+  // set, and declaration failures are reported on their own line.
   const declared = verifyDeclaredFiles(repoRoot, local.registry);
   failures.push(...declared.failures);
-  say(`  declared surface files: ${declared.checked - declared.failures.length}/${declared.checked} present`);
+  say(`  declared surface files: ${declared.present}/${declared.checked} present`);
   say(`  declared CLI commands: ${declared.commands} (verified by the CLI's own command tests)`);
+  if (declared.failures.length > 0) {
+    say(`  declaration failures: ${declared.failures.length}`);
+  }
 
   // A registry that declares no file evidence at all would otherwise report a
   // cheerful "0/0 present". In CI that is a failure, not a pass.

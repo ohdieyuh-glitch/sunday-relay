@@ -185,6 +185,18 @@ describe('every build-dependent test is re-run after its build', () => {
     ).toBeGreaterThan(at('npm run relay:build'));
   });
 
+  it('the workflow describes the accounting as it now is — nothing is skipped', () => {
+    // The re-run steps used to be justified in prose by the claim that the
+    // build-dependent assertions SKIP during `npm test`, and that without the
+    // re-run the guarantee "would be a skipped test reported as green". That
+    // stopped being true when the conditional skipping was removed: those
+    // files assert in BOTH branches now. Prose that still says "skipped"
+    // teaches the next maintainer that deleting a re-run step costs only a
+    // skipped test, when it actually costs the built-artifact branch itself.
+    expect(workflow, 'the assertions no longer skip — they assert in both branches').not.toMatch(/\bthey\s+SKIP\b/u);
+    expect(workflow).not.toMatch(/skipped test reported as green/u);
+  });
+
   it('the list of build-dependent tests is COMPLETE', () => {
     // Any other test that reads dist/ or dist-relay/ is build-dependent and
     // must be declared above, so the ledger cannot silently fall behind.

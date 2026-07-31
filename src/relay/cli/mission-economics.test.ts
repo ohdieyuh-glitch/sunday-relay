@@ -54,6 +54,14 @@ describe('mission economics rendering', () => {
   });
 
   it('renders the budget view with warning, approval, and hard-limit state', () => {
+    // "not reached" and "within limit" are claims about MONEY, and this
+    // fixture is what earns them: every receipt is priced, so the projected
+    // total exists and is complete. Asserting that here is what stops this
+    // test from silently covering an unknown-cost ledger, where those same
+    // words would be a fabrication — see unknown-cost.test.ts.
+    expect(fixture.evaluation.projectedTotal, 'the fixture must have a total to compare').not.toBeNull();
+    expect(fixture.evaluation.projectedTotalComplete, 'the fixture must be fully priced').toBe(true);
+
     const text = renderMissionBudget(fixture.projection, fixture.evaluation, WIDE).join('\n');
     expect(text).toContain('MISSION BUDGET');
     expect(text).toContain('Warning threshold');

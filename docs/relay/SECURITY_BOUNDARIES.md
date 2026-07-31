@@ -15,8 +15,11 @@
 > only `node-deps.ts` may spawn a process, and only READ-ONLY git
 > (`rev-parse`/`status`/`merge-base` allowlist — mutation subcommands are
 > boundary-banned), with repo-relative paths only (no absolute paths, no
-> `..`, structurally unable to reach the frontend worktree, which is always
-> reported MANUAL VERIFICATION REQUIRED). No network APIs, no writes, no
+> `..`), so no other checkout on this machine is reachable from the check.
+> The browser surface IS in this repository and is always reported MANUAL
+> VERIFICATION REQUIRED — not because it lives elsewhere, but because this
+> check never inspects it: it opens no browser, serves no page and reads no
+> rendered route. No network APIs, no writes, no
 > provider adapters, no deployment tooling (all boundary-tested). Git-
 > provided values (branch names) are printable-ASCII scrubbed before
 > display. Prompt 8.6 follow-ups closed: the shell's fatal-error path now
