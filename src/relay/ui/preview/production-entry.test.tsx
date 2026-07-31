@@ -68,6 +68,39 @@ describe('production bundle', () => {
     ).toBe(true);
   };
 
+  /**
+   * THE ROOT URL MUST WORK. The build once emitted only `relay.html`, so a
+   * static host serving index.html at `/` returned 404 and the application was
+   * reachable only at `/relay.html`. This asserts the shipped artifact, which
+   * is the only place that regression is visible.
+   */
+  it('ships an index.html so the root URL serves the application', () => {
+    const index = join(ROOT, 'dist', 'index.html');
+    if (!existsSync(index)) {
+      requireCiRerun();
+      return;
+    }
+    const html = readFileSync(index, 'utf8');
+    expect(html).toContain('<title>Sunday Relay</title>');
+    expect(html).toContain('<div id="root"></div>');
+    // Vite rewrote the entry module into a hashed asset — not the raw source.
+    expect(html).toMatch(/<script type="module"[^>]+src="\/assets\/[^"]+\.js"/);
+    expect(html).not.toContain('/src/relay/main.tsx');
+  });
+
+  it('keeps /relay.html as a redirect, never a second application', () => {
+    const relay = join(ROOT, 'dist', 'relay.html');
+    if (!existsSync(relay)) {
+      requireCiRerun();
+      return;
+    }
+    const html = readFileSync(relay, 'utf8');
+    expect(html).toContain('url=/');
+    // A second built application would carry a hashed module script too.
+    expect(html).not.toMatch(/<script type="module"[^>]+src="\/assets\//);
+    expect(html).not.toContain('id="root"');
+  });
+
   it('contains no DEV PREVIEW label', () => {
     if (bundles.length === 0) {
       requireCiRerun();

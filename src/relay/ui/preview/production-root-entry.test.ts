@@ -5,10 +5,14 @@ import { join, resolve } from 'node:path';
 /**
  * THE PRODUCTION ROOT ENTRY.
  *
- * The build used to emit `dist/relay.html` and no `dist/index.html`, so a host
- * that serves `index.html` at `/` returned 404 for the root URL and the
- * application was only reachable at `/relay.html`. That is a broken first
- * customer-facing deployment, and it is the only thing these tests are about.
+ * The build used to emit only the relay document and no index document, so a
+ * host that serves index.html at the root URL returned 404 and the application
+ * was reachable only at /relay.html. That is a broken first customer-facing
+ * deployment, and it is the only thing these tests are about.
+ *
+ * These are SOURCE-level assertions and read no build artifact; the shipped
+ * output is asserted by `production-entry.test.tsx`, which the CI ledger
+ * already declares build-dependent and re-runs after the website build.
  *
  * The repair is the ordinary Vite convention — the canonical document is
  * `index.html` at the repository root — with `relay.html` kept as a REDIRECT
