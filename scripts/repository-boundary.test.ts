@@ -270,9 +270,15 @@ describe('relay repository-boundary scanner', () => {
     // qualifies, and a banner that hid that would overstate the old coverage.
     expect(result.stdout).toContain('never a production module merely named "fixtures"');
     expect(result.stdout).toContain('judged on the residue left after every marker word is stripped');
-    // The deployment surface now includes reachable Node wrappers, and the
-    // banner states both the count and — just as important — what is NOT read.
-    expect(result.stdout).toMatch(/plus the \d+ Node entry point\(s\) those scripts and steps actually run with/);
+    // The deployment surface now includes reachable Node and launcher
+    // wrappers, and the banner states both the count and — just as important —
+    // what is NOT read.
+    expect(result.stdout).toMatch(/plus the \d+ script entry point\(s\) those scripts and steps actually run through/);
+    // M-1: the banner must state that node arguments are parsed, because the
+    // defect it replaced was a banner claiming coverage it did not have.
+    expect(result.stdout).toContain('node arguments parsed deterministically');
+    expect(result.stdout).toContain('a value-consuming flag and its value are');
+    expect(result.stdout).toContain('still found behind a flag this scan does not know');
     expect(result.stdout).toContain('NOT scanned: every other tracked source file');
     expect(result.stdout).toContain('reported as unanalyzable rather than passed');
     expect(result.stdout).toMatch(/forbidden path patterns/);
@@ -1091,7 +1097,11 @@ describe('MEDIUM-3a — a side-effect import is a reachability edge like any oth
     // that reads as a closed set must actually enumerate the closed set.
     expect(result.stdout).toContain('createRequire alias');
     expect(result.stdout).toContain('a child_process binding that escapes');
-    expect(result.stdout).toContain('any further `node <file>` a wrapper itself runs');
+    expect(result.stdout).toContain('any further launcher invocation a wrapper itself runs');
+    // M-1 widened the doctrine, so the doctrine sentence widened with it.
+    expect(result.stdout).toContain('an entry');
+    expect(result.stdout).toContain('built at run time, a program read from standard input');
+    expect(result.stdout).toContain('a path above this repository');
   });
 });
 

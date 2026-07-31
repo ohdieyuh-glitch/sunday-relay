@@ -488,19 +488,84 @@ function stripShellComment(line) {
  * A BACKTICK still flushes, because it is not a quote: it is command
  * substitution, and `echo ` + backtick + `vercel --prod` + backtick genuinely
  * runs the deploy. `$(…)` keeps splitting on its parentheses as before.
+ *
+ * WHAT WAS ALSO REPAIRED (L-1) — A PARENTHESIS INSIDE QUOTED DATA IS NOT
+ * GROUPING. Transparency is right for a quote's effect on WORDS, but it was
+ * applied to GROUPING too, and a `(` cannot open a subshell inside a quoted
+ * string any more than a `#` can open a comment there:
+ *
+ *     echo "Deployment (vercel) is out of scope"
+ *
+ * grouped `vercel` into a segment of its own and reported a deployment. That
+ * line is executable, so `allow-mention` is deliberately powerless on it and
+ * the sentence could not be committed at all — the same shape F5 removed,
+ * surviving in the grouping half of this function.
+ *
+ * Quote state is now tracked, and a bare `( ) { }` inside a quoted run is a
+ * WORD SEPARATOR rather than grouping. Separator, not data: that is what keeps
+ * `sh -c "(vercel --prod)"` resolving to `vercel` while
+ * `echo "Deployment (vercel) is out of scope"` keeps `echo` as its head word
+ * and stays inert. Treating it as data instead lost both — the head word
+ * became `(vercel` and matched nothing at all.
+ *
+ * `$(` STILL GROUPS, quoted or not. Command substitution is exactly what a
+ * double-quoted run is FOR, and `URL="$(vercel --prod)"` genuinely deploys;
+ * so does `echo "$(flyctl deploy)"`. A first attempt at this repair called
+ * every quoted parenthesis data and silently lost both.
+ *
+ * `${…}` IS AN EXPANSION, NOT A BRACE GROUP, quoted or not. Splitting on its
+ * braces cut `node ${NODE_ARGS} scripts/main.mjs` in half and lost the entry
+ * point on the far side of it.
+ *
+ * SEPARATORS still split inside quotes, because that is what exposes the inner
+ * command of `sh -c "echo safe && vercel --prod"`; only grouping changes.
+ *
+ * UNBALANCED QUOTES FALL BACK to the quote-blind reading. An apostrophe in
+ * `Relay's policy` is prose, not a quote, and a fallback that groups MORE can
+ * only add detections — never lose one. This is what keeps the base ⊆ head
+ * invariant true through this change.
  */
 function commandSegments(text) {
+  return segmentsOf(text, quotesBalanced(text));
+}
+
+/** Does every quote in `text` close, reading backslash escapes as a shell does? */
+function quotesBalanced(text) {
+  let single = false;
+  let double = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === '\\' && !single) { i += 1; continue; }
+    if (ch === "'" && !double) { single = !single; continue; }
+    if (ch === '"' && !single) { double = !double; continue; }
+  }
+  return !single && !double;
+}
+
+function segmentsOf(text, quoteAware) {
   const segments = [];
   let current = '';
   let depth = 0;            // open `(` — a subshell or `$( )`, not a case label
   let statement = 0;        // index in `segments` where the current statement began
+  let single = false;
+  let double = false;
+  let expansion = 0;        // open `${` — a parameter expansion, not a brace group
   const flush = () => { if (current.trim() !== '') segments.push(current); current = ''; };
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
     if (ch === '\\') { current += ch + (text[i + 1] ?? ''); i += 1; continue; }
-    if (ch === '"' || ch === "'") continue;             // transparent, not a boundary
-    if (ch === '(') { flush(); depth += 1; statement = segments.length; continue; }
-    if (ch === ')') {
+    // A quote character is always DROPPED — that is what makes a quoted string
+    // part of the word it sits in. Only the STATE it toggles is conditional.
+    if (ch === "'") { if (!double) single = quoteAware && !single; continue; }
+    if (ch === '"') { if (!single) double = quoteAware && !double; continue; }
+    const quoted = single || double;
+    // `$(` is COMMAND SUBSTITUTION wherever it appears, quoted or not: what is
+    // inside it runs. `${` is a parameter expansion and groups nothing.
+    const substitution = ch === '(' && text[i - 1] === '$';
+    if (ch === '{' && text[i - 1] === '$') { expansion += 1; current += ch; continue; }
+    if (ch === '}' && expansion > 0) { expansion -= 1; current += ch; continue; }
+    if (ch === '(' && (!quoted || substitution)) { flush(); depth += 1; statement = segments.length; continue; }
+    if (ch === ')' && (!quoted || depth > 0)) {
       flush();
       // A CASE LABEL, NOT A COMMAND. An unbalanced `)` closes a `case`
       // pattern, so what precedes it in this statement is a label being
@@ -510,9 +575,32 @@ function commandSegments(text) {
       statement = segments.length;
       continue;
     }
+    // A BARE GROUPING CHARACTER INSIDE QUOTED DATA INHERITS THE HEAD WORD.
+    //
+    // It still ends a segment — dropping that lost `sh -c "(vercel --prod)"`
+    // and the deploy inside `node -e "require('child_process')
+    // .execSync('vercel --prod')"` — but the segment it opens is re-seeded
+    // with the ENCLOSING command's head word, because that command is what
+    // decides whether any of this runs:
+    //
+    //     echo "Deployment (vercel) is out of scope"   ->  `echo vercel`
+    //     sh -c "(vercel --prod)"                      ->  `sh vercel --prod`
+    //
+    // `echo` takes its arguments as data, so the first stays inert; `sh` is a
+    // runner, so the second resolves to `vercel` exactly as it should. A group
+    // at a FRESH command position inherits nothing, because there is nothing
+    // enclosing it — `bash -c "cd app && (vercel --prod)"`.
+    if (quoted && /[(){}]/.test(ch)) {
+      const head = current.trim().split(/\s+/)[0] ?? '';
+      flush();
+      current = head === '' ? '' : `${head} `;
+      continue;
+    }
     // `|` does NOT begin a new statement: it continues a pipeline, and it also
     // separates the alternatives of one case label — `vercel|netlify)`.
-    if (ch === '`' || /[;&{}\n]/.test(ch)) { flush(); statement = segments.length; continue; }
+    if (ch === '`' || /[;&\n]/.test(ch) || /[{}]/.test(ch)) {
+      flush(); statement = segments.length; continue;
+    }
     if (ch === '|') { flush(); continue; }
     current += ch;
   }
@@ -722,15 +810,18 @@ function resolveCommand(segment) {
       const rest = words.slice(1);
       // A lookup is not an invocation: nothing in this segment runs.
       const lookup = RUNNER_LOOKUP_FLAGS.get(lower);
-      if (lookup && rest.length > 0 && lookup.has(rest[0])) return { binary: '', args: [], runner: '' };
+      if (lookup && rest.length > 0 && lookup.has(rest[0])) return { binary: '', args: [], runner: '', head: '' };
       runner = lower;
       words = dropRunnerArguments(rest, lower);
       continue;
     }
     if (word === '--') { words = words.slice(1); continue; }
-    return { binary: basenameOf(word).toLowerCase(), args: words.slice(1), runner };
+    // `head` is the head word BEFORE `basenameOf` threw its directory away.
+    // `bun run ./scripts/ship.ts` resolves its binary to `ship.ts`, and the
+    // path is the only thing that can be looked up as a repository file.
+    return { binary: basenameOf(word).toLowerCase(), args: words.slice(1), runner, head: word };
   }
-  return { binary: '', args: [], runner: '' };
+  return { binary: '', args: [], runner: '', head: '' };
 }
 
 /**
@@ -1002,26 +1093,335 @@ function refuseBaselineEntry(where, resolved, how) {
   );
 }
 
+/* --- Node and launcher argument parsing (M-1) ---------------------------
+ *
+ * WHAT WAS REPAIRED. The entry finder skipped any word beginning with `-`,
+ * took the FIRST remaining word as the script, and `break`-ed unconditionally.
+ * A node flag whose value is a SEPARATE WORD therefore donated its value to
+ * the entry slot, and the real script was never reached:
+ *
+ *     node --env-file .env scripts/ship.mjs
+ *
+ * `--env-file` was skipped, `.env` became "the entry", it did not resolve, and
+ * the loop broke before `scripts/ship.mjs`. A wrapper containing
+ * `execSync('vercel --prod')` then passed with exit 0 — and the banner printed
+ * `0 Node entry point(s)`, which is the false-assurance half of the defect.
+ * The same held for `-r`, `--require`, `--import`, `--loader`,
+ * `--experimental-loader`, `--conditions` and `-C`, in package scripts and in
+ * workflow `run:` steps alike.
+ *
+ * The repair is a classification, not a special case for one flag:
+ *
+ *   VALUE FLAGS      consume the following word            `--env-file .env`
+ *   ATTACHED VALUES  are one word and consume nothing      `--env-file=.env`
+ *   BOOLEAN FLAGS    consume nothing                       `--experimental-vm-modules`
+ *   EXECUTION MODES  take CODE, and mean there is no file  `-e`, `-p`, `--eval`
+ *
+ * …plus one safety net that does not depend on the table being complete: if
+ * the first candidate does not resolve, the REMAINING candidates are still
+ * searched for a tracked file. An unknown value-consuming flag therefore
+ * cannot hide an entry either, which is what keeps this a closed class rather
+ * than a list to be kept up to date.
+ */
+
+/** Node flags whose value is the FOLLOWING word. `--flag=value` is one word. */
+const NODE_VALUE_FLAGS = new Set([
+  '-r', '--require', '--import', '--loader', '--experimental-loader',
+  '--env-file', '--env-file-if-exists', '--conditions', '-C', '--chdir',
+  '--experimental-policy', '--policy-integrity', '--experimental-specifier-resolution',
+  '--icu-data-dir', '--redirect-warnings', '--diagnostic-dir', '--disable-warning',
+  '--heapsnapshot-signal', '--report-directory', '--report-filename', '--report-signal',
+  '--cpu-prof-dir', '--cpu-prof-name', '--cpu-prof-interval',
+  '--heap-prof-dir', '--heap-prof-name', '--heap-prof-interval',
+  '--snapshot-blob', '--build-snapshot-config', '--title', '--tls-cipher-list',
+  '--dns-result-order', '--unhandled-rejections', '--secure-heap', '--secure-heap-min',
+  '--stack-trace-limit', '--max-old-space-size', '--max-semi-space-size',
+  '--watch-path', '--test-name-pattern', '--test-reporter', '--test-reporter-destination',
+  '--test-shard', '--test-concurrency', '--allow-fs-read', '--allow-fs-write',
+  '--inspect-port', '--use-largepages',
+]);
+
 /**
- * Every tracked file a command text runs with `node <file>`.
+ * Node flags whose value is a MODULE NODE ITSELF RUNS, before the main script.
+ *
+ * These are value flags, so the classification above already stops them from
+ * being mistaken for the entry — but skipping them entirely swapped one blind
+ * spot for another: `node -r ./scripts/preload.mjs scripts/main.mjs` executes
+ * the preload, and a `vercel --prod` inside it would have been read by neither
+ * the entry slot nor a finding. A preload is an entry point too.
+ */
+const NODE_PRELOAD_FLAGS = new Set(['-r', '--require', '--import', '--loader', '--experimental-loader']);
+
+/**
+ * Node flags that take CODE rather than a file — the invocation runs no script.
+ * `-pe` is node's own accepted spelling of `-p -e` and evaluates its argument;
+ * left out, the code string fell through as an unknown flag's value.
+ */
+const NODE_EVAL_FLAGS = new Set(['-e', '--eval', '-p', '--print', '-pe']);
+
+/**
+ * Repository-local script launchers whose first non-flag argument is a FILE.
+ *
+ * Deliberately SMALL and explicit (the informational gap beside M-1). These
+ * are the launchers a repository actually uses to run a local TypeScript or
+ * JavaScript wrapper; each takes a path exactly where `node` takes one, so the
+ * same parser reads all of them. A bundler is NOT here — `esbuild src/x.ts`
+ * names a source file but does not run it — and neither is a test runner,
+ * whose file arguments are the whole test tree.
+ */
+const SCRIPT_LAUNCHERS = new Set(['node', 'tsx', 'ts-node', 'ts-node-esm', 'bun']);
+
+/** Pair runners whose head word is a FILE rather than a named package script. */
+const FILE_PAIR_RUNNERS = new Set(['bun run']);
+
+/**
+ * Splits a launcher's arguments into the file CANDIDATES it might run and the
+ * CODE it was asked to evaluate. Order is preserved, so "the first candidate"
+ * is the script position a launcher would actually use.
+ */
+function parseLauncherArguments(args) {
+  const candidates = [];
+  const preloads = [];
+  const code = [];
+  let stdin = false;
+  for (let i = 0; i < args.length; i += 1) {
+    const word = args[i];
+    if (word === '--') continue;
+    if (word === '-') { stdin = true; continue; }
+    if (word.startsWith('-')) {
+      const equals = word.indexOf('=');
+      const name = equals < 0 ? word : word.slice(0, equals);
+      if (NODE_EVAL_FLAGS.has(name)) {
+        // `-e` means node runs CODE and no file at all. Quote stripping has
+        // already merged the code into words, so everything after it is code.
+        code.push(equals < 0 ? args.slice(i + 1).join(' ') : [word.slice(equals + 1), ...args.slice(i + 1)].join(' '));
+        return { candidates: [], preloads, code, stdin };
+      }
+      if (NODE_PRELOAD_FLAGS.has(name)) {
+        if (equals >= 0) preloads.push(word.slice(equals + 1));
+        else if (i + 1 < args.length) { preloads.push(args[i + 1]); i += 1; }
+        continue;
+      }
+      if (equals < 0 && NODE_VALUE_FLAGS.has(name) && i + 1 < args.length) i += 1;
+      continue;
+    }
+    candidates.push(word);
+  }
+  return { candidates, preloads, code, stdin };
+}
+
+/**
+ * The suffixes node itself tries for a specifier that carries none. Declared
+ * here because both the entry classifier and the import follower need it, and
+ * the entry classifier runs first.
+ */
+const EXTENSION_CANDIDATES = ['', '.mjs', '.cjs', '.js', '.mts', '.cts', '.ts', '.tsx', '.jsx',
+  '/index.mjs', '/index.cjs', '/index.js', '/index.ts', '/index.tsx'];
+
+/** A word that cannot be read as a literal path: it is built at run time. */
+const RUNTIME_WORD = /[$`]/;
+
+/**
+ * Normalizes a candidate WITHOUT letting it climb above the repository root.
+ * `repositoryPath` pops a leading `..` against an empty stack and silently
+ * re-roots the result; for an entry point that would name a different file
+ * than the one the command runs, so an escape is refused here instead.
+ */
+const REPOSITORY_ROOT = process.cwd().replace(/[\\/]+$/, '');
+
+function containedPath(base, target) {
+  if (target.includes('\0')) return null;
+  let spec = target;
+  // AN ABSOLUTE PATH IS NOT A RELATIVE ONE. Dropping its empty leading segment
+  // silently RE-ROOTED it: `node /scripts/ship.mjs` resolved to this
+  // repository's `scripts/ship.mjs` — a different file than the one that runs —
+  // and `node /tmp/ship.mjs` became a quiet `tmp/ship.mjs` miss. An absolute
+  // path is accepted only when it genuinely points inside this checkout.
+  if (/^([\\/]|[A-Za-z]:[\\/])/.test(spec)) {
+    const root = `${REPOSITORY_ROOT}/`;
+    if (!spec.startsWith(root)) return null;
+    spec = spec.slice(root.length);
+    base = '';
+  }
+  const parts = [];
+  for (const part of `${base ? `${base}/` : ''}${spec}`.split(/[\\/]/)) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') { if (parts.length === 0) return null; parts.pop(); continue; }
+    parts.push(part);
+  }
+  return parts.length === 0 ? null : parts.join('/');
+}
+
+/**
+ * Classifies one candidate word.
+ *
+ *   entry      a tracked, scannable repository file — queued and read
+ *   baseline   the frozen baseline copy — refused and REPORTED (F9)
+ *   dynamic    built at run time, so the file it names cannot be read
+ *   outside    a path above the repository root, which is not ours to read
+ *   other      a determinate path this scan does not read: a build artifact,
+ *              an installed binary, a bare package specifier. Not a finding —
+ *              it is the documented bound, and the banner says so.
+ */
+function classifyEntryCandidate(base, word) {
+  if (RUNTIME_WORD.test(word)) return { kind: 'dynamic' };
+  const path = containedPath(base, word);
+  if (path === null) return { kind: 'outside' };
+  if (isScannableEntry(path)) return { kind: 'entry', path };
+  // NODE RESOLVES AN EXTENSION, AND SO MUST THIS. `require('./scripts/ship')`
+  // and `node ./scripts/ship` reach the same file `./scripts/ship.mjs` does;
+  // refusing to try the extensions dropped that wrapper in silence. Only tried
+  // when the word does not already carry a source extension, and it can only
+  // ADD a file to read.
+  if (!SCANNABLE_SOURCE.test(path)) {
+    const resolved = EXTENSION_CANDIDATES.map((ext) => `${path}${ext}`).find((c) => isScannableEntry(c));
+    if (resolved) return { kind: 'entry', path: resolved };
+  }
+  if (tracked.has(path) && path.startsWith(BASELINE_PREFIX)) return { kind: 'baseline', path };
+  return { kind: 'other', path };
+}
+
+/** A static, repository-local module specifier inside evaluated code. */
+const EVAL_MODULE_LOAD = /(?<![.\w$])(?:import|require)\s*\(([^)]*)\)/g;
+
+/**
+ * Module loads inside `node -e` code. Quotes are already stripped by
+ * `commandSegments`, so a specifier is matched with its quotes optional.
+ *
+ * A LITERAL local specifier is followed; anything assembled at run time is
+ * REPORTED. `node -e "import('./scripts/ship.mjs')"` reached a whole wrapper
+ * that nothing read, which is the same silent-pass class as M-1 itself.
+ */
+function evalModuleLoads(base, code) {
+  const entries = [];
+  const unreadable = [];
+  const specifiers = [
+    ...[...code.matchAll(EVAL_MODULE_LOAD)].map((m) => m[1]),
+    // A BARE `import` STATEMENT loads a module too, and node auto-detects ESM
+    // in `--eval`, so `node -e "import './scripts/ship.mjs'"` needs no flag at
+    // all. Only a relative specifier is matched: this is a statement form, and
+    // a bare package in it is not ours to follow.
+    ...[...code.matchAll(EVAL_IMPORT_STATEMENT)].map((m) => m[1]),
+  ];
+  for (const found of specifiers) {
+    const raw = found.trim().replace(/^['"`]|['"`]$/g, '').trim();
+    if (raw === '' || RUNTIME_WORD.test(raw) || /[+,\s]/.test(raw)) { unreadable.push(found.trim()); continue; }
+    if (raw.startsWith('.') || raw.startsWith('/')) {
+      // Node resolves an extension-less specifier and a directory index, so
+      // `require('./scripts/ship')` reaches the same file `./scripts/ship.mjs`
+      // does; refusing to try the extensions dropped it in silence.
+      const resolved = EXTENSION_CANDIDATES
+        .map((ext) => classifyEntryCandidate(base, `${raw}${ext}`))
+        .find((c) => c.kind === 'entry');
+      if (resolved) { entries.push(resolved.path); continue; }
+      const classified = classifyEntryCandidate(base, raw);
+      if (classified.kind !== 'other') unreadable.push(raw);
+      continue;
+    }
+    // Not a path. It is only safe to pass over as a BARE PACKAGE if it could
+    // actually be one; `process.env.TARGET` is an expression, and quote
+    // stripping is exactly what makes the two look alike here — so anything
+    // that is not a well-formed package specifier is reported, not assumed.
+    if (BARE_PACKAGE_SPECIFIER.test(raw)) continue;
+    unreadable.push(raw);
+  }
+  return { entries, unreadable };
+}
+
+/**
+ * An npm package specifier, or a `node:` builtin. The NAME is lowercase — npm
+ * requires it — which is what tells `node:fs` and `lodash.merge` apart from
+ * `process.env.TARGET`, an expression that quote stripping leaves looking the
+ * same. A scope subpath may carry uppercase, because a file inside a package
+ * may. Without the `node:` prefix this reported every modern builtin import in
+ * evaluated code as unanalyzable — an unsuppressible false positive.
+ */
+const BARE_PACKAGE_SPECIFIER =
+  /^(?:node:)?(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*(?:\/[A-Za-z0-9._-]+)*$/;
+
+/** `import './x.mjs'` / `import x from './x.mjs'`, quotes already stripped. */
+const EVAL_IMPORT_STATEMENT = /(?<![.\w$])import\s+(?:[\w${}*,\s]*?\bfrom\s+)?(\.[^\s;'"`)]*)/g;
+
+/**
+ * Every tracked file a command text runs through `node` or one of the small,
+ * explicit launcher set — plus a finding for any launcher invocation whose
+ * entry this scan cannot safely determine.
  *
  * Quotes no longer need stripping here: `commandSegments` removes them, which
  * is what makes `node 'scripts/ship.mjs'` resolve at all (F3).
  */
-function nodeEntriesIn(text, base, where) {
+function wrapperEntriesIn(text, base, where) {
   const entries = [];
+  const unanalyzable = (why) => add('deploy-analyzability', `${where} — ${why}`);
+
   for (const segment of commandSegments(text)) {
-    const { binary, args } = resolveCommand(segment);
-    if (binary !== 'node') continue;
-    for (const arg of args) {
-      if (arg === '--' || arg.startsWith('-')) continue;
-      const resolved = repositoryPath(base, arg);
-      if (isScannableEntry(resolved)) entries.push(resolved);
-      else if (tracked.has(resolved) && resolved.startsWith(BASELINE_PREFIX)) {
-        refuseBaselineEntry(where, resolved, 'runs');
-      }
-      break; // the first non-flag argument is the entry point
+    const { binary, args, runner, head } = resolveCommand(segment);
+    const isPairFile = FILE_PAIR_RUNNERS.has(runner);
+    if (!SCRIPT_LAUNCHERS.has(binary) && !isPairFile) continue;
+
+    // `bun run ./scripts/ship.ts` had its launcher stripped as a pair runner,
+    // so the head word IS the candidate script.
+    const words = isPairFile && !SCRIPT_LAUNCHERS.has(binary) ? [head, ...args] : args;
+    const launcher = isPairFile && !SCRIPT_LAUNCHERS.has(binary) ? runner : binary;
+    const { candidates, preloads, code, stdin } = parseLauncherArguments(words);
+
+    // A PRELOAD RUNS. `-r ./scripts/preload.mjs` is executed before the main
+    // script, so it is queued on its own terms; a preload that is not a
+    // repository file (`dotenv/config`) is ordinary and says nothing.
+    for (const preload of preloads) {
+      const classified = classifyEntryCandidate(base, preload);
+      if (classified.kind === 'entry') entries.push(classified.path);
+      else if (classified.kind === 'baseline') refuseBaselineEntry(where, classified.path, 'preloads');
     }
+
+    for (const text_ of code) {
+      const { entries: found, unreadable } = evalModuleLoads(base, text_);
+      entries.push(...found);
+      for (const specifier of unreadable) {
+        unanalyzable(
+          `\`${launcher}\` evaluates code whose module specifier \`${specifier}\` cannot be read,`
+          + ' so the module it loads, and every command inside it, cannot be read;'
+          + ' a deployment-capable path must be statically analyzable',
+        );
+      }
+    }
+    if (code.length > 0) continue;      // `-e` runs code, never a script file
+
+    if (stdin) {
+      unanalyzable(
+        `\`${launcher} -\` reads its program from standard input, which this scan cannot read;`
+        + ' a deployment-capable path must be statically analyzable',
+      );
+      continue;
+    }
+
+    // THE SAFETY NET. The first candidate is the script position, but an
+    // unrecognised value-consuming flag can put its value there — so if the
+    // first does not resolve, the rest are searched before anything is said.
+    const classified = candidates.map((word) => classifyEntryCandidate(base, word));
+    const resolvedIndex = classified.findIndex((c) => c.kind === 'entry');
+    if (resolvedIndex >= 0) { entries.push(classified[resolvedIndex].path); continue; }
+
+    const first = classified[0];
+    if (!first) continue;               // `node --version`, a bare REPL: runs nothing
+    if (first.kind === 'baseline') { refuseBaselineEntry(where, first.path, 'runs'); continue; }
+    if (first.kind === 'dynamic') {
+      unanalyzable(
+        `\`${launcher}\` is given an entry built at run time, so the file it runs,`
+        + ' and every command inside it, cannot be read;'
+        + ' a deployment-capable path must be statically analyzable',
+      );
+      continue;
+    }
+    if (first.kind === 'outside') {
+      unanalyzable(
+        `\`${launcher}\` names \`${candidates[0]}\`, a path above this repository, which this scan never reads;`
+        + ' a deployment-capable path must be statically analyzable',
+      );
+    }
+    // `other` — a determinate path that is not tracked source (a build
+    // artifact, an installed binary, a bare specifier). Not read, by the same
+    // bound the banner states, and not a finding.
   }
   return entries;
 }
@@ -1048,7 +1448,7 @@ for (const f of files.filter((s2) => /(^|\/)package\.json$/.test(s2))) {
     const before = findings.length;
     checkDeployLine(`${f} — script "${name}"`, body, true);
     if (findings.length > before) deployingScripts.add(name);
-    for (const entry of nodeEntriesIn(stripShellComment(body), directoryOf(f), `${f} — script "${name}"`)) {
+    for (const entry of wrapperEntriesIn(stripShellComment(body), directoryOf(f), `${f} — script "${name}"`)) {
       recordEntry(entry, `${f} — script "${name}"`, name);
     }
   }
@@ -1061,7 +1461,7 @@ for (const f of files.filter((s2) => /\.(sh|bash|zsh|fish)$/.test(s2) || /(^|\/)
   for (const [index, line] of lines.entries()) {
     if (/^\s*#/.test(line)) continue; // a full-line comment cannot execute
     checkDeployLine(`${f}:${index + 1}`, line, true);
-    for (const entry of nodeEntriesIn(stripShellComment(line), '', `${f}:${index + 1}`)) {
+    for (const entry of wrapperEntriesIn(stripShellComment(line), '', `${f}:${index + 1}`)) {
       recordEntry(entry, `${f}:${index + 1}`, null);
     }
   }
@@ -1098,7 +1498,7 @@ for (const f of files.filter((s2) => s2.startsWith('.github/'))) {
 }
 for (const { file: f, number, raw, runs } of workflowLines) {
   if (!runs) continue;
-  for (const entry of nodeEntriesIn(stripShellComment(commandTextOf(raw)), '', `${f}:${number}`)) {
+  for (const entry of wrapperEntriesIn(stripShellComment(commandTextOf(raw)), '', `${f}:${number}`)) {
     recordEntry(entry, `${f}:${number}`, null);
   }
 }
@@ -1401,8 +1801,6 @@ function staticCommandOf(fn, args) {
  */
 const LOCAL_SPECIFIER =
   /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s*)(?:(['"])(\.[^'"]*)\1|`(\.[^`$\\]*)`)/g;
-const EXTENSION_CANDIDATES = ['', '.mjs', '.cjs', '.js', '.mts', '.cts', '.ts', '.tsx', '.jsx',
-  '/index.mjs', '/index.cjs', '/index.js', '/index.ts', '/index.tsx'];
 /**
  * The repository file a relative specifier names, or null. A specifier that
  * resolves into the frozen baseline is REFUSED and reported rather than
@@ -1779,7 +2177,7 @@ while (entryQueue.length > 0) {
     // static and names a tracked, scannable file, so the path CAN be read
     // through — and the banner says nothing readable is passed in silence.
     // The queue and the cycle guard handle the rest.
-    for (const entry of nodeEntriesIn(command, '', where)) reach(entry);
+    for (const entry of wrapperEntriesIn(command, '', where)) reach(entry);
     for (const why of deployHits(command)) {
       add('ci-deploy', `${where} — ${why} in ${site.fn}(), run by ${callers}`);
       for (const script of reachingScripts.get(file) ?? []) deployingScripts.add(script);
@@ -1834,19 +2232,24 @@ if (findings.length === 0) {
     + ` (${DEPLOY_PATTERNS.length + DEPLOY_BINARIES.length} behaviours + any deployment action)`,
   );
   console.log(
-    `     (plus the ${analyzedEntries.size} Node entry point(s) those scripts and steps actually run with`
-    + ' `node <file>`,',
+    `     (plus the ${analyzedEntries.size} script entry point(s) those scripts and steps actually run through`
+    + ` ${[...SCRIPT_LAUNCHERS].join('/')},`,
   );
+  console.log('      with node arguments parsed deterministically — a value-consuming flag and its value are');
+  console.log('      skipped together, in both the `--flag value` and `--flag=value` forms, and an entry is');
+  console.log('      still found behind a flag this scan does not know;');
   console.log('      and the local modules those files reach — by a binding import, a BARE SIDE-EFFECT');
   console.log('      import, a re-export, a require(), a createRequire alias,');
   console.log('      or a dynamic import with a literal specifier;');
-  console.log('      plus any further `node <file>` a wrapper itself runs.');
+  console.log('      plus any further launcher invocation a wrapper itself runs.');
   console.log('      child_process commands there are read as commands.');
-  console.log('      NOT scanned: every other tracked source file. Nothing a reachable wrapper cannot be');
-  console.log('      read through is passed in silence: a command it builds at runtime, a COMPUTED');
-  console.log('      specifier whose module therefore cannot be read, a child_process binding that escapes');
-  console.log('      its call form, and a path into the frozen baseline are each');
-  console.log('      reported as unanalyzable rather than passed)');
+  console.log('      NOT scanned: every other tracked source file, and a determinate path that is not tracked');
+  console.log('      source — a build artifact, an installed binary, a bare package specifier.');
+  console.log('      Nothing a reachable wrapper cannot be read through is passed in silence: a command it');
+  console.log('      builds at runtime, a COMPUTED specifier whose module therefore cannot be read, an entry');
+  console.log('      built at run time, a program read from standard input, a path above this repository,');
+  console.log('      a child_process binding that escapes its call form, and a path into the frozen baseline');
+  console.log('      are each reported as unanalyzable rather than passed)');
   process.exit(0);
 }
 

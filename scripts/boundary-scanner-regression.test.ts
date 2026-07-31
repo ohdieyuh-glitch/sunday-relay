@@ -452,6 +452,57 @@ const workflowWith = (step: string) => ({
     `name: Relay CI\non:\n  pull_request:\njobs:\n  verify:\n    runs-on: ubuntu-latest\n    steps:\n${step}\n`,
 });
 
+/** A wrapper that deploys, and one that does not. Written once, used widely. */
+const SHIP_MJS = "import { execSync } from 'node:child_process';\nexecSync('vercel --prod');\n";
+const SHIP_TS = "import { execSync } from 'node:child_process';\nexecSync('railway up');\n";
+const CHECK_MJS = "// Harmless. This repository never deploys.\nconsole.log('no deployment configured');\n";
+
+/** A package manifest whose one script is `command`. */
+const scriptRunning = (command: string, name = 'ship') => ({
+  'package.json': JSON.stringify({ name: 'sunday-relay', scripts: { [name]: command } }, null, 2),
+});
+
+/**
+ * EVERY LAUNCH FORM THAT HID A WRAPPER (M-1 and the launcher gap beside it).
+ *
+ * Each entry runs a repository-local wrapper whose body deploys. The command
+ * is the ONLY thing that varies, so a form that stops resolving fails here
+ * rather than quietly reducing coverage.
+ */
+const NODE_LAUNCH_BYPASSES: Array<[string, string]> = [
+  // The exact command the independent review demonstrated.
+  ['node --env-file <value> (the reported bypass)', 'node --env-file .env scripts/ship.mjs'],
+  ['node --env-file=<value>', 'node --env-file=.env scripts/ship.mjs'],
+  ['node -r <value>', 'node -r dotenv/config scripts/ship.mjs'],
+  ['node --require <value>', 'node --require dotenv/config scripts/ship.mjs'],
+  ['node --import <value>', 'node --import tsx scripts/ship.mjs'],
+  ['node --import=<value>', 'node --import=tsx scripts/ship.mjs'],
+  ['node --loader <value>', 'node --loader ts-node/esm scripts/ship.mjs'],
+  ['node --loader=<value>', 'node --loader=ts-node/esm scripts/ship.mjs'],
+  ['node --experimental-loader <value>', 'node --experimental-loader ts-node/esm scripts/ship.mjs'],
+  ['node --conditions <value>', 'node --conditions development scripts/ship.mjs'],
+  ['node --conditions=<value>', 'node --conditions=development scripts/ship.mjs'],
+  ['node -C <value>', 'node -C packages/app scripts/ship.mjs'],
+  ['node --env-file-if-exists <value>', 'node --env-file-if-exists .env scripts/ship.mjs'],
+  // The safety net: a value-consuming flag this scan has never heard of must
+  // not hide the entry either, or the repair is only as good as its table.
+  ['node behind a flag the scan does not know', 'node --some-unreleased-flag someValue scripts/ship.mjs'],
+  ['node behind two unknown valued flags', 'node --alpha a --beta b scripts/ship.mjs'],
+  // A boolean flag never consumed a value, and must not start doing so.
+  ['node behind a boolean flag', 'node --experimental-vm-modules scripts/ship.mjs'],
+  // `node -e` runs CODE, and a literal local import inside it is a wrapper.
+  ['node -e with a literal local import', "node -e \"import('./scripts/ship.mjs')\""],
+  // Repository-local launchers that are not node.
+  ['npx tsx <file>', 'npx tsx scripts/ship.ts'],
+  ['npm exec -- tsx <file>', 'npm exec -- tsx scripts/ship.ts'],
+  ['pnpm exec tsx <file>', 'pnpm exec tsx scripts/ship.ts'],
+  ['yarn tsx <file>', 'yarn tsx scripts/ship.ts'],
+  ['ts-node <file>', 'ts-node scripts/ship.ts'],
+  ['bun <file>', 'bun scripts/ship.ts'],
+  ['bun run <file>', 'bun run scripts/ship.ts'],
+  ['tsx behind a valued flag', 'npx tsx --tsconfig tsconfig.build.json scripts/ship.ts'],
+];
+
 /**
  * ACTIVE deployment paths. Every one of these must fail on the head scanner,
  * and each is additionally measured against the base scanner below.
@@ -771,6 +822,78 @@ const ACTIVE_DEPLOY_CASES: Array<[string, Record<string, string>]> = [
     'a deploy binary behind an arbitrary unknown word',
     { 'scripts/w.sh': '#!/usr/bin/env bash\nsomeunknownwrapper vercel --prod\n' },
   ],
+
+  /* ------------------------------------------------------------------ *
+   * M-1 — A NODE FLAG'S VALUE IS NOT THE ENTRY POINT.
+   *
+   * The independent review of PR #2 demonstrated this exact bypass:
+   *
+   *     "ship": "node --env-file .env scripts/ship.mjs"
+   *
+   * `--env-file` was skipped as a flag, `.env` was taken as the script, it did
+   * not resolve, and the finder broke BEFORE `scripts/ship.mjs`. The wrapper's
+   * `execSync('vercel --prod')` was never read; the scan exited 0 and the
+   * banner printed `0 Node entry point(s)` — a coverage claim that was false.
+   *
+   * Every value-consuming flag it named is a case here, in BOTH the separated
+   * and the attached form, on BOTH surfaces, plus a flag the scan does not
+   * know at all — because a repair that only enumerates flags is one unknown
+   * flag away from the same defect.
+   * ------------------------------------------------------------------ */
+  ...NODE_LAUNCH_BYPASSES.map(
+    ([label, command]): [string, Record<string, string>] => [
+      label,
+      { ...scriptRunning(command), 'scripts/ship.mjs': SHIP_MJS, 'scripts/ship.ts': SHIP_TS },
+    ],
+  ),
+  ...NODE_LAUNCH_BYPASSES.slice(0, 6).map(
+    ([label, command]): [string, Record<string, string>] => [
+      `${label} — in a workflow run: step`,
+      { ...workflowWith(`      - run: ${command}`), 'scripts/ship.mjs': SHIP_MJS, 'scripts/ship.ts': SHIP_TS },
+    ],
+  ),
+  [
+    'workflow → package script → flagged node wrapper → deployment',
+    {
+      ...scriptRunning('node --env-file .env scripts/ship.mjs'),
+      'scripts/ship.mjs': SHIP_MJS,
+      '.github/workflows/deploy.yml':
+        'name: Ship\non:\n  push:\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm run ship\n',
+    },
+  ],
+  [
+    'workflow → package script → tsx launcher → deployment',
+    {
+      ...scriptRunning('npx tsx scripts/ship.ts'),
+      'scripts/ship.ts': SHIP_TS,
+      '.github/workflows/deploy.yml':
+        'name: Ship\non:\n  push:\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm run ship\n',
+    },
+  ],
+  [
+    'a flagged node wrapper in a shell wrapper',
+    { 'scripts/w.sh': '#!/usr/bin/env bash\nnode --import tsx scripts/ship.mjs\n', 'scripts/ship.mjs': SHIP_MJS },
+  ],
+  [
+    'a flagged node invocation a reachable wrapper itself runs',
+    {
+      ...scriptRunning('node scripts/a.mjs'),
+      'scripts/a.mjs': "import { execSync } from 'node:child_process';\nexecSync('node --env-file .env scripts/ship.mjs');\n",
+      'scripts/ship.mjs': SHIP_MJS,
+    },
+  ],
+
+  /* A GROUPED command is a command. `commandSegments` stopped treating a
+   * parenthesis inside QUOTED data as grouping (L-1); real grouping must
+   * keep working, so it is measured here rather than assumed. */
+  ['a subshell-grouped deployment', workflowWith('      - run: (vercel --prod)')],
+  ['a grouped deployment after safe prose', workflowWith('      - run: echo safe && (railway up)')],
+  [
+    'a grouped deployment after QUOTED prose naming a vendor',
+    workflowWith('      - run: echo "Deployment (docs) here" && (netlify deploy --prod)'),
+  ],
+  ['a deployment inside an explicit sh -c string', workflowWith('      - run: sh -c "echo safe && vercel --prod"')],
+  ['a deployment inside an explicit bash -c string', workflowWith("      - run: bash -c 'wrangler deploy'")],
 ];
 
 describe('H-5 — active deployment behaviour is detected wherever it lives', () => {
@@ -1148,6 +1271,351 @@ describe('H-5 — documentation, prose and inert samples are NOT deployment', ()
 
 /* ---------------------------------------------- base vs head coverage */
 
+describe('M-1 — a node flag value is not the entry point', () => {
+  /**
+   * THE REPORTED BYPASS, REPRODUCED EXACTLY.
+   *
+   * This is the command from the independent review of PR #2, with the file it
+   * ran and the deployment inside it. It must fail, and the failure must name
+   * the wrapper — not merely exit 1 for some unrelated reason.
+   */
+  it('the exact reported command is detected, and the wrapper is named', () => {
+    const result = scan({
+      ...baseline(),
+      ...scriptRunning('node --env-file .env scripts/ship.mjs'),
+      'scripts/ship.mjs': SHIP_MJS,
+    });
+    expect(result.code, result.output).toBe(1);
+    expect(result.output).toContain('[ci-deploy]');
+    expect(result.output).toContain('scripts/ship.mjs');
+    expect(result.output).toContain('a Vercel deployment command');
+    expect(result.output).toContain('script "ship"');
+  });
+
+  it('the base scanner accepted that command — this is a real repair, not a restatement', () => {
+    const files = {
+      ...baseline(),
+      ...scriptRunning('node --env-file .env scripts/ship.mjs'),
+      'scripts/ship.mjs': SHIP_MJS,
+    };
+    expect(scanWithBase(files).code, 'the baseline must accept it, or the differential proves nothing').toBe(0);
+    expect(scan(files).code).toBe(1);
+  });
+
+  /**
+   * THE FALSE-ASSURANCE HALF. Exiting 0 was only half the defect; the other
+   * half was a banner that stated a coverage fact which was not true. A scan
+   * that resolves the entry must COUNT it.
+   */
+  it('the entry is counted in the banner, not reported as zero', () => {
+    const passing = {
+      ...baseline(),
+      ...scriptRunning('node --env-file .env scripts/check.mjs'),
+      'scripts/check.mjs': CHECK_MJS,
+    };
+    const result = scan(passing);
+    expect(result.code, result.output).toBe(0);
+    expect(result.output).toMatch(/plus the [1-9]\d* script entry point\(s\)/);
+    expect(result.output).not.toMatch(/plus the 0 script entry point\(s\)/);
+  });
+
+  it('an unflagged node invocation still resolves exactly as before', () => {
+    const result = scan({
+      ...baseline(),
+      ...scriptRunning('node scripts/ship.mjs'),
+      'scripts/ship.mjs': SHIP_MJS,
+    });
+    expect(result.code, result.output).toBe(1);
+  });
+
+  /* ----------------------------- safe controls ------------------------ */
+
+  it('a flagged node invocation of a HARMLESS wrapper passes', () => {
+    for (const command of [
+      'node --env-file .env scripts/check.mjs',
+      'node -r dotenv/config scripts/check.mjs',
+      'node --import tsx scripts/check.mjs',
+      'node --loader=ts-node/esm scripts/check.mjs',
+    ]) {
+      const result = scan({ ...baseline(), ...scriptRunning(command), 'scripts/check.mjs': CHECK_MJS });
+      expect(result.code, `${command} was reported:\n${result.output}`).toBe(0);
+    }
+  });
+
+  it('a missing optional preload followed by a real tracked entry is not a finding', () => {
+    // `dotenv/config` is not a repository file. That is ordinary, and it must
+    // not be mistaken either for the entry or for something unanalyzable.
+    const result = scan({
+      ...baseline(),
+      ...scriptRunning('node -r dotenv/config scripts/check.mjs'),
+      'scripts/check.mjs': CHECK_MJS,
+    });
+    expect(result.code, result.output).toBe(0);
+    expect(result.output).not.toContain('deploy-analyzability');
+  });
+
+  it('a package script with no deployment path passes', () => {
+    const result = scan({
+      ...baseline(),
+      'package.json': JSON.stringify(
+        { name: 'sunday-relay', scripts: { build: 'tsc -b && vite build', test: 'vitest run', version: 'node --version' } },
+        null,
+        2,
+      ),
+    });
+    expect(result.code, result.output).toBe(0);
+  });
+
+  it('a legitimate non-file execution mode with no deployment passes', () => {
+    const result = scan({ ...baseline(), ...scriptRunning('node -e "console.log(1)"') });
+    expect(result.code, result.output).toBe(0);
+  });
+
+  it('a determinate path that is not tracked source is neither read nor reported', () => {
+    // A built CLI is exactly this shape, and this repository runs its own.
+    const result = scan({ ...baseline(), ...scriptRunning('node dist-relay/cli.cjs demo yc --presentation') });
+    expect(result.code, result.output).toBe(0);
+    expect(result.output).not.toContain('deploy-analyzability');
+  });
+
+  it('documentation containing node flag examples is not scanned as a command', () => {
+    const result = scan({
+      ...baseline(),
+      'docs/relay/FLAGS.md':
+        '# Node flags\n\n`node --env-file .env scripts/ship.mjs` and `node -r dotenv/config x.mjs`'
+        + ' are examples. Neither is used here.\n',
+    });
+    expect(result.code, result.output).toBe(0);
+  });
+
+  /* ------------------- unanalyzable, never silent --------------------- */
+
+  it('an entry built at run time is reported rather than passed', () => {
+    const result = scan({ ...baseline(), ...scriptRunning('node "$RELAY_SCRIPT"') });
+    expect(result.code, result.output).toBe(1);
+    expect(result.output).toContain('[deploy-analyzability]');
+    expect(result.output).toContain('built at run time');
+  });
+
+  it('a program read from standard input is reported rather than passed', () => {
+    const result = scan({ ...baseline(), ...scriptRunning('node - < scripts/ship.mjs') });
+    expect(result.code, result.output).toBe(1);
+    expect(result.output).toContain('[deploy-analyzability]');
+    expect(result.output).toContain('standard input');
+  });
+
+  it('a path above the repository is reported rather than followed', () => {
+    const result = scan({ ...baseline(), ...scriptRunning('node ../outside/ship.mjs') });
+    expect(result.code, result.output).toBe(1);
+    expect(result.output).toContain('[deploy-analyzability]');
+    expect(result.output).toContain('above this repository');
+  });
+
+  /**
+   * A PRELOAD RUNS BEFORE THE SCRIPT, so its module is an entry point too.
+   * The first cut of this repair skipped a value flag and its value together,
+   * which stopped `.env` being mistaken for the entry but ALSO threw away
+   * `-r ./scripts/preload.mjs` — a module node genuinely executes. That is the
+   * same bypass one slot over.
+   */
+  it('a preloaded module is read, in every preload flag and both spellings', () => {
+    for (const command of [
+      'node --require ./scripts/preload.mjs scripts/main.mjs',
+      'node -r ./scripts/preload.mjs scripts/main.mjs',
+      'node --require=./scripts/preload.mjs scripts/main.mjs',
+      'node --import ./scripts/preload.mjs scripts/main.mjs',
+      'node --loader ./scripts/preload.mjs scripts/main.mjs',
+      'node -r ./scripts/preload.mjs',
+    ]) {
+      const result = scan({
+        ...baseline(),
+        ...scriptRunning(command),
+        'scripts/preload.mjs': SHIP_MJS,
+        'scripts/main.mjs': "console.log('ok');\n",
+      });
+      expect(result.code, `${command} did not read its preload:\n${result.output}`).toBe(1);
+      expect(result.output).toContain('scripts/preload.mjs');
+    }
+  });
+
+  it('a preload that is not a repository file says nothing', () => {
+    const result = scan({
+      ...baseline(),
+      ...scriptRunning('node -r dotenv/config scripts/check.mjs'),
+      'scripts/check.mjs': CHECK_MJS,
+    });
+    expect(result.code, result.output).toBe(0);
+  });
+
+  it('-pe is node’s own spelling of -p -e, and its code is read', () => {
+    const result = scan({
+      ...baseline(),
+      ...scriptRunning('node -pe "require(\'./scripts/ship.mjs\')"'),
+      'scripts/ship.mjs': SHIP_MJS,
+    });
+    expect(result.code, result.output).toBe(1);
+  });
+
+  it('an extension-less or directory specifier resolves exactly as node resolves it', () => {
+    for (const command of ['node ./scripts/ship', "node -e \"require('./scripts/ship')\""]) {
+      const result = scan({ ...baseline(), ...scriptRunning(command), 'scripts/ship.mjs': SHIP_MJS });
+      expect(result.code, `${command}:\n${result.output}`).toBe(1);
+    }
+  });
+
+  it('an ESM import STATEMENT in evaluated code is followed', () => {
+    // Node auto-detects ESM in --eval, so no flag is needed for this to run.
+    const result = scan({
+      ...baseline(),
+      ...scriptRunning("node -e \"import './scripts/ship.mjs'\""),
+      'scripts/ship.mjs': SHIP_MJS,
+    });
+    expect(result.code, result.output).toBe(1);
+  });
+
+  /**
+   * AN ABSOLUTE PATH IS NOT A RELATIVE ONE. Dropping the empty leading segment
+   * re-rooted it, so `node /scripts/ship.mjs` resolved to THIS repository's
+   * `scripts/ship.mjs` — a different file than the one that runs — and an
+   * absolute path elsewhere on the machine became a silent miss.
+   */
+  it('an absolute path outside the repository is reported, never re-rooted', () => {
+    const result = scan({
+      ...baseline(),
+      ...scriptRunning('node /opt/ci/ship.mjs'),
+      'opt/ci/ship.mjs': CHECK_MJS,   // the file the old re-rooting would have read
+    });
+    expect(result.code, result.output).toBe(1);
+    expect(result.output).toContain('[deploy-analyzability]');
+    expect(result.output).toContain('above this repository');
+  });
+
+  it('a node: builtin in evaluated code is not reported as unanalyzable', () => {
+    // `deploy-analyzability` has no annotation escape hatch by design, so a
+    // false positive here is unfixable red on ordinary code.
+    for (const command of [
+      'node -e "require(\'node:fs\').mkdirSync(x)"',
+      'node -e "import(\'node:path\')"',
+      'node -e "require(\'fs\')"',
+      'node -e "require(\'@scope/Pkg/Thing.js\')"',
+    ]) {
+      const result = scan({ ...baseline(), ...scriptRunning(command) });
+      expect(result.code, `${command} was reported:\n${result.output}`).toBe(0);
+    }
+  });
+
+  it('a ${…} expansion does not split the line and lose the entry beyond it', () => {
+    const result = scan({
+      ...baseline(),
+      ...scriptRunning('node ${NODE_ARGS} scripts/ship.mjs'),
+      'scripts/ship.mjs': SHIP_MJS,
+    });
+    expect(result.code, result.output).toBe(1);
+    expect(result.output).toContain('scripts/ship.mjs');
+  });
+
+  it('the frozen-baseline refusal still fires through a flagged invocation', () => {
+    const frozen = 'scripts/__baseline__/relay-repository-boundary.d21d383.mjs';
+    const result = scan({
+      ...baseline(),
+      ...scriptRunning(`node --env-file .env ${frozen}`),
+      [frozen]: '// a frozen copy\n',
+    });
+    expect(result.code, result.output).toBe(1);
+    expect(result.output).toContain('frozen baseline copy');
+  });
+});
+
+describe('L-1 — a parenthesis inside quoted data is not shell grouping', () => {
+  const safe = [
+    'echo "Deployment (vercel) is out of scope"',
+    "echo 'Deployment (railway) is disabled'",
+    'printf \'%s\\n\' "Use (flyctl) only manually"',
+    'echo "Deployment (vercel, railway, netlify) is out of scope"',
+    'echo "see the runbook (section 3) before shipping"',
+    'echo "a brace {vercel} is data too"',
+  ];
+
+  for (const line of safe) {
+    it(`passes, with no annotation required: ${line}`, () => {
+      // The point of the repair: these are EXECUTABLE lines, so
+      // `allow-mention` is powerless on them by design. Before the repair they
+      // could not be committed at all.
+      const result = scan({ ...baseline(), ...workflowWith(`      - run: ${line}`) });
+      expect(result.code, `${line} was reported:\n${result.output}`).toBe(0);
+      expect(result.output).not.toContain(MENTION);
+    });
+  }
+
+  it('the same prose in a shell wrapper and a package script also passes', () => {
+    expect(
+      scan({ ...baseline(), 'scripts/say.sh': '#!/usr/bin/env bash\necho "Deployment (vercel) is out of scope"\n' }).code,
+    ).toBe(0);
+    expect(scan({ ...baseline(), ...scriptRunning('echo "Deployment (vercel) is out of scope"', 'say') }).code).toBe(0);
+  });
+
+  /**
+   * THE HALF A FIRST ATTEMPT GOT WRONG. Calling every quoted parenthesis
+   * "data" removed the false positive and took four true detections with it:
+   * command substitution is what a double-quoted run is FOR, and a quoted
+   * command string passed to `sh -c` is a command. Each is measured here
+   * against the previous head, not merely asserted.
+   */
+  it('command substitution inside quotes still groups and still reports', () => {
+    for (const line of [
+      'URL="$(vercel --prod)"',
+      'echo "$(flyctl deploy)"',
+      'sh -c "(vercel --prod)"',
+      "sh -c '(railway up)'",
+      'bash -c "cd app && (vercel --prod)"',
+      'node -e "require(\'child_process\').execSync(\'vercel --prod\')"',
+    ]) {
+      const result = scan({ ...baseline(), ...workflowWith(`      - run: ${line}`) });
+      expect(result.code, `${line} was NOT detected:\n${result.output}`).toBe(1);
+    }
+  });
+
+  it('a wrapper reached through quoted grouping is still queued', () => {
+    for (const line of ['sh -c "(node scripts/ship.mjs)"', 'URL="$(node scripts/ship.mjs)"']) {
+      const result = scan({ ...baseline(), ...workflowWith(`      - run: ${line}`), 'scripts/ship.mjs': SHIP_MJS });
+      expect(result.code, `${line} lost its entry point:\n${result.output}`).toBe(1);
+    }
+  });
+
+  it('real grouping is still grouping', () => {
+    for (const line of [
+      '(vercel --prod)',
+      'echo safe && (railway up)',
+      'sh -c "echo safe && vercel --prod"',
+      "bash -c 'wrangler deploy'",
+      'echo "Deployment (docs) here" && (netlify deploy --prod)',
+    ]) {
+      const result = scan({ ...baseline(), ...workflowWith(`      - run: ${line}`) });
+      expect(result.code, `${line} was NOT detected:\n${result.output}`).toBe(1);
+    }
+  });
+
+  it('quoted-hash protection is unaffected', () => {
+    expect(scan({ ...baseline(), ...workflowWith('      - run: echo "#" && vercel --prod') }).code).toBe(1);
+    expect(scan({ ...baseline(), ...workflowWith('      - run: echo "# (vercel) note" && railway up') }).code).toBe(1);
+  });
+
+  it('an unbalanced quote falls back to the grouping reading, so nothing is lost', () => {
+    // An apostrophe in prose is not a quote. The fallback groups MORE, never
+    // less, which is what keeps base ⊆ head true through this change.
+    const result = scan({ ...baseline(), ...workflowWith("      - run: echo Relay's policy && (vercel --prod)") });
+    expect(result.code, result.output).toBe(1);
+  });
+
+  it('a case label is still inert and a case body is still detected', () => {
+    const inert = 'name: ci\non:\n  push:\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n'
+      + '      - run: |\n          case "$1" in\n            vercel) echo unsupported ;;\n          esac\n';
+    expect(scan({ ...baseline(), '.github/workflows/c.yml': inert }).code).toBe(0);
+    const active = inert.replace('vercel) echo unsupported ;;', 'prod) vercel --prod ;;');
+    expect(scan({ ...baseline(), '.github/workflows/c.yml': active }).code).toBe(1);
+  });
+});
+
 describe('H-5 — the head scanner detects everything the base scanner did', () => {
   // Each case builds two throwaway git repositories and runs two scanners, so
   // this is deliberately slower than a unit test. The timeout is explicit
@@ -1222,6 +1690,11 @@ describe('H-5 — the head scanner detects everything the base scanner did', () 
     'if true; then yarn publish; fi', 'if true; then vercel --prod; fi',
     'for i in 1; do railway up; done', 'bash -c "yarn publish"', 'sh -c "vercel --prod"',
     './node_modules/.bin/vercel --prod', 'xvfb-run docker push x',
+    // Grouped forms, kept measured because L-1 changed when a parenthesis
+    // groups. A repair that removed a FALSE positive must not have removed a
+    // true one with it.
+    '(vercel --prod)', 'echo safe && (railway up)', 'bash -c \'wrangler deploy\'',
+    'echo "Deployment (docs) here" && (netlify deploy --prod)',
   ];
 
   it('head detects every shape the frozen baseline detects', () => {
