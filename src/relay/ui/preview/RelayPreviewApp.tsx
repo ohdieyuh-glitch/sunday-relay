@@ -62,6 +62,8 @@ import {
 } from '../../usage';
 import { RelayUsageDetailPanel, type RelayWorkspaceUsage } from '../usage';
 import { RelayNotificationHost, useRelayNotificationCenter } from '../notifications';
+import { RelayMissionRecoveryPanel } from '../recovery';
+import { useRelayDurableMission } from '../app/useRelayDurableMission';
 import './relay-preview.css';
 
 /**
@@ -320,6 +322,58 @@ export function RelayPreviewApp() {
     () => projectUsageDetail(usageSnapshot, new Date().toISOString()),
     [usageSnapshot, usageOpen],
   );
+
+  /* ------------------- durable mission persistence + recovery ---------- */
+  /* ONE durable store for the whole application. `runtimeAvailable` is FALSE
+     in this offline build, so recovery restores SAVED STATE and never claims
+     that an agent reconnected. */
+  const [inspectingRecovery, setInspectingRecovery] = useState(false);
+  const durable = useRelayDurableMission({
+    publish: notificationCenter.publish,
+    onViewRecovery: () => setInspectingRecovery(true),
+    runtimeAvailable: false,
+  });
+  const durableCheckpoint = durable.checkpoint;
+
+  /* CHECKPOINT AT SAFE BOUNDARIES ONLY. The effect depends on a boundary
+     IDENTITY string — mission id, state, phase, terminal status, line count,
+     finding count — so a keystroke, an animation frame or a stream of
+     terminal characters can never trigger a mission checkpoint. */
+  const checkpointMissionId =
+    route.screen === 'workspace'
+      ? store.getProject(route.projectId)?.activeMissionId ?? null
+      : null;
+  const checkpointMission = checkpointMissionId ? store.getMission(checkpointMissionId) : null;
+  const checkpointBoundary = checkpointMission === null
+    ? null
+    : [
+      checkpointMission.id,
+      checkpointMission.state,
+      checkpointMission.phase ?? '',
+      checkpointMission.terminal?.status ?? '',
+      String(checkpointMission.review?.findings.length ?? 0),
+    ].join('|');
+
+  useEffect(() => {
+    if (checkpointBoundary === null || checkpointMissionId === null) return;
+    const mission = store.getMission(checkpointMissionId);
+    const project = mission ? store.getProject(mission.projectId) : null;
+    if (mission === null || project === null) return;
+    void durableCheckpoint({
+      mission,
+      project,
+      settings: store.getSettings(project.id),
+      events: store.getMissionEvents(mission.id),
+      usage: usageSnapshot,
+      interruptionReason: null,
+    });
+  }, [checkpointBoundary, checkpointMissionId, store, usageSnapshot, durableCheckpoint]);
+
+  const recoveredMissionName = (() => {
+    const id = durable.discovered?.record?.missionId;
+    if (id === undefined) return 'Unfinished mission';
+    return store.getMission(id)?.title ?? id;
+  })();
 
   /* ---------------- Entry Home host state (memory-only UI bits) ------- */
   const [projectIdeaDraft, setProjectIdeaDraft] = useState('');
@@ -771,6 +825,28 @@ export function RelayPreviewApp() {
         className="rpv-stage"
         style={zoom === 100 ? undefined : { zoom: zoom / 100 }}
       >
+        {/* THE RECOVERY SURFACE — shown only when an incomplete mission was
+            actually discovered and validated. It sits above the screen so it
+            is the first thing seen, and it is rendered ONCE for the whole
+            application, never per screen. */}
+        {durable.discovered !== null && durable.discovered.classification !== 'completed' && (
+          <RelayMissionRecoveryPanel
+            assessment={durable.discovered}
+            missionName={recoveredMissionName}
+            runtimeAvailable={false}
+            inspecting={inspectingRecovery}
+            onResume={() => {
+              const id = durable.discovered?.record?.missionId;
+              if (id !== undefined) void durable.resume(id);
+            }}
+            onInspect={() => setInspectingRecovery((v) => !v)}
+            onStop={() => {
+              const id = durable.discovered?.record?.missionId;
+              if (id !== undefined) void durable.stop(id);
+              else durable.dismissDiscovered();
+            }}
+          />
+        )}
         {mobileFrame && route.screen !== 'console' ? (
           <div className="rpv-mobile-frame">
             <div className="rpv-mobile-viewport">{screen}</div>

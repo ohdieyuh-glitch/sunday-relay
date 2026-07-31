@@ -66,7 +66,10 @@ describe('Demo Simulation keeps the original Live Terminal renderer', () => {
 
     // Truthful compact source marker inside the existing status row.
     expect(after.textContent).toContain('DEMO SIMULATION');
-  });
+    // An explicit budget: this drives the WHOLE demo timeline through the
+    // real application shell, so it is slower than the 5s default when the
+    // suite runs files in parallel.
+  }, 30_000);
 
   it('never renders the forbidden Codex demo-terminal interface', async () => {
     vi.useFakeTimers();
