@@ -28,6 +28,17 @@ import type { WorkspaceCommandPolicy } from './contracts';
 export * from './contracts';
 export { DEFAULT_WORKSPACE_COMMAND_POLICY } from './command-policy';
 export { workspaceDoctorReport } from './doctor';
+/* Mission-scoped worktrees — exported from the FACADE because the CLI may
+   import this module and nothing deeper inside the workspace tree. */
+export {
+  MISSION_WORKTREE_DIRNAME, assertNotPrimaryCheckout, evaluateWorktreeCleanup,
+  openMissionWorktree, removeMissionWorktree, resolveMissionWorktreePath,
+  validateMissionWorktree,
+} from './mission-worktree';
+export type {
+  OpenMissionWorktreeInput, OpenMissionWorktreeOutput,
+  ValidateMissionWorktreeInput, WorktreeCleanupAssessment,
+} from './mission-worktree';
 export { runWorkspaceVerification } from './verify-harness';
 
 /**
