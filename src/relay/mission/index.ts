@@ -140,3 +140,23 @@ export {
   type PromptArchitectRecord, type PromptArchitectRecordDraft,
   type PromptArchitectStorePort, type PromptArchitectView,
 } from './prompt-architect';
+
+export {
+  // Reviewer harness — re-exported through the barrel so the CLI (which may
+  // import only '../mission') and the website render the ONE projection.
+  CATALOG_STATUS_LABEL, HARNESS_STATE_LABEL, NO_HARNESS_CAPABILITIES,
+  REVIEWER_HARNESS_CAPABILITIES, REVIEWER_HARNESS_CATALOG,
+  REVIEWER_HARNESS_SCHEMA_VERSION, REVIEWER_SIMULATED_LABEL, REVIEWER_TOOLS,
+  UNKNOWN_HARNESS_USAGE, UNKNOWN_INDEPENDENCE,
+  assessIndependence, blockingFindings, classifyRecoveredHarness,
+  createReviewerHarnessStore, findCatalogEntry, grantReviewerTools,
+  harnessDraftFrom, harnessIsSelectableForRun, idleHarnessRecord,
+  isForbiddenReviewerTool, projectReviewerHarness, readHarnessRecord,
+  renderCatalogLine, renderHarnessCatalogLines, renderReviewerStatusLines,
+  retryHarnessRun, reviewerNotification, sealHarnessRecord,
+  validateProposedResult, validatedVerdictFor,
+  type HarnessConnectionState, type IndependenceAssessment, type ProposedVerdict,
+  type ReviewerHarnessCatalogEntry, type ReviewerHarnessRecord,
+  type ReviewerHarnessRecordDraft, type ReviewerHarnessStorePort,
+  type ReviewerHarnessView, type ReviewerIdentityEvidence,
+} from './reviewer-harness';

@@ -4,6 +4,7 @@ import type { RelayAgentOperatingProjection } from '../../mission';
 import type { MissionWorktreeView } from '../../mission/worktree';
 import type { CodingAgentView } from '../../mission/coding-agent';
 import type { PromptArchitectView } from '../../mission/prompt-architect';
+import type { ReviewerHarnessView } from '../../mission/reviewer-harness';
 
 /**
  * SUNDAY RELAY — THE AGENT OPERATING INSPECTOR.
@@ -36,6 +37,7 @@ export function RelayAgentOperatingInspector({
   worktree,
   runtime,
   architect,
+  reviewer,
   defaultOpen = false,
 }: {
   projection: RelayAgentOperatingProjection;
@@ -45,6 +47,8 @@ export function RelayAgentOperatingInspector({
   runtime?: CodingAgentView;
   /** Optional Prompt Architect runtime state (GPT). Absent = unknown. */
   architect?: PromptArchitectView;
+  /** Optional Reviewer harness state. Harness and Model stay separate. */
+  reviewer?: ReviewerHarnessView;
   /** Detail starts collapsed; a surface may open it for a focused view. */
   defaultOpen?: boolean;
 }) {
@@ -121,6 +125,27 @@ export function RelayAgentOperatingInspector({
           <span className="rpw-operating-runtime-detail">{architect.outcomeLabel}</span>
           {architect.disclosure !== null && (
             <span className="rpw-operating-disclosure">{architect.disclosure}</span>
+          )}
+        </p>
+      )}
+
+      {reviewer !== undefined && (
+        <p
+          className={`rpw-operating-runtime${reviewer.blocking ? ' rpw-operating-runtime--blocked' : ''}`}
+          data-reviewer-state={reviewer.connectionState}
+        >
+          <span className="rpw-operating-key">Reviewer harness</span>
+          <span className="rpw-operating-value">{reviewer.summary}</span>
+          {/* Harness and Model are always two separate labels. */}
+          <span className="rpw-operating-runtime-detail">
+            {`Harness ${reviewer.harnessLabel} · Model ${reviewer.modelLabel} · Provider ${reviewer.providerLabel}`}
+          </span>
+          <span className="rpw-operating-runtime-detail">
+            {`Independence ${reviewer.independenceLabel} · Validated ${reviewer.validatedVerdictLabel} · Usage ${reviewer.usageLabel}`}
+          </span>
+          <span className="rpw-operating-runtime-detail">{reviewer.outcomeLabel}</span>
+          {reviewer.disclosure !== null && (
+            <span className="rpw-operating-disclosure">{reviewer.disclosure}</span>
           )}
         </p>
       )}

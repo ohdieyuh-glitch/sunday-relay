@@ -18,6 +18,10 @@ import {
   createPromptArchitectStore,
   type PromptArchitectStorePort,
 } from '../mission/prompt-architect';
+import {
+  createReviewerHarnessStore,
+  type ReviewerHarnessStorePort,
+} from '../mission/reviewer-harness';
 
 /**
  * THE NODE DURABLE-MISSION ADAPTER.
@@ -116,6 +120,11 @@ export function createNodeCodingAgentStore(root: string): CodingAgentStorePort {
 /** The Prompt Architect store — a fourth key prefix on the same backing. */
 export function createNodePromptArchitectStore(root: string): PromptArchitectStorePort {
   return createPromptArchitectStore(createNodeDurableBacking(root));
+}
+
+/** The Reviewer harness store — a fifth key prefix on the same backing. */
+export function createNodeReviewerHarnessStore(root: string): ReviewerHarnessStorePort {
+  return createReviewerHarnessStore(createNodeDurableBacking(root));
 }
 
 /** The retained previous checkpoint, when one exists. Recovery offers this

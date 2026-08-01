@@ -27,6 +27,7 @@ import { RelayAgentOperatingInspector } from './RelayAgentOperatingInspector';
 import type { MissionWorktreeView } from '../../mission/worktree';
 import type { CodingAgentView } from '../../mission/coding-agent';
 import type { PromptArchitectView } from '../../mission/prompt-architect';
+import type { ReviewerHarnessView } from '../../mission/reviewer-harness';
 import { OUTPUT_STATE_LABEL, completionDisplay } from './projections';
 import type { RelayProjectWorkspaceProps } from './contracts';
 import type {
@@ -88,6 +89,8 @@ export function RelayProjectWorkspace(
     codingRuntime?: CodingAgentView;
     /** Prompt Architect runtime state for the Environment inspector. */
     architectRuntime?: PromptArchitectView;
+    /** Reviewer harness state for the Environment inspector. */
+    reviewerHarness?: ReviewerHarnessView;
   },
 ) {
   const {
@@ -198,6 +201,7 @@ export function RelayProjectWorkspace(
             worktree={agentRole === 'coding_agent' ? props.worktree : undefined}
             runtime={agentRole === 'coding_agent' ? props.codingRuntime : undefined}
             architect={agentRole === 'prompt_architect' ? props.architectRuntime : undefined}
+            reviewer={agentRole === 'reviewer' ? props.reviewerHarness : undefined}
           />
         )}
       </RelayFocusedPanel>
