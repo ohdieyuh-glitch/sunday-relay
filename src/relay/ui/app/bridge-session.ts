@@ -164,3 +164,137 @@ export function stateFromResponse(input: {
   }
   return 'bridge_unavailable';
 }
+
+/* ------------------------------------------------------ redeeming a grant */
+
+/** The bridge this browser was built to talk to. Non-secret, build-time. */
+export function configuredBridgeUrl(): string | null {
+  const env = (typeof import.meta !== 'undefined' ? import.meta.env : undefined) as
+    | { VITE_RELAY_BRIDGE_URL?: string; VITE_RELAY_LIVE?: string }
+    | undefined;
+  if (env?.VITE_RELAY_LIVE !== '1') return null;
+  const url = env?.VITE_RELAY_BRIDGE_URL?.trim();
+  return url !== undefined && url !== '' ? url.replace(/\/$/, '') : null;
+}
+
+export interface PairBrowserResult {
+  readonly state: BridgeConnectionState;
+  /** Safe to display. Never contains a grant, a secret or a token. */
+  readonly message: string | null;
+}
+
+/**
+ * Redeems a one-time pairing grant for a browser session.
+ *
+ * The grant is sent ONCE and never stored — not in memory, not in
+ * sessionStorage, not in a log. Only the session token that comes back is
+ * kept, and only for this tab. The Origin header is attached by the browser
+ * itself, which is what binds the exchange to the approved site.
+ */
+export async function pairBrowser(input: {
+  grantId: string;
+  grantSecret: string;
+  fetchImpl?: typeof fetch;
+  bridgeUrl?: string | null;
+}): Promise<PairBrowserResult> {
+  const base = input.bridgeUrl ?? configuredBridgeUrl();
+  if (base === null) {
+    return { state: 'offline', message: 'No Relay Bridge is configured for this build.' };
+  }
+  const doFetch = input.fetchImpl ?? ((u: RequestInfo | URL, i?: RequestInit) => fetch(u, i));
+
+  let status: number | null = null;
+  let token: string | null = null;
+  let expiresAt = '';
+  try {
+    const res = await doFetch(`${base}/relay-api/browser/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      // The grant travels in the BODY, never a URL — a URL reaches proxies,
+      // history and logs.
+      body: JSON.stringify({ grantId: input.grantId, grantSecret: input.grantSecret }),
+      credentials: 'omit',
+      cache: 'no-store',
+    });
+    status = res.status;
+    if (res.ok) {
+      const payload = await res.json() as { data?: { sessionToken?: unknown; expiresAt?: unknown } };
+      const t = payload.data?.sessionToken;
+      if (typeof t === 'string' && t !== '') {
+        token = t;
+        expiresAt = typeof payload.data?.expiresAt === 'string' ? payload.data.expiresAt : '';
+      }
+    }
+  } catch {
+    return { state: 'bridge_unavailable', message: 'The Relay Bridge could not be reached.' };
+  }
+
+  if (token === null) {
+    // A rejected grant is authentication_rejected, never "connected". The
+    // bridge deliberately gives one message for every failure mode.
+    if (status === 401 || status === 403) {
+      return {
+        state: 'authentication_rejected',
+        message: 'That grant was not accepted. Grants expire after two minutes and may be used once.',
+      };
+    }
+    return { state: 'bridge_unavailable', message: 'The Relay Bridge did not return a session.' };
+  }
+
+  saveBridgeSession({
+    token,
+    origin: typeof window !== 'undefined' ? window.location.origin : '',
+    expiresAt,
+    scope: 'browser_read_only',
+  });
+  return { state: 'connected', message: null };
+}
+
+export interface DisconnectResult {
+  readonly state: BridgeConnectionState;
+  /** True ONLY when the bridge confirmed it destroyed the session. */
+  readonly revokedOnBridge: boolean;
+  readonly message: string;
+}
+
+/**
+ * Ends the session.
+ *
+ * The local copy is cleared WHATEVER happens, so a browser can always reach a
+ * known-clean state. But a local clear is not a revocation: when the bridge
+ * cannot be reached the result says so rather than implying the session is
+ * dead everywhere.
+ */
+export async function disconnectBrowser(input: {
+  fetchImpl?: typeof fetch;
+  bridgeUrl?: string | null;
+} = {}): Promise<DisconnectResult> {
+  const session = loadBridgeSession();
+  const base = input.bridgeUrl ?? configuredBridgeUrl();
+  const doFetch = input.fetchImpl ?? ((u: RequestInfo | URL, i?: RequestInit) => fetch(u, i));
+
+  let revokedOnBridge = false;
+  if (session !== null && base !== null) {
+    try {
+      const res = await doFetch(`${base}/relay-api/browser/revoke`, {
+        method: 'POST',
+        headers: bridgeSessionHeader(session),
+        credentials: 'omit',
+        cache: 'no-store',
+      });
+      revokedOnBridge = res.ok;
+    } catch {
+      revokedOnBridge = false;
+    }
+  }
+
+  // Always, even if the bridge never answered.
+  clearBridgeSession();
+  return {
+    state: 'reachable_not_paired',
+    revokedOnBridge,
+    message: revokedOnBridge
+      ? 'Session revoked on the Relay Bridge and cleared from this browser.'
+      : 'Cleared from this browser. The Relay Bridge did not confirm revocation — the session expires on its own.',
+  };
+}

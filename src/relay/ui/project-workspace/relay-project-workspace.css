@@ -2024,3 +2024,126 @@
 @media (prefers-reduced-motion: reduce) {
   .rpw-tmpanel-shell { transition: none; animation: none; }
 }
+
+/* ================================================================
+   RELAY BRIDGE PAIRING — the browser's only route to a Bridge
+   credential. Same sheet language as the harness catalog.
+   ================================================================ */
+
+.rbp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 67;
+  background: rgba(4, 5, 8, 0.86);
+  display: flex;
+  justify-content: flex-end;
+}
+.rbp-sheet {
+  background: var(--rpw-bg);
+  color: var(--rpw-cream);
+  border-left: 1px solid var(--rpw-gold-dim);
+  width: min(420px, 100%);
+  height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding:
+    calc(14px + env(safe-area-inset-top, 0px))
+    calc(16px + env(safe-area-inset-right, 0px))
+    calc(14px + env(safe-area-inset-bottom, 0px))
+    calc(16px + env(safe-area-inset-left, 0px));
+  font-family: var(--rpw-mono);
+}
+.rbp-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rpw-line);
+}
+.rbp-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--rpw-cream);
+}
+.rbp-title::before { content: '■ '; color: var(--rpw-gold); font-size: 7px; vertical-align: 2px; }
+.rbp-close {
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--rpw-dim);
+  background: transparent;
+  border: 1px solid var(--rpw-line);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.rbp-close:focus-visible, .rbp-btn:focus-visible, .rbp-input:focus-visible {
+  outline: 2px solid var(--rpw-gold);
+  outline-offset: 1px;
+}
+/* State is stated in words; the attribute tints only the connected case. */
+.rbp-state {
+  margin: 10px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--rpw-cream);
+}
+.rbp-state[data-bridge-state='connected'] { color: var(--rpw-green); }
+.rbp-message {
+  margin: 4px 0 0;
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--rpw-amber);
+  overflow-wrap: anywhere;
+}
+.rbp-note {
+  margin: 10px 0 0;
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--rpw-dim);
+}
+.rbp-note code { color: var(--rpw-gold); }
+.rbp-form { display: flex; flex-direction: column; }
+.rbp-label {
+  margin: 10px 0 3px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rpw-faint);
+}
+.rbp-input {
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--rpw-cream);
+  background: var(--rpw-panel);
+  border: 1px solid var(--rpw-line);
+  padding: 7px 8px;
+  min-width: 0;
+}
+.rbp-btn {
+  margin-top: 14px;
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rpw-gold);
+  background: transparent;
+  border: 1px solid var(--rpw-gold-dim);
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.rbp-btn--primary { border-color: var(--rpw-gold); }
+.rbp-btn[disabled] { color: var(--rpw-faint); border-color: var(--rpw-line); cursor: default; }
+
+@media (max-width: 700px) {
+  .rbp-overlay { justify-content: stretch; }
+  .rbp-sheet { width: 100%; border-left: 0; }
+  .rbp-close, .rbp-btn, .rbp-input { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rbp-overlay, .rbp-sheet { transition: none; animation: none; }
+}
