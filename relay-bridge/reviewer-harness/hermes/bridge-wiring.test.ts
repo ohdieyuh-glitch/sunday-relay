@@ -56,7 +56,10 @@ describe('the readiness endpoint costs nothing', () => {
     path: string, opts: { token?: string | null } = {},
   ): Promise<{ status: number; body: Record<string, unknown> }> => {
     const previous = process.env.RELAY_BRIDGE_API_TOKEN;
+    const previousExe = process.env.RELAY_HERMES_EXECUTABLE;
     process.env.RELAY_BRIDGE_API_TOKEN = TOKEN;
+    // Deterministic and fast: never probe whichever Hermes this machine has.
+    process.env.RELAY_HERMES_EXECUTABLE = '/nonexistent/relay-hermes-probe';
     const server = createBridgeServer(loadBridgeConfig(), {
       start: () => ({}) as never, get: () => undefined, cancel: () => undefined, retry: () => undefined,
     } as never);
@@ -73,6 +76,8 @@ describe('the readiness endpoint costs nothing', () => {
       await new Promise<void>((r) => server.close(() => r()));
       if (previous === undefined) delete process.env.RELAY_BRIDGE_API_TOKEN;
       else process.env.RELAY_BRIDGE_API_TOKEN = previous;
+      if (previousExe === undefined) delete process.env.RELAY_HERMES_EXECUTABLE;
+      else process.env.RELAY_HERMES_EXECUTABLE = previousExe;
     }
   };
 

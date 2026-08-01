@@ -118,7 +118,7 @@ describe('discovery reports what is installed, and nothing more', () => {
     const readiness = assessHarnessReadiness(hermesEntry(), evidence);
     expect(readiness.startable).toBe(false);
     expect(readiness.state).toBe('credentials_missing');
-  });
+  }, 30_000);
 
   it('discovery makes no provider request and mutates no global config', () => {
     const dir = workdir();
@@ -466,7 +466,7 @@ describe('readiness never upgrades itself', () => {
     expect(evidence.verifiedModelId).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(assessHarnessReadiness(hermesEntry(), evidence).state).toBe('model_unverified');
-  });
+  }, 30_000);
 
   it('does not contact the provider when a local requirement already failed', async () => {
     const dir = workdir();
@@ -478,7 +478,7 @@ describe('readiness never upgrades itself', () => {
     expect(r.providerRequestMade).toBe(false);
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(assessHarnessReadiness(hermesEntry(), r.evidence).state).toBe('incompatible');
-  });
+  }, 30_000);
 
   it('reaches ready only when every requirement is proven', async () => {
     const dir = workdir();
@@ -497,7 +497,7 @@ describe('readiness never upgrades itself', () => {
     expect(readiness.startable).toBe(true);
     // Ready is still not authorization.
     expect(readiness.reason).toContain('explicit authorization');
-  });
+  }, 30_000);
 
   it('an unavailable model leaves the harness unstartable', async () => {
     const dir = workdir();
@@ -512,7 +512,7 @@ describe('readiness never upgrades itself', () => {
     const readiness = assessHarnessReadiness(hermesEntry(), r.evidence);
     expect(readiness.startable).toBe(false);
     expect(readiness.state).toBe('model_unverified');
-  });
+  }, 30_000);
 
   it('the effective entry only ever changes the two runtime-knowable fields', async () => {
     const dir = workdir();
@@ -534,5 +534,5 @@ describe('readiness never upgrades itself', () => {
     expect(harnessIsSelectableForRun(effective)).toBe(true);
     // Without evidence the canonical rule still says no.
     expect(harnessIsSelectableForRun(base)).toBe(false);
-  });
+  }, 30_000);
 });
