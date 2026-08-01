@@ -1,7 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 
 import { RelayProjectHeader } from './RelayProjectHeader';
-import { RelayWorkforceStrip } from './RelayWorkforceStrip';
 import { RelayConsole } from './RelayConsole';
 import { RelayProjectConversation } from './RelayProjectConversation';
 import { RelayLiveTerminalPanel } from './RelayLiveTerminalPanel';
@@ -16,14 +15,8 @@ import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
 import { RelayProjectFooter } from './RelayProjectFooter';
 import { RelayPspAgentImport } from '../psp-import';
-import { RelayUsageBar, type RelayWorkspaceUsage } from '../usage';
-import {
-  RelayFocusBackdrop,
-  RelayFocusedPanel,
-  RelayPanelExpandButton,
-  type RelayFocusablePanel,
-} from './RelayPanelFocus';
-import { RelayAgentOperatingInspector } from './RelayAgentOperatingInspector';
+import type { RelayWorkspaceUsage } from '../usage';
+import type { RelayFocusablePanel } from './RelayPanelFocus';
 import type { MissionWorktreeView } from '../../mission/worktree';
 import type { CodingAgentView } from '../../mission/coding-agent';
 import type { PromptArchitectView } from '../../mission/prompt-architect';
@@ -153,81 +146,20 @@ export function RelayProjectWorkspace(
     [props.reviewerHarness],
   );
 
+
   /**
-   * WHICH PANEL IS FOCUSED — view state, and only view state.
+   * THE WORKSPACE HAS NO PER-PANEL FULLSCREEN CONTROL.
    *
-   * No mission, terminal or agent state lives here, and nothing is copied into
-   * a fullscreen-only store: focusing a panel changes one string. The panels
-   * themselves never leave the tree, so expanding one cannot restart an agent,
-   * duplicate a terminal or lose output.
+   * Expanding a box is a LIVE TERMINAL affordance (founder direction): the
+   * terminal's role boxes carry the control, and the workspace stays a plain
+   * reading surface. This helper therefore renders the panel exactly as it is
+   * — kept as a seam so the call sites stay readable and a future surface can
+   * reintroduce a wrapper in one place rather than nine.
    */
-  const [requestedFocus, setRequestedFocus] = useState<RelayFocusablePanel | null>(null);
-  /**
-   * A PANEL THAT IS NOT RENDERED CANNOT BE FOCUSED. The Coding Agent panel
-   * exists only while there is a terminal view; if that goes away while it is
-   * focused, the stored id would leave a backdrop over an empty workspace with
-   * nothing to close. Focus is therefore derived, not merely stored.
-   */
-  const focusedPanel: RelayFocusablePanel | null =
-    requestedFocus === 'coding_agent' && props.codingTerminal === undefined ? null : requestedFocus;
-  const setFocusedPanel = setRequestedFocus;
-  const expandRefs = useRef<Partial<Record<RelayFocusablePanel, HTMLButtonElement | null>>>({});
-
-  const toggleFocus = useCallback((panel: RelayFocusablePanel) => {
-    setFocusedPanel((current) => (current === panel ? null : panel));
-  }, []);
-  const closeFocus = useCallback(() => setFocusedPanel(null), []);
-
-  /**
-   * Wraps a panel IN PLACE with the canonical expand control and focused
-   * shell. `agent` adds the four operating components to the focused view, so
-   * a focused agent shows what is running it without the workforce strip.
-   */
-  const focusable = (
-    panel: RelayFocusablePanel,
-    content: React.ReactNode,
-    agentRole?: 'prompt_architect' | 'coding_agent' | 'reviewer',
-  ) => {
-    const focused = focusedPanel === panel;
-    const profile = agentRole === undefined
-      ? undefined
-      : props.operatingProfiles?.find((p) => p.role === agentRole);
-    return (
-      <RelayFocusedPanel
-        panel={panel}
-        focused={focused}
-        onClose={closeFocus}
-        returnFocusTo={expandRefs.current[panel] ?? null}
-      >
-        <RelayPanelExpandButton
-          panel={panel}
-          focused={focused}
-          onToggle={toggleFocus}
-          buttonRef={(node) => { expandRefs.current[panel] = node; }}
-        />
-        {content}
-        {/* The Usage Bar stays available in focused views: the backdrop
-            covers the header, so the focused shell pins a compact echo of
-            the SAME projected view beside the return control. Stateless, so
-            this is presentation, never a second usage authority. */}
-        {focused && props.usage !== undefined && (
-          <RelayUsageBar view={props.usage.bar} onOpen={props.usage.onOpenUsage} compact />
-        )}
-        {focused && profile !== undefined && (
-          <RelayAgentOperatingInspector
-            projection={profile}
-            worktree={agentRole === 'coding_agent' ? props.worktree : undefined}
-            runtime={agentRole === 'coding_agent' ? props.codingRuntime : undefined}
-            architect={agentRole === 'prompt_architect' ? props.architectRuntime : undefined}
-            reviewer={agentRole === 'reviewer' ? props.reviewerHarness : undefined}
-          />
-        )}
-      </RelayFocusedPanel>
-    );
-  };
+  const focusable = (_panel: RelayFocusablePanel, content: React.ReactNode) => content;
 
   return (
-    <div className="rpw" data-panel-focused={focusedPanel !== null ? 'true' : 'false'}>
+    <div className="rpw" data-panel-focused="false">
       <div className="rpw-grid-bg" aria-hidden="true" />
       <div className="rpw-scanlines" aria-hidden="true" />
 
@@ -246,15 +178,6 @@ export function RelayProjectWorkspace(
         onOpenTerminal={onOpenTerminal}
       />
 
-      {/* The four canonical operating components per Relay Dog, from the SAME
-          projection `relay agent profile` prints. Simulated until a runtime is
-          actually attached, and the inspector says so. */}
-      <RelayWorkforceStrip
-        workforce={workforce}
-        mode={mode}
-        phase={phase}
-        operating={props.operatingProfiles}
-      />
 
       <main className="rpw-main">
         {/* The Relay Dog sits centered between the workforce strip and the
@@ -301,7 +224,6 @@ export function RelayProjectWorkspace(
             {props.codingTerminal && focusable(
               'coding_agent',
               <RelayCodingAgentTerminal view={props.codingTerminal} reducedMotion={reducedMotion} />,
-              'coding_agent',
             )}
             {props.roleBilling && props.roleBilling.length > 0 && (
               <RelayRoleBilling rows={props.roleBilling} />
@@ -350,12 +272,12 @@ export function RelayProjectWorkspace(
                   onOpenFinding={onOpenFinding}
                   onOpenRepair={onOpenRepair}
                 />
-              ), 'reviewer')}
+              ))}
             </div>
             <div className="rpw-status-block">
               {focusable('prompt_architect', (
                 <RelayResearchStatus state={researchState} onRequestResearch={onRequestResearch} />
-              ), 'prompt_architect')}
+              ))}
             </div>
             <div className="rpw-status-block">
               {focusable('project_brain', <RelayProjectBrainStatus state={projectBrainState} />)}
@@ -380,7 +302,6 @@ export function RelayProjectWorkspace(
 
       {/* Makes the workspace inert to the pointer while a panel is focused.
           `aria-modal` on the focused panel does the same for assistive tech. */}
-      <RelayFocusBackdrop focused={focusedPanel !== null} />
 
       {terminalOpen && (
         <div className="rpw-terminal-overlay">

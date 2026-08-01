@@ -76,18 +76,14 @@ describe('Usage Bar in the workspace header', () => {
   });
 });
 
-describe('fullscreen (focused panel) integration', () => {
-  it('keeps the Usage Bar available inside a focused agent view, without duplicating state', () => {
+describe('the workspace keeps exactly one Usage Bar', () => {
+  it('has no per-panel fullscreen control, so no view can echo a second bar', () => {
     renderWorkspace({ usage: usageProp() });
+    // Expanding a box is a Live Terminal affordance now; the workspace has no
+    // focused view, so the compact echo has nowhere to be duplicated.
+    expect(screen.queryAllByRole('button', { name: /^Expand .+ panel$/ })).toHaveLength(0);
     expect(usageButtons()).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Reviewer panel' }));
-    const dialog = screen.getByRole('dialog');
-    const compact = within(dialog).getAllByRole('button', { name: /^Usage — / });
-    expect(compact).toHaveLength(1);
-    expect(compact[0].className).toContain('rus-bar--compact');
-    // Escape returns to the workspace; the compact echo goes away with it.
-    fireEvent.keyDown(dialog, { key: 'Escape' });
-    expect(usageButtons()).toHaveLength(1);
+    expect(document.querySelectorAll('.rus-bar--compact')).toHaveLength(0);
   });
 
   it('the compact echo is pinned clear of the sticky return control (CSS fact)', () => {

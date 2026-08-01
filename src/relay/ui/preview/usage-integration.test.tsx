@@ -150,17 +150,14 @@ describe('Demo Simulation drives the SIMULATED usage ladder', () => {
     driveDemoTo(6);
     expect(hosts()).toHaveLength(1);
     const before = screen.getByText('You have used 70% of your five-hour allowance.');
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Relay Console panel' }));
+    // The workspace no longer expands panels, so there is no second place for
+    // the host or the toast to be re-created.
+    expect(screen.queryAllByRole('button', { name: /^Expand .+ panel$/ })).toHaveLength(0);
     expect(hosts()).toHaveLength(1);
     // The SAME toast node survives — nothing remounted, no timer restarted.
     expect(screen.getByText('You have used 70% of your five-hour allowance.')).toBe(before);
-    // The compact usage echo is reachable inside the focused view.
-    const dialogs = screen.getAllByRole('dialog');
-    const focused = dialogs.find((d) => d.getAttribute('aria-label')?.includes('focused panel'));
-    expect(focused).toBeTruthy();
-    expect(
-      within(focused as HTMLElement).getAllByRole('button', { name: /^Usage — / }).length,
-    ).toBe(1);
+    // Exactly one Usage Bar, in the header, and no duplicate echo anywhere.
+    expect(screen.getAllByRole('button', { name: /^Usage — / })).toHaveLength(1);
   }, SLOW);
 
   it('route changes do not duplicate an already-delivered event', () => {

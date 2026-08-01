@@ -80,22 +80,15 @@ describe('product flow + application surface', () => {
 /* ------------------------------------------------------------- workforce */
 
 describe('workforce strip', () => {
-  it('shows Architect, Coding Agent, Reviewer, Mode, and Phase with truthful states', () => {
+  it('no longer carries the workforce strip (founder direction)', () => {
     const html = render('implementing');
-    expect(html).toContain('PROMPT ARCHITECT');
-    expect(html).toContain('Sunday Alcatraz');
-    expect(html).toContain('PREPARING HANDOFF');
-    expect(html).toContain('CODING AGENT');
-    expect(html).toContain('Claude Code');
-    expect(html).toContain('IMPLEMENTING');
-    expect(html).toContain('REVIEWER');
+    // The top band was removed from the workspace. The strip component and its
+    // own tests still exist; the WORKSPACE simply does not render it.
+    expect(html).not.toContain('rpw-strip-square');
+    expect(html).not.toContain('rpw-strip-cell');
+    expect(html).not.toContain('rpw-operating-rows');
+    // The Reviewer is still named where it is actually acted on.
     expect(html).toContain('Codex');
-    expect(html).toContain('MODE');
-    expect(html).toContain('SEMI');
-    expect(html).toContain('PHASE');
-    expect(html).toContain('BUILD');
-    // Continuous strip with gold status squares, not cards.
-    expect(html).toContain('rpw-strip-square');
   });
 });
 

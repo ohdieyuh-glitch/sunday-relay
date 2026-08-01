@@ -42,6 +42,7 @@ export const RELAY_FOCUSABLE_PANELS = [
   'conversation',
   'console',
   'live_terminal',
+  'relay_system',
 ] as const;
 
 export type RelayFocusablePanel = (typeof RELAY_FOCUSABLE_PANELS)[number];
@@ -59,6 +60,7 @@ export const RELAY_PANEL_NAME: Readonly<Record<RelayFocusablePanel, string>> = O
   conversation: 'Project conversation',
   console: 'Relay Console',
   live_terminal: 'Live Terminal',
+  relay_system: 'Relay System',
 });
 
 export const EXPAND_TOOLTIP = 'Expand';

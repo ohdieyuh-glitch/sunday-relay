@@ -1,7 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RelayDogMark } from '../pixel-dog';
 import { RelayProjectFooter } from './RelayProjectFooter';
 import { RelayCodingAgentTerminal } from './RelayCodingAgentTerminal';
+import { REVIEWER_STATE_LABEL } from './projections';
+import {
+  RelayFocusedPanel, RelayPanelExpandButton, type RelayFocusablePanel,
+} from './RelayPanelFocus';
 import type { CodingTerminalView } from './coding-terminal';
 import { OUTPUT_STATE_LABEL, TRUTH_BADGE, formatEventTime } from './projections';
 import type {
@@ -34,6 +38,7 @@ import type {
 
 const ARCHITECT_CATS: ReadonlySet<TerminalEventCategory> = new Set(['prompt_architect', 'research']);
 const CODING_CATS: ReadonlySet<TerminalEventCategory> = new Set(['coding_agent', 'repair']);
+const REVIEWER_CATS: ReadonlySet<TerminalEventCategory> = new Set(['reviewer', 'verification']);
 
 const ACTIVE_STATES: ReadonlySet<WorkspaceOutputState> = new Set([
   'ready',
@@ -142,14 +147,30 @@ function TerminalRow({ event, streaming }: { event: WorkspaceTerminalEvent; stre
   );
 }
 
+/**
+ * ONE ROLE BOX. Every box in the Live Terminal is this component, so the
+ * fullscreen control lives HERE rather than at each call site — a box added
+ * later gets the control for free, and none of them can drift apart.
+ *
+ * The control and the expanded shell are the canonical ones the rest of Relay
+ * uses (`RelayPanelExpandButton` / `RelayFocusedPanel`): same icon, same
+ * accessible name shape, same Escape and focus-return behaviour.
+ */
 function RolePanel({
+  panel,
   title,
   chip,
   rightStatus,
   busy,
   events,
   contextLine,
+  focused,
+  onToggleFocus,
+  onCloseFocus,
+  expandRef,
+  returnFocusTo,
 }: {
+  panel: RelayFocusablePanel;
   title: string;
   chip: string;
   rightStatus: string;
@@ -157,30 +178,49 @@ function RolePanel({
   busy: boolean;
   events: WorkspaceTerminalEvent[];
   contextLine?: string;
+  focused: boolean;
+  onToggleFocus: (panel: RelayFocusablePanel) => void;
+  onCloseFocus: () => void;
+  expandRef: (node: HTMLButtonElement | null) => void;
+  returnFocusTo: HTMLButtonElement | null;
 }) {
   if (events.length === 0 && !contextLine) return null;
   const lastId = events.length > 0 ? events[events.length - 1].eventId : null;
   return (
-    <section className="rpw-tmpanel" aria-label={`${title} activity`}>
-      <header className="rpw-tmpanel-head">
-        <span className="rpw-tmpanel-title">
-          <span className="rpw-tmpanel-square" aria-hidden="true">
-            ■
-          </span>{' '}
-          {title} <span className="rpw-tmpanel-chip">{chip}</span>
-        </span>
-        <span className={`rpw-tmpanel-status${busy ? ' rpw-tmpanel-status--busy' : ''}`}>
-          {rightStatus}
-          {busy && <BusyDots />}
-        </span>
-      </header>
-      <ol className="rpw-tmpanel-feed">
-        {events.map((e) => (
-          <TerminalRow key={e.eventId} event={e} streaming={busy && e.eventId === lastId} />
-        ))}
-      </ol>
-      {contextLine && <p className="rpw-tmpanel-context">{contextLine}</p>}
-    </section>
+    <RelayFocusedPanel
+      panel={panel}
+      focused={focused}
+      onClose={onCloseFocus}
+      returnFocusTo={returnFocusTo}
+      className="rpw-tmpanel-shell"
+    >
+      <section className="rpw-tmpanel" aria-label={`${title} activity`}>
+        <header className="rpw-tmpanel-head">
+          <span className="rpw-tmpanel-title">
+            <span className="rpw-tmpanel-square" aria-hidden="true">
+              ■
+            </span>{' '}
+            {title} <span className="rpw-tmpanel-chip">{chip}</span>
+          </span>
+          <span className={`rpw-tmpanel-status${busy ? ' rpw-tmpanel-status--busy' : ''}`}>
+            {rightStatus}
+            {busy && <BusyDots />}
+          </span>
+          <RelayPanelExpandButton
+            panel={panel}
+            focused={focused}
+            onToggle={onToggleFocus}
+            buttonRef={expandRef}
+          />
+        </header>
+        <ol className="rpw-tmpanel-feed">
+          {events.map((e) => (
+            <TerminalRow key={e.eventId} event={e} streaming={busy && e.eventId === lastId} />
+          ))}
+        </ol>
+        {contextLine && <p className="rpw-tmpanel-context">{contextLine}</p>}
+      </section>
+    </RelayFocusedPanel>
   );
 }
 
@@ -248,12 +288,35 @@ export function RelayLiveTerminalPanel({
 
   const architectEvents = events.filter((e) => ARCHITECT_CATS.has(e.category));
   const codingEvents = events.filter((e) => CODING_CATS.has(e.category));
+  const reviewerEvents = events.filter((e) => REVIEWER_CATS.has(e.category));
+  // RELAY SYSTEM stays the catch-all, so a reviewer event appears in exactly
+  // one lane rather than two.
   const relayEvents = events.filter(
-    (e) => !ARCHITECT_CATS.has(e.category) && !CODING_CATS.has(e.category),
+    (e) => !ARCHITECT_CATS.has(e.category) && !CODING_CATS.has(e.category)
+      && !REVIEWER_CATS.has(e.category),
   );
 
   const architectBusy = live && ARCHITECT_BUSY.has(workforce.promptArchitect.status);
   const codingBusy = live && CODING_BUSY.has(workforce.codingAgent.status);
+
+  /* WHICH ROLE BOX IS EXPANDED — view state, and only view state. The boxes
+     never leave the tree, so expanding one cannot restart a stream or lose
+     output. */
+  const [focusedRole, setFocusedRole] = useState<RelayFocusablePanel | null>(null);
+  const roleExpandRefs = useRef<Partial<Record<RelayFocusablePanel, HTMLButtonElement | null>>>({});
+  const toggleRole = useCallback(
+    (panel: RelayFocusablePanel) => setFocusedRole((c) => (c === panel ? null : panel)),
+    [],
+  );
+  const closeRole = useCallback(() => setFocusedRole(null), []);
+  const roleProps = (panel: RelayFocusablePanel) => ({
+    panel,
+    focused: focusedRole === panel,
+    onToggleFocus: toggleRole,
+    onCloseFocus: closeRole,
+    expandRef: (node: HTMLButtonElement | null) => { roleExpandRefs.current[panel] = node; },
+    returnFocusTo: roleExpandRefs.current[panel] ?? null,
+  });
 
   return (
     <section
@@ -341,6 +404,7 @@ export function RelayLiveTerminalPanel({
         ) : (
           <div className="rpw-tm-panels">
             <RolePanel
+              {...roleProps('prompt_architect')}
               title="PROMPT ARCHITECT"
               chip={architectEvents.length > 0 ? 'ACTIVE' : 'IDLE'}
               rightStatus={ARCHITECT_STATUS[workforce.promptArchitect.status]}
@@ -348,9 +412,23 @@ export function RelayLiveTerminalPanel({
               events={architectEvents}
             />
             {codingTerminal ? (
-              <RelayCodingAgentTerminal view={codingTerminal} reducedMotion={reducedMotion} />
+              <RelayFocusedPanel
+                {...(() => { const p = roleProps('coding_agent'); return {
+                  panel: p.panel, focused: p.focused, onClose: p.onCloseFocus,
+                  returnFocusTo: p.returnFocusTo }; })()}
+                className="rpw-tmpanel-shell"
+              >
+                <RelayPanelExpandButton
+                  panel="coding_agent"
+                  focused={focusedRole === 'coding_agent'}
+                  onToggle={toggleRole}
+                  buttonRef={(node) => { roleExpandRefs.current.coding_agent = node; }}
+                />
+                <RelayCodingAgentTerminal view={codingTerminal} reducedMotion={reducedMotion} />
+              </RelayFocusedPanel>
             ) : (
               <RolePanel
+                {...roleProps('coding_agent')}
                 title="CODING AGENT"
                 chip={codingEvents.length > 0 ? 'ACTIVE' : 'IDLE'}
                 rightStatus={CODING_STATUS[workforce.codingAgent.status]}
@@ -359,6 +437,16 @@ export function RelayLiveTerminalPanel({
               />
             )}
             <RolePanel
+              {...roleProps('reviewer')}
+              title="REVIEWER"
+              chip={reviewerEvents.length > 0 ? 'ACTIVE' : 'IDLE'}
+              rightStatus={REVIEWER_STATE_LABEL[workforce.reviewer.state]}
+              busy={false}
+              events={reviewerEvents}
+              contextLine={`REVIEWER: ${workforce.reviewer.name}`}
+            />
+            <RolePanel
+              {...roleProps('relay_system')}
               title="RELAY SYSTEM"
               chip={demo ? 'DEMO' : live ? 'LIVE' : 'STANDBY'}
               rightStatus={OUTPUT_STATE_LABEL[outputState]}

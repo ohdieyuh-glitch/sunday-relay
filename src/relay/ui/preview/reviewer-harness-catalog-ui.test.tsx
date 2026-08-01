@@ -80,16 +80,14 @@ describe('the Reviewer Harness control', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
   }, 30_000);
 
-  it('is reachable from the Reviewer fullscreen surface', async () => {
+  it('is reachable directly on the Reviewer panel, with no fullscreen step', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Reviewer panel' }));
-    const focused = document.querySelectorAll('.rpw-focusable[data-focused="true"]');
-    expect(focused).toHaveLength(1);
-    expect(focused[0].getAttribute('data-panel')).toBe('reviewer');
-    // The SAME control, inside the focused panel — not a second one.
+    // The workspace has no per-panel fullscreen control any more, so the
+    // catalog must be reachable in one click from the panel itself.
+    expect(screen.queryAllByRole('button', { name: /^Expand .+ panel$/ })).toHaveLength(0);
     const triggers = screen.getAllByRole('button', { name: 'Reviewer Harness' });
     expect(triggers).toHaveLength(1);
-    expect(focused[0].contains(triggers[0])).toBe(true);
+    expect(triggers[0].closest('.rpw-reviewer')).not.toBeNull();
     fireEvent.click(triggers[0]);
     expect(screen.getByRole('dialog', { name: 'Reviewer Harness' })).toBeTruthy();
   }, 30_000);
@@ -462,17 +460,13 @@ describe('independence is projected, never assumed', () => {
 /* ------------------------------------------ fullscreen, focus, escape -- */
 
 describe('fullscreen, focus and Escape', () => {
-  it('opens from Reviewer fullscreen without duplicating a host or a panel', async () => {
+  it('opens without duplicating the Reviewer panel, the catalog or the host', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Reviewer panel' }));
     openCatalog();
-    expect(document.querySelectorAll('.rpw-focusable[data-focused="true"]')).toHaveLength(1);
     expect(document.querySelectorAll('.rpw-reviewer')).toHaveLength(1);
     expect(document.querySelectorAll('[data-relay-harness-catalog="true"]')).toHaveLength(1);
     expect(document.querySelectorAll('[data-relay-notification-host="true"]').length)
       .toBeLessThanOrEqual(1);
-    // Prompt Architect and Coding Agent panels keep their own controls.
-    expect(screen.getByRole('button', { name: 'Expand Prompt Architect panel' })).toBeTruthy();
   }, 30_000);
 
   it('moves focus into the sheet and returns it to the trigger on close', async () => {
@@ -486,18 +480,14 @@ describe('fullscreen, focus and Escape', () => {
     expect(document.activeElement).toBe(trigger);
   }, 30_000);
 
-  it('Escape closes the catalog and leaves the focused panel open beneath it', async () => {
+  it('Escape closes the catalog and leaves the workspace intact', async () => {
     await renderApp();
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Reviewer panel' }));
     const dialog = openCatalog();
     fireEvent.keyDown(dialog, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'Reviewer Harness' })).toBeNull();
-    // The topmost surface closed — and only that one.
-    const focused = document.querySelectorAll('.rpw-focusable[data-focused="true"]');
-    expect(focused).toHaveLength(1);
-    // A second Escape then returns the panel to the workspace.
-    fireEvent.keyDown(focused[0], { key: 'Escape' });
-    expect(document.querySelectorAll('.rpw-focusable[data-focused="true"]')).toHaveLength(0);
+    // The Reviewer panel itself is untouched and still carries its trigger.
+    expect(document.querySelectorAll('.rpw-reviewer')).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Reviewer Harness' })).toHaveLength(1);
   }, 30_000);
 });
 
@@ -592,14 +582,12 @@ describe('the sheet stays usable on mobile', () => {
 /* --------------------------------------------- existing surfaces hold -- */
 
 describe('the surrounding surfaces are unchanged', () => {
-  it('keeps Prompt Architect, Coding Agent and Reviewer fullscreen working', async () => {
+  it('leaves the surrounding workspace surfaces intact', async () => {
     const fetchSpy = await renderApp();
-    for (const panel of ['Prompt Architect', 'Reviewer']) {
-      fireEvent.click(screen.getByRole('button', { name: `Expand ${panel} panel` }));
-      const focused = document.querySelectorAll('.rpw-focusable[data-focused="true"]');
-      expect(focused, `${panel} did not focus`).toHaveLength(1);
-      fireEvent.keyDown(focused[0], { key: 'Escape' });
-    }
+    // Fullscreen moved to the Live Terminal; the workspace carries none.
+    expect(screen.queryAllByRole('button', { name: /^Expand .+ panel$/ })).toHaveLength(0);
+    expect(document.querySelectorAll('.rpw-reviewer')).toHaveLength(1);
+    expect(document.querySelectorAll('.rpw-research')).toHaveLength(1);
     expect(screen.getAllByRole('button', { name: /^Usage — / })[0].textContent)
       .toBe('USAGE · UNAVAILABLE');
     expect(fetchSpy).not.toHaveBeenCalled();

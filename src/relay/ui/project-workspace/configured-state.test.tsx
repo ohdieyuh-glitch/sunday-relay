@@ -129,11 +129,11 @@ describe('configured workspace render', () => {
     expect(html).toContain('STANDBY');
     expect(html).toContain('No mission is running.');
     expect(html).not.toContain('rpw-console-feed');
-    // The founder's actual workforce, all waiting.
-    expect(html).toContain('Sunday Alcatraz');
-    expect(html).toContain('Claude Code');
+    // The Reviewer is still named on the panel that acts on it. The workforce
+    // strip itself was removed from the workspace (founder direction).
     expect(html).toContain('Codex');
-    expect(html).toContain('GUIDED');
+    // MODE/GUIDED lived only in the removed workforce strip.
+    expect(html).not.toContain('rpw-strip-cell');
     // No fabricated activity or verdicts.
     expect(html).not.toContain('FIXTURE');
     expect(html).not.toContain('VERIFIED COMPLETE');

@@ -1971,3 +1971,56 @@
 @media (prefers-reduced-motion: reduce) {
   .rhc-overlay, .rhc-sheet, .rhc-entry-btn { transition: none; animation: none; }
 }
+
+/* ================================================================
+   LIVE TERMINAL ROLE BOX — FULLSCREEN.
+   Expanding is a Live Terminal affordance: each role box carries the
+   canonical corner control, and the expanded box fills the terminal.
+   The workspace itself has no per-panel control.
+   ================================================================ */
+
+.rpw-tmpanel-shell { display: contents; }
+
+/* The head now carries the control, so it reserves room for it. */
+.rpw-tmpanel-head { position: relative; padding-right: 30px; }
+.rpw-tmpanel-head .rpw-expand-btn {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+/* Lifted to fill the Live Terminal, inside its safe areas. */
+.rpw-tmpanel-shell[data-focused='true'] {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 64;
+  overflow: auto;
+  background: var(--rpw-bg);
+  padding:
+    calc(8px + env(safe-area-inset-top, 0px))
+    calc(8px + env(safe-area-inset-right, 0px))
+    calc(8px + env(safe-area-inset-bottom, 0px))
+    calc(8px + env(safe-area-inset-left, 0px));
+}
+.rpw-tmpanel-shell[data-focused='true'] > .rpw-tmpanel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 0;
+}
+.rpw-tmpanel-shell[data-focused='true'] .rpw-tmpanel-feed { flex: 1 1 auto; min-height: 0; }
+/* The return control stays reachable while expanded. */
+.rpw-tmpanel-shell[data-focused='true'] .rpw-expand-btn {
+  position: sticky;
+  top: 0;
+  color: var(--rpw-gold);
+}
+
+@media (max-width: 700px) {
+  .rpw-tmpanel-head .rpw-expand-btn { min-height: 44px; min-width: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rpw-tmpanel-shell { transition: none; animation: none; }
+}
