@@ -17,7 +17,9 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadBridgeConfig, productionConfigProblems, type BridgeConfig } from './config';
+import {
+  loadBridgeConfig, productionConfigProblems, productionConfigWarnings, type BridgeConfig,
+} from './config';
 import { createMissionRegistry, type MissionRegistry } from './mission';
 import { architectPreflight, loadArchitectConfig } from './openai-architect';
 import { handleReviewerRoute, isReviewerRoute, type ReviewerRunPort } from './reviewer-routes';
@@ -253,6 +255,10 @@ export function main(): void {
     for (const problem of problems) console.error(`Relay bridge cannot start: ${problem}`);
     process.exitCode = 1;
     return;
+  }
+  // Said out loud, but never fatal — a CLI-only bridge is a valid deployment.
+  for (const warning of productionConfigWarnings(config)) {
+    console.warn(`Relay bridge notice: ${warning}`);
   }
 
   const state = prepareStateRoot(config.stateRoot);
