@@ -45,6 +45,13 @@ export type {
   HarnessCapabilityView, HarnessCatalogEntryView, ReviewerHarnessCatalogView,
   ReviewerHarnessView, ReviewerIdentityRow, ReviewerProjectionOptions,
 } from './harness-projection';
+export {
+  HARNESS_READINESS_LABEL, HARNESS_READINESS_STATES, NO_RUNTIME_EVIDENCE,
+  assessHarnessReadiness, effectiveCatalogEntry,
+} from './harness-readiness';
+export type {
+  HarnessReadinessAssessment, HarnessReadinessState, HarnessRuntimeEvidence,
+} from './harness-readiness';
 export { createReviewerHarnessStore } from './harness-store';
 export type { HarnessWriteResult, ReviewerHarnessStorePort } from './harness-store';
 export {

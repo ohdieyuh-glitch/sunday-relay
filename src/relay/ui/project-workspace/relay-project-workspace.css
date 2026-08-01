@@ -1939,6 +1939,15 @@
   overflow-wrap: anywhere;
 }
 .rhc-entry-reason { color: var(--rpw-faint); }
+/* Readiness is stated in words; the attribute drives no colour-only meaning. */
+.rhc-entry-readiness {
+  margin: 4px 0 0;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--rpw-dim);
+  overflow-wrap: anywhere;
+}
+.rhc-entry-readiness[data-readiness='ready'] { color: var(--rpw-green); }
 
 .rhc-entry-detail { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--rpw-line); }
 .rhc-caps { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }

@@ -46,7 +46,12 @@ export interface ReviewerHarnessCatalogEntry {
   readonly verificationNotes: readonly string[];
 }
 
-/** Nothing in the catalog can be started: no adapter exists for any of it. */
+/**
+ * The ONE startability rule. It reads only catalog fields, so a surface that
+ * wants a runtime answer must first replace the runtime-knowable fields with
+ * what a probe proved (`effectiveCatalogEntry`) — it may never re-implement
+ * this test.
+ */
 export function harnessIsSelectableForRun(entry: ReviewerHarnessCatalogEntry): boolean {
   return entry.adapterAvailable
     && entry.integrationStatus === 'available'
@@ -56,23 +61,51 @@ export function harnessIsSelectableForRun(entry: ReviewerHarnessCatalogEntry): b
 
 const unproven = NO_HARNESS_CAPABILITIES;
 
+/**
+ * What the Hermes adapter's own tests PROVE, and nothing more.
+ *
+ * `supportsLiveExecution` stays FALSE deliberately: the adapter is exercised
+ * against a fake Hermes executable that speaks the real process protocol, which
+ * proves framing, cancellation, redaction and parsing — not that a paid
+ * provider call succeeded. It turns true only when a founder-authorized live
+ * run records a real provider response.
+ */
+const HERMES_PROVEN_CAPABILITIES = Object.freeze({
+  ...NO_HARNESS_CAPABILITIES,
+  supportsStructuredFindings: true,
+  supportsEvidenceReferences: true,
+  supportsCancellation: true,
+  supportsReadOnlyExecution: true,
+  supportsUsageReporting: true,
+  supportsModelIdentity: true,
+  supportsLocalExecution: true,
+});
+
 export const REVIEWER_HARNESS_CATALOG: readonly ReviewerHarnessCatalogEntry[] = Object.freeze([
   {
     catalogId: 'hermes',
     name: 'Hermes',
     description: 'A reviewer harness intended to conduct independent reviews against mission evidence.',
-    integrationStatus: 'coming_soon',
-    adapterAvailable: false,
-    installState: 'not_installed',
+    // `available` describes the INTEGRATION — Relay ships a concrete adapter.
+    // Whether it can actually run is a server-side fact and lives in
+    // `assessHarnessReadiness`, never here.
+    integrationStatus: 'available',
+    adapterAvailable: true,
+    // Installation is a PROBE RESULT. The static catalog cannot know it and
+    // the browser must never guess it, so it stays `unknown` until a Relay
+    // Bridge reports what it actually found.
+    installState: 'unknown',
     supportedEnvironments: ['local'],
     modelConfiguration: 'configurable',
+    // Proven per run by the adapter's zero-toolset enforcement, not asserted.
     readOnlyReviewSupported: 'unknown',
-    capabilities: unproven,
-    experimental: false,
+    capabilities: HERMES_PROVEN_CAPABILITIES,
+    experimental: true,
     verificationNotes: [
-      'Intended first live reviewer harness.',
-      'No connected state exists yet — no adapter has been written.',
-      'Read-only execution must be proven before it may review.',
+      'Runs as a local one-shot Hermes process behind the Relay Bridge; the browser never reaches it.',
+      'Read-only is structural: the adapter grants Hermes no toolset, so it holds no file, terminal or network tool.',
+      'The provider credential is read only inside the bridge process and is never returned, persisted or logged.',
+      'Live execution stays unproven until a founder-authorized run records a real provider response.',
     ],
   },
   {

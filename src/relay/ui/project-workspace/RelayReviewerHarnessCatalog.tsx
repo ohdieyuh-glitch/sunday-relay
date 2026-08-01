@@ -216,6 +216,12 @@ export function RelayReviewerHarnessCatalog({
                 <p className="rhc-entry-facts">
                   {`${entry.adapterLabel} · ${entry.installLabel} · ${entry.startLabel}`}
                 </p>
+                {/* The runtime answer, from the canonical readiness ladder.
+                    A static browser has no Relay Bridge to ask, so this says
+                    so rather than implying a connection exists. */}
+                <p className="rhc-entry-readiness" data-readiness={entry.readinessState}>
+                  {entry.readinessLabel}
+                </p>
                 <p className="rhc-entry-caps">{entry.capabilitySummary}</p>
                 {entry.unavailableReason !== null && (
                   <p className="rhc-entry-reason" id={reasonId}>{entry.unavailableReason}</p>
