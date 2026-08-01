@@ -98,19 +98,45 @@ describe('the catalog is a product list, not a capability claim', () => {
     ]);
   });
 
-  it('no entry claims an adapter, an installation or any capability', () => {
+  it('claims an adapter ONLY for the harness Relay actually implements', () => {
     for (const entry of REVIEWER_HARNESS_CATALOG) {
+      if (entry.catalogId === 'hermes') continue;
       expect(entry.adapterAvailable, entry.catalogId).toBe(false);
       expect(entry.installState, entry.catalogId).toBe('not_installed');
       expect(entry.capabilities, entry.catalogId).toEqual(NO_HARNESS_CAPABILITIES);
-      // And therefore nothing can be started.
       expect(harnessIsSelectableForRun(entry), entry.catalogId).toBe(false);
     }
   });
 
+  it('the implemented harness still cannot start from static data alone', () => {
+    const hermes = findCatalogEntry('hermes');
+    expect(hermes?.adapterAvailable).toBe(true);
+    // Installation is a PROBE RESULT the static catalog cannot know, so the
+    // canonical rule says no until a bridge proves otherwise.
+    expect(hermes?.installState).toBe('unknown');
+    expect(hermes?.readOnlyReviewSupported).toBe('unknown');
+    expect(harnessIsSelectableForRun(hermes!)).toBe(false);
+  });
+
+  it('advertises only the capabilities the adapter tests prove', () => {
+    const hermes = findCatalogEntry('hermes');
+    const proven = REVIEWER_HARNESS_CAPABILITIES.filter((c) => hermes!.capabilities[c]);
+    expect(proven).toEqual([
+      'supportsCancellation', 'supportsStructuredFindings', 'supportsEvidenceReferences',
+      'supportsUsageReporting', 'supportsReadOnlyExecution', 'supportsModelIdentity',
+      'supportsLocalExecution',
+    ]);
+    // Live execution is NOT claimed: a fake-process test proves the protocol,
+    // not that a paid provider call succeeded.
+    expect(hermes!.capabilities.supportsLiveExecution).toBe(false);
+    expect(hermes!.capabilities.supportsStreaming).toBe(false);
+    expect(hermes!.capabilities.supportsSubagents).toBe(false);
+    expect(hermes!.capabilities.supportsACP).toBe(false);
+  });
+
   it('carries the truthful statuses the founder specified', () => {
     const status = (id: string) => findCatalogEntry(id)?.integrationStatus;
-    expect(status('hermes')).toBe('coming_soon');
+    expect(status('hermes')).toBe('available');
     expect(status('buzz-acp')).toBe('coming_soon');
     expect(status('vellum')).toBe('coming_soon');
     expect(status('trustclaw')).toBe('experimental');
@@ -118,7 +144,7 @@ describe('the catalog is a product list, not a capability claim', () => {
     expect(status('zeroclaw')).toBe('coming_soon');
     expect(status('agent-zero')).toBe('coming_soon');
     expect(findCatalogEntry('trustclaw')?.experimental).toBe(true);
-    expect(findCatalogEntry('hermes')?.experimental).toBe(false);
+    expect(findCatalogEntry('hermes')?.experimental).toBe(true);
   });
 
   it('advertises no performance, language or installation claims', () => {

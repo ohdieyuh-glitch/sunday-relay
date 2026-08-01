@@ -120,17 +120,31 @@ describe('the catalog surface', () => {
       const row = entryRow(dialog, entry.catalogId);
       expect(row.textContent).toContain(entry.maturityLabel);
     }
-    // Both labels the current catalog actually uses appear; none claims more.
+    // Every maturity the catalog actually uses appears, and each row's label
+    // is the one the domain holds — the component invents none of them.
     expect(dialog.textContent).toContain('Coming soon');
     expect(dialog.textContent).toContain('Experimental');
-    expect(dialog.textContent).not.toContain('Available');
+    // `Available` describes the INTEGRATION of the implemented harness. It is
+    // never a connection: the same row still reads Backend unavailable.
+    expect(entryRow(dialog, 'hermes').textContent).toContain('Available');
+    expect(dialog.textContent).not.toContain('Connected');
   }, 30_000);
 
-  it('renders adapterAvailable false and not_installed truthfully', async () => {
+  it('renders adapterAvailable and install state truthfully per entry', async () => {
     await renderApp();
     const dialog = openCatalog();
     for (const entry of REVIEWER_HARNESS_CATALOG) {
       const row = entryRow(dialog, entry.catalogId);
+      if (entry.catalogId === 'hermes') {
+        // An adapter EXISTS, but the static browser has no bridge to ask, so
+        // installation stays unknown and the row is still not startable.
+        expect(entry.adapterAvailable).toBe(true);
+        expect(entry.installState).toBe('unknown');
+        expect(row.textContent).toContain('Adapter available');
+        expect(row.textContent).toContain('Install state unknown');
+        expect(row.textContent).toContain('Not startable');
+        continue;
+      }
       expect(entry.adapterAvailable).toBe(false);
       expect(entry.installState).toBe('not_installed');
       expect(row.textContent).toContain('Adapter unavailable');
@@ -155,7 +169,8 @@ describe('the catalog surface', () => {
     const dialog = openCatalog();
     const hermes = entryRow(dialog, 'hermes');
     expect(hermes.textContent).toContain('Hermes');
-    expect(hermes.textContent).toContain('Coming soon');
+    // An implemented adapter is still not a connection in a static browser.
+    expect(hermes.textContent).toContain('Not startable');
     expect(hermes.getAttribute('data-startable')).toBe('false');
     expect(dialog.textContent).not.toContain('Hermes · Connected');
     // The intended future model is nowhere on the surface at all.
@@ -342,10 +357,19 @@ describe('identity fields stay independently Unknown', () => {
 /* ---------------------------------------------------- capabilities ----- */
 
 describe('capabilities are proven or they are not shown', () => {
-  it('says No proven capabilities for every current entry', async () => {
+  it('says No proven capabilities for every entry with nothing proven', async () => {
     await renderApp();
     const dialog = openCatalog();
     for (const entry of projectHarnessCatalog().entries) {
+      if (entry.catalogId === 'hermes') {
+        // Only what the adapter's own tests prove — and live execution is not
+        // among them, because no paid call has ever been made.
+        expect(entry.provenCapabilityKeys.length).toBeGreaterThan(0);
+        expect(entry.provenCapabilityKeys).not.toContain('supportsLiveExecution');
+        expect(entryRow(dialog, entry.catalogId).textContent)
+          .not.toContain(NO_PROVEN_CAPABILITIES_LABEL);
+        continue;
+      }
       expect(entry.provenCapabilityKeys).toHaveLength(0);
       expect(entryRow(dialog, entry.catalogId).textContent)
         .toContain(NO_PROVEN_CAPABILITIES_LABEL);
@@ -355,14 +379,22 @@ describe('capabilities are proven or they are not shown', () => {
   it('shows a false capability as Not proven, never as supported', async () => {
     await renderApp();
     const dialog = openCatalog();
-    fireEvent.click(within(entryRow(dialog, 'hermes')).getByRole('button'));
-    const capabilities = entryRow(dialog, 'hermes').querySelectorAll('.rhc-cap');
+    fireEvent.click(within(entryRow(dialog, 'vellum')).getByRole('button'));
+    const capabilities = entryRow(dialog, 'vellum').querySelectorAll('.rhc-cap');
     // All fifteen contract capabilities, each stated in readable text.
     expect(capabilities).toHaveLength(15);
     for (const capability of Array.from(capabilities)) {
       expect(capability.getAttribute('data-proven')).toBe('false');
       expect(capability.textContent).toContain('Not proven');
     }
+    // The implemented harness shows its FALSE capabilities as Not proven too —
+    // a proven one never makes its neighbours look supported.
+    fireEvent.click(within(entryRow(dialog, 'hermes')).getByRole('button'));
+    const hermesCaps = Array.from(entryRow(dialog, 'hermes').querySelectorAll('.rhc-cap'));
+    expect(hermesCaps).toHaveLength(15);
+    const live = hermesCaps.find((n) => (n.textContent ?? '').includes('Live execution'));
+    expect(live?.getAttribute('data-proven')).toBe('false');
+    expect(live?.textContent).toContain('Not proven');
   }, 30_000);
 });
 

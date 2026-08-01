@@ -46,11 +46,15 @@ describe('relay reviewer harnesses', () => {
     expect(out).toContain('Coming soon');
     expect(out).toContain('Experimental');
     expect(out).not.toContain('Connected');
-    // Nothing claims an adapter, an installation or a capability.
-    expect(out).not.toContain('adapter:     available');
+    // Exactly ONE entry claims an adapter — the harness Relay implements.
+    expect(out.match(/adapter:     available/g) ?? []).toHaveLength(1);
+    expect(out.match(/adapter:     none/g) ?? []).toHaveLength(6);
+    // Installation is a probe result the CLI catalog never asserts statically.
     expect(out).not.toContain('installed:   installed');
     expect(out).toContain('capabilities: none verified');
-    expect(out).toContain('startable:   no');
+    // And nothing is startable from static catalog data alone.
+    expect(out).not.toContain('startable:   yes');
+    expect(out.match(/startable:   no/g) ?? []).toHaveLength(7);
   });
 
   it('refuses an unknown reviewer action rather than guessing', async () => {

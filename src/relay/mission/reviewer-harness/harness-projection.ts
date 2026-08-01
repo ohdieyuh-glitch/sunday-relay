@@ -6,6 +6,10 @@ import {
   CATALOG_STATUS_LABEL, REVIEWER_HARNESS_CATALOG, harnessIsSelectableForRun,
   type HarnessInstallState, type HarnessIntegrationStatus, type ReviewerHarnessCatalogEntry,
 } from './harness-catalog';
+import {
+  assessHarnessReadiness, effectiveCatalogEntry,
+  type HarnessReadinessState, type HarnessRuntimeEvidence,
+} from './harness-readiness';
 
 /**
  * THE ONE REVIEWER PROJECTION — rendered identically by the website panel and
@@ -280,6 +284,15 @@ export interface HarnessCatalogEntryView {
   readonly modelConfigurationLabel: string;
   readonly readOnlyReviewLabel: string;
   readonly verificationNotes: readonly string[];
+  /**
+   * RUNTIME readiness, from the one ladder in `harness-readiness`. With no
+   * server-side evidence — every browser, always — this is the truthful
+   * "Relay cannot ask anything" answer, never a guess.
+   */
+  readonly readinessState: HarnessReadinessState;
+  readonly readinessLabel: string;
+  readonly readinessReason: string;
+  readonly readinessMissing: readonly string[];
 }
 
 /** Identity fields stay SEPARATE rows; none is inferred from another. */
@@ -305,8 +318,15 @@ export interface ReviewerHarnessCatalogView {
   readonly disclosure: string | null;
 }
 
-function projectCatalogEntry(entry: ReviewerHarnessCatalogEntry): HarnessCatalogEntryView {
-  const startable = harnessIsSelectableForRun(entry);
+function projectCatalogEntry(
+  staticEntry: ReviewerHarnessCatalogEntry,
+  evidence: HarnessRuntimeEvidence | null,
+): HarnessCatalogEntryView {
+  // Runtime-knowable fields are replaced by what a probe PROVED before any
+  // label is derived, so every string below describes one consistent world.
+  const entry = effectiveCatalogEntry(staticEntry, evidence);
+  const readiness = assessHarnessReadiness(staticEntry, evidence);
+  const startable = harnessIsSelectableForRun(entry) && readiness.startable;
   const provenCapabilityKeys = REVIEWER_HARNESS_CAPABILITIES.filter((c) => entry.capabilities[c]);
   const maturityLabel = CATALOG_STATUS_LABEL[entry.integrationStatus];
 
@@ -328,6 +348,9 @@ function projectCatalogEntry(entry: ReviewerHarnessCatalogEntry): HarnessCatalog
   }
   if (entry.readOnlyReviewSupported !== 'yes') {
     unavailableReasons.push('Read-only review is not proven for this harness.');
+  }
+  if (!readiness.startable && readiness.state !== 'ready') {
+    unavailableReasons.push(readiness.reason);
   }
 
   return {
@@ -364,6 +387,10 @@ function projectCatalogEntry(entry: ReviewerHarnessCatalogEntry): HarnessCatalog
       ? UNKNOWN_LABEL
       : entry.readOnlyReviewSupported,
     verificationNotes: entry.verificationNotes,
+    readinessState: readiness.state,
+    readinessLabel: readiness.label,
+    readinessReason: readiness.reason,
+    readinessMissing: readiness.missing,
   };
 }
 
@@ -376,9 +403,16 @@ function projectCatalogEntry(entry: ReviewerHarnessCatalogEntry): HarnessCatalog
  */
 export function projectHarnessCatalog(
   reviewer?: ReviewerHarnessView | null,
+  /**
+   * Server-side probe results by catalog id. A browser passes nothing and gets
+   * the truthful "no Relay Bridge answered" projection; the CLI and the bridge
+   * pass what they proved. Same function, same strings, both surfaces.
+   */
+  runtimeEvidence?: Readonly<Record<string, HarnessRuntimeEvidence>> | null,
 ): ReviewerHarnessCatalogView {
   const view = reviewer ?? null;
-  const entries = REVIEWER_HARNESS_CATALOG.map(projectCatalogEntry);
+  const entries = REVIEWER_HARNESS_CATALOG.map((entry) =>
+    projectCatalogEntry(entry, runtimeEvidence?.[entry.catalogId] ?? null));
   const startableCount = entries.filter((e) => e.startable).length;
 
   // "Connected" requires a VERIFIED launch AND an observed harness identity.
