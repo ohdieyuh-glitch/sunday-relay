@@ -48,7 +48,9 @@ export function parseAllowedOrigins(raw: string | undefined): string[] {
 }
 
 export function loadBridgeConfig(env: NodeJS.ProcessEnv = process.env): BridgeConfig {
-  const stateRoot = env.RELAY_STATE_HOME?.trim();
+  // `RELAY_DATA_DIR` is the hosted-volume variable; `RELAY_STATE_HOME` is the
+  // existing local one and still works.
+  const stateRoot = (env.RELAY_DATA_DIR ?? env.RELAY_STATE_HOME)?.trim();
   return {
     // A managed host injects PORT. The Relay-specific variable still wins for
     // local runs, and the historical default remains the fallback.
@@ -70,7 +72,17 @@ export function loadBridgeConfig(env: NodeJS.ProcessEnv = process.env): BridgeCo
 }
 
 /**
- * What must be true before a PRODUCTION bridge may accept traffic.
+ * What must be true before a PRODUCTION bridge may accept traffic AT ALL.
+ *
+ * Deliberately short. A boot failure takes the service down, so only things
+ * that would make it unsafe — not merely limited — belong here. A missing
+ * token would leave every protected route unreachable, and a wildcard origin
+ * would let any page spend a founder's credentials; both are fatal.
+ *
+ * Absent CORS origins and an absent volume are NOT fatal: an empty allowlist
+ * already means "no browser may call this", which is the safe direction, and
+ * an absent volume falls back to the local default. Those are warnings, so a
+ * bridge configured for CLI use only still starts.
  *
  * Returns the missing pieces by NAME, never by value, so the message is safe
  * to print in a deployment log.
@@ -84,19 +96,30 @@ export function productionConfigProblems(
   if ((env.RELAY_BRIDGE_API_TOKEN ?? '').trim() === '') {
     problems.push('RELAY_BRIDGE_API_TOKEN is not set — every protected route would be unreachable.');
   }
-  if (config.allowedOrigins.length === 0) {
-    problems.push('RELAY_ALLOWED_ORIGINS is not set — no browser origin would be allowed.');
-  }
   if (config.allowedOrigins.some((o) => o === '*')) {
     problems.push('RELAY_ALLOWED_ORIGINS contains "*", which is never permitted with authenticated routes.');
   }
-  if (config.stateRoot === null) {
-    problems.push('RELAY_STATE_HOME is not set — durable state would not use the mounted volume.');
-  } else if (!isAbsolute(config.stateRoot)) {
-    problems.push('RELAY_STATE_HOME must be an absolute path.');
+  if (config.stateRoot !== null && !isAbsolute(config.stateRoot)) {
+    problems.push('RELAY_DATA_DIR must be an absolute path.');
   }
   if (!Number.isFinite(config.port) || config.port <= 0) {
     problems.push('PORT did not resolve to a usable port number.');
   }
   return problems;
+}
+
+/**
+ * Production settings worth saying out loud without refusing to start. Each
+ * names a capability the service will simply not have.
+ */
+export function productionConfigWarnings(config: BridgeConfig): string[] {
+  if (!config.production) return [];
+  const warnings: string[] = [];
+  if (config.allowedOrigins.length === 0) {
+    warnings.push('RELAY_ALLOWED_ORIGINS is not set — no browser origin may call this bridge. Authenticated CLI use is unaffected.');
+  }
+  if (config.stateRoot === null) {
+    warnings.push('RELAY_DATA_DIR is not set — durable state uses the default path, not a mounted volume.');
+  }
+  return warnings;
 }

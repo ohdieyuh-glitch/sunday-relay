@@ -5,7 +5,9 @@ import type { Server } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createBridgeServer, prepareStateRoot } from './server';
-import { loadBridgeConfig, parseAllowedOrigins, productionConfigProblems } from './config';
+import {
+  loadBridgeConfig, parseAllowedOrigins, productionConfigProblems, productionConfigWarnings,
+} from './config';
 
 /**
  * THE BRIDGE AS A HOSTED SERVICE.
@@ -106,7 +108,7 @@ describe('the public liveness probe discloses nothing', () => {
     const base = await boot({
       RELAY_ALLOWED_ORIGINS: ORIGIN,
       RELAY_BRIDGE_API_TOKEN: TOKEN,
-      RELAY_STATE_HOME: '/data',
+      RELAY_DATA_DIR: '/data',
       FUSION_BASE_URL: 'https://internal.fusion.example',
     });
     const text = await (await fetch(`${base}/health`)).text();
@@ -230,11 +232,27 @@ describe('a production bridge refuses to boot unsafely', () => {
     return productionConfigProblems(loadBridgeConfig(env), env);
   };
 
-  it('demands a bridge token, an origin allowlist and a state root', () => {
-    const problems = prod().join(' ');
-    expect(problems).toContain('RELAY_BRIDGE_API_TOKEN');
-    expect(problems).toContain('RELAY_ALLOWED_ORIGINS');
-    expect(problems).toContain('RELAY_STATE_HOME');
+  it('refuses to start without a bridge token — protected routes would be unreachable', () => {
+    expect(prod().join(' ')).toContain('RELAY_BRIDGE_API_TOKEN');
+  });
+
+  it('starts WITHOUT an origin allowlist or a volume — those are warnings, not crashes', () => {
+    // A crash-looping bridge helps nobody. An empty allowlist already means
+    // "no browser may call this", which is the safe direction, and a CLI-only
+    // deployment is legitimate.
+    const env = { NODE_ENV: 'production', RELAY_BRIDGE_API_TOKEN: TOKEN } as NodeJS.ProcessEnv;
+    expect(productionConfigProblems(loadBridgeConfig(env), env)).toEqual([]);
+    const warnings = productionConfigWarnings(loadBridgeConfig(env)).join(' ');
+    expect(warnings).toContain('RELAY_ALLOWED_ORIGINS');
+    expect(warnings).toContain('RELAY_DATA_DIR');
+  });
+
+  it('reads the hosted volume from RELAY_DATA_DIR, and still honours RELAY_STATE_HOME', () => {
+    expect(loadBridgeConfig({ RELAY_DATA_DIR: '/data' } as NodeJS.ProcessEnv).stateRoot).toBe('/data');
+    expect(loadBridgeConfig({ RELAY_STATE_HOME: '/legacy' } as NodeJS.ProcessEnv).stateRoot).toBe('/legacy');
+    // The hosted variable wins when both are present.
+    expect(loadBridgeConfig({ RELAY_DATA_DIR: '/data', RELAY_STATE_HOME: '/legacy' } as NodeJS.ProcessEnv)
+      .stateRoot).toBe('/data');
   });
 
   it('refuses a wildcard origin outright', () => {
@@ -245,19 +263,19 @@ describe('a production bridge refuses to boot unsafely', () => {
 
   it('requires an absolute state root', () => {
     expect(prod({
-      RELAY_BRIDGE_API_TOKEN: TOKEN, RELAY_ALLOWED_ORIGINS: ORIGIN, RELAY_STATE_HOME: 'data',
+      RELAY_BRIDGE_API_TOKEN: TOKEN, RELAY_ALLOWED_ORIGINS: ORIGIN, RELAY_DATA_DIR: 'data',
     }).join(' ')).toContain('absolute');
   });
 
   it('is satisfied by a complete production configuration', () => {
     expect(prod({
       RELAY_BRIDGE_API_TOKEN: TOKEN, RELAY_ALLOWED_ORIGINS: ORIGIN,
-      RELAY_STATE_HOME: '/data', PORT: '8080',
+      RELAY_DATA_DIR: '/data', PORT: '8080',
     })).toEqual([]);
   });
 
   it('names variables only — a problem list never carries a value', () => {
-    const problems = prod({ RELAY_ALLOWED_ORIGINS: ORIGIN, RELAY_STATE_HOME: '/data' }).join(' ');
+    const problems = prod({ RELAY_ALLOWED_ORIGINS: ORIGIN, RELAY_DATA_DIR: '/data' }).join(' ');
     expect(problems).not.toContain(TOKEN);
   });
 
@@ -322,7 +340,7 @@ describe('nothing leaks into the deployment log', () => {
   it('the bridge requires no provider credential to start', () => {
     const env = {
       NODE_ENV: 'production', RELAY_BRIDGE_API_TOKEN: TOKEN,
-      RELAY_ALLOWED_ORIGINS: ORIGIN, RELAY_STATE_HOME: '/data',
+      RELAY_ALLOWED_ORIGINS: ORIGIN, RELAY_DATA_DIR: '/data',
     } as NodeJS.ProcessEnv;
     expect(productionConfigProblems(loadBridgeConfig(env), env)).toEqual([]);
     // No provider key is named anywhere in the requirement list.
