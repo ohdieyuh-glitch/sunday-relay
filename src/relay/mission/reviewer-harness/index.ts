@@ -36,11 +36,15 @@ export {
 } from './harness-record';
 export type { HarnessReadResult } from './harness-record';
 export {
-  HARNESS_STATE_LABEL, REVIEWER_BRIDGE_REQUIRED_LABEL, REVIEWER_SIMULATED_LABEL,
-  projectReviewerHarness, renderHarnessCatalogLines, renderReviewerStatusLines,
-  reviewerNotification,
+  HARNESS_STATE_LABEL, NO_PROVEN_CAPABILITIES_LABEL, REVIEWER_BRIDGE_REQUIRED_LABEL,
+  REVIEWER_HARNESS_NOT_CONNECTED_LABEL, REVIEWER_SIMULATED_LABEL, UNKNOWN_LABEL,
+  projectHarnessCatalog, projectReviewerHarness, renderHarnessCatalogLines,
+  renderReviewerStatusLines, reviewerNotification,
 } from './harness-projection';
-export type { ReviewerHarnessView, ReviewerProjectionOptions } from './harness-projection';
+export type {
+  HarnessCapabilityView, HarnessCatalogEntryView, ReviewerHarnessCatalogView,
+  ReviewerHarnessView, ReviewerIdentityRow, ReviewerProjectionOptions,
+} from './harness-projection';
 export { createReviewerHarnessStore } from './harness-store';
 export type { HarnessWriteResult, ReviewerHarnessStorePort } from './harness-store';
 export {

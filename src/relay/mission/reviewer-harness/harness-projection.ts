@@ -4,7 +4,7 @@ import {
 } from './harness-contracts';
 import {
   CATALOG_STATUS_LABEL, REVIEWER_HARNESS_CATALOG, harnessIsSelectableForRun,
-  type ReviewerHarnessCatalogEntry,
+  type HarnessInstallState, type HarnessIntegrationStatus, type ReviewerHarnessCatalogEntry,
 } from './harness-catalog';
 
 /**
@@ -28,6 +28,10 @@ export const HARNESS_STATE_LABEL: Readonly<Record<HarnessConnectionState, string
 });
 
 export const UNKNOWN_LABEL = 'Unknown';
+/** Said whenever no harness has been observed running. Never "Not selected". */
+export const REVIEWER_HARNESS_NOT_CONNECTED_LABEL = 'Reviewer harness not connected';
+/** An empty capability set is a STATEMENT, never an empty list. */
+export const NO_PROVEN_CAPABILITIES_LABEL = 'No proven capabilities';
 export const REVIEWER_SIMULATED_LABEL =
   'SIMULATED REVIEW — DEMO SIMULATION — NO REVIEWER HARNESS RAN';
 export const REVIEWER_BRIDGE_REQUIRED_LABEL =
@@ -42,6 +46,13 @@ const CAPABILITY_LABEL: Readonly<Record<ReviewerHarnessCapability, string>> = Ob
   supportsActualIdentity: 'Actual identity', supportsModelIdentity: 'Model identity',
   supportsLocalExecution: 'Local execution', supportsRemoteExecution: 'Remote execution',
   supportsACP: 'ACP',
+});
+
+/** Installation is a PROBE RESULT, so "unknown" is one of its three answers. */
+const INSTALL_LABEL: Readonly<Record<HarnessInstallState, string>> = Object.freeze({
+  not_installed: 'Not installed',
+  installed: 'Installed',
+  unknown: 'Install state unknown',
 });
 
 export interface ReviewerHarnessView {
@@ -219,18 +230,201 @@ export function renderReviewerStatusLines(missionId: string, view: ReviewerHarne
   return lines;
 }
 
-/** `relay reviewer harnesses` — the catalog, worded once. */
+/* ----------------------------------------------------- the catalog view */
+
+/**
+ * THE ONE CATALOG PROJECTION — rendered by `relay reviewer harnesses` and by
+ * the website's Reviewer Harness surface from the SAME call, so neither can
+ * word a maturity, an adapter, an installation or a capability differently.
+ *
+ * It is a PROJECTION, not a second catalog: every value below is read from
+ * `REVIEWER_HARNESS_CATALOG` or from the reviewer view, and nothing is
+ * asserted that the domain does not already hold. A surface that wants to
+ * show a harness must render these strings; it may not compose its own.
+ */
+
+/** One capability of one entry, with its proven state as READABLE TEXT. */
+export interface HarnessCapabilityView {
+  readonly capability: ReviewerHarnessCapability;
+  readonly label: string;
+  readonly proven: boolean;
+  /** Never a bare tick: a false capability says so in words. */
+  readonly statusLabel: string;
+}
+
+export interface HarnessCatalogEntryView {
+  readonly catalogId: string;
+  readonly name: string;
+  readonly description: string;
+  readonly integrationStatus: HarnessIntegrationStatus;
+  readonly maturityLabel: string;
+  readonly experimental: boolean;
+  readonly adapterAvailable: boolean;
+  readonly adapterLabel: string;
+  readonly installState: HarnessInstallState;
+  readonly installLabel: string;
+  /** The domain's own startability rule — never re-derived by a surface. */
+  readonly startable: boolean;
+  readonly startLabel: string;
+  /** Raw capability keys an adapter proved. The CLI prints these verbatim. */
+  readonly provenCapabilityKeys: readonly ReviewerHarnessCapability[];
+  readonly provenCapabilityLabels: readonly string[];
+  /** `No proven capabilities` when nothing is proven. */
+  readonly capabilitySummary: string;
+  /** All fifteen, so a detail view can show false without implying support. */
+  readonly capabilities: readonly HarnessCapabilityView[];
+  /** Every fact that blocks a run, each naming the field that decided it. */
+  readonly unavailableReasons: readonly string[];
+  readonly unavailableReason: string | null;
+  readonly environmentLabel: string;
+  readonly modelConfigurationLabel: string;
+  readonly readOnlyReviewLabel: string;
+  readonly verificationNotes: readonly string[];
+}
+
+/** Identity fields stay SEPARATE rows; none is inferred from another. */
+export interface ReviewerIdentityRow {
+  readonly key: 'requested_harness' | 'actual_harness' | 'requested_model' | 'actual_model' | 'provider';
+  readonly label: string;
+  readonly value: string;
+}
+
+export interface ReviewerHarnessCatalogView {
+  readonly title: string;
+  /** `Reviewer harness not connected` until a launch was actually verified. */
+  readonly statusLabel: string;
+  readonly statusDetail: string;
+  readonly identityRows: readonly ReviewerIdentityRow[];
+  readonly independenceLabel: string;
+  readonly independenceReasons: readonly string[];
+  readonly providerDiversityLabel: string;
+  readonly entries: readonly HarnessCatalogEntryView[];
+  readonly startableCount: number;
+  readonly countLabel: string;
+  /** Carries the simulated/fixture disclosure through to every surface. */
+  readonly disclosure: string | null;
+}
+
+function projectCatalogEntry(entry: ReviewerHarnessCatalogEntry): HarnessCatalogEntryView {
+  const startable = harnessIsSelectableForRun(entry);
+  const provenCapabilityKeys = REVIEWER_HARNESS_CAPABILITIES.filter((c) => entry.capabilities[c]);
+  const maturityLabel = CATALOG_STATUS_LABEL[entry.integrationStatus];
+
+  // Every blocking fact, in the order the startability rule tests them, so the
+  // explanation and the rule can never drift apart.
+  const unavailableReasons: string[] = [];
+  if (!entry.adapterAvailable) {
+    unavailableReasons.push('Adapter unavailable — Relay ships no adapter for this harness yet.');
+  }
+  if (entry.integrationStatus !== 'available') {
+    unavailableReasons.push(`${maturityLabel} — not available to run a review yet.`);
+  }
+  if (entry.installState !== 'installed') {
+    unavailableReasons.push(
+      entry.installState === 'not_installed'
+        ? 'Not installed — Relay has not detected this harness.'
+        : 'Install state unknown — Relay has not probed for this harness.',
+    );
+  }
+  if (entry.readOnlyReviewSupported !== 'yes') {
+    unavailableReasons.push('Read-only review is not proven for this harness.');
+  }
+
+  return {
+    catalogId: entry.catalogId,
+    name: entry.name,
+    description: entry.description,
+    integrationStatus: entry.integrationStatus,
+    maturityLabel,
+    experimental: entry.experimental,
+    adapterAvailable: entry.adapterAvailable,
+    adapterLabel: entry.adapterAvailable ? 'Adapter available' : 'Adapter unavailable',
+    installState: entry.installState,
+    installLabel: INSTALL_LABEL[entry.installState],
+    startable,
+    startLabel: startable ? 'Startable' : 'Not startable',
+    provenCapabilityKeys,
+    provenCapabilityLabels: provenCapabilityKeys.map((c) => CAPABILITY_LABEL[c]),
+    capabilitySummary: provenCapabilityKeys.length === 0
+      ? NO_PROVEN_CAPABILITIES_LABEL
+      : provenCapabilityKeys.map((c) => CAPABILITY_LABEL[c]).join(', '),
+    capabilities: REVIEWER_HARNESS_CAPABILITIES.map((capability) => ({
+      capability,
+      label: CAPABILITY_LABEL[capability],
+      proven: entry.capabilities[capability],
+      statusLabel: entry.capabilities[capability] ? 'Proven' : 'Not proven',
+    })),
+    unavailableReasons,
+    unavailableReason: unavailableReasons[0] ?? null,
+    environmentLabel: entry.supportedEnvironments.join(', '),
+    modelConfigurationLabel: entry.modelConfiguration === 'unknown'
+      ? UNKNOWN_LABEL
+      : entry.modelConfiguration,
+    readOnlyReviewLabel: entry.readOnlyReviewSupported === 'unknown'
+      ? UNKNOWN_LABEL
+      : entry.readOnlyReviewSupported,
+    verificationNotes: entry.verificationNotes,
+  };
+}
+
+/**
+ * The catalog, plus the CURRENT reviewer identity when a surface has one.
+ *
+ * `reviewer` is optional and every identity row falls back to `Unknown`
+ * independently — an absent view can never make one field imply another, and
+ * a requested harness never becomes an actual one.
+ */
+export function projectHarnessCatalog(
+  reviewer?: ReviewerHarnessView | null,
+): ReviewerHarnessCatalogView {
+  const view = reviewer ?? null;
+  const entries = REVIEWER_HARNESS_CATALOG.map(projectCatalogEntry);
+  const startableCount = entries.filter((e) => e.startable).length;
+
+  // "Connected" requires a VERIFIED launch AND an observed harness identity.
+  // A requested harness, a selected catalog entry and an intended future
+  // harness are all still "not connected".
+  const connected = view !== null
+    && view.present
+    && view.launchVerified
+    && view.harnessLabel !== UNKNOWN_LABEL;
+
+  return {
+    title: 'REVIEWER HARNESS CATALOG',
+    statusLabel: connected && view !== null
+      ? `${view.harnessLabel} · ${view.connectionLabel}`
+      : REVIEWER_HARNESS_NOT_CONNECTED_LABEL,
+    statusDetail: view?.outcomeLabel ?? REVIEWER_BRIDGE_REQUIRED_LABEL,
+    identityRows: [
+      { key: 'requested_harness', label: 'Requested harness', value: view?.requestedHarnessLabel ?? UNKNOWN_LABEL },
+      { key: 'actual_harness', label: 'Actual harness', value: view?.harnessLabel ?? UNKNOWN_LABEL },
+      { key: 'requested_model', label: 'Requested model', value: view?.requestedModelLabel ?? UNKNOWN_LABEL },
+      { key: 'actual_model', label: 'Actual model', value: view?.modelLabel ?? UNKNOWN_LABEL },
+      { key: 'provider', label: 'Provider', value: view?.providerLabel ?? UNKNOWN_LABEL },
+    ],
+    independenceLabel: view?.independenceLabel ?? UNKNOWN_LABEL,
+    independenceReasons: view?.independenceReasons ?? ['no reviewer identity evidence has been recorded'],
+    providerDiversityLabel: view?.providerDiversityLabel ?? UNKNOWN_LABEL,
+    entries,
+    startableCount,
+    countLabel: `${startableCount} of ${entries.length} harnesses can start a review.`,
+    disclosure: view?.disclosure ?? null,
+  };
+}
+
+/** `relay reviewer harnesses` — the catalog, worded once, from the projection. */
 export function renderHarnessCatalogLines(): string[] {
-  const lines = ['REVIEWER HARNESS CATALOG'];
-  for (const entry of REVIEWER_HARNESS_CATALOG) {
+  const catalog = projectHarnessCatalog();
+  const lines = [catalog.title];
+  for (const entry of catalog.entries) {
     lines.push(`  ${entry.catalogId}`);
     lines.push(`    name:        ${entry.name}`);
-    lines.push(`    status:      ${CATALOG_STATUS_LABEL[entry.integrationStatus]}`);
+    lines.push(`    status:      ${entry.maturityLabel}`);
     lines.push(`    installed:   ${entry.installState.replace(/_/g, ' ')}`);
     lines.push(`    adapter:     ${entry.adapterAvailable ? 'available' : 'none'}`);
-    const proven = REVIEWER_HARNESS_CAPABILITIES.filter((c) => entry.capabilities[c]);
-    lines.push(`    capabilities: ${proven.length === 0 ? 'none verified' : proven.join(', ')}`);
-    lines.push(`    startable:   ${harnessIsSelectableForRun(entry) ? 'yes' : 'no'}`);
+    lines.push(`    capabilities: ${entry.provenCapabilityKeys.length === 0
+      ? 'none verified' : entry.provenCapabilityKeys.join(', ')}`);
+    lines.push(`    startable:   ${entry.startable ? 'yes' : 'no'}`);
   }
   return lines;
 }

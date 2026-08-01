@@ -1721,3 +1721,244 @@
   color: var(--rpw-dim);
   overflow-wrap: anywhere;
 }
+
+/* ================================================================
+   REVIEWER HARNESS CATALOG — a technical capability registry, not a
+   settings page. Near-black ground, cream type, restrained aged gold,
+   thin single-pixel rules; a right-docked sheet on desktop and a
+   full-width one on mobile, matching the Usage detail panel rather
+   than inventing a second overlay language.
+   ================================================================ */
+
+.rpw-reviewer-harness {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--rpw-line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* The connection fact carries text, never colour alone. */
+.rpw-reviewer-harness-state {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--rpw-dim);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.rpw-reviewer-harness-btn {
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rpw-gold);
+  background: transparent;
+  border: 1px solid var(--rpw-gold-dim);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.rpw-reviewer-harness-btn:hover { color: var(--rpw-gold-bright); border-color: var(--rpw-gold); }
+.rpw-reviewer-harness-btn:focus-visible {
+  outline: 2px solid var(--rpw-gold);
+  outline-offset: 1px;
+}
+
+.rhc-overlay {
+  position: fixed;
+  inset: 0;
+  /* Above a focused panel (61) and its backdrop (60); below the usage
+     panel (68) and the ONE notification host (70). */
+  z-index: 67;
+  background: rgba(4, 5, 8, 0.86);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rhc-sheet {
+  background: var(--rpw-bg);
+  color: var(--rpw-cream);
+  border-left: 1px solid var(--rpw-gold-dim);
+  width: min(420px, 100%);
+  height: 100dvh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding:
+    calc(14px + env(safe-area-inset-top, 0px))
+    calc(16px + env(safe-area-inset-right, 0px))
+    calc(14px + env(safe-area-inset-bottom, 0px))
+    calc(16px + env(safe-area-inset-left, 0px));
+  font-family: var(--rpw-mono);
+}
+
+.rhc-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rpw-line);
+}
+.rhc-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--rpw-cream);
+}
+.rhc-title::before { content: '■ '; color: var(--rpw-gold); font-size: 7px; vertical-align: 2px; }
+.rhc-close {
+  flex: 0 0 auto;
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--rpw-dim);
+  background: transparent;
+  border: 1px solid var(--rpw-line);
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.rhc-close:hover { color: var(--rpw-cream); border-color: var(--rpw-gold-dim); }
+.rhc-close:focus-visible { outline: 2px solid var(--rpw-gold); outline-offset: 1px; }
+
+.rhc-disclosure {
+  margin: 8px 0 0;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--rpw-amber);
+  border: 1px solid rgba(224, 178, 92, 0.4);
+  padding: 5px 7px;
+}
+
+.rhc-status { margin: 10px 0 0; }
+.rhc-status-label {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--rpw-cream);
+  overflow-wrap: anywhere;
+}
+.rhc-status-detail {
+  margin: 3px 0 0;
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--rpw-dim);
+  overflow-wrap: anywhere;
+}
+
+.rhc-identity, .rhc-entry-meta { margin: 8px 0 0; display: flex; flex-direction: column; gap: 2px; }
+.rhc-identity-row { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.rhc-identity-row dt, .rhc-identity-row dd { margin: 0; }
+.rhc-key {
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--rpw-faint);
+  min-width: 116px;
+}
+.rhc-value {
+  font-size: 10px;
+  color: var(--rpw-cream);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.rhc-independence {
+  margin: 8px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+}
+.rhc-independence .rhc-key { min-width: 0; }
+.rhc-reasons {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--rpw-dim);
+}
+.rhc-reasons li { overflow-wrap: anywhere; }
+.rhc-reasons li::before { content: '· '; color: var(--rpw-gold-dim); }
+
+.rhc-subtitle {
+  margin: 14px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--rpw-line);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--rpw-cream);
+}
+.rhc-count { margin: 3px 0 0; font-size: 9px; color: var(--rpw-faint); }
+
+.rhc-entries { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rhc-entry { border: 1px solid var(--rpw-line); padding: 8px; min-width: 0; }
+/* No neon and no colour-only signal: an unavailable row is stated in words
+   and marked only by a quieter left rule. */
+.rhc-entry[data-startable='false'] { border-left: 2px solid var(--rpw-faint); }
+.rhc-entry[data-startable='true'] { border-left: 2px solid var(--rpw-gold); }
+
+.rhc-entry-btn {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--rpw-cream);
+}
+.rhc-entry-btn:focus-visible { outline: 2px solid var(--rpw-gold); outline-offset: 2px; }
+.rhc-entry-btn[aria-disabled='true'] { cursor: default; color: var(--rpw-dim); }
+.rhc-entry-name { font-size: 11px; letter-spacing: 0.08em; overflow-wrap: anywhere; min-width: 0; }
+.rhc-entry-maturity {
+  flex: 0 0 auto;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rpw-dim);
+  border: 1px solid var(--rpw-line);
+  padding: 1px 5px;
+}
+
+.rhc-entry-facts, .rhc-entry-caps, .rhc-entry-reason, .rhc-entry-desc {
+  margin: 4px 0 0;
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--rpw-dim);
+  overflow-wrap: anywhere;
+}
+.rhc-entry-reason { color: var(--rpw-faint); }
+
+.rhc-entry-detail { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--rpw-line); }
+.rhc-caps { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.rhc-cap { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.rhc-cap .rhc-key { min-width: 132px; }
+/* A capability that is not proven says so; it is never a dimmer tick. */
+.rhc-cap[data-proven='false'] .rhc-value { color: var(--rpw-faint); }
+.rhc-cap[data-proven='true'] .rhc-value { color: var(--rpw-green); }
+
+@media (max-width: 700px) {
+  .rhc-overlay { justify-content: stretch; }
+  .rhc-sheet { width: 100%; border-left: 0; }
+  /* Touch-safe minimums on every control the sheet owns. */
+  .rhc-close, .rhc-entry-btn { min-height: 44px; }
+  .rpw-reviewer-harness-btn { min-height: 44px; }
+  .rhc-identity-row, .rhc-cap { flex-direction: column; gap: 0; }
+  .rhc-key { min-width: 0; }
+  .rhc-cap .rhc-key { min-width: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rhc-overlay, .rhc-sheet, .rhc-entry-btn { transition: none; animation: none; }
+}

@@ -20,6 +20,7 @@ export { RelayTerminalEvent } from './RelayTerminalEvent';
 export { RelayProjectPhaseRail } from './RelayProjectPhaseRail';
 export { RelayManualTaskPanel } from './RelayManualTaskPanel';
 export { RelayReviewerStatus } from './RelayReviewerStatus';
+export { RelayReviewerHarnessCatalog } from './RelayReviewerHarnessCatalog';
 export { RelayFindingPanel } from './RelayFindingPanel';
 export { RelayRepairPanel } from './RelayRepairPanel';
 export { RelayVerificationSummary } from './RelayVerificationSummary';
