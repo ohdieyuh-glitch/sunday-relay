@@ -15,22 +15,47 @@
  */
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { loadBridgeConfig, type BridgeConfig } from './config';
+import { chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { loadBridgeConfig, productionConfigProblems, type BridgeConfig } from './config';
 import { createMissionRegistry, type MissionRegistry } from './mission';
 import { architectPreflight, loadArchitectConfig } from './openai-architect';
 import { handleReviewerRoute, isReviewerRoute, type ReviewerRunPort } from './reviewer-routes';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
+/**
+ * EXACT-ORIGIN CORS.
+ *
+ * A browser origin is echoed back only when it matches the allowlist
+ * character for character. An unapproved origin gets NO
+ * `access-control-allow-origin` header at all, so the browser refuses the
+ * response — and the reply says nothing about why, or about what is allowed.
+ *
+ * A request with NO Origin header (an authenticated CLI, curl, a health probe)
+ * is not a browser request and is unaffected: it simply receives no CORS
+ * headers, which is exactly right.
+ *
+ * There is deliberately no wildcard branch. With authenticated routes, `*`
+ * would let any page on the internet spend a founder's credentials.
+ */
 function corsHeaders(config: BridgeConfig, origin: string | undefined): Record<string, string> {
-  const allow = config.allowedOrigin ?? origin ?? '*';
-  return {
-    'access-control-allow-origin': allow,
+  const base: Record<string, string> = {
     'access-control-allow-methods': 'GET,POST,OPTIONS',
-    'access-control-allow-headers': 'content-type',
+    'access-control-allow-headers': 'authorization,content-type',
     'access-control-max-age': '600',
     vary: 'origin',
   };
+  if (origin === undefined) return base;
+  const normalized = origin.trim().replace(/\/$/, '');
+  if (!config.allowedOrigins.includes(normalized)) return base;
+  return { ...base, 'access-control-allow-origin': normalized };
+}
+
+/** Whether this browser origin may proceed. No Origin = not a browser call. */
+function originAllowed(config: BridgeConfig, origin: string | undefined): boolean {
+  if (origin === undefined) return true;
+  return config.allowedOrigins.includes(origin.trim().replace(/\/$/, ''));
 }
 
 function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string>): void {
@@ -83,8 +108,30 @@ export function createBridgeServer(
     const path = (req.url ?? '/').split('?')[0].replace(/\/+$/, '') || '/';
 
     if (method === 'OPTIONS') {
-      res.writeHead(204, cors);
+      // A preflight from an unapproved origin is refused without explaining
+      // the policy or naming what is allowed.
+      res.writeHead(originAllowed(config, origin) ? 204 : 403, cors);
       res.end();
+      return;
+    }
+
+    // A browser request from an unapproved origin never reaches a route.
+    if (!originAllowed(config, origin)) {
+      send(res, 403, { error: 'origin not allowed' }, cors);
+      return;
+    }
+
+    /**
+     * THE PUBLIC LIVENESS PROBE.
+     *
+     * Deliberately the least informative endpoint in the product: it proves a
+     * process is answering and nothing else. No version, no mode, no backend
+     * URL, no host path, no mission, no readiness detail — a managed host's
+     * health checker needs none of it, and anyone else scanning the internet
+     * should learn nothing.
+     */
+    if (method === 'GET' && path === '/health') {
+      send(res, 200, { status: 'ok' }, cors);
       return;
     }
 
@@ -173,8 +220,48 @@ export function createBridgeServer(
 }
 
 /** Entry point — `node dist-relay-bridge/server.cjs`. */
+/**
+ * Prepares the durable-state root and proves it is usable.
+ *
+ * A bridge that cannot write its own state must not report itself healthy, so
+ * this failing is a startup failure rather than a warning. Permissions are
+ * owner-only: the volume holds mission state, not public data.
+ */
+export function prepareStateRoot(root: string | null): { ok: true } | { ok: false; reason: string } {
+  if (root === null) return { ok: true };
+  try {
+    mkdirSync(root, { recursive: true, mode: 0o700 });
+    chmodSync(root, 0o700);
+    // Prove writability rather than assume it — a mount can exist read-only.
+    const probe = join(root, '.relay-write-probe');
+    writeFileSync(probe, 'ok', { mode: 0o600 });
+    rmSync(probe, { force: true });
+    return { ok: true };
+  } catch {
+    // The path is NOT included: it is host layout, and this line reaches logs.
+    return { ok: false, reason: 'the durable state directory is not writable' };
+  }
+}
+
 export function main(): void {
   const config = loadBridgeConfig();
+
+  // Refuse to boot a production bridge that would be unsafe. Names only —
+  // never values — so this is safe in a deployment log.
+  const problems = productionConfigProblems(config, process.env);
+  if (problems.length > 0) {
+    for (const problem of problems) console.error(`Relay bridge cannot start: ${problem}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const state = prepareStateRoot(config.stateRoot);
+  if (!state.ok) {
+    console.error(`Relay bridge cannot start: ${state.reason}.`);
+    process.exitCode = 1;
+    return;
+  }
+
   const registry = createMissionRegistry({
     fusionBaseUrl: config.fusionBaseUrl,
     sundayMode: config.sundayMode,
@@ -184,14 +271,37 @@ export function main(): void {
     architectEnv: process.env,
   });
   const server = createBridgeServer(config, registry);
-  server.listen(config.port, () => {
+
+  /**
+   * GRACEFUL SHUTDOWN. A managed host sends SIGTERM before replacing an
+   * instance. Stop accepting new connections, let in-flight requests finish,
+   * and exit — rather than dying mid-request and leaving a caller unsure
+   * whether its work was accepted.
+   */
+  let shuttingDown = false;
+  const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`Relay bridge received ${signal} — closing.`);
+    server.close(() => process.exit(0));
+    // A caller that never finishes must not hold the deploy open forever.
+    const forced = setTimeout(() => process.exit(0), 10_000);
+    forced.unref?.();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
+  server.listen(config.port, config.host, () => {
     // Safe startup line — configuration facts only, no secrets.
     // eslint-disable-next-line no-console
     console.log(
-      `Relay bridge listening on :${config.port} · claude: ${config.claudeMode} · ` +
-        `alcatraz(fusion): ${config.fusionBaseUrl} · sundayMode: ${config.sundayMode} · ` +
-        `confirm-live: ${config.confirmLive ? 'yes' : 'no'} · ` +
-        `CORS: ${config.allowedOrigin ? 'restricted' : 'open (dev)'}`,
+      // Configuration FACTS only. No token, no origin list contents beyond a
+      // count, no state path — this line goes straight into a deployment log.
+      `Relay bridge listening on ${config.host}:${config.port} · claude: ${config.claudeMode} · ` +
+        `sundayMode: ${config.sundayMode} · confirm-live: ${config.confirmLive ? 'yes' : 'no'} · ` +
+        `CORS origins: ${config.allowedOrigins.length} · ` +
+        `durable state: ${config.stateRoot === null ? 'default' : 'mounted'} · ` +
+        `auth: ${(process.env.RELAY_BRIDGE_API_TOKEN ?? '').trim() === '' ? 'OPEN (dev)' : 'required'}`,
     );
   });
 }

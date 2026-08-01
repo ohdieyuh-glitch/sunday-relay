@@ -14,8 +14,19 @@ import {
  */
 
 const TOKEN = 'bridge-token-abcdefghijklmnop';
+/**
+ * The harness probe is pointed at a path that cannot exist. These tests are
+ * about authentication, validation and disclosure — not about whichever Hermes
+ * happens to be installed on the machine running them. Probing a real binary
+ * costs tens of seconds and makes the result machine-dependent.
+ */
 const env = (extra: Record<string, string> = {}): NodeJS.ProcessEnv =>
-  ({ [BRIDGE_TOKEN_ENV]: TOKEN, PATH: process.env.PATH, ...extra }) as NodeJS.ProcessEnv;
+  ({
+    [BRIDGE_TOKEN_ENV]: TOKEN,
+    PATH: process.env.PATH,
+    RELAY_HERMES_EXECUTABLE: '/nonexistent/relay-hermes-probe',
+    ...extra,
+  }) as NodeJS.ProcessEnv;
 
 const call = (
   path: string,
