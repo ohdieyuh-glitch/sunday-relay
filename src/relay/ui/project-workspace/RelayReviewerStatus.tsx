@@ -4,6 +4,7 @@ import { REVIEWER_STATE_LABEL } from './projections';
 import { RelayFindingPanel } from './RelayFindingPanel';
 import { RelayRepairPanel } from './RelayRepairPanel';
 import { RelayReviewerHarnessCatalog } from './RelayReviewerHarnessCatalog';
+import { RelayBridgePairingPanel } from '../app/RelayBridgePairingPanel';
 import type { RepairTask, ReviewFinding, ReviewerStateKind } from './contracts';
 import type { ReviewerHarnessCatalogView } from '../../mission/reviewer-harness';
 
@@ -39,7 +40,9 @@ export function RelayReviewerStatus({
   onOpenRepair: (repairId: string) => void;
 }) {
   const [catalogOpen, setCatalogOpen] = useState(false);
+  const [pairingOpen, setPairingOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const pairingTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   return (
     <section className="rpw-reviewer" aria-labelledby="rpw-reviewer-heading">
@@ -71,6 +74,18 @@ export function RelayReviewerStatus({
           >
             Reviewer Harness
           </button>
+          {/* Beside the harness control: the Bridge this Reviewer would run
+              through, and where a browser session is established. */}
+          <button
+            type="button"
+            ref={pairingTriggerRef}
+            className="rpw-reviewer-harness-btn"
+            aria-haspopup="dialog"
+            aria-expanded={pairingOpen}
+            onClick={() => setPairingOpen(true)}
+          >
+            Relay Bridge
+          </button>
         </div>
       )}
 
@@ -91,6 +106,12 @@ export function RelayReviewerStatus({
           onInspectUnavailable={onHarnessUnavailable}
         />
       )}
+
+      <RelayBridgePairingPanel
+        open={pairingOpen}
+        onClose={() => setPairingOpen(false)}
+        returnFocusTo={pairingTriggerRef.current}
+      />
     </section>
   );
 }
