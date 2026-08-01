@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 import type { RelayAgentOperatingProjection } from '../../mission';
 import type { MissionWorktreeView } from '../../mission/worktree';
 import type { CodingAgentView } from '../../mission/coding-agent';
+import type { PromptArchitectView } from '../../mission/prompt-architect';
 
 /**
  * SUNDAY RELAY — THE AGENT OPERATING INSPECTOR.
@@ -34,6 +35,7 @@ export function RelayAgentOperatingInspector({
   projection,
   worktree,
   runtime,
+  architect,
   defaultOpen = false,
 }: {
   projection: RelayAgentOperatingProjection;
@@ -41,6 +43,8 @@ export function RelayAgentOperatingInspector({
   worktree?: MissionWorktreeView;
   /** Optional Coding Agent runtime state (Claude Code). Absent = unknown. */
   runtime?: CodingAgentView;
+  /** Optional Prompt Architect runtime state (GPT). Absent = unknown. */
+  architect?: PromptArchitectView;
   /** Detail starts collapsed; a surface may open it for a focused view. */
   defaultOpen?: boolean;
 }) {
@@ -100,6 +104,23 @@ export function RelayAgentOperatingInspector({
           <span className="rpw-operating-runtime-detail">{runtime.outcomeLabel}</span>
           {runtime.disclosure !== null && (
             <span className="rpw-operating-disclosure">{runtime.disclosure}</span>
+          )}
+        </p>
+      )}
+
+      {architect !== undefined && (
+        <p
+          className={`rpw-operating-runtime${architect.blocking ? ' rpw-operating-runtime--blocked' : ''}`}
+          data-architect-state={architect.connectionState}
+        >
+          <span className="rpw-operating-key">Prompt Architect runtime</span>
+          <span className="rpw-operating-value">{architect.summary}</span>
+          <span className="rpw-operating-runtime-detail">
+            {`Requested ${architect.requestedModelLabel} · Actual ${architect.actualModelLabel} · Usage ${architect.usageLabel} · Cost ${architect.costLabel}`}
+          </span>
+          <span className="rpw-operating-runtime-detail">{architect.outcomeLabel}</span>
+          {architect.disclosure !== null && (
+            <span className="rpw-operating-disclosure">{architect.disclosure}</span>
           )}
         </p>
       )}

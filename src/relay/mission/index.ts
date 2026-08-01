@@ -123,3 +123,20 @@ export {
   type CodingAgentStorePort, type CodingAgentAvailability, type CodingAgentProbeInput,
   type CodingAgentView,
 } from './coding-agent';
+
+export {
+  // Prompt Architect — re-exported through the barrel for the same reason as
+  // worktrees and the coding agent: the CLI boundary permits only the bare
+  // '../mission' path, and BOTH surfaces must render the one projection.
+  ARCHITECT_BRIDGE_REQUIRED_LABEL, ARCHITECT_SIMULATED_LABEL, ARCHITECT_STATE_LABEL,
+  PROMPT_ARCHITECT_CAPABILITIES, PROMPT_ARCHITECT_SCHEMA_VERSION,
+  NO_ARCHITECT_CAPABILITIES, UNKNOWN_ARCHITECT_USAGE,
+  architectDraftFrom, architectNotification, boundHandoff, buildArchitectContext,
+  classifyRecoveredArchitect, createPromptArchitectStore, idleArchitectRecord,
+  planNeedsInput, projectPromptArchitect, readArchitectRecord, redactContextText,
+  renderArchitectStatusLines, renderContextInput, renderContractInstruction,
+  sealArchitectRecord, validateArchitectPlan,
+  type ArchitectPlan, type ArchitectConnectionState, type ContextBlock,
+  type PromptArchitectRecord, type PromptArchitectRecordDraft,
+  type PromptArchitectStorePort, type PromptArchitectView,
+} from './prompt-architect';
