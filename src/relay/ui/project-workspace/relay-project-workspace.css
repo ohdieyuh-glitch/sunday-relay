@@ -1682,3 +1682,24 @@
 @media (prefers-reduced-motion: reduce) {
   .rpw-expand-btn { transition: none; }
 }
+
+/* ------------------------------------------- isolated mission worktree */
+/* A property of the Environment row, rendered beneath the four operating
+   components — never a fifth row. */
+
+.rpw-operating-worktree {
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px dashed var(--rpw-line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rpw-operating-worktree--blocked .rpw-operating-value { color: var(--rpw-red); }
+.rpw-operating-worktree-detail {
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--rpw-dim);
+  overflow-wrap: anywhere;
+}

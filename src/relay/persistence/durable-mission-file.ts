@@ -6,6 +6,10 @@ import {
   type DurableKeyValueBacking,
   type DurableMissionStorePort,
 } from '../mission/durable';
+import {
+  createMissionWorktreeStore,
+  type MissionWorktreeStorePort,
+} from '../mission/worktree';
 
 /**
  * THE NODE DURABLE-MISSION ADAPTER.
@@ -84,6 +88,15 @@ export function createNodeDurableBacking(root: string): DurableKeyValueBacking {
 
 export function createNodeDurableMissionStore(root: string): DurableMissionStorePort {
   return createDurableMissionStore(createNodeDurableBacking(root));
+}
+
+/**
+ * The mission-worktree store over the SAME backing. Worktree records use a
+ * different key prefix, so both live in one directory with one set of atomic
+ * write and retention rules — not two competing stores.
+ */
+export function createNodeMissionWorktreeStore(root: string): MissionWorktreeStorePort {
+  return createMissionWorktreeStore(createNodeDurableBacking(root));
 }
 
 /** The retained previous checkpoint, when one exists. Recovery offers this

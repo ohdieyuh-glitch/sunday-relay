@@ -24,6 +24,7 @@ import {
   type RelayFocusablePanel,
 } from './RelayPanelFocus';
 import { RelayAgentOperatingInspector } from './RelayAgentOperatingInspector';
+import type { MissionWorktreeView } from '../../mission/worktree';
 import { OUTPUT_STATE_LABEL, completionDisplay } from './projections';
 import type { RelayProjectWorkspaceProps } from './contracts';
 import type {
@@ -75,6 +76,12 @@ export function RelayProjectWorkspace(
      * render exactly as before.
      */
     usage?: RelayWorkspaceUsage;
+    /**
+     * Isolated-worktree state for the Coding Agent's Environment. Optional:
+     * a caller that cannot know (the static deployment has no Node bridge)
+     * passes the offline view rather than nothing pretending to be nothing.
+     */
+    worktree?: MissionWorktreeView;
   },
 ) {
   const {
@@ -180,7 +187,10 @@ export function RelayProjectWorkspace(
           <RelayUsageBar view={props.usage.bar} onOpen={props.usage.onOpenUsage} compact />
         )}
         {focused && profile !== undefined && (
-          <RelayAgentOperatingInspector projection={profile} />
+          <RelayAgentOperatingInspector
+            projection={profile}
+            worktree={agentRole === 'coding_agent' ? props.worktree : undefined}
+          />
         )}
       </RelayFocusedPanel>
     );

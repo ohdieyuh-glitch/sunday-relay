@@ -24,9 +24,11 @@ import {
   checkSupervisedPrerequisites, runSupervisedContractVerification, runSupervisedProof,
 } from '../connectors/supervised';
 import {
-  createStateStore, createSupervisedRunRecorder, recoverRun, resolveStateRoot,
-  runPersistenceContractVerification, runRecoveryDrill, stateDoctorReport,
+  createNodeMissionWorktreeStore, createStateStore, createSupervisedRunRecorder, recoverRun,
+  resolveStateRoot, runPersistenceContractVerification, runRecoveryDrill, stateDoctorReport,
 } from '../persistence';
+// The worktree projection comes through the mission BARREL — the CLI
+// boundary permits '../mission', never a deep module path.
 import {
   detectCaps, findProjectRecord, loadAppData, productHome, productProjects, productProjectStatus,
   productProjectView, productRecover, productRunConfirmation, runCliContractVerification,
@@ -50,6 +52,7 @@ import { renderAgentOperatingProfiles } from './agent-operating';
 // The SHARED projection — the same one the website's inspector renders.
 import {
   RELAY_AGENT_ROLES, operatingProfileFixture, projectAgentOperatingProfiles,
+  projectMissionWorktree, renderWorktreeStatusLines,
 } from '../mission';
 
 /**
@@ -80,7 +83,9 @@ export interface ParsedCli {
   agentAction?: 'import' | 'profile';
   /** Which agent's operating profile to print; all three when absent. */
   role?: string;
-  missionAction?: 'economics' | 'budget' | 'receipts';
+  missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree';
+  worktreeMode?: 'status' | 'inspect';
+  missionRef?: string;
   /** True when a credential was pasted as an argument — refused, never used. */
   credentialInArgv?: boolean;
   stdinCredential?: boolean;
@@ -175,13 +180,35 @@ export function parseCli(argv: string[]): ParsedCli {
     const [first, second, third] = positionals;
     if (values.help || first === 'help') return { command: 'help', ...base };
     if (first === 'mission') {
-      const missionActions = ['economics', 'budget', 'receipts'] as const;
+      const missionActions = ['economics', 'budget', 'receipts', 'worktree'] as const;
       type MissionAction = (typeof missionActions)[number];
       if (!missionActions.includes(second as MissionAction)) {
         return {
           command: 'mission',
           ...base,
-          error: 'mission requires an action: economics, budget, or receipts.',
+          error: 'mission requires an action: economics, budget, receipts, or worktree.',
+        };
+      }
+      if (second === 'worktree') {
+        // `relay mission worktree <status|inspect> <mission-id>` — read-only.
+        // There is no raw-git passthrough here by design.
+        const modes = ['status', 'inspect'] as const;
+        const mode = third;
+        if (!modes.includes(mode as (typeof modes)[number])) {
+          return {
+            command: 'mission',
+            missionAction: 'worktree',
+            ...base,
+            error: 'mission worktree requires status or inspect, then a mission id.',
+          };
+        }
+        return {
+          command: 'mission',
+          missionAction: 'worktree',
+          worktreeMode: mode as (typeof modes)[number],
+          missionRef: positionals[3],
+          stateRoot: values['state-root'],
+          ...base,
         };
       }
       return {
@@ -350,6 +377,8 @@ export const HELP_TEXT = [
   '       [--auto-accept-blueprint]',
   '  relay doctor                   read-only environment checks',
   '  relay workspace doctor         isolated-worktree capability checks (live local)',
+  '  relay mission worktree status <mission-id>   isolated worktree state (read-only)',
+  '  relay mission worktree inspect <mission-id>  the same state plus validation findings',
   '  relay workspace verify         deterministic workspace security verification',
   '  relay claude doctor            truthful Claude Code capability + auth report',
   '  relay claude contract-verify   offline adapter proof (no provider call)',
@@ -525,11 +554,11 @@ export function doctorReport(io: CliIo): { lines: string[]; exitCode: number } {
   checks.push(['Simulation adapters', 'available']);
   checks.push(['Scenario registry', `${Object.keys(SCENARIOS).length} scenarios`]);
   checks.push(['Current storage', 'volatile memory (state dies with the process)']);
-  checks.push(['Durable storage', 'DEFERRED (later prompt)']);
+  checks.push(['Durable storage', 'live local (journal + snapshots + mission records)']);
   checks.push(['Real Claude Code adapter', 'DEFERRED']);
   checks.push(['Real Codex adapter', 'DEFERRED']);
   checks.push(['Hermes adapter', 'DEFERRED']);
-  checks.push(['Worktree manager', 'DEFERRED']);
+  checks.push(['Worktree manager', 'live local (isolated mission worktrees)']);
   checks.push(['Production deployment', 'disabled']);
   checks.push(['Provider credentials accessed', 'no']);
   checks.push(['Terminal TTY', io.isTTY ? 'interactive' : 'non-interactive']);
@@ -1140,10 +1169,57 @@ async function runMissionCli(parsed: ParsedCli, io: CliIo): Promise<number> {
     case 'receipts':
       for (const line of renderMissionReceipts(fixture.receipts, options)) io.out(line);
       return EXIT.completed;
+    case 'worktree':
+      return await runMissionWorktreeCli(parsed, io);
     default:
-      io.out('mission requires an action: economics, budget, or receipts.');
+      io.out('mission requires an action: economics, budget, receipts, or worktree.');
       return EXIT.usage;
   }
+}
+
+/**
+ * `relay mission worktree status|inspect <mission-id>` — READ-ONLY.
+ *
+ * Prints the SAME projection the website's Coding Agent Environment
+ * inspector renders, so the two surfaces cannot disagree. Creation and
+ * removal are deliberately NOT exposed here: they are internal APIs in this
+ * milestone, and there is no raw-git passthrough at all.
+ */
+async function runMissionWorktreeCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const missionId = parsed.missionRef;
+  if (missionId === undefined || missionId.trim() === '') {
+    io.out('mission worktree requires a mission id.');
+    return EXIT.usage;
+  }
+  const root = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
+  if (!root.ok) {
+    io.out(root.error.message);
+    return EXIT.usage;
+  }
+  const store = createNodeMissionWorktreeStore(root.value.root);
+  const read = await store.read(missionId);
+
+  if (!read.ok && read.reason !== 'not_found') {
+    // A record Relay cannot trust is reported as such — never as "no
+    // worktree", and never repaired silently.
+    io.out(`MISSION WORKTREE — ${missionId}`);
+    io.out(`  State:        Requires inspection (${read.reason})`);
+    io.out(`  Detail:       ${read.detail}`);
+    return EXIT.blocked;
+  }
+
+  const view = projectMissionWorktree(read.ok ? read.record : null);
+  for (const line of renderWorktreeStatusLines(missionId, view)) io.out(line);
+
+  if (parsed.worktreeMode === 'inspect' && read.ok) {
+    io.out('  Validation:');
+    for (const found of read.record.validationFindings) {
+      io.out(`    [${found.ok ? 'PASS' : 'FAIL'}] ${found.check} — ${found.detail}`);
+    }
+    // The full path appears ONLY in the explicit detail view.
+    io.out(`  Full path:    ${read.record.worktreePath}`);
+  }
+  return EXIT.completed;
 }
 
 async function runAgentCli(parsed: ParsedCli, io: CliIo): Promise<number> {

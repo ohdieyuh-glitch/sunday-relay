@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 
 import type { RelayAgentOperatingProjection } from '../../mission';
+import type { MissionWorktreeView } from '../../mission/worktree';
 
 /**
  * SUNDAY RELAY — THE AGENT OPERATING INSPECTOR.
@@ -22,12 +23,20 @@ import type { RelayAgentOperatingProjection } from '../../mission';
  * environment reference has no field that can carry a key, a token or the
  * contents of a private variable. The drawer shows the Mission Contract's
  * IDENTITY and mode — never its raw system-level instruction text.
+ *
+ * THE WORKTREE LINE is a property of the Environment, not a fifth row: it is
+ * rendered beneath the four rows from the SAME projection the CLI prints,
+ * and it says `Not available in offline demo` in the static deployment
+ * rather than naming a local path that does not exist there.
  */
 export function RelayAgentOperatingInspector({
   projection,
+  worktree,
   defaultOpen = false,
 }: {
   projection: RelayAgentOperatingProjection;
+  /** Optional isolated-worktree state. Absent = the surface knows nothing. */
+  worktree?: MissionWorktreeView;
   /** Detail starts collapsed; a surface may open it for a focused view. */
   defaultOpen?: boolean;
 }) {
@@ -55,6 +64,24 @@ export function RelayAgentOperatingInspector({
           </div>
         ))}
       </dl>
+
+      {worktree !== undefined && (
+        <p
+          className={`rpw-operating-worktree${worktree.blocking ? ' rpw-operating-worktree--blocked' : ''}`}
+          data-worktree-state={worktree.state ?? 'none'}
+        >
+          <span className="rpw-operating-key">Isolated worktree</span>
+          <span className="rpw-operating-value">{worktree.summary}</span>
+          {worktree.present && (
+            <span className="rpw-operating-worktree-detail">
+              {worktree.missionBranch} · {worktree.cleanLabel} · {worktree.pathLabel}
+            </span>
+          )}
+          {worktree.disclosure !== null && (
+            <span className="rpw-operating-disclosure">{worktree.disclosure}</span>
+          )}
+        </p>
+      )}
 
       <button
         type="button"

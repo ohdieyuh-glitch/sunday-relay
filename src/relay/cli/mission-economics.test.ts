@@ -29,8 +29,8 @@ describe('mission economics command parsing', () => {
   });
 
   it('rejects a missing or unknown action rather than guessing', () => {
-    expect(parseCli(['mission']).error).toMatch(/economics, budget, or receipts/u);
-    expect(parseCli(['mission', 'spend']).error).toMatch(/economics, budget, or receipts/u);
+    expect(parseCli(['mission']).error).toMatch(/economics, budget, receipts, or worktree/u);
+    expect(parseCli(['mission', 'spend']).error).toMatch(/economics, budget, receipts, or worktree/u);
   });
 });
 

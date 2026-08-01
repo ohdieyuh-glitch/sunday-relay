@@ -63,6 +63,7 @@ import {
 import { RelayUsageDetailPanel, type RelayWorkspaceUsage } from '../usage';
 import { RelayNotificationHost, useRelayNotificationCenter } from '../notifications';
 import { RelayMissionRecoveryPanel } from '../recovery';
+import { projectMissionWorktree } from '../../mission/worktree';
 import { useRelayDurableMission } from '../app/useRelayDurableMission';
 import './relay-preview.css';
 
@@ -368,6 +369,24 @@ export function RelayPreviewApp() {
       interruptionReason: null,
     });
   }, [checkpointBoundary, checkpointMissionId, store, usageSnapshot, durableCheckpoint]);
+
+  /* ---------------------- isolated mission worktree ------------------- */
+  /* THE STATIC DEPLOYMENT HAS NO NODE BRIDGE, so it cannot know whether a
+     local worktree exists — and it must not guess. `offline: true` renders
+     "Not available in offline demo"; Demo Simulation renders a SIMULATED
+     worktree under the existing disclosure. Neither ever names a real path. */
+  const worktreeView = useMemo(
+    () => projectMissionWorktree(null, {
+      offline: !demoSimulation.state.active,
+      simulated: demoSimulation.state.active,
+    }),
+    [demoSimulation.state.active],
+  );
+
+  /* Worktree notifications reuse the ONE host. Nothing announces success
+     here: with no bridge there is no worktree to be ready, so the only
+     truthful event is the absence itself, which the Environment row states
+     without a notification. */
 
   const recoveredMissionName = (() => {
     const id = durable.discovered?.record?.missionId;
@@ -684,6 +703,7 @@ export function RelayPreviewApp() {
         {...presentation}
         agentsPanel={agentsPanel}
         usage={workspaceUsage}
+        worktree={worktreeView}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -756,6 +776,7 @@ export function RelayPreviewApp() {
         {...presentation}
         agentsPanel={agentsPanel}
         usage={workspaceUsage}
+        worktree={worktreeView}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen

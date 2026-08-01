@@ -87,3 +87,20 @@ export {
   type RelayRuntimeReference, type RelayMissionContractReference,
   type RelayEnvironmentReference, type RelayToolGrant,
 } from './agent-operating';
+
+export {
+  // Isolated mission worktrees — re-exported for the same reason economics
+  // and the agent operating foundation are: the CLI boundary permits only
+  // the bare '../mission' barrel, and BOTH surfaces must render the one
+  // worktree projection rather than word the same state differently.
+  MISSION_BRANCH_PREFIX, MISSION_WORKTREE_STATES, PROTECTED_BRANCH_NAMES,
+  WORKTREE_SCHEMA_VERSION, WORKTREE_STATE_LABEL,
+  NO_WORKTREE_LABEL, WORKTREE_OFFLINE_LABEL, WORKTREE_SIMULATED_LABEL,
+  abbreviateWorktreePath, createMissionWorktreeStore, deriveMissionBranch,
+  projectMissionWorktree, readWorktreeRecord, renderWorktreeStatusLines,
+  sealWorktreeRecord, validateMissionBranch, worktreeRefFor,
+  type MissionWorktreeRecord, type MissionWorktreeRecordDraft,
+  type MissionWorktreeState, type MissionWorktreeStorePort,
+  type MissionWorktreeView, type WorktreeReadResult,
+  type WorktreeValidationFinding,
+} from './worktree';
