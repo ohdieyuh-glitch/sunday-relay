@@ -66,6 +66,7 @@ import { RelayMissionRecoveryPanel } from '../recovery';
 import { projectMissionWorktree } from '../../mission/worktree';
 import { projectCodingAgentRuntime } from '../../mission/coding-agent';
 import { projectPromptArchitect } from '../../mission/prompt-architect';
+import { projectReviewerHarness } from '../../mission/reviewer-harness';
 import { useRelayDurableMission } from '../app/useRelayDurableMission';
 import './relay-preview.css';
 
@@ -412,6 +413,16 @@ export function RelayPreviewApp() {
     [demoSimulation.state.active],
   );
 
+  /* THE REVIEWER HARNESS. No catalog entry has an adapter yet and no bridge
+     is hosted, so nothing is startable and nothing may read as Connected. */
+  const reviewerHarnessView = useMemo(
+    () => projectReviewerHarness(null, {
+      bridgeAvailable: false,
+      simulated: demoSimulation.state.active,
+    }),
+    [demoSimulation.state.active],
+  );
+
   const recoveredMissionName = (() => {
     const id = durable.discovered?.record?.missionId;
     if (id === undefined) return 'Unfinished mission';
@@ -730,6 +741,7 @@ export function RelayPreviewApp() {
         worktree={worktreeView}
         codingRuntime={codingRuntimeView}
         architectRuntime={architectRuntimeView}
+        reviewerHarness={reviewerHarnessView}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -805,6 +817,7 @@ export function RelayPreviewApp() {
         worktree={worktreeView}
         codingRuntime={codingRuntimeView}
         architectRuntime={architectRuntimeView}
+        reviewerHarness={reviewerHarnessView}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen

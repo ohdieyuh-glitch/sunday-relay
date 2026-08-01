@@ -24,7 +24,8 @@ import {
   checkSupervisedPrerequisites, runSupervisedContractVerification, runSupervisedProof,
 } from '../connectors/supervised';
 import {
-  createNodeCodingAgentStore, createNodeMissionWorktreeStore, createNodePromptArchitectStore, createStateStore, createSupervisedRunRecorder, recoverRun,
+  createNodeCodingAgentStore, createNodeMissionWorktreeStore, createNodePromptArchitectStore,
+  createNodeReviewerHarnessStore, createStateStore, createSupervisedRunRecorder, recoverRun,
   resolveStateRoot, runPersistenceContractVerification, runRecoveryDrill, stateDoctorReport,
 } from '../persistence';
 // The worktree projection comes through the mission BARREL — the CLI
@@ -55,6 +56,7 @@ import {
   projectMissionWorktree, renderWorktreeStatusLines,
   codingAgentDraftFrom, projectCodingAgentRuntime, renderCodingAgentStatusLines,
   architectDraftFrom, projectPromptArchitect, renderArchitectStatusLines,
+  harnessDraftFrom, projectReviewerHarness, renderHarnessCatalogLines, renderReviewerStatusLines,
 } from '../mission';
 import { evaluateReadiness, readGptArchitectConfig } from '../connectors/gpt-architect';
 import { inspectClaudeRuntime } from './claude-runtime';
@@ -82,12 +84,13 @@ const defaultIo: CliIo = {
 export interface ParsedCli {
   command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude' | 'codex' | 'supervised'
     | 'state' | 'runs' | 'persistence'
-    | 'home' | 'projects' | 'project' | 'recover' | 'cli' | 'session' | 'yc' | 'agent' | 'mission';
+    | 'home' | 'projects' | 'project' | 'recover' | 'cli' | 'session' | 'yc' | 'agent' | 'mission' | 'reviewer';
   workspaceAction?: 'doctor' | 'verify';
   agentAction?: 'import' | 'profile';
   /** Which agent's operating profile to print; all three when absent. */
   role?: string;
-  missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree' | 'coding-agent' | 'prompt-architect';
+  missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree' | 'coding-agent' | 'prompt-architect' | 'reviewer';
+  reviewerMode?: 'status' | 'inspect' | 'stop';
   architectMode?: 'status' | 'inspect' | 'stop';
   codingAgentMode?: 'status' | 'inspect' | 'stop';
   worktreeMode?: 'status' | 'inspect';
@@ -186,15 +189,32 @@ export function parseCli(argv: string[]): ParsedCli {
     const [first, second, third] = positionals;
     if (values.help || first === 'help') return { command: 'help', ...base };
     if (first === 'mission') {
-      const missionActions = ['economics', 'budget', 'receipts', 'worktree', 'coding-agent', 'prompt-architect'] as const;
+      const missionActions = ['economics', 'budget', 'receipts', 'worktree', 'coding-agent', 'prompt-architect', 'reviewer'] as const;
       type MissionAction = (typeof missionActions)[number];
       if (!missionActions.includes(second as MissionAction)) {
         return {
           command: 'mission',
           ...base,
-          error: 'mission requires an action: economics, budget, receipts, worktree, coding-agent, or prompt-architect.',
+          error: 'mission requires an action: economics, budget, receipts, worktree, coding-agent, prompt-architect, or reviewer.',
         };
       }
+      if (second === 'reviewer') {
+        // `relay mission reviewer <status|inspect|stop> <mission-id>`.
+        // No harness CLI passthrough exists here by design.
+        const modes = ['status', 'inspect', 'stop'] as const;
+        if (!modes.includes(third as (typeof modes)[number])) {
+          return {
+            command: 'mission', missionAction: 'reviewer', ...base,
+            error: 'mission reviewer requires status, inspect, or stop, then a mission id.',
+          };
+        }
+        return {
+          command: 'mission', missionAction: 'reviewer',
+          reviewerMode: third as (typeof modes)[number],
+          missionRef: positionals[3], stateRoot: values['state-root'], ...base,
+        };
+      }
+
       if (second === 'prompt-architect') {
         // `relay mission prompt-architect <status|inspect|stop> <mission-id>`.
         // No arbitrary OpenAI request passthrough exists here by design.
@@ -262,6 +282,15 @@ export function parseCli(argv: string[]): ParsedCli {
         ...base,
         projectRef: third,
       };
+    }
+
+    if (first === 'reviewer') {
+      // `relay reviewer harnesses` — the catalog only. There is no harness
+      // passthrough, because no harness adapter exists.
+      if (second !== 'harnesses') {
+        return { command: 'reviewer', ...base, error: 'reviewer requires an action: harnesses.' };
+      }
+      return { command: 'reviewer', ...base };
     }
 
     if (first === 'agent' || first === 'psp-agent') {
@@ -430,6 +459,10 @@ export const HELP_TEXT = [
   '  relay mission prompt-architect status <mission-id>   GPT planning state',
   '  relay mission prompt-architect inspect <mission-id>  state plus server configuration',
   '  relay mission prompt-architect stop <mission-id>     record a cancellation request',
+  '  relay mission reviewer status <mission-id>   Reviewer harness state',
+  '  relay mission reviewer inspect <mission-id>  state plus independence reasoning',
+  '  relay mission reviewer stop <mission-id>     record a cancellation request',
+  '  relay reviewer harnesses       the Reviewer harness catalog (truthful statuses)',
   '  relay workspace verify         deterministic workspace security verification',
   '  relay claude doctor            truthful Claude Code capability + auth report',
   '  relay claude contract-verify   offline adapter proof (no provider call)',
@@ -1226,8 +1259,10 @@ async function runMissionCli(parsed: ParsedCli, io: CliIo): Promise<number> {
       return await runMissionCodingAgentCli(parsed, io);
     case 'prompt-architect':
       return await runMissionArchitectCli(parsed, io);
+    case 'reviewer':
+      return await runMissionReviewerCli(parsed, io);
     default:
-      io.out('mission requires an action: economics, budget, receipts, worktree, coding-agent, or prompt-architect.');
+      io.out('mission requires an action: economics, budget, receipts, worktree, coding-agent, prompt-architect, or reviewer.');
       return EXIT.usage;
   }
 }
@@ -1410,6 +1445,67 @@ async function runMissionArchitectCli(parsed: ParsedCli, io: CliIo): Promise<num
     io.out(`    max tokens:  ${config.maxOutputTokens}`);
     if (readiness.blockedReason !== null) io.out(`    blocked:     ${readiness.blockedReason}`);
   }
+  return EXIT.completed;
+}
+
+/**
+ * `relay mission reviewer status|inspect|stop <mission-id>`.
+ *
+ * Prints the SAME projection the website renders. No harness is startable
+ * from here — no adapter exists for any catalog entry yet.
+ */
+async function runMissionReviewerCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const missionId = parsed.missionRef;
+  if (missionId === undefined || missionId.trim() === '') {
+    io.out('mission reviewer requires a mission id.');
+    return EXIT.usage;
+  }
+  const root = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
+  if (!root.ok) {
+    io.out(root.error.message);
+    return EXIT.usage;
+  }
+  const store = createNodeReviewerHarnessStore(root.value.root);
+  const read = await store.read(missionId);
+
+  if (!read.ok && read.reason !== 'not_found') {
+    io.out(`REVIEWER — ${missionId}`);
+    io.out(`  Connection:   Needs inspection (${read.reason})`);
+    io.out(`  Detail:       ${read.detail}`);
+    return EXIT.blocked;
+  }
+
+  if (parsed.reviewerMode === 'stop') {
+    if (!read.ok) {
+      io.out(`No Reviewer run is recorded for ${missionId}.`);
+      return EXIT.usage;
+    }
+    const stopped = await store.write({
+      ...harnessDraftFrom(read.record),
+      cancellationRequested: true,
+      updatedAt: new Date().toISOString(),
+    });
+    if (!stopped.ok) {
+      io.out(`Could not record the stop request: ${stopped.reason ?? 'unknown error'}`);
+      return EXIT.blocked;
+    }
+    io.out(`Stop requested for ${missionId}. Findings and evidence are preserved.`);
+    return EXIT.completed;
+  }
+
+  // No harness adapter exists yet, so no bridge can make one startable.
+  const view = projectReviewerHarness(read.ok ? read.record : null, { bridgeAvailable: false });
+  for (const line of renderReviewerStatusLines(missionId, view)) io.out(line);
+  if (parsed.reviewerMode === 'inspect') {
+    io.out('  Independence reasons:');
+    for (const reason of view.independenceReasons) io.out(`    - ${reason}`);
+  }
+  return EXIT.completed;
+}
+
+/** `relay reviewer harnesses` — the truthful catalog. */
+function runReviewerCatalogCli(io: CliIo): number {
+  for (const line of renderHarnessCatalogLines()) io.out(line);
   return EXIT.completed;
 }
 
@@ -1646,6 +1742,8 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       return runYcCli(parsed, io);
     case 'agent':
       return runAgentCli(parsed, io);
+    case 'reviewer':
+      return runReviewerCatalogCli(io);
     case 'mission':
       return runMissionCli(parsed, io);
     case 'demo':
