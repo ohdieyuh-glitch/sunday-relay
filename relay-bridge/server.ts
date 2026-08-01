@@ -18,6 +18,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { loadBridgeConfig, type BridgeConfig } from './config';
 import { createMissionRegistry, type MissionRegistry } from './mission';
 import { architectPreflight, loadArchitectConfig } from './openai-architect';
+import {
+  createIsolatedProfile, createProbe, loadXaiConfig, localReadiness,
+} from './reviewer-harness/hermes';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -94,6 +97,35 @@ export function createBridgeServer(config: BridgeConfig, registry: MissionRegist
             promptArchitectReady: architect.ready,
             promptArchitectMissing: architect.missing,
           }, cors);
+          return;
+        }
+
+        /**
+         * The Reviewer harness readiness a browser may safely ask for.
+         *
+         * LOCAL ONLY: it probes the installed runtime and reports whether a
+         * credential is PRESENT. It never contacts a provider, so polling this
+         * cannot spend money, and it never returns a credential, a path or a
+         * comparison — only the evidence the pure domain needs to render a
+         * truthful state. Model verification is a separate, explicit action.
+         */
+        if (method === 'GET' && path === '/relay-api/reviewer/readiness') {
+          const profile = createIsolatedProfile();
+          try {
+            const evidence = localReadiness({
+              executable: process.env.RELAY_HERMES_EXECUTABLE ?? 'hermes',
+              probe: createProbe(profile.home),
+              xai: loadXaiConfig(process.env),
+            });
+            send(res, 200, {
+              harness: 'hermes',
+              // The binary path stays server-side; a browser has no use for it
+              // and it discloses the host's layout.
+              evidence: { ...evidence, binaryPath: null },
+            }, cors);
+          } finally {
+            profile.dispose();
+          }
           return;
         }
 
