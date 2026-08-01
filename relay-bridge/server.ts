@@ -216,6 +216,38 @@ export function createBridgeServer(
           }
         }
 
+        /**
+         * THE MISSION FAMILY IS AUTHENTICATED TOO.
+         *
+         * These routes predate the bridge being hosted: they were written for
+         * a localhost developer tool and had no credential check, which was
+         * harmless until the service got a public domain. It is not harmless
+         * now — an anonymous caller could start, cancel and retry real work.
+         *
+         * Same boundary as the reviewer family: an operator may do anything, a
+         * paired browser session may only READ one mission, and everything
+         * else is refused before the registry is touched.
+         */
+        if (path.startsWith('/relay-api/mission')) {
+          const decision = authorizeReviewerCall({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string'
+              ? req.headers.authorization : undefined,
+            origin,
+            env: process.env,
+            now: Date.now(),
+            store: browserSessions,
+          });
+          if (decision.kind === 'rejected') {
+            send(res, decision.status, {
+              kind: decision.status === 403 ? 'authorization_required' : 'authentication_failed',
+              error: decision.message,
+            }, cors);
+            return;
+          }
+        }
+
         if (method === 'POST' && path === '/relay-api/mission/start') {
           const body = (await readBody(req)) as { missionId?: unknown; objective?: unknown } | undefined;
           const missionId = typeof body?.missionId === 'string' ? body.missionId : '';

@@ -199,6 +199,9 @@ const BROWSER_READABLE = [
   /^\/reviewer\/readiness$/,
   /^\/reviewer\/status\/[^/]+$/,
   /^\/reviewer\/inspect\/[^/]+$/,
+  // Reading one mission's state. Starting, cancelling and retrying a mission
+  // are NOT here: they run real work and belong to an operator.
+  /^\/mission\/[^/]+$/,
 ] as const;
 
 export function browserSessionMayCall(method: string, path: string): boolean {
