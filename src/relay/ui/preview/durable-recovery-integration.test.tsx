@@ -377,12 +377,14 @@ describe('the application shell', () => {
   it('existing fullscreen panels still open and close', async () => {
     render(createElement(RelayPreviewApp));
     await act(async () => { await Promise.resolve(); });
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Relay Console panel' }));
-    const dialog = screen.getAllByRole('dialog').find(
-      (d) => d.getAttribute('aria-label')?.includes('focused panel'),
-    );
-    expect(dialog).toBeTruthy();
-    fireEvent.keyDown(dialog as HTMLElement, { key: 'Escape' });
+    // The workspace carries NO per-panel fullscreen control any more —
+    // expanding a box is a Live Terminal affordance (founder direction).
+    expect(screen.queryAllByRole('button', { name: /^Expand .+ panel$/ })).toHaveLength(0);
+    expect(
+      screen.queryAllByRole('dialog').filter(
+        (d) => d.getAttribute('aria-label')?.includes('focused panel'),
+      ),
+    ).toHaveLength(0);
     expect(
       screen.queryAllByRole('dialog').filter(
         (d) => d.getAttribute('aria-label')?.includes('focused panel'),

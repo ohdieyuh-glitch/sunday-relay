@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 import { RelayPreviewApp } from './RelayPreviewApp';
 import { getRelayAppStore } from '../app';
@@ -122,12 +122,14 @@ describe('offline production stays honest', () => {
     await act(async () => { await Promise.resolve(); });
     expect(screen.getAllByRole('button', { name: /^Usage — / })[0].textContent)
       .toBe('USAGE · UNAVAILABLE');
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Relay Console panel' }));
-    const dialog = screen.getAllByRole('dialog').find(
-      (d) => d.getAttribute('aria-label')?.includes('focused panel'),
-    );
-    expect(dialog).toBeTruthy();
-    fireEvent.keyDown(dialog as HTMLElement, { key: 'Escape' });
+    // The workspace carries NO per-panel fullscreen control any more —
+    // expanding a box is a Live Terminal affordance (founder direction).
+    expect(screen.queryAllByRole('button', { name: /^Expand .+ panel$/ })).toHaveLength(0);
+    expect(
+      screen.queryAllByRole('dialog').filter(
+        (d) => d.getAttribute('aria-label')?.includes('focused panel'),
+      ),
+    ).toHaveLength(0);
     const dogLine = screen.getAllByRole('status').find((n) => n.textContent?.includes('Relay Dog'));
     expect(dogLine?.textContent).toContain('Relay Dog');
   }, 30_000);
