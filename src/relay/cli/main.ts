@@ -24,7 +24,7 @@ import {
   checkSupervisedPrerequisites, runSupervisedContractVerification, runSupervisedProof,
 } from '../connectors/supervised';
 import {
-  createNodeMissionWorktreeStore, createStateStore, createSupervisedRunRecorder, recoverRun,
+  createNodeCodingAgentStore, createNodeMissionWorktreeStore, createStateStore, createSupervisedRunRecorder, recoverRun,
   resolveStateRoot, runPersistenceContractVerification, runRecoveryDrill, stateDoctorReport,
 } from '../persistence';
 // The worktree projection comes through the mission BARREL — the CLI
@@ -53,7 +53,9 @@ import { renderAgentOperatingProfiles } from './agent-operating';
 import {
   RELAY_AGENT_ROLES, operatingProfileFixture, projectAgentOperatingProfiles,
   projectMissionWorktree, renderWorktreeStatusLines,
+  codingAgentDraftFrom, projectCodingAgentRuntime, renderCodingAgentStatusLines,
 } from '../mission';
+import { inspectClaudeRuntime } from './claude-runtime';
 
 /**
  * Relay CLI entry (Prompt 5). Thin client: parses arguments, composes the
@@ -83,7 +85,8 @@ export interface ParsedCli {
   agentAction?: 'import' | 'profile';
   /** Which agent's operating profile to print; all three when absent. */
   role?: string;
-  missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree';
+  missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree' | 'coding-agent';
+  codingAgentMode?: 'status' | 'inspect' | 'stop';
   worktreeMode?: 'status' | 'inspect';
   missionRef?: string;
   /** True when a credential was pasted as an argument — refused, never used. */
@@ -180,15 +183,37 @@ export function parseCli(argv: string[]): ParsedCli {
     const [first, second, third] = positionals;
     if (values.help || first === 'help') return { command: 'help', ...base };
     if (first === 'mission') {
-      const missionActions = ['economics', 'budget', 'receipts', 'worktree'] as const;
+      const missionActions = ['economics', 'budget', 'receipts', 'worktree', 'coding-agent'] as const;
       type MissionAction = (typeof missionActions)[number];
       if (!missionActions.includes(second as MissionAction)) {
         return {
           command: 'mission',
           ...base,
-          error: 'mission requires an action: economics, budget, receipts, or worktree.',
+          error: 'mission requires an action: economics, budget, receipts, worktree, or coding-agent.',
         };
       }
+      if (second === 'coding-agent') {
+        // `relay mission coding-agent <status|inspect|stop> <mission-id>`.
+        // No arbitrary Claude CLI passthrough exists here by design.
+        const modes = ['status', 'inspect', 'stop'] as const;
+        if (!modes.includes(third as (typeof modes)[number])) {
+          return {
+            command: 'mission',
+            missionAction: 'coding-agent',
+            ...base,
+            error: 'mission coding-agent requires status, inspect, or stop, then a mission id.',
+          };
+        }
+        return {
+          command: 'mission',
+          missionAction: 'coding-agent',
+          codingAgentMode: third as (typeof modes)[number],
+          missionRef: positionals[3],
+          stateRoot: values['state-root'],
+          ...base,
+        };
+      }
+
       if (second === 'worktree') {
         // `relay mission worktree <status|inspect> <mission-id>` — read-only.
         // There is no raw-git passthrough here by design.
@@ -379,6 +404,9 @@ export const HELP_TEXT = [
   '  relay workspace doctor         isolated-worktree capability checks (live local)',
   '  relay mission worktree status <mission-id>   isolated worktree state (read-only)',
   '  relay mission worktree inspect <mission-id>  the same state plus validation findings',
+  '  relay mission coding-agent status <mission-id>   Coding Agent runtime state',
+  '  relay mission coding-agent inspect <mission-id>  runtime state plus probed capabilities',
+  '  relay mission coding-agent stop <mission-id>     record a stop request (work preserved)',
   '  relay workspace verify         deterministic workspace security verification',
   '  relay claude doctor            truthful Claude Code capability + auth report',
   '  relay claude contract-verify   offline adapter proof (no provider call)',
@@ -1171,8 +1199,10 @@ async function runMissionCli(parsed: ParsedCli, io: CliIo): Promise<number> {
       return EXIT.completed;
     case 'worktree':
       return await runMissionWorktreeCli(parsed, io);
+    case 'coding-agent':
+      return await runMissionCodingAgentCli(parsed, io);
     default:
-      io.out('mission requires an action: economics, budget, receipts, or worktree.');
+      io.out('mission requires an action: economics, budget, receipts, worktree, or coding-agent.');
       return EXIT.usage;
   }
 }
@@ -1218,6 +1248,77 @@ async function runMissionWorktreeCli(parsed: ParsedCli, io: CliIo): Promise<numb
     }
     // The full path appears ONLY in the explicit detail view.
     io.out(`  Full path:    ${read.record.worktreePath}`);
+  }
+  return EXIT.completed;
+}
+
+/**
+ * `relay mission coding-agent status|inspect|stop <mission-id>`.
+ *
+ * Prints the SAME projection the website's Coding Agent panel renders. There
+ * is no raw Claude CLI passthrough: `stop` records a cancellation REQUEST
+ * against the durable record — it never reaches into a process this command
+ * cannot prove it owns.
+ */
+async function runMissionCodingAgentCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const missionId = parsed.missionRef;
+  if (missionId === undefined || missionId.trim() === '') {
+    io.out('mission coding-agent requires a mission id.');
+    return EXIT.usage;
+  }
+  const root = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
+  if (!root.ok) {
+    io.out(root.error.message);
+    return EXIT.usage;
+  }
+  const store = createNodeCodingAgentStore(root.value.root);
+  const read = await store.read(missionId);
+
+  if (!read.ok && read.reason !== 'not_found') {
+    io.out(`CODING AGENT — ${missionId}`);
+    io.out(`  Connection:   Requires inspection (${read.reason})`);
+    io.out(`  Detail:       ${read.detail}`);
+    return EXIT.blocked;
+  }
+
+  if (parsed.codingAgentMode === 'stop') {
+    if (!read.ok) {
+      io.out(`No Coding Agent run is recorded for ${missionId}.`);
+      return EXIT.usage;
+    }
+    // A stop REQUEST is recorded; termination is only ever confirmed by the
+    // component that actually owns the process.
+    const stopped = await store.write({
+      ...codingAgentDraftFrom(read.record),
+      cancellationRequested: true,
+      updatedAt: new Date().toISOString(),
+    });
+    if (!stopped.ok) {
+      io.out(`Could not record the stop request: ${stopped.reason ?? 'unknown error'}`);
+      return EXIT.blocked;
+    }
+    io.out(`Stop requested for ${missionId}. Mission work and evidence are preserved.`);
+    return EXIT.completed;
+  }
+
+  // The CLI runs on the machine, so it may report the REAL local runtime.
+  const availability = inspectClaudeRuntime(new Date().toISOString());
+  const view = projectCodingAgentRuntime(read.ok ? read.record : null, {
+    bridgeAvailable: availability.installed,
+  });
+  for (const line of renderCodingAgentStatusLines(missionId, view)) io.out(line);
+
+  if (parsed.codingAgentMode === 'inspect') {
+    io.out('  Installed runtime:');
+    io.out(`    executable:  ${availability.installed ? 'present' : 'not installed'}`);
+    io.out(`    version:     ${availability.version ?? 'Unknown'}`);
+    io.out(`    auth class:  ${availability.authClass}`);
+    io.out(`    live run:    ${availability.authorizedForLiveRun ? 'authorized' : 'not authorized'}`);
+    if (availability.blockedReason !== null) io.out(`    blocked:     ${availability.blockedReason}`);
+    io.out('  Capabilities:');
+    for (const [name, enabled] of Object.entries(availability.capabilities)) {
+      io.out(`    [${enabled ? 'YES' : 'NO '}] ${name}`);
+    }
   }
   return EXIT.completed;
 }

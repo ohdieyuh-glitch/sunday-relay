@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 
 import type { RelayAgentOperatingProjection } from '../../mission';
 import type { MissionWorktreeView } from '../../mission/worktree';
+import type { CodingAgentView } from '../../mission/coding-agent';
 
 /**
  * SUNDAY RELAY — THE AGENT OPERATING INSPECTOR.
@@ -32,11 +33,14 @@ import type { MissionWorktreeView } from '../../mission/worktree';
 export function RelayAgentOperatingInspector({
   projection,
   worktree,
+  runtime,
   defaultOpen = false,
 }: {
   projection: RelayAgentOperatingProjection;
   /** Optional isolated-worktree state. Absent = the surface knows nothing. */
   worktree?: MissionWorktreeView;
+  /** Optional Coding Agent runtime state (Claude Code). Absent = unknown. */
+  runtime?: CodingAgentView;
   /** Detail starts collapsed; a surface may open it for a focused view. */
   defaultOpen?: boolean;
 }) {
@@ -79,6 +83,23 @@ export function RelayAgentOperatingInspector({
           )}
           {worktree.disclosure !== null && (
             <span className="rpw-operating-disclosure">{worktree.disclosure}</span>
+          )}
+        </p>
+      )}
+
+      {runtime !== undefined && (
+        <p
+          className={`rpw-operating-runtime${runtime.blocking ? ' rpw-operating-runtime--blocked' : ''}`}
+          data-connection-state={runtime.connectionState}
+        >
+          <span className="rpw-operating-key">Coding Agent runtime</span>
+          <span className="rpw-operating-value">{runtime.summary}</span>
+          <span className="rpw-operating-runtime-detail">
+            {`Version ${runtime.versionLabel} · Model ${runtime.modelLabel} · Usage ${runtime.usageLabel}`}
+          </span>
+          <span className="rpw-operating-runtime-detail">{runtime.outcomeLabel}</span>
+          {runtime.disclosure !== null && (
+            <span className="rpw-operating-disclosure">{runtime.disclosure}</span>
           )}
         </p>
       )}

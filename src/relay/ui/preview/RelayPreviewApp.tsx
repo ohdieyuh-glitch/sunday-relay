@@ -64,6 +64,7 @@ import { RelayUsageDetailPanel, type RelayWorkspaceUsage } from '../usage';
 import { RelayNotificationHost, useRelayNotificationCenter } from '../notifications';
 import { RelayMissionRecoveryPanel } from '../recovery';
 import { projectMissionWorktree } from '../../mission/worktree';
+import { projectCodingAgentRuntime } from '../../mission/coding-agent';
 import { useRelayDurableMission } from '../app/useRelayDurableMission';
 import './relay-preview.css';
 
@@ -388,6 +389,17 @@ export function RelayPreviewApp() {
      truthful event is the absence itself, which the Environment row states
      without a notification. */
 
+  /* THE CODING AGENT RUNTIME. The static deployment hosts no Relay Bridge,
+     so it can launch nothing and must not offer to: `bridgeAvailable: false`
+     renders "Relay Bridge required" and disables Start. */
+  const codingRuntimeView = useMemo(
+    () => projectCodingAgentRuntime(null, {
+      bridgeAvailable: false,
+      simulated: demoSimulation.state.active,
+    }),
+    [demoSimulation.state.active],
+  );
+
   const recoveredMissionName = (() => {
     const id = durable.discovered?.record?.missionId;
     if (id === undefined) return 'Unfinished mission';
@@ -704,6 +716,7 @@ export function RelayPreviewApp() {
         agentsPanel={agentsPanel}
         usage={workspaceUsage}
         worktree={worktreeView}
+        codingRuntime={codingRuntimeView}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -777,6 +790,7 @@ export function RelayPreviewApp() {
         agentsPanel={agentsPanel}
         usage={workspaceUsage}
         worktree={worktreeView}
+        codingRuntime={codingRuntimeView}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
