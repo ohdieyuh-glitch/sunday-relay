@@ -1703,3 +1703,21 @@
   color: var(--rpw-dim);
   overflow-wrap: anywhere;
 }
+
+/* ------------------------------------------ coding agent runtime state */
+.rpw-operating-runtime {
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px dashed var(--rpw-line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rpw-operating-runtime--blocked .rpw-operating-value { color: var(--rpw-red); }
+.rpw-operating-runtime-detail {
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--rpw-dim);
+  overflow-wrap: anywhere;
+}

@@ -10,6 +10,10 @@ import {
   createMissionWorktreeStore,
   type MissionWorktreeStorePort,
 } from '../mission/worktree';
+import {
+  createCodingAgentStore,
+  type CodingAgentStorePort,
+} from '../mission/coding-agent';
 
 /**
  * THE NODE DURABLE-MISSION ADAPTER.
@@ -97,6 +101,12 @@ export function createNodeDurableMissionStore(root: string): DurableMissionStore
  */
 export function createNodeMissionWorktreeStore(root: string): MissionWorktreeStorePort {
   return createMissionWorktreeStore(createNodeDurableBacking(root));
+}
+
+/** The Coding Agent runtime store over the same backing — a third key
+    prefix, not a third store. */
+export function createNodeCodingAgentStore(root: string): CodingAgentStorePort {
+  return createCodingAgentStore(createNodeDurableBacking(root));
 }
 
 /** The retained previous checkpoint, when one exists. Recovery offers this

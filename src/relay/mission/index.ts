@@ -104,3 +104,22 @@ export {
   type MissionWorktreeView, type WorktreeReadResult,
   type WorktreeValidationFinding,
 } from './worktree';
+
+export {
+  // The Coding Agent runtime — re-exported through the barrel for the same
+  // reason worktrees and economics are: the CLI boundary permits only the
+  // bare '../mission' path, and BOTH surfaces must render the one runtime
+  // projection rather than word a connection state differently.
+  CODING_AGENT_CAPABILITIES, CODING_AGENT_CONNECTION_STATES,
+  CODING_AGENT_RUNTIME_SCHEMA_VERSION, CONNECTION_STATE_LABEL,
+  BRIDGE_REQUIRED_LABEL, SIMULATED_RUNTIME_LABEL, NO_CAPABILITIES, UNKNOWN_USAGE,
+  availabilityFromProbe, capabilitiesFromProbe, runtimeRecordForMission,
+  classifyRecoveredRuntime, codingAgentDraftFrom, createCodingAgentStore,
+  idleCodingAgentRecord, notificationForRuntime,
+  projectCodingAgentRuntime, readCodingAgentRecord, renderCodingAgentStatusLines,
+  sealCodingAgentRecord,
+  type CodingAgentCapabilities, type CodingAgentConnectionState,
+  type CodingAgentRuntimeRecord, type CodingAgentRuntimeRecordDraft,
+  type CodingAgentStorePort, type CodingAgentAvailability, type CodingAgentProbeInput,
+  type CodingAgentView,
+} from './coding-agent';

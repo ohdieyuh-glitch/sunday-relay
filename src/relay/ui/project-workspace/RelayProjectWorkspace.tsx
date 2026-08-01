@@ -25,6 +25,7 @@ import {
 } from './RelayPanelFocus';
 import { RelayAgentOperatingInspector } from './RelayAgentOperatingInspector';
 import type { MissionWorktreeView } from '../../mission/worktree';
+import type { CodingAgentView } from '../../mission/coding-agent';
 import { OUTPUT_STATE_LABEL, completionDisplay } from './projections';
 import type { RelayProjectWorkspaceProps } from './contracts';
 import type {
@@ -82,6 +83,8 @@ export function RelayProjectWorkspace(
      * passes the offline view rather than nothing pretending to be nothing.
      */
     worktree?: MissionWorktreeView;
+    /** Coding Agent runtime state for the Environment inspector. */
+    codingRuntime?: CodingAgentView;
   },
 ) {
   const {
@@ -190,6 +193,7 @@ export function RelayProjectWorkspace(
           <RelayAgentOperatingInspector
             projection={profile}
             worktree={agentRole === 'coding_agent' ? props.worktree : undefined}
+            runtime={agentRole === 'coding_agent' ? props.codingRuntime : undefined}
           />
         )}
       </RelayFocusedPanel>
