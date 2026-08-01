@@ -37,5 +37,5 @@ export { runPersistenceContractVerification, type PersistenceContractCheck } fro
 export { runRecoveryDrill } from './recovery-drill';
 export {
   DURABLE_MISSIONS_DIR, createNodeDurableBacking, createNodeDurableMissionStore,
-  createNodeCodingAgentStore, createNodeMissionWorktreeStore, readPreviousDurableRecordText,
+  createNodeCodingAgentStore, createNodeMissionWorktreeStore, createNodePromptArchitectStore, readPreviousDurableRecordText,
 } from './durable-mission-file';

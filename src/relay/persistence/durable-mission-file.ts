@@ -14,6 +14,10 @@ import {
   createCodingAgentStore,
   type CodingAgentStorePort,
 } from '../mission/coding-agent';
+import {
+  createPromptArchitectStore,
+  type PromptArchitectStorePort,
+} from '../mission/prompt-architect';
 
 /**
  * THE NODE DURABLE-MISSION ADAPTER.
@@ -107,6 +111,11 @@ export function createNodeMissionWorktreeStore(root: string): MissionWorktreeSto
     prefix, not a third store. */
 export function createNodeCodingAgentStore(root: string): CodingAgentStorePort {
   return createCodingAgentStore(createNodeDurableBacking(root));
+}
+
+/** The Prompt Architect store — a fourth key prefix on the same backing. */
+export function createNodePromptArchitectStore(root: string): PromptArchitectStorePort {
+  return createPromptArchitectStore(createNodeDurableBacking(root));
 }
 
 /** The retained previous checkpoint, when one exists. Recovery offers this

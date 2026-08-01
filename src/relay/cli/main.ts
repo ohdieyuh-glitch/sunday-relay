@@ -24,7 +24,7 @@ import {
   checkSupervisedPrerequisites, runSupervisedContractVerification, runSupervisedProof,
 } from '../connectors/supervised';
 import {
-  createNodeCodingAgentStore, createNodeMissionWorktreeStore, createStateStore, createSupervisedRunRecorder, recoverRun,
+  createNodeCodingAgentStore, createNodeMissionWorktreeStore, createNodePromptArchitectStore, createStateStore, createSupervisedRunRecorder, recoverRun,
   resolveStateRoot, runPersistenceContractVerification, runRecoveryDrill, stateDoctorReport,
 } from '../persistence';
 // The worktree projection comes through the mission BARREL — the CLI
@@ -54,7 +54,9 @@ import {
   RELAY_AGENT_ROLES, operatingProfileFixture, projectAgentOperatingProfiles,
   projectMissionWorktree, renderWorktreeStatusLines,
   codingAgentDraftFrom, projectCodingAgentRuntime, renderCodingAgentStatusLines,
+  architectDraftFrom, projectPromptArchitect, renderArchitectStatusLines,
 } from '../mission';
+import { evaluateReadiness, readGptArchitectConfig } from '../connectors/gpt-architect';
 import { inspectClaudeRuntime } from './claude-runtime';
 
 /**
@@ -85,7 +87,8 @@ export interface ParsedCli {
   agentAction?: 'import' | 'profile';
   /** Which agent's operating profile to print; all three when absent. */
   role?: string;
-  missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree' | 'coding-agent';
+  missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree' | 'coding-agent' | 'prompt-architect';
+  architectMode?: 'status' | 'inspect' | 'stop';
   codingAgentMode?: 'status' | 'inspect' | 'stop';
   worktreeMode?: 'status' | 'inspect';
   missionRef?: string;
@@ -183,15 +186,32 @@ export function parseCli(argv: string[]): ParsedCli {
     const [first, second, third] = positionals;
     if (values.help || first === 'help') return { command: 'help', ...base };
     if (first === 'mission') {
-      const missionActions = ['economics', 'budget', 'receipts', 'worktree', 'coding-agent'] as const;
+      const missionActions = ['economics', 'budget', 'receipts', 'worktree', 'coding-agent', 'prompt-architect'] as const;
       type MissionAction = (typeof missionActions)[number];
       if (!missionActions.includes(second as MissionAction)) {
         return {
           command: 'mission',
           ...base,
-          error: 'mission requires an action: economics, budget, receipts, worktree, or coding-agent.',
+          error: 'mission requires an action: economics, budget, receipts, worktree, coding-agent, or prompt-architect.',
         };
       }
+      if (second === 'prompt-architect') {
+        // `relay mission prompt-architect <status|inspect|stop> <mission-id>`.
+        // No arbitrary OpenAI request passthrough exists here by design.
+        const modes = ['status', 'inspect', 'stop'] as const;
+        if (!modes.includes(third as (typeof modes)[number])) {
+          return {
+            command: 'mission', missionAction: 'prompt-architect', ...base,
+            error: 'mission prompt-architect requires status, inspect, or stop, then a mission id.',
+          };
+        }
+        return {
+          command: 'mission', missionAction: 'prompt-architect',
+          architectMode: third as (typeof modes)[number],
+          missionRef: positionals[3], stateRoot: values['state-root'], ...base,
+        };
+      }
+
       if (second === 'coding-agent') {
         // `relay mission coding-agent <status|inspect|stop> <mission-id>`.
         // No arbitrary Claude CLI passthrough exists here by design.
@@ -407,6 +427,9 @@ export const HELP_TEXT = [
   '  relay mission coding-agent status <mission-id>   Coding Agent runtime state',
   '  relay mission coding-agent inspect <mission-id>  runtime state plus probed capabilities',
   '  relay mission coding-agent stop <mission-id>     record a stop request (work preserved)',
+  '  relay mission prompt-architect status <mission-id>   GPT planning state',
+  '  relay mission prompt-architect inspect <mission-id>  state plus server configuration',
+  '  relay mission prompt-architect stop <mission-id>     record a cancellation request',
   '  relay workspace verify         deterministic workspace security verification',
   '  relay claude doctor            truthful Claude Code capability + auth report',
   '  relay claude contract-verify   offline adapter proof (no provider call)',
@@ -1201,8 +1224,10 @@ async function runMissionCli(parsed: ParsedCli, io: CliIo): Promise<number> {
       return await runMissionWorktreeCli(parsed, io);
     case 'coding-agent':
       return await runMissionCodingAgentCli(parsed, io);
+    case 'prompt-architect':
+      return await runMissionArchitectCli(parsed, io);
     default:
-      io.out('mission requires an action: economics, budget, receipts, worktree, or coding-agent.');
+      io.out('mission requires an action: economics, budget, receipts, worktree, coding-agent, or prompt-architect.');
       return EXIT.usage;
   }
 }
@@ -1319,6 +1344,71 @@ async function runMissionCodingAgentCli(parsed: ParsedCli, io: CliIo): Promise<n
     for (const [name, enabled] of Object.entries(availability.capabilities)) {
       io.out(`    [${enabled ? 'YES' : 'NO '}] ${name}`);
     }
+  }
+  return EXIT.completed;
+}
+
+/**
+ * `relay mission prompt-architect status|inspect|stop <mission-id>`.
+ *
+ * Prints the SAME projection the website renders. `stop` records a
+ * cancellation REQUEST; confirmation belongs to whatever owns the in-flight
+ * request. There is no OpenAI request passthrough.
+ */
+async function runMissionArchitectCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const missionId = parsed.missionRef;
+  if (missionId === undefined || missionId.trim() === '') {
+    io.out('mission prompt-architect requires a mission id.');
+    return EXIT.usage;
+  }
+  const root = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
+  if (!root.ok) {
+    io.out(root.error.message);
+    return EXIT.usage;
+  }
+  const store = createNodePromptArchitectStore(root.value.root);
+  const read = await store.read(missionId);
+
+  if (!read.ok && read.reason !== 'not_found') {
+    io.out(`PROMPT ARCHITECT — ${missionId}`);
+    io.out(`  Connection:   Requires inspection (${read.reason})`);
+    io.out(`  Detail:       ${read.detail}`);
+    return EXIT.blocked;
+  }
+
+  if (parsed.architectMode === 'stop') {
+    if (!read.ok) {
+      io.out(`No Prompt Architect run is recorded for ${missionId}.`);
+      return EXIT.usage;
+    }
+    const stopped = await store.write({
+      ...architectDraftFrom(read.record),
+      cancellationRequested: true,
+      updatedAt: new Date().toISOString(),
+    });
+    if (!stopped.ok) {
+      io.out(`Could not record the stop request: ${stopped.reason ?? 'unknown error'}`);
+      return EXIT.blocked;
+    }
+    io.out(`Stop requested for ${missionId}. Any evidence already received is preserved.`);
+    return EXIT.completed;
+  }
+
+  const config = readGptArchitectConfig(io.env as Record<string, string | undefined>);
+  const readiness = evaluateReadiness(config);
+  const view = projectPromptArchitect(read.ok ? read.record : null, {
+    bridgeAvailable: readiness.ready,
+  });
+  for (const line of renderArchitectStatusLines(missionId, view)) io.out(line);
+
+  if (parsed.architectMode === 'inspect') {
+    io.out('  Server configuration:');
+    // Presence only — the key value is never read into this output.
+    io.out(`    API key:     ${config.apiKeyPresent ? 'present' : 'absent'}`);
+    io.out(`    model:       ${config.model ?? 'not configured'}`);
+    io.out(`    live mode:   ${config.liveMode ? 'enabled' : 'disabled'}`);
+    io.out(`    max tokens:  ${config.maxOutputTokens}`);
+    if (readiness.blockedReason !== null) io.out(`    blocked:     ${readiness.blockedReason}`);
   }
   return EXIT.completed;
 }

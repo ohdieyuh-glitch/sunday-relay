@@ -65,6 +65,7 @@ import { RelayNotificationHost, useRelayNotificationCenter } from '../notificati
 import { RelayMissionRecoveryPanel } from '../recovery';
 import { projectMissionWorktree } from '../../mission/worktree';
 import { projectCodingAgentRuntime } from '../../mission/coding-agent';
+import { projectPromptArchitect } from '../../mission/prompt-architect';
 import { useRelayDurableMission } from '../app/useRelayDurableMission';
 import './relay-preview.css';
 
@@ -400,6 +401,17 @@ export function RelayPreviewApp() {
     [demoSimulation.state.active],
   );
 
+  /* THE PROMPT ARCHITECT RUNTIME. The static deployment hosts no Relay
+     Bridge and must never call OpenAI from the browser, so it renders
+     "Relay Bridge required" and offers no Start. */
+  const architectRuntimeView = useMemo(
+    () => projectPromptArchitect(null, {
+      bridgeAvailable: false,
+      simulated: demoSimulation.state.active,
+    }),
+    [demoSimulation.state.active],
+  );
+
   const recoveredMissionName = (() => {
     const id = durable.discovered?.record?.missionId;
     if (id === undefined) return 'Unfinished mission';
@@ -717,6 +729,7 @@ export function RelayPreviewApp() {
         usage={workspaceUsage}
         worktree={worktreeView}
         codingRuntime={codingRuntimeView}
+        architectRuntime={architectRuntimeView}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -791,6 +804,7 @@ export function RelayPreviewApp() {
         usage={workspaceUsage}
         worktree={worktreeView}
         codingRuntime={codingRuntimeView}
+        architectRuntime={architectRuntimeView}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
