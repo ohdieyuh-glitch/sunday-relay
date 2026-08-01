@@ -423,6 +423,19 @@ export function RelayPreviewApp() {
     [demoSimulation.state.active],
   );
 
+  /* Inspecting an unavailable harness may say so ONCE, through the same host
+     every other Relay notification uses. The catalog explains each row inline
+     as well, so this never becomes a stack of toasts, and it announces an
+     absence — it can never announce a connection. */
+  const onHarnessUnavailable = useCallback(() => {
+    publishNotification({
+      dedupeKey: 'reviewer-harness-unavailable',
+      kind: 'warning',
+      title: 'Reviewer harness unavailable',
+      body: 'This harness is not connected yet.',
+    });
+  }, [publishNotification]);
+
   const recoveredMissionName = (() => {
     const id = durable.discovered?.record?.missionId;
     if (id === undefined) return 'Unfinished mission';
@@ -742,6 +755,7 @@ export function RelayPreviewApp() {
         codingRuntime={codingRuntimeView}
         architectRuntime={architectRuntimeView}
         reviewerHarness={reviewerHarnessView}
+        onHarnessUnavailable={onHarnessUnavailable}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -818,6 +832,7 @@ export function RelayPreviewApp() {
         codingRuntime={codingRuntimeView}
         architectRuntime={architectRuntimeView}
         reviewerHarness={reviewerHarnessView}
+        onHarnessUnavailable={onHarnessUnavailable}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen

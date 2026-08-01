@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { RelayProjectHeader } from './RelayProjectHeader';
 import { RelayWorkforceStrip } from './RelayWorkforceStrip';
@@ -27,7 +27,7 @@ import { RelayAgentOperatingInspector } from './RelayAgentOperatingInspector';
 import type { MissionWorktreeView } from '../../mission/worktree';
 import type { CodingAgentView } from '../../mission/coding-agent';
 import type { PromptArchitectView } from '../../mission/prompt-architect';
-import type { ReviewerHarnessView } from '../../mission/reviewer-harness';
+import { projectHarnessCatalog, type ReviewerHarnessView } from '../../mission/reviewer-harness';
 import { OUTPUT_STATE_LABEL, completionDisplay } from './projections';
 import type { RelayProjectWorkspaceProps } from './contracts';
 import type {
@@ -91,6 +91,12 @@ export function RelayProjectWorkspace(
     architectRuntime?: PromptArchitectView;
     /** Reviewer harness state for the Environment inspector. */
     reviewerHarness?: ReviewerHarnessView;
+    /**
+     * Lets the Reviewer Harness catalog reach the ONE application
+     * notification host. Optional: without it the catalog explains every
+     * unavailable harness inline and publishes nothing.
+     */
+    onHarnessUnavailable?: (harnessName: string) => void;
   },
 ) {
   const {
@@ -134,6 +140,18 @@ export function RelayProjectWorkspace(
 
   const completion = completionDisplay({ completionState, reviewerState, findings, repairs });
   const openTasks = manualTasks.filter((t) => t.status === 'open').length;
+
+  /**
+   * THE REVIEWER HARNESS CATALOG — projected from the canonical domain, never
+   * composed here, and always available: with no reviewer view every identity
+   * row is independently `Unknown`, which is the truth this deployment has.
+   * It is not gated on a mode, a flag or a build, because the catalog is a
+   * truthful product surface in production too.
+   */
+  const harnessCatalog = useMemo(
+    () => projectHarnessCatalog(props.reviewerHarness ?? null),
+    [props.reviewerHarness],
+  );
 
   /**
    * WHICH PANEL IS FOCUSED — view state, and only view state.
@@ -327,6 +345,8 @@ export function RelayProjectWorkspace(
                   state={reviewerState}
                   findings={findings}
                   repairs={repairs}
+                  harnessCatalog={harnessCatalog}
+                  onHarnessUnavailable={props.onHarnessUnavailable}
                   onOpenFinding={onOpenFinding}
                   onOpenRepair={onOpenRepair}
                 />
