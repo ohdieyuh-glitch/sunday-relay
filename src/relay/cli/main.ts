@@ -10,6 +10,8 @@ import { detectRenderOptions, renderAudit, renderEvent, renderManualTask, welcom
 import { buildCompetitiveFrames, competitiveJson } from './competitive';
 import { buildMissionControlFrames } from './mission-control';
 import { EXIT, exitCodeForFinalStatus } from './exit-codes';
+import { runReviewerBridgeCli } from './reviewer-bridge-cli';
+import { BRIDGE_URL_ENV } from '../reviewer-bridge-client';
 import { runWorkspaceVerification, workspaceDoctorReport } from '../workspace';
 import { createRandomIdFactory } from '../protocol/ids';
 import {
@@ -90,7 +92,13 @@ export interface ParsedCli {
   /** Which agent's operating profile to print; all three when absent. */
   role?: string;
   missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree' | 'coding-agent' | 'prompt-architect' | 'reviewer';
-  reviewerMode?: 'status' | 'inspect' | 'stop';
+  reviewerMode?: 'status' | 'inspect' | 'stop' | 'test-connection' | 'start' | 'retry';
+  authorize?: boolean;
+  harness?: string;
+  model?: string;
+  generation?: string;
+  idempotencyKey?: string;
+  priorRun?: string;
   architectMode?: 'status' | 'inspect' | 'stop';
   codingAgentMode?: 'status' | 'inspect' | 'stop';
   worktreeMode?: 'status' | 'inspect';
@@ -170,6 +178,15 @@ export function parseCli(argv: string[]): ParsedCli {
         'credential-env': { type: 'string' },
         yes: { type: 'boolean', default: false },
         workspace: { type: 'string' },
+        // Reviewer bridge controls. There is deliberately NO --bridge-token
+        // flag: a bearer credential must never reach argv, shell history or
+        // the process table. The token arrives only through RELAY_BRIDGE_TOKEN.
+        authorize: { type: 'boolean', default: false },
+        harness: { type: 'string' },
+        model: { type: 'string' },
+        generation: { type: 'string' },
+        'idempotency-key': { type: 'string' },
+        'prior-run': { type: 'string' },
       },
     });
     const pace = values.pace !== undefined ? Number(values.pace) : undefined;
@@ -178,6 +195,12 @@ export function parseCli(argv: string[]): ParsedCli {
       plain: values.plain === true, quiet: values.quiet === true,
       untilStopped: values['until-stopped'] === true,
       autoAcceptBlueprint: values['auto-accept-blueprint'] === true,
+      authorize: values.authorize === true,
+      harness: values.harness,
+      model: values.model,
+      generation: values.generation,
+      idempotencyKey: values['idempotency-key'],
+      priorRun: values['prior-run'],
       presentation: values.presentation === true,
       pace, compact: values.compact === true,
       watch: values.watch === true, once: values.once === true,
@@ -199,13 +222,14 @@ export function parseCli(argv: string[]): ParsedCli {
         };
       }
       if (second === 'reviewer') {
-        // `relay mission reviewer <status|inspect|stop> <mission-id>`.
-        // No harness CLI passthrough exists here by design.
-        const modes = ['status', 'inspect', 'stop'] as const;
+        // `relay mission reviewer <action> <mission-id>`. The bridge-backed
+        // actions reach the server through the Reviewer Bridge Client; there
+        // is still no harness passthrough from the terminal.
+        const modes = ['status', 'inspect', 'stop', 'test-connection', 'start', 'retry'] as const;
         if (!modes.includes(third as (typeof modes)[number])) {
           return {
             command: 'mission', missionAction: 'reviewer', ...base,
-            error: 'mission reviewer requires status, inspect, or stop, then a mission id.',
+            error: 'mission reviewer requires status, inspect, stop, test-connection, start, or retry, then a mission id.',
           };
         }
         return {
@@ -462,6 +486,9 @@ export const HELP_TEXT = [
   '  relay mission reviewer status <mission-id>   Reviewer harness state',
   '  relay mission reviewer inspect <mission-id>  state plus independence reasoning',
   '  relay mission reviewer stop <mission-id>     record a cancellation request',
+  '  relay mission reviewer test-connection <id>  verify the bridge Reviewer (no run)',
+  '  relay mission reviewer start <mission-id>    start an authorized Reviewer run',
+  '  relay mission reviewer retry <mission-id>    retry a failed run as a NEW run',
   '  relay reviewer harnesses       the Reviewer harness catalog (truthful statuses)',
   '  relay workspace verify         deterministic workspace security verification',
   '  relay claude doctor            truthful Claude Code capability + auth report',
@@ -1459,6 +1486,32 @@ async function runMissionReviewerCli(parsed: ParsedCli, io: CliIo): Promise<numb
   if (missionId === undefined || missionId.trim() === '') {
     io.out('mission reviewer requires a mission id.');
     return EXIT.usage;
+  }
+
+  /**
+   * THE LIVE PATH. `test-connection`, `start` and `retry` only exist against a
+   * Relay Bridge, and `status`/`inspect`/`stop` prefer it when one is
+   * configured — a configured bridge is the authority, and falling back to the
+   * local record would report stale state as current.
+   *
+   * With no bridge configured, the existing local behaviour is untouched.
+   */
+  const bridgeConfigured = (io.env as Record<string, string | undefined>)[BRIDGE_URL_ENV] !== undefined
+    && ((io.env as Record<string, string | undefined>)[BRIDGE_URL_ENV] ?? '').trim() !== '';
+  const liveOnly = parsed.reviewerMode === 'test-connection'
+    || parsed.reviewerMode === 'start' || parsed.reviewerMode === 'retry';
+  if (liveOnly || (bridgeConfigured && parsed.reviewerMode !== undefined)) {
+    return await runReviewerBridgeCli({
+      mode: (parsed.reviewerMode ?? 'status') as 'status',
+      missionId,
+      json: parsed.json === true,
+      authorize: parsed.authorize === true,
+      harness: parsed.harness,
+      model: parsed.model,
+      generation: parsed.generation,
+      idempotencyKey: parsed.idempotencyKey,
+      priorRun: parsed.priorRun,
+    }, { out: io.out, env: io.env as Record<string, string | undefined> });
   }
   const root = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
   if (!root.ok) {

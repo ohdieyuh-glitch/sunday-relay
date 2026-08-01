@@ -18,9 +18,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { loadBridgeConfig, type BridgeConfig } from './config';
 import { createMissionRegistry, type MissionRegistry } from './mission';
 import { architectPreflight, loadArchitectConfig } from './openai-architect';
-import {
-  createIsolatedProfile, createProbe, loadXaiConfig, localReadiness,
-} from './reviewer-harness/hermes';
+import { handleReviewerRoute, isReviewerRoute, type ReviewerRunPort } from './reviewer-routes';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -69,7 +67,15 @@ function readBody(req: IncomingMessage): Promise<unknown> {
   });
 }
 
-export function createBridgeServer(config: BridgeConfig, registry: MissionRegistry): Server {
+export function createBridgeServer(
+  config: BridgeConfig,
+  registry: MissionRegistry,
+  /**
+   * The Reviewer run engine. Absent on a bridge that only reports readiness —
+   * the routes then answer `reviewer_not_ready` rather than inventing a run.
+   */
+  reviewerRuns: ReviewerRunPort | null = null,
+): Server {
   return createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
     const cors = corsHeaders(config, origin);
@@ -101,32 +107,24 @@ export function createBridgeServer(config: BridgeConfig, registry: MissionRegist
         }
 
         /**
-         * The Reviewer harness readiness a browser may safely ask for.
-         *
-         * LOCAL ONLY: it probes the installed runtime and reports whether a
-         * credential is PRESENT. It never contacts a provider, so polling this
-         * cannot spend money, and it never returns a credential, a path or a
-         * comparison — only the evidence the pure domain needs to render a
-         * truthful state. Model verification is a separate, explicit action.
+         * THE REVIEWER BOUNDARY. Every Reviewer operation the CLI can perform
+         * lives behind one authenticated handler, so the terminal client never
+         * needs the Hermes process adapter, the provider client or a
+         * credential. Read-only routes start nothing and spend nothing.
          */
-        if (method === 'GET' && path === '/relay-api/reviewer/readiness') {
-          const profile = createIsolatedProfile();
-          try {
-            const evidence = localReadiness({
-              executable: process.env.RELAY_HERMES_EXECUTABLE ?? 'hermes',
-              probe: createProbe(profile.home),
-              xai: loadXaiConfig(process.env),
-            });
-            send(res, 200, {
-              harness: 'hermes',
-              // The binary path stays server-side; a browser has no use for it
-              // and it discloses the host's layout.
-              evidence: { ...evidence, binaryPath: null },
-            }, cors);
-          } finally {
-            profile.dispose();
+        if (isReviewerRoute(path.replace('/relay-api', ''))) {
+          const reviewerResult = await handleReviewerRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string'
+              ? req.headers.authorization : undefined,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            env: process.env,
+          }, reviewerRuns);
+          if (reviewerResult !== null) {
+            send(res, reviewerResult.status, reviewerResult.body, cors);
+            return;
           }
-          return;
         }
 
         if (method === 'POST' && path === '/relay-api/mission/start') {

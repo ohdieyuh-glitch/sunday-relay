@@ -112,6 +112,6 @@ describe('relay mission reviewer', () => {
 
   it('exposes no harness passthrough', async () => {
     const { out } = await run(['mission', 'reviewer', 'exec', 'm1']);
-    expect(out).toContain('requires status, inspect, or stop');
+    expect(out).toContain('requires status, inspect, stop, test-connection, start, or retry');
   });
 });
