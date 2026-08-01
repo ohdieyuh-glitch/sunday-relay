@@ -59,7 +59,7 @@ describe('relay reviewer harnesses', () => {
 
   it('refuses an unknown reviewer action rather than guessing', async () => {
     const { out } = await run(['reviewer', 'launch']);
-    expect(out).toContain('reviewer requires an action: harnesses.');
+    expect(out).toContain('reviewer requires an action: harnesses or pair-browser.');
   });
 });
 

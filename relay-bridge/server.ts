@@ -23,6 +23,10 @@ import {
 import { createMissionRegistry, type MissionRegistry } from './mission';
 import { architectPreflight, loadArchitectConfig } from './openai-architect';
 import { handleReviewerRoute, isReviewerRoute, type ReviewerRunPort } from './reviewer-routes';
+import { createBrowserSessionStore } from './browser-session/grants';
+import {
+  authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute,
+} from './browser-session/routes';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -103,6 +107,12 @@ export function createBridgeServer(
    */
   reviewerRuns: ReviewerRunPort | null = null,
 ): Server {
+  /**
+   * Browser pairing state lives in MEMORY, for the lifetime of this process.
+   * A restart therefore revokes every grant and session — fail-closed — and no
+   * browser credential is ever written to the mounted volume.
+   */
+  const browserSessions = createBrowserSessionStore();
   return createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
     const cors = corsHeaders(config, origin);
@@ -161,6 +171,26 @@ export function createBridgeServer(
          * needs the Hermes process adapter, the provider client or a
          * credential. Read-only routes start nothing and spend nothing.
          */
+        // Browser pairing. Minting a grant costs the operator token; redeeming
+        // one costs a valid grant AND the approved Origin.
+        if (isBrowserSessionRoute(path.replace('/relay-api', ''))) {
+          const browserResult = handleBrowserSessionRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string'
+              ? req.headers.authorization : undefined,
+            origin,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            env: process.env,
+            now: Date.now(),
+            allowedOrigins: config.allowedOrigins,
+          }, browserSessions);
+          if (browserResult !== null) {
+            send(res, browserResult.status, browserResult.body, cors);
+            return;
+          }
+        }
+
         if (isReviewerRoute(path.replace('/relay-api', ''))) {
           const reviewerResult = await handleReviewerRoute({
             method,
@@ -169,6 +199,16 @@ export function createBridgeServer(
               ? req.headers.authorization : undefined,
             body: method === 'POST' ? await readBody(req) : undefined,
             env: process.env,
+            authorize: () => authorizeReviewerCall({
+              method,
+              path: path.replace('/relay-api', ''),
+              authorization: typeof req.headers.authorization === 'string'
+                ? req.headers.authorization : undefined,
+              origin,
+              env: process.env,
+              now: Date.now(),
+              store: browserSessions,
+            }),
           }, reviewerRuns);
           if (reviewerResult !== null) {
             send(res, reviewerResult.status, reviewerResult.body, cors);

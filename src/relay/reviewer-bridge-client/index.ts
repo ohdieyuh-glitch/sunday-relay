@@ -8,7 +8,7 @@ export { BRIDGE_ERROR_KINDS, CONFIGURATION_ERROR_KINDS, isConfigurationError } f
 export type {
   BridgeError, BridgeErrorKind, BridgeResult, RetryReviewerRequest, RetryReviewerResponse,
   ReviewerBridgeClient, ReviewerConnectionTestResponse, ReviewerFindingSummary,
-  ReviewerInspectResponse, ReviewerReadinessResponse, ReviewerRunLimitsRequest,
+  PairingGrantResponse, ReviewerInspectResponse, ReviewerReadinessResponse, ReviewerRunLimitsRequest,
   ReviewerStatusResponse, StartReviewerRequest, StartReviewerResponse, StopReviewerResponse,
 } from './bridge-contracts';
 export {
