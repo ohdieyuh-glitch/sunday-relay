@@ -1,5 +1,5 @@
 import type {
-  BridgeError, BridgeResult, RetryReviewerRequest, RetryReviewerResponse,
+  BridgeError, BridgeResult, PairingGrantResponse, RetryReviewerRequest, RetryReviewerResponse,
   ReviewerBridgeClient, ReviewerConnectionTestResponse, ReviewerInspectResponse,
   ReviewerReadinessResponse, ReviewerStatusResponse, StartReviewerRequest,
   StartReviewerResponse, StopReviewerResponse,
@@ -220,6 +220,8 @@ function buildClient(
   }
 
   return {
+    createBrowserPairing: (origin: string) =>
+      call<PairingGrantResponse>('POST', '/browser/pair', { origin }),
     getReviewerReadiness: () =>
       call<ReviewerReadinessResponse>('GET', '/reviewer/readiness'),
     testReviewerConnection: () =>

@@ -10,7 +10,7 @@ import { detectRenderOptions, renderAudit, renderEvent, renderManualTask, welcom
 import { buildCompetitiveFrames, competitiveJson } from './competitive';
 import { buildMissionControlFrames } from './mission-control';
 import { EXIT, exitCodeForFinalStatus } from './exit-codes';
-import { runReviewerBridgeCli } from './reviewer-bridge-cli';
+import { bridgeClientFrom, runReviewerBridgeCli } from './reviewer-bridge-cli';
 import { BRIDGE_URL_ENV } from '../reviewer-bridge-client';
 import { runWorkspaceVerification, workspaceDoctorReport } from '../workspace';
 import { createRandomIdFactory } from '../protocol/ids';
@@ -93,6 +93,8 @@ export interface ParsedCli {
   role?: string;
   missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree' | 'coding-agent' | 'prompt-architect' | 'reviewer';
   reviewerMode?: 'status' | 'inspect' | 'stop' | 'test-connection' | 'start' | 'retry';
+  reviewerAction?: 'harnesses' | 'pair-browser';
+  pairOrigin?: string;
   authorize?: boolean;
   harness?: string;
   model?: string;
@@ -311,10 +313,17 @@ export function parseCli(argv: string[]): ParsedCli {
     if (first === 'reviewer') {
       // `relay reviewer harnesses` — the catalog only. There is no harness
       // passthrough, because no harness adapter exists.
-      if (second !== 'harnesses') {
-        return { command: 'reviewer', ...base, error: 'reviewer requires an action: harnesses.' };
+      if (second !== 'harnesses' && second !== 'pair-browser') {
+        return {
+          command: 'reviewer', ...base,
+          error: 'reviewer requires an action: harnesses or pair-browser.',
+        };
       }
-      return { command: 'reviewer', ...base };
+      return {
+        command: 'reviewer', ...base,
+        reviewerAction: second as 'harnesses' | 'pair-browser',
+        pairOrigin: positionals[2],
+      };
     }
 
     if (first === 'agent' || first === 'psp-agent') {
@@ -490,6 +499,7 @@ export const HELP_TEXT = [
   '  relay mission reviewer start <mission-id>    start an authorized Reviewer run',
   '  relay mission reviewer retry <mission-id>    retry a failed run as a NEW run',
   '  relay reviewer harnesses       the Reviewer harness catalog (truthful statuses)',
+  '  relay reviewer pair-browser <origin>  mint a one-time browser pairing grant',
   '  relay workspace verify         deterministic workspace security verification',
   '  relay claude doctor            truthful Claude Code capability + auth report',
   '  relay claude contract-verify   offline adapter proof (no provider call)',
@@ -1556,6 +1566,43 @@ async function runMissionReviewerCli(parsed: ParsedCli, io: CliIo): Promise<numb
   return EXIT.completed;
 }
 
+/**
+ * `relay reviewer pair-browser <origin>` — mint a one-time browser grant.
+ *
+ * This is the ONLY way a browser credential comes into existence, and it costs
+ * the operator token to run. The grant is printed once, is single-use, expires
+ * in a couple of minutes, and is bound to the exact origin given. The operator
+ * token itself is never printed.
+ */
+async function runBrowserPairingCli(parsed: ParsedCli, io: CliIo): Promise<number> {
+  const origin = parsed.pairOrigin;
+  if (origin === undefined || origin.trim() === '') {
+    io.out('reviewer pair-browser requires the exact browser origin, e.g. https://sunday-relay.vercel.app');
+    return EXIT.usage;
+  }
+  const built = bridgeClientFrom({ out: io.out, env: io.env as Record<string, string | undefined> });
+  if (!built.ok) {
+    io.out(`  Blocked:      ${built.error.kind.replace(/_/g, ' ')}`);
+    io.out(`  Detail:       ${built.error.message}`);
+    return EXIT.blocked;
+  }
+  const result = await built.value.createBrowserPairing(origin.trim());
+  if (!result.ok) {
+    io.out('BROWSER PAIRING');
+    io.out(`  Blocked:      ${result.error.kind.replace(/_/g, ' ')}`);
+    io.out(`  Detail:       ${result.error.message}`);
+    return EXIT.blocked;
+  }
+  const grant = result.value;
+  io.out('BROWSER PAIRING GRANT');
+  io.out(`  Origin:       ${grant.origin}`);
+  io.out(`  Grant id:     ${grant.grantId}`);
+  io.out(`  Grant secret: ${grant.grantSecret}`);
+  io.out(`  Expires:      ${grant.expiresAt} (${grant.expiresInSeconds}s)`);
+  io.out('  Single use. Paste it into the Relay browser once, then it is spent.');
+  return EXIT.completed;
+}
+
 /** `relay reviewer harnesses` — the truthful catalog. */
 function runReviewerCatalogCli(io: CliIo): number {
   for (const line of renderHarnessCatalogLines()) io.out(line);
@@ -1796,6 +1843,7 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     case 'agent':
       return runAgentCli(parsed, io);
     case 'reviewer':
+      if (parsed.reviewerAction === 'pair-browser') return await runBrowserPairingCli(parsed, io);
       return runReviewerCatalogCli(io);
     case 'mission':
       return runMissionCli(parsed, io);

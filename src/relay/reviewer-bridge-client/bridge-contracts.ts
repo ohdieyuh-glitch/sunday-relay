@@ -202,8 +202,19 @@ export interface RetryReviewerResponse {
   readonly requestedModel: string | null;
 }
 
-/** The seven operations. Nothing else reaches the bridge from a CLI. */
+/** A one-time browser pairing grant, minted by an authenticated operator. */
+export interface PairingGrantResponse {
+  readonly grantId: string;
+  /** Shown once. Never stored by Relay and never recoverable. */
+  readonly grantSecret: string;
+  readonly origin: string;
+  readonly expiresAt: string;
+  readonly expiresInSeconds: number;
+}
+
+/** The operations. Nothing else reaches the bridge from a CLI. */
 export interface ReviewerBridgeClient {
+  createBrowserPairing(origin: string): Promise<BridgeResult<PairingGrantResponse>>;
   getReviewerReadiness(): Promise<BridgeResult<ReviewerReadinessResponse>>;
   testReviewerConnection(): Promise<BridgeResult<ReviewerConnectionTestResponse>>;
   startReviewerRun(request: StartReviewerRequest): Promise<BridgeResult<StartReviewerResponse>>;

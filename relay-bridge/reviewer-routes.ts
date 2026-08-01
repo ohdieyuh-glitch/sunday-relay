@@ -65,6 +65,15 @@ export interface ReviewerRouteRequest {
   readonly authorization: string | undefined;
   readonly body: unknown;
   readonly env: NodeJS.ProcessEnv;
+  /**
+   * Decides WHO is calling. Injected so this module keeps knowing nothing
+   * about sessions: it asks, and enforces the answer.
+   *
+   * Absent = operator-token-only, the behaviour before browser pairing
+   * existed, which is what the CLI and every existing test rely on.
+   */
+  readonly authorize?: () => { kind: 'operator' } | { kind: 'browser' }
+    | { kind: 'rejected'; status: number; message: string };
 }
 
 /** Reviewer run state the bridge can serve without a live run engine yet. */
@@ -121,8 +130,20 @@ export async function handleReviewerRoute(
   // EVERY Reviewer route is authenticated, including the read-only ones: run
   // state is operational detail, and an unauthenticated readiness probe would
   // still disclose what is installed on the host.
-  if (!bearerMatches(request.authorization, env[BRIDGE_TOKEN_ENV])) {
-    return err(401, 'authentication_failed', 'Authentication is required for Reviewer operations.');
+  //
+  // An operator may call anything. A paired browser session may call only the
+  // read-only subset — the decision belongs to the injected authorizer, and
+  // this module simply refuses whatever it rejects.
+  const decision = request.authorize?.()
+    ?? (bearerMatches(request.authorization, env[BRIDGE_TOKEN_ENV])
+      ? { kind: 'operator' as const }
+      : { kind: 'rejected' as const, status: 401, message: 'Authentication is required for Reviewer operations.' });
+  if (decision.kind === 'rejected') {
+    return err(
+      decision.status,
+      decision.status === 403 ? 'authorization_required' : 'authentication_failed',
+      decision.message,
+    );
   }
 
   /* ------------------------------------------------ readiness (local) --- */
