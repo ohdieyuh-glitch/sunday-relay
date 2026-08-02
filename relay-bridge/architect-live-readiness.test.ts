@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Server } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -216,9 +218,8 @@ describe('the verification route is operator-only and needs consent', () => {
 /* --------------------------------------------------- no other provider --- */
 
 describe('no other role is touched', () => {
-  it('the verification path names no Coding Agent, Reviewer or Hermes call', async () => {
-    const { readFileSync } = await import('node:fs');
-    const src = readFileSync(new URL('./openai-architect.ts', import.meta.url), 'utf8');
+  it('the verification path names no Coding Agent, Reviewer or Hermes call', () => {
+    const src = readFileSync(join(process.cwd(), 'relay-bridge/openai-architect.ts'), 'utf8');
     const fn = src.slice(src.indexOf('export async function verifyArchitectConnection'));
     for (const forbidden of ['claude', 'hermes', 'anthropic', 'x.ai', 'reviewer']) {
       expect(fn.toLowerCase(), forbidden).not.toContain(forbidden);
