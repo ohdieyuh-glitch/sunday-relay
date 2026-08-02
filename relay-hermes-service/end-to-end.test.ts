@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -243,5 +244,86 @@ describe('a non-zero exit cannot approve', () => {
     // A non-zero exit can never become an approval.
     expect(state.status).not.toBe('completed');
     expect(state.reviewText).toBeNull();
+  }, 60_000);
+});
+
+/**
+ * THE SHUTDOWN PATH, PROVEN RATHER THAN ASSUMED.
+ *
+ * `main.ts` answers SIGTERM by refusing new reviews and then calling
+ * `engine.cancelAll()`. The refusal half was already covered; `cancelAll`
+ * itself was covered by nothing, which left the most consequential half of the
+ * shutdown contract — a platform restart must never manufacture an approval —
+ * resting on an untested call.
+ *
+ * The orphan check is deliberately made against the real process table. The
+ * abort path terminates the process GROUP and resolves immediately without
+ * waiting for the child to close, so a settled run status proves that
+ * cancellation was requested, NOT that anything actually died.
+ */
+describe('the SIGTERM path cancels live runs and leaves nothing behind', () => {
+  let shutdownDir: string;
+  /** Unique, so the process table can be searched without ambiguity. */
+  const probe = `relay-shutdown-probe-${process.pid}`;
+
+  beforeAll(() => {
+    shutdownDir = mkdtempSync(join(tmpdir(), 'relay-hermes-shutdown-'));
+  });
+
+  afterAll(() => {
+    rmSync(shutdownDir, { recursive: true, force: true });
+  });
+
+  const processTableHas = (token: string): boolean => {
+    // If the platform cannot be asked, the test fails loudly rather than
+    // passing without having checked anything.
+    const table = execFileSync('ps', ['-eo', 'args'], { encoding: 'utf8' });
+    return table.includes(token);
+  };
+
+  const settle = async (predicate: () => boolean, tries = 100): Promise<void> => {
+    for (let i = 0; i < tries && !predicate(); i += 1) {
+      await new Promise((r) => { setTimeout(r, 100); });
+    }
+  };
+
+  it('cancels an in-flight review, which then reports no verdict and no orphan', async () => {
+    const executable = writeFakeHermes(join(shutdownDir, probe), 'hang');
+    const engine = createLocalHermesTransport({
+      executable, provider: providerConfig(), apiKey: 'sk-ant-FAKE-NEVER-USED',
+    });
+
+    const started = await engine.startReview({
+      runId: 'shutdown-1', idempotencyKey: 'shutdown-key-1', prompt: 'review',
+      // Comfortably longer than this test needs, so a PASS can only come from
+      // cancellation and never from the runner's own timeout firing first.
+      limits: { timeoutMs: 30_000, maxOutputBytes: 4096, maxTurns: 1, maxPromptBytes: 4096 },
+    });
+    expect(started.accepted).toBe(true);
+
+    // There is a real child process, and the run is genuinely live.
+    await settle(() => processTableHas(probe), 50);
+    expect(processTableHas(probe), 'the fake Hermes should be running before cancellation').toBe(true);
+    expect((await engine.getReview('shutdown-1')).status).toBe('running');
+
+    // EXACTLY what main.ts does on SIGTERM.
+    await engine.cancelAll?.();
+
+    let state = await engine.getReview('shutdown-1');
+    for (let i = 0; i < 60 && state.status === 'running'; i += 1) {
+      await new Promise((r) => { setTimeout(r, 100); });
+      state = await engine.getReview('shutdown-1');
+    }
+
+    // An interrupted review is never a completed one, and carries no verdict.
+    expect(state.status).toBe('cancelled');
+    expect(state.reviewText).toBeNull();
+    // Usage nobody reported stays Unknown. It never becomes zero.
+    expect(state.usage.source).toBe('unavailable');
+    expect(state.usage.inputTokens).toBeNull();
+
+    // And the process group is really gone.
+    await settle(() => !processTableHas(probe), 100);
+    expect(processTableHas(probe), 'a cancelled review left an orphan Hermes process').toBe(false);
   }, 60_000);
 });
