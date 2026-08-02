@@ -17,9 +17,8 @@
  */
 
 import { timingSafeEqual } from 'node:crypto';
-import {
-  createIsolatedProfile, createProbe, loadXaiConfig, localReadiness, verifiedReadiness,
-} from './reviewer-harness/hermes';
+import { buildHermesTransport } from './reviewer-harness/hermes/transport-factory';
+import { NO_RUNTIME_EVIDENCE } from '../src/relay/mission/reviewer-harness/harness-readiness';
 import { safeText } from './redact';
 
 export const BRIDGE_TOKEN_ENV = 'RELAY_BRIDGE_API_TOKEN';
@@ -146,54 +145,56 @@ export async function handleReviewerRoute(
     );
   }
 
-  /* ------------------------------------------------ readiness (local) --- */
+  /* --------------------------------------- readiness (via transport) --- */
   if (method === 'GET' && path === '/reviewer/readiness') {
-    const profile = createIsolatedProfile();
-    try {
-      const evidence = localReadiness({
-        executable: env.RELAY_HERMES_EXECUTABLE ?? 'hermes',
-        probe: createProbe(profile.home),
-        xai: loadXaiConfig(env),
-      });
-      return ok({ harness: 'hermes', evidence: { ...evidence, binaryPath: null } });
-    } finally {
-      profile.dispose();
-    }
-  }
-
-  /* ------------------------------------- test connection (may contact) --- */
-  if (method === 'POST' && path === '/reviewer/test-connection') {
-    const profile = createIsolatedProfile();
-    try {
-      const xai = loadXaiConfig(env);
-      const result = await verifiedReadiness({
-        executable: env.RELAY_HERMES_EXECUTABLE ?? 'hermes',
-        probe: createProbe(profile.home),
-        xai,
-      });
-      const v = result.verification;
-      const connected = result.evidence.modelVerified;
+    // The bridge no longer probes its OWN container. It asks whichever
+    // transport is configured — which on a hosted deployment is a dedicated
+    // Hermes service, and never this process's PATH.
+    const built = await buildHermesTransport({ env, production: env.NODE_ENV === 'production' });
+    if (!built.ok) {
       return ok({
         harness: 'hermes',
-        evidence: { ...result.evidence, binaryPath: null },
-        providerRequestMade: result.providerRequestMade,
-        requestedModel: result.evidence.requestedModel,
-        // Only ever from server proof; absent stays null and renders Unknown.
-        verifiedModelId: result.evidence.verifiedModelId,
-        provider: connected ? 'xai' : null,
-        checkedAt: result.evidence.checkedAt,
-        connected,
-        reason: connected
-          ? null
-          : safeText(
-            v !== null && 'safeMessage' in v && typeof v.safeMessage === 'string'
-              ? v.safeMessage
-              : result.evidence.failureReason ?? 'The Reviewer harness is not ready.',
-          ),
+        evidence: { ...NO_RUNTIME_EVIDENCE, bridgeAvailable: true, failureReason: built.safeMessage },
+        failureKind: built.kind,
       });
-    } finally {
-      profile.dispose();
     }
+    const evidence = await built.transport.readiness();
+    return ok({
+      harness: 'hermes',
+      // A binary path is host layout and never leaves the server.
+      evidence: { ...evidence, binaryPath: null },
+      mode: built.transport.mode,
+    });
+  }
+
+  /* ------------------------- test connection (via transport, may contact) --- */
+  if (method === 'POST' && path === '/reviewer/test-connection') {
+    const built = await buildHermesTransport({ env, production: env.NODE_ENV === 'production' });
+    if (!built.ok) {
+      return ok({
+        harness: 'hermes',
+        connected: false,
+        runCreated: false,
+        reason: safeText(built.safeMessage),
+        failureKind: built.kind,
+      });
+    }
+    const evidence = await built.transport.testConnection();
+    return ok({
+      harness: 'hermes',
+      mode: built.transport.mode,
+      connected: evidence.connected,
+      // Verifying a connection never creates a run.
+      runCreated: false,
+      // Harness, provider and model are three identities and stay separate.
+      provider: evidence.identity?.provider ?? null,
+      requestedModel: evidence.identity?.requestedModel ?? null,
+      // Server proof only; absent stays null and renders Unknown.
+      verifiedModelId: evidence.identity?.verifiedModelId ?? null,
+      checkedAt: evidence.checkedAt,
+      failureKind: evidence.failureKind,
+      reason: evidence.connected ? null : safeText(evidence.safeMessage ?? 'The Reviewer harness is not ready.'),
+    });
   }
 
   // The remaining operations need a run engine. Without one the bridge says so

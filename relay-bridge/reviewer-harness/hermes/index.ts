@@ -35,3 +35,18 @@ export {
   DEFAULT_RUN_LIMITS, UNKNOWN_USAGE, buildHermesArgs, parseUsageFile, runHermesReviewer,
 } from './runner';
 export type { HermesRunInput, HermesRunLimits, HermesRunOutcome, HermesUsage } from './runner';
+
+export {
+  HERMES_FAILURE_KINDS, HERMES_MODES, HERMES_SERVICE_PROTOCOL, selectHermesMode,
+} from './hermes-transport';
+export type {
+  HermesConnectionEvidence, HermesFailureKind, HermesMode, HermesReviewerTransport,
+  RemoteHermesCancelResult, RemoteHermesReviewInput, RemoteHermesReviewStart,
+  RemoteHermesReviewState,
+} from './hermes-transport';
+export {
+  HERMES_PROVIDERS, describeProvider, loadHermesProviderConfig, providerVerificationLimit,
+} from './hermes-provider';
+export type { HermesProviderConfig, HermesProviderId, SafeProviderIdentity } from './hermes-provider';
+export { createRemoteHermesTransport } from './remote-transport';
+export { buildHermesTransport } from './transport-factory';

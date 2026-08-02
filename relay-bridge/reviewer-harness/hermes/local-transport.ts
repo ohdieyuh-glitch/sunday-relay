@@ -38,6 +38,12 @@ export interface LocalTransportConfig {
   readonly provider: HermesProviderConfig;
   readonly apiKey: string | null;
   readonly baseUrl?: string | null;
+  /**
+   * The environment this transport reports on. Passed in rather than read
+   * from `process.env` at call time so the bridge reports on the environment
+   * it was BUILT with — and so a test can inject one.
+   */
+  readonly env?: NodeJS.ProcessEnv;
   readonly now?: () => string;
   /** Injected in tests so the whole pipeline runs against a fake executable. */
   readonly spawnImpl?: Parameters<typeof runHermesReviewer>[0]['spawnImpl'];
@@ -54,6 +60,7 @@ export function createLocalHermesTransport(
   config: LocalTransportConfig,
 ): HermesReviewerTransport {
   const now = config.now ?? (() => new Date().toISOString());
+  const env = config.env ?? process.env;
   // Volatile by construction. A restart loses these, and `getReview` says so.
   const runs = new Map<string, LocalRun>();
   const byIdempotencyKey = new Map<string, string>();
@@ -73,7 +80,7 @@ export function createLocalHermesTransport(
         return localReadiness({
           executable: config.executable,
           probe,
-          xai: loadXaiConfig(process.env),
+          xai: loadXaiConfig(env),
           now,
         });
       } finally {
@@ -87,7 +94,7 @@ export function createLocalHermesTransport(
         const result = await verifiedReadiness({
           executable: config.executable,
           probe,
-          xai: loadXaiConfig(process.env),
+          xai: loadXaiConfig(env),
           now,
         });
         const connected = result.evidence.modelVerified;
