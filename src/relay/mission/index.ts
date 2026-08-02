@@ -117,9 +117,10 @@ export {
   classifyRecoveredRuntime, codingAgentDraftFrom, createCodingAgentStore,
   idleCodingAgentRecord, notificationForRuntime,
   projectCodingAgentRuntime, readCodingAgentRecord, renderCodingAgentStatusLines,
-  sealCodingAgentRecord,
+  runtimeRecordFromObservation, sealCodingAgentRecord, usageFromRuntimeReport,
   type CodingAgentCapabilities, type CodingAgentConnectionState,
   type CodingAgentRuntimeRecord, type CodingAgentRuntimeRecordDraft,
+  type CodingAgentRunObservation,
   type CodingAgentStorePort, type CodingAgentAvailability, type CodingAgentProbeInput,
   type CodingAgentView,
 } from './coding-agent';

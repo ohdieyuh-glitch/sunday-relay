@@ -10,6 +10,8 @@ import type {
 import type { EventDraft } from '../../protocol/envelopes';
 import { createWorkspaceService, type WorkspaceCommandPolicy, type WorkspacePolicyInput } from '../../workspace';
 import { DEFAULT_WORKSPACE_COMMAND_POLICY } from '../../workspace';
+import { sanitizeOutput } from '../../workspace/output-sanitizer';
+import { runGit } from '../../workspace/repository-inspector';
 import { evaluateCompletionPolicy } from '../../verification/completion';
 import {
   CLAUDE_ADAPTER_ID, claudePromptFor, claudeToolPolicyFor, createClaudeCodeAdapter,
@@ -18,6 +20,7 @@ import { DEFAULT_LIVE_LIMITS, type ClaudeCodeCapabilityProfile, type ClaudeLiveL
 import {
   buildSafeEditFixture, RELAY_TEST_ARGS, TEST_FILE,
 } from './fixture';
+import { auditToolScope, type ScopeAuditResult } from './scope-auditor';
 
 /**
  * Live Claude proof orchestrator (Prompt 8). Runs the full low-risk proof
@@ -27,7 +30,24 @@ import {
  * the offline contract harness with the fake executable (same pipeline, no
  * provider call). The Agent report is never trusted over inspection, and no
  * reviewer is claimed (the low-risk policy does not require one).
+ *
+ * It also produces the RECEIPT for one live proof. Three properties make that
+ * receipt worth trusting:
+ *
+ *   - OBSERVED IDENTITY. The model that answered is read off the runtime's own
+ *     stream and reported separately from the model that was requested. There
+ *     is no fallback between them: an alias like `sonnet` resolves to a dated
+ *     id, and a runtime that names nothing yields Unknown.
+ *   - MEASURED SCOPE. Every tool target the runtime reported is classified
+ *     against the workspace root. One escape stops the run — a clean process
+ *     exit is not permitted to mean the work stayed inside its boundary.
+ *   - PRESERVED EVIDENCE. Under `preserveEvidence` the workspace and fixture
+ *     survive the run so a founder can inspect what actually happened, and
+ *     the proof reports exactly where they are.
  */
+
+/** Diff bound: enough to review one fixture edit, never an unbounded blob. */
+const MAX_DIFF_BYTES = 64 * 1024;
 
 export interface ClaudeProofOptions {
   executablePath: string;
@@ -36,6 +56,34 @@ export interface ClaudeProofOptions {
   ids: IdFactory;
   limits?: ClaudeLiveLimits;
   baseEnv?: Record<string, string | undefined>;
+  /** A model to genuinely request. Omitted = the account default is used. */
+  requestedModel?: string | null;
+  /**
+   * Keep the isolated workspace and throwaway fixture after the run so the
+   * work can be inspected. The caller is then responsible for removal — which
+   * is the point: cleanup becomes a decision, not a side effect.
+   */
+  preserveEvidence?: boolean;
+}
+
+/**
+ * The runtime identity Relay OBSERVED for this run. Every `actual*` field
+ * comes from the process; `null` means the runtime never said, and renders
+ * as Unknown rather than falling back to the requested value.
+ */
+export interface ObservedRuntimeIdentity {
+  readonly requestedModel: string | null;
+  readonly actualModel: string | null;
+  /** Set only once a stream from the launched process was parsed. */
+  readonly actualRuntime: string | null;
+  /** The installed CLI version the probe read before launching. */
+  readonly runtimeVersion: string | null;
+  readonly launchVerified: boolean;
+  /** Redacted tail of the provider session id — never the whole value. */
+  readonly sessionRefRedacted: string | null;
+  readonly turns: number | null;
+  readonly durationMs: number | null;
+  readonly reportedCostUsd: number | null;
 }
 
 export interface ClaudeProofResult {
@@ -51,6 +99,39 @@ export interface ClaudeProofResult {
   completionOutcome: string;
   events: EventDraft[];
   evidence: EvidenceRecord[];
+  /** Requested vs actual runtime identity, kept strictly separate. */
+  identity: ObservedRuntimeIdentity;
+  /** Tool targets classified against the workspace root. */
+  scope: ScopeAuditResult;
+  /** The real resulting diff, read by Relay from the worktree, bounded. */
+  unifiedDiff: string | null;
+  /** Where the preserved work is, when `preserveEvidence` was set. */
+  preservedWorkspacePath: string | null;
+  preservedFixturePath: string | null;
+  /** Process facts, so a receipt need not re-derive them. */
+  exitCodeObserved: number | null;
+  signal: string | null;
+  timedOut: boolean;
+  cancelled: boolean;
+  terminationConfirmed: boolean;
+  spawnFailed: boolean;
+  startedAt: string | null;
+  endedAt: string | null;
+  /** Exactly why Relay refused the run, when it did. */
+  stopReason: string | null;
+}
+
+/** Nothing observed yet — the honest starting point for every field. */
+const UNOBSERVED_IDENTITY: ObservedRuntimeIdentity = Object.freeze({
+  requestedModel: null, actualModel: null, actualRuntime: null, runtimeVersion: null,
+  launchVerified: false, sessionRefRedacted: null,
+  turns: null, durationMs: null, reportedCostUsd: null,
+});
+
+/** Keep only a short tail of a session id: enough to correlate, not to reuse. */
+export function redactSessionRef(sessionId: string | null): string | null {
+  if (typeof sessionId !== 'string' || sessionId.length === 0) return null;
+  return `…${sessionId.slice(-6)}`;
 }
 
 const LIVE_COMPLETION_POLICY: CompletionPolicy = {
@@ -127,17 +208,58 @@ export async function runClaudeProof(options: ClaudeProofOptions): Promise<Claud
   };
   const workspace = createWorkspaceService({ ids, now, commandPolicy: verifyPolicy });
 
+  const preserve = options.preserveEvidence === true;
+  const requestedModel =
+    typeof options.requestedModel === 'string' && options.requestedModel.trim() !== ''
+      ? options.requestedModel.trim()
+      : null;
+
   const result: ClaudeProofResult = {
     lines, exitCode: 1, audit: null, sessionCaptured: null, filesChanged: [], protectedChanges: [],
     inspectionAssessment: 'unsupported_inspection', sourceUnchanged: true, verificationPassed: false,
     completionOutcome: 'unsatisfied', events: [], evidence: [],
+    identity: { ...UNOBSERVED_IDENTITY, requestedModel },
+    scope: { filesInspected: [], escapes: [], toolsUsed: [], contained: true },
+    unifiedDiff: null, preservedWorkspacePath: null, preservedFixturePath: null,
+    exitCodeObserved: null, signal: null, timedOut: false, cancelled: false,
+    terminationConfirmed: false, spawnFailed: false, startedAt: null, endedAt: null,
+    stopReason: null,
   };
+
+  /**
+   * The isolated workspace is created UNDER the fixture root
+   * (`<fixtureRoot>/.relay-workspaces/…`), so removing the fixture removes the
+   * workspace with it. Both paths are therefore disposed of — or kept —
+   * together, and the run says which of the two actually happened rather than
+   * announcing a preservation it did not perform.
+   */
+  let workspacePath: string | null = null;
+
+  const disposeFixture = (): void => {
+    if (preserve) {
+      result.preservedFixturePath = fixture.fixtureRoot;
+      result.preservedWorkspacePath = workspacePath;
+      return;
+    }
+    try { rmSync(fixture.fixtureRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+    result.preservedFixturePath = null;
+    result.preservedWorkspacePath = null;
+  };
+
+  /** State what became of the evidence — never a claim, always the outcome. */
+  const evidenceDisposition = (): string =>
+    preserve
+      ? `Work preserved for inspection at ${result.preservedWorkspacePath ?? result.preservedFixturePath ?? 'the throwaway fixture'}.`
+      : 'Throwaway workspace and fixture removed (re-run with evidence preservation to keep them).';
+
   const finishStopped = (message: string): ClaudeProofResult => {
-    emit('', `${badge('STOP')} ${message}`, 'RELAY STOPPED SAFELY — no completion is claimed.');
+    result.stopReason = message;
     result.events = [...workspace.collectEvents()];
     result.evidence = [...workspace.collectEvidence()];
     result.exitCode = 5;
-    try { rmSync(fixture.fixtureRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+    disposeFixture();
+    emit('', `${badge('STOP')} ${message}`, evidenceDisposition(),
+      'RELAY STOPPED SAFELY — no completion is claimed.');
     return result;
   };
 
@@ -155,6 +277,7 @@ export async function runClaudeProof(options: ClaudeProofOptions): Promise<Claud
     });
     if (!prepared.ok) return finishStopped(`Workspace preparation failed: ${prepared.error.message}`);
     const ws = prepared.value.value.workspace;
+    workspacePath = ws.workspacePath;
     emit('', 'PROJECT BRAIN', 'Task requirements and constraints loaded.',
       '', 'TASK OWNER', 'Claude Code',
       '', 'HANDOFF', 'One claimed file.', 'All other files protected.',
@@ -177,9 +300,35 @@ export async function runClaudeProof(options: ClaudeProofOptions): Promise<Claud
       executablePath, capabilities,
       association: { projectId, runId, taskId, workspaceId: ws.workspaceId, adapterId: CLAUDE_ADAPTER_ID },
       pkg, workspacePath: ws.workspacePath, toolPolicy, prompt, attempt: 1,
-      limits, baseEnv: options.baseEnv, now: now(),
+      requestedModel, limits, baseEnv: options.baseEnv, now: now(),
     });
     result.events.push(...invocation.events);
+
+    /* ---- Everything below is OBSERVED, and is recorded even when the run is
+     * about to be refused: a failed proof still owes an honest receipt. ---- */
+    const parsed = invocation.outcome.parsed;
+    result.exitCodeObserved = invocation.outcome.exitCode;
+    result.signal = invocation.outcome.signal;
+    result.timedOut = invocation.outcome.timedOut;
+    result.cancelled = invocation.outcome.cancelled;
+    result.terminationConfirmed = invocation.outcome.termination === 'termination_confirmed';
+    result.spawnFailed = invocation.outcome.spawnError !== undefined;
+    result.startedAt = invocation.outcome.startedAt;
+    result.endedAt = invocation.outcome.completedAt;
+    result.identity = {
+      requestedModel,
+      // The model the RUNTIME named. Never the requested one, never a default.
+      actualModel: parsed.model,
+      // A runtime identity may be asserted only once its own stream was seen.
+      actualRuntime: parsed.initSeen ? 'Claude Code' : null,
+      runtimeVersion: capabilities.version,
+      launchVerified: parsed.initSeen && invocation.outcome.spawnError === undefined,
+      sessionRefRedacted: redactSessionRef(invocation.sessionId),
+      turns: parsed.usage.numTurns,
+      durationMs: parsed.usage.durationMs,
+      reportedCostUsd: parsed.usage.reportedCostUsd,
+    };
+    result.scope = auditToolScope(parsed.toolActivity, ws.workspacePath);
 
     if (invocation.sessionId) {
       adapter.sessions.capture(
@@ -191,6 +340,18 @@ export async function runClaudeProof(options: ClaudeProofOptions): Promise<Claud
 
     if (invocation.outcome.cancelled || invocation.outcome.timedOut || invocation.outcome.spawnError) {
       return finishStopped('Claude process did not complete normally.');
+    }
+
+    /* CONTAINMENT GATE. Path scoping is advisory on this CLI, so Relay
+     * measures where the run actually reached. A target outside the isolated
+     * workspace stops the proof — a clean exit never certifies containment. */
+    if (!result.scope.contained) {
+      emit('', 'RELAY SCOPE AUDIT',
+        `${result.scope.escapes.length} tool target(s) resolved outside the isolated workspace.`,
+        ...result.scope.escapes.slice(0, 5).map((e) => `  ${e}`));
+      return finishStopped(
+        `The Coding Agent reached outside the isolated workspace (${result.scope.escapes.length} target(s)).`,
+      );
     }
     if (!invocation.structurallyValid) {
       return finishStopped(`Claude output was not usable: ${invocation.structuralReason}.`);
@@ -211,15 +372,26 @@ export async function runClaudeProof(options: ClaudeProofOptions): Promise<Claud
     result.filesChanged = insp.claimedChanges;
     result.protectedChanges = insp.protectedChanges;
 
+    /* The REAL resulting diff, read by Relay from the isolated worktree after
+     * the agent exited — read-only git, bounded, and secret-sanitized. It is
+     * captured BEFORE any rejection returns, so a refused run still leaves the
+     * founder something to look at. */
+    const diff = runGit(['diff', '--unified=3'], ws.workspacePath);
+    if (diff.ok) {
+      const clean = sanitizeOutput(diff.value.slice(0, MAX_DIFF_BYTES));
+      result.unifiedDiff = clean.text;
+    }
+
     if (insp.assessment !== 'allowed') {
       emit('', 'RELAY INSPECTION',
         insp.assessment === 'clean' ? 'No file changed — nothing to verify.'
           : `Unauthorized change detected (${insp.assessment}).`);
-      return finishStopped(`Workspace inspection rejected the change (${insp.assessment}). Workspace preserved.`);
+      return finishStopped(`Workspace inspection rejected the change (${insp.assessment}).`);
     }
     emit('', 'RELAY INSPECTION',
       `${insp.claimedChanges.length} claimed file changed.`,
-      `${insp.protectedChanges.length} protected files changed.`, 'Source worktree unchanged.');
+      `${insp.protectedChanges.length} protected files changed.`, 'Source worktree unchanged.',
+      `${result.scope.filesInspected.length} path(s) inspected, all inside the isolated workspace.`);
 
     /* Relay — not Claude — runs the deterministic verification. */
     const verify = await workspace.executeCommand({
@@ -270,10 +442,23 @@ export async function runClaudeProof(options: ClaudeProofOptions): Promise<Claud
         : 'Live run did not satisfy the completion policy.',
       remainingIssues: outcome === 'verified-complete' ? [] : completion.missing.concat(completion.failed),
     };
-    workspace.cleanupWorkspace(ws.workspaceId, { authorizeRemoval: true });
+    // Evidence is captured above; the workspace is torn down only when the
+    // caller did NOT ask to keep it. Preservation is the founder's decision,
+    // so it is never overridden by the success path.
+    if (!preserve) workspace.cleanupWorkspace(ws.workspaceId, { authorizeRemoval: true });
     result.audit = audit;
     result.events = [...result.events, ...workspace.collectEvents().slice(result.evidence.length)];
     result.evidence = [...workspace.collectEvidence()];
+
+    /* The receipt: requested and actual identity side by side, never merged. */
+    emit('', 'RUNTIME IDENTITY',
+      `Requested runtime: Claude Code`,
+      `Actual runtime:    ${result.identity.actualRuntime ?? 'Unknown'}`,
+      `Runtime version:   ${result.identity.runtimeVersion ?? 'Unknown'}`,
+      `Requested model:   ${result.identity.requestedModel ?? 'Unknown (account default requested)'}`,
+      `Actual model:      ${result.identity.actualModel ?? 'Unknown'}`,
+      `Launch verified:   ${result.identity.launchVerified ? 'yes' : 'no'}`,
+      `Session ref:       ${result.identity.sessionRefRedacted ?? 'Unknown'}`);
 
     emit('', 'FINAL AUDIT',
       outcome === 'verified-complete' ? 'Live Claude Code execution verified.' : 'Live run stopped — not verified.',
@@ -287,7 +472,11 @@ export async function runClaudeProof(options: ClaudeProofOptions): Promise<Claud
     }
     return result;
   } finally {
-    try { rmSync(fixture.fixtureRoot, { recursive: true, force: true }); } catch { /* best effort */ }
+    // `finishStopped` already disposed on its paths; this is the success path
+    // and the safety net for a throw. `disposeFixture` is idempotent and
+    // honours preservation, so nothing here can destroy kept evidence.
+    disposeFixture();
+    if (result.stopReason === null) emit('', evidenceDisposition());
   }
 }
 

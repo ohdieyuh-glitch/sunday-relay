@@ -2,14 +2,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildClaudeEnvironment, apiKeyEnvironmentDetected } from './environment';
+import { buildClaudeEnvironment, apiKeyEnvironmentDetected, PASSTHROUGH } from './environment';
 import { compileClaudePermissions, toolPolicyArgs, FORBIDDEN_TOOLS } from './permission-compiler';
 import { compileClaudePrompt, compileRevisionPrompt, REPORT_MARKER } from './prompt-compiler';
 import { parseAgentExecutionReport } from './report-parser';
 import { createStreamParser, streamIsStructurallyValid } from './stream-parser';
 import { createSessionManager, type SessionAssociation } from './session-manager';
 import { assessProjectSettings } from './config';
-import { classifyClaudeAuth, resolveClaudeExecutable } from './capability-probe';
+import { classifyClaudeAuth, resolveClaudeExecutable, PROBE_ENV_KEYS } from './capability-probe';
 import { runClaudeContractVerification } from './contract-verify';
 import type { AgentHandoffPackage } from '../../protocol/contracts';
 import type { ClaudeCodeCapabilityProfile } from './contracts';
@@ -236,6 +236,25 @@ describe('capability probe helpers', () => {
   });
   it('returns null for a non-existent explicit executable', () => {
     expect(resolveClaudeExecutable('/nonexistent/claude/binary')).toBeNull();
+  });
+});
+
+describe('the probe never sees more of the environment than the run', () => {
+  it('keeps the probe environment a strict subset of the run passthrough', () => {
+    // The probe decides which capabilities Relay advertises and whether the
+    // auth profile is approved; the run then happens under a different env
+    // builder. If the probe could read configuration the run does not
+    // receive, Relay would be reporting on a machine that does not exist.
+    for (const key of PROBE_ENV_KEYS) {
+      expect(PASSTHROUGH, `probe forwards ${key}, which the run does not`).toContain(key);
+    }
+  });
+
+  it('forwards no credential-shaped variable to either', () => {
+    const CREDENTIALISH = /(TOKEN|SECRET|PASSWORD|CREDENTIAL|API_?KEY|PRIVATE|ANTHROPIC)/i;
+    for (const key of [...PROBE_ENV_KEYS, ...PASSTHROUGH]) {
+      expect(CREDENTIALISH.test(key), `${key} is credential-shaped`).toBe(false);
+    }
   });
 });
 
