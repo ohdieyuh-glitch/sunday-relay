@@ -207,8 +207,14 @@ describe('every build-dependent test is re-run after its build', () => {
     // become a place to hide a genuinely build-dependent test.
     const LEDGER = 'scripts/ci-test-accounting.test.ts';
     const declared = new Set([...BUILD_DEPENDENT.map((entry) => entry.file), LEDGER]);
+    // Every artifact directory this repository produces must appear here. The
+    // Hermes Reviewer service added a FOURTH one, and a completeness check
+    // that does not know about an artifact cannot report a test depending on
+    // it — it just returns green, which is the failure mode this test exists
+    // to prevent.
     const undeclared = testFiles.filter(
-      (file) => !declared.has(file) && /['"`](\.\.\/)*dist(-relay|-relay-bridge)?['"`,/]/.test(sourceOf(file)),
+      (file) => !declared.has(file)
+        && /['"`](\.\.\/)*dist(-relay|-relay-bridge|-relay-hermes)?['"`,/]/.test(sourceOf(file)),
     );
     expect(
       undeclared,
