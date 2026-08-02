@@ -55,6 +55,98 @@ export {
 } from './loop-command-types';
 
 export {
+  ALL_LOOP_FEATURES_DISABLED,
+  RELAY_LOOP_AVAILABILITY_STATES,
+  RELAY_LOOP_FEATURES,
+  RELAY_LOOP_FEATURE_DEPENDENCIES,
+  UNCHAIN_GRANTING_STATES,
+  UNCHAIN_METER_STATES,
+  UNCHAIN_TEMPORARY_SLOTS,
+  evaluateLoopAvailability,
+  featureEffectivelyEnabled,
+  featureEnabled,
+  unchainSessionProblem,
+  type RelayLoopAvailability,
+  type RelayLoopAvailabilityInput,
+  type RelayLoopAvailabilityState,
+  type RelayLoopFeature,
+  type RelayLoopFeatureFlags,
+  type UnchainMeterState,
+  type UnchainSessionRecord,
+} from './loop-availability';
+
+export {
+  RELAY_ELIGIBILITY_BLOCKER_REASONS,
+  RELAY_LOOP_BLOCKER_REASONS,
+  RELAY_LOOP_BLOCKER_SOURCES,
+  blockersForUnavailableRoles,
+  blockersFromEligibility,
+  runtimeBlocker,
+  type RelayEligibilityCheckLike,
+  type RelayEligibilityResultLike,
+  type RelayLoopBlocker,
+  type RelayLoopBlockerReason,
+  type RelayLoopBlockerSource,
+  type RelayLoopRuntimeCondition,
+} from './loop-blockers';
+
+export {
+  COMPLETION_SUPPORTING_TRUSTS,
+  RELAY_LOOP_COMPLETION_VERDICTS,
+  claimAloneCompletes,
+  evaluateLoopCompletion,
+  trustSupportsCompletion,
+  type RelayLoopCompletionInput,
+  type RelayLoopCompletionResult,
+  type RelayLoopCompletionVerdict,
+  type RelayLoopEvidenceSummary,
+  type RelayLoopIterationOutcomeSummary,
+} from './loop-completion';
+
+export {
+  DEFAULT_LOOP_LIMITS,
+  RELAY_LOOP_CONTRACT_SCHEMA_V1,
+  RELAY_LOOP_CONTRACT_SCHEMA_VERSION,
+  RELAY_LOOP_CREATION_SOURCES,
+  RELAY_LOOP_STATES,
+  RELAY_LOOP_STOP_CONDITIONS,
+  RELAY_LOOP_TYPES,
+  RELAY_SWARM_STATES,
+  RESUMABLE_LOOP_STATES,
+  SUPPORTED_LOOP_CONTRACT_SCHEMA_VERSIONS,
+  TERMINAL_LOOP_STATES,
+  buildLoopContract,
+  isBindingLoopChange,
+  loopBindingFields,
+  validateLoopContractDraft,
+  type RelayLoopContract,
+  type RelayLoopContractDraft,
+  type RelayLoopContractSchemaVersion,
+  type RelayLoopCreationSource,
+  type RelayLoopLimits,
+  type RelayLoopReviewPolicy,
+  type RelayLoopScope,
+  type RelayLoopState,
+  type RelayLoopStopCondition,
+  type RelayLoopType,
+  type RelaySwarmState,
+} from './loop-contract';
+
+export {
+  ASSIGNABLE_ROLE_AVAILABILITY,
+  RELAY_ROLE_AVAILABILITIES,
+  requestedRolesFor,
+  resolveLoopTarget,
+  targetIsStaffable,
+  withObservedAssignment,
+  type RelayAgentRegistrySnapshot,
+  type RelayLoopRoleAssignment,
+  type RelayLoopTarget,
+  type RelayLoopUnavailableRole,
+  type RelayRoleAvailability,
+} from './loop-target';
+
+export {
   DEFAULT_LOOP_TARGET,
   RELAY_LOOP_ALL_ALIASES,
   RELAY_LOOP_CANONICAL_ALIAS,
