@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createHermesService, SERVICE_TOKEN_ENV } from './service';
+import { createHermesService, setLifecycleState, SERVICE_TOKEN_ENV } from './service';
 import { createLocalHermesTransport } from '../relay-bridge/reviewer-harness/hermes/local-transport';
 import { createRemoteHermesTransport } from '../relay-bridge/reviewer-harness/hermes/remote-transport';
 import { writeFakeHermes } from '../relay-bridge/reviewer-harness/hermes/fake-executable';
@@ -64,6 +64,7 @@ async function startService(scenario: Parameters<typeof writeFakeHermes>[1]): Pr
   });
   server = createHermesService(engine);
   baseUrl = await listenOn(server);
+  setLifecycleState('ready');
 }
 
 beforeAll(async () => {
@@ -216,6 +217,7 @@ describe('a non-zero exit cannot approve', () => {
       executable, provider: providerConfig(), apiKey: 'sk-ant-FAKE-NEVER-USED',
     }));
     failUrl = await listenOn(failServer);
+    setLifecycleState('ready');
   });
 
   afterAll(() => {

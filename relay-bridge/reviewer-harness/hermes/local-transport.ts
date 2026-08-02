@@ -186,6 +186,20 @@ export function createLocalHermesTransport(
       };
     },
 
+    /**
+     * Cancel every live run. Used by the service on SIGTERM so a container
+     * restart never leaves an orphaned Hermes process group behind, and never
+     * lets an interrupted review look like a finished one.
+     */
+    async cancelAll(): Promise<void> {
+      for (const [, run] of runs) {
+        if (run.status === 'running') {
+          run.cancelRequested = true;
+          run.controller.abort();
+        }
+      }
+    },
+
     async cancelReview(runId: string): Promise<RemoteHermesCancelResult> {
       const run = runs.get(runId);
       if (run === undefined) {

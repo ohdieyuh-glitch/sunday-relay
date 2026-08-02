@@ -26,6 +26,22 @@ import type { HermesReviewerTransport } from '../relay-bridge/reviewer-harness/h
 
 export const SERVICE_TOKEN_ENV = 'RELAY_HERMES_SERVICE_TOKEN';
 
+/**
+ * Process lifecycle. `/healthz` reports it, and review creation is refused
+ * once draining begins — a platform restarting a container must not be able to
+ * start work it is about to kill.
+ */
+export type LifecycleState = 'starting' | 'ready' | 'shutting_down';
+let lifecycle: LifecycleState = 'starting';
+
+export function setLifecycleState(state: LifecycleState): void {
+  lifecycle = state;
+}
+
+export function lifecycleState(): LifecycleState {
+  return lifecycle;
+}
+
 /** Request bodies are capped before parsing; a client cannot flood the service. */
 const MAX_BODY_BYTES = 512 * 1024;
 
@@ -130,7 +146,14 @@ export async function handleServiceRoute(
   // it. It therefore discloses nothing but liveness — no version, no host, no
   // configuration, and it never contacts a provider.
   if (method === 'GET' && path === '/healthz') {
-    return { status: 200, body: { status: 'ok' } };
+    // Deterministic, provider-free, and it discloses nothing but liveness:
+    // no version, no model, no credential state, no executable path. A
+    // platform health check must never depend on a paid request.
+    if (lifecycle === 'ready') return { status: 200, body: { status: 'ok' } };
+    return {
+      status: 503,
+      body: { status: lifecycle === 'shutting_down' ? 'shutting_down' : 'starting' },
+    };
   }
 
   if (!bearerMatches(request.authorization, request.env[SERVICE_TOKEN_ENV])) {
@@ -141,6 +164,7 @@ export async function handleServiceRoute(
     // Offline. No provider contact, no run created.
     const evidence = await engine.readiness();
     return ok({
+      lifecycle,
       evidence: {
         installed: evidence.installed,
         version: evidence.version,
@@ -172,6 +196,10 @@ export async function handleServiceRoute(
   }
 
   if (method === 'POST' && path === '/v1/reviews') {
+    if (lifecycle === 'shutting_down') {
+      // Refused, not queued. Work started now would be killed moments later.
+      return err(503, 'shutting_down', 'The Hermes Reviewer service is shutting down and is not accepting new reviews.');
+    }
     const parsed = parseReviewBody(request.body);
     if (!parsed.ok) return err(422, 'validation_failed', parsed.message);
     const started = await engine.startReview(parsed.value);

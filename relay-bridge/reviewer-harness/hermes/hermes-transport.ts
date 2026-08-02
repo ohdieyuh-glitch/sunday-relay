@@ -125,6 +125,11 @@ export interface HermesReviewerTransport {
   startReview(input: RemoteHermesReviewInput): Promise<RemoteHermesReviewStart>;
   getReview(runId: string): Promise<RemoteHermesReviewState>;
   cancelReview(runId: string): Promise<RemoteHermesCancelResult>;
+  /**
+   * Cancel every live run. Optional because only an in-process engine can
+   * honour it; a remote client asks the service, which cancels its own.
+   */
+  cancelAll?(): Promise<void>;
 }
 
 /* ------------------------------------------------------- mode selection --- */

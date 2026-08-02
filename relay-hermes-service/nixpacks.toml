@@ -1,0 +1,19 @@
+# Hermes Reviewer service build.
+#
+# The Hermes binary is NOT vendored here. It is installed into the image at
+# build time, and RELAY_HERMES_EXECUTABLE points the service at it. Nothing in
+# this file may contain a credential, a Railway project or service id, a
+# private domain, or the public bridge URL — the boundary scanner rejects
+# deployment config carrying any of those, and they would be wrong here anyway.
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "python311", "git"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run relay:hermes:build"]
+
+[start]
+cmd = "npm run relay:hermes:start"

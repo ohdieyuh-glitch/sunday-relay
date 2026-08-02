@@ -8,12 +8,17 @@ import { createRemoteHermesTransport } from './remote-transport';
 /**
  * BUILDING THE TRANSPORT THE BRIDGE WILL ACTUALLY USE.
  *
- * The local implementation is imported LAZILY, and that is the point. A static
- * import would pull `node:child_process`, discovery and the profile builder
- * into the bridge bundle for every deployment, including production remote
- * ones that must never be able to spawn. Loading it only when local mode is
- * genuinely selected keeps "cannot spawn" a property of the remote build
- * rather than a promise about it.
+ * The local implementation is imported LAZILY. Be precise about what that
+ * buys: esbuild still BUNDLES the module, so `createLocalHermesTransport` is
+ * present in the bridge artifact either way — the dynamic import defers
+ * EVALUATION, not inclusion. What it guarantees is that in remote mode the
+ * module is never evaluated, so discovery never runs, no isolated profile is
+ * created and `child_process` is never reached through this path.
+ *
+ * The structural guarantee that remote cannot spawn lives in
+ * `remote-transport.ts`, which references no process API at all and has a test
+ * asserting it. This lazy import is a defence-in-depth measure on top of that,
+ * not the boundary itself.
  *
  * Selection failures return a transport-shaped refusal instead of throwing, so
  * a misconfigured bridge answers every Reviewer route with a categorised
@@ -51,7 +56,7 @@ export async function buildHermesTransport(input: {
   }
   const credential = input.env[provider.config.credentialEnvName] ?? null;
 
-  // Lazy: keeps the process-spawning module out of a remote-mode bundle.
+  // Lazy: never evaluated in remote mode. Bundled, but not reached.
   const { createLocalHermesTransport } = await import('./local-transport');
   return {
     ok: true,
