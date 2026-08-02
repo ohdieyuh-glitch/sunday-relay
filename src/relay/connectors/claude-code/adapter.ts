@@ -60,6 +60,13 @@ export interface ClaudeInvocationInput {
   attempt: 1 | 2;
   /** Present on attempt 2 — the exact captured session id to resume. */
   resumeSessionId?: string;
+  /**
+   * A model the mission REQUESTED. When set it is really passed to the CLI,
+   * so "requested" names an actual request rather than a label on a receipt.
+   * The model that ANSWERED is read back off the stream and never assumed to
+   * equal this.
+   */
+  requestedModel?: string | null;
   limits: ClaudeLiveLimits;
   baseEnv?: Record<string, string | undefined>;
   now: string;
@@ -83,12 +90,19 @@ export function buildClaudeArgs(input: {
   toolPolicy: ClaudeToolPolicy;
   attempt: 1 | 2;
   resumeSessionId?: string;
+  requestedModel?: string | null;
 }): string[] {
-  const { capabilities, toolPolicy, attempt, resumeSessionId } = input;
+  const { capabilities, toolPolicy, attempt, resumeSessionId, requestedModel } = input;
   const args = ['-p', '--output-format', 'stream-json', '--verbose'];
   // Settings / MCP isolation: strongest reliable primitive on this CLI.
   if (capabilities.settingsIsolationSupported === 'available') args.push('--safe-mode');
   if (capabilities.mcpIsolationSupported === 'available') args.push('--strict-mcp-config');
+  // A requested model is genuinely requested. An alias ('sonnet') is resolved
+  // by the runtime into a dated id, which is exactly why the model that
+  // answered must be read back rather than inferred from this argument.
+  if (typeof requestedModel === 'string' && requestedModel.trim() !== '') {
+    args.push('--model', requestedModel.trim());
+  }
   args.push(...toolPolicyArgs(toolPolicy, capabilities));
   if (attempt === 2 && resumeSessionId) args.push('--resume', resumeSessionId);
   return args;

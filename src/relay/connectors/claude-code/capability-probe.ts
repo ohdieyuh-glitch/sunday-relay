@@ -19,9 +19,30 @@ import type {
 const PROBE_TIMEOUT_MS = 15_000;
 const PROBE_MAX_BUFFER = 4 * 1024 * 1024;
 
+/**
+ * The environment the probe hands the runtime. It stays deliberately tiny and
+ * forwards no credential-shaped variable, but it does include the XDG
+ * config-discovery paths.
+ *
+ * The reason is CONSISTENCY, not speed. The probe decides which capabilities
+ * Relay advertises and whether the auth profile is approved; the run then
+ * happens under `buildClaudeEnvironment`, which passes these paths. A founder
+ * whose config lives at a non-default `XDG_CONFIG_HOME` would otherwise have
+ * the probe read one configuration and the run use another — and Relay would
+ * be reporting on a machine that does not exist.
+ *
+ * `PROBE_ENV_KEYS` is therefore required to stay a strict SUBSET of that
+ * PASSTHROUGH set, which `claude-code.test.ts` asserts: the probe may never
+ * see more than the run.
+ */
+export const PROBE_ENV_KEYS = [
+  'PATH', 'HOME', 'LANG', 'TMPDIR',
+  'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME',
+] as const;
+
 const readOnlyEnv = (): Record<string, string> => {
   const env: Record<string, string> = {};
-  for (const key of ['PATH', 'HOME', 'LANG', 'TMPDIR']) {
+  for (const key of PROBE_ENV_KEYS) {
     const value = process.env[key];
     if (value !== undefined) env[key] = value;
   }

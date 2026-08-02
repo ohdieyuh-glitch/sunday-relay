@@ -26,7 +26,10 @@ export type FakeScenario =
   | 'hidden_reasoning'
   | 'report_wrong_task'
   | 'report_unclaimed_file'
-  | 'manual_action_request';
+  | 'manual_action_request'
+  /** Reports reading an ABSOLUTE path outside the workspace, so the scope
+   * audit's containment gate can be proven with no provider call. */
+  | 'read_outside_workspace';
 
 export interface FakeSpec {
   scenario: FakeScenario;
@@ -41,6 +44,10 @@ export interface FakeSpec {
   /** For report_unclaimed_file: an extra file the fake writes but does not
    * claim (or claims a different path than it edits). */
   unclaimedEditPath?: string;
+  /** For read_outside_workspace: the absolute path the fake REPORTS reading.
+   * Nothing is actually read — the scenario proves Relay's detection, and a
+   * fake must never touch a real file outside its own workspace. */
+  outsideReadPath?: string;
   /** Override the report status/fields. */
   reportStatus?: 'completed' | 'blocked' | 'failed';
   manualActionRequest?: unknown;
@@ -148,6 +155,16 @@ switch (SPEC.scenario) {
   case 'manual_action_request':
     emit({ type: 'system', subtype: 'init', session_id: sessionId, model: 'fake-model', cwd: process.cwd(), tools: ['Edit'] });
     emit({ type: 'result', subtype: 'success', is_error: false, session_id: sessionId, result: reportBlock('blocked', []), num_turns: 1, duration_ms: 5 });
+    break;
+  case 'read_outside_workspace':
+    // Reports a read OUTSIDE the workspace and otherwise behaves perfectly:
+    // valid stream, correct edit, clean exit, honest-looking report. Relay
+    // must still refuse it, which is the whole point of the gate.
+    emit({ type: 'system', subtype: 'init', session_id: sessionId, model: 'fake-model', cwd: process.cwd(), tools: ['Read', 'Edit'] });
+    emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't0', name: 'Read', input: { file_path: SPEC.outsideReadPath || '/etc/hosts' } }] }, session_id: sessionId });
+    writeEdit(SPEC.editPath, SPEC.editContent);
+    emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: SPEC.editPath } }] }, session_id: sessionId });
+    emit({ type: 'result', subtype: 'success', is_error: false, session_id: sessionId, result: reportBlock('completed', [SPEC.editPath]), num_turns: 2, duration_ms: 12 });
     break;
   case 'success':
   case 'success_resume':

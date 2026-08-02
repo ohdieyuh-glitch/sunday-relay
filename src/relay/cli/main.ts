@@ -15,7 +15,8 @@ import { BRIDGE_URL_ENV } from '../reviewer-bridge-client';
 import { runWorkspaceVerification, workspaceDoctorReport } from '../workspace';
 import { createRandomIdFactory } from '../protocol/ids';
 import {
-  checkLivePrerequisites, classifyClaudeAuth, claudeDoctorReport, DEFAULT_LIVE_LIMITS,
+  checkLivePrerequisites, classifyClaudeAuth, claudeDoctorReport, CLAUDE_ADAPTER_ID,
+  DEFAULT_LIVE_LIMITS,
   probeClaudeCapabilities, runClaudeContractVerification, runClaudeProof,
 } from '../connectors/claude-code';
 import {
@@ -57,6 +58,7 @@ import {
   RELAY_AGENT_ROLES, operatingProfileFixture, projectAgentOperatingProfiles,
   projectMissionWorktree, renderWorktreeStatusLines,
   codingAgentDraftFrom, projectCodingAgentRuntime, renderCodingAgentStatusLines,
+  runtimeRecordFromObservation, usageFromRuntimeReport,
   architectDraftFrom, projectPromptArchitect, renderArchitectStatusLines,
   harnessDraftFrom, projectReviewerHarness, renderHarnessCatalogLines, renderReviewerStatusLines,
 } from '../mission';
@@ -130,6 +132,8 @@ export interface ParsedCli {
   stateRoot?: string;
   fixture?: string;
   confirmLive: boolean;
+  /** Keep the throwaway workspace + fixture after a live proof for inspection. */
+  preserveEvidence?: boolean;
   scenario?: string;
   objective?: string;
   maxCost?: number;
@@ -166,6 +170,7 @@ export function parseCli(argv: string[]): ParsedCli {
         help: { type: 'boolean', default: false },
         fixture: { type: 'string' },
         'confirm-live': { type: 'boolean', default: false },
+        'preserve-evidence': { type: 'boolean', default: false },
         run: { type: 'string' },
         'state-root': { type: 'string' },
         project: { type: 'string' },
@@ -207,6 +212,7 @@ export function parseCli(argv: string[]): ParsedCli {
       pace, compact: values.compact === true,
       watch: values.watch === true, once: values.once === true,
       confirmLive: values['confirm-live'] === true,
+      preserveEvidence: values['preserve-evidence'] === true,
     };
     if (pace !== undefined && (!Number.isFinite(pace) || pace < 0)) {
       return { command: 'help', ...base, pace: undefined, error: '--pace must be a non-negative number of milliseconds.' };
@@ -372,7 +378,14 @@ export function parseCli(argv: string[]): ParsedCli {
       if (!second || !actions.includes(second)) {
         return { command: 'claude', ...base, error: 'claude requires an action: doctor, run, inspect, cancel, or contract-verify.' };
       }
-      return { command: 'claude', claudeAction: second as ParsedCli['claudeAction'], fixture: values.fixture, ...base };
+      // `--project` names the receipt the proof writes (so it can be read back
+      // with `relay mission coding-agent status <id>`); `--state-root` says
+      // where. Both are optional — the receipt id otherwise derives from the
+      // run's own redacted session reference.
+      return {
+        command: 'claude', claudeAction: second as ParsedCli['claudeAction'], fixture: values.fixture,
+        projectRef: values.project, stateRoot: values['state-root'], ...base,
+      };
     }
     if (first === 'codex') {
       const actions = ['doctor', 'run', 'inspect', 'cancel', 'contract-verify'];
@@ -504,6 +517,9 @@ export const HELP_TEXT = [
   '  relay claude doctor            truthful Claude Code capability + auth report',
   '  relay claude contract-verify   offline adapter proof (no provider call)',
   '  relay claude run --fixture safe-edit --confirm-live   REAL Claude Code proof',
+  '      --model <alias|id>     request a model (the answering model is read back)',
+  '      --preserve-evidence    keep the throwaway worktree + fixture to inspect',
+  '      --project <id>         name the receipt written for the run',
   '  relay codex doctor             truthful Codex reviewer capability + auth report',
   '  relay codex contract-verify    offline reviewer proof (no provider call)',
   '  relay codex run --fixture review-defect --confirm-live   REAL Codex review',
@@ -745,13 +761,18 @@ async function runClaudeCli(parsed: ParsedCli, io: CliIo): Promise<number> {
     out('MANUAL TASK', '', 'Relay needs your help.', '', prereq.manualTitle, '',
       'Why Relay stopped:', `  ${prereq.manualReason}`);
     if (!parsed.confirmLive && caps.executablePath && auth.approvedForLiveRun) {
+      // The pre-confirmation screen states exactly what the confirmed run will
+      // do — including what becomes of the evidence — so the founder approves
+      // the run they are actually about to get.
       out('', 'LIVE CLAUDE CODE RUN', '',
         'This will use your existing Claude Code account.', '',
         'Workspace:', '  Isolated Relay worktree',
         'Source repository:', '  Will not be modified',
         'Deployment:', '  Disabled', 'Git push:', '  Prohibited',
         'Maximum agent turns:', turnLimitLine,
-        'Files Claude may change:', '  src/normalize.js', '',
+        'Files Claude may change:', '  src/normalize.js',
+        'Requested model:', `  ${parsed.model ?? 'account default (none requested)'}`,
+        'Evidence after the run:', `  ${parsed.preserveEvidence ? 'preserved for inspection' : 'removed'}`, '',
         'To proceed, re-run with --confirm-live (approval is never inferred from a TTY).');
     }
     return EXIT.checkpointRequired;
@@ -764,24 +785,150 @@ async function runClaudeCli(parsed: ParsedCli, io: CliIo): Promise<number> {
     'Source repository:', '  Will not be modified',
     'Deployment:', '  Disabled', 'Git push:', '  Prohibited',
     'Maximum agent turns:', turnLimitLine,
-    'Files Claude may change:', '  src/normalize.js', '',
+    'Files Claude may change:', '  src/normalize.js',
+    'Requested model:', `  ${parsed.model ?? 'account default (none requested)'}`,
+    'Evidence after the run:', `  ${parsed.preserveEvidence ? 'preserved for inspection' : 'removed'}`, '',
     'Confirmed via --confirm-live.');
 
   const proof = await runClaudeProof({
     executablePath: caps.executablePath!, capabilities: caps, now, ids: createRandomIdFactory(),
+    requestedModel: parsed.model ?? null,
+    preserveEvidence: parsed.preserveEvidence === true,
   });
+
+  // Persist the receipt. This is the COMPOSITION ROOT: the adapter reported
+  // what it observed and may not import the mission layer, so the CLI maps
+  // those observations onto the canonical record and writes it. A receipt
+  // that cannot be written is REPORTED as unwritten — never silently skipped,
+  // and never allowed to change the proof's own exit code.
+  const receipt = await writeCodingAgentReceipt(parsed, io, proof, caps);
+
   if (parsed.json) {
     io.out(JSON.stringify({
       exitCode: proof.exitCode, sessionCaptured: proof.sessionCaptured,
       filesChanged: proof.filesChanged, protectedChanges: proof.protectedChanges,
       inspectionAssessment: proof.inspectionAssessment, sourceUnchanged: proof.sourceUnchanged,
       verificationPassed: proof.verificationPassed, completionOutcome: proof.completionOutcome,
+      // Requested and actual stay separate all the way into the JSON.
+      requestedModel: proof.identity.requestedModel,
+      actualModel: proof.identity.actualModel,
+      actualRuntime: proof.identity.actualRuntime,
+      runtimeVersion: proof.identity.runtimeVersion,
+      launchVerified: proof.identity.launchVerified,
+      sessionRefRedacted: proof.identity.sessionRefRedacted,
+      turns: proof.identity.turns,
+      reportedCostUsd: proof.identity.reportedCostUsd,
+      filesInspected: proof.scope.filesInspected,
+      toolsUsed: proof.scope.toolsUsed,
+      scopeEscapes: proof.scope.escapes,
+      scopeContained: proof.scope.contained,
+      unifiedDiff: proof.unifiedDiff,
+      preservedWorkspacePath: proof.preservedWorkspacePath,
+      preservedFixturePath: proof.preservedFixturePath,
+      stopReason: proof.stopReason,
+      receipt,
       audit: proof.audit,
     }));
   } else {
     proof.lines.forEach((line) => io.out(line));
+    if (proof.unifiedDiff !== null && proof.unifiedDiff.trim() !== '') {
+      out('', 'RESULTING DIFF (read by Relay from the isolated worktree)');
+      proof.unifiedDiff.split('\n').forEach((line) => io.out(`  ${line}`));
+    }
+    out('', 'PATHS INSPECTED (reported by the runtime, all inside the workspace)');
+    if (proof.scope.filesInspected.length === 0) out('  None recorded');
+    else proof.scope.filesInspected.forEach((f) => io.out(`  ${f}`));
+    out('', 'RECEIPT', `  ${receipt.message}`);
   }
   return proof.exitCode;
+}
+
+/**
+ * Write the durable Coding Agent receipt for one live proof.
+ *
+ * The mission id defaults to the redacted session reference so the founder can
+ * read the run back with `relay mission coding-agent status <id>`; `--project`
+ * overrides it. The write is best-effort BY DESIGN: a proof that really ran
+ * must not be reported as failed because a state directory was unwritable, but
+ * the failure is always stated.
+ */
+async function writeCodingAgentReceipt(
+  parsed: ParsedCli,
+  io: CliIo,
+  proof: Awaited<ReturnType<typeof runClaudeProof>>,
+  caps: ReturnType<typeof probeClaudeCapabilities>,
+): Promise<{ written: boolean; missionId: string | null; location: string | null; message: string }> {
+  const missionId = (parsed.projectRef ?? '').trim() !== ''
+    ? (parsed.projectRef as string).trim()
+    : `claude-live-proof-${(proof.sessionCaptured ?? 'unknown').slice(-8)}`;
+
+  const root = resolveStateRoot(io.env as Record<string, string | undefined>, parsed.stateRoot);
+  if (!root.ok) {
+    return { written: false, missionId, location: null, message: `Receipt NOT written: ${root.error.message}` };
+  }
+
+  const availability = inspectClaudeRuntime(new Date().toISOString());
+  // Relay only reaches its verification command once its own inspection has
+  // accepted the change; before that, no test was attempted at all.
+  const verificationAttempted = proof.inspectionAssessment === 'allowed';
+  const draft = runtimeRecordFromObservation({
+    missionId,
+    projectId: 'relay-coding-agent-live-proof',
+    requestedRuntime: 'Claude Code',
+    requestedModel: proof.identity.requestedModel,
+    adapterId: CLAUDE_ADAPTER_ID,
+    actualRuntime: proof.identity.actualRuntime,
+    actualModel: proof.identity.actualModel,
+    runtimeVersion: proof.identity.runtimeVersion ?? caps.version,
+    launchVerified: proof.identity.launchVerified,
+    runId: proof.audit?.runId ?? null,
+    sessionRefRedacted: proof.identity.sessionRefRedacted,
+    capabilities: availability.capabilities,
+    worktreeRef: proof.preservedWorkspacePath,
+    startedAt: proof.startedAt,
+    endedAt: proof.endedAt,
+    exitCode: proof.exitCodeObserved,
+    signal: proof.signal,
+    cancellationRequested: proof.cancelled,
+    timedOut: proof.timedOut,
+    terminationConfirmed: proof.terminationConfirmed,
+    spawnFailed: proof.spawnFailed,
+    filesChanged: proof.filesChanged,
+    filesInspected: proof.scope.filesInspected,
+    // Relay runs exactly one verification command, and only once its own
+    // inspection has passed. It counts as COMPLETED only when Relay observed
+    // it pass — but a command that ran and failed still ran, so the count and
+    // the status must not disagree ("failed (0 run)" describes nothing).
+    commandsStarted: verificationAttempted ? 1 : 0,
+    commandsCompleted: proof.verificationPassed ? 1 : 0,
+    testsRun: verificationAttempted ? 1 : 0,
+    testStatus: proof.verificationPassed ? 'passed' : verificationAttempted ? 'failed' : 'not_run',
+    outputRefs: [],
+    evidenceRefs: proof.evidence.map((e) => e.evidenceId as unknown as string),
+    warnings: [...proof.scope.escapes],
+    usage: usageFromRuntimeReport({
+      // This CLI reports turns and cost, not token counts; unknown stays null
+      // rather than becoming zero.
+      inputTokens: null,
+      outputTokens: null,
+      reportedCostUsd: proof.identity.reportedCostUsd,
+    }),
+    stopReason: proof.stopReason,
+    now: new Date().toISOString(),
+  });
+
+  const store = createNodeCodingAgentStore(root.value.root);
+  const written = await store.write(draft);
+  if (!written.ok) {
+    return {
+      written: false, missionId, location: store.locationLabel,
+      message: `Receipt NOT written: ${written.reason ?? 'unknown error'}`,
+    };
+  }
+  return {
+    written: true, missionId, location: store.locationLabel,
+    message: `Saved. Read it back with: relay mission coding-agent status ${missionId}`,
+  };
 }
 
 /* --------------------------- codex commands ------------------------ */

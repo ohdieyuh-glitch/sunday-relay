@@ -35,3 +35,7 @@ export {
   availabilityFromProbe, capabilitiesFromProbe, runtimeRecordForMission,
 } from './coding-agent-capabilities';
 export type { CodingAgentAvailability, CodingAgentProbeInput } from './coding-agent-capabilities';
+export {
+  runtimeRecordFromObservation, usageFromRuntimeReport,
+} from './coding-agent-observation';
+export type { CodingAgentRunObservation } from './coding-agent-observation';

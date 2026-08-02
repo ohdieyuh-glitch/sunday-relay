@@ -13,5 +13,9 @@ export { assessProjectSettings } from './config';
 export { buildClaudeEnvironment, apiKeyEnvironmentDetected } from './environment';
 export { claudeDoctorReport } from './doctor';
 export { runClaudeContractVerification, type ContractCheck } from './contract-verify';
-export { runClaudeProof, checkLivePrerequisites, type ClaudeProofResult, type ClaudeProofOptions } from './live-runner';
+export {
+  runClaudeProof, checkLivePrerequisites, redactSessionRef,
+  type ClaudeProofResult, type ClaudeProofOptions, type ObservedRuntimeIdentity,
+} from './live-runner';
+export { auditToolScope, classifyTarget, type ScopeAuditResult } from './scope-auditor';
 export { buildSafeEditFixture } from './fixture';

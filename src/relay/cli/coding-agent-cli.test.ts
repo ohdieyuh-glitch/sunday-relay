@@ -5,9 +5,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { runCli } from './main';
 import { createNodeCodingAgentStore } from '../persistence';
 import {
+  NO_CAPABILITIES,
   idleCodingAgentRecord,
   projectCodingAgentRuntime,
   renderCodingAgentStatusLines,
+  runtimeRecordFromObservation,
+  usageFromRuntimeReport,
 } from '../mission';
 
 /**
@@ -34,8 +37,22 @@ afterEach(() => {
 });
 
 const NOW = '2026-08-01T12:00:00.000Z';
-/** Explicit budget for cases that shell out to the installed Claude CLI. */
-const PROBES = 30_000;
+/**
+ * Explicit budget for cases that shell out to the installed Claude CLI.
+ *
+ * Each such case spawns THREE real subprocesses (`--version`, `--help`,
+ * `auth status`), each bounded by the probe's own 15s timeout — so a single
+ * case can legitimately need ~45s before the probe itself gives up. Six cases
+ * in this file now do that, and under full-suite CPU contention on a machine
+ * where Claude is actually installed, 60s was still not enough.
+ *
+ * The budget is deliberately well clear of 3 x 15s rather than tuned to the
+ * last observed duration: a timeout that sits just above the worst run is a
+ * flake waiting to happen, and a flaky gate teaches people to re-run instead
+ * of to look. On CI, where the Claude CLI is not installed, the probe resolves
+ * no executable and these cases finish in milliseconds.
+ */
+const PROBES = 120_000;
 
 async function run(args: string[]): Promise<{ code: number; out: string }> {
   const lines: string[] = [];
@@ -111,5 +128,115 @@ describe('relay mission coding-agent', () => {
     // The status path probes --version/--help/auth only; it never runs a model.
     const { code } = await run(['mission', 'coding-agent', 'status', 'm1', '--state-root', stateRoot()]);
     expect(code).toBe(0);
+  }, PROBES);
+});
+
+/**
+ * The receipt a live proof leaves behind. Written by the CLI composition root
+ * from OBSERVED facts, read back by the same command the founder runs — so a
+ * proof that really happened can be re-read after the terminal is closed.
+ */
+describe('the live-proof receipt round-trips into the status command', () => {
+  it('renders the model the runtime reported, separately from the one requested', async () => {
+    const root = stateRoot();
+    const store = createNodeCodingAgentStore(root);
+    const written = await store.write(
+      runtimeRecordFromObservation({
+        missionId: 'live-proof-1',
+        projectId: 'relay-coding-agent-live-proof',
+        requestedRuntime: 'Claude Code',
+        requestedModel: 'sonnet',
+        adapterId: 'claude-code-local',
+        actualRuntime: 'Claude Code',
+        actualModel: 'claude-sonnet-4-5-20250929',
+        runtimeVersion: '2.1.220',
+        launchVerified: true,
+        runId: 'run_1',
+        sessionRefRedacted: '…abc123',
+        capabilities: NO_CAPABILITIES,
+        worktreeRef: null,
+        startedAt: NOW,
+        endedAt: NOW,
+        exitCode: 0,
+        signal: null,
+        cancellationRequested: false,
+        timedOut: false,
+        terminationConfirmed: false,
+        spawnFailed: false,
+        filesChanged: ['src/normalize.js'],
+        filesInspected: ['src/normalize.js'],
+        commandsStarted: 1,
+        commandsCompleted: 1,
+        testsRun: 1,
+        testStatus: 'passed',
+        outputRefs: [],
+        evidenceRefs: [],
+        warnings: [],
+        usage: usageFromRuntimeReport({ inputTokens: null, outputTokens: null, reportedCostUsd: null }),
+        stopReason: null,
+        now: NOW,
+      }),
+    );
+    expect(written.ok).toBe(true);
+
+    const { out } = await run(['mission', 'coding-agent', 'status', 'live-proof-1', '--state-root', root]);
+    expect(out).toContain('Claude Code (requested)');
+    expect(out).toContain('Actual:       Claude Code');
+    expect(out).toContain('Model:        claude-sonnet-4-5-20250929');
+    expect(out).toContain('Connection:   Completed');
+    expect(out).toContain('Launch:       verified');
+    expect(out).toContain('Files:        1 changed');
+    expect(out).toContain('Tests:        passed (1 run)');
+    // The runtime reported no token usage, so it stays Unknown — not 0.
+    expect(out).toContain('Usage:        Unknown');
+    // The alias that was requested is never shown as the model that answered.
+    expect(out).not.toContain('Model:        sonnet');
+  }, PROBES);
+
+  it('a run Relay refused reads back as blocked, never as completed', async () => {
+    const root = stateRoot();
+    const store = createNodeCodingAgentStore(root);
+    await store.write(
+      runtimeRecordFromObservation({
+        missionId: 'escaped-1',
+        projectId: 'relay-coding-agent-live-proof',
+        requestedRuntime: 'Claude Code',
+        requestedModel: null,
+        adapterId: 'claude-code-local',
+        actualRuntime: 'Claude Code',
+        actualModel: 'claude-sonnet-4-5-20250929',
+        runtimeVersion: '2.1.220',
+        launchVerified: true,
+        runId: 'run_2',
+        sessionRefRedacted: '…def456',
+        capabilities: NO_CAPABILITIES,
+        worktreeRef: null,
+        startedAt: NOW,
+        endedAt: NOW,
+        // The process exited perfectly. Relay still refused the result.
+        exitCode: 0,
+        signal: null,
+        cancellationRequested: false,
+        timedOut: false,
+        terminationConfirmed: false,
+        spawnFailed: false,
+        filesChanged: [],
+        filesInspected: ['src/normalize.js'],
+        commandsStarted: 0,
+        commandsCompleted: 0,
+        testsRun: 0,
+        testStatus: 'not_run',
+        outputRefs: [],
+        evidenceRefs: [],
+        warnings: ['Read: /etc/passwd'],
+        usage: usageFromRuntimeReport({ inputTokens: null, outputTokens: null, reportedCostUsd: null }),
+        stopReason: 'The Coding Agent reached outside the isolated workspace (1 target(s)).',
+        now: NOW,
+      }),
+    );
+    const { out } = await run(['mission', 'coding-agent', 'status', 'escaped-1', '--state-root', root]);
+    expect(out).toContain('Connection:   Blocked');
+    expect(out).toContain('outside the isolated workspace');
+    expect(out).not.toContain('Connection:   Completed');
   }, PROBES);
 });
