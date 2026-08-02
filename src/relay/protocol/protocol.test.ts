@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RELAY_PROTOCOL_VERSION, checkProtocolVersion } from './version';
-import { checkFreeId, checkId, createRandomIdFactory } from './ids';
+import { PREFIXES, checkFreeId, checkId, createRandomIdFactory } from './ids';
 import { COMMAND_TYPES, parseCommand, parseEvent, parseQuery, parseReport, RELAY_EVENT_KINDS } from './envelopes';
 import { makeCommand, makeReport, deterministicIds, fixedId } from '../testing/factories';
 import { RELAY_ERROR_CODES } from './errors';
@@ -37,6 +37,30 @@ describe('identifiers', () => {
     const b = deterministicIds();
     expect(a.next('evt')).toBe(b.next('evt'));
     expect(a.next('evt')).toBe('evt_t0002');
+  });
+
+  // PREFIXES is the most contended object in the repository — the Loop Engine
+  // and the MCP host both append families to it. A duplicate key would make
+  // one id family validate as another SILENTLY, which is exactly the class of
+  // bug `checkId` exists to prevent. This makes the collision a red build.
+  it('every id prefix is unique and self-consistent', () => {
+    const keys = Object.keys(PREFIXES);
+    expect(new Set(keys).size, 'duplicate key in PREFIXES').toBe(keys.length);
+    const values = Object.values(PREFIXES);
+    expect(new Set(values).size, 'two id families share a prefix string').toBe(values.length);
+    for (const [key, value] of Object.entries(PREFIXES)) {
+      expect(value, `PREFIXES.${key} must be "${key}_"`).toBe(`${key}_`);
+    }
+  });
+
+  it('Loop Engine ids validate through the one branded-id system', () => {
+    const factory = createRandomIdFactory();
+    for (const prefix of ['lpe', 'lpi', 'lps', 'lpt', 'lpo', 'lpb', 'lpc', 'lpm', 'lpu', 'lpk'] as const) {
+      expect(checkId(factory.next(prefix), prefix, `${prefix}Id`)).toBeNull();
+    }
+    // A Loop id is not interchangeable with any other family:
+    expect(checkId('lpe_abc', 'run', 'runId')?.code).toBe('validation-failed');
+    expect(checkId('run_abc', 'lpe', 'loopId')?.code).toBe('validation-failed');
   });
 });
 

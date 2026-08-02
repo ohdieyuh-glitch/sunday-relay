@@ -38,6 +38,32 @@ export type SessionRefId = Branded<'ses'>;
 export type WorkspaceRefId = Branded<'wsp'>;
 export type ManualTaskId = Branded<'mtk'>;
 export type ManualRequestId = Branded<'mrq'>;
+
+/**
+ * LOOP ENGINE identifiers (docs/relay/LOOP_ENGINE.md). They live here, in the
+ * one branded-id system, rather than in a private scheme under the Loop
+ * domain — an id that validates differently from every other Relay id is an id
+ * whose validation nobody checks.
+ *
+ * The whole Loop id set is declared in ONE append rather than a prefix at a
+ * time. `PREFIXES` is the most contended object in the repository (the MCP
+ * host adds its own family here too), and one append block is one merge
+ * conflict to resolve rather than five.
+ *
+ * Note what is NOT an id: a Loop's `bindingDigest` is a content digest, not an
+ * identifier, so it is never minted by the factory and never carries a prefix.
+ */
+export type RelayLoopId = Branded<'lpe'>;
+export type RelayLoopIterationId = Branded<'lpi'>;
+export type RelayLoopScheduleId = Branded<'lps'>;
+export type RelayLoopTriggerId = Branded<'lpt'>;
+export type RelayLoopSlotId = Branded<'lpo'>;
+export type RelayLoopBranchId = Branded<'lpb'>;
+export type RelayLoopCapacityGrantId = Branded<'lpc'>;
+export type RelayLoopTemplateId = Branded<'lpm'>;
+export type UnchainSessionId = Branded<'lpu'>;
+export type RelayLoopCollapseId = Branded<'lpk'>;
+
 export type CommandId = Branded<'cmd-free'>;
 export type QueryId = Branded<'qry-free'>;
 export type CorrelationId = Branded<'cor-free'>;
@@ -54,6 +80,9 @@ export const PREFIXES = {
   apr: 'apr_', oqn: 'oqn_', use: 'use_', aud: 'aud_', clm: 'clm_', asn: 'asn_',
   dsg: 'dsg_', pol: 'pol_', hcr: 'hcr_', ckp: 'ckp_', art: 'art_', ses: 'ses_',
   wsp: 'wsp_', mtk: 'mtk_', mrq: 'mrq_',
+  // Loop Engine (docs/relay/LOOP_ENGINE.md).
+  lpe: 'lpe_', lpi: 'lpi_', lps: 'lps_', lpt: 'lpt_', lpo: 'lpo_',
+  lpb: 'lpb_', lpc: 'lpc_', lpm: 'lpm_', lpu: 'lpu_', lpk: 'lpk_',
 } as const;
 
 export type IdPrefix = keyof typeof PREFIXES;
