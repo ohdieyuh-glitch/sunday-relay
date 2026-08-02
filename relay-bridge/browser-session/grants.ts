@@ -202,6 +202,13 @@ const BROWSER_READABLE = [
   // Reading one mission's state. Starting, cancelling and retrying a mission
   // are NOT here: they run real work and belong to an operator.
   /^\/mission\/[^/]+$/,
+  // Hosted Coding Agent, read-only. Readiness is free and offline; status and
+  // inspect describe a run that already happened. Starting, stopping and
+  // retrying a hosted run are deliberately absent — each either spends a
+  // provider credential or changes a run in flight, so each needs an operator.
+  /^\/hosted-coding\/readiness$/,
+  /^\/hosted-coding\/status\/[^/]+$/,
+  /^\/hosted-coding\/inspect\/[^/]+$/,
 ] as const;
 
 export function browserSessionMayCall(method: string, path: string): boolean {
