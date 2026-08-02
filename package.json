@@ -18,7 +18,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit && tsc -p relay-bridge/tsconfig.json --noEmit",
+    "typecheck": "tsc -b --noEmit && tsc -p relay-bridge/tsconfig.json --noEmit && tsc -p relay-hermes-service/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "relay:build": "esbuild src/relay/cli/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay/cli.cjs --banner:js=\"#!/usr/bin/env node\" --log-level=warning",
@@ -51,7 +51,7 @@
     "relay:hermes:build": "esbuild relay-hermes-service/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-hermes/main.cjs --banner:js=\"#!/usr/bin/env node\" --log-level=warning",
     "relay:hermes:start": "node dist-relay-hermes/main.cjs",
     "relay:hermes:dev": "npm run relay:hermes:build --silent && node dist-relay-hermes/main.cjs",
-    "relay:hermes:typecheck": "tsc -p relay-bridge/tsconfig.json --noEmit",
+    "relay:hermes:typecheck": "tsc -p relay-hermes-service/tsconfig.json --noEmit",
     "relay:hermes:test": "vitest run relay-hermes-service relay-bridge/reviewer-harness/hermes"
   },
   "dependencies": {
