@@ -243,3 +243,80 @@ describe('reviews', () => {
     expect(r.terminationConfirmed).toBe(false);
   });
 });
+
+/**
+ * A CATEGORISED FAILURE IS THE PRODUCT HERE.
+ *
+ * This transport's whole reason for returning kinds rather than one vague
+ * "not connected" is that each kind sends an operator somewhere different. Two
+ * ways that guarantee can quietly rot:
+ *
+ *   1. two distinct faults collapsing into one kind — a timeout and a refused
+ *      connection both arrive as a thrown error, and reporting the slow case
+ *      as "unreachable" sends someone to check a URL that is perfectly fine;
+ *   2. an unrecognised kind being CAST into the union — the run status is
+ *      validated against its known list, so a kind must be too, or arbitrary
+ *      upstream text travels on with the authority of a checked value.
+ */
+describe('failures stay categorised, and the categories stay honest', () => {
+  /** Answers nothing, ever, but honours the abort the transport arms. */
+  const neverAnswers: FetchLike = (_url, init) => new Promise((_resolve, reject) => {
+    init.signal?.addEventListener('abort', () => { reject(new Error('aborted')); }, { once: true });
+  });
+
+  it('reports its own timeout as timed_out, never as an unreachable service', async () => {
+    const slow = createRemoteHermesTransport({
+      serviceUrl: 'http://hermes.railway.internal:8080',
+      serviceToken: TOKEN,
+      timeoutMs: 25,
+      now: () => NOW,
+      fetchImpl: neverAnswers,
+    });
+    const r = await slow.testConnection();
+    // A service answering too slowly is not a service that is not there. One
+    // is a wedged or overloaded box, the other a bad URL or a dead deploy.
+    expect(r.failureKind).toBe('timed_out');
+    expect(r.connected).toBe(false);
+    expect(r.runCreated).toBe(false);
+    // The distinction must not have cost the redaction guarantees.
+    const serialized = JSON.stringify(r);
+    expect(serialized).not.toContain(TOKEN);
+    expect(serialized).not.toContain('railway.internal');
+  }, 15_000);
+
+  it('still reports a refused connection as service_unreachable', async () => {
+    // The companion half: the two must not have merged in the other direction.
+    const r = await transport(() => Promise.reject(new Error('ECONNREFUSED'))).testConnection();
+    expect(r.failureKind).toBe('service_unreachable');
+  });
+
+  it('drops a failure kind that is not in the protocol vocabulary', async () => {
+    const r = await transport(() => reply(200, {
+      protocol: HERMES_SERVICE_PROTOCOL,
+      connected: false,
+      failureKind: 'everything_is_fine_actually',
+    })).testConnection();
+    // Not laundered into the union by a cast — Relay's own honest default.
+    expect(r.failureKind).toBe('provider_unverified');
+  });
+
+  it('keeps a failure kind the service is genuinely entitled to send', async () => {
+    const r = await transport(() => reply(200, {
+      protocol: HERMES_SERVICE_PROTOCOL,
+      connected: false,
+      failureKind: 'credentials_missing',
+    })).testConnection();
+    expect(r.failureKind).toBe('credentials_missing');
+  });
+
+  it('drops an unrecognised refusal kind when a review is refused', async () => {
+    const r = await transport(() => reply(200, {
+      protocol: HERMES_SERVICE_PROTOCOL, accepted: false, failureKind: 'made_up_kind',
+    })).startReview({
+      runId: 'r1', idempotencyKey: 'k1', prompt: 'review',
+      limits: { timeoutMs: 1000, maxOutputBytes: 1000, maxTurns: 1, maxPromptBytes: 1000 },
+    });
+    expect(r.accepted).toBe(false);
+    expect(r.failureKind).toBe('malformed_response');
+  });
+});

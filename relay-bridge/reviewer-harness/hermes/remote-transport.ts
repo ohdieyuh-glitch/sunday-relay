@@ -1,7 +1,7 @@
 import type { HarnessRuntimeEvidence } from '../../../src/relay/mission/reviewer-harness/harness-readiness';
 import { NO_RUNTIME_EVIDENCE } from '../../../src/relay/mission/reviewer-harness/harness-readiness';
 import {
-  HERMES_SERVICE_PROTOCOL,
+  HERMES_FAILURE_KINDS, HERMES_SERVICE_PROTOCOL,
   type HermesConnectionEvidence, type HermesFailureKind, type HermesReviewerTransport,
   type RemoteHermesCancelResult, type RemoteHermesReviewInput,
   type RemoteHermesReviewStart, type RemoteHermesReviewState,
@@ -61,6 +61,20 @@ const strOrNull = (v: unknown): string | null =>
 const numOrNull = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? v : null;
 
+const KNOWN_FAILURE_KINDS: ReadonlySet<string> = new Set(HERMES_FAILURE_KINDS);
+
+/**
+ * A failure kind is a VOCABULARY, not free text.
+ *
+ * The run status is already validated against its known list; the kind was
+ * not, so an arbitrary upstream string could be cast straight into the typed
+ * union and travel on as if Relay had recognised it. A kind decides what an
+ * operator is told to go and fix, which makes an unrecognised one worse than
+ * none — so it is dropped here and the caller supplies its own honest default.
+ */
+const kindOrNull = (v: unknown): HermesFailureKind | null =>
+  typeof v === 'string' && KNOWN_FAILURE_KINDS.has(v) ? (v as HermesFailureKind) : null;
+
 export function createRemoteHermesTransport(
   config: RemoteTransportConfig,
 ): HermesReviewerTransport {
@@ -74,7 +88,13 @@ export function createRemoteHermesTransport(
     body?: unknown,
   ): Promise<CallResult> => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    // A timeout and a refused connection are DIFFERENT facts with different
+    // fixes: one means a service answered too slowly or wedged, the other that
+    // nothing answered at all. Both surface as an exception here, so the only
+    // way to keep them apart is to record which one we caused.
+    const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
     try {
       const res = await doFetch(`${base}${path}`, {
         method,
@@ -137,8 +157,15 @@ export function createRemoteHermesTransport(
       }
       return { ok: true, body: parsed };
     } catch {
-      // AbortError and every transport failure land here. The cause is not
+      // AbortError and every transport failure land here. The cause is never
       // reflected: it can carry the URL, which names internal host layout.
+      // Only WHICH of the two failures it was crosses this boundary.
+      if (timedOut) {
+        return {
+          ok: false, kind: 'timed_out',
+          safeMessage: `The Hermes Reviewer service did not answer within ${timeoutMs} ms.`,
+        };
+      }
       return {
         ok: false, kind: 'service_unreachable',
         safeMessage: 'Relay could not reach the Hermes Reviewer service.',
@@ -208,7 +235,7 @@ export function createRemoteHermesTransport(
         runCreated: false,
         protocol: HERMES_SERVICE_PROTOCOL,
         identity,
-        failureKind: connected ? null : ((strOrNull(r.body.failureKind) ?? 'provider_unverified') as HermesFailureKind),
+        failureKind: connected ? null : (kindOrNull(r.body.failureKind) ?? 'provider_unverified'),
         safeMessage: connected ? null : (strOrNull(r.body.safeMessage) ?? 'The Hermes Reviewer service is not connected.'),
         checkedAt: now(),
       };
@@ -231,7 +258,7 @@ export function createRemoteHermesTransport(
         accepted: boolOf(r.body.accepted),
         runId: strOrNull(r.body.runId) ?? input.runId,
         duplicate: boolOf(r.body.duplicate),
-        failureKind: boolOf(r.body.accepted) ? null : ((strOrNull(r.body.failureKind) ?? 'malformed_response') as HermesFailureKind),
+        failureKind: boolOf(r.body.accepted) ? null : (kindOrNull(r.body.failureKind) ?? 'malformed_response'),
         safeMessage: boolOf(r.body.accepted) ? null : (strOrNull(r.body.safeMessage) ?? 'The Hermes Reviewer service refused the review.'),
       };
     },
