@@ -6,8 +6,8 @@ over authenticated private HTTP.
 
 > **Status: not deployed.** These are repository artifacts only. Nothing in this
 > directory has been deployed to Railway, no provider request has ever been
-> made through it, and no paid Reviewer run has occurred. The presence of a
-> `railway.json` does not mean a service exists.
+> made through it, and no paid Reviewer run has occurred. Repository artifacts
+> existing is not a deployment.
 
 ## Why it exists
 
@@ -63,6 +63,27 @@ All server-only. None of these may ever use a `VITE_` name.
 
 Every problem is reported at startup at once, by **variable name only** — never
 a value, a length or a hash.
+
+## Railway settings (dashboard, not a config file)
+
+This repository's boundary scanner **hard-fails on committed deployment
+configuration**, so there is deliberately no `railway.json` here — the existing
+Relay bridge is configured the same way. Set these in the Railway service:
+
+| Setting | Value |
+|---|---|
+| Build command | `npm ci && npm run relay:hermes:build` |
+| Start command | `npm run relay:hermes:start` |
+| Healthcheck path | `/healthz` |
+| Restart policy | on failure |
+
+`nixpacks.toml` in this directory is a **build recipe** (it installs the Node
+and Python toolchain Hermes needs), not deployment configuration, and passes
+the scanner. The Hermes binary is installed into the image at build time;
+`RELAY_HERMES_EXECUTABLE` points the service at it.
+
+Nothing here hardcodes a Railway project id, service id, private domain, the
+public bridge URL, a provider credential or the service token.
 
 ## Build and run
 
