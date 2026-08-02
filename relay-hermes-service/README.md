@@ -64,6 +64,32 @@ All server-only. None of these may ever use a `VITE_` name.
 Every problem is reported at startup at once, by **variable name only** — never
 a value, a length or a hash.
 
+The provider decides which variables carry the credential and the base URL, and
+a caller cannot name them: an `xai` run receives `XAI_API_KEY`/`XAI_BASE_URL`
+and no Anthropic variable, an `anthropic` run receives
+`ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL` and no xAI variable.
+
+## Run limits — the service decides the ceiling
+
+The service owns the provider credential and pays for every run, so it is the
+trust boundary. A caller may ask for **less** than these; asking for more is
+clamped, and the effective values come back on the create response.
+
+| Limit | Service ceiling |
+|---|---|
+| `timeoutMs` | 600000 (10 minutes) |
+| `maxOutputBytes` | 1048576 (1 MiB) |
+| `maxPromptBytes` | 262144 (256 KiB) |
+| `maxTurns` | **exactly 1** |
+
+Every limit must be a positive, finite, safe integer; zero, negatives,
+fractions, `NaN`, overflow and numeric strings are refused rather than coerced.
+
+`maxTurns` is **not** a flexible budget. The adapter runs Hermes with
+`-z/--oneshot` — a single prompt and a single final response — there is no
+turn-limit flag, and the isolated profile pins `agent.max_turns: 1`. Any other
+value is refused rather than accepted and silently ignored.
+
 ## Railway settings (dashboard, not a config file)
 
 This repository's boundary scanner **hard-fails on committed deployment
@@ -141,3 +167,28 @@ Run state is held in memory. A restart loses it, and the service says so rather
 than inventing durable state. Durable review records live in Relay Core, which
 remains the single source of run truth; this service is an execution boundary,
 not a second Relay.
+
+### Idempotency is NOT restart-safe — and that gates the first paid Mission
+
+The idempotency map lives in the same memory. Within one process life it is
+honoured exactly: a replayed key returns the existing run and starts no second
+process, and a key replayed for a **materially different** request (different
+run id, prompt or effective limits) is refused as a conflict rather than
+silently answered with some other run's identity. A run record is never
+replaced, so a duplicate run id cannot orphan a live process group.
+
+**Across a restart none of that survives.** A same-key request arriving after a
+restart is indistinguishable from a new one, and would start another run — a
+second *paid* run, once a real provider is attached.
+
+What stands between that and a duplicate charge today is deliberate, and stays
+deliberate: **there is no automatic retry anywhere in Relay**, and the only
+retry path requires fresh explicit authorization (`/reviewer/retry` answers
+`403 authorization_required` without it, because a retry is a new paid call and
+prior authorization does not carry over).
+
+Durable idempotency belongs in Relay Core, which already owns run truth;
+inventing a second durable store here would create exactly the competing
+source of truth this service exists to avoid. It is therefore an explicit
+**post-merge, pre-paid milestone**, and until it lands this service must not be
+described as restart-safe.

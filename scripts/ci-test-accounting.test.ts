@@ -73,6 +73,15 @@ const BUILD_DEPENDENT: ReadonlyArray<{
     accounting: 'rerun_after_build',
   },
   {
+    // The signal handlers can only be proven on a real process, which means
+    // the built entry point. Its artifact-absent branch asserts CI re-runs it
+    // after the Hermes service build.
+    file: 'relay-hermes-service/signal-lifecycle.test.ts',
+    needs: 'dist-relay-hermes/main.cjs',
+    producedBy: 'npm run relay:hermes:build',
+    accounting: 'rerun_after_build',
+  },
+  {
     // Fully build-aware already: with the CLI built it requires READY FOR
     // FOUNDER ACCEPTANCE, and without it requires NOT READY naming exactly
     // the `relay-build` check. Both branches assert, so no re-run is needed —
@@ -183,6 +192,11 @@ describe('every build-dependent test is re-run after its build', () => {
       at('docs/documentation-contract.test.ts'),
       'the documentation-contract re-run must come AFTER the CLI build',
     ).toBeGreaterThan(at('npm run relay:build'));
+    expect(at('npm run relay:hermes:build'), 'the Hermes service build must appear in CI').toBeGreaterThan(-1);
+    expect(
+      at('relay-hermes-service/signal-lifecycle.test.ts'),
+      'the signal-lifecycle re-run must come AFTER the Hermes service build',
+    ).toBeGreaterThan(at('npm run relay:hermes:build'));
   });
 
   it('the workflow describes the accounting as it now is — nothing is skipped', () => {
