@@ -20,7 +20,7 @@ const REGISTRY: RelayAgentRegistrySnapshot = {
   activeCompoundAgentRoles: ['prompt_architect', 'coding_agent'],
   eligibleRoles: ['prompt_architect', 'coding_agent', 'reviewer'],
   availability: { prompt_architect: 'available', coding_agent: 'available', reviewer: 'available' },
-  provenance: 'offline',
+  provenance: 'simulated',
   observedAt: NOW,
 };
 

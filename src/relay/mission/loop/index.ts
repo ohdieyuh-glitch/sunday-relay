@@ -55,6 +55,24 @@ export {
 } from './loop-command-types';
 
 export {
+  RELAY_LOOP_RECORD_SCHEMA_V1,
+  RELAY_LOOP_RECORD_SCHEMA_VERSION,
+  SUPPORTED_LOOP_RECORD_SCHEMA_VERSIONS,
+  contractStillBinds,
+  createRelayLoopStore,
+  readLoopRecord,
+  sealLoopRecord,
+  type LoopReadResult,
+  type LoopWriteResult,
+  type RelayLoopIterationRef,
+  type RelayLoopOwnerLease,
+  type RelayLoopRecord,
+  type RelayLoopRecordDraft,
+  type RelayLoopRecordSchemaVersion,
+  type RelayLoopStorePort,
+} from './loop-store';
+
+export {
   projectLoopCommandPreview,
   renderLoopPreviewLines,
   type RelayLoopCommandPreview,

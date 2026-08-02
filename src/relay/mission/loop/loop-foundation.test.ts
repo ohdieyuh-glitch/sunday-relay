@@ -41,6 +41,13 @@ import {
   type RelayAgentRegistrySnapshot,
 } from './loop-target';
 import { DEFAULT_LOOP_TARGET } from './loop-roles';
+import {
+  contractStillBinds,
+  createRelayLoopStore,
+  readLoopRecord,
+  sealLoopRecord,
+  type RelayLoopRecordDraft,
+} from './loop-store';
 import { parseSlashCommand } from './loop-command-parser';
 
 const NOW = '2026-08-02T12:00:00.000Z';
@@ -298,7 +305,7 @@ const BASE_DRAFT: RelayLoopContractDraft = {
   creationSource: 'slash_command',
   createdBy: 'operator',
   createdAt: NOW,
-  provenance: 'offline',
+  provenance: 'simulated',
 };
 
 describe('loop contract foundation', () => {
@@ -663,5 +670,123 @@ describe('the Unchain gate', () => {
     });
     expect(availability.state).toBe('available');
     expect(availability.grantedTemporarySlots).toBe(0);
+  });
+});
+
+/* ------------------------------------------------------------ persistence */
+
+describe('the Loop persistence contract', () => {
+  function backing() {
+    const map = new Map<string, string>();
+    return {
+      durability: 'volatile-test-only' as const,
+      locationLabel: 'in-memory (test)',
+      async getText(key: string) {
+        return map.get(key) ?? null;
+      },
+      async putText(key: string, value: string) {
+        map.set(key, value);
+      },
+      async deleteKey(key: string) {
+        map.delete(key);
+      },
+      async listKeys() {
+        return [...map.keys()];
+      },
+      raw: map,
+    };
+  }
+
+  const DRAFT: RelayLoopRecordDraft = {
+    loopId: 'lpe_1',
+    projectId: 'prj_1',
+    contractRef: 'lpe_1',
+    contractVersion: 1,
+    contractBindingDigest: 'abc123',
+    state: 'draft',
+    iterations: [],
+    lastIteration: null,
+    inFlightIteration: null,
+    blockers: [],
+    knownSpendMicros: null,
+    consecutiveFailures: 0,
+    interruptionReason: null,
+    owner: null,
+    recoveryGeneration: 0,
+    provenance: 'offline',
+    createdAt: NOW,
+    updatedAt: NOW,
+  };
+
+  it('seals a record with a schema version and a checksum, and reads it back', async () => {
+    const store = createRelayLoopStore(backing());
+    const written = await store.write(DRAFT);
+    expect(written.ok).toBe(true);
+    expect(written.record?.schemaVersion).toBe('relay-loop-record.v1');
+    const read = await store.read('lpe_1');
+    expect(read.ok).toBe(true);
+    if (!read.ok) throw new Error('unreachable');
+    expect(read.record.loopId).toBe('lpe_1');
+  });
+
+  it('reports a tampered record as corrupt rather than partially trusting it', async () => {
+    const b = backing();
+    const store = createRelayLoopStore(b);
+    await store.write(DRAFT);
+    const stored = JSON.parse(b.raw.get('loop:lpe_1') as string);
+    stored.state = 'completed'; // a state nobody wrote
+    b.raw.set('loop:lpe_1', JSON.stringify(stored));
+    const read = await store.read('lpe_1');
+    expect(read.ok).toBe(false);
+    if (read.ok) throw new Error('unreachable');
+    expect(read.reason).toBe('corrupt');
+  });
+
+  it('distinguishes a newer schema from damage', () => {
+    const result = readLoopRecord({ schemaVersion: 'relay-loop-record.v9', loopId: 'lpe_1', checksum: 'x' });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('unreachable');
+    expect(result.reason).toBe('unsupported_version');
+  });
+
+  it('reports a missing record as not_found, never as empty', async () => {
+    const store = createRelayLoopStore(backing());
+    const read = await store.read('lpe_missing');
+    expect(read.ok).toBe(false);
+    if (read.ok) throw new Error('unreachable');
+    expect(read.reason).toBe('not_found');
+  });
+
+  it('says out loud when its backing is not durable', () => {
+    expect(createRelayLoopStore(backing()).durability).toBe('volatile-test-only');
+  });
+
+  it('lists only Loop keys', async () => {
+    const b = backing();
+    b.raw.set('mission:m1', '{}');
+    const store = createRelayLoopStore(b);
+    await store.write(DRAFT);
+    expect(await store.list()).toEqual(['lpe_1']);
+  });
+
+  it('detects a contract that moved under a resumed Loop', () => {
+    const built = buildLoopContract(BASE_DRAFT);
+    if (!built.ok) throw new Error('unreachable');
+    const record = sealLoopRecord({
+      ...DRAFT,
+      contractVersion: built.value.version,
+      contractBindingDigest: built.value.bindingDigest,
+    });
+    expect(contractStillBinds(record, built.value)).toBe(true);
+
+    const moved = buildLoopContract({ ...BASE_DRAFT, objective: 'Something else entirely.' });
+    if (!moved.ok) throw new Error('unreachable');
+    expect(contractStillBinds(record, moved.value)).toBe(false);
+  });
+
+  it('keeps an unknown spend Unknown rather than zero', async () => {
+    const store = createRelayLoopStore(backing());
+    const written = await store.write(DRAFT);
+    expect(written.record?.knownSpendMicros).toBeNull();
   });
 });

@@ -289,9 +289,14 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
   // repository. That makes them the ONLY place a reviewer can check the
   // locked terms against — so the one thing they must never do is imply a
   // feature exists because it is written down.
-  const loop = read('docs/relay/LOOP_ENGINE.md');
-  const unchain = read('docs/relay/UNCHAIN.md');
-  const cron = read('docs/relay/CRON_LOOPS.md');
+  // Markdown wraps a sentence across source lines, so every assertion below
+  // runs against the UNWRAPPED text — the same idiom the parity-contract
+  // block above uses. Asserting on a raw line is how a doc test starts
+  // failing for reflow rather than for meaning.
+  const unwrap = (text: string) => text.replace(/\s+/gu, ' ');
+  const loop = unwrap(read('docs/relay/LOOP_ENGINE.md'));
+  const unchain = unwrap(read('docs/relay/UNCHAIN.md'));
+  const cron = unwrap(read('docs/relay/CRON_LOOPS.md'));
 
   it('each one declares its implementation status up front', () => {
     expect(loop).toContain('RUNTIME NOT IMPLEMENTED');
@@ -302,12 +307,23 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
   it('the Unchain record carries the locked founder decisions', () => {
     expect(unchain).toContain('temporary capacity expansion');
     expect(unchain).toContain('Exactly two');
-    expect(unchain).toContain('does not grant new permissions');
+    // The "does NOT do" list, as the document actually words it.
+    for (const refusal of [
+      'grant new permissions',
+      'expand workspace access',
+      'bypass human approvals',
+      'bypass spending controls',
+      'allow unverified completion',
+    ]) {
+      expect(unchain, `UNCHAIN.md must state that Unchain does not ${refusal}`).toContain(refusal);
+    }
     expect(unchain).toContain('server-authoritative');
     expect(unchain).toContain('Rechaining');
     // Capacity, never authority — and skins never grant anything.
     expect(unchain).toContain('never grants capacity');
-    expect(unchain).toContain('not an authority-expansion mechanism');
+    // `modes.ts` is a ceiling, never a way to grant more authority.
+    expect(unchain).toContain('an authority-expansion mechanism');
+    expect(unchain).toContain('Mode policy is a ceiling');
   });
 
   it('the Unchain record refuses to claim documentation is implementation', () => {
