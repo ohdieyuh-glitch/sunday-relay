@@ -44,6 +44,10 @@ const ARCHITECT_RESULT: OpenAiArchitectResult = {
   receipt: {
     provider: 'openai',
     model: 'gpt-test',
+    requestedModel: 'gpt-test',
+    // A fixture that names the SAME model for both would hide a mismatch, so
+    // the returned identity is deliberately the dated variant a provider sends.
+    actualModel: 'gpt-test-2026-01-01',
     requestIdRedacted: '…123456',
     startedAt: AT,
     completedAt: AT,
