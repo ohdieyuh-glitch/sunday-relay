@@ -79,8 +79,16 @@ Relay bridge is configured the same way. Set these in the Railway service:
 
 `nixpacks.toml` in this directory is a **build recipe** (it installs the Node
 and Python toolchain Hermes needs), not deployment configuration, and passes
-the scanner. The Hermes binary is installed into the image at build time;
-`RELAY_HERMES_EXECUTABLE` points the service at it.
+the scanner.
+
+> **The recipe does not install Hermes.** It provisions the toolchain Hermes
+> needs and builds this service — nothing in it vendors or fetches the Hermes
+> binary. Getting Hermes into the execution environment is a separate step that
+> **has not been performed**, and `RELAY_HERMES_EXECUTABLE` must then point the
+> service at it. Until then the service starts, answers `/healthz`, and fails
+> every review at discovery. That is the truthful outcome, not a defect — and
+> claiming the artifact installs Hermes would recreate the exact class of bug
+> this milestone exists to remove.
 
 Nothing here hardcodes a Railway project id, service id, private domain, the
 public bridge URL, a provider credential or the service token.

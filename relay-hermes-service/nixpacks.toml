@@ -1,9 +1,21 @@
 # Hermes Reviewer service build.
 #
-# The Hermes binary is NOT vendored here. It is installed into the image at
-# build time, and RELAY_HERMES_EXECUTABLE points the service at it. Nothing in
-# this file may contain a credential, a Railway project or service id, a
-# private domain, or the public bridge URL — the boundary scanner rejects
+# WHAT THIS RECIPE DOES: install npm dependencies, build the service bundle,
+# start it. That is all.
+#
+# WHAT IT DOES NOT DO: install Hermes. The setup phase provisions the Node and
+# Python toolchain Hermes NEEDS, but the Hermes binary itself is neither
+# vendored here nor fetched by any command below. Putting Hermes into the
+# execution environment is a SEPARATE, DELIBERATE step that has NOT been
+# performed, and RELAY_HERMES_EXECUTABLE must then point the service at it.
+# Until that step happens the service starts and answers /healthz, and every
+# review fails at discovery — which is the truthful outcome, not a bug.
+#
+# Saying otherwise here would recreate the exact defect this milestone exists
+# to remove: a machine-readable artifact implying an installation nobody did.
+#
+# Nothing in this file may contain a credential, a Railway project or service
+# id, a private domain, or the public bridge URL — the boundary scanner rejects
 # deployment config carrying any of those, and they would be wrong here anyway.
 
 [phases.setup]
