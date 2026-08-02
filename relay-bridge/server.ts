@@ -27,6 +27,9 @@ import {
 import {
   bearerMatches, handleReviewerRoute, isReviewerRoute, type ReviewerRunPort,
 } from './reviewer-routes';
+import {
+  handleHostedCodingRoute, isHostedCodingRoute, type HostedCodingRunPort,
+} from './hosted-coding-agent/hosted-routes';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute,
@@ -110,6 +113,13 @@ export function createBridgeServer(
    * the routes then answer `reviewer_not_ready` rather than inventing a run.
    */
   reviewerRuns: ReviewerRunPort | null = null,
+  /**
+   * The hosted Coding Agent run engine. Absent on a bridge that only reports
+   * readiness — the lifecycle routes then answer `hosted_coding_not_ready`
+   * rather than inventing a run. Readiness itself always answers, because it
+   * is free and offline.
+   */
+  hostedCodingRuns: HostedCodingRunPort | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -248,6 +258,40 @@ export function createBridgeServer(
           }, reviewerRuns);
           if (reviewerResult !== null) {
             send(res, reviewerResult.status, reviewerResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * THE HOSTED CODING AGENT FAMILY.
+         *
+         * The same boundary as the reviewer family, for the same reason:
+         * readiness and run state are readable by a paired browser session,
+         * while starting, stopping and retrying either spend a provider
+         * credential or change a run in flight, and belong to an operator.
+         */
+        if (isHostedCodingRoute(path.replace('/relay-api', ''))) {
+          const hostedResult = await handleHostedCodingRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string'
+              ? req.headers.authorization : undefined,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            env: process.env,
+            now: new Date().toISOString(),
+            authorize: () => authorizeReviewerCall({
+              method,
+              path: path.replace('/relay-api', ''),
+              authorization: typeof req.headers.authorization === 'string'
+                ? req.headers.authorization : undefined,
+              origin,
+              env: process.env,
+              now: Date.now(),
+              store: browserSessions,
+            }),
+          }, hostedCodingRuns);
+          if (hostedResult !== null) {
+            send(res, hostedResult.status, hostedResult.body, cors);
             return;
           }
         }

@@ -43,3 +43,22 @@ export {
   HOSTED_RUN_ADAPTER_ID, loadHostedQuery, runHostedCodingAgent,
 } from './hosted-runner';
 export type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from './hosted-runner';
+
+export {
+  ACTIVE_HOSTED_STATES, HOSTED_RUN_SCHEMA, HOSTED_RUN_STATES, NO_EVIDENCE,
+  isTerminal, newHostedRun, sanitizeHostedRun, settleHostedRun,
+} from './hosted-run-record';
+export type {
+  HostedRunEvidence, HostedRunRecord, HostedRunState, SanitizedHostedRun,
+} from './hosted-run-record';
+
+export {
+  createHostedRunStore, decideHostedStart, recoverHostedRun,
+} from './hosted-run-store';
+export type { HostedRunStore, StartDecision } from './hosted-run-store';
+
+export {
+  HOSTED_PREFIX, browserMayReadHostedRoute, handleHostedCodingRoute,
+  isHostedCodingRoute,
+} from './hosted-routes';
+export type { HostedCodingRunPort, HostedRouteRequest } from './hosted-routes';
