@@ -283,3 +283,53 @@ describe('development contracts are accounted for', () => {
     expect(existsSync(join(ROOT, '.env'))).toBe(false);
   });
 });
+
+describe('the Loop Engine documents state what exists, truthfully', () => {
+  // These three docs record decisions that arrived from outside the
+  // repository. That makes them the ONLY place a reviewer can check the
+  // locked terms against — so the one thing they must never do is imply a
+  // feature exists because it is written down.
+  const loop = read('docs/relay/LOOP_ENGINE.md');
+  const unchain = read('docs/relay/UNCHAIN.md');
+  const cron = read('docs/relay/CRON_LOOPS.md');
+
+  it('each one declares its implementation status up front', () => {
+    expect(loop).toContain('RUNTIME NOT IMPLEMENTED');
+    expect(unchain).toContain('SPECIFIED, NOT IMPLEMENTED');
+    expect(cron).toContain('SCHEDULER NOT IMPLEMENTED');
+  });
+
+  it('the Unchain record carries the locked founder decisions', () => {
+    expect(unchain).toContain('temporary capacity expansion');
+    expect(unchain).toContain('Exactly two');
+    expect(unchain).toContain('does not grant new permissions');
+    expect(unchain).toContain('server-authoritative');
+    expect(unchain).toContain('Rechaining');
+    // Capacity, never authority — and skins never grant anything.
+    expect(unchain).toContain('never grants capacity');
+    expect(unchain).toContain('not an authority-expansion mechanism');
+  });
+
+  it('the Unchain record refuses to claim documentation is implementation', () => {
+    expect(unchain).toContain('Documentation is not implementation');
+    expect(unchain).toContain('Open founder decisions');
+  });
+
+  it('the Cron record fixes the approved beta scheduling decision', () => {
+    expect(cron).toContain('journal and snapshots remain the source of truth');
+    expect(cron).toContain('in-bridge scheduler');
+    expect(cron).toContain('OccurrenceClaimPort');
+    expect(cron).toContain('not durable schedule truth');
+    expect(cron).toContain('Distributed multi-worker scheduling is not claimed');
+    expect(cron).toContain('IANA timezone');
+    expect(cron).toContain('fails closed');
+  });
+
+  it('the Loop Engine record states that parsing is not execution', () => {
+    expect(loop).toContain('Parsing is not execution');
+    expect(loop).toContain('Completion is earned, not claimed');
+    expect(loop).toContain('Requested is not actual');
+    expect(loop).toContain('Maximum utilization is **not** claimed');
+    expect(loop).toContain('No Loop has ever run');
+  });
+});
