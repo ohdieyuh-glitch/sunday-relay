@@ -49,6 +49,20 @@ export interface LocalTransportConfig {
   readonly spawnImpl?: Parameters<typeof runHermesReviewer>[0]['spawnImpl'];
 }
 
+/**
+ * What makes two creation requests "the same request" for idempotency.
+ * Deliberately includes the prompt and the effective limits: a key replayed
+ * with different evidence, or a different budget, is a different review.
+ */
+function requestFingerprint(input: RemoteHermesReviewInput): string {
+  return JSON.stringify([
+    input.runId,
+    input.prompt,
+    input.limits.timeoutMs, input.limits.maxOutputBytes,
+    input.limits.maxTurns, input.limits.maxPromptBytes,
+  ]);
+}
+
 interface LocalRun {
   status: RemoteHermesReviewState['status'];
   outcome: HermesRunOutcome | null;
@@ -63,7 +77,7 @@ export function createLocalHermesTransport(
   const env = config.env ?? process.env;
   // Volatile by construction. A restart loses these, and `getReview` says so.
   const runs = new Map<string, LocalRun>();
-  const byIdempotencyKey = new Map<string, string>();
+  const byIdempotencyKey = new Map<string, { runId: string; fingerprint: string }>();
 
   const probeFor = () => {
     const profile = createIsolatedProfile();
@@ -117,17 +131,44 @@ export function createLocalHermesTransport(
     },
 
     async startReview(input: RemoteHermesReviewInput): Promise<RemoteHermesReviewStart> {
+      const fingerprint = requestFingerprint(input);
       const existing = byIdempotencyKey.get(input.idempotencyKey);
       if (existing !== undefined) {
-        // A repeated key returns the run that already exists rather than
-        // starting a second one.
-        return { accepted: true, runId: existing, duplicate: true, failureKind: null, safeMessage: null };
+        // A KEY IS A PROMISE ABOUT ONE REQUEST.
+        // Returning the earlier run for a DIFFERENT request would answer a
+        // question nobody asked, and hide that two reviews were conflated.
+        if (existing.fingerprint !== fingerprint) {
+          return {
+            accepted: false, runId: existing.runId, duplicate: false,
+            failureKind: 'review_refused',
+            safeMessage:
+              'That idempotency key was already used for a materially different review request.',
+          };
+        }
+        // A repeated key with the same request returns the run that already
+        // exists rather than starting a second one.
+        return { accepted: true, runId: existing.runId, duplicate: true, failureKind: null, safeMessage: null };
       }
+
       const runId = input.runId.trim() === '' ? randomUUID() : input.runId;
+      // A RUN RECORD IS NEVER REPLACED.
+      //
+      // `runs.set(runId, …)` used to overwrite silently, so a second request
+      // reusing a run id destroyed the first record — and with it the only
+      // reference to that run's AbortController. `cancelAll()` could then
+      // never reach it, so a shutdown left its Hermes process group alive:
+      // the exact orphan this service promises cannot happen.
+      if (runs.has(runId)) {
+        return {
+          accepted: false, runId, duplicate: false,
+          failureKind: 'review_refused',
+          safeMessage: 'That run id is already in use on this service, and a run record is never replaced.',
+        };
+      }
       const controller = new AbortController();
       const run: LocalRun = { status: 'running', outcome: null, controller, cancelRequested: false };
       runs.set(runId, run);
-      byIdempotencyKey.set(input.idempotencyKey, runId);
+      byIdempotencyKey.set(input.idempotencyKey, { runId, fingerprint });
 
       // A fresh isolated profile per run — never a persistent personal one.
       void runHermesReviewer({

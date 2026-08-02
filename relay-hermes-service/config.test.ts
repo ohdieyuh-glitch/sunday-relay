@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { describeStartup, loadServiceConfig, DEFAULT_HOST } from './config';
 import {
   handleServiceRoute, lifecycleState, setLifecycleState, parseReviewBody, bearerMatches,
+  SERVICE_LIMIT_CEILINGS, SERVICE_MAX_TURNS,
 } from './service';
 
 /**
@@ -290,5 +291,103 @@ describe('server-only code cannot enter the browser graph', () => {
     );
     expect(factory).toContain("await import('./local-transport')");
     expect(/^import .*local-transport/m.test(factory), 'local transport must not be statically imported').toBe(false);
+  });
+});
+
+/**
+ * SERVER-AUTHORITATIVE RUN CEILINGS.
+ *
+ * The service owns the provider credential and pays for every run, so it is
+ * the trust boundary — not the bridge. Limits used to be accepted with only a
+ * `> 0` check and then merged OVER the runner's defaults, so an authenticated
+ * caller could ask for a 24-hour wall clock and a 1 GB output cap and get it.
+ */
+describe('the service clamps run limits to its own ceilings', () => {
+  const body = (limits: Record<string, unknown>) => ({
+    runId: 'r1', idempotencyKey: 'k1', prompt: 'review', limits,
+  });
+  const sane = {
+    timeoutMs: 1_000, maxOutputBytes: 1_000, maxTurns: 1, maxPromptBytes: 1_000,
+  };
+
+  it('clamps a 24-hour timeout to the service ceiling', () => {
+    const r = parseReviewBody(body({ ...sane, timeoutMs: 86_400_000 }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('should parse');
+    expect(r.value.limits.timeoutMs).toBe(SERVICE_LIMIT_CEILINGS.timeoutMs);
+    expect(r.value.limits.timeoutMs).toBeLessThan(86_400_000);
+  });
+
+  it('clamps a 1 GB output request to the service ceiling', () => {
+    const r = parseReviewBody(body({ ...sane, maxOutputBytes: 1_073_741_824 }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('should parse');
+    expect(r.value.limits.maxOutputBytes).toBe(SERVICE_LIMIT_CEILINGS.maxOutputBytes);
+  });
+
+  it('clamps an oversized prompt ceiling', () => {
+    const r = parseReviewBody(body({ ...sane, maxPromptBytes: 50_000_000 }));
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('should parse');
+    expect(r.value.limits.maxPromptBytes).toBe(SERVICE_LIMIT_CEILINGS.maxPromptBytes);
+  });
+
+  it('leaves a modest request exactly as asked', () => {
+    const r = parseReviewBody(body(sane));
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('should parse');
+    expect(r.value.limits).toEqual(sane);
+  });
+
+  it('rejects zero, negative, fractional, NaN and overflowing values', () => {
+    for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 1e308 * 10, Number.MAX_SAFE_INTEGER + 2]) {
+      const r = parseReviewBody(body({ ...sane, timeoutMs: bad }));
+      expect(r.ok, `timeoutMs ${String(bad)} must be rejected`).toBe(false);
+    }
+  });
+
+  it('rejects a numeric string rather than coercing it into a bound', () => {
+    expect(parseReviewBody(body({ ...sane, timeoutMs: '1000' })).ok).toBe(false);
+  });
+
+  /**
+   * The adapter runs Hermes with `-z/--oneshot`: one prompt, one final
+   * response. There is no turn-limit flag, and the isolated profile pins
+   * `agent.max_turns: 1`. Accepting 50 and silently running one turn would be
+   * a control that exists only in the request.
+   */
+  it('refuses any turn count other than the one-shot contract', () => {
+    for (const turns of [2, 5, 50, 10_000]) {
+      const r = parseReviewBody(body({ ...sane, maxTurns: turns }));
+      expect(r.ok, `maxTurns ${turns} must be refused, not silently ignored`).toBe(false);
+      if (!r.ok) expect(r.message).toContain('one-shot');
+    }
+    expect(parseReviewBody(body({ ...sane, maxTurns: SERVICE_MAX_TURNS })).ok).toBe(true);
+  });
+
+  it('reports the EFFECTIVE limits back, so a caller never assumes it got what it asked for', async () => {
+    setLifecycleState('ready');
+    const seen: { limits?: unknown } = {};
+    const engine = {
+      mode: 'local' as const,
+      readiness: async () => { throw new Error('unused'); },
+      testConnection: async () => { throw new Error('unused'); },
+      startReview: async (input: { limits: unknown }) => {
+        seen.limits = input.limits;
+        return { accepted: true, runId: 'r1', duplicate: false, failureKind: null, safeMessage: null };
+      },
+      getReview: async () => { throw new Error('unused'); },
+      cancelReview: async () => { throw new Error('unused'); },
+    };
+    const res = await handleServiceRoute({
+      method: 'POST', path: '/v1/reviews', authorization: 'Bearer t',
+      body: body({ ...sane, timeoutMs: 86_400_000 }),
+      env: { RELAY_HERMES_SERVICE_TOKEN: 't' } as NodeJS.ProcessEnv,
+    }, engine as never);
+    expect(res.status).toBe(200);
+    const returned = (res.body as { limits: { timeoutMs: number } }).limits;
+    expect(returned.timeoutMs).toBe(SERVICE_LIMIT_CEILINGS.timeoutMs);
+    // And the RUNNER received the clamped value, not the requested one.
+    expect((seen.limits as { timeoutMs: number }).timeoutMs).toBe(SERVICE_LIMIT_CEILINGS.timeoutMs);
   });
 });

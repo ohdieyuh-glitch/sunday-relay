@@ -83,6 +83,34 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 const REVIEW_FIELDS = new Set(['runId', 'idempotencyKey', 'prompt', 'limits']);
 const LIMIT_FIELDS = new Set(['timeoutMs', 'maxOutputBytes', 'maxTurns', 'maxPromptBytes']);
 
+/**
+ * SERVER-OWNED CEILINGS. THE CLIENT MAY ONLY ASK FOR LESS.
+ *
+ * The limits used to be taken from the request with nothing but a `> 0`
+ * check, and the runner merged them OVER its defaults — so an authenticated
+ * caller could ask for a 24-hour wall clock and a 1 GB output cap on a box
+ * that owns the provider credential and pays for every run. "The bridge is
+ * authenticated" is not a reason to trust a number: the service is the trust
+ * boundary, and a bounded run is the product.
+ *
+ * Effective limit = min(requested, ceiling). Asking for more is not an error,
+ * it is simply clamped, and the effective values are returned so a caller can
+ * see exactly what it got.
+ */
+export const SERVICE_LIMIT_CEILINGS = Object.freeze({
+  timeoutMs: 600_000,          // 10 minutes of wall clock, never a day
+  maxOutputBytes: 1_048_576,   // 1 MiB of captured stdout
+  maxPromptBytes: 262_144,     // 256 KiB, under the 512 KiB body cap
+});
+
+/**
+ * The adapter runs Hermes with `-z/--oneshot`: a single prompt, a single final
+ * response. There is no turn-limit flag, and the isolated profile pins
+ * `agent.max_turns: 1`. Accepting any other number and silently running one
+ * turn would be a fake control, so the contract states the real one.
+ */
+export const SERVICE_MAX_TURNS = 1;
+
 export type ReviewBody = {
   runId: string; idempotencyKey: string; prompt: string;
   limits: { timeoutMs: number; maxOutputBytes: number; maxTurns: number; maxPromptBytes: number };
@@ -112,18 +140,44 @@ export function parseReviewBody(raw: unknown): { ok: true; value: ReviewBody } |
   for (const key of Object.keys(raw.limits)) {
     if (!LIMIT_FIELDS.has(key)) return { ok: false, message: 'limits contained an unsupported field.' };
   }
+  // A limit must be a positive, finite, safe INTEGER. A fraction, an
+  // overflowing float and a numeric string are all rejected rather than
+  // coerced into something that looks like a bound.
   const num = (k: string): number | null => {
     const v = (raw.limits as Record<string, unknown>)[k];
-    return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null;
+    if (typeof v !== 'number' || !Number.isFinite(v)) return null;
+    if (!Number.isSafeInteger(v) || v <= 0) return null;
+    return v;
   };
   const timeoutMs = num('timeoutMs');
   const maxOutputBytes = num('maxOutputBytes');
   const maxTurns = num('maxTurns');
   const maxPromptBytes = num('maxPromptBytes');
   if (timeoutMs === null || maxOutputBytes === null || maxTurns === null || maxPromptBytes === null) {
-    return { ok: false, message: 'limits must be positive numbers.' };
+    return { ok: false, message: 'limits must be positive safe integers.' };
   }
-  return { ok: true, value: { runId, idempotencyKey, prompt, limits: { timeoutMs, maxOutputBytes, maxTurns, maxPromptBytes } } };
+  // The adapter is one-shot. Any other turn count is refused rather than
+  // accepted and quietly ignored.
+  if (maxTurns !== SERVICE_MAX_TURNS) {
+    return {
+      ok: false,
+      message: `maxTurns must be ${SERVICE_MAX_TURNS}; the Hermes Reviewer adapter is one-shot.`,
+    };
+  }
+  // Clamped, never trusted. Asking for more is allowed; getting more is not.
+  const clamp = (requested: number, ceiling: number) => Math.min(requested, ceiling);
+  return {
+    ok: true,
+    value: {
+      runId, idempotencyKey, prompt,
+      limits: {
+        timeoutMs: clamp(timeoutMs, SERVICE_LIMIT_CEILINGS.timeoutMs),
+        maxOutputBytes: clamp(maxOutputBytes, SERVICE_LIMIT_CEILINGS.maxOutputBytes),
+        maxTurns: SERVICE_MAX_TURNS,
+        maxPromptBytes: clamp(maxPromptBytes, SERVICE_LIMIT_CEILINGS.maxPromptBytes),
+      },
+    },
+  };
 }
 
 /* -------------------------------------------------------------- routing --- */
@@ -204,8 +258,14 @@ export async function handleServiceRoute(
     if (!parsed.ok) return err(422, 'validation_failed', parsed.message);
     const started = await engine.startReview(parsed.value);
     return started.accepted
-      ? ok({ accepted: true, runId: started.runId, duplicate: started.duplicate })
-      : err(409, started.failureKind ?? 'malformed_response', started.safeMessage ?? 'The review was refused.');
+      // The EFFECTIVE limits are returned, so a caller can see what it
+      // actually got rather than assuming it got what it asked for.
+      ? ok({
+        accepted: true, runId: started.runId, duplicate: started.duplicate,
+        limits: parsed.value.limits,
+      })
+      // A refusal is a decision, not an outage, and it says so.
+      : err(409, started.failureKind ?? 'review_refused', started.safeMessage ?? 'The review was refused.');
   }
 
   const stateMatch = /^\/v1\/reviews\/([^/]+)$/.exec(path);

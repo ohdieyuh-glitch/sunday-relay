@@ -82,8 +82,11 @@ afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+// 30s of polling inside a 60s case budget. The helper used to give up after
+// 6s while its callers allowed 60, so a loaded machine failed on the helper's
+// clock rather than on behaviour. No assertion changes — only the patience.
 const waitForSettled = async (runId: string, client = bridgeClient()) => {
-  for (let i = 0; i < 60; i += 1) {
+  for (let i = 0; i < 300; i += 1) {
     const state = await client.getReview(runId);
     if (state.status !== 'running') return state;
     await new Promise((r) => { setTimeout(r, 100); });
@@ -157,16 +160,39 @@ describe('bridge -> service -> fake Hermes, over real HTTP', () => {
 
   it('does not start a second paid run for a repeated idempotency key', async () => {
     const client = bridgeClient();
-    const first = await client.startReview({
+    const request = {
       runId: 'e2e-dup-a', idempotencyKey: 'shared-key',
       prompt: 'first', limits: { timeoutMs: 20_000, maxOutputBytes: 4096, maxTurns: 1, maxPromptBytes: 4096 },
-    });
-    const second = await client.startReview({
-      runId: 'e2e-dup-b', idempotencyKey: 'shared-key',
-      prompt: 'second', limits: { timeoutMs: 20_000, maxOutputBytes: 4096, maxTurns: 1, maxPromptBytes: 4096 },
-    });
+    };
+    const first = await client.startReview(request);
+    // The SAME request replayed — a retry, not a new review.
+    const second = await client.startReview(request);
     expect(second.duplicate).toBe(true);
     expect(second.runId).toBe(first.runId);
+  }, 30_000);
+
+  /**
+   * This case used to replay the key with a different run id AND a different
+   * prompt and expect a silent `duplicate: true` — so a key reused for a
+   * genuinely different review returned some OTHER run's identity, and the
+   * caller could never tell the two reviews had been conflated. A key is a
+   * promise about one request; a different request under the same key is a
+   * conflict, and it is now refused as a decision rather than an outage.
+   */
+  it('refuses an idempotency key replayed for a materially different review', async () => {
+    const client = bridgeClient();
+    const base = {
+      idempotencyKey: 'conflict-key',
+      limits: { timeoutMs: 20_000, maxOutputBytes: 4096, maxTurns: 1, maxPromptBytes: 4096 },
+    };
+    const first = await client.startReview({ ...base, runId: 'e2e-conf-a', prompt: 'first' });
+    expect(first.accepted).toBe(true);
+
+    const conflicting = await client.startReview({ ...base, runId: 'e2e-conf-b', prompt: 'DIFFERENT' });
+    expect(conflicting.accepted).toBe(false);
+    expect(conflicting.failureKind).toBe('review_refused');
+    // Still no second paid run, which was the point of the original case.
+    expect((await client.getReview('e2e-conf-b')).status).toBe('failed');
   }, 30_000);
 
   it('rejects an unknown field rather than silently ignoring it', async () => {
@@ -325,5 +351,93 @@ describe('the SIGTERM path cancels live runs and leaves nothing behind', () => {
     // And the process group is really gone.
     await settle(() => !processTableHas(probe), 100);
     expect(processTableHas(probe), 'a cancelled review left an orphan Hermes process').toBe(false);
+  }, 60_000);
+});
+
+/**
+ * RUN IDENTITY SAFETY.
+ *
+ * `runs.set(runId, …)` used to overwrite silently. A second request reusing a
+ * run id destroyed the first record and, with it, the only reference to that
+ * run's AbortController — so `cancelAll()` could never reach it and a
+ * shutdown left its Hermes process group alive. That is precisely the orphan
+ * this service promises cannot happen, produced by a caller sending a
+ * duplicate id.
+ */
+describe('a run record is never replaced, and a collision orphans nothing', () => {
+  let dir2: string;
+  const probe2 = `relay-collision-probe-${process.pid}`;
+
+  beforeAll(() => { dir2 = mkdtempSync(join(tmpdir(), 'relay-hermes-collision-')); });
+  afterAll(() => { rmSync(dir2, { recursive: true, force: true }); });
+
+  const tableHas = (token: string): boolean =>
+    execFileSync('ps', ['-eo', 'args'], { encoding: 'utf8' }).includes(token);
+
+  const wait = async (predicate: () => boolean, tries = 100): Promise<void> => {
+    for (let i = 0; i < tries && !predicate(); i += 1) {
+      await new Promise((r) => { setTimeout(r, 100); });
+    }
+  };
+
+  const limits = { timeoutMs: 30_000, maxOutputBytes: 4096, maxTurns: 1, maxPromptBytes: 4096 };
+
+  it('refuses a duplicate runId instead of overwriting the live run', async () => {
+    const executable = writeFakeHermes(join(dir2, probe2), 'hang');
+    const engine = createLocalHermesTransport({
+      executable, provider: providerConfig(), apiKey: 'sk-ant-FAKE-NEVER-USED',
+    });
+
+    const first = await engine.startReview({
+      runId: 'collide-1', idempotencyKey: 'key-A', prompt: 'first', limits,
+    });
+    expect(first.accepted).toBe(true);
+    await wait(() => tableHas(probe2), 50);
+    expect(tableHas(probe2)).toBe(true);
+
+    // Same runId, DIFFERENT idempotency key — the collision.
+    const second = await engine.startReview({
+      runId: 'collide-1', idempotencyKey: 'key-B', prompt: 'second', limits,
+    });
+    expect(second.accepted).toBe(false);
+    // A decision, not an outage.
+    expect(second.failureKind).toBe('review_refused');
+
+    // The FIRST run is untouched and still live.
+    expect((await engine.getReview('collide-1')).status).toBe('running');
+
+    // And shutdown still reaches it — the orphan the collision used to cause.
+    await engine.cancelAll?.();
+    let state = await engine.getReview('collide-1');
+    for (let i = 0; i < 60 && state.status === 'running'; i += 1) {
+      await new Promise((r) => { setTimeout(r, 100); });
+      state = await engine.getReview('collide-1');
+    }
+    expect(state.status).toBe('cancelled');
+    expect(state.reviewText).toBeNull();
+    await wait(() => !tableHas(probe2), 100);
+    expect(tableHas(probe2), 'the collision left an orphan Hermes process').toBe(false);
+  }, 90_000);
+
+  it('returns the same run for a replayed key, and refuses a key reused for a different request', async () => {
+    const executable = writeFakeHermes(join(dir2, 'hermes-idem-clean'), 'clean');
+    const engine = createLocalHermesTransport({
+      executable, provider: providerConfig(), apiKey: 'sk-ant-FAKE-NEVER-USED',
+    });
+    const req = { runId: 'idem-1', idempotencyKey: 'key-1', prompt: 'same', limits };
+
+    const a = await engine.startReview(req);
+    const b = await engine.startReview(req);
+    expect(a.accepted).toBe(true);
+    expect(b.accepted).toBe(true);
+    expect(b.duplicate).toBe(true);
+    expect(b.runId).toBe(a.runId);
+
+    // Same key, materially different request — a conflict, not a duplicate.
+    const c = await engine.startReview({ ...req, runId: 'idem-2', prompt: 'DIFFERENT evidence' });
+    expect(c.accepted).toBe(false);
+    expect(c.failureKind).toBe('review_refused');
+    // The original run was not replaced by the conflicting request.
+    expect((await engine.getReview('idem-1')).runId).toBe('idem-1');
   }, 60_000);
 });
