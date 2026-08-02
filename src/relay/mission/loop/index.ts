@@ -55,6 +55,14 @@ export {
 } from './loop-command-types';
 
 export {
+  projectLoopCommandPreview,
+  renderLoopPreviewLines,
+  type RelayLoopCommandPreview,
+  type RelayLoopPreviewInput,
+  type RelayLoopPreviewRow,
+} from './loop-preview';
+
+export {
   ALL_LOOP_FEATURES_DISABLED,
   RELAY_LOOP_AVAILABILITY_STATES,
   RELAY_LOOP_FEATURES,

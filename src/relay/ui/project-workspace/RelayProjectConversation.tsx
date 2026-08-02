@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { routeRelayInput } from '../../mission';
 import type { ProjectMessage } from './contracts';
 
 /**
@@ -23,11 +24,19 @@ const QUICK_ACTIONS = [
 export function RelayProjectConversation({
   messages,
   onSendProjectMessage,
+  onSendSlashCommand,
   onApproveDecision,
   onRejectDecision,
 }: {
   messages: ProjectMessage[];
   onSendProjectMessage: (text: string) => void;
+  /**
+   * Slash input, routed to the CANONICAL grammar rather than the conversation.
+   * Optional so an embedding surface that has no Loop composer yet keeps
+   * today's behaviour instead of silently swallowing `/loop …` — a command
+   * that quietly became a chat message would be the worst of both.
+   */
+  onSendSlashCommand?: (text: string) => void;
   onApproveDecision: (decisionId: string) => void;
   onRejectDecision: (decisionId: string) => void;
 }) {
@@ -36,7 +45,15 @@ export function RelayProjectConversation({
   const send = () => {
     const text = input.trim();
     if (!text) return;
-    onSendProjectMessage(text);
+    // ONE seam between the two interpreters. Leading slash goes to the Loop
+    // grammar; everything else stays natural language, which the existing
+    // deterministic mission command interpreter owns. Loop-first does not
+    // mean chat-removed.
+    if (routeRelayInput(text) === 'slash' && onSendSlashCommand !== undefined) {
+      onSendSlashCommand(text);
+    } else {
+      onSendProjectMessage(text);
+    }
     setInput('');
   };
 
