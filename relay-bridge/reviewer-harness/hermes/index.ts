@@ -45,7 +45,8 @@ export type {
   RemoteHermesReviewState,
 } from './hermes-transport';
 export {
-  HERMES_PROVIDERS, describeProvider, loadHermesProviderConfig, providerVerificationLimit,
+  ALL_PROVIDER_ENV_NAMES, HERMES_PROVIDERS, PROVIDER_BASE_URL_ENV, PROVIDER_CREDENTIAL_ENV,
+  describeProvider, loadHermesProviderConfig, providerEnvNames, providerVerificationLimit,
 } from './hermes-provider';
 export type { HermesProviderConfig, HermesProviderId, SafeProviderIdentity } from './hermes-provider';
 export { createRemoteHermesTransport } from './remote-transport';

@@ -19,6 +19,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { providerEnvNames, type HermesProviderId } from './hermes-provider';
 
 /**
  * Every built-in toolset this Hermes exposes. The Reviewer gets NONE of them.
@@ -118,11 +119,20 @@ export function createIsolatedProfile(root?: string): IsolatedProfile {
  */
 export function isolatedChildEnv(input: {
   profile: IsolatedProfile;
-  /** The provider credential, read from the bridge process only. */
+  /**
+   * WHICH PROVIDER THIS RUN IS FOR. The variable names are derived from it and
+   * cannot be supplied by the caller.
+   *
+   * They used to be caller-supplied, and the runner's only call site passed
+   * the xAI names unconditionally — so an Anthropic-configured Reviewer sent
+   * its Anthropic secret to the child as `XAI_API_KEY`, with no
+   * `ANTHROPIC_API_KEY` present. The run could not authenticate, and a secret
+   * for one vendor travelled under another vendor's name.
+   */
+  provider: HermesProviderId;
+  /** The provider credential, read from the owning process only. */
   apiKey: string | null;
-  apiKeyEnvVar: string;
   baseUrl: string | null;
-  baseUrlEnvVar: string;
   path?: string;
 }): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
@@ -135,8 +145,9 @@ export function isolatedChildEnv(input: {
     NO_COLOR: '1',
     TERM: 'dumb',
   };
-  if (input.apiKey !== null && input.apiKey !== '') env[input.apiKeyEnvVar] = input.apiKey;
-  if (input.baseUrl !== null && input.baseUrl !== '') env[input.baseUrlEnvVar] = input.baseUrl;
+  const names = providerEnvNames(input.provider);
+  if (input.apiKey !== null && input.apiKey !== '') env[names.credential] = input.apiKey;
+  if (input.baseUrl !== null && input.baseUrl !== '') env[names.baseUrl] = input.baseUrl;
   return env;
 }
 

@@ -32,6 +32,38 @@ export const PROVIDER_CREDENTIAL_ENV: Readonly<Record<HermesProviderId, string>>
   });
 
 /**
+ * The base-URL variable each provider reads.
+ *
+ * THIS MAPPING IS THE ONLY AUTHORITY. It exists because the runner used to
+ * hardcode the xAI names at its single call site, so an Anthropic-configured
+ * Reviewer handed its Anthropic secret to the child as `XAI_API_KEY` and no
+ * `ANTHROPIC_API_KEY` at all. That is two faults at once: the run cannot
+ * authenticate, and a secret for one vendor is presented under a variable
+ * named for another.
+ *
+ * A caller may not name the variable. It is derived from the provider, here,
+ * so the two can never drift apart again.
+ */
+export const PROVIDER_BASE_URL_ENV: Readonly<Record<HermesProviderId, string>> =
+  Object.freeze({
+    anthropic: 'ANTHROPIC_BASE_URL',
+    xai: 'XAI_BASE_URL',
+  });
+
+/** Every provider-scoped variable name, for allowlist and leak assertions. */
+export const ALL_PROVIDER_ENV_NAMES: readonly string[] = Object.freeze([
+  ...Object.values(PROVIDER_CREDENTIAL_ENV),
+  ...Object.values(PROVIDER_BASE_URL_ENV),
+]);
+
+/** The variables a run for THIS provider may set, and no others. */
+export function providerEnvNames(provider: HermesProviderId): {
+  readonly credential: string; readonly baseUrl: string;
+} {
+  return { credential: PROVIDER_CREDENTIAL_ENV[provider], baseUrl: PROVIDER_BASE_URL_ENV[provider] };
+}
+
+/**
  * Whether a provider offers an authenticated, zero-inference way to confirm
  * that THIS credential may use THIS model.
  *

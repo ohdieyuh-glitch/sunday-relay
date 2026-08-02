@@ -20,7 +20,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { safeText } from '../../redact';
 import { createIsolatedProfile, isolatedChildEnv, type IsolatedProfile } from './isolated-profile';
-import { XAI_API_KEY_ENV, XAI_BASE_URL_ENV } from './xai-models';
+import type { HermesProviderId } from './hermes-provider';
 
 export interface HermesRunLimits {
   readonly timeoutMs: number;
@@ -123,7 +123,7 @@ export function parseUsageFile(path: string): HermesUsage {
 export function buildHermesArgs(input: {
   prompt: string;
   model: string;
-  provider: string;
+  provider: HermesProviderId;
   usageFilePath: string;
 }): string[] {
   return [
@@ -141,7 +141,7 @@ export interface HermesRunInput {
   readonly executable: string;
   readonly prompt: string;
   readonly model: string;
-  readonly provider: string;
+  readonly provider: HermesProviderId;
   readonly apiKey: string | null;
   readonly baseUrl: string | null;
   readonly limits?: HermesRunLimits;
@@ -190,12 +190,15 @@ export async function runHermesReviewer(input: HermesRunInput): Promise<HermesRu
     provider: input.provider,
     usageFilePath: profile.usageFilePath,
   });
+  // The provider decides which variables carry the credential and base URL.
+  // This call site used to name the xAI variables unconditionally, which sent
+  // an Anthropic secret to the child as XAI_API_KEY and left the run with no
+  // credential its provider would read.
   const env = isolatedChildEnv({
     profile,
+    provider: input.provider,
     apiKey: input.apiKey,
-    apiKeyEnvVar: XAI_API_KEY_ENV,
     baseUrl: input.baseUrl,
-    baseUrlEnvVar: XAI_BASE_URL_ENV,
   });
 
   const startedAt = now();
