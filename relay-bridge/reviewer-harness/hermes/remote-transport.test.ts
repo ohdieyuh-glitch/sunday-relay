@@ -320,3 +320,166 @@ describe('failures stay categorised, and the categories stay honest', () => {
     expect(r.failureKind).toBe('malformed_response');
   });
 });
+
+/**
+ * A REFUSAL IS A DECISION; A BYTE CEILING IS A CEILING.
+ *
+ * Two faults this covers. Every error status used to flatten to
+ * `service_unreachable`, so a service that authenticated the caller,
+ * understood the request and DECLINED it read as a network outage. And the
+ * response cap was applied to `raw.length` after `res.text()` had already
+ * buffered everything — it bounded parsing, not memory, and counted UTF-16
+ * units, so a 256K-unit cap admitted roughly a megabyte of UTF-8.
+ */
+describe('refusal, outage and oversize stay three different answers', () => {
+  const withBody = (status: number, body: unknown, extra: Record<string, unknown> = {}): FetchLike =>
+    () => Promise.resolve({
+      ok: status >= 200 && status < 300,
+      status,
+      text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+      ...extra,
+    } as Awaited<ReturnType<FetchLike>>);
+
+  const startArgs = {
+    runId: 'r1', idempotencyKey: 'k1', prompt: 'review',
+    limits: { timeoutMs: 1000, maxOutputBytes: 1000, maxTurns: 1, maxPromptBytes: 1000 },
+  };
+
+  it('reports a deliberate refusal as review_refused, not as an unreachable service', async () => {
+    const r = await transport(withBody(409, {
+      protocol: HERMES_SERVICE_PROTOCOL, kind: 'review_refused',
+      error: 'UPSTREAM-PROSE-THAT-MUST-NOT-BE-REFLECTED',
+    })).startReview(startArgs);
+    expect(r.accepted).toBe(false);
+    expect(r.failureKind).toBe('review_refused');
+    // Code can branch on refusal without mistaking it for an outage.
+    expect(r.failureKind).not.toBe('service_unreachable');
+    // The KIND crosses the boundary; the upstream prose does not.
+    expect(r.safeMessage ?? '').not.toContain('UPSTREAM-PROSE-THAT-MUST-NOT-BE-REFLECTED');
+  });
+
+  it('keeps authentication, protocol and outage distinct from refusal', async () => {
+    expect((await transport(withBody(401, {})).startReview(startArgs)).failureKind)
+      .toBe('authentication_failed');
+    expect((await transport(withBody(500, 'not json')).startReview(startArgs)).failureKind)
+      .toBe('service_unreachable');
+    expect((await transport(withBody(409, { protocol: 'some.other.v9', kind: 'review_refused' }))
+      .startReview(startArgs)).failureKind).toBe('service_unreachable');
+    expect((await transport(withBody(409, { protocol: HERMES_SERVICE_PROTOCOL, kind: 'not_a_real_kind' }))
+      .startReview(startArgs)).failureKind).toBe('service_unreachable');
+  });
+
+  it('accepts a body just under the ceiling and refuses one just over it, in BYTES', async () => {
+    const pad = (bytes: number) =>
+      `{"protocol":"${HERMES_SERVICE_PROTOCOL}","connected":true,"identity":{"provider":"xai"},"pad":"${'x'.repeat(bytes)}"}`;
+    const underOk = await transport(withBody(200, pad(1000))).testConnection();
+    expect(underOk.failureKind).toBeNull();
+    const over = await transport(withBody(200, pad(300_000))).testConnection();
+    expect(over.failureKind).toBe('malformed_response');
+  });
+
+  it('counts multi-byte UTF-8 as its real byte length, not its string length', async () => {
+    // 200_000 four-byte characters = 800_000 bytes but only 400_000 UTF-16
+    // units. Measured as a string this slipped under a 256K cap.
+    const emoji = '😀'.repeat(200_000);
+    const r = await transport(withBody(200, `{"protocol":"${HERMES_SERVICE_PROTOCOL}","pad":"${emoji}"}`))
+      .testConnection();
+    expect(r.failureKind).toBe('malformed_response');
+  });
+
+  it('refuses an oversized declared Content-Length before reading the body', async () => {
+    let bodyRead = false;
+    const fetchImpl: FetchLike = () => Promise.resolve({
+      ok: true, status: 200,
+      headers: { get: (n: string) => (n.toLowerCase() === 'content-length' ? '99999999' : null) },
+      text: async () => { bodyRead = true; return '{}'; },
+    } as Awaited<ReturnType<FetchLike>>);
+    const r = await transport(fetchImpl).testConnection();
+    expect(r.failureKind).toBe('malformed_response');
+    expect(bodyRead, 'an over-declared body must not be read at all').toBe(false);
+  });
+
+  it('stops a streamed body the moment it crosses the ceiling, even with a lying Content-Length', async () => {
+    let chunksServed = 0;
+    const chunk = new Uint8Array(64 * 1024);
+    const fetchImpl: FetchLike = () => Promise.resolve({
+      ok: true, status: 200,
+      headers: { get: () => '10' }, // a lie
+      body: {
+        getReader: () => ({
+          read: async () => {
+            chunksServed += 1;
+            // Would stream forever if nothing stopped it.
+            return { done: false, value: chunk };
+          },
+          cancel: async () => undefined,
+        }),
+      },
+      text: async () => '{}',
+    } as unknown as Awaited<ReturnType<FetchLike>>);
+    const r = await transport(fetchImpl).testConnection();
+    expect(r.failureKind).toBe('malformed_response');
+    // It abandoned the stream rather than draining it forever.
+    expect(chunksServed).toBeLessThan(64);
+  });
+
+  it('reports a stream that fails mid-read as unreadable, not as a verdict', async () => {
+    const fetchImpl: FetchLike = () => Promise.resolve({
+      ok: true, status: 200,
+      headers: { get: () => null },
+      body: {
+        getReader: () => ({
+          read: async () => { throw new Error('connection reset'); },
+          cancel: async () => undefined,
+        }),
+      },
+      text: async () => '{}',
+    } as unknown as Awaited<ReturnType<FetchLike>>);
+    const r = await transport(fetchImpl).testConnection();
+    expect(r.connected).toBe(false);
+    expect(r.failureKind).toBe('malformed_response');
+  });
+});
+
+/**
+ * PROVIDER IDENTITY IS NEVER INFERRED.
+ *
+ * `strOrNull(identity.provider) ?? 'xai'` behind a cast meant an absent,
+ * blank, mistyped or unrecognised provider silently became xAI — inference,
+ * in the one place the milestone promises there is none.
+ */
+describe('a provider Relay cannot read is not a connected provider', () => {
+  const identity = (id: unknown) => ({
+    protocol: HERMES_SERVICE_PROTOCOL, connected: true,
+    identity: { provider: id, requestedModel: 'm', credentialPresent: true, verifiable: true },
+  });
+
+  for (const [label, value] of [
+    ['missing', undefined], ['blank', ''], ['whitespace', '   '],
+    ['unknown', 'openai'], ['wrong type', 42], ['null', null],
+  ] as const) {
+    it(`refuses to infer a provider when it is ${label}`, async () => {
+      const r = await transport(() => reply(200, identity(value))).testConnection();
+      expect(r.connected, `${label} must not report connected`).toBe(false);
+      expect(r.identity).toBeNull();
+      expect(r.failureKind).toBe('provider_unverified');
+      // Above all: it did not become xAI.
+      expect(JSON.stringify(r)).not.toContain('"xai"');
+    });
+  }
+
+  it('accepts each real provider exactly as declared', async () => {
+    for (const p of ['xai', 'anthropic'] as const) {
+      const r = await transport(() => reply(200, identity(p))).testConnection();
+      expect(r.connected).toBe(true);
+      expect(r.identity?.provider).toBe(p);
+    }
+  });
+
+  it('keeps a service-declared provider separate from a verified model', async () => {
+    const r = await transport(() => reply(200, identity('anthropic'))).testConnection();
+    // Declared, but nothing here verified a model.
+    expect(r.identity?.provider).toBe('anthropic');
+    expect(r.identity?.verifiedModelId).toBeNull();
+  });
+});

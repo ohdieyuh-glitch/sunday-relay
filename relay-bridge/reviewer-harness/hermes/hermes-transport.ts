@@ -55,6 +55,13 @@ export const HERMES_FAILURE_KINDS = [
   'protocol_mismatch',
   'malformed_response',
   'timed_out',
+  /**
+   * The service was reached, authenticated, understood the request — and
+   * DECLINED it. A deliberate refusal is not an outage: it will not fix itself
+   * and retrying it is a new paid call, whereas `service_unreachable` invites
+   * an operator to go and check networking that is working perfectly.
+   */
+  'review_refused',
 ] as const;
 export type HermesFailureKind = (typeof HERMES_FAILURE_KINDS)[number];
 

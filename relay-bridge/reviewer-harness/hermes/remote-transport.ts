@@ -6,6 +6,7 @@ import {
   type RemoteHermesCancelResult, type RemoteHermesReviewInput,
   type RemoteHermesReviewStart, type RemoteHermesReviewState,
 } from './hermes-transport';
+import { HERMES_PROVIDERS, type HermesProviderId } from './hermes-provider';
 
 /**
  * THE REMOTE HERMES TRANSPORT — authenticated HTTP, and nothing else.
@@ -38,7 +39,15 @@ export type FetchLike = (
     body?: string;
     signal?: AbortSignal;
   },
-) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>;
+) => Promise<{
+  ok: boolean;
+  status: number;
+  /** Present on a real Response; used to reject an oversized body before reading it. */
+  headers?: { get(name: string): string | null };
+  /** Present on a real Response; used to count WIRE BYTES while streaming. */
+  body?: ReadableStream<Uint8Array> | null;
+  text: () => Promise<string>;
+}>;
 
 export interface RemoteTransportConfig {
   readonly serviceUrl: string;
@@ -74,6 +83,105 @@ const KNOWN_FAILURE_KINDS: ReadonlySet<string> = new Set(HERMES_FAILURE_KINDS);
  */
 const kindOrNull = (v: unknown): HermesFailureKind | null =>
   typeof v === 'string' && KNOWN_FAILURE_KINDS.has(v) ? (v as HermesFailureKind) : null;
+
+const KNOWN_PROVIDERS: ReadonlySet<string> = new Set(HERMES_PROVIDERS);
+
+/**
+ * A provider is a closed vocabulary, exactly like the run status and the
+ * failure kind. Absent, blank, mistyped or unrecognised all mean the same
+ * thing here — Relay does not know — and none of them may become a default.
+ */
+const providerOrNull = (v: unknown): HermesProviderId | null =>
+  typeof v === 'string' && KNOWN_PROVIDERS.has(v) ? (v as HermesProviderId) : null;
+
+type ReadResult =
+  | { readonly ok: true; readonly text: string }
+  | { readonly ok: false; readonly reason: 'too_large' | 'unreadable' };
+
+/**
+ * READ THE BODY IN WIRE BYTES, AND STOP AT THE CEILING.
+ *
+ * The cap used to be applied to `raw.length` AFTER `res.text()` had already
+ * buffered the whole body: it bounded parsing, not memory, and it measured
+ * UTF-16 code units, so a 256K-unit cap admitted up to ~1 MB of UTF-8.
+ *
+ * Now: a declared Content-Length over the ceiling is refused before a byte is
+ * read; otherwise the stream is consumed incrementally and abandoned the
+ * moment the running byte count crosses the ceiling — so a lying or absent
+ * Content-Length cannot get past it either.
+ */
+async function readBounded(
+  res: { headers?: { get(n: string): string | null }; body?: ReadableStream<Uint8Array> | null; text: () => Promise<string> },
+  maxBytes: number,
+): Promise<ReadResult> {
+  const declared = res.headers?.get('content-length');
+  if (declared !== null && declared !== undefined) {
+    const n = Number(declared);
+    // A declared length over the ceiling is refused before the body is read.
+    if (Number.isFinite(n) && n > maxBytes) return { ok: false, reason: 'too_large' };
+  }
+
+  const stream = res.body;
+  if (stream === null || stream === undefined || typeof stream.getReader !== 'function') {
+    // No stream to read incrementally (a test double, or a runtime without
+    // one). Measure BYTES, never string length.
+    try {
+      const text = await res.text();
+      if (Buffer.byteLength(text, 'utf8') > maxBytes) return { ok: false, reason: 'too_large' };
+      return { ok: true, text };
+    } catch {
+      return { ok: false, reason: 'unreadable' };
+    }
+  }
+
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value === undefined) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        // Abandon immediately; do not accumulate the rest.
+        await reader.cancel().catch(() => { /* already gone */ });
+        return { ok: false, reason: 'too_large' };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    // A timeout or cancellation mid-stream lands here.
+    await reader.cancel().catch(() => { /* already gone */ });
+    return { ok: false, reason: 'unreadable' };
+  }
+  // Decoded once, from complete bytes, so a multi-byte character split across
+  // two chunks is never mangled.
+  return { ok: true, text: Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8') };
+}
+
+/**
+ * A refusal the service composed, recovered from an error status WITHOUT
+ * reflecting upstream text.
+ *
+ * Only a protocol-valid body carrying a kind already in Relay's vocabulary is
+ * honoured; the message is always written here. Everything else stays
+ * `service_unreachable`, which is what an unexplained error status is.
+ */
+function refusalFromBody(status: number, text: string): CallResult | null {
+  let parsed: unknown;
+  try { parsed = JSON.parse(text); } catch { return null; }
+  if (!isRecord(parsed)) return null;
+  if (strOrNull(parsed.protocol) !== HERMES_SERVICE_PROTOCOL) return null;
+  const kind = kindOrNull(parsed.kind);
+  if (kind === null) return null;
+  return {
+    ok: false, kind,
+    safeMessage:
+      `The Hermes Reviewer service declined the request (HTTP ${status}, ${kind}). `
+      + 'This is a decision by the service, not a network fault.',
+  };
+}
 
 export function createRemoteHermesTransport(
   config: RemoteTransportConfig,
@@ -116,20 +224,40 @@ export function createRemoteHermesTransport(
         };
       }
       if (!res.ok) {
-        // Status only. A body can quote the request, which quotes the token.
+        // A DELIBERATE REFUSAL IS NOT AN OUTAGE.
+        //
+        // This used to flatten every error status to `service_unreachable`,
+        // so a service that authenticated the caller, understood the request
+        // and declined it read as a network fault — sending an operator to
+        // check connectivity that was working. The body is read under the
+        // same byte ceiling and only a kind already in Relay's vocabulary is
+        // honoured; no upstream text is reflected.
+        const errBody = await readBounded(res, MAX_RESPONSE_BYTES);
+        if (errBody.ok) {
+          const refusal = refusalFromBody(res.status, errBody.text);
+          if (refusal !== null) return refusal;
+        }
+        // Unexplained error status: status only. A body can quote the
+        // request, which quotes the token.
         return {
           ok: false, kind: 'service_unreachable',
           safeMessage: `The Hermes Reviewer service returned HTTP ${res.status}.`,
         };
       }
 
-      const raw = await res.text();
-      if (raw.length > MAX_RESPONSE_BYTES) {
-        return {
-          ok: false, kind: 'malformed_response',
-          safeMessage: 'The Hermes Reviewer service returned an oversized response.',
-        };
+      const read = await readBounded(res, MAX_RESPONSE_BYTES);
+      if (!read.ok) {
+        return read.reason === 'too_large'
+          ? {
+            ok: false, kind: 'malformed_response',
+            safeMessage: 'The Hermes Reviewer service returned an oversized response.',
+          }
+          : {
+            ok: false, kind: 'malformed_response',
+            safeMessage: 'The Hermes Reviewer service response could not be read.',
+          };
       }
+      const raw = read.text;
       let parsed: unknown;
       try {
         parsed = JSON.parse(raw);
@@ -219,10 +347,32 @@ export function createRemoteHermesTransport(
           failureKind: r.kind, safeMessage: r.safeMessage, checkedAt: now(),
         };
       }
-      const connected = boolOf(r.body.connected);
+      const claimedConnected = boolOf(r.body.connected);
       const identityRaw = isRecord(r.body.identity) ? r.body.identity : null;
-      const identity = identityRaw === null ? null : {
-        provider: (strOrNull(identityRaw.provider) ?? 'xai') as 'anthropic' | 'xai',
+      const provider = identityRaw === null ? null : providerOrNull(identityRaw.provider);
+
+      // A PROVIDER IS NEVER INFERRED.
+      //
+      // This used to read `strOrNull(identity.provider) ?? 'xai'` behind a
+      // cast, so an absent, blank, mistyped or unrecognised provider silently
+      // became xAI — inference, in the one place the whole milestone promises
+      // there is none, and it could carry an unknown string into the identity
+      // model with the authority of a checked value.
+      //
+      // Now: an identity Relay cannot read is not a connected identity.
+      if (claimedConnected && (identityRaw === null || provider === null)) {
+        return {
+          connected: false, runCreated: false, protocol: HERMES_SERVICE_PROTOCOL, identity: null,
+          failureKind: 'provider_unverified',
+          safeMessage:
+            'The Hermes Reviewer service reported a connection without a provider identity Relay recognises.',
+          checkedAt: now(),
+        };
+      }
+
+      const connected = claimedConnected;
+      const identity = identityRaw === null || provider === null ? null : {
+        provider,
         requestedModel: strOrNull(identityRaw.requestedModel) ?? '',
         credentialPresent: boolOf(identityRaw.credentialPresent),
         verifiable: boolOf(identityRaw.verifiable),
