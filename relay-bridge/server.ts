@@ -21,8 +21,12 @@ import {
   loadBridgeConfig, productionConfigProblems, productionConfigWarnings, type BridgeConfig,
 } from './config';
 import { createMissionRegistry, type MissionRegistry } from './mission';
-import { architectPreflight, loadArchitectConfig } from './openai-architect';
-import { handleReviewerRoute, isReviewerRoute, type ReviewerRunPort } from './reviewer-routes';
+import {
+  architectPreflight, loadArchitectConfig, verifyArchitectConnection,
+} from './openai-architect';
+import {
+  bearerMatches, handleReviewerRoute, isReviewerRoute, type ReviewerRunPort,
+} from './reviewer-routes';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute,
@@ -171,6 +175,38 @@ export function createBridgeServer(
          * needs the Hermes process adapter, the provider client or a
          * credential. Read-only routes start nothing and spend nothing.
          */
+        /**
+         * ONE bounded live architect check. OPERATOR ONLY — it is the single
+         * route in Relay that deliberately spends money, so a browser session
+         * can never reach it. It runs the architect and nothing else: no
+         * Coding Agent, no Reviewer, no mission.
+         */
+        if (method === 'POST' && path === '/relay-api/architect/verify') {
+          const auth = typeof req.headers.authorization === 'string'
+            ? req.headers.authorization : undefined;
+          if (!bearerMatches(auth, process.env.RELAY_BRIDGE_API_TOKEN)) {
+            send(res, 401, {
+              kind: 'authentication_failed',
+              error: 'A live architect verification requires operator authentication.',
+            }, cors);
+            return;
+          }
+          const body = (await readBody(req)) as { authorized?: unknown } | undefined;
+          if (body?.authorized !== true) {
+            // Reaching the route is not consent to spend. The caller must say so.
+            send(res, 403, {
+              kind: 'authorization_required',
+              error: 'A live architect verification spends money and requires explicit authorization.',
+            }, cors);
+            return;
+          }
+          const verification = await verifyArchitectConnection({
+            config: loadArchitectConfig(process.env),
+          });
+          send(res, verification.ok ? 200 : 409, { data: verification }, cors);
+          return;
+        }
+
         // Browser pairing. Minting a grant costs the operator token; redeeming
         // one costs a valid grant AND the approved Origin.
         if (isBrowserSessionRoute(path.replace('/relay-api', ''))) {

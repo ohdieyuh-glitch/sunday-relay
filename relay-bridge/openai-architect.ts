@@ -28,7 +28,15 @@ export interface PromptArchitectHandoff {
 
 export interface ArchitectReceipt {
   provider: 'openai';
+  /**
+   * DEPRECATED SPELLING, kept so existing readers do not break. It carries the
+   * REQUESTED model. Use `requestedModel` / `actualModel` — they are separate
+   * facts and only the response is authority for the second.
+   */
   model: string;
+  requestedModel: string;
+  /** What the provider said it ran. `null` renders as Unknown. */
+  actualModel: string | null;
   /** Redacted — last 6 chars only, never the full provider id. */
   requestIdRedacted: string | null;
   startedAt: string;
@@ -304,6 +312,8 @@ export async function runOpenAiArchitect(
     choices?: Array<{ message?: { content?: string } }>;
     usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
     id?: string;
+    /** What the provider ACTUALLY ran. Never the same field as the request. */
+    model?: string;
   };
   try {
     payload = (await res.json()) as typeof payload;
@@ -319,11 +329,22 @@ export async function runOpenAiArchitect(
   const completedAt = now();
   const rawId = typeof payload.id === 'string' ? payload.id : null;
 
+  // REQUESTED IS NOT ACTUAL. A request for `gpt-4o` is commonly answered by
+  // `gpt-4o-2024-08-06`, and only the response is authority for what ran. The
+  // receipt previously stamped the REQUESTED model here, which asserted an
+  // identity nothing had verified.
+  const actualModel = typeof payload.model === 'string' && payload.model.trim() !== ''
+    ? payload.model.trim()
+    : null;
+
   return {
     handoff,
     receipt: {
       provider: 'openai',
       model: cfg.model as string,
+      requestedModel: cfg.model as string,
+      // `null` renders as Unknown rather than falling back to the request.
+      actualModel,
       requestIdRedacted: rawId ? `…${rawId.slice(-6)}` : null,
       startedAt,
       completedAt,
@@ -337,5 +358,129 @@ export async function runOpenAiArchitect(
       networkPath: 'relay-bridge-direct-openai',
       coordinationLabel: ARCHITECT_COORDINATION_LABEL,
     },
+  };
+}
+
+
+/* ------------------------------------------------ bounded live verification */
+
+export interface ArchitectVerification {
+  readonly ok: boolean;
+  readonly requestedModel: string | null;
+  /** Only ever from the provider response. `null` renders as Unknown. */
+  readonly actualModel: string | null;
+  readonly provider: 'openai' | null;
+  readonly inputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly totalTokens: number | null;
+  readonly requestIdRedacted: string | null;
+  readonly checkedAt: string;
+  /** Safe to print. Never a provider body, never a credential. */
+  readonly reason: string | null;
+}
+
+/**
+ * ONE bounded live call, and nothing else.
+ *
+ * This exists because the architect was otherwise reachable only through
+ * `mission/start`, which runs a full three-role preflight and then drives the
+ * Coding Agent and the Reviewer. Verifying the architect that way would either
+ * block before reaching the provider, or spend money on two roles nobody asked
+ * to test.
+ *
+ * It asks for the smallest useful completion, caps output hard, and reports
+ * REQUESTED and ACTUAL model as separate fields. A network 200 is not success:
+ * a response that names a different model, or carries no model at all, is
+ * reported as such rather than smoothed over.
+ */
+export async function verifyArchitectConnection(input: {
+  config: OpenAiArchitectConfig;
+  fetchImpl?: typeof fetch;
+  now?: () => string;
+  /** Deliberately tiny — this proves identity, not capability. */
+  maxOutputTokens?: number;
+}): Promise<ArchitectVerification> {
+  const now = input.now ?? (() => new Date().toISOString());
+  const cfg = input.config;
+  const ready = architectPreflight(cfg);
+  if (!ready.ready) {
+    return {
+      ok: false, requestedModel: cfg.model ?? null, actualModel: null, provider: null,
+      inputTokens: null, outputTokens: null, totalTokens: null, requestIdRedacted: null,
+      checkedAt: now(), reason: ready.reason ?? 'The Prompt Architect is not configured.',
+    };
+  }
+
+  const doFetch = input.fetchImpl ?? ((u: RequestInfo | URL, i?: RequestInit) => fetch(u, i));
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), cfg.timeoutMs ?? 90_000);
+  let res: Response;
+  try {
+    res = await doFetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.apiKey}` },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages: [{ role: 'user', content: 'Reply with the single word: ok' }],
+        max_completion_tokens: input.maxOutputTokens ?? 16,
+      }),
+      signal: controller.signal,
+    });
+  } catch {
+    return {
+      ok: false, requestedModel: cfg.model ?? null, actualModel: null, provider: null,
+      inputTokens: null, outputTokens: null, totalTokens: null, requestIdRedacted: null,
+      checkedAt: now(), reason: 'The Prompt Architect provider could not be reached.',
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!res.ok) {
+    return {
+      ok: false, requestedModel: cfg.model ?? null, actualModel: null, provider: null,
+      inputTokens: null, outputTokens: null, totalTokens: null, requestIdRedacted: null,
+      checkedAt: now(),
+      // Status only — a provider body can quote the request, which quotes the key.
+      reason: res.status === 401
+        ? 'The provider rejected the credential.'
+        : res.status === 429
+          ? 'The provider refused the request (rate limit or insufficient balance).'
+          : `The provider returned status ${res.status}.`,
+    };
+  }
+
+  let payload: {
+    model?: string;
+    id?: string;
+    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  };
+  try {
+    payload = (await res.json()) as typeof payload;
+  } catch {
+    return {
+      ok: false, requestedModel: cfg.model ?? null, actualModel: null, provider: null,
+      inputTokens: null, outputTokens: null, totalTokens: null, requestIdRedacted: null,
+      checkedAt: now(), reason: 'The provider returned an unreadable response.',
+    };
+  }
+
+  const actualModel = typeof payload.model === 'string' && payload.model.trim() !== ''
+    ? payload.model.trim()
+    : null;
+  const rawId = typeof payload.id === 'string' ? payload.id : null;
+
+  return {
+    // A 200 that names no model has not verified an identity.
+    ok: actualModel !== null,
+    requestedModel: cfg.model ?? null,
+    actualModel,
+    provider: actualModel !== null ? 'openai' : null,
+    inputTokens: payload.usage?.prompt_tokens ?? null,
+    outputTokens: payload.usage?.completion_tokens ?? null,
+    totalTokens: payload.usage?.total_tokens ?? null,
+    requestIdRedacted: rawId !== null ? `…${rawId.slice(-6)}` : null,
+    checkedAt: now(),
+    reason: actualModel === null ? 'The provider answered without naming a model.' : null,
   };
 }
