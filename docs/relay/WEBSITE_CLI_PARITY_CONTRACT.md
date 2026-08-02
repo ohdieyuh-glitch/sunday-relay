@@ -194,14 +194,18 @@ the same functions.
 A passing strict run reports what it actually inspected, at manifest `1.2.0`:
 
 ```text
-  declared surface files: 200/200 present
+  declared surface files: 215/215 present
   declared CLI commands: 24 (verified by the CLI's own command tests)
 ```
 
 The file total counts every declaration that resolved, across all five
 declaration fields plus any exception evidence. It rose when
 `sharedDomainReferences` joined the fields the checker walks — those
-declarations existed before and were counted in nothing.
+declarations existed before and were counted in nothing. It rose again from
+200 to 215 when the MCP Foundation registered `mcp-connection-management` and
+`mcp-mission-preflight`, whose shared-domain declarations name the projection,
+connection, registry, risk, approval and preflight modules both surfaces
+render from.
 `docs/documentation-contract.test.ts` holds both quoted lines to what the
 checker really prints, so a stale number fails rather than reassures.
 

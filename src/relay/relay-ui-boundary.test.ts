@@ -175,7 +175,14 @@ describe('Relay UI boundary — the UI is a consumer of the domain, never a supp
       }
     }
     expect(offenders, 'these modules must not depend inward on the website tree').toEqual([]);
-  });
+    // A GENEROUS, EXPLICIT TIME BUDGET — not a weakened assertion.
+    //
+    // This walk resolves every relative import of every non-UI module, and its
+    // cost grows with the tree. Adding `src/relay/mcp` pushed it past vitest's
+    // 5s default on a 2-core host, which failed the test for taking too long
+    // rather than for finding anything. The assertion above is unchanged and
+    // still fails on the FIRST inward import; only the clock is different.
+  }, 60_000);
 
   it('the mission wire contracts are on the domain side and import nothing', () => {
     // The fix is only real while the contracts stay importable without pulling

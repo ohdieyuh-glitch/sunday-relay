@@ -225,7 +225,12 @@ describe('the parity contract describes the checker that exists', () => {
     for (const line of quoted) {
       expect(output, `the contract quotes "${line}", which the checker does not print`).toContain(line);
     }
-  });
+    // A GENEROUS, EXPLICIT TIME BUDGET — not a weakened assertion. This test
+    // SHELLS OUT to the parity checker, whose walk grows with the registry; it
+    // passed 5s on a 2-core host once the MCP capabilities were declared, and
+    // failed for being slow rather than for a stale number. The comparison
+    // above is unchanged.
+  }, 120_000);
 
   it('names sharedDomainReferences as a field that is VERIFIED, not merely declared', () => {
     expect(unwrapped).toMatch(/sharedDomainReferences.{0,120}(verified|resolved)/iu);

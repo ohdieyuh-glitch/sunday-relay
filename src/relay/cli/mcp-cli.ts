@@ -20,12 +20,16 @@
  * the fifth has already made the claim.
  */
 
-import type {
-  McpApprovalRow, McpCapabilitiesView, McpCatalogRow, McpConnectionRow,
-} from '../mcp/domain/mcp-surface-projection';
-import { MCP_APPROVAL_LABELS, MCP_PERMISSION_LABELS, MCP_RISK_LABELS } from '../mcp/domain/mcp-surface-projection';
-import type { McpPreflightResult } from '../mcp/mission/mcp-mission-preflight';
-import { preflightSummaryLine } from '../mcp/mission/mcp-mission-preflight';
+// The BARREL ONLY. `src/relay/relay-core-boundary.test.ts` holds the CLI to a
+// thin client, and reaching into `../mcp/<layer>/<file>` would widen that
+// allowlist from one bare module to a subtree. The barrel is the pure,
+// browser-safe surface — the same reason `../mission` and `../psp` are
+// imported bare here.
+import {
+  MCP_APPROVAL_LABELS, MCP_PERMISSION_LABELS, MCP_RISK_LABELS, preflightSummaryLine,
+  type McpApprovalRow, type McpCapabilitiesView, type McpCatalogRow,
+  type McpConnectionRow, type McpPreflightResult,
+} from '../mcp';
 import { EXIT } from './exit-codes';
 
 export interface McpRenderOptions {
