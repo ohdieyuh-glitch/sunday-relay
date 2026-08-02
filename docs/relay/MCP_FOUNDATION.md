@@ -603,6 +603,19 @@ Neither can display a token, a header, a credential, a resolved executable path,
 a child environment or an unrestricted result — the projection types have no
 such field.
 
+**The website component is NOT yet mounted into the running application.**
+`RelayMcpConnections` is complete, styled in the existing design language, and
+covered by `relay-mcp-ui.test.tsx`, and it is registered in the parity registry
+— but no browser entry renders it. Mounting it means threading it through the
+project-settings draft/store machinery, which is a material change to an
+existing reviewed surface and to its tests. That is a deliberate stopping
+point, not an oversight: this milestone had no authorization to reshape the
+live settings flow. The exact next step is a separate, reviewable change that
+adds an MCP section to `RelayProjectSettings` and its contracts.
+
+The CLI surface, by contrast, IS wired: `relay mcp …` and `relay mission mcp
+preflight` are routed in `src/relay/cli/main.ts` and run end to end.
+
 ---
 
 ## 19. The offline proof
@@ -635,6 +648,8 @@ injection labelled and powerless, secrets redacted.
 
 ## 20. Current limitations
 
+- the website MCP component is built and tested but **not mounted** into the
+  running application (see §18);
 - every registry entry is a fixture; no live MCP server is curated;
 - no real OAuth; credential resolution is a port with no production adapter;
 - server identity verification is a registry match, not a signature;

@@ -47,8 +47,14 @@ describe('secret redaction', () => {
   }
 
   it('redacts a URL that embeds credentials', () => {
-    const result = redactText('postgres://user:FAKETESTNOTREALpw@db.internal:5432/app');
-    expect(result.text).not.toContain('FAKETESTNOTREALpw');
+    // Kept deliberately minimal around the marker: the repository's
+    // committed-secret scanner judges what REMAINS after the fixture marker is
+    // stripped, and a realistic host/database/port residue reads as real key
+    // material however it is annotated. The shape the pattern matches — scheme,
+    // userinfo with a >=6 character password, host — is preserved exactly.
+    const result = redactText('postgres://u:FAKETESTNOTREALxxxx@h/d');
+    expect(result.text).not.toContain('FAKETESTNOTREALxxxx');
+    expect(result.text).toContain('[redacted:url-with-credentials]');
   });
 
   it('redacts an Authorization header reflected in an error body', () => {
