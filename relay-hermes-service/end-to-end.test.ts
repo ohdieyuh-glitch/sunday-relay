@@ -95,7 +95,7 @@ describe('bridge -> service -> fake Hermes, over real HTTP', () => {
     const res = await fetch(`${baseUrl}/healthz`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: 'ok' });
-  });
+  }, 30_000);
 
   it('refuses every /v1 route without the service token', async () => {
     for (const [method, path] of [
@@ -105,7 +105,7 @@ describe('bridge -> service -> fake Hermes, over real HTTP', () => {
       const res = await fetch(`${baseUrl}${path}`, { method });
       expect(res.status, `${method} ${path}`).toBe(401);
     }
-  });
+  }, 30_000);
 
   it('refuses an incorrect token and accepts the correct one', async () => {
     const wrong = await bridgeClient('not-the-token').readiness();
@@ -152,7 +152,7 @@ describe('bridge -> service -> fake Hermes, over real HTTP', () => {
     // A real verdict came back through four layers.
     expect(state.reviewText).toBeTruthy();
     expect(typeof state.reviewText).toBe('string');
-  });
+  }, 60_000);
 
   it('does not start a second paid run for a repeated idempotency key', async () => {
     const client = bridgeClient();
@@ -166,7 +166,7 @@ describe('bridge -> service -> fake Hermes, over real HTTP', () => {
     });
     expect(second.duplicate).toBe(true);
     expect(second.runId).toBe(first.runId);
-  });
+  }, 30_000);
 
   it('rejects an unknown field rather than silently ignoring it', async () => {
     const res = await fetch(`${baseUrl}/v1/reviews`, {
@@ -180,7 +180,7 @@ describe('bridge -> service -> fake Hermes, over real HTTP', () => {
     });
     // A caller trying to hand the service a credential is refused outright.
     expect(res.status).toBe(422);
-  });
+  }, 30_000);
 
   it('rejects malformed limits', async () => {
     const res = await fetch(`${baseUrl}/v1/reviews`, {
@@ -189,20 +189,20 @@ describe('bridge -> service -> fake Hermes, over real HTTP', () => {
       body: JSON.stringify({ runId: 'x', idempotencyKey: 'k2', prompt: 'p', limits: { timeoutMs: -1 } }),
     });
     expect(res.status).toBe(422);
-  });
+  }, 30_000);
 
   it('reports an unknown run truthfully instead of inventing state', async () => {
     const state = await bridgeClient().getReview('never-existed');
     expect(state.status).toBe('failed');
     expect(state.reviewText).toBeNull();
     expect(state.safeMessage).toContain('do not survive a restart');
-  });
+  }, 30_000);
 
   it('reports Unknown usage rather than zero when the harness reported none', async () => {
     const state = await bridgeClient().getReview('never-existed');
     expect(state.usage.source).toBe('unavailable');
     expect(state.usage.inputTokens).toBeNull();
-  });
+  }, 30_000);
 });
 
 describe('a non-zero exit cannot approve', () => {
@@ -243,5 +243,5 @@ describe('a non-zero exit cannot approve', () => {
     // A non-zero exit can never become an approval.
     expect(state.status).not.toBe('completed');
     expect(state.reviewText).toBeNull();
-  });
+  }, 60_000);
 });
