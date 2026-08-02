@@ -38,6 +38,28 @@ export type SessionRefId = Branded<'ses'>;
 export type WorkspaceRefId = Branded<'wsp'>;
 export type ManualTaskId = Branded<'mtk'>;
 export type ManualRequestId = Branded<'mrq'>;
+
+/**
+ * MCP host identifiers (docs/relay/MCP_FOUNDATION.md). They live here, in the
+ * one branded-id system, rather than in a private scheme under `src/relay/mcp`
+ * — an id that validates differently from every other Relay id is an id whose
+ * validation nobody checks.
+ *
+ * Note what is NOT an id: a capability FINGERPRINT is a content digest, not an
+ * identifier, so it is never minted by the factory and never carries a prefix.
+ * Confusing the two is how "the tool changed but its id did not" happens.
+ */
+export type McpRegistryEntryId = Branded<'mrg'>;
+export type McpServerDefinitionId = Branded<'msd'>;
+export type McpConnectionId = Branded<'mcn'>;
+export type McpCapabilitySnapshotId = Branded<'mcs'>;
+export type McpInvocationId = Branded<'mci'>;
+export type McpApprovalRequestId = Branded<'mcq'>;
+export type McpApprovalRecordId = Branded<'mca'>;
+export type McpPermissionGrantId = Branded<'mcg'>;
+export type McpCredentialReferenceId = Branded<'mcr'>;
+export type McpAuditRecordId = Branded<'mcu'>;
+export type McpMissionBindingId = Branded<'mcb'>;
 export type CommandId = Branded<'cmd-free'>;
 export type QueryId = Branded<'qry-free'>;
 export type CorrelationId = Branded<'cor-free'>;
@@ -54,6 +76,10 @@ export const PREFIXES = {
   apr: 'apr_', oqn: 'oqn_', use: 'use_', aud: 'aud_', clm: 'clm_', asn: 'asn_',
   dsg: 'dsg_', pol: 'pol_', hcr: 'hcr_', ckp: 'ckp_', art: 'art_', ses: 'ses_',
   wsp: 'wsp_', mtk: 'mtk_', mrq: 'mrq_',
+  // MCP host (docs/relay/MCP_FOUNDATION.md).
+  mrg: 'mrg_', msd: 'msd_', mcn: 'mcn_', mcs: 'mcs_', mci: 'mci_',
+  mcq: 'mcq_', mca: 'mca_', mcg: 'mcg_', mcr: 'mcr_', mcu: 'mcu_',
+  mcb: 'mcb_',
 } as const;
 
 export type IdPrefix = keyof typeof PREFIXES;
