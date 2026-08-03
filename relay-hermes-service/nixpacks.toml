@@ -15,8 +15,16 @@
 # to remove: a machine-readable artifact implying an installation nobody did.
 #
 # Nothing in this file may contain a credential, a Railway project or service
-# id, a private domain, or the public bridge URL — the boundary scanner rejects
-# deployment config carrying any of those, and they would be wrong here anyway.
+# id, a private domain, or the public bridge URL.
+#
+# Be exact about what enforces that, because a comment claiming a gate it does
+# not have is the same defect as a recipe claiming an install nobody did. The
+# boundary scanner's committed-credential tripwire reads EVERY tracked file, so
+# a credential here is caught. It has no content rule for a project id, a
+# service id, a private domain or the bridge URL, and it does not classify this
+# file as deployment configuration at all — so it would not catch those. They
+# are pinned by `docs/documentation-contract.test.ts` instead, because an
+# invariant nothing checks is a hope.
 
 [phases.setup]
 nixPkgs = ["nodejs_22", "python311", "git"]

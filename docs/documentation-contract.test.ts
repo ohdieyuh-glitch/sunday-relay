@@ -407,4 +407,29 @@ describe('the Hermes Reviewer claims only what has actually happened', () => {
   it('does not tell an operator that installing Hermes locally connects a hosted bridge', () => {
     expect(env).toMatch(/does NOT make a hosted Relay Bridge\s+connected/u);
   });
+
+  it('keeps the build recipe free of the ids, domains and URLs nothing else checks', () => {
+    /**
+     * The recipe states that no credential, Railway project or service id,
+     * private domain or public bridge URL may appear in it. Only the FIRST of
+     * those is enforced elsewhere: the boundary scanner's committed-credential
+     * tripwire reads every tracked file. It has no content rule for ids,
+     * domains or the bridge URL, and `nixpacks.toml` is not in its forbidden
+     * paths at all, so it never classifies this file as deployment config.
+     *
+     * That gap is the whole reason for this test. A recipe that names an
+     * invariant no gate checks is the same defect as one claiming an install
+     * nobody performed — the claim reads as a measurement and is not one.
+     *
+     * Read RAW, deliberately: `#` is what makes these lines comments, and a
+     * secret pasted into a comment is still committed.
+     */
+    const recipe = read('relay-hermes-service/nixpacks.toml');
+    expect(recipe, 'no URL belongs in the build recipe')
+      .not.toMatch(/https?:\/\//u);
+    expect(recipe, 'no Railway domain belongs in the build recipe')
+      .not.toMatch(/[\w-]+\.(?:up\.)?railway\.app|\.railway\.internal/iu);
+    expect(recipe, 'no Railway project or service id belongs in the build recipe')
+      .not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/iu);
+  });
 });
