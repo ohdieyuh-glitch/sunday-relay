@@ -194,8 +194,8 @@ the same functions.
 A passing strict run reports what it actually inspected, at manifest `1.2.0`:
 
 ```text
-  declared surface files: 200/200 present
-  declared CLI commands: 24 (verified by the CLI's own command tests)
+  declared surface files: 220/220 present
+  declared CLI commands: 26 (verified by the CLI's own command tests)
 ```
 
 The file total counts every declaration that resolved, across all five
