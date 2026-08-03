@@ -121,7 +121,13 @@ describe('no VITE-prefixed OpenAI variable exists anywhere', () => {
 
     const envExample = readIfExists(join(REPO, '.env.example')) ?? '';
     expect(envExample).not.toMatch(/VITE_[A-Z_]*OPENAI/);
-  });
+    // An explicit budget, for the same reason as the sibling rule in
+    // `relay-bridge/browser-session/browser-session.test.ts`: this WALKS THE
+    // TREE across three roots and reads every matching file, so its cost grows
+    // with the repository. The Hermes Reviewer milestone added 31 files and
+    // pushed it past vitest's 5s default under parallel load. Every assertion
+    // is byte-identical; only the clock changed.
+  }, 30_000);
 
   it('the vite client type declarations expose no OpenAI variable', () => {
     const decl = readIfExists(join(REPO, 'src', 'relay', 'vite-env.d.ts')) ?? '';
