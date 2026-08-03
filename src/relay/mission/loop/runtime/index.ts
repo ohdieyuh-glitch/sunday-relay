@@ -110,6 +110,42 @@ export {
 export { loopDigest, loopDigestOf, loopSha256Hex, loopStableSerialize } from './loop-runtime-digest';
 
 export {
+  RELAY_LOOP_AGENT_OUTCOMES,
+  SAFE_TO_RETRY_OUTCOMES,
+  portSupportsRole,
+  type RelayLoopAgentFinding,
+  type RelayLoopAgentOutcome,
+  type RelayLoopAgentPort,
+  type RelayLoopAgentRequest,
+  type RelayLoopAgentResult,
+  type RelayLoopAgentStatus,
+  type RelayLoopAgentUsage,
+} from './loop-agent-port';
+
+export {
+  createFakeLoopAgent,
+  type FakeLoopAgent,
+  type FakeLoopAgentInvocation,
+  type FakeLoopAgentOptions,
+  type FakeLoopAgentStep,
+} from './fake-loop-agent';
+
+export {
+  checkLoopLimits,
+  createInMemoryLoopLockPort,
+  preflightLoopDispatch,
+  runLoopIteration,
+  runLoopUntilSettled,
+  type LoopEngineContext,
+  type LoopEngineDeps,
+  type LoopEngineOutcome,
+  type LoopLimitVerdict,
+  type LoopLockResult,
+  type LoopRunLockHandle,
+  type LoopRunLockPort,
+} from './loop-iteration-engine';
+
+export {
   RELAY_LOOP_RECOVERY_CLASSIFICATIONS,
   RESUMABLE_LOOP_CLASSIFICATIONS,
   BLOCKING_LOOP_CLASSIFICATIONS,

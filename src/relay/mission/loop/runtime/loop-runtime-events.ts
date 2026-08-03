@@ -68,6 +68,11 @@ export const RELAY_LOOP_EVENT_KINDS = [
   'loop.iteration_started',
   'loop.agent_request_prepared',
   'loop.agent_execution_started',
+  // The moment Relay learns WHO actually answered. Separate from the
+  // assignment because the assignment is what was requested and this is what
+  // was observed, and a run that cannot tell them apart cannot answer "which
+  // model actually did this" after the fact.
+  'loop.agent_identity_observed',
   'loop.output_observed',
   'loop.evidence_recorded',
   'loop.completion_claim_recorded',
@@ -84,6 +89,11 @@ export const RELAY_LOOP_EVENT_KINDS = [
   'loop.limit_reached',
   'loop.blocked',
   'loop.failed',
+  // A run-level wall-clock bound elapsed. Distinct from `loop.limit_reached`
+  // with `duration`: that is a BUDGET the user set for total run time, this is
+  // an iteration that overran its own bound. Both end the run; neither is
+  // completion; and a user fixes them differently.
+  'loop.timed_out',
   'loop.recovery_required',
   'loop.completed',
 ] as const;
@@ -187,6 +197,15 @@ export type RelayLoopEventPayload =
   | { readonly kind: 'loop.iteration_started'; readonly iterationId: string; readonly ordinal: number }
   | { readonly kind: 'loop.agent_request_prepared'; readonly iterationId: string; readonly inputRefs: readonly string[] }
   | { readonly kind: 'loop.agent_execution_started'; readonly iterationId: string; readonly executionId: string }
+  // Every field is nullable and `null` means UNKNOWN. The reducer never fills
+  // one of these from the requested side.
+  | {
+      readonly kind: 'loop.agent_identity_observed';
+      readonly iterationId: string;
+      readonly actualAdapterId: string | null;
+      readonly actualAgentId: string | null;
+      readonly actualModel: string | null;
+    }
   | { readonly kind: 'loop.output_observed'; readonly observation: RelayLoopObservation }
   | { readonly kind: 'loop.evidence_recorded'; readonly iterationId: string; readonly evidenceRefs: readonly string[] }
   | { readonly kind: 'loop.completion_claim_recorded'; readonly iterationId: string; readonly observationId: string }
@@ -206,6 +225,7 @@ export type RelayLoopEventPayload =
   | { readonly kind: 'loop.limit_reached'; readonly limit: 'iterations' | 'duration' | 'spend' | 'tokens' | 'provider_calls'; readonly detail: string }
   | { readonly kind: 'loop.blocked'; readonly blockers: readonly RelayLoopBlocker[] }
   | { readonly kind: 'loop.failed'; readonly failure: RelayLoopRuntimeFailure }
+  | { readonly kind: 'loop.timed_out'; readonly detail: string; readonly iterationId: string | null }
   | { readonly kind: 'loop.recovery_required'; readonly reason: string; readonly uncertainIterationId: string | null }
   | { readonly kind: 'loop.completed'; readonly verdict: 'verified_complete'; readonly evidenceRefs: readonly string[] };
 
@@ -233,6 +253,7 @@ export const RELAY_LOOP_EVENT_STATE: Readonly<
   'loop.iteration_started': 'running',
   'loop.agent_request_prepared': null,
   'loop.agent_execution_started': null,
+  'loop.agent_identity_observed': null,
   'loop.output_observed': 'observing',
   'loop.evidence_recorded': null,
   'loop.completion_claim_recorded': null,
@@ -250,6 +271,7 @@ export const RELAY_LOOP_EVENT_STATE: Readonly<
   'loop.limit_reached': null,
   'loop.blocked': null,
   'loop.failed': 'failed',
+  'loop.timed_out': 'timed_out',
   'loop.recovery_required': 'recovery_required',
   'loop.completed': 'completed',
 });
@@ -267,6 +289,7 @@ export const REPEATABLE_LOOP_EVENT_KINDS: readonly RelayLoopEventKind[] = [
   'loop.iteration_started',
   'loop.agent_request_prepared',
   'loop.agent_execution_started',
+  'loop.agent_identity_observed',
   'loop.output_observed',
   'loop.evidence_recorded',
   'loop.completion_claim_recorded',
@@ -309,9 +332,12 @@ export function loopEventIdentity(event: {
   switch (p.kind) {
     case 'loop.iteration_started':
     case 'loop.agent_request_prepared':
+    case 'loop.agent_identity_observed':
     case 'loop.completion_claim_recorded':
     case 'loop.completion_evaluated':
       return `${event.kind}:${p.iterationId}`;
+    case 'loop.timed_out':
+      return `${event.kind}:${p.iterationId ?? 'run'}`;
     // Evidence may be recorded more than once for one iteration, so the REFS
     // are part of the fact. The same refs twice is a duplicate; different refs
     // is something new.

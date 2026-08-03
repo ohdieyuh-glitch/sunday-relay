@@ -34,6 +34,7 @@
  */
 
 import type { RelayLoopBlocker } from '../loop-blockers';
+import type { RelayLoopAssignment } from './loop-runtime-types';
 import {
   REPEATABLE_LOOP_EVENT_KINDS,
   RELAY_LOOP_EVENT_STATE,
@@ -104,12 +105,36 @@ export function seedLoopRun(input: {
 
 /* ------------------------------------------------------------- helpers */
 
-const addKnown = (total: string | null, delta: string | null): string | null => {
+const addKnown = (total: string | null, delta: string | null | undefined): string | null => {
   // Unknown propagates. `null + anything` is still unknown, and a known total
   // plus an unknown delta is no longer a total anybody can stand behind.
-  if (total === null || delta === null) return null;
+  if (total === null || !isKnownAmount(delta)) return null;
   return (BigInt(total) + BigInt(delta)).toString();
 };
+
+/**
+ * Is this a usable number?
+ *
+ * `undefined` matters as much as `null` here. A journal payload can lose a
+ * field — redaction drops credential-shaped keys, and a torn or foreign line
+ * can simply lack one — and the arithmetic that follows must not turn a missing
+ * value into `NaN`. A `NaN` total is worse than an unknown one: it is a number,
+ * so it compares, it serializes, and it silently defeats every limit check it
+ * touches. Anything that is not a finite number is UNKNOWN.
+ */
+function isKnownCount(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isKnownAmount(value: string | null | undefined): value is string {
+  return typeof value === 'string' && value !== '';
+}
+
+/** Add a count, propagating Unknown rather than inventing a total. */
+function addCount(total: number | null, delta: number | null | undefined): number | null {
+  if (total === null || !isKnownCount(delta)) return null;
+  return total + delta;
+}
 
 function replaceIteration(
   iterations: readonly RelayLoopIteration[],
@@ -162,6 +187,8 @@ function checkLoopPrecondition(
     }
     case 'loop.agent_request_prepared':
       return needsIteration(payload.iterationId, 'prepare a request for');
+    case 'loop.agent_identity_observed':
+      return needsIteration(payload.iterationId, 'record an observed identity for');
     case 'loop.agent_execution_started': {
       const missing = needsIteration(payload.iterationId, 'execute');
       if (missing !== null) return missing;
@@ -313,13 +340,40 @@ export function applyLoopEvent(run: RelayLoopRun, event: RelayLoopEvent): LoopAp
             // In flight. `unknown` is the truthful outcome until it finishes —
             // and it is exactly what forces inspection if the process dies now.
             outcome: 'unknown',
-            usage: { costMicros: null, currency: null, tokens: null, providerCalls: null },
+            usage: { costMicros: null, currency: null, modelUnits: null, providerCalls: null },
             failureSummary: null,
           },
         })),
       };
       break;
     }
+
+    case 'loop.agent_identity_observed': {
+      // ONLY ever fills from what was observed. A `null` in the payload means
+      // the adapter could not say, and leaves the field as it was — it never
+      // overwrites something already observed, and it never reaches across to
+      // the requested side for a value.
+      const fill = (existing: string | null, seen: string | null): string | null => seen ?? existing;
+      const observed = (a: RelayLoopAssignment): RelayLoopAssignment => ({
+        ...a,
+        actualAdapterId: fill(a.actualAdapterId, payload.actualAdapterId),
+        actualAgentId: fill(a.actualAgentId, payload.actualAgentId),
+        actualModel: fill(a.actualModel, payload.actualModel),
+      });
+      next = {
+        ...next,
+        assignment: next.assignment === null ? null : observed(next.assignment),
+        iterations: replaceIteration(next.iterations, payload.iterationId, (it) => ({
+          ...it,
+          assignment: observed(it.assignment),
+        })),
+      };
+      break;
+    }
+
+    case 'loop.timed_out':
+      next = { ...next, interruptionReason: payload.detail, currentIterationId: null };
+      break;
 
     case 'loop.output_observed': {
       const observation: RelayLoopObservation = payload.observation;
@@ -376,17 +430,15 @@ export function applyLoopEvent(run: RelayLoopRun, event: RelayLoopEvent): LoopAp
         budget: {
           ...next.budget,
           iterationsCompleted: next.budget.iterationsCompleted + (exec.outcome === 'completed' ? 1 : 0),
-          knownSpendMicros: addKnown(next.budget.knownSpendMicros, usage.costMicros),
+          knownSpendMicros: addKnown(next.budget.knownSpendMicros, usage.costMicros ?? null),
           spendHasUnknownComponent:
-            next.budget.spendHasUnknownComponent || usage.costMicros === null,
-          currency: next.budget.currency ?? usage.currency,
-          tokensUsed:
-            next.budget.tokensUsed === null || usage.tokens === null
-              ? null
-              : next.budget.tokensUsed + usage.tokens,
+            next.budget.spendHasUnknownComponent || !isKnownAmount(usage.costMicros),
+          currency: next.budget.currency ?? usage.currency ?? null,
+          tokensUsed: addCount(next.budget.tokensUsed, usage.modelUnits),
           tokensHaveUnknownComponent:
-            next.budget.tokensHaveUnknownComponent || usage.tokens === null,
-          providerCallsUsed: next.budget.providerCallsUsed + (usage.providerCalls ?? 0),
+            next.budget.tokensHaveUnknownComponent || !isKnownCount(usage.modelUnits),
+          providerCallsUsed:
+            next.budget.providerCallsUsed + (isKnownCount(usage.providerCalls) ? usage.providerCalls : 0),
           consecutiveFailures: failed ? next.budget.consecutiveFailures + 1 : 0,
         },
       };

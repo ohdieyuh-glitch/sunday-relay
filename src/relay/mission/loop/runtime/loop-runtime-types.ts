@@ -222,11 +222,23 @@ export interface RelayLoopAgentExecution {
     | 'refused'
     | 'adapter_unavailable'
     | 'unknown';
-  /** Adapter-reported usage. Every field `null` when the adapter cannot say. */
+  /**
+   * Adapter-reported usage. Every field `null` when the adapter cannot say.
+   *
+   * `modelUnits` IS the token count, and it is not called `tokens` for a
+   * concrete reason: this object is written into a journal payload, and the
+   * shared redaction rules drop any key containing "token" because that is
+   * overwhelmingly a credential. A field named `tokens` is silently deleted on
+   * the way to disk and the count then reads as absent — so the accounting
+   * quietly breaks in the direction of a wrong number. Renaming the field this
+   * side of the boundary is safer than loosening a credential filter that
+   * protects every durable record in Relay.
+   */
   readonly usage: {
     readonly costMicros: string | null;
     readonly currency: string | null;
-    readonly tokens: number | null;
+    /** Model tokens consumed. `null` is Unknown. */
+    readonly modelUnits: number | null;
     readonly providerCalls: number | null;
   };
   /** Safe failure summary. `null` on success. */
@@ -285,6 +297,10 @@ export interface RelayLoopRuntimeFailure {
   readonly failureId: string;
   readonly kind:
     | 'adapter_failure'
+    /** The agent declined. Recorded as its own kind because a refusal is a
+     *  real answer, and reporting it as an adapter fault would send someone to
+     *  debug infrastructure that worked correctly. */
+    | 'agent_refused'
     | 'malformed_output'
     | 'timeout'
     | 'limit_violation'

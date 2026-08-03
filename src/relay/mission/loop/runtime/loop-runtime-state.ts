@@ -37,6 +37,21 @@ import {
 /* --------------------------------------------------------------- table */
 
 /**
+ * The five exhaustion landings, spliced into every state the engine can be in
+ * when it checks a limit.
+ *
+ * Written once because the alternative is five state names repeated in five
+ * places, where a sixth limit added later would be added to four of them.
+ */
+const EXHAUSTION_LANDINGS = [
+  'iteration_exhausted',
+  'duration_exhausted',
+  'budget_exhausted',
+  'token_exhausted',
+  'provider_call_exhausted',
+] as const satisfies readonly RelayLoopRuntimeState[];
+
+/**
  * The legal edges, as `from -> to[]`.
  *
  * Read it as the life of a run: a draft is validated and confirmed, queued,
@@ -58,9 +73,17 @@ export const RELAY_LOOP_TRANSITIONS: Readonly<
   awaiting_confirmation: ['validating', 'queued', 'draft', 'stopped'],
 
   /* ---- admission ---- */
-  queued: ['starting', 'waiting_budget', 'waiting_dependency', 'waiting_approval', 'stopping', 'stopped', 'failed'],
-  starting: ['planning', 'running', 'failed', 'stopping', 'recovery_required'],
-  planning: ['running', 'stopping', 'failed', 'recovery_required'],
+  // A bound can already be spent at admission — `maxIterations: 0`, or a
+  // budget consumed by an earlier run against the same allowance. Such a run
+  // ends exhausted WITHOUT starting, so every exhaustion is reachable from
+  // here. Omitting these edges would leave the engine unable to record a limit
+  // it correctly refused to exceed.
+  queued: [
+    'starting', 'waiting_budget', 'waiting_dependency', 'waiting_approval', 'stopping', 'stopped', 'failed',
+    ...EXHAUSTION_LANDINGS,
+  ],
+  starting: ['planning', 'running', 'failed', 'stopping', 'recovery_required', ...EXHAUSTION_LANDINGS],
+  planning: ['running', 'stopping', 'failed', 'recovery_required', ...EXHAUSTION_LANDINGS],
 
   /* ---- the iteration cycle ---- */
   running: [
@@ -75,6 +98,10 @@ export const RELAY_LOOP_TRANSITIONS: Readonly<
     'timed_out',
     'failed',
     'recovery_required',
+    // The engine re-checks limits before EVERY dispatch, including the second
+    // and later ones, when the run is sitting in `running`. A limit found there
+    // must be recordable or the check cannot stop anything.
+    ...EXHAUSTION_LANDINGS,
   ],
   observing: ['completion_check', 'pausing', 'stopping', 'failed', 'timed_out', 'recovery_required'],
   completion_check: [
@@ -113,16 +140,18 @@ export const RELAY_LOOP_TRANSITIONS: Readonly<
   paused: ['resuming', 'stopping', 'stopped', 'failed', 'recovery_required'],
   // Resume re-validates before it runs. It may discover the contract moved, the
   // budget is gone, or authorization lapsed — so it can land anywhere honest.
+  // Resume re-checks limits as well as authorization, so it can discover any
+  // of them gone rather than only the budget.
   resuming: [
     'running',
     'paused',
     'waiting_budget',
     'waiting_approval',
     'waiting_dependency',
-    'budget_exhausted',
     'stopping',
     'failed',
     'recovery_required',
+    ...EXHAUSTION_LANDINGS,
   ],
 
   /* ---- stop ---- */

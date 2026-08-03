@@ -72,9 +72,23 @@ export interface LoopRunRecord {
   readonly integrity: LoopJournalIntegrity;
 }
 
+/**
+ * The operations a backing must support — and deliberately NOT "write the
+ * whole record".
+ *
+ * A journal is append-only. A port that took a complete record would force the
+ * Node backing to work out which lines were new by diffing, and a diff that got
+ * it wrong would rewrite history rather than extend it. Naming the append makes
+ * the durable operation the obvious one and the destructive one unavailable.
+ */
 export interface LoopRunStoreBacking {
   read(runId: string): LoopRunRecord | null;
-  write(record: LoopRunRecord): void;
+  /** Create the run's storage. Refuses if it already exists. */
+  create(record: LoopRunRecord): void;
+  /** Durably append ONE line. The only way the journal ever grows. */
+  appendEvent(runId: string, event: RelayLoopEvent): void;
+  /** Write the current snapshot, rotating the existing one into `previous`. */
+  writeSnapshot(runId: string, snapshot: RelayLoopSnapshot): void;
 }
 
 /* -------------------------------------------------------------- append */
@@ -180,7 +194,7 @@ export function appendLoopRunEvent(
   });
   if (!final.ok) return { ok: false, problem: final.problem };
 
-  backing.write({ ...record, events: [...record.events, final.event] });
+  backing.appendEvent(input.runId, final.event);
   return { ok: true, event: final.event, run: folded.run, duplicate: false };
 }
 
@@ -228,7 +242,7 @@ export function checkpointLoopRun(
     };
   }
   const snapshot = loopSnapshotFrom(replayed.run, replayed.lastSequence, digest);
-  backing.write({ ...record, snapshot, previousSnapshot: record.snapshot });
+  backing.writeSnapshot(runId, snapshot);
   return { ok: true, snapshot };
 }
 
@@ -240,14 +254,33 @@ export function checkpointLoopRun(
  */
 export function createInMemoryLoopBacking(
   initial: readonly LoopRunRecord[] = [],
-): LoopRunStoreBacking & { snapshotOf(runId: string): LoopRunRecord | null } {
+): LoopRunStoreBacking & { corrupt(runId: string, integrity: LoopJournalIntegrity): void } {
   const runs = new Map<string, LoopRunRecord>(initial.map((r) => [r.runId, r]));
+  const require_ = (runId: string): LoopRunRecord => {
+    const record = runs.get(runId);
+    if (record === undefined) throw new Error(`No in-memory Loop run ${runId}.`);
+    return record;
+  };
   return {
     read: (runId) => runs.get(runId) ?? null,
-    write: (record) => {
+    create: (record) => {
+      if (runs.has(record.runId)) throw new Error(`Loop run ${record.runId} already exists.`);
       runs.set(record.runId, record);
     },
-    snapshotOf: (runId) => runs.get(runId) ?? null,
+    appendEvent: (runId, event) => {
+      const record = require_(runId);
+      runs.set(runId, { ...record, events: [...record.events, event] });
+    },
+    writeSnapshot: (runId, snapshot) => {
+      const record = require_(runId);
+      // Rotate, exactly as the file backing does — the previous copy is what
+      // the fallback chain reads when the current one is unusable.
+      runs.set(runId, { ...record, snapshot, previousSnapshot: record.snapshot });
+    },
+    /** Test-only: simulate a reader verdict the in-memory backing cannot reach. */
+    corrupt: (runId, integrity) => {
+      runs.set(runId, { ...require_(runId), integrity });
+    },
   };
 }
 

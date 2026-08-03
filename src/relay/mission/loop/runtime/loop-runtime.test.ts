@@ -157,7 +157,7 @@ const execution = (
   startedAt: NOW,
   finishedAt: NOW,
   outcome: 'completed',
-  usage: { costMicros: '1000', currency: 'USD', tokens: 100, providerCalls: 1 },
+  usage: { costMicros: '1000', currency: 'USD', modelUnits: 100, providerCalls: 1 },
   failureSummary: null,
   ...overrides,
 });
@@ -176,6 +176,11 @@ const SAMPLE_PAYLOADS: Record<string, RelayLoopEventPayload> = {
   'loop.iteration_started': { kind: 'loop.iteration_started', iterationId: 'lpi_1', ordinal: 1 },
   'loop.agent_request_prepared': { kind: 'loop.agent_request_prepared', iterationId: 'lpi_1', inputRefs: [] },
   'loop.agent_execution_started': { kind: 'loop.agent_execution_started', iterationId: 'lpi_1', executionId: 'exe-1' },
+  'loop.agent_identity_observed': {
+    kind: 'loop.agent_identity_observed', iterationId: 'lpi_1',
+    actualAdapterId: 'fake', actualAgentId: 'agent-1', actualModel: 'model-1',
+  },
+  'loop.timed_out': { kind: 'loop.timed_out', detail: 'the iteration overran', iterationId: 'lpi_1' },
   'loop.output_observed': { kind: 'loop.output_observed', observation: OBSERVATION },
   'loop.evidence_recorded': { kind: 'loop.evidence_recorded', iterationId: 'lpi_1', evidenceRefs: ['evd_1'] },
   'loop.completion_claim_recorded': { kind: 'loop.completion_claim_recorded', iterationId: 'lpi_1', observationId: 'obs-1' },
@@ -537,7 +542,7 @@ describe('unknown never becomes zero', () => {
         kind: 'loop.iteration_finished',
         iterationId: 'lpi_1',
         execution: execution('lpi_1', {
-          usage: { costMicros: null, currency: null, tokens: null, providerCalls: null },
+          usage: { costMicros: null, currency: null, modelUnits: null, providerCalls: null },
         }),
       }),
     ];
@@ -1335,9 +1340,7 @@ describe('the run store refuses to record the same fact twice', () => {
   it('refuses to append to a journal that does not read cleanly', () => {
     const backing = freshStore();
     admit(backing);
-    const record = backing.read('lpr_test');
-    if (record === null) throw new Error('expected a record');
-    backing.write({ ...record, integrity: 'corrupt' });
+    backing.corrupt('lpr_test', 'corrupt');
     const refused = appendLoopRunEvent(backing, {
       runId: 'lpr_test',
       base: appendBase({ kind: 'loop.iteration_started', iterationId: 'lpi_1', ordinal: 1 }),
