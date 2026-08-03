@@ -441,7 +441,9 @@ async function withLock(
     }
     // The adapter could still be read, so the outcome is known after all and
     // the iteration is closed from what it reported — never from a guess.
-    const closed = recordAgentResult(append, deps, inFlight.iterationId, observed.result, at);
+    const closed = recordAgentResult(
+      append, deps, inFlight.iterationId, inFlight.execution.executionId, observed.result, at,
+    );
     if (!closed.ok) return refuse(closed.problem);
     run = closed.run;
   }
@@ -538,7 +540,7 @@ async function withLock(
     deadlineMs: context.iterationDeadlineMs,
   });
 
-  const recorded = recordAgentResult(append, deps, iterationId, result, at);
+  const recorded = recordAgentResult(append, deps, iterationId, executionId, result, at);
   if (!recorded.ok) return refuse(recorded.problem);
   run = recorded.run;
 
@@ -553,17 +555,26 @@ async function withLock(
         })
       : ending === 'stopped'
         ? stopTwoPhase(append, iterationId, result.failureSummary ?? 'The iteration was cancelled.')
-        : append({
-            kind: 'loop.failed',
-            failure: {
-              failureId: deps.newId('flr'),
-              kind: failureKindFor(result.outcome),
-              summary: result.failureSummary ?? `The iteration ended as ${result.outcome}.`,
-              iterationId,
-              at: deps.now(),
-              recoverable: result.outcome === 'adapter_unavailable',
-            },
-          });
+        : ending === 'recovery'
+          ? append({
+              kind: 'loop.recovery_required',
+              reason:
+                result.failureSummary
+                ?? `Iteration ${ordinal} ended in a state the adapter could not describe. It was not retried, `
+                  + 'because an operation nobody can account for may already have run.',
+              uncertainIterationId: iterationId,
+            })
+          : append({
+              kind: 'loop.failed',
+              failure: {
+                failureId: deps.newId('flr'),
+                kind: failureKindFor(result.outcome),
+                summary: result.failureSummary ?? `The iteration ended as ${result.outcome}.`,
+                iterationId,
+                at: deps.now(),
+                recoverable: result.outcome === 'adapter_unavailable',
+              },
+            });
     if (!ended.ok) return refuse(ended.problem);
     checkpointLoopRun(deps.backing, context.runId, deps.digest);
     return { kind: 'terminal', run: ended.run, state: ended.run.state };
@@ -670,6 +681,7 @@ function recordAgentResult(
   append: Appender,
   deps: LoopEngineDeps,
   iterationId: string,
+  executionId: string,
   result: RelayLoopAgentResult,
   at: string,
 ): { ok: true; run: RelayLoopRun } | { ok: false; problem: string } {
@@ -731,7 +743,11 @@ function recordAgentResult(
     kind: 'loop.iteration_finished',
     iterationId,
     execution: {
-      executionId: `exe-${iterationId}`,
+      // THE SAME id the start event carried. Minting a fresh one here would
+      // leave the journal saying one execution began and a different one
+      // finished — nothing could be correlated, and duplicate detection keys on
+      // this very field, so the retry guard would be watching the wrong subject.
+      executionId,
       iterationId,
       startedAt: at,
       finishedAt: deps.now(),
@@ -808,7 +824,9 @@ function stopTwoPhase(
 }
 
 /** How the run ends for an outcome that ends it, or `null` to continue. */
-function endingFor(outcome: RelayLoopAgentResult['outcome']): 'failed' | 'timed_out' | 'stopped' | null {
+function endingFor(
+  outcome: RelayLoopAgentResult['outcome'],
+): 'failed' | 'timed_out' | 'stopped' | 'recovery' | null {
   switch (outcome) {
     case 'timeout':
       return 'timed_out';
@@ -818,8 +836,15 @@ function endingFor(outcome: RelayLoopAgentResult['outcome']): 'failed' | 'timed_
     case 'malformed_output':
     case 'crashed':
     case 'adapter_unavailable':
-    case 'unknown':
       return 'failed';
+    // An adapter reporting `unknown` is saying it does not know what happened.
+    // Recording that as `failed` would assert more than anyone knows — and
+    // `failed` is terminal, which would close a run whose work may have
+    // succeeded, or may have half-succeeded and spent money doing it. An
+    // uncertain operation is a recovery case, exactly as a crash mid-dispatch
+    // is, and it waits for a human rather than being decided by a default.
+    case 'unknown':
+      return 'recovery';
     case 'completed':
       return null;
   }

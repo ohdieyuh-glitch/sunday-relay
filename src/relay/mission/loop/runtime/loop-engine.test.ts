@@ -9,6 +9,7 @@ import {
   createInMemoryLoopLockPort,
   emptyLoopBudget,
   emptyLoopRunRecord,
+  isTerminalLoopState,
   loopDigest,
   preflightLoopDispatch,
   readLoopRun,
@@ -414,6 +415,48 @@ describe('nothing that goes wrong is mistaken for finishing', () => {
       expect(outcome.state).not.toBe('completed');
     });
   }
+
+  it('names the SAME execution at start and at finish', async () => {
+    // Minting a fresh id when the iteration closes would leave the journal
+    // saying one execution began and a different one ended. Nothing could then
+    // be correlated — and duplicate detection for `loop.iteration_finished`
+    // keys on this very field, so the retry guard would watch the wrong thing.
+    const { deps, backing } = harness([{ kind: 'continuing' }]);
+    admit(backing);
+    await runLoopIteration(deps, context());
+    const events = backing.read('lpr_engine')?.events ?? [];
+    const started = events.find((e) => e.kind === 'loop.agent_execution_started');
+    const finished = events.find((e) => e.kind === 'loop.iteration_finished');
+    const startedId = (started?.payload as { executionId: string }).executionId;
+    const finishedId = (finished?.payload as { execution: { executionId: string } }).execution.executionId;
+    expect(finishedId).toBe(startedId);
+  });
+
+  it('treats an adapter that cannot say what happened as a recovery case', async () => {
+    // `unknown` is the adapter admitting ignorance. Recording it as `failed`
+    // would assert more than anyone knows AND close the run terminally, when
+    // the work may have succeeded — or half-succeeded and spent money.
+    const { deps, backing } = harness([{
+      kind: 'custom',
+      result: {
+        outcome: 'unknown',
+        actualAdapterId: 'fake-loop-agent', actualAgentId: null, actualModel: null,
+        findings: [],
+        usage: { known: false, reason: 'the adapter lost track of the call', providerCalls: null, tokens: null },
+        failureSummary: 'The adapter could not determine how the call ended.',
+        checkpointed: false,
+      },
+    }]);
+    admit(backing);
+    const outcome = await runLoopIteration(deps, context());
+    expect(outcome.kind).toBe('terminal');
+    if (outcome.kind !== 'terminal') throw new Error('unreachable');
+    expect(outcome.state).toBe('recovery_required');
+    // Not terminal — an unconfirmable run is unfinished, not finished.
+    expect(outcome.state).not.toBe('failed');
+    expect(outcome.state).not.toBe('completed');
+    expect(isTerminalLoopState(outcome.state)).toBe(false);
+  });
 
   it('classifies a refusal as a refusal, not as an adapter fault', async () => {
     const { deps, backing } = harness([{ kind: 'refusal', summary: 'I will not do that.' }]);
