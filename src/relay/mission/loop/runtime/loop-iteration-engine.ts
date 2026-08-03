@@ -457,17 +457,58 @@ async function withLock(
   if (run.state === 'pausing') {
     // A pause REQUEST is not a pause. Ask the adapter to park, record the safe
     // boundary, and only then say the run is paused.
-    if (deps.agent.requestSafeCheckpoint !== undefined && run.currentIterationId !== null) {
-      await deps.agent.requestSafeCheckpoint(run.currentIterationId);
+    const pauseRequestId = latestControlRequestId(deps, context.runId, 'loop.pause_requested');
+    if (pauseRequestId === null) {
+      // `pausing` with no request behind it means the journal and the state
+      // disagree about why the run is here. Parking it anyway would invent a
+      // pause nobody asked for.
+      return refuse('This run is pausing but no pause request is recorded for it.');
     }
+
+    let parked = true;
+    if (deps.agent.requestSafeCheckpoint !== undefined && run.currentIterationId !== null) {
+      parked = await deps.agent.requestSafeCheckpoint(run.currentIterationId);
+    }
+    if (!parked) {
+      // THE ADAPTER COULD NOT CONFIRM A SAFE BOUNDARY. Reporting "paused
+      // safely" here would tell a user it is safe to walk away while an agent
+      // may still be working — and any evidence it produces afterwards would
+      // land against a run everyone believes is at rest.
+      const uncertain = append({
+        kind: 'loop.recovery_required',
+        reason:
+          'A pause was requested but the adapter could not confirm it reached a safe boundary. The run is held for '
+          + 'inspection rather than reported as safely paused.',
+        uncertainIterationId: run.currentIterationId,
+      });
+      if (!uncertain.ok) return refuse(uncertain.problem);
+      checkpointLoopRun(deps.backing, context.runId, deps.digest);
+      return {
+        kind: 'recovery_required',
+        run: uncertain.run,
+        report: classifyLoopRecovery({
+          run: uncertain.run,
+          replayProblems: [],
+          contractStillBinds: true,
+          schemaSupported: true,
+          adapterObservable: null,
+        }),
+      };
+    }
+
     const checkpoint = append({
       kind: 'loop.safe_checkpoint_reached',
       reason: 'safe_pause_reached',
       iterationId: run.currentIterationId,
     });
     if (!checkpoint.ok) return refuse(checkpoint.problem);
-    const paused = append({ kind: 'loop.paused', at, requestId: `pause-${run.recoveryGeneration}` });
+    // The landing carries the id of the REQUEST it answers, so a second pause
+    // after a resume is a distinct fact rather than a duplicate of this one.
+    const paused = append({ kind: 'loop.paused', at, requestId: pauseRequestId });
     if (!paused.ok) return refuse(paused.problem);
+    // A corroborating snapshot: status after a restart is then a read rather
+    // than a full replay. The journal remains the authority either way.
+    checkpointLoopRun(deps.backing, context.runId, deps.digest);
     return { kind: 'paused', run: paused.run };
   }
   if (run.state === 'paused') {
@@ -658,6 +699,29 @@ async function withLock(
     iterationId,
     verdict: completion.verdict,
   };
+}
+
+/**
+ * The id of the most recent control request of a given kind.
+ *
+ * Read from the journal rather than tracked in memory, because the process that
+ * answers a pause is frequently not the one that received it — a request
+ * arrives on the bridge, and the next engine tick, possibly after a restart, is
+ * what actually parks the run.
+ */
+function latestControlRequestId(
+  deps: LoopEngineDeps,
+  runId: string,
+  kind: 'loop.pause_requested' | 'loop.resume_requested' | 'loop.stop_requested',
+): string | null {
+  const events = deps.backing.read(runId)?.events ?? [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i];
+    if (event.kind === kind && 'requestId' in event.payload) {
+      return (event.payload as { requestId: string }).requestId;
+    }
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------ recording */

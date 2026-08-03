@@ -256,6 +256,13 @@ export interface LoopRunNodeStore extends LoopRunStoreBacking {
   /** Read-only lock inspection — never acquires. */
   inspect(loopId: string, runId: string): RelayResult<LockClassification>;
   createRun(seed: RelayLoopRun): RelayResult<string>;
+  /**
+   * The runs belonging to ONE Loop definition, or `null` when the Loop has no
+   * directory at all. Reads that Loop's own folder and nothing else — history
+   * for one Loop never loads another Loop's runs, which is both faster and the
+   * reason a caller cannot accidentally enumerate the whole system.
+   */
+  runIdsForLoop(loopId: string): readonly string[] | null;
 }
 
 /**
@@ -354,6 +361,16 @@ export function createLoopRunNodeStore(options: { root: string }): LoopRunNodeSt
       writeRunDirectory(dir.value, seed);
       loopOfRun.set(seed.runId, seed.loopId);
       return ok(dir.value);
+    },
+
+    runIdsForLoop: (loopId) => {
+      const segment = safeRunSegment(loopId);
+      if (!segment.ok) return null;
+      const runsDir = join(root, LOOPS_DIR, segment.value, LOOP_RUNS_DIR);
+      if (!existsSync(runsDir)) return null;
+      return safeChildren(runsDir)
+        .filter((runId) => existsSync(join(runsDir, runId, LOOP_METADATA_FILE)))
+        .sort();
     },
 
     read: readRecord,

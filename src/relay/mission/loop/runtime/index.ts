@@ -131,6 +131,36 @@ export {
 } from './fake-loop-agent';
 
 export {
+  LOOP_LOCK_PURPOSE,
+  RELAY_LOOP_CONTROL_ACTIONS,
+  confirmLoopRun,
+  loopConfirmationKey,
+  loopRunIsActive,
+  requestLoopPause,
+  requestLoopResume,
+  requestLoopStop,
+  type LoopConfirmationInput,
+  type LoopConfirmationOutcome,
+  type LoopControlOutcome,
+  type LoopOperationDeps,
+  type RelayLoopControlAction,
+  type RelayLoopControlRequest,
+} from './loop-operations';
+
+export {
+  projectLoopHistory,
+  projectLoopInspection,
+  projectLoopStatus,
+  projectionLeaksNothing,
+  type LoopHistoryEntry,
+  type LoopIdentityProjection,
+  type LoopInspectionProjection,
+  type LoopIterationProjection,
+  type LoopStatusProjection,
+  type LoopUsageProjection,
+} from './loop-projections';
+
+export {
   checkLoopLimits,
   createInMemoryLoopLockPort,
   preflightLoopDispatch,

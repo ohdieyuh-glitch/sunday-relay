@@ -61,6 +61,18 @@ export type RelayLoopId = Branded<'lpe'>;
  * make "which run produced this evidence" unanswerable.
  */
 export type RelayLoopRunId = Branded<'lpr'>;
+/**
+ * ONE CONTROL REQUEST — a pause, a resume or a stop somebody asked for.
+ *
+ * Deliberately its own family rather than a reused run, iteration or event id.
+ * A control request is a distinct durable fact with its own lifetime: it is
+ * created before anything happens, it may be redelivered, and it is answered
+ * exactly once. Deriving its identity from the recovery generation (the earlier
+ * shortcut) breaks the moment a resume fails and the run parks again at the
+ * same generation — the second pause would collide with the first and be
+ * discarded as a duplicate of a request nobody made twice.
+ */
+export type RelayLoopControlRequestId = Branded<'lpq'>;
 export type RelayLoopIterationId = Branded<'lpi'>;
 export type RelayLoopScheduleId = Branded<'lps'>;
 export type RelayLoopTriggerId = Branded<'lpt'>;
@@ -90,8 +102,8 @@ export const PREFIXES = {
   // Loop Engine (docs/relay/LOOP_ENGINE.md).
   lpe: 'lpe_', lpi: 'lpi_', lps: 'lps_', lpt: 'lpt_', lpo: 'lpo_',
   lpb: 'lpb_', lpc: 'lpc_', lpm: 'lpm_', lpu: 'lpu_', lpk: 'lpk_',
-  // Stage 2 runtime: one execution of a Loop.
-  lpr: 'lpr_',
+  // Stage 2 runtime: one execution of a Loop, and one control request against it.
+  lpr: 'lpr_', lpq: 'lpq_',
 } as const;
 
 export type IdPrefix = keyof typeof PREFIXES;
