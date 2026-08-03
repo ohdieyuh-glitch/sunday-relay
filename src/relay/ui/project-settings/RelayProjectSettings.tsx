@@ -19,6 +19,7 @@ import {
   SectionVerification,
 } from './SettingsPolicySections';
 import { SettingsWorkforce } from './SettingsWorkforce';
+import { SectionMcp } from './SettingsMcp';
 import { SettingsReview } from './SettingsReview';
 import type {
   ProjectSettingsDraft,
@@ -51,7 +52,13 @@ const SECTIONS: Array<{ id: SettingsSectionId; number: string; label: string }> 
   { id: 'verification', number: '11', label: 'VERIFICATION' },
   { id: 'limits', number: '12', label: 'LIMITS' },
   { id: 'notifications', number: '13', label: 'NOTIFICATIONS' },
-  { id: 'review', number: '14', label: 'REVIEW AND START' },
+  // MCP CONNECTIONS sits after the policy sections and before REVIEW because
+  // it is the last thing an operator inspects before starting: which curated
+  // connectors exist, what is actually connected, and what a mission's MCP
+  // preflight would say. It is READ AND REVIEW, not draft configuration —
+  // nothing in this section writes to the settings draft.
+  { id: 'mcp', number: '14', label: 'MCP CONNECTIONS' },
+  { id: 'review', number: '15', label: 'REVIEW AND START' },
 ];
 
 export function RelayProjectSettings({
@@ -59,6 +66,7 @@ export function RelayProjectSettings({
   agentOptions,
   entitlement,
   initialDraft,
+  mcp,
   onSaveDraft,
   onStartProject,
   onConnectRepository,
@@ -112,13 +120,15 @@ export function RelayProjectSettings({
         return <SectionLimits draft={draft} patch={patch} />;
       case 'notifications':
         return <SectionNotifications draft={draft} patch={patch} />;
+      case 'mcp':
+        return <SectionMcp mcp={mcp} />;
       case 'review':
         return (
           <SettingsReview
             draft={draft}
             validation={validation}
             agentOptions={agentOptions}
-            onBack={() => setActive('notifications')}
+            onBack={() => setActive('mcp')}
             onSaveDraft={() => onSaveDraft(draft)}
             onStartProject={() => onStartProject(draft)}
           />

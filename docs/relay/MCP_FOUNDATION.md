@@ -589,7 +589,7 @@ contains no secret.
 `capabilities <id>`, `test-connection <id>`, `approvals`, `approve <id>`,
 `revoke <id>`, and `relay mission mcp preflight <mission-id>`.
 
-**Website**: Relay Workspace → Settings → MCP Connections, in the existing
+**Website**: Project Settings → section **14 MCP CONNECTIONS**, in the existing
 design language. Not a generic SaaS settings dashboard.
 
 Both render the **same projection**
@@ -603,18 +603,48 @@ Neither can display a token, a header, a credential, a resolved executable path,
 a child environment or an unrestricted result — the projection types have no
 such field.
 
-**The website component is NOT yet mounted into the running application.**
-`RelayMcpConnections` is complete, styled in the existing design language, and
-covered by `relay-mcp-ui.test.tsx`, and it is registered in the parity registry
-— but no browser entry renders it. Mounting it means threading it through the
-project-settings draft/store machinery, which is a material change to an
-existing reviewed surface and to its tests. That is a deliberate stopping
-point, not an oversight: this milestone had no authorization to reshape the
-live settings flow. The exact next step is a separate, reviewable change that
-adds an MCP section to `RelayProjectSettings` and its contracts.
+**The website component IS mounted into the running application.** It was not
+for the first nine commits of this milestone, and that fact was disclosed here
+rather than implied away; this section records what changed.
 
-The CLI surface, by contrast, IS wired: `relay mcp …` and `relay mission mcp
+`RelayMcpConnections` is now rendered by **section 14, MCP CONNECTIONS**, of
+`RelayProjectSettings` — the real settings host that `src/relay/main.tsx`
+reaches through `RelayPreviewApp`. An operator navigates to it: Relay Entry
+Home → PROJECT SETTINGS → the numbered rail entry `14 MCP CONNECTIONS`, or
+directly at `#/relay/project/:id/settings`. `REVIEW AND START` moved to 15.
+
+The seam is `src/relay/ui/project-settings/SettingsMcp.tsx`, and it is
+deliberately thin: it decides only whether there is an MCP surface to render,
+and adds no row, label or state word of its own. Everything it displays comes
+from `src/relay/ui/mcp/mcp-settings-view.ts`, which calls the SHARED projection
+(`projectCatalog`, `projectConnections`, `projectApprovals`) the CLI calls. The
+host supplies state; the view projects it; the component renders it.
+
+**Four states, kept apart.** `loading` claims nothing. `unavailable` states a
+reason and is NOT rendered as an empty list — "Relay could not look" is a
+different fact from "Relay looked and found nothing configured". `ready` shows
+the curated registry and says plainly that no connection and no approval
+exists. `degraded` and `blocked` carry a real mission preflight verdict, and
+the section reports it in `data-mcp-readiness`; with no mission asking for
+preflight the value is `not_evaluated`, which is deliberately not `ready`.
+
+**What the mounted surface is NOT.** It grants nothing: the section renders no
+input, select or textarea at all. It cannot open a connection — the browser has
+no transport, no connection manager and no credential path, and says so on the
+page. Every registry row is a simulation fixture and labels itself. The
+Independent Reviewer's permanent denial is stated on the section in every
+state, naming the roles read from `MCP_FORBIDDEN_ROLES` rather than a sentence
+that could outlive the policy.
+
+The CLI surface was wired from the start: `relay mcp …` and `relay mission mcp
 preflight` are routed in `src/relay/cli/main.ts` and run end to end.
+
+**The parity check now proves reachability, not existence.** A declared website
+entry point must be reachable by following imports from `src/relay/main.tsx`;
+`scripts/relay-surface-parity.mjs` fails `website-entry-unreachable` otherwise.
+This milestone is exactly why: for nine commits the registry declared
+`mcp-connection-management` as `tested` on both surfaces, every declared file
+resolved, and no browser entry rendered the component.
 
 ---
 
@@ -648,8 +678,12 @@ injection labelled and powerless, secrets redacted.
 
 ## 20. Current limitations
 
-- the website MCP component is built and tested but **not mounted** into the
-  running application (see §18);
+- the mounted website surface is **read-only**: it renders the curated registry
+  and any MCP state a host supplies, and it grants, connects and revokes
+  nothing. The browser cannot open a connection at all (see §18);
+- the browser host supplies NO connection, approval, capability snapshot or
+  mission preflight today, so the mounted section shows the registry and an
+  empty, truthfully-labelled connection list;
 - every registry entry is a fixture; no live MCP server is curated;
 - no real OAuth; credential resolution is a port with no production adapter;
 - server identity verification is a registry match, not a signature;

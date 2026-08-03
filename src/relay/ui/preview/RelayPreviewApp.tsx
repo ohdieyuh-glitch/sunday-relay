@@ -27,6 +27,7 @@ import type { RelayMissionState } from '../app';
 import type { ProjectMessage, WorkspaceFixtureKey } from '../project-workspace';
 import { AGENT_OPTIONS, RelayProjectSettings } from '../project-settings';
 import type { ProjectSettingsDraft } from '../project-settings';
+import { buildRelayMcpSettingsView } from '../mcp';
 import {
   deriveMissionProjection,
   getRelayAppStore,
@@ -648,6 +649,19 @@ export function RelayPreviewApp() {
   const settingsBrief = settingsProjectId ? store.getBrief(settingsProjectId) : null;
   const storedSettings = settingsProjectId ? store.getSettings(settingsProjectId) : null;
 
+  /**
+   * MCP CONNECTIONS (section 14) — the browser's honest MCP state.
+   *
+   * The curated registry is the only MCP fact this bundle genuinely holds, and
+   * every entry in it is a simulation fixture that labels itself on its own
+   * row. There is NO connection, NO approval, NO capability snapshot and NO
+   * mission preflight here, so those are passed empty and null rather than
+   * populated with anything that would read as a live connector. That is not a
+   * gap being papered over — connections are opened by the host process
+   * through the server-only transports, which this bundle cannot reach.
+   */
+  const mcpSettings = useMemo(() => buildRelayMcpSettingsView(), []);
+
   const projectSettings = settingsProject ? (
     <RelayProjectSettings
       brief={settingsBrief?.draft ?? null}
@@ -656,6 +670,7 @@ export function RelayPreviewApp() {
       initialDraft={
         storedSettings?.draft ?? defaultSettingsForProject(store, settingsProject.id)
       }
+      mcp={mcpSettings}
       onSaveDraft={(d: ProjectSettingsDraft) => {
         store.saveSettings(settingsProject.id, d);
       }}

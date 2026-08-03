@@ -518,3 +518,24 @@
     linear-gradient(rgba(158, 180, 232, 0.07) 1px, transparent 1px),
     linear-gradient(90deg, rgba(158, 180, 232, 0.07) 1px, transparent 1px);
 }
+
+/* ===================== 14 MCP CONNECTIONS (mounted) ===================== */
+/* The section is a HOST, not a second design system: the connections surface
+   keeps its own workspace styling (`relay-mcp.css`), and this block styles
+   only the seam around it — the two standing notices and the states in which
+   there is nothing to render. */
+.rps-mcp { display: flex; flex-direction: column; gap: 8px; }
+.rps-mcp-denial,
+.rps-mcp-browser-limit,
+.rps-mcp-loading,
+.rps-mcp-unavailable {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--rps-line);
+  background: rgba(7, 8, 11, 0.5);
+  line-height: 1.5;
+}
+.rps-mcp-denial { border-left: 2px solid var(--rps-gold); color: var(--rps-cream); }
+.rps-mcp-loading,
+.rps-mcp-unavailable { color: var(--rps-dim); }
+.rps-mcp .rmcp { border-color: var(--rps-line); }
