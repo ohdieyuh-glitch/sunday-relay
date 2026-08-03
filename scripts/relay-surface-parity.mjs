@@ -44,7 +44,7 @@
 
 import { readFileSync, existsSync, realpathSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { isAbsolute, join, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 
 export const REGISTRY_RELATIVE_PATH = join('src', 'relay', 'parity', 'relay-surface-capabilities.json');
 
@@ -776,6 +776,201 @@ export function verifyDeclaredFiles(repoRoot, registry) {
   return { ok: failures.length === 0, failures, checked, present, commands };
 }
 
+/* ------------------- website reachability (the mount) -------------------- *
+ *
+ * THE UNVERIFIED CLAIM THIS CLOSES.
+ *
+ * Everything above proves a declared website file EXISTS. It cannot tell the
+ * difference between a screen an operator can navigate to and a component that
+ * only its own unit test ever renders. `mcp-connection-management` was
+ * declared `tested` on both surfaces, with a real component and a real test,
+ * for an entire milestone in which NO browser entry rendered it. The registry
+ * read as parity; the product had a terminal surface and no website surface.
+ *
+ * So the entry point of an implemented website capability must be REACHABLE
+ * from a real browser entry — an import path that a bundler would follow from
+ * `src/relay/main.tsx`. That is what "the website has this capability" means.
+ *
+ * A surface that genuinely is not mounted is not silently tolerated: it must be
+ * RECORDED below, with a reason, and the record is checked in both directions.
+ * A recorded path that has since become reachable FAILS, so mounting something
+ * forces the record to be corrected rather than left to rot into a permanent
+ * excuse.
+ * ----------------------------------------------------------------------- */
+
+/** Entries a browser genuinely loads. Kept identical to the browser boundary
+ *  guard's list (`src/relay/shared/browser-boundary.test.ts`). */
+export const BROWSER_ENTRY_POINTS = Object.freeze(['src/relay/main.tsx']);
+
+/** Extensions a TypeScript/React import may resolve to, longest-lived first. */
+const MODULE_EXTENSIONS = Object.freeze(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']);
+
+/** Assets contribute no module edge; a bundler loads them, nothing imports on. */
+const ASSET_EXTENSIONS = /\.(css|json|svg|png|jpe?g|gif|webp|woff2?|ttf)$/i;
+
+/**
+ * WEBSITE SURFACES THAT ARE DECLARED BUT NOT MOUNTED.
+ *
+ * Each entry is a component that exists, is tested, and that no browser entry
+ * renders. Recording one is a disclosure, not an approval — the reason must say
+ * what an operator therefore cannot reach today.
+ */
+export const UNMOUNTED_WEBSITE_SURFACES = Object.freeze({
+  'src/relay/ui/project-workspace/RelayMissionEconomics.tsx':
+    'the mission economics panel is rendered only by its own tests and by '
+    + 'src/relay/cli/simulated-data-disclosure.test.ts; no browser route mounts it, so a '
+    + 'website operator cannot today reach mission cost receipts, budget status or the '
+    + 'verified mission cost. Pre-existing and untouched by the MCP milestone.',
+});
+
+/** Every module specifier a source file imports, in the forms this repo uses. */
+export function importSpecifiersOf(source) {
+  const specifiers = [];
+  const patterns = [
+    /(?:^|[\s;}])(?:import|export)\s[^;]*?\sfrom\s*['"]([^'"]+)['"]/gu,
+    /(?:^|[\s;}])import\s*['"]([^'"]+)['"]/gu,
+    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/gu,
+  ];
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) specifiers.push(match[1]);
+  }
+  return specifiers;
+}
+
+/**
+ * Resolve one specifier to a repo-relative module path, or `null` when it is a
+ * package, an asset, or something outside the tree. Deliberately conservative:
+ * an edge this cannot resolve is an edge NOT followed, which can only make a
+ * surface look LESS reachable — a false failure that is loud, never a false
+ * pass that is silent.
+ */
+export function resolveModuleSpecifier(repoRoot, fromRelative, specifier) {
+  let candidate;
+  if (specifier.startsWith('.')) {
+    candidate = join(dirname(fromRelative), specifier);
+  } else if (specifier.startsWith('/src/') || specifier.startsWith('/relay-bridge/')) {
+    candidate = specifier.slice(1); // root-absolute, as the bundler resolves it
+  } else {
+    return null; // a package, a `node:` builtin, or an alias this check does not follow
+  }
+  candidate = candidate.split(/[\\/]/).filter((part) => part !== '' && part !== '.').join('/');
+  if (ASSET_EXTENSIONS.test(candidate)) return null;
+
+  const exists = (relativePath) => {
+    const resolved = resolveInsideRepo(repoRoot, relativePath);
+    return resolved.ok && existsSync(resolved.full) && statSync(resolved.full).isFile()
+      ? relativePath
+      : null;
+  };
+
+  if (/\.[a-z]+$/iu.test(candidate)) {
+    const direct = exists(candidate);
+    if (direct !== null) return direct;
+  }
+  for (const extension of MODULE_EXTENSIONS) {
+    const withExtension = exists(`${candidate}${extension}`);
+    if (withExtension !== null) return withExtension;
+  }
+  for (const extension of MODULE_EXTENSIONS) {
+    const asIndex = exists(`${candidate}/index${extension}`);
+    if (asIndex !== null) return asIndex;
+  }
+  return null;
+}
+
+/** Every module a browser entry can reach, as repo-relative paths. */
+export function reachableFromBrowserEntries(repoRoot, entries = BROWSER_ENTRY_POINTS) {
+  const seen = new Set();
+  const pending = [];
+  for (const entry of entries) {
+    const resolved = resolveInsideRepo(repoRoot, entry);
+    if (resolved.ok && existsSync(resolved.full)) {
+      seen.add(entry);
+      pending.push(entry);
+    }
+  }
+  while (pending.length > 0) {
+    const current = pending.pop();
+    const resolved = resolveInsideRepo(repoRoot, current);
+    if (!resolved.ok) continue;
+    let source;
+    try { source = readFileSync(resolved.full, 'utf8'); } catch { continue; }
+    for (const specifier of importSpecifiersOf(source)) {
+      const next = resolveModuleSpecifier(repoRoot, current, specifier);
+      if (next === null || seen.has(next)) continue;
+      seen.add(next);
+      pending.push(next);
+    }
+  }
+  return seen;
+}
+
+/** A website capability counts here once it claims to be on the website. */
+const claimsWebsite = (capability) =>
+  capability.websiteStatus === 'implemented' || capability.websiteStatus === 'tested';
+
+/**
+ * Hold every implemented website entry point to actual reachability from a
+ * browser entry, and hold the unmounted record to being accurate in BOTH
+ * directions.
+ */
+export function verifyWebsiteReachability(repoRoot, registry, record = UNMOUNTED_WEBSITE_SURFACES) {
+  const failures = [];
+  const reachable = reachableFromBrowserEntries(repoRoot);
+  const declared = new Set();
+  const unmountedSeen = new Set();
+  const isRecorded = (path) => Object.prototype.hasOwnProperty.call(record, path);
+  let checked = 0;
+  let mounted = 0;
+
+  for (const capability of registry.capabilities ?? []) {
+    if (!claimsWebsite(capability)) continue;
+    const id = capability.capabilityId ?? '(unnamed)';
+    for (const entry of capability.websiteEntryPoints ?? []) {
+      const path = declaredPathOf(entry);
+      if (classifyDeclaration(entry).kind !== 'file') continue;
+      declared.add(path);
+      checked += 1;
+      if (reachable.has(path)) {
+        mounted += 1;
+        if (isRecorded(path)) {
+          failures.push({
+            capabilityId: id,
+            rule: 'stale-unmounted-record',
+            detail: `${path} is recorded as an unmounted website surface, but a browser entry now reaches it — `
+              + 'remove the record rather than leaving a disclosure that has stopped being true',
+          });
+        }
+        continue;
+      }
+      if (isRecorded(path)) {
+        unmountedSeen.add(path);
+        continue;
+      }
+      failures.push({
+        capabilityId: id,
+        rule: 'website-entry-unreachable',
+        detail: `websiteEntryPoints names ${path}, which is ${capability.websiteStatus} but is NOT reachable from `
+          + `${BROWSER_ENTRY_POINTS.join(', ')} — the file exists and nothing in the running website renders it. `
+          + 'Mount it, or record it in UNMOUNTED_WEBSITE_SURFACES with the reason an operator cannot reach it',
+      });
+    }
+  }
+
+  for (const path of Object.keys(record)) {
+    if (!declared.has(path)) {
+      failures.push({
+        capabilityId: '(registry)',
+        rule: 'unused-unmounted-record',
+        detail: `${path} is recorded as an unmounted website surface, but no capability declares it — `
+          + 'a record for nothing describes nothing',
+      });
+    }
+  }
+
+  return { ok: failures.length === 0, failures, checked, mounted, unmounted: [...unmountedSeen].sort() };
+}
+
 /* --------------------------------- run ---------------------------------- */
 
 export function runParityCheck(options) {
@@ -815,6 +1010,16 @@ export function runParityCheck(options) {
   say(`  declared CLI commands: ${declared.commands} (verified by the CLI's own command tests)`);
   if (declared.failures.length > 0) {
     say(`  declaration failures: ${declared.failures.length}`);
+  }
+
+  // EXISTENCE IS NOT REACHABILITY. A declared component that no browser entry
+  // renders is a capability the website does not have, however complete and
+  // however well tested the component is.
+  const reachability = verifyWebsiteReachability(repoRoot, local.registry);
+  failures.push(...reachability.failures);
+  say(`  website entry points reachable: ${reachability.mounted}/${reachability.checked} mounted`);
+  for (const path of reachability.unmounted) {
+    say(`  NOT MOUNTED  ${path} — ${UNMOUNTED_WEBSITE_SURFACES[path]}`);
   }
 
   // A registry that declares no file evidence at all would otherwise report a

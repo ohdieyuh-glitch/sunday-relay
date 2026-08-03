@@ -670,13 +670,18 @@
       "websiteStatus": "tested",
       "cliStatus": "tested",
       "websiteEntryPoints": [
-        "src/relay/ui/mcp/RelayMcpConnections.tsx"
+        "src/relay/ui/mcp/RelayMcpConnections.tsx",
+        "src/relay/ui/mcp/mcp-settings-view.ts",
+        "src/relay/ui/project-settings/SettingsMcp.tsx",
+        "src/relay/ui/project-settings/RelayProjectSettings.tsx#SectionMcp"
       ],
       "cliEntryPoints": [
         "src/relay/cli/mcp-cli.ts"
       ],
       "websiteTestReferences": [
-        "src/relay/ui/mcp/relay-mcp-ui.test.tsx"
+        "src/relay/ui/mcp/relay-mcp-ui.test.tsx",
+        "src/relay/ui/project-settings/project-settings-mcp.test.tsx",
+        "src/relay/ui/preview/mcp-host-reachability.test.tsx"
       ],
       "cliTestReferences": [
         "src/relay/cli/mcp-cli.test.ts"
@@ -697,13 +702,15 @@
       "websiteStatus": "tested",
       "cliStatus": "tested",
       "websiteEntryPoints": [
-        "src/relay/ui/mcp/RelayMcpConnections.tsx"
+        "src/relay/ui/mcp/RelayMcpConnections.tsx",
+        "src/relay/ui/project-settings/SettingsMcp.tsx"
       ],
       "cliEntryPoints": [
         "src/relay/cli/mcp-cli.ts"
       ],
       "websiteTestReferences": [
-        "src/relay/ui/mcp/relay-mcp-ui.test.tsx"
+        "src/relay/ui/mcp/relay-mcp-ui.test.tsx",
+        "src/relay/ui/project-settings/project-settings-mcp.test.tsx"
       ],
       "cliTestReferences": [
         "src/relay/cli/mcp-cli.test.ts"

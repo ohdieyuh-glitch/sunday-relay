@@ -4,17 +4,23 @@ import { describe, expect, it } from 'vitest';
 
 import {
   anchorSegments,
+  BROWSER_ENTRY_POINTS,
   compareRegistries,
   declaredPathOf,
   DECLARATION_FIELDS,
   DEFAULT_COMPANION_PATHS,
   findCompanion,
+  importSpecifiersOf,
   isFileClaim,
   loadRegistry,
+  reachableFromBrowserEntries,
+  resolveModuleSpecifier,
   runParityCheck,
+  UNMOUNTED_WEBSITE_SURFACES,
   validateRegistry,
   verifyAnchor,
   verifyDeclaredFiles,
+  verifyWebsiteReachability,
   REGISTRY_RELATIVE_PATH,
 } from '../../../scripts/relay-surface-parity.mjs';
 import {
@@ -575,5 +581,153 @@ describe('cross-repository verification', () => {
     if (!loaded.ok) return;
     expect(loaded.value.checksum).toMatch(/^[0-9a-f]{64}$/);
     expect(REGISTRY_RELATIVE_PATH.replace(/\\/g, '/')).toBe(RELAY_PARITY_REGISTRY_PATH);
+  });
+});
+
+/* ------------------- reachability: existence is not a mount -------------- */
+
+describe('an implemented website capability must be REACHABLE, not merely present', () => {
+  /**
+   * The gap this closes was real and it lasted a whole milestone.
+   * `mcp-connection-management` was `tested` on both surfaces, every declared
+   * file resolved, and no browser entry rendered the component. The registry
+   * read as parity; the website had no such surface. These tests hold the
+   * repaired rule to failing on exactly that shape.
+   */
+
+  const reachable = reachableFromBrowserEntries(repoRoot);
+
+  it('the browser entry itself is reachable, and the walk found a real graph', () => {
+    for (const entry of BROWSER_ENTRY_POINTS) expect(reachable.has(entry)).toBe(true);
+    // A resolver that silently resolved nothing would report every surface
+    // unmounted, and a resolver that "resolved" everything would report none.
+    expect(reachable.size).toBeGreaterThan(50);
+    expect(reachable.has('src/relay/ui/preview/RelayPreviewApp.tsx')).toBe(true);
+    // Server-only modules are NOT in a browser graph.
+    expect(reachable.has('src/relay/cli/main.ts')).toBe(false);
+  });
+
+  it('follows relative, index, extensionless and root-absolute specifiers', () => {
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/main.tsx', './ui/preview/RelayPreviewApp'))
+      .toBe('src/relay/ui/preview/RelayPreviewApp.tsx');
+    // A directory import resolves through its barrel.
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/ui/preview/RelayPreviewApp.tsx', '../project-settings'))
+      .toBe('src/relay/ui/project-settings/index.ts');
+    // Root-absolute, the form that once slipped past a boundary walker.
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/main.tsx', '/src/relay/ui/preview/RelayPreviewApp.tsx'))
+      .toBe('src/relay/ui/preview/RelayPreviewApp.tsx');
+    // Assets and packages contribute no module edge.
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/main.tsx', './relay.css')).toBeNull();
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/main.tsx', 'react')).toBeNull();
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/main.tsx', 'node:fs')).toBeNull();
+  });
+
+  it('recognises every import form this repository actually uses', () => {
+    const specifiers = importSpecifiersOf([
+      "import { A } from './a';",
+      "export { B } from './b';",
+      "import './c.css';",
+      "const d = await import('./d');",
+      "import type { E } from './e';",
+    ].join('\n'));
+    expect(specifiers).toEqual(expect.arrayContaining(['./a', './b', './c.css', './d', './e']));
+  });
+
+  it('THE MCP SURFACE IS MOUNTED — the component and its settings host are both reachable', () => {
+    for (const path of [
+      'src/relay/ui/mcp/RelayMcpConnections.tsx',
+      'src/relay/ui/mcp/mcp-settings-view.ts',
+      'src/relay/ui/project-settings/SettingsMcp.tsx',
+    ]) {
+      expect(reachable.has(path), `${path} is declared but no browser entry reaches it`).toBe(true);
+    }
+  });
+
+  it('this repository has no unreachable website entry point that is not disclosed', () => {
+    const result = verifyWebsiteReachability(repoRoot, registry);
+    expect(result.failures).toEqual([]);
+    expect(result.mounted).toBeGreaterThan(0);
+    expect(result.checked).toBeGreaterThanOrEqual(result.mounted);
+  });
+
+  it('FAILS a declared website surface that no browser entry renders', () => {
+    const result = verifyWebsiteReachability(repoRoot, {
+      capabilities: [capability({
+        capabilityId: 'ghost-surface',
+        // A real file, fully tested, that nothing in the running website mounts.
+        websiteEntryPoints: ['src/relay/ui/project-workspace/RelayMissionEconomics.tsx#RelayMissionEconomics'],
+      })],
+    });
+    // Recorded paths are disclosed, not failed — so use one that is NOT recorded.
+    const undisclosed = verifyWebsiteReachability(repoRoot, {
+      capabilities: [capability({
+        capabilityId: 'ghost-surface',
+        websiteEntryPoints: ['src/relay/ui/psp-import/relay-psp-import.test.tsx'],
+      })],
+    });
+    expect(result.failures.map((f: { rule: string }) => f.rule)).not.toContain('website-entry-unreachable');
+    expect(result.unmounted).toContain('src/relay/ui/project-workspace/RelayMissionEconomics.tsx');
+    expect(undisclosed.failures.map((f: { rule: string }) => f.rule)).toContain('website-entry-unreachable');
+  });
+
+  it('does NOT demand reachability from a capability that claims no website surface', () => {
+    const result = verifyWebsiteReachability(repoRoot, {
+      capabilities: [capability({
+        capabilityId: 'cli-only',
+        websiteStatus: 'not_started',
+        websiteEntryPoints: ['src/relay/ui/psp-import/relay-psp-import.test.tsx'],
+      })],
+    });
+    // The `unused-unmounted-record` rule compares against the WHOLE registry
+    // and is expected to fire on a one-capability fixture, so this asserts the
+    // rule actually under test rather than an empty list.
+    expect(result.failures.map((f: { rule: string }) => f.rule)).not.toContain('website-entry-unreachable');
+    expect(result.checked).toBe(0);
+  });
+
+  it('FAILS a record that has gone stale — mounting forces the disclosure to be corrected', () => {
+    // A path that IS reachable, recorded as if it were not. This is the shape
+    // the MCP surface would have taken had its "not mounted" disclosure been
+    // left behind by this change.
+    const result = verifyWebsiteReachability(
+      repoRoot,
+      { capabilities: [capability({ capabilityId: 'mounted', websiteEntryPoints: ['src/relay/main.tsx'] })] },
+      { 'src/relay/main.tsx': 'stale claim that the browser entry is not mounted' },
+    );
+    expect(result.failures.map((f: { rule: string }) => f.rule)).toContain('stale-unmounted-record');
+  });
+
+  it('FAILS a record that no capability declares — a disclosure about nothing', () => {
+    const result = verifyWebsiteReachability(repoRoot, {
+      capabilities: [capability({ capabilityId: 'unrelated', websiteEntryPoints: ['src/relay/main.tsx'] })],
+    });
+    expect(result.failures.map((f: { rule: string }) => f.rule)).toContain('unused-unmounted-record');
+  });
+
+  it('every recorded unmounted surface is genuinely unmounted AND genuinely declared', () => {
+    for (const [path, why] of Object.entries(UNMOUNTED_WEBSITE_SURFACES)) {
+      expect(existsSync(join(repoRoot, path)), `${path} is recorded but does not exist`).toBe(true);
+      expect(reachable.has(path), `${path} is recorded as unmounted but IS reachable`).toBe(false);
+      // A record with no reason discloses nothing.
+      expect(String(why).length).toBeGreaterThan(40);
+    }
+    const result = verifyWebsiteReachability(repoRoot, registry);
+    expect(result.failures.map((f: { rule: string }) => f.rule)).not.toContain('unused-unmounted-record');
+  });
+
+  it('the run prints the reachability total and every NOT MOUNTED disclosure', () => {
+    const result = runParityCheck({ repoRoot, now: NOW });
+    const printed = result.lines.join('\n');
+    expect(printed).toMatch(/website entry points reachable: \d+\/\d+ mounted/);
+    for (const path of Object.keys(UNMOUNTED_WEBSITE_SURFACES)) {
+      expect(printed).toContain(`NOT MOUNTED  ${path}`);
+    }
+    expect(result.ok).toBe(true);
+  });
+
+  it('STRICT mode enforces reachability too — it is not a local-only courtesy', () => {
+    const strict = runParityCheck({ repoRoot, strict: true, now: NOW });
+    expect(strict.ok).toBe(true);
+    expect(strict.lines.join('\n')).toMatch(/website entry points reachable: \d+\/\d+ mounted/);
   });
 });
