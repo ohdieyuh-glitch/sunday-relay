@@ -661,6 +661,64 @@
         "src/relay/mission/agent-operating/operating-profile-builder.ts#buildAgentOperatingProfile",
         "src/relay/mission/agent-operating/agent-operating.test.ts"
       ]
+    },
+    {
+      "capabilityId": "loop-command-grammar",
+      "name": "Loop slash-command grammar",
+      "domain": "command",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayProjectConversation.tsx#routeRelayInput",
+        "src/relay/ui/loop/loop-view.ts#openLoopSurface"
+      ],
+      "cliEntryPoints": [
+        "relay loop",
+        "src/relay/cli/loop-cli.ts#slashCommandFromArgv",
+        "src/relay/cli/loop-cli.ts#runLoopCli"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/loop/loop-ui.test.tsx",
+        "src/relay/ui/project-workspace/loop-composer-routing.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/loop-cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/loop/loop-command-parser.ts#parseSlashCommand",
+        "src/relay/mission/loop/loop-command-parser.ts#routeRelayInput",
+        "src/relay/mission/loop/loop-command-types.ts",
+        "src/relay/mission/loop/loop-command-parser.test.ts"
+      ]
+    },
+    {
+      "capabilityId": "loop-contract-preview",
+      "name": "Loop contract preview before execution",
+      "domain": "command",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/loop/RelayLoopComposer.tsx",
+        "src/relay/ui/loop/loop-view.ts#projectLoopComposerView"
+      ],
+      "cliEntryPoints": [
+        "relay loop",
+        "src/relay/cli/loop-cli.ts#renderLoopPreviewLines"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/loop/loop-ui.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/loop-cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/loop/loop-preview.ts#projectLoopCommandPreview",
+        "src/relay/mission/loop/loop-preview.ts#renderLoopPreviewLines",
+        "src/relay/mission/loop/loop-blockers.ts",
+        "src/relay/mission/loop/loop-target.ts#resolveLoopTarget"
+      ]
     }
   ]
 }
