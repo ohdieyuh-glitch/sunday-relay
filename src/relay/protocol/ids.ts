@@ -54,6 +54,13 @@ export type ManualRequestId = Branded<'mrq'>;
  * identifier, so it is never minted by the factory and never carries a prefix.
  */
 export type RelayLoopId = Branded<'lpe'>;
+/**
+ * ONE EXECUTION of a Loop. Distinct from `RelayLoopId`, which identifies the
+ * Loop itself: a Loop may be run more than once, and a run carries the
+ * iterations, the assignment and the durable journal. Conflating the two would
+ * make "which run produced this evidence" unanswerable.
+ */
+export type RelayLoopRunId = Branded<'lpr'>;
 export type RelayLoopIterationId = Branded<'lpi'>;
 export type RelayLoopScheduleId = Branded<'lps'>;
 export type RelayLoopTriggerId = Branded<'lpt'>;
@@ -83,6 +90,8 @@ export const PREFIXES = {
   // Loop Engine (docs/relay/LOOP_ENGINE.md).
   lpe: 'lpe_', lpi: 'lpi_', lps: 'lps_', lpt: 'lpt_', lpo: 'lpo_',
   lpb: 'lpb_', lpc: 'lpc_', lpm: 'lpm_', lpu: 'lpu_', lpk: 'lpk_',
+  // Stage 2 runtime: one execution of a Loop.
+  lpr: 'lpr_',
 } as const;
 
 export type IdPrefix = keyof typeof PREFIXES;

@@ -141,6 +141,7 @@ export {
   RESUMABLE_LOOP_STATES,
   SUPPORTED_LOOP_CONTRACT_SCHEMA_VERSIONS,
   TERMINAL_LOOP_STATES,
+  EXHAUSTION_LOOP_STATES,
   buildLoopContract,
   isBindingLoopChange,
   loopBindingFields,
@@ -189,3 +190,8 @@ export {
   type RoleExpressionProblem,
   type RoleExpressionResult,
 } from './loop-roles';
+
+/* ------------------------------------------------------------- runtime */
+/* Stage 2: the durable execution of one Loop. Pure — the Node journal
+   adapter lives in `src/relay/persistence/`. */
+export * from './runtime';

@@ -67,6 +67,7 @@ export const RELAY_LOOP_STATES = [
   'validating',
   'awaiting_confirmation',
   'queued',
+  'starting',
   'planning',
   'decomposing',
   'running',
@@ -78,26 +79,58 @@ export const RELAY_LOOP_STATES = [
   'waiting_budget',
   'rate_limited',
   'backing_off',
+  'pausing',
   'paused',
+  'resuming',
+  'stopping',
   'converging',
   'completion_check',
   'completed',
   'stopped',
+  'iteration_exhausted',
+  'duration_exhausted',
   'timed_out',
   'budget_exhausted',
+  'token_exhausted',
+  'provider_call_exhausted',
   'failed',
   'recovery_required',
 ] as const;
 export type RelayLoopState = (typeof RELAY_LOOP_STATES)[number];
 
-/** Terminal states. `recovery_required` is deliberately NOT terminal: an
- *  unconfirmable Loop is unfinished, not finished. */
+/**
+ * Terminal states. `recovery_required` is deliberately NOT terminal: an
+ * unconfirmable Loop is unfinished, not finished.
+ *
+ * EVERY EXHAUSTION IS TERMINAL AND NONE OF THEM IS COMPLETION. They are listed
+ * separately rather than collapsed into one `exhausted` state because the five
+ * limits fail for different reasons and a user fixes them differently — raising
+ * an iteration cap is not the same act as raising a spend cap. `timed_out` is
+ * distinct again: a wall-clock deadline is not a consumed resource.
+ */
 export const TERMINAL_LOOP_STATES: readonly RelayLoopState[] = [
   'completed',
   'stopped',
+  'iteration_exhausted',
+  'duration_exhausted',
   'timed_out',
   'budget_exhausted',
+  'token_exhausted',
+  'provider_call_exhausted',
   'failed',
+];
+
+/**
+ * The five ways a Loop can run out of a bounded resource. Kept as its own set
+ * so a surface can say "a limit stopped this" without re-listing them, and so a
+ * test can prove none of them is ever treated as completion.
+ */
+export const EXHAUSTION_LOOP_STATES: readonly RelayLoopState[] = [
+  'iteration_exhausted',
+  'duration_exhausted',
+  'budget_exhausted',
+  'token_exhausted',
+  'provider_call_exhausted',
 ];
 
 /**
