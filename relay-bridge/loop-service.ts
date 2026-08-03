@@ -23,6 +23,8 @@ import {
   type RelayLoopControlAction,
   type RelayLoopRun,
 } from '../src/relay/mission/loop/runtime';
+import { parseRoleExpression } from '../src/relay/mission/loop/loop-roles';
+import type { RelayAgentRole } from '../src/relay/mission/agent-operating';
 import type { LoopRunPort } from './loop-routes';
 
 /**
@@ -120,7 +122,7 @@ export function createLoopService(options: LoopServiceOptions): LoopService {
     return loaded?.run == null ? null : projectLoopStatus(loaded.run);
   };
 
-  const contextFor = (run: RelayLoopRun): LoopEngineContext => {
+  const contextFor = (run: RelayLoopRun, roles: readonly RelayAgentRole[], expression: string): LoopEngineContext => {
     const policy = policyFor({ loopId: run.loopId, runId: run.runId });
     return {
       runId: run.runId,
@@ -128,17 +130,23 @@ export function createLoopService(options: LoopServiceOptions): LoopService {
       projectId: run.projectId,
       actor: 'relay-loop-service',
       sessionId: 'bridge',
+      // THE TARGET THAT WAS CONFIRMED, not a convenient one. Building a
+      // coding_agent target here regardless of what the user asked for would
+      // silently run Reviewer work through the Coding Agent adapter and then
+      // report it as the Reviewer having done it. The engine's preflight
+      // refuses anything the injected adapter cannot staff, and this is what
+      // gives it something truthful to refuse.
       target: {
-        selector: { kind: 'exact_roles', requestedExpression: 'coding', requestedRoles: ['coding_agent'] },
-        requestedRoles: ['coding_agent'],
-        resolvedRoles: ['coding_agent'],
+        selector: { kind: 'exact_roles', requestedExpression: expression, requestedRoles: roles },
+        requestedRoles: roles,
+        resolvedRoles: roles,
         unavailableRoles: [],
-        assignments: [{
-          role: 'coding_agent',
+        assignments: roles.map((role) => ({
+          role,
           requestedAdapterId: options.agent.adapterId,
           actualAgentId: null,
           actualAdapterId: null,
-        }],
+        })),
         registryProvenance: 'simulated',
         resolvedAt: options.now(),
       },
@@ -159,16 +167,67 @@ export function createLoopService(options: LoopServiceOptions): LoopService {
     };
   };
 
+  /**
+   * The target each run was confirmed with.
+   *
+   * Held in memory for this process. A run whose target this process never saw
+   * — after a restart, or when another process confirmed it — falls back to the
+   * roles the ASSIGNMENT already records in the journal, and refuses when there
+   * is no assignment yet. It never guesses a role, because guessing `coding`
+   * is precisely how Reviewer work gets done by the wrong agent.
+   */
+  const confirmedTargets = new Map<string, { roles: readonly RelayAgentRole[]; expression: string }>();
+
   const drive = async (run: RelayLoopRun): Promise<void> => {
-    await runLoopUntilSettled(engine, contextFor(run), {
-      maxIterationsThisCall: options.maxIterationsPerCall ?? 12,
-    });
+    const remembered = confirmedTargets.get(run.runId);
+    const roles = remembered?.roles
+      ?? (run.assignment === null ? null : [run.assignment.resolvedRole]);
+    if (roles === null) return;
+    await runLoopUntilSettled(
+      engine,
+      contextFor(run, roles, remembered?.expression ?? roles.join(',')),
+      { maxIterationsThisCall: options.maxIterationsPerCall ?? 12 },
+    );
+  };
+
+  /**
+   * Which roles this expression names, or `null` when Stage 2 will not run it.
+   *
+   * `null` is returned for every multi-role expression and every alias meaning
+   * "all". The route reports that as an unsupported target rather than running
+   * one of the roles and calling it done.
+   */
+  const rolesFor = (expression: string): readonly RelayAgentRole[] | null => {
+    const parsed = parseRoleExpression(expression);
+    if (!parsed.ok) return null;
+    // `all`/`team` and the compound-agent default resolve against a registry,
+    // not here, and Stage 2 will not run either of them.
+    if (parsed.selector.kind !== 'exact_roles') return null;
+    return parsed.selector.requestedRoles.length === 1 ? parsed.selector.requestedRoles : null;
   };
 
   return {
     store,
 
     confirm: async (input) => {
+      const roles = rolesFor(input.targetExpression);
+      if (roles === null) {
+        return {
+          ok: false, status: 422, kind: 'unsupported_target',
+          message:
+            `"${input.targetExpression}" names more than one agent, or every agent. Stage 2 runs exactly one, and `
+            + 'refusing is the only truthful answer — running one of them would do a fraction of what was asked '
+            + 'without saying so.',
+        };
+      }
+      if (!options.agent.supportedRoles.includes(roles[0])) {
+        return {
+          ok: false, status: 422, kind: 'unsupported_target',
+          message:
+            `No adapter in this build can staff the ${roles[0]} role. The run was not created — executing it through `
+            + 'a different agent would report work as having been done by somebody who did not do it.',
+        };
+      }
       const policy = policyFor({ loopId: input.loopId, runId: '' });
       /**
        * THE RUN ID IS DERIVED FROM THE CONFIRMATION, NOT MINTED.
@@ -212,6 +271,7 @@ export function createLoopService(options: LoopServiceOptions): LoopService {
       if (!created.ok) {
         return { ok: false, status: created.status, kind: created.kind, message: created.problem };
       }
+      confirmedTargets.set(created.run.runId, { roles, expression: input.targetExpression });
       if (!created.duplicate) await drive(created.run);
       const status = statusOf(created.run.runId);
       return status === null

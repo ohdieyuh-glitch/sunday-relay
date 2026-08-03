@@ -497,6 +497,50 @@ describe('pause, resume and stop through the route', () => {
   });
 });
 
+/* ================================================ unsupported targets === */
+
+describe('a target Stage 2 cannot run is refused, never substituted', () => {
+  it('refuses /loop reviewer rather than running it through the coding fake', async () => {
+    // THE FAILURE THIS PREVENTS. The only adapter in this build staffs
+    // coding_agent. Executing a Reviewer contract through it and reporting the
+    // result would be claiming an independent review that never happened —
+    // which is the single most consequential lie this system could tell.
+    const result = await call('POST', '/loop/confirm', { ...CONFIRM_BODY, targetExpression: 'reviewer' });
+    expect(result?.status).toBe(422);
+    const body = result?.body as { kind: string; error: string };
+    expect(body.kind).toBe('unsupported_target');
+    expect(body.error).toContain('reviewer');
+    expect(body.error).toContain('did not do it');
+    // And nothing was created.
+    expect(service.store.runIdsForLoop('lpe_proof')).toBeNull();
+  });
+
+  it('refuses architect for the same reason', async () => {
+    const result = await call('POST', '/loop/confirm', { ...CONFIRM_BODY, targetExpression: 'architect' });
+    expect(result?.status).toBe(422);
+    expect((result?.body as { kind: string }).kind).toBe('unsupported_target');
+  });
+
+  it('refuses every multi-role expression', async () => {
+    for (const expression of ['all', 'team', 'coding,reviewer', 'architect,coding,reviewer']) {
+      const result = await call('POST', '/loop/confirm', { ...CONFIRM_BODY, targetExpression: expression });
+      expect(result?.status, expression).toBe(422);
+      expect((result?.body as { kind: string }).kind).toBe('unsupported_target');
+      expect(service.store.runIdsForLoop('lpe_proof'), expression).toBeNull();
+    }
+  });
+
+  it('accepts every alias that means the one supported role', async () => {
+    for (const expression of ['coding', 'coder', 'coding-agent']) {
+      rmSync(root, { recursive: true, force: true });
+      root = mkdtempSync(join(tmpdir(), 'relay-loop-routes-'));
+      service = makeService([{ kind: 'attested_evidence' }]);
+      const result = await call('POST', '/loop/confirm', { ...CONFIRM_BODY, targetExpression: expression });
+      expect(result?.status, expression).toBe(200);
+    }
+  });
+});
+
 /* ========================================================== leakage === */
 
 describe('projections disclose nothing they should not', () => {
