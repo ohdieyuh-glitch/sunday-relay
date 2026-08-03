@@ -157,3 +157,49 @@ describe('the browser Loop surface stays browser-safe', () => {
     expect(/grantedToOperator:\s*true/.test(source), 'the domain fabricates an operator grant').toBe(false);
   });
 });
+
+/* -------------------------------------------------- the host actually wires it */
+
+/**
+ * A surface nothing mounts is not an integrated surface.
+ *
+ * `RelayProjectWorkspace` takes `loopSurface` OPTIONALLY — deliberately, so the
+ * approved screen renders unchanged without it — which means the parser can be
+ * fully integrated and `/loop` can still fall through to the conversation
+ * because no host ever passed one. That is precisely the gap this asserts
+ * against, and it is invisible to every other test in this file.
+ */
+describe('the application host reaches the Loop surface', () => {
+  const HOST = join(__dirname, '..', 'preview', 'RelayPreviewApp.tsx');
+  const source = readFileSync(HOST, 'utf8');
+
+  it('opens the Loop surface through the shared pure entry point', () => {
+    expect(source).toContain('openLoopSurface');
+    // The host must not reach past it into the parser and re-decide meaning.
+    expect(/\bparseSlashCommand\b/.test(source), 'the host parses slash input itself').toBe(false);
+  });
+
+  it('passes a loopSurface to EVERY workspace it renders', () => {
+    const renders = source.match(/<RelayProjectWorkspace\b/g) ?? [];
+    expect(renders.length, 'expected the host to render the workspace').toBeGreaterThan(0);
+    const wired = source.match(/loopSurface=\{loopSurface\}/g) ?? [];
+    expect(
+      wired.length,
+      'a RelayProjectWorkspace render site without loopSurface silently drops /loop',
+    ).toBe(renders.length);
+  });
+
+  it('cannot mint an Unchain session or enable a Loop feature from the browser', () => {
+    // The host supplies flags and Unchain state. Both must be the refusing
+    // value: a host that passed enabled flags would be claiming shipped
+    // capability, and one that passed a session would be forging eligibility.
+    expect(source).toContain('flags: null');
+    expect(/unchain:\s*(?!null)/.test(source), 'the host supplies an Unchain session').toBe(false);
+  });
+
+  it('starts nothing — the host has no Loop execution call', () => {
+    for (const forbidden of [/startLoop\s*\(/, /runLoop\s*\(/, /dispatchLoop\s*\(/]) {
+      expect(forbidden.test(source), `the host calls ${forbidden}`).toBe(false);
+    }
+  });
+});

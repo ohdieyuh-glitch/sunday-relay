@@ -23,6 +23,11 @@ import {
   WORKSPACE_FIXTURES,
   WORKSPACE_FIXTURE_KEYS,
 } from '../project-workspace';
+import {
+  openLoopSurface,
+  type RelayLoopSurface,
+  type RelayLoopSurfaceState,
+} from '../loop';
 import type { RelayMissionState } from '../app';
 import type { ProjectMessage, WorkspaceFixtureKey } from '../project-workspace';
 import { AGENT_OPTIONS, RelayProjectSettings } from '../project-settings';
@@ -589,6 +594,51 @@ export function RelayPreviewApp() {
     ]);
   };
 
+  /* ------------------------------------------------------------ Loops */
+  /* The website half of the ONE Loop grammar, wired to the real workspace.
+     `openLoopSurface` is a PURE function of the typed text: it parses, gates
+     and projects, and it is the only thing this host calls. Nothing here
+     starts a Loop, and nothing can — `start_loop` is permanently disabled in
+     the view model and there is no runtime behind it.
+
+     Feature flags are `null`, which means every Loop feature is OFF. That is
+     the truthful value in this build: no code reads an environment variable
+     for them yet, so claiming otherwise here would make this host the place
+     the product starts lying about what it has shipped. The composer
+     therefore opens and reports NOT ENABLED with real blockers — which is
+     exactly what a user should see. */
+  const [loopSurfaceState, setLoopSurfaceState] = useState<RelayLoopSurfaceState | null>(null);
+  const openLoop = useCallback(
+    (text: string) => {
+      setLoopSurfaceState(
+        openLoopSurface(text, {
+          flags: null,
+          // No registry observation is available in the preview host. `null`
+          // renders as Unknown rather than as "no agents are available",
+          // which are different claims.
+          registry: null,
+          observedAt: new Date().toISOString(),
+          projectId: 'project-sunday',
+          workspaceId: 'ws-relay-preview',
+        }),
+      );
+    },
+    [],
+  );
+  const loopSurface: RelayLoopSurface = useMemo(
+    () => ({
+      state: loopSurfaceState,
+      onSlashCommand: openLoop,
+      onClose: () => setLoopSurfaceState(null),
+      onStartComposer: () => openLoop('/loop'),
+      onSaveDraft: () =>
+        setNotice('Loop drafts are not persisted yet. Nothing was saved and nothing was spent.'),
+      onContinueToPreflight: () =>
+        setNotice('Loop preflight is not implemented yet. No Loop was started.'),
+    }),
+    [loopSurfaceState, openLoop],
+  );
+
   /* ------------------------------------------------------- Entry Home */
   const home = (
     <RelayEntryHome
@@ -756,6 +806,7 @@ export function RelayPreviewApp() {
         architectRuntime={architectRuntimeView}
         reviewerHarness={reviewerHarnessView}
         onHarnessUnavailable={onHarnessUnavailable}
+        loopSurface={loopSurface}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -833,6 +884,7 @@ export function RelayPreviewApp() {
         architectRuntime={architectRuntimeView}
         reviewerHarness={reviewerHarnessView}
         onHarnessUnavailable={onHarnessUnavailable}
+        loopSurface={loopSurface}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
