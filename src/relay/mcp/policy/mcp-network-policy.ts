@@ -358,7 +358,14 @@ export interface McpDnsResolverPort {
 export interface McpResolutionVerdict {
   readonly allowed: boolean;
   readonly reason: string | null;
-  /** The address the transport MUST connect to. Closes the rebinding window. */
+  /**
+   * The address that WAS checked, and the one a transport must connect to in
+   * order to close the rebinding window.
+   *
+   * No transport reads it today — see the header. The field is the contract,
+   * not the evidence, and saying "closes the rebinding window" here was the
+   * same overstatement the header was rewritten to retract.
+   */
   readonly pinnedAddress: string | null;
   readonly classes: readonly McpAddressClass[];
 }

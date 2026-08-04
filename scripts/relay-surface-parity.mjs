@@ -857,13 +857,34 @@ export const UNMOUNTED_WEBSITE_SURFACES = Object.freeze({
  * after `(`, `[`, `{`, `,`, `;`, an operator, one of a few keywords, or at the
  * start of input — begins a regex; a `/` after a value is division. That is a
  * heuristic, not a parser, and it is stated as one. Its failure mode is
- * bounded to one line, and `parity-scanner.test.ts` asserts the whole tree
- * scans clean.
+ * bounded, and `src/relay/parity/surface-parity.test.ts` asserts over the REAL
+ * graph — in both directions — that no comment yields an edge and no real
+ * import is lost.
+ *
+ * RESIDUAL, STATED RATHER THAN IMPLIED: a regex in a position this heuristic
+ * does not recognise — after `)` or `}` — is not consumed, so a backtick
+ * inside it can still open a phantom template literal. No file in this tree
+ * does that, and the real-graph test would catch it if one appeared.
  */
-/** Characters after which a `/` begins a REGEX rather than a division. */
+/**
+ * Characters after which a `/` begins a REGEX rather than a division.
+ *
+ * `<` and `>` are DELIBERATELY ABSENT, and so is `\n`. Including them was a
+ * defect with a wide blast radius in a React codebase: `<` made every JSX
+ * closing tag — `</StrictMode>` — look like the start of a regex, and treating
+ * a newline as regex position made every line beginning with `/` one too. The
+ * bogus "regex" then ran to the first slash of a later `//`, and the comment
+ * body landed back in code position. An independent reviewer measured 1400
+ * such positions across 61 of the 270 reachable modules, `src/relay/main.tsx`
+ * among them.
+ *
+ * `)` and `}` are absent for the opposite reason: `if (x) /re/.test(y)` is a
+ * regex and `(a + b) / c` is division, and nothing short of a parser tells
+ * them apart. Leaving them out means a regex in that position is not consumed
+ * — see the residual note on `stripComments`.
+ */
 const REGEX_POSITION_BEFORE = new Set([
-  '(', '[', '{', ',', ';', ':', '=', '!', '&', '|', '?', '+', '-', '*', '%',
-  '~', '^', '<', '>', '\n',
+  '(', '[', '{', ',', ';', ':', '=', '!', '&', '|', '?', '+', '-', '*', '%', '~', '^',
 ]);
 /** Keywords after which the same is true. */
 const REGEX_POSITION_KEYWORDS =
@@ -872,17 +893,52 @@ const REGEX_POSITION_KEYWORDS =
 export function stripComments(source) {
   let out = '';
   let index = 0;
-  let quote = null; // "'", '"', '`', or null
+  /** An open `'` or `"` string. Backticks have their own context stack. */
+  let quote = null;
   /** The last significant character emitted in CODE position. */
   let previous = '';
+  /**
+   * Template-literal contexts, innermost last.
+   *
+   * `interpolation === null` — we are in template TEXT, which is blanked.
+   * `interpolation >= 0`     — we are inside `${…}`, which is ordinary code and
+   *                            goes through every rule below, brace-counted so
+   *                            the expression ends where it really ends.
+   *
+   * A stack rather than a flag because a template may nest inside an
+   * interpolation inside a template.
+   */
+  const templates = [];
+  const top = () => (templates.length === 0 ? null : templates[templates.length - 1]);
+  const inTemplateText = () => top() !== null && top().interpolation === null;
+
   const startsRegex = () => {
     if (previous === '') return true;
     if (REGEX_POSITION_BEFORE.has(previous)) return true;
     return REGEX_POSITION_KEYWORDS.test(out.slice(-24));
   };
+
   while (index < source.length) {
     const char = source[index];
     const next = source[index + 1];
+
+    // TEMPLATE TEXT — blanked. See the doc block: text that reads like an
+    // import is not an edge, and the specifier matcher cannot tell.
+    if (inTemplateText()) {
+      if (char === '\\') { index += 2; continue; }
+      if (char === '`') { templates.pop(); previous = '`'; index += 1; continue; }
+      if (char === '$' && next === '{') {
+        out += '${';
+        top().interpolation = 0;
+        previous = '{';
+        index += 2;
+        continue;
+      }
+      if (char === '\n') out += '\n';   // keep line structure
+      index += 1;
+      continue;
+    }
+
     if (quote !== null) {
       out += char;
       if (char === '\\') {
@@ -890,35 +946,70 @@ export function stripComments(source) {
         index += 2;
         continue;
       }
-      if (char === quote) quote = null;
-      // A `'` or `"` string cannot cross a newline. Anything still "open" at a
-      // line break was never a string delimiter — an apostrophe in prose, or a
-      // quote inside a regex literal — so the scanner resynchronises here
-      // rather than swallowing the rest of the file.
-      else if (char === '\n' && quote !== '`') quote = null;
+      if (char === quote) {
+        quote = null;
+        // A closed literal is a VALUE, so a `/` after it is division.
+        previous = char;
+      } else if (char === '\n') {
+        // A `'` or `"` string cannot cross a newline. Anything still open at a
+        // line break was never a delimiter — an apostrophe in prose, or a quote
+        // inside a regex — so the scanner resynchronises rather than swallowing
+        // the rest of the file.
+        quote = null;
+        previous = char;
+      }
       index += 1;
       continue;
     }
-    if (char === "'" || char === '"' || char === '`') {
-      quote = char;
+
+    // A QUOTE ONLY OPENS A STRING WHERE A STRING COULD LEGALLY START.
+    //
+    // `Relay's own inspection` in JSX text is not a string — and JavaScript
+    // agrees: `abc'def'` is not valid, so a quote directly after an identifier
+    // character, `)`, `]` or `}` cannot be an opener. That one rule removes the
+    // apostrophe-in-prose class entirely, rather than bounding it to a line.
+    //
+    // `<` and `>` are excluded for the same reason they are excluded from
+    // regex position: after `>` comes JSX TEXT far more often than a comparison
+    // against a string literal in this codebase. The cost of being wrong is
+    // small in this direction — an unrecognised string has its contents passed
+    // through the ordinary rules, and a specifier's own quotes are still
+    // emitted, so `from '…'` still matches.
+    if (char === "'" || char === '"') {
+      if (startsRegex()) {
+        quote = char;
+        out += char;
+        index += 1;
+        continue;
+      }
+      // Prose. Emit it and move on; it delimits nothing.
       out += char;
+      previous = char;
       index += 1;
       continue;
     }
+
+    if (char === '`') {
+      templates.push({ interpolation: null });
+      index += 1;
+      continue;
+    }
+
     if (char === '/' && next === '/') {
       while (index < source.length && source[index] !== '\n') index += 1;
       continue; // the newline itself is copied on the next turn
     }
+
     if (char === '/' && next === '*') {
       index += 2;
       while (index < source.length && !(source[index] === '*' && source[index + 1] === '/')) {
-        // Preserve line structure so nothing on either side is joined into one statement.
         if (source[index] === '\n') out += '\n';
         index += 1;
       }
       index += 2;
       continue;
     }
+
     // A REGEX LITERAL, consumed whole — so a quote or a backtick inside it can
     // never be mistaken for the start of a string.
     if (char === '/' && startsRegex()) {
@@ -927,14 +1018,24 @@ export function stripComments(source) {
       let closed = false;
       while (cursor < source.length) {
         const c = source[cursor];
-        if (c === '\\') { cursor += 2; continue; }
+        // An escape cannot span a line break: `\` at end-of-line means this was
+        // never a regex, and skipping the newline would run the scan past the
+        // line it is supposed to be bounded to.
+        if (c === '\\') {
+          if (source[cursor + 1] === '\n' || cursor + 1 >= source.length) break;
+          cursor += 2;
+          continue;
+        }
         if (c === '\n') break;            // unterminated — it was not a regex
         if (c === '[') inClass = true;
         else if (c === ']') inClass = false;
         else if (c === '/' && !inClass) { closed = true; cursor += 1; break; }
         cursor += 1;
       }
-      if (closed) {
+      // A candidate whose closing slash is immediately followed by `/` or `*`
+      // did not close a regex — it ran INTO a comment and stopped on its first
+      // slash. Consuming it would put the comment body back in code position.
+      if (closed && source[cursor] !== '/' && source[cursor] !== '*') {
         while (cursor < source.length && /[a-z]/u.test(source[cursor])) cursor += 1;
         out += source.slice(index, cursor);
         previous = '/';
@@ -943,8 +1044,29 @@ export function stripComments(source) {
       }
       // Not a regex after all. Fall through and treat it as an ordinary char.
     }
+
+    // Brace counting, so `${…}` ends where the expression ends rather than at
+    // the first `}` inside an object literal or a nested block.
+    const context = top();
+    if (context !== null && context.interpolation !== null) {
+      if (char === '{') context.interpolation += 1;
+      else if (char === '}') {
+        if (context.interpolation === 0) {
+          out += '}';
+          context.interpolation = null;   // back to template TEXT
+          previous = '}';
+          index += 1;
+          continue;
+        }
+        context.interpolation -= 1;
+      }
+    }
+
     out += char;
-    if (char === '\n' || !/\s/u.test(char)) previous = char;
+    // Whitespace, INCLUDING a newline, does not change what preceded the next
+    // `/`. Treating a line break as significant is what made every line
+    // starting with `/` look like a regex.
+    if (!/\s/u.test(char)) previous = char;
     index += 1;
   }
   return out;
@@ -971,12 +1093,20 @@ function clauseIsTypeOnly(clause) {
   }
   if (/\*\s*as\s/u.test(beforeBraces)) return false;        // namespace binding
   const named = braces[1].split(',').map((part) => part.trim()).filter((part) => part !== '');
-  // `import {} from './X'` is a REAL EDGE, not an erasure. The specification
-  // still evaluates the module, and this repository bundles with Vite/esbuild,
-  // which preserves it as a side-effect import. Calling it erased was a claim
-  // about TypeScript's `verbatimModuleSyntax` behaviour that this tsconfig does
-  // not enable.
-  if (named.length === 0) return false;
+  /*
+   * `import {} from './X'` — NO EDGE, and the reasoning is bundler-specific
+   * rather than specification-shaped.
+   *
+   * A previous version of this line said the module is still evaluated
+   * "because Vite/esbuild preserves it as a side-effect import". A reviewer
+   * ran the repository's own esbuild: `transform` emits no import at all, and
+   * a real `bundle: true` build drops the module entirely. So reporting an
+   * edge here would claim a reachability the shipped bundle does not have —
+   * a silent false pass, which is the one direction this checker must never
+   * fail in. The specification does evaluate it; this bundler does not, and
+   * the bundler is what ships.
+   */
+  if (named.length === 0) return true;
   return named.every((part) => /^type\s/u.test(part));
 }
 

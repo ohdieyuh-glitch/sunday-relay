@@ -630,11 +630,8 @@ describe('an implemented website capability must be REACHABLE, not merely presen
       "const d = await import('./d');",
       "import Default, { type F } from './f';",
       "import * as ns from './g';",
-      // A side-effect import with empty braces IS a real edge: the module is
-      // still evaluated, and this repository's bundler preserves it.
-      "import {} from './h';",
     ].join('\n'));
-    expect(specifiers).toEqual(expect.arrayContaining(['./a', './b', './c.css', './d', './f', './g', './h']));
+    expect(specifiers).toEqual(expect.arrayContaining(['./a', './b', './c.css', './d', './f', './g']));
   });
 
   it('counts NO edge for something a bundler would not include', () => {
@@ -644,6 +641,10 @@ describe('an implemented website capability must be REACHABLE, not merely presen
     // first while nothing at all executes the second.
     const specifiers = importSpecifiersOf([
       "import type { E } from './erased-type-clause';",
+      // `import {}` is NOT an edge for THIS bundler: the repository's own
+      // esbuild elides it. The specification would evaluate the module; the
+      // bundler is what ships.
+      "import {} from './erased-empty-clause';",
       "import { type OnlyAType } from './erased-inline-type';",
       "export type { G } from './erased-type-reexport';",
       "// import { Thing } from './commented-line';",
@@ -685,9 +686,11 @@ describe('an implemented website capability must be REACHABLE, not merely presen
      * It exists because the first version of `stripComments` failed exactly
      * here and no unit case caught it. A bare apostrophe in JSX text —
      * `Relay's own inspection` — opened a "string" that never closed, so every
-     * comment after it in that file survived; 22 of 646 tracked files did it,
-     * four of them inside this graph. A regex holding an odd number of
-     * backticks did the same one layer down.
+     * comment after it in that file survived. Two independent measurements of
+     * how many files did it disagreed (22 of 646, and 25 of 731) because they
+     * counted different file sets; neither number is repeated here, because a
+     * count nobody can reproduce is not evidence. What both agreed on, and what
+     * this test pins, is the property: it must be zero.
      */
     const ghost = './__phantom_edge_that_must_not_be_followed__';
     const offenders: string[] = [];
@@ -699,6 +702,39 @@ describe('an implemented website capability must be REACHABLE, not merely presen
       if (importSpecifiersOf(probed).includes(ghost)) offenders.push(relative);
     }
     expect(offenders, 'a commented-out import was counted as a real edge').toEqual([]);
+  });
+
+  it('and not even a comment appended to the END OF AN EXISTING LINE yields one', () => {
+    /*
+     * THE CASE THE TEST ABOVE STRUCTURALLY CANNOT REACH.
+     *
+     * Appending the ghost on its own line only exercises code position. A
+     * reviewer appended it to the end of every existing line instead and found
+     * 1400 phantom edges across 61 of the 270 reachable modules — including
+     * `src/relay/main.tsx` — produced by a regex-position heuristic that
+     * treated every JSX closing tag as the start of a regex.
+     *
+     * One line per file rather than all of them, so the suite stays fast; the
+     * line is chosen as the longest, which is where the interesting syntax
+     * lives. The exhaustive 48 000-injection sweep lives in the review record.
+     */
+    const ghost = './__phantom_edge_appended_to_a_line__';
+    const offenders: string[] = [];
+    for (const relative of reachableFromBrowserEntries(repoRoot)) {
+      const full = join(repoRoot, relative);
+      if (!existsSync(full)) continue;
+      const lines = readFileSync(full, 'utf8').split('\n');
+      let widest = 0;
+      for (let i = 1; i < lines.length; i += 1) {
+        if ((lines[i] ?? '').length > (lines[widest] ?? '').length) widest = i;
+      }
+      const probe = [...lines];
+      probe[widest] = `${probe[widest]} // import { Ghost } from '${ghost}';`;
+      if (importSpecifiersOf(probe.join('\n')).includes(ghost)) {
+        offenders.push(`${relative}:${widest + 1}`);
+      }
+    }
+    expect(offenders, 'a trailing comment was counted as a real edge').toEqual([]);
   });
 
   it('and no reachable module loses a REAL edge to the same scanner', () => {
