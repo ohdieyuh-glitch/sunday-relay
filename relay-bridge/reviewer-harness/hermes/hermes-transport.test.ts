@@ -176,14 +176,30 @@ describe('the failure vocabulary is categorised, not free text', () => {
       'utf8',
     );
     const emitted = new Set<string>();
-    // `err(<status>, '<kind>', …)` and the capacity/validation branches.
-    for (const match of source.matchAll(/\berr\(\s*\d{3}\s*,\s*'([a-z_]+)'/g)) {
-      emitted.add(match[1]!);
+    // WHAT THIS MATCHES, EXACTLY: a quoted kind in an `err(...)` call, a
+    // quoted kind in a `kind:` field, and a quoted `??` default. It does NOT
+    // match a kind passed through as a variable (`err(503, started.failureKind,
+    // …)`) — those come from the engine, whose kinds are this same union — so
+    // the guarantee is over the LITERALS this file writes down.
+    for (const pattern of [
+      /\berr\(\s*\d{3}\s*,\s*'([a-z_]+)'/g,
+      /\bkind:\s*'([a-z_]+)'/g,
+      /\?\?\s*'([a-z_]+)'/g,
+    ]) {
+      for (const match of source.matchAll(pattern)) emitted.add(match[1]!);
+    }
+    // Kinds this service is known to forward from its engine rather than
+    // write itself. Listed so the union still has to contain them.
+    for (const forwarded of ['capacity_exhausted', 'shutting_down', 'validation_failed']) {
+      emitted.add(forwarded);
     }
     const missing = [...emitted].filter((kind) => !HERMES_FAILURE_KINDS.includes(kind as never));
     expect(missing, 'the service emits a kind the bridge cannot decode').toEqual([]);
-    // The scan must actually find something, or it proves nothing.
-    expect(emitted.size).toBeGreaterThan(4);
+    // The scan must actually find the ones we know are there, or it proves
+    // nothing. A regex that silently stopped matching would otherwise pass.
+    for (const known of ['not_found', 'internal_error', 'authentication_failed', 'review_refused']) {
+      expect(emitted, `the scan stopped finding ${known}`).toContain(known);
+    }
   });
 
   it('versions the bridge-to-service protocol', () => {

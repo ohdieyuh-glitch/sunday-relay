@@ -274,16 +274,24 @@ describe('capacity is released exactly once', () => {
     ).toBe(true);
   });
 
-  it('a run whose RUNNER REJECTS frees its slot too — the .catch branch', async () => {
-    // The other half, which nothing covered. `runHermesReviewer` is expected
-    // to resolve for every outcome; if it ever rejects instead, the slot must
-    // still come back. Forced here by a spawn double that survives long enough
-    // to be awaited and then throws asynchronously.
+  it('a run whose child emits ERROR after spawn frees its slot too', async () => {
+    /*
+     * NAMED FOR WHAT IT COVERS. An earlier version of this test was called
+     * "the .catch branch" and did not reach it: `runner.ts` handles
+     * `child.on('error')` by calling `finish({kind:'launch_failed'})`, which
+     * RESOLVES, so this settles through `.then` exactly as the synchronous
+     * throw above does. Shipping that mislabel in the same commit that fixed
+     * another one is how the habit survives.
+     *
+     * The distinct thing this covers is the ASYNCHRONOUS failure — a child
+     * that spawned and then died — which the synchronous-throw test cannot
+     * reach. The `.catch` at the call site remains a belt-and-braces guard
+     * that no fixture through this seam can trigger, because the runner is
+     * written never to reject; that is stated rather than pretended.
+     */
     const rejectingSpawn = (() => {
       const child = fakeChild();
-      // No 'close' and no 'error' — instead, break the contract the runner
-      // relies on so its own await path rejects.
-      setTimeout(() => child.emit('error', new Error('the child broke the contract')), 0);
+      setTimeout(() => child.emit('error', new Error('the child died after spawning')), 0);
       return child;
     }) as never;
     const engine = transport(rejectingSpawn, { ...ADMISSION_CEILINGS, maxActiveReviews: 1 });

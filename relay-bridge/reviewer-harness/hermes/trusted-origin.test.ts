@@ -320,10 +320,16 @@ describe('a refused origin never becomes a request', () => {
     expect(built.ok).toBe(true);
   });
 
-  it('the transport the GATE produced calls only the origin the gate approved', async () => {
-    // Driven through `buildHermesTransport`, not by constructing the transport
-    // directly — otherwise this would prove only that a transport calls its own
-    // configured URL, which is true of any URL, gated or not.
+  it('an approved origin yields a transport, and that transport calls that origin only once', async () => {
+    /*
+     * TWO SEPARATE CLAIMS, and the name says both because the test cannot fuse
+     * them: `buildHermesTransport` accepts no injected `fetch`, so the gate's
+     * own transport cannot be observed making a request. What is proven here is
+     * (a) the gate approves this origin and returns a transport, and (b) a
+     * transport built for that origin calls it exactly once and nowhere else.
+     * The link between them — that the gate refuses to produce a transport for
+     * anything else — is proven by the three tests above, not by this one.
+     */
     const built = await buildHermesTransport({
       env: remoteEnv({
         [HERMES_SERVICE_URL_ENV]: 'https://hermes.internal',
@@ -334,8 +340,7 @@ describe('a refused origin never becomes a request', () => {
     expect(built.ok).toBe(true);
     if (!built.ok) return;
 
-    // Re-create with the same approved URL and a spying fetch, because the
-    // factory does not accept an injected one.
+    // A second transport for the same approved URL, with a spying fetch.
     const spy = spyFetch();
     const transport = createRemoteHermesTransport({
       serviceUrl: 'https://hermes.internal',

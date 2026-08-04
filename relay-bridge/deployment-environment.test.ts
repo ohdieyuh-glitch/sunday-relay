@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { isProductionDeployment } from './deployment-environment';
+import { loadBridgeConfig, productionConfigProblems, productionConfigWarnings } from './config';
 import {
   HERMES_MODE_ENV, HERMES_SERVICE_TOKEN_ENV, HERMES_SERVICE_URL_ENV,
   selectHermesMode,
@@ -114,5 +115,77 @@ describe('the gate cannot be reached around', () => {
     };
     for (const dir of ['relay-bridge', 'relay-hermes-service', 'src']) walk(join(root, dir));
     expect(callers).toEqual(['relay-bridge/reviewer-harness/hermes/transport-factory.ts']);
+  });
+});
+
+/* ------------------------------------------- the boot gate, and its blast radius */
+
+/**
+ * A FAIL-FAST IS ARMED BY A DECLARATION, NOT BY AN INFERENCE.
+ *
+ * `productionConfigProblems` is fatal: `server.ts` sets a non-zero exit code
+ * and stops, and on a platform that restarts the process that is a crash loop
+ * rather than a message. If a Railway marker alone armed it, a service that was
+ * running perfectly could start insisting on four variables nobody had been
+ * asked for — and the evidence needed to rule that out is not obtainable from
+ * outside the deployment. A bridge with NO token answers 401 exactly as one
+ * with a token does, because `bearerMatches` refuses an empty configured
+ * secret, so an external probe cannot tell the safe case from the outage case.
+ *
+ * So the two questions are two flags: `production` (inferred, used by
+ * everything that fails closed) and `declaredProduction` (declared, and the
+ * only thing that can refuse to boot).
+ */
+describe('the boot refusal is armed by NODE_ENV, never by a host marker', () => {
+  const bridgeEnv = (vars: Record<string, string>): NodeJS.ProcessEnv =>
+    ({ PORT: '8080', ...vars }) as unknown as NodeJS.ProcessEnv;
+
+  it('a Railway deploy with no NODE_ENV and no token does NOT refuse to boot', () => {
+    const raw = bridgeEnv({ RAILWAY_ENVIRONMENT: 'production' });
+    const config = loadBridgeConfig(raw);
+    expect(config.production, 'fail-closed gates must still see a real deployment').toBe(true);
+    expect(config.declaredProduction).toBe(false);
+    expect(
+      productionConfigProblems(config, raw),
+      'a host marker must not be able to crash-loop a running service',
+    ).toEqual([]);
+  });
+
+  it('and it says so out loud, naming what is therefore not armed', () => {
+    const config = loadBridgeConfig(bridgeEnv({ RAILWAY_ENVIRONMENT: 'production' }));
+    const warnings = productionConfigWarnings(config);
+    expect(warnings.join(' ')).toContain('NODE_ENV');
+    expect(warnings.join(' ')).toContain('RELAY_BRIDGE_API_TOKEN');
+  });
+
+  it('NODE_ENV=production DOES arm it, and names the missing variable', () => {
+    const raw = bridgeEnv({ NODE_ENV: 'production' });
+    const problems = productionConfigProblems(loadBridgeConfig(raw), raw);
+    expect(problems.join(' ')).toContain('RELAY_BRIDGE_API_TOKEN');
+  });
+
+  it('a declared production bridge with its variables set boots clean', () => {
+    const raw = bridgeEnv({
+      NODE_ENV: 'production',
+      RELAY_BRIDGE_API_TOKEN: 'operator-secret',
+      RELAY_ALLOWED_ORIGINS: 'https://sunday-relay.vercel.app',
+      RELAY_DATA_DIR: '/data',
+    });
+    expect(productionConfigProblems(loadBridgeConfig(raw), raw)).toEqual([]);
+  });
+
+  it('a relative state path names the variable that was actually read', () => {
+    const viaDataDir = bridgeEnv({
+      NODE_ENV: 'production', RELAY_BRIDGE_API_TOKEN: 't', RELAY_DATA_DIR: 'relative/path',
+    });
+    expect(productionConfigProblems(loadBridgeConfig(viaDataDir), viaDataDir).join(' '))
+      .toContain('RELAY_DATA_DIR');
+
+    const viaStateHome = bridgeEnv({
+      NODE_ENV: 'production', RELAY_BRIDGE_API_TOKEN: 't', RELAY_STATE_HOME: 'relative/path',
+    });
+    // Being told to fix a variable you never set is its own small outage.
+    expect(productionConfigProblems(loadBridgeConfig(viaStateHome), viaStateHome).join(' '))
+      .toContain('RELAY_STATE_HOME');
   });
 });

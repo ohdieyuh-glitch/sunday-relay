@@ -323,7 +323,12 @@ export async function handleServiceRoute(
     // lines in `main.ts` ran first. The whole reason the engine owns a drain
     // flag is that this ordering must not be what the answer depends on.
     if (started.failureKind === 'capacity_exhausted' || started.failureKind === 'shutting_down') {
-      return err(503, started.failureKind, started.safeMessage ?? 'The Hermes Reviewer service is at capacity.');
+      // The default follows the KIND. One shared fallback would tell a caller
+      // refused by a draining service that it was at capacity.
+      const fallback = started.failureKind === 'shutting_down'
+        ? 'The Hermes Reviewer service is shutting down and is not accepting new reviews.'
+        : 'The Hermes Reviewer service is at capacity.';
+      return err(503, started.failureKind, started.safeMessage ?? fallback);
     }
     // A request the service understood and found malformed is 422, not 409:
     // 409 says "the service decided against this"; 422 says "this could not
