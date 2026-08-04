@@ -10,7 +10,7 @@
  * moves. Binding Relay's baseline to it would mean a routine dependency bump
  * silently changed which protocol a Mission Contract was verified against —
  * the version would be a fact about `node_modules`, not a decision anyone made.
- * The constant below is the decision; `mcp-sdk-contract.test.ts` asserts the
+ * The constant below is the decision; `../mcp-boundary.test.ts` asserts the
  * pinned SDK can actually speak it, so the two can never drift apart in
  * silence.
  *

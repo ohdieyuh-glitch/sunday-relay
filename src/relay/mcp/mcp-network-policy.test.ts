@@ -4,6 +4,7 @@ import {
   addressPermitted, checkRedirect, checkResolvedAddresses, checkUrlPolicy,
   classifyAddress, classifyIpv4, classifyIpv6, contentTypeAcceptable, originOf,
   MCP_DEFAULT_NETWORK_POLICY, MCP_LOOPBACK_TEST_NETWORK_POLICY,
+  type McpAddressClass,
 } from './policy/mcp-network-policy';
 import { fixedResolver, loopbackOnlyResolver } from './testing/fake-mcp-harness';
 
@@ -285,5 +286,110 @@ describe('the default network policy is closed', () => {
   it('the loopback test policy differs ONLY in the ways it must', () => {
     expect(LOOPBACK.allowLoopbackForTesting).toBe(true);
     expect(LOOPBACK.allowPrivateNetwork).toBe(false);
+  });
+});
+
+/* ==================================================================== *
+ * IPv4-MAPPED IPv6 — asserted through URL STRINGS, not through literals
+ *
+ * The previous test for this asserted `classifyIpv6('::ffff:127.0.0.1')`, a
+ * string production never sees: the WHATWG URL parser rewrites that form into
+ * hex — `new URL('https://[::ffff:127.0.0.1]/').hostname === '[::ffff:7f00:1]'`
+ * — before any policy code runs. The old dotted-quad regex could not match the
+ * hex form, so mapped loopback and mapped metadata were classified `public`
+ * and ALLOWED under the default policy. These assert on the path production
+ * actually takes.
+ * ==================================================================== */
+
+describe('IPv4-mapped and IPv4-embedding IPv6, through checkUrlPolicy', () => {
+  it('the URL parser really does rewrite the dotted-quad form into hex', () => {
+    // The premise of the whole defect. If this ever stops being true, the
+    // tests below stop testing what they claim to test.
+    expect(new URL('https://[::ffff:127.0.0.1]/').hostname).toBe('[::ffff:7f00:1]');
+    expect(new URL('https://[::ffff:169.254.169.254]/').hostname).toBe('[::ffff:a9fe:a9fe]');
+  });
+
+  const refused: ReadonlyArray<readonly [string, McpAddressClass]> = [
+    // Mapped, hex form — what the parser hands the policy.
+    ['https://[::ffff:7f00:1]/mcp', 'loopback'],
+    ['https://[::ffff:a9fe:a9fe]/mcp', 'cloud_metadata'],
+    ['https://[::ffff:a00:1]/mcp', 'private'],
+    ['https://[::ffff:c0a8:1]/mcp', 'private'],
+    // Mapped, dotted-quad form — normalised by the parser to the same address.
+    ['https://[::ffff:127.0.0.1]/mcp', 'loopback'],
+    ['https://[::ffff:169.254.169.254]/mcp', 'cloud_metadata'],
+    // IPv4-translated (RFC 2765) — `::ffff:0:a.b.c.d`.
+    ['https://[::ffff:0:7f00:1]/mcp', 'loopback'],
+    ['https://[::ffff:0:a9fe:a9fe]/mcp', 'cloud_metadata'],
+    // The well-known NAT64 prefix.
+    ['https://[64:ff9b::7f00:1]/mcp', 'loopback'],
+    ['https://[64:ff9b::a9fe:a9fe]/mcp', 'cloud_metadata'],
+    // 6to4 carries its IPv4 in the second and third groups.
+    ['https://[2002:7f00:1::]/mcp', 'loopback'],
+    ['https://[2002:a9fe:a9fe::]/mcp', 'cloud_metadata'],
+    // Deprecated IPv4-compatible form.
+    ['https://[::127.0.0.1]/mcp', 'loopback'],
+  ];
+
+  for (const [endpoint, expected] of refused) {
+    it(`REFUSES ${endpoint} as ${expected}`, () => {
+      const verdict = checkUrlPolicy(endpoint, DEFAULT);
+      expect(verdict.allowed, `${endpoint} must not be allowed`).toBe(false);
+      expect(verdict.literalAddressClass ?? classifyAddress(new URL(endpoint).hostname)).toBe(expected);
+    });
+  }
+
+  it('refuses the private mapped forms even under an explicit private-network policy when they are loopback or metadata', () => {
+    expect(checkUrlPolicy('https://[::ffff:7f00:1]/mcp', PRIVATE_OK).allowed).toBe(false);
+    expect(checkUrlPolicy('https://[::ffff:a9fe:a9fe]/mcp', PRIVATE_OK).allowed).toBe(false);
+    // A mapped RFC1918 address is exactly a private address, so the explicit
+    // private-network policy permits it — and only that policy.
+    expect(checkUrlPolicy('https://[::ffff:a00:1]/mcp', PRIVATE_OK).allowed).toBe(true);
+    expect(checkUrlPolicy('https://[::ffff:a00:1]/mcp', DEFAULT).allowed).toBe(false);
+  });
+
+  it('a mapped PUBLIC address stays public — the fix refuses embeddings, not IPv6', () => {
+    expect(checkUrlPolicy('https://[::ffff:808:808]/mcp', DEFAULT).allowed).toBe(true);
+    expect(checkUrlPolicy('https://[2606:4700::1111]/mcp', DEFAULT).allowed).toBe(true);
+  });
+
+  it('a redirect to a mapped metadata or loopback address is refused', () => {
+    // The live reach of the defect: a compromised MCP server answers with a
+    // Location header and Relay issues the request.
+    const from = new URL('https://server.example.com/mcp');
+    for (const location of [
+      'https://[::ffff:a9fe:a9fe]/latest/meta-data/iam/security-credentials/',
+      'https://[::ffff:7f00:1]/admin',
+      'https://[::ffff:0:a9fe:a9fe]/latest/meta-data/',
+      'https://[64:ff9b::a9fe:a9fe]/latest/meta-data/',
+    ]) {
+      const hop = checkRedirect(from, location, 1, DEFAULT);
+      expect(hop.allowed, location).toBe(false);
+      expect(hop.target, location).toBeNull();
+      expect(hop.mayForwardCredentials, location).toBe(false);
+    }
+  });
+
+  it('a resolver answering with a mapped address is refused too', async () => {
+    const verdict = await checkResolvedAddresses(
+      'evil.example.com',
+      fixedResolver({ 'evil.example.com': ['::ffff:a9fe:a9fe'] }),
+      DEFAULT,
+    );
+    expect(verdict.allowed).toBe(false);
+    expect(verdict.pinnedAddress).toBeNull();
+  });
+
+  it('classifies every spelling of one address identically', () => {
+    // Canonical, hex-compressed, fully expanded and upper-case are one address.
+    for (const spelling of ['::ffff:127.0.0.1', '::ffff:7f00:1', '0:0:0:0:0:ffff:7f00:1', '::FFFF:7F00:1']) {
+      expect(classifyIpv6(spelling), spelling).toBe('loopback');
+    }
+  });
+
+  it('refuses a malformed IPv6 literal rather than calling it public', () => {
+    for (const malformed of ['1:2:3:4:5:6:7', '1::2::3', 'gggg::1', '1.2.3.4.5', '::ffff:127.0.0.256']) {
+      expect(classifyIpv6(malformed), malformed).toBe('unparsable');
+    }
   });
 });

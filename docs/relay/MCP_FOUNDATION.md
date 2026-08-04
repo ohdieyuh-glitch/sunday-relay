@@ -449,8 +449,16 @@ Two stages, both must pass:
 
 Blocked always, under every policy: cloud metadata (AWS/GCP/Azure/Alibaba/ECS,
 including the IPv6 form), link-local, unspecified, multicast, reserved,
-unparsable. IPv4-mapped IPv6 (`::ffff:127.0.0.1`) is classified as the IPv4
-address it carries.
+unparsable. An IPv6 address that carries an IPv4 address is classified as the
+IPv4 address it carries — and it is classified from the **parsed number**, not
+from the text, because the two are not the same input. `new URL()` rewrites
+`https://[::ffff:127.0.0.1]/` into `[::ffff:7f00:1]` before any policy code
+runs, so a rule matching only the dotted-quad spelling never fires in
+production. Covered: IPv4-mapped (`::ffff:a.b.c.d` in either spelling),
+IPv4-translated (`::ffff:0:a.b.c.d`), the well-known NAT64 prefix
+(`64:ff9b::/96`), 6to4 (`2002::/16`) and the deprecated IPv4-compatible form
+(`::a.b.c.d`). A malformed IPv6 literal is `unparsable`, which is blocked —
+never `public`.
 
 Loopback is blocked by default and permitted **only** through
 `MCP_LOOPBACK_TEST_NETWORK_POLICY`, a named object rather than an environment
@@ -629,9 +637,19 @@ the section reports it in `data-mcp-readiness`; with no mission asking for
 preflight the value is `not_evaluated`, which is deliberately not `ready`.
 
 **What the mounted surface is NOT.** It grants nothing: the section renders no
-input, select or textarea at all. It cannot open a connection — the browser has
-no transport, no connection manager and no credential path, and says so on the
-page. Every registry row is a simulation fixture and labels itself. The
+input, select or textarea at all — and no button either. It cannot open a
+connection — the browser has no transport, no connection manager and no
+credential path, and says so on the page.
+
+`RelayMcpConnections` accepts optional `onReconnect`, `onDisconnect` and
+`onRevokeApproval` handlers, and **each control renders only when its handler
+is supplied**. The mounted host passes data and no handlers, so it renders none
+of the three. This is not tidiness. A button wired to `handler?.(id)` with no
+handler is a control that does nothing and reports nothing, and on this
+particular page the worst case is exact: an operator clicks `Revoke` on a live
+MCP approval, sees no error, and reasonably concludes a risk-bearing approval
+was revoked. A dead affordance on a security surface is a lie the page tells,
+so there is no dead affordance. Every registry row is a simulation fixture and labels itself. The
 Independent Reviewer's permanent denial is stated on the section in every
 state, naming the roles read from `MCP_FORBIDDEN_ROLES` rather than a sentence
 that could outlive the policy.
@@ -645,6 +663,18 @@ entry point must be reachable by following imports from `src/relay/main.tsx`;
 This milestone is exactly why: for nine commits the registry declared
 `mcp-connection-management` as `tested` on both surfaces, every declared file
 resolved, and no browser entry rendered the component.
+
+**What the walker counts as an edge, stated exactly.** Comments are stripped
+before import specifiers are read, and type-only clauses (`import type …`,
+`import { type X } …`, `export type … from`) contribute nothing, because
+TypeScript erases them and a surface reachable only through one is not reachable
+in the shipped bundle. Both once produced a false pass in the checker whose
+whole purpose is preventing one. **One over-approximation survives and is not
+hidden:** a barrel's `export … from './X'` is followed even when nothing
+consumes the re-exported binding. The edge is real in the module graph, but a
+tree-shaking bundler may drop it, so a surface reachable ONLY through an
+unconsumed barrel re-export would be reported mounted. Closing that needs
+binding-level liveness analysis this script does not do.
 
 ---
 

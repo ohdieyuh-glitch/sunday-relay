@@ -20,7 +20,7 @@
  * negotiated revision is therefore read back off the connected client and
  * re-checked by `negotiateProtocol` in `../domain/mcp-protocol.ts`, which is
  * what turns "the SDK connected" into "the server speaks the revision this
- * mission was verified against". `mcp-sdk-contract.test.ts` asserts the SDK's
+ * mission was verified against". `../mcp-boundary.test.ts` asserts the SDK's
  * own constant still equals Relay's baseline, so a dependency bump that moved
  * the protocol out from under us fails a test instead of shipping.
  *

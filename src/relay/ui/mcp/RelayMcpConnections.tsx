@@ -46,6 +46,17 @@ export interface RelayMcpConnectionsProps {
   readonly missionId: string | null;
   /** Registry entry ids a PSP Agent declared it requires. */
   readonly requiredByPsp: readonly string[];
+  /**
+   * OPTIONAL, AND THE CONTROL DOES NOT RENDER WITHOUT ONE.
+   *
+   * A button wired to `handler?.(id)` with no handler supplied is a control
+   * that does nothing and says nothing — and on a security surface the worst
+   * case is exact: an operator clicks `Revoke` on a live approval, sees no
+   * error, and reasonably concludes a risk-bearing approval was revoked. That
+   * is a lie told by an affordance. Each of these renders only when its handler
+   * exists, so the mounted read-only projection shows no control at all rather
+   * than a dead one.
+   */
   readonly onReconnect?: (connectionId: string) => void;
   readonly onDisconnect?: (connectionId: string) => void;
   readonly onRevokeApproval?: (approvalRecordId: string) => void;
@@ -171,10 +182,16 @@ export function RelayMcpConnections(props: RelayMcpConnectionsProps): JSX.Elemen
                   <p className="rmcp-simulation">SIMULATION FIXTURE — connects to no live service.</p>
                 )}
 
-                <div className="rmcp-actions">
-                  <button type="button" onClick={() => props.onReconnect?.(row.connectionId)}>Reconnect</button>
-                  <button type="button" onClick={() => props.onDisconnect?.(row.connectionId)}>Disconnect</button>
-                </div>
+                {(props.onReconnect !== undefined || props.onDisconnect !== undefined) && (
+                  <div className="rmcp-actions">
+                    {props.onReconnect !== undefined && (
+                      <button type="button" onClick={() => props.onReconnect?.(row.connectionId)}>Reconnect</button>
+                    )}
+                    {props.onDisconnect !== undefined && (
+                      <button type="button" onClick={() => props.onDisconnect?.(row.connectionId)}>Disconnect</button>
+                    )}
+                  </div>
+                )}
               </li>
             );
           })}
@@ -206,11 +223,13 @@ export function RelayMcpConnections(props: RelayMcpConnectionsProps): JSX.Elemen
                 This approval covers exactly the operation, arguments, agent, server and
                 capability snapshot it was shown. It does not widen.
               </p>
-              <div className="rmcp-actions">
-                <button type="button" onClick={() => props.onRevokeApproval?.(row.approvalRecordId)} disabled={row.revoked}>
-                  {row.revoked ? 'Revoked' : 'Revoke'}
-                </button>
-              </div>
+              {props.onRevokeApproval !== undefined && (
+                <div className="rmcp-actions">
+                  <button type="button" onClick={() => props.onRevokeApproval?.(row.approvalRecordId)} disabled={row.revoked}>
+                    {row.revoked ? 'Revoked' : 'Revoke'}
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>

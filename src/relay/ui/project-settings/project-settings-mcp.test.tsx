@@ -15,7 +15,8 @@ import {
 } from '../mcp';
 import { MCP_FORBIDDEN_ROLES, MCP_REGISTRY_FIXTURES, runMcpMissionPreflight } from '../../mcp';
 import type { McpMissionRequirement, McpPreflightResult } from '../../mcp';
-import { TEST_NOW, buildConnection } from '../../mcp/testing/mcp-test-fixtures';
+import { TEST_NOW, buildApproval, buildConnection } from '../../mcp/testing/mcp-test-fixtures';
+import { RelayMcpConnections } from '../mcp';
 
 /**
  * MCP CONNECTIONS, MOUNTED IN THE REAL PROJECT SETTINGS HOST.
@@ -278,6 +279,72 @@ describe('the Reviewer is permanently denied, and the settings surface says so',
     openMcpSection();
     const controls = section().querySelectorAll('input, select, textarea');
     expect(controls.length, 'the MCP section grants nothing from this page').toBe(0);
+  });
+});
+
+/* -------------------------------------------------- no dead affordances */
+
+/**
+ * A BUTTON THAT DOES NOTHING IS A LIE THE SURFACE TELLS.
+ *
+ * `RelayMcpConnections` accepts optional `onReconnect`, `onDisconnect` and
+ * `onRevokeApproval` handlers. The mounted host passes DATA ONLY. Rendering the
+ * buttons anyway wired them to `handler?.(id)` — a silent no-op. The worst case
+ * is exact: an operator clicks `Revoke` on a live, unexpired MCP approval, sees
+ * no error, and reasonably concludes a risk-bearing approval was revoked.
+ *
+ * These assert on the MOUNTED host, because the component in isolation is
+ * allowed to render the controls when a handler is supplied.
+ */
+describe('the mounted MCP section renders no control that does nothing', () => {
+  const withLiveApproval = () => buildRelayMcpSettingsView({
+    connections: [buildConnection()],
+    approvals: [buildApproval()],
+  });
+
+  it('renders no button at all on the read-only mounted projection', () => {
+    setup({ mcp: withLiveApproval() });
+    openMcpSection();
+    const buttons = [...section().querySelectorAll('button')];
+    expect(
+      buttons.map((button) => button.textContent),
+      'the mounted MCP section supplies no handlers, so it must render no controls',
+    ).toEqual([]);
+  });
+
+  it('specifically renders no REVOKE for a live approval', () => {
+    setup({ mcp: withLiveApproval() });
+    openMcpSection();
+    // The approval itself must still be VISIBLE — the repair removes the dead
+    // control, not the disclosure.
+    expect(section().textContent).toContain('APPROVALS');
+    expect(screen.queryByRole('button', { name: /revoke/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /reconnect/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /disconnect/i })).toBeNull();
+  });
+
+  it('the component still renders each control when its handler IS supplied', () => {
+    // The repair must not delete the capability, only the false affordance.
+    const view = withLiveApproval().view;
+    if (view === null) throw new Error('the fixture must produce a ready view');
+    render(createElement(RelayMcpConnections, {
+      ...view,
+      onReconnect: vi.fn(),
+      onDisconnect: vi.fn(),
+      onRevokeApproval: vi.fn(),
+    }));
+    expect(screen.getByRole('button', { name: /^reconnect$/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^disconnect$/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^revoke$/i })).toBeTruthy();
+  });
+
+  it('a supplied handler is actually called — the control is wired, not decorative', () => {
+    const view = withLiveApproval().view;
+    if (view === null) throw new Error('the fixture must produce a ready view');
+    const onRevokeApproval = vi.fn();
+    render(createElement(RelayMcpConnections, { ...view, onRevokeApproval }));
+    fireEvent.click(screen.getByRole('button', { name: /^revoke$/i }));
+    expect(onRevokeApproval).toHaveBeenCalledTimes(1);
   });
 });
 

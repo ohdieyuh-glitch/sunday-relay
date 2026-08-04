@@ -823,16 +823,113 @@ export const UNMOUNTED_WEBSITE_SURFACES = Object.freeze({
     + 'verified mission cost. Pre-existing and untouched by the MCP milestone.',
 });
 
-/** Every module specifier a source file imports, in the forms this repo uses. */
+/**
+ * Remove `//` and block comments while leaving string and template literals
+ * intact, so a commented-out import contributes no edge and a specifier that
+ * happens to contain `//` (a URL in a string) is not truncated.
+ *
+ * A hand-written scanner rather than a regex because the two cases defeat each
+ * other: stripping `//…` to end of line eats the tail of any line holding a URL
+ * literal, and not stripping it counts a commented-out import as a real edge.
+ * Regular-expression literals are NOT tracked — `/\/\//` would be read as a
+ * line comment. That costs nothing here: it can only drop edges on such a line,
+ * and this repo has no import specifier following a regex literal on one line.
+ */
+export function stripComments(source) {
+  let out = '';
+  let index = 0;
+  let quote = null; // "'", '"', '`', or null
+  while (index < source.length) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (quote !== null) {
+      out += char;
+      if (char === '\\') {
+        out += next ?? '';
+        index += 2;
+        continue;
+      }
+      if (char === quote) quote = null;
+      index += 1;
+      continue;
+    }
+    if (char === "'" || char === '"' || char === '`') {
+      quote = char;
+      out += char;
+      index += 1;
+      continue;
+    }
+    if (char === '/' && next === '/') {
+      while (index < source.length && source[index] !== '\n') index += 1;
+      continue; // the newline itself is copied on the next turn
+    }
+    if (char === '/' && next === '*') {
+      index += 2;
+      while (index < source.length && !(source[index] === '*' && source[index + 1] === '/')) {
+        // Preserve line structure so nothing on either side is joined into one statement.
+        if (source[index] === '\n') out += '\n';
+        index += 1;
+      }
+      index += 2;
+      continue;
+    }
+    out += char;
+    index += 1;
+  }
+  return out;
+}
+
+/**
+ * True when an import/export clause contributes NO runtime module edge because
+ * every binding it names is type-only. TypeScript erases these entirely, so a
+ * surface reachable only through one is not reachable in the shipped bundle.
+ *
+ *   `import type { Props } from './X'`       — erased
+ *   `import { type A, type B } from './X'`   — erased
+ *   `import { type A, B } from './X'`        — NOT erased, B is a value
+ *   `import './X'`                           — NOT erased, side-effect import
+ */
+function clauseIsTypeOnly(clause) {
+  const text = clause.trim();
+  if (/^(?:import|export)\s+type\b/u.test(text)) return true;
+  const braces = /\{([^}]*)\}/u.exec(text);
+  if (braces === null) return false;                       // default or namespace binding
+  const beforeBraces = text.slice(0, braces.index);
+  if (/[A-Za-z0-9_$]\s*,\s*$/u.test(beforeBraces.replace(/^(?:import|export)\s+/u, ''))) {
+    return false;                                          // `import Default, { … }`
+  }
+  if (/\*\s*as\s/u.test(beforeBraces)) return false;        // namespace binding
+  const named = braces[1].split(',').map((part) => part.trim()).filter((part) => part !== '');
+  if (named.length === 0) return true;                      // `import {} from './X'` — erased
+  return named.every((part) => /^type\s/u.test(part));
+}
+
+/**
+ * Every module specifier a source file imports, in the forms this repo uses.
+ *
+ * KNOWN OVER-APPROXIMATION, stated rather than hidden: a barrel's
+ * `export … from './X'` is followed even when nothing consumes the re-exported
+ * binding. The edge is real in the module graph — the module is evaluated — but
+ * a tree-shaking bundler may drop it, so a surface reachable ONLY through an
+ * unconsumed barrel re-export is reported mounted when a user cannot see it.
+ * Closing that would require binding-level liveness analysis this script does
+ * not do. Comments and type-only imports, which are not real edges under any
+ * bundler, ARE excluded.
+ */
 export function importSpecifiersOf(source) {
+  const code = stripComments(source);
   const specifiers = [];
+  const clausePattern = /(?:^|[\s;}])((?:import|export)\s[^;]*?\sfrom\s*['"]([^'"]+)['"])/gu;
+  for (const match of code.matchAll(clausePattern)) {
+    if (clauseIsTypeOnly(match[1])) continue;
+    specifiers.push(match[2]);
+  }
   const patterns = [
-    /(?:^|[\s;}])(?:import|export)\s[^;]*?\sfrom\s*['"]([^'"]+)['"]/gu,
     /(?:^|[\s;}])import\s*['"]([^'"]+)['"]/gu,
     /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/gu,
   ];
   for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) specifiers.push(match[1]);
+    for (const match of code.matchAll(pattern)) specifiers.push(match[1]);
   }
   return specifiers;
 }
@@ -840,9 +937,13 @@ export function importSpecifiersOf(source) {
 /**
  * Resolve one specifier to a repo-relative module path, or `null` when it is a
  * package, an asset, or something outside the tree. Deliberately conservative:
- * an edge this cannot resolve is an edge NOT followed, which can only make a
- * surface look LESS reachable — a false failure that is loud, never a false
+ * an edge this step cannot resolve is an edge NOT followed, which can only make
+ * a surface look LESS reachable — a false failure that is loud, never a false
  * pass that is silent.
+ *
+ * That guarantee covers RESOLUTION only. Whether a candidate edge should have
+ * been offered at all is `importSpecifiersOf`'s question, and its doc block
+ * names the one over-approximation that survives there.
  */
 export function resolveModuleSpecifier(repoRoot, fromRelative, specifier) {
   let candidate;

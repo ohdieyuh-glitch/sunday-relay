@@ -628,9 +628,47 @@ describe('an implemented website capability must be REACHABLE, not merely presen
       "export { B } from './b';",
       "import './c.css';",
       "const d = await import('./d');",
-      "import type { E } from './e';",
+      "import Default, { type F } from './f';",
+      "import * as ns from './g';",
     ].join('\n'));
-    expect(specifiers).toEqual(expect.arrayContaining(['./a', './b', './c.css', './d', './e']));
+    expect(specifiers).toEqual(expect.arrayContaining(['./a', './b', './c.css', './d', './f', './g']));
+  });
+
+  it('counts NO edge for something a bundler would not include', () => {
+    // The checker's whole purpose is preventing a false pass. Each of these
+    // once produced one: a surface reachable ONLY through a type-only import or
+    // a commented-out import was reported mounted, and TypeScript erases the
+    // first while nothing at all executes the second.
+    const specifiers = importSpecifiersOf([
+      "import type { E } from './erased-type-clause';",
+      "import { type OnlyAType } from './erased-inline-type';",
+      "export type { G } from './erased-type-reexport';",
+      "// import { Thing } from './commented-line';",
+      "/* import { Thing } from './commented-block'; */",
+      '/**\n * import { Thing } from "./commented-doc";\n */',
+      "import { Real } from './real';",
+    ].join('\n'));
+    expect(specifiers).toEqual(['./real']);
+  });
+
+  it('does not truncate a line that carries a URL literal', () => {
+    // A naive comment stripper eats everything after `//` — including, on this
+    // line, the import that follows a string containing a protocol separator.
+    const specifiers = importSpecifiersOf([
+      "const endpoint = 'https://example.com/mcp'; import { A } from './a';",
+      "const other = \"http://example.com\";",
+      "import { B } from './b';",
+    ].join('\n'));
+    expect(specifiers).toEqual(expect.arrayContaining(['./a', './b']));
+  });
+
+  it('the doc block does not claim a false pass is impossible', () => {
+    // LOW-value on its own, but the module used to assert a guarantee wider
+    // than it held. The barrel over-approximation is real and must stay stated.
+    const source = readFileSync(join(repoRoot, 'scripts/relay-surface-parity.mjs'), 'utf8');
+    const docBlock = source.slice(0, source.indexOf('export function importSpecifiersOf'));
+    expect(docBlock).toContain('KNOWN OVER-APPROXIMATION');
+    expect(docBlock).toContain('unconsumed barrel re-export');
   });
 
   it('THE MCP SURFACE IS MOUNTED — the component and its settings host are both reachable', () => {

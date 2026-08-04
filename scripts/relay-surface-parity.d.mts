@@ -158,7 +158,19 @@ export const BROWSER_ENTRY_POINTS: readonly string[];
  */
 export const UNMOUNTED_WEBSITE_SURFACES: Readonly<Record<string, string>>;
 
-/** Every module specifier a source file imports, in the forms this repo uses. */
+/**
+ * Remove `//` and block comments while leaving string and template literals
+ * intact, so a commented-out import contributes no edge and a specifier holding
+ * `//` inside a string is not truncated.
+ */
+export function stripComments(source: string): string;
+
+/**
+ * Every module specifier a source file imports that a bundler would actually
+ * follow. Comments and type-only clauses are excluded; the one surviving
+ * over-approximation (an unconsumed barrel re-export) is stated in the
+ * implementation's doc block rather than hidden.
+ */
 export function importSpecifiersOf(source: string): string[];
 
 /**

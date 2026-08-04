@@ -114,22 +114,118 @@ export function classifyIpv4(address: string): McpAddressClass {
   return 'public';
 }
 
+/**
+ * Expand an IPv6 literal to its eight 16-bit groups, or null when it is not a
+ * parsable IPv6 address.
+ *
+ * WHY THIS EXISTS RATHER THAN A SET OF REGEXES OVER THE TEXT. An IPv6 address
+ * has many spellings and Relay does not choose which one it is handed. The
+ * WHATWG URL parser rewrites `https://[::ffff:127.0.0.1]/` into the hex form
+ * `[::ffff:7f00:1]` BEFORE any policy code sees it, so a rule that matches only
+ * the dotted-quad spelling of an IPv4-mapped address never fires in production
+ * and classifies loopback as public. A resolver port can hand back either
+ * spelling too. Classifying the NUMBER instead of the STRING removes the whole
+ * family of defects at once: `::ffff:127.0.0.1`, `::ffff:7f00:1`,
+ * `0:0:0:0:0:ffff:7f00:1` and `::FFFF:7F00:1` are one address and get one answer.
+ */
+function ipv6Groups(input: string): readonly number[] | null {
+  if (!/^[0-9a-f:.]+$/.test(input) || !input.includes(':')) return null;
+
+  // An embedded dotted quad may only appear as the final 32 bits. Rewrite it to
+  // two hex groups so the rest of the parse deals with hex alone.
+  let text = input;
+  const lastColon = text.lastIndexOf(':');
+  const trailer = text.slice(lastColon + 1);
+  if (trailer.includes('.')) {
+    const quad = IPV4.exec(trailer);
+    if (!quad) return null;
+    const octets = quad.slice(1, 5).map(Number);
+    if (octets.some((value) => !Number.isInteger(value) || value < 0 || value > 255)) return null;
+    const [a, b, c, d] = octets as [number, number, number, number];
+    text = `${text.slice(0, lastColon + 1)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  } else if (text.includes('.')) {
+    return null; // a dot anywhere else is not an address
+  }
+
+  const halves = text.split('::');
+  if (halves.length > 2) return null;
+
+  const parseSide = (side: string): number[] | null => {
+    if (side === '') return [];
+    const out: number[] = [];
+    for (const group of side.split(':')) {
+      if (!/^[0-9a-f]{1,4}$/.test(group)) return null;
+      out.push(Number.parseInt(group, 16));
+    }
+    return out;
+  };
+
+  const left = parseSide(halves[0]!);
+  if (left === null) return null;
+  if (halves.length === 1) return left.length === 8 ? left : null;
+
+  const right = parseSide(halves[1]!);
+  if (right === null) return null;
+  const elided = 8 - left.length - right.length;
+  if (elided < 1) return null; // `::` must stand for at least one group
+  return [...left, ...new Array<number>(elided).fill(0), ...right];
+}
+
+const ipv4FromGroups = (high: number, low: number): string =>
+  `${(high >> 8) & 255}.${high & 255}.${(low >> 8) & 255}.${low & 255}`;
+
+/**
+ * The class of the IPv4 address an IPv6 address carries, or null when it
+ * carries none. Every embedding is answered as the IPv4 it transports, because
+ * that is the host the packet actually reaches.
+ */
+function embeddedIpv4Class(groups: readonly number[]): McpAddressClass | null {
+  const zeroThrough = (count: number): boolean => groups.slice(0, count).every((value) => value === 0);
+  const carried = (): McpAddressClass => classifyIpv4(ipv4FromGroups(groups[6]!, groups[7]!));
+
+  // ::ffff:a.b.c.d — IPv4-mapped (RFC 4291 §2.5.5.2). The form the URL parser produces.
+  if (zeroThrough(5) && groups[5] === 0xffff) return carried();
+  // ::ffff:0:a.b.c.d — IPv4-translated (RFC 2765 §2.1).
+  if (zeroThrough(4) && groups[4] === 0xffff && groups[5] === 0) return carried();
+  // 64:ff9b::/96 — the well-known NAT64 prefix (RFC 6052 §2.1).
+  if (groups[0] === 0x0064 && groups[1] === 0xff9b && groups.slice(2, 6).every((value) => value === 0)) {
+    return carried();
+  }
+  // 2002:a.b.c.d::/48 — 6to4 (RFC 3056 §2), which carries the IPv4 in groups 1-2.
+  if (groups[0] === 0x2002) return classifyIpv4(ipv4FromGroups(groups[1]!, groups[2]!));
+  // ::a.b.c.d — IPv4-compatible (deprecated). `::` and `::1` are not that.
+  if (zeroThrough(6) && !(groups[6] === 0 && (groups[7] === 0 || groups[7] === 1))) return carried();
+  return null;
+}
+
+const CLOUD_METADATA_IPV6: readonly (readonly number[])[] = Object.freeze(
+  [...CLOUD_METADATA_ADDRESSES]
+    .filter((address) => address.includes(':'))
+    .map((address) => ipv6Groups(address))
+    .filter((groups): groups is readonly number[] => groups !== null),
+);
+
 export function classifyIpv6(input: string): McpAddressClass {
   const address = input.toLowerCase().replace(/^\[|\]$/g, '').split('%')[0]!;
-  if (CLOUD_METADATA_ADDRESSES.has(address)) return 'cloud_metadata';
-  if (address === '::' ) return 'unspecified';
-  if (address === '::1') return 'loopback';
-  // IPv4-mapped (::ffff:a.b.c.d) and IPv4-compatible — classified as the IPv4
-  // address they carry. A host that skips this accepts `::ffff:127.0.0.1` as a
-  // public IPv6 address, which is loopback with two extra colons.
-  const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(address)
-    ?? /^::(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(address);
-  if (mapped) return classifyIpv4(mapped[1]!);
-  if (/^fe[89ab]/.test(address)) return 'link_local';
-  if (/^f[cd]/.test(address)) return 'private';       // unique local fc00::/7
-  if (/^ff/.test(address)) return 'multicast';
-  if (/^2001:0?db8:/.test(address)) return 'reserved'; // documentation range
-  if (!/^[0-9a-f:.]+$/.test(address) || !address.includes(':')) return 'unparsable';
+  const groups = ipv6Groups(address);
+  if (groups === null) return 'unparsable';
+
+  if (CLOUD_METADATA_IPV6.some((known) => known.every((value, index) => value === groups[index]))) {
+    return 'cloud_metadata';
+  }
+  // An embedded IPv4 answers first: `::ffff:169.254.169.254` is the metadata
+  // service, not a public IPv6 address that happens to contain those digits.
+  const embedded = embeddedIpv4Class(groups);
+  if (embedded !== null) return embedded;
+
+  if (groups.every((value) => value === 0)) return 'unspecified';
+  if (groups.slice(0, 7).every((value) => value === 0) && groups[7] === 1) return 'loopback';
+
+  const first = groups[0]!;
+  if ((first & 0xffc0) === 0xfe80) return 'link_local';   // fe80::/10
+  if ((first & 0xfe00) === 0xfc00) return 'private';      // unique local fc00::/7
+  if ((first & 0xff00) === 0xff00) return 'multicast';    // ff00::/8
+  if (first === 0x2001 && groups[1] === 0x0db8) return 'reserved'; // documentation 2001:db8::/32
   return 'public';
 }
 

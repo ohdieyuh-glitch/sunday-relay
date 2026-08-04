@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 import {
   MCP_APPROVAL_LABELS, MCP_PERMISSION_LABELS, MCP_RISK_LABELS,
@@ -139,10 +139,26 @@ describe('the MCP connections surface', () => {
     expect(screen.getAllByText('Required by PSP').length).toBeGreaterThan(0);
   });
 
-  it('offers Reconnect and Disconnect', () => {
+  it('offers Reconnect and Disconnect WHEN A HOST CAN ACTUALLY PERFORM THEM', () => {
+    // The previous version of this test rendered the surface with no handlers
+    // and asserted the buttons existed. That is exactly what the independent
+    // review objected to: a control wired to `handler?.(id)` with no handler is
+    // a silent no-op, and the test was the thing certifying it as present.
+    const onReconnect = vi.fn();
+    const onDisconnect = vi.fn();
+    renderSurface({ onReconnect, onDisconnect });
+    fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }));
+    // Wired, not merely rendered.
+    expect(onReconnect).toHaveBeenCalledTimes(1);
+    expect(onDisconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers NEITHER when the host supplies no handler', () => {
     renderSurface();
-    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Disconnect' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /revoke/i })).toBeNull();
   });
 
   it('shows requested AND negotiated protocol separately', () => {
