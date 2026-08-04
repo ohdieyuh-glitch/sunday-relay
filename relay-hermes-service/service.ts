@@ -314,8 +314,22 @@ export async function handleServiceRoute(
     // request that was never the problem.
     //
     // 503 and the kind, and no invented wait. See CAPACITY notes above.
-    if (started.failureKind === 'capacity_exhausted') {
-      return err(503, 'capacity_exhausted', started.safeMessage ?? 'The Hermes Reviewer service is at capacity.');
+    //
+    // A DRAINING ENGINE IS TEMPORARY TOO. The lifecycle check above answers
+    // 503 for `shutting_down`; the ENGINE can also report it, from its own
+    // `draining` flag, and that path used to fall through to 409 — the status
+    // this service reserves for "will not resolve itself, retrying is a new
+    // paid call". Two codes for one condition, differing only by which of two
+    // lines in `main.ts` ran first. The whole reason the engine owns a drain
+    // flag is that this ordering must not be what the answer depends on.
+    if (started.failureKind === 'capacity_exhausted' || started.failureKind === 'shutting_down') {
+      return err(503, started.failureKind, started.safeMessage ?? 'The Hermes Reviewer service is at capacity.');
+    }
+    // A request the service understood and found malformed is 422, not 409:
+    // 409 says "the service decided against this"; 422 says "this could not
+    // be a valid request", and only one of them is worth re-sending changed.
+    if (started.failureKind === 'validation_failed') {
+      return err(422, 'validation_failed', started.safeMessage ?? 'The review request was not usable.');
     }
     return err(409, started.failureKind ?? 'review_refused', started.safeMessage ?? 'The review was refused.');
   }

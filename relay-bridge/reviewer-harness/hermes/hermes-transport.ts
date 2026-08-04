@@ -93,7 +93,32 @@ export const HERMES_FAILURE_KINDS = [
    * client's own bad request was reported to it as an unreachable service.
    */
   'validation_failed',
+  /**
+   * The service has no such run, or no such route. Emitted for a run id that
+   * cannot be read and for an unrecognised path — the latter being what a
+   * protocol skew between bridge and service looks like from the outside.
+   * Reporting it as `service_unreachable` would send an operator to inspect
+   * networking when the answer is that these two builds disagree.
+   */
+  'not_found',
+  /**
+   * The service faulted. It is genuinely a server-side fault and genuinely
+   * NOT an unreachable service — it answered, and the distinction decides
+   * whether anyone should look at the network at all.
+   */
+  'internal_error',
 ] as const;
+
+/**
+ * EVERY KIND THE SERVICE CAN EMIT IS IN THE LIST ABOVE.
+ *
+ * `refusalFromBody` honours only kinds already in Relay's vocabulary and
+ * reports everything else as `service_unreachable`. That is the right default
+ * for a body Relay does not understand, and the wrong answer for one it
+ * emitted itself — so a kind added to the service and forgotten here becomes
+ * "go and check the network" for a condition the service explained perfectly.
+ * `hermes-transport.test.ts` holds the two lists together.
+ */
 export type HermesFailureKind = (typeof HERMES_FAILURE_KINDS)[number];
 
 export interface HermesConnectionEvidence {

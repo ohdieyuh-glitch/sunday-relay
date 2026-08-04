@@ -10,6 +10,7 @@
  * a bridge that boots wide open is worse than one that does not boot.
  */
 
+import { isProductionDeployment } from './deployment-environment';
 import { isAbsolute } from 'node:path';
 import type { SundayMode } from './architect';
 
@@ -67,7 +68,24 @@ export function loadBridgeConfig(env: NodeJS.ProcessEnv = process.env): BridgeCo
     // Fake mode implies confirmation (no real spend). Live requires the flag.
     confirmLive: env.RELAY_BRIDGE_FAKE_CLAUDE === '1' || env.RELAY_BRIDGE_CONFIRM_LIVE === '1',
     stateRoot: stateRoot !== undefined && stateRoot !== '' ? stateRoot : null,
-    production: env.NODE_ENV === 'production',
+    /**
+     * The SAME production signal the trusted-origin gate uses, and for a
+     * stronger reason.
+     *
+     * This flag gates `productionConfigProblems`, which is the boot refusal
+     * for a missing `RELAY_BRIDGE_API_TOKEN` and a wildcard CORS origin. Read
+     * from `NODE_ENV` alone, a Railway deploy that never set it would boot
+     * with every protected route unauthenticated and any page allowed to
+     * spend the founder's credentials — a strictly larger hole than the one
+     * repaired in the trusted-origin gate one file away, and silent.
+     *
+     * Verified before this change rather than assumed: the deployed bridge
+     * answers 401 to an unauthenticated protected route and echoes no
+     * `access-control-allow-origin` to a hostile Origin, so both required
+     * variables are already set and turning the gate on refuses nothing that
+     * is running today.
+     */
+    production: isProductionDeployment(env),
   };
 }
 

@@ -1,3 +1,4 @@
+import { isProductionDeployment } from '../relay-bridge/deployment-environment';
 import {
   loadHermesProviderConfig, type HermesProviderConfig,
 } from '../relay-bridge/reviewer-harness/hermes/hermes-provider';
@@ -97,7 +98,9 @@ export function loadServiceConfig(env: NodeJS.ProcessEnv): ConfigResult {
       executable,
       provider: provider.config,
       apiKey,
-      production: env.NODE_ENV === 'production',
+      // Same signal as the bridge: a Railway deploy that never set NODE_ENV
+      // is a production deployment whatever the variable says.
+      production: isProductionDeployment(env),
     },
   };
 }

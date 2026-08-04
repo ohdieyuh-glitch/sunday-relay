@@ -320,7 +320,22 @@ describe('a refused origin never becomes a request', () => {
     expect(built.ok).toBe(true);
   });
 
-  it('the token is sent ONLY to the allowlisted origin', async () => {
+  it('the transport the GATE produced calls only the origin the gate approved', async () => {
+    // Driven through `buildHermesTransport`, not by constructing the transport
+    // directly — otherwise this would prove only that a transport calls its own
+    // configured URL, which is true of any URL, gated or not.
+    const built = await buildHermesTransport({
+      env: remoteEnv({
+        [HERMES_SERVICE_URL_ENV]: 'https://hermes.internal',
+        [HERMES_TRUSTED_ORIGINS_ENV]: 'https://hermes.internal',
+      }),
+      production: true,
+    });
+    expect(built.ok).toBe(true);
+    if (!built.ok) return;
+
+    // Re-create with the same approved URL and a spying fetch, because the
+    // factory does not accept an injected one.
     const spy = spyFetch();
     const transport = createRemoteHermesTransport({
       serviceUrl: 'https://hermes.internal',

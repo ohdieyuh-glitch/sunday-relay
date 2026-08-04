@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   HERMES_FAILURE_KINDS, HERMES_SERVICE_PROTOCOL, selectHermesMode,
@@ -155,6 +157,33 @@ describe('the failure vocabulary is categorised, not free text', () => {
     ]) {
       expect(HERMES_FAILURE_KINDS).toContain(kind);
     }
+  });
+
+  it('contains EVERY kind the service can emit — read out of the service itself', () => {
+    /*
+     * `refusalFromBody` honours only kinds already in this list and reports
+     * everything else as `service_unreachable`. A kind added to the service
+     * and forgotten here therefore becomes "go and check the network" for a
+     * condition the service explained perfectly — which is what happened to
+     * `shutting_down` on every ordinary deploy, and to `validation_failed`
+     * for every malformed request.
+     *
+     * Reading the service source keeps the two lists together without a
+     * second hand-maintained copy of one of them.
+     */
+    const source = readFileSync(
+      join(__dirname, '../../../relay-hermes-service/service.ts'),
+      'utf8',
+    );
+    const emitted = new Set<string>();
+    // `err(<status>, '<kind>', …)` and the capacity/validation branches.
+    for (const match of source.matchAll(/\berr\(\s*\d{3}\s*,\s*'([a-z_]+)'/g)) {
+      emitted.add(match[1]!);
+    }
+    const missing = [...emitted].filter((kind) => !HERMES_FAILURE_KINDS.includes(kind as never));
+    expect(missing, 'the service emits a kind the bridge cannot decode').toEqual([]);
+    // The scan must actually find something, or it proves nothing.
+    expect(emitted.size).toBeGreaterThan(4);
   });
 
   it('versions the bridge-to-service protocol', () => {

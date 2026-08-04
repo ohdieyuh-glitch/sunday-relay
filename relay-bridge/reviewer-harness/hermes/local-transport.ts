@@ -322,7 +322,16 @@ export function createLocalHermesTransport(
       if (!verdict.admitted) {
         return {
           accepted: false, runId, duplicate: false,
-          failureKind: 'capacity_exhausted',
+          // NOT every refusal is capacity. Hardcoding `capacity_exhausted`
+          // here told a caller with an unusable timeout that its request was
+          // "temporary and clears as running reviews finish" and could be
+          // "sent again unchanged" — an invitation to retry forever something
+          // that can never succeed. The policy already distinguishes them;
+          // flattening the distinction one line later is the same defect as
+          // publishing a ceiling that cannot fire.
+          failureKind: verdict.reason === 'unusable_timeout_request'
+            ? 'validation_failed'
+            : 'capacity_exhausted',
           safeMessage: verdict.safeMessage,
         };
       }

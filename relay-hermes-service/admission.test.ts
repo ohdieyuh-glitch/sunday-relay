@@ -5,7 +5,7 @@ import {
 } from '../relay-bridge/reviewer-harness/hermes/admission';
 import { createLocalHermesTransport } from '../relay-bridge/reviewer-harness/hermes/local-transport';
 import { loadHermesProviderConfig } from '../relay-bridge/reviewer-harness/hermes/hermes-provider';
-import { handleServiceRoute, SERVICE_TOKEN_ENV } from './service';
+import { handleServiceRoute, SERVICE_LIMIT_CEILINGS, SERVICE_TOKEN_ENV } from './service';
 import type { RemoteHermesReviewInput } from '../relay-bridge/reviewer-harness/hermes/hermes-transport';
 
 /**
@@ -115,7 +115,7 @@ describe('the aggregate policy bounds only what the service can truthfully enfor
     // previous version of this test asserted `activeTimeoutBudgetMs` one below
     // a ceiling that no sequence of admissions could ever reach — proving a
     // branch while the bound it stood for could not fire.
-    const fullRun = 600_000;
+    const fullRun = SERVICE_LIMIT_CEILINGS.timeoutMs;
     const at = { activeCount: 3, activeTimeoutBudgetMs: 3 * fullRun };
     expect(at.activeCount).toBeLessThan(ADMISSION_CEILINGS.maxActiveReviews);
     const verdict = evaluateAdmission(at, fullRun);
@@ -125,12 +125,17 @@ describe('the aggregate policy bounds only what the service can truthfully enfor
 
   it('the wall-clock ceiling is REACHABLE — it is below count x per-run ceiling', () => {
     // The arithmetic the previous value failed. With the ceiling at exactly
-    // `maxActiveReviews x 600_000`, the count check returns first and the
-    // largest sum this check can ever see equals the ceiling, against a strict
-    // `>`. A bound that cannot fire is a claimed gate the code does not have.
-    const perRunCeilingMs = 600_000;
+    // `maxActiveReviews x per-run ceiling`, the count check returns first and
+    // the largest sum this check can ever see equals the ceiling, against a
+    // strict `>`. A bound that cannot fire is a claimed gate the code does not
+    // have.
+    //
+    // The per-run ceiling is IMPORTED, not written down again. Hardcoding
+    // 600_000 here would let a future change lower `SERVICE_LIMIT_CEILINGS`
+    // and make the budget silently unreachable again with this test green —
+    // which is exactly the shape of the defect it exists to catch.
     expect(ADMISSION_CEILINGS.maxActiveTimeoutBudgetMs)
-      .toBeLessThan(ADMISSION_CEILINGS.maxActiveReviews * perRunCeilingMs);
+      .toBeLessThan(ADMISSION_CEILINGS.maxActiveReviews * SERVICE_LIMIT_CEILINGS.timeoutMs);
   });
 
   it('refuses a reservation that is not a usable number', () => {
@@ -253,11 +258,12 @@ describe('capacity is released exactly once', () => {
     expect(second.accepted, 'a finished run must free its slot').toBe(true);
   });
 
-  it('a FAILED run frees its slot — release is not a success-only path', async () => {
-    // The spawn rejects, so the run never reaches a `close` event and settles
-    // through the rejection handler instead. Nothing tested this: every prior
-    // fixture exited 0, so a leak on the failure path would have been invisible
-    // and would have permanently shrunk the ceiling by one.
+  it('a run that FAILED TO LAUNCH frees its slot — release is not a success-only path', async () => {
+    // The spawn throws, so the run never reaches a `close` event. Be exact
+    // about the path: `runner.ts` catches the synchronous throw and RESOLVES
+    // `{kind:'launch_failed'}`, so this settles through the `.then` branch,
+    // not the `.catch`. Every prior fixture exited 0, so a leak here would
+    // have been invisible and would have permanently shrunk the ceiling by one.
     const failingSpawn = (() => { throw new Error('spawn failed'); }) as never;
     const engine = transport(failingSpawn, { ...ADMISSION_CEILINGS, maxActiveReviews: 1 });
     expect((await engine.startReview(input(1))).accepted).toBe(true);
@@ -266,6 +272,40 @@ describe('capacity is released exactly once', () => {
       (await engine.startReview(input(2))).accepted,
       'a run that failed to launch must return its slot',
     ).toBe(true);
+  });
+
+  it('a run whose RUNNER REJECTS frees its slot too — the .catch branch', async () => {
+    // The other half, which nothing covered. `runHermesReviewer` is expected
+    // to resolve for every outcome; if it ever rejects instead, the slot must
+    // still come back. Forced here by a spawn double that survives long enough
+    // to be awaited and then throws asynchronously.
+    const rejectingSpawn = (() => {
+      const child = fakeChild();
+      // No 'close' and no 'error' — instead, break the contract the runner
+      // relies on so its own await path rejects.
+      setTimeout(() => child.emit('error', new Error('the child broke the contract')), 0);
+      return child;
+    }) as never;
+    const engine = transport(rejectingSpawn, { ...ADMISSION_CEILINGS, maxActiveReviews: 1 });
+    expect((await engine.startReview(input(1))).accepted).toBe(true);
+    await new Promise((r) => setTimeout(r, 40));
+    expect(
+      (await engine.startReview(input(2))).accepted,
+      'a rejected runner must still return its slot',
+    ).toBe(true);
+  });
+
+  it('an unusable timeout is refused as validation_failed, NOT as capacity', async () => {
+    // Flattening every non-admitted verdict to `capacity_exhausted` told a
+    // caller that a request which can never succeed was "temporary" and could
+    // be "sent again unchanged" — an invitation to retry forever.
+    const engine = transport(hangingSpawn().impl);
+    const refused = await engine.startReview({
+      ...input(1), limits: { ...input(1).limits, timeoutMs: Number.NaN },
+    });
+    expect(refused.accepted).toBe(false);
+    expect(refused.failureKind).toBe('validation_failed');
+    expect(refused.failureKind).not.toBe('capacity_exhausted');
   });
 
   it('a CANCELLED run frees its slot', async () => {
@@ -524,7 +564,7 @@ describe('the wall-clock ceiling refuses a real admission, not just a hand-built
      * holds only two full-length runs.
      */
     const spawn = hangingSpawn();
-    const fullRun = 600_000;
+    const fullRun = SERVICE_LIMIT_CEILINGS.timeoutMs;
     const shortRun = 1_000;
     const engine = transport(spawn.impl, {
       ...ADMISSION_CEILINGS,

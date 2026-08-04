@@ -188,6 +188,12 @@ const REFUSAL_GUIDANCE: Partial<Record<HermesFailureKind, string>> = {
   validation_failed:
     'The service understood the request and found it malformed. Sending it again unchanged will '
     + 'fail again.',
+  not_found:
+    'The service has no such run, or does not recognise that route. Sending it again unchanged '
+    + 'will fail again; a route it does not recognise means these two builds disagree.',
+  internal_error:
+    'The service faulted while handling the request. It answered, so this is not a network '
+    + 'problem — but retrying immediately is unlikely to help.',
 };
 
 /**
