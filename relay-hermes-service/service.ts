@@ -1,7 +1,8 @@
-import { timingSafeEqual } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { HERMES_SERVICE_PROTOCOL } from '../relay-bridge/reviewer-harness/hermes/hermes-transport';
 import type { HermesReviewerTransport } from '../relay-bridge/reviewer-harness/hermes/hermes-transport';
+import { ADMISSION_CEILINGS } from '../relay-bridge/reviewer-harness/hermes/admission';
+import { bearerMatches } from '../relay-bridge/bearer-auth';
 
 /**
  * THE HERMES REVIEWER SERVICE.
@@ -46,23 +47,17 @@ export function lifecycleState(): LifecycleState {
 const MAX_BODY_BYTES = 512 * 1024;
 
 /**
- * Constant-time bearer comparison, matching the bridge's own implementation.
- * A length mismatch still performs a comparison so the reply time does not
- * distinguish "wrong length" from "wrong value".
+ * Bearer authentication is the SHARED server-only implementation, re-exported
+ * here for the callers that already import it from this module.
+ *
+ * It used to be a second copy whose docstring claimed it matched the bridge's.
+ * It did not — different scheme casing, different separator handling, and a
+ * different rule for a configured secret carrying whitespace. Both copies
+ * failed closed, so no wrong secret was ever accepted; the defect was a stated
+ * parity that was not real. There is now one implementation, so the statement
+ * is true by construction rather than by assertion.
  */
-export function bearerMatches(header: string | undefined, expected: string | undefined): boolean {
-  if (typeof expected !== 'string' || expected.trim() === '') return false;
-  const presented = Buffer.from(
-    typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7).trim() : '',
-    'utf8',
-  );
-  const secret = Buffer.from(expected, 'utf8');
-  if (presented.length !== secret.length) {
-    timingSafeEqual(secret, secret);
-    return false;
-  }
-  return timingSafeEqual(presented, secret);
-}
+export { bearerMatches };
 
 export interface ServiceResult {
   readonly status: number;
@@ -182,6 +177,31 @@ export function parseReviewBody(raw: unknown): { ok: true; value: ReviewBody } |
 
 /* -------------------------------------------------------------- routing --- */
 
+/**
+ * How long a client should wait before retrying a capacity refusal. One
+ * number, sent as `retryAfterSeconds` and as the `Retry-After` header, so a
+ * client that reads either gets the same answer.
+ */
+export const CAPACITY_RETRY_AFTER_SECONDS = 30;
+
+/**
+ * Decode one path segment, or `null` when it cannot be decoded.
+ *
+ * `decodeURIComponent` THROWS on a malformed escape — `%ZZ`, a lone `%`, an
+ * orphan surrogate — and the throw used to escape the route handler and be
+ * caught by the server's generic catch, which answered **500**. A malformed
+ * path is a client error and there is no such run, so it is a 404: a 500 tells
+ * an operator the service is broken when nothing about it is.
+ */
+export function decodeSegment(raw: string): string | null {
+  try {
+    const decoded = decodeURIComponent(raw);
+    return decoded.trim() === '' ? null : decoded;
+  } catch {
+    return null;
+  }
+}
+
 export interface ServiceRequest {
   readonly method: string;
   readonly path: string;
@@ -234,6 +254,17 @@ export async function handleServiceRoute(
         failureReason: evidence.failureReason,
         // binaryPath is deliberately NOT included: it is host layout.
       },
+      /**
+       * The aggregate ceilings this service enforces, so a caller can see the
+       * bound rather than discover it as a 503. Ceilings only — never the
+       * current occupancy, which would tell one caller what other callers are
+       * doing.
+       */
+      capacity: {
+        maxActiveReviews: ADMISSION_CEILINGS.maxActiveReviews,
+        maxActiveTimeoutBudgetMs: ADMISSION_CEILINGS.maxActiveTimeoutBudgetMs,
+        maxRetainedTerminalRuns: ADMISSION_CEILINGS.maxRetainedTerminalRuns,
+      },
       runCreated: false,
     });
   }
@@ -257,20 +288,41 @@ export async function handleServiceRoute(
     const parsed = parseReviewBody(request.body);
     if (!parsed.ok) return err(422, 'validation_failed', parsed.message);
     const started = await engine.startReview(parsed.value);
-    return started.accepted
+    if (started.accepted) {
       // The EFFECTIVE limits are returned, so a caller can see what it
       // actually got rather than assuming it got what it asked for.
-      ? ok({
+      return ok({
         accepted: true, runId: started.runId, duplicate: started.duplicate,
         limits: parsed.value.limits,
-      })
-      // A refusal is a decision, not an outage, and it says so.
-      : err(409, started.failureKind ?? 'review_refused', started.safeMessage ?? 'The review was refused.');
+      });
+    }
+    // CAPACITY IS NOT A REFUSAL, AND NEITHER IS AN OUTAGE.
+    //
+    // A refusal is a decision about THIS request: it will not resolve itself,
+    // and retrying is a new paid call — 409. Capacity is a statement about the
+    // service's current load: the same request will succeed once a run
+    // finishes — 503, with the standard `Retry-After` so a client backs off on
+    // the protocol's own terms instead of guessing. Collapsing the two would
+    // send an operator to change a request that was never the problem.
+    if (started.failureKind === 'capacity_exhausted') {
+      return {
+        status: 503,
+        body: {
+          protocol: HERMES_SERVICE_PROTOCOL,
+          kind: 'capacity_exhausted',
+          error: started.safeMessage ?? 'The Hermes Reviewer service is at capacity.',
+          retryAfterSeconds: CAPACITY_RETRY_AFTER_SECONDS,
+        },
+      };
+    }
+    return err(409, started.failureKind ?? 'review_refused', started.safeMessage ?? 'The review was refused.');
   }
 
   const stateMatch = /^\/v1\/reviews\/([^/]+)$/.exec(path);
   if (stateMatch !== null && method === 'GET') {
-    const state = await engine.getReview(decodeURIComponent(stateMatch[1]));
+    const runId = decodeSegment(stateMatch[1]);
+    if (runId === null) return err(404, 'not_found', 'Unknown Hermes Reviewer operation.');
+    const state = await engine.getReview(runId);
     return ok({
       runId: state.runId,
       status: state.status,
@@ -283,7 +335,9 @@ export async function handleServiceRoute(
 
   const cancelMatch = /^\/v1\/reviews\/([^/]+)\/cancel$/.exec(path);
   if (cancelMatch !== null && method === 'POST') {
-    const result = await engine.cancelReview(decodeURIComponent(cancelMatch[1]));
+    const cancelId = decodeSegment(cancelMatch[1]);
+    if (cancelId === null) return err(404, 'not_found', 'Unknown Hermes Reviewer operation.');
+    const result = await engine.cancelReview(cancelId);
     return ok({
       requested: result.requested,
       terminationConfirmed: result.terminationConfirmed,
@@ -343,6 +397,12 @@ export function createHermesService(engine: HermesReviewerTransport): Server {
         'content-length': Buffer.byteLength(payload),
         // This is a private machine API. No browser may reach it directly.
         'cache-control': 'no-store',
+        // A capacity refusal carries the standard header as well as the body
+        // field, so a client that honours `Retry-After` backs off correctly
+        // without having to understand this service's JSON at all.
+        ...(result.body.kind === 'capacity_exhausted'
+          ? { 'retry-after': String(CAPACITY_RETRY_AFTER_SECONDS) }
+          : {}),
       });
       res.end(payload);
     })();
