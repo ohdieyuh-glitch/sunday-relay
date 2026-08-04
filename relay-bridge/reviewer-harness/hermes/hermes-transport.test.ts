@@ -188,10 +188,13 @@ describe('the failure vocabulary is categorised, not free text', () => {
     ]) {
       for (const match of source.matchAll(pattern)) emitted.add(match[1]!);
     }
-    // Kinds this service is known to forward from its engine rather than
-    // write itself. Listed so the union still has to contain them.
-    for (const forwarded of ['capacity_exhausted', 'shutting_down', 'validation_failed']) {
-      emitted.add(forwarded);
+    // Kinds the ENGINE can also report, reaching the wire through a variable
+    // rather than a literal the scan can see. (`shutting_down` and
+    // `validation_failed` are ALSO written as literals in the service; only
+    // `capacity_exhausted` is forward-only. Listing all three costs nothing and
+    // keeps the union honest either way.)
+    for (const viaEngine of ['capacity_exhausted', 'shutting_down', 'validation_failed']) {
+      emitted.add(viaEngine);
     }
     const missing = [...emitted].filter((kind) => !HERMES_FAILURE_KINDS.includes(kind as never));
     expect(missing, 'the service emits a kind the bridge cannot decode').toEqual([]);

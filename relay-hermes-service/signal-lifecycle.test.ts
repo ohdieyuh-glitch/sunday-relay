@@ -139,6 +139,32 @@ describe('the built service registers real signal handlers', () => {
         // THE SIGNAL. This is the part no other test exercises.
         s.child.kill(signal);
 
+        /*
+         * WAIT FOR DRAINING TO BE OBSERVABLE BEFORE PROBING.
+         *
+         * Delivering a signal and running its handler are two events, and
+         * between them the server is still an ordinary server. Probing in that
+         * window tested the SCHEDULER, not the drain: on a quiet box the
+         * handler always won and the test passed; under load the request
+         * sometimes arrived first and the test failed for a service behaving
+         * exactly as designed. A flake that only appears when the box is busy
+         * is worse than no test, because it teaches people to re-run.
+         *
+         * `/healthz` reports the lifecycle, so draining is observable. Once it
+         * says so, refusing a new review is a real obligation and this asserts
+         * it. A closed socket is also a refusal, and is accepted as one.
+         */
+        for (let i = 0; i < 100; i += 1) {
+          try {
+            const health = await fetch(`http://127.0.0.1:${s.port}/healthz`);
+            const body = await health.json() as { status?: string };
+            if (body.status === 'shutting_down') break;
+          } catch {
+            break; // already stopped listening — the strongest refusal there is
+          }
+          await sleep(20);
+        }
+
         // A review created while draining must never be accepted. The server
         // may already have stopped listening, which is also a refusal.
         let refusedStatus: number | 'connection-refused';

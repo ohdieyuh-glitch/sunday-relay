@@ -328,7 +328,7 @@ describe('a refused origin never becomes a request', () => {
      * (a) the gate approves this origin and returns a transport, and (b) a
      * transport built for that origin calls it exactly once and nowhere else.
      * The link between them — that the gate refuses to produce a transport for
-     * anything else — is proven by the three tests above, not by this one.
+     * anything else — is proven by the two refusals above, not by this one.
      */
     const built = await buildHermesTransport({
       env: remoteEnv({

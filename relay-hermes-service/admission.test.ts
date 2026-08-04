@@ -299,7 +299,7 @@ describe('capacity is released exactly once', () => {
     await new Promise((r) => setTimeout(r, 40));
     expect(
       (await engine.startReview(input(2))).accepted,
-      'a rejected runner must still return its slot',
+      'a run whose child died after spawning must still return its slot',
     ).toBe(true);
   });
 

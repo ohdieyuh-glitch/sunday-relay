@@ -5,9 +5,23 @@
  *
  * PRODUCTION HOSTING. A managed host injects `PORT` and expects the process to
  * bind every interface, so both are read from the environment rather than
- * assumed. Production additionally REFUSES TO START without the pieces that
- * make the service safe — a bridge token and an exact CORS allowlist — because
- * a bridge that boots wide open is worse than one that does not boot.
+ * assumed.
+ *
+ * A DECLARED production bridge — `NODE_ENV=production`, and only that —
+ * additionally REFUSES TO START on four conditions: no `RELAY_BRIDGE_API_TOKEN`,
+ * a literal `*` in the CORS allowlist, a relative durable-state path, or a
+ * `PORT` that does not resolve. An ABSENT allowlist is a warning, not a
+ * refusal: empty already means "no browser origin may call this", which is the
+ * safe direction, and a bridge configured for CLI use only must still start.
+ *
+ * WHAT THAT REFUSAL IS FOR, stated accurately because an earlier version of
+ * this paragraph was not. It is a fail-fast on misconfiguration, not a lock on
+ * an open door. A missing token makes every protected route UNREACHABLE — the
+ * shared bearer check refuses an empty configured secret — and a `*` entry
+ * allows nothing, because origins are matched by exact string and no browser
+ * sends `Origin: *`. "A bridge that boots wide open" describes neither case.
+ * The refusal exists so a deploy that forgot something fails loudly at boot
+ * instead of quietly serving nobody.
  */
 
 import { isProductionDeployment } from './deployment-environment';
@@ -35,8 +49,14 @@ export interface BridgeConfig {
   stateRoot: string | null;
   /**
    * IS THIS A REAL DEPLOYMENT? Inferred — `NODE_ENV=production` or any Railway
-   * marker. Used by everything that fails CLOSED: a wrong answer here makes a
-   * gate stricter, never looser, and cannot take the service down.
+   * marker.
+   *
+   * Its only reader is `productionConfigWarnings`. Fail-closed gates do not
+   * read this FIELD; they call `isProductionDeployment(env)` directly, because
+   * they are reached from route handlers that never load a `BridgeConfig`. The
+   * predicate is the shared answer; this field is one caller of it. Saying
+   * "used by everything that fails closed" was a claim about a set with one
+   * member in it, in the commit whose subject was claim accuracy.
    */
   production: boolean;
   /**
@@ -112,10 +132,12 @@ export function loadBridgeConfig(env: NodeJS.ProcessEnv = process.env): BridgeCo
 /**
  * What must be true before a PRODUCTION bridge may accept traffic AT ALL.
  *
- * Deliberately short. A boot failure takes the service down, so only things
- * that would make it unsafe — not merely limited — belong here. A missing
- * token would leave every protected route unreachable, and a wildcard origin
- * would let any page spend a founder's credentials; both are fatal.
+ * Deliberately short. A boot failure takes the service down, so only a
+ * configuration nobody could have meant belongs here. A missing token leaves
+ * every protected route unreachable, and a literal `*` in an exact-match
+ * allowlist matches nothing a browser can send — so neither is an open door,
+ * and neither was ever one. Both are operator intent that cannot be honoured,
+ * which is worth failing loudly at boot rather than serving badly for a week.
  *
  * Absent CORS origins and an absent volume are NOT fatal: an empty allowlist
  * already means "no browser may call this", which is the safe direction, and
@@ -159,7 +181,12 @@ export function productionConfigProblems(
     );
   }
   if (!Number.isFinite(config.port) || config.port <= 0) {
-    problems.push('PORT did not resolve to a usable port number.');
+    // Name the variable that was actually read, for the same reason as the
+    // state path above: `RELAY_BRIDGE_PORT` wins when set, and `Number('')` is
+    // 0, so an empty one reaches here and must not send an operator to `PORT`.
+    problems.push(
+      `${env.RELAY_BRIDGE_PORT !== undefined ? 'RELAY_BRIDGE_PORT' : 'PORT'} did not resolve to a usable port number.`,
+    );
   }
   return problems;
 }
