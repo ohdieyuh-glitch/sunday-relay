@@ -12,6 +12,9 @@ import {
   type RemoteHermesReviewStart, type RemoteHermesReviewState,
 } from './hermes-transport';
 import { describeProvider, type HermesProviderConfig } from './hermes-provider';
+import {
+  ADMISSION_CEILINGS, evaluateAdmission, selectEvictions, type AdmissionCeilings,
+} from './admission';
 
 /**
  * THE LOCAL EXECUTABLE TRANSPORT — the historical behaviour, behind the seam.
@@ -24,13 +27,28 @@ import { describeProvider, type HermesProviderConfig } from './hermes-provider';
  * subtly different copy of the safety logic, which is the failure mode this
  * whole refactor is trying to avoid.
  *
- * It is for DEVELOPMENT on a machine that genuinely has Hermes. In production
- * the bridge selects the remote transport and never reaches this file.
+ * WHERE IT RUNS. Two places, and the second one is easy to miss: the BRIDGE
+ * uses it for development on a machine that genuinely has Hermes, and the
+ * Hermes Reviewer SERVICE uses it as its production engine —
+ * `relay-hermes-service/main.ts` injects exactly this transport. There is
+ * deliberately no second process runner, because two copies of safety logic
+ * drift and the drifted one is always the one in production.
  *
- * One real difference from a remote run: the service keeps its runs in a
- * durable place, whereas this transport holds them in memory for the life of
- * the process. That is stated rather than hidden — `getReview` for an unknown
- * id reports the run as lost to a restart instead of inventing a state.
+ * RUN STORAGE IS IN MEMORY, ON BOTH SIDES OF THAT SEAM.
+ *
+ * A previous version of this docstring said "the service keeps its runs in a
+ * durable place, whereas this transport holds them in memory". That was false
+ * in the one way that matters: the service *is* this transport. Nothing here
+ * is durable, on either host. `getReview` for an unknown id says so rather
+ * than inventing a state, the README says so, and idempotency is explicitly
+ * NOT restart-safe. Durable run truth lives in Relay Core, which already owns
+ * it; a second durable store here would be a competing source of truth.
+ *
+ * WHAT IS BOUNDED (independent review, F1). Concurrent runs, the outstanding
+ * worst-case wall clock, the number of retained terminal runs, and the
+ * idempotency map — which is evicted WITH the run it points at, so it cannot
+ * become the leak that survives the fix. See `admission.ts` for why those are
+ * the only units this service can bound truthfully.
  */
 
 export interface LocalTransportConfig {
@@ -47,6 +65,12 @@ export interface LocalTransportConfig {
   readonly now?: () => string;
   /** Injected in tests so the whole pipeline runs against a fake executable. */
   readonly spawnImpl?: Parameters<typeof runHermesReviewer>[0]['spawnImpl'];
+  /**
+   * Aggregate ceilings. Overridable ONLY for tests — nothing reads these from
+   * a request or from the environment, because a caller that could raise the
+   * ceiling is not bounded by it.
+   */
+  readonly ceilings?: AdmissionCeilings;
 }
 
 /**
@@ -68,6 +92,20 @@ interface LocalRun {
   outcome: HermesRunOutcome | null;
   controller: AbortController;
   cancelRequested: boolean;
+  /** The effective timeout this run reserved from the wall-clock budget. */
+  reservedTimeoutMs: number;
+  /**
+   * Whether this run's capacity has been returned.
+   *
+   * RELEASED EXACTLY ONCE. Completion, failure, timeout, cancellation and
+   * shutdown can all arrive for the same run — a user cancel followed by the
+   * process settling is the ordinary case, not an edge one. Releasing twice
+   * would decrement the active count below the truth and hand out a slot that
+   * does not exist, which is a capacity bound that quietly stops bounding.
+   */
+  released: boolean;
+  /** Idempotency keys pointing at this run; evicted with it. */
+  readonly keys: Set<string>;
 }
 
 export function createLocalHermesTransport(
@@ -75,9 +113,63 @@ export function createLocalHermesTransport(
 ): HermesReviewerTransport {
   const now = config.now ?? (() => new Date().toISOString());
   const env = config.env ?? process.env;
+  const ceilings = config.ceilings ?? ADMISSION_CEILINGS;
   // Volatile by construction. A restart loses these, and `getReview` says so.
+  // BOUNDED by construction too: see `releaseCapacity` and `evictIfNeeded`.
   const runs = new Map<string, LocalRun>();
   const byIdempotencyKey = new Map<string, { runId: string; fingerprint: string }>();
+  /** Insertion order of run ids, used to evict the oldest terminal runs. */
+  const runOrder: string[] = [];
+
+  let activeCount = 0;
+  let activeTimeoutBudgetMs = 0;
+
+  /**
+   * "Active" for eviction purposes is deliberately WIDER than "holding
+   * capacity": a run counts as active while it is still running OR still
+   * holding a slot. Shutdown releases capacity up front so the counters are
+   * honest, and a run whose process has not settled yet must still never be
+   * evicted — its `AbortController` is the only handle on that process group.
+   */
+  const isActive = (runId: string): boolean => {
+    const run = runs.get(runId);
+    if (run === undefined) return false;
+    return run.status === 'running' || !run.released;
+  };
+
+  /**
+   * Return one run's capacity, at most once. Called from every terminal path:
+   * the settle handler (completion, timeout, failure, cancellation), the
+   * rejection handler, and shutdown.
+   */
+  const releaseCapacity = (run: LocalRun): void => {
+    if (run.released) return;
+    run.released = true;
+    activeCount -= 1;
+    activeTimeoutBudgetMs -= run.reservedTimeoutMs;
+  };
+
+  /**
+   * Drop the oldest terminal runs beyond the retention ceiling, and the
+   * idempotency entries that point at them. An ACTIVE run is never evicted —
+   * `selectEvictions` re-checks that per candidate rather than trusting the
+   * order list, because dropping a live run would strand its AbortController
+   * and leave a Hermes process group that shutdown can no longer reach.
+   */
+  const evictIfNeeded = (): void => {
+    const doomed = selectEvictions(runOrder, isActive, ceilings);
+    for (const runId of doomed) {
+      const run = runs.get(runId);
+      // Belt and braces: `selectEvictions` already excluded active runs, and
+      // this refuses again at the point of deletion. The cost of the redundant
+      // check is nothing; the cost of being wrong is an unreachable process.
+      if (run === undefined || isActive(runId)) continue;
+      for (const key of run.keys) byIdempotencyKey.delete(key);
+      runs.delete(runId);
+      const at = runOrder.indexOf(runId);
+      if (at >= 0) runOrder.splice(at, 1);
+    }
+  };
 
   const probeFor = () => {
     const profile = createIsolatedProfile();
@@ -165,10 +257,53 @@ export function createLocalHermesTransport(
           safeMessage: 'That run id is already in use on this service, and a run record is never replaced.',
         };
       }
+
+      /* ------------------------------------------------ ADMISSION --------
+       * ATOMIC BY CONSTRUCTION.
+       *
+       * From the `evaluateAdmission` call to the counter increments below
+       * there is NO `await`. On a single-threaded runtime that makes
+       * check-and-reserve one uninterrupted step, so two concurrent callers
+       * cannot both observe the last free slot. An `await` anywhere in this
+       * block — even an innocuous one — would reintroduce exactly the race
+       * this shape exists to close, which is why the spawn happens strictly
+       * after the reservation and nothing is looked up in between.
+       *
+       * AND IT HAPPENS BEFORE ANY SPAWN. `runHermesReviewer` is what puts the
+       * provider credential into a child environment; a refused request must
+       * never reach it. Ordering the reservation first is what makes "no
+       * credential exposure or process spawn before admission" true rather
+       * than merely intended.
+       * ------------------------------------------------------------------ */
+      const reservedTimeoutMs = input.limits.timeoutMs;
+      const verdict = evaluateAdmission({ activeCount, activeTimeoutBudgetMs }, reservedTimeoutMs, ceilings);
+      if (!verdict.admitted) {
+        return {
+          accepted: false, runId, duplicate: false,
+          failureKind: 'capacity_exhausted',
+          safeMessage: verdict.safeMessage,
+        };
+      }
+
       const controller = new AbortController();
-      const run: LocalRun = { status: 'running', outcome: null, controller, cancelRequested: false };
+      const run: LocalRun = {
+        status: 'running', outcome: null, controller, cancelRequested: false,
+        reservedTimeoutMs, released: false, keys: new Set([input.idempotencyKey]),
+      };
       runs.set(runId, run);
+      runOrder.push(runId);
       byIdempotencyKey.set(input.idempotencyKey, { runId, fingerprint });
+      activeCount += 1;
+      activeTimeoutBudgetMs += reservedTimeoutMs;
+
+      /** Every terminal path funnels through here, so capacity is returned
+       *  once and the retention ceiling is applied at the same moment. */
+      const settle = (status: RemoteHermesReviewState['status'], outcome: HermesRunOutcome | null): void => {
+        run.outcome = outcome;
+        run.status = status;
+        releaseCapacity(run);
+        evictIfNeeded();
+      };
 
       // A fresh isolated profile per run — never a persistent personal one.
       void runHermesReviewer({
@@ -183,14 +318,15 @@ export function createLocalHermesTransport(
         now,
         spawnImpl: config.spawnImpl,
       }).then((outcome) => {
-        run.outcome = outcome;
-        run.status = run.cancelRequested ? 'cancelled'
-          : outcome.kind === 'completed' ? 'completed'
-            : outcome.kind === 'timed_out' ? 'timed_out'
-              : outcome.kind === 'cancelled' ? 'cancelled' : 'failed';
+        settle(
+          run.cancelRequested ? 'cancelled'
+            : outcome.kind === 'completed' ? 'completed'
+              : outcome.kind === 'timed_out' ? 'timed_out'
+                : outcome.kind === 'cancelled' ? 'cancelled' : 'failed',
+          outcome,
+        );
       }).catch(() => {
-        run.outcome = null;
-        run.status = 'failed';
+        settle('failed', null);
       });
 
       return { accepted: true, runId, duplicate: false, failureKind: null, safeMessage: null };
@@ -199,12 +335,20 @@ export function createLocalHermesTransport(
     async getReview(runId: string): Promise<RemoteHermesReviewState> {
       const run = runs.get(runId);
       if (run === undefined) {
-        // Truthful about volatility instead of inventing durable state.
+        // Truthful about volatility instead of inventing durable state — and
+        // truthful about ALL THREE ways a record can be absent. Naming only
+        // the restart would now be a guess: since retention became bounded, an
+        // old completed run can also have been evicted, and neither of those
+        // is the same as an id that never existed. Relay Core holds the
+        // durable record; this service never did.
         return {
           runId, status: 'failed', protocol: HERMES_SERVICE_PROTOCOL, reviewText: null,
           usage: { inputTokens: null, outputTokens: null, source: 'unavailable' },
           failureKind: 'service_unreachable',
-          safeMessage: 'This Relay Bridge has no record of that review. Local runs are held in memory and do not survive a restart.',
+          safeMessage:
+            'There is no in-memory record of that review here: it was never created, it was lost to a restart, '
+            + 'or it finished long enough ago to be evicted from the bounded retention window. '
+            + 'Run truth is held by Relay Core, not by this service.',
         };
       }
       const outcome = run.outcome;
@@ -237,6 +381,12 @@ export function createLocalHermesTransport(
         if (run.status === 'running') {
           run.cancelRequested = true;
           run.controller.abort();
+          // Capacity is returned at SHUTDOWN, not left pinned until a child
+          // that may never settle finally does. `releaseCapacity` is
+          // idempotent, so the later `settle` for the same run is a no-op and
+          // the count is decremented exactly once. Eviction is not triggered
+          // here: these runs are still executing, and `isActive` keeps them.
+          releaseCapacity(run);
         }
       }
     },
