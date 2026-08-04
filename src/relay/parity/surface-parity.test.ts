@@ -664,6 +664,41 @@ describe('an implemented website capability must be REACHABLE, not merely presen
     expect(specifiers).toEqual(['./real']);
   });
 
+  it('does not truncate a SPECIFIER that is itself a URL', () => {
+    // `from` ends in an identifier character, and a rule that refused to open a
+    // string after one turned the `//` inside this URL into a line comment —
+    // swallowing the NEXT line's real import with it.
+    expect(importSpecifiersOf([
+      "import x from 'https://esm.sh/react';",
+      "import { Real } from './real';",
+    ].join('\n'))).toEqual(expect.arrayContaining(['https://esm.sh/react', './real']));
+
+    expect(importSpecifiersOf("import 'https://x/y';\nimport { R } from './r';"))
+      .toEqual(expect.arrayContaining(['https://x/y', './r']));
+  });
+
+  it('does not count import-shaped PROSE as an edge', () => {
+    // A specifier is itself quoted text, so the matcher cannot tell a real
+    // `from './x'` from a string that merely contains one. Everything but the
+    // specifier position is blanked, which removes the ambiguity rather than
+    // arguing with it.
+    expect(importSpecifiersOf([
+      `const doc = ' import { X } from "./phantom" ';`,
+      "import { Real } from './real';",
+    ].join('\n'))).toEqual(['./real']);
+
+    expect(importSpecifiersOf([
+      "const t = `import { X } from './phantom-in-a-template';`;",
+      "import { Real } from './real';",
+    ].join('\n'))).toEqual(['./real']);
+  });
+
+  it('still finds a dynamic import inside a template interpolation', () => {
+    // Template TEXT is blanked; `${…}` is code and must keep its edges.
+    expect(importSpecifiersOf("const t = `${await import('./dyn')}`;"))
+      .toEqual(['./dyn']);
+  });
+
   it('does not truncate a line that carries a URL literal', () => {
     // A naive comment stripper eats everything after `//` — including, on this
     // line, the import that follows a string containing a protocol separator.

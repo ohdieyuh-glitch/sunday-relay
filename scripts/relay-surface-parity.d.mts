@@ -159,14 +159,18 @@ export const BROWSER_ENTRY_POINTS: readonly string[];
 export const UNMOUNTED_WEBSITE_SURFACES: Readonly<Record<string, string>>;
 
 /**
- * Remove `//` and block comments while leaving string literals, template
- * literals and regular-expression literals intact — so a commented-out import
- * contributes no edge, a specifier holding `//` inside a string is not
- * truncated, and a quote or backtick inside a regex cannot open a phantom
- * string that swallows the rest of the file.
+ * Reduce a source file to the text a module-edge matcher may safely read.
  *
- * Regex-versus-division is decided by what precedes the `/`. That is a
- * heuristic, and the implementation's doc block says so.
+ * Comments are REMOVED. Template text and ordinary strings are BLANKED —
+ * newlines and delimiters kept — except a string in SPECIFIER position, whose
+ * text is the answer and survives verbatim. `${…}` interpolations are code and
+ * go through every rule. Regex literals are preserved whole, so a quote or
+ * backtick inside one cannot open a phantom string.
+ *
+ * Blanking rather than preserving, because a specifier is itself quoted text:
+ * prose containing `from './x'` produced an edge no bundler creates. The
+ * implementation's doc block states the two residuals and why both fail in the
+ * loud direction.
  */
 export function stripComments(source: string): string;
 

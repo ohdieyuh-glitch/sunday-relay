@@ -824,77 +824,106 @@ export const UNMOUNTED_WEBSITE_SURFACES = Object.freeze({
 });
 
 /**
- * Remove `//` and block comments while leaving string and template literals
- * intact, so a commented-out import contributes no edge and a specifier that
- * happens to contain `//` (a URL in a string) is not truncated.
+ * Reduce a source file to the text a MODULE-EDGE MATCHER may safely read.
  *
- * A hand-written scanner rather than a regex because the two cases defeat each
- * other: stripping `//…` to end of line eats the tail of any line holding a URL
- * literal, and not stripping it counts a commented-out import as a real edge.
+ * Not "remove comments while leaving literals intact" — that is what this said
+ * for three review rounds and it is not what it does. Precisely:
  *
- * A SINGLE-QUOTE STRING CANNOT SPAN A NEWLINE, AND THAT IS WHAT MAKES THIS
- * SAFE. The first version of this scanner opened a "string" on any `'`, `"` or
- * backtick — including a bare apostrophe in JSX text, which is not a delimiter
- * at all. `Relay's own inspection` therefore opened a quote that never closed,
- * and from that point to the end of the file NO comment was stripped: a
- * commented-out import after it counted as a real edge. An independent review
- * instrumented the tree and found 22 of 646 tracked files desynchronising this
- * way, four of them inside the browser reachability graph — reinstating exactly
- * the false pass this function was written to remove.
+ *   comments            REMOVED
+ *   template text       BLANKED (newlines kept), `${…}` treated as code
+ *   ordinary strings    BLANKED, except in SPECIFIER position, where the text
+ *                       is the answer and is preserved verbatim
+ *   regex literals      preserved whole, so a quote or backtick inside one
+ *                       cannot open a phantom string
  *
- * `'` and `"` are therefore closed at every line break unless the line ends in
- * a `\` continuation. Backticks legitimately span lines and are left alone.
+ * WHY BLANKING, NOT PRESERVING. A specifier is itself quoted text, so the
+ * matcher cannot tell `from './x'` from a string that merely CONTAINS
+ * `from './x'`. Prose like `' import { X } from "./phantom" '` produced an edge
+ * no bundler creates — a silent false pass, in the checker built to prevent
+ * one. Blanking everything except the specifier position removes the ambiguity
+ * instead of arguing with it.
  *
- * REGULAR-EXPRESSION LITERALS ARE TRACKED TOO, because leaving them out
- * reopened the same hole one layer down. A regex holding a quote — /['"]/ —
- * opens a phantom string exactly as the apostrophe did, and a regex holding an
- * ODD number of backticks opens a phantom TEMPLATE literal, which the newline
- * reset deliberately does not close because a real template legitimately spans
- * lines. Six files in this repository did exactly that.
+ * THE THREE DEFECTS THIS SHAPE EXISTS TO CLOSE, each found by an independent
+ * review after the previous fix:
  *
- * Whether a `/` starts a regex or is division is the classic ambiguity, decided
- * here the standard way: by what precedes it. A `/` in expression position —
- * after `(`, `[`, `{`, `,`, `;`, an operator, one of a few keywords, or at the
- * start of input — begins a regex; a `/` after a value is division. That is a
- * heuristic, not a parser, and it is stated as one. Its failure mode is
- * bounded, and `src/relay/parity/surface-parity.test.ts` asserts over the REAL
- * graph — in both directions — that no comment yields an edge and no real
- * import is lost.
+ * 1. Opening a string on ANY quote. A bare apostrophe in JSX text —
+ *    `Relay's own inspection` — is not a delimiter, and it opened a "string"
+ *    that never closed, so every later comment in that file survived.
+ * 2. Guessing regex position from `<` and from a line break. That made every
+ *    JSX closing tag `</Tag>` and every line beginning with `/` look like the
+ *    start of a regex; the bogus regex ran to the first slash of a later `//`
+ *    and put the comment body back in code position.
+ * 3. Copying `${…}` verbatim, so a comment inside an interpolation was never
+ *    stripped.
  *
- * RESIDUAL, STATED RATHER THAN IMPLIED: a regex in a position this heuristic
- * does not recognise — after `)` or `}` — is not consumed, so a backtick
- * inside it can still open a phantom template literal. No file in this tree
- * does that, and the real-graph test would catch it if one appeared.
+ * The rules that replace the guessing, each derived from what the language
+ * actually permits rather than from a pattern that happened to work:
+ *
+ * - A `'`/`"` string cannot span a newline, so both close at every line break.
+ * - `abc'def'` is not valid JavaScript, so a quote directly after an identifier
+ *   character, `)`, `]` or `}` cannot be an opener — UNLESS the preceding token
+ *   is one of the keywords a literal legitimately follows (`from`, `import`,
+ *   `as`, `case`, `return`, …). Leaving `from` out of that list truncated
+ *   `import x from 'https://esm.sh/react'` at the `//` and swallowed the next
+ *   line's real import.
+ * - Whether `/` starts a regex or is division is the classic ambiguity, decided
+ *   by what precedes it. That is a heuristic, and it is stated as one.
+ *
+ * RESIDUALS, STATED RATHER THAN IMPLIED. A regex in a position the heuristic
+ * does not recognise — after `)` or `}` — is not consumed, so a backtick inside
+ * it can still open a template. An ODD backtick in JSX prose (`Press \`Enter`)
+ * opens one too, because a backtick after an identifier is how a TAGGED
+ * template is written and the two are indistinguishable without JSX context;
+ * this repository contains no tagged template. Both residuals fail in the LOUD
+ * direction — a dropped edge is a visible parity failure, never a silent pass.
+ *
+ * `src/relay/parity/surface-parity.test.ts` asserts the properties over the
+ * REAL graph in three directions: a comment on its own line, a comment appended
+ * to an existing line, and a real import that must still be found.
  */
 /**
  * Characters after which a `/` begins a REGEX rather than a division.
  *
- * `<` and `>` are DELIBERATELY ABSENT, and so is `\n`. Including them was a
- * defect with a wide blast radius in a React codebase: `<` made every JSX
- * closing tag — `</StrictMode>` — look like the start of a regex, and treating
- * a newline as regex position made every line beginning with `/` one too. The
- * bogus "regex" then ran to the first slash of a later `//`, and the comment
- * body landed back in code position. An independent reviewer measured 1400
- * such positions across 61 of the 270 reachable modules, `src/relay/main.tsx`
- * among them.
+ * `<`, `>` and `\n` are DELIBERATELY ABSENT. Including them was a defect with a
+ * wide blast radius in a React codebase: `<` made every JSX closing tag look
+ * like the start of a regex, and treating a line break as significant made
+ * every line beginning with `/` one too — 1400 phantom positions across 61 of
+ * the 270 reachable modules, `src/relay/main.tsx` among them.
  *
  * `)` and `}` are absent for the opposite reason: `if (x) /re/.test(y)` is a
- * regex and `(a + b) / c` is division, and nothing short of a parser tells
- * them apart. Leaving them out means a regex in that position is not consumed
- * — see the residual note on `stripComments`.
+ * regex and `(a + b) / c` is division, and nothing short of a parser separates
+ * them. A regex in that position is therefore not consumed — see RESIDUALS.
  */
 const REGEX_POSITION_BEFORE = new Set([
   '(', '[', '{', ',', ';', ':', '=', '!', '&', '|', '?', '+', '-', '*', '%', '~', '^',
 ]);
-/** Keywords after which the same is true. */
+
+/** Keywords after which a `/` is a regex rather than a division. */
 const REGEX_POSITION_KEYWORDS =
-  /(?:^|[^\w$])(return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)\s*$/u;
+  /(?:^|[^\w$])(?:return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)\s*$/u;
+
+/**
+ * Keywords a STRING may legally follow even though they end in an identifier
+ * character. `from` is the one that mattered: without it,
+ * `import x from 'https://esm.sh/react'` never opened a string, the `//` inside
+ * the URL became a line comment, and the next line's real import went with it.
+ */
+const LITERAL_POSITION_KEYWORDS =
+  /(?:^|[^\w$])(?:from|import|export|as|default|case|return|typeof|instanceof|in|of|new|delete|void|do|else|yield|await)\s*$/u;
+
+/**
+ * A string in SPECIFIER position is the answer, so its text is kept verbatim.
+ * Every other string is blanked — see the doc block.
+ */
+const SPECIFIER_POSITION = /(?:^|[^\w$])(?:from|import|require)\s*\(?\s*$/u;
 
 export function stripComments(source) {
   let out = '';
   let index = 0;
   /** An open `'` or `"` string. Backticks have their own context stack. */
   let quote = null;
+  /** True while inside a SPECIFIER string, whose text must survive verbatim. */
+  let keepQuoted = false;
   /** The last significant character emitted in CODE position. */
   let previous = '';
   /**
@@ -912,11 +941,24 @@ export function stripComments(source) {
   const top = () => (templates.length === 0 ? null : templates[templates.length - 1]);
   const inTemplateText = () => top() !== null && top().interpolation === null;
 
+  /**
+   * The last 48 emitted characters. Its own small string because
+   * `out.slice(-24)` re-flattened the entire accumulated rope on every call —
+   * quadratic, and this scanner now asks the question once per quote as well as
+   * once per slash.
+   */
+  let recent = '';
+  const emit = (text) => {
+    out += text;
+    recent = (recent + text).slice(-48);
+  };
   const startsRegex = () => {
     if (previous === '') return true;
     if (REGEX_POSITION_BEFORE.has(previous)) return true;
-    return REGEX_POSITION_KEYWORDS.test(out.slice(-24));
+    return REGEX_POSITION_KEYWORDS.test(recent);
   };
+  const canOpenString = () => startsRegex() || LITERAL_POSITION_KEYWORDS.test(recent);
+  const inSpecifierPosition = () => SPECIFIER_POSITION.test(recent);
 
   while (index < source.length) {
     const char = source[index];
@@ -925,24 +967,33 @@ export function stripComments(source) {
     // TEMPLATE TEXT — blanked. See the doc block: text that reads like an
     // import is not an edge, and the specifier matcher cannot tell.
     if (inTemplateText()) {
-      if (char === '\\') { index += 2; continue; }
+      if (char === '\\') {
+        // Keep line structure even across an escaped line break, or the output
+        // loses a line and every later position shifts.
+        if (next === '\n') emit('\n');
+        index += 2;
+        continue;
+      }
       if (char === '`') { templates.pop(); previous = '`'; index += 1; continue; }
       if (char === '$' && next === '{') {
-        out += '${';
+        emit('${');
         top().interpolation = 0;
         previous = '{';
         index += 2;
         continue;
       }
-      if (char === '\n') out += '\n';   // keep line structure
+      if (char === '\n') emit('\n');   // keep line structure
       index += 1;
       continue;
     }
 
     if (quote !== null) {
-      out += char;
+      // Blanked unless this literal IS the specifier. Delimiters and newlines
+      // always survive, so the matcher still sees `from ''` and line numbers
+      // do not shift.
+      if (keepQuoted || char === quote || char === '\n') emit(char);
       if (char === '\\') {
-        out += next ?? '';
+        if (keepQuoted) emit(next ?? '');
         index += 2;
         continue;
       }
@@ -976,14 +1027,15 @@ export function stripComments(source) {
     // through the ordinary rules, and a specifier's own quotes are still
     // emitted, so `from '…'` still matches.
     if (char === "'" || char === '"') {
-      if (startsRegex()) {
+      if (canOpenString()) {
         quote = char;
-        out += char;
+        keepQuoted = inSpecifierPosition();
+        emit(char);
         index += 1;
         continue;
       }
       // Prose. Emit it and move on; it delimits nothing.
-      out += char;
+      emit(char);
       previous = char;
       index += 1;
       continue;
@@ -1003,7 +1055,7 @@ export function stripComments(source) {
     if (char === '/' && next === '*') {
       index += 2;
       while (index < source.length && !(source[index] === '*' && source[index + 1] === '/')) {
-        if (source[index] === '\n') out += '\n';
+        if (source[index] === '\n') emit('\n');
         index += 1;
       }
       index += 2;
@@ -1037,7 +1089,7 @@ export function stripComments(source) {
       // slash. Consuming it would put the comment body back in code position.
       if (closed && source[cursor] !== '/' && source[cursor] !== '*') {
         while (cursor < source.length && /[a-z]/u.test(source[cursor])) cursor += 1;
-        out += source.slice(index, cursor);
+        emit(source.slice(index, cursor));
         previous = '/';
         index = cursor;
         continue;
@@ -1052,7 +1104,7 @@ export function stripComments(source) {
       if (char === '{') context.interpolation += 1;
       else if (char === '}') {
         if (context.interpolation === 0) {
-          out += '}';
+          emit('}');
           context.interpolation = null;   // back to template TEXT
           previous = '}';
           index += 1;
@@ -1062,7 +1114,7 @@ export function stripComments(source) {
       }
     }
 
-    out += char;
+    emit(char);
     // Whitespace, INCLUDING a newline, does not change what preceded the next
     // `/`. Treating a line break as significant is what made every line
     // starting with `/` look like a regex.
