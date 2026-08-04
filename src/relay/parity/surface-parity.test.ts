@@ -630,8 +630,11 @@ describe('an implemented website capability must be REACHABLE, not merely presen
       "const d = await import('./d');",
       "import Default, { type F } from './f';",
       "import * as ns from './g';",
+      // A side-effect import with empty braces IS a real edge: the module is
+      // still evaluated, and this repository's bundler preserves it.
+      "import {} from './h';",
     ].join('\n'));
-    expect(specifiers).toEqual(expect.arrayContaining(['./a', './b', './c.css', './d', './f', './g']));
+    expect(specifiers).toEqual(expect.arrayContaining(['./a', './b', './c.css', './d', './f', './g', './h']));
   });
 
   it('counts NO edge for something a bundler would not include', () => {
@@ -646,6 +649,15 @@ describe('an implemented website capability must be REACHABLE, not merely presen
       "// import { Thing } from './commented-line';",
       "/* import { Thing } from './commented-block'; */",
       '/**\n * import { Thing } from "./commented-doc";\n */',
+      // A bare apostrophe in prose is NOT a string delimiter. This one line is
+      // what defeated the first version of the scanner for the rest of a file.
+      "export const copy = <p>Relay's own inspection</p>;",
+      "// import { Thing } from './commented-after-an-apostrophe';",
+      // A regex carrying a quote, and one carrying an odd number of backticks.
+      "const q = /['\"]/;",
+      "// import { Thing } from './commented-after-a-regex';",
+      'const t = /\\bimport\\s*\\(\\s*`([^`$]+)`\\s*\\)/g;',
+      "// import { Thing } from './commented-after-a-backtick-regex';",
       "import { Real } from './real';",
     ].join('\n'));
     expect(specifiers).toEqual(['./real']);
@@ -660,6 +672,48 @@ describe('an implemented website capability must be REACHABLE, not merely presen
       "import { B } from './b';",
     ].join('\n'));
     expect(specifiers).toEqual(expect.arrayContaining(['./a', './b']));
+  });
+
+  it('NO reachable module can be made to yield a phantom edge by a comment', () => {
+    /*
+     * THE PROPERTY, TESTED ON THE REAL TREE.
+     *
+     * Unit cases prove the scanner handles the shapes someone thought of. This
+     * proves the thing the checker actually promises: that no file in the
+     * browser graph can have a commented-out import counted as a real edge.
+     *
+     * It exists because the first version of `stripComments` failed exactly
+     * here and no unit case caught it. A bare apostrophe in JSX text —
+     * `Relay's own inspection` — opened a "string" that never closed, so every
+     * comment after it in that file survived; 22 of 646 tracked files did it,
+     * four of them inside this graph. A regex holding an odd number of
+     * backticks did the same one layer down.
+     */
+    const ghost = './__phantom_edge_that_must_not_be_followed__';
+    const offenders: string[] = [];
+    for (const relative of reachableFromBrowserEntries(repoRoot)) {
+      const full = join(repoRoot, relative);
+      if (!existsSync(full)) continue;
+      const source = readFileSync(full, 'utf8');
+      const probed = `${source}\n// import { Ghost } from '${ghost}';\n`;
+      if (importSpecifiersOf(probed).includes(ghost)) offenders.push(relative);
+    }
+    expect(offenders, 'a commented-out import was counted as a real edge').toEqual([]);
+  });
+
+  it('and no reachable module loses a REAL edge to the same scanner', () => {
+    // The other direction. Over-stripping would produce a false FAILURE, which
+    // is loud rather than silent — but it would still be wrong, and a scanner
+    // that drops edges to protect itself is not a reachability checker.
+    const real = './__real_edge_that_must_be_followed__';
+    const offenders: string[] = [];
+    for (const relative of reachableFromBrowserEntries(repoRoot)) {
+      const full = join(repoRoot, relative);
+      if (!existsSync(full)) continue;
+      const probed = `${readFileSync(full, 'utf8')}\nimport { Real } from '${real}';\n`;
+      if (!importSpecifiersOf(probed).includes(real)) offenders.push(relative);
+    }
+    expect(offenders, 'a real import was not seen').toEqual([]);
   });
 
   it('the doc block does not claim a false pass is impossible', () => {

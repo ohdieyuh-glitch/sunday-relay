@@ -831,14 +831,55 @@ export const UNMOUNTED_WEBSITE_SURFACES = Object.freeze({
  * A hand-written scanner rather than a regex because the two cases defeat each
  * other: stripping `//…` to end of line eats the tail of any line holding a URL
  * literal, and not stripping it counts a commented-out import as a real edge.
- * Regular-expression literals are NOT tracked — `/\/\//` would be read as a
- * line comment. That costs nothing here: it can only drop edges on such a line,
- * and this repo has no import specifier following a regex literal on one line.
+ *
+ * A SINGLE-QUOTE STRING CANNOT SPAN A NEWLINE, AND THAT IS WHAT MAKES THIS
+ * SAFE. The first version of this scanner opened a "string" on any `'`, `"` or
+ * backtick — including a bare apostrophe in JSX text, which is not a delimiter
+ * at all. `Relay's own inspection` therefore opened a quote that never closed,
+ * and from that point to the end of the file NO comment was stripped: a
+ * commented-out import after it counted as a real edge. An independent review
+ * instrumented the tree and found 22 of 646 tracked files desynchronising this
+ * way, four of them inside the browser reachability graph — reinstating exactly
+ * the false pass this function was written to remove.
+ *
+ * `'` and `"` are therefore closed at every line break unless the line ends in
+ * a `\` continuation. Backticks legitimately span lines and are left alone.
+ *
+ * REGULAR-EXPRESSION LITERALS ARE TRACKED TOO, because leaving them out
+ * reopened the same hole one layer down. A regex holding a quote — /['"]/ —
+ * opens a phantom string exactly as the apostrophe did, and a regex holding an
+ * ODD number of backticks opens a phantom TEMPLATE literal, which the newline
+ * reset deliberately does not close because a real template legitimately spans
+ * lines. Six files in this repository did exactly that.
+ *
+ * Whether a `/` starts a regex or is division is the classic ambiguity, decided
+ * here the standard way: by what precedes it. A `/` in expression position —
+ * after `(`, `[`, `{`, `,`, `;`, an operator, one of a few keywords, or at the
+ * start of input — begins a regex; a `/` after a value is division. That is a
+ * heuristic, not a parser, and it is stated as one. Its failure mode is
+ * bounded to one line, and `parity-scanner.test.ts` asserts the whole tree
+ * scans clean.
  */
+/** Characters after which a `/` begins a REGEX rather than a division. */
+const REGEX_POSITION_BEFORE = new Set([
+  '(', '[', '{', ',', ';', ':', '=', '!', '&', '|', '?', '+', '-', '*', '%',
+  '~', '^', '<', '>', '\n',
+]);
+/** Keywords after which the same is true. */
+const REGEX_POSITION_KEYWORDS =
+  /(?:^|[^\w$])(return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)\s*$/u;
+
 export function stripComments(source) {
   let out = '';
   let index = 0;
   let quote = null; // "'", '"', '`', or null
+  /** The last significant character emitted in CODE position. */
+  let previous = '';
+  const startsRegex = () => {
+    if (previous === '') return true;
+    if (REGEX_POSITION_BEFORE.has(previous)) return true;
+    return REGEX_POSITION_KEYWORDS.test(out.slice(-24));
+  };
   while (index < source.length) {
     const char = source[index];
     const next = source[index + 1];
@@ -850,6 +891,11 @@ export function stripComments(source) {
         continue;
       }
       if (char === quote) quote = null;
+      // A `'` or `"` string cannot cross a newline. Anything still "open" at a
+      // line break was never a string delimiter — an apostrophe in prose, or a
+      // quote inside a regex literal — so the scanner resynchronises here
+      // rather than swallowing the rest of the file.
+      else if (char === '\n' && quote !== '`') quote = null;
       index += 1;
       continue;
     }
@@ -873,7 +919,32 @@ export function stripComments(source) {
       index += 2;
       continue;
     }
+    // A REGEX LITERAL, consumed whole — so a quote or a backtick inside it can
+    // never be mistaken for the start of a string.
+    if (char === '/' && startsRegex()) {
+      let cursor = index + 1;
+      let inClass = false;
+      let closed = false;
+      while (cursor < source.length) {
+        const c = source[cursor];
+        if (c === '\\') { cursor += 2; continue; }
+        if (c === '\n') break;            // unterminated — it was not a regex
+        if (c === '[') inClass = true;
+        else if (c === ']') inClass = false;
+        else if (c === '/' && !inClass) { closed = true; cursor += 1; break; }
+        cursor += 1;
+      }
+      if (closed) {
+        while (cursor < source.length && /[a-z]/u.test(source[cursor])) cursor += 1;
+        out += source.slice(index, cursor);
+        previous = '/';
+        index = cursor;
+        continue;
+      }
+      // Not a regex after all. Fall through and treat it as an ordinary char.
+    }
     out += char;
+    if (char === '\n' || !/\s/u.test(char)) previous = char;
     index += 1;
   }
   return out;
@@ -900,7 +971,12 @@ function clauseIsTypeOnly(clause) {
   }
   if (/\*\s*as\s/u.test(beforeBraces)) return false;        // namespace binding
   const named = braces[1].split(',').map((part) => part.trim()).filter((part) => part !== '');
-  if (named.length === 0) return true;                      // `import {} from './X'` — erased
+  // `import {} from './X'` is a REAL EDGE, not an erasure. The specification
+  // still evaluates the module, and this repository bundles with Vite/esbuild,
+  // which preserves it as a side-effect import. Calling it erased was a claim
+  // about TypeScript's `verbatimModuleSyntax` behaviour that this tsconfig does
+  // not enable.
+  if (named.length === 0) return false;
   return named.every((part) => /^type\s/u.test(part));
 }
 

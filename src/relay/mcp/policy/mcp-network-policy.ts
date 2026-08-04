@@ -17,11 +17,25 @@
  * Stage 2 takes a RESOLVER PORT, so tests inject resolutions (including a name
  * that resolves to a metadata address) without any DNS traffic at all.
  *
- * DNS REBINDING. A name checked at stage 2 and connected to a moment later can
- * resolve differently in between. Relay's answer is to pin: the transport
- * connects to an address that was checked, and `pinnedAddress` on the verdict
- * is what it must use. Re-resolving between check and connect is the rebinding
- * window, and the only way to close it is not to re-resolve.
+ * DNS REBINDING, AND HOW MUCH OF IT IS ACTUALLY CLOSED.
+ *
+ * A name checked at stage 2 and connected to a moment later can resolve
+ * differently in between. The verdict therefore carries `pinnedAddress`: the
+ * address that was checked, and the one a transport MUST connect to in order to
+ * close the window.
+ *
+ * Be exact, because the previous version of this paragraph was not.
+ * `guarded-fetch.ts` does not read `pinnedAddress` today — it re-resolves
+ * through the platform's own `fetch`. The rebinding window is therefore OPEN,
+ * and what stage 2 buys is that a name resolving to a private, loopback or
+ * metadata address at check time is refused outright. That is a real control
+ * and it is not the same control as pinning. Saying otherwise here would be a
+ * comment describing a gate the code does not have — the defect class this
+ * milestone was reviewed against.
+ *
+ * Closing it means connecting by address with the hostname carried for TLS and
+ * `Host`, which is a transport change rather than a policy change, and it is
+ * not made here.
  *
  * LOOPBACK IS BLOCKED BY DEFAULT AND UNBLOCKED ONLY BY AN EXPLICIT TEST
  * POLICY. `allowLoopbackForTesting` exists because §23 requires the offline

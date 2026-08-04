@@ -159,9 +159,14 @@ export const BROWSER_ENTRY_POINTS: readonly string[];
 export const UNMOUNTED_WEBSITE_SURFACES: Readonly<Record<string, string>>;
 
 /**
- * Remove `//` and block comments while leaving string and template literals
- * intact, so a commented-out import contributes no edge and a specifier holding
- * `//` inside a string is not truncated.
+ * Remove `//` and block comments while leaving string literals, template
+ * literals and regular-expression literals intact — so a commented-out import
+ * contributes no edge, a specifier holding `//` inside a string is not
+ * truncated, and a quote or backtick inside a regex cannot open a phantom
+ * string that swallows the rest of the file.
+ *
+ * Regex-versus-division is decided by what precedes the `/`. That is a
+ * heuristic, and the implementation's doc block says so.
  */
 export function stripComments(source: string): string;
 
