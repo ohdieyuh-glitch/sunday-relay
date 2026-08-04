@@ -188,6 +188,10 @@ export {
   type RelayRoleAvailability, type RelaySlashCommand, type RelaySlashFamily,
   type RelaySwarmLoopAction, type RelaySwarmLoopCommand, type RelaySwarmState,
   type UnchainMeterState, type UnchainSessionRecord,
+  // Stage 2 runtime read-models. Re-exported through the barrel so the CLI
+  // (which may import only '../mission') and the website render the ONE
+  // projection rather than each building their own from the domain.
+  type LoopHistoryEntry, type LoopInspectionProjection, type LoopStatusProjection,
 } from './loop';
 
 export {

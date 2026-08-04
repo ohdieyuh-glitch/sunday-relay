@@ -23,7 +23,7 @@
  * become a second HTTP stack.
  */
 
-import type { LoopHistoryEntry, LoopInspectionProjection, LoopStatusProjection } from '../mission/loop/runtime';
+import type { LoopHistoryEntry, LoopInspectionProjection, LoopStatusProjection } from '../mission';
 
 /* ----------------------------------------------------------------- port */
 

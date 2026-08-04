@@ -9,7 +9,7 @@ import {
   type LoopClientResult,
   type LoopExecutionClient,
 } from './loop-execution';
-import type { LoopStatusProjection } from '../mission/loop/runtime';
+import type { LoopStatusProjection } from '../mission';
 
 /**
  * The CLI's execution surface, offline.
