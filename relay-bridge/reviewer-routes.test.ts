@@ -211,7 +211,14 @@ describe('mutating routes validate and require authorization', () => {
 describe('the route module leaks nothing', () => {
   it('never returns a credential, an environment or a raw provider body', async () => {
     const r = await call('/reviewer/readiness', {
-      env: env({ XAI_API_KEY: 'xai-super-secret-value', SOME_OTHER_SECRET: 'nope' }),
+      // Provider identity is now explicit: the bridge no longer assumes xAI,
+      // so a readiness call must be told which provider it is reporting on.
+      env: env({
+        RELAY_HERMES_PROVIDER: 'xai',
+        RELAY_HERMES_MODEL: 'grok-4',
+        XAI_API_KEY: 'xai-super-secret-value',
+        SOME_OTHER_SECRET: 'nope',
+      }),
     });
     const serialized = JSON.stringify(r?.body);
     expect(serialized).not.toContain('xai-super-secret-value');

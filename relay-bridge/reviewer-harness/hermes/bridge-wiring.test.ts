@@ -33,10 +33,19 @@ describe('the catalog claim matches the server runtime', () => {
     ).toBe(true);
     const routes = readFileSync(join(REPO, 'relay-bridge', 'reviewer-routes.ts'), 'utf8');
     expect(
-      /from '\.\/reviewer-harness\/hermes'/.test(routes),
-      'the catalog claims an adapter, so the bridge must import one',
+      /from '\.\/reviewer-harness\/hermes\//.test(routes),
+      'the catalog claims an adapter, so the bridge must reach one',
     ).toBe(true);
-    expect(routes).toContain('localReadiness');
+    // The bridge now reaches Hermes through the TRANSPORT rather than calling
+    // local readiness directly. The guarantee is unchanged — the catalog's
+    // adapterAvailable claim still has to be backed by a real chain — but the
+    // chain deliberately no longer probes this container's own PATH, which is
+    // what made a hosted bridge tell a founder to install Hermes on a laptop.
+    expect(routes).toContain('buildHermesTransport');
+    expect(
+      routes.includes('localReadiness'),
+      'the bridge must not call local Hermes readiness directly any more',
+    ).toBe(false);
   });
 
   it('exposes readiness without exposing the host or the credential', () => {

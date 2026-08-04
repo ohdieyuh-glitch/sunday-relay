@@ -9,8 +9,12 @@ import {
   isolatedChildEnv, isolatedConfigYaml, loadXaiConfig, localReadiness,
   modelMatchesVerified, parseModelList, parseUsageFile, runHermesReviewer,
   unknownToolsets, verifiedReadiness, verifyXaiModel, versionAtLeast,
+  ALL_PROVIDER_ENV_NAMES, PROVIDER_BASE_URL_ENV, PROVIDER_CREDENTIAL_ENV,
   XAI_API_KEY_ENV, XAI_DEFAULT_BASE_URL,
 } from './index';
+import {
+  REQUIRED_ONESHOT_FLAGS, generatedProfileDisablesEveryToolset, helpAdvertisesFlag,
+} from './discovery';
 import { writeFakeHermes, writeFakeHermesProbe } from './fake-executable';
 import { assessHarnessReadiness, effectiveCatalogEntry } from '../../../src/relay/mission/reviewer-harness/harness-readiness';
 import { findCatalogEntry, harnessIsSelectableForRun } from '../../../src/relay/mission/reviewer-harness';
@@ -47,7 +51,20 @@ const hermesEntry = () => {
   return e;
 };
 
-const FULL_FLAGS = ['-z', '--usage-file', '-t', '--ignore-rules', '--safe-mode'] as const;
+/**
+ * What the REAL Hermes advertises, taken from its actual `--help`:
+ *
+ *   -z/--oneshot   --usage-file   -m/--model   --provider
+ *   -t/--toolsets  --ignore-rules --safe-mode
+ *
+ * `-m` and `--provider` are here because the runner passes them on every run;
+ * they were missing from this fixture while readiness did not require them,
+ * which is exactly how a build with no model or provider selection could
+ * report ready and then fail at execution.
+ */
+const FULL_FLAGS = [
+  '-z', '--usage-file', '-m', '--provider', '-t', '--ignore-rules', '--safe-mode',
+] as const;
 
 const probeFor = (dir: string, opts?: { version?: string; flags?: readonly string[]; acpOk?: boolean }) => {
   const bin = writeFakeHermesProbe(join(dir, 'hermes-probe.cjs'), {
@@ -130,8 +147,7 @@ describe('discovery reports what is installed, and nothing more', () => {
     // The probe env points HOME and HERMES_HOME at the isolated dir, so the
     // operator's own ~/.hermes can never be the target.
     const env = isolatedChildEnv({
-      profile: createIsolatedProfile(dir), apiKey: null, apiKeyEnvVar: XAI_API_KEY_ENV,
-      baseUrl: null, baseUrlEnvVar: 'XAI_BASE_URL',
+      profile: createIsolatedProfile(dir), provider: 'xai', apiKey: null, baseUrl: null,
     });
     expect(env.HERMES_HOME).toContain('relay-hermes-profile-');
     expect(env.HOME).toBe(env.HERMES_HOME);
@@ -191,11 +207,12 @@ describe('the isolated profile makes read-only structural', () => {
     const profile = createIsolatedProfile(workdir());
     process.env.RELAY_TEST_UNRELATED_SECRET = 'must-not-propagate';
     const env = isolatedChildEnv({
-      profile, apiKey: 'xai-test-key', apiKeyEnvVar: XAI_API_KEY_ENV,
-      baseUrl: null, baseUrlEnvVar: 'XAI_BASE_URL',
+      profile, provider: 'xai', apiKey: 'xai-test-key', baseUrl: null,
     });
     expect(env.RELAY_TEST_UNRELATED_SECRET).toBeUndefined();
     expect(env.OPENAI_API_KEY).toBeUndefined();
+    // For an xAI run the Anthropic variable must be absent — not because the
+    // parent is filtered, but because the provider decides the names.
     expect(env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(env[XAI_API_KEY_ENV]).toBe('xai-test-key');
     expect(Object.keys(env).sort()).toEqual(
@@ -535,4 +552,175 @@ describe('readiness never upgrades itself', () => {
     // Without evidence the canonical rule still says no.
     expect(harnessIsSelectableForRun(base)).toBe(false);
   }, 30_000);
+});
+
+/**
+ * PROVIDER-SPECIFIC CREDENTIAL ROUTING.
+ *
+ * The runner used to name the xAI variables at its only call site, whatever
+ * the configured provider was. An Anthropic-backed Reviewer therefore handed
+ * its Anthropic secret to the child as `XAI_API_KEY` and supplied no
+ * `ANTHROPIC_API_KEY` at all — the run could not authenticate, and a secret
+ * for one vendor travelled under another vendor's name.
+ *
+ * The variable names now come from the provider mapping and cannot be chosen
+ * by a caller, so these tests are what stop that drifting back.
+ */
+describe('a credential reaches the child only under its own provider name', () => {
+  const OTHER = { xai: 'anthropic', anthropic: 'xai' } as const;
+
+  for (const provider of ['xai', 'anthropic'] as const) {
+    const mine = PROVIDER_CREDENTIAL_ENV[provider];
+    const theirs = PROVIDER_CREDENTIAL_ENV[OTHER[provider]];
+    const secret = `${provider}-SECRET-VALUE-NEVER-REAL`;
+
+    it(`routes a ${provider} credential to ${mine} and to nothing else`, () => {
+      const profile = createIsolatedProfile(workdir());
+      const env = isolatedChildEnv({ profile, provider, apiKey: secret, baseUrl: null });
+      expect(env[mine]).toBe(secret);
+      // The other provider's variable must be ABSENT, not empty.
+      expect(env[theirs]).toBeUndefined();
+      expect(Object.keys(env)).not.toContain(theirs);
+      // And the secret must appear exactly once, under its own name.
+      const carrying = Object.keys(env).filter((k) => env[k] === secret);
+      expect(carrying).toEqual([mine]);
+      profile.dispose();
+    });
+
+    it(`routes a ${provider} base URL to ${PROVIDER_BASE_URL_ENV[provider]} and to nothing else`, () => {
+      const profile = createIsolatedProfile(workdir());
+      const env = isolatedChildEnv({
+        profile, provider, apiKey: null, baseUrl: 'http://127.0.0.1:9/base',
+      });
+      expect(env[PROVIDER_BASE_URL_ENV[provider]]).toBe('http://127.0.0.1:9/base');
+      expect(env[PROVIDER_BASE_URL_ENV[OTHER[provider]]]).toBeUndefined();
+      profile.dispose();
+    });
+
+    it(`never lets an unrelated parent secret into a ${provider} child`, () => {
+      process.env.RELAY_TEST_FOREIGN_SECRET = 'must-not-propagate';
+      const profile = createIsolatedProfile(workdir());
+      const env = isolatedChildEnv({ profile, provider, apiKey: secret, baseUrl: null });
+      expect(env.RELAY_TEST_FOREIGN_SECRET).toBeUndefined();
+      expect(env.OPENAI_API_KEY).toBeUndefined();
+      // Every provider variable except this provider's own is absent.
+      for (const name of ALL_PROVIDER_ENV_NAMES.filter((n) => n !== mine)) {
+        expect(env[name], `${name} must not be set for a ${provider} run`).toBeUndefined();
+      }
+      delete process.env.RELAY_TEST_FOREIGN_SECRET;
+      profile.dispose();
+    });
+  }
+
+  it('proves the routing through a real spawned process, for both providers', async () => {
+    for (const provider of ['xai', 'anthropic'] as const) {
+      const dir = workdir();
+      const bin = writeFakeHermes(join(dir, `hermes-env-${provider}.cjs`), 'echo_env');
+      const secret = `${provider}-SPAWNED-SECRET-NEVER-REAL`;
+      const outcome = await runHermesReviewer({
+        executable: bin, prompt: 'p', model: 'model-x', provider,
+        apiKey: secret, baseUrl: null,
+        profile: createIsolatedProfile(dir),
+      });
+      expect(outcome.kind).toBe('completed');
+      if (outcome.kind !== 'completed') throw new Error('the fake should complete');
+      const env = JSON.parse(outcome.stdout) as Record<string, string>;
+      expect(env[PROVIDER_CREDENTIAL_ENV[provider]]).toBe(secret);
+      expect(env[PROVIDER_CREDENTIAL_ENV[OTHER[provider]]]).toBeUndefined();
+    }
+  }, 45_000);
+
+  it('keeps the credential out of argv, so it cannot reach a process listing', () => {
+    const args = buildHermesArgs({
+      prompt: 'review this', model: 'model-x', provider: 'anthropic',
+      usageFilePath: '/tmp/usage.json',
+    });
+    expect(args.join(' ')).not.toContain('SECRET');
+    expect(args).toContain('--provider');
+    expect(args[args.indexOf('--provider') + 1]).toBe('anthropic');
+  });
+
+  it('never puts a credential value into an outcome, message or usage record', async () => {
+    const dir = workdir();
+    const bin = writeFakeHermes(join(dir, 'hermes-crash-cred.cjs'), 'crash');
+    const secret = 'anthropic-LEAK-CANARY-NEVER-REAL';
+    const outcome = await runHermesReviewer({
+      executable: bin, prompt: 'p', model: 'model-x', provider: 'anthropic',
+      apiKey: secret, baseUrl: null,
+      profile: createIsolatedProfile(dir),
+    });
+    // A failing run is exactly where a naive implementation echoes context.
+    expect(JSON.stringify(outcome)).not.toContain(secret);
+  }, 45_000);
+});
+
+/**
+ * READINESS MUST REQUIRE EVERY FLAG THE RUNNER ACTUALLY PASSES.
+ *
+ * The required list used to contain `-t` — which the runner never passes,
+ * because `-t/--toolsets` ENABLES toolsets and the Reviewer wants none — and
+ * to omit `-m` and `--provider`, which it passes on every single run. A build
+ * without model or provider selection therefore passed readiness and failed
+ * at execution, which is the wrong place to discover it.
+ */
+describe('every flag the runner passes is required before ready', () => {
+  for (const flag of REQUIRED_ONESHOT_FLAGS) {
+    it(`fails closed when this Hermes build does not expose ${flag}`, () => {
+      const dir = workdir();
+      const bin = writeFakeHermesProbe(join(dir, `hermes-no-${flag.replace(/-/g, '')}.cjs`), {
+        version: '0.19.0',
+        flags: FULL_FLAGS.filter((f) => f !== flag),
+        acpOk: false,
+      });
+      const d = discoverHermes({ executable: bin, probe: createProbe(dir) });
+      expect(d.installed).toBe(true);
+      expect(d.machineInterfaceVerified, `${flag} missing must not verify the interface`).toBe(false);
+      expect(d.machineInterface).toBeNull();
+      expect(d.failureReason ?? '').toContain(flag);
+      // Each case spawns three probe processes against a fake executable;
+      // the 5s default is not a budget for that on a loaded machine.
+    }, 30_000);
+  }
+
+  it('does not mistake a flag NAMED INSIDE another flag for support', () => {
+    // `-m` appears inside `--safe-mode`, and `-t` inside `--worktree`. A
+    // substring check reported both as supported by a build exposing neither.
+    const help = 'usage: hermes -z PROMPT --safe-mode --worktree --ignore-rules';
+    expect(helpAdvertisesFlag(help, '-m')).toBe(false);
+    expect(helpAdvertisesFlag(help, '-t')).toBe(false);
+    expect(helpAdvertisesFlag(help, '-z')).toBe(true);
+    expect(helpAdvertisesFlag(help, '--ignore-rules')).toBe(true);
+    // And the real argparse rendering is still recognised.
+    expect(helpAdvertisesFlag('  -m MODEL, --model MODEL', '-m')).toBe(true);
+    expect(helpAdvertisesFlag('  [-t TOOLSETS]', '-t')).toBe(true);
+  });
+
+  it('reports ready only when every required flag is present', () => {
+    const dir = workdir();
+    const bin = writeFakeHermesProbe(join(dir, 'hermes-complete.cjs'), {
+      version: '0.19.0', flags: FULL_FLAGS, acpOk: false,
+    });
+    const d = discoverHermes({ executable: bin, probe: createProbe(dir) });
+    expect(d.machineInterfaceVerified).toBe(true);
+    expect(d.machineInterface).toBe('oneshot_json');
+  }, 30_000);
+
+  /**
+   * Read-only evidence used to be `help.includes('-t')`, a flag the runner
+   * never passes, standing in as proof for a mechanism it has nothing to do
+   * with. The mechanism is the Relay-owned profile, so the evidence now
+   * checks the profile Relay actually generates.
+   */
+  it('derives read-only evidence from the profile that enforces it', () => {
+    expect(generatedProfileDisablesEveryToolset()).toBe(true);
+    const yaml = isolatedConfigYaml();
+    for (const toolset of [...DISABLED_TOOLSETS, ...WRITE_CAPABLE_TOOLSETS]) {
+      expect(yaml, `${toolset} must be disabled by the generated profile`)
+        .toMatch(new RegExp(`^\\s*-\\s*${toolset}\\s*$`, 'm'));
+    }
+    expect(yaml).toMatch(/max_turns:\s*1\b/);
+    expect(yaml).toContain('mcp_servers: {}');
+    expect(yaml).toContain('plugins: []');
+    expect(yaml).toContain('hooks: {}');
+  });
 });

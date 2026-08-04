@@ -56,6 +56,20 @@ export async function startFakeBridge(input: {
         const key = `${req.method} ${(req.url ?? '/').split('?')[0]}`;
         const route = input.routes[key];
 
+        // EXACT MATCH, AND NOT A MODEL OF THE REAL PARSER.
+        //
+        // `relay-bridge/bearer-auth.ts` is deliberately tolerant — RFC 6750
+        // makes the scheme case-insensitive and allows any whitespace run
+        // after it — so this fixture ACCEPTS LESS than a real bridge does. It
+        // stays that way on purpose: this file cannot import the bridge (the
+        // browser boundary forbids `src/relay` reaching `relay-bridge`), and a
+        // second tolerant copy here would be exactly the drifting duplicate
+        // that `bearer-auth.ts` exists to remove.
+        //
+        // What follows is the consequence, stated rather than discovered: a
+        // test written against this fake proves the CLIENT sends the canonical
+        // `Bearer <token>` form. It can prove nothing about the real parser,
+        // and no test here should be read as covering it.
         const accept = input.acceptToken !== false;
         if (!accept || authorization !== `Bearer ${input.token}`) {
           res.writeHead(401, { 'content-type': 'application/json' });

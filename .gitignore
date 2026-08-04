@@ -2,6 +2,7 @@ node_modules
 dist
 dist-relay
 dist-relay-bridge
+dist-relay-hermes
 *.tsbuildinfo
 .DS_Store
 .env

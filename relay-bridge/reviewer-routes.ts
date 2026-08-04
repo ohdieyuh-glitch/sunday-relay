@@ -16,10 +16,11 @@
  * environment and a stack trace can none of them reach a response.
  */
 
-import { timingSafeEqual } from 'node:crypto';
-import {
-  createIsolatedProfile, createProbe, loadXaiConfig, localReadiness, verifiedReadiness,
-} from './reviewer-harness/hermes';
+import { bearerMatches } from './bearer-auth';
+import { decodeSegment } from './path-segment';
+import { isProductionDeployment } from './deployment-environment';
+import { buildHermesTransport } from './reviewer-harness/hermes/transport-factory';
+import { NO_RUNTIME_EVIDENCE } from '../src/relay/mission/reviewer-harness/harness-readiness';
 import { safeText } from './redact';
 
 export const BRIDGE_TOKEN_ENV = 'RELAY_BRIDGE_API_TOKEN';
@@ -34,29 +35,17 @@ const err = (status: number, kind: string, message: string): ReviewerRouteResult
   ({ status, body: { kind, error: message } });
 
 /**
- * Constant-time bearer comparison.
+ * Constant-time bearer comparison — the SHARED server-only implementation,
+ * re-exported so existing importers of this module are unaffected.
  *
- * A plain `===` leaks the shared prefix length through timing. This compares
- * fixed-length digests of equal size, so a mismatch costs the same whatever
- * the input — and an absent or malformed header is refused identically to a
- * wrong token, because distinguishing them is itself information.
+ * This used to be one of two copies. The Hermes service carried the other, and
+ * described it as "matching the bridge's own implementation" while differing
+ * in scheme casing, separator handling and secret trimming. Both fail closed,
+ * so no wrong secret was ever accepted — but a comment asserting a parity that
+ * does not hold is the kind of thing the next change relies on. See
+ * `relay-bridge/bearer-auth.ts`.
  */
-export function bearerMatches(header: string | undefined, expected: string | undefined): boolean {
-  if (expected === undefined || expected.trim() === '') return false;
-  if (header === undefined) return false;
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  if (match === null) return false;
-  const presented = Buffer.from(match[1]);
-  const secret = Buffer.from(expected.trim());
-  // Equalise lengths first: timingSafeEqual throws on a length mismatch, and
-  // the throw itself would be an oracle.
-  if (presented.length !== secret.length) {
-    // Still burn a comparison so the failure path is not obviously shorter.
-    timingSafeEqual(secret, secret);
-    return false;
-  }
-  return timingSafeEqual(presented, secret);
-}
+export { bearerMatches };
 
 export interface ReviewerRouteRequest {
   readonly method: string;
@@ -146,54 +135,56 @@ export async function handleReviewerRoute(
     );
   }
 
-  /* ------------------------------------------------ readiness (local) --- */
+  /* --------------------------------------- readiness (via transport) --- */
   if (method === 'GET' && path === '/reviewer/readiness') {
-    const profile = createIsolatedProfile();
-    try {
-      const evidence = localReadiness({
-        executable: env.RELAY_HERMES_EXECUTABLE ?? 'hermes',
-        probe: createProbe(profile.home),
-        xai: loadXaiConfig(env),
-      });
-      return ok({ harness: 'hermes', evidence: { ...evidence, binaryPath: null } });
-    } finally {
-      profile.dispose();
-    }
-  }
-
-  /* ------------------------------------- test connection (may contact) --- */
-  if (method === 'POST' && path === '/reviewer/test-connection') {
-    const profile = createIsolatedProfile();
-    try {
-      const xai = loadXaiConfig(env);
-      const result = await verifiedReadiness({
-        executable: env.RELAY_HERMES_EXECUTABLE ?? 'hermes',
-        probe: createProbe(profile.home),
-        xai,
-      });
-      const v = result.verification;
-      const connected = result.evidence.modelVerified;
+    // The bridge no longer probes its OWN container. It asks whichever
+    // transport is configured — which on a hosted deployment is a dedicated
+    // Hermes service, and never this process's PATH.
+    const built = await buildHermesTransport({ env, production: isProductionDeployment(env) });
+    if (!built.ok) {
       return ok({
         harness: 'hermes',
-        evidence: { ...result.evidence, binaryPath: null },
-        providerRequestMade: result.providerRequestMade,
-        requestedModel: result.evidence.requestedModel,
-        // Only ever from server proof; absent stays null and renders Unknown.
-        verifiedModelId: result.evidence.verifiedModelId,
-        provider: connected ? 'xai' : null,
-        checkedAt: result.evidence.checkedAt,
-        connected,
-        reason: connected
-          ? null
-          : safeText(
-            v !== null && 'safeMessage' in v && typeof v.safeMessage === 'string'
-              ? v.safeMessage
-              : result.evidence.failureReason ?? 'The Reviewer harness is not ready.',
-          ),
+        evidence: { ...NO_RUNTIME_EVIDENCE, bridgeAvailable: true, failureReason: built.safeMessage },
+        failureKind: built.kind,
       });
-    } finally {
-      profile.dispose();
     }
+    const evidence = await built.transport.readiness();
+    return ok({
+      harness: 'hermes',
+      // A binary path is host layout and never leaves the server.
+      evidence: { ...evidence, binaryPath: null },
+      mode: built.transport.mode,
+    });
+  }
+
+  /* ------------------------- test connection (via transport, may contact) --- */
+  if (method === 'POST' && path === '/reviewer/test-connection') {
+    const built = await buildHermesTransport({ env, production: isProductionDeployment(env) });
+    if (!built.ok) {
+      return ok({
+        harness: 'hermes',
+        connected: false,
+        runCreated: false,
+        reason: safeText(built.safeMessage),
+        failureKind: built.kind,
+      });
+    }
+    const evidence = await built.transport.testConnection();
+    return ok({
+      harness: 'hermes',
+      mode: built.transport.mode,
+      connected: evidence.connected,
+      // Verifying a connection never creates a run.
+      runCreated: false,
+      // Harness, provider and model are three identities and stay separate.
+      provider: evidence.identity?.provider ?? null,
+      requestedModel: evidence.identity?.requestedModel ?? null,
+      // Server proof only; absent stays null and renders Unknown.
+      verifiedModelId: evidence.identity?.verifiedModelId ?? null,
+      checkedAt: evidence.checkedAt,
+      failureKind: evidence.failureKind,
+      reason: evidence.connected ? null : safeText(evidence.safeMessage ?? 'The Reviewer harness is not ready.'),
+    });
   }
 
   // The remaining operations need a run engine. Without one the bridge says so
@@ -234,8 +225,11 @@ export async function handleReviewerRoute(
   const statusMatch = /^\/reviewer\/(status|inspect|stop)\/(.+)$/.exec(path);
   if (statusMatch !== null) {
     const action = statusMatch[1];
-    const missionId = decodeURIComponent(statusMatch[2]);
-    if (missionId.trim() === '') {
+    // `decodeSegment`, not a bare `decodeURIComponent`: `%ZZ` in the path is a
+    // malformed client request, and letting the URIError escape made this
+    // route answer 500 through the server's generic catch.
+    const missionId = decodeSegment(statusMatch[2]);
+    if (missionId === null) {
       return err(422, 'validation_failed', 'A mission id is required.');
     }
     if (method === 'GET' && action === 'status') return await runs.status(missionId);

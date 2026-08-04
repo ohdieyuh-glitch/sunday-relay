@@ -109,7 +109,14 @@ describe('the operator token never reaches the browser', () => {
       .filter((f) => /\.(ts|tsx)$/.test(f))
       .filter((f) => /VITE_[A-Z_]*(TOKEN|SECRET|KEY)/.test(readFileSync(f, 'utf8')));
     expect(offenders).toEqual([]);
-  });
+    // An explicit budget, because this rule WALKS THE TREE and reads every
+    // matching file: its cost grows with the repository. The Hermes Reviewer
+    // milestone added 31 files under `relay-bridge/reviewer-harness/hermes`
+    // and elsewhere, which pushed this past vitest's 5s default when the suite
+    // runs files in parallel on a 2-core host. It failed for taking too long,
+    // not for finding anything. The rule is byte-identical and still fails on
+    // the first offending file; only the clock changed.
+  }, 30_000);
 
   it('a browser session token is a DIFFERENT scheme, so the two cannot be confused', () => {
     expect(sessionTokenFrom(`Bearer ${OPERATOR}`)).toBeNull();

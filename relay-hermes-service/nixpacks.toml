@@ -1,0 +1,39 @@
+# Hermes Reviewer service build.
+#
+# WHAT THIS RECIPE DOES: install npm dependencies, build the service bundle,
+# start it. That is all.
+#
+# WHAT IT DOES NOT DO: install Hermes. The setup phase provisions the Node and
+# Python toolchain Hermes NEEDS, but the Hermes binary itself is neither
+# vendored here nor fetched by any command below. Putting Hermes into the
+# execution environment is a SEPARATE, DELIBERATE step that has NOT been
+# performed, and RELAY_HERMES_EXECUTABLE must then point the service at it.
+# Until that step happens the service starts and answers /healthz, and every
+# review fails at discovery — which is the truthful outcome, not a bug.
+#
+# Saying otherwise here would recreate the exact defect this milestone exists
+# to remove: a machine-readable artifact implying an installation nobody did.
+#
+# Nothing in this file may contain a credential, a Railway project or service
+# id, a private domain, or the public bridge URL.
+#
+# Be exact about what enforces that, because a comment claiming a gate it does
+# not have is the same defect as a recipe claiming an install nobody did. The
+# boundary scanner's committed-credential tripwire reads EVERY tracked file, so
+# a credential here is caught. It has no content rule for a project id, a
+# service id, a private domain or the bridge URL, and it does not classify this
+# file as deployment configuration at all — so it would not catch those. They
+# are pinned by `docs/documentation-contract.test.ts` instead, because an
+# invariant nothing checks is a hope.
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "python311", "git"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run relay:hermes:build"]
+
+[start]
+cmd = "npm run relay:hermes:start"

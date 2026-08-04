@@ -283,3 +283,159 @@ describe('development contracts are accounted for', () => {
     expect(existsSync(join(ROOT, '.env'))).toBe(false);
   });
 });
+
+/**
+ * THE HERMES REVIEWER DOCUMENTATION CONTRACT.
+ *
+ * The Reviewer service milestone added a server-only process with its own
+ * credentials, its own deployment story, and a long list of things that have
+ * NOT happened yet. None of that was pinned by a test: the entire block could
+ * be deleted from `.env.example`, or quietly upgraded into claiming a
+ * deployment that never occurred, and every gate would still report green.
+ *
+ * Documentation is the only place several of these facts exist at all — the
+ * service is not deployed, so there is no running system to contradict a false
+ * claim about it. That makes the claims worth a contract of their own.
+ */
+describe('the Hermes Reviewer environment contract', () => {
+  const env = read('.env.example');
+
+  it('documents every variable the bridge and the service actually read', () => {
+    for (const name of [
+      'RELAY_HERMES_MODE', 'RELAY_HERMES_SERVICE_URL', 'RELAY_HERMES_SERVICE_TOKEN',
+      'RELAY_HERMES_PROVIDER', 'RELAY_HERMES_MODEL', 'RELAY_HERMES_EXECUTABLE',
+      'XAI_API_KEY', 'ANTHROPIC_API_KEY',
+      // The trusted-origin allowlist. It was introduced, made REQUIRED in
+      // production, documented at length in `.env.example` and in the
+      // README — and left out of this list, so every one of those lines could
+      // have been deleted with the whole gate still green. A contract that
+      // does not name the newest variable is not covering the newest risk.
+      'RELAY_HERMES_TRUSTED_ORIGINS',
+    ]) {
+      expect(env, `${name} must be documented`).toContain(name);
+    }
+  });
+
+  it('gives no credential-bearing variable a value, commented or not', () => {
+    // A commented example still teaches, and `.env.example` is copied wholesale.
+    // Asserting only that the NAME appears would let a real token be pasted in
+    // beside a `#` and travel into the repository looking like documentation.
+    for (const name of ['RELAY_HERMES_SERVICE_TOKEN', 'XAI_API_KEY', 'ANTHROPIC_API_KEY']) {
+      const occurrences = [...env.matchAll(new RegExp(`^\\s*#?\\s*${name}=(.*)$`, 'gm'))];
+      expect(occurrences.length, `${name} should appear in .env.example`).toBeGreaterThan(0);
+      for (const [line, value] of occurrences) {
+        // Anything after `=` that is not whitespace or a trailing comment is a value.
+        expect(value.replace(/#.*$/u, '').trim(), `${line.trim()} carries a value`).toBe('');
+      }
+    }
+  });
+
+  it('declares each Hermes variable exactly once as a live assignment', () => {
+    // A `.env` is read last-wins, so a second live definition silently
+    // overrides the first and the operator debugs a value they cannot see.
+    // This block previously declared executable, provider and model twice,
+    // with DIFFERENT values in each copy.
+    for (const name of [
+      'RELAY_HERMES_MODE', 'RELAY_HERMES_EXECUTABLE', 'RELAY_HERMES_PROVIDER',
+      'RELAY_HERMES_MODEL', 'XAI_API_KEY', 'ANTHROPIC_API_KEY',
+    ]) {
+      const live = [...env.matchAll(new RegExp(`^${name}=`, 'gmu'))];
+      expect(live.length, `${name} has ${live.length} live definitions; exactly one is correct`).toBe(1);
+    }
+  });
+
+  it('never gives a server-only Hermes variable a VITE_ name', () => {
+    // A VITE_ name is inlined into the public bundle.
+    for (const forbidden of [
+      'VITE_XAI_API_KEY', 'VITE_ANTHROPIC_API_KEY', 'VITE_RELAY_HERMES_SERVICE_TOKEN',
+    ]) {
+      expect(env, `${forbidden} would ship a secret to the browser`)
+        .not.toMatch(new RegExp(`^\\s*${forbidden}=`, 'mu'));
+    }
+  });
+});
+
+describe('the Hermes Reviewer claims only what has actually happened', () => {
+  /**
+   * These documents wrap, and a wrapped line carries its container's prefix —
+   * `#` in an env file, `>` in a markdown blockquote. The CLAIM is what
+   * matters, not where the paragraph happened to break, so prefixes and line
+   * breaks are flattened before any prose is matched. Variable assertions
+   * above deliberately do NOT use this: there, `#` is meaningful.
+   */
+  const flow = (text: string) => text.replace(/^[\s>#]+/gmu, ' ').replace(/\s+/gu, ' ');
+
+  const env = flow(read('.env.example'));
+  const serviceReadme = flow(read('relay-hermes-service/README.md'));
+  const nixpacks = flow(read('relay-hermes-service/nixpacks.toml'));
+
+  it('states plainly that the service is not deployed', () => {
+    expect(serviceReadme).toMatch(/not deployed/iu);
+    expect(env).toContain('Repository artifacts existing is not deployment');
+  });
+
+  it('does not claim the build artifact installs Hermes', () => {
+    // The recipe provisions the Node and Python TOOLCHAIN; it neither vendors
+    // nor fetches the Hermes binary. Both documents said it was "installed
+    // into the image at build time", which is an installation nobody has done
+    // — the same class of defect this milestone exists to remove.
+    for (const doc of [serviceReadme, nixpacks]) {
+      expect(doc).not.toMatch(/is installed into the image/iu);
+      expect(doc).not.toMatch(/binary is installed at build time/iu);
+    }
+    expect(serviceReadme, 'the README must say the recipe does not install Hermes')
+      .toMatch(/does not install Hermes/iu);
+    expect(nixpacks, 'the recipe must say the binary is not fetched by it')
+      .toMatch(/neither vendored here nor fetched/iu);
+    expect(nixpacks, 'the recipe must say the install step has not happened')
+      .toMatch(/has NOT been performed/u);
+  });
+
+  it('claims no production connection, no live review and no paid run', () => {
+    for (const doc of [serviceReadme, nixpacks, env]) {
+      expect(doc).not.toMatch(/production connection (?:passed|verified|proven|succeeded)/iu);
+      expect(doc).not.toMatch(/test.connection (?:passed|succeeded|verified)/iu);
+      expect(doc).not.toMatch(/(?:a|the) live (?:Grok|Hermes) review (?:ran|occurred|completed|succeeded)/iu);
+      expect(doc).not.toMatch(/paid (?:review|run|request) (?:has )?(?:occurred|completed|succeeded|ran)/iu);
+    }
+    // And the README must keep saying so affirmatively, not merely omit it.
+    expect(serviceReadme).toMatch(/no provider request has ever been\s+made through it/u);
+    expect(serviceReadme).toMatch(/no paid Reviewer run has occurred/u);
+  });
+
+  it('keeps Anthropic identity honestly unverified rather than inferred', () => {
+    // xAI can be checked for free; Anthropic cannot without paying, so the
+    // README must not quietly upgrade "credential present" into "verified".
+    expect(serviceReadme).toMatch(/provider_unverified/u);
+    expect(serviceReadme).toMatch(/Credential presence is not provider verification/u);
+  });
+
+  it('does not tell an operator that installing Hermes locally connects a hosted bridge', () => {
+    expect(env).toMatch(/does NOT make a hosted Relay Bridge\s+connected/u);
+  });
+
+  it('keeps the build recipe free of the ids, domains and URLs nothing else checks', () => {
+    /**
+     * The recipe states that no credential, Railway project or service id,
+     * private domain or public bridge URL may appear in it. Only the FIRST of
+     * those is enforced elsewhere: the boundary scanner's committed-credential
+     * tripwire reads every tracked file. It has no content rule for ids,
+     * domains or the bridge URL, and `nixpacks.toml` is not in its forbidden
+     * paths at all, so it never classifies this file as deployment config.
+     *
+     * That gap is the whole reason for this test. A recipe that names an
+     * invariant no gate checks is the same defect as one claiming an install
+     * nobody performed — the claim reads as a measurement and is not one.
+     *
+     * Read RAW, deliberately: `#` is what makes these lines comments, and a
+     * secret pasted into a comment is still committed.
+     */
+    const recipe = read('relay-hermes-service/nixpacks.toml');
+    expect(recipe, 'no URL belongs in the build recipe')
+      .not.toMatch(/https?:\/\//u);
+    expect(recipe, 'no Railway domain belongs in the build recipe')
+      .not.toMatch(/[\w-]+\.(?:up\.)?railway\.app|\.railway\.internal/iu);
+    expect(recipe, 'no Railway project or service id belongs in the build recipe')
+      .not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/iu);
+  });
+});
