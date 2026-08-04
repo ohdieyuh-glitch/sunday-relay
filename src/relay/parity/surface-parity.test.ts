@@ -11,6 +11,7 @@ import {
   DEFAULT_COMPANION_PATHS,
   findCompanion,
   importSpecifiersOf,
+  stripComments,
   isFileClaim,
   loadRegistry,
   reachableFromBrowserEntries,
@@ -691,6 +692,30 @@ describe('an implemented website capability must be REACHABLE, not merely presen
       "const t = `import { X } from './phantom-in-a-template';`;",
       "import { Real } from './real';",
     ].join('\n'))).toEqual(['./real']);
+  });
+
+  it('a MEMBER CALL named from/import is not specifier position', () => {
+    // `Array.from(…)` is not an import clause. Treating it as one preserved its
+    // argument verbatim, so prose passed to it produced an edge no bundler
+    // creates — a silent false pass, inside the rule added to close silent
+    // false passes.
+    for (const call of ['Array.from', 'Buffer.from', 'q.from', 'obj?.import']) {
+      expect(
+        importSpecifiersOf(`const a = ${call}(' import { X } from "./phantom" ');`),
+        call,
+      ).toEqual([]);
+    }
+    // The real clauses are untouched.
+    expect(importSpecifiersOf("import x from 'https://esm.sh/react';"))
+      .toEqual(['https://esm.sh/react']);
+    expect(importSpecifiersOf("const a = await import('./dyn');")).toEqual(['./dyn']);
+  });
+
+  it('a blanked string keeps its line count', () => {
+    // A line continuation inside a blanked string still ends a line, and
+    // dropping it shifts every later position in the file.
+    const source = "const s = 'abc\\\ndef';\nconst z = 1;\n";
+    expect(stripComments(source).split('\n')).toHaveLength(source.split('\n').length);
   });
 
   it('still finds a dynamic import inside a template interpolation', () => {

@@ -161,9 +161,10 @@ export const UNMOUNTED_WEBSITE_SURFACES: Readonly<Record<string, string>>;
 /**
  * Reduce a source file to the text a module-edge matcher may safely read.
  *
- * Comments are REMOVED. Template text and ordinary strings are BLANKED —
- * newlines and delimiters kept — except a string in SPECIFIER position, whose
- * text is the answer and survives verbatim. `${…}` interpolations are code and
+ * Comments are REMOVED. Ordinary strings are BLANKED with their newlines and
+ * their delimiters kept; template literals are blanked INCLUDING their
+ * backticks, keeping only newlines. A string in SPECIFIER position is the
+ * exception: its text is the answer and survives verbatim. `${…}` interpolations are code and
  * go through every rule. Regex literals are preserved whole, so a quote or
  * backtick inside one cannot open a phantom string.
  *

@@ -869,13 +869,27 @@ export const UNMOUNTED_WEBSITE_SURFACES = Object.freeze({
  * - Whether `/` starts a regex or is division is the classic ambiguity, decided
  *   by what precedes it. That is a heuristic, and it is stated as one.
  *
- * RESIDUALS, STATED RATHER THAN IMPLIED. A regex in a position the heuristic
- * does not recognise — after `)` or `}` — is not consumed, so a backtick inside
- * it can still open a template. An ODD backtick in JSX prose (`Press \`Enter`)
- * opens one too, because a backtick after an identifier is how a TAGGED
- * template is written and the two are indistinguishable without JSX context;
- * this repository contains no tagged template. Both residuals fail in the LOUD
- * direction — a dropped edge is a visible parity failure, never a silent pass.
+ * RESIDUALS, STATED RATHER THAN IMPLIED, AND NOT CLAIMED EXHAUSTIVE. An
+ * earlier version of this paragraph asserted that every residual fails in the
+ * loud direction; a reviewer then found one that does not, which is why the
+ * claim is now about the ones listed rather than about all of them.
+ *
+ * - A regex in a position the heuristic does not recognise — after `)` or `}`
+ *   — is not consumed, so a backtick inside it can still open a template.
+ * - An ODD backtick in JSX prose (`Press \`Enter`) opens one too: a backtick
+ *   after an identifier is how a TAGGED template is written, and the two are
+ *   indistinguishable without JSX context. This repository contains none.
+ * - An unopened string or JSX text containing `/*` opens a block comment that
+ *   runs to the next `*` + `/`.
+ * - `clausePattern` matches `[^;]*?` across newlines, so an `export type`
+ *   alias NOT terminated by `;` can swallow the next import and be classified
+ *   type-only. Every alias in this tree ends `;`. Pre-existing.
+ * - A fully static TEMPLATE specifier — `import(\`./x\`)` — is not followed,
+ *   while `src/relay/shared/browser-boundary.ts` deliberately does follow that
+ *   form. The two scanners disagree; this one is the conservative side.
+ *
+ * All five drop an edge, which is a visible parity failure. That is a fact
+ * about these five, not a guarantee about a sixth.
  *
  * `src/relay/parity/surface-parity.test.ts` asserts the properties over the
  * REAL graph in three directions: a comment on its own line, a comment appended
@@ -914,8 +928,15 @@ const LITERAL_POSITION_KEYWORDS =
 /**
  * A string in SPECIFIER position is the answer, so its text is kept verbatim.
  * Every other string is blanked — see the doc block.
+ *
+ * `.` and `?` are excluded from the preceding class deliberately.
+ * `Array.from(…)`, `Buffer.from(…)` and `obj?.import(…)` are member calls, not
+ * import clauses, and treating them as specifier position preserved their
+ * argument verbatim — so `Array.from(' import { X } from "./phantom" ')`
+ * produced an edge no bundler creates. A silent false pass, in the rule added
+ * to close silent false passes.
  */
-const SPECIFIER_POSITION = /(?:^|[^\w$])(?:from|import|require)\s*\(?\s*$/u;
+const SPECIFIER_POSITION = /(?:^|[^\w$.?])(?:from|import|require)\s*\(?\s*$/u;
 
 export function stripComments(source) {
   let out = '';
@@ -950,15 +971,19 @@ export function stripComments(source) {
   let recent = '';
   const emit = (text) => {
     out += text;
-    recent = (recent + text).slice(-48);
+    recent += text;
+    // Trimmed in batches rather than on every character: slicing per character
+    // allocated two strings per byte and cost more over the whole tree than the
+    // quadratic `out.slice` it replaced saved on one pathological line.
+    if (recent.length > 96) recent = recent.slice(-48);
   };
   const startsRegex = () => {
     if (previous === '') return true;
     if (REGEX_POSITION_BEFORE.has(previous)) return true;
-    return REGEX_POSITION_KEYWORDS.test(recent);
+    return REGEX_POSITION_KEYWORDS.test(recent.slice(-48));
   };
-  const canOpenString = () => startsRegex() || LITERAL_POSITION_KEYWORDS.test(recent);
-  const inSpecifierPosition = () => SPECIFIER_POSITION.test(recent);
+  const canOpenString = () => startsRegex() || LITERAL_POSITION_KEYWORDS.test(recent.slice(-48));
+  const inSpecifierPosition = () => SPECIFIER_POSITION.test(recent.slice(-48));
 
   while (index < source.length) {
     const char = source[index];
@@ -994,6 +1019,9 @@ export function stripComments(source) {
       if (keepQuoted || char === quote || char === '\n') emit(char);
       if (char === '\\') {
         if (keepQuoted) emit(next ?? '');
+        // A line continuation inside a blanked string still ends a line, and
+        // dropping it shifts every later position. Same rule as template text.
+        else if (next === '\n') emit('\n');
         index += 2;
         continue;
       }
