@@ -16,7 +16,7 @@
  * environment and a stack trace can none of them reach a response.
  */
 
-import { timingSafeEqual } from 'node:crypto';
+import { bearerMatches } from './bearer-auth';
 import { buildHermesTransport } from './reviewer-harness/hermes/transport-factory';
 import { NO_RUNTIME_EVIDENCE } from '../src/relay/mission/reviewer-harness/harness-readiness';
 import { safeText } from './redact';
@@ -33,29 +33,17 @@ const err = (status: number, kind: string, message: string): ReviewerRouteResult
   ({ status, body: { kind, error: message } });
 
 /**
- * Constant-time bearer comparison.
+ * Constant-time bearer comparison — the SHARED server-only implementation,
+ * re-exported so existing importers of this module are unaffected.
  *
- * A plain `===` leaks the shared prefix length through timing. This compares
- * fixed-length digests of equal size, so a mismatch costs the same whatever
- * the input — and an absent or malformed header is refused identically to a
- * wrong token, because distinguishing them is itself information.
+ * This used to be one of two copies. The Hermes service carried the other, and
+ * described it as "matching the bridge's own implementation" while differing
+ * in scheme casing, separator handling and secret trimming. Both fail closed,
+ * so no wrong secret was ever accepted — but a comment asserting a parity that
+ * does not hold is the kind of thing the next change relies on. See
+ * `relay-bridge/bearer-auth.ts`.
  */
-export function bearerMatches(header: string | undefined, expected: string | undefined): boolean {
-  if (expected === undefined || expected.trim() === '') return false;
-  if (header === undefined) return false;
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  if (match === null) return false;
-  const presented = Buffer.from(match[1]);
-  const secret = Buffer.from(expected.trim());
-  // Equalise lengths first: timingSafeEqual throws on a length mismatch, and
-  // the throw itself would be an oracle.
-  if (presented.length !== secret.length) {
-    // Still burn a comparison so the failure path is not obviously shorter.
-    timingSafeEqual(secret, secret);
-    return false;
-  }
-  return timingSafeEqual(presented, secret);
-}
+export { bearerMatches };
 
 export interface ReviewerRouteRequest {
   readonly method: string;
