@@ -62,6 +62,15 @@ export const HERMES_FAILURE_KINDS = [
    * an operator to go and check networking that is working perfectly.
    */
   'review_refused',
+  /**
+   * The service was reached, authenticated, understood the request — and had
+   * no capacity for it. Distinct from `review_refused` because the fix is
+   * different in kind: a refusal will not resolve itself and retrying it is a
+   * new paid call, whereas capacity clears on its own as runs finish. Merging
+   * them would tell an operator to change the request when they should simply
+   * wait.
+   */
+  'capacity_exhausted',
 ] as const;
 export type HermesFailureKind = (typeof HERMES_FAILURE_KINDS)[number];
 
@@ -146,14 +155,151 @@ export type HermesModeSelection =
   | { readonly ok: true; readonly mode: 'remote'; readonly serviceUrl: string; readonly serviceToken: string }
   | { readonly ok: false; readonly kind: 'configuration_missing'; readonly safeMessage: string };
 
-/** A private-network URL the bridge may call. Nothing else is accepted. */
-function validServiceUrl(raw: string): boolean {
+/**
+ * THE TRUSTED-ORIGIN GATE (independent review, F2).
+ *
+ * The previous `validServiceUrl` was documented as "a private-network URL the
+ * bridge may call. Nothing else is accepted." It checked the PROTOCOL and
+ * nothing else, so with `production: true` an operator-set
+ * `https://attacker.example.com/hermes` was accepted — and the bridge then
+ * sent its bearer token there. Not directly exploitable, because the value is
+ * operator-set rather than attacker-set; a defect all the same, and precisely
+ * the class this repository's own `nixpacks.toml` warns about: a comment
+ * claiming a gate the code does not implement is trusted by the next change.
+ *
+ * The gate now exists.
+ *
+ * PRODUCTION: the URL's origin must appear, exactly, in
+ * `RELAY_HERMES_TRUSTED_ORIGINS`. Exact origin match — scheme, host and port,
+ * compared after WHATWG normalisation. No suffix matching, because
+ * `evil-relay.internal` ends with `relay.internal`; no wildcards, because a
+ * wildcard is how an allowlist stops being one; no bare-host entries, because
+ * a host without a scheme silently admits plaintext `http:`.
+ *
+ * FAIL CLOSED. Production with no trusted origins configured is a
+ * configuration error, not an implicit "allow everything". That is the whole
+ * behaviour of the repaired gate: absent policy denies.
+ *
+ * DEVELOPMENT: loopback only, stated explicitly rather than left as "anything
+ * goes outside production". A developer pointing the bridge at a public host
+ * without an allowlist entry is doing the production-shaped thing on a laptop,
+ * and gets the production-shaped refusal. An explicit allowlist still works
+ * outside production, so a real staging host remains reachable by naming it.
+ */
+export const HERMES_TRUSTED_ORIGINS_ENV = 'RELAY_HERMES_TRUSTED_ORIGINS';
+
+/** Hosts that are unambiguously this machine. */
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+/** `https://host:port` — never a path, never a query, never credentials. */
+export function originOf(raw: string): string | null {
   try {
     const url = new URL(raw);
-    return url.protocol === 'http:' || url.protocol === 'https:';
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    // Embedded credentials in a service URL are refused outright: they would
+    // be a second, unmanaged secret travelling in configuration.
+    if (url.username !== '' || url.password !== '') return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+export function isLoopbackOrigin(origin: string): boolean {
+  try {
+    return LOOPBACK_HOSTS.has(new URL(origin).hostname);
   } catch {
     return false;
   }
+}
+
+/** Parse the allowlist into exact, normalised origins. A malformed entry is
+ *  dropped rather than approximated — a half-understood allowlist entry is
+ *  worse than a missing one. */
+export function parseTrustedOrigins(raw: string | undefined): readonly string[] {
+  return (raw ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '')
+    .map((entry) => originOf(entry))
+    .filter((entry): entry is string => entry !== null);
+}
+
+export type ServiceUrlVerdict =
+  | { readonly ok: true; readonly origin: string }
+  | { readonly ok: false; readonly safeMessage: string };
+
+/**
+ * Decide whether the bridge may send its bearer token to this URL.
+ *
+ * The rejected URL is never echoed in a message: it names internal host
+ * layout, and this text reaches logs and operators.
+ */
+export function checkServiceUrl(input: {
+  readonly raw: string;
+  readonly production: boolean;
+  readonly trustedOrigins: readonly string[];
+}): ServiceUrlVerdict {
+  const origin = originOf(input.raw);
+  if (origin === null) {
+    return {
+      ok: false,
+      safeMessage: `${HERMES_SERVICE_URL_ENV} is not a usable http(s) URL without embedded credentials.`,
+    };
+  }
+
+  /**
+   * A QUERY OR FRAGMENT ON THE SERVICE URL SILENTLY MISROUTES EVERY REQUEST.
+   *
+   * `remote-transport.call()` builds each endpoint by concatenation:
+   * `${serviceUrl.replace(/\/$/, '')}${path}`. Concatenation is not URL
+   * resolution, so a base carrying `?` or `#` swallows the path that follows:
+   *
+   *   'https://h/mcp#f'      + '/v1/readiness'  ->  path /mcp,  fragment 'f/v1/readiness'
+   *   'https://h/mcp?x=1'    + '/v1/readiness'  ->  path /mcp,  query 'x=1/v1/readiness'
+   *
+   * Every call then reaches the WRONG endpoint and the service answers 404 —
+   * or worse, something else answers 200. Origin-only allowlisting cannot see
+   * this, because the origin of all three is identical. Refusing here is the
+   * check that catches it, and it belongs on the service URL rather than in
+   * `originOf`, which is deliberately path-insensitive so an allowlist ENTRY
+   * may be written with or without a trailing path.
+   *
+   * THE CHECK IS ON THE RAW STRING, NOT THE PARSED URL, and that distinction
+   * is load-bearing. `new URL('https://h#').hash` is `''` — the parser drops
+   * an empty fragment — but the raw string still carries the `#`, and the raw
+   * string is what gets concatenated. Testing `parsed.hash` would pass
+   * `https://h#` and `https://h?` straight through to misroute every call to
+   * `/`. A percent-encoded `%23` or `%3F` inside a path is untouched, because
+   * only a literal delimiter truncates a concatenation.
+   */
+  if (input.raw.includes('#') || input.raw.includes('?')) {
+    return {
+      ok: false,
+      safeMessage:
+        `${HERMES_SERVICE_URL_ENV} must not carry a query or a fragment. Endpoint paths are appended to it, `
+        + 'so either one would silently redirect every service call to a different path.',
+    };
+  }
+
+  if (input.trustedOrigins.includes(origin)) return { ok: true, origin };
+
+  if (input.production) {
+    return {
+      ok: false,
+      safeMessage: input.trustedOrigins.length === 0
+        ? `A production Relay Bridge must list the Hermes service origin in ${HERMES_TRUSTED_ORIGINS_ENV}. `
+          + 'None is configured, so no origin is trusted and the bearer token is sent nowhere.'
+        : `The configured ${HERMES_SERVICE_URL_ENV} origin is not in ${HERMES_TRUSTED_ORIGINS_ENV}.`,
+    };
+  }
+  if (isLoopbackOrigin(origin)) return { ok: true, origin };
+  return {
+    ok: false,
+    safeMessage:
+      `Outside production, ${HERMES_SERVICE_URL_ENV} must be a loopback origin, or its exact origin must be `
+      + `listed in ${HERMES_TRUSTED_ORIGINS_ENV}.`,
+  };
 }
 
 /**
@@ -195,27 +341,35 @@ export function selectHermesMode(input: {
     return { ok: true, mode: 'local', executableOverride: readExecutable(input.env) };
   }
 
-  // remote — both pieces are required, and neither is inferred.
+  // remote — every piece is required, and none is inferred.
+  //
+  // EVERY problem is reported, not the first. Adding the trusted-origin gate
+  // made this matter: an untrusted origin AND a missing token used to surface
+  // one at a time, so an operator fixed one, redeployed, and discovered the
+  // other — which is exactly the failure `loadServiceConfig` already avoids by
+  // returning every problem it finds. A refusal is a refusal either way; the
+  // only thing at stake is how many restarts it takes to act on it.
   const serviceUrl = (input.env[HERMES_SERVICE_URL_ENV] ?? '').trim();
   const serviceToken = (input.env[HERMES_SERVICE_TOKEN_ENV] ?? '').trim();
+  const problems: string[] = [];
+
   if (serviceUrl === '') {
-    return {
-      ok: false, kind: 'configuration_missing',
-      safeMessage: `${HERMES_MODE_ENV} is remote but no ${HERMES_SERVICE_URL_ENV} is configured.`,
-    };
-  }
-  if (!validServiceUrl(serviceUrl)) {
-    return {
-      ok: false, kind: 'configuration_missing',
-      // The rejected URL is not echoed: it names internal host layout.
-      safeMessage: `${HERMES_SERVICE_URL_ENV} is not a usable http(s) URL.`,
-    };
+    problems.push(`${HERMES_MODE_ENV} is remote but no ${HERMES_SERVICE_URL_ENV} is configured.`);
+  } else {
+    // The bearer token goes to this origin, so the origin is checked before
+    // the configuration is accepted — never after it has been used.
+    const urlVerdict = checkServiceUrl({
+      raw: serviceUrl,
+      production: input.production,
+      trustedOrigins: parseTrustedOrigins(input.env[HERMES_TRUSTED_ORIGINS_ENV]),
+    });
+    if (!urlVerdict.ok) problems.push(urlVerdict.safeMessage);
   }
   if (serviceToken === '') {
-    return {
-      ok: false, kind: 'configuration_missing',
-      safeMessage: `${HERMES_MODE_ENV} is remote but no ${HERMES_SERVICE_TOKEN_ENV} is configured.`,
-    };
+    problems.push(`${HERMES_MODE_ENV} is remote but no ${HERMES_SERVICE_TOKEN_ENV} is configured.`);
+  }
+  if (problems.length > 0) {
+    return { ok: false, kind: 'configuration_missing', safeMessage: problems.join(' ') };
   }
   return { ok: true, mode: 'remote', serviceUrl, serviceToken };
 }

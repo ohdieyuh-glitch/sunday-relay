@@ -38,6 +38,11 @@ export type FetchLike = (
     headers: Record<string, string>;
     body?: string;
     signal?: AbortSignal;
+    /**
+     * Always `'manual'`. See `call()` — a followed redirect is how a bearer
+     * token reaches an origin nobody allowlisted.
+     */
+    redirect?: 'manual' | 'follow' | 'error';
   },
 ) => Promise<{
   ok: boolean;
@@ -215,7 +220,30 @@ export function createRemoteHermesTransport(
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         signal: controller.signal,
+        // NO CROSS-ORIGIN BEARER FORWARDING.
+        //
+        // The default is `follow`. A 302 from the Hermes service — or from
+        // anything sitting in front of it — would send this request onward,
+        // and the runtime's redirect handling is the only thing deciding
+        // whether the `Authorization` header goes with it. That is a guarantee
+        // held by somebody else's implementation detail. `manual` makes the
+        // redirect visible here, and the check below refuses it outright: the
+        // trusted-origin allowlist approved ONE origin, and a redirect is a
+        // request to talk to a different one.
+        redirect: 'manual',
       });
+
+      // 3xx is refused rather than followed. The `Location` is never read and
+      // never echoed — it names a host this bridge has not been told to trust.
+      if (res.status >= 300 && res.status < 400) {
+        return {
+          ok: false, kind: 'service_unreachable',
+          safeMessage:
+            `The Hermes Reviewer service replied with a redirect (HTTP ${res.status}). Relay does not follow `
+            + 'redirects for an authenticated service call: the credential is issued for one trusted origin, '
+            + 'and a redirect asks for it to be sent to another.',
+        };
+      }
 
       if (res.status === 401 || res.status === 403) {
         return {

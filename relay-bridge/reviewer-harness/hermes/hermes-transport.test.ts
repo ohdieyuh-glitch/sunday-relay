@@ -16,10 +16,22 @@ import {
 
 const env = (o: Record<string, string>): NodeJS.ProcessEnv => o as NodeJS.ProcessEnv;
 
+/**
+ * A COMPLETE remote configuration.
+ *
+ * `RELAY_HERMES_TRUSTED_ORIGINS` joined this fixture when the trusted-origin
+ * gate landed (independent review, F2). Before it, a production bridge
+ * accepted ANY https origin and sent its bearer token there; a fixture without
+ * an allowlist is now an incomplete configuration, and these tests would be
+ * pinning the defect rather than the behaviour. The origin here matches the
+ * service URL exactly — scheme, host and port — because that is the only form
+ * the gate accepts.
+ */
 const REMOTE = {
   RELAY_HERMES_MODE: 'remote',
   RELAY_HERMES_SERVICE_URL: 'http://hermes.railway.internal:8080',
   RELAY_HERMES_SERVICE_TOKEN: 'service-token',
+  RELAY_HERMES_TRUSTED_ORIGINS: 'http://hermes.railway.internal:8080',
 };
 
 describe('transport selection fails closed', () => {
@@ -80,11 +92,28 @@ describe('transport selection fails closed', () => {
 
   it('fails closed when remote mode has no service token', () => {
     const s = selectHermesMode({
-      env: env({ RELAY_HERMES_MODE: 'remote', RELAY_HERMES_SERVICE_URL: 'http://h.internal' }),
+      env: env({
+        RELAY_HERMES_MODE: 'remote',
+        RELAY_HERMES_SERVICE_URL: 'http://h.internal',
+        RELAY_HERMES_TRUSTED_ORIGINS: 'http://h.internal',
+      }),
       production: true,
     });
     expect(s.ok).toBe(false);
     expect(s.ok === false && s.safeMessage).toContain('RELAY_HERMES_SERVICE_TOKEN');
+  });
+
+  it('reports an untrusted origin AND a missing token together, not one per restart', () => {
+    // The trusted-origin gate made this worth pinning: reporting only the
+    // first problem costs an operator a deploy cycle per fault.
+    const s = selectHermesMode({
+      env: env({ RELAY_HERMES_MODE: 'remote', RELAY_HERMES_SERVICE_URL: 'https://untrusted.example' }),
+      production: true,
+    });
+    expect(s.ok).toBe(false);
+    expect(s.ok === false && s.safeMessage).toContain('RELAY_HERMES_TRUSTED_ORIGINS');
+    expect(s.ok === false && s.safeMessage).toContain('RELAY_HERMES_SERVICE_TOKEN');
+    expect(s.ok === false && s.safeMessage).not.toContain('untrusted.example');
   });
 
   it('fails closed on a service URL that is not http(s)', () => {
