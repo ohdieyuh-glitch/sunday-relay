@@ -154,16 +154,31 @@ describe('the built service registers real signal handlers', () => {
          * says so, refusing a new review is a real obligation and this asserts
          * it. A closed socket is also a refusal, and is accepted as one.
          */
+        let drainObserved = false;
+        let listenerClosed = false;
         for (let i = 0; i < 100; i += 1) {
           try {
             const health = await fetch(`http://127.0.0.1:${s.port}/healthz`);
             const body = await health.json() as { status?: string };
-            if (body.status === 'shutting_down') break;
+            if (body.status === 'shutting_down') { drainObserved = true; break; }
           } catch {
-            break; // already stopped listening — the strongest refusal there is
+            // The socket is gone. That is the strongest refusal there is, but
+            // it is NOT evidence that the lifecycle flag was ever set — a
+            // service that only closed its listener would look identical here.
+            // Recorded rather than conflated, and asserted below.
+            listenerClosed = true;
+            break;
           }
-          await sleep(20);
+          // 100ms per attempt, matching every other wait in this file. The
+          // reported flake was a latency problem, and a 2s budget on the one
+          // operation whose latency was the problem is narrowing it rather
+          // than removing it.
+          await sleep(100);
         }
+        expect(
+          drainObserved || listenerClosed,
+          'the service neither reported draining nor stopped listening within 10s',
+        ).toBe(true);
 
         // A review created while draining must never be accepted. The server
         // may already have stopped listening, which is also a refusal.
@@ -182,6 +197,14 @@ describe('the built service registers real signal handlers', () => {
           refusedStatus = 'connection-refused';
         }
         expect(refusedStatus, 'a draining service must not accept a new review').not.toBe(200);
+        // And when the socket was still open, the LIFECYCLE flag is what did
+        // the refusing — so deleting `setLifecycleState('shutting_down')` from
+        // `main.ts` cannot leave this file green on the strength of a closed
+        // listener alone.
+        if (!listenerClosed) {
+          expect(drainObserved, 'the service must report draining before it stops listening').toBe(true);
+          expect(refusedStatus).toBe(503);
+        }
 
         // The handler ran, and the process exited within its bounded grace.
         const ended = await Promise.race([

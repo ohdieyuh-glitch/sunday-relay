@@ -180,7 +180,12 @@ export function productionConfigProblems(
       `${env.RELAY_DATA_DIR !== undefined && env.RELAY_DATA_DIR !== '' ? 'RELAY_DATA_DIR' : 'RELAY_STATE_HOME'} must be an absolute path.`,
     );
   }
-  if (!Number.isFinite(config.port) || config.port <= 0) {
+  // A PORT IS AN INTEGER IN 1..65535, and anything else is refused HERE with
+  // the variable named — rather than at `server.listen`, which dies with
+  // `ERR_SOCKET_BAD_PORT` and tells an operator nothing about which variable
+  // they set. `65535` and `8790.5` both used to survive this check while the
+  // message promised "a usable port number".
+  if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
     // Name the variable that was actually read, for the same reason as the
     // state path above: `RELAY_BRIDGE_PORT` wins when set, and `Number('')` is
     // 0, so an empty one reaches here and must not send an operator to `PORT`.
