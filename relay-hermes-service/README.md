@@ -61,6 +61,46 @@ All server-only. None of these may ever use a `VITE_` name.
 | `HOST` | no | Defaults to `0.0.0.0`. |
 | `PORT` | platform | Railway injects it. Local default `8791`. |
 
+### Bridge-side: where the bearer token may be sent
+
+| Variable | Required | Notes |
+|---|---|---|
+| `RELAY_HERMES_TRUSTED_ORIGINS` | **in production** | Comma-separated **exact origins** (`https://host:port`) the bridge may send its service token to. |
+
+The independent review of PR #26 (finding **F2**) found that the previous check
+validated the *protocol* only, while its own comment claimed "a private-network
+URL the bridge may call. Nothing else is accepted." With `production: true` an
+operator-set `https://attacker.example.com/hermes` was accepted and the bearer
+token was sent there.
+
+The gate now exists, and it is exact:
+
+- **production** — the service URL's origin must appear verbatim in
+  `RELAY_HERMES_TRUSTED_ORIGINS`. Scheme, host and port all compared. No suffix
+  matching (`evil-relay.internal` ends with `relay.internal`), no wildcards, no
+  bare hosts (a host without a scheme silently admits plaintext `http:`), and
+  no embedded credentials in the URL;
+- **production with no allowlist** — fails closed. Absent policy denies; it is
+  never an implicit "allow everything";
+- **outside production** — loopback only (`localhost`, `127.0.0.1`, `[::1]`),
+  stated explicitly rather than left as "anything goes off Railway". An
+  explicit allowlist entry still works, so a real staging host stays reachable
+  by naming it;
+- **redirects are refused, never followed.** The bridge sends
+  `redirect: 'manual'` and treats any `3xx` as a failure. The credential is
+  issued for one trusted origin, and a redirect is a request to send it to
+  another — that guarantee is held here rather than delegated to whatever the
+  runtime's redirect handling happens to do. The `Location` is never read into
+  a message; it names a host the bridge was not told to trust.
+
+`RELAY_HERMES_SERVICE_URL` itself must carry **no query and no fragment**.
+Endpoint paths are appended to it by string concatenation, so either one
+silently truncates the result: `https://host/mcp#f` plus `/v1/readiness`
+requests `/mcp`. The origin allowlist cannot catch this — all such URLs share
+the same origin — so it is refused separately. The check reads the raw string
+rather than the parsed URL, because `new URL('https://host#').hash` is empty
+while the raw `#` still breaks the concatenation.
+
 Every problem is reported at startup at once, by **variable name only** — never
 a value, a length or a hash.
 
@@ -161,12 +201,79 @@ bounded 10s, and exits. A review interrupted this way is never reported as
 completed and never yields a verdict — a platform restarting a container must
 not be able to manufacture an approval.
 
+## Capacity — the ceiling above the per-run ceilings
+
+Per-run limits are server-owned and clamped, so no caller can ask for a
+24-hour timeout. Until the independent review of PR #26 (finding **F1**) that
+was the *only* bound: two hundred concurrent `POST /v1/reviews` from one
+authenticated caller were all accepted, each spawning a Hermes process group
+holding the provider credential, and neither the run map nor the idempotency
+map was ever evicted. The realistic trigger was not an attacker but a bridge
+retry loop — made likelier by the restart-safety property documented below.
+
+| Ceiling | Value | What it bounds |
+|---|---|---|
+| `maxActiveReviews` | 4 | Concurrent Hermes process groups on this container. |
+| `maxActiveTimeoutBudgetMs` | 2 400 000 | Sum of the effective timeouts of active runs — the worst-case outstanding wall clock. |
+| `maxRetainedTerminalRuns` | 64 | Finished runs kept for `GET /v1/reviews/:id` before oldest-first eviction. |
+
+**Truthful units only.** These are not a spend limit and are never described as
+one. This service cannot enforce spend or tokens: usage is reported by the
+harness *after* a run and may be absent entirely, so a pre-admission spend
+check would have to invent a number for work that has not happened. It bounds
+exactly the two quantities it decides and can hold — how many process groups
+are running, and the worst-case wall clock they can occupy. Spend is bounded by
+Relay Core, which owns the Mission Contract's budget.
+
+Admission is **atomic**: the check and the reservation happen in one
+uninterrupted synchronous step, so two concurrent callers cannot both take the
+last slot. It happens **before any spawn**, so a refused request never puts the
+provider credential into a child environment. Capacity is released **exactly
+once** per run, on completion, failure, timeout, cancellation and shutdown.
+
+A refusal is `503` with `Retry-After`, carrying `kind: capacity_exhausted` —
+deliberately *not* the `409 review_refused` used for a decision about the
+request itself. Capacity clears on its own; a refusal does not, and retrying a
+refusal is a new paid call. The message names the ceiling and nothing else: no
+other caller's run id, no occupancy, no host.
+
+**Retention is the second half of the same finding.** Capping concurrency while
+keeping every terminal run forever would move the unbounded growth rather than
+remove it, so terminal runs are evicted oldest-first beyond the ceiling and an
+evicted run takes its idempotency entries with it — otherwise the idempotency
+map becomes the leak that survives the fix. An **active run is never evicted**:
+dropping it would discard the only reference to its `AbortController`, and
+shutdown could then not reach its process group.
+
+#### What eviction costs, stated plainly
+
+Evicting a run drops its idempotency keys, so a key replayed *after* its run was
+evicted is indistinguishable from a new one and would start another run — the
+same property the restart section below already documents, now also reachable
+by age rather than only by restart.
+
+It is bounded in the way that matters: **only terminal runs are evicted**, so a
+replayed key can never fail to find a run that is still executing. Eviction can
+therefore duplicate *finished* work; it can never create a second review racing
+a live one. The window is the 64 most recent terminal runs.
+
+This is another reason durable idempotency belongs in Relay Core rather than
+here, and another reason this service must not be described as restart-safe.
+
 ## Restart loss
 
-Run state is held in memory. A restart loses it, and the service says so rather
-than inventing durable state. Durable review records live in Relay Core, which
-remains the single source of run truth; this service is an execution boundary,
-not a second Relay.
+Run state is held in memory — in the service as well as in the bridge. The
+service's engine *is* `createLocalHermesTransport`, injected by `main.ts`;
+there has never been a second, durable store here, and a comment in that
+transport claiming otherwise was corrected as part of the same review.
+
+A restart loses run state, and the service says so rather than inventing
+durable state. `GET /v1/reviews/:id` for an unknown id now names all three
+reasons a record can be absent — never created, lost to a restart, or evicted
+from the bounded retention window — rather than asserting the restart, which
+since retention became bounded would be a guess. Durable review records live in
+Relay Core, which remains the single source of run truth; this service is an
+execution boundary, not a second Relay.
 
 ### Idempotency is NOT restart-safe — and that gates the first paid Mission
 

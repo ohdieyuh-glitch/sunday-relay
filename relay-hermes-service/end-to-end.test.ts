@@ -222,7 +222,14 @@ describe('bridge -> service -> fake Hermes, over real HTTP', () => {
     const state = await bridgeClient().getReview('never-existed');
     expect(state.status).toBe('failed');
     expect(state.reviewText).toBeNull();
-    expect(state.safeMessage).toContain('do not survive a restart');
+    // ALL THREE causes are named, and none is asserted as the one that
+    // happened. The message used to say only "do not survive a restart";
+    // once retention became bounded (independent review, F1) that became a
+    // guess, because an old completed run can now also have been evicted, and
+    // neither of those is an id that never existed.
+    expect(state.safeMessage).toContain('never created');
+    expect(state.safeMessage).toContain('restart');
+    expect(state.safeMessage).toContain('evicted');
   }, 30_000);
 
   it('reports Unknown usage rather than zero when the harness reported none', async () => {
