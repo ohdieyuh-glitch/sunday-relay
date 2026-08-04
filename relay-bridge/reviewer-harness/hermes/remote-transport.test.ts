@@ -483,3 +483,82 @@ describe('a provider Relay cannot read is not a connected provider', () => {
     expect(r.identity?.verifiedModelId).toBeNull();
   });
 });
+
+/* -------------------------------------- temporary vs permanent refusals --- */
+
+/**
+ * THE DISTINCTION THE SERVICE DREW, PRESERVED ONE HOP LATER.
+ *
+ * `relay-hermes-service/service.ts` is careful that capacity is not a refusal:
+ * "capacity clears on its own; a refusal does not". The bridge then rewrote
+ * every refusal with one sentence — *"This is a decision by the service, not a
+ * network fault"* — which for a 503 is the exact opposite of what the service
+ * said, and tells an operator to change a request that was never the problem.
+ *
+ * `shutting_down` and `validation_failed` were worse: the service emits both
+ * and the bridge's vocabulary did not contain them, so `refusalFromBody`
+ * dropped them and reported `service_unreachable`. Every ordinary deploy sent
+ * an operator to check networking that was working perfectly.
+ */
+describe('a temporary condition is not reported as a decision', () => {
+  const body = (status: number, kind: string): FetchLike =>
+    () => Promise.resolve({
+      ok: false,
+      status,
+      text: async () => JSON.stringify({
+        protocol: HERMES_SERVICE_PROTOCOL, kind, error: 'UPSTREAM-PROSE',
+      }),
+    } as Awaited<ReturnType<FetchLike>>);
+
+  const start = {
+    runId: 'r1', idempotencyKey: 'k1', prompt: 'review',
+    limits: { timeoutMs: 1000, maxOutputBytes: 1000, maxTurns: 1, maxPromptBytes: 1000 },
+  };
+
+  it('a 503 capacity refusal decodes as capacity_exhausted, and says it will clear', async () => {
+    const r = await transport(body(503, 'capacity_exhausted')).startReview(start);
+    expect(r.accepted).toBe(false);
+    expect(r.failureKind).toBe('capacity_exhausted');
+    expect(r.failureKind).not.toBe('service_unreachable');
+    expect(r.safeMessage ?? '').toContain('temporary');
+    expect(r.safeMessage ?? '').toContain('may be sent again unchanged');
+    // The wording that was wrong for this case must not be what it gets.
+    expect(r.safeMessage ?? '').not.toContain('decision by the service');
+    // Upstream prose still never crosses the boundary.
+    expect(r.safeMessage ?? '').not.toContain('UPSTREAM-PROSE');
+  });
+
+  it('a draining service decodes as shutting_down, not as unreachable', async () => {
+    const r = await transport(body(503, 'shutting_down')).startReview(start);
+    expect(r.failureKind).toBe('shutting_down');
+    expect(r.safeMessage ?? '').toContain('temporary');
+    expect(r.safeMessage ?? '').toContain('deploy');
+  });
+
+  it('a malformed request decodes as validation_failed, and says retrying will not help', async () => {
+    const r = await transport(body(422, 'validation_failed')).startReview(start);
+    expect(r.failureKind).toBe('validation_failed');
+    expect(r.safeMessage ?? '').toContain('will fail again');
+  });
+
+  it('a deliberate refusal keeps the permanent framing', async () => {
+    const r = await transport(body(409, 'review_refused')).startReview(start);
+    expect(r.failureKind).toBe('review_refused');
+    expect(r.safeMessage ?? '').toContain('decision by the service');
+  });
+
+  it('an evicted or unknown run is passed through as unknown, not rewritten to failed', async () => {
+    const r = await transport(() => Promise.resolve({
+      ok: true, status: 200,
+      text: async () => JSON.stringify({
+        protocol: HERMES_SERVICE_PROTOCOL, runId: 'gone', status: 'unknown',
+        usage: {}, failureKind: null,
+        safeMessage: 'There is no in-memory record of that review here.',
+      }),
+    } as Awaited<ReturnType<FetchLike>>)).getReview('gone');
+    expect(r.status).toBe('unknown');
+    expect(r.failureKind).toBeNull();
+    expect(r.reviewText).toBeNull();
+    expect(r.usage.source).toBe('unavailable');
+  });
+});

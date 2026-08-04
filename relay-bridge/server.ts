@@ -30,6 +30,7 @@ import {
 import {
   handleHostedCodingRoute, isHostedCodingRoute, type HostedCodingRunPort,
 } from './hosted-coding-agent/hosted-routes';
+import { decodeSegment } from './path-segment';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute,
@@ -343,7 +344,12 @@ export function createBridgeServer(
 
         const missionMatch = path.match(/^\/relay-api\/mission\/([^/]+)(?:\/(cancel|retry))?$/);
         if (missionMatch) {
-          const id = decodeURIComponent(missionMatch[1]);
+          // `%ZZ` here is a malformed client request naming no mission. Bare
+          // `decodeURIComponent` threw a URIError into the catch below, which
+          // whitelists two message strings and answers 500 for everything
+          // else — a server fault reported for a client's typo.
+          const id = decodeSegment(missionMatch[1]);
+          if (id === null) return send(res, 404, { error: 'mission not found' }, cors);
           const action = missionMatch[2];
           if (method === 'GET' && !action) {
             const view = registry.get(id);

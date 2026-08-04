@@ -49,6 +49,19 @@ import {
  * idempotency map — which is evicted WITH the run it points at, so it cannot
  * become the leak that survives the fix. See `admission.ts` for why those are
  * the only units this service can bound truthfully.
+ *
+ * THE CEILINGS ARE PER TRANSPORT INSTANCE, AND THAT IS A REQUIREMENT ON THE
+ * CALLER. The counters are closure-local, so N instances enforce N × the
+ * ceiling. `relay-hermes-service/main.ts` creates exactly one and holds it for
+ * the process lifetime, which is what makes the bound real. The bridge's
+ * `transport-factory.ts` builds a fresh transport per request — harmless
+ * today because no bridge route calls `startReview`, and a live hazard the
+ * moment one does. Whoever adds that route must hoist the instance, not
+ * discover this comment afterwards.
+ *
+ * Note also that ceilings are per PROCESS. N replicas of this service enforce
+ * N × the ceiling between them; nothing here coordinates across containers and
+ * nothing here claims to.
  */
 
 export interface LocalTransportConfig {
@@ -123,6 +136,23 @@ export function createLocalHermesTransport(
 
   let activeCount = 0;
   let activeTimeoutBudgetMs = 0;
+  /**
+   * Set by `cancelAll`, never cleared.
+   *
+   * `cancelAll` returns every slot up front so the counters stay honest, but
+   * the process groups it aborted are still alive — SIGTERM first, SIGKILL
+   * only after a grace period. Without this flag the transport would happily
+   * admit a full set of new runs on top of them, and up to twice the ceiling
+   * in credential-holding process groups would exist at once.
+   *
+   * Nothing bad happens today, because `main.ts` flips its module-global
+   * lifecycle to `shutting_down` before it calls `cancelAll`, and the route
+   * refuses new reviews from that moment. But that invariant lived in a
+   * different file, enforced by the ORDER of two lines; reversing them, or
+   * calling `cancelAll` from anywhere else, would silently over-subscribe.
+   * An invariant about a counter belongs where the counter is.
+   */
+  let draining = false;
 
   /**
    * "Active" for eviction purposes is deliberately WIDER than "holding
@@ -178,6 +208,9 @@ export function createLocalHermesTransport(
 
   return {
     mode: 'local',
+    // What THIS engine enforces, so the service reports a fact rather than a
+    // module constant it happens to import.
+    ceilings,
 
     async readiness(): Promise<HarnessRuntimeEvidence> {
       const { profile, probe } = probeFor();
@@ -223,6 +256,15 @@ export function createLocalHermesTransport(
     },
 
     async startReview(input: RemoteHermesReviewInput): Promise<RemoteHermesReviewStart> {
+      // Refused before idempotency, before admission, before anything: once
+      // this engine has begun draining it starts nothing, including a replay.
+      if (draining) {
+        return {
+          accepted: false, runId: input.runId, duplicate: false,
+          failureKind: 'shutting_down',
+          safeMessage: 'This Hermes Reviewer engine is draining and is starting no further reviews.',
+        };
+      }
       const fingerprint = requestFingerprint(input);
       const existing = byIdempotencyKey.get(input.idempotencyKey);
       if (existing !== undefined) {
@@ -341,13 +383,22 @@ export function createLocalHermesTransport(
         // old completed run can also have been evicted, and neither of those
         // is the same as an id that never existed. Relay Core holds the
         // durable record; this service never did.
+        //
+        // `unknown`, NOT `failed`. This used to answer
+        // `status: 'failed', failureKind: 'service_unreachable'`, and both
+        // fields were false for the commonest case: a review that COMPLETED
+        // and was later evicted. Nothing failed and the service was perfectly
+        // reachable — it answered. The prose below said so while the two
+        // machine-readable fields said the opposite, and a caller reads the
+        // fields.
         return {
-          runId, status: 'failed', protocol: HERMES_SERVICE_PROTOCOL, reviewText: null,
+          runId, status: 'unknown', protocol: HERMES_SERVICE_PROTOCOL, reviewText: null,
           usage: { inputTokens: null, outputTokens: null, source: 'unavailable' },
-          failureKind: 'service_unreachable',
+          failureKind: null,
           safeMessage:
             'There is no in-memory record of that review here: it was never created, it was lost to a restart, '
             + 'or it finished long enough ago to be evicted from the bounded retention window. '
+            + 'This is not a report that the review failed — an evicted review most likely completed. '
             + 'Run truth is held by Relay Core, not by this service.',
         };
       }
@@ -377,6 +428,9 @@ export function createLocalHermesTransport(
      * lets an interrupted review look like a finished one.
      */
     async cancelAll(): Promise<void> {
+      // Before any abort: from here this engine admits nothing, whatever the
+      // caller does next. See `draining`.
+      draining = true;
       for (const [, run] of runs) {
         if (run.status === 'running') {
           run.cancelRequested = true;

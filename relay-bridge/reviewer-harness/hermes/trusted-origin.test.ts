@@ -4,6 +4,7 @@ import {
   checkServiceUrl, isLoopbackOrigin, originOf, parseTrustedOrigins, selectHermesMode,
 } from './hermes-transport';
 import { createRemoteHermesTransport, type FetchLike } from './remote-transport';
+import { buildHermesTransport } from './transport-factory';
 
 /**
  * F2 — THE TRUSTED-ORIGIN GATE. The adversarial suite for the independent
@@ -263,5 +264,71 @@ describe('the bearer token is never forwarded across a redirect', () => {
       const headers = call.init.headers as Record<string, string>;
       expect(headers.Authorization).toBe('Bearer service-token');
     }
+  });
+});
+
+/* ------------------------------------- the refusal reaches the network --- */
+
+/**
+ * A REFUSED ORIGIN MUST PRODUCE ZERO REQUESTS, NOT A REFUSAL SOMEWHERE.
+ *
+ * Everything above proves the pure function refuses. None of it proved the
+ * refusal is CONNECTED to anything: `buildHermesTransport` could have gone on
+ * constructing a transport and sending the token, and every assertion here
+ * would still have passed. This asserts the whole path — untrusted origin in,
+ * no transport out, and a spying fetch that is never called.
+ */
+describe('a refused origin never becomes a request', () => {
+  const spyFetch = () => {
+    const calls: string[] = [];
+    const impl = (async (url: string) => {
+      calls.push(url);
+      return { ok: true, status: 200, text: async () => '{}' };
+    }) as unknown as FetchLike;
+    return { calls, impl };
+  };
+
+  it('buildHermesTransport returns NO transport for an untrusted origin in production', async () => {
+    const built = await buildHermesTransport({
+      env: remoteEnv({ [HERMES_SERVICE_URL_ENV]: 'https://attacker.example.com/hermes' }),
+      production: true,
+    });
+    expect(built.ok, 'an untrusted origin must not yield a transport').toBe(false);
+    if (built.ok) return;
+    expect(built.kind).toBe('configuration_missing');
+    expect(built.safeMessage).not.toContain('attacker.example.com');
+  });
+
+  it('production with NO allowlist configured yields no transport either', async () => {
+    const built = await buildHermesTransport({
+      env: remoteEnv({ [HERMES_SERVICE_URL_ENV]: 'https://hermes.internal' }),
+      production: true,
+    });
+    expect(built.ok, 'absent policy denies').toBe(false);
+  });
+
+  it('an ALLOWLISTED origin does yield a transport, and only then is fetch reached', async () => {
+    // The control. Without it, the two refusals above would also pass if
+    // `buildHermesTransport` were broken for every input.
+    const built = await buildHermesTransport({
+      env: remoteEnv({
+        [HERMES_SERVICE_URL_ENV]: 'https://hermes.internal',
+        [HERMES_TRUSTED_ORIGINS_ENV]: 'https://hermes.internal',
+      }),
+      production: true,
+    });
+    expect(built.ok).toBe(true);
+  });
+
+  it('the token is sent ONLY to the allowlisted origin', async () => {
+    const spy = spyFetch();
+    const transport = createRemoteHermesTransport({
+      serviceUrl: 'https://hermes.internal',
+      serviceToken: 'service-token',
+      fetchImpl: spy.impl,
+    });
+    await transport.readiness();
+    expect(spy.calls).toHaveLength(1);
+    expect(spy.calls[0]!.startsWith('https://hermes.internal/')).toBe(true);
   });
 });

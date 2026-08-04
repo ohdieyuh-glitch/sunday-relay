@@ -5,7 +5,7 @@ import {
 } from '../relay-bridge/reviewer-harness/hermes/admission';
 import { createLocalHermesTransport } from '../relay-bridge/reviewer-harness/hermes/local-transport';
 import { loadHermesProviderConfig } from '../relay-bridge/reviewer-harness/hermes/hermes-provider';
-import { handleServiceRoute, SERVICE_TOKEN_ENV, CAPACITY_RETRY_AFTER_SECONDS } from './service';
+import { handleServiceRoute, SERVICE_TOKEN_ENV } from './service';
 import type { RemoteHermesReviewInput } from '../relay-bridge/reviewer-harness/hermes/hermes-transport';
 
 /**
@@ -110,14 +110,38 @@ describe('the aggregate policy bounds only what the service can truthfully enfor
   });
 
   it('bounds outstanding worst-case wall clock independently of the count', () => {
-    // One slot free, but the wall-clock budget cannot absorb another full run.
-    const at = {
-      activeCount: 1,
-      activeTimeoutBudgetMs: ADMISSION_CEILINGS.maxActiveTimeoutBudgetMs - 1,
-    };
-    const verdict = evaluateAdmission(at, 1000);
-    expect(verdict.admitted).toBe(false);
+    // A REACHABLE state, not an arbitrary one. Three full-length runs is what
+    // the transport can genuinely be holding when a fourth arrives, and the
+    // previous version of this test asserted `activeTimeoutBudgetMs` one below
+    // a ceiling that no sequence of admissions could ever reach — proving a
+    // branch while the bound it stood for could not fire.
+    const fullRun = 600_000;
+    const at = { activeCount: 3, activeTimeoutBudgetMs: 3 * fullRun };
+    expect(at.activeCount).toBeLessThan(ADMISSION_CEILINGS.maxActiveReviews);
+    const verdict = evaluateAdmission(at, fullRun);
+    expect(verdict.admitted, 'a slot is free and this must still be refused').toBe(false);
     if (!verdict.admitted) expect(verdict.reason).toBe('active_wall_clock_limit');
+  });
+
+  it('the wall-clock ceiling is REACHABLE — it is below count x per-run ceiling', () => {
+    // The arithmetic the previous value failed. With the ceiling at exactly
+    // `maxActiveReviews x 600_000`, the count check returns first and the
+    // largest sum this check can ever see equals the ceiling, against a strict
+    // `>`. A bound that cannot fire is a claimed gate the code does not have.
+    const perRunCeilingMs = 600_000;
+    expect(ADMISSION_CEILINGS.maxActiveTimeoutBudgetMs)
+      .toBeLessThan(ADMISSION_CEILINGS.maxActiveReviews * perRunCeilingMs);
+  });
+
+  it('refuses a reservation that is not a usable number', () => {
+    // `NaN - x` is `NaN` forever: one non-finite reservation would poison the
+    // running budget and silently disable the wall-clock ceiling for the life
+    // of the process.
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1]) {
+      const verdict = evaluateAdmission({ activeCount: 0, activeTimeoutBudgetMs: 0 }, bad);
+      expect(verdict.admitted, String(bad)).toBe(false);
+      if (!verdict.admitted) expect(verdict.reason).toBe('unusable_timeout_request');
+    }
   });
 
   it('admits when both bounds have room', () => {
@@ -161,8 +185,14 @@ describe('admission is atomic under concurrency', () => {
   it('NO process is spawned for a refused request — the credential never reaches a child', async () => {
     const spawn = hangingSpawn();
     const engine = transport(spawn.impl);
-    await Promise.all(Array.from({ length: 50 }, (_, i) => engine.startReview(input(i))));
-    // One spawn per ADMITTED run, and not one more.
+    const results = await Promise.all(
+      Array.from({ length: 50 }, (_, i) => engine.startReview(input(i))),
+    );
+    const accepted = results.filter((r) => r.accepted).length;
+    // EXACTLY one spawn per admitted run. An upper bound alone would stay green
+    // if the spawn path stopped running altogether, which is not the claim.
+    expect(accepted).toBeGreaterThan(0);
+    expect(spawn.calls.length).toBe(accepted);
     expect(spawn.calls.length).toBeLessThanOrEqual(ADMISSION_CEILINGS.maxActiveReviews);
   });
 
@@ -223,7 +253,39 @@ describe('capacity is released exactly once', () => {
     expect(second.accepted, 'a finished run must free its slot').toBe(true);
   });
 
-  it('cancelAll releases every live slot, and a later settle does NOT release twice', async () => {
+  it('a FAILED run frees its slot — release is not a success-only path', async () => {
+    // The spawn rejects, so the run never reaches a `close` event and settles
+    // through the rejection handler instead. Nothing tested this: every prior
+    // fixture exited 0, so a leak on the failure path would have been invisible
+    // and would have permanently shrunk the ceiling by one.
+    const failingSpawn = (() => { throw new Error('spawn failed'); }) as never;
+    const engine = transport(failingSpawn, { ...ADMISSION_CEILINGS, maxActiveReviews: 1 });
+    expect((await engine.startReview(input(1))).accepted).toBe(true);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(
+      (await engine.startReview(input(2))).accepted,
+      'a run that failed to launch must return its slot',
+    ).toBe(true);
+  });
+
+  it('a CANCELLED run frees its slot', async () => {
+    // `cancelReview` release was asserted by nothing anywhere in the repository.
+    const spawn = hangingSpawn();
+    const engine = transport(spawn.impl, { ...ADMISSION_CEILINGS, maxActiveReviews: 1 });
+    const first = await engine.startReview(input(1));
+    expect(first.accepted).toBe(true);
+    expect((await engine.startReview(input(2))).accepted).toBe(false);
+
+    await engine.cancelReview(first.runId);
+    // The abort settles the runner, which settles the run, which releases.
+    await new Promise((r) => setTimeout(r, 30));
+    expect(
+      (await engine.startReview(input(3))).accepted,
+      'a cancelled run must return its slot',
+    ).toBe(true);
+  });
+
+  it('cancelAll releases every live slot AND starts nothing further', async () => {
     const spawn = hangingSpawn();
     const engine = transport(spawn.impl, { ...ADMISSION_CEILINGS, maxActiveReviews: 2 });
     await engine.startReview(input(1));
@@ -232,11 +294,18 @@ describe('capacity is released exactly once', () => {
 
     await engine.cancelAll?.();
 
-    // Two slots came back — not four, which is what a double release would
-    // produce and what would let the service exceed its own ceiling.
-    expect((await engine.startReview(input(4))).accepted).toBe(true);
-    expect((await engine.startReview(input(5))).accepted).toBe(true);
-    expect((await engine.startReview(input(6))).accepted).toBe(false);
+    // The slots came back so the counters are honest — but the process groups
+    // cancelAll aborted are still alive, so admitting a fresh set on top of
+    // them would put twice the ceiling in credential-holding children at once.
+    // The engine refuses, and it refuses on its own rather than relying on a
+    // lifecycle flag in another file being flipped in the right order.
+    const after = await engine.startReview(input(4));
+    expect(after.accepted).toBe(false);
+    expect(after.failureKind).toBe('shutting_down');
+    // Even a replay of an accepted key starts nothing once draining.
+    expect((await engine.startReview(input(1))).accepted).toBe(false);
+    // And no further child was spawned by any of it.
+    expect(spawn.calls.length).toBe(2);
   });
 });
 
@@ -264,14 +333,45 @@ describe('retention is bounded, and never at the cost of a live run', () => {
     expect(selectEvictions(['a', 'b'], () => false)).toEqual([]);
   });
 
-  it('an evicted run reports honestly — never "lost to a restart" when it was evicted', async () => {
+  it('an absent record is UNKNOWN, not failed — and names all three causes', async () => {
     const engine = transport(hangingSpawn().impl);
     const state = await engine.getReview('never-existed');
-    expect(state.status).toBe('failed');
+    // Absence is not a failure and the service is not unreachable — it just
+    // answered. Both fields used to assert otherwise.
+    expect(state.status).toBe('unknown');
+    expect(state.failureKind).toBeNull();
     // All three causes are named; none is asserted as the one that happened.
     expect(state.safeMessage).toContain('never created');
     expect(state.safeMessage).toContain('restart');
     expect(state.safeMessage).toContain('evicted');
+  });
+
+  it('a run that genuinely COMPLETED and was then evicted is never reported as failed', async () => {
+    /*
+     * The test this replaces was titled for eviction and evicted nothing: it
+     * called `getReview` on a fresh transport with zero runs. Deleting
+     * `evictIfNeeded` entirely left it green.
+     *
+     * This one really evicts. `run-0` completes, three more terminal runs push
+     * it out of a retention window of two, and the answer must not claim a
+     * failure that did not happen — the likeliest truth about an evicted run
+     * is that it succeeded.
+     */
+    const engine = transport(settlingSpawn(), { ...ADMISSION_CEILINGS, maxRetainedTerminalRuns: 2 });
+    expect((await engine.startReview(input(0))).accepted).toBe(true);
+    await new Promise((r) => setTimeout(r, 20));
+    expect((await engine.getReview('run-0')).status, 'run-0 must really complete first').toBe('completed');
+
+    for (let n = 1; n < 4; n += 1) {
+      expect((await engine.startReview(input(n))).accepted, `run ${n}`).toBe(true);
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    const evicted = await engine.getReview('run-0');
+    expect(evicted.status, 'an evicted COMPLETED run must not be reported failed').toBe('unknown');
+    expect(evicted.failureKind, 'nothing failed, and the service answered').toBeNull();
+    expect(evicted.reviewText).toBeNull();
+    expect(evicted.usage.source).toBe('unavailable');
   });
 
   /**
@@ -294,10 +394,10 @@ describe('retention is bounded, and never at the cost of a live run', () => {
     }
 
     // The oldest runs are gone from the run map.
-    expect((await engine.getReview('run-0')).failureKind).toBe('service_unreachable');
-    expect((await engine.getReview('run-1')).failureKind).toBe('service_unreachable');
+    expect((await engine.getReview('run-0')).status).toBe('unknown');
+    expect((await engine.getReview('run-1')).status).toBe('unknown');
     // The newest survive, so retention is bounded rather than simply broken.
-    expect((await engine.getReview('run-4')).failureKind).not.toBe('service_unreachable');
+    expect((await engine.getReview('run-4')).status).toBe('completed');
 
     /*
      * The load-bearing assertion. `key-0` belonged to the evicted `run-0`.
@@ -351,7 +451,7 @@ describe('the service answers capacity as a temporary condition', () => {
     }),
   };
 
-  it('503 with Retry-After, not 409 — the request was fine, the timing was not', async () => {
+  it('503 and the kind, not 409 — the request was fine, the timing was not', async () => {
     const result = await handleServiceRoute({
       method: 'POST', path: '/v1/reviews', authorization: 'Bearer secret', env,
       body: {
@@ -362,18 +462,88 @@ describe('the service answers capacity as a temporary condition', () => {
 
     expect(result.status).toBe(503);
     expect(result.body.kind).toBe('capacity_exhausted');
-    expect(result.body.retryAfterSeconds).toBe(CAPACITY_RETRY_AFTER_SECONDS);
   });
 
-  it('readiness publishes the ceilings but never the current occupancy', async () => {
+  it('invents NO retry hint — the service cannot know when a slot frees', async () => {
+    // A constant 30 s used to be published in the body and as `Retry-After`,
+    // and documented as how long to wait. A slot frees when a run ends, and a
+    // run may hold one for the full clamped ten minutes. Unknown stays Unknown.
+    const result = await handleServiceRoute({
+      method: 'POST', path: '/v1/reviews', authorization: 'Bearer secret', env,
+      body: {
+        runId: 'r', idempotencyKey: 'k', prompt: 'p',
+        limits: { timeoutMs: 1000, maxOutputBytes: 1024, maxTurns: 1, maxPromptBytes: 1024 },
+      },
+    }, capacityEngine as never);
+    expect(Object.keys(result.body)).not.toContain('retryAfterSeconds');
+  });
+
+  it('readiness publishes the RUNNING ENGINE\'s ceilings, never the module constant', async () => {
+    // The ceilings are constructor-injectable. Publishing the imported constant
+    // was a claim about configuration rather than a report about what runs, and
+    // an engine enforcing nothing would have published them all the same.
+    const injected = { maxActiveReviews: 2, maxActiveTimeoutBudgetMs: 5, maxRetainedTerminalRuns: 7 };
     const result = await handleServiceRoute({
       method: 'GET', path: '/v1/readiness', authorization: 'Bearer secret', env, body: undefined,
-    }, { ...capacityEngine, readiness: async () => ({}) } as never);
+    }, { ...capacityEngine, ceilings: injected, readiness: async () => ({}) } as never);
 
     const capacity = result.body.capacity as Record<string, unknown>;
-    expect(capacity.maxActiveReviews).toBe(ADMISSION_CEILINGS.maxActiveReviews);
+    expect(capacity.maxActiveReviews).toBe(2);
+    expect(capacity.maxActiveReviews).not.toBe(ADMISSION_CEILINGS.maxActiveReviews);
     // Occupancy would tell one caller what other callers are doing.
     expect(Object.keys(capacity)).not.toContain('activeCount');
     expect(Object.keys(capacity)).not.toContain('activeTimeoutBudgetMs');
+  });
+
+  it('an engine that enforces NO ceiling reports Unknown, not a default', async () => {
+    const result = await handleServiceRoute({
+      method: 'GET', path: '/v1/readiness', authorization: 'Bearer secret', env, body: undefined,
+    }, { ...capacityEngine, ceilings: null, readiness: async () => ({}) } as never);
+    expect(result.body.capacity).toBeNull();
+  });
+
+  it('the real local engine reports the ceilings it was built with', async () => {
+    // Not a hand-built object: the transport the service actually injects.
+    const engine = transport(hangingSpawn().impl, {
+      ...ADMISSION_CEILINGS, maxActiveReviews: 3,
+    });
+    expect(engine.ceilings?.maxActiveReviews).toBe(3);
+  });
+});
+
+/* ----------------------------------------- the bound, through the engine -- */
+
+describe('the wall-clock ceiling refuses a real admission, not just a hand-built state', () => {
+  it('refuses a further full-length run while a slot is still free', async () => {
+    /*
+     * Through `startReview` with genuine reservations, because the policy unit
+     * test alone cannot show that the transport ever reaches this branch — and
+     * with the previous ceiling it could not.
+     *
+     * Ceilings sized so the wall clock binds first: 4 slots, but a budget that
+     * holds only two full-length runs.
+     */
+    const spawn = hangingSpawn();
+    const fullRun = 600_000;
+    const shortRun = 1_000;
+    const engine = transport(spawn.impl, {
+      ...ADMISSION_CEILINGS,
+      maxActiveReviews: 4,
+      // Room for two full-length runs plus one short one, and no more.
+      maxActiveTimeoutBudgetMs: 2 * fullRun + shortRun,
+    });
+
+    expect((await engine.startReview(input(1, fullRun))).accepted).toBe(true);
+    expect((await engine.startReview(input(2, fullRun))).accepted).toBe(true);
+
+    const third = await engine.startReview(input(3, fullRun));
+    expect(third.accepted, 'two slots are free and this must still be refused').toBe(false);
+    expect(third.failureKind).toBe('capacity_exhausted');
+    expect(third.safeMessage).toContain('wall-clock');
+    // And nothing was spawned for it.
+    expect(spawn.calls.length).toBe(2);
+
+    // A SHORT run still fits, which is the whole point of a second bound.
+    expect((await engine.startReview(input(4, shortRun))).accepted).toBe(true);
   });
 });

@@ -192,7 +192,9 @@ describe('bridge -> service -> fake Hermes, over real HTTP', () => {
     expect(conflicting.accepted).toBe(false);
     expect(conflicting.failureKind).toBe('review_refused');
     // Still no second paid run, which was the point of the original case.
-    expect((await client.getReview('e2e-conf-b')).status).toBe('failed');
+    // `unknown`, not `failed`: no run by that id exists here, and absence is
+    // not a failure report.
+    expect((await client.getReview('e2e-conf-b')).status).toBe('unknown');
   }, 30_000);
 
   it('rejects an unknown field rather than silently ignoring it', async () => {
@@ -220,7 +222,8 @@ describe('bridge -> service -> fake Hermes, over real HTTP', () => {
 
   it('reports an unknown run truthfully instead of inventing state', async () => {
     const state = await bridgeClient().getReview('never-existed');
-    expect(state.status).toBe('failed');
+    expect(state.status).toBe('unknown');
+    expect(state.failureKind, 'absence is not a failure and the service answered').toBeNull();
     expect(state.reviewText).toBeNull();
     // ALL THREE causes are named, and none is asserted as the one that
     // happened. The message used to say only "do not survive a restart";

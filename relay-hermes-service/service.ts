@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { HERMES_SERVICE_PROTOCOL } from '../relay-bridge/reviewer-harness/hermes/hermes-transport';
 import type { HermesReviewerTransport } from '../relay-bridge/reviewer-harness/hermes/hermes-transport';
-import { ADMISSION_CEILINGS } from '../relay-bridge/reviewer-harness/hermes/admission';
 import { bearerMatches } from '../relay-bridge/bearer-auth';
+import { decodeSegment } from '../relay-bridge/path-segment';
 
 /**
  * THE HERMES REVIEWER SERVICE.
@@ -47,8 +47,7 @@ export function lifecycleState(): LifecycleState {
 const MAX_BODY_BYTES = 512 * 1024;
 
 /**
- * Bearer authentication is the SHARED server-only implementation, re-exported
- * here for the callers that already import it from this module.
+ * Bearer authentication is the SHARED server-only implementation.
  *
  * It used to be a second copy whose docstring claimed it matched the bridge's.
  * It did not — different scheme casing, different separator handling, and a
@@ -56,8 +55,20 @@ const MAX_BODY_BYTES = 512 * 1024;
  * failed closed, so no wrong secret was ever accepted; the defect was a stated
  * parity that was not real. There is now one implementation, so the statement
  * is true by construction rather than by assertion.
+ *
+ * Re-exported here for exactly one caller: the parity test, which asserts the
+ * two surfaces resolve to the same function object. Saying that plainly beats
+ * the earlier justification — "the callers that already import it from this
+ * module" — which named a set that was empty.
  */
 export { bearerMatches };
+
+/**
+ * Path-segment decoding is the SHARED server-only implementation too, for the
+ * same reason and re-exported on the same terms. See
+ * `../relay-bridge/path-segment.ts`.
+ */
+export { decodeSegment };
 
 export interface ServiceResult {
   readonly status: number;
@@ -178,29 +189,24 @@ export function parseReviewBody(raw: unknown): { ok: true; value: ReviewBody } |
 /* -------------------------------------------------------------- routing --- */
 
 /**
- * How long a client should wait before retrying a capacity refusal. One
- * number, sent as `retryAfterSeconds` and as the `Retry-After` header, so a
- * client that reads either gets the same answer.
- */
-export const CAPACITY_RETRY_AFTER_SECONDS = 30;
-
-/**
- * Decode one path segment, or `null` when it cannot be decoded.
+ * THERE IS NO `Retry-After` ON A CAPACITY REFUSAL, ON PURPOSE.
  *
- * `decodeURIComponent` THROWS on a malformed escape — `%ZZ`, a lone `%`, an
- * orphan surrogate — and the throw used to escape the route handler and be
- * caught by the server's generic catch, which answered **500**. A malformed
- * path is a client error and there is no such run, so it is a 404: a 500 tells
- * an operator the service is broken when nothing about it is.
+ * There was: a constant 30 seconds, published in the body as
+ * `retryAfterSeconds`, in the header as `Retry-After`, and in the README as
+ * "how long a client should wait". The service cannot know that. A slot frees
+ * when a run ends, and an admitted run may hold its slot for up to the full
+ * clamped `timeoutMs` — ten minutes. Thirty was a guess wearing the clothes of
+ * an answer, which is the one thing this codebase does not ship: a missing
+ * value is Unknown, never a plausible default.
+ *
+ * Computing an honest one is possible in principle (the minimum remaining
+ * reserved wall clock across active runs) and is deliberately not done here:
+ * it would disclose another caller's run timing to whoever asked, and a
+ * capacity message tells you only that you were not admitted.
+ *
+ * The 503 status already says "temporary, try again"; `capacity_exhausted`
+ * already says why. Neither invents a number.
  */
-export function decodeSegment(raw: string): string | null {
-  try {
-    const decoded = decodeURIComponent(raw);
-    return decoded.trim() === '' ? null : decoded;
-  } catch {
-    return null;
-  }
-}
 
 export interface ServiceRequest {
   readonly method: string;
@@ -255,16 +261,19 @@ export async function handleServiceRoute(
         // binaryPath is deliberately NOT included: it is host layout.
       },
       /**
-       * The aggregate ceilings this service enforces, so a caller can see the
-       * bound rather than discover it as a 503. Ceilings only — never the
-       * current occupancy, which would tell one caller what other callers are
-       * doing.
+       * The aggregate ceilings the RUNNING ENGINE enforces, so a caller can
+       * see the bound rather than discover it as a 503. Ceilings only — never
+       * the current occupancy, which would tell one caller what other callers
+       * are doing.
+       *
+       * Read from the engine, not from the module constant this file imports.
+       * The ceilings are constructor-injectable, so publishing the constant
+       * was a claim about configuration rather than a report about what is
+       * running — and an engine that enforces nothing would have published
+       * them anyway. `null` when the engine enforces none: Unknown stays
+       * Unknown and never becomes a default.
        */
-      capacity: {
-        maxActiveReviews: ADMISSION_CEILINGS.maxActiveReviews,
-        maxActiveTimeoutBudgetMs: ADMISSION_CEILINGS.maxActiveTimeoutBudgetMs,
-        maxRetainedTerminalRuns: ADMISSION_CEILINGS.maxRetainedTerminalRuns,
-      },
+      capacity: engine.ceilings ?? null,
       runCreated: false,
     });
   }
@@ -301,19 +310,12 @@ export async function handleServiceRoute(
     // A refusal is a decision about THIS request: it will not resolve itself,
     // and retrying is a new paid call — 409. Capacity is a statement about the
     // service's current load: the same request will succeed once a run
-    // finishes — 503, with the standard `Retry-After` so a client backs off on
-    // the protocol's own terms instead of guessing. Collapsing the two would
-    // send an operator to change a request that was never the problem.
+    // finishes — 503. Collapsing the two would send an operator to change a
+    // request that was never the problem.
+    //
+    // 503 and the kind, and no invented wait. See CAPACITY notes above.
     if (started.failureKind === 'capacity_exhausted') {
-      return {
-        status: 503,
-        body: {
-          protocol: HERMES_SERVICE_PROTOCOL,
-          kind: 'capacity_exhausted',
-          error: started.safeMessage ?? 'The Hermes Reviewer service is at capacity.',
-          retryAfterSeconds: CAPACITY_RETRY_AFTER_SECONDS,
-        },
-      };
+      return err(503, 'capacity_exhausted', started.safeMessage ?? 'The Hermes Reviewer service is at capacity.');
     }
     return err(409, started.failureKind ?? 'review_refused', started.safeMessage ?? 'The review was refused.');
   }
@@ -321,7 +323,10 @@ export async function handleServiceRoute(
   const stateMatch = /^\/v1\/reviews\/([^/]+)$/.exec(path);
   if (stateMatch !== null && method === 'GET') {
     const runId = decodeSegment(stateMatch[1]);
-    if (runId === null) return err(404, 'not_found', 'Unknown Hermes Reviewer operation.');
+    // NOT the unknown-route message. The operation is perfectly well known —
+    // it is the run id that cannot be read. Answering both with one sentence
+    // tells an operator to check the URL shape when the URL shape was right.
+    if (runId === null) return err(404, 'not_found', 'That run id could not be read as a run id.');
     const state = await engine.getReview(runId);
     return ok({
       runId: state.runId,
@@ -336,7 +341,7 @@ export async function handleServiceRoute(
   const cancelMatch = /^\/v1\/reviews\/([^/]+)\/cancel$/.exec(path);
   if (cancelMatch !== null && method === 'POST') {
     const cancelId = decodeSegment(cancelMatch[1]);
-    if (cancelId === null) return err(404, 'not_found', 'Unknown Hermes Reviewer operation.');
+    if (cancelId === null) return err(404, 'not_found', 'That run id could not be read as a run id.');
     const result = await engine.cancelReview(cancelId);
     return ok({
       requested: result.requested,
@@ -397,12 +402,9 @@ export function createHermesService(engine: HermesReviewerTransport): Server {
         'content-length': Buffer.byteLength(payload),
         // This is a private machine API. No browser may reach it directly.
         'cache-control': 'no-store',
-        // A capacity refusal carries the standard header as well as the body
-        // field, so a client that honours `Retry-After` backs off correctly
-        // without having to understand this service's JSON at all.
-        ...(result.body.kind === 'capacity_exhausted'
-          ? { 'retry-after': String(CAPACITY_RETRY_AFTER_SECONDS) }
-          : {}),
+        // No `Retry-After`. The service does not know when a slot frees, and
+        // the constant that used to be sent here was a guess published as an
+        // answer. See the CAPACITY note above `handleServiceRoute`.
       });
       res.end(payload);
     })();

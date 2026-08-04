@@ -1,7 +1,15 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 
 /**
- * BEARER AUTHENTICATION — ONE IMPLEMENTATION, SHARED BY EVERY SERVER SURFACE.
+ * BEARER AUTHENTICATION — ONE IMPLEMENTATION, SHARED BY EVERY SERVER SURFACE
+ * THAT PARSES A `Bearer` CREDENTIAL.
+ *
+ * That qualifier is not hedging, it is the scope. `Relay-Session` is a
+ * DIFFERENT scheme with different rules, parsed by
+ * `relay-bridge/browser-session/routes.ts`, and deliberately so: the operator
+ * credential and a browser session must never be mistakable for one another.
+ * An unqualified "every server surface" would have read as a claim over that
+ * parser too, and this file is where such a claim was wrong once already.
  *
  * There used to be two. `relay-bridge/reviewer-routes.ts` and
  * `relay-hermes-service/service.ts` each carried their own `bearerMatches`,

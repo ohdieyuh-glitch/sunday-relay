@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { bearerMatches, parseBearerCredential } from './bearer-auth';
 import { bearerMatches as routeBearerMatches } from './reviewer-routes';
 import { bearerMatches as serviceBearerMatches } from '../relay-hermes-service/service';
@@ -38,15 +40,67 @@ describe('the two surfaces now share one implementation', () => {
     ['absent header', undefined],
   ];
 
-  it.each(cases)('bridge and service agree: %s', (_label, header) => {
+  /**
+   * THIS TABLE IS A TAUTOLOGY, AND IT IS KEPT AS ONE ON PURPOSE.
+   *
+   * The identity assertion below proves all three names are the SAME function
+   * object, so of course they agree — every row would pass against any
+   * implementation, correct or not. Read as a parity matrix it proves nothing;
+   * read as what it is, it is a tripwire: the day someone re-forks one of the
+   * re-exports, the identity assertion fails and this table starts meaning
+   * something again. The real behavioural coverage is in the next describe.
+   */
+  it.each(cases)('the three names answer identically (they are one function): %s', (_label, header) => {
     const shared = bearerMatches(header, SECRET);
     expect(routeBearerMatches(header, SECRET)).toBe(shared);
     expect(serviceBearerMatches(header, SECRET)).toBe(shared);
   });
 
-  it('the shared parser is the one both re-export', () => {
+  it('the shared parser is the one both re-export — the load-bearing assertion', () => {
     expect(routeBearerMatches).toBe(bearerMatches);
     expect(serviceBearerMatches).toBe(bearerMatches);
+  });
+
+  it('there is no THIRD bearer parser in production code', () => {
+    /*
+     * The claim in the module headline is that one implementation is shared by
+     * every server surface that parses a `Bearer` credential. Function identity
+     * proves it for the two known re-exports; this holds the claim against a
+     * surface that has not been written yet, by reading the tree.
+     *
+     * `Relay-Session` is deliberately excluded: it is a different scheme with
+     * different rules, and the headline says so.
+     */
+    const root = join(__dirname, '..');
+    const offenders: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) { walk(full); continue; }
+        if (!/\.tsx?$/.test(entry.name) || entry.name.includes('.test.')) continue;
+        const source = readFileSync(full, 'utf8');
+        if (full.endsWith('bearer-auth.ts')) continue;
+        /*
+         * PARSING, not sending. Every client in this tree builds an outbound
+         * `Authorization: \`Bearer ${token}\`` header, and that is not a second
+         * parser — so the shapes looked for here are the ones that READ an
+         * incoming credential: a regex over the scheme, a `startsWith`, or a
+         * direct comparison against a composed `Bearer …` string.
+         */
+        const parsesBearer = [
+          /\/\^[^/\n]{0,14}[Bb]earer/,        // an anchored regex literal over the scheme
+          /startsWith\(\s*['"`]\s*[Bb]earer/, // header.startsWith('Bearer ')
+          /[!=]==\s*`Bearer /,               // authorization === `Bearer ${token}`
+          /`Bearer [^`]*`\s*[!=]==/,
+        ].some((pattern) => pattern.test(source));
+        if (parsesBearer) offenders.push(full.slice(root.length + 1));
+      }
+    };
+    for (const dir of ['relay-bridge', 'relay-hermes-service']) walk(join(root, dir));
+    // The fixture bridge under src/ is a test double and is documented as one;
+    // nothing under the two server trees may parse Bearer for itself.
+    expect(offenders, 'a second Bearer parser appeared').toEqual([]);
   });
 });
 
@@ -86,10 +140,27 @@ describe('what it accepts and refuses', () => {
     expect(parseBearerCredential(undefined)).toBeNull();
   });
 
-  it('comparison is over fixed-length digests, so no length branch remains', () => {
-    // A one-character secret and a very long presented value must both be
-    // handled without throwing — the old shape special-cased length.
+  it('a wildly mismatched length is answered, not thrown on — and answered wrong-secret', () => {
+    // The old shape special-cased length before comparing. This asserts the
+    // OUTCOME for mismatched lengths; it deliberately does not claim to prove
+    // constant time, which a unit test cannot. The digest step that removes the
+    // length branch is asserted structurally below.
     expect(bearerMatches(`Bearer ${'x'.repeat(4096)}`, 'a')).toBe(false);
+    expect(bearerMatches('Bearer a', `${'x'.repeat(4096)}`)).toBe(false);
     expect(bearerMatches('Bearer a', 'a')).toBe(true);
+  });
+
+  it('the implementation really does hash before comparing', () => {
+    /*
+     * The previous test was titled "comparison is over fixed-length digests"
+     * and asserted only that nothing threw — it passed with a plain `===`.
+     * Whether both sides are reduced to a fixed-length digest before
+     * `timingSafeEqual` is a property of the source, so the source is what is
+     * read. `timingSafeEqual` on raw buffers of different lengths THROWS, so a
+     * shape without the digest could not answer the case above at all.
+     */
+    const source = readFileSync(join(__dirname, 'bearer-auth.ts'), 'utf8');
+    expect(source).toMatch(/createHash\(\s*['"]sha256['"]\s*\)/);
+    expect(source).toContain('timingSafeEqual');
   });
 });

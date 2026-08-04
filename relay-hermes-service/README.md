@@ -86,6 +86,19 @@ The gate now exists, and it is exact:
   stated explicitly rather than left as "anything goes off Railway". An
   explicit allowlist entry still works, so a real staging host stays reachable
   by naming it;
+- **what counts as production** — `NODE_ENV=production` *or* any Railway
+  marker (`RAILWAY_ENVIRONMENT`, `RAILWAY_ENVIRONMENT_NAME`,
+  `RAILWAY_SERVICE_ID`). This mattered: the branch was selected by `NODE_ENV`
+  alone, Railway does not set it unless somebody remembers to, and a real
+  deployment could therefore silently take the *more permissive* branch with
+  nothing logged and no test failing. Every signal is one-way — no variable
+  turns production off, because a host that can be talked out of being a
+  production host is not one;
+- **what the gate does NOT do** — it checks the origin STRING. No DNS
+  resolution, no IP classification: an allowlisted name whose A record points
+  at `169.254.169.254` is accepted. That is not a bypass, since the allowlist
+  is operator-set configuration, but it is the boundary of the guarantee and it
+  is written down rather than assumed;
 - **redirects are refused, never followed.** The bridge sends
   `redirect: 'manual'` and treats any `3xx` as a failure. The credential is
   issued for one trusted origin, and a redirect is a request to send it to
@@ -213,9 +226,29 @@ retry loop — made likelier by the restart-safety property documented below.
 
 | Ceiling | Value | What it bounds |
 |---|---|---|
-| `maxActiveReviews` | 4 | Concurrent Hermes process groups on this container. |
-| `maxActiveTimeoutBudgetMs` | 2 400 000 | Sum of the effective timeouts of active runs — the worst-case outstanding wall clock. |
+| `maxActiveReviews` | 4 | Concurrent **reviews** admitted at once. |
+| `maxActiveTimeoutBudgetMs` | 1 800 000 | Sum of the effective timeouts of active runs — the worst-case outstanding wall clock. |
 | `maxRetainedTerminalRuns` | 64 | Finished runs kept for `GET /v1/reviews/:id` before oldest-first eviction. |
+
+`maxActiveTimeoutBudgetMs` was published here as 2 400 000 and **could never
+refuse anything**: that is exactly `4 × 600 000`, the count check returns
+first, and the sum reachable below the count ceiling tops out at exactly
+2 400 000 against a strict `>`. A ceiling that cannot fire is a claimed gate the
+code does not have, which is the same defect the review raised about a comment.
+At 1 800 000 the two bounds genuinely differ — three full-length 600 s runs fill
+it and a fourth is refused *even though a slot is free*, while four runs still
+fit whenever they average 450 s or less (the harness default is 180 s).
+
+**"Concurrent reviews", not "process groups on this container".** The earlier
+wording was wider than the code. `GET /v1/readiness` and
+`POST /v1/test-connection` each run Hermes discovery probes, and those probes
+are outside this accounting. They create no review and hold no slot, and they
+are also synchronous `spawnSync` calls that occupy the event loop while they
+run — a pre-existing property of the discovery path, disclosed here rather than
+implied away. The ceilings bound reviews.
+
+These ceilings are **per process**. N replicas enforce N × the ceiling between
+them; nothing here coordinates across containers and nothing here claims to.
 
 **Truthful units only.** These are not a spend limit and are never described as
 one. This service cannot enforce spend or tokens: usage is reported by the
@@ -231,11 +264,19 @@ last slot. It happens **before any spawn**, so a refused request never puts the
 provider credential into a child environment. Capacity is released **exactly
 once** per run, on completion, failure, timeout, cancellation and shutdown.
 
-A refusal is `503` with `Retry-After`, carrying `kind: capacity_exhausted` —
-deliberately *not* the `409 review_refused` used for a decision about the
-request itself. Capacity clears on its own; a refusal does not, and retrying a
-refusal is a new paid call. The message names the ceiling and nothing else: no
-other caller's run id, no occupancy, no host.
+A refusal is `503` carrying `kind: capacity_exhausted` — deliberately *not* the
+`409 review_refused` used for a decision about the request itself. Capacity
+clears on its own; a refusal does not, and retrying a refusal is a new paid
+call. The message names the ceiling and nothing else: no other caller's run id,
+no occupancy, no host.
+
+**There is no `Retry-After`, and that is the honest answer.** There was one: a
+constant 30 seconds, sent as a header, as `retryAfterSeconds`, and described
+here as how long a client should wait. The service cannot know that — a slot
+frees when a run ends, and an admitted run may hold one for the full clamped ten
+minutes. Thirty was a guess in the clothes of an answer. Deriving a real number
+is possible (the minimum remaining reserved wall clock) and is deliberately not
+done, because it would disclose another caller's run timing to whoever asked.
 
 **Retention is the second half of the same finding.** Capping concurrency while
 keeping every terminal run forever would move the unbounded growth rather than
@@ -256,6 +297,14 @@ It is bounded in the way that matters: **only terminal runs are evicted**, so a
 replayed key can never fail to find a run that is still executing. Eviction can
 therefore duplicate *finished* work; it can never create a second review racing
 a live one. The window is the 64 most recent terminal runs.
+
+**An evicted run answers `status: "unknown"`, never `failed`.** It used to
+answer `status: "failed", failureKind: "service_unreachable"`, and both fields
+were false for the commonest case — a review that completed and was later
+evicted. Nothing failed, and the service was perfectly reachable; it answered.
+The prose said so while the two machine-readable fields said the opposite, and
+callers read fields. `unknown` carries no `failureKind` at all: absence is not a
+failure, and run truth is held by Relay Core.
 
 This is another reason durable idempotency belongs in Relay Core rather than
 here, and another reason this service must not be described as restart-safe.

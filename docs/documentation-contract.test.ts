@@ -305,6 +305,12 @@ describe('the Hermes Reviewer environment contract', () => {
       'RELAY_HERMES_MODE', 'RELAY_HERMES_SERVICE_URL', 'RELAY_HERMES_SERVICE_TOKEN',
       'RELAY_HERMES_PROVIDER', 'RELAY_HERMES_MODEL', 'RELAY_HERMES_EXECUTABLE',
       'XAI_API_KEY', 'ANTHROPIC_API_KEY',
+      // The trusted-origin allowlist. It was introduced, made REQUIRED in
+      // production, documented at length in `.env.example` and in the
+      // README — and left out of this list, so every one of those lines could
+      // have been deleted with the whole gate still green. A contract that
+      // does not name the newest variable is not covering the newest risk.
+      'RELAY_HERMES_TRUSTED_ORIGINS',
     ]) {
       expect(env, `${name} must be documented`).toContain(name);
     }

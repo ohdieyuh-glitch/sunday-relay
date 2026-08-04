@@ -1,5 +1,6 @@
 import type { HarnessRuntimeEvidence } from '../../../src/relay/mission/reviewer-harness/harness-readiness';
 import type { SafeProviderIdentity } from './hermes-provider';
+import type { AdmissionCeilings } from './admission';
 
 /**
  * THE HERMES TRANSPORT SEAM — pure contract and pure selection.
@@ -16,7 +17,10 @@ import type { SafeProviderIdentity } from './hermes-provider';
  *   local   the bridge spawns Hermes itself. Unchanged behaviour, for
  *           development on a machine that really has it.
  *   remote  the bridge calls a dedicated Hermes Reviewer service over
- *           authenticated private HTTP and never spawns anything.
+ *           authenticated HTTP to an ALLOWLISTED ORIGIN, and never spawns
+ *           anything. "Private" is what such a deployment usually is; it is
+ *           not what the gate below checks, and the gate's word is the one
+ *           that belongs here.
  *
  * THE RULE THAT MATTERS MOST: remote NEVER falls back to local. A production
  * bridge that quietly probed its own PATH after a remote failure would report
@@ -71,6 +75,24 @@ export const HERMES_FAILURE_KINDS = [
    * wait.
    */
   'capacity_exhausted',
+  /**
+   * The service is draining and is not accepting new reviews. It emits this
+   * kind on every deploy, and the bridge used not to know the word — so
+   * `refusalFromBody` dropped it and reported `service_unreachable`, sending
+   * an operator to check networking that was working perfectly during a
+   * perfectly ordinary restart. That is the exact conflation the capacity
+   * split was added to remove, reintroduced through a vocabulary gap.
+   *
+   * Like capacity, it clears on its own; unlike capacity, what clears it is a
+   * deploy finishing rather than a run finishing.
+   */
+  'shutting_down',
+  /**
+   * The service understood the request and found it malformed. Also emitted
+   * today and also missing from this list, with the same consequence: a
+   * client's own bad request was reported to it as an unreachable service.
+   */
+  'validation_failed',
 ] as const;
 export type HermesFailureKind = (typeof HERMES_FAILURE_KINDS)[number];
 
@@ -106,9 +128,34 @@ export interface RemoteHermesReviewStart {
   readonly safeMessage: string | null;
 }
 
+export const HERMES_REVIEW_STATUSES = [
+  'running', 'completed', 'failed', 'cancelled', 'timed_out',
+  /**
+   * NO RECORD — AND THAT IS NOT A FAILURE.
+   *
+   * This service holds runs in memory. A record can be absent because the run
+   * never existed, because a restart lost it, or because it finished long
+   * enough ago to be evicted from the bounded retention window. NONE of those
+   * means the review failed, and the third means it very likely SUCCEEDED and
+   * was simply forgotten here.
+   *
+   * Before this status existed, absence was reported as
+   * `status: 'failed', failureKind: 'service_unreachable'` — two
+   * machine-readable assertions that are both false for an evicted completed
+   * run: nothing failed, and the service answered perfectly well. The prose
+   * was honest while the fields lied, and callers read fields.
+   *
+   * `unknown` carries no `failureKind`. Unknown is not zero and it is not a
+   * failure; run truth is held by Relay Core, which is where a caller must
+   * look next.
+   */
+  'unknown',
+] as const;
+export type HermesReviewStatus = (typeof HERMES_REVIEW_STATUSES)[number];
+
 export interface RemoteHermesReviewState {
   readonly runId: string;
-  readonly status: 'running' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+  readonly status: HermesReviewStatus;
   readonly protocol: HermesServiceProtocol | null;
   /** Present only once a review really finished. */
   readonly reviewText: string | null;
@@ -136,6 +183,22 @@ export interface RemoteHermesCancelResult {
  */
 export interface HermesReviewerTransport {
   readonly mode: HermesMode;
+  /**
+   * The aggregate ceilings THIS engine enforces, or `null` when it enforces
+   * none.
+   *
+   * The service used to publish the module constant `ADMISSION_CEILINGS` on
+   * `/v1/readiness` under a comment saying "the ceilings this service
+   * enforces". That was inferred from configuration rather than observed: the
+   * ceilings are constructor-injectable, and a service handed
+   * `createRemoteHermesTransport` — which enforces nothing at all — would have
+   * gone on publishing those three numbers as its bounds. Asking the engine
+   * makes the answer a fact about what is running.
+   *
+   * `null` is the honest answer for a proxying engine, and the service reports
+   * it as Unknown rather than substituting a default.
+   */
+  readonly ceilings?: AdmissionCeilings | null;
   readiness(): Promise<HarnessRuntimeEvidence>;
   testConnection(): Promise<HermesConnectionEvidence>;
   startReview(input: RemoteHermesReviewInput): Promise<RemoteHermesReviewStart>;
@@ -180,6 +243,22 @@ export type HermesModeSelection =
  * configuration error, not an implicit "allow everything". That is the whole
  * behaviour of the repaired gate: absent policy denies.
  *
+ * WHAT IT IS "PRODUCTION" ACCORDING TO. `isProductionDeployment`, not
+ * `NODE_ENV` alone — Railway does not set `NODE_ENV` unless somebody
+ * remembers to, and a forgotten variable must not be the difference between
+ * this gate and no gate.
+ *
+ * WHAT THIS GATE DOES NOT DO, STATED SO THE NEXT READER DOES NOT ASSUME IT.
+ * It checks the ORIGIN STRING. It performs no DNS resolution and no IP
+ * classification, so an allowlisted name whose A record points at
+ * `169.254.169.254` is accepted. That is not a bypass — the allowlist is
+ * operator-set configuration, and an operator who allowlists a hostile name
+ * has already made the decision this gate exists to require — but it is the
+ * boundary of the guarantee, and the boundary belongs in writing. Relay's MCP
+ * network policy DOES resolve and classify addresses; this one deliberately
+ * does not, because re-resolving between check and connect is the rebinding
+ * window and there is no resolver here to pin against.
+ *
  * DEVELOPMENT: loopback only, stated explicitly rather than left as "anything
  * goes outside production". A developer pointing the bridge at a public host
  * without an allowlist entry is doing the production-shaped thing on a laptop,
@@ -189,7 +268,12 @@ export type HermesModeSelection =
 export const HERMES_TRUSTED_ORIGINS_ENV = 'RELAY_HERMES_TRUSTED_ORIGINS';
 
 /** Hosts that are unambiguously this machine. */
-const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+/**
+ * `URL.hostname` returns an IPv6 literal WITH its brackets, so `'[::1]'` is the
+ * form that can match and a bare `'::1'` entry never could. Listing both was
+ * harmless and misleading — a reader would conclude the bare form is handled.
+ */
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 /** `https://host:port` — never a path, never a query, never credentials. */
 export function originOf(raw: string): string | null {

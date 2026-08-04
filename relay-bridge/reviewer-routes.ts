@@ -17,6 +17,8 @@
  */
 
 import { bearerMatches } from './bearer-auth';
+import { decodeSegment } from './path-segment';
+import { isProductionDeployment } from './deployment-environment';
 import { buildHermesTransport } from './reviewer-harness/hermes/transport-factory';
 import { NO_RUNTIME_EVIDENCE } from '../src/relay/mission/reviewer-harness/harness-readiness';
 import { safeText } from './redact';
@@ -138,7 +140,7 @@ export async function handleReviewerRoute(
     // The bridge no longer probes its OWN container. It asks whichever
     // transport is configured — which on a hosted deployment is a dedicated
     // Hermes service, and never this process's PATH.
-    const built = await buildHermesTransport({ env, production: env.NODE_ENV === 'production' });
+    const built = await buildHermesTransport({ env, production: isProductionDeployment(env) });
     if (!built.ok) {
       return ok({
         harness: 'hermes',
@@ -157,7 +159,7 @@ export async function handleReviewerRoute(
 
   /* ------------------------- test connection (via transport, may contact) --- */
   if (method === 'POST' && path === '/reviewer/test-connection') {
-    const built = await buildHermesTransport({ env, production: env.NODE_ENV === 'production' });
+    const built = await buildHermesTransport({ env, production: isProductionDeployment(env) });
     if (!built.ok) {
       return ok({
         harness: 'hermes',
@@ -223,8 +225,11 @@ export async function handleReviewerRoute(
   const statusMatch = /^\/reviewer\/(status|inspect|stop)\/(.+)$/.exec(path);
   if (statusMatch !== null) {
     const action = statusMatch[1];
-    const missionId = decodeURIComponent(statusMatch[2]);
-    if (missionId.trim() === '') {
+    // `decodeSegment`, not a bare `decodeURIComponent`: `%ZZ` in the path is a
+    // malformed client request, and letting the URIError escape made this
+    // route answer 500 through the server's generic catch.
+    const missionId = decodeSegment(statusMatch[2]);
+    if (missionId === null) {
       return err(422, 'validation_failed', 'A mission id is required.');
     }
     if (method === 'GET' && action === 'status') return await runs.status(missionId);

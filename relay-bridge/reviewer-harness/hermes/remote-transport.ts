@@ -1,7 +1,7 @@
 import type { HarnessRuntimeEvidence } from '../../../src/relay/mission/reviewer-harness/harness-readiness';
 import { NO_RUNTIME_EVIDENCE } from '../../../src/relay/mission/reviewer-harness/harness-readiness';
 import {
-  HERMES_FAILURE_KINDS, HERMES_SERVICE_PROTOCOL,
+  HERMES_FAILURE_KINDS, HERMES_REVIEW_STATUSES, HERMES_SERVICE_PROTOCOL,
   type HermesConnectionEvidence, type HermesFailureKind, type HermesReviewerTransport,
   type RemoteHermesCancelResult, type RemoteHermesReviewInput,
   type RemoteHermesReviewStart, type RemoteHermesReviewState,
@@ -39,10 +39,12 @@ export type FetchLike = (
     body?: string;
     signal?: AbortSignal;
     /**
-     * Always `'manual'`. See `call()` — a followed redirect is how a bearer
-     * token reaches an origin nobody allowlisted.
+     * `'manual'`, and the type admits nothing else. See `call()` — a followed
+     * redirect is how a bearer token reaches an origin nobody allowlisted.
+     * The wider union this used to carry made the docstring the only thing
+     * standing between the credential and a redirect chain.
      */
-    redirect?: 'manual' | 'follow' | 'error';
+    redirect?: 'manual';
   },
 ) => Promise<{
   ok: boolean;
@@ -166,6 +168,29 @@ async function readBounded(
 }
 
 /**
+ * What each refusal kind MEANS to whoever has to act on it. The service takes
+ * care to distinguish a decision from a wait; a single message template on
+ * this side undid that one hop later.
+ *
+ * `capacity_exhausted` and `shutting_down` are temporary and clear without
+ * anyone changing anything. Calling them "a decision by the service, not a
+ * network fault" — the wording every kind used to get — is the precise
+ * inversion of what `service.ts` says about them in the same codebase, and it
+ * tells an operator to go and edit a request that was never the problem.
+ */
+const REFUSAL_GUIDANCE: Partial<Record<HermesFailureKind, string>> = {
+  capacity_exhausted:
+    'The service is at its concurrent-review ceiling. This is temporary and clears as running '
+    + 'reviews finish; the same request may be sent again unchanged.',
+  shutting_down:
+    'The service is draining and is not accepting new reviews. This is temporary and clears when '
+    + 'the deploy finishes; the same request may be sent again unchanged.',
+  validation_failed:
+    'The service understood the request and found it malformed. Sending it again unchanged will '
+    + 'fail again.',
+};
+
+/**
  * A refusal the service composed, recovered from an error status WITHOUT
  * reflecting upstream text.
  *
@@ -183,8 +208,9 @@ function refusalFromBody(status: number, text: string): CallResult | null {
   return {
     ok: false, kind,
     safeMessage:
-      `The Hermes Reviewer service declined the request (HTTP ${status}, ${kind}). `
-      + 'This is a decision by the service, not a network fault.',
+      `The Hermes Reviewer service answered HTTP ${status} (${kind}). `
+      + (REFUSAL_GUIDANCE[kind]
+        ?? 'This is a decision by the service, not a network fault.'),
   };
 }
 
@@ -342,6 +368,11 @@ export function createRemoteHermesTransport(
 
   return {
     mode: 'remote',
+    // This transport enforces NO aggregate ceiling. It is an HTTP client; the
+    // service on the other end owns admission. Reporting `null` is the honest
+    // answer, and it is why the service asks its engine instead of publishing
+    // a module constant that would be wrong here.
+    ceilings: null,
 
     async readiness(): Promise<HarnessRuntimeEvidence> {
       const r = await call('GET', '/v1/readiness');
@@ -451,7 +482,11 @@ export function createRemoteHermesTransport(
         };
       }
       const status = strOrNull(r.body.status);
-      const known = ['running', 'completed', 'failed', 'cancelled', 'timed_out'];
+      // The vocabulary itself, not a second hand-written copy of it: a status
+      // added to the contract and forgotten here would be decoded as
+      // `malformed_response`, which is the bridge calling the service broken
+      // for speaking the agreed protocol.
+      const known: readonly string[] = HERMES_REVIEW_STATUSES;
       if (status === null || !known.includes(status)) {
         return {
           runId, status: 'failed', protocol: HERMES_SERVICE_PROTOCOL, reviewText: null,

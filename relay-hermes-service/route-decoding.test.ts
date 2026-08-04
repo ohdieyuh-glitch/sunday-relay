@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { decodeSegment, handleServiceRoute, SERVICE_TOKEN_ENV } from './service';
+import { createHermesService, decodeSegment, handleServiceRoute, SERVICE_TOKEN_ENV } from './service';
 
 /**
  * MALFORMED PATH ENCODING — the non-blocking review finding that
@@ -37,7 +37,11 @@ const post = (path: string) => handleServiceRoute(
   engine as never,
 );
 
-/** Every shape `decodeURIComponent` is known to throw on. */
+/**
+ * A SAMPLE of shapes `decodeURIComponent` throws on — not an enumeration, and
+ * the earlier comment claimed one. The guard is written to catch every throw
+ * rather than these seven, and `decodeSegment` is the thing that must hold.
+ */
 const MALFORMED = ['%ZZ', '%', '%E0%A4%A', '%C0%80', '%F0%9F', 'a%', '%%'];
 
 describe('a malformed path is a client error, never an internal fault', () => {
@@ -84,4 +88,71 @@ describe('decodeSegment itself', () => {
     expect(decodeSegment('')).toBeNull();
     expect(decodeSegment('%09')).toBeNull();
   });
+});
+
+/* ------------------------------------------------- through the real server */
+
+/**
+ * THE LAYER THE FINDING WAS ACTUALLY ABOUT.
+ *
+ * Every test above calls `handleServiceRoute` directly — which is one layer
+ * BELOW the generic `catch` that turned the URIError into a 500. Proving the
+ * route returns 404 in isolation does not prove the deployed server does, and
+ * it cannot show the other half of the claim: that we did not "fix" the 500 by
+ * converting genuine server faults into 4xx.
+ *
+ * These go over real loopback HTTP against `createHermesService`.
+ */
+describe('the real server answers a malformed path as 404 and a real fault as 500', () => {
+  const TOKEN = 'signal-secret';
+
+  async function withService(
+    engineOverride: Record<string, unknown>,
+    run: (base: string) => Promise<void>,
+  ): Promise<void> {
+    // `createHermesService` reads the token from `process.env`, so the token
+    // is set here and restored afterwards rather than injected.
+    const previous = process.env[SERVICE_TOKEN_ENV];
+    process.env[SERVICE_TOKEN_ENV] = TOKEN;
+    const service = createHermesService({ ...engine, ...engineOverride } as never);
+    await new Promise<void>((resolve) => { service.listen(0, '127.0.0.1', () => resolve()); });
+    const address = service.address();
+    if (address === null || typeof address === 'string') throw new Error('no port');
+    try {
+      await run(`http://127.0.0.1:${address.port}`);
+    } finally {
+      await new Promise<void>((resolve) => { service.close(() => resolve()); });
+      if (previous === undefined) delete process.env[SERVICE_TOKEN_ENV];
+      else process.env[SERVICE_TOKEN_ENV] = previous;
+    }
+  }
+
+  it('GET /v1/reviews/%ZZ is 404 over real HTTP', async () => {
+    await withService({}, async (base) => {
+      const res = await fetch(`${base}/v1/reviews/%ZZ`, {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      expect(res.status).toBe(404);
+      const body = await res.json() as { kind: string; error: string };
+      expect(body.kind).toBe('not_found');
+      // And it does NOT reuse the unknown-route sentence: the operation was
+      // known, the run id was not.
+      expect(body.error).not.toBe('Unknown Hermes Reviewer operation.');
+    });
+  }, 30_000);
+
+  it('a genuine engine fault is STILL 500 — the repair did not convert faults into 4xx', async () => {
+    await withService({
+      getReview: async () => { throw new Error('the engine really broke'); },
+    }, async (base) => {
+      const res = await fetch(`${base}/v1/reviews/run-1`, {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      expect(res.status).toBe(500);
+      const body = await res.json() as { kind: string; error: string };
+      expect(body.kind).toBe('internal_error');
+      // The cause is never reflected: it can carry a prompt, a path or a key.
+      expect(body.error).not.toContain('really broke');
+    });
+  }, 30_000);
 });

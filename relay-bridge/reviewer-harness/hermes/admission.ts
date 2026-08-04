@@ -73,13 +73,26 @@ export const ADMISSION_CEILINGS: AdmissionCeilings = Object.freeze({
    */
   maxActiveReviews: 4,
   /**
-   * Sum of the effective `timeoutMs` of active runs. With a 600 000 ms per-run
-   * ceiling this admits four full-length runs and refuses a fifth even if a
-   * slot were free — the two bounds are deliberately not redundant, because a
-   * fleet of short runs and a fleet of long ones are different amounts of
-   * outstanding work.
+   * Sum of the effective `timeoutMs` of active runs.
+   *
+   * THIS NUMBER WAS 2_400_000 AND COULD NEVER REFUSE ANYTHING. That is exactly
+   * `maxActiveReviews × SERVICE_LIMIT_CEILINGS.timeoutMs`, and the count check
+   * returns first — so this check only ever ran with `activeCount ≤ 3`, where
+   * the largest reachable sum is `3 × 600_000 + 600_000 = 2_400_000`, and the
+   * predicate is a strict `>`. No input to the service could reach it, while
+   * the docstring called the two bounds "deliberately not redundant" and the
+   * README published the ceiling to operators as a second limit. A ceiling
+   * that cannot fire is a claimed gate the code does not have — the same
+   * defect class as the comment F2 was raised about.
+   *
+   * 1_800_000 ms (30 minutes) is reachable and means something: three
+   * full-length 600 s runs fill it, and a fourth is refused **even though a
+   * slot is free**. Four runs still fit whenever they average 450 s or less,
+   * which the harness default of 180 s (`runner.ts`) comfortably does. So the
+   * two bounds now genuinely differ: `maxActiveReviews` binds a fleet of short
+   * runs, this binds a fleet of long ones.
    */
-  maxActiveTimeoutBudgetMs: 2_400_000,
+  maxActiveTimeoutBudgetMs: 1_800_000,
   /**
    * Terminal runs retained for `GET /v1/reviews/:id` after they finish.
    * Beyond this, the oldest are evicted. Relay Core holds the durable record;
@@ -88,7 +101,11 @@ export const ADMISSION_CEILINGS: AdmissionCeilings = Object.freeze({
   maxRetainedTerminalRuns: 64,
 });
 
-export const ADMISSION_REFUSAL_REASONS = ['active_run_limit', 'active_wall_clock_limit'] as const;
+export const ADMISSION_REFUSAL_REASONS = [
+  'active_run_limit',
+  'active_wall_clock_limit',
+  'unusable_timeout_request',
+] as const;
 export type AdmissionRefusalReason = (typeof ADMISSION_REFUSAL_REASONS)[number];
 
 export interface AdmissionState {
@@ -123,6 +140,24 @@ export function evaluateAdmission(
   requestedTimeoutMs: number,
   ceilings: AdmissionCeilings = ADMISSION_CEILINGS,
 ): AdmissionVerdict {
+  /**
+   * A RESERVATION MUST BE A NUMBER, OR THE BUDGET STOPS BEING ONE.
+   *
+   * `NaN - x` is `NaN` forever: one non-finite reservation would poison
+   * `activeTimeoutBudgetMs` for the life of the process and silently disable
+   * the wall-clock ceiling with no error and no way back. The service's own
+   * `parseReviewBody` already requires a positive safe integer, so nothing in
+   * the deployed path can arrive here malformed — but this module is exported,
+   * documented as the authority, and testable on its own, and a policy module
+   * that trusts its caller is not an authority.
+   */
+  if (!Number.isFinite(requestedTimeoutMs) || requestedTimeoutMs <= 0) {
+    return {
+      admitted: false,
+      reason: 'unusable_timeout_request',
+      safeMessage: 'A review must declare a positive wall-clock timeout before it can be admitted.',
+    };
+  }
   if (state.activeCount >= ceilings.maxActiveReviews) {
     return {
       admitted: false,
