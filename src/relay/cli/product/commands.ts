@@ -244,7 +244,7 @@ export function productProjectView(
       // health and says nothing has reported, rather than a wall of zeroes.
       const view = renderOperationsView({
         caps,
-        view: projectOperations(emptyOperationalRecord(project.id), new Date().toISOString()),
+        view: projectOperations(emptyOperationalRecord(project.projectId), new Date().toISOString()),
       });
       lines.push(...view.lines);
       json = view.json;
