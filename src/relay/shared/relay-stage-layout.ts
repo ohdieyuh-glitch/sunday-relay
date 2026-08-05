@@ -224,6 +224,12 @@ export interface RelayStageLayout {
    * stage by less than the rounding step is still reported as overflowing.
    */
   readonly requestedWidth: number;
+  /**
+   * `requestedWidth` as a surface should PRINT it beside the capacity. Computed
+   * here so both surfaces say the same thing rather than each deciding how to
+   * phrase a rounded number that sits on the boundary.
+   */
+  readonly requestedWidthLabel: string;
   readonly capacity: number;
   /** True when the cast asks for more room than the stage has. */
   readonly overflowing: boolean;
@@ -244,11 +250,15 @@ export function layoutStage(input: {
   // stopped describing its cast and started describing IEEE 754 — but rounding
   // BEFORE the comparison would let a cast overflowing by less than half a
   // hundredth of a dog-width be reported as fitting.
+  // `?? 1` matches `placeActor`'s footprint default. They used to disagree: an
+  // actor with `width: NaN` was PLACED one dog wide and COUNTED as zero, so a
+  // stage could be visibly full while reporting an empty cast.
   const measuredWidth = input.actors.reduce(
-    (total, actor) => total + (sanitiseUnits(actor.width) ?? 0),
+    (total, actor) => total + (sanitiseUnits(actor.width) ?? 1),
     0,
   );
   const requestedWidth = roundUnits(measuredWidth);
+  const overflowing = measuredWidth > capacity;
   const placements = [...input.actors]
     .map((actor) => placeActor(actor, capacity))
     // Nearer actors paint later, so a cub in front of the Leopard is in front.
@@ -258,8 +268,14 @@ export function layoutStage(input: {
     shape,
     placements,
     requestedWidth,
+    requestedWidthLabel: overflowing && requestedWidth <= capacity
+      // Rounding can print a figure that does not visibly exceed the capacity
+      // beside it — "room for about 6, and 6 were placed, some are
+      // overlapping" reads as a contradiction. Said in words instead.
+      ? `slightly more than ${capacity}`
+      : String(requestedWidth),
     capacity,
-    overflowing: measuredWidth > capacity,
+    overflowing,
     emptyReason: input.actors.length === 0
       ? (input.emptyReason ?? 'No Relay agent is on stage.')
       : null,

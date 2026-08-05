@@ -74,7 +74,7 @@ export function renderStageView(input: StageViewInput): { lines: string[]; json:
   if (layout.overflowing) {
     lines.push(
       p.tone('amber', `  This stage has room for about ${layout.capacity} dog-widths, `
-        + `and ${layout.requestedWidth} were placed. Some are overlapping.`),
+        + `and ${layout.requestedWidthLabel} were placed. Some are overlapping.`),
       '',
     );
   }

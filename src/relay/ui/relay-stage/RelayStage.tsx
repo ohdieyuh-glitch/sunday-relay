@@ -132,7 +132,7 @@ export function RelayStage({
         // stacked its cast would be claiming room it does not have.
         <p className="rst-overflow" role="status">
           {`This stage has room for about ${layout.capacity} dog-widths, and `}
-          {`${layout.requestedWidth} were placed. Some are overlapping.`}
+          {`${layout.requestedWidthLabel} were placed. Some are overlapping.`}
         </p>
       )}
     </section>

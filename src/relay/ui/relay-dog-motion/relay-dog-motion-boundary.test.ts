@@ -115,8 +115,21 @@ describe('relay dog motion boundary', () => {
     expect(/filter:\s*drop-shadow|box-shadow:[^;]*rgba\(\s*255/iu.test(css)).toBe(false);
   });
 
-  it('the CSS prevents horizontal overflow and honours reduced motion', () => {
-    expect(/\.rdm\s*\{[^}]*overflow-x:\s*hidden/u.test(css)).toBe(true);
+  it('the boundary itself no longer clips, and honours reduced motion', () => {
+    // THIS ASSERTION USED TO SAY THE OPPOSITE, AND PASSED FOR THE WRONG REASON.
+    //
+    // It required `.rdm { overflow-x: hidden }`. That declaration was deleted —
+    // CSS forces `overflow-y` to `auto` when the other axis is `hidden`, so a
+    // rule written to stop horizontal scroll was clipping the dog vertically —
+    // and this line kept passing anyway, because the comment left in its place
+    // EXPLAINS the removal using the words the regex was matching, and `[^}]*`
+    // walks straight through a comment.
+    //
+    // Comments are stripped, and the assertion is inverted to match the code.
+    // Horizontal containment is the PAGE's job now: `.rpw-stage-bounds` in the
+    // workspace, `.reh` on the home screen.
+    const declarations = css.replace(/\/\*[\s\S]*?\*\//gu, '');
+    expect(/\.rdm\s*\{[^}]*overflow/su.test(declarations)).toBe(false);
     expect(/@media \(prefers-reduced-motion: reduce\)/u.test(css)).toBe(true);
     expect(/\.rdm--reduced[^{]*\{[^}]*animation:\s*none/su.test(css)).toBe(true);
   });

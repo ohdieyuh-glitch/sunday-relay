@@ -34,7 +34,14 @@
   line-height: 1.55;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
+  /* `clip`, not `hidden`. `overflow-x: hidden` forces `overflow-y` to compute
+     as `auto`, which makes this root a scroll container and CLIPS ANYTHING THAT
+     LEAVES IT VERTICALLY — including the home dog, which renders inside the
+     same `RelayDogMotionBoundary` the workspace uses and is meant to be able to
+     jump. `clip` stops horizontal scrolling and leaves the vertical axis
+     genuinely visible. Same reasoning, and the same fix, as
+     `.rpw-stage-bounds`. */
+  overflow-x: clip;
 }
 
 /* Technical grid + restrained scanlines. Decorative, never interactive. */

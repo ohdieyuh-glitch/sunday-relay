@@ -817,7 +817,14 @@ describe('REGRESSION — untouched states stay untouched', () => {
     const homeCss = readFileSync(
       join(dir, '..', 'entry-home', 'relay-entry-home.css'), 'utf8',
     ).replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(homeCss).toMatch(/overflow-x:\s*hidden/);
+    // Scoped to the ROOT rule, not grepped across the file: an unrelated
+    // `.reh-thumbnail { overflow-x: hidden }` would otherwise keep this green
+    // after the containment it names had been deleted.
+    // `clip` on the home root too: `hidden` would force `overflow-y: auto`
+    // there and clip the home dog's jump, which is the same defect this whole
+    // test exists to prevent in the workspace.
+    expect(homeCss).toMatch(/\.reh\s*\{[^}]*overflow-x:\s*clip/s);
+    expect(homeCss).not.toMatch(/\.reh\s*\{[^}]*overflow-x:\s*hidden/s);
 
     // The decor box keeps its own clip, and should: it is a sibling overlay
     // sized to the sprite, and its job is to keep dig-clods and sleep-marks on

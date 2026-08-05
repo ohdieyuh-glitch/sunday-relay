@@ -299,3 +299,40 @@ describe('the overflow verdict comes from the measurement, not the display', () 
     expect(layout.overflowing).toBe(false);
   });
 });
+
+describe('the printed figure never contradicts the warning beside it', () => {
+  it('says "slightly more than" rather than a number equal to the capacity', () => {
+    // "room for about 6 dog-widths, and 6 were placed. Some are overlapping."
+    // is a sentence that argues with itself.
+    const layout = layoutStage({
+      actors: Array.from({ length: 5 }, (_, i) => actor({ id: `a${i}`, width: 1.2005 })),
+      viewportWidthPx: 1440,
+    });
+    expect(layout.overflowing).toBe(true);
+    expect(layout.requestedWidth).toBe(6);
+    expect(layout.requestedWidthLabel).toBe('slightly more than 6');
+  });
+
+  it('prints the plain number when it already exceeds the capacity', () => {
+    const layout = layoutStage({
+      actors: [actor({ width: 9 })],
+      viewportWidthPx: 1440,
+    });
+    expect(layout.requestedWidthLabel).toBe('9');
+  });
+});
+
+describe('a footprint is counted the same way it is placed', () => {
+  it('an actor with a nonsense width occupies one dog, in BOTH answers', () => {
+    // These used to disagree: layoutStage summed `?? 0` while placeActor
+    // defaulted `?? 1`, so a stage could be visibly full and report an empty
+    // cast.
+    const layout = layoutStage({
+      actors: [actor({ width: Number.NaN })],
+      viewportWidthPx: 1440,
+    });
+    expect(layout.requestedWidth).toBe(1);
+    const placement = placeActor(actor({ width: Number.NaN }), WIDE_CAPACITY);
+    expect(placement.widthPercent).toBeCloseTo(100 / WIDE_CAPACITY, 5);
+  });
+});
