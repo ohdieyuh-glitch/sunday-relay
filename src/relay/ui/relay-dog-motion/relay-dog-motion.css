@@ -12,9 +12,18 @@
   justify-content: flex-start;
   width: 100%;
   max-width: 100%;
-  /* The travel track never pushes the page — patrol cannot cause
-     horizontal scrolling. */
-  overflow-x: hidden;
+  /* NO CLIP HERE. This used to carry `overflow-x: hidden` to stop patrol travel
+     pushing the page sideways. Two things were wrong with that.
+
+     First, CSS does not let one axis clip while the other stays visible: with
+     `overflow-x: hidden`, `overflow-y` computes to `auto`. So a rule written to
+     bound HORIZONTAL travel was also cutting the dog VERTICALLY — a jump was
+     clipped by the very box that was supposed to only stop a scrollbar.
+
+     Second, the page no longer needs it. The Relay Stage owns the region now,
+     and the containment that keeps patrol from scrolling the page belongs to
+     the page, not to the actor. `.rpw-stage-bounds` carries `overflow-x: clip`,
+     which — unlike `hidden` — leaves `overflow-y: visible` intact. */
 }
 
 /* Horizontal patrol position. Transform only — no layout thrash. */

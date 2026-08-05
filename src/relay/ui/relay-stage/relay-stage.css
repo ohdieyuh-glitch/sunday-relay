@@ -1,0 +1,106 @@
+/* SUNDAY RELAY — THE RELAY STAGE.
+ *
+ * FRAMELESS. There is deliberately no border, no background, no radius and no
+ * shadow on `.rst`. The stage is a region of the page, not a widget on it. It
+ * replaces a full-width band whose scenery was clipped to a fixed 128x90 box —
+ * ninety pixels of height, one occupant, and anything that left the box was cut.
+ *
+ * ONLY THE BACKDROP CLIPS. An actor mid-jump or mid-transformation must not be
+ * cut by the thing that exists to give it room. */
+
+.rst {
+  position: relative;
+  width: 100%;
+  /* aspect-ratio and min-height come from the layout projection, inline, so a
+     narrow viewport gets a taller stage rather than a squeezed one. */
+  display: block;
+  /* No border. No background. No radius. No shadow. Frameless. */
+}
+
+.rst-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The one layer that clips, so a scene never bleeds past the stage. */
+.rst-layer.is-clipped {
+  overflow: hidden;
+}
+
+/* Everything else must be free to exceed the stage box. */
+.rst-layer:not(.is-clipped) {
+  overflow: visible;
+}
+
+.rst-layer--backdrop { z-index: 0; }
+.rst-layer--far { z-index: 1; }
+.rst-layer--ground { z-index: 2; }
+.rst-layer--actors { z-index: 3; }
+.rst-layer--effects { z-index: 4; }
+.rst-layer--foreground { z-index: 5; }
+
+/* The actors layer is the only one a pointer can reach — scenery and effects
+   are decoration and must never swallow a click meant for a control. */
+.rst-layer--actors { pointer-events: auto; }
+
+.rst-actor {
+  position: absolute;
+  /* `left`/`bottom`, `width` and the scale come from the layout projection. The
+     translateX(-50%) centres an actor on its own x, so a wider Leopard grows
+     around its position rather than drifting right.
+
+     The WIDTH is not cosmetic. An absolutely positioned box with no width
+     shrink-to-fits, so an actor whose own layer asks for `width: 100%` — the
+     Relay Dog's patrol track does exactly that — would resolve to the width of
+     its own sprite and measure a track of nearly zero. Patrol would then switch
+     itself off silently, with no error anywhere. */
+  transform-origin: bottom center;
+  will-change: transform;
+}
+
+/* THE PAGE'S containment, not the stage's and not the actor's.
+
+   `clip` rather than `hidden` on purpose: `overflow-x: hidden` forces
+   `overflow-y` to `auto`, which would re-clip every jumping actor and undo the
+   whole point of the stage. `overflow-x: clip` leaves the vertical axis
+   genuinely visible. */
+.rpw-stage-bounds {
+  overflow-x: clip;
+}
+
+.rst-empty,
+.rst-overflow {
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  transform: translateX(-50%);
+  margin: 0;
+  max-width: 90%;
+  text-align: center;
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--text-dim, #8b8578);
+  z-index: 6;
+}
+
+.rst-overflow {
+  color: var(--warn, #d9a441);
+}
+
+/* Reduced motion suppresses parallax and effects. The LAYOUT is identical —
+   a user who asked for less motion does not get a different scene. */
+.rst--still .rst-layer--effects,
+.rst--still .rst-layer--far {
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rst .rst-layer--effects,
+  .rst .rst-layer--far {
+    animation: none !important;
+    transition: none !important;
+  }
+}

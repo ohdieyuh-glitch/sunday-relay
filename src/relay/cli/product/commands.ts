@@ -8,6 +8,8 @@ import {
 } from './renderer';
 import { paint } from './theme';
 import { safeText } from './safety';
+import { renderStageView } from './stage';
+import type { RelayStageActor } from '../../shared/relay-stage-layout';
 
 /**
  * Relay CLI product commands (Prompt 8.6) — the NON-INTERACTIVE command
@@ -126,13 +128,25 @@ export function productProjectStatus(store: StateStore, caps: CliCaps, reference
   return { lines: renderProjectHome(vm, caps), json: vm, exitCode: 0 };
 }
 
+/**
+ * The cast the CLI knows about — one actor, for the same reason the website
+ * has one: the Relay Dog is the only agent with artwork and a state model.
+ * Naming a Leopard here would be inventing a cast.
+ */
+const RELAY_CLI_STAGE_CAST: readonly RelayStageActor[] = Object.freeze([
+  Object.freeze({
+    id: 'relay-dog', x: 0.5, depth: 1, width: 1, track: 6, layer: 'actors' as const,
+  }),
+]);
+
 export type ProjectView =
-  | 'tasks' | 'findings' | 'repairs' | 'evidence' | 'history' | 'settings' | 'workforce' | 'research';
+  | 'tasks' | 'findings' | 'repairs' | 'evidence' | 'history' | 'settings' | 'workforce'
+  | 'research' | 'stage';
 
 const VIEW_ROUTE: Record<ProjectView, string> = {
   tasks: 'RLY / TASKS', findings: 'RLY / FINDINGS', repairs: 'RLY / FINDINGS',
   evidence: 'RLY / EVIDENCE', history: 'RLY / HISTORY', settings: 'RLY / SETTINGS',
-  workforce: 'RLY / WORKFORCE', research: 'RLY / RESEARCH',
+  workforce: 'RLY / WORKFORCE', research: 'RLY / RESEARCH', stage: 'RLY / STAGE',
 };
 
 /** Non-interactive project sub-surfaces (`relay project findings|tasks|
@@ -207,6 +221,18 @@ export function productProjectView(
         p.dim('The Prompt Architect researches only approved topics; new knowledge requires your approval before it enters the Project Brain.'),
       );
       json = { research: label };
+      break;
+    }
+    case 'stage': {
+      // The SAME projection the website renders. A terminal cannot draw the
+      // stage; it can answer every question the stage answers.
+      const view = renderStageView({
+        caps,
+        actors: RELAY_CLI_STAGE_CAST,
+        selectedBackdrop: project.stageBackdrop,
+      });
+      lines.push(...view.lines);
+      json = view.json;
       break;
     }
     case 'settings':

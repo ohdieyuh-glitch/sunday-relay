@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { RelayProjectHeader } from './RelayProjectHeader';
 import { RelayConsole } from './RelayConsole';
@@ -14,6 +14,35 @@ import { RelayVerificationSummary } from './RelayVerificationSummary';
 import { RelayResearchStatus } from './RelayResearchStatus';
 import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
+import {
+  RelayStage, RelayStageBackdrop, RelayStageBackdropPicker,
+  type RelayBackdropId, type RelayStageActor,
+} from '../relay-stage';
+import { useViewportWidth } from './use-viewport-width';
+
+/** The width assumed only when there is no window to ask. */
+const DEFAULT_VIEWPORT_WIDTH_PX = 1440;
+
+/**
+ * WHO IS ON THE WORKSPACE STAGE TODAY.
+ *
+ * One actor, and the honest reason there is one: the Relay Dog is the only
+ * agent this surface has artwork and a state model for. The Leopard, the cubs
+ * and the vehicles have slots in the stage's contract and no sprites yet, and
+ * a stage that drew them from nothing would be inventing a cast — the same
+ * defect as a panel that renders a run it never fetched.
+ *
+ * `depth: 1` puts the Dog at the front of the ground plane, where the old band
+ * effectively pinned it. A second actor arrives by adding a row here.
+ */
+const RELAY_WORKSPACE_CAST: readonly RelayStageActor[] = Object.freeze([
+  // One dog-width of footprint, but it patrols the whole stage: `track` is what
+  // its patrol engine measures, and a track the size of the sprite would switch
+  // patrol off without failing anywhere.
+  Object.freeze({
+    id: 'relay-dog', x: 0.5, depth: 1, width: 1, track: 6, layer: 'actors' as const,
+  }),
+]);
 import { RelayProjectFooter } from './RelayProjectFooter';
 import { RelayPspAgentImport } from '../psp-import';
 import type { RelayWorkspaceUsage } from '../usage';
@@ -124,6 +153,10 @@ export function RelayProjectWorkspace(
     terminalOpen,
     terminalFullScreen = false,
     reducedMotion = false,
+    // No default: absent means "measure it", not "assume a desktop".
+    viewportWidthPx,
+    // Absent means no scene, which is a choice rather than a fallback.
+    stageBackdrop,
     onSendProjectMessage,
     onApproveDecision,
     onRejectDecision,
@@ -137,10 +170,32 @@ export function RelayProjectWorkspace(
     onOpenFinding,
     onOpenRepair,
     onReturnHome,
+    onSelectStageBackdrop,
   } = props;
 
   const completion = completionDisplay({ completionState, reviewerState, findings, repairs });
   const openTasks = manualTasks.filter((t) => t.status === 'open').length;
+
+  /**
+   * THE VIEWPORT, MEASURED. `viewportWidthPx` remains an explicit override so a
+   * test or a non-browser host can state the width; when it is absent the host
+   * observes one instead of assuming a desktop.
+   */
+  const measuredWidthPx = useViewportWidth(DEFAULT_VIEWPORT_WIDTH_PX);
+  const observedViewportWidthPx = viewportWidthPx ?? measuredWidthPx;
+
+  /**
+   * THE BACKDROP CHOICE lives here so the picker is genuinely operable. A host
+   * that wants the choice remembered passes `onSelectStageBackdrop` and stores
+   * it; without one the scene still changes, and simply does not survive a
+   * reload. Reporting a selection and persisting it are different jobs.
+   */
+  const [localBackdrop, setLocalBackdrop] = useState<RelayBackdropId | null>(null);
+  const selectedBackdrop = localBackdrop ?? stageBackdrop;
+  const handleSelectBackdrop = useCallback((id: RelayBackdropId) => {
+    setLocalBackdrop(id);
+    onSelectStageBackdrop?.(id);
+  }, [onSelectStageBackdrop]);
 
   /**
    * THE REVIEWER HARNESS CATALOG — projected from the canonical domain, never
@@ -188,11 +243,36 @@ export function RelayProjectWorkspace(
 
 
       <main className="rpw-main">
-        {/* The Relay Dog sits centered between the workforce strip and the
-            Relay Console (founder direction). */}
-        <div className="rpw-dogzone">
-          <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} />
+        {/* THE RELAY STAGE, between the workforce strip and the Relay Console.
+            It replaces `.rpw-dogzone` + the motion boundary's full-width band:
+            a frameless region with layers and depth, rather than ninety pixels
+            of clipped strip with room for exactly one occupant. The Dog is its
+            first actor; a wider Leopard, cubs, vehicles and effects have slots
+            waiting rather than a rectangle to be squeezed into. */}
+        <div className="rpw-stage-bounds">
+          <RelayStage
+            className="rpw-stage"
+            actors={RELAY_WORKSPACE_CAST}
+            viewportWidthPx={observedViewportWidthPx}
+            reducedMotion={reducedMotion}
+            label="Relay stage"
+            backdrop={(
+              <RelayStageBackdrop backdrop={selectedBackdrop} reducedMotion={reducedMotion} />
+            )}
+            render={(id) => (id === 'relay-dog'
+              ? <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} />
+              : null)}
+          />
         </div>
+        {/* The picker is MOUNTED, so "two selectable backdrops" is a fact about
+            the shipped website and not only about the catalog. Selection is
+            local to this screen; a host that wants it remembered passes
+            `onSelectStageBackdrop` and stores it. */}
+        <RelayStageBackdropPicker
+          selected={selectedBackdrop}
+          reducedMotion={reducedMotion}
+          onSelect={handleSelectBackdrop}
+        />
         {completion.showVerifiedComplete ? (
           <section className="rpw-completion rpw-completion--verified" aria-label="Mission verdict">
             <p className="rpw-completion-verdict">

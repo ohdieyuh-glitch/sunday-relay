@@ -12,6 +12,7 @@
 
 import type { EventTruthClass, TerminalEventCategory } from '../../mission/wire-contracts';
 import type { RelayAgentOperatingProjection } from '../../mission';
+import type { RelayBackdropId } from '../relay-stage';
 
 /* ----------------------------------------------------------------- modes */
 
@@ -289,6 +290,34 @@ export interface RelayProjectWorkspaceProps {
   /** Mobile full-screen terminal presentation. */
   terminalFullScreen?: boolean;
   reducedMotion?: boolean;
+  /**
+   * Which stage backdrop the user selected.
+   *
+   * A string rather than the union, deliberately: it arrives from stored
+   * preference and may name a scene THIS BUILD DOES NOT HAVE. `resolveBackdrop`
+   * turns an unknown id into `none` rather than into a substitute, because a
+   * preference from an older build is a fact about that build and not an
+   * instruction to show something else.
+   */
+  stageBackdrop?: string;
+  /**
+   * Told when the user picks a scene. OPTIONAL, and its absence does not
+   * disable the picker: selection works either way and simply does not survive
+   * a reload. Reporting a choice and storing one are different jobs, and the
+   * workspace only does the first.
+   */
+  onSelectStageBackdrop?: (id: RelayBackdropId) => void;
+  /**
+   * An EXPLICIT viewport width for the Relay Stage, overriding measurement.
+   *
+   * The stage itself measures nothing — it is a pure projection of what someone
+   * else observed, the same discipline this surface uses for a clock. The
+   * observing is the WORKSPACE's job (`use-viewport-width.ts`), so absent means
+   * "measure it", not "assume a desktop". A test or a non-browser host passes
+   * this to state the width it means; only when there is no window at all does
+   * a desktop width stand in.
+   */
+  viewportWidthPx?: number;
   /** Optional demo mission playback control, rendered above the console.
       Absent in fixtures and the honest configured state. */
   missionPlayback?: import('react').ReactNode;

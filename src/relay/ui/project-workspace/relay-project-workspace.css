@@ -38,7 +38,12 @@
   line-height: 1.55;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
+  /* `clip`, not `hidden` — the same reason as `.reh` and `.rpw-stage-bounds`.
+     `overflow-x: hidden` forces `overflow-y` to compute as `auto`, making this
+     root a scroll container that clips anything leaving it vertically. That
+     would re-impose the clip one level OUTSIDE `.rpw-stage-bounds`, defeating
+     the stage's whole purpose from its own ancestor. */
+  overflow-x: clip;
 }
 
 .rpw-grid-bg {
@@ -682,13 +687,15 @@
 .rpw-brain-body dd { font-size: 11px; margin: 0; }
 .rpw-brain-pending { color: var(--rpw-amber); }
 
-/* -------------------------------------------------------------- dog zone */
+/* ------------------------------------------------------------ relay stage */
 
-/* Centered between the workforce strip and the Relay Console. */
-.rpw-dogzone {
-  display: flex;
-  justify-content: center;
-  padding: 2px 0 8px;
+/* `.rpw-dogzone` lived here: a flex row that centred the Relay Dog between the
+   workforce strip and the Relay Console. It is gone, and so is the band it
+   centred — see `src/relay/ui/relay-stage/`. The stage is FRAMELESS and sizes
+   itself by aspect, so this file gives it margins and nothing else. Adding a
+   border, a background or a fixed height here would put the rectangle back. */
+.rpw-stage {
+  margin: 2px 0 8px;
 }
 
 /* -------------------------------------------------------------- footer */

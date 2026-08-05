@@ -1,0 +1,272 @@
+/* SUNDAY RELAY — SELECTABLE STAGE BACKDROPS.
+ *
+ * Two scenes, drawn entirely in CSS and inline SVG. No image, no external
+ * asset, no font — a request that can 404 into a blank stage is a scene that
+ * sometimes is not there.
+ *
+ * Both are DECORATION: aria-hidden, no pointer events, no product meaning.
+ * They live in `.rst-layer--backdrop`, the one layer that clips, so a horizon
+ * can run to the edges while an actor in front is still free to leave the box.
+ *
+ * Motion is minimal and every animated element is stilled by
+ * `prefers-reduced-motion` and by `.rsb--still`. The LAYOUT is identical either
+ * way: a user who asked for less motion gets the same scene, not a different one. */
+
+.rsb {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* ===================================================================== *
+ * JUNGLE
+ * ===================================================================== */
+
+.rsb--jungle .rsb-sky {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 70% at 50% 0%, #d8c88a 0%, #8fa062 26%, #40603f 58%, #1d3327 100%);
+}
+
+/* One shaft of light through the canopy. The only moving element, and the
+   first thing reduced motion stills. */
+.rsb--jungle .rsb-shaft {
+  position: absolute;
+  top: -10%;
+  left: 46%;
+  width: 22%;
+  height: 120%;
+  background: linear-gradient(
+    to bottom,
+    rgba(240, 226, 160, 0.32) 0%,
+    rgba(240, 226, 160, 0.12) 45%,
+    rgba(240, 226, 160, 0) 78%
+  );
+  transform: rotate(9deg);
+  transform-origin: top center;
+  filter: blur(6px);
+  animation: rsb-shaft-drift 17s ease-in-out infinite alternate;
+}
+
+@keyframes rsb-shaft-drift {
+  from { transform: rotate(7deg) translateX(-2%); opacity: 0.85; }
+  to { transform: rotate(12deg) translateX(3%); opacity: 1; }
+}
+
+.rsb--jungle .rsb-canopy {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  width: 100%;
+  display: block;
+}
+
+/* Depth entirely by colour and height: far is flat and desaturated, near is
+   dark and high-contrast. No blur, so the silhouette stays crisp beside a
+   pixel-art actor. */
+.rsb--jungle .rsb-canopy--far { height: 58%; fill: #56724a; opacity: 0.75; }
+.rsb--jungle .rsb-canopy--mid { height: 46%; fill: #33512f; opacity: 0.9; }
+.rsb--jungle .rsb-canopy--near { height: 34%; fill: #16281b; }
+
+.rsb--jungle .rsb-undergrowth {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 26%;
+  fill: #12211a;
+  display: block;
+}
+
+/* ===================================================================== *
+ * SPACE STATION — the window is the point: VISIBLE OUTER SPACE.
+ * ===================================================================== */
+
+.rsb--space_station {
+  background: #0a0d14;
+}
+
+/* The void, seen through the window. */
+.rsb--space_station .rsb-void {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 6%;
+  bottom: 26%;
+  background: radial-gradient(120% 120% at 30% 20%, #131a2c 0%, #070910 70%, #04050a 100%);
+  overflow: hidden;
+}
+
+/* Stars as repeating gradients rather than an image. Two layers at different
+   sizes and opacities read as depth without a single request. */
+.rsb--space_station .rsb-stars {
+  position: absolute;
+  inset: -20%;
+  background-image:
+    radial-gradient(1.4px 1.4px at 12% 22%, #fff 50%, transparent 51%),
+    radial-gradient(1.2px 1.2px at 42% 12%, #e8eeff 50%, transparent 51%),
+    radial-gradient(1.6px 1.6px at 68% 34%, #fff 50%, transparent 51%),
+    radial-gradient(1.1px 1.1px at 84% 16%, #cfe0ff 50%, transparent 51%),
+    radial-gradient(1.3px 1.3px at 26% 62%, #fff 50%, transparent 51%),
+    radial-gradient(1.2px 1.2px at 58% 74%, #dce8ff 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 90% 58%, #fff 50%, transparent 51%);
+  background-repeat: repeat;
+  background-size: 190px 140px;
+  animation: rsb-drift 240s linear infinite;
+}
+
+.rsb--space_station .rsb-stars--far {
+  background-size: 96px 76px;
+  opacity: 0.5;
+  animation-duration: 420s;
+}
+
+/* Slow enough to be felt rather than watched. */
+@keyframes rsb-drift {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-190px, 0, 0); }
+}
+
+/* A planet limb with a TERMINATOR. The lit edge and the shadow are one
+   gradient, so the light has a direction and the sphere reads as a sphere
+   rather than a flat disc. */
+.rsb--space_station .rsb-planet {
+  position: absolute;
+  left: 52%;
+  bottom: -58%;
+  width: 86%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 26% 26%, #6ea8d8 0%, #3f6f9e 34%, #21405f 56%, #0a1220 74%, #05070d 100%);
+}
+
+.rsb--space_station .rsb-planet-glow {
+  position: absolute;
+  left: 52%;
+  bottom: -58%;
+  width: 86%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  box-shadow: 0 0 46px 6px rgba(110, 168, 216, 0.22);
+}
+
+/* The interior, in front of the void. */
+.rsb--space_station .rsb-window-frame {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 6%;
+  bottom: 26%;
+  border: 3px solid #2b3446;
+  box-shadow: inset 0 0 0 2px #10141d, inset 0 0 30px rgba(0, 0, 0, 0.75);
+}
+
+.rsb--space_station .rsb-rib {
+  position: absolute;
+  top: 0;
+  bottom: 26%;
+  width: 6%;
+  background: linear-gradient(to right, #10141d, #1c2333 45%, #10141d);
+}
+
+.rsb--space_station .rsb-rib--left { left: 0; }
+.rsb--space_station .rsb-rib--right { right: 0; }
+
+.rsb--space_station .rsb-deck {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26%;
+  background:
+    linear-gradient(to bottom, #161c28 0%, #0d1119 100%);
+  border-top: 2px solid #2b3446;
+}
+
+/* ===================================================================== *
+ * REDUCED MOTION — the scene is identical, only the movement stops.
+ * ===================================================================== */
+
+.rsb--still .rsb-shaft,
+.rsb--still .rsb-stars {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rsb .rsb-shaft,
+  .rsb .rsb-stars {
+    animation: none;
+  }
+}
+
+/* ===================================================================== *
+ * THE PICKER
+ *
+ * A radio group rather than a dropdown: the choices are mutually exclusive
+ * and a user must see all of them, including "None" — which is the one this
+ * build ships selected. A hidden option is an option most people never learn
+ * they have.
+ * ===================================================================== */
+
+.rsbp {
+  border: 1px solid var(--hairline, #2b3446);
+  border-radius: var(--radius-md, 4px);
+  margin: 0;
+  padding: 12px 14px 14px;
+}
+
+.rsbp-legend {
+  font-family: var(--font-brand, ui-monospace, monospace);
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  padding: 0 6px;
+}
+
+.rsbp-note,
+.rsbp-description,
+.rsbp-motion {
+  color: var(--text-dim, #8b8578);
+  font-size: 0.8rem;
+  margin: 2px 0 0;
+}
+
+.rsbp-note { margin-bottom: 10px; }
+
+.rsbp-list {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rsbp-item.is-selected .rsbp-name {
+  color: var(--gold-400, #d9a441);
+}
+
+.rsbp-label {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.rsbp-name {
+  font-family: var(--font-brand, ui-monospace, monospace);
+  letter-spacing: 0.04em;
+}
+
+.rsbp-current {
+  border: 1px solid var(--hairline, #2b3446);
+  border-radius: 2px;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  padding: 1px 5px;
+}
+
+/* The motion note is a fact about the scene, so it reads as one. */
+.rsbp-motion { font-style: italic; }

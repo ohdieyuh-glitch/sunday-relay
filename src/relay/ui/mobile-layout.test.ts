@@ -74,9 +74,19 @@ describe('mobile content repairs', () => {
   });
 
   it('the integrated Demo Mission summary stays compact without horizontal overflow', () => {
-    expect(rdm).toMatch(/\.rdm-title strong \{[\s\S]*?overflow-wrap: anywhere/);
-    expect(rdm).toMatch(/@media \(max-width: 640px\)[\s\S]*?\.rdm \{[\s\S]*?max-width: 100%[\s\S]*?overflow-x: hidden/);
-    expect(rdm).toMatch(/\.rdm-toggle \{[\s\S]*?width: 44px;[\s\S]*?height: 44px/);
+    // NAMESPACED `rdms`, NOT `rdm`. This panel used to share `.rdm` — and
+    // `.rdm-body` — with the Relay Dog's motion boundary, and both stylesheets
+    // are imported by the preview app. Equal specificity plus later source
+    // order meant the demo panel's `overflow-x: hidden` landed ON THE DOG below
+    // 640px, re-imposing the exact vertical clip the Relay Stage exists to
+    // remove (CSS forces `overflow-y: auto` when the other axis is `hidden`),
+    // and giving the dog a stray border and panel background at every width.
+    expect(rdm).toMatch(/\.rdms-title strong \{[\s\S]*?overflow-wrap: anywhere/);
+    expect(rdm).toMatch(/@media \(max-width: 640px\)[\s\S]*?\.rdms \{[\s\S]*?max-width: 100%[\s\S]*?overflow-x: hidden/);
+    expect(rdm).toMatch(/\.rdms-toggle \{[\s\S]*?width: 44px;[\s\S]*?height: 44px/);
+    // And the collision cannot come back: this stylesheet declares no rule that
+    // the dog's boundary would also match.
+    expect(rdm).not.toMatch(/(^|[\s,}])\.rdm(?![a-z-])/m);
   });
 });
 
