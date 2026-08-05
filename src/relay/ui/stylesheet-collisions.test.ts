@@ -37,28 +37,38 @@ const SRC = join(__dirname, '..', '..');
  * of two of them.
  */
 const ALLOWED_COLLISIONS: Readonly<Record<string, string>> = Object.freeze({
-  'relay-wordmark': 'relay.css + mission-control.css; both declare colour and font only',
+  // relay.css paints it with a gradient clipped to the text (`background`,
+  // `background-clip: text`, `color: transparent`); mission-control.css
+  // declares NO colour at all — only `font-weight: 700` and
+  // `letter-spacing: 0.18em`, which override relay.css's 800 and 0.22em.
+  'relay-wordmark': 'PRE-EXISTING: mission-control.css declares no colour and overrides font-weight (800 to 700) and letter-spacing (0.22em to 0.18em). Not verified as intentional.',
   // relay.css declares `color` AND `font-size: 12px`; mission-control.css
   // declares colour only, and is imported second, so it overrides only the
   // colour. Stated exactly, because this file's own rule is that a reason
   // which is not true of the code is the rot it exists to prevent.
   'relay-dim': 'relay.css declares colour + font-size; mission-control.css colour only, and overrides only colour',
   // Not harmless, and not claimed to be. `main.tsx` imports relay.css then
-  // mission-control.css, so the later one re-declares padding (6px 12px over
-  // 9px 16px), border-radius, border and min-height on every `.relay-btn`, and
-  // margin-left on `.relay-tagline`. That is pre-existing behaviour on a
-  // surface this change does not touch; it is recorded here as a known
+  // mission-control.css, so the later one overrides padding (9px 16px becomes
+  // 6px 12px) and border-radius, and INTRODUCES min-height: 32px, which
+  // relay.css does not declare at all. On `.relay-tagline` it introduces
+  // margin-left and also overrides colour and font-size. Pre-existing
+  // behaviour on a surface this change does not touch; recorded as a known
   // collision rather than asserted safe.
   'relay-btn': 'PRE-EXISTING: mission-control.css re-declares padding and border-radius and INTRODUCES min-height. Not verified as intentional.',
-  'relay-tagline': 'PRE-EXISTING: mission-control.css INTRODUCES margin-left. Not verified as intentional.',
+  'relay-tagline': 'PRE-EXISTING: mission-control.css INTRODUCES margin-left and also overrides colour and font-size. Not verified as intentional.',
   // Surfaced only once compound selectors became their own key. Both sheets
   // declare these at equal specificity and mission-control.css is imported
-  // second, so its `color` and `border-color` win. relay.css gives `.primary` a
-  // gold GRADIENT background and `font-weight: 700`; mission-control declares
-  // neither, so those survive and combine with mission-control's gold text —
-  // a gold-on-gold button. Recorded as a real, pre-existing collision rather
-  // than asserted harmless; nothing in this change touches either sheet.
-  'primary.relay-btn': 'PRE-EXISTING: both sheets declare it; mission-control.css wins on colour and border-color while relay.css keeps the gradient and font-weight. Not verified as intentional.',
+  // second, so its `color` and `border-color` win. relay.css gives `.primary`
+  // a gradient background and `font-weight: 700`; mission-control declares
+  // neither, so those survive.
+  //
+  // The gradient is NOT gold, whatever the token is called: `--gold-400` is
+  // `#ad9beb` and `--gold-600` is `#8a74cf` — periwinkle and lilac, since the
+  // de-gold reskin. `--mc-gold` is `#d9a441`, a real gold. So the shipped
+  // result is gold text on a lilac gradient. Reading the token NAME instead of
+  // its VALUE is how the previous version of this comment described it as
+  // "gold-on-gold", which is the same defect this file exists to catch.
+  'primary.relay-btn': 'PRE-EXISTING: mission-control.css wins on colour (#d9a441 gold) and border-color; relay.css keeps its periwinkle/lilac gradient and font-weight. Not verified as intentional.',
   'ghost.relay-btn': 'PRE-EXISTING: both sheets declare it; mission-control.css wins on colour while relay.css keeps background and border-color. Not verified as intentional.',
 });
 
@@ -122,7 +132,20 @@ function selectorLists(css: string): string[] {
     }
     buffer += char;
   }
+  // A sheet that ends inside a block was mis-parsed: every rule after the
+  // unbalanced brace was read as nested and therefore skipped, so the rest of
+  // the file went DARK. That is the same silent miss this guard exists to
+  // prevent, so it is reported rather than tolerated.
+  if (stack.length !== 0) throw new UnbalancedStylesheet(stack.length);
   return lists;
+}
+
+/** Thrown rather than swallowed: a mis-parsed sheet must not read as a clean one. */
+class UnbalancedStylesheet extends Error {
+  constructor(depth: number) {
+    super(`stylesheet ends ${depth} block(s) deep — it cannot be scanned for collisions`);
+    this.name = 'UnbalancedStylesheet';
+  }
 }
 
 /** Split a selector list on commas that are not inside `(` or `[`. */
@@ -203,20 +226,38 @@ function definedClasses(css: string): Set<string> {
   return names;
 }
 
-function ownersByClass(files: readonly string[]): Map<string, string[]> {
+function ownersByClass(files: readonly string[]): {
+  owners: Map<string, string[]>; unscannable: string[];
+} {
   const owners = new Map<string, string[]>();
+  const unscannable: string[] = [];
   for (const file of files) {
     const relative = file.slice(SRC.length + 1);
-    for (const name of definedClasses(readFileSync(file, 'utf8'))) {
+    let names: Set<string>;
+    try {
+      names = definedClasses(readFileSync(file, 'utf8'));
+    } catch (error) {
+      // Named, not skipped. A sheet nobody could scan is a hole in the guard,
+      // and a guard with an unreported hole is worse than no guard.
+      unscannable.push(`${relative} — ${(error as Error).message}`);
+      continue;
+    }
+    for (const name of names) {
       owners.set(name, [...(owners.get(name) ?? []), relative]);
     }
   }
-  return owners;
+  return { owners, unscannable };
 }
 
 describe('no class is defined by two stylesheets that share a bundle', () => {
   const files = stylesheets(SRC);
-  const owners = ownersByClass(files);
+  const { owners, unscannable } = ownersByClass(files);
+
+  it('every stylesheet could actually be scanned', () => {
+    // A sheet the parser cannot walk contributes no classes, so it would slip
+    // through every assertion below while looking clean.
+    expect(unscannable, 'these stylesheets could not be scanned').toEqual([]);
+  });
 
   it('parses real stylesheets, so nothing below can pass vacuously', () => {
     expect(files.length, 'found no stylesheets to walk').toBeGreaterThan(10);
@@ -264,10 +305,17 @@ describe('no class is defined by two stylesheets that share a bundle', () => {
     // `\b`-anchored and case-insensitive, because at-rule names are ASCII
     // case-insensitive and `@keyframesish` is a different at-rule.
     expect(of('@keyframesish x { .kept { } }')).toEqual(['kept']);
-    expect(of('@KEYFRAMES x { from { opacity: 0 } }')).toEqual([]);
-    // Tolerates malformed input rather than throwing: an operations guard that
-    // crashes on one odd file is less useful than one that reports the rest.
-    expect(of('.unterminated { color: red')).toEqual(['unterminated']);
+    // Discriminating case. `@KEYFRAMES x { from {} }` yields [] whether or not
+    // the match is case-insensitive, because `from` is not a class — so it
+    // could never fail against the code it names. A CLASS inside the block is
+    // what tells the two apart.
+    expect(of('@KEYFRAMES x { .cls { } }')).toEqual([]);
+    // A sheet that ends inside a block REPORTS rather than returning a partial
+    // answer. Every rule after the unbalanced brace would have been read as
+    // nested and skipped, so the rest of the file went dark — the same silent
+    // miss this guard exists to prevent. The caller names the file instead.
+    expect(() => of('.unterminated { color: red')).toThrow(/cannot be scanned/);
+    // A stray closing brace is recoverable and does not hide anything.
     expect(of('} .stray { }')).toEqual(['stray']);
     // Scoped per selector, not per list.
     expect(of('[data-relay-colorway="m"] .q, .bare { }')).toEqual(['bare']);
