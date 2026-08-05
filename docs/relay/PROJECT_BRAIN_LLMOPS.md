@@ -247,7 +247,12 @@ and where nothing could use it.
 `ClaudeRunOutcome.durationMs` is not nullable — the harness always measured
 something — so falling back to it unconditionally gave a process that never
 started a "total latency" of two milliseconds. A completed run and a timed-out
-one both spent that time working, and their elapsed time is a latency. A spawn
+one both spent that time working, and their elapsed time is a latency.
+
+The timed-out sample is right-censored at the configured runtime limit, so a
+population of timeouts piles at that constant and moves when somebody tunes it.
+Excluding them would be worse — the slowest runs are exactly the ones that time
+out, so dropping them would make a degrading system show IMPROVING latency. A spawn
 failure and a cancellation did not, and contribute no sample at all.
 
 The provider's own `duration_ms` is preferred where it exists, because the
@@ -255,16 +260,32 @@ harness's clock includes spawn and teardown. Both are checked for usability
 rather than nullness: `??` does not fall through on `NaN`, so a garbage provider
 figure used to discard a perfectly good harness measurement.
 
-**Failures stay distinct, most specific cause first.** A spawn failure outranks
-a timeout — a process that never started cannot meaningfully have timed out, and
-reporting the watchdog instead of `ENOENT` sends someone to tune a timeout that
-was never the problem. A cancellation outranks the error flag, because a
-cancelled run's error is a consequence of the cancelling.
+**Failures stay distinct, in the order the shipping classifier already uses.**
+`event-normalizer.ts` ranks them cancelled > timedOut > spawnError > isError,
+and the adapter matches it exactly. Two producers that disagree about what one
+run WAS put two vocabularies into one record, which is what the single-producer
+rule exists to prevent — and the first version broke it by ranking `spawnError`
+first, on the reasoning that a process which never started cannot have timed
+out. `spawnError` does not mean that: it is set from `child.on('error')`, which
+Node also emits when a process cannot be KILLED, and the connector's own event
+says "failed to start OR RUN". So that order reclassified a real timeout whose
+SIGKILL failed as a workspace failure and discarded its latency.
+
+Both co-occurrences are reachable: the watchdog sets `timedOut`, then the kill
+grace window leaves the run cancellable for several more seconds. An operator
+who cancels a hung run in that window has not run a failed provider attempt.
 
 **A cancelled run is not an attempt.** It is not a trial of the provider, and
 counting it would raise the error rate's denominator while never raising its
 numerator — quietly reporting a system as more reliable the more often somebody
 interrupted it. Everything else counts one.
+
+It is not invisible, though. A cancelled run carries its `observedAt` into the
+record even with no latency and no error, because without it a project somebody
+is interrupting all day would be byte-identical to one nobody is using, and
+health would report that nothing had been observed. What it does NOT record is
+the provider time and money a cancelled run still consumed — that belongs to a
+receipt, and no receipt producer exists yet.
 
 **An unrecognised termination becomes an `unknown` error**, never silence.
 Producing no error while still counting the attempt deflates the rate, and the

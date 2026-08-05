@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { observeRun } from './run-observation';
+import { RELAY_RUN_TERMINATIONS, observeRun } from './run-observation';
 import { emptyOperationalRecord } from './llmops-contracts';
 import { ingest } from './operational-intake';
 import { projectOperations } from './llmops-projection';
@@ -82,10 +82,15 @@ describe('the three failures stay three failures', () => {
   });
 });
 
-describe('a terminal outcome is one attempt, and that is what makes a rate possible', () => {
-  it('every termination counts exactly one attempt', () => {
-    for (const termination of ['completed', 'timed_out', 'spawn_failed', 'reported_error'] as const) {
-      expect(observeRun({ termination, observedAt: AT }).attemptsObserved, termination).toBe(1);
+describe('a run that was TRIED is one attempt, and that is what makes a rate possible', () => {
+  it('every termination counts one attempt, except a cancellation', () => {
+    // Listed exhaustively rather than as a hand-picked four: the previous
+    // version silently omitted `cancelled`, so it stayed green while asserting
+    // something that had stopped being true.
+    for (const termination of RELAY_RUN_TERMINATIONS) {
+      expect(
+        observeRun({ termination, observedAt: AT }).attemptsObserved, termination,
+      ).toBe(termination === 'cancelled' ? 0 : 1);
     }
   });
 

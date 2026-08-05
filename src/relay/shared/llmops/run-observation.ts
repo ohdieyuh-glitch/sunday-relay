@@ -20,10 +20,11 @@
  * actually ran, so the fallback is now allowed for exactly the terminations
  * where elapsed time means what it says.
  *
- * WHAT IT CONTRIBUTES THAT NOTHING ELSE COULD. A counted denominator. Every
- * terminal outcome is exactly one attempt, so `attemptsObserved: 1` per run
- * makes the error RATE knowable for the first time — before this, every rate in
- * the product was `unknown_denominator`, correctly but uselessly.
+ * WHAT IT CONTRIBUTES THAT NOTHING ELSE COULD. A counted denominator. A run
+ * that was actually TRIED counts one attempt, which makes the error RATE
+ * knowable for the first time — before this, every rate in the product was
+ * `unknown_denominator`, correctly but uselessly. A cancelled run counts zero;
+ * see `ObservedRunTermination`.
  *
  * STRUCTURAL TYPES, NO IMPORT EDGE. `mission/` must not depend on
  * `connectors/`; the domain does not get to know which adapter is feeding it.
@@ -39,11 +40,12 @@ export interface ObservedRunUsage {
 }
 
 /**
- * How a run ENDED. These are the four terminal branches the connector's
- * normalizer already distinguishes, and they are kept distinct here for the
- * same reason it keeps them distinct: a timeout, a process that never started,
- * and a provider that answered with an error are three different failures, and
- * a surface that merges them cannot tell a user which one to act on.
+ * How a run ENDED. These are the five terminal branches the connector's
+ * normalizer already distinguishes, in its order, and they are kept distinct
+ * here for the reason it keeps them distinct: a cancellation, a timeout, a
+ * process that failed to start or run, and a provider that answered with an
+ * error are four different endings, and a surface that merges them cannot tell
+ * a user which one to act on.
  */
 export type ObservedRunTermination =
   | 'completed'
@@ -57,6 +59,14 @@ export type ObservedRunTermination =
    * reporting a system as more reliable the more often it is interrupted.
    */
   | 'cancelled';
+
+/**
+ * Every termination, as a value, so a test can iterate them exhaustively rather
+ * than hand-picking a list that silently stops matching the union.
+ */
+export const RELAY_RUN_TERMINATIONS = [
+  'completed', 'timed_out', 'spawn_failed', 'reported_error', 'cancelled',
+] as const;
 
 export interface ObservedRun {
   readonly termination: ObservedRunTermination;
@@ -83,6 +93,12 @@ export interface ObservedRun {
 export interface RunObservation {
   readonly latency: readonly RelayLatencySample[];
   readonly errors: readonly RelayErrorEvent[];
+  /**
+   * When the run ended. Carried even when it produced no latency and no error,
+   * so a project whose only activity is cancelled runs is not mistaken for one
+   * with no activity at all.
+   */
+  readonly observedAt: string;
   /**
    * 1 for a run that was actually tried, 0 for one that was cancelled. This is
    * the denominator of every rate in the operations view, so what it counts
@@ -168,6 +184,12 @@ export function observeRun(run: ObservedRun): RunObservation {
     if (event !== null) errors.push(event);
   }
 
-  // A cancelled run is not a trial of the provider, so it is not a denominator.
-  return { latency, errors, attemptsObserved: run.termination === 'cancelled' ? 0 : 1 };
+  // A cancelled run is not a trial of the provider, so it is not a denominator
+  // — but it DID happen, and `observedAt` is what keeps it from vanishing.
+  return {
+    latency,
+    errors,
+    observedAt: run.observedAt,
+    attemptsObserved: run.termination === 'cancelled' ? 0 : 1,
+  };
 }

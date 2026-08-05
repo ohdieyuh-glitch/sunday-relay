@@ -149,16 +149,68 @@ describe('the classification carries the connector’s own facts', () => {
     expect(observed.errors[0].detail).toBe('error_max_turns');
   });
 
-  it('a timeout outranks a reported error, and a spawn failure outranks both', () => {
+  it('follows the shipping normalizer: cancelled, then timeout, then spawn, then error', () => {
+    // This assertion used to say a spawn failure outranked a timeout, which was
+    // my reasoning rather than the product's. `event-normalizer.ts` ships the
+    // opposite order, and a second producer that disagrees about what one run
+    // was is the defect this adapter exists to avoid.
     expect(toObservedRun(outcome({ timedOut: true, parsed: parsed({ isError: true }) })).termination)
       .toBe('timed_out');
     expect(toObservedRun(outcome({ spawnError: 'ENOENT', timedOut: true })).termination)
-      .toBe('spawn_failed');
+      .toBe('timed_out');
+    expect(toObservedRun(outcome({ cancelled: true, spawnError: 'ENOENT' })).termination)
+      .toBe('cancelled');
+    expect(toObservedRun(outcome({ spawnError: 'ENOENT' })).termination).toBe('spawn_failed');
   });
 
   it('does not decide whether the run recovered — the caller knows, this does not', () => {
     expect(observeClaudeRun(outcome({ timedOut: true })).errors[0].recovered).toBe(false);
     expect(observeClaudeRun(outcome({ timedOut: true }), { recovered: true }).errors[0].recovered)
       .toBe(true);
+  });
+});
+
+describe('the classification agrees with the classifier that ships', () => {
+  it('a cancelled run that also timed out is a CANCELLATION', () => {
+    // Both flags are reachable: the watchdog sets `timedOut`, then the kill
+    // grace window leaves the run cancellable for several seconds. The shipping
+    // `event-normalizer.ts` calls this `agent.process_cancelled`, and two
+    // producers that disagree about what one run was put two vocabularies into
+    // one record.
+    const observed = observeClaudeRun(outcome({ cancelled: true, timedOut: true, durationMs: 600_000 }));
+    expect(toObservedRun(outcome({ cancelled: true, timedOut: true })).termination).toBe('cancelled');
+    // An operator who cancels a hung run has not run a failed provider attempt.
+    expect(observed.errors).toEqual([]);
+    expect(observed.attemptsObserved).toBe(0);
+    expect(observed.latency).toEqual([]);
+  });
+
+  it('a timeout whose kill failed stays a TIMEOUT, not a workspace failure', () => {
+    // `spawnError` is set from `child.on('error')`, which Node also emits when
+    // a process cannot be KILLED — the connector's own event says "failed to
+    // start OR RUN". Ranking it above `timedOut` reclassified a real timeout
+    // and threw away its latency.
+    const observed = observeClaudeRun(outcome({
+      timedOut: true, spawnError: 'kill EPERM', durationMs: 600_000,
+      parsed: parsed({ usage: { numTurns: null, durationMs: null, apiDurationMs: null, reportedCostUsd: null } }),
+    }));
+    expect(observed.errors[0].kind).toBe('provider_timeout');
+    expect(observed.latency.find((s) => s.phase === 'total')?.durationMs).toBe(600_000);
+  });
+
+  it('a spawn failure with no other flag is still the workspace’s', () => {
+    expect(observeClaudeRun(outcome({ spawnError: 'ENOENT' })).errors[0].kind)
+      .toBe('workspace_failure');
+  });
+
+  it('a cancelled run still tells the record that something happened', () => {
+    // Otherwise a project somebody is interrupting all day is byte-identical to
+    // one nobody is using, and health reports "nothing has been observed".
+    const record = ingest(emptyOperationalRecord('p'),
+      observeClaudeRun(outcome({ cancelled: true })));
+    expect(record.newestSignalAt).toBe('2026-08-05T12:00:00.000Z');
+    const view = projectOperations(record, '2026-08-05T12:00:05.000Z');
+    expect(view.health).not.toBe('unknown');
+    expect(view.newestSignalAt).not.toBeNull();
   });
 });

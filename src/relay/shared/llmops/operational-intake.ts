@@ -182,6 +182,16 @@ export function ingest(
     readonly latency?: readonly RelayLatencySample[];
     readonly errors?: readonly RelayErrorEvent[];
     readonly attemptsObserved?: number | null;
+    /**
+     * ISO-8601. Something happened at this instant even if it produced no
+     * latency and no error.
+     *
+     * Without it a project whose only activity is CANCELLED runs is
+     * byte-identical to a project with no activity: `newestSignalAt` stays
+     * null, health reports "nothing has been observed", and a system somebody
+     * is interrupting all day long looks like a system nobody is using.
+     */
+    readonly observedAt?: string;
   },
 ): RelayOperationalRecord {
   const latency = [...record.latency, ...(input.latency ?? [])];
@@ -191,6 +201,7 @@ export function ingest(
     ...(record.newestSignalAt === null ? [] : [record.newestSignalAt]),
     ...latency.map((s) => s.observedAt),
     ...errors.map((e) => e.at),
+    ...(input.observedAt === undefined ? [] : [input.observedAt]),
   ].filter((value) => Number.isFinite(Date.parse(value)));
 
   const newestSignalAt = stamps.length === 0

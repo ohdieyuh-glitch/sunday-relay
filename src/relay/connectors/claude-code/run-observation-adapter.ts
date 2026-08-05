@@ -45,17 +45,29 @@ export function toObservedRun(
 ): ObservedRun {
   const parsed = outcome.parsed;
   return {
-    // ORDER IS THE MOST SPECIFIC CAUSE FIRST, because an outcome can carry
-    // several flags at once and a reader needs the one that explains the rest.
+    // THE ORDER IS THE NORMALIZER'S ORDER, deliberately and exactly:
+    // `event-normalizer.ts` classifies the same outcome as
+    // cancelled > timedOut > spawnError > isError, and it ships. Two producers
+    // that disagree about what one run WAS put two vocabularies into one
+    // record, which is the thing this module's header says it exists to stop —
+    // and the first version of this adapter did precisely that by ranking
+    // `spawnError` first.
     //
-    // A spawn failure outranks everything: a process that never started cannot
-    // meaningfully have timed out, and reporting the watchdog instead of ENOENT
-    // sends someone to tune a timeout that was never the problem. Cancellation
-    // outranks the error flag for the same reason — a cancelled run's error is
-    // a consequence of the cancelling, not a fact about the provider.
-    termination: outcome.spawnError ? 'spawn_failed'
+    // It also read `spawnError` as "never started", which the field does not
+    // mean. It is set from `child.on('error')`, which Node also emits when a
+    // process cannot be KILLED — the connector's own event says "failed to
+    // start OR RUN". Ranking it above `timedOut` therefore reclassified a real
+    // timeout whose SIGKILL failed as a workspace failure, and threw away its
+    // latency.
+    //
+    // Cancellation outranks the timeout because both flags are reachable
+    // together: the watchdog sets `timedOut`, then the kill grace window leaves
+    // the run cancellable for several seconds. An operator who cancels a hung
+    // run in that window has NOT run a failed provider attempt, and booking one
+    // is the exact flattery the cancelled rule exists to prevent.
+    termination: outcome.cancelled ? 'cancelled'
       : outcome.timedOut ? 'timed_out'
-        : outcome.cancelled ? 'cancelled'
+        : outcome.spawnError ? 'spawn_failed'
           : parsed.isError ? 'reported_error' : 'completed',
     usage: {
       durationMs: parsed.usage.durationMs,
