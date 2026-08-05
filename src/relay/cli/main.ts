@@ -141,7 +141,8 @@ export interface ParsedCli {
   runsAction?: 'list' | 'inspect' | 'recover' | 'archive';
   persistenceAction?: 'contract-verify' | 'recovery-drill';
   projectAction?: 'new' | 'open' | 'status' | 'settings' | 'workforce' | 'research' | 'run'
-    | 'terminal' | 'tasks' | 'findings' | 'evidence' | 'history' | 'repairs' | 'stage';
+    | 'terminal' | 'tasks' | 'findings' | 'evidence' | 'history' | 'repairs' | 'stage'
+    | 'operations';
   cliAction?: 'demo' | 'contract-verify';
   ycAction?: 'check' | 'demo';
   projectRef?: string;
@@ -482,7 +483,8 @@ export function parseCli(argv: string[]): ParsedCli {
     }
     if (first === 'project') {
       const actions = ['new', 'open', 'status', 'settings', 'workforce', 'research', 'run',
-        'terminal', 'tasks', 'findings', 'evidence', 'history', 'repairs', 'stage'];
+        'terminal', 'tasks', 'findings', 'evidence', 'history', 'repairs', 'stage',
+        'operations'];
       if (!second || !actions.includes(second)) {
         return { command: 'project', ...base, error: `project requires an action: ${actions.join(', ')}.` };
       }
@@ -1397,6 +1399,7 @@ async function runProductCli(parsed: ParsedCli, io: CliIo): Promise<number> {
     case 'evidence':
     case 'history':
     case 'stage':
+    case 'operations':
       return respond(() => productProjectView(store, caps, parsed.projectAction as ProjectView, parsed.projectRef));
     case 'run':
       return emit(productRunConfirmation(store, caps, parsed.projectRef));

@@ -147,10 +147,42 @@ waiting to disagree with the website's. Two people reading different numbers off
 two screens in the same conversation is the failure a parity contract exists to
 prevent.
 
+## Intake: where a provider's `null` meets a metric
+
+`operational-intake.ts` is the only place the two touch, and the rule is stated
+once and applied everywhere in it: **a null, a NaN, a negative, or an
+`unavailable` usage class produces NO SAMPLE.** Not a zero, not a defaulted
+field — nothing enters the array, and the projection then names that phase under
+`missingPhases`.
+
+A zero duration IS kept, because zero is only wrong as a stand-in for unknown;
+an actually-instant phase is a fact, and dropping it would be the mirror of the
+same bug.
+
+Two more defaults that go the safe way:
+
+- An **unrecognised failure label becomes `unknown`**, never the closest-looking
+  match. Deciding that `connection_reset` is a `provider_timeout` invents a
+  diagnosis, and the count of `unknown` errors is itself the signal that the
+  mapping needs a case.
+- **Absent recovery means NOT KNOWN to have recovered.** Defaulting to
+  `recovered: true` would quietly downgrade every failure an adapter forgot to
+  annotate, and unrecovered errors are exactly what make health `failing`.
+
+`newestSignalAt` is computed from the signals present rather than from the wall
+clock at ingest: a record assembled at noon from an hour-old log is an hour old,
+and staleness drives health.
+
+Every intake function takes a STRUCTURAL type rather than importing a
+connector's interface. The domain must not depend on a particular adapter, and
+an import edge from `mission/` into `connectors/` would invert the same layering
+the website boundary rule protects.
+
 ## Not implemented
 
-No producer writes into `RelayOperationalRecord` yet — no adapter, no run
-handler, no bridge. Token counts are modelled by `mission/economics` receipts
+**Nothing calls the intake yet.** The functions exist and are tested against
+fixtures; no adapter, run handler or bridge invokes them, so no live run is
+being measured. Token counts are modelled by `mission/economics` receipts
 (`input_token`, `output_token`, `cached_input_token`) and are cited from there
 rather than duplicated here. There is no persistence for short-term memory, no
 UI for approving a promotion proposal, and no scheduled refresh of the Brain

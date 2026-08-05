@@ -68,7 +68,28 @@ const duration = (value: number): string => {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 };
 
-export function RelayOperationsPanel({ view }: { readonly view: RelayOperationsView }) {
+export function RelayOperationsPanel({ view }: {
+  /**
+   * Null means NO HOST SUPPLIED ONE — which is a different fact from a project
+   * that reported nothing, and is said differently. Neither is drawn as zeroes.
+   */
+  readonly view: RelayOperationsView | null;
+}) {
+  if (view === null) {
+    return (
+      <section className="rop" aria-labelledby="rop-heading">
+        <h2 id="rop-heading" className="rpw-section-title">PROJECT OPERATIONS</h2>
+        <p className="rop-health rop-health--unknown">
+          <span className="rop-health-state">UNKNOWN</span>
+          <span className="rop-health-reason">
+            This deployment has no operations source wired, so nothing is being
+            measured. That is not the same as a project with nothing to report.
+          </span>
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section className="rop" aria-labelledby="rop-heading">
       <h2 id="rop-heading" className="rpw-section-title">PROJECT OPERATIONS</h2>

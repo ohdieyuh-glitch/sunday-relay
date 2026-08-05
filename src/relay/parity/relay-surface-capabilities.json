@@ -822,6 +822,36 @@
         "src/relay/mcp/mission/mcp-mission-preflight.ts",
         "src/relay/mcp/domain/mcp-surface-projection.ts"
       ]
+    },
+    {
+      "capabilityId": "mission-llmops-operations",
+      "name": "Project operations: latency, errors, health, evaluations, repair loops, waiting",
+      "domain": "mission_operations",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayOperationsPanel.tsx"
+      ],
+      "cliEntryPoints": [
+        "src/relay/cli/product/operations.ts"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/project-workspace/operations-panel.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/product/operations.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/llmops/brain-memory.test.ts",
+        "src/relay/mission/llmops/brain-memory.ts",
+        "src/relay/mission/llmops/index.ts",
+        "src/relay/mission/llmops/llmops-contracts.ts",
+        "src/relay/mission/llmops/llmops-projection.test.ts",
+        "src/relay/mission/llmops/llmops-projection.ts",
+        "src/relay/mission/llmops/operational-intake.test.ts",
+        "src/relay/mission/llmops/operational-intake.ts"
+      ]
     }
   ]
 }

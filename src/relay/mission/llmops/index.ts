@@ -74,3 +74,11 @@ export type {
   RelayShortTermEntry,
   RelayShortTermMemory,
 } from './brain-memory';
+
+export {
+  errorFromFailure,
+  ingest,
+  noteObservation,
+  samplesFromTurn,
+} from './operational-intake';
+export type { ObservedFailure, ObservedTurn } from './operational-intake';
