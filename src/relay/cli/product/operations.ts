@@ -1,7 +1,7 @@
 import { paint } from './theme';
 import type { CliCaps } from './contracts';
-import { formatMicros } from '../../mission/llmops';
-import type { RelayFigure, RelayOperationsView } from '../../mission/llmops';
+import { formatMicros } from '../../shared/llmops';
+import type { RelayFigure, RelayOperationsView } from '../../shared/llmops';
 
 /**
  * PROJECT OPERATIONS, ON THE CLI.

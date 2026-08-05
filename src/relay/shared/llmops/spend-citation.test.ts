@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { citeSpend, emptySpendCitation, formatMicros } from './spend-citation';
-import type { RelayCostReceipt } from '../economics/cost-receipt-types';
+import type { RelayCostReceipt } from '../../mission/economics/cost-receipt-types';
 
 /**
  * TOKENS AND COST, CITED.

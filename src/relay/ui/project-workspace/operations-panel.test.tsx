@@ -4,8 +4,8 @@ import { cleanup, render } from '@testing-library/react';
 import { createElement } from 'react';
 
 import { RelayOperationsPanel } from './RelayOperationsPanel';
-import { emptyOperationalRecord, projectOperations } from '../../mission/llmops';
-import type { RelayOperationalRecord } from '../../mission/llmops';
+import { emptyOperationalRecord, projectOperations } from '../../shared/llmops';
+import type { RelayOperationalRecord } from '../../shared/llmops';
 
 /**
  * THE OPERATIONS PANEL.

@@ -1,5 +1,5 @@
 import type { ProjectBrainState } from './contracts';
-import type { RelayBrainDocument } from '../../mission/llmops';
+import type { RelayBrainDocument } from '../../shared/llmops';
 
 /**
  * Project Brain — the Prompt Architect's approved, sourced project

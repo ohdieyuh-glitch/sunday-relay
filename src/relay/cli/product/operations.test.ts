@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { renderOperationsView } from './operations';
-import { emptyOperationalRecord, projectOperations } from '../../mission/llmops';
+import { emptyOperationalRecord, projectOperations } from '../../shared/llmops';
 import type { CliCaps } from './contracts';
 import { parseCli } from '../main';
-import type { RelayOperationalRecord } from '../../mission/llmops';
+import type { RelayOperationalRecord } from '../../shared/llmops';
 
 /**
  * THE CLI'S OPERATIONS SURFACE.

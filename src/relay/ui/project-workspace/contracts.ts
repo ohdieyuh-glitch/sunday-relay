@@ -13,7 +13,7 @@
 import type { EventTruthClass, TerminalEventCategory } from '../../mission/wire-contracts';
 import type { RelayAgentOperatingProjection } from '../../mission';
 import type { RelayBackdropId } from '../relay-stage';
-import type { RelayBrainDocument, RelayOperationsView } from '../../mission/llmops';
+import type { RelayBrainDocument, RelayOperationsView } from '../../shared/llmops';
 
 /* ----------------------------------------------------------------- modes */
 

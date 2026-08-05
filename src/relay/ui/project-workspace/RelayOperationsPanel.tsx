@@ -1,8 +1,8 @@
 import './relay-operations-panel.css';
-import { formatMicros } from '../../mission/llmops';
+import { formatMicros } from '../../shared/llmops';
 import type {
   RelayFigure, RelayHealthState, RelayOperationsView,
-} from '../../mission/llmops';
+} from '../../shared/llmops';
 
 /**
  * PROJECT OPERATIONS — tokens, cost, latency, errors, health, evaluations,

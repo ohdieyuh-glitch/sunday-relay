@@ -11,8 +11,8 @@ import { safeText } from './safety';
 import { renderStageView } from './stage';
 import type { RelayStageActor } from '../../shared/relay-stage-layout';
 import { renderOperationsView } from './operations';
-import { emptyOperationalRecord, projectOperations } from '../../mission/llmops';
-import { emptyShortTermMemory, refreshBrainDocument } from '../../mission/llmops';
+import { emptyOperationalRecord, projectOperations } from '../../shared/llmops';
+import { emptyShortTermMemory, refreshBrainDocument } from '../../shared/llmops';
 
 /**
  * Relay CLI product commands (Prompt 8.6) — the NON-INTERACTIVE command

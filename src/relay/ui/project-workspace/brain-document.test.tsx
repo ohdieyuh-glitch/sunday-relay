@@ -6,7 +6,7 @@ import { createElement } from 'react';
 import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
 import {
   emptyShortTermMemory, refreshBrainDocument, rememberShortTerm,
-} from '../../mission/llmops';
+} from '../../shared/llmops';
 import type { ProjectBrainState } from './contracts';
 
 /**

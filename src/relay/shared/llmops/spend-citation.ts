@@ -35,10 +35,10 @@
 
 import type {
   RelayCostReceipt, RelayReceiptQuantityUnit,
-} from '../economics/cost-receipt-types';
-import { PROVIDER_SPEND_CATEGORIES } from '../economics/cost-receipt-types';
-import type { RelayCostCategory } from '../economics/cost-receipt-types';
-import type { RelayMoney } from '../economics/money';
+} from '../../mission/economics/cost-receipt-types';
+import { PROVIDER_SPEND_CATEGORIES } from '../../mission/economics/cost-receipt-types';
+import type { RelayCostCategory } from '../../mission/economics/cost-receipt-types';
+import type { RelayMoney } from '../../mission/economics/money';
 
 /* ---------------------------------------------------------------- tokens */
 
