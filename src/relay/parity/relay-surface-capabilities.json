@@ -845,9 +845,10 @@
         "src/relay/cli/product/operations.test.ts"
       ],
       "sharedDomainReferences": [
+        "src/relay/connectors/claude-code/run-observation-adapter.test.ts",
+        "src/relay/connectors/claude-code/run-observation-adapter.ts",
         "src/relay/shared/llmops/brain-memory.test.ts",
         "src/relay/shared/llmops/brain-memory.ts",
-        "src/relay/shared/llmops/connector-conformance.test.ts",
         "src/relay/shared/llmops/index.ts",
         "src/relay/shared/llmops/llmops-contracts.ts",
         "src/relay/shared/llmops/llmops-projection.test.ts",

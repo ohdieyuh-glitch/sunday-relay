@@ -8,12 +8,17 @@
  * one — a second producer with its own idea of what a timeout is would put two
  * different error vocabularies into one record.
  *
- * WHAT IT READS. The Claude connector already parses `duration_ms`,
- * `duration_api_ms`, `num_turns` and `total_cost_usd` off the CLI's own result
- * line, and initialises every one of them to `null`. That null is the whole
- * reason this mapping is honest: a run that did not report a duration produces
- * NO SAMPLE, and the operations view names the phase as untimed rather than
- * drawing a zero.
+ * WHAT IT READS. The Claude connector parses `duration_ms` and
+ * `duration_api_ms` off the CLI's own result line and initialises both to
+ * `null`, so a run that reported no duration produces NO SAMPLE for that phase.
+ *
+ * The harness's OWN wall clock is a different matter, and getting this wrong
+ * was the first version's real defect. `ClaudeRunOutcome.durationMs` is not
+ * nullable — the harness always measured something — so falling back to it
+ * unconditionally gave a process that never started a "total latency" of two
+ * milliseconds. A duration is only a LATENCY when the thing being timed
+ * actually ran, so the fallback is now allowed for exactly the terminations
+ * where elapsed time means what it says.
  *
  * WHAT IT CONTRIBUTES THAT NOTHING ELSE COULD. A counted denominator. Every
  * terminal outcome is exactly one attempt, so `attemptsObserved: 1` per run
@@ -29,10 +34,8 @@ import { errorFromFailure, samplesFromTurn } from './operational-intake';
 
 /** What the connector's stream parser produces, structurally. */
 export interface ObservedRunUsage {
-  readonly numTurns?: number | null;
   readonly durationMs?: number | null;
   readonly apiDurationMs?: number | null;
-  readonly reportedCostUsd?: number | null;
 }
 
 /**
@@ -46,7 +49,14 @@ export type ObservedRunTermination =
   | 'completed'
   | 'timed_out'
   | 'spawn_failed'
-  | 'reported_error';
+  | 'reported_error'
+  /**
+   * Stopped on purpose. Not a failure, and NOT AN ATTEMPT: a run somebody
+   * cancelled is not a trial of the provider, and counting it would raise the
+   * error rate's denominator while never raising its numerator — quietly
+   * reporting a system as more reliable the more often it is interrupted.
+   */
+  | 'cancelled';
 
 export interface ObservedRun {
   readonly termination: ObservedRunTermination;
@@ -73,7 +83,11 @@ export interface ObservedRun {
 export interface RunObservation {
   readonly latency: readonly RelayLatencySample[];
   readonly errors: readonly RelayErrorEvent[];
-  /** Always 1: a terminal outcome is one attempt, however it ended. */
+  /**
+   * 1 for a run that was actually tried, 0 for one that was cancelled. This is
+   * the denominator of every rate in the operations view, so what it counts
+   * decides what those rates MEAN.
+   */
   readonly attemptsObserved: number;
 }
 
@@ -81,6 +95,7 @@ export interface RunObservation {
 const TERMINATION_TO_LABEL: Readonly<Record<ObservedRunTermination, string | null>> =
   Object.freeze(Object.assign(Object.create(null) as Record<ObservedRunTermination, string | null>, {
     completed: null,
+    cancelled: null,
     timed_out: 'provider_timeout',
     // A process that never started is the workspace's failure, not the
     // provider's, and calling it a provider error would send someone to read
@@ -88,6 +103,23 @@ const TERMINATION_TO_LABEL: Readonly<Record<ObservedRunTermination, string | nul
     spawn_failed: 'workspace_failure',
     reported_error: 'provider_error',
   }));
+
+/**
+ * Terminations whose elapsed time is a LATENCY.
+ *
+ * A completed run and a timed-out one both spent that time doing the work. A
+ * process that never started spent it failing to start, and a cancelled one was
+ * interrupted partway — neither number describes how long the provider takes,
+ * and letting them into the distribution makes every percentile a lie about a
+ * different thing.
+ */
+const TIMED_TERMINATIONS: readonly ObservedRunTermination[] =
+  Object.freeze(['completed', 'timed_out']);
+
+/** A duration usable as a measurement: finite and non-negative. */
+const usable = (value: number | null | undefined): number | null => (
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+);
 
 /**
  * Read one finished run into operational signal.
@@ -101,19 +133,27 @@ export function observeRun(run: ObservedRun): RunObservation {
 
   // `duration_ms` is the provider's own figure; the harness's wall clock is the
   // fallback. They are not the same measurement — the harness's includes spawn
-  // and teardown — so the provider's is preferred and the fallback is used only
-  // when the provider reported none.
-  const totalMs = usage.durationMs ?? run.outcomeDurationMs ?? null;
+  // and teardown — so the provider's is preferred.
+  //
+  // `usable()` on BOTH, rather than `??`: a provider figure of NaN is not null,
+  // so `??` kept it and threw away a perfectly good harness measurement.
+  const timed = TIMED_TERMINATIONS.includes(run.termination);
+  const totalMs = timed ? (usable(usage.durationMs) ?? usable(run.outcomeDurationMs)) : null;
 
-  const latency = samplesFromTurn({
+  const latency = timed ? samplesFromTurn({
     durationMs: totalMs,
-    apiDurationMs: usage.apiDurationMs ?? null,
+    apiDurationMs: usable(usage.apiDurationMs),
     observedAt: run.observedAt,
     ...(run.missionId === undefined ? {} : { missionId: run.missionId }),
     ...(run.taskId === undefined ? {} : { taskId: run.taskId }),
-  });
+  }) : [];
 
-  const label = TERMINATION_TO_LABEL[run.termination];
+  // An unrecognised termination becomes an `unknown` error rather than
+  // nothing. Silently producing no error while still counting the attempt
+  // deflates the error rate, and `errorFromFailure` already holds the rule this
+  // follows: the count of `unknown` is itself the signal that a case is missing.
+  const known = Object.hasOwn(TERMINATION_TO_LABEL, run.termination);
+  const label = known ? TERMINATION_TO_LABEL[run.termination] : 'unrecognised_termination';
   const errors: RelayErrorEvent[] = [];
   if (label !== null && label !== undefined) {
     const event = errorFromFailure({
@@ -128,5 +168,6 @@ export function observeRun(run: ObservedRun): RunObservation {
     if (event !== null) errors.push(event);
   }
 
-  return { latency, errors, attemptsObserved: 1 };
+  // A cancelled run is not a trial of the provider, so it is not a denominator.
+  return { latency, errors, attemptsObserved: run.termination === 'cancelled' ? 0 : 1 };
 }

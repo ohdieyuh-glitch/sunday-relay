@@ -194,7 +194,7 @@ the same functions.
 A passing strict run reports what it actually inspected, at manifest `1.2.0`:
 
 ```text
-  declared surface files: 286/286 present
+  declared surface files: 287/287 present
   declared CLI commands: 27 (verified by the CLI's own command tests)
   website entry points reachable: 40/49 mounted
 ```
