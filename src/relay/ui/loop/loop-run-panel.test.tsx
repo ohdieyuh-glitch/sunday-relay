@@ -253,6 +253,140 @@ describe('restoration is a read, not a cache', () => {
     await waitFor(() => expect(port.status).toHaveBeenCalledWith(other));
   });
 
+  it('THE LATEST REQUEST WINS — a slow earlier read cannot repaint a newer one', async () => {
+    /*
+     * The race the first version lost. Two overlapping reads and the SLOWER
+     * one decided what the screen said, so a refresh issued before a Stop could
+     * answer after it and repaint a stopped run as running, pulse animating.
+     * That is rule 1 broken by the surface built to hold it.
+     */
+    const finished = status({
+      runId: RUN_ID, state: 'completed', stateClass: 'successful_terminal',
+      finished: true, succeeded: true,
+    });
+    const running = status({ runId: RUN_ID });
+    let releaseSlow: (v: RelayLoopRunFetch) => void = () => {};
+    const calls: string[] = [];
+    const port: RelayLoopRunPort = {
+      status: vi.fn(async (): Promise<RelayLoopRunFetch> => {
+        calls.push('status');
+        if (calls.length === 1) {
+          // The FIRST read is the slow one, and it answers stale.
+          return new Promise<RelayLoopRunFetch>((resolve) => { releaseSlow = resolve; });
+        }
+        return { ok: true, status: finished };
+      }),
+    };
+    const store = memoryStore({ runId: RUN_ID, loopId: LOOP_ID });
+    const { rerender } = render(createElement(RelayLoopRunSurface, { port, store }));
+    await waitFor(() => expect(calls.length).toBe(1));
+
+    // A second read supersedes it and answers first.
+    rerender(createElement(RelayLoopRunSurface, { port, store, runId: RUN_ID }));
+    await waitFor(() => expect(calls.length).toBe(2));
+    await waitFor(() => {
+      expect(document.querySelector('[data-loop-activity]')?.getAttribute('data-loop-activity'))
+        .toBe('finished');
+    });
+
+    // Now the stale read lands. It must be dropped, not drawn.
+    releaseSlow({ ok: true, status: running });
+    await new Promise((r) => { setTimeout(r, 20); });
+    expect(
+      document.querySelector('[data-loop-activity]')?.getAttribute('data-loop-activity'),
+      'a superseded read must not repaint a finished run as running',
+    ).toBe('finished');
+  });
+
+  it('Refresh is not offered while a control is in flight', () => {
+    // The same race by another door: Refresh stayed enabled during `acting`,
+    // so a user could start a read that outlived the Stop it raced.
+    const view = projectLoopRunView({ status: status() });
+    render(createElement(RelayLoopRunPanel, {
+      view, sync: 'acting' as const, syncMessage: null,
+      onRefresh: vi.fn(), onControl: vi.fn(),
+    }));
+    const refresh = screen.getByRole('button', { name: /^refresh$/i });
+    expect(refresh.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('a REFUSED control still says so after the re-read', async () => {
+    /*
+     * The message was set and then immediately wiped: the re-read cleared it on
+     * entry. A user pressed Stop, the bridge refused, and the screen said
+     * nothing at all — which is the precise defect this file's header claims to
+     * prevent.
+     */
+    const port: RelayLoopRunPort = {
+      status: vi.fn(async (): Promise<RelayLoopRunFetch> => ({ ok: true, status: status() })),
+      control: vi.fn(async (): Promise<RelayLoopRunFetch> => ({
+        ok: false, message: 'The Relay Bridge rejected the credential.',
+      })),
+    };
+    const store = memoryStore({ runId: RUN_ID, loopId: LOOP_ID });
+    render(createElement(RelayLoopRunSurface, { port, store }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^stop$/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /^stop$/i }));
+
+    await waitFor(() => expect(port.control).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('rejected the credential');
+    });
+  });
+
+  it('a run the server says does NOT EXIST is forgotten; one it cannot reach is kept', async () => {
+    // Otherwise a dead id is re-requested on every future mount forever — and
+    // the doc said it was cleared, which was simply untrue.
+    const gone: RelayLoopRunPort = {
+      status: vi.fn(async (): Promise<RelayLoopRunFetch> => ({
+        ok: false, kind: 'not_found', message: 'The Relay Bridge has no such Loop run.',
+      })),
+    };
+    const goneStore = memoryStore({ runId: RUN_ID, loopId: LOOP_ID });
+    render(createElement(RelayLoopRunSurface, { port: gone, store: goneStore }));
+    await waitFor(() => expect(goneStore.value).toBeNull());
+
+    cleanup();
+    const unreachable: RelayLoopRunPort = {
+      status: vi.fn(async (): Promise<RelayLoopRunFetch> => ({
+        ok: false, kind: 'unreachable', message: 'The Relay Bridge could not be reached.',
+      })),
+    };
+    const keptStore = memoryStore({ runId: RUN_ID, loopId: LOOP_ID });
+    render(createElement(RelayLoopRunSurface, { port: unreachable, store: keptStore }));
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect(keptStore.value, 'an unreachable bridge says nothing about the run').not.toBeNull();
+  });
+
+  it('a store that THROWS does not take the tree down', async () => {
+    // `localStorage` throws under blocked storage and over quota. A surface
+    // that crashes because it could not remember an id is worse than one that
+    // forgets it.
+    const hostile: RelayLoopRunStore = {
+      read: () => { throw new Error('storage is blocked'); },
+      write: () => { throw new Error('quota exceeded'); },
+    };
+    const port = okPort(status());
+    render(createElement(RelayLoopRunSurface, { port, store: hostile }));
+    await waitFor(() => expect(screen.getByText(/Draft a Loop and confirm it/)).toBeTruthy());
+  });
+
+  it('a response that lands after unmount writes nothing', async () => {
+    let release: (v: RelayLoopRunFetch) => void = () => {};
+    const port: RelayLoopRunPort = {
+      status: vi.fn(async () => new Promise<RelayLoopRunFetch>((r) => { release = r; })),
+    };
+    const store = memoryStore({ runId: RUN_ID, loopId: LOOP_ID });
+    const { unmount } = render(createElement(RelayLoopRunSurface, { port, store }));
+    await waitFor(() => expect(port.status).toHaveBeenCalled());
+    unmount();
+    const before = store.value;
+    release({ ok: true, status: status() });
+    await new Promise((r) => { setTimeout(r, 20); });
+    expect(store.value, 'a late response must not write after unmount').toBe(before);
+  });
+
   it('re-reads the run after a control instead of announcing the outcome', async () => {
     // "Stopped" is announced only after the server says stopped. A control that
     // failed must not leave the surface claiming it succeeded.

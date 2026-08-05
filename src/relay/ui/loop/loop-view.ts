@@ -425,7 +425,20 @@ export function openLoopSurface(
    * caller's current Loop" is not something a browser can resolve.
    */
   if (command.kind === 'loop_action' && command.action === 'status' && command.loopId !== null) {
-    return { kind: 'run', runId: command.loopId };
+    /*
+     * A RUN ID, NOT ANY ADDRESSABLE ID.
+     *
+     * The grammar accepts `lpe_` (a Loop), `lps_` (a schedule) and `lpr_` (one
+     * run) so that all three are expressible. `status` addresses a RUN, and
+     * this seam used to open the run surface for whichever of the three
+     * arrived — so `/loop status lpe_abc` opened a run panel that then reported
+     * "no such Loop run" for a perfectly valid Loop id. The CLI seam refuses
+     * the mismatch; the website has to as well, or the two surfaces mean
+     * different things by the same command.
+     */
+    if (command.loopId.startsWith('lpr_')) {
+      return { kind: 'run', runId: command.loopId };
+    }
   }
 
   const availability = evaluateLoopAvailability({

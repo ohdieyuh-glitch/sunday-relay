@@ -136,6 +136,49 @@ describe('a failure is named, and never becomes a run state', () => {
     expect(result.kind).toBe('invalid_response');
   });
 
+  it('redacts the token from the KIND as well as the message', async () => {
+    // The kind was not redacted, and `loop-execution.ts` prints it to stdout.
+    // A server answering `{"kind":"refused: <token>"}` therefore got the
+    // credential onto the terminal, past a docstring promising it never is.
+    const f = spy(400, { kind: `refused: ${TOKEN}`, error: 'nope' });
+    const result = await client(f.impl).status('lpr_1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.kind).not.toContain(TOKEN);
+    expect(result.message).not.toContain(TOKEN);
+  });
+
+  it('a kind that is not a vocabulary word is not relayed onward', async () => {
+    // The kind is a word the CLI branches on, not free text. A kilobyte of
+    // prose in that slot is a malformed response, not something to pass along.
+    for (const kind of ['A'.repeat(500), 'has spaces', 'Uppercase', '', '../../etc']) {
+      const f = spy(400, { kind, error: 'nope' });
+      const result = await client(f.impl).status('lpr_1');
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(result.kind, JSON.stringify(kind)).not.toBe(kind);
+    }
+  });
+
+  it('a data envelope that is not an object is refused, not passed through', async () => {
+    // `'data' in envelope` was the whole check, so `{"data":null}` came back
+    // ok:true and the renderer threw inside a promise the CLI does not catch —
+    // an unhandled rejection rather than a message.
+    for (const data of [null, 5, 'text', true]) {
+      const f = spy(200, { data });
+      const result = await client(f.impl).status('lpr_1');
+      expect(result.ok, JSON.stringify(data)).toBe(false);
+      if (result.ok) continue;
+      expect(result.kind).toBe('invalid_response');
+    }
+  });
+
+  it('a real data object still passes', async () => {
+    const f = spy(200, { data: { runId: 'lpr_1' } });
+    const result = await client(f.impl).status('lpr_1');
+    expect(result.ok).toBe(true);
+  });
+
   it('redacts token-shaped text a server sent back', async () => {
     const f = spy(400, { kind: 'validation_failed', error: `bad request for ${TOKEN}` });
     const result = await client(f.impl).status('lpr_1');

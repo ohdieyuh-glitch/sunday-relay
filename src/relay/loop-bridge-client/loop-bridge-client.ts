@@ -155,19 +155,48 @@ export function createLoopBridgeClient(options: LoopBridgeClientOptions): LoopEx
       : {};
 
     if (!response.ok) {
-      const kind = typeof envelope.kind === 'string' ? envelope.kind : null;
+      /*
+       * BOTH FIELDS ARE UNTRUSTED, AND BOTH ARE PRINTED.
+       *
+       * `error` was redacted and `kind` was not — and `loop-execution.ts`
+       * prints the kind to stdout. A server that answered
+       * `{"kind":"refused: <token>"}` therefore got the credential onto the
+       * terminal, past a docstring promising the token is "never in a message
+       * and never in an error". Redacting one field and printing the other is
+       * not redaction.
+       *
+       * The kind is also BOUNDED and shape-checked: it is a vocabulary word
+       * the CLI branches on, not free text, so a kilobyte of prose in that slot
+       * is a malformed response rather than something to relay onward.
+       */
+      const rawKind = typeof envelope.kind === 'string' ? envelope.kind : null;
+      const kind = rawKind !== null && /^[a-z][a-z0-9_]{0,63}$/u.test(rawKind)
+        ? rawKind
+        : null;
       const message = typeof envelope.error === 'string'
         // The token is passed so the literal value is removed, not merely
         // anything token-SHAPED. A server that echoes the credential back must
         // not be able to get it printed.
-        ? redactBridgeSecrets(envelope.error, token.value)
+        ? redactBridgeSecrets(envelope.error.slice(0, 2000), token.value)
         : null;
       return classify(response.status, kind, message);
     }
-    if (!('data' in envelope)) {
-      return failure(response.status, 'invalid_response', 'The Relay Bridge sent no data envelope.');
+    /*
+     * `'data' in envelope` was the whole check, so `{"data":null}` and
+     * `{"data":5}` both came back `ok: true` — and the renderer then threw
+     * `Cannot read properties of null` inside a promise the CLI does not catch,
+     * which is an unhandled rejection rather than a message. The Reviewer
+     * client this one deliberately mirrors rejects exactly this; drifting from
+     * it silently is how two clients stop behaving alike.
+     */
+    const data = envelope.data;
+    if (data === null || data === undefined || typeof data !== 'object') {
+      return failure(
+        response.status, 'invalid_response',
+        'The Relay Bridge sent no usable data envelope.',
+      );
     }
-    return { ok: true, data: envelope.data as T };
+    return { ok: true, data: data as T };
   };
 
   const encode = (id: string): string => encodeURIComponent(id);

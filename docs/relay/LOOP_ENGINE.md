@@ -264,7 +264,16 @@ answer them differently on purpose.
 **A command that NAMES a run reaches the server.** `relay loop status <run-id>`
 asks what a run is doing; it does not describe the command back to you.
 `inspect` and `history` are the same. On the website, `/loop status <run-id>`
-opens the run panel. A command with **no** id stays with the preview, because
+opens the run panel — **and in this build that panel has no session to ask.**
+
+Be exact about that, because "opens the run panel" on its own would imply a
+reading it cannot do. `RelayLoopSurfaceHost` renders the panel only when the
+host supplies BOTH a port and a store, and **no shipped host supplies either**:
+the website has no operator credential and no browser-session plumbing for Loop
+routes. So the surface a user reaches today says, in as many words, that it has
+no Relay Bridge session and is claiming nothing about any run that may exist.
+That is a truthful state rather than a broken one — and it is the state, not
+the panel, that ships. A command with **no** id stays with the preview, because
 "your current Loop" is not something a client can resolve — there is no local
 notion of one, and inventing a default would be the surface guessing.
 

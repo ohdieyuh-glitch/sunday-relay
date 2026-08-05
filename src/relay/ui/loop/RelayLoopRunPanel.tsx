@@ -47,7 +47,21 @@ import {
 
 export type RelayLoopRunFetch =
   | { readonly ok: true; readonly status: LoopStatusProjection }
-  | { readonly ok: false; readonly message: string };
+  | {
+    readonly ok: false;
+    readonly message: string;
+    /**
+     * WHY it failed, when the port knows.
+     *
+     * Without this the host could not tell "this run does not exist" from
+     * "Relay could not reach the bridge" — and the two demand opposite
+     * behaviour: the first must clear the stored id so a dead run is not
+     * re-requested forever, and the second must keep it, because the run is
+     * probably fine and the network is not. The client computes exactly this
+     * distinction and used to drop it on the floor.
+     */
+    readonly kind?: string;
+  };
 
 export interface RelayLoopRunPort {
   /** Read one run's status from the SERVER. The only source of run truth. */
@@ -216,7 +230,11 @@ export function RelayLoopRunPanel({
             type="button"
             className="rlc-btn"
             onClick={onRefresh}
-            disabled={sync === 'refreshing' || sync === 'restoring'}
+            // `acting` too: a read started while a control is in flight can
+            // outlive it and repaint the pre-control state. The host also stops
+            // offering the handler, and both are deliberate — the panel should
+            // be correct on its own rather than only in the host that wires it.
+            disabled={sync === 'refreshing' || sync === 'restoring' || sync === 'acting'}
           >
             Refresh
           </button>
@@ -245,21 +263,74 @@ export interface RelayLoopRunSurfaceProps {
  * anything it stored. A stored point whose run the server no longer knows is
  * cleared, not rendered.
  */
+/** Failure kinds that mean the run is GONE rather than unreachable. */
+const RUN_ABSENT_KINDS: ReadonlySet<string> = new Set(['not_found', 'run_not_found']);
+
+/**
+ * A store whose `read` or `write` throws must not take the tree down with it.
+ * `localStorage` throws under blocked storage and over quota, and a surface
+ * that crashes because it could not remember a run id is worse than one that
+ * forgets it.
+ */
+function safeRead(store: RelayLoopRunStore): unknown {
+  try {
+    return store.read();
+  } catch {
+    return null;
+  }
+}
+function safeWrite(store: RelayLoopRunStore, point: RelayLoopRestorePoint | null): void {
+  try {
+    store.write(point);
+  } catch {
+    // Nothing to do and nothing to claim: the id is simply not remembered.
+  }
+}
+
 export function RelayLoopRunSurface({ port, store, runId, onClose }: RelayLoopRunSurfaceProps) {
   const [status, setStatus] = useState<LoopStatusProjection | null>(null);
   const [sync, setSync] = useState<RelayLoopRunSync>('idle');
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [emptyReason, setEmptyReason] = useState<string | undefined>(undefined);
 
-  const load = useCallback(async (id: string, mode: 'restoring' | 'refreshing') => {
+  /**
+   * THE LATEST REQUEST WINS, AND ONLY THE LATEST.
+   *
+   * Every read and every control takes a ticket; a result whose ticket is no
+   * longer current is DROPPED. Without this, two overlapping requests race and
+   * the SLOWER one decides what the screen says — so a refresh issued before a
+   * Stop could answer after it and repaint a stopped run as `running`, with the
+   * pulse animating. That is rule 1 broken by the surface that exists to hold
+   * it, and no amount of correct state mapping prevents it.
+   *
+   * The same ticket handles unmount: after it, nothing is current, so a late
+   * response neither renders nor writes to the store.
+   */
+  const ticket = useRef(0);
+  const nextTicket = () => {
+    ticket.current += 1;
+    return ticket.current;
+  };
+  useEffect(() => () => { ticket.current = -1; }, []);
+
+  const load = useCallback(async (
+    id: string,
+    mode: 'restoring' | 'refreshing',
+    /** A message from a control that failed. It must survive the re-read. */
+    carryMessage?: string,
+  ) => {
+    const mine = nextTicket();
     setSync(mode);
-    setSyncMessage(null);
+    setSyncMessage(carryMessage ?? null);
     const result = await port.status(id);
+    if (ticket.current !== mine) return;   // superseded, or unmounted
     if (result.ok) {
       setStatus(result.status);
-      store.write(restorePointFor(result.status));
+      safeWrite(store, restorePointFor(result.status));
       setEmptyReason(undefined);
-      setSync('idle');
+      // A control failure is still the most recent thing the user did, so its
+      // message outlives a successful re-read rather than being wiped by it.
+      setSync(carryMessage === undefined ? 'idle' : 'unreachable');
       return;
     }
     // The server could not answer. The panel does NOT fall back to whatever it
@@ -267,8 +338,12 @@ export function RelayLoopRunSurface({ port, store, runId, onClose }: RelayLoopRu
     // this design exists to refuse.
     setStatus(null);
     setEmptyReason('Relay could not read this run from the server, so it is not showing one.');
-    setSyncMessage(result.message);
+    setSyncMessage(carryMessage ?? result.message);
     setSync('unreachable');
+    // A run the server says does not EXIST is forgotten, so it is not
+    // re-requested on every future mount. One it merely could not reach is
+    // kept, because the run is probably fine and the network is not.
+    if (result.kind !== undefined && RUN_ABSENT_KINDS.has(result.kind)) safeWrite(store, null);
   }, [port, store]);
 
   useEffect(() => {
@@ -277,10 +352,10 @@ export function RelayLoopRunSurface({ port, store, runId, onClose }: RelayLoopRu
       void load(explicit, 'restoring');
       return;
     }
-    const stored: unknown = store.read();
+    const stored: unknown = safeRead(store);
     if (!isUsableRestorePoint(stored)) {
       // Nothing to restore is not an error, and it is not an empty run either.
-      store.write(null);
+      safeWrite(store, null);
       setStatus(null);
       setEmptyReason(undefined);
       setSync('idle');
@@ -296,22 +371,29 @@ export function RelayLoopRunSurface({ port, store, runId, onClose }: RelayLoopRu
       view={projectLoopRunView({ status, ...(emptyReason === undefined ? {} : { emptyReason }) })}
       sync={sync}
       syncMessage={syncMessage}
-      onRefresh={currentId === null ? undefined : () => { void load(currentId, 'refreshing'); }}
+      onRefresh={currentId === null || sync === 'acting'
+        ? undefined
+        : () => { void load(currentId, 'refreshing'); }}
       onControl={port.control === undefined || currentId === null ? undefined : (action) => {
         void (async () => {
+          const mine = nextTicket();
           setSync('acting');
           setSyncMessage(null);
           const result = await port.control!({ runId: currentId, action });
+          if (ticket.current !== mine) return;   // superseded, or unmounted
           if (result.ok) {
             setStatus(result.status);
-            store.write(restorePointFor(result.status));
+            safeWrite(store, restorePointFor(result.status));
             setSync('idle');
             return;
           }
           // The action's outcome is UNKNOWN, so the run is re-read rather than
           // assumed. Announcing "Stopped" here would be announcing an intention.
-          setSyncMessage(result.message);
-          await load(currentId, 'refreshing');
+          //
+          // The failure message is CARRIED INTO the re-read rather than set
+          // before it: `load` clears the message on entry, so setting it here
+          // meant a refused Stop left the screen saying nothing at all.
+          await load(currentId, 'refreshing', result.message);
         })();
       }}
       {...(onClose === undefined ? {} : { onClose })}

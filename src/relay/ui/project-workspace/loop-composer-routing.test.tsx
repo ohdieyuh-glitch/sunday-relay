@@ -93,6 +93,18 @@ describe('website ↔ CLI Loop preview parity', () => {
     expect(opened.kind).toBe('run');
     expect(isLoopRunCommand(['loop', 'status', 'lpr_a'])).toBe(true);
 
+    // A LOOP id where a RUN id belongs opens no run surface either. The CLI
+    // seam refused this from the start; the website did not, so
+    // `/loop status lpe_abc` opened a panel that then reported "no such Loop
+    // run" for a perfectly valid Loop id.
+    for (const wrong of ['/loop status lpe_abc', '/loop status lps_abc']) {
+      const mismatched = openLoopSurface(wrong, {
+        flags: null, registry: null, observedAt: NOW,
+        projectId: 'p', workspaceId: 'w',
+      });
+      expect(mismatched.kind, wrong).not.toBe('run');
+    }
+
     // No id: neither surface can resolve "the caller's current Loop", and both
     // fall back to the preview that explains why.
     const bare = openLoopSurface('/loop status', {
