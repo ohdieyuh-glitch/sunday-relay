@@ -82,3 +82,15 @@ export {
   samplesFromTurn,
 } from './operational-intake';
 export type { ObservedFailure, ObservedTurn } from './operational-intake';
+
+export {
+  TOKEN_UNITS,
+  citeSpend,
+  emptySpendCitation,
+  formatMicros,
+} from './spend-citation';
+export type {
+  RelayCurrencyTotal,
+  RelaySpendCitation,
+  RelayTokenTotals,
+} from './spend-citation';

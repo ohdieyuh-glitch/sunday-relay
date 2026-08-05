@@ -31,6 +31,8 @@
  * See docs/relay/PROJECT_BRAIN_LLMOPS.md.
  */
 
+import type { RelaySpendCitation } from './spend-citation';
+
 /* ------------------------------------------------------------------ time */
 
 /**
@@ -238,6 +240,12 @@ export interface RelayRepairLoop {
  */
 export interface RelayOperationalRecord {
   readonly projectId: string;
+  /**
+   * Tokens and money, CITED from `../economics`. `null` means no economics
+   * source is wired — a different fact from a project with no receipts, and
+   * the surfaces say which.
+   */
+  readonly spend: RelaySpendCitation | null;
   readonly latency: readonly RelayLatencySample[];
   readonly waits: readonly RelayWaitInterval[];
   readonly errors: readonly RelayErrorEvent[];
@@ -252,6 +260,7 @@ export interface RelayOperationalRecord {
 export function emptyOperationalRecord(projectId: string): RelayOperationalRecord {
   return {
     projectId,
+    spend: null,
     latency: [],
     waits: [],
     errors: [],

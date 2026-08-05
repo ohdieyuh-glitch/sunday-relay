@@ -1,5 +1,6 @@
 import { paint } from './theme';
 import type { CliCaps } from './contracts';
+import { formatMicros } from '../../mission/llmops';
 import type { RelayFigure, RelayOperationsView } from '../../mission/llmops';
 
 /**
@@ -76,6 +77,40 @@ export function renderOperationsView(input: OperationsViewInput): {
     + (view.repairs.inProgress > 0 ? p.dim(`, ${view.repairs.inProgress} running`) : ''),
     '',
   );
+
+  /* ---- tokens and money, as economics recorded them ---- */
+  const spend = view.spend;
+  if (spend === null) {
+    lines.push(p.dim('  No economics source is wired, so no tokens or cost are recorded.'), '');
+  } else {
+    const t = spend.tokens;
+    lines.push(
+      `  ${p.dim('TOKENS'.padEnd(18))} ${p.tone('cream', t.total)}`
+      + p.dim(`  (${t.input} in, ${t.output} out, ${t.cachedInput} cached)`)
+      + (t.unreadable > 0 ? p.tone('amber', `  ${t.unreadable} unreadable`) : ''),
+    );
+    lines.push(`  ${p.dim('COST'.padEnd(18))} ${spend.actual.length === 0
+      ? p.dim('—')
+      : p.tone('cream', spend.actual
+        .map((total) => formatMicros(total.currency, total.amountMicros)).join(', '))}`);
+    if (spend.estimated.length > 0) {
+      // Never added to actual. A projection and a bill are different facts.
+      lines.push(`  ${p.dim('ESTIMATED'.padEnd(18))} ${p.dim(spend.estimated
+        .map((total) => formatMicros(total.currency, total.amountMicros)).join(', '))}`);
+    }
+    // Said beside the total, so a small total cannot read as a cheap run.
+    if (spend.amountUnknown > 0) {
+      lines.push(p.tone('amber', `  ${spend.amountUnknown} receipt(s) have no cost recorded yet.`));
+    }
+    if (spend.voidedOrDisputed > 0) {
+      lines.push(p.dim(`  ${spend.voidedOrDisputed} receipt(s) voided or disputed, excluded.`));
+    }
+    if (spend.fixtureSourced > 0) {
+      // Simulated data says so.
+      lines.push(p.tone('amber', `  ${spend.fixtureSourced} receipt(s) come from a development fixture, not a bill.`));
+    }
+    lines.push('');
+  }
 
   lines.push(p.dim('  LATENCY'));
   if (view.latency.length === 0) {

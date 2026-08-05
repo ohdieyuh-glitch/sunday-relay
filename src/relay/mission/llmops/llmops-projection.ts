@@ -13,6 +13,7 @@
  * showing a guess.
  */
 
+import type { RelaySpendCitation } from './spend-citation';
 import {
   WAITING_ON_USER_REASONS,
   isIndependentEvaluation,
@@ -114,6 +115,11 @@ export interface RelayRepairView {
 
 export interface RelayOperationsView {
   readonly projectId: string;
+  /**
+   * Tokens and money, as `../economics` recorded them. `null` means no
+   * economics source is wired; it is never an empty total standing in for one.
+   */
+  readonly spend: RelaySpendCitation | null;
   /** ISO-8601 instant this view was projected for. */
   readonly asOf: string;
   readonly health: RelayHealthState;
@@ -276,6 +282,7 @@ export function projectOperations(
 
   return {
     projectId: record.projectId,
+    spend: record.spend,
     asOf,
     health,
     healthReason,

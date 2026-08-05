@@ -1,4 +1,5 @@
 import './relay-operations-panel.css';
+import { formatMicros } from '../../mission/llmops';
 import type {
   RelayFigure, RelayHealthState, RelayOperationsView,
 } from '../../mission/llmops';
@@ -156,6 +157,65 @@ export function RelayOperationsPanel({ view }: {
           </dd>
         </div>
       </dl>
+
+      <h3 className="rop-subheading">TOKENS AND COST</h3>
+      {view.spend === null ? (
+        <p className="rop-empty">
+          No economics source is wired, so no tokens or cost are recorded.
+        </p>
+      ) : (
+        <>
+          <dl className="rop-figures">
+            <div>
+              <dt>TOKENS</dt>
+              <dd>
+                {view.spend.tokens.total}
+                <span className="rop-caveat">
+                  {` (${view.spend.tokens.input} in, ${view.spend.tokens.output} out, `}
+                  {`${view.spend.tokens.cachedInput} cached)`}
+                </span>
+                {view.spend.tokens.unreadable > 0 && (
+                  <span className="rop-bad"> {view.spend.tokens.unreadable} unreadable</span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>COST</dt>
+              <dd>
+                {view.spend.actual.length === 0 ? '—' : view.spend.actual
+                  .map((total) => formatMicros(total.currency, total.amountMicros)).join(', ')}
+              </dd>
+            </div>
+            {view.spend.estimated.length > 0 && (
+              <div>
+                {/* Never added to actual. A projection and a bill are different facts. */}
+                <dt>ESTIMATED</dt>
+                <dd className="rop-caveat">
+                  {view.spend.estimated
+                    .map((total) => formatMicros(total.currency, total.amountMicros)).join(', ')}
+                </dd>
+              </div>
+            )}
+          </dl>
+          {view.spend.amountUnknown > 0 && (
+            // Said beside the total: a small total must not read as a cheap run.
+            <p className="rop-missing">
+              {`${view.spend.amountUnknown} receipt(s) have no cost recorded yet.`}
+            </p>
+          )}
+          {view.spend.voidedOrDisputed > 0 && (
+            <p className="rop-missing">
+              {`${view.spend.voidedOrDisputed} receipt(s) voided or disputed, excluded.`}
+            </p>
+          )}
+          {view.spend.fixtureSourced > 0 && (
+            // Simulated data says so.
+            <p className="rop-missing">
+              {`${view.spend.fixtureSourced} receipt(s) come from a development fixture, not a bill.`}
+            </p>
+          )}
+        </>
+      )}
 
       <h3 className="rop-subheading">LATENCY</h3>
       {view.latency.length === 0 ? (

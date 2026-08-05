@@ -147,6 +147,32 @@ waiting to disagree with the website's. Two people reading different numbers off
 two screens in the same conversation is the failure a parity contract exists to
 prevent.
 
+## Tokens and cost are CITED, not recomputed
+
+The view names six things. Four are modelled here; tokens and money already had
+a careful model next door — receipts with statuses, cost classes, sources and an
+explicit unknown discipline — so `spend-citation.ts` reads that model and
+reports it. It does not add up a second opinion, because two summations of the
+same receipts eventually disagree and both look equally plausible on screen.
+
+What it refuses:
+
+- **An unknown amount is never a zero.** A pending receipt has `amount: null`;
+  it is counted as cost-not-yet-known and the count is printed beside the total,
+  so a small total cannot be read as a cheap run.
+- **Estimated is never added to actual.** A projection and a bill are different
+  facts, reported in separate rows.
+- **A voided or disputed receipt is not spend.** Counted and excluded, never
+  silently dropped.
+- **Currencies are not mixed.** Per-currency totals; no invented conversion.
+- **A fixture is never a bill.** `development_fixture`-sourced receipts are
+  counted and labelled.
+
+Arithmetic is `bigint` throughout, on the exact integer strings the receipts
+carry. `Number(micros) / 1e6` loses exactness above 2^53 and loses it
+invisibly — and a token count of 9007199254740993 must not print as
+9007199254740992.
+
 ## Intake: where a provider's `null` meets a metric
 
 `operational-intake.ts` is the only place the two touch, and the rule is stated
@@ -180,9 +206,10 @@ the website boundary rule protects.
 
 ## Not implemented
 
-**Nothing calls the intake yet.** The functions exist and are tested against
-fixtures; no adapter, run handler or bridge invokes them, so no live run is
-being measured. Token counts are modelled by `mission/economics` receipts
+**Nothing calls the intake yet, and nothing supplies receipts.** The functions
+exist and are tested against fixtures; no adapter, run handler or bridge invokes
+them, so no live run is being measured and `spend` is `null` in every shipped
+host. Both surfaces say so in those words rather than rendering zeroes. Token counts are modelled by `mission/economics` receipts
 (`input_token`, `output_token`, `cached_input_token`) and are cited from there
 rather than duplicated here. There is no persistence for short-term memory, no
 UI for approving a promotion proposal, and no scheduled refresh of the Brain

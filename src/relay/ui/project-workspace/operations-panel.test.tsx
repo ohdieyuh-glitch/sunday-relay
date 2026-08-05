@@ -146,3 +146,53 @@ describe('the figures a person can act on are not softened', () => {
     expect(document.querySelector('.rop-health--failing')).not.toBeNull();
   });
 });
+
+describe('tokens and cost are cited, and a fixture never looks like a bill', () => {
+  const spend = {
+    tokens: { input: '1200', output: '340', cachedInput: '900', total: '2440', unreadable: 0 },
+    actual: [{ currency: 'USD', amountMicros: '1500000', receipts: 1 }],
+    estimated: [] as { currency: string; amountMicros: string; receipts: number }[],
+    amountUnknown: 0,
+    voidedOrDisputed: 0,
+    fixtureSourced: 0,
+    receiptsRead: 1,
+  };
+  const withSpend = (over: Partial<typeof spend> = {}) => render(createElement(
+    RelayOperationsPanel,
+    { view: projectOperations({ ...emptyOperationalRecord('p'), newestSignalAt: RECENT,
+      spend: { ...spend, ...over } }, AS_OF) },
+  ));
+
+  it('shows the token breakdown and the money, formatted from integers', () => {
+    withSpend();
+    expect(text()).toContain('2440');
+    expect(text()).toContain('1200 in, 340 out, 900 cached');
+    expect(text()).toContain('USD 1.50');
+  });
+
+  it('no economics source is a different sentence from no receipts', () => {
+    render(createElement(RelayOperationsPanel, {
+      view: projectOperations({ ...emptyOperationalRecord('p'), newestSignalAt: RECENT }, AS_OF),
+    }));
+    expect(text()).toContain('No economics source is wired');
+  });
+
+  it('never presents an estimate as billed spend', () => {
+    withSpend({ estimated: [{ currency: 'USD', amountMicros: '9000000', receipts: 1 }] });
+    expect(text()).toContain('ESTIMATED');
+    // The two totals appear separately; the estimate is not summed in.
+    expect(text()).toContain('USD 1.50');
+    expect(text()).toContain('USD 9.00');
+    expect(text()).not.toContain('USD 10.50');
+  });
+
+  it('says when a cost is not yet known, beside the total', () => {
+    withSpend({ amountUnknown: 3 });
+    expect(text()).toContain('3 receipt(s) have no cost recorded yet');
+  });
+
+  it('labels fixture-sourced receipts rather than letting them read as a bill', () => {
+    withSpend({ fixtureSourced: 2 });
+    expect(text()).toContain('development fixture, not a bill');
+  });
+});
