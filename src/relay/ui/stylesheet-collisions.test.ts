@@ -16,36 +16,40 @@ import { describe, expect, it } from 'vitest';
  * Nothing failed. Both components' own tests passed, because each read only
  * its own stylesheet. The collision existed solely in the built artifact.
  *
- * The previous guard asserted that ONE file does not declare ONE class. That
- * closes the instance. This closes the CLASS OF BUG: every class name defined
- * in more than one stylesheet must be listed below with a reason.
- *
- * The list is SELF-CLEANING — an entry that stops colliding fails the test and
- * must be deleted, so a stale exception cannot accumulate.
+ * THE PARSER IS BRACE-AWARE, and that is not a detail. The first version of
+ * this guard matched `([^{}]+)\{[^}]*\}`, which swallows `@media … { .a { … }`
+ * as a single match whose "selector" is the at-rule. It therefore MISSED THE
+ * VERY RULE IT WAS WRITTEN FOR — the offending `.rdm` sat first inside a
+ * `@media (max-width: 640px)` block — while catching the second and later rules
+ * in the same block. Coverage was positionally accidental, and the cheapest way
+ * to silence a real failure would have been to move the rule into a media
+ * query. An at-rule does not scope a class name, so this parser descends.
  */
 
 const SRC = join(__dirname, '..', '..');
 
 /**
- * Collisions that are deliberate, each with the reason it is safe.
+ * Collisions that exist today, each with a reason that is TRUE of the code.
  *
- * A class belongs here only if the two definitions cannot restyle each other's
- * component — because one is specificity-scoped to a context the other never
- * enters, or because both describe the same component on purpose.
+ * A reason here is a claim about behaviour, and an exception whose reason is
+ * untrue is exactly the rot this file exists to prevent — the first version of
+ * this list said these four were "colour and typography only", which is false
+ * of two of them.
  */
 const ALLOWED_COLLISIONS: Readonly<Record<string, string>> = Object.freeze({
-  // `relay.css` and `mission-control.css` share four design-system classes.
-  // Both definitions are colour and typography only — neither declares
-  // `overflow`, `position`, or any box property — so the later one restyles the
-  // earlier one's appearance and cannot move or clip anything. Pre-existing,
-  // and untouched by the Relay Stage work.
-  'relay-wordmark': 'relay.css + mission-control.css, colour and type only',
-  'relay-tagline': 'relay.css + mission-control.css, colour and type only',
-  'relay-dim': 'relay.css + mission-control.css, colour and type only',
-  'relay-btn': 'relay.css + mission-control.css, colour and type only',
+  'relay-wordmark': 'relay.css + mission-control.css; both declare colour and font only',
+  'relay-dim': 'relay.css + mission-control.css; both declare colour only',
+  // Not harmless, and not claimed to be. `main.tsx` imports relay.css then
+  // mission-control.css, so the later one re-declares padding (6px 12px over
+  // 9px 16px), border-radius, border and min-height on every `.relay-btn`, and
+  // margin-left on `.relay-tagline`. That is pre-existing behaviour on a
+  // surface this change does not touch; it is recorded here as a known
+  // collision rather than asserted safe.
+  'relay-btn': 'PRE-EXISTING: mission-control.css re-declares padding/border-radius/min-height. Not verified as intentional.',
+  'relay-tagline': 'PRE-EXISTING: mission-control.css re-declares margin-left. Not verified as intentional.',
 });
 
-/** Rules whose selector is attribute-scoped cannot collide with a bare class. */
+/** A selector scoped to a colourway cannot collide with a bare class. */
 const THEME_SCOPED = /\[data-relay-colorway=/;
 
 function stylesheets(dir: string, found: string[] = []): string[] {
@@ -57,49 +61,169 @@ function stylesheets(dir: string, found: string[] = []): string[] {
   return found;
 }
 
-/** Class names this stylesheet defines in an UNSCOPED rule. */
+/**
+ * Every selector list in the sheet, including those nested inside at-rules.
+ *
+ * Walks braces rather than matching them, so `@media { .a { } }` yields `.a`
+ * and not `@media`. `@keyframes` is skipped: its children are percentages and
+ * keywords, not selectors.
+ */
+function selectorLists(css: string): string[] {
+  const source = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const lists: string[] = [];
+  const atRuleDepth: boolean[] = [];
+  let buffer = '';
+  let inKeyframes = 0;
+
+  for (const char of source) {
+    if (char === '{') {
+      const head = buffer.trim();
+      buffer = '';
+      const isAtRule = head.startsWith('@');
+      atRuleDepth.push(isAtRule);
+      if (isAtRule) {
+        if (/^@keyframes|^@-\w+-keyframes/.test(head)) inKeyframes += 1;
+        continue;
+      }
+      // A rule's children are declarations, not selectors — but we only ever
+      // reach here at a depth where `head` is a real selector list.
+      if (inKeyframes === 0 && head !== '') lists.push(head);
+      continue;
+    }
+    if (char === '}') {
+      const wasAtRule = atRuleDepth.pop();
+      if (wasAtRule && inKeyframes > 0) inKeyframes -= 1;
+      buffer = '';
+      continue;
+    }
+    buffer += char;
+  }
+  return lists;
+}
+
+/** Split a selector list on commas that are not inside `(` or `[`. */
+function splitSelectorList(list: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of list) {
+    if (char === '(' || char === '[') depth += 1;
+    else if (char === ')' || char === ']') depth -= 1;
+    if (char === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  parts.push(current);
+  return parts.map((part) => part.trim()).filter((part) => part !== '');
+}
+
+/**
+ * The selector's single compound, or null if it has a combinator.
+ *
+ * A descendant or sibling selector is SCOPED: `.x .a` styles `.a` only inside
+ * `.x`, so another sheet's bare `.a` rule cannot be fighting it for the same
+ * elements in the same way. Only a selector that is one compound is an
+ * unscoped definition.
+ */
+function soleCompoundOf(selector: string): string | null {
+  let depth = 0;
+  for (const char of selector) {
+    if (char === '(' || char === '[') depth += 1;
+    else if (char === ')' || char === ']') depth -= 1;
+    else if (depth === 0 && (char === ' ' || char === '>' || char === '+' || char === '~')) {
+      return null;
+    }
+  }
+  return selector.trim();
+}
+
+/**
+ * Class names this stylesheet defines UNSCOPED — that is, as the whole subject
+ * of a rule, where another sheet's bare rule of the same name would fight it.
+ *
+ * `.a:hover` and `.a[data-x]` count: they still style `.a`. `.a.b` and `.x .a`
+ * do not: they need a second class or an ancestor, so they cannot be reached by
+ * a bare `.a` rule alone.
+ */
 function definedClasses(css: string): Set<string> {
-  const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const names = new Set<string>();
-  for (const match of withoutComments.matchAll(/([^{}]+)\{[^}]*\}/g)) {
-    const selectorList = match[1];
-    if (THEME_SCOPED.test(selectorList)) continue;
-    for (const selector of selectorList.split(',')) {
-      const trimmed = selector.trim();
-      if (trimmed.startsWith('@') || trimmed === '') continue;
-      // Only the SUBJECT of the selector — its last compound — can be restyled
-      // by another sheet's bare rule. `.rps-mcp .rmcp` defines `rmcp` only in
-      // the context of `.rps-mcp`, so it is not an unscoped definition.
-      const compounds = trimmed.split(/\s+|>|\+|~/).filter(Boolean);
-      if (compounds.length !== 1) continue;
-      const classes = [...compounds[0].matchAll(/\.([\w-]+)/g)].map((m) => m[1]);
+  for (const list of selectorLists(css)) {
+    for (const selector of splitSelectorList(list)) {
+      // Checked PER SELECTOR, not per list: `[data-relay-colorway=x] .a, .b {}`
+      // scopes `.a` and leaves `.b` bare.
+      if (THEME_SCOPED.test(selector)) continue;
+      const subject = soleCompoundOf(selector);
+      if (subject === null) continue;
+      // Functional pseudo-classes carry their own selectors; strip them whole
+      // so `.a:not(.b)` reads as `.a` and never invents a `.b`.
+      const bare = subject
+        .replace(/:{1,2}[\w-]+\([^)]*\)/g, '')
+        .replace(/\[[^\]]*\]/g, '')
+        .replace(/:{1,2}[\w-]+/g, '');
+      if (!bare.startsWith('.')) continue;
+      const classes = [...bare.matchAll(/\.([\w-]+)/g)].map((m) => m[1]);
       if (classes.length === 1) names.add(classes[0]);
     }
   }
   return names;
 }
 
+function ownersByClass(files: readonly string[]): Map<string, string[]> {
+  const owners = new Map<string, string[]>();
+  for (const file of files) {
+    const relative = file.slice(SRC.length + 1);
+    for (const name of definedClasses(readFileSync(file, 'utf8'))) {
+      owners.set(name, [...(owners.get(name) ?? []), relative]);
+    }
+  }
+  return owners;
+}
+
 describe('no class is defined by two stylesheets that share a bundle', () => {
   const files = stylesheets(SRC);
+  const owners = ownersByClass(files);
 
-  it('finds the stylesheets, so an empty walk cannot pass vacuously', () => {
-    expect(files.length).toBeGreaterThan(10);
+  it('parses real stylesheets, so nothing below can pass vacuously', () => {
+    expect(files.length, 'found no stylesheets to walk').toBeGreaterThan(10);
+    // The extractor must be producing real output. Without this, stubbing it to
+    // return an empty Set makes every assertion below pass — and the only thing
+    // that would notice is the allow-list canary, which the self-cleaning rule
+    // actively encourages deleting.
+    expect(owners.size, 'the class extractor produced almost nothing').toBeGreaterThan(200);
+  });
+
+  it('descends into at-rules, where the original defect lived', () => {
+    // The offending `.rdm` was the FIRST rule inside `@media (max-width: 640px)`.
+    // A parser that treats an at-rule opener as a selector misses exactly that.
+    const nested = selectorLists('@media (max-width: 640px) { .first { color: red } .second { } }');
+    expect(nested).toEqual(['.first', '.second']);
+    expect(selectorLists('@keyframes x { from { opacity: 0 } }')).toEqual([]);
+  });
+
+  it('reads a selector’s subject, and only when it is a bare class', () => {
+    const of = (css: string) => [...definedClasses(css)];
+    expect(of('.a:hover { }')).toEqual(['a']);
+    expect(of('.a[data-x] { }')).toEqual(['a']);
+    expect(of('.a:not(.b) { }')).toEqual(['a']);
+    expect(of('.a:is(.c, .d) { }')).toEqual(['a']);
+    expect(of('.a, .b { }')).toEqual(['a', 'b']);
+    // Needs an ancestor or a second class, so a bare rule cannot reach it.
+    expect(of('.x .a { }')).toEqual([]);
+    expect(of('.a.b { }')).toEqual([]);
+    // Scoped per selector, not per list.
+    expect(of('[data-relay-colorway="m"] .q, .bare { }')).toEqual(['bare']);
   });
 
   it('every cross-stylesheet collision is listed with a reason', () => {
-    const owners = new Map<string, string[]>();
-    for (const file of files) {
-      const relative = file.slice(SRC.length + 1);
-      if (relative.endsWith('relay-manual-theme.css')) continue;
-      for (const name of definedClasses(readFileSync(file, 'utf8'))) {
-        owners.set(name, [...(owners.get(name) ?? []), relative]);
-      }
-    }
-
     const undeclared: string[] = [];
     for (const [name, sheets] of owners) {
       if (sheets.length < 2) continue;
-      if (name in ALLOWED_COLLISIONS) continue;
+      // `hasOwn`, not `in`: `.constructor` and `.toString` are legal class
+      // names and would otherwise be exempted by the prototype chain.
+      if (Object.hasOwn(ALLOWED_COLLISIONS, name)) continue;
       undeclared.push(`${name} — ${sheets.join(' AND ')}`);
     }
 
@@ -107,21 +231,13 @@ describe('no class is defined by two stylesheets that share a bundle', () => {
       undeclared.sort(),
       'each of these class names is defined by two stylesheets in one bundle, so '
       + 'the later one silently restyles the earlier one’s component. Rename it, '
-      + 'scope it, or add it to ALLOWED_COLLISIONS with the reason it is safe.',
+      + 'scope it, or add it to ALLOWED_COLLISIONS with a reason that is TRUE.',
     ).toEqual([]);
   });
 
   it('the allow-list is self-cleaning: no entry has stopped colliding', () => {
-    const owners = new Map<string, number>();
-    for (const file of files) {
-      if (file.endsWith('relay-manual-theme.css')) continue;
-      for (const name of definedClasses(readFileSync(file, 'utf8'))) {
-        owners.set(name, (owners.get(name) ?? 0) + 1);
-      }
-    }
     const stale = Object.keys(ALLOWED_COLLISIONS)
-      .filter((name) => !name.startsWith('__'))
-      .filter((name) => (owners.get(name) ?? 0) < 2);
+      .filter((name) => (owners.get(name)?.length ?? 0) < 2);
     expect(stale, 'these exceptions no longer collide and must be deleted')
       .toEqual([]);
   });
