@@ -13,6 +13,7 @@
 import type { EventTruthClass, TerminalEventCategory } from '../../mission/wire-contracts';
 import type { RelayAgentOperatingProjection } from '../../mission';
 import type { RelayBackdropId } from '../relay-stage';
+import type { RelayBrainDocument, RelayOperationsView } from '../../shared/llmops';
 
 /* ----------------------------------------------------------------- modes */
 
@@ -275,6 +276,18 @@ export interface RelayProjectWorkspaceProps {
   repairs: RepairTask[];
   researchState: ResearchState;
   projectBrainState: ProjectBrainState;
+  /**
+   * The refreshed Project Brain document. Absent means no generator has run;
+   * the panel says that rather than drawing an empty document.
+   */
+  projectBrainDocument?: RelayBrainDocument;
+  /**
+   * The operational half of the Project Brain. OPTIONAL, and its absence is
+   * rendered as "no operations source is wired" rather than as zeroes — a
+   * deployment that measures nothing and a project that reported nothing are
+   * different facts and the panel says which one it is.
+   */
+  operationsView?: RelayOperationsView;
   completionState: CompletionState;
   /** Whether research automation was enabled in Project Settings. */
   researchEnabled: boolean;

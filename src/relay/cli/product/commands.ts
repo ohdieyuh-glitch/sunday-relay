@@ -10,6 +10,9 @@ import { paint } from './theme';
 import { safeText } from './safety';
 import { renderStageView } from './stage';
 import type { RelayStageActor } from '../../shared/relay-stage-layout';
+import { renderOperationsView } from './operations';
+import { emptyOperationalRecord, projectOperations } from '../../shared/llmops';
+import { emptyShortTermMemory, refreshBrainDocument } from '../../shared/llmops';
 
 /**
  * Relay CLI product commands (Prompt 8.6) — the NON-INTERACTIVE command
@@ -141,12 +144,13 @@ const RELAY_CLI_STAGE_CAST: readonly RelayStageActor[] = Object.freeze([
 
 export type ProjectView =
   | 'tasks' | 'findings' | 'repairs' | 'evidence' | 'history' | 'settings' | 'workforce'
-  | 'research' | 'stage';
+  | 'research' | 'stage' | 'operations' | 'brain';
 
 const VIEW_ROUTE: Record<ProjectView, string> = {
   tasks: 'RLY / TASKS', findings: 'RLY / FINDINGS', repairs: 'RLY / FINDINGS',
   evidence: 'RLY / EVIDENCE', history: 'RLY / HISTORY', settings: 'RLY / SETTINGS',
   workforce: 'RLY / WORKFORCE', research: 'RLY / RESEARCH', stage: 'RLY / STAGE',
+  operations: 'RLY / OPERATIONS', brain: 'RLY / BRAIN',
 };
 
 /** Non-interactive project sub-surfaces (`relay project findings|tasks|
@@ -233,6 +237,45 @@ export function productProjectView(
       });
       lines.push(...view.lines);
       json = view.json;
+      break;
+    }
+    case 'operations': {
+      // The SAME projection the workspace panel renders. Nothing has a producer
+      // yet, so an empty record is projected — which truthfully reports UNKNOWN
+      // health and says nothing has reported, rather than a wall of zeroes.
+      const view = renderOperationsView({
+        caps,
+        view: projectOperations(emptyOperationalRecord(project.projectId), new Date().toISOString()),
+      });
+      lines.push(...view.lines);
+      json = view.json;
+      break;
+    }
+    case 'brain': {
+      // The SAME document generator the workspace panel renders. Nothing
+      // persists memory yet, so this reports an empty project truthfully:
+      // "nothing has been recorded", not an empty document dressed as one.
+      const document = refreshBrainDocument({
+        projectId: project.projectId,
+        longTerm: [],
+        shortTerm: emptyShortTermMemory(),
+        proposals: [],
+        generatedAt: new Date().toISOString(),
+      });
+      lines.push(
+        `  ${p.dim('FRESHNESS'.padEnd(18))} ${p.tone(document.stale ? 'gray' : 'cyan',
+          document.stale ? 'STALE' : 'CURRENT')}`,
+        `  ${p.dim(''.padEnd(18))} ${p.dim(document.freshness)}`,
+        '',
+      );
+      for (const section of document.sections) {
+        lines.push(p.dim(`  ${section.heading}`));
+        for (const line of section.lines) {
+          lines.push(`    ${p.tone('cream', safeText(line, { maxLength: 200 }))}`);
+        }
+        lines.push('');
+      }
+      json = document;
       break;
     }
     case 'settings':

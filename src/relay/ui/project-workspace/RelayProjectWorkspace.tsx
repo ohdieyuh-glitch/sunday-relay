@@ -13,6 +13,7 @@ import { RelayReviewerStatus } from './RelayReviewerStatus';
 import { RelayVerificationSummary } from './RelayVerificationSummary';
 import { RelayResearchStatus } from './RelayResearchStatus';
 import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
+import { RelayOperationsPanel } from './RelayOperationsPanel';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
 import {
   RelayStage, RelayStageBackdrop, RelayStageBackdropPicker,
@@ -171,6 +172,8 @@ export function RelayProjectWorkspace(
     onOpenRepair,
     onReturnHome,
     onSelectStageBackdrop,
+    operationsView,
+    projectBrainDocument,
   } = props;
 
   const completion = completionDisplay({ completionState, reviewerState, findings, repairs });
@@ -372,7 +375,12 @@ export function RelayProjectWorkspace(
               ))}
             </div>
             <div className="rpw-status-block">
-              {focusable('project_brain', <RelayProjectBrainStatus state={projectBrainState} />)}
+              {focusable('project_brain', <RelayProjectBrainStatus state={projectBrainState} document={projectBrainDocument} />)}
+              {/* The operational half of the Brain. Mounted unconditionally: a
+                  deployment with no operations source says so, which is a
+                  different fact from a project with nothing to report, and
+                  neither is drawn as a wall of zeroes. */}
+              <RelayOperationsPanel view={operationsView ?? null} />
             </div>
             {props.agentsPanel && (
               <div className="rpw-status-block">
