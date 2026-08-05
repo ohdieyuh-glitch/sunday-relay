@@ -308,12 +308,14 @@ export interface RelayProjectWorkspaceProps {
    */
   onSelectStageBackdrop?: (id: RelayBackdropId) => void;
   /**
-   * The viewport width the HOST observed, for the Relay Stage.
+   * An EXPLICIT viewport width for the Relay Stage, overriding measurement.
    *
-   * Passed in rather than measured, because the stage is a pure projection of
-   * what someone else saw — the same discipline the rest of this surface uses
-   * for a clock. Absent falls back to a wide stage, which is the shape a
-   * desktop workspace has; it is a default for a LAYOUT, not for a fact.
+   * The stage itself measures nothing — it is a pure projection of what someone
+   * else observed, the same discipline this surface uses for a clock. The
+   * observing is the WORKSPACE's job (`use-viewport-width.ts`), so absent means
+   * "measure it", not "assume a desktop". A test or a non-browser host passes
+   * this to state the width it means; only when there is no window at all does
+   * a desktop width stand in.
    */
   viewportWidthPx?: number;
   /** Optional demo mission playback control, rendered above the console.

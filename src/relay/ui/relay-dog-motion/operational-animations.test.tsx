@@ -793,10 +793,36 @@ describe('REGRESSION — untouched states stay untouched', () => {
   });
 
   it('the scene is responsive and cannot overflow horizontally', () => {
-    // The boundary already clips its own track; the decor is absolutely
-    // positioned inside it and clipped too.
-    expect(css).toMatch(/\.rdm\s*\{[^}]*overflow-x:\s*hidden/s);
-    expect(css).toMatch(/\.rdo\s*\{[^}]*overflow:\s*hidden/s);
+    // THE CONTAINMENT MOVED, AND THIS TEST MOVED WITH IT.
+    //
+    // `.rdm` used to carry `overflow-x: hidden`. It cannot any more: CSS forces
+    // `overflow-y` to `auto` when the other axis is `hidden`, so that one
+    // declaration was clipping the dog VERTICALLY and there was no room for a
+    // jump. Containment is now the PAGE's job, one level up.
+    //
+    // Asserted against comment-stripped CSS on purpose. This assertion kept
+    // passing after the declaration was deleted, because the comment left in
+    // its place explains the removal using the very words it was matching and
+    // `[^}]*` walks straight through a comment. A test that reads its own
+    // explanation is not testing anything.
+    const declarations = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(declarations).not.toMatch(/\.rdm\s*\{[^}]*overflow/s);
+
+    // Every host that renders the boundary still contains it horizontally.
+    const stageCss = readFileSync(
+      join(dir, '..', 'relay-stage', 'relay-stage.css'), 'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    // `clip`, not `hidden` — `clip` leaves the vertical axis genuinely visible.
+    expect(stageCss).toMatch(/\.rpw-stage-bounds\s*\{[^}]*overflow-x:\s*clip/s);
+    const homeCss = readFileSync(
+      join(dir, '..', 'entry-home', 'relay-entry-home.css'), 'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(homeCss).toMatch(/overflow-x:\s*hidden/);
+
+    // The decor box keeps its own clip, and should: it is a sibling overlay
+    // sized to the sprite, and its job is to keep dig-clods and sleep-marks on
+    // the dog rather than flung across the panel. It never clipped the dog.
+    expect(declarations).toMatch(/\.rdo\s*\{[^}]*overflow:\s*hidden/s);
     // A phone breakpoint keeps the remaining scenery legible rather than
     // letting it shrink without bound.
     expect(css).toContain('@media (max-width: 480px)');

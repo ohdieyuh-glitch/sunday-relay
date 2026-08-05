@@ -275,3 +275,27 @@ describe('a cast is described in dog units, not in IEEE 754', () => {
     expect(String(requestedWidth)).not.toContain('0000');
   });
 });
+
+describe('the overflow verdict comes from the measurement, not the display', () => {
+  it('a cast overflowing by less than the rounding step is still overflowing', () => {
+    // requestedWidth is rounded to two places so a surface never prints
+    // 6.0025000000000004. Deciding `overflowing` from that rounded number would
+    // report a cast that genuinely does not fit as fitting.
+    const layout = layoutStage({
+      actors: Array.from({ length: 5 }, (_, i) => actor({ id: `a${i}`, width: 1.2005 })),
+      viewportWidthPx: 1440,
+    });
+    expect(layout.capacity).toBe(6);
+    expect(layout.requestedWidth).toBe(6);       // what a person reads
+    expect(layout.overflowing).toBe(true);       // what is actually true
+  });
+
+  it('a cast that exactly fills the stage is not overflowing', () => {
+    const layout = layoutStage({
+      actors: [actor({ width: 6 })],
+      viewportWidthPx: 1440,
+    });
+    expect(layout.requestedWidth).toBe(6);
+    expect(layout.overflowing).toBe(false);
+  });
+});
