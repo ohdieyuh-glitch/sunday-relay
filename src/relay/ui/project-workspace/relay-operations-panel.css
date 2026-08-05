@@ -1,0 +1,149 @@
+/* SUNDAY RELAY — PROJECT OPERATIONS PANEL.
+ *
+ * An unknown figure is styled DIFFERENTLY from a zero on purpose. The most
+ * common way an operations surface misleads is by rendering both as the same
+ * confident glyph, so `.rop-unknown` is dimmed and carries its reason inline. */
+
+.rop {
+  display: grid;
+  gap: 10px;
+}
+
+/* ------------------------------------------------------------ health */
+
+.rop-health {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+}
+
+.rop-health-state {
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  font-family: var(--font-brand, ui-monospace, monospace);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  padding: 1px 7px;
+}
+
+.rop-health-reason {
+  color: var(--text-dim, #8b8578);
+  font-size: 0.8rem;
+}
+
+/* UNKNOWN is its own state with its own colour, never folded into healthy. */
+.rop-health--healthy .rop-health-state { color: var(--ok, #6fae6f); }
+.rop-health--degraded .rop-health-state { color: var(--warn, #d9a441); }
+.rop-health--failing .rop-health-state { color: var(--bad, #c96a5c); }
+.rop-health--unknown .rop-health-state { color: var(--text-dim, #8b8578); }
+
+/* --------------------------------------------------------- waiting */
+
+.rop-waiting {
+  border-left: 2px solid var(--text-dim, #8b8578);
+  color: var(--text-dim, #8b8578);
+  font-size: 0.82rem;
+  margin: 0;
+  padding-left: 10px;
+}
+
+/* An OPEN wait on the user is the one line here that is asking for something. */
+.rop-waiting--open {
+  border-left-color: var(--warn, #d9a441);
+  color: var(--warn, #d9a441);
+}
+
+/* --------------------------------------------------------- figures */
+
+.rop-figures {
+  display: grid;
+  gap: 8px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin: 0;
+}
+
+.rop-figures dt {
+  color: var(--text-dim, #8b8578);
+  font-family: var(--font-brand, ui-monospace, monospace);
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+}
+
+.rop-figures dd {
+  margin: 2px 0 0;
+}
+
+.rop-bad { color: var(--bad, #c96a5c); }
+.rop-caveat { color: var(--text-dim, #8b8578); }
+
+/* An unknown reads as an absence, and says why it is absent. */
+.rop-unknown { color: var(--text-dim, #8b8578); }
+
+.rop-unknown-why {
+  font-size: 0.72rem;
+  font-style: italic;
+}
+
+/* --------------------------------------------------------- latency */
+
+.rop-subheading {
+  color: var(--text-dim, #8b8578);
+  font-family: var(--font-brand, ui-monospace, monospace);
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  margin: 6px 0 0;
+}
+
+.rop-latency {
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  width: 100%;
+}
+
+.rop-latency th,
+.rop-latency td {
+  padding: 3px 8px 3px 0;
+  text-align: left;
+}
+
+.rop-latency thead th {
+  color: var(--text-dim, #8b8578);
+  font-size: 0.68rem;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+}
+
+.rop-latency tbody th {
+  font-weight: normal;
+}
+
+.rop-empty,
+.rop-missing,
+.rop-asof {
+  color: var(--text-dim, #8b8578);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+/* --------------------------------------------------------- waits */
+
+.rop-waits {
+  display: grid;
+  font-size: 0.8rem;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rop-waits li {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.rop-wait-reason { text-transform: lowercase; }
+
+.rop-wait-time { color: var(--text-dim, #8b8578); }
