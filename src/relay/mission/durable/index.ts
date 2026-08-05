@@ -34,6 +34,7 @@ export {
   migrateDurableRecord,
   readDurableRecord,
   redactDurableRecord,
+  redactDurableValue,
   sealDurableRecord,
   serializeDurableRecord,
   verifyDurableChecksum,

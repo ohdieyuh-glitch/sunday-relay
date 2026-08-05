@@ -1003,3 +1003,34 @@ commits: c0a959f (protocol+architecture), ccebea5 (spec+security), 36ebc0e
 (tests+ADRs), b8359e2 (state/log/supersessions/AGENTS §7), then the final
 audit-fix lock commit (`docs(relay): lock expanded Relay architecture` —
 see `git log`).
+
+## Loop Engine — command foundation (2026-08-02)
+
+The Relay Loop command foundation landed on `relay/loop-engine`. What exists is
+the **grammar and the contracts around it**, not a runtime:
+
+| Piece | State |
+|---|---|
+| Canonical slash-command parser | implemented — one grammar, CLI + composer |
+| Loop target contract (requested / resolved / actual) | implemented |
+| Loop Contract foundation + validation + binding digest | implemented |
+| Truthful blocker model | implemented |
+| Completion-trust rules | implemented |
+| Feature gates (all fail closed, all off) | implemented |
+| Shared preview projection | implemented |
+| `relay loop …` CLI + composer routing | implemented |
+| Loop iteration runtime | **not implemented** |
+| Durable Loop persistence | **not implemented** |
+| Work-conserving scheduler, slots, watchdog | **not implemented** |
+| Cron scheduler (grammar only) | **not implemented** |
+| Unchain, S-Loop runtime, Rechaining | **not implemented** |
+
+**No Loop has ever run, and no provider call has ever been made.** A command
+that parses is not a Loop that ran. See `LOOP_ENGINE.md`, `UNCHAIN.md` and
+`CRON_LOOPS.md`, each of which states its own implementation status first.
+
+The Loop feature flags are a PURE domain concept (`RelayLoopFeatureFlags`)
+today. They are deliberately **not** in `.env.example` yet: no code reads an
+environment variable for them, and documenting an environment contract nothing
+honours would be the same kind of claim this product exists to avoid. They land
+with the bridge stage that reads them.

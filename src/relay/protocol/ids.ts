@@ -40,6 +40,50 @@ export type ManualTaskId = Branded<'mtk'>;
 export type ManualRequestId = Branded<'mrq'>;
 
 /**
+ * LOOP ENGINE identifiers (docs/relay/LOOP_ENGINE.md). They live here, in the
+ * one branded-id system, rather than in a private scheme under the Loop
+ * domain — an id that validates differently from every other Relay id is an id
+ * whose validation nobody checks.
+ *
+ * The whole Loop id set is declared in ONE append rather than a prefix at a
+ * time. `PREFIXES` is the most contended object in the repository (the MCP
+ * host adds its own family here too), and one append block is one merge
+ * conflict to resolve rather than five.
+ *
+ * Note what is NOT an id: a Loop's `bindingDigest` is a content digest, not an
+ * identifier, so it is never minted by the factory and never carries a prefix.
+ */
+export type RelayLoopId = Branded<'lpe'>;
+/**
+ * ONE EXECUTION of a Loop. Distinct from `RelayLoopId`, which identifies the
+ * Loop itself: a Loop may be run more than once, and a run carries the
+ * iterations, the assignment and the durable journal. Conflating the two would
+ * make "which run produced this evidence" unanswerable.
+ */
+export type RelayLoopRunId = Branded<'lpr'>;
+/**
+ * ONE CONTROL REQUEST — a pause, a resume or a stop somebody asked for.
+ *
+ * Deliberately its own family rather than a reused run, iteration or event id.
+ * A control request is a distinct durable fact with its own lifetime: it is
+ * created before anything happens, it may be redelivered, and it is answered
+ * exactly once. Deriving its identity from the recovery generation (the earlier
+ * shortcut) breaks the moment a resume fails and the run parks again at the
+ * same generation — the second pause would collide with the first and be
+ * discarded as a duplicate of a request nobody made twice.
+ */
+export type RelayLoopControlRequestId = Branded<'lpq'>;
+export type RelayLoopIterationId = Branded<'lpi'>;
+export type RelayLoopScheduleId = Branded<'lps'>;
+export type RelayLoopTriggerId = Branded<'lpt'>;
+export type RelayLoopSlotId = Branded<'lpo'>;
+export type RelayLoopBranchId = Branded<'lpb'>;
+export type RelayLoopCapacityGrantId = Branded<'lpc'>;
+export type RelayLoopTemplateId = Branded<'lpm'>;
+export type UnchainSessionId = Branded<'lpu'>;
+export type RelayLoopCollapseId = Branded<'lpk'>;
+
+/**
  * MCP host identifiers (docs/relay/MCP_FOUNDATION.md). They live here, in the
  * one branded-id system, rather than in a private scheme under `src/relay/mcp`
  * — an id that validates differently from every other Relay id is an id whose
@@ -76,6 +120,11 @@ export const PREFIXES = {
   apr: 'apr_', oqn: 'oqn_', use: 'use_', aud: 'aud_', clm: 'clm_', asn: 'asn_',
   dsg: 'dsg_', pol: 'pol_', hcr: 'hcr_', ckp: 'ckp_', art: 'art_', ses: 'ses_',
   wsp: 'wsp_', mtk: 'mtk_', mrq: 'mrq_',
+  // Loop Engine (docs/relay/LOOP_ENGINE.md).
+  lpe: 'lpe_', lpi: 'lpi_', lps: 'lps_', lpt: 'lpt_', lpo: 'lpo_',
+  lpb: 'lpb_', lpc: 'lpc_', lpm: 'lpm_', lpu: 'lpu_', lpk: 'lpk_',
+  // Stage 2 runtime: one execution of a Loop, and one control request against it.
+  lpr: 'lpr_', lpq: 'lpq_',
   // MCP host (docs/relay/MCP_FOUNDATION.md).
   mrg: 'mrg_', msd: 'msd_', mcn: 'mcn_', mcs: 'mcs_', mci: 'mci_',
   mcq: 'mcq_', mca: 'mca_', mcg: 'mcg_', mcr: 'mcr_', mcu: 'mcu_',

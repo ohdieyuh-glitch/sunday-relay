@@ -143,6 +143,58 @@ export {
 } from './prompt-architect';
 
 export {
+  // Loop Engine — re-exported through the barrel for the same reason economics,
+  // worktrees, the coding agent, the prompt architect and the reviewer harness
+  // are: the CLI boundary permits only the bare '../mission' path, and BOTH
+  // surfaces must normalize a slash command through the SAME parser rather
+  // than each growing their own grammar.
+  ALL_LOOP_FEATURES_DISABLED, COMPLETION_SUPPORTING_TRUSTS, DEFAULT_LOOP_LIMITS,
+  DEFAULT_LOOP_TARGET, RELAY_ELIGIBILITY_BLOCKER_REASONS, RELAY_INPUT_ROUTES,
+  RELAY_LOOP_ACTIONS, RELAY_LOOP_ACTIONS_ACCEPTING_ID, RELAY_LOOP_ALL_ALIASES,
+  RELAY_LOOP_AVAILABILITY_STATES, RELAY_LOOP_BLOCKER_REASONS,
+  RELAY_LOOP_BLOCKER_SOURCES, RELAY_LOOP_CANONICAL_ALIAS,
+  RELAY_LOOP_COMPLETION_VERDICTS, RELAY_LOOP_CONTRACT_SCHEMA_VERSION,
+  RELAY_LOOP_CREATION_SOURCES, RELAY_LOOP_FEATURES, RELAY_LOOP_FEATURE_DEPENDENCIES,
+  RELAY_LOOP_RECORD_SCHEMA_VERSION, SUPPORTED_LOOP_RECORD_SCHEMA_VERSIONS,
+  contractStillBinds, createRelayLoopStore, readLoopRecord, sealLoopRecord,
+  RELAY_LOOP_ROLE_ALIASES, RELAY_LOOP_ROLE_WORDS, RELAY_LOOP_SCHEDULE_VERBS,
+  RELAY_LOOP_STATES, RELAY_LOOP_STOP_CONDITIONS, RELAY_LOOP_TARGETABLE_ROLES,
+  RELAY_LOOP_TARGET_KINDS, RELAY_LOOP_TYPES, RELAY_ROLE_AVAILABILITIES,
+  RELAY_SLASH_COMMAND_KINDS, RELAY_SLASH_FAMILIES, RELAY_SWARM_ACTIONS_ACCEPTING_ID,
+  RELAY_SWARM_LOOP_ACTIONS, RELAY_SWARM_STATES, RESUMABLE_LOOP_STATES,
+  TERMINAL_LOOP_STATES, UNCHAIN_GRANTING_STATES, UNCHAIN_METER_STATES,
+  UNCHAIN_TEMPORARY_SLOTS,
+  blockersForUnavailableRoles, blockersFromEligibility, buildLoopContract,
+  claimAloneCompletes, commandRequestsExecution, evaluateLoopAvailability,
+  evaluateLoopCompletion, featureEffectivelyEnabled, featureEnabled,
+  isBindingLoopChange, isSlashCommandInput, looksLikeTargetExpression,
+  parseRoleExpression, parseSlashCommand, projectLoopCommandPreview,
+  renderLoopPreviewLines, requestedRolesFor, resolveLoopTarget,
+  roleForAlias, routeRelayInput, runtimeBlocker, targetIsStaffable,
+  trustSupportsCompletion, unchainSessionProblem, validateLoopContractDraft,
+  withObservedAssignment,
+  type RelayAgentRegistrySnapshot, type RelayInputRoute, type RelayLoopAction,
+  type RelayLoopAvailability, type RelayLoopBlocker, type RelayLoopBlockerReason,
+  type RelayLoopCommand, type RelayLoopCompletionInput, type RelayLoopCompletionResult,
+  type RelayLoopCompletionVerdict, type RelayLoopContract, type RelayLoopContractDraft,
+  type RelayLoopCreateCommand, type RelayLoopCreationSource, type RelayLoopFeature,
+  type RelayLoopFeatureFlags, type RelayLoopLimits, type RelayLoopRoleAssignment,
+  type RelayLoopCommandPreview, type RelayLoopIterationRef, type RelayLoopOwnerLease,
+  type RelayLoopPreviewInput, type RelayLoopPreviewRow, type RelayLoopRecord,
+  type RelayLoopRecordDraft, type RelayLoopStorePort,
+  type RelayLoopScheduleCommand, type RelayLoopScope, type RelayLoopState,
+  type RelayLoopStopCondition, type RelayLoopTarget, type RelayLoopTargetKind,
+  type RelayLoopTargetSelector, type RelayLoopType, type RelayParsedSlashCommand,
+  type RelayRoleAvailability, type RelaySlashCommand, type RelaySlashFamily,
+  type RelaySwarmLoopAction, type RelaySwarmLoopCommand, type RelaySwarmState,
+  type UnchainMeterState, type UnchainSessionRecord,
+  // Stage 2 runtime read-models. Re-exported through the barrel so the CLI
+  // (which may import only '../mission') and the website render the ONE
+  // projection rather than each building their own from the domain.
+  type LoopHistoryEntry, type LoopInspectionProjection, type LoopStatusProjection,
+} from './loop';
+
+export {
   // Reviewer harness — re-exported through the barrel so the CLI (which may
   // import only '../mission') and the website render the ONE projection.
   CATALOG_STATUS_LABEL, HARNESS_STATE_LABEL, NO_HARNESS_CAPABILITIES,

@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { RelayProjectHeader } from './RelayProjectHeader';
 import { RelayConsole } from './RelayConsole';
 import { RelayProjectConversation } from './RelayProjectConversation';
+import { RelayLoopSurfaceHost, type RelayLoopSurface } from '../loop/RelayLoopSurface';
 import { RelayLiveTerminalPanel } from './RelayLiveTerminalPanel';
 import { RelayCodingAgentTerminal } from './RelayCodingAgentTerminal';
 import { RelayRoleBilling } from './RelayRoleBilling';
@@ -72,6 +73,13 @@ export function RelayProjectWorkspace(
      * render exactly as before.
      */
     usage?: RelayWorkspaceUsage;
+    /**
+     * Optional Loop surface. Present only once a host wires the Loop
+     * commands; absent, the workspace renders exactly as it did before and
+     * slash input stays with the conversation. Additive on purpose — this
+     * is an approved screen and Loops must not rebuild it.
+     */
+    loopSurface?: RelayLoopSurface;
     /**
      * Isolated-worktree state for the Coding Agent's Environment. Optional:
      * a caller that cannot know (the static deployment has no Node bridge)
@@ -239,10 +247,14 @@ export function RelayProjectWorkspace(
               <RelayProjectConversation
                 messages={projectMessages}
                 onSendProjectMessage={onSendProjectMessage}
+                onSendSlashCommand={props.loopSurface?.onSlashCommand}
                 onApproveDecision={onApproveDecision}
                 onRejectDecision={onRejectDecision}
               />
             ))}
+            {props.loopSurface !== undefined ? (
+              <RelayLoopSurfaceHost surface={props.loopSurface} />
+            ) : null}
           </div>
 
           <aside className="rpw-status" aria-label="System status">

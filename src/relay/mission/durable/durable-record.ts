@@ -68,6 +68,18 @@ export function redactDurableRecord(draft: DurableMissionRecordDraft): DurableMi
   return redactValue(draft, 0) as DurableMissionRecordDraft;
 }
 
+/**
+ * The same redaction, for any durable value that is not a mission record.
+ *
+ * The Loop journal needs these exact rules — same forbidden keys, same secret
+ * shapes, same bounds — and a second implementation of them would be a second
+ * thing to keep in step. Exposing the walker rather than copying it means one
+ * set of rules protects both lifecycles.
+ */
+export function redactDurableValue(value: unknown): unknown {
+  return redactValue(value, 0);
+}
+
 /* -------------------------------------------------------------- sealing */
 
 /**

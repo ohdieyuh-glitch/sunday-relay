@@ -295,6 +295,89 @@ describe('development contracts are accounted for', () => {
   });
 });
 
+describe('the Loop Engine documents state what exists, truthfully', () => {
+  // These three docs record decisions that arrived from outside the
+  // repository. That makes them the ONLY place a reviewer can check the
+  // locked terms against — so the one thing they must never do is imply a
+  // feature exists because it is written down.
+  // Markdown wraps a sentence across source lines, so every assertion below
+  // runs against the UNWRAPPED text — the same idiom the parity-contract
+  // block above uses. Asserting on a raw line is how a doc test starts
+  // failing for reflow rather than for meaning.
+  const unwrap = (text: string) => text.replace(/\s+/gu, ' ');
+  const loop = unwrap(read('docs/relay/LOOP_ENGINE.md'));
+  const unchain = unwrap(read('docs/relay/UNCHAIN.md'));
+  const cron = unwrap(read('docs/relay/CRON_LOOPS.md'));
+
+  it('each one declares its implementation status up front', () => {
+    /*
+     * ASSERTED ON THE STATUS LINE, NOT ON THE WHOLE DOCUMENT.
+     *
+     * This read `expect(loop).toContain('RUNTIME NOT IMPLEMENTED')` and kept
+     * passing after the runtime landed — because the rewritten header explains
+     * that the previous version of the line SAID that. The test was satisfied
+     * by a sentence withdrawing the very claim it existed to check, which is
+     * the same defect class as a comment describing a gate the code lacks.
+     */
+    const statusLine = (doc: string): string => doc.slice(0, doc.indexOf('---'));
+    expect(statusLine(loop)).toContain('SINGLE-LOOP RUNTIME IMPLEMENTED');
+    expect(statusLine(loop)).toContain('DEFAULT OFF');
+    expect(statusLine(loop)).toContain('NO LOOP HAS RUN IN PRODUCTION');
+    expect(statusLine(unchain)).toContain('SPECIFIED, NOT IMPLEMENTED');
+    expect(statusLine(cron)).toContain('SCHEDULER NOT IMPLEMENTED');
+  });
+
+  it('the Unchain record carries the locked founder decisions', () => {
+    expect(unchain).toContain('temporary capacity expansion');
+    expect(unchain).toContain('Exactly two');
+    // The "does NOT do" list, as the document actually words it.
+    for (const refusal of [
+      'grant new permissions',
+      'expand workspace access',
+      'bypass human approvals',
+      'bypass spending controls',
+      'allow unverified completion',
+    ]) {
+      expect(unchain, `UNCHAIN.md must state that Unchain does not ${refusal}`).toContain(refusal);
+    }
+    expect(unchain).toContain('server-authoritative');
+    expect(unchain).toContain('Rechaining');
+    // Capacity, never authority — and skins never grant anything.
+    expect(unchain).toContain('never grants capacity');
+    // `modes.ts` is a ceiling, never a way to grant more authority.
+    expect(unchain).toContain('an authority-expansion mechanism');
+    expect(unchain).toContain('Mode policy is a ceiling');
+  });
+
+  it('the Unchain record refuses to claim documentation is implementation', () => {
+    expect(unchain).toContain('Documentation is not implementation');
+    expect(unchain).toContain('Open founder decisions');
+  });
+
+  it('the Cron record fixes the approved beta scheduling decision', () => {
+    expect(cron).toContain('journal and snapshots remain the source of truth');
+    expect(cron).toContain('in-bridge scheduler');
+    expect(cron).toContain('OccurrenceClaimPort');
+    expect(cron).toContain('not durable schedule truth');
+    expect(cron).toContain('Distributed multi-worker scheduling is not claimed');
+    expect(cron).toContain('IANA timezone');
+    expect(cron).toContain('fails closed');
+  });
+
+  it('the Loop Engine record states that parsing is not execution', () => {
+    expect(loop).toContain('Parsing is not execution');
+    expect(loop).toContain('Completion is earned, not claimed');
+    expect(loop).toContain('Requested is not actual');
+    expect(loop).toContain('Maximum utilization is **not** claimed');
+    // Was `No Loop has ever run`. The runtime made that false, and the
+    // sentence that replaced it is stronger because it separates the four
+    // claims the status line now keeps apart.
+    expect(loop).toContain('No Loop has run outside a test');
+    expect(loop).toContain('SINGLE-LOOP RUNTIME IMPLEMENTED');
+    expect(loop).toContain('DEFAULT OFF');
+  });
+});
+
 /**
  * THE HERMES REVIEWER DOCUMENTATION CONTRACT.
  *

@@ -172,7 +172,7 @@ describe('relay-core boundary (new module roots)', () => {
     // `agent-operating` is the CLI's renderer for the SHARED operating-profile
     // projection, and sits beside `mission-economics` for the same reason: the
     // domain lives in `../mission`, and only the presentation is local.
-    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control|mission-economics|agent-operating|claude-runtime|product|reviewer-bridge-cli|mcp-cli)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer|gpt-architect|supervised)|\.\.\/mission|\.\.\/mcp|\.\.\/shared(\/[a-z-]+)?|\.\.\/reviewer-bridge-client|\.\.\/persistence|\.\.\/yc|\.\.\/psp(\/psp-fixtures)?|node:util|node:readline)['"]/;
+    const ALLOWED = /from\s+['"](\.\/(main|interactive|render|exit-codes|index|presentation|competitive|mission-control|mission-economics|agent-operating|claude-runtime|product|reviewer-bridge-cli|mcp-cli|loop-cli|loop-execution|loop-run-cli)|\.\.\/core\/app|\.\.\/protocol\/(version|ids|errors)|\.\.\/testing\/factories|\.\.\/workspace|\.\.\/connectors\/(claude-code|codex-reviewer|gpt-architect|supervised)|\.\.\/mission|\.\.\/mcp|\.\.\/shared(\/[a-z-]+)?|\.\.\/reviewer-bridge-client|\.\.\/loop-bridge-client|\.\.\/persistence|\.\.\/yc|\.\.\/psp(\/psp-fixtures)?|node:util|node:readline)['"]/;
     // The Prompt-8.6 product shell is CLI-internal: its files may import ONLY
     // each other, the persistence facade (canonical durable state), and the
     // node builtins needed for the isolated demo state root — never `../main`

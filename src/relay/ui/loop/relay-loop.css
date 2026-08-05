@@ -1,0 +1,634 @@
+/* ==========================================================================
+   Sunday Relay — Loop Composer and Loop Overview
+
+   Obsidian canvas, bone-white type, iridescent periwinkle accent. Definition
+   lists rather than cards: these are facts about ONE thing, not a gallery.
+   Hairline rules carry the structure so nothing needs a border box.
+
+   Every status is legible without colour — a shape marker and a word carry it,
+   and the colour is a third signal rather than the only one. Motion is opt-in
+   and disappears entirely under `prefers-reduced-motion`.
+   ========================================================================== */
+
+.rlc,
+.rlo {
+  background: var(--surface-solid);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elev-1);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 20px 22px 18px;
+  max-width: 760px;
+}
+
+/* ---------------------------------------------------------------- header */
+
+.rlc-head,
+.rlo-head {
+  align-items: baseline;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  padding-bottom: 12px;
+}
+
+.rlc-title,
+.rlo-title {
+  color: var(--text);
+  font-family: var(--font-brand);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin: 0;
+}
+
+/* A programmatically focused heading must still show focus visibly. */
+.rlc-title:focus-visible,
+.rlo-title:focus-visible {
+  outline: 2px solid var(--gold-400);
+  outline-offset: 3px;
+}
+
+.rlc-status {
+  align-items: center;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 6px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rlc-status-mark {
+  font-size: 12px;
+}
+
+.rlc-status--neutral { color: var(--text-dim); }
+.rlc-status--attention { color: var(--warn); }
+.rlc-status--ready { color: var(--gold-400); }
+
+.rlc-status-detail {
+  color: var(--text-dim);
+  margin: 10px 0 0;
+}
+
+/* ------------------------------------------------------------------ raw */
+
+.rlc-raw {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 0;
+}
+
+.rlc-raw-label,
+.rlo-capability-label {
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+.rlc-raw-value {
+  color: var(--gold-100);
+  word-break: break-word;
+}
+
+/* ------------------------------------------------------- boundary + gate */
+
+.rlc-boundary,
+.rlc-gate {
+  border-left: 2px solid var(--border-strong);
+  margin: 16px 0 0;
+  padding: 2px 0 2px 14px;
+}
+
+.rlc-boundary-title,
+.rlc-gate-title {
+  color: var(--gold-400);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  margin: 0 0 6px;
+}
+
+.rlc-boundary-lines,
+.rlc-gate-lines {
+  color: var(--text-dim);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rlc-boundary-lines li,
+.rlc-gate-lines li {
+  margin: 2px 0;
+}
+
+/* -------------------------------------------------------------- sections */
+
+.rlc-section-title {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  margin: 20px 0 8px;
+}
+
+.rlc-dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.rlc-row {
+  border-bottom: 1px solid var(--hairline);
+  display: grid;
+  gap: 4px 18px;
+  grid-template-columns: 200px minmax(0, 1fr);
+  padding: 7px 0;
+}
+
+.rlc-row dt {
+  color: var(--text-dim);
+}
+
+.rlc-row dd {
+  color: var(--text);
+  margin: 0;
+  word-break: break-word;
+}
+
+.rlc-unknown,
+.rlc-none {
+  color: var(--text-faint);
+  font-style: normal;
+}
+
+.rlc-unavailable {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rlc-note,
+.rlo-empty,
+.rlc-why,
+.rlt-mode-detail,
+.rlt-role-note {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.rlc-note {
+  margin: 8px 0 0;
+}
+
+/* ------------------------------------------------- problems and blockers */
+
+.rlc-problems ul,
+.rlc-blockers ul,
+.rlc-notices {
+  color: var(--text-dim);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rlc-problems li,
+.rlc-blockers li {
+  border-left: 2px solid var(--warn);
+  margin: 6px 0;
+  padding-left: 12px;
+}
+
+.rlc-blockers li {
+  display: grid;
+  gap: 2px;
+}
+
+.rlc-blocker-reason {
+  color: var(--warn);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rlc-blocker-action {
+  color: var(--text-dim);
+}
+
+.rlc-notices {
+  margin: 16px 0 0;
+}
+
+.rlc-notices li {
+  margin: 4px 0;
+}
+
+/* A live region must not collapse layout when empty. */
+.rlc-live:empty {
+  display: none;
+}
+
+.rlc-live {
+  color: var(--warn);
+  margin: 14px 0 0;
+}
+
+/* --------------------------------------------------------------- actions */
+
+.rlc-actions,
+.rlo-actions {
+  align-items: flex-start;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 20px;
+  padding-top: 16px;
+}
+
+.rlc-action {
+  display: grid;
+  gap: 4px;
+  max-width: 260px;
+}
+
+.rlc-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  padding: 8px 16px;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+
+.rlc-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--gold-100);
+}
+
+.rlc-btn:focus-visible {
+  outline: 2px solid var(--gold-400);
+  outline-offset: 2px;
+}
+
+.rlc-btn--primary {
+  border-color: var(--border-strong);
+  color: var(--gold-100);
+}
+
+.rlc-btn:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+  opacity: 1; /* the reason is rendered; do not also make it hard to read */
+}
+
+/* ---------------------------------------------------------------- picker */
+
+.rlt {
+  border: 0;
+  margin: 20px 0 0;
+  padding: 0;
+}
+
+.rlt-modes {
+  display: grid;
+  gap: 10px;
+}
+
+.rlt-mode {
+  cursor: pointer;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  row-gap: 2px;
+}
+
+.rlt-mode input {
+  accent-color: var(--gold-400);
+  grid-row: span 2;
+  margin-top: 3px;
+}
+
+.rlt-mode-label {
+  color: var(--text);
+}
+
+.rlt-roles {
+  border-top: 1px solid var(--hairline);
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 12px 0 0;
+}
+
+.rlt-role label {
+  align-items: baseline;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+}
+
+.rlt-role input {
+  accent-color: var(--gold-400);
+}
+
+.rlt-role-name {
+  color: var(--text);
+}
+
+.rlt-role-state {
+  color: var(--text-faint);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Non-colour signal: blocked roles are also bracketed. */
+.rlt-role-state--blocked {
+  color: var(--warn);
+}
+
+.rlt-role-state--blocked::before { content: '['; }
+.rlt-role-state--blocked::after { content: ']'; }
+
+.rlt-role-note {
+  display: block;
+  margin: 2px 0 8px 26px;
+}
+
+/* -------------------------------------------------------------- overview */
+
+.rlo-lede {
+  color: var(--text-dim);
+  margin: 14px 0 0;
+}
+
+.rlo-capability {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0 0;
+}
+
+.rlo-section {
+  margin: 0;
+}
+
+.rlo-tag {
+  color: var(--text-faint);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  margin-left: 10px;
+}
+
+.rlo-tag::before { content: '· '; }
+
+.rlo-fixture {
+  color: var(--warn);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.rlo-empty {
+  margin: 0;
+}
+
+.rlo-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rlo-items li {
+  border-bottom: 1px solid var(--hairline);
+  display: grid;
+  gap: 2px;
+  padding: 7px 0;
+}
+
+.rlo-item-secondary {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------- mobile */
+
+@media (max-width: 640px) {
+  .rlc,
+  .rlo {
+    border-radius: 0;
+    padding: 16px 14px 14px;
+  }
+
+  .rlc-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+  }
+
+  .rlc-action {
+    max-width: none;
+  }
+
+  .rlc-actions,
+  .rlo-actions {
+    flex-direction: column;
+  }
+
+  .rlc-btn {
+    width: 100%;
+  }
+}
+
+
+/* ======================================================================
+ * THE RUN PANEL (`rlr-`)
+ *
+ * The pulse animates for ONE activity value: `working`. Every other state —
+ * waiting on approval, stopping, at rest, finished, needing attention — is a
+ * run that is NOT making progress, and an animation there would say otherwise
+ * once a second for as long as it stayed stuck.
+ * ====================================================================== */
+
+.rlr {
+  background: var(--surface-solid);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elev-1);
+  color: var(--text);
+  font-family: var(--font);
+  padding: 18px 16px 16px;
+}
+
+.rlr-head {
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 10px;
+}
+
+.rlr-title {
+  color: var(--text);
+  font-family: var(--font-brand);
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.rlr-title:focus-visible {
+  outline: 2px solid var(--gold-400);
+  outline-offset: 3px;
+}
+
+.rlr-headline {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+
+.rlr-state {
+  font-family: var(--font-brand);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rlr-pulse {
+  background: var(--text-dim);
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  height: 9px;
+  width: 9px;
+}
+
+.rlr--working .rlr-pulse.is-animating {
+  animation: rlr-pulse 1.4s ease-in-out infinite;
+  background: var(--gold-400);
+}
+
+.rlr--attention .rlr-pulse { background: var(--warn); }
+.rlr--finished .rlr-pulse { background: var(--text-dim); }
+
+@keyframes rlr-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.rlr-sync,
+.rlr-empty {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin: 6px 0;
+}
+
+.rlr-unreachable {
+  border-left: 2px solid var(--warn);
+  color: var(--text);
+  font-size: 0.85rem;
+  margin: 10px 0;
+  padding-left: 10px;
+}
+
+.rlr-identity,
+.rlr-usage {
+  display: grid;
+  gap: 2px 14px;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 8px 0 14px;
+}
+
+.rlr-identity > div,
+.rlr-usage > div {
+  display: grid;
+  gap: 0 12px;
+  grid-template-columns: 150px minmax(0, 1fr);
+}
+
+.rlr-identity dt,
+.rlr-usage dt {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rlr-identity dd,
+.rlr-usage dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Unknown is styled as Unknown. It is never restyled into a zero. */
+.rlr-unknown {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.rlr-id {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
+}
+
+.rlr-tag {
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  margin-right: 8px;
+  padding: 1px 5px;
+}
+
+.rlr-blocker { color: var(--warn); margin: 8px 0; }
+.rlr-action { color: var(--text); margin: 4px 0 10px; }
+.rlr-failure { color: var(--danger, var(--warn)); margin: 8px 0; }
+
+.rlr-controls {
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.rlr-control {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .rlr-identity > div,
+  .rlr-usage > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rlr-controls {
+    flex-direction: column;
+  }
+}
+
+/* -------------------------------------------------------- reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .rlc-btn {
+    transition: none;
+  }
+
+  /* The pulse is the only animation on the run panel, and a user who asked for
+     less motion still needs the state — which the WORD already carries. */
+  .rlr--working .rlr-pulse.is-animating {
+    animation: none;
+  }
+}

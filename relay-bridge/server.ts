@@ -31,6 +31,7 @@ import {
   handleHostedCodingRoute, isHostedCodingRoute, type HostedCodingRunPort,
 } from './hosted-coding-agent/hosted-routes';
 import { decodeSegment } from './path-segment';
+import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute,
@@ -121,6 +122,13 @@ export function createBridgeServer(
    * is free and offline.
    */
   hostedCodingRuns: HostedCodingRunPort | null = null,
+  /**
+   * The Loop run engine. Absent on a bridge that does not run Loops — the
+   * routes then answer `loop_engine_not_ready` rather than inventing a run.
+   * Even when present, every Loop route stays behind the server-side feature
+   * flag, which defaults OFF.
+   */
+  loopRuns: LoopRunPort | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -293,6 +301,50 @@ export function createBridgeServer(
           }, hostedCodingRuns);
           if (hostedResult !== null) {
             send(res, hostedResult.status, hostedResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * THE LOOP FAMILY.
+         *
+         * Same boundary again, and the asymmetry is now familiar: status,
+         * inspect and history are side-effect-free reads a paired browser may
+         * poll, while confirm, pause, resume and stop change a durable run or
+         * authorize work and belong to an operator. The family is additionally
+         * gated by a server-side feature flag that defaults OFF, so a bridge
+         * that has not been told to run Loops answers every one of these with a
+         * refusal rather than a run.
+         */
+        if (isLoopRoute(path.replace('/relay-api', ''))) {
+          const loopResult = await handleLoopRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string'
+              ? req.headers.authorization : undefined,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            env: process.env,
+            now: new Date().toISOString(),
+            authorize: () => {
+              const decision = authorizeReviewerCall({
+                method,
+                path: path.replace('/relay-api', ''),
+                authorization: typeof req.headers.authorization === 'string'
+                  ? req.headers.authorization : undefined,
+                origin,
+                env: process.env,
+                now: Date.now(),
+                store: browserSessions,
+              });
+              // The shared authorizer answers WHO; the Loop routes also need a
+              // principal to bind idempotency to, and a session id is not one.
+              return decision.kind === 'rejected'
+                ? decision
+                : { kind: decision.kind, principal: decision.kind === 'operator' ? 'operator' : 'browser' };
+            },
+          }, loopRuns);
+          if (loopResult !== null) {
+            send(res, loopResult.status, loopResult.body, cors);
             return;
           }
         }

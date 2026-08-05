@@ -53,6 +53,8 @@ import {
   renderMissionReceipts,
 } from './mission-economics';
 import { renderAgentOperatingProfiles } from './agent-operating';
+import { LOOP_CLI_HELP, runLoopCli } from './loop-cli';
+import { isLoopRunCommand, runLoopRunCli } from './loop-run-cli';
 // The SHARED projection — the same one the website's inspector renders.
 import {
   RELAY_AGENT_ROLES, operatingProfileFixture, projectAgentOperatingProfiles,
@@ -97,13 +99,16 @@ export interface ParsedCli {
   command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude' | 'codex' | 'supervised'
     | 'state' | 'runs' | 'persistence'
     | 'home' | 'projects' | 'project' | 'recover' | 'cli' | 'session' | 'yc' | 'agent' | 'mission' | 'reviewer'
-    | 'mcp';
+    | 'mcp' | 'loop';
   /** `relay mcp <action>`. Read-only except approve/revoke, which record a
    * human decision — no MCP action here opens a connection or calls a tool. */
   mcpAction?: 'catalog' | 'connections' | 'inspect' | 'capabilities' | 'test-connection'
     | 'approvals' | 'approve' | 'revoke';
   /** Connection id or approval id, depending on the action. */
   mcpRef?: string;
+  /** The canonical slash string this invocation reconstructs, when the command
+   *  is a Loop command. The CLI never parses the grammar itself. */
+  loopArgs?: readonly string[];
   workspaceAction?: 'doctor' | 'verify';
   agentAction?: 'import' | 'profile';
   /** Which agent's operating profile to print; all three when absent. */
@@ -258,6 +263,13 @@ export function parseCli(argv: string[]): ParsedCli {
         };
       }
       return { command: 'mcp', mcpAction: second as McpAction, mcpRef: third, ...base };
+    }
+    // LOOP COMMANDS. Deliberately NOT parsed here: `loop-cli.ts` rebuilds the
+    // canonical slash string and hands it to the ONE domain grammar, so argv
+    // and a browser composer cannot drift. A literal slash argument
+    // (`relay "/loop all fix it"`) takes the same path.
+    if (first === 'loop' || first === 'loops' || first === 'sloop' || first?.startsWith('/')) {
+      return { command: 'loop', loopArgs: positionals, ...base };
     }
     if (first === 'mission') {
       const missionActions = ['economics', 'budget', 'receipts', 'worktree', 'coding-agent', 'prompt-architect', 'reviewer'] as const;
@@ -551,6 +563,15 @@ export const HELP_TEXT = [
   '  relay mission reviewer test-connection <id>  verify the bridge Reviewer (no run)',
   '  relay mission reviewer start <mission-id>    start an authorized Reviewer run',
   '  relay mission reviewer retry <mission-id>    retry a failed run as a NEW run',
+  '  relay loop <objective>         draft a Loop for your active compound agent',
+  '  relay loop all|team <objective>        every eligible agent',
+  '  relay loop architect|coding|reviewer <objective>   one role',
+  '  relay loop architect,coding <objective>            several roles',
+  '  relay loop status|inspect|pause|resume|stop [loop-id]',
+  '  relay loops                    the Loop catalog',
+  '  relay loop schedule|cron|schedules     Cron Loop grammar (runtime not enabled)',
+  '  relay sloop <objective>        Swarm Loop (requires Unchain)',
+  '  relay loop help                the full Loop grammar',
   '  relay reviewer harnesses       the Reviewer harness catalog (truthful statuses)',
   '  relay reviewer pair-browser <origin>  mint a one-time browser pairing grant',
   '  relay workspace verify         deterministic workspace security verification',
@@ -2140,6 +2161,49 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       }
       io.out('\nWORKSPACE VERIFICATION PASSED — isolation, policy, and cleanup proven.');
       return EXIT.completed;
+    }
+    case 'loop': {
+      const args = parsed.loopArgs ?? [];
+      if (args[1] === 'help') {
+        LOOP_CLI_HELP.forEach((line) => io.out(line));
+        return EXIT.completed;
+      }
+      // A COMMAND ABOUT A LIVE RUN IS A QUESTION FOR THE SERVER.
+      //
+      // `relay loop status lpr_x` used to print a preview of the command it had
+      // parsed. That was honest while there was no runtime and misleading once
+      // there was one: the user asked what a run is DOING, and got a
+      // description of what they had typed. Reads and controls that name a run
+      // now go to the bridge; everything else — drafts, the composer, the
+      // catalog, anything without an id — stays with the preview, because a
+      // draft is still a draft and nothing here may start a run by accident.
+      if (isLoopRunCommand(args)) {
+        const outcome = await runLoopRunCli({
+          positionals: args,
+          env: process.env,
+          // `--authorize`, the same flag every other route that changes
+          // something already requires. Reaching a command is not consent.
+          confirmed: parsed.authorize === true,
+          // THE CALLER MINTS THE REQUEST ID, and the CLI refuses to mint one
+          // for a control. An id generated here would be new on every attempt,
+          // so a retry after a timeout would read as a second decision and the
+          // server's idempotency would have nothing to match — the exact shape
+          // of a double stop. `--idempotency-key` is how a retry says "this is
+          // the same decision I already made".
+          requestId: parsed.idempotencyKey ?? '',
+        });
+        if (outcome.handled) {
+          outcome.result.lines.forEach((line) => io.out(line));
+          return outcome.result.failed ? EXIT.runFailed : EXIT.completed;
+        }
+      }
+      // The CLI observes no agent registry and no feature flags yet, so both
+      // are omitted rather than invented: the preview says Unknown where it
+      // does not know, and the Loop Engine reports itself disabled because it
+      // is. A surface that guessed here would be the first thing to lie.
+      const result = runLoopCli({ positionals: args, observedAt: new Date().toISOString() });
+      result.lines.forEach((line) => io.out(line));
+      return result.invalid ? EXIT.usage : EXIT.completed;
     }
     case 'claude':
       return runClaudeCli(parsed, io);

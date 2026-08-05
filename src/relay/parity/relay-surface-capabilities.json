@@ -663,6 +663,94 @@
       ]
     },
     {
+      "capabilityId": "loop-command-grammar",
+      "name": "Loop slash-command grammar",
+      "domain": "command",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/project-workspace/RelayProjectConversation.tsx#routeRelayInput",
+        "src/relay/ui/loop/loop-view.ts#openLoopSurface"
+      ],
+      "cliEntryPoints": [
+        "relay loop",
+        "src/relay/cli/loop-cli.ts#slashCommandFromArgv",
+        "src/relay/cli/loop-cli.ts#runLoopCli"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/loop/loop-ui.test.tsx",
+        "src/relay/ui/project-workspace/loop-composer-routing.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/loop-cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/loop/loop-command-parser.ts#parseSlashCommand",
+        "src/relay/mission/loop/loop-command-parser.ts#routeRelayInput",
+        "src/relay/mission/loop/loop-command-types.ts",
+        "src/relay/mission/loop/loop-command-parser.test.ts"
+      ]
+    },
+    {
+      "capabilityId": "loop-contract-preview",
+      "name": "Loop contract preview before execution",
+      "domain": "command",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/loop/RelayLoopComposer.tsx",
+        "src/relay/ui/loop/loop-view.ts#projectLoopComposerView"
+      ],
+      "cliEntryPoints": [
+        "relay loop",
+        "src/relay/cli/loop-cli.ts#renderLoopPreviewLines"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/loop/loop-ui.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/loop-cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/loop/loop-preview.ts#projectLoopCommandPreview",
+        "src/relay/mission/loop/loop-preview.ts#renderLoopPreviewLines",
+        "src/relay/mission/loop/loop-blockers.ts",
+        "src/relay/mission/loop/loop-target.ts#resolveLoopTarget"
+      ]
+    },
+    {
+      "capabilityId": "loop-run-observation",
+      "name": "Loop run observation and control",
+      "domain": "command",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/loop/RelayLoopRunPanel.tsx",
+        "src/relay/ui/loop/loop-run-view.ts#projectLoopRunView"
+      ],
+      "cliEntryPoints": [
+        "relay loop status",
+        "src/relay/cli/loop-run-cli.ts#runLoopRunCli",
+        "src/relay/cli/loop-execution.ts#executeLoopStatus"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/loop/loop-run-panel.test.tsx",
+        "src/relay/ui/loop/loop-run-view.test.ts"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/loop-run-cli.test.ts",
+        "src/relay/cli/loop-execution.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/loop/runtime/loop-projections.ts",
+        "src/relay/ui/loop/loop-run-view.ts#restorePointFor"
+      ],
+      "notes": "The WEBSITE half renders the run panel only when a host supplies a port and a store, and no shipped host supplies either — the website has no operator credential and no browser-session plumbing for Loop routes. What a user reaches today is the panel’s no-session state, which says so. The CLI half is complete: `relay loop status|inspect|history|pause|resume|stop <id>` reach the bridge. Recorded here rather than implied by a \"tested\" status, because a capability that is reachable is not the same claim as a capability that can answer."
+    },
+    {
       "capabilityId": "mcp-connection-management",
       "name": "MCP connection management",
       "domain": "settings",

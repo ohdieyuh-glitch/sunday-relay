@@ -19,6 +19,7 @@ const allCss = [
   'preview/relay-preview.css',
   'chrome/relay-chrome.css',
   'pixel-dog/pixel-dog.css',
+  'loop/relay-loop.css',
 ].map((f) => readFileSync(join(UI, f), 'utf8'));
 
 describe('exact semantic tokens (defined once)', () => {
