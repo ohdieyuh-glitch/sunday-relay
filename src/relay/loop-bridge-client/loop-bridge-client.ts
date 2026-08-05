@@ -28,8 +28,17 @@ import type {
  *
  * THE TOKEN travels in an `Authorization` header and nowhere else: never in the
  * URL (proxies log those), never in argv (the process table is world readable),
- * never in a message and never in an error. Everything a server sends back goes
- * through `redactBridgeSecrets` before it can be printed.
+ * never in a message and never in an error.
+ *
+ * BE EXACT ABOUT WHAT IS REDACTED. Every FAILURE field — the error text and the
+ * kind — goes through `redactBridgeSecrets` here, and a kind that changes under
+ * redaction is dropped entirely rather than printed with a hole in it. The
+ * SUCCESS payload is not: a run projection is data the renderer formats, and a
+ * server that embedded the credential in a run id or a failure summary would
+ * get it printed. That is a smaller surface than an error message and it is not
+ * zero, so it is written down rather than covered by "everything". An earlier
+ * version of this sentence said everything, and that was the sentence rather
+ * than the code.
  *
  * WHY IT REUSES `reviewer-bridge-client` RATHER THAN COPYING IT. Target
  * validation is a security control: it refuses a cleartext remote URL, refuses

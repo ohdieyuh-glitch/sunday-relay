@@ -178,7 +178,18 @@ describe('a failure is named, and never becomes a run state', () => {
     const result = await client(f.impl).status('lpr_1');
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.message).not.toContain(TOKEN.slice(0, 12));
+    /*
+     * TEN, NOT TWELVE — and that difference is the whole test.
+     *
+     * Slicing at 2000 leaves exactly the first TEN characters of this token, so
+     * asserting on a twelve-character prefix passed against the buggy code as
+     * well: the leaked fragment was never that long. The assertion has to name
+     * the fragment that actually survived.
+     */
+    const survivingPrefix = TOKEN.slice(0, 10);
+    expect(survivingPrefix.length).toBe(10);
+    expect(result.message, 'the prefix left behind by slice-then-redact')
+      .not.toContain(survivingPrefix);
   });
 
   it('a LIST where an object was expected is refused, not passed through', async () => {

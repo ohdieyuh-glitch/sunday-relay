@@ -104,12 +104,17 @@ export type RelayLoopRunSync =
   /** Relay could not ASK. Nothing is claimed about the run. */
   | 'unreachable'
   /**
-   * Relay asked, the server ANSWERED, and it refused the action.
+   * A control did not take effect, AND the re-read that followed succeeded.
+   *
+   * Named for the common case and defined by the second clause, because that
+   * is what the code actually tests. Whether the control failed because the
+   * server refused it or because the request never arrived is not knowable
+   * here — but the READ did arrive, so the run shown below is current, and
+   * that is the only thing this state asserts.
    *
    * Distinct from `unreachable` because the sentence that follows differs
-   * completely: a refusal comes with a fresh, trustworthy view of the run, and
-   * telling the user "Relay could not ask" while showing them the answer is
-   * the surface lying about what just happened.
+   * completely: telling a user "Relay could not ask" while showing them a
+   * fresh answer is the surface lying about what just happened.
    */
   | 'refused';
 

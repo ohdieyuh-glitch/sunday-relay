@@ -139,16 +139,40 @@ export async function runLoopRunCli(input: LoopRunCliInput): Promise<LoopRunCliO
     token: input.env.RELAY_BRIDGE_TOKEN,
   });
 
-  if (action === 'status') return { handled: true, result: await executeLoopStatus(client, loopId) };
-  if (action === 'inspect') return { handled: true, result: await executeLoopInspect(client, loopId) };
-  if (action === 'history') return { handled: true, result: await executeLoopHistory(client, loopId) };
-  return {
-    handled: true,
-    result: await executeLoopControl(client, {
-      runId: loopId,
-      action: action as 'pause' | 'resume' | 'stop',
-      requestId: input.requestId,
-      reason: input.reason ?? null,
-    }),
+  /*
+   * A MALFORMED SERVER RESPONSE IS A MESSAGE, NOT A CRASH.
+   *
+   * The client validates the envelope; it does not validate every field each
+   * renderer reaches for. `{"data":{}}` therefore reaches `renderLoopStatusLines`
+   * and throws on `.state.replace` — inside a promise `main.ts` does not catch,
+   * so the process dies with an unhandled rejection instead of saying anything.
+   * A bridge that answers nonsense is a bridge problem, and the user should be
+   * told which one it is.
+   */
+  const guarded = async (run: () => Promise<LoopExecutionResult>): Promise<LoopRunCliOutcome> => {
+    try {
+      return { handled: true, result: await run() };
+    } catch {
+      return {
+        handled: true,
+        result: {
+          lines: [
+            'The Relay Bridge answered in a shape Relay could not read.',
+            'Nothing is claimed about the Loop run; the response was not usable.',
+          ],
+          failed: true,
+        },
+      };
+    }
   };
+
+  if (action === 'status') return guarded(() => executeLoopStatus(client, loopId));
+  if (action === 'inspect') return guarded(() => executeLoopInspect(client, loopId));
+  if (action === 'history') return guarded(() => executeLoopHistory(client, loopId));
+  return guarded(() => executeLoopControl(client, {
+    runId: loopId,
+    action: action as 'pause' | 'resume' | 'stop',
+    requestId: input.requestId,
+    reason: input.reason ?? null,
+  }));
 }

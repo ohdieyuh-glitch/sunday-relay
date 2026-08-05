@@ -398,6 +398,19 @@ describe('restoration is a read, not a cache', () => {
         .toBe('finished');
     });
 
+    /*
+     * A THIRD READ, AND THIS LINE IS WHY THE TEST BITES.
+     *
+     * Without it the sequence passed against the BUGGY code too: with the
+     * ticket rewound to -1, pass two takes ticket 0 while the orphan holds 1,
+     * and nothing ever restores the counter to 1 — so the orphan was dropped
+     * by accident rather than by the guard. Clicking Refresh advances the
+     * buggy counter back to exactly 1, which is the collision. A regression
+     * test that cannot fail on the code it was written for is not one.
+     */
+    fireEvent.click(screen.getByRole('button', { name: /^refresh$/i }));
+    await waitFor(() => expect(results.length).toBeGreaterThanOrEqual(3));
+
     // The orphaned first-pass read lands last, carrying a DIFFERENT run.
     releaseFirst({ ok: true, status: orphan });
     await new Promise((r) => { setTimeout(r, 30); });

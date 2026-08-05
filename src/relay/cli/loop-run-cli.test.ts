@@ -198,6 +198,41 @@ describe('a control needs consent AND an identified decision', () => {
   });
 });
 
+describe('a bridge that answers nonsense is a message, not a crash', () => {
+  it('a renderer that throws becomes a truthful failure', async () => {
+    // The client validates the envelope, not every field each renderer reaches
+    // for. `{"data":{}}` reached `renderLoopStatusLines` and threw on
+    // `.state.replace`, inside a promise `main.ts` does not catch — so the
+    // process died with an unhandled rejection instead of saying anything.
+    const client = fakeClient();
+    (client.status as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true, data: {} as never,
+    });
+    const outcome = await runLoopRunCli({
+      positionals: ['loop', 'status', RUN_ID], env, confirmed: false, requestId: '', client,
+    });
+    expect(outcome.handled).toBe(true);
+    if (!outcome.handled) return;
+    expect(outcome.result.failed).toBe(true);
+    expect(outcome.result.lines.join(' ')).toContain('could not read');
+    // And it claims nothing about the run.
+    expect(outcome.result.lines.join(' ')).toContain('Nothing is claimed');
+  });
+
+  it('the same holds for a control', async () => {
+    const client = fakeClient();
+    (client.control as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true, data: {} as never,
+    });
+    const outcome = await runLoopRunCli({
+      positionals: ['loop', 'stop', RUN_ID], env, confirmed: true, requestId: 'req-1', client,
+    });
+    expect(outcome.handled).toBe(true);
+    if (!outcome.handled) return;
+    expect(outcome.result.failed).toBe(true);
+  });
+});
+
 describe('a draft falls through to the preview, unhandled', () => {
   it('returns handled:false so the caller renders the composer preview', async () => {
     const client = fakeClient();
