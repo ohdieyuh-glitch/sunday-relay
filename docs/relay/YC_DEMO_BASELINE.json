@@ -36,7 +36,8 @@
     "verified-mission-cost",
     "agent-operating-profile",
     "loop-command-grammar",
-    "loop-contract-preview"
+    "loop-contract-preview",
+    "loop-run-observation"
   ],
   "requiredFiles": {
     "websiteEntry": [

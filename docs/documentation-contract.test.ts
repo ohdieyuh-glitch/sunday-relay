@@ -346,6 +346,11 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     expect(loop).toContain('Completion is earned, not claimed');
     expect(loop).toContain('Requested is not actual');
     expect(loop).toContain('Maximum utilization is **not** claimed');
-    expect(loop).toContain('No Loop has ever run');
+    // Was `No Loop has ever run`. The runtime made that false, and the
+    // sentence that replaced it is stronger because it separates the four
+    // claims the status line now keeps apart.
+    expect(loop).toContain('No Loop has run outside a test');
+    expect(loop).toContain('SINGLE-LOOP RUNTIME IMPLEMENTED');
+    expect(loop).toContain('DEFAULT OFF');
   });
 });

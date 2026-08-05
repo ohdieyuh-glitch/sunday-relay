@@ -78,7 +78,7 @@ run; one exceeded the 5s default. None is an assertion failure.
 | Website build (`npm run build`) | exit 0 |
 | CLI build (`relay:build`) | exit 0 |
 | Bridge build (`relay:bridge:build`) | exit 0 |
-| Surface parity | PASS — 220/220 files, 26 CLI commands |
+| Surface parity | PASS — 220/220 files, 26 CLI commands (at `777d690`; 230/230 and 27 after the Stage 2 surfaces landed) |
 | Strict surface parity | PASS |
 | Repository boundary scanner (secret + artifact shape) | PASS |
 | Core boundary | 66/66 |

@@ -247,7 +247,12 @@ describe('relay loop through the real CLI entry point', () => {
         form
           .replace(/<objective>|<o>|<when \+ what>/g, 'do the thing')
           .replace(/"<expr>"/g, '"0 8 * * 1-5"')
-          .replace(/\[loop-id\]|\[id\]/g, '')
+          // Placeholders are stripped, not substituted, because the forms are
+          // asserted to PARSE — and a bare action with no id is a valid form.
+          // `<run-id>` and `<loop-id>` joined the help when runs became
+          // addressable; leaving them literal made the test fail on a
+          // documented form that is perfectly good.
+          .replace(/\[loop-id\]|\[id\]|<run-id>|<loop-id>|<key>/g, '')
           .trim(),
       );
     expect(forms.length).toBeGreaterThan(8);
