@@ -38,15 +38,28 @@ const SRC = join(__dirname, '..', '..');
  */
 const ALLOWED_COLLISIONS: Readonly<Record<string, string>> = Object.freeze({
   'relay-wordmark': 'relay.css + mission-control.css; both declare colour and font only',
-  'relay-dim': 'relay.css + mission-control.css; both declare colour only',
+  // relay.css declares `color` AND `font-size: 12px`; mission-control.css
+  // declares colour only, and is imported second, so it overrides only the
+  // colour. Stated exactly, because this file's own rule is that a reason
+  // which is not true of the code is the rot it exists to prevent.
+  'relay-dim': 'relay.css declares colour + font-size; mission-control.css colour only, and overrides only colour',
   // Not harmless, and not claimed to be. `main.tsx` imports relay.css then
   // mission-control.css, so the later one re-declares padding (6px 12px over
   // 9px 16px), border-radius, border and min-height on every `.relay-btn`, and
   // margin-left on `.relay-tagline`. That is pre-existing behaviour on a
   // surface this change does not touch; it is recorded here as a known
   // collision rather than asserted safe.
-  'relay-btn': 'PRE-EXISTING: mission-control.css re-declares padding/border-radius/min-height. Not verified as intentional.',
-  'relay-tagline': 'PRE-EXISTING: mission-control.css re-declares margin-left. Not verified as intentional.',
+  'relay-btn': 'PRE-EXISTING: mission-control.css re-declares padding and border-radius and INTRODUCES min-height. Not verified as intentional.',
+  'relay-tagline': 'PRE-EXISTING: mission-control.css INTRODUCES margin-left. Not verified as intentional.',
+  // Surfaced only once compound selectors became their own key. Both sheets
+  // declare these at equal specificity and mission-control.css is imported
+  // second, so its `color` and `border-color` win. relay.css gives `.primary` a
+  // gold GRADIENT background and `font-weight: 700`; mission-control declares
+  // neither, so those survive and combine with mission-control's gold text —
+  // a gold-on-gold button. Recorded as a real, pre-existing collision rather
+  // than asserted harmless; nothing in this change touches either sheet.
+  'primary.relay-btn': 'PRE-EXISTING: both sheets declare it; mission-control.css wins on colour and border-color while relay.css keeps the gradient and font-weight. Not verified as intentional.',
+  'ghost.relay-btn': 'PRE-EXISTING: both sheets declare it; mission-control.css wins on colour while relay.css keeps background and border-color. Not verified as intentional.',
 });
 
 /** A selector scoped to a colourway cannot collide with a bare class. */
@@ -71,28 +84,39 @@ function stylesheets(dir: string, found: string[] = []): string[] {
 function selectorLists(css: string): string[] {
   const source = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const lists: string[] = [];
-  const atRuleDepth: boolean[] = [];
+  /** One frame per open brace: whether it is an at-rule, and whether a rule. */
+  const stack: ('at' | 'rule' | 'keyframes')[] = [];
   let buffer = '';
-  let inKeyframes = 0;
+
+  const insideRule = () => stack.includes('rule') || stack.includes('keyframes');
 
   for (const char of source) {
+    if (char === ';') {
+      // A STATEMENT AT-RULE ends here and has no block: `@import url(x);`,
+      // `@charset "UTF-8";`, `@layer a, b;`. Without this reset the buffer runs
+      // on into the NEXT rule's selector, `startsWith('@')` misclassifies the
+      // pair, and that rule vanishes — a silent false negative, which is the
+      // same failure mode as the defect this file exists to catch.
+      buffer = '';
+      continue;
+    }
     if (char === '{') {
       const head = buffer.trim();
       buffer = '';
-      const isAtRule = head.startsWith('@');
-      atRuleDepth.push(isAtRule);
-      if (isAtRule) {
-        if (/^@keyframes|^@-\w+-keyframes/.test(head)) inKeyframes += 1;
+      if (head.startsWith('@')) {
+        // `\b`-anchored and case-insensitive: at-rule names are ASCII
+        // case-insensitive, and `@keyframesish` is not `@keyframes`.
+        stack.push(/^@(?:-[\w]+-)?keyframes\b/i.test(head) ? 'keyframes' : 'at');
         continue;
       }
-      // A rule's children are declarations, not selectors — but we only ever
-      // reach here at a depth where `head` is a real selector list.
-      if (inKeyframes === 0 && head !== '') lists.push(head);
+      // A selector nested inside another RULE is scoped by its parent, exactly
+      // like a descendant selector, so it is not an unscoped definition.
+      if (!insideRule() && head !== '') lists.push(head);
+      stack.push('rule');
       continue;
     }
     if (char === '}') {
-      const wasAtRule = atRuleDepth.pop();
-      if (wasAtRule && inKeyframes > 0) inKeyframes -= 1;
+      stack.pop();
       buffer = '';
       continue;
     }
@@ -162,10 +186,18 @@ function definedClasses(css: string): Set<string> {
       const bare = subject
         .replace(/:{1,2}[\w-]+\([^)]*\)/g, '')
         .replace(/\[[^\]]*\]/g, '')
-        .replace(/:{1,2}[\w-]+/g, '');
+        .replace(/:{1,2}[\w-]+/g, '')
+        // A leading element or universal still styles the same elements a bare
+        // class rule would reach, so `a.foo` and `*.foo` define `foo`.
+        .replace(/^[*]|^[a-zA-Z][\w-]*/, '');
       if (!bare.startsWith('.')) continue;
       const classes = [...bare.matchAll(/\.([\w-]+)/g)].map((m) => m[1]);
-      if (classes.length === 1) names.add(classes[0]);
+      if (classes.length === 0) continue;
+      // A COMPOUND is keyed on the whole compound, not dropped. A bare `.a`
+      // cannot reach `.a.b` — but two sheets that BOTH declare `.a.b` are equal
+      // specificity and the later one silently wins, which is the very thing
+      // being guarded against. Sorted, so `.a.b` and `.b.a` are one key.
+      names.add([...classes].sort().join('.'));
     }
   }
   return names;
@@ -192,7 +224,7 @@ describe('no class is defined by two stylesheets that share a bundle', () => {
     // return an empty Set makes every assertion below pass — and the only thing
     // that would notice is the allow-list canary, which the self-cleaning rule
     // actively encourages deleting.
-    expect(owners.size, 'the class extractor produced almost nothing').toBeGreaterThan(200);
+    expect(owners.size, 'the class extractor produced almost nothing').toBeGreaterThan(500);
   });
 
   it('descends into at-rules, where the original defect lived', () => {
@@ -212,7 +244,31 @@ describe('no class is defined by two stylesheets that share a bundle', () => {
     expect(of('.a, .b { }')).toEqual(['a', 'b']);
     // Needs an ancestor or a second class, so a bare rule cannot reach it.
     expect(of('.x .a { }')).toEqual([]);
-    expect(of('.a.b { }')).toEqual([]);
+    // A COMPOUND is keyed on the whole compound rather than dropped: a bare
+    // `.a` cannot reach `.a.b`, but two sheets that both declare `.a.b` are
+    // equal specificity and the later one silently wins.
+    expect(of('.a.b { }')).toEqual(['a.b']);
+    expect(of('.b.a { }')).toEqual(['a.b']);
+    // Element-qualified and universal still style what a bare class would.
+    expect(of('a.foo { }')).toEqual(['foo']);
+    expect(of('*.foo { }')).toEqual(['foo']);
+    // A selector nested inside another rule is scoped by its parent.
+    expect(of('.parent { .nested { color: red } }')).toEqual(['parent']);
+    // A statement at-rule must not swallow the rule that follows it. Without
+    // the `;` reset the buffer runs on, `startsWith('@')` misclassifies the
+    // pair, and the following rule VANISHES — a silent false negative, the
+    // same failure mode as the defect this file exists to catch.
+    expect(of('@import url("x.css");\n.after { }')).toEqual(['after']);
+    expect(of('@layer a, b;\n.after { }')).toEqual(['after']);
+    expect(of('@charset "UTF-8";\n.after { }')).toEqual(['after']);
+    // `\b`-anchored and case-insensitive, because at-rule names are ASCII
+    // case-insensitive and `@keyframesish` is a different at-rule.
+    expect(of('@keyframesish x { .kept { } }')).toEqual(['kept']);
+    expect(of('@KEYFRAMES x { from { opacity: 0 } }')).toEqual([]);
+    // Tolerates malformed input rather than throwing: an operations guard that
+    // crashes on one odd file is less useful than one that reports the rest.
+    expect(of('.unterminated { color: red')).toEqual(['unterminated']);
+    expect(of('} .stray { }')).toEqual(['stray']);
     // Scoped per selector, not per list.
     expect(of('[data-relay-colorway="m"] .q, .bare { }')).toEqual(['bare']);
   });
