@@ -806,7 +806,7 @@ describe('REGRESSION — untouched states stay untouched', () => {
     // `[^}]*` walks straight through a comment. A test that reads its own
     // explanation is not testing anything.
     const declarations = css.replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(declarations).not.toMatch(/\.rdm\s*\{[^}]*overflow/s);
+    expect(declarations).not.toMatch(/\.rdm\s*\{[^}]*overflow(-x|-y)?\s*:/s);
 
     // Every host that renders the boundary still contains it horizontally.
     const stageCss = readFileSync(

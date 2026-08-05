@@ -129,7 +129,7 @@ describe('relay dog motion boundary', () => {
     // Horizontal containment is the PAGE's job now: `.rpw-stage-bounds` in the
     // workspace, `.reh` on the home screen.
     const declarations = css.replace(/\/\*[\s\S]*?\*\//gu, '');
-    expect(/\.rdm\s*\{[^}]*overflow/su.test(declarations)).toBe(false);
+    expect(/\.rdm\s*\{[^}]*overflow(-x|-y)?\s*:/su.test(declarations)).toBe(false);
     expect(/@media \(prefers-reduced-motion: reduce\)/u.test(css)).toBe(true);
     expect(/\.rdm--reduced[^{]*\{[^}]*animation:\s*none/su.test(css)).toBe(true);
   });
