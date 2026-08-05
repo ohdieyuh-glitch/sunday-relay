@@ -234,10 +234,47 @@ connector's interface. The domain must not depend on a particular adapter, and
 an import edge from `mission/` into `connectors/` would invert the same layering
 the website boundary rule protects.
 
+## The first producer
+
+`run-observation.ts` reads a finished Claude run into operational signal. It is
+deliberately the ONLY producer: a second one with its own idea of what a timeout
+is would put two error vocabularies into one record.
+
+The connector's stream parser already lifts `duration_ms`, `duration_api_ms`,
+`num_turns` and `total_cost_usd` off the CLI's own result line, and initialises
+every one of them to `null`. That null is what makes the mapping honest — a run
+that reported no duration produces NO SAMPLE, and the view names the phase as
+untimed rather than drawing a zero.
+
+**The three failures stay three failures.** A timeout, a process that never
+started, and a provider that answered with an error are different problems, and
+a spawn failure belongs to the WORKSPACE rather than the provider — calling it a
+provider error sends someone to read the wrong logs.
+
+**It contributes the one thing nothing else could: a counted denominator.**
+Every terminal outcome is exactly one attempt, so `attemptsObserved: 1` per run
+makes the error RATE knowable. Before this, every rate in the product was
+`unknown_denominator` — correct, and useless.
+
+The provider's own `duration_ms` is preferred over the harness's wall clock,
+because they measure different things: the harness's includes spawn and
+teardown. The wall clock is the fallback, used only where the provider reported
+nothing — which is exactly the timeout case, where the CLI never printed a
+result line at all.
+
+`connector-conformance.test.ts` imports the connector's REAL types, as types
+only. There is no runtime edge — `shared/` must not depend on a connector — but
+`tsc` now fails the day `ClaudeRunOutcome` or `ParsedStreamState` stops fitting
+`ObservedRun`, which is the failure a structural type is otherwise blind to.
+
 ## Not implemented
 
-**Nothing calls the intake yet, nothing supplies receipts, and nothing persists
-memory.** The CLI's `brain` view generates a document from an empty memory on
+**Nothing calls the producer on a live run, nothing supplies receipts, and
+nothing persists memory.** The mapping from real connector output exists and is
+proven against the connector's own types; what is missing is a STORE — something
+accumulating a `RelayOperationalRecord` across runs and handing it to a surface.
+Until that exists, both surfaces truthfully report that no operations source is
+wired. The CLI's `brain` view generates a document from an empty memory on
 every invocation, which is why it truthfully reports that nothing has been
 recorded. The functions
 exist and are tested against fixtures; no adapter, run handler or bridge invokes

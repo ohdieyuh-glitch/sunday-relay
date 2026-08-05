@@ -94,3 +94,11 @@ export type {
   RelaySpendCitation,
   RelayTokenTotals,
 } from './spend-citation';
+
+export { observeRun } from './run-observation';
+export type {
+  ObservedRun,
+  ObservedRunTermination,
+  ObservedRunUsage,
+  RunObservation,
+} from './run-observation';

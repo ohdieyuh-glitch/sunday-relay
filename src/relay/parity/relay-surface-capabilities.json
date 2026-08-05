@@ -847,12 +847,15 @@
       "sharedDomainReferences": [
         "src/relay/shared/llmops/brain-memory.test.ts",
         "src/relay/shared/llmops/brain-memory.ts",
+        "src/relay/shared/llmops/connector-conformance.test.ts",
         "src/relay/shared/llmops/index.ts",
         "src/relay/shared/llmops/llmops-contracts.ts",
         "src/relay/shared/llmops/llmops-projection.test.ts",
         "src/relay/shared/llmops/llmops-projection.ts",
         "src/relay/shared/llmops/operational-intake.test.ts",
         "src/relay/shared/llmops/operational-intake.ts",
+        "src/relay/shared/llmops/run-observation.test.ts",
+        "src/relay/shared/llmops/run-observation.ts",
         "src/relay/shared/llmops/spend-citation.test.ts",
         "src/relay/shared/llmops/spend-citation.ts"
       ]
