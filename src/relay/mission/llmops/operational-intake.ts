@@ -22,9 +22,10 @@
 
 import type {
   RelayErrorEvent, RelayErrorKind, RelayLatencyPhase, RelayLatencySample,
-  RelayOperationalRecord, RelayShortTermEntry,
+  RelayOperationalRecord,
 } from './llmops-contracts';
-import type { RelayShortTermMemory } from './brain-memory';
+// Short-term memory lives in `brain-memory`, not in the signal contracts.
+import type { RelayShortTermEntry, RelayShortTermMemory } from './brain-memory';
 import { rememberShortTerm } from './brain-memory';
 
 /* ------------------------------------------------------------- durations */

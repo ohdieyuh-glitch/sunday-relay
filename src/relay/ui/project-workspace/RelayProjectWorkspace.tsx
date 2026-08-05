@@ -173,6 +173,7 @@ export function RelayProjectWorkspace(
     onReturnHome,
     onSelectStageBackdrop,
     operationsView,
+    projectBrainDocument,
   } = props;
 
   const completion = completionDisplay({ completionState, reviewerState, findings, repairs });
@@ -374,7 +375,7 @@ export function RelayProjectWorkspace(
               ))}
             </div>
             <div className="rpw-status-block">
-              {focusable('project_brain', <RelayProjectBrainStatus state={projectBrainState} />)}
+              {focusable('project_brain', <RelayProjectBrainStatus state={projectBrainState} document={projectBrainDocument} />)}
               {/* The operational half of the Brain. Mounted unconditionally: a
                   deployment with no operations source says so, which is a
                   different fact from a project with nothing to report, and

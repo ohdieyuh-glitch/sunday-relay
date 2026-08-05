@@ -1,11 +1,21 @@
 import type { ProjectBrainState } from './contracts';
+import type { RelayBrainDocument } from '../../mission/llmops';
 
 /**
  * Project Brain — the Prompt Architect's approved, sourced project
  * knowledge. Counts and approval queue only; entries are managed through
  * Project Settings and the approval flow, never edited here.
  */
-export function RelayProjectBrainStatus({ state }: { state: ProjectBrainState }) {
+export function RelayProjectBrainStatus({ state, document: brainDocument }: {
+  state: ProjectBrainState;
+  /**
+   * The refreshed Brain document. OPTIONAL, and its absence means NO GENERATOR
+   * HAS RUN — which is said in those words rather than shown as an empty
+   * document, because a project with nothing recorded and a deployment that
+   * generates nothing are different facts.
+   */
+  document?: RelayBrainDocument;
+}) {
   return (
     <section className="rpw-brain" aria-labelledby="rpw-brain-heading">
       <h2 id="rpw-brain-heading" className="rpw-section-title">
@@ -27,6 +37,31 @@ export function RelayProjectBrainStatus({ state }: { state: ProjectBrainState })
           </dd>
         </div>
       </dl>
+
+      {brainDocument === undefined ? (
+        <p className="rpw-brain-doc-none">
+          No Brain document has been generated for this project.
+        </p>
+      ) : (
+        <div className="rpw-brain-doc">
+          {/* Freshness first, and always a sentence. "Continuously refreshed" is
+              a promise about staleness, and a promise about staleness needs an
+              observed timestamp — so the document reports what it was generated
+              FROM, not only what it concluded. */}
+          <p className={brainDocument.stale ? 'rpw-brain-stale' : 'rpw-brain-fresh'}>
+            {brainDocument.stale ? 'STALE — ' : 'CURRENT — '}
+            {brainDocument.freshness}
+          </p>
+          {brainDocument.sections.map((section) => (
+            <section key={section.heading} aria-label={section.heading}>
+              <h3 className="rpw-brain-doc-heading">{section.heading}</h3>
+              <ul className="rpw-brain-doc-lines">
+                {section.lines.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

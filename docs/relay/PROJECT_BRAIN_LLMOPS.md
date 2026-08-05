@@ -137,6 +137,12 @@ Entries approved by their own author get their own section rather than being
 filtered out. They exist and are being used, and hiding them would make the
 Brain look better than it is.
 
+**Both surfaces render it.** `RelayProjectBrainStatus` shows the freshness line
+and every section; `relay project brain` prints the same document from the same
+generator. A document that was never generated is reported as exactly that,
+never as an empty document — a project with nothing recorded and a deployment
+that generates nothing are different facts.
+
 ## Both surfaces, one projection
 
 `projectOperations` is called by the workspace panel and by
@@ -206,7 +212,10 @@ the website boundary rule protects.
 
 ## Not implemented
 
-**Nothing calls the intake yet, and nothing supplies receipts.** The functions
+**Nothing calls the intake yet, nothing supplies receipts, and nothing persists
+memory.** The CLI's `brain` view generates a document from an empty memory on
+every invocation, which is why it truthfully reports that nothing has been
+recorded. The functions
 exist and are tested against fixtures; no adapter, run handler or bridge invokes
 them, so no live run is being measured and `spend` is `null` in every shipped
 host. Both surfaces say so in those words rather than rendering zeroes. Token counts are modelled by `mission/economics` receipts

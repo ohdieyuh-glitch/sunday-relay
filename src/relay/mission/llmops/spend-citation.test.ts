@@ -20,6 +20,8 @@ const receipt = (over: Partial<RelayCostReceipt> = {}): RelayCostReceipt => ({
   status: 'finalized',
   source: 'provider_reported',
   amount: { currency: 'USD', amountMicros: '1500000' },
+  integrity: 'source_attested',
+  redactionStatus: 'not_required',
   missionRevision: 1,
   occurredAt: '2026-08-05T12:00:00.000Z',
   recordedAt: '2026-08-05T12:00:01.000Z',
