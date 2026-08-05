@@ -401,6 +401,7 @@ export function openLoopSurface(
 ):
   | { readonly kind: 'composer'; readonly view: RelayLoopComposerView; readonly swarmGate?: RelaySwarmGateView }
   | { readonly kind: 'overview' }
+  | { readonly kind: 'run'; readonly runId: string }
   | { readonly kind: 'error'; readonly message: string; readonly details: readonly string[] } {
   const parsed = parseSlashCommand(input);
   if (!parsed.ok) {
@@ -409,6 +410,23 @@ export function openLoopSurface(
 
   const command = parsed.value.command;
   if (command.kind === 'loop_catalog') return { kind: 'overview' };
+
+  /*
+   * `/loop status <run-id>` OPENS THE RUN, IT DOES NOT DESCRIBE THE COMMAND.
+   *
+   * Routed here rather than into the composer because they answer different
+   * questions: the composer says what a command WOULD do, and a user typing
+   * `status` with an id is asking what a run IS doing. Only `status` — the
+   * read — reaches this surface. `pause`, `resume` and `stop` change a run and
+   * cost money to undo, and this host has no operator credential and no way to
+   * get one, so it must not offer them at all.
+   *
+   * An action with no id stays with the composer, which explains that "the
+   * caller's current Loop" is not something a browser can resolve.
+   */
+  if (command.kind === 'loop_action' && command.action === 'status' && command.loopId !== null) {
+    return { kind: 'run', runId: command.loopId };
+  }
 
   const availability = evaluateLoopAvailability({
     command,

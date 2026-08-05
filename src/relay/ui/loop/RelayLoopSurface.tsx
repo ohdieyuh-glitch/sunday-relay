@@ -1,5 +1,6 @@
 import { RelayLoopComposer } from './RelayLoopComposer';
 import { RelayLoopOverview, type RelayLoopOverviewSection } from './RelayLoopOverview';
+import { RelayLoopRunSurface, type RelayLoopRunPort, type RelayLoopRunStore } from './RelayLoopRunPanel';
 import type { RelayLoopComposerView, RelaySwarmGateView } from './loop-view';
 
 /**
@@ -29,6 +30,17 @@ export type RelayLoopSurfaceState =
       /** The safe, structured message the parser returned. */
       readonly message: string;
       readonly details: readonly string[];
+    }
+  | {
+      /**
+       * A LIVE RUN, read from the server.
+       *
+       * `runId` absent means "restore whatever this browser last saw, by
+       * asking". The panel persists only the id and fetches everything else —
+       * see `RelayLoopRunPanel`.
+       */
+      readonly kind: 'run';
+      readonly runId?: string | null;
     };
 
 export interface RelayLoopSurface {
@@ -43,6 +55,17 @@ export interface RelayLoopSurface {
   readonly onSaveDraft: () => void;
   readonly onContinueToPreflight: () => void;
   readonly onStartComposer: () => void;
+  /**
+   * How this host reads a run, and where it keeps the one id it may remember.
+   *
+   * BOTH ABSENT IS A REAL STATE, not a missing feature: a surface with no
+   * server session cannot read a run, and the `run` state is simply not
+   * reachable from it. That is why they are optional rather than stubbed —
+   * a stub would let the panel render as though it had asked and found
+   * nothing, which is a different claim from never having asked.
+   */
+  readonly runPort?: RelayLoopRunPort;
+  readonly runStore?: RelayLoopRunStore;
 }
 
 export function RelayLoopSurfaceHost({ surface }: { surface: RelayLoopSurface }) {
@@ -55,6 +78,35 @@ export function RelayLoopSurfaceHost({ surface }: { surface: RelayLoopSurface })
         sections={state.sections}
         onClose={surface.onClose}
         onStartComposer={surface.onStartComposer}
+      />
+    );
+  }
+
+  if (state.kind === 'run') {
+    // Not reachable without both a port and a store, and the host says so
+    // rather than drawing an empty run.
+    if (surface.runPort === undefined || surface.runStore === undefined) {
+      return (
+        <section className="rlc" role="status" aria-labelledby="rlc-norun-heading">
+          <header className="rlc-head">
+            <h2 className="rlc-title" id="rlc-norun-heading">LOOP RUN</h2>
+          </header>
+          <p className="rlc-status-detail">
+            This surface has no Relay Bridge session, so it cannot read a Loop run. Nothing is
+            claimed about any run that may exist.
+          </p>
+          <footer className="rlc-actions">
+            <button type="button" className="rlc-btn" onClick={surface.onClose}>Close</button>
+          </footer>
+        </section>
+      );
+    }
+    return (
+      <RelayLoopRunSurface
+        port={surface.runPort}
+        store={surface.runStore}
+        {...(state.runId === undefined ? {} : { runId: state.runId })}
+        onClose={surface.onClose}
       />
     );
   }

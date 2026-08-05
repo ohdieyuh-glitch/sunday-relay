@@ -719,6 +719,35 @@
         "src/relay/mission/loop/loop-blockers.ts",
         "src/relay/mission/loop/loop-target.ts#resolveLoopTarget"
       ]
+    },
+    {
+      "capabilityId": "loop-run-observation",
+      "name": "Loop run observation and control",
+      "domain": "command",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/loop/RelayLoopRunPanel.tsx",
+        "src/relay/ui/loop/loop-run-view.ts#projectLoopRunView"
+      ],
+      "cliEntryPoints": [
+        "relay loop status",
+        "src/relay/cli/loop-run-cli.ts#runLoopRunCli",
+        "src/relay/cli/loop-execution.ts#executeLoopStatus"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/loop/loop-run-panel.test.tsx",
+        "src/relay/ui/loop/loop-run-view.test.ts"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/loop-run-cli.test.ts",
+        "src/relay/cli/loop-execution.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/loop/runtime/loop-projections.ts",
+        "src/relay/ui/loop/loop-run-view.ts#restorePointFor"
+      ]
     }
   ]
 }

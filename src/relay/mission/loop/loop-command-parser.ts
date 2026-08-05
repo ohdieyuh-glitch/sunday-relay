@@ -83,6 +83,14 @@ export function routeRelayInput(input: string): RelayInputRoute {
 
 const LOOP_ID_PREFIX = PREFIXES.lpe;
 const SCHEDULE_ID_PREFIX = PREFIXES.lps;
+/**
+ * A RUN id. The grammar predates the runtime, so it addressed Loops and
+ * schedules and nothing else — which left `relay loop status lpr_…`
+ * unexpressible the moment runs became real things a user can name. A Loop is
+ * the standing instruction; a run is one execution of it, and `status`,
+ * `inspect`, `pause`, `resume` and `stop` are all questions about a RUN.
+ */
+const RUN_ID_PREFIX = PREFIXES.lpr;
 /** Same body rule the protocol's `checkId` uses, so a Loop id that parses here
  *  is a Loop id that validates there. Duplicating the SHAPE would let the two
  *  drift; deriving the prefix from `PREFIXES` is what prevents it. */
@@ -97,8 +105,13 @@ function isScheduleIdToken(token: string): boolean {
 }
 
 /** Any Relay identifier a Loop action may legitimately address. */
+function isRunIdToken(token: string): boolean {
+  return token.startsWith(RUN_ID_PREFIX) && ID_BODY.test(token.slice(RUN_ID_PREFIX.length));
+}
+
+/** Any Relay identifier a Loop action may legitimately address. */
 function isAddressableIdToken(token: string): boolean {
-  return isLoopIdToken(token) || isScheduleIdToken(token);
+  return isLoopIdToken(token) || isScheduleIdToken(token) || isRunIdToken(token);
 }
 
 const WHITESPACE = /\s/;
@@ -179,7 +192,7 @@ function parseOptionalLoopId(rest: string, verb: string, acceptsId: boolean): Ac
   if (!isAddressableIdToken(word)) {
     return {
       loopId: null,
-      problem: `"${word}" is not a Loop identifier — expected ${LOOP_ID_PREFIX}<id> or ${SCHEDULE_ID_PREFIX}<id>.`,
+      problem: `"${word}" is not a Loop identifier — expected ${LOOP_ID_PREFIX}<id>, ${RUN_ID_PREFIX}<id> or ${SCHEDULE_ID_PREFIX}<id>.`,
     };
   }
   if (tail.trim() !== '') {

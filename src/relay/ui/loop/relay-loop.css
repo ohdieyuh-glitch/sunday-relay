@@ -450,10 +450,185 @@
   }
 }
 
+
+/* ======================================================================
+ * THE RUN PANEL (`rlr-`)
+ *
+ * The pulse animates for ONE activity value: `working`. Every other state —
+ * waiting on approval, stopping, at rest, finished, needing attention — is a
+ * run that is NOT making progress, and an animation there would say otherwise
+ * once a second for as long as it stayed stuck.
+ * ====================================================================== */
+
+.rlr {
+  background: var(--surface-solid);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elev-1);
+  color: var(--text);
+  font-family: var(--font);
+  padding: 18px 16px 16px;
+}
+
+.rlr-head {
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 10px;
+}
+
+.rlr-title {
+  color: var(--text);
+  font-family: var(--font-brand);
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.rlr-title:focus-visible {
+  outline: 2px solid var(--gold-400);
+  outline-offset: 3px;
+}
+
+.rlr-headline {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+
+.rlr-state {
+  font-family: var(--font-brand);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rlr-pulse {
+  background: var(--text-dim);
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  height: 9px;
+  width: 9px;
+}
+
+.rlr--working .rlr-pulse.is-animating {
+  animation: rlr-pulse 1.4s ease-in-out infinite;
+  background: var(--gold-400);
+}
+
+.rlr--attention .rlr-pulse { background: var(--warn); }
+.rlr--finished .rlr-pulse { background: var(--text-dim); }
+
+@keyframes rlr-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.rlr-sync,
+.rlr-empty {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  margin: 6px 0;
+}
+
+.rlr-unreachable {
+  border-left: 2px solid var(--warn);
+  color: var(--text);
+  font-size: 0.85rem;
+  margin: 10px 0;
+  padding-left: 10px;
+}
+
+.rlr-identity,
+.rlr-usage {
+  display: grid;
+  gap: 2px 14px;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 8px 0 14px;
+}
+
+.rlr-identity > div,
+.rlr-usage > div {
+  display: grid;
+  gap: 0 12px;
+  grid-template-columns: 150px minmax(0, 1fr);
+}
+
+.rlr-identity dt,
+.rlr-usage dt {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rlr-identity dd,
+.rlr-usage dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Unknown is styled as Unknown. It is never restyled into a zero. */
+.rlr-unknown {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.rlr-id {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.82rem;
+}
+
+.rlr-tag {
+  border: 1px solid var(--hairline);
+  border-radius: 2px;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  margin-right: 8px;
+  padding: 1px 5px;
+}
+
+.rlr-blocker { color: var(--warn); margin: 8px 0; }
+.rlr-action { color: var(--text); margin: 4px 0 10px; }
+.rlr-failure { color: var(--danger, var(--warn)); margin: 8px 0; }
+
+.rlr-controls {
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 12px;
+}
+
+.rlr-control {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .rlr-identity > div,
+  .rlr-usage > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rlr-controls {
+    flex-direction: column;
+  }
+}
+
 /* -------------------------------------------------------- reduced motion */
 
 @media (prefers-reduced-motion: reduce) {
   .rlc-btn {
     transition: none;
+  }
+
+  /* The pulse is the only animation on the run panel, and a user who asked for
+     less motion still needs the state — which the WORD already carries. */
+  .rlr--working .rlr-pulse.is-animating {
+    animation: none;
   }
 }

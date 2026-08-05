@@ -599,7 +599,14 @@ export function RelayPreviewApp() {
      `openLoopSurface` is a PURE function of the typed text: it parses, gates
      and projects, and it is the only thing this host calls. Nothing here
      starts a Loop, and nothing can — `start_loop` is permanently disabled in
-     the view model and there is no runtime behind it.
+     the view model.
+
+     BE EXACT ABOUT WHY. It is not that no runtime exists: a single-Loop
+     runtime does, behind authenticated bridge routes. It is that THIS host has
+     no bridge session, no operator credential and no way to get one, so it can
+     neither start a Loop nor read one. Saying "there is no runtime" was true
+     when it was written and stopped being true three commits later, which is
+     how a comment becomes the thing that misleads the next reader.
 
      Feature flags are `null`, which means every Loop feature is OFF. That is
      the truthful value in this build: no code reads an environment variable

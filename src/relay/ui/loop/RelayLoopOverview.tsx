@@ -51,7 +51,13 @@ export const RELAY_LOOP_OVERVIEW_SECTIONS: readonly RelayLoopOverviewSection[] =
     id: 'active',
     title: 'ACTIVE LOOPS',
     items: [],
-    emptyReason: 'Loop execution is not implemented in this build. No Loop has ever run.',
+    // TWO DIFFERENT FACTS, and this line used to collapse them. Execution IS
+    // implemented — one Loop, one role, durably, offline. What is true is that
+    // the engine is default OFF, nothing is deployed with it on, and this
+    // surface cannot list runs because it has no server to ask.
+    emptyReason:
+      'Relay has a single-Loop runtime, but this surface has no server to ask and the engine is '
+      + 'off by default. Nothing is claimed to be running.',
     unavailable: true,
   }),
   Object.freeze({
@@ -73,7 +79,9 @@ export const RELAY_LOOP_OVERVIEW_SECTIONS: readonly RelayLoopOverviewSection[] =
     id: 'history',
     title: 'RECENT LOOP HISTORY',
     items: [],
-    emptyReason: 'There is no history because no Loop has run.',
+    emptyReason:
+      'There is no history here because this surface has no server to ask. No Loop has run '
+      + 'outside a test.',
     unavailable: true,
   }),
 ]) as readonly RelayLoopOverviewSection[];
@@ -112,9 +120,10 @@ export function RelayLoopOverview({
       </header>
 
       <p className="rlo-lede">
-        A Loop is persistent compound-agent work. Today Relay understands Loop commands and can
-        draft a contract for review. Persistent execution is not implemented, so every section
-        below says what it can and cannot yet hold.
+        A Loop is persistent compound-agent work. Relay understands Loop commands, drafts a
+        contract for review, and has a single-Loop runtime behind an authenticated server — one
+        Loop, one role, off by default. This surface cannot start one and has no server to ask,
+        so every section below says what it can and cannot hold.
       </p>
 
       <p className="rlo-capability">

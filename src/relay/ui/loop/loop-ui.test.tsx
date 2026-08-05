@@ -321,7 +321,11 @@ describe('the /loops overview is truthfully empty', () => {
   });
 
   it('explains WHY each section is empty rather than showing a zero', () => {
-    expect(markup).toContain('No Loop has ever run');
+    // Was `No Loop has ever run`. That stopped being the honest sentence when
+    // the runtime landed: the truthful facts are that this SURFACE has no
+    // server to ask, and that no Loop has run outside a test.
+    expect(markup).toContain('no server to ask');
+    expect(markup).toContain('No Loop has run outside a test');
     expect(markup).toContain('the scheduler is not enabled');
     expect(markup).toContain('not implemented yet');
     expect(markup).toContain('NOT AVAILABLE YET');
@@ -355,7 +359,11 @@ describe('the /loops overview is truthfully empty', () => {
   });
 
   it('says what exists now and what does not', () => {
-    expect(markup).toContain('Persistent execution is not implemented');
+    // Was `Persistent execution is not implemented`, which the runtime made
+    // false. What is still true, and is what a user needs, is that this surface
+    // cannot start one.
+    expect(markup).toContain('single-Loop runtime');
+    expect(markup).toContain('cannot start one');
     expect(markup).toContain('Nothing runs and nothing is spent');
   });
 });

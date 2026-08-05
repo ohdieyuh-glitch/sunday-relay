@@ -14,6 +14,29 @@ export {
 } from './RelayLoopSurface';
 export { RelayLoopOverview, RELAY_LOOP_OVERVIEW_SECTIONS, type RelayLoopOverviewSection } from './RelayLoopOverview';
 export {
+  RelayLoopRunPanel,
+  RelayLoopRunSurface,
+  type RelayLoopRunFetch,
+  type RelayLoopRunPanelProps,
+  type RelayLoopRunPort,
+  type RelayLoopRunStore,
+  type RelayLoopRunSurfaceProps,
+  type RelayLoopRunSync,
+} from './RelayLoopRunPanel';
+export {
+  RELAY_LOOP_ACTIVITY,
+  activityFor,
+  controlsFor,
+  isUsableRestorePoint,
+  projectLoopRunView,
+  restorePointFor,
+  type RelayLoopActivity,
+  type RelayLoopRestorePoint,
+  type RelayLoopRunControlView,
+  type RelayLoopRunView,
+  type RelayLoopUsageLine,
+} from './loop-run-view';
+export {
   RelayLoopTargetPicker,
   targetChoiceCommand,
   targetChoiceExpression,

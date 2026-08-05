@@ -13,6 +13,8 @@ import {
   type RelayAgentRegistrySnapshot,
 } from '../../mission';
 import { runLoopCli } from '../../cli/loop-cli';
+import { isLoopRunCommand } from '../../cli/loop-run-cli';
+import { openLoopSurface } from '../loop';
 
 const NOW = '2026-08-02T12:00:00.000Z';
 
@@ -58,7 +60,11 @@ describe('website ↔ CLI Loop preview parity', () => {
   const CASES: Array<[string, string[]]> = [
     ['/loop all fix the parser', ['loop', 'all', 'fix', 'the', 'parser']],
     ['/loop architect,coding ship it', ['loop', 'architect,coding', 'ship', 'it']],
-    ['/loop status lpe_a', ['loop', 'status', 'lpe_a']],
+    // `/loop status <id>` used to live here. It no longer describes what either
+    // surface does with that input — both now OPEN THE RUN rather than preview
+    // the command — so it is asserted below as the routing decision it became,
+    // not left here asserting a preview neither surface renders.
+    ['/loop status', ['loop', 'status']],
     ['/sloop explore three repairs', ['sloop', 'explore', 'three', 'repairs']],
   ];
 
@@ -69,6 +75,45 @@ describe('website ↔ CLI Loop preview parity', () => {
       expect(cliLines).toEqual(renderLoopPreviewLines(preview));
     });
   }
+
+  it('a status command NAMING A RUN opens the run on both surfaces, and previews on neither', () => {
+    /*
+     * The one place the two surfaces could drift into meaning different things.
+     * A user typing `status lpe_a` is asking what a run IS DOING; describing the
+     * command back to them is the answer to a different question.
+     *
+     * Website: `openLoopSurface` returns the run surface.
+     * CLI: `isLoopRunCommand` routes it to the bridge instead of the preview.
+     * Both refuse the same input — one with no id — for the same reason.
+     */
+    const opened = openLoopSurface('/loop status lpr_a', {
+      flags: null, registry: null, observedAt: NOW,
+      projectId: 'p', workspaceId: 'w',
+    });
+    expect(opened.kind).toBe('run');
+    expect(isLoopRunCommand(['loop', 'status', 'lpr_a'])).toBe(true);
+
+    // No id: neither surface can resolve "the caller's current Loop", and both
+    // fall back to the preview that explains why.
+    const bare = openLoopSurface('/loop status', {
+      flags: null, registry: null, observedAt: NOW,
+      projectId: 'p', workspaceId: 'w',
+    });
+    expect(bare.kind).not.toBe('run');
+    expect(isLoopRunCommand(['loop', 'status'])).toBe(false);
+  });
+
+  it('a CONTROL never opens a run surface on the website — the browser cannot authorize one', () => {
+    for (const action of ['pause', 'resume', 'stop']) {
+      const opened = openLoopSurface(`/loop ${action} lpr_a`, {
+        flags: null, registry: null, observedAt: NOW,
+        projectId: 'p', workspaceId: 'w',
+      });
+      expect(opened.kind, action).not.toBe('run');
+    }
+    // The CLI does route them — it can carry an operator credential.
+    expect(isLoopRunCommand(['loop', 'stop', 'lpr_a'])).toBe(true);
+  });
 
   it('uses one vocabulary for absence on both surfaces', () => {
     const preview = composerPreview('/loop all fix it');

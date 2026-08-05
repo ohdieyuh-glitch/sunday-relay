@@ -110,3 +110,71 @@ made expensive.
 adapter in this build is the deterministic scripted fake, which is
 structurally prevented from reaching a network, a process, a provider SDK, a
 credential or a real clock — asserted by a test that reads its source.
+
+---
+
+## Resolution — 2026-08-04, execution session
+
+### The dependency gate is REPAIRED, and the earlier diagnosis was right
+
+The diagnosis above was correct and the reproduction was sound. It was
+incomplete in one respect, which is what made the repair look founder-gated:
+the `claude` binary in this worktree was **not merely missing its manifest, it
+was truncated** — 205 467 830 bytes against the complete 275 012 592. An
+interrupted download on a volume that is 94 % full, not a packaging quirk.
+
+It was also **not shared**. Every worktree carries its own `node_modules`;
+`~/sunday-relay-hermes-service` and `~/sunday-relay-mcp-foundation` both held
+complete, correct copies of the same version (`0.3.220`, matching
+`package-lock.json`). Only this worktree's copy was broken, so repairing it
+could not disturb another session — the reason the earlier session held back
+does not apply.
+
+**What was done:** the truncated file was removed and the complete one from
+`~/sunday-relay-hermes-service` was **hardlinked** in (same filesystem, so zero
+additional disk on a nearly-full volume), and the three missing metadata files
+were copied. `cmp` reports the two binaries identical. No production resolution
+logic was altered, no manifest was fabricated, and no test was skipped or
+weakened — the install is simply correct now.
+
+### What Stage 2 was still missing, and now is not
+
+The suite result above was accurate and the branch was still incomplete, in a
+way a passing suite could not show: **three things existed with nothing
+connecting them.**
+
+| Existed, with tests | Missing |
+|---|---|
+| `src/relay/ui/loop/loop-run-view.ts` — the projection of a running Loop | any component that rendered it |
+| `src/relay/cli/loop-execution.ts` — every execution command, behind a port | any implementation of that port |
+| a durable single-Loop runtime and authenticated bridge routes | anything in argv that reached them |
+
+A projection nothing renders is a surface that exists in the repository and not
+in the product — precisely the condition the MCP milestone's reachability check
+was built to catch. Added:
+
+- `RelayLoopRunPanel.tsx` and its host, where **restoration is a read, not a
+  cache**: the browser persists only `{runId, loopId}` and fetches the rest, so
+  a finished run cannot come back from a refresh still looking alive. Only the
+  server's own state class may animate, and a control with no handler is not
+  drawn at all;
+- `src/relay/loop-bridge-client/` — the missing adapter, reusing the Reviewer
+  client's target validation rather than copying it, because a second copy of a
+  control that decides where a bearer token may be sent is the copy that drifts;
+- `src/relay/cli/loop-run-cli.ts` — the argv seam. Reads and controls of a
+  **named** run reach the bridge; drafts keep going to the preview; a control
+  needs `--authorize` **and** a caller-minted `--idempotency-key`, because an id
+  the CLI generated would be new on every attempt and a retry after a timeout
+  would arrive as a second decision;
+- a `loop-run-observation` capability entry, so the parity gate holds the new
+  surface to being reachable rather than merely present.
+
+### Documentation that had stopped being true
+
+`LOOP_ENGINE.md` still said **"RUNTIME NOT IMPLEMENTED"** three commits after
+the runtime landed, and the Loop overview said "no Loop has ever run" and "Loop
+execution is not implemented in this build". A stale status line is the same
+defect as a comment claiming a gate the code does not have, pointed the other
+way — and it is worse here, because it invites the next session to rebuild
+something that exists. All three now state the four separate facts:
+implemented · offline · default OFF · never run in production.

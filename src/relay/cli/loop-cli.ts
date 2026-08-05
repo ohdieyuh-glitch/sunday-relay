@@ -9,8 +9,13 @@
  * kept in step, but because there is only one.
  *
  * IT SPENDS NOTHING. A CLI Loop command parses, resolves against whatever the
- * caller knows, and prints a preview. Compiling and starting a Loop is a
- * separate, confirmed step that lands with the runtime.
+ * caller knows, and prints a preview. Compiling and STARTING a Loop is a
+ * separate, confirmed step and is deliberately not reachable from here.
+ *
+ * READS AND CONTROLS OF A NAMED RUN GO ELSEWHERE. `loop-run-cli.ts` routes
+ * those to the bridge, because a user asking `status lpr_x` wants to know what
+ * a run is DOING and a preview answers a different question. This module keeps
+ * the drafting half, unchanged and still free of I/O.
  *
  * The CLI stays a thin client: this module imports only `../mission` (the
  * barrel the boundary test permits) and formats what comes back.
@@ -134,12 +139,23 @@ export const LOOP_CLI_HELP: readonly string[] = [
   '  relay loop reviewer <objective>     draft an independent Reviewer Loop',
   '  relay loop architect,coding <o>     draft a multi-role Loop',
   '',
-  '  relay loop status [loop-id]         current Loop state',
-  '  relay loop inspect [loop-id]        iterations, assignments, evidence, budget, blockers',
-  '  relay loop pause|resume|stop [id]   request a safe transition',
-  '  relay loop history [loop-id]        prior iterations and evidence',
+  '  relay loop status <run-id>          READ a live run from the server',
+  '  relay loop inspect <run-id>         iterations, assignments, evidence, budget, blockers',
+  '  relay loop history <loop-id>        prior runs of one Loop',
+  '  relay loop pause|resume|stop <run-id> --authorize --idempotency-key <key>',
   '  relay loop templates                available Loop templates',
   '  relay loops                         the Loop catalog',
+  '',
+  'A command NAMING a run reaches the Relay Bridge. Without an id there is no',
+  'local notion of "your current Loop", so it prints the grammar instead.',
+  'Reading costs nothing and needs no authorization. Pausing, resuming and',
+  'stopping change what a run does with money and with a workspace, so each',
+  'needs --authorize AND an --idempotency-key you mint: reuse the SAME key when',
+  'retrying, so a retry is never recorded as a second decision.',
+  '',
+  'Set RELAY_BRIDGE_URL and RELAY_BRIDGE_TOKEN to reach a bridge. The token is',
+  'read from the environment only — never from argv, where the process table',
+  'would carry it.',
   '',
   '  relay loop schedule                 open the Scheduled Loop Composer',
   '  relay loop schedule <when + what>   draft a recurring Loop',

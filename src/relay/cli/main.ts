@@ -54,6 +54,7 @@ import {
 } from './mission-economics';
 import { renderAgentOperatingProfiles } from './agent-operating';
 import { LOOP_CLI_HELP, runLoopCli } from './loop-cli';
+import { isLoopRunCommand, runLoopRunCli } from './loop-run-cli';
 // The SHARED projection — the same one the website's inspector renders.
 import {
   RELAY_AGENT_ROLES, operatingProfileFixture, projectAgentOperatingProfiles,
@@ -1993,6 +1994,35 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
       if (args[1] === 'help') {
         LOOP_CLI_HELP.forEach((line) => io.out(line));
         return EXIT.completed;
+      }
+      // A COMMAND ABOUT A LIVE RUN IS A QUESTION FOR THE SERVER.
+      //
+      // `relay loop status lpr_x` used to print a preview of the command it had
+      // parsed. That was honest while there was no runtime and misleading once
+      // there was one: the user asked what a run is DOING, and got a
+      // description of what they had typed. Reads and controls that name a run
+      // now go to the bridge; everything else — drafts, the composer, the
+      // catalog, anything without an id — stays with the preview, because a
+      // draft is still a draft and nothing here may start a run by accident.
+      if (isLoopRunCommand(args)) {
+        const outcome = await runLoopRunCli({
+          positionals: args,
+          env: process.env,
+          // `--authorize`, the same flag every other route that changes
+          // something already requires. Reaching a command is not consent.
+          confirmed: parsed.authorize === true,
+          // THE CALLER MINTS THE REQUEST ID, and the CLI refuses to mint one
+          // for a control. An id generated here would be new on every attempt,
+          // so a retry after a timeout would read as a second decision and the
+          // server's idempotency would have nothing to match — the exact shape
+          // of a double stop. `--idempotency-key` is how a retry says "this is
+          // the same decision I already made".
+          requestId: parsed.idempotencyKey ?? '',
+        });
+        if (outcome.handled) {
+          outcome.result.lines.forEach((line) => io.out(line));
+          return outcome.result.failed ? EXIT.runFailed : EXIT.completed;
+        }
       }
       // The CLI observes no agent registry and no feature flags yet, so both
       // are omitted rather than invented: the preview says Unknown where it
