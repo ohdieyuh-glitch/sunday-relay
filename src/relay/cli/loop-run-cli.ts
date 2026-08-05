@@ -148,6 +148,15 @@ export async function runLoopRunCli(input: LoopRunCliInput): Promise<LoopRunCliO
    * so the process dies with an unhandled rejection instead of saying anything.
    * A bridge that answers nonsense is a bridge problem, and the user should be
    * told which one it is.
+   *
+   * THE CATCH IS UNCONDITIONAL, AND THAT IS A TRADE. A Relay-side bug thrown
+   * anywhere under here is also reported as "the bridge answered in a shape
+   * Relay could not read", which blames the wrong party. It is still strictly
+   * better than the alternative it replaces — an unhandled rejection that kills
+   * the process and says nothing — because the caller gets a non-zero exit and
+   * a sentence that claims nothing about the run. Narrowing it would mean
+   * enumerating every field each renderer reaches for, which is the check the
+   * client deliberately does not do.
    */
   const guarded = async (run: () => Promise<LoopExecutionResult>): Promise<LoopRunCliOutcome> => {
     try {

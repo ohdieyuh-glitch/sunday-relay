@@ -104,7 +104,11 @@ export type RelayLoopRunSync =
   /** Relay could not ASK. Nothing is claimed about the run. */
   | 'unreachable'
   /**
-   * A control did not take effect, AND the re-read that followed succeeded.
+   * A control REPORTED a failure, AND the re-read that followed succeeded.
+   *
+   * "Reported", not "did not take effect": a control that timed out in
+   * transport may well have taken effect on the server, and this state cannot
+   * know. The paragraph below already said so; the opening clause did not.
    *
    * Named for the common case and defined by the second clause, because that
    * is what the code actually tests. Whether the control failed because the

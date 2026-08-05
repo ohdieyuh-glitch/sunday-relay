@@ -413,7 +413,15 @@ describe('restoration is a read, not a cache', () => {
 
     // The orphaned first-pass read lands last, carrying a DIFFERENT run.
     releaseFirst({ ok: true, status: orphan });
-    await new Promise((r) => { setTimeout(r, 30); });
+    // WAIT FOR THE ORPHAN TO BE HANDLED, not for a fixed 30ms. A settle window
+    // can expire before the response lands on a loaded box, and the assertion
+    // then passes because nothing happened yet — vacuously, which is the same
+    // failure mode as the two tests this commit series already had to fix.
+    await waitFor(() => {
+      expect((port.status as ReturnType<typeof vi.fn>).mock.results.length)
+        .toBeGreaterThanOrEqual(3);
+    });
+    await Promise.resolve();
     expect(
       document.querySelector('[data-loop-activity]')?.getAttribute('data-loop-activity'),
       'an orphaned first-pass read must not repaint a finished run',
