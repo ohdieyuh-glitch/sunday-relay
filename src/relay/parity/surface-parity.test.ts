@@ -4,17 +4,24 @@ import { describe, expect, it } from 'vitest';
 
 import {
   anchorSegments,
+  BROWSER_ENTRY_POINTS,
   compareRegistries,
   declaredPathOf,
   DECLARATION_FIELDS,
   DEFAULT_COMPANION_PATHS,
   findCompanion,
+  importSpecifiersOf,
+  stripComments,
   isFileClaim,
   loadRegistry,
+  reachableFromBrowserEntries,
+  resolveModuleSpecifier,
   runParityCheck,
+  UNMOUNTED_WEBSITE_SURFACES,
   validateRegistry,
   verifyAnchor,
   verifyDeclaredFiles,
+  verifyWebsiteReachability,
   REGISTRY_RELATIVE_PATH,
 } from '../../../scripts/relay-surface-parity.mjs';
 import {
@@ -575,5 +582,344 @@ describe('cross-repository verification', () => {
     if (!loaded.ok) return;
     expect(loaded.value.checksum).toMatch(/^[0-9a-f]{64}$/);
     expect(REGISTRY_RELATIVE_PATH.replace(/\\/g, '/')).toBe(RELAY_PARITY_REGISTRY_PATH);
+  });
+});
+
+/* ------------------- reachability: existence is not a mount -------------- */
+
+describe('an implemented website capability must be REACHABLE, not merely present', () => {
+  /**
+   * The gap this closes was real and it lasted a whole milestone.
+   * `mcp-connection-management` was `tested` on both surfaces, every declared
+   * file resolved, and no browser entry rendered the component. The registry
+   * read as parity; the website had no such surface. These tests hold the
+   * repaired rule to failing on exactly that shape.
+   */
+
+  const reachable = reachableFromBrowserEntries(repoRoot);
+
+  it('the browser entry itself is reachable, and the walk found a real graph', () => {
+    for (const entry of BROWSER_ENTRY_POINTS) expect(reachable.has(entry)).toBe(true);
+    // A resolver that silently resolved nothing would report every surface
+    // unmounted, and a resolver that "resolved" everything would report none.
+    expect(reachable.size).toBeGreaterThan(50);
+    expect(reachable.has('src/relay/ui/preview/RelayPreviewApp.tsx')).toBe(true);
+    // Server-only modules are NOT in a browser graph.
+    expect(reachable.has('src/relay/cli/main.ts')).toBe(false);
+  });
+
+  it('follows relative, index, extensionless and root-absolute specifiers', () => {
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/main.tsx', './ui/preview/RelayPreviewApp'))
+      .toBe('src/relay/ui/preview/RelayPreviewApp.tsx');
+    // A directory import resolves through its barrel.
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/ui/preview/RelayPreviewApp.tsx', '../project-settings'))
+      .toBe('src/relay/ui/project-settings/index.ts');
+    // Root-absolute, the form that once slipped past a boundary walker.
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/main.tsx', '/src/relay/ui/preview/RelayPreviewApp.tsx'))
+      .toBe('src/relay/ui/preview/RelayPreviewApp.tsx');
+    // Assets and packages contribute no module edge.
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/main.tsx', './relay.css')).toBeNull();
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/main.tsx', 'react')).toBeNull();
+    expect(resolveModuleSpecifier(repoRoot, 'src/relay/main.tsx', 'node:fs')).toBeNull();
+  });
+
+  it('recognises every import form this repository actually uses', () => {
+    const specifiers = importSpecifiersOf([
+      "import { A } from './a';",
+      "export { B } from './b';",
+      "import './c.css';",
+      "const d = await import('./d');",
+      "import Default, { type F } from './f';",
+      "import * as ns from './g';",
+    ].join('\n'));
+    expect(specifiers).toEqual(expect.arrayContaining(['./a', './b', './c.css', './d', './f', './g']));
+  });
+
+  it('counts NO edge for something a bundler would not include', () => {
+    // The checker's whole purpose is preventing a false pass. Each of these
+    // once produced one: a surface reachable ONLY through a type-only import or
+    // a commented-out import was reported mounted, and TypeScript erases the
+    // first while nothing at all executes the second.
+    const specifiers = importSpecifiersOf([
+      "import type { E } from './erased-type-clause';",
+      // `import {}` is NOT an edge for THIS bundler: the repository's own
+      // esbuild elides it. The specification would evaluate the module; the
+      // bundler is what ships.
+      "import {} from './erased-empty-clause';",
+      "import { type OnlyAType } from './erased-inline-type';",
+      "export type { G } from './erased-type-reexport';",
+      "// import { Thing } from './commented-line';",
+      "/* import { Thing } from './commented-block'; */",
+      '/**\n * import { Thing } from "./commented-doc";\n */',
+      // A bare apostrophe in prose is NOT a string delimiter. This one line is
+      // what defeated the first version of the scanner for the rest of a file.
+      "export const copy = <p>Relay's own inspection</p>;",
+      "// import { Thing } from './commented-after-an-apostrophe';",
+      // A regex carrying a quote, and one carrying an odd number of backticks.
+      "const q = /['\"]/;",
+      "// import { Thing } from './commented-after-a-regex';",
+      'const t = /\\bimport\\s*\\(\\s*`([^`$]+)`\\s*\\)/g;',
+      "// import { Thing } from './commented-after-a-backtick-regex';",
+      "import { Real } from './real';",
+    ].join('\n'));
+    expect(specifiers).toEqual(['./real']);
+  });
+
+  it('does not truncate a SPECIFIER that is itself a URL', () => {
+    // `from` ends in an identifier character, and a rule that refused to open a
+    // string after one turned the `//` inside this URL into a line comment —
+    // swallowing the NEXT line's real import with it.
+    expect(importSpecifiersOf([
+      "import x from 'https://esm.sh/react';",
+      "import { Real } from './real';",
+    ].join('\n'))).toEqual(expect.arrayContaining(['https://esm.sh/react', './real']));
+
+    expect(importSpecifiersOf("import 'https://x/y';\nimport { R } from './r';"))
+      .toEqual(expect.arrayContaining(['https://x/y', './r']));
+  });
+
+  it('does not count import-shaped PROSE as an edge', () => {
+    // A specifier is itself quoted text, so the matcher cannot tell a real
+    // `from './x'` from a string that merely contains one. Everything but the
+    // specifier position is blanked, which removes the ambiguity rather than
+    // arguing with it.
+    expect(importSpecifiersOf([
+      `const doc = ' import { X } from "./phantom" ';`,
+      "import { Real } from './real';",
+    ].join('\n'))).toEqual(['./real']);
+
+    expect(importSpecifiersOf([
+      "const t = `import { X } from './phantom-in-a-template';`;",
+      "import { Real } from './real';",
+    ].join('\n'))).toEqual(['./real']);
+  });
+
+  it('a MEMBER CALL named from/import is not specifier position', () => {
+    // `Array.from(…)` is not an import clause. Treating it as one preserved its
+    // argument verbatim, so prose passed to it produced an edge no bundler
+    // creates — a silent false pass, inside the rule added to close silent
+    // false passes.
+    for (const call of ['Array.from', 'Buffer.from', 'q.from', 'obj?.import']) {
+      expect(
+        importSpecifiersOf(`const a = ${call}(' import { X } from "./phantom" ');`),
+        call,
+      ).toEqual([]);
+    }
+    // The real clauses are untouched.
+    expect(importSpecifiersOf("import x from 'https://esm.sh/react';"))
+      .toEqual(['https://esm.sh/react']);
+    expect(importSpecifiersOf("const a = await import('./dyn');")).toEqual(['./dyn']);
+  });
+
+  it('a blanked string keeps its line count', () => {
+    // A line continuation inside a blanked string still ends a line, and
+    // dropping it shifts every later position in the file.
+    const source = "const s = 'abc\\\ndef';\nconst z = 1;\n";
+    expect(stripComments(source).split('\n')).toHaveLength(source.split('\n').length);
+  });
+
+  it('still finds a dynamic import inside a template interpolation', () => {
+    // Template TEXT is blanked; `${…}` is code and must keep its edges.
+    expect(importSpecifiersOf("const t = `${await import('./dyn')}`;"))
+      .toEqual(['./dyn']);
+  });
+
+  it('does not truncate a line that carries a URL literal', () => {
+    // A naive comment stripper eats everything after `//` — including, on this
+    // line, the import that follows a string containing a protocol separator.
+    const specifiers = importSpecifiersOf([
+      "const endpoint = 'https://example.com/mcp'; import { A } from './a';",
+      "const other = \"http://example.com\";",
+      "import { B } from './b';",
+    ].join('\n'));
+    expect(specifiers).toEqual(expect.arrayContaining(['./a', './b']));
+  });
+
+  it('NO reachable module can be made to yield a phantom edge by a comment', () => {
+    /*
+     * THE PROPERTY, TESTED ON THE REAL TREE.
+     *
+     * Unit cases prove the scanner handles the shapes someone thought of. This
+     * proves the thing the checker actually promises: that no file in the
+     * browser graph can have a commented-out import counted as a real edge.
+     *
+     * It exists because the first version of `stripComments` failed exactly
+     * here and no unit case caught it. A bare apostrophe in JSX text —
+     * `Relay's own inspection` — opened a "string" that never closed, so every
+     * comment after it in that file survived. Two independent measurements of
+     * how many files did it disagreed (22 of 646, and 25 of 731) because they
+     * counted different file sets; neither number is repeated here, because a
+     * count nobody can reproduce is not evidence. What both agreed on, and what
+     * this test pins, is the property: it must be zero.
+     */
+    const ghost = './__phantom_edge_that_must_not_be_followed__';
+    const offenders: string[] = [];
+    for (const relative of reachableFromBrowserEntries(repoRoot)) {
+      const full = join(repoRoot, relative);
+      if (!existsSync(full)) continue;
+      const source = readFileSync(full, 'utf8');
+      const probed = `${source}\n// import { Ghost } from '${ghost}';\n`;
+      if (importSpecifiersOf(probed).includes(ghost)) offenders.push(relative);
+    }
+    expect(offenders, 'a commented-out import was counted as a real edge').toEqual([]);
+  });
+
+  it('and not even a comment appended to the END OF AN EXISTING LINE yields one', () => {
+    /*
+     * THE CASE THE TEST ABOVE STRUCTURALLY CANNOT REACH.
+     *
+     * Appending the ghost on its own line only exercises code position. A
+     * reviewer appended it to the end of every existing line instead and found
+     * 1400 phantom edges across 61 of the 270 reachable modules — including
+     * `src/relay/main.tsx` — produced by a regex-position heuristic that
+     * treated every JSX closing tag as the start of a regex.
+     *
+     * One line per file rather than all of them, so the suite stays fast; the
+     * line is chosen as the longest, which is where the interesting syntax
+     * lives. The exhaustive 48 000-injection sweep lives in the review record.
+     */
+    const ghost = './__phantom_edge_appended_to_a_line__';
+    const offenders: string[] = [];
+    for (const relative of reachableFromBrowserEntries(repoRoot)) {
+      const full = join(repoRoot, relative);
+      if (!existsSync(full)) continue;
+      const lines = readFileSync(full, 'utf8').split('\n');
+      let widest = 0;
+      for (let i = 1; i < lines.length; i += 1) {
+        if ((lines[i] ?? '').length > (lines[widest] ?? '').length) widest = i;
+      }
+      const probe = [...lines];
+      probe[widest] = `${probe[widest]} // import { Ghost } from '${ghost}';`;
+      if (importSpecifiersOf(probe.join('\n')).includes(ghost)) {
+        offenders.push(`${relative}:${widest + 1}`);
+      }
+    }
+    expect(offenders, 'a trailing comment was counted as a real edge').toEqual([]);
+  });
+
+  it('and no reachable module loses a REAL edge to the same scanner', () => {
+    // The other direction. Over-stripping would produce a false FAILURE, which
+    // is loud rather than silent — but it would still be wrong, and a scanner
+    // that drops edges to protect itself is not a reachability checker.
+    const real = './__real_edge_that_must_be_followed__';
+    const offenders: string[] = [];
+    for (const relative of reachableFromBrowserEntries(repoRoot)) {
+      const full = join(repoRoot, relative);
+      if (!existsSync(full)) continue;
+      const probed = `${readFileSync(full, 'utf8')}\nimport { Real } from '${real}';\n`;
+      if (!importSpecifiersOf(probed).includes(real)) offenders.push(relative);
+    }
+    expect(offenders, 'a real import was not seen').toEqual([]);
+  });
+
+  it('the doc block does not claim a false pass is impossible', () => {
+    // LOW-value on its own, but the module used to assert a guarantee wider
+    // than it held. The barrel over-approximation is real and must stay stated.
+    const source = readFileSync(join(repoRoot, 'scripts/relay-surface-parity.mjs'), 'utf8');
+    const docBlock = source.slice(0, source.indexOf('export function importSpecifiersOf'));
+    expect(docBlock).toContain('KNOWN OVER-APPROXIMATION');
+    // BOTH must be named. A doc that admits one and hides the other is the
+    // same defect as one that admits none — and the second was found only
+    // because a reviewer diffed the edge set against the TypeScript parser.
+    expect(docBlock, 'the barrel re-export over-approximation').toMatch(/barrel/i);
+    expect(docBlock, 'the TypeScript import-type over-approximation').toMatch(/import-type/i);
+  });
+
+  it('THE MCP SURFACE IS MOUNTED — the component and its settings host are both reachable', () => {
+    for (const path of [
+      'src/relay/ui/mcp/RelayMcpConnections.tsx',
+      'src/relay/ui/mcp/mcp-settings-view.ts',
+      'src/relay/ui/project-settings/SettingsMcp.tsx',
+    ]) {
+      expect(reachable.has(path), `${path} is declared but no browser entry reaches it`).toBe(true);
+    }
+  });
+
+  it('this repository has no unreachable website entry point that is not disclosed', () => {
+    const result = verifyWebsiteReachability(repoRoot, registry);
+    expect(result.failures).toEqual([]);
+    expect(result.mounted).toBeGreaterThan(0);
+    expect(result.checked).toBeGreaterThanOrEqual(result.mounted);
+  });
+
+  it('FAILS a declared website surface that no browser entry renders', () => {
+    const result = verifyWebsiteReachability(repoRoot, {
+      capabilities: [capability({
+        capabilityId: 'ghost-surface',
+        // A real file, fully tested, that nothing in the running website mounts.
+        websiteEntryPoints: ['src/relay/ui/project-workspace/RelayMissionEconomics.tsx#RelayMissionEconomics'],
+      })],
+    });
+    // Recorded paths are disclosed, not failed — so use one that is NOT recorded.
+    const undisclosed = verifyWebsiteReachability(repoRoot, {
+      capabilities: [capability({
+        capabilityId: 'ghost-surface',
+        websiteEntryPoints: ['src/relay/ui/psp-import/psp-import-ui.test.tsx'],
+      })],
+    });
+    expect(result.failures.map((f: { rule: string }) => f.rule)).not.toContain('website-entry-unreachable');
+    expect(result.unmounted).toContain('src/relay/ui/project-workspace/RelayMissionEconomics.tsx');
+    expect(undisclosed.failures.map((f: { rule: string }) => f.rule)).toContain('website-entry-unreachable');
+  });
+
+  it('does NOT demand reachability from a capability that claims no website surface', () => {
+    const result = verifyWebsiteReachability(repoRoot, {
+      capabilities: [capability({
+        capabilityId: 'cli-only',
+        websiteStatus: 'not_started',
+        websiteEntryPoints: ['src/relay/ui/psp-import/psp-import-ui.test.tsx'],
+      })],
+    });
+    // The `unused-unmounted-record` rule compares against the WHOLE registry
+    // and is expected to fire on a one-capability fixture, so this asserts the
+    // rule actually under test rather than an empty list.
+    expect(result.failures.map((f: { rule: string }) => f.rule)).not.toContain('website-entry-unreachable');
+    expect(result.checked).toBe(0);
+  });
+
+  it('FAILS a record that has gone stale — mounting forces the disclosure to be corrected', () => {
+    // A path that IS reachable, recorded as if it were not. This is the shape
+    // the MCP surface would have taken had its "not mounted" disclosure been
+    // left behind by this change.
+    const result = verifyWebsiteReachability(
+      repoRoot,
+      { capabilities: [capability({ capabilityId: 'mounted', websiteEntryPoints: ['src/relay/main.tsx'] })] },
+      { 'src/relay/main.tsx': 'stale claim that the browser entry is not mounted' },
+    );
+    expect(result.failures.map((f: { rule: string }) => f.rule)).toContain('stale-unmounted-record');
+  });
+
+  it('FAILS a record that no capability declares — a disclosure about nothing', () => {
+    const result = verifyWebsiteReachability(repoRoot, {
+      capabilities: [capability({ capabilityId: 'unrelated', websiteEntryPoints: ['src/relay/main.tsx'] })],
+    });
+    expect(result.failures.map((f: { rule: string }) => f.rule)).toContain('unused-unmounted-record');
+  });
+
+  it('every recorded unmounted surface is genuinely unmounted AND genuinely declared', () => {
+    for (const [path, why] of Object.entries(UNMOUNTED_WEBSITE_SURFACES)) {
+      expect(existsSync(join(repoRoot, path)), `${path} is recorded but does not exist`).toBe(true);
+      expect(reachable.has(path), `${path} is recorded as unmounted but IS reachable`).toBe(false);
+      // A record with no reason discloses nothing.
+      expect(String(why).length).toBeGreaterThan(40);
+    }
+    const result = verifyWebsiteReachability(repoRoot, registry);
+    expect(result.failures.map((f: { rule: string }) => f.rule)).not.toContain('unused-unmounted-record');
+  });
+
+  it('the run prints the reachability total and every NOT MOUNTED disclosure', () => {
+    const result = runParityCheck({ repoRoot, now: NOW });
+    const printed = result.lines.join('\n');
+    expect(printed).toMatch(/website entry points reachable: \d+\/\d+ mounted/);
+    for (const path of Object.keys(UNMOUNTED_WEBSITE_SURFACES)) {
+      expect(printed).toContain(`NOT MOUNTED  ${path}`);
+    }
+    expect(result.ok).toBe(true);
+  });
+
+  it('STRICT mode enforces reachability too — it is not a local-only courtesy', () => {
+    const strict = runParityCheck({ repoRoot, strict: true, now: NOW });
+    expect(strict.ok).toBe(true);
+    expect(strict.lines.join('\n')).toMatch(/website entry points reachable: \d+\/\d+ mounted/);
   });
 });

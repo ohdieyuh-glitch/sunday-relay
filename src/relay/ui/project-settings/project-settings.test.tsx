@@ -82,7 +82,7 @@ const sectionHtml = {
 /* -------------------------------------------------------------- shell */
 
 describe('settings shell', () => {
-  it('renders the numbered section rail 01–14 with the config identity', () => {
+  it('renders the numbered section rail 01–15 with the config identity', () => {
     const html = shell();
     expect(html).toContain('PROJECT SETTINGS');
     expect(html).toContain('RLY / CONFIG');
@@ -90,7 +90,9 @@ describe('settings shell', () => {
       '01', 'PROJECT', '02', 'PROJECT TYPE', '03', 'PLATFORM', '04', 'TECHNOLOGY',
       '05', 'WORKFORCE', '06', 'MODE', '07', 'RESEARCH', '08', 'PROJECT MEMORY',
       '09', 'SCOPE', '10', 'PERMISSIONS', '11', 'VERIFICATION', '12', 'LIMITS',
-      '13', 'NOTIFICATIONS', '14', 'REVIEW AND START',
+      // 14 MCP CONNECTIONS joined the rail when the MCP surface was mounted;
+      // REVIEW AND START moved from 14 to 15. See project-settings-mcp.test.tsx.
+      '13', 'NOTIFICATIONS', '14', 'MCP CONNECTIONS', '15', 'REVIEW AND START',
     ]) {
       expect(html, `missing ${label}`).toContain(label);
     }

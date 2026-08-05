@@ -74,7 +74,26 @@ const FORBIDDEN_IMPORTS = [
   [/from\s+['"]@\/state\/|from\s+['"][^'"]*\/state\/session/, 'the Alcatraz session store'],
   [/from\s+['"]@\/components\//, 'Alcatraz UI components'],
   [/from\s+['"]@\/styles\//, "the Alcatraz stylesheet"],
-  [/from\s+['"][^'"]*\/server\/(?!.*relay)/, 'the Alcatraz server'],
+  /**
+   * The Alcatraz server is imported by a PATH INSIDE THIS REPOSITORY — a
+   * relative specifier, a root-absolute one, or the `@/` alias. It is never a
+   * third-party package.
+   *
+   * WHAT WAS REPAIRED. The previous class was `[^'"]*\/server\/`, which matches
+   * ANY specifier containing a `/server/` segment — including the subpath of an
+   * npm package. `@modelcontextprotocol/sdk/server/index.js` is the official MCP
+   * SDK's server entry, used by the offline MCP fixture servers, and it was
+   * reported as "imports the Alcatraz server". A rule that cannot tell a
+   * package subpath from a path into this tree cannot be satisfied by correct
+   * code, and the pressure it creates is to weaken it wholesale.
+   *
+   * The specifier must now BEGIN with `.`, `/` or `@/` before the `/server/`
+   * segment counts. A bare package specifier — anything starting with a letter
+   * or with `@scope/` — is out of scope for a rule about Alcatraz's own tree.
+   * Every real shape this rule was written for still matches:
+   * `../server/x`, `../../src/server/x`, `/src/server/x`, `@/server/x`.
+   */
+  [/from\s+['"](?:\.[^'"]*|\/[^'"]*|@\/[^'"]*)\/server\/(?!.*relay)/, 'the Alcatraz server'],
 ];
 const sources = files.filter((f) => /\.(ts|tsx|mts|mjs|js)$/.test(f));
 for (const f of sources) {

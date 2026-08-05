@@ -34,7 +34,9 @@
     "budget-hard-limit",
     "budget-approval",
     "verified-mission-cost",
-    "agent-operating-profile"
+    "agent-operating-profile",
+    "mcp-connection-management",
+    "mcp-mission-preflight"
   ],
   "requiredFiles": {
     "websiteEntry": [

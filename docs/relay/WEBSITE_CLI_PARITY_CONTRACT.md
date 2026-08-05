@@ -194,16 +194,48 @@ the same functions.
 A passing strict run reports what it actually inspected, at manifest `1.2.0`:
 
 ```text
-  declared surface files: 200/200 present
+  declared surface files: 222/222 present
   declared CLI commands: 24 (verified by the CLI's own command tests)
+  website entry points reachable: 28/37 mounted
 ```
 
 The file total counts every declaration that resolved, across all five
 declaration fields plus any exception evidence. It rose when
 `sharedDomainReferences` joined the fields the checker walks — those
-declarations existed before and were counted in nothing.
-`docs/documentation-contract.test.ts` holds both quoted lines to what the
+declarations existed before and were counted in nothing. It rose again from
+200 to 215 when the MCP Foundation registered `mcp-connection-management` and
+`mcp-mission-preflight`, whose shared-domain declarations name the projection,
+connection, registry, risk, approval and preflight modules both surfaces
+render from. It rose to 222 when those two capabilities declared the settings
+host that actually mounts them.
+`docs/documentation-contract.test.ts` holds all three quoted lines to what the
 checker really prints, so a stale number fails rather than reassures.
+
+### Existence is not reachability
+
+The third line is a different measurement from the first, and it exists
+because the first one was passing while the product's claim was false.
+`mcp-connection-management` was declared `tested` on both surfaces — a real
+component, a real test, a resolving path — through an entire milestone in
+which **no browser entry rendered it**. Every file the registry named existed.
+The website still did not have the capability.
+
+So an implemented website entry point must be reachable by following imports
+from a real browser entry (`src/relay/main.tsx`), which is what a bundler does
+and therefore what "an operator can get to this" means.
+
+A surface that genuinely is not mounted is not silently tolerated. It must be
+recorded in `UNMOUNTED_WEBSITE_SURFACES` with a reason stating what an operator
+cannot reach, the checker PRINTS every such record on its own `NOT MOUNTED`
+line, and the record is verified in both directions: a recorded path that has
+since become reachable FAILS (`stale-unmounted-record`), so mounting something
+forces the disclosure to be corrected instead of rotting into a permanent
+excuse, and a record no capability declares FAILS too
+(`unused-unmounted-record`).
+
+One surface is recorded today: `RelayMissionEconomics.tsx`, which nine
+economics capabilities declare and which only its own tests render. That is a
+pre-existing gap the MCP milestone did not create and did not close.
 
 ### It detects
 
@@ -219,6 +251,11 @@ checker really prints, so a stale number fails rather than reassures.
 - wildcard exceptions, exceptions naming a different capability, exceptions
   claiming the wrong surface is missing, and exceptions on capabilities that
   carry core mission truth
+- an implemented or tested website entry point that **no browser entry can
+  reach** (`website-entry-unreachable`) — the file exists, its tests pass, and
+  nothing in the running website renders it
+- an unmounted-surface record that has gone stale in either direction
+  (`stale-unmounted-record`, `unused-unmounted-record`)
 - declarations that are neither a `relay …` command nor a well-formed file
   path — including a path that whitespace would previously have demoted to an
   unchecked "command"

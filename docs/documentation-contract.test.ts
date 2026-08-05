@@ -219,13 +219,24 @@ describe('the parity contract describes the checker that exists', () => {
       // either way, and this test compares only those.
       output = String((err as { stdout?: string }).stdout ?? '');
     }
-    const quoted = [...contract.matchAll(/^\s*(declared (?:surface files|CLI commands):.*)$/gmu)]
-      .map((match) => match[1].trim());
-    expect(quoted.length, 'the contract should quote both totals').toBe(2);
+    // Three totals now: the two declaration counts, and the reachability count
+    // that distinguishes a declared website file from one a browser entry can
+    // actually render. A quoted reachability number that has drifted would be
+    // the worst of the three — it is the line that claims the website has the
+    // capability at all.
+    const quoted = [...contract.matchAll(
+      /^\s*(declared (?:surface files|CLI commands):.*|website entry points reachable:.*)$/gmu,
+    )].map((match) => match[1].trim());
+    expect(quoted.length, 'the contract should quote all three totals').toBe(3);
     for (const line of quoted) {
       expect(output, `the contract quotes "${line}", which the checker does not print`).toContain(line);
     }
-  });
+    // A GENEROUS, EXPLICIT TIME BUDGET — not a weakened assertion. This test
+    // SHELLS OUT to the parity checker, whose walk grows with the registry; it
+    // passed 5s on a 2-core host once the MCP capabilities were declared, and
+    // failed for being slow rather than for a stale number. The comparison
+    // above is unchanged.
+  }, 120_000);
 
   it('names sharedDomainReferences as a field that is VERIFIED, not merely declared', () => {
     expect(unwrapped).toMatch(/sharedDomainReferences.{0,120}(verified|resolved)/iu);

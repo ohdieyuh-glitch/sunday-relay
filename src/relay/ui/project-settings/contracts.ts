@@ -254,6 +254,7 @@ export type SettingsSectionId =
   | 'verification'
   | 'limits'
   | 'notifications'
+  | 'mcp'
   | 'review';
 
 export interface RelayProjectSettingsProps {
@@ -262,6 +263,17 @@ export interface RelayProjectSettingsProps {
   agentOptions: AgentOption[];
   entitlement: 'free' | 'pro' | 'max';
   initialDraft?: ProjectSettingsDraft;
+  /**
+   * MCP host state for section 14.
+   *
+   * OPTIONAL, AND ITS ABSENCE IS NOT AN EMPTY LIST. A host that has no MCP
+   * surface omits this and the section says so; it never renders an empty
+   * connection list, which would claim Relay inspected the workspace. It is
+   * NOT part of `ProjectSettingsDraft`: connections are workspace state a host
+   * reads, not a project setting this screen edits, and putting them in the
+   * draft would make them savable and startable configuration they are not.
+   */
+  mcp?: import('../mcp').RelayMcpSettingsState;
   onSaveDraft: (draft: ProjectSettingsDraft) => void;
   onStartProject: (draft: ProjectSettingsDraft) => void;
   onConnectRepository: () => void;
