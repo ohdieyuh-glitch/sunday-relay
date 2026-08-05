@@ -200,6 +200,13 @@ export interface ProjectDraft {
   reviewer: string;
   mode: string;
   researchPreference: 'not_configured' | 'monitoring' | 'active';
+  /**
+   * The stage backdrop this project selected, if any. A STRING rather than the
+   * union: it comes from stored state and may name a scene a later build
+   * removed, which `resolveBackdrop` turns into `none` rather than a
+   * substitute.
+   */
+  stageBackdrop?: string;
   evidenceRequirements: string[];
   runtimeLimitMinutes: number;
   callLimit: number;

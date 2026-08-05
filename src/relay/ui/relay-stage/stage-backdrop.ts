@@ -15,8 +15,9 @@
  *
  * NO EXTERNAL ASSETS. Every backdrop is drawn in CSS and inline SVG, for the
  * same reason the Relay Dog is: an image URL is a network request, a licence
- * question and a thing that can 404 into a blank stage. `relay-stage.css` and
- * the components beside it contain the whole of every scene.
+ * question and a thing that can 404 into a blank stage.
+ * `relay-stage-backdrop.css` and the components beside it contain the whole of
+ * every scene.
  */
 
 export const RELAY_BACKDROP_IDS = ['none', 'jungle', 'space_station'] as const;

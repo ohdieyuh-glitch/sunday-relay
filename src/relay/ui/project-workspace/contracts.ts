@@ -12,6 +12,7 @@
 
 import type { EventTruthClass, TerminalEventCategory } from '../../mission/wire-contracts';
 import type { RelayAgentOperatingProjection } from '../../mission';
+import type { RelayBackdropId } from '../relay-stage';
 
 /* ----------------------------------------------------------------- modes */
 
@@ -299,6 +300,13 @@ export interface RelayProjectWorkspaceProps {
    * instruction to show something else.
    */
   stageBackdrop?: string;
+  /**
+   * Told when the user picks a scene. OPTIONAL, and its absence does not
+   * disable the picker: selection works either way and simply does not survive
+   * a reload. Reporting a choice and storing one are different jobs, and the
+   * workspace only does the first.
+   */
+  onSelectStageBackdrop?: (id: RelayBackdropId) => void;
   /**
    * The viewport width the HOST observed, for the Relay Stage.
    *

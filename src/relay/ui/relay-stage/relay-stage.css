@@ -46,11 +46,27 @@
 
 .rst-actor {
   position: absolute;
-  /* `left`/`bottom` and the scale come from the layout projection. The
+  /* `left`/`bottom`, `width` and the scale come from the layout projection. The
      translateX(-50%) centres an actor on its own x, so a wider Leopard grows
-     around its position rather than drifting right. */
+     around its position rather than drifting right.
+
+     The WIDTH is not cosmetic. An absolutely positioned box with no width
+     shrink-to-fits, so an actor whose own layer asks for `width: 100%` — the
+     Relay Dog's patrol track does exactly that — would resolve to the width of
+     its own sprite and measure a track of nearly zero. Patrol would then switch
+     itself off silently, with no error anywhere. */
   transform-origin: bottom center;
   will-change: transform;
+}
+
+/* THE PAGE'S containment, not the stage's and not the actor's.
+
+   `clip` rather than `hidden` on purpose: `overflow-x: hidden` forces
+   `overflow-y` to `auto`, which would re-clip every jumping actor and undo the
+   whole point of the stage. `overflow-x: clip` leaves the vertical axis
+   genuinely visible. */
+.rpw-stage-bounds {
+  overflow-x: clip;
 }
 
 .rst-empty,

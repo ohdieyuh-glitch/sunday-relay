@@ -80,7 +80,16 @@ export const RELAY_STAGE_NARROW: RelayStageShape = Object.freeze({
 /** The width below which the stage becomes portrait-ish. */
 export const RELAY_STAGE_NARROW_BELOW_PX = 640;
 
+/**
+ * An UNKNOWN width resolves to the NARROW shape, and so do zero and negative.
+ *
+ * One policy for every input that is not a real wide viewport, because the
+ * alternative — `NaN` falling through a `<` comparison to WIDE while `0` gives
+ * NARROW — makes the unknown case take the branch with LESS vertical room.
+ * A host that could not measure gets the taller stage, not the squeezed one.
+ */
 export function stageShapeFor(viewportWidthPx: number): RelayStageShape {
+  if (!Number.isFinite(viewportWidthPx)) return RELAY_STAGE_NARROW;
   return viewportWidthPx < RELAY_STAGE_NARROW_BELOW_PX ? RELAY_STAGE_NARROW : RELAY_STAGE_WIDE;
 }
 
@@ -102,6 +111,18 @@ export interface RelayStageActor {
   readonly depth: number;
   /** Footprint in dog units. */
   readonly width: number;
+  /**
+   * How much of the stage this actor may MOVE ACROSS, in dog units. Defaults
+   * to `width` — an actor that does not roam.
+   *
+   * Footprint and track are different facts. The Relay Dog occupies one dog
+   * unit but patrols the whole stage, and its patrol engine measures its track
+   * from its own box: give it a box the size of its sprite and it measures a
+   * track of nearly zero and stops patrolling, with nothing failing anywhere.
+   * Capacity is still counted in `width`, because two actors that PASS each
+   * other do not need room for both tracks at once.
+   */
+  readonly track?: number;
   readonly layer: RelayStageLayer;
 }
 
@@ -116,6 +137,14 @@ export interface RelayStagePlacement {
   readonly scale: number;
   /** Painting order within a layer: nearer actors paint later. */
   readonly order: number;
+  /**
+   * Percentage of stage width the actor's BOX spans, from its track.
+   *
+   * An absolutely-positioned box with no width shrink-to-fits its content, so
+   * a `width: 100%` child inside it resolves to the sprite's own width. This
+   * is the number that stops that happening.
+   */
+  readonly widthPercent: number;
 }
 
 /** Where the ground meets the backdrop, as a fraction of stage height. */
@@ -123,8 +152,22 @@ export const GROUND_HORIZON = 0.62;
 /** How much smaller the farthest actor is than the nearest. */
 export const FAR_SCALE = 0.55;
 
+/**
+ * Only NaN — a value with no position on the line — falls back to 0. Infinity
+ * clamps to 1 like any other over-large number, because mapping the maximum to
+ * the minimum would put an actor declared "as near as possible" at the far
+ * horizon, which is a silent inversion rather than a clamp.
+ */
 const clamp01 = (value: number): number => (
-  Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
+  Number.isNaN(value) ? 0 : Math.min(1, Math.max(0, value))
+);
+
+/** Dog units, to two places. `3.8000000000000003` is not a cast description. */
+const roundUnits = (value: number): number => Math.round(value * 100) / 100;
+
+/** A footprint or track in dog units: finite and non-negative, or nothing. */
+const sanitiseUnits = (value: number | undefined): number | null => (
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 );
 
 /**
@@ -135,11 +178,19 @@ const clamp01 = (value: number): number => (
  * only the first would put a small dog floating in mid-air, which is the
  * commonest way a flat stage betrays that it has no depth model at all.
  */
-export function placeActor(actor: RelayStageActor): RelayStagePlacement {
+export function placeActor(actor: RelayStageActor, capacity: number): RelayStagePlacement {
   const depth = clamp01(actor.depth);
   const scale = FAR_SCALE + (1 - FAR_SCALE) * depth;
   // depth 1 (near) sits ON the ground line; depth 0 (far) sits at the horizon.
   const bottomPercent = (GROUND_HORIZON - depth * GROUND_HORIZON) * 100;
+
+  // Track defaults to footprint; footprint defaults to one dog. An actor may
+  // not roam wider than the stage.
+  const footprint = sanitiseUnits(actor.width) ?? 1;
+  const track = sanitiseUnits(actor.track) ?? footprint;
+  const usableCapacity = Number.isFinite(capacity) && capacity > 0 ? capacity : 1;
+  const widthPercent = Math.min(100, (track / usableCapacity) * 100);
+
   return {
     id: actor.id,
     layer: actor.layer,
@@ -147,6 +198,7 @@ export function placeActor(actor: RelayStageActor): RelayStagePlacement {
     bottomPercent,
     scale,
     order: Math.round(depth * 1000),
+    widthPercent,
   };
 }
 
@@ -182,12 +234,16 @@ export function layoutStage(input: {
 }): RelayStageLayout {
   const shape = stageShapeFor(input.viewportWidthPx);
   const capacity = stageCapacity(shape);
-  const requestedWidth = input.actors.reduce(
-    (total, actor) => total + (Number.isFinite(actor.width) ? Math.max(0, actor.width) : 0),
+  // Rounded to two places because it is a SUM OF FLOATS that a surface prints:
+  // 2 + 0.6 + 0.6 + 0.6 is 3.8000000000000003 in binary floating point, and a
+  // stage that reports that has stopped describing its cast and started
+  // describing IEEE 754.
+  const requestedWidth = roundUnits(input.actors.reduce(
+    (total, actor) => total + (sanitiseUnits(actor.width) ?? 0),
     0,
-  );
+  ));
   const placements = [...input.actors]
-    .map(placeActor)
+    .map((actor) => placeActor(actor, capacity))
     // Nearer actors paint later, so a cub in front of the Leopard is in front.
     .sort((a, b) => a.order - b.order);
 

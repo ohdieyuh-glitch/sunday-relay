@@ -99,9 +99,18 @@ describe('no scene reaches the network', () => {
     const css = read('relay-stage-backdrop.css');
     expect(css).toContain('prefers-reduced-motion');
     expect(css).toContain('.rsb--still');
-    // The stilled selectors are ANIMATIONS, not layout.
-    const stillBlock = css.slice(css.indexOf('.rsb--still'));
+    // The stilled selectors are ANIMATIONS, not layout. Sliced to the END OF
+    // THE BLOCK: running to EOF asserted a "no layout change" property over
+    // the whole rest of the stylesheet, including the unrelated picker, which
+    // is a test that passes because it is looking somewhere else.
+    // Comments stripped first: the header comment NAMES `.rsb--still` while
+    // explaining it, and slicing from that mention reads the wrong block.
+    const declarations = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const start = declarations.indexOf('.rsb--still');
+    const stillBlock = declarations.slice(start, declarations.indexOf('}', start) + 1);
     expect(stillBlock).toContain('animation: none');
-    expect(stillBlock).not.toMatch(/display:\s*none/);
+    for (const layoutProperty of [/display:/, /position:/, /visibility:/, /width:/, /height:/]) {
+      expect(stillBlock, String(layoutProperty)).not.toMatch(layoutProperty);
+    }
   });
 });

@@ -6,6 +6,12 @@ import {
 } from './stage-layout';
 
 /**
+ * Layers that are decoration WHEN EMPTY. Any of them may legally hold an actor,
+ * and one that does is announced like any other.
+ */
+const DECORATIVE_LAYERS: readonly RelayStageLayer[] = ['backdrop', 'far', 'effects'];
+
+/**
  * THE RELAY STAGE — a frameless region with room to act in.
  *
  * FRAMELESS MEANS FRAMELESS. No border, no background panel, no rounded box,
@@ -85,7 +91,13 @@ export function RelayStage({
           key={layer}
           className={`rst-layer rst-layer--${layer}${layerClips(layer) ? ' is-clipped' : ''}`}
           data-stage-layer={layer}
-          aria-hidden={layer === 'backdrop' || layer === 'far' || layer === 'effects' ? true : undefined}
+          // Decoration is hidden from assistive technology — but only while it
+          // IS decoration. `far` and `effects` are legal layers to declare an
+          // actor on, and a blanket aria-hidden would erase that actor from a
+          // screen reader while leaving it plainly visible on screen.
+          aria-hidden={
+            DECORATIVE_LAYERS.includes(layer) && byLayer(layer).length === 0 ? true : undefined
+          }
         >
           {layer === 'backdrop' ? backdrop ?? null : null}
           {byLayer(layer).map((placement) => (
@@ -96,6 +108,9 @@ export function RelayStage({
               style={{
                 left: `${placement.leftPercent}%`,
                 bottom: `${placement.bottomPercent}%`,
+                // A real box, so an actor that measures its own track measures
+                // the stage rather than its own sprite.
+                width: `${placement.widthPercent}%`,
                 // Depth scales and lifts together — they are one fact about
                 // distance, and applying only the first floats an actor.
                 transform: `translateX(-50%) scale(${placement.scale})`,
@@ -116,8 +131,8 @@ export function RelayStage({
         // Said out loud rather than drawn as an overlap. A stage that quietly
         // stacked its cast would be claiming room it does not have.
         <p className="rst-overflow" role="status">
-          {`This stage has room for about ${layout.capacity} at once, and ${layout.requestedWidth} were placed. `}
-          {'Some are overlapping.'}
+          {`This stage has room for about ${layout.capacity} dog-widths, and `}
+          {`${layout.requestedWidth} were placed. Some are overlapping.`}
         </p>
       )}
     </section>

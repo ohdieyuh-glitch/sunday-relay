@@ -45,9 +45,14 @@ describe('the stage is frameless', () => {
     // rather than against a computed style jsdom does not compute.
     const css = readStageCss();
     const block = css.slice(css.indexOf('.rst {'), css.indexOf('.rst-layer {'));
-    for (const framing of ['border:', 'background:', 'border-radius:', 'box-shadow:']) {
-      expect(block, `the stage must declare no ${framing}`).not.toContain(framing);
-    }
+    // Matched as PROPERTIES rather than as the four exact strings: `border:`
+    // does not catch `border-top:`, and `background:` does not catch
+    // `background-color:` or `background-image:`. The stylesheet is frameless
+    // either way — this is about whether the guard would catch it becoming
+    // framed, which is the only reason the guard exists.
+    const framingProperties = /(^|[;{]\s*)(border(-[a-z]+)*|background(-[a-z]+)*|box-shadow|outline(-[a-z]+)*)\s*:/;
+    const declarations = block.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(declarations, 'the stage must declare no framing property').not.toMatch(framingProperties);
   });
 
   it('sizes itself by ASPECT with a floor, never a fixed height', () => {

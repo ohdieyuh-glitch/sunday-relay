@@ -35,28 +35,33 @@
       "websiteStatus": "tested",
       "cliStatus": "tested",
       "websiteEntryPoints": [
-        "src/relay/ui/relay-dog-motion/dog-behavior.ts",
         "src/relay/ui/project-workspace/RelayWorkspaceDog.tsx",
+        "src/relay/ui/project-workspace/use-viewport-width.ts",
+        "src/relay/ui/relay-dog-motion/dog-behavior.ts",
         "src/relay/ui/relay-stage/RelayStage.tsx",
-        "src/relay/ui/relay-stage/stage-layout.ts",
         "src/relay/ui/relay-stage/RelayStageBackdrop.tsx",
+        "src/relay/ui/relay-stage/RelayStageBackdropPicker.tsx",
         "src/relay/ui/relay-stage/stage-backdrop.ts",
-        "src/relay/ui/relay-stage/RelayStageBackdropPicker.tsx"
+        "src/relay/ui/relay-stage/stage-layout.ts"
       ],
       "cliEntryPoints": [
-        "src/relay/cli/product/dog.ts"
+        "src/relay/cli/product/dog.ts",
+        "src/relay/cli/product/stage.ts"
       ],
       "websiteTestReferences": [
         "src/relay/ui/official-relay-dog/official-relay-dog.test.tsx",
+        "src/relay/ui/project-workspace/workspace-stage.test.tsx",
         "src/relay/ui/relay-dog-motion/relay-dog-motion.test.tsx",
-        "src/relay/ui/relay-stage/relay-stage.test.tsx",
-        "src/relay/ui/relay-stage/stage-layout.test.ts",
         "src/relay/ui/relay-stage/relay-stage-backdrop.test.tsx",
+        "src/relay/ui/relay-stage/relay-stage-picker.test.tsx",
+        "src/relay/ui/relay-stage/relay-stage.test.tsx",
         "src/relay/ui/relay-stage/stage-backdrop.test.ts",
-        "src/relay/ui/relay-stage/relay-stage-picker.test.tsx"
+        "src/relay/ui/relay-stage/stage-layout.test.ts",
+        "src/relay/ui/relay-stage/stage-real-actor.test.tsx"
       ],
       "cliTestReferences": [
-        "src/relay/cli/product/official-relay-dog.test.ts"
+        "src/relay/cli/product/official-relay-dog.test.ts",
+        "src/relay/cli/product/stage.test.ts"
       ],
       "sharedDomainReferences": [
         "src/relay/shared/official-relay-dog-states.ts"
@@ -758,7 +763,7 @@
         "src/relay/mission/loop/runtime/loop-projections.ts",
         "src/relay/ui/loop/loop-run-view.ts#restorePointFor"
       ],
-      "notes": "The WEBSITE half renders the run panel only when a host supplies a port and a store, and no shipped host supplies either — the website has no operator credential and no browser-session plumbing for Loop routes. What a user reaches today is the panel’s no-session state, which says so. The CLI half is complete: `relay loop status|inspect|history|pause|resume|stop <id>` reach the bridge. Recorded here rather than implied by a \"tested\" status, because a capability that is reachable is not the same claim as a capability that can answer."
+      "notes": "The WEBSITE half renders the run panel only when a host supplies a port and a store, and no shipped host supplies either \u2014 the website has no operator credential and no browser-session plumbing for Loop routes. What a user reaches today is the panel\u2019s no-session state, which says so. The CLI half is complete: `relay loop status|inspect|history|pause|resume|stop <id>` reach the bridge. Recorded here rather than implied by a \"tested\" status, because a capability that is reachable is not the same claim as a capability that can answer."
     },
     {
       "capabilityId": "mcp-connection-management",

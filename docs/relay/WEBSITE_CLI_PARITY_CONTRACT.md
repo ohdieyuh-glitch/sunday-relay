@@ -194,9 +194,9 @@ the same functions.
 A passing strict run reports what it actually inspected, at manifest `1.2.0`:
 
 ```text
-  declared surface files: 252/252 present
+  declared surface files: 267/267 present
   declared CLI commands: 27 (verified by the CLI's own command tests)
-  website entry points reachable: 34/43 mounted
+  website entry points reachable: 40/49 mounted
 ```
 
 The file total counts every declaration that resolved, across all five

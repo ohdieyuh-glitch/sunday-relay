@@ -1,9 +1,11 @@
 # The Relay Stage
 
-**Status: IMPLEMENTED. ONE ACTOR ON IT. TWO SELECTABLE BACKDROPS. NONE
-SELECTED BY DEFAULT.**
+**Status: IMPLEMENTED. ONE ACTOR ON IT. TWO BACKDROPS, SELECTABLE FROM THE
+WORKSPACE AND LISTED BY `relay project stage`. NONE SELECTED BY DEFAULT. THE
+CHOICE DOES NOT SURVIVE A RELOAD.**
 
-Those are four different claims and this file keeps them apart.
+Those are five different claims and this file keeps them apart. The last one is
+the honest limit: the picker reports a selection and nothing stores it yet.
 
 ---
 
@@ -11,16 +13,28 @@ Those are four different claims and this file keeps them apart.
 
 The Relay Dog lived in a band. Measured in `main` at `390660d`:
 
-| Element | Where | What it did |
-|---|---|---|
-| `.rpw-dogzone` | `relay-project-workspace.css` | a flex row that centred the dog |
-| `.rdm` | `relay-dog-motion.css` | `width: 100%`, `overflow-x: hidden` — the band |
-| `.rdo` | `relay-dog-motion.css` | `position: absolute`, **fixed `128px × 90px`**, `overflow: hidden` — the scenery box |
+| Element | Where | What it did | Now |
+|---|---|---|---|
+| `.rpw-dogzone` | `relay-project-workspace.css` | a flex row that centred the dog | **removed** |
+| `.rdm` | `relay-dog-motion.css` | `width: 100%`, `overflow-x: hidden` — the band | **clip removed**, still the motion boundary |
+| `.rdo` | `relay-dog-motion.css` | `position: absolute`, fixed `128px × 90px`, `overflow: hidden` | **unchanged, and correctly so** |
 
-Ninety pixels of usable height **at every viewport**, one occupant, and anything
-that left `128 × 90` was cut. There was no vertical room for a jump, no depth
-axis, and nowhere to put a second actor. It read as a rectangle because it was
-one.
+Two of those three were replaced. `.rdo` was not, because it is not what it
+looked like: it is a decor overlay that is a SIBLING of the dog, sized to the
+sprite, and its clip exists to keep dig-clods and sleep-marks on the dog rather
+than flung across the panel. It never clipped the dog. Removing it would not
+free an actor; it would scatter particles.
+
+`.rdm` is the one that mattered, and the reason is a CSS rule rather than a
+layout choice: **`overflow-x: hidden` cannot leave the other axis visible** —
+`overflow-y` computes to `auto`. So a declaration written to stop patrol travel
+scrolling the page was also cutting the dog VERTICALLY. That is why there was no
+room for a jump. The containment it provided now lives on `.rpw-stage-bounds` as
+`overflow-x: clip`, which does leave `overflow-y: visible` intact.
+
+`stage-real-actor.test.tsx` mounts the shipped dog on the stage, walks the real
+ancestor chain, and fails if any element between the two matches a clipping
+selector in either stylesheet.
 
 ## What the Stage is
 
@@ -36,8 +50,9 @@ does inside that room is the actor's business.
 No border, no background panel, no radius, no shadow, and no `overflow: hidden`
 around the cast. The stage is a region of the page, not a widget on it. Depth
 comes from layered content and from the backdrop, never from a container edge.
-A test asserts the stylesheet declares none of those four properties on `.rst`,
-because "frameless" is a requirement rather than a preference.
+A test asserts the stylesheet declares no framing property on `.rst` — matched
+as a property pattern, so `background-color`, `border-top` and `outline` are
+caught too, not only the four exact spellings someone thought of first.
 
 ### Six layers, and only one of them clips
 
@@ -65,6 +80,13 @@ click meant for a control.
 `x` is 0–1 across the stage. `depth` is 0 (far) to 1 (near). `width` is in **dog
 units** — the Relay Dog is 1, a wider Leopard 2, a cub 0.6, a vehicle whatever
 it is.
+
+Footprint and TRACK are separate: `width` is how much room an actor occupies,
+`track` is how much of the stage it may move across. The Relay Dog is one dog
+unit wide and patrols the whole stage. This is not a nicety — `.rst-actor` is
+absolutely positioned, so with no width it shrink-to-fits, `.rdm { width: 100% }`
+resolves to the sprite's own width, and the patrol engine measures a track below
+its 24px minimum and stops patrolling with nothing failing anywhere.
 
 **Depth scales and lifts together**, because they are one fact about distance. A
 surface that applied only the scale would put a small dog floating in mid-air,
@@ -96,7 +118,9 @@ adds any more.
   observed.
 - **Measure anything.** The host passes the viewport width it observed. That is
   what makes a stage with a Leopard, three cubs and a vehicle testable without
-  rendering one.
+  rendering one. The workspace does the observing, in `use-viewport-width.ts`;
+  it previously passed a hardcoded 1440, so the projection knew a narrow
+  viewport should get a taller stage and was never told one existed.
 
 Reduced motion suppresses parallax and effects. The **layout is identical** — a
 user who asked for less motion does not get a different scene.
@@ -139,6 +163,18 @@ older build, not an instruction to show something else. Since `jungle` is first
 in the catalog, a naive fallback would land there — so `resolveBackdrop` returns
 `none` for anything it does not recognise, and a test asserts exactly that.
 
+### The picker is mounted
+
+`RelayProjectWorkspace` renders it, so both scenes are reachable in the shipped
+website — asserted by `workspace-stage.test.tsx`, which clicks each radio and
+checks the scene that appears. An exported component that nothing renders is not
+a shipped capability, and the parity reachability walk cannot tell the
+difference because it follows import edges rather than renders.
+
+Selection is local to the screen. A host that wants it remembered passes
+`onSelectStageBackdrop` and stores it; without one the scene still changes and
+simply does not survive a reload.
+
 ### The picker says what is true
 
 A radio group rather than a dropdown, because "None" is a choice and a hidden
@@ -151,9 +187,15 @@ rule the run panel and the MCP settings surface hold.
 ## Not implemented
 
 Parallax content for the `far` layer · the Leopard, cubs, vehicle and
-transformation sprites · any cinematic sequence · persistence of the backdrop
-choice (the picker reports a selection; who stores it is the host's business,
-and no shipped host stores it yet).
+transformation sprites · any cinematic sequence · **persistence of the backdrop
+choice** (the picker reports a selection and changes the scene; no shipped host
+stores it, so a reload returns to None).
+
+Two things are asserted where the decision lives rather than in a browser,
+because jsdom computes no cascade and reports `clientWidth === 0`: that `.rst`
+declares no framing property, and that nothing between the stage and the dog
+clips. Both are read from the stylesheets. Neither has been confirmed against a
+real rendering engine.
 
 Backgrounds came after the stage on purpose. A scene painted into a 90px clipped
 band would have to be redrawn the moment the band went away.
@@ -166,3 +208,11 @@ parity class is `semantic_visual_required` and which is tested on both surfaces.
 Registering the Stage separately would have required a founder-approved
 `surface_specific` exception, and inventing one to make a checker pass is the
 kind of thing this repository's parity gate exists to catch.
+
+That argument is only honest if the CLI genuinely has an equivalent, so it was
+given one. `relay project stage` (`src/relay/cli/product/stage.ts`) reports the
+shape, the capacity, who is on the stage, which scene is selected and what the
+other choices are — calling `layoutStage` and `projectBackdropChoices`, the SAME
+functions the website calls. A terminal cannot draw the stage; it can answer
+every question the stage answers, and `stage.test.ts` asserts the two surfaces
+read one projection and so cannot disagree.

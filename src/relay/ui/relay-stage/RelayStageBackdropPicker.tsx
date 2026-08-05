@@ -44,8 +44,8 @@ export function RelayStageBackdropPicker({
       <ul className="rsbp-list">
         {choices.map((choice) => (
           <li key={choice.id} className={choice.selected ? 'rsbp-item is-selected' : 'rsbp-item'}>
-            <label className="rsbp-label">
-              {interactive && (
+            {interactive ? (
+              <label className="rsbp-label">
                 <input
                   type="radio"
                   name={name}
@@ -53,10 +53,16 @@ export function RelayStageBackdropPicker({
                   checked={choice.selected}
                   onChange={() => onSelect(choice.id)}
                 />
-              )}
-              <span className="rsbp-name">{choice.label}</span>
-              {choice.selected && !interactive && <span className="rsbp-current">SELECTED</span>}
-            </label>
+                <span className="rsbp-name">{choice.label}</span>
+              </label>
+            ) : (
+              // Read-only: a <label> wrapping no form control labels nothing,
+              // and announces itself to assistive technology as if it did.
+              <p className="rsbp-label">
+                <span className="rsbp-name">{choice.label}</span>
+                {choice.selected && <span className="rsbp-current">SELECTED</span>}
+              </p>
+            )}
             <p className="rsbp-description">{choice.description}</p>
             {choice.animated && (
               <p className="rsbp-motion">

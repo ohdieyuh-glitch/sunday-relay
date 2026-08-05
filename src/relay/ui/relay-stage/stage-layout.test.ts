@@ -15,6 +15,9 @@ import {
  * the difference real rather than cosmetic.
  */
 
+/** Capacity of the wide stage, so placement tests state the stage they mean. */
+const WIDE_CAPACITY = stageCapacity(RELAY_STAGE_WIDE);
+
 const actor = (over: Partial<RelayStageActor> = {}): RelayStageActor => ({
   id: 'relay-dog',
   x: 0.5,
@@ -80,8 +83,8 @@ describe('the stage grows with the page and always has vertical room', () => {
 
 describe('depth scales and lifts together', () => {
   it('a nearer actor is bigger AND lower on the ground plane', () => {
-    const near = placeActor(actor({ depth: 1 }));
-    const far = placeActor(actor({ depth: 0 }));
+    const near = placeActor(actor({ depth: 1 }), WIDE_CAPACITY);
+    const far = placeActor(actor({ depth: 0 }), WIDE_CAPACITY);
     expect(near.scale).toBeGreaterThan(far.scale);
     expect(near.bottomPercent).toBeLessThan(far.bottomPercent);
   });
@@ -89,13 +92,13 @@ describe('depth scales and lifts together', () => {
   it('the FARTHEST actor stands at the horizon, not in mid-air', () => {
     // Applying scale without lift is how a flat stage betrays that it has no
     // depth model: a small dog floats.
-    const far = placeActor(actor({ depth: 0 }));
+    const far = placeActor(actor({ depth: 0 }), WIDE_CAPACITY);
     expect(far.bottomPercent).toBeCloseTo(GROUND_HORIZON * 100, 5);
     expect(far.scale).toBeCloseTo(FAR_SCALE, 5);
   });
 
   it('the NEAREST actor stands on the ground line', () => {
-    const near = placeActor(actor({ depth: 1 }));
+    const near = placeActor(actor({ depth: 1 }), WIDE_CAPACITY);
     expect(near.bottomPercent).toBeCloseTo(0, 5);
     expect(near.scale).toBeCloseTo(1, 5);
   });
@@ -109,10 +112,10 @@ describe('depth scales and lifts together', () => {
   });
 
   it('a nonsense depth or x is clamped, never propagated', () => {
-    const wild = placeActor(actor({ depth: 4, x: -3 }));
+    const wild = placeActor(actor({ depth: 4, x: -3 }), WIDE_CAPACITY);
     expect(wild.leftPercent).toBe(0);
     expect(wild.scale).toBeLessThanOrEqual(1);
-    const nan = placeActor(actor({ depth: Number.NaN, x: Number.NaN }));
+    const nan = placeActor(actor({ depth: Number.NaN, x: Number.NaN }), WIDE_CAPACITY);
     expect(Number.isFinite(nan.scale)).toBe(true);
     expect(Number.isFinite(nan.bottomPercent)).toBe(true);
     expect(Number.isFinite(nan.leftPercent)).toBe(true);
@@ -182,5 +185,93 @@ describe('an empty stage is a real state', () => {
   it('an occupied stage has no empty reason at all', () => {
     const layout = layoutStage({ actors: [actor()], viewportWidthPx: 1440 });
     expect(layout.emptyReason).toBeNull();
+  });
+});
+
+/* ------------------------------------------------- track, and its absence */
+
+describe('an actor gets a BOX, not just a point', () => {
+  it('an actor that roams gets a box the size of its track, not its sprite', () => {
+    // The regression this exists for: `.rst-actor` is absolutely positioned, so
+    // with no width it shrink-to-fits its content. The Relay Dog's motion
+    // boundary asks for `width: 100%`, which then resolves to the width of the
+    // dog itself; its patrol engine measures that as its track, finds it below
+    // MIN_PATROL_TRACK_PX, and stops patrolling. Nothing fails. The dog just
+    // quietly stands still.
+    const roaming = placeActor(actor({ width: 1, track: 6 }), WIDE_CAPACITY);
+    const rooted = placeActor(actor({ width: 1 }), WIDE_CAPACITY);
+    expect(roaming.widthPercent).toBeGreaterThan(rooted.widthPercent);
+    expect(rooted.widthPercent).toBeCloseTo(100 / WIDE_CAPACITY, 5);
+  });
+
+  it('track defaults to footprint, and neither may exceed the stage', () => {
+    expect(placeActor(actor({ width: 2 }), WIDE_CAPACITY).widthPercent)
+      .toBeCloseTo(200 / WIDE_CAPACITY, 5);
+    // A track wider than the whole stage is still only the whole stage.
+    expect(placeActor(actor({ track: 999 }), WIDE_CAPACITY).widthPercent).toBe(100);
+    // A capacity of zero or nonsense cannot produce Infinity or NaN.
+    for (const capacity of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const placement = placeActor(actor({ track: 2 }), capacity);
+      expect(Number.isFinite(placement.widthPercent), String(capacity)).toBe(true);
+      expect(placement.widthPercent).toBeGreaterThan(0);
+    }
+  });
+
+  it('a nonsense width or track falls back rather than propagating', () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, -5]) {
+      const placement = placeActor(actor({ width: bad, track: bad }), WIDE_CAPACITY);
+      expect(Number.isFinite(placement.widthPercent), String(bad)).toBe(true);
+    }
+  });
+});
+
+/* --------------------------------------------------- clamping, precisely */
+
+describe('a clamp clamps, and does not invert', () => {
+  it('an infinitely NEAR actor is the nearest one, not the farthest', () => {
+    // `Number.isFinite(v) ? … : 0` mapped the maximum to the minimum: an actor
+    // declared as near as possible was placed at the far horizon, silently.
+    const near = placeActor(actor({ depth: Number.POSITIVE_INFINITY }), WIDE_CAPACITY);
+    const groundLine = placeActor(actor({ depth: 1 }), WIDE_CAPACITY);
+    expect(near.bottomPercent).toBeCloseTo(groundLine.bottomPercent, 5);
+    expect(near.scale).toBeCloseTo(groundLine.scale, 5);
+
+    const right = placeActor(actor({ x: Number.POSITIVE_INFINITY }), WIDE_CAPACITY);
+    expect(right.leftPercent).toBe(100);
+  });
+
+  it('only NaN — a value with no place on the line — falls back to zero', () => {
+    const nan = placeActor(actor({ depth: Number.NaN, x: Number.NaN }), WIDE_CAPACITY);
+    expect(nan.leftPercent).toBe(0);
+    expect(nan.bottomPercent).toBeCloseTo(GROUND_HORIZON * 100, 5);
+  });
+});
+
+describe('one policy for an unmeasurable viewport', () => {
+  it('an unknown width gets the taller stage, like zero and negative do', () => {
+    // NaN used to fall through `<` to WIDE while 0 gave NARROW, so the one
+    // input meaning "nobody measured" took the branch with LESS vertical room.
+    for (const width of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1]) {
+      expect(stageShapeFor(width), String(width)).toBe(RELAY_STAGE_NARROW);
+    }
+    expect(stageShapeFor(1440)).toBe(RELAY_STAGE_WIDE);
+  });
+});
+
+describe('a cast is described in dog units, not in IEEE 754', () => {
+  it('the requested width of a Leopard and three cubs is 3.8', () => {
+    // 2 + 0.6 + 0.6 + 0.6 is 3.8000000000000003 in binary floating point, and
+    // the overflow notice prints this number to a person.
+    const { requestedWidth } = layoutStage({
+      actors: [
+        actor({ id: 'leopard', width: 2 }),
+        actor({ id: 'cub-1', width: 0.6 }),
+        actor({ id: 'cub-2', width: 0.6 }),
+        actor({ id: 'cub-3', width: 0.6 }),
+      ],
+      viewportWidthPx: 1440,
+    });
+    expect(requestedWidth).toBe(3.8);
+    expect(String(requestedWidth)).not.toContain('0000');
   });
 });

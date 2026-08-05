@@ -141,7 +141,7 @@ export interface ParsedCli {
   runsAction?: 'list' | 'inspect' | 'recover' | 'archive';
   persistenceAction?: 'contract-verify' | 'recovery-drill';
   projectAction?: 'new' | 'open' | 'status' | 'settings' | 'workforce' | 'research' | 'run'
-    | 'terminal' | 'tasks' | 'findings' | 'evidence' | 'history' | 'repairs';
+    | 'terminal' | 'tasks' | 'findings' | 'evidence' | 'history' | 'repairs' | 'stage';
   cliAction?: 'demo' | 'contract-verify';
   ycAction?: 'check' | 'demo';
   projectRef?: string;
@@ -482,7 +482,7 @@ export function parseCli(argv: string[]): ParsedCli {
     }
     if (first === 'project') {
       const actions = ['new', 'open', 'status', 'settings', 'workforce', 'research', 'run',
-        'terminal', 'tasks', 'findings', 'evidence', 'history', 'repairs'];
+        'terminal', 'tasks', 'findings', 'evidence', 'history', 'repairs', 'stage'];
       if (!second || !actions.includes(second)) {
         return { command: 'project', ...base, error: `project requires an action: ${actions.join(', ')}.` };
       }
@@ -1396,6 +1396,7 @@ async function runProductCli(parsed: ParsedCli, io: CliIo): Promise<number> {
     case 'repairs':
     case 'evidence':
     case 'history':
+    case 'stage':
       return respond(() => productProjectView(store, caps, parsed.projectAction as ProjectView, parsed.projectRef));
     case 'run':
       return emit(productRunConfirmation(store, caps, parsed.projectRef));
