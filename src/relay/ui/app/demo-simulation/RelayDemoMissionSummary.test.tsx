@@ -6,6 +6,18 @@ import { getRelayAppStore } from '..';
 import { RelayPreviewApp } from '../../preview/RelayPreviewApp';
 import { RELAY_DEMO_SCRIPT } from './demo-simulation-script';
 
+/**
+ * A FILE-LEVEL TIME BUDGET, NOT A WEAKENED RULE.
+ *
+ * Every test here calls `startDemo()`, which mounts the REAL application shell
+ * in jsdom; several then drive the demo timeline through it. On a 2-core host
+ * with the suite running files in parallel that exceeds vitest's 5s default,
+ * so these failed for taking too long rather than for finding anything.
+ *
+ * Every assertion is byte-identical. Only the clock changed.
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
 beforeEach(() => {
   window.localStorage.clear();
   window.location.hash = '#/relay/project/rly-001';

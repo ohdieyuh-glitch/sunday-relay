@@ -123,8 +123,8 @@ describe('typing policy', () => {
     // 12 — pick a preset limit.
     gotoSection('12 LIMITS');
     fireEvent.click(screen.getByRole('button', { name: '$10' }));
-    // 14 — review and start.
-    gotoSection('14 REVIEW AND START');
+    // 15 — review and start (14 is MCP CONNECTIONS since the MCP mount).
+    gotoSection('15 REVIEW AND START');
     const start = screen.getByRole('button', { name: 'START PROJECT' }) as HTMLButtonElement;
     expect(start.disabled).toBe(false);
     fireEvent.click(start);
@@ -142,7 +142,7 @@ describe('typing policy', () => {
 
   it('START stays disabled while a blocker exists', () => {
     setup({ brief: null }); // no brief → no project source preselected
-    gotoSection('14 REVIEW AND START');
+    gotoSection('15 REVIEW AND START');
     const start = screen.getByRole('button', { name: 'START PROJECT' }) as HTMLButtonElement;
     expect(start.disabled).toBe(true);
     expect(screen.getByRole('alert').textContent).toContain('Choose a project source');

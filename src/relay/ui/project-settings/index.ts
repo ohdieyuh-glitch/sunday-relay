@@ -1,5 +1,6 @@
 export { RelayProjectSettings } from './RelayProjectSettings';
 export { SettingsWorkforce } from './SettingsWorkforce';
+export { SectionMcp } from './SettingsMcp';
 export { SettingsReview } from './SettingsReview';
 export * from './contracts';
 export {

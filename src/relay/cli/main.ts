@@ -66,6 +66,14 @@ import {
 } from '../mission';
 import { evaluateReadiness, readGptArchitectConfig } from '../connectors/gpt-architect';
 import { inspectClaudeRuntime } from './claude-runtime';
+import {
+  MCP_REGISTRY_FIXTURES, projectApprovals, projectCatalog, projectConnections,
+  runMcpMissionPreflight,
+} from '../mcp';
+import {
+  renderApprovalDecision, renderApprovals, renderCapabilities, renderCatalog,
+  renderConnections, renderInspect, renderMissionMcpPreflight, renderTestConnection,
+} from './mcp-cli';
 
 /**
  * Relay CLI entry (Prompt 5). Thin client: parses arguments, composes the
@@ -91,7 +99,13 @@ export interface ParsedCli {
   command: 'interactive' | 'demo' | 'run' | 'doctor' | 'version' | 'help' | 'workspace' | 'claude' | 'codex' | 'supervised'
     | 'state' | 'runs' | 'persistence'
     | 'home' | 'projects' | 'project' | 'recover' | 'cli' | 'session' | 'yc' | 'agent' | 'mission' | 'reviewer'
-    | 'loop';
+    | 'mcp' | 'loop';
+  /** `relay mcp <action>`. Read-only except approve/revoke, which record a
+   * human decision — no MCP action here opens a connection or calls a tool. */
+  mcpAction?: 'catalog' | 'connections' | 'inspect' | 'capabilities' | 'test-connection'
+    | 'approvals' | 'approve' | 'revoke';
+  /** Connection id or approval id, depending on the action. */
+  mcpRef?: string;
   /** The canonical slash string this invocation reconstructs, when the command
    *  is a Loop command. The CLI never parses the grammar itself. */
   loopArgs?: readonly string[];
@@ -99,7 +113,7 @@ export interface ParsedCli {
   agentAction?: 'import' | 'profile';
   /** Which agent's operating profile to print; all three when absent. */
   role?: string;
-  missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree' | 'coding-agent' | 'prompt-architect' | 'reviewer';
+  missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree' | 'coding-agent' | 'prompt-architect' | 'reviewer' | 'mcp';
   reviewerMode?: 'status' | 'inspect' | 'stop' | 'test-connection' | 'start' | 'retry';
   reviewerAction?: 'harnesses' | 'pair-browser';
   pairOrigin?: string;
@@ -225,6 +239,31 @@ export function parseCli(argv: string[]): ParsedCli {
     }
     const [first, second, third] = positionals;
     if (values.help || first === 'help') return { command: 'help', ...base };
+    if (first === 'mission' && second === 'mcp') {
+      // `relay mission mcp preflight <mission-id>` — read-only readiness.
+      if (third !== 'preflight') {
+        return { command: 'mission', missionAction: 'mcp', ...base, error: 'mission mcp requires: preflight <mission-id>.' };
+      }
+      return { command: 'mission', missionAction: 'mcp', missionRef: positionals[3], ...base };
+    }
+    if (first === 'mcp') {
+      const mcpActions = ['catalog', 'connections', 'inspect', 'capabilities', 'test-connection', 'approvals', 'approve', 'revoke'] as const;
+      type McpAction = (typeof mcpActions)[number];
+      if (!mcpActions.includes(second as McpAction)) {
+        return {
+          command: 'mcp', ...base,
+          error: `mcp requires an action: ${mcpActions.join(', ')}.`,
+        };
+      }
+      const needsRef = ['inspect', 'capabilities', 'test-connection', 'approve', 'revoke'];
+      if (needsRef.includes(second!) && third === undefined) {
+        return {
+          command: 'mcp', mcpAction: second as McpAction, ...base,
+          error: `mcp ${second} requires an id.`,
+        };
+      }
+      return { command: 'mcp', mcpAction: second as McpAction, mcpRef: third, ...base };
+    }
     // LOOP COMMANDS. Deliberately NOT parsed here: `loop-cli.ts` rebuilds the
     // canonical slash string and hands it to the ONE domain grammar, so argv
     // and a browser composer cannot drift. A literal slash argument
@@ -569,6 +608,15 @@ export const HELP_TEXT = [
   '       [--credential-env NAME]   read it from a NAMED environment reference',
   '       [--workspace <id>] [--yes]',
   '  relay psp-agent import         same command, spelled out',
+  '  relay mcp catalog              curated MCP registry entries (private beta)',
+  '  relay mcp connections          configured MCP connections in this workspace',
+  '  relay mcp inspect <id>         one connection in full (states kept distinct)',
+  '  relay mcp capabilities <id>    the captured capability snapshot + risk classes',
+  '  relay mcp test-connection <id> verify transport, protocol and server identity',
+  '  relay mcp approvals            recorded MCP approvals and their exact scope',
+  '  relay mcp approve <id>         grant a pending MCP approval',
+  '  relay mcp revoke <id>          revoke an MCP approval',
+  '  relay mission mcp preflight <mission-id>   mission MCP readiness (blocked/degraded/ready)',
   '  relay yc check                 YC demo preflight (read-only, no provider call)',
   '  relay yc demo                  founder YC demo launcher (offline simulation only)',
   '  relay session                  legacy simulated interactive session',
@@ -1934,6 +1982,131 @@ export function runProductWatch(
   });
 }
 
+/* --------------------------------- MCP ----------------------------- */
+
+/**
+ * `relay mcp …` — TRUTHFUL MCP MANAGEMENT.
+ *
+ * The CLI renders; it makes no MCP policy decision, opens no connection,
+ * resolves no credential and spawns nothing. Every value printed comes from the
+ * shared projection the website also renders
+ * (`src/relay/mcp/domain/mcp-surface-projection.ts`), so the two surfaces
+ * cannot drift into two vocabularies.
+ *
+ * WHAT IT SHOWS TODAY, stated honestly: the curated registry is real and every
+ * entry in it is a SIMULATION FIXTURE. No MCP connection is configured in the
+ * CLI's composition, so `connections`, `approvals` and `inspect` correctly
+ * report nothing rather than inventing a connector. That is the truthful
+ * state — the alternative, a fake "connected" row, is exactly what §22 forbids.
+ */
+function runMcpCli(parsed: ParsedCli, io: CliIo): number {
+  const options = { plain: parsed.plain, width: 80 };
+  const catalog = projectCatalog(MCP_REGISTRY_FIXTURES);
+  // No connection is configured in this composition. Rendering an empty set is
+  // the truthful answer; fabricating one would be a claim Relay cannot support.
+  const connections = projectConnections([], MCP_REGISTRY_FIXTURES);
+  const approvals = projectApprovals([]);
+
+  switch (parsed.mcpAction) {
+    case 'catalog': {
+      const lines = renderCatalog(catalog, options);
+      if (parsed.json) io.out(JSON.stringify({ catalog }));
+      else lines.forEach((line) => io.out(line));
+      return EXIT.completed;
+    }
+    case 'connections': {
+      if (parsed.json) io.out(JSON.stringify({ connections }));
+      else renderConnections(connections, options).forEach((line) => io.out(line));
+      return EXIT.completed;
+    }
+    case 'inspect': {
+      const row = connections.find((entry) => entry.connectionId === parsed.mcpRef) ?? null;
+      const result = renderInspect(row, parsed.mcpRef ?? '', options);
+      if (parsed.json) io.out(JSON.stringify({ connection: row, exitCode: result.exitCode }));
+      else result.lines.forEach((line) => io.out(line));
+      return result.exitCode;
+    }
+    case 'capabilities': {
+      // A snapshot exists only on a live connection, and none is configured.
+      const result = renderCapabilities(null, parsed.mcpRef ?? '', options);
+      if (parsed.json) io.out(JSON.stringify({ capabilities: null, exitCode: result.exitCode }));
+      else result.lines.forEach((line) => io.out(line));
+      return result.exitCode;
+    }
+    case 'test-connection': {
+      const result = renderTestConnection({
+        connectionId: parsed.mcpRef ?? '',
+        reachable: false,
+        negotiatedProtocolVersion: null,
+        identityVerified: false,
+        failureCategory: 'capability_missing',
+        failureMessage: 'no MCP connection with that id is configured in this workspace',
+        simulation: true,
+      }, options);
+      if (parsed.json) io.out(JSON.stringify({ exitCode: result.exitCode }));
+      else result.lines.forEach((line) => io.out(line));
+      return result.exitCode;
+    }
+    case 'approvals': {
+      if (parsed.json) io.out(JSON.stringify({ approvals }));
+      else renderApprovals(approvals, options).forEach((line) => io.out(line));
+      return EXIT.completed;
+    }
+    case 'approve':
+    case 'revoke': {
+      const result = renderApprovalDecision(parsed.mcpAction, parsed.mcpRef ?? '', {
+        ok: false,
+        reason: 'no MCP approval with that id exists in this workspace',
+      });
+      result.lines.forEach((line) => io.out(line));
+      return result.exitCode;
+    }
+    default:
+      io.out('mcp requires an action. See `relay help`.');
+      return EXIT.usage;
+  }
+}
+
+/**
+ * `relay mission mcp preflight <mission-id>` — mission MCP readiness.
+ *
+ * A mission with NO declared MCP requirements is READY with respect to MCP,
+ * and says so. That is the honest answer for every mission today: no mission
+ * binding declares an MCP requirement yet, and reporting `blocked` for the
+ * absence of a requirement nobody stated would be false.
+ */
+function runMissionMcpCli(parsed: ParsedCli, io: CliIo): number {
+  if (!parsed.missionRef) {
+    io.out('mission mcp preflight requires a mission id.');
+    return EXIT.usage;
+  }
+  const result = runMcpMissionPreflight({
+    binding: {
+      missionBindingId: `mcb_${parsed.missionRef}` as never,
+      missionId: parsed.missionRef,
+      accountId: 'local',
+      workspaceId: 'local',
+      projectId: null,
+      requirements: [],
+      approvedSnapshots: {},
+      writablePathPrefixes: [],
+      createdAt: new Date().toISOString(),
+    },
+    registry: MCP_REGISTRY_FIXTURES,
+    connections: [],
+    snapshots: { get: () => null },
+    credentials: [],
+    grants: [],
+    approvals: [],
+    networkPolicyAllows: () => true,
+    now: new Date().toISOString(),
+  });
+  const rendered = renderMissionMcpPreflight(parsed.missionRef, result, { plain: parsed.plain, width: 80 });
+  if (parsed.json) io.out(JSON.stringify({ preflight: result, exitCode: rendered.exitCode }));
+  else rendered.lines.forEach((line) => io.out(line));
+  return rendered.exitCode;
+}
+
 /* ------------------------------- main ------------------------------ */
 
 export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<number> {
@@ -2057,7 +2230,10 @@ export async function runCli(argv: string[], io: CliIo = defaultIo): Promise<num
     case 'reviewer':
       if (parsed.reviewerAction === 'pair-browser') return await runBrowserPairingCli(parsed, io);
       return runReviewerCatalogCli(io);
+    case 'mcp':
+      return runMcpCli(parsed, io);
     case 'mission':
+      if (parsed.missionAction === 'mcp') return runMissionMcpCli(parsed, io);
       return runMissionCli(parsed, io);
     case 'demo':
     case 'run': {

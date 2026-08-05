@@ -14,9 +14,64 @@
 
 import { spawnSync } from 'node:child_process';
 import { safeText } from '../../redact';
+import { DISABLED_TOOLSETS, WRITE_CAPABLE_TOOLSETS, isolatedConfigYaml } from './isolated-profile';
 
-/** The one-shot flags this adapter depends on, proven from local `--help`. */
-export const REQUIRED_ONESHOT_FLAGS = ['-z', '--usage-file', '-t', '--ignore-rules'] as const;
+/**
+ * Read-only rests on the generated profile, so readiness checks the profile
+ * Relay would actually write — not a flag that happens to exist.
+ */
+export function generatedProfileDisablesEveryToolset(): boolean {
+  const yaml = isolatedConfigYaml();
+  if (!yaml.includes('disabled_toolsets:')) return false;
+  if (!/max_turns:\s*1\b/.test(yaml)) return false;
+  if (!yaml.includes('mcp_servers: {}')) return false;
+  // Every toolset Relay knows about, and every write-capable one explicitly.
+  const named = [...new Set([...DISABLED_TOOLSETS, ...WRITE_CAPABLE_TOOLSETS])];
+  return named.every((t) => new RegExp(`^\\s*-\\s*${t}\\s*$`, 'm').test(yaml));
+}
+
+/**
+ * THE FLAGS THE RUNNER ACTUALLY PASSES, and therefore the only ones readiness
+ * has any business requiring.
+ *
+ * This list used to require `-t` and not require `-m` or `--provider`. That
+ * was backwards on both counts: `-t/--toolsets` is an ENABLE list the runner
+ * deliberately never passes (isolation comes from the profile's
+ * `agent.disabled_toolsets`), while `-m` and `--provider` are passed on every
+ * single run — so a Hermes with no model or provider selection passed
+ * readiness and then failed at execution.
+ *
+ * Verified against the installed Hermes `--help`:
+ *   -z/--oneshot      single prompt, final response only
+ *   --usage-file      one-shot usage report
+ *   -m/--model        model override for this invocation
+ *   --provider        provider override for this invocation
+ *   --ignore-rules    skip AGENTS.md, SOUL.md, .cursorrules, memory, skills
+ */
+export const REQUIRED_ONESHOT_FLAGS = [
+  '-z', '--usage-file', '-m', '--provider', '--ignore-rules',
+] as const;
+
+/**
+ * The toolset flag. Relay does NOT pass it — it enables toolsets, and the
+ * Reviewer wants none — but its presence is what tells us this build has the
+ * toolset system the profile's `disabled_toolsets` key drives.
+ */
+export const TOOLSET_FLAG = '-t';
+
+/**
+ * Does `--help` really advertise this flag?
+ *
+ * Naive substring matching is wrong for short flags and silently so: `-m`
+ * appears inside `--safe-mode`, and `-t` inside `--worktree`, so a build
+ * exposing neither would still be reported as supporting both. A flag must
+ * appear as its own token — delimited by whitespace, a comma, a bracket or an
+ * `=` — exactly as an argument parser prints it.
+ */
+export function helpAdvertisesFlag(helpText: string, flag: string): boolean {
+  const escaped = flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[\\s,\\[(])${escaped}([\\s,\\])=]|$)`, 'm').test(helpText);
+}
 
 /** Minimum Hermes that exposes one-shot + usage reporting + toolset control. */
 export const MINIMUM_HERMES_VERSION = '0.18.0';
@@ -105,8 +160,8 @@ export function discoverHermes(input: {
   const compatible = versionAtLeast(parsedVersion, MINIMUM_HERMES_VERSION);
 
   const help = probe(executable, ['--help']);
-  const supportedFlags = REQUIRED_ONESHOT_FLAGS.filter((flag) => help.text.includes(flag));
-  const missingFlags = REQUIRED_ONESHOT_FLAGS.filter((flag) => !help.text.includes(flag));
+  const supportedFlags = REQUIRED_ONESHOT_FLAGS.filter((flag) => helpAdvertisesFlag(help.text, flag));
+  const missingFlags = REQUIRED_ONESHOT_FLAGS.filter((flag) => !helpAdvertisesFlag(help.text, flag));
 
   const acp = probe(executable, ['acp', '--check']);
   const acpAvailable = acp.ok && /ACP check OK/i.test(acp.text);
@@ -116,9 +171,22 @@ export function discoverHermes(input: {
   const machineInterfaceVerified = missingFlags.length === 0 && compatible;
   const machineInterface: HermesMachineInterface = machineInterfaceVerified ? 'oneshot_json' : null;
 
-  // Read-only is enforced by granting NO toolset through an isolated profile,
-  // which requires the toolset flag and rule suppression to both exist.
-  const readOnlyEnforceable = help.text.includes('-t') && help.text.includes('--ignore-rules');
+  // READ-ONLY EVIDENCE MUST DESCRIBE THE MECHANISM THAT ENFORCES IT.
+  //
+  // This used to be `help.includes('-t') && help.includes('--ignore-rules')`
+  // — a flag the runner never passes, standing in as proof for a mechanism it
+  // has nothing to do with. Read-only is actually enforced by the Relay-owned
+  // profile: `agent.disabled_toolsets` names every toolset this build exposes,
+  // `agent.max_turns: 1` pins one turn, and `mcp_servers`/`plugins`/`hooks`
+  // are empty. `--ignore-rules` is the second lock, and IS passed.
+  //
+  // So the evidence now requires: the build has the toolset system the
+  // profile drives, rule suppression is available, and the profile Relay
+  // generates really does disable every toolset it knows about.
+  const profileDisablesEveryToolset = generatedProfileDisablesEveryToolset();
+  const readOnlyEnforceable = helpAdvertisesFlag(help.text, TOOLSET_FLAG)
+    && helpAdvertisesFlag(help.text, '--ignore-rules')
+    && profileDisablesEveryToolset;
 
   const failureReason = (() => {
     if (parsedVersion === null) return 'Relay could not read a Hermes version from this runtime.';
@@ -127,6 +195,9 @@ export function discoverHermes(input: {
     }
     if (missingFlags.length > 0) {
       return `This Hermes build does not expose ${missingFlags.join(', ')}, which the one-shot transport requires.`;
+    }
+    if (!profileDisablesEveryToolset) {
+      return 'The Relay Reviewer profile does not disable every toolset it knows about.';
     }
     if (!readOnlyEnforceable) return 'Relay cannot prove read-only execution for this Hermes build.';
     return null;

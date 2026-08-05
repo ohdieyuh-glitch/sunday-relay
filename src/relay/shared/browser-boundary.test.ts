@@ -100,6 +100,23 @@ const FORBIDDEN_DIRS: readonly ForbiddenDir[] = [
     prefix: 'src/relay/testing/',
     why: 'the deterministic TEST FIXTURE surface — deterministicIds and testClock exist for tests, and a browser edge into them ships the whole fixture module in the product bundle',
   },
+  /**
+   * The MCP host's server-only layers. The MCP domain, policy, registry,
+   * mission, psp and gateway layers are deliberately pure and ARE browser-safe
+   * — the website renders their projections — so the boundary is drawn at the
+   * three directories that hold process, socket and secret code:
+   *
+   *   transports/  spawns child processes, opens sockets, imports the MCP SDK
+   *   client/      drives those transports
+   *   testing/     the offline fake servers, which spawn real processes
+   *
+   * A browser edge into any of them ships `node:child_process` and the MCP SDK
+   * into the product bundle, and would put credential resolution one import
+   * away from the browser.
+   */
+  { prefix: 'src/relay/mcp/transports/', why: 'the MCP transports — child processes, sockets and the MCP SDK' },
+  { prefix: 'src/relay/mcp/client/', why: 'the MCP connection manager, which drives the server-only transports' },
+  { prefix: 'src/relay/mcp/testing/', why: 'the offline MCP fake servers, which spawn real processes' },
   { prefix: 'relay-bridge/', why: 'the local Relay bridge SERVER' },
   { prefix: 'scripts/', why: 'repository tooling — boundary, parity and deployment scanners' },
 ];

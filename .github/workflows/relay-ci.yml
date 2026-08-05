@@ -77,6 +77,22 @@ jobs:
       - name: Relay bridge build
         run: npm run relay:bridge:build
 
+      # The Hermes Reviewer service is the fourth build target, and Railway is
+      # configured to run exactly this command. Without a step here a broken
+      # service bundle would be discovered by a deploy rather than by CI —
+      # which is the wrong place to learn that the artifact does not build.
+      # It builds only; nothing here starts the service or contacts a provider.
+      - name: Hermes Reviewer service build
+        run: npm run relay:hermes:build
+
+      # Signal handling can only be proven against a real process, so this file
+      # needs the built entry point that `npm test` runs before producing. In
+      # that first run its artifact-absent branch asserts this step exists;
+      # here is where the handlers are actually signalled. Accounted for in
+      # `scripts/ci-test-accounting.test.ts`.
+      - name: Hermes service signal handling (built entry point, loopback only)
+        run: npx vitest run relay-hermes-service/signal-lifecycle.test.ts
+
       # Parity is a REQUIREMENT, not an aspiration (governance §7). The
       # registry and the checker both live in this tree now, so these steps no
       # longer guard on their existence: a guard that skips when its own input

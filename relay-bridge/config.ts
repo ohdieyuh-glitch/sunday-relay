@@ -5,11 +5,26 @@
  *
  * PRODUCTION HOSTING. A managed host injects `PORT` and expects the process to
  * bind every interface, so both are read from the environment rather than
- * assumed. Production additionally REFUSES TO START without the pieces that
- * make the service safe — a bridge token and an exact CORS allowlist — because
- * a bridge that boots wide open is worse than one that does not boot.
+ * assumed.
+ *
+ * A DECLARED production bridge — `NODE_ENV=production`, and only that —
+ * additionally REFUSES TO START on four conditions: no `RELAY_BRIDGE_API_TOKEN`,
+ * a literal `*` in the CORS allowlist, a relative durable-state path, or a
+ * `PORT` that does not resolve. An ABSENT allowlist is a warning, not a
+ * refusal: empty already means "no browser origin may call this", which is the
+ * safe direction, and a bridge configured for CLI use only must still start.
+ *
+ * WHAT THAT REFUSAL IS FOR, stated accurately because an earlier version of
+ * this paragraph was not. It is a fail-fast on misconfiguration, not a lock on
+ * an open door. A missing token makes every protected route UNREACHABLE — the
+ * shared bearer check refuses an empty configured secret — and a `*` entry
+ * allows nothing, because origins are matched by exact string and no browser
+ * sends `Origin: *`. "A bridge that boots wide open" describes neither case.
+ * The refusal exists so a deploy that forgot something fails loudly at boot
+ * instead of quietly serving nobody.
  */
 
+import { isProductionDeployment } from './deployment-environment';
 import { isAbsolute } from 'node:path';
 import type { SundayMode } from './architect';
 
@@ -32,7 +47,29 @@ export interface BridgeConfig {
   confirmLive: boolean;
   /** Absolute durable-state root (the mounted volume), or null when unset. */
   stateRoot: string | null;
+  /**
+   * IS THIS A REAL DEPLOYMENT? Inferred — `NODE_ENV=production` or any Railway
+   * marker.
+   *
+   * Its only reader is `productionConfigWarnings`. Fail-closed gates do not
+   * read this FIELD; they call `isProductionDeployment(env)` directly, because
+   * they are reached from route handlers that never load a `BridgeConfig`. The
+   * predicate is the shared answer; this field is one caller of it. Saying
+   * "used by everything that fails closed" was a claim about a set with one
+   * member in it, in the commit whose subject was claim accuracy.
+   */
   production: boolean;
+  /**
+   * DID AN OPERATOR SAY SO? `NODE_ENV=production` and nothing else.
+   *
+   * These are two different questions and they were one flag, which is the
+   * whole of the risk in this change. The boot refusal below EXITS THE
+   * PROCESS, and on a platform that restarts it, exiting is a crash loop. A
+   * fail-fast may be armed by a declaration; it must not be armed by an
+   * inference about the host, because the inference cannot know whether the
+   * variables it is about to insist on were ever set.
+   */
+  declaredProduction: boolean;
 }
 
 function pickMode(v: string | undefined): SundayMode {
@@ -67,17 +104,40 @@ export function loadBridgeConfig(env: NodeJS.ProcessEnv = process.env): BridgeCo
     // Fake mode implies confirmation (no real spend). Live requires the flag.
     confirmLive: env.RELAY_BRIDGE_FAKE_CLAUDE === '1' || env.RELAY_BRIDGE_CONFIRM_LIVE === '1',
     stateRoot: stateRoot !== undefined && stateRoot !== '' ? stateRoot : null,
-    production: env.NODE_ENV === 'production',
+    /**
+     * Inferred, and used only where being wrong is safe. `NODE_ENV` alone is
+     * not enough: Railway does not set it, so a real deployment was taking
+     * the development branch of the trusted-origin gate.
+     *
+     * WHAT THE UN-GATED CASE IS AND IS NOT. An earlier draft of this comment
+     * said the bridge would boot "with every protected route unauthenticated
+     * and any page allowed to spend the founder's credentials". Both halves
+     * are false against this code, and a reviewer was right to say so:
+     * `bearer-auth.ts` returns false for an empty configured secret, so a
+     * missing token makes every protected route UNREACHABLE rather than open;
+     * and `server.ts` matches origins by exact string with no wildcard branch,
+     * so a literal `*` entry allows nothing a browser can send. What is
+     * actually lost is the fail-fast and the warnings — a diagnostics gap, not
+     * an open door. Worth closing; not worth a crash loop.
+     */
+    production: isProductionDeployment(env),
+    /**
+     * Declared. Arms the boot refusal, which exits the process — see
+     * `productionConfigProblems`.
+     */
+    declaredProduction: env.NODE_ENV === 'production',
   };
 }
 
 /**
  * What must be true before a PRODUCTION bridge may accept traffic AT ALL.
  *
- * Deliberately short. A boot failure takes the service down, so only things
- * that would make it unsafe — not merely limited — belong here. A missing
- * token would leave every protected route unreachable, and a wildcard origin
- * would let any page spend a founder's credentials; both are fatal.
+ * Deliberately short. A boot failure takes the service down, so only a
+ * configuration nobody could have meant belongs here. A missing token leaves
+ * every protected route unreachable, and a literal `*` in an exact-match
+ * allowlist matches nothing a browser can send — so neither is an open door,
+ * and neither was ever one. Both are operator intent that cannot be honoured,
+ * which is worth failing loudly at boot rather than serving badly for a week.
  *
  * Absent CORS origins and an absent volume are NOT fatal: an empty allowlist
  * already means "no browser may call this", which is the safe direction, and
@@ -91,7 +151,20 @@ export function productionConfigProblems(
   config: BridgeConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
-  if (!config.production) return [];
+  /*
+   * DECLARED, NOT INFERRED — and this line is the safety of the whole change.
+   *
+   * A problem here is fatal: the server sets a non-zero exit code and stops,
+   * and on a platform that restarts the process that is a crash loop rather
+   * than a message. Arming that from `isProductionDeployment` would mean a
+   * host marker alone could newly insist on four variables nobody had been
+   * asked for, on a service that was running perfectly a minute earlier.
+   *
+   * A fail-fast is a promise the operator made. `NODE_ENV=production` is how
+   * they make it. Everything that fails CLOSED uses the inferred flag, because
+   * being wrong there refuses a request; being wrong HERE refuses to boot.
+   */
+  if (!config.declaredProduction) return [];
   const problems: string[] = [];
   if ((env.RELAY_BRIDGE_API_TOKEN ?? '').trim() === '') {
     problems.push('RELAY_BRIDGE_API_TOKEN is not set — every protected route would be unreachable.');
@@ -100,10 +173,25 @@ export function productionConfigProblems(
     problems.push('RELAY_ALLOWED_ORIGINS contains "*", which is never permitted with authenticated routes.');
   }
   if (config.stateRoot !== null && !isAbsolute(config.stateRoot)) {
-    problems.push('RELAY_DATA_DIR must be an absolute path.');
+    // Name the variable that was actually read. `RELAY_STATE_HOME` also
+    // reaches this field, and being told to fix a variable you never set is
+    // its own small outage.
+    problems.push(
+      `${env.RELAY_DATA_DIR !== undefined && env.RELAY_DATA_DIR !== '' ? 'RELAY_DATA_DIR' : 'RELAY_STATE_HOME'} must be an absolute path.`,
+    );
   }
-  if (!Number.isFinite(config.port) || config.port <= 0) {
-    problems.push('PORT did not resolve to a usable port number.');
+  // A PORT IS AN INTEGER IN 1..65535, and anything else is refused HERE with
+  // the variable named — rather than at `server.listen`, which dies with
+  // `ERR_SOCKET_BAD_PORT` and tells an operator nothing about which variable
+  // they set. `65535` and `8790.5` both used to survive this check while the
+  // message promised "a usable port number".
+  if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
+    // Name the variable that was actually read, for the same reason as the
+    // state path above: `RELAY_BRIDGE_PORT` wins when set, and `Number('')` is
+    // 0, so an empty one reaches here and must not send an operator to `PORT`.
+    problems.push(
+      `${env.RELAY_BRIDGE_PORT !== undefined ? 'RELAY_BRIDGE_PORT' : 'PORT'} did not resolve to a usable port number.`,
+    );
   }
   return problems;
 }
@@ -115,6 +203,16 @@ export function productionConfigProblems(
 export function productionConfigWarnings(config: BridgeConfig): string[] {
   if (!config.production) return [];
   const warnings: string[] = [];
+  if (!config.declaredProduction) {
+    // Say what is therefore NOT running, by name. A deployment that never set
+    // NODE_ENV gets every fail-closed gate and none of the fail-fast, and an
+    // operator should learn that from the log rather than from an incident.
+    warnings.push(
+      'NODE_ENV is not "production" on what looks like a real deployment. Fail-closed gates are '
+      + 'active, but the startup refusal for a missing RELAY_BRIDGE_API_TOKEN, a "*" CORS origin, '
+      + 'a relative state path or an unusable PORT is NOT armed. Set NODE_ENV=production to arm it.',
+    );
+  }
   if (config.allowedOrigins.length === 0) {
     warnings.push('RELAY_ALLOWED_ORIGINS is not set — no browser origin may call this bridge. Authenticated CLI use is unaffected.');
   }

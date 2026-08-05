@@ -1,4 +1,5 @@
 import { safeText } from '../redact';
+import { decodeSegment } from '../path-segment';
 import { bearerMatches, BRIDGE_TOKEN_ENV, type ReviewerRouteResult } from '../reviewer-routes';
 import { probeHostedReadiness, sanitizeHostedStatus } from './hosted-readiness';
 import { sanitizeHostedRun, type HostedRunRecord } from './hosted-run-record';
@@ -134,7 +135,12 @@ export async function handleHostedCodingRoute(
 
   const statusMatch = /^\/hosted-coding\/(status|inspect)\/(.+)$/.exec(path);
   if (statusMatch !== null && method === 'GET') {
-    const runId = decodeURIComponent(statusMatch[2]);
+    // A malformed escape is a client error and names no run, so it is a 404.
+    // Bare `decodeURIComponent` threw a URIError out of this handler and the
+    // server's generic catch turned it into 500 — a server fault reported for
+    // a request the client got wrong.
+    const runId = decodeSegment(statusMatch[2]);
+    if (runId === null) return err(404, 'not_found', 'No hosted Coding Agent run with that id.');
     const record = statusMatch[1] === 'inspect'
       ? await runs.inspect(runId)
       : await runs.get(runId);
@@ -170,7 +176,9 @@ export async function handleHostedCodingRoute(
   const stopMatch = /^\/hosted-coding\/stop\/(.+)$/.exec(path);
   if (stopMatch !== null && method === 'POST') {
     if (decision.kind !== 'operator') return operatorOnly();
-    const stopped = await runs.stop(decodeURIComponent(stopMatch[1]));
+    const stopId = decodeSegment(stopMatch[1]);
+    if (stopId === null) return err(404, 'not_found', 'No hosted Coding Agent run with that id.');
+    const stopped = await runs.stop(stopId);
     return stopped.ok
       ? ok(sanitizeHostedRun(stopped.record))
       : err(stopped.status, stopped.kind, safeText(stopped.message));

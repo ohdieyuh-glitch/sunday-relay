@@ -83,6 +83,27 @@ export type RelayLoopTemplateId = Branded<'lpm'>;
 export type UnchainSessionId = Branded<'lpu'>;
 export type RelayLoopCollapseId = Branded<'lpk'>;
 
+/**
+ * MCP host identifiers (docs/relay/MCP_FOUNDATION.md). They live here, in the
+ * one branded-id system, rather than in a private scheme under `src/relay/mcp`
+ * — an id that validates differently from every other Relay id is an id whose
+ * validation nobody checks.
+ *
+ * Note what is NOT an id: a capability FINGERPRINT is a content digest, not an
+ * identifier, so it is never minted by the factory and never carries a prefix.
+ * Confusing the two is how "the tool changed but its id did not" happens.
+ */
+export type McpRegistryEntryId = Branded<'mrg'>;
+export type McpServerDefinitionId = Branded<'msd'>;
+export type McpConnectionId = Branded<'mcn'>;
+export type McpCapabilitySnapshotId = Branded<'mcs'>;
+export type McpInvocationId = Branded<'mci'>;
+export type McpApprovalRequestId = Branded<'mcq'>;
+export type McpApprovalRecordId = Branded<'mca'>;
+export type McpPermissionGrantId = Branded<'mcg'>;
+export type McpCredentialReferenceId = Branded<'mcr'>;
+export type McpAuditRecordId = Branded<'mcu'>;
+export type McpMissionBindingId = Branded<'mcb'>;
 export type CommandId = Branded<'cmd-free'>;
 export type QueryId = Branded<'qry-free'>;
 export type CorrelationId = Branded<'cor-free'>;
@@ -104,6 +125,10 @@ export const PREFIXES = {
   lpb: 'lpb_', lpc: 'lpc_', lpm: 'lpm_', lpu: 'lpu_', lpk: 'lpk_',
   // Stage 2 runtime: one execution of a Loop, and one control request against it.
   lpr: 'lpr_', lpq: 'lpq_',
+  // MCP host (docs/relay/MCP_FOUNDATION.md).
+  mrg: 'mrg_', msd: 'msd_', mcn: 'mcn_', mcs: 'mcs_', mci: 'mci_',
+  mcq: 'mcq_', mca: 'mca_', mcg: 'mcg_', mcr: 'mcr_', mcu: 'mcu_',
+  mcb: 'mcb_',
 } as const;
 
 export type IdPrefix = keyof typeof PREFIXES;

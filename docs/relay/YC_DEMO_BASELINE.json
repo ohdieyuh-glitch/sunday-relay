@@ -37,7 +37,9 @@
     "agent-operating-profile",
     "loop-command-grammar",
     "loop-contract-preview",
-    "loop-run-observation"
+    "loop-run-observation",
+    "mcp-connection-management",
+    "mcp-mission-preflight"
   ],
   "requiredFiles": {
     "websiteEntry": [

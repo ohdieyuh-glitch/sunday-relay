@@ -144,3 +144,72 @@ export function runParityCheck(options: {
   companionPath?: string;
   now?: string;
 }): ParityResult & { lines: string[] };
+
+/* ---------------------- website reachability (the mount) ---------------- */
+
+/** Entries a browser genuinely loads, mirroring the browser boundary guard. */
+export const BROWSER_ENTRY_POINTS: readonly string[];
+
+/**
+ * Website surfaces that are DECLARED and TESTED but that no browser entry
+ * renders, each mapped to the reason an operator cannot reach them. Recording
+ * one is a disclosure, not an approval, and the record is checked in both
+ * directions.
+ */
+export const UNMOUNTED_WEBSITE_SURFACES: Readonly<Record<string, string>>;
+
+/**
+ * Reduce a source file to the text a module-edge matcher may safely read.
+ *
+ * Comments are REMOVED. Ordinary strings are BLANKED with their newlines and
+ * their delimiters kept; template literals are blanked INCLUDING their
+ * backticks, keeping only newlines. A string in SPECIFIER position is the
+ * exception: its text is the answer and survives verbatim. `${…}` interpolations are code and
+ * go through every rule. Regex literals are preserved whole, so a quote or
+ * backtick inside one cannot open a phantom string.
+ *
+ * Blanking rather than preserving, because a specifier is itself quoted text:
+ * prose containing `from './x'` produced an edge no bundler creates. The
+ * implementation's doc block lists five residuals, states that each of THOSE
+ * five drops an edge, and does not claim the list is exhaustive.
+ */
+export function stripComments(source: string): string;
+
+/**
+ * Every module specifier a source file imports that a bundler would actually
+ * follow. Comments and type-only clauses are excluded; the two surviving
+ * over-approximations (an unconsumed barrel re-export, and a TypeScript
+ * import-type node in type position) is stated in the
+ * implementation's doc block rather than hidden.
+ */
+export function importSpecifiersOf(source: string): string[];
+
+/**
+ * Resolve one specifier to a repo-relative module path, or `null` for a
+ * package, an asset, or anything outside the tree. Conservative by design: an
+ * unresolved edge is an edge not followed, which can only understate
+ * reachability — a loud false failure, never a silent false pass.
+ */
+export function resolveModuleSpecifier(
+  repoRoot: string,
+  fromRelative: string,
+  specifier: string,
+): string | null;
+
+/** Every module a browser entry can reach, as repo-relative paths. */
+export function reachableFromBrowserEntries(
+  repoRoot: string,
+  entries?: readonly string[],
+): Set<string>;
+
+/**
+ * Existence is not reachability. Every implemented or tested website entry
+ * point must be reachable from a browser entry, or be recorded as unmounted
+ * with a reason. `record` is injectable so the rules can be proven to FAIL;
+ * production callers use the default.
+ */
+export function verifyWebsiteReachability(
+  repoRoot: string,
+  registry: unknown,
+  record?: Readonly<Record<string, string>>,
+): ParityResult & { checked: number; mounted: number; unmounted: string[] };

@@ -18,7 +18,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit && tsc -p relay-bridge/tsconfig.json --noEmit",
+    "typecheck": "tsc -b --noEmit && tsc -p relay-bridge/tsconfig.json --noEmit && tsc -p relay-hermes-service/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "relay:build": "esbuild src/relay/cli/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay/cli.cjs --banner:js=\"#!/usr/bin/env node\" --log-level=warning",
@@ -47,11 +47,17 @@
     "relay:yc-demo:check": "npm run relay:build --silent && node dist-relay/cli.cjs yc check",
     "relay:yc-demo:cli": "npm run relay:build --silent && node dist-relay/cli.cjs yc demo",
     "relay:competitive": "npm run relay:build --silent && node dist-relay/cli.cjs demo competitive",
-    "relay:mission-control": "npm run relay:build --silent && node dist-relay/cli.cjs demo mission-control"
+    "relay:mission-control": "npm run relay:build --silent && node dist-relay/cli.cjs demo mission-control",
+    "relay:hermes:build": "esbuild relay-hermes-service/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-hermes/main.cjs --banner:js=\"#!/usr/bin/env node\" --log-level=warning",
+    "relay:hermes:start": "node dist-relay-hermes/main.cjs",
+    "relay:hermes:dev": "npm run relay:hermes:build --silent && node dist-relay-hermes/main.cjs",
+    "relay:hermes:typecheck": "tsc -p relay-hermes-service/tsconfig.json --noEmit",
+    "relay:hermes:test": "vitest run relay-hermes-service relay-bridge/reviewer-harness/hermes"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
     "@fontsource/fira-code": "^5.2.7",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "openai": "^7.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

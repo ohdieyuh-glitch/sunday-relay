@@ -14,6 +14,23 @@ import { RELAY_DEMO_SCRIPT } from './demo-simulation-script';
  * events. The forbidden alternate surface must never render.
  */
 
+/**
+ * A FILE-LEVEL TIME BUDGET, NOT A WEAKENED RULE.
+ *
+ * Every test here mounts the REAL application shell in jsdom, and one of them
+ * drives the whole demo timeline through it. That cost is the point of the
+ * gate, and on a 2-core host with the suite running files in parallel it
+ * exceeds vitest's 5s default — so these failed for taking too long rather
+ * than for finding anything. One test already carried an explicit 30s budget;
+ * the others inherited the default, which made the file's result depend on how
+ * busy the machine was.
+ *
+ * Every assertion is byte-identical, and the renderer-preservation gate still
+ * fails if the forbidden Codex demo-terminal surface, its region, its copy,
+ * the route or the project count ever regress. Only the clock changed.
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
 beforeEach(() => {
   window.localStorage.clear();
   // Open directly in full-screen Terminal Mode so the Live Terminal is mounted.

@@ -1,0 +1,273 @@
+/**
+ * Relay Workspace -> Settings -> MCP Connections.
+ *
+ * Uses the existing Relay workspace surface language: charcoal plate, cream
+ * text, restrained gold accent, sharp terminal corners, monospace. Nothing
+ * here changes the surrounding workspace design, and nothing here introduces a
+ * second design system for a settings screen.
+ */
+
+.rmcp {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(217, 164, 65, 0.22);
+  background: rgba(12, 13, 16, 0.72);
+  color: #ece9e2;
+  font-family: var(--rpw-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+}
+
+.rmcp-title {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  color: #d9a441;
+}
+
+.rmcp-h3 {
+  margin: 0.5rem 0 0;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: rgba(217, 164, 65, 0.8);
+}
+
+.rmcp-sub,
+.rmcp-empty,
+.rmcp-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: rgba(236, 233, 226, 0.62);
+}
+
+/* -------------------------------- preflight ------------------------------ */
+
+.rmcp-preflight {
+  padding: 0.65rem 0.75rem;
+  border-left: 2px solid rgba(236, 233, 226, 0.3);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.rmcp-preflight.is-ready { border-left-color: #6ea36e; }
+.rmcp-preflight.is-degraded { border-left-color: #d9a441; }
+.rmcp-preflight.is-blocked { border-left-color: #b4544a; }
+
+.rmcp-preflight-line {
+  margin: 0.3rem 0 0;
+  font-size: 0.74rem;
+}
+
+.rmcp-findings {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+}
+
+.rmcp-findings li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
+.rmcp-findings li.is-blocking .rmcp-badge { color: #b4544a; border-color: rgba(180, 84, 74, 0.5); }
+.rmcp-findings li.is-warning .rmcp-badge { color: #d9a441; border-color: rgba(217, 164, 65, 0.45); }
+
+.rmcp-finding-category { color: rgba(236, 233, 226, 0.85); }
+.rmcp-finding-detail { color: rgba(236, 233, 226, 0.6); flex: 1 1 16rem; }
+
+/* ---------------------------------- cards -------------------------------- */
+
+.rmcp-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.rmcp-card {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(236, 233, 226, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.rmcp-card.is-ready { border-color: rgba(110, 163, 110, 0.35); }
+.rmcp-card.is-capability_changed { border-color: rgba(217, 164, 65, 0.5); }
+.rmcp-card.is-permission_blocked,
+.rmcp-card.is-protocol_mismatch,
+.rmcp-card.is-malformed_response,
+.rmcp-card.is-failed { border-color: rgba(180, 84, 74, 0.45); }
+
+.rmcp-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.rmcp-name { font-size: 0.76rem; color: #ece9e2; }
+.rmcp-state { font-size: 0.68rem; color: rgba(236, 233, 226, 0.6); }
+
+/* --------------------------------- facts --------------------------------- */
+
+.rmcp-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  font-size: 0.63rem;
+  letter-spacing: 0.06em;
+}
+
+.rmcp-fact {
+  padding: 0.1rem 0.35rem;
+  border: 1px solid rgba(236, 233, 226, 0.18);
+  text-transform: uppercase;
+}
+
+.rmcp-fact.is-yes { color: #9fc39f; border-color: rgba(110, 163, 110, 0.4); }
+.rmcp-fact.is-no { color: rgba(236, 233, 226, 0.35); }
+
+/* Capability change is the one "yes" that is not good news. */
+.rmcp-fact[data-fact='capability changed'].is-yes,
+.rmcp-fact[data-fact='degraded'].is-yes {
+  color: #d9a441;
+  border-color: rgba(217, 164, 65, 0.5);
+}
+
+/* ---------------------------------- meta --------------------------------- */
+
+.rmcp-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.2rem 1rem;
+  font-size: 0.68rem;
+}
+
+.rmcp-meta > div { display: flex; gap: 0.4rem; }
+.rmcp-meta dt { color: rgba(236, 233, 226, 0.45); min-width: 8rem; }
+.rmcp-meta dd { margin: 0; color: rgba(236, 233, 226, 0.8); overflow-wrap: anywhere; }
+
+.rmcp-fingerprint { font-size: 0.62rem; color: rgba(236, 233, 226, 0.55); }
+
+/* ------------------------------ capabilities ----------------------------- */
+
+.rmcp-caps { font-size: 0.7rem; }
+.rmcp-caps summary { cursor: pointer; color: rgba(217, 164, 65, 0.8); }
+
+.rmcp-cap-list {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.rmcp-cap-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+
+.rmcp-cap-kind {
+  color: rgba(236, 233, 226, 0.4);
+  text-transform: uppercase;
+  font-size: 0.6rem;
+  min-width: 4.5rem;
+}
+
+.rmcp-cap-name { color: #ece9e2; }
+
+.rmcp-risk {
+  font-size: 0.6rem;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid rgba(236, 233, 226, 0.2);
+  text-transform: uppercase;
+}
+
+.rmcp-risk.is-read_only { color: #9fc39f; border-color: rgba(110, 163, 110, 0.35); }
+.rmcp-risk.is-workspace_write { color: #d9c07a; }
+.rmcp-risk.is-external_write,
+.rmcp-risk.is-deployment,
+.rmcp-risk.is-financial { color: #d9a441; border-color: rgba(217, 164, 65, 0.45); }
+.rmcp-risk.is-credential_access,
+.rmcp-risk.is-destructive,
+.rmcp-risk.is-unknown { color: #d98a80; border-color: rgba(180, 84, 74, 0.5); }
+
+.rmcp-approval-flag {
+  font-size: 0.6rem;
+  color: #d9a441;
+  text-transform: uppercase;
+}
+
+.rmcp-contradiction {
+  font-size: 0.62rem;
+  color: #d98a80;
+  flex: 1 1 14rem;
+}
+
+/* -------------------------------- notices -------------------------------- */
+
+.rmcp-warning,
+.rmcp-failure {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: #d9a441;
+}
+
+.rmcp-failure { color: #d98a80; display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+.rmcp-badge {
+  border: 1px solid currentColor;
+  padding: 0 0.3rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Simulation disclosure is never subtle: it is a truth claim, not a hint. */
+.rmcp-simulation {
+  margin: 0;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  color: #d9a441;
+  border-top: 1px dashed rgba(217, 164, 65, 0.3);
+  padding-top: 0.3rem;
+}
+
+/* -------------------------------- actions -------------------------------- */
+
+.rmcp-actions { display: flex; gap: 0.4rem; }
+
+.rmcp-actions button {
+  font-family: inherit;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.6rem;
+  color: #ece9e2;
+  background: transparent;
+  border: 1px solid rgba(236, 233, 226, 0.25);
+  cursor: pointer;
+}
+
+.rmcp-actions button:hover:not(:disabled) { border-color: rgba(217, 164, 65, 0.6); color: #d9a441; }
+.rmcp-actions button:disabled { opacity: 0.4; cursor: default; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .rmcp-actions button { transition: border-color 120ms ease, color 120ms ease; }
+}

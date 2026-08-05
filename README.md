@@ -1,7 +1,7 @@
 # Sunday Relay
 
-**Sunday Relay turns separate AI tools, agents and human collaborators into one
-coordinated, supervised and independently verified project workforce.**
+**Sunday Relay turns separate AI tools, agents,  large language models and agent harnesses into one
+coordinated, supervised and independently verified Compound AI Agent.**
 
 Sunday Relay is a product of Aquala Technologies. It is developed in this
 repository, independently of [Sunday Alcatraz](https://github.com/ohdieyuh-glitch/turbo-broccoli).

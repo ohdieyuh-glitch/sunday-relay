@@ -748,6 +748,64 @@
         "src/relay/mission/loop/runtime/loop-projections.ts",
         "src/relay/ui/loop/loop-run-view.ts#restorePointFor"
       ]
+    },
+    {
+      "capabilityId": "mcp-connection-management",
+      "name": "MCP connection management",
+      "domain": "settings",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/mcp/RelayMcpConnections.tsx",
+        "src/relay/ui/mcp/mcp-settings-view.ts",
+        "src/relay/ui/project-settings/SettingsMcp.tsx",
+        "src/relay/ui/project-settings/RelayProjectSettings.tsx#SectionMcp"
+      ],
+      "cliEntryPoints": [
+        "src/relay/cli/mcp-cli.ts"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/mcp/relay-mcp-ui.test.tsx",
+        "src/relay/ui/project-settings/project-settings-mcp.test.tsx",
+        "src/relay/ui/preview/mcp-host-reachability.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/mcp-cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mcp/domain/mcp-surface-projection.ts",
+        "src/relay/mcp/domain/mcp-connection.ts",
+        "src/relay/mcp/registry/mcp-registry-types.ts",
+        "src/relay/mcp/policy/mcp-risk.ts",
+        "src/relay/mcp/policy/mcp-approvals.ts"
+      ]
+    },
+    {
+      "capabilityId": "mcp-mission-preflight",
+      "name": "Mission MCP preflight readiness",
+      "domain": "mission",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/mcp/RelayMcpConnections.tsx",
+        "src/relay/ui/project-settings/SettingsMcp.tsx"
+      ],
+      "cliEntryPoints": [
+        "src/relay/cli/mcp-cli.ts"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/mcp/relay-mcp-ui.test.tsx",
+        "src/relay/ui/project-settings/project-settings-mcp.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/mcp-cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mcp/mission/mcp-mission-preflight.ts",
+        "src/relay/mcp/domain/mcp-surface-projection.ts"
+      ]
     }
   ]
 }
