@@ -682,13 +682,15 @@
 .rpw-brain-body dd { font-size: 11px; margin: 0; }
 .rpw-brain-pending { color: var(--rpw-amber); }
 
-/* -------------------------------------------------------------- dog zone */
+/* ------------------------------------------------------------ relay stage */
 
-/* Centered between the workforce strip and the Relay Console. */
-.rpw-dogzone {
-  display: flex;
-  justify-content: center;
-  padding: 2px 0 8px;
+/* `.rpw-dogzone` lived here: a flex row that centred the Relay Dog between the
+   workforce strip and the Relay Console. It is gone, and so is the band it
+   centred — see `src/relay/ui/relay-stage/`. The stage is FRAMELESS and sizes
+   itself by aspect, so this file gives it margins and nothing else. Adding a
+   border, a background or a fixed height here would put the rectangle back. */
+.rpw-stage {
+  margin: 2px 0 8px;
 }
 
 /* -------------------------------------------------------------- footer */

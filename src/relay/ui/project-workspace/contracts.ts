@@ -289,6 +289,15 @@ export interface RelayProjectWorkspaceProps {
   /** Mobile full-screen terminal presentation. */
   terminalFullScreen?: boolean;
   reducedMotion?: boolean;
+  /**
+   * The viewport width the HOST observed, for the Relay Stage.
+   *
+   * Passed in rather than measured, because the stage is a pure projection of
+   * what someone else saw — the same discipline the rest of this surface uses
+   * for a clock. Absent falls back to a wide stage, which is the shape a
+   * desktop workspace has; it is a default for a LAYOUT, not for a fact.
+   */
+  viewportWidthPx?: number;
   /** Optional demo mission playback control, rendered above the console.
       Absent in fixtures and the honest configured state. */
   missionPlayback?: import('react').ReactNode;

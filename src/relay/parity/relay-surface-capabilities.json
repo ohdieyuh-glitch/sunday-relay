@@ -36,14 +36,18 @@
       "cliStatus": "tested",
       "websiteEntryPoints": [
         "src/relay/ui/relay-dog-motion/dog-behavior.ts",
-        "src/relay/ui/project-workspace/RelayWorkspaceDog.tsx"
+        "src/relay/ui/project-workspace/RelayWorkspaceDog.tsx",
+        "src/relay/ui/relay-stage/RelayStage.tsx",
+        "src/relay/ui/relay-stage/stage-layout.ts"
       ],
       "cliEntryPoints": [
         "src/relay/cli/product/dog.ts"
       ],
       "websiteTestReferences": [
         "src/relay/ui/official-relay-dog/official-relay-dog.test.tsx",
-        "src/relay/ui/relay-dog-motion/relay-dog-motion.test.tsx"
+        "src/relay/ui/relay-dog-motion/relay-dog-motion.test.tsx",
+        "src/relay/ui/relay-stage/relay-stage.test.tsx",
+        "src/relay/ui/relay-stage/stage-layout.test.ts"
       ],
       "cliTestReferences": [
         "src/relay/cli/product/official-relay-dog.test.ts"

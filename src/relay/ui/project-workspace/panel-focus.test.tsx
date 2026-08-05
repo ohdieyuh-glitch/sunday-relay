@@ -252,7 +252,8 @@ describe('expanding a box changes nothing else', () => {
 
   it('does not change the Relay Dog state', () => {
     renderTerminal();
-    const dog = () => document.querySelector('.rpw-dogzone')?.innerHTML ?? '';
+    // The dog now stands on the Relay Stage; `.rpw-dogzone` is gone with the band.
+    const dog = () => document.querySelector('[data-stage-actor="relay-dog"]')?.innerHTML ?? '';
     const before = dog();
     fireEvent.click(expandButtons()[0]);
     expect(dog()).toBe(before);

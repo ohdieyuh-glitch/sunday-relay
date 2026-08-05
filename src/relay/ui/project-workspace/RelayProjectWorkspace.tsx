@@ -14,6 +14,23 @@ import { RelayVerificationSummary } from './RelayVerificationSummary';
 import { RelayResearchStatus } from './RelayResearchStatus';
 import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
+import { RelayStage, type RelayStageActor } from '../relay-stage';
+
+/**
+ * WHO IS ON THE WORKSPACE STAGE TODAY.
+ *
+ * One actor, and the honest reason there is one: the Relay Dog is the only
+ * agent this surface has artwork and a state model for. The Leopard, the cubs
+ * and the vehicles have slots in the stage's contract and no sprites yet, and
+ * a stage that drew them from nothing would be inventing a cast — the same
+ * defect as a panel that renders a run it never fetched.
+ *
+ * `depth: 1` puts the Dog at the front of the ground plane, where the old band
+ * effectively pinned it. A second actor arrives by adding a row here.
+ */
+const RELAY_WORKSPACE_CAST: readonly RelayStageActor[] = Object.freeze([
+  Object.freeze({ id: 'relay-dog', x: 0.5, depth: 1, width: 1, layer: 'actors' as const }),
+]);
 import { RelayProjectFooter } from './RelayProjectFooter';
 import { RelayPspAgentImport } from '../psp-import';
 import type { RelayWorkspaceUsage } from '../usage';
@@ -124,6 +141,8 @@ export function RelayProjectWorkspace(
     terminalOpen,
     terminalFullScreen = false,
     reducedMotion = false,
+    // A desktop-width default: the shape a workspace has when nobody measured.
+    viewportWidthPx = 1440,
     onSendProjectMessage,
     onApproveDecision,
     onRejectDecision,
@@ -188,11 +207,22 @@ export function RelayProjectWorkspace(
 
 
       <main className="rpw-main">
-        {/* The Relay Dog sits centered between the workforce strip and the
-            Relay Console (founder direction). */}
-        <div className="rpw-dogzone">
-          <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} />
-        </div>
+        {/* THE RELAY STAGE, between the workforce strip and the Relay Console.
+            It replaces `.rpw-dogzone` + the motion boundary's full-width band:
+            a frameless region with layers and depth, rather than ninety pixels
+            of clipped strip with room for exactly one occupant. The Dog is its
+            first actor; a wider Leopard, cubs, vehicles and effects have slots
+            waiting rather than a rectangle to be squeezed into. */}
+        <RelayStage
+          className="rpw-stage"
+          actors={RELAY_WORKSPACE_CAST}
+          viewportWidthPx={viewportWidthPx}
+          reducedMotion={reducedMotion}
+          label="Relay stage"
+          render={(id) => (id === 'relay-dog'
+            ? <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} />
+            : null)}
+        />
         {completion.showVerifiedComplete ? (
           <section className="rpw-completion rpw-completion--verified" aria-label="Mission verdict">
             <p className="rpw-completion-verdict">
