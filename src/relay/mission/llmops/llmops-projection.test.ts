@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  emptyOperationalRecord, isIndependentEvaluation,
+  actorIdentityIsComparable, emptyOperationalRecord, isIndependentEvaluation,
   type RelayErrorEvent, type RelayEvaluation, type RelayLatencySample,
   type RelayOperationalRecord, type RelayRepairLoop, type RelayWaitInterval,
 } from './llmops-contracts';
 import {
   HEALTH_STALE_AFTER_MS, MIN_SAMPLES_FOR_TAIL, projectOperations,
 } from './llmops-projection';
+import { isSelfApproved } from './brain-memory';
 
 /**
  * THE OPERATIONS VIEW.
@@ -283,5 +284,108 @@ describe('the projection never produces a number it cannot stand behind', () => 
     expect(view.health).toBe('unknown');
     expect(Number.isNaN(view.waitingOnUserMs)).toBe(false);
     expect(view.signalAgeMs.known).toBe(false);
+  });
+});
+
+/* ------------------------------------------- the review's own findings */
+
+describe('health does not depend on a denominator nobody counted', () => {
+  it('recovered errors degrade health even when attempts are unknown', () => {
+    // This is EVERY shipped invocation today: nothing counts attempts, so
+    // gating on the error RATE made recovered errors invisible and reported a
+    // project with five failures as healthy.
+    const view = projectOperations(record({
+      errors: Array.from({ length: 5 }, (_, i) => ({
+        kind: 'provider_error' as const, at: RECENT, recovered: true, attempt: i + 1,
+      })),
+    }), AS_OF);
+    expect(view.errorRate.known).toBe(false);
+    expect(view.errorCount).toBe(5);
+    expect(view.health).toBe('degraded');
+    expect(view.healthReason).toContain('5 error(s)');
+  });
+
+  it('a signal dated in the future cannot argue the system is alive', () => {
+    // Math.max(0, …) reported an age of zero, so a skewed clock pinned health
+    // at healthy no matter how long the feed had actually been silent.
+    const future = new Date(Date.parse(AS_OF) + 10 * 86_400_000).toISOString();
+    const view = projectOperations(record({ newestSignalAt: future }), AS_OF);
+    expect(view.health).toBe('unknown');
+    expect(view.healthReason).toContain('dated in the future');
+    expect(view.signalAgeMs.known).toBe(false);
+  });
+
+  it('an unreadable timestamp is reported as unreadable, not as stale', () => {
+    const view = projectOperations(record({ newestSignalAt: 'yesterday' }), AS_OF);
+    expect(view.signalAgeMs.known === false && view.signalAgeMs.reason).toBe('unreadable');
+  });
+});
+
+describe('a rate needs a denominator that could actually be one', () => {
+  it('refuses a fractional or too-small base rather than exceeding 100%', () => {
+    const errors = [
+      { kind: 'tool_failure' as const, at: RECENT, recovered: true, attempt: 1 },
+      { kind: 'tool_failure' as const, at: RECENT, recovered: true, attempt: 2 },
+      { kind: 'tool_failure' as const, at: RECENT, recovered: true, attempt: 3 },
+    ];
+    for (const attempts of [1.5, 2, 0, -5]) {
+      const view = projectOperations(
+        record({ errors, attempts: { attempts, source: 'counted' } }), AS_OF,
+      );
+      expect(view.errorRate.known, `attempts=${attempts}`).toBe(false);
+    }
+    const ok = projectOperations(
+      record({ errors, attempts: { attempts: 6, source: 'counted' } }), AS_OF,
+    );
+    expect(ok.errorRate.known && ok.errorRate.value).toBeCloseTo(0.5, 5);
+  });
+});
+
+describe('independence cannot be asserted by choosing a spelling', () => {
+  const evaluation = (judgedBy: string, authoredBy: string) => ({
+    evaluationId: 'e', rubricId: 'r', verdict: 'pass' as const,
+    judgedBy, authoredBy, at: RECENT,
+  });
+
+  it('a homoglyph or an invisible character is not a second party', () => {
+    // A Cyrillic а (U+0430) reads as a Latin a and made a self-evaluation
+    // count as independent — so the caller picked the answer after all.
+    expect(isIndependentEvaluation(evaluation('аgent', 'agent'))).toBe(false);
+    expect(isIndependentEvaluation(evaluation('agent​', 'agent'))).toBe(false);
+    expect(isIndependentEvaluation(evaluation('ａgent', 'agent'))).toBe(false);
+    // A genuinely different actor still counts.
+    expect(isIndependentEvaluation(evaluation('reviewer-b', 'agent'))).toBe(true);
+  });
+});
+
+describe('an identity that cannot be compared does not buy independence', () => {
+  const evaluation = (judgedBy: string, authoredBy: string) => ({
+    evaluationId: 'e', rubricId: 'r', verdict: 'pass' as const,
+    judgedBy, authoredBy, at: RECENT,
+  });
+
+  it('fails CLOSED on a script this product does not issue identities in', () => {
+    // The confusable fold is a mitigation, not a proof. Pretending otherwise
+    // would be the same defect it was written to fix, so an identity carrying
+    // a character outside the issued set is treated as possibly-the-same.
+    expect(isIndependentEvaluation(evaluation('ャgent', 'agent'))).toBe(false);
+    expect(actorIdentityIsComparable('reviewer-b')).toBe(true);
+    expect(actorIdentityIsComparable('аgent')).toBe(true);  // folds to ASCII
+    expect(actorIdentityIsComparable('ャgent')).toBe(false);
+  });
+
+  it('a self-approved entry cannot escape by an uncomparable approver', () => {
+    expect(isSelfApproved({
+      entryId: 'e', statement: 's', source: 'run_observed', citation: 'c',
+      proposedBy: 'agent-a', approvedBy: 'аgent-a', approvedAt: RECENT,
+    })).toBe(true);
+    expect(isSelfApproved({
+      entryId: 'e', statement: 's', source: 'run_observed', citation: 'c',
+      proposedBy: 'agent-a', approvedBy: 'ャgent-a', approvedAt: RECENT,
+    })).toBe(true);
+    expect(isSelfApproved({
+      entryId: 'e', statement: 's', source: 'run_observed', citation: 'c',
+      proposedBy: 'agent-a', approvedBy: 'founder', approvedAt: RECENT,
+    })).toBe(false);
   });
 });

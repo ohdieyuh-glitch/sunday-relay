@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { renderOperationsView } from './operations';
 import { emptyOperationalRecord, projectOperations } from '../../mission/llmops';
 import type { CliCaps } from './contracts';
+import { parseCli } from '../main';
 import type { RelayOperationalRecord } from '../../mission/llmops';
 
 /**
@@ -148,5 +149,22 @@ describe('both surfaces read one projection', () => {
     // Not "equal to" — the SAME object. A CLI that reshaped the view would be
     // a second implementation waiting to disagree with the website's.
     expect(json).toBe(view);
+  });
+});
+
+describe('the route is reachable, not just the renderer', () => {
+  it('parses `relay project operations` and `relay project brain` from argv', () => {
+    // `cliStatus: "tested"` covered only `renderOperationsView` before this.
+    // A renderer nothing routes to is not a CLI surface.
+    for (const action of ['operations', 'brain']) {
+      const parsed = parseCli(['project', action]);
+      expect(parsed.command, action).toBe('project');
+      expect(parsed.projectAction, action).toBe(action);
+      expect(parsed.error, action).toBeUndefined();
+    }
+  });
+
+  it('rejects an action it does not have', () => {
+    expect(parseCli(['project', 'telemetry']).error).toBeDefined();
   });
 });

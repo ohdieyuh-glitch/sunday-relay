@@ -57,6 +57,11 @@ and contributes zero milliseconds. Dropping it would under-report how often the
 run blocked, which is the figure someone uses to decide whether to go and do
 something else.
 
+This is the one deliberate exception to the `RelayFigure` discipline: a wait
+TOTAL is a plain number, and it is a FLOOR rather than an estimate. The
+`intervals` count beside it is what tells a reader the difference — a total of
+0ms across 1 interval means the wait happened and could not be timed.
+
 **3. A rate with an unknown denominator is unknown.** Two errors out of an
 unknown number of attempts is not a 100% error rate and not a 0% one.
 `RelayAttemptBase` carries the denominator and its provenance
@@ -64,10 +69,19 @@ unknown number of attempts is not a 100% error rate and not a 0% one.
 
 **4. A self-evaluation is not an independent one.** `RelayEvaluation` requires
 both `judgedBy` and `authoredBy`, and `isIndependentEvaluation` DERIVES
-independence from whether they differ. It is not a flag a caller can assert.
-This is the same rule the repository applies to its own review gate, and the
-reason it is a type rather than a note is that every other form of it has been
-violated at least once in this codebase's history.
+independence from whether they differ.
+
+Deriving it is not enough on its own, because a caller can still choose the
+answer by choosing a SPELLING. A Cyrillic `а` (U+0430) reads as a Latin `a` and
+survives NFKC unchanged — NFKC normalises compatibility forms, not confusables —
+so `judgedBy: 'аgent'` against `authoredBy: 'agent'` counted as independent. So
+identities are folded through a small confusables table as well as NFKC, and
+invisible characters are stripped.
+
+That table is a mitigation and is not claimed to be complete. Where an identity
+still carries a character this product does not issue, comparison **fails
+closed**: `isIndependentEvaluation` returns false, and `isSelfApproved` returns
+true. Neither grants a benefit on the strength of a spelling nobody can verify.
 
 ## Health is derived, and silence is not health
 
@@ -82,9 +96,9 @@ Health always carries a REASON. A state without one is a colour.
 
 | State | When |
 |---|---|
-| `unknown` | nothing observed, an unreadable timestamp, or the newest signal is stale |
+| `unknown` | nothing observed, an unreadable timestamp, a signal dated in the FUTURE, or a stale newest signal |
 | `failing` | one or more errors the run did not recover from |
-| `degraded` | a repair loop ended with its finding open, a failing evaluation, or recovered errors |
+| `degraded` | a repair loop ended with its finding open, a failing evaluation, or any recovered error |
 | `healthy` | recent signal, nothing unrecovered, nothing open |
 
 ## A repair loop that ran out of budget did not succeed
@@ -169,7 +183,15 @@ What it refuses:
 - **Estimated is never added to actual.** A projection and a bill are different
   facts, reported in separate rows.
 - **A voided or disputed receipt is not spend.** Counted and excluded, never
-  silently dropped.
+  silently dropped. Its TOKENS are still counted: the tokens were spent
+  whatever later happened to the receipt.
+- **A refund is not dropped.** `adjustment` is the one category permitted a
+  negative amount, so it is how a credit or a correction is recorded. Excluding
+  it made every refund invisible and every total too high.
+- **Nothing leaves the total silently.** A receipt excluded by category — human
+  time, chiefly — is counted in `excludedByCategory`, and an amount that exists
+  but cannot be parsed is `amountUnreadable` rather than being folded into
+  `amountUnknown`, which means "no amount yet".
 - **Currencies are not mixed.** Per-currency totals; no invented conversion.
 - **A fixture is never a bill.** `development_fixture`-sourced receipts are
   counted and labelled.
@@ -177,7 +199,9 @@ What it refuses:
 Arithmetic is `bigint` throughout, on the exact integer strings the receipts
 carry. `Number(micros) / 1e6` loses exactness above 2^53 and loses it
 invisibly — and a token count of 9007199254740993 must not print as
-9007199254740992.
+9007199254740992. Display rounds half away from zero on the integer rather than
+truncating: truncation printed 999999 micros as `0.99`, understating every total
+by up to a cent while looking exact.
 
 ## Intake: where a provider's `null` meets a metric
 

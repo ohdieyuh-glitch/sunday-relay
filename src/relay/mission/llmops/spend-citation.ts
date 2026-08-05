@@ -26,15 +26,31 @@
  *   is reported in its own bucket rather than converted at an invented rate.
  * - **To let a fixture look like a bill.** Receipts sourced from
  *   `development_fixture` are counted separately and labelled.
+ * - **To drop a refund.** `adjustment` is the ONE category permitted to carry a
+ *   negative amount, so it is how this repository records a credit or a
+ *   correction. Excluding it made every refund invisible and every total too
+ *   high. It counts. Anything else excluded by category is COUNTED and
+ *   reported, so a total can never quietly omit a receipt.
  */
 
 import type {
   RelayCostReceipt, RelayReceiptQuantityUnit,
 } from '../economics/cost-receipt-types';
 import { PROVIDER_SPEND_CATEGORIES } from '../economics/cost-receipt-types';
+import type { RelayCostCategory } from '../economics/cost-receipt-types';
 import type { RelayMoney } from '../economics/money';
 
 /* ---------------------------------------------------------------- tokens */
+
+/**
+ * Categories that belong in a SPEND total: provider spend, plus `adjustment`,
+ * which is the only category allowed a negative amount and therefore the only
+ * way a credit or correction is recorded. Human time is valued separately and
+ * stays out.
+ */
+const SPEND_CATEGORIES: readonly RelayCostCategory[] = Object.freeze([
+  ...PROVIDER_SPEND_CATEGORIES, 'adjustment',
+]);
 
 /** The three units that are tokens. Everything else is time, calls or runs. */
 export const TOKEN_UNITS: readonly RelayReceiptQuantityUnit[] = Object.freeze([
@@ -68,8 +84,12 @@ export interface RelaySpendCitation {
   readonly actual: readonly RelayCurrencyTotal[];
   /** Projections. Never added to `actual`. */
   readonly estimated: readonly RelayCurrencyTotal[];
-  /** Receipts whose amount is not yet known. Reported, never zeroed. */
+  /** Receipts with no amount yet. Reported, never zeroed. */
   readonly amountUnknown: number;
+  /** Receipts whose amount exists but could not be read. Not the same fact. */
+  readonly amountUnreadable: number;
+  /** Receipts excluded from the total by category — human time, chiefly. */
+  readonly excludedByCategory: number;
   /** Receipts excluded because they did not stand. */
   readonly voidedOrDisputed: number;
   /** Receipts whose source is a development fixture. Never a bill. */
@@ -87,6 +107,8 @@ export function emptySpendCitation(): RelaySpendCitation {
     actual: [],
     estimated: [],
     amountUnknown: 0,
+    amountUnreadable: 0,
+    excludedByCategory: 0,
     voidedOrDisputed: 0,
     fixtureSourced: 0,
     receiptsRead: 0,
@@ -121,6 +143,8 @@ export function citeSpend(receipts: readonly RelayCostReceipt[]): RelaySpendCita
   let cachedInput = 0n;
   let unreadable = 0;
   let amountUnknown = 0;
+  let amountUnreadable = 0;
+  let excludedByCategory = 0;
   let voidedOrDisputed = 0;
   let fixtureSourced = 0;
 
@@ -149,12 +173,20 @@ export function citeSpend(receipts: readonly RelayCostReceipt[]): RelaySpendCita
       continue;
     }
 
-    // Human time is valued separately and never mixed into provider spend.
-    if (!PROVIDER_SPEND_CATEGORIES.includes(receipt.category)) continue;
+    // Human time is valued separately and never mixed into provider spend —
+    // but it is COUNTED, so a total never quietly omits a receipt.
+    if (!SPEND_CATEGORIES.includes(receipt.category)) {
+      excludedByCategory += 1;
+      continue;
+    }
 
     const micros = readMicros(receipt.amount);
     if (micros === null) {
-      amountUnknown += 1;
+      // A receipt that HAS an amount which cannot be read is a different fact
+      // from one that has none yet, and "no cost recorded yet" would be the
+      // wrong sentence for it.
+      if (receipt.amount === null || receipt.amount === undefined) amountUnknown += 1;
+      else amountUnreadable += 1;
       continue;
     }
 
@@ -184,6 +216,8 @@ export function citeSpend(receipts: readonly RelayCostReceipt[]): RelaySpendCita
     actual: totals(actual),
     estimated: totals(estimated),
     amountUnknown,
+    amountUnreadable,
+    excludedByCategory,
     voidedOrDisputed,
     fixtureSourced,
     receiptsRead: receipts.length,
@@ -195,14 +229,18 @@ export function citeSpend(receipts: readonly RelayCostReceipt[]): RelaySpendCita
  *
  * `Number(micros) / 1e6` loses exactness above 2^53 micros — about nine billion
  * currency units — and more importantly makes the rounding invisible. This
- * divides the integer.
+ * divides the integer, and ROUNDS HALF AWAY FROM ZERO rather than truncating:
+ * truncation printed 999999 micros as `0.99`, understating every total by up to
+ * a cent while looking exact.
  */
 export function formatMicros(currency: string, amountMicros: string): string {
   if (!/^-?[0-9]+$/u.test(amountMicros)) return `${currency} —`;
   const value = BigInt(amountMicros);
   const negative = value < 0n;
   const absolute = negative ? -value : value;
-  const units = absolute / 1_000_000n;
-  const fraction = (absolute % 1_000_000n).toString().padStart(6, '0').slice(0, 2);
+  // Round to cents on the integer: add half a cent, then divide.
+  const cents = (absolute + 5_000n) / 10_000n;
+  const units = cents / 100n;
+  const fraction = (cents % 100n).toString().padStart(2, '0');
   return `${negative ? '-' : ''}${currency} ${units.toString()}.${fraction}`;
 }

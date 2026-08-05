@@ -23,6 +23,8 @@
  * would be decorative.
  */
 
+import { actorIdentityIsComparable, normaliseActor } from './llmops-contracts';
+
 /* ------------------------------------------------------------ short term */
 
 export const RELAY_OBSERVATION_KINDS = [
@@ -75,9 +77,18 @@ export function rememberShortTerm(
   memory: RelayShortTermMemory,
   entry: RelayShortTermEntry,
 ): RelayShortTermMemory {
+  // Sorted on the INSTANT, not on the string. Two ISO timestamps can compare
+  // the wrong way lexically — different offsets, or differing fractional-second
+  // precision — and eviction then drops the NEWEST entry while claiming to keep
+  // the most recent. Unparseable timestamps sort last so they are evicted first.
+  const instant = (value: string): number => {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+  };
   const combined = [...memory.entries, entry]
     .slice()
-    .sort((a, b) => a.observedAt.localeCompare(b.observedAt) || a.entryId.localeCompare(b.entryId));
+    .sort((a, b) => instant(a.observedAt) - instant(b.observedAt)
+      || a.entryId.localeCompare(b.entryId));
   const overflow = Math.max(0, combined.length - SHORT_TERM_CAPACITY);
   return {
     entries: combined.slice(overflow),
@@ -116,8 +127,15 @@ export interface RelayLongTermEntry {
 
 /** An entry an agent approved for itself is not an approved entry. */
 export function isSelfApproved(entry: RelayLongTermEntry): boolean {
-  const proposer = entry.proposedBy.trim().toLowerCase();
-  const approver = entry.approvedBy.trim().toLowerCase();
+  // Same normalisation as independence: an approver who differs from the
+  // proposer only by a homoglyph or an invisible character is the proposer,
+  // and must not escape the "approved by their own author" section.
+  const proposer = normaliseActor(entry.proposedBy);
+  const approver = normaliseActor(entry.approvedBy);
+  // Fails closed in the OTHER direction: an approver whose identity cannot be
+  // compared with confidence is treated as possibly the proposer, so the entry
+  // is surfaced rather than quietly accepted as independently approved.
+  if (!actorIdentityIsComparable(entry.approvedBy)) return true;
   return proposer !== '' && proposer === approver;
 }
 
@@ -219,9 +237,12 @@ export function refreshBrainDocument(input: {
     ...input.proposals.map((p) => p.proposedAt),
   ].filter((value) => Number.isFinite(Date.parse(value)));
 
+  // Reduced on the INSTANT, as `ingest` already does. Comparing ISO strings
+  // lexically picks `13:00:00+02:00` over `12:00:00Z`, which is an hour EARLIER
+  // — and the document then reports a staleness that is simply wrong.
   const newestInputAt = timestamps.length === 0
     ? null
-    : timestamps.reduce((newest, value) => (value > newest ? value : newest));
+    : timestamps.reduce((newest, value) => (Date.parse(value) > Date.parse(newest) ? value : newest));
 
   const generatedMs = Date.parse(input.generatedAt);
   const newestMs = newestInputAt === null ? Number.NaN : Date.parse(newestInputAt);

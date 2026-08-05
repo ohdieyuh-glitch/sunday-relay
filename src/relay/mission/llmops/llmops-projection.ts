@@ -7,10 +7,15 @@
  * figure of its own, which is what keeps `relay project operations` and the
  * workspace panel from disagreeing about the same run.
  *
- * The projection never invents a number. Every field that could be unknown is
- * typed as possibly-unknown, and the reason is carried with it — a surface
- * showing "—" should be able to say WHY, and a surface that cannot say why is
- * showing a guess.
+ * The projection never invents a number. Every FIGURE that could be unknown is
+ * a `RelayFigure` carrying its reason — a surface showing "—" should be able to
+ * say WHY, and one that cannot say why is showing a guess.
+ *
+ * Wait TOTALS are the deliberate exception and are plain numbers. An interval
+ * that happened but could not be measured contributes zero milliseconds and
+ * still counts as an interval, because dropping it would under-report how often
+ * the run blocked. So a wait total is a floor, not an estimate, and
+ * `intervals` beside it is what tells a reader the difference.
  */
 
 import type { RelaySpendCitation } from './spend-citation';
@@ -30,6 +35,7 @@ export const RELAY_UNKNOWN_REASONS = [
   'insufficient_samples',
   'unknown_denominator',
   'stale',
+  'unreadable',
 ] as const;
 export type RelayUnknownReason = (typeof RELAY_UNKNOWN_REASONS)[number];
 
@@ -222,8 +228,11 @@ export function projectOperations(
 
   // Rule 3: a rate with an unknown denominator is unknown, not zero and not one.
   const attempts = record.attempts.attempts;
+  // The denominator must be a whole number of attempts and must be at least the
+  // number of errors observed; anything else produces a rate above 100%, which
+  // is not a rate but a sign the base is wrong.
   const errorRate: RelayFigure =
-    attempts === null || !Number.isFinite(attempts) || attempts <= 0
+    attempts === null || !Number.isInteger(attempts) || attempts <= 0 || attempts < errorCount
       ? unknownFigure('unknown_denominator')
       : knownFigure(errorCount / attempts);
 
@@ -268,16 +277,21 @@ export function projectOperations(
   /* ---- health, derived last, from everything above ---- */
   const newestMs = record.newestSignalAt === null ? Number.NaN : Date.parse(record.newestSignalAt);
   const ageKnown = Number.isFinite(newestMs) && asOfKnown;
+  const fromTheFuture = ageKnown && newestMs > asOfMs;
   const ageMs = ageKnown ? Math.max(0, asOfMs - newestMs) : Number.NaN;
-  const signalAgeMs: RelayFigure = ageKnown
+  const signalAgeMs: RelayFigure = ageKnown && !fromTheFuture
     ? knownFigure(ageMs)
-    : unknownFigure(record.newestSignalAt === null ? 'not_observed' : 'stale');
+    // `unreadable` when a timestamp exists and cannot be parsed: reporting that
+    // as `stale` told the reader the wrong thing about why the figure is absent.
+    : unknownFigure(record.newestSignalAt === null ? 'not_observed'
+      : fromTheFuture ? 'not_observed' : 'unreadable');
 
   const { health, healthReason } = deriveHealth({
     hasSignal: record.newestSignalAt !== null,
-    ageKnown, ageMs, unrecoveredErrorCount, errorRate,
+    ageKnown, ageMs, unrecoveredErrorCount, errorCount,
     endedUnfixed: repairs.endedUnfixed,
     failedEvaluations: failed,
+    fromTheFuture,
   });
 
   return {
@@ -309,9 +323,10 @@ function deriveHealth(input: {
   ageKnown: boolean;
   ageMs: number;
   unrecoveredErrorCount: number;
-  errorRate: RelayFigure;
+  errorCount: number;
   endedUnfixed: number;
   failedEvaluations: number;
+  fromTheFuture: boolean;
 }): { health: RelayHealthState; healthReason: string } {
   // Nothing has reported. That is not health, and it is not ill health either.
   if (!input.hasSignal) {
@@ -319,6 +334,15 @@ function deriveHealth(input: {
   }
   if (!input.ageKnown) {
     return { health: 'unknown', healthReason: 'The newest signal carries a timestamp that could not be read.' };
+  }
+  // A signal dated in the future cannot be used to argue the system is alive:
+  // `Math.max(0, …)` would report an age of zero forever, so a skewed clock
+  // would pin health at `healthy` no matter how long the feed had been silent.
+  if (input.fromTheFuture) {
+    return {
+      health: 'unknown',
+      healthReason: 'The newest signal is dated in the future, so its age cannot be trusted.',
+    };
   }
   if (input.ageMs > HEALTH_STALE_AFTER_MS) {
     const minutes = Math.floor(input.ageMs / 60000);
@@ -345,10 +369,13 @@ function deriveHealth(input: {
       healthReason: `${input.failedEvaluations} evaluation(s) returned a failing verdict.`,
     };
   }
-  if (input.errorRate.known && input.errorRate.value > 0) {
+  // Gated on the COUNT, not on the rate. Gating on the rate meant recovered
+  // errors were invisible whenever the denominator was unknown — which is every
+  // shipped invocation today, since nothing counts attempts yet.
+  if (input.errorCount > 0) {
     return {
       health: 'degraded',
-      healthReason: 'Errors occurred, and every one of them was recovered.',
+      healthReason: `${input.errorCount} error(s) occurred, and every one was recovered.`,
     };
   }
   return { health: 'healthy', healthReason: 'Recent signal, no unrecovered errors, no open repair loops.' };

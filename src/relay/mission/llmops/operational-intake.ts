@@ -69,7 +69,9 @@ function usableDuration(value: number | null | undefined): number | null {
  */
 export function samplesFromTurn(turn: ObservedTurn): RelayLatencySample[] {
   // An adapter that could not observe usage has not observed a fast turn.
-  if (turn.usageClass === 'unavailable') return [];
+  // Compared case-insensitively: an adapter that reports `UNAVAILABLE` has not
+  // observed a fast turn either.
+  if ((turn.usageClass ?? '').toLowerCase() === 'unavailable') return [];
   if (!Number.isFinite(Date.parse(turn.observedAt))) return [];
 
   const pairs: readonly (readonly [RelayLatencyPhase, number | null | undefined])[] = [
@@ -108,7 +110,15 @@ export interface ObservedFailure {
   readonly detail?: string;
 }
 
-const ERROR_KIND_BY_LABEL: Readonly<Record<string, RelayErrorKind>> = Object.freeze({
+/**
+ * Prototype-free on purpose. A plain object literal inherits from
+ * `Object.prototype`, so a failure labelled `constructor` or `toString` looked
+ * up to a FUNCTION, `??` did not catch it because it is not null, and the value
+ * escaped the `RelayErrorKind` type entirely — `tsc` cannot see it. The
+ * projection then threw `a.kind.localeCompare is not a function` while sorting.
+ */
+const ERROR_KIND_BY_LABEL: Readonly<Record<string, RelayErrorKind>> = Object.freeze(
+  Object.assign(Object.create(null) as Record<string, RelayErrorKind>, {
   timeout: 'provider_timeout',
   provider_timeout: 'provider_timeout',
   rate_limit: 'rate_limited',
@@ -127,7 +137,7 @@ const ERROR_KIND_BY_LABEL: Readonly<Record<string, RelayErrorKind>> = Object.fre
   policy_refusal: 'policy_refusal',
   provider_error: 'provider_error',
   internal_error: 'internal_error',
-});
+}));
 
 /**
  * Map an adapter's label onto the vocabulary. An unrecognised label becomes
@@ -138,12 +148,15 @@ const ERROR_KIND_BY_LABEL: Readonly<Record<string, RelayErrorKind>> = Object.fre
 export function errorFromFailure(failure: ObservedFailure): RelayErrorEvent | null {
   if (!Number.isFinite(Date.parse(failure.observedAt))) return null;
   const label = (failure.kind ?? '').trim().toLowerCase();
+  // A nonsense attempt number becomes 1 — the first attempt — because that is
+  // the only value that cannot overstate how many times something was tried.
   const attempt = typeof failure.attempt === 'number'
     && Number.isInteger(failure.attempt) && failure.attempt >= 1
     ? failure.attempt
     : 1;
   return {
-    kind: ERROR_KIND_BY_LABEL[label] ?? 'unknown',
+    // `hasOwn`, not `??`: see the note on the map above.
+    kind: Object.hasOwn(ERROR_KIND_BY_LABEL, label) ? ERROR_KIND_BY_LABEL[label] : 'unknown',
     at: failure.observedAt,
     // Absent means NOT KNOWN to have recovered. Defaulting to `true` would
     // quietly downgrade every failure an adapter forgot to annotate.

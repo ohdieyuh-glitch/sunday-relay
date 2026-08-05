@@ -46,14 +46,44 @@ describe('an unknown amount is never a zero', () => {
       receipt({ amount: { currency: 'USD', amountMicros: '1.5' } }),
       receipt({ receiptId: 'b', amount: { currency: 'usd', amountMicros: '10' } }),
     ]);
-    expect(cited.amountUnknown).toBe(2);
+    // UNREADABLE, not unknown. A receipt that has an amount nobody can parse is
+    // a different fact from one that has no amount yet, and "no cost recorded
+    // yet" is the wrong sentence for it.
+    expect(cited.amountUnreadable).toBe(2);
+    expect(cited.amountUnknown).toBe(0);
     expect(cited.actual).toEqual([]);
+  });
+
+  it('a refund is subtracted, not silently dropped', () => {
+    // `adjustment` is the ONLY category permitted a negative amount, so it is
+    // how this repository records a credit or a correction. Excluding it made
+    // every refund invisible and every total too high.
+    const cited = citeSpend([
+      receipt({ receiptId: 'a', amount: { currency: 'USD', amountMicros: '100000000' } }),
+      receipt({
+        receiptId: 'b', category: 'adjustment',
+        amount: { currency: 'USD', amountMicros: '-40000000' },
+      }),
+    ]);
+    expect(cited.actual).toEqual([{ currency: 'USD', amountMicros: '60000000', receipts: 2 }]);
+    expect(formatMicros('USD', cited.actual[0].amountMicros)).toBe('USD 60.00');
+  });
+
+  it('a receipt excluded by category is COUNTED, so no total quietly omits one', () => {
+    const cited = citeSpend([
+      receipt({ receiptId: 'a' }),
+      receipt({ receiptId: 'b', category: 'human_intervention' }),
+    ]);
+    expect(cited.excludedByCategory).toBe(1);
+    expect(cited.receiptsRead).toBe(2);
   });
 
   it('an empty citation is empty, not zeroed', () => {
     const empty = emptySpendCitation();
     expect(empty.actual).toEqual([]);
     expect(empty.receiptsRead).toBe(0);
+    expect(empty.excludedByCategory).toBe(0);
+    expect(empty.amountUnreadable).toBe(0);
     expect(empty.tokens.total).toBe('0');
   });
 });
@@ -151,11 +181,16 @@ describe('token counts are exact integers, never floats', () => {
 });
 
 describe('money is formatted from integers, without floating point', () => {
-  it('formats micros exactly', () => {
+  it('formats micros exactly, rounding rather than truncating', () => {
     expect(formatMicros('USD', '1500000')).toBe('USD 1.50');
     expect(formatMicros('USD', '0')).toBe('USD 0.00');
     expect(formatMicros('USD', '1')).toBe('USD 0.00');
     expect(formatMicros('USD', '-2500000')).toBe('-USD 2.50');
+    // Truncation printed this as 0.99, understating every total by up to a
+    // cent while looking exact.
+    expect(formatMicros('USD', '999999')).toBe('USD 1.00');
+    expect(formatMicros('USD', '994999')).toBe('USD 0.99');
+    expect(formatMicros('USD', '995000')).toBe('USD 1.00');
   });
 
   it('is exact far above the range a double holds', () => {

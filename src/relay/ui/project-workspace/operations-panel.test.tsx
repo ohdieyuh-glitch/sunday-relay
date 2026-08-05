@@ -153,6 +153,8 @@ describe('tokens and cost are cited, and a fixture never looks like a bill', () 
     actual: [{ currency: 'USD', amountMicros: '1500000', receipts: 1 }],
     estimated: [] as { currency: string; amountMicros: string; receipts: number }[],
     amountUnknown: 0,
+    amountUnreadable: 0,
+    excludedByCategory: 0,
     voidedOrDisputed: 0,
     fixtureSourced: 0,
     receiptsRead: 1,

@@ -194,10 +194,71 @@ export interface RelayEvaluation {
  * never counts toward independent coverage.
  */
 export function isIndependentEvaluation(evaluation: RelayEvaluation): boolean {
-  const judge = evaluation.judgedBy.trim().toLowerCase();
-  const author = evaluation.authoredBy.trim().toLowerCase();
+  const judge = normaliseActor(evaluation.judgedBy);
+  const author = normaliseActor(evaluation.authoredBy);
   if (judge === '' || author === '') return false;
+  // Fails closed: an identity this product could not have issued cannot be
+  // compared for confusability with confidence, so it does not buy
+  // independence.
+  if (!actorIdentityIsComparable(evaluation.judgedBy)) return false;
+  if (!actorIdentityIsComparable(evaluation.authoredBy)) return false;
   return judge !== author;
+}
+
+/**
+ * Latin look-alikes from other scripts, folded to their Latin counterpart.
+ *
+ * NFKC does NOT do this — it normalises COMPATIBILITY forms (fullwidth, ligatures,
+ * superscripts), not CONFUSABLES. Cyrillic `а` U+0430 survives NFKC unchanged and
+ * still reads as a Latin `a` to a person, which is exactly enough to make a
+ * self-evaluation look independent.
+ *
+ * This table is deliberately small and deliberately NOT a claim to completeness:
+ * it covers the Cyrillic and Greek letters that render identically to ASCII in
+ * the fonts this product uses. A determined caller can still find a glyph this
+ * misses — see `actorIdentityIsComparable`, which is the part that fails closed.
+ */
+const CONFUSABLE_TO_LATIN: ReadonlyMap<string, string> = new Map(Object.entries({
+  'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'х': 'x', 'у': 'y', 'ѕ': 's',
+  'і': 'i', 'ј': 'j', 'ԁ': 'd', 'һ': 'h', 'ӏ': 'l', 'ν': 'v', 'ο': 'o', 'α': 'a',
+  'ε': 'e', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x', 'κ': 'k', 'ι': 'i',
+}));
+
+/** Invisible characters cannot be a real difference between two identities. */
+const DEFAULT_IGNORABLE = /[\u00AD\u180E\u200B-\u200F\u2060-\u206F\uFEFF]/gu;
+
+/**
+ * An actor identity, reduced to what it actually IS rather than how it is
+ * spelled.
+ *
+ * Without this, independence was assertable by TYPOGRAPHY: a Cyrillic `а` in
+ * place of a Latin `a`, or an invisible zero-width space, made a
+ * self-evaluation read as independent — so the caller chose the answer after
+ * all, which is precisely what deriving it was supposed to prevent.
+ */
+export function normaliseActor(actor: string): string {
+  const folded = actor
+    .normalize('NFKC')
+    .replace(DEFAULT_IGNORABLE, '')
+    .trim()
+    .toLowerCase();
+  let skeleton = '';
+  for (const char of folded) skeleton += CONFUSABLE_TO_LATIN.get(char) ?? char;
+  return skeleton;
+}
+
+/**
+ * Whether two identities can be compared for sameness with confidence.
+ *
+ * The fold above is a mitigation, not a proof, and pretending otherwise would
+ * be the same defect it was written to fix. So when either identity still
+ * carries a character outside the set this product actually issues — ASCII
+ * letters, digits, and the few separators agent ids use — comparison FAILS
+ * CLOSED: the pair is treated as possibly-the-same, and independence is not
+ * granted on the strength of a spelling nobody can verify.
+ */
+export function actorIdentityIsComparable(actor: string): boolean {
+  return /^[a-z0-9 ._@:-]*$/u.test(normaliseActor(actor));
 }
 
 /* ---------------------------------------------------------- repair loops */
