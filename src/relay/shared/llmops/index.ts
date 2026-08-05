@@ -102,3 +102,16 @@ export type {
   ObservedRunUsage,
   RunObservation,
 } from './run-observation';
+
+export {
+  MAX_ERROR_EVENTS,
+  MAX_LATENCY_SAMPLES,
+  createOperationalStore,
+} from './operational-store';
+export type {
+  OperationalBacking,
+  OperationalReadResult,
+  OperationalStore,
+  OperationalStoreStatus,
+  OperationalWriteResult,
+} from './operational-store';

@@ -127,6 +127,10 @@ export function renderOperationsView(input: OperationsViewInput): {
       );
     }
   }
+  if (view.droppedLatency > 0) {
+    lines.push(p.dim(`  Showing the most recent samples; ${view.droppedLatency} older `
+      + 'one(s) evicted, so these figures describe recent history.'));
+  }
   if (view.missingPhases.length > 0) {
     // Named, so nobody reads an absent row as a fast one.
     lines.push(p.dim(`  Not timed: ${view.missingPhases.join(', ')}.`));

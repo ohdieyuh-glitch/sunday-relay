@@ -238,6 +238,13 @@ export function RelayOperationsPanel({ view }: {
           </tbody>
         </table>
       )}
+      {view.droppedLatency > 0 && (
+        // A percentile over a truncated window is a percentile OF THE WINDOW.
+        <p className="rop-missing">
+          {`Showing the most recent samples; ${view.droppedLatency} older one(s) `}
+          {'have been evicted, so these figures describe recent history.'}
+        </p>
+      )}
       {view.missingPhases.length > 0 && (
         // Named rather than shown as rows of zeroes.
         <p className="rop-missing">

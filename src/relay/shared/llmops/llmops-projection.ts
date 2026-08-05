@@ -144,6 +144,13 @@ export interface RelayOperationsView {
   readonly repairs: RelayRepairView;
   readonly newestSignalAt: string | null;
   readonly signalAgeMs: RelayFigure;
+  /**
+   * Observations the store evicted to stay bounded. A surface showing a
+   * percentile alongside a non-zero count here is showing a percentile of a
+   * window, and should say so.
+   */
+  readonly droppedLatency: number;
+  readonly droppedErrors: number;
 }
 
 /* ------------------------------------------------------------ projection */
@@ -313,6 +320,8 @@ export function projectOperations(
     repairs,
     newestSignalAt: record.newestSignalAt,
     signalAgeMs,
+    droppedLatency: record.droppedLatency ?? 0,
+    droppedErrors: record.droppedErrors ?? 0,
   };
 }
 

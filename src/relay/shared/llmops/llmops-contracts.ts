@@ -315,6 +315,16 @@ export interface RelayOperationalRecord {
   readonly repairLoops: readonly RelayRepairLoop[];
   /** ISO-8601 of the newest signal of ANY kind, or null if nothing observed. */
   readonly newestSignalAt: string | null;
+  /**
+   * Observations evicted to keep the record bounded.
+   *
+   * Reported rather than silent, because a percentile computed over a truncated
+   * window is a percentile OF THE WINDOW. A reader who knows four thousand
+   * samples fell off the end reads the figure as recent history; a reader who
+   * does not read it as the project's history.
+   */
+  readonly droppedLatency: number;
+  readonly droppedErrors: number;
 }
 
 /** An empty record — observed nothing, which is not the same as observed zero. */
@@ -329,5 +339,7 @@ export function emptyOperationalRecord(projectId: string): RelayOperationalRecor
     evaluations: [],
     repairLoops: [],
     newestSignalAt: null,
+    droppedLatency: 0,
+    droppedErrors: 0,
   };
 }
