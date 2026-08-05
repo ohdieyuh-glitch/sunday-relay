@@ -818,7 +818,11 @@ describe('an implemented website capability must be REACHABLE, not merely presen
     const source = readFileSync(join(repoRoot, 'scripts/relay-surface-parity.mjs'), 'utf8');
     const docBlock = source.slice(0, source.indexOf('export function importSpecifiersOf'));
     expect(docBlock).toContain('KNOWN OVER-APPROXIMATION');
-    expect(docBlock).toContain('unconsumed barrel re-export');
+    // BOTH must be named. A doc that admits one and hides the other is the
+    // same defect as one that admits none — and the second was found only
+    // because a reviewer diffed the edge set against the TypeScript parser.
+    expect(docBlock, 'the barrel re-export over-approximation').toMatch(/barrel/i);
+    expect(docBlock, 'the TypeScript import-type over-approximation').toMatch(/import-type/i);
   });
 
   it('THE MCP SURFACE IS MOUNTED — the component and its settings host are both reachable', () => {
@@ -850,7 +854,7 @@ describe('an implemented website capability must be REACHABLE, not merely presen
     const undisclosed = verifyWebsiteReachability(repoRoot, {
       capabilities: [capability({
         capabilityId: 'ghost-surface',
-        websiteEntryPoints: ['src/relay/ui/psp-import/relay-psp-import.test.tsx'],
+        websiteEntryPoints: ['src/relay/ui/psp-import/psp-import-ui.test.tsx'],
       })],
     });
     expect(result.failures.map((f: { rule: string }) => f.rule)).not.toContain('website-entry-unreachable');
@@ -863,7 +867,7 @@ describe('an implemented website capability must be REACHABLE, not merely presen
       capabilities: [capability({
         capabilityId: 'cli-only',
         websiteStatus: 'not_started',
-        websiteEntryPoints: ['src/relay/ui/psp-import/relay-psp-import.test.tsx'],
+        websiteEntryPoints: ['src/relay/ui/psp-import/psp-import-ui.test.tsx'],
       })],
     });
     // The `unused-unmounted-record` rule compares against the WHOLE registry

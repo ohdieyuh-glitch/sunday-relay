@@ -170,15 +170,16 @@ export const UNMOUNTED_WEBSITE_SURFACES: Readonly<Record<string, string>>;
  *
  * Blanking rather than preserving, because a specifier is itself quoted text:
  * prose containing `from './x'` produced an edge no bundler creates. The
- * implementation's doc block states the two residuals and why both fail in the
- * loud direction.
+ * implementation's doc block lists five residuals, states that each of THOSE
+ * five drops an edge, and does not claim the list is exhaustive.
  */
 export function stripComments(source: string): string;
 
 /**
  * Every module specifier a source file imports that a bundler would actually
- * follow. Comments and type-only clauses are excluded; the one surviving
- * over-approximation (an unconsumed barrel re-export) is stated in the
+ * follow. Comments and type-only clauses are excluded; the two surviving
+ * over-approximations (an unconsumed barrel re-export, and a TypeScript
+ * import-type node in type position) is stated in the
  * implementation's doc block rather than hidden.
  */
 export function importSpecifiersOf(source: string): string[];

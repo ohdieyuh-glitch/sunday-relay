@@ -669,12 +669,14 @@ before import specifiers are read, and type-only clauses (`import type …`,
 `import { type X } …`, `export type … from`) contribute nothing, because
 TypeScript erases them and a surface reachable only through one is not reachable
 in the shipped bundle. Both once produced a false pass in the checker whose
-whole purpose is preventing one. **One over-approximation survives and is not
-hidden:** a barrel's `export … from './X'` is followed even when nothing
-consumes the re-exported binding. The edge is real in the module graph, but a
-tree-shaking bundler may drop it, so a surface reachable ONLY through an
-unconsumed barrel re-export would be reported mounted. Closing that needs
-binding-level liveness analysis this script does not do.
+whole purpose is preventing one. **Two over-approximations survive and are not
+hidden.** A barrel's `export … from './X'` is followed even when nothing
+consumes the re-exported binding — the edge is real in the module graph, but a
+tree-shaking bundler may drop it. And a TypeScript import-type node in type
+position (`import('./x').T`) is erased by `tsc` and counted here; there are
+seven, across five files. Both are in the phantom direction, and neither changes
+the answer today: a reachability walk driven by the TypeScript parser returns
+the same 270 modules, so every target is reachable by a real edge as well.
 
 ---
 

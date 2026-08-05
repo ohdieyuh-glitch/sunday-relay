@@ -859,7 +859,8 @@ export const UNMOUNTED_WEBSITE_SURFACES = Object.freeze({
  * The rules that replace the guessing, each derived from what the language
  * actually permits rather than from a pattern that happened to work:
  *
- * - A `'`/`"` string cannot span a newline, so both close at every line break.
+ * - A `'`/`"` string cannot span an UNESCAPED newline, so both close at every
+ *   line break that is not preceded by a continuation.
  * - `abc'def'` is not valid JavaScript, so a quote directly after an identifier
  *   character, `)`, `]` or `}` cannot be an opener — UNLESS the preceding token
  *   is one of the keywords a literal legitimately follows (`from`, `import`,
@@ -885,7 +886,7 @@ export const UNMOUNTED_WEBSITE_SURFACES = Object.freeze({
  *   alias NOT terminated by `;` can swallow the next import and be classified
  *   type-only. Every alias in this tree ends `;`. Pre-existing.
  * - A fully static TEMPLATE specifier — `import(\`./x\`)` — is not followed,
- *   while `src/relay/shared/browser-boundary.ts` deliberately does follow that
+ *   while `src/relay/shared/browser-boundary.test.ts` deliberately does follow that
  *   form. The two scanners disagree; this one is the conservative side.
  *
  * All five drop an edge, which is a visible parity failure. That is a fact
@@ -963,7 +964,8 @@ export function stripComments(source) {
   const inTemplateText = () => top() !== null && top().interpolation === null;
 
   /**
-   * The last 48 emitted characters. Its own small string because
+   * At least the last 48 emitted characters (48–96, since it is trimmed in
+   * batches). Its own small string because
    * `out.slice(-24)` re-flattened the entire accumulated rope on every call —
    * quadratic, and this scanner now asks the question once per quote as well as
    * once per slash.
@@ -973,8 +975,11 @@ export function stripComments(source) {
     out += text;
     recent += text;
     // Trimmed in batches rather than on every character: slicing per character
-    // allocated two strings per byte and cost more over the whole tree than the
-    // quadratic `out.slice` it replaced saved on one pathological line.
+    // allocated two strings per byte, which cost roughly a second over the
+    // whole tree. Batching recovers that AND keeps the ~30 s the bounded buffer
+    // saves on a pathological line — an earlier version of this comment said
+    // the per-character cost outweighed that saving, which was wrong by more
+    // than an order of magnitude.
     if (recent.length > 96) recent = recent.slice(-48);
   };
   const startsRegex = () => {
@@ -1193,14 +1198,22 @@ function clauseIsTypeOnly(clause) {
 /**
  * Every module specifier a source file imports, in the forms this repo uses.
  *
- * KNOWN OVER-APPROXIMATION, stated rather than hidden: a barrel's
- * `export … from './X'` is followed even when nothing consumes the re-exported
- * binding. The edge is real in the module graph — the module is evaluated — but
- * a tree-shaking bundler may drop it, so a surface reachable ONLY through an
- * unconsumed barrel re-export is reported mounted when a user cannot see it.
- * Closing that would require binding-level liveness analysis this script does
- * not do. Comments and type-only imports, which are not real edges under any
- * bundler, ARE excluded.
+ * TWO KNOWN OVER-APPROXIMATIONS, stated rather than hidden. Both are in the
+ * phantom direction — they can report a surface reachable that a bundler would
+ * not include — and neither changes this tree's answer today.
+ *
+ * 1. A barrel's `export … from './X'` is followed even when nothing consumes
+ *    the re-exported binding. The edge is real in the module graph (the module
+ *    is evaluated), but a tree-shaking bundler may drop it. Closing this needs
+ *    binding-level liveness analysis this script does not do.
+ * 2. A TypeScript IMPORT-TYPE node in type position — `import('./x').T`,
+ *    `keyof typeof import('./x')` — is erased by `tsc` and counted here. Seven
+ *    instances across five files. A reachability walk driven by the TypeScript
+ *    parser returns the SAME 270 modules, so every target is reachable by a
+ *    real edge as well; the count is unchanged either way.
+ *
+ * Comments and type-only IMPORT CLAUSES, which are not edges under any
+ * bundler, are excluded.
  */
 export function importSpecifiersOf(source) {
   const code = stripComments(source);
@@ -1229,7 +1242,7 @@ export function importSpecifiersOf(source) {
  *
  * That guarantee covers RESOLUTION only. Whether a candidate edge should have
  * been offered at all is `importSpecifiersOf`'s question, and its doc block
- * names the one over-approximation that survives there.
+ * names the two over-approximations that survive there.
  */
 export function resolveModuleSpecifier(repoRoot, fromRelative, specifier) {
   let candidate;
