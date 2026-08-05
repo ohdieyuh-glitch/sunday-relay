@@ -234,10 +234,79 @@ connector's interface. The domain must not depend on a particular adapter, and
 an import edge from `mission/` into `connectors/` would invert the same layering
 the website boundary rule protects.
 
+## The first producer
+
+`shared/llmops/run-observation.ts` turns a finished run into operational signal;
+`connectors/claude-code/run-observation-adapter.ts` classifies a real
+`ClaudeRunOutcome` and hands it over. The split is not cosmetic: `shared/` may
+not import a connector in any file that ships, so a mapping written beside the
+projection could only ever live in a test — where the boundary rules exempt it,
+and where nothing could use it.
+
+**Elapsed time is only a LATENCY when the thing being timed ran.**
+`ClaudeRunOutcome.durationMs` is not nullable — the harness always measured
+something — so falling back to it unconditionally gave a process that never
+started a "total latency" of two milliseconds. A completed run and a timed-out
+one both spent that time working, and their elapsed time is a latency.
+
+The timed-out sample is right-censored at the configured runtime limit, so a
+population of timeouts piles at that constant and moves when somebody tunes it.
+Excluding them would be worse — the slowest runs are exactly the ones that time
+out, so dropping them would make a degrading system show IMPROVING latency. A spawn
+failure and a cancellation did not, and contribute no sample at all.
+
+The provider's own `duration_ms` is preferred where it exists, because the
+harness's clock includes spawn and teardown. Both are checked for usability
+rather than nullness: `??` does not fall through on `NaN`, so a garbage provider
+figure used to discard a perfectly good harness measurement.
+
+**Failures stay distinct, in the order the shipping classifier already uses.**
+`event-normalizer.ts` ranks them cancelled > timedOut > spawnError > isError,
+and the adapter matches it exactly. Two producers that disagree about what one
+run WAS put two vocabularies into one record, which is what the single-producer
+rule exists to prevent — and the first version broke it by ranking `spawnError`
+first, on the reasoning that a process which never started cannot have timed
+out. `spawnError` does not mean that: it is set from `child.on('error')`, which
+Node also emits when a process cannot be KILLED, and the connector's own event
+says "failed to start OR RUN". So that order reclassified a real timeout whose
+SIGKILL failed as a workspace failure and discarded its latency.
+
+Both co-occurrences are reachable: the watchdog sets `timedOut`, then the kill
+grace window leaves the run cancellable for several more seconds. An operator
+who cancels a hung run in that window has not run a failed provider attempt.
+
+**A cancelled run is not an attempt.** It is not a trial of the provider, and
+counting it would raise the error rate's denominator while never raising its
+numerator — quietly reporting a system as more reliable the more often somebody
+interrupted it. Everything else counts one.
+
+It is not invisible, though. A cancelled run carries its `observedAt` into the
+record even with no latency and no error, because without it a project somebody
+is interrupting all day would be byte-identical to one nobody is using, and
+health would report that nothing had been observed. What it does NOT record is
+the provider time and money a cancelled run still consumed — that belongs to a
+receipt, and no receipt producer exists yet.
+
+**An unrecognised termination becomes an `unknown` error**, never silence.
+Producing no error while still counting the attempt deflates the rate, and the
+intake already holds the rule this follows: the count of `unknown` is itself the
+signal that a case is missing.
+
+Its test fixture carries every field `ParsedStreamState` and `ClaudeRunOutcome`
+require, with **no cast**. The first version cast through `as unknown`, which
+hid six missing required fields and would not have failed on a seventh — so the
+claim "proven against the connector's real types" was worth less than it
+sounded. Without the cast, a new required field breaks the file, which is the
+whole reason to test against the real type rather than a hand-drawn shape.
+
 ## Not implemented
 
-**Nothing calls the intake yet, nothing supplies receipts, and nothing persists
-memory.** The CLI's `brain` view generates a document from an empty memory on
+**Nothing calls `observeClaudeRun` on a live run, nothing supplies receipts, and
+nothing persists memory.** The adapter now lives where a caller could reach it,
+and is proven against the connector's real types — but no caller exists. What is
+missing is a STORE: something accumulating a `RelayOperationalRecord` across runs
+and handing it to a surface. Until that exists, both surfaces truthfully report
+that no operations source is wired. The CLI's `brain` view generates a document from an empty memory on
 every invocation, which is why it truthfully reports that nothing has been
 recorded. The functions
 exist and are tested against fixtures; no adapter, run handler or bridge invokes
