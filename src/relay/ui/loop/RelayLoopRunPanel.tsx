@@ -57,8 +57,18 @@ export type RelayLoopRunFetch =
      * "Relay could not reach the bridge" — and the two demand opposite
      * behaviour: the first must clear the stored id so a dead run is not
      * re-requested forever, and the second must keep it, because the run is
-     * probably fine and the network is not. The client computes exactly this
-     * distinction and used to drop it on the floor.
+     * probably fine and the network is not.
+     *
+     * OPTIONAL, AND ABSENT IN EVERY SHIPPED PATH TODAY. No adapter constructs
+     * this type outside the tests — the website supplies no port at all — so a
+     * failure arrives here without a kind and the stored id is KEPT, which is
+     * the conservative half. Recorded rather than implied, because an earlier
+     * version of this comment said the client "used to drop it on the floor",
+     * and there is no client wired to drop anything.
+     *
+     * The kinds that mean GONE are `not_found` and `run_not_found`. A server
+     * that invents a third word will be treated as unreachable, which keeps
+     * the id — wrong in the safe direction.
      */
     readonly kind?: string;
   };
@@ -89,7 +99,19 @@ export interface RelayLoopRunStore {
  * doing. A failed refresh must not be drawn as a failed run, and a restoring
  * panel must not be drawn as an idle one.
  */
-export type RelayLoopRunSync = 'idle' | 'restoring' | 'refreshing' | 'acting' | 'unreachable';
+export type RelayLoopRunSync =
+  | 'idle' | 'restoring' | 'refreshing' | 'acting'
+  /** Relay could not ASK. Nothing is claimed about the run. */
+  | 'unreachable'
+  /**
+   * Relay asked, the server ANSWERED, and it refused the action.
+   *
+   * Distinct from `unreachable` because the sentence that follows differs
+   * completely: a refusal comes with a fresh, trustworthy view of the run, and
+   * telling the user "Relay could not ask" while showing them the answer is
+   * the surface lying about what just happened.
+   */
+  | 'refused';
 
 export interface RelayLoopRunPanelProps {
   readonly view: RelayLoopRunView;
@@ -113,6 +135,7 @@ const SYNC_LABEL: Readonly<Record<RelayLoopRunSync, string | null>> = Object.fre
   refreshing: 'Reading the latest state from the server…',
   acting: 'Waiting for the server to confirm…',
   unreachable: null, // the message says it; a label would repeat it
+  refused: null,
 });
 
 export function RelayLoopRunPanel({
@@ -161,7 +184,11 @@ export function RelayLoopRunPanel({
         <p className="rlr-unreachable" role="alert">
           {syncMessage}
           {' '}
-          This says nothing about the run itself — Relay could not ask.
+          {sync === 'refused'
+            // The server answered, so the run shown below IS current. Saying
+            // "Relay could not ask" here would contradict the panel itself.
+            ? 'The run below is what the server reports now.'
+            : 'This says nothing about the run itself — Relay could not ask.'}
         </p>
       )}
 
@@ -307,11 +334,30 @@ export function RelayLoopRunSurface({ port, store, runId, onClose }: RelayLoopRu
    * response neither renders nor writes to the store.
    */
   const ticket = useRef(0);
+  const alive = useRef(true);
   const nextTicket = () => {
     ticket.current += 1;
     return ticket.current;
   };
-  useEffect(() => () => { ticket.current = -1; }, []);
+  /*
+   * THE COUNTER IS MONOTONIC; UNMOUNT IS A SEPARATE FLAG.
+   *
+   * Cleanup used to set the ticket to `-1`, which is a REWIND rather than a
+   * bump — so tickets restarted at 1, 2, 3 and collided with requests still in
+   * flight from before. React double-invokes effects under `<StrictMode>`,
+   * which `src/relay/main.tsx` uses, so a mount issued two passes of reads and
+   * an orphaned first-pass response could match a later ticket exactly and
+   * repaint a finished run as running. The guard defeated by its own cleanup.
+   *
+   * `alive` also has to be RE-ARMED on mount: StrictMode runs cleanup between
+   * the two passes, and a flag that only ever goes false would leave the second
+   * pass unable to render anything at all.
+   */
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+  const current = (mine: number) => alive.current && ticket.current === mine;
 
   const load = useCallback(async (
     id: string,
@@ -323,14 +369,15 @@ export function RelayLoopRunSurface({ port, store, runId, onClose }: RelayLoopRu
     setSync(mode);
     setSyncMessage(carryMessage ?? null);
     const result = await port.status(id);
-    if (ticket.current !== mine) return;   // superseded, or unmounted
+    if (!current(mine)) return;   // superseded, or unmounted
     if (result.ok) {
       setStatus(result.status);
       safeWrite(store, restorePointFor(result.status));
       setEmptyReason(undefined);
       // A control failure is still the most recent thing the user did, so its
-      // message outlives a successful re-read rather than being wiped by it.
-      setSync(carryMessage === undefined ? 'idle' : 'unreachable');
+      // message outlives a successful re-read rather than being wiped by it —
+      // as `refused`, because the read SUCCEEDED and the run below is current.
+      setSync(carryMessage === undefined ? 'idle' : 'refused');
       return;
     }
     // The server could not answer. The panel does NOT fall back to whatever it
@@ -380,7 +427,7 @@ export function RelayLoopRunSurface({ port, store, runId, onClose }: RelayLoopRu
           setSync('acting');
           setSyncMessage(null);
           const result = await port.control!({ runId: currentId, action });
-          if (ticket.current !== mine) return;   // superseded, or unmounted
+          if (!current(mine)) return;   // superseded, or unmounted
           if (result.ok) {
             setStatus(result.status);
             safeWrite(store, restorePointFor(result.status));

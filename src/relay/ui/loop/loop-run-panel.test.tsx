@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { afterEach, describe, expect, it as baseIt, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { createElement } from 'react';
+import { StrictMode, createElement } from 'react';
 
 import {
   RelayLoopRunPanel, RelayLoopRunSurface, projectLoopRunView,
@@ -333,6 +333,79 @@ describe('restoration is a read, not a cache', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain('rejected the credential');
     });
+  });
+
+  it('a REFUSED control does not claim Relay could not ask', async () => {
+    /*
+     * The fix for the wiped message left a false sentence in its place: sync
+     * became `unreachable`, so the alert said "Relay could not ask" while the
+     * panel showed fresh server data from the re-read that had just succeeded.
+     * Relay DID ask. On this branch's own standard that is the surface lying
+     * about what happened.
+     */
+    const port: RelayLoopRunPort = {
+      status: vi.fn(async (): Promise<RelayLoopRunFetch> => ({ ok: true, status: status() })),
+      control: vi.fn(async (): Promise<RelayLoopRunFetch> => ({
+        ok: false, message: 'The Relay Bridge rejected the credential.',
+      })),
+    };
+    const store = memoryStore({ runId: RUN_ID, loopId: LOOP_ID });
+    render(createElement(RelayLoopRunSurface, { port, store }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /^stop$/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /^stop$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('rejected the credential');
+    });
+    const alert = screen.getByRole('alert').textContent ?? '';
+    expect(alert, 'the server answered, so this must not say Relay could not ask')
+      .not.toContain('could not ask');
+    expect(alert).toContain('what the server reports now');
+    expect(document.querySelector('[data-loop-sync]')?.getAttribute('data-loop-sync'))
+      .toBe('refused');
+  });
+
+  it('the request guard survives StrictMode double-mounting', async () => {
+    /*
+     * `src/relay/main.tsx` renders under `<StrictMode>`, which double-invokes
+     * effects in development. Cleanup used to REWIND the ticket to -1, so the
+     * second pass restarted at 1 and collided with a first-pass request still
+     * in flight — the orphan then landed, was accepted, and repainted a
+     * finished run as running. The guard defeated by its own cleanup.
+     */
+    const finished = status({
+      state: 'completed', stateClass: 'successful_terminal', finished: true, succeeded: true,
+    });
+    const orphan = status({ runId: 'lpr_00000000000000000009' });
+    const results: RelayLoopRunFetch[] = [];
+    let releaseFirst: (v: RelayLoopRunFetch) => void = () => {};
+    const port: RelayLoopRunPort = {
+      status: vi.fn(async (): Promise<RelayLoopRunFetch> => {
+        results.push({ ok: true, status: finished });
+        if (results.length === 1) {
+          return new Promise<RelayLoopRunFetch>((resolve) => { releaseFirst = resolve; });
+        }
+        return { ok: true, status: finished };
+      }),
+    };
+    const store = memoryStore({ runId: RUN_ID, loopId: LOOP_ID });
+    render(createElement(StrictMode, null,
+      createElement(RelayLoopRunSurface, { port, store })));
+
+    await waitFor(() => expect(results.length).toBeGreaterThanOrEqual(2));
+    await waitFor(() => {
+      expect(document.querySelector('[data-loop-activity]')?.getAttribute('data-loop-activity'))
+        .toBe('finished');
+    });
+
+    // The orphaned first-pass read lands last, carrying a DIFFERENT run.
+    releaseFirst({ ok: true, status: orphan });
+    await new Promise((r) => { setTimeout(r, 30); });
+    expect(
+      document.querySelector('[data-loop-activity]')?.getAttribute('data-loop-activity'),
+      'an orphaned first-pass read must not repaint a finished run',
+    ).toBe('finished');
+    expect((store.value as { runId?: string } | null)?.runId).not.toBe(orphan.runId);
   });
 
   it('a run the server says does NOT EXIST is forgotten; one it cannot reach is kept', async () => {

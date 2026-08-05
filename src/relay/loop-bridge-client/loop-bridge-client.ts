@@ -170,14 +170,31 @@ export function createLoopBridgeClient(options: LoopBridgeClientOptions): LoopEx
        * is a malformed response rather than something to relay onward.
        */
       const rawKind = typeof envelope.kind === 'string' ? envelope.kind : null;
-      const kind = rawKind !== null && /^[a-z][a-z0-9_]{0,63}$/u.test(rawKind)
+      /*
+       * SHAPE-CHECKED **AND** REDACTED, because the first is not the second.
+       *
+       * The previous attempt added only the shape check and the commit called
+       * it redaction. A token made of lowercase letters, digits and
+       * underscores and no longer than 64 characters matches
+       * `^[a-z][a-z0-9_]{0,63}$` perfectly — so a server answering
+       * `{"kind":"<token>"}` still put the credential on the terminal. The
+       * test written to prove otherwise passed for the wrong reason: its
+       * fixture token contained hyphens, so it failed the shape check whatever
+       * the redaction did.
+       *
+       * A kind that CHANGES under redaction contained the secret, so it is
+       * dropped entirely rather than printed with a hole in it.
+       */
+      const shaped = rawKind !== null && /^[a-z][a-z0-9_]{0,63}$/u.test(rawKind)
         ? rawKind
         : null;
+      const kind = shaped !== null && redactBridgeSecrets(shaped, token.value) === shaped
+        ? shaped
+        : null;
       const message = typeof envelope.error === 'string'
-        // The token is passed so the literal value is removed, not merely
-        // anything token-SHAPED. A server that echoes the credential back must
-        // not be able to get it printed.
-        ? redactBridgeSecrets(envelope.error.slice(0, 2000), token.value)
+        // REDACT, THEN SLICE. Slicing first cut a token across the boundary and
+        // left its prefix in the message — a shorter secret is still a secret.
+        ? redactBridgeSecrets(envelope.error, token.value).slice(0, 2000)
         : null;
       return classify(response.status, kind, message);
     }
@@ -194,6 +211,22 @@ export function createLoopBridgeClient(options: LoopBridgeClientOptions): LoopEx
       return failure(
         response.status, 'invalid_response',
         'The Relay Bridge sent no usable data envelope.',
+      );
+    }
+    /*
+     * AN ARRAY IS AN OBJECT, AND THAT MATTERED.
+     *
+     * `typeof [] === 'object'` — the check above is byte-identical to the
+     * Reviewer client this one mirrors, and both let `{"data":[]}` through. The
+     * renderer then threw `Cannot read properties of undefined` inside a
+     * promise the CLI does not catch, which is an unhandled rejection rather
+     * than a message. Every route here returns a JSON OBJECT; an array is a
+     * malformed response, and saying so is cheaper than a stack trace.
+     */
+    if (Array.isArray(data)) {
+      return failure(
+        response.status, 'invalid_response',
+        'The Relay Bridge sent a list where an object was expected.',
       );
     }
     return { ok: true, data: data as T };

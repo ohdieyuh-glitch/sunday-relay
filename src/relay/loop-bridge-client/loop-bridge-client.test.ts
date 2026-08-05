@@ -148,6 +148,49 @@ describe('a failure is named, and never becomes a run state', () => {
     expect(result.message).not.toContain(TOKEN);
   });
 
+  it('a token that is ITSELF a valid-looking kind is still not printed', async () => {
+    /*
+     * THE TEST ABOVE PASSED FOR THE WRONG REASON, and this is the one that
+     * would have caught it.
+     *
+     * A shape check was added and called redaction. `TOKEN` contains hyphens,
+     * so it failed `^[a-z][a-z0-9_]{0,63}$` whatever the redaction did — the
+     * assertion held while the leak was wide open. A token made only of
+     * lowercase letters, digits and underscores matches that shape perfectly,
+     * and `loop-execution.ts` prints the kind to stdout.
+     */
+    const shapedToken = 'rlb_live_9f3a2c8d1e';
+    const f = spy(400, { kind: shapedToken, error: 'nope' });
+    const result = await createLoopBridgeClient({
+      bridgeUrl: URL_BASE, token: shapedToken, fetchImpl: f.impl,
+    }).status('lpr_1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.kind, 'the credential must never become the printed kind')
+      .not.toContain(shapedToken);
+  });
+
+  it('redacts BEFORE truncating, so no prefix of the token survives', async () => {
+    // Slicing first cut a token across the 2000-character boundary and left
+    // its prefix behind. A shorter secret is still a secret.
+    const long = `${'x'.repeat(1990)}${TOKEN} trailing`;
+    const f = spy(400, { kind: 'validation_failed', error: long });
+    const result = await client(f.impl).status('lpr_1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.message).not.toContain(TOKEN.slice(0, 12));
+  });
+
+  it('a LIST where an object was expected is refused, not passed through', async () => {
+    // `typeof [] === 'object'`, so `{"data":[]}` slipped past the guard and
+    // `executeLoopHistory` threw inside a promise the CLI does not catch.
+    const f = spy(200, { data: [] });
+    const result = await client(f.impl).history('lpe_1');
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.kind).toBe('invalid_response');
+  });
+
   it('a kind that is not a vocabulary word is not relayed onward', async () => {
     // The kind is a word the CLI branches on, not free text. A kilobyte of
     // prose in that slot is a malformed response, not something to pass along.
