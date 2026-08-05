@@ -4,7 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { createElement } from 'react';
 
 import { RelayStage } from './RelayStage';
-import { RELAY_STAGE_LAYERS, type RelayStageActor } from './stage-layout';
+import { RELAY_STAGE_LAYERS, type RelayStageActor } from '../../shared/relay-stage-layout';
 
 /**
  * THE STAGE, RENDERED.

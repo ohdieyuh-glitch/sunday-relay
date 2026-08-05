@@ -1,5 +1,5 @@
 import './relay-stage-backdrop.css';
-import { projectBackdropChoices, type RelayBackdropId } from './stage-backdrop';
+import { projectBackdropChoices, type RelayBackdropId } from '../../shared/relay-stage-backdrop';
 
 /**
  * CHOOSING A SCENE.

@@ -9,7 +9,7 @@ import {
 import { paint } from './theme';
 import { safeText } from './safety';
 import { renderStageView } from './stage';
-import type { RelayStageActor } from '../../ui/relay-stage';
+import type { RelayStageActor } from '../../shared/relay-stage-layout';
 
 /**
  * Relay CLI product commands (Prompt 8.6) — the NON-INTERACTIVE command

@@ -1,5 +1,5 @@
 import './relay-stage-backdrop.css';
-import { resolveBackdrop, type RelayBackdropId } from './stage-backdrop';
+import { resolveBackdrop, type RelayBackdropId } from '../../shared/relay-stage-backdrop';
 
 /**
  * THE TWO SELECTABLE SCENES, DRAWN IN CSS AND SVG.

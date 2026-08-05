@@ -15,12 +15,12 @@ export {
   isKnownBackdrop,
   projectBackdropChoices,
   resolveBackdrop,
-} from './stage-backdrop';
+} from '../../shared/relay-stage-backdrop';
 export type {
   RelayBackdropChoice,
   RelayBackdropEntry,
   RelayBackdropId,
-} from './stage-backdrop';
+} from '../../shared/relay-stage-backdrop';
 export type { RelayStageProps } from './RelayStage';
 export {
   CLIPPING_LAYERS,
@@ -35,11 +35,11 @@ export {
   placeActor,
   stageCapacity,
   stageShapeFor,
-} from './stage-layout';
+} from '../../shared/relay-stage-layout';
 export type {
   RelayStageActor,
   RelayStageLayer,
   RelayStageLayout,
   RelayStagePlacement,
   RelayStageShape,
-} from './stage-layout';
+} from '../../shared/relay-stage-layout';

@@ -4,7 +4,7 @@ import {
   CLIPPING_LAYERS, FAR_SCALE, GROUND_HORIZON, RELAY_STAGE_LAYERS,
   RELAY_STAGE_NARROW, RELAY_STAGE_WIDE, layerClips, layoutStage, placeActor,
   stageCapacity, stageShapeFor, type RelayStageActor,
-} from './stage-layout';
+} from './relay-stage-layout';
 
 /**
  * THE STAGE'S LAYOUT, TESTED WITHOUT RENDERING ONE.

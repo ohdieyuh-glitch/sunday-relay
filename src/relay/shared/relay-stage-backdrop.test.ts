@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   RELAY_BACKDROPS, RELAY_BACKDROP_IDS, isKnownBackdrop, projectBackdropChoices,
   resolveBackdrop,
-} from './stage-backdrop';
+} from './relay-stage-backdrop';
 
 /**
  * THE BACKDROP CATALOG.
@@ -77,7 +77,7 @@ describe('a picker can be honest about what reduced motion changes', () => {
 });
 
 describe('no scene reaches the network', () => {
-  const read = (name: string) => readFileSync(join(__dirname, name), 'utf8');
+  const read = (name: string) => readFileSync(join(__dirname, '..', 'ui', 'relay-stage', name), 'utf8');
 
   it('the backdrop stylesheet loads no external asset', () => {
     // An image URL is a request, a licence question, and a thing that can 404

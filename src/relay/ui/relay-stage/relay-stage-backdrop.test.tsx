@@ -5,7 +5,7 @@ import { createElement } from 'react';
 
 import { RelayStage } from './RelayStage';
 import { RelayStageBackdrop } from './RelayStageBackdrop';
-import type { RelayStageActor } from './stage-layout';
+import type { RelayStageActor } from '../../shared/relay-stage-layout';
 
 /**
  * THE TWO SCENES, RENDERED.

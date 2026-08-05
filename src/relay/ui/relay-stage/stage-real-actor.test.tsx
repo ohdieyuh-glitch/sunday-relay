@@ -5,7 +5,7 @@ import { createElement } from 'react';
 
 import { RelayStage } from './RelayStage';
 import { RelayWorkspaceDog } from '../project-workspace/RelayWorkspaceDog';
-import type { RelayStageActor } from './stage-layout';
+import type { RelayStageActor } from '../../shared/relay-stage-layout';
 
 /**
  * THE REAL ACTOR ON THE REAL STAGE.

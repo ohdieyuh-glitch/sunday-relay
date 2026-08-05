@@ -3,7 +3,7 @@ import './relay-stage.css';
 import {
   RELAY_STAGE_LAYERS, layerClips, layoutStage,
   type RelayStageActor, type RelayStageLayer, type RelayStageLayout,
-} from './stage-layout';
+} from '../../shared/relay-stage-layout';
 
 /**
  * Layers that are decoration WHEN EMPTY. Any of them may legally hold an actor,

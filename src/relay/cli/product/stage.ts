@@ -1,9 +1,11 @@
 import { paint } from './theme';
 import type { CliCaps } from './contracts';
 import {
-  RELAY_BACKDROPS, layoutStage, projectBackdropChoices, resolveBackdrop,
-  stageCapacity, stageShapeFor, type RelayStageActor,
-} from '../../ui/relay-stage';
+  layoutStage, stageCapacity, stageShapeFor, type RelayStageActor,
+} from '../../shared/relay-stage-layout';
+import {
+  RELAY_BACKDROPS, projectBackdropChoices, resolveBackdrop,
+} from '../../shared/relay-stage-backdrop';
 
 /**
  * THE RELAY STAGE, ON THE CLI.

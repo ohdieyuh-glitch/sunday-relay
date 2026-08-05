@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { renderStageView } from './stage';
-import { layoutStage, stageShapeFor, stageCapacity } from '../../ui/relay-stage';
+import { layoutStage, stageShapeFor, stageCapacity } from '../../shared/relay-stage-layout';
 import type { CliCaps } from './contracts';
-import type { RelayStageActor } from '../../ui/relay-stage';
+import type { RelayStageActor } from '../../shared/relay-stage-layout';
 
 /**
  * THE CLI'S STAGE SURFACE.
