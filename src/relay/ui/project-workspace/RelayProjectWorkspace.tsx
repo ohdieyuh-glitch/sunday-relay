@@ -14,7 +14,7 @@ import { RelayVerificationSummary } from './RelayVerificationSummary';
 import { RelayResearchStatus } from './RelayResearchStatus';
 import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
-import { RelayStage, type RelayStageActor } from '../relay-stage';
+import { RelayStage, RelayStageBackdrop, type RelayStageActor } from '../relay-stage';
 
 /**
  * WHO IS ON THE WORKSPACE STAGE TODAY.
@@ -143,6 +143,8 @@ export function RelayProjectWorkspace(
     reducedMotion = false,
     // A desktop-width default: the shape a workspace has when nobody measured.
     viewportWidthPx = 1440,
+    // Absent means no scene, which is a choice rather than a fallback.
+    stageBackdrop,
     onSendProjectMessage,
     onApproveDecision,
     onRejectDecision,
@@ -219,6 +221,9 @@ export function RelayProjectWorkspace(
           viewportWidthPx={viewportWidthPx}
           reducedMotion={reducedMotion}
           label="Relay stage"
+          backdrop={(
+            <RelayStageBackdrop backdrop={stageBackdrop} reducedMotion={reducedMotion} />
+          )}
           render={(id) => (id === 'relay-dog'
             ? <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} />
             : null)}

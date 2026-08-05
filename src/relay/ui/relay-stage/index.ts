@@ -7,6 +7,20 @@
  */
 
 export { RelayStage } from './RelayStage';
+export { RelayStageBackdrop } from './RelayStageBackdrop';
+export { RelayStageBackdropPicker } from './RelayStageBackdropPicker';
+export {
+  RELAY_BACKDROPS,
+  RELAY_BACKDROP_IDS,
+  isKnownBackdrop,
+  projectBackdropChoices,
+  resolveBackdrop,
+} from './stage-backdrop';
+export type {
+  RelayBackdropChoice,
+  RelayBackdropEntry,
+  RelayBackdropId,
+} from './stage-backdrop';
 export type { RelayStageProps } from './RelayStage';
 export {
   CLIPPING_LAYERS,

@@ -38,7 +38,10 @@
         "src/relay/ui/relay-dog-motion/dog-behavior.ts",
         "src/relay/ui/project-workspace/RelayWorkspaceDog.tsx",
         "src/relay/ui/relay-stage/RelayStage.tsx",
-        "src/relay/ui/relay-stage/stage-layout.ts"
+        "src/relay/ui/relay-stage/stage-layout.ts",
+        "src/relay/ui/relay-stage/RelayStageBackdrop.tsx",
+        "src/relay/ui/relay-stage/stage-backdrop.ts",
+        "src/relay/ui/relay-stage/RelayStageBackdropPicker.tsx"
       ],
       "cliEntryPoints": [
         "src/relay/cli/product/dog.ts"
@@ -47,7 +50,10 @@
         "src/relay/ui/official-relay-dog/official-relay-dog.test.tsx",
         "src/relay/ui/relay-dog-motion/relay-dog-motion.test.tsx",
         "src/relay/ui/relay-stage/relay-stage.test.tsx",
-        "src/relay/ui/relay-stage/stage-layout.test.ts"
+        "src/relay/ui/relay-stage/stage-layout.test.ts",
+        "src/relay/ui/relay-stage/relay-stage-backdrop.test.tsx",
+        "src/relay/ui/relay-stage/stage-backdrop.test.ts",
+        "src/relay/ui/relay-stage/relay-stage-picker.test.tsx"
       ],
       "cliTestReferences": [
         "src/relay/cli/product/official-relay-dog.test.ts"

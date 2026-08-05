@@ -1,8 +1,9 @@
 # The Relay Stage
 
-**Status: IMPLEMENTED. ONE ACTOR ON IT. NO BACKDROP YET.**
+**Status: IMPLEMENTED. ONE ACTOR ON IT. TWO SELECTABLE BACKDROPS. NONE
+SELECTED BY DEFAULT.**
 
-Those are three different claims and this file keeps them apart.
+Those are four different claims and this file keeps them apart.
 
 ---
 
@@ -110,13 +111,51 @@ rendering a run it never fetched.
 
 A second actor arrives by adding a row to `RELAY_WORKSPACE_CAST`.
 
+## The two scenes
+
+Both are drawn entirely in **CSS and inline SVG**. No image, no external asset,
+no font — a request that can 404 is a scene that sometimes is not there, and a
+test asserts the stylesheet contains no `url(`, no `@import` and no `http`.
+
+**Jungle.** Three canopy depths, undergrowth along the ground line so an actor
+stands *in* the scene rather than in front of a picture of one, and one drifting
+light shaft. Depth is carried by colour and height rather than blur, so the
+silhouette stays crisp beside a pixel-art actor.
+
+**Space Station.** The window is the point: a void with two star layers at
+different sizes, and a planet limb with a **terminator** — the lit edge and the
+shadow are one gradient, which is what makes a sphere read as a sphere instead
+of a flat disc. The interior ribs and deck sit *in front of* the void, not
+instead of it. That is what "visible outer space" means here: you are looking
+through a window, not at a painted wall.
+
+Both are `aria-hidden`, take no pointer events, and carry **no product
+meaning**. A user choosing the Space Station has not put Relay in space.
+
+### An unknown id resolves to NONE, never to a substitute
+
+A stored preference naming a scene this build does not have is a fact about an
+older build, not an instruction to show something else. Since `jungle` is first
+in the catalog, a naive fallback would land there — so `resolveBackdrop` returns
+`none` for anything it does not recognise, and a test asserts exactly that.
+
+### The picker says what is true
+
+A radio group rather than a dropdown, because "None" is a choice and a hidden
+option is one most people never learn they have. Each scene describes what it
+**is**. A scene that animates says so — and says that reduced motion will still
+it **only when that user's setting is actually on**. Without a handler the
+picker draws no input at all: a control that cannot act is not drawn, the same
+rule the run panel and the MCP settings surface hold.
+
 ## Not implemented
 
-The **Jungle** backdrop · the **Space Station** backdrop with visible outer
-space · backdrop selection · parallax content for the `far` layer · the Leopard,
-cubs, vehicle and transformation sprites · any cinematic sequence.
+Parallax content for the `far` layer · the Leopard, cubs, vehicle and
+transformation sprites · any cinematic sequence · persistence of the backdrop
+choice (the picker reports a selection; who stores it is the host's business,
+and no shipped host stores it yet).
 
-Backgrounds come after the stage on purpose. A scene painted into a 90px clipped
+Backgrounds came after the stage on purpose. A scene painted into a 90px clipped
 band would have to be redrawn the moment the band went away.
 
 ## Parity

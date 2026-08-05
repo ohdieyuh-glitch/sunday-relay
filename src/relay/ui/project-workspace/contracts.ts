@@ -290,6 +290,16 @@ export interface RelayProjectWorkspaceProps {
   terminalFullScreen?: boolean;
   reducedMotion?: boolean;
   /**
+   * Which stage backdrop the user selected.
+   *
+   * A string rather than the union, deliberately: it arrives from stored
+   * preference and may name a scene THIS BUILD DOES NOT HAVE. `resolveBackdrop`
+   * turns an unknown id into `none` rather than into a substitute, because a
+   * preference from an older build is a fact about that build and not an
+   * instruction to show something else.
+   */
+  stageBackdrop?: string;
+  /**
    * The viewport width the HOST observed, for the Relay Stage.
    *
    * Passed in rather than measured, because the stage is a pure projection of
