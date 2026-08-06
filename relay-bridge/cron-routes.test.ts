@@ -1,0 +1,321 @@
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { handleCronRoute, type CronRouteRequest } from './cron-routes';
+import { createCronTickService, type CronTickService } from './cron-service';
+import { loopDigest, readLoopRun } from '../src/relay/mission/loop/runtime';
+
+/**
+ * THE CRON TICK ENDPOINT, through the real handler and a real state root.
+ *
+ * What is tested is the endpoint's refusals and its ONE positive claim: a
+ * tick creates durable Loop run RECORDS and dispatches nothing. Every gate
+ * is asserted to have touched no disk, because "the flag was off" and "the
+ * flag was off but we claimed three occurrences first" are the same status
+ * code and completely different facts.
+ */
+
+const TOKEN = 'operator-token-for-cron-tests';
+const T0 = '2026-08-06T12:00:30.000Z';
+const ENABLED = {
+  RELAY_BRIDGE_API_TOKEN: TOKEN,
+  RELAY_LOOP_ENGINE_ENABLED: '1',
+  RELAY_LOOP_CRON_ENABLED: '1',
+} as NodeJS.ProcessEnv;
+
+let root: string;
+let service: CronTickService;
+
+beforeEach(() => {
+  root = mkdtempSync(join(tmpdir(), 'relay-cron-route-'));
+  service = createCronTickService({ root, now: () => T0 });
+});
+afterEach(() => {
+  rmSync(root, { recursive: true, force: true });
+});
+
+const BODY = {
+  authorized: true,
+  scheduleId: 'sched_triage',
+  contractVersion: 3,
+  cronExpression: '0 * * * *',
+  timeZone: 'UTC',
+  afterExclusive: '2026-08-06T09:00:00.000Z',
+  maxOccurrences: 20,
+  missedPolicy: 'run_all_with_limit',
+  maxCatchUpRuns: 10,
+  workClass: 'read_only',
+  overlapPolicy: 'parallel_with_limit',
+  parallelLimit: 5,
+  binding: {
+    projectId: 'prj_cron',
+    workspaceId: null,
+    loopId: 'lpe_cron',
+    contractRef: 'contract-ref',
+    contractBindingDigest: 'digest-1',
+  },
+};
+
+function call(
+  body: unknown = BODY,
+  overrides: Partial<CronRouteRequest> = {},
+  ticks: CronTickService | null = service,
+) {
+  const request: CronRouteRequest = {
+    method: 'POST',
+    path: '/cron/tick',
+    authorization: `Bearer ${TOKEN}`,
+    body,
+    env: ENABLED,
+    now: T0,
+    authorize: () => ({ kind: 'operator', principal: 'operator' }),
+    ...overrides,
+  };
+  return handleCronRoute(request, ticks);
+}
+
+const occurrenceDir = (): string => join(root, 'cron-occurrences');
+const errorOf = (result: Awaited<ReturnType<typeof call>>) =>
+  (result?.body as { error: { kind: string; message: string } }).error;
+const dataOf = (result: Awaited<ReturnType<typeof call>>) =>
+  (result?.body as { data: Record<string, unknown> }).data;
+
+describe('a tick creates records and dispatches nothing', () => {
+  it('creates one durable run per due occurrence, all marked schedule-created', async () => {
+    const result = await call();
+    expect(result?.status).toBe(200);
+    const data = dataOf(result);
+    // 10:00, 11:00 and 12:00 are due against a 09:00 exclusive start.
+    expect(data.runsCreated).toBe(3);
+    expect(data.duplicates).toBe(0);
+    expect(data.claimedWithoutRun).toBe(0);
+    // A LITERAL claim about the code path, not a count of something observed.
+    expect(data.dispatched).toBe(0);
+    expect(String(data.note)).toContain('NOT advanced');
+
+    const occurrences = data.occurrences as { outcome: string; journalRecorded?: boolean }[];
+    expect(occurrences.map((o) => o.outcome)).toEqual(['run_created', 'run_created', 'run_created']);
+    expect(occurrences.every((o) => o.journalRecorded === true)).toBe(true);
+
+    // The runs exist on disk and say WHERE they came from.
+    const runIds = service.store.runIdsForLoop('lpe_cron') ?? [];
+    expect(runIds).toHaveLength(3);
+    for (const runId of runIds) {
+      const loaded = readLoopRun(service.store, runId, loopDigest);
+      expect(loaded?.run?.creationSource).toBe('schedule');
+    }
+  });
+
+  it('the window END is the SERVER clock, never the body', async () => {
+    // A body that asks for a window reaching into next week gets the
+    // server's own instant instead — so the tick's future_window refusal is
+    // structurally unreachable from this route rather than merely unlikely.
+    const result = await call({ ...BODY, untilInclusive: '2026-08-20T00:00:00.000Z' });
+    expect(result?.status).toBe(200);
+    const window = dataOf(result).window as { untilInclusive: string };
+    expect(window.untilInclusive).toBe(T0);
+    expect(dataOf(result).evaluatedAt).toBe(T0);
+  });
+
+  it('a SECOND identical tick creates nothing — every occurrence already handled', async () => {
+    await call();
+    const again = await call();
+    expect(again?.status).toBe(200);
+    const data = dataOf(again);
+    expect(data.runsCreated).toBe(0);
+    expect((data.occurrences as { outcome: string }[]).every((o) => o.outcome === 'already_handled'))
+      .toBe(true);
+    expect(service.store.runIdsForLoop('lpe_cron')).toHaveLength(3);
+  });
+
+  it('within one tick, a created run counts against the limit for the next occurrence', async () => {
+    const result = await call({ ...BODY, parallelLimit: 1 });
+    expect(result?.status).toBe(200);
+    expect(dataOf(result).runsCreated).toBe(1);
+    expect((dataOf(result).occurrences as { outcome: string }[]).map((o) => o.outcome))
+      .toEqual(['run_created', 'skipped_by_capacity_unclaimed', 'skipped_by_capacity_unclaimed']);
+    expect(service.activeRunsFor('lpe_cron')).toBe(1);
+  });
+
+  it('the overlap count is DERIVED from the journal — a caller cannot claim its way past a limit', async () => {
+    // The first tick leaves three ACTIVE runs on this Loop. A second tick for
+    // a DIFFERENT schedule (so nothing is already_handled) then hits the
+    // parallel limit no matter what the body says.
+    //
+    // Mutation check: this is the test that kills `activeRuns` being read
+    // from the request. An earlier version passed `activeRuns: 0` into a
+    // single tick and survived that mutation, because the tick's own
+    // within-pass evolution produced the identical outcome — a test passing
+    // for a reason other than the property it named.
+    await call();
+    expect(service.activeRunsFor('lpe_cron')).toBe(3);
+
+    const second = await call({
+      ...BODY, scheduleId: 'sched_other', parallelLimit: 1, activeRuns: 0,
+    });
+    expect(second?.status).toBe(200);
+    expect(dataOf(second).runsCreated).toBe(0);
+    expect((dataOf(second).occurrences as { outcome: string }[])
+      .every((o) => o.outcome === 'skipped_by_capacity_unclaimed')).toBe(true);
+  });
+});
+
+describe('every gate refuses before touching disk', () => {
+  it('an unauthenticated call is 401 and evaluates nothing', async () => {
+    const result = await call(BODY, { authorize: () => ({ kind: 'none', principal: 'none' }) });
+    expect(result?.status).toBe(401);
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('a paired BROWSER is 403 — cron is operator-only', async () => {
+    const result = await call(BODY, { authorize: () => ({ kind: 'browser', principal: 'browser' }) });
+    expect(result?.status).toBe(403);
+    expect(errorOf(result).kind).toBe('authorization_required');
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('the Loop engine flag off is 403, before any body field is read', async () => {
+    const result = await call(BODY, { env: { RELAY_BRIDGE_API_TOKEN: TOKEN } });
+    expect(errorOf(result).kind).toBe('loop_engine_disabled');
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('the CRON flag off is 403, and claims nothing — the gate is before the disk', async () => {
+    // Mutation check: moving the cron gate below the evaluation would leave
+    // an occurrence directory behind on a refused tick.
+    const result = await call(BODY, {
+      env: { RELAY_BRIDGE_API_TOKEN: TOKEN, RELAY_LOOP_ENGINE_ENABLED: '1' },
+    });
+    expect(result?.status).toBe(403);
+    expect(errorOf(result).kind).toBe('cron_disabled');
+    expect(errorOf(result).message).toContain('claimed or created');
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('a flag set to a plausible-looking value is still off', async () => {
+    for (const value of ['true', 'yes', 'TRUE', '', ' 1']) {
+      const result = await call(BODY, {
+        env: { RELAY_BRIDGE_API_TOKEN: TOKEN, RELAY_LOOP_ENGINE_ENABLED: '1', RELAY_LOOP_CRON_ENABLED: value },
+      });
+      expect(errorOf(result).kind, value).toBe('cron_disabled');
+    }
+  });
+
+  it('no mounted state root is 503, never a claim it cannot mark durably', async () => {
+    const result = await call(BODY, {}, null);
+    expect(result?.status).toBe(503);
+    expect(errorOf(result).kind).toBe('cron_not_ready');
+  });
+
+  it('reaching the route is not consent — authorized must be explicitly true', async () => {
+    for (const authorized of [undefined, false, 'true', 1]) {
+      const result = await call({ ...BODY, authorized });
+      expect(result?.status, String(authorized)).toBe(403);
+      expect(errorOf(result).kind).toBe('authorization_required');
+    }
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('a GET, or any other cron path, is refused as an unknown operation', async () => {
+    expect(errorOf(await call(BODY, { method: 'GET' })).message).toContain('Unknown Cron operation');
+    expect(errorOf(await call(BODY, { path: '/cron/schedules' })).message)
+      .toContain('Unknown Cron operation');
+  });
+
+  it('a path outside the family is not this handler’s business', async () => {
+    expect(await call(BODY, { path: '/loop/status/x' })).toBeNull();
+  });
+});
+
+describe('what the endpoint refuses to promise', () => {
+  it('a QUEUE policy is refused by name — no queue exists to enqueue into', async () => {
+    for (const overlapPolicy of ['queue_one', 'queue_all']) {
+      const result = await call({ ...BODY, overlapPolicy, queueLimit: 3 });
+      expect(result?.status, overlapPolicy).toBe(422);
+      expect(errorOf(result).kind).toBe('no_queue_exists');
+      expect(errorOf(result).message).toContain('promise an enqueue nothing performs');
+    }
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('an unknown overlap policy is refused the same way, never silently dispatched', async () => {
+    const result = await call({ ...BODY, overlapPolicy: 'improvise' });
+    expect(result?.status).toBe(422);
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('a bad cron expression is refused with the FIELD and TOKEN named', async () => {
+    const result = await call({ ...BODY, cronExpression: '99 * * * *' });
+    expect(result?.status).toBe(422);
+    expect(errorOf(result).message).toContain('is not a minute value');
+  });
+
+  it('a bare UTC offset is not an IANA zone — Intl would have accepted it', async () => {
+    // The rule is CRON_LOOPS.md's, and it needs its own check: Intl accepts
+    // "+05:30" happily, so without this the doc rule was unenforced. A fixed
+    // offset cannot express daylight saving.
+    for (const timeZone of ['+05:30', '-08:00', 'GMT+2']) {
+      const result = await call({ ...BODY, timeZone });
+      expect(result?.status, timeZone).toBe(422);
+      expect(errorOf(result).message).toContain('not an IANA timezone name');
+    }
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('a zone the host cannot answer for is refused by the evaluator', async () => {
+    const result = await call({ ...BODY, timeZone: 'Mars/Olympus_Mons' });
+    expect(result?.status).toBe(422);
+    expect(errorOf(result).kind).toBe('unknown_timezone');
+  });
+
+  it('missing fields are listed by name, and nothing is created', async () => {
+    const result = await call({ authorized: true, scheduleId: 'sched_x' });
+    expect(result?.status).toBe(422);
+    expect(errorOf(result).message).toContain('cronExpression');
+    expect(errorOf(result).message).toContain('timeZone');
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('a missing BINDING field is named as binding.<field>', async () => {
+    const result = await call({ ...BODY, binding: { projectId: 'prj_cron' } });
+    expect(result?.status).toBe(422);
+    expect(errorOf(result).message).toContain('binding.loopId');
+  });
+
+  it('a window wider than the evaluation bound is refused, not scanned', async () => {
+    const result = await call({ ...BODY, afterExclusive: '2026-07-01T00:00:00.000Z' });
+    expect(result?.status).toBe(422);
+    expect(errorOf(result).kind).toBe('window_too_large');
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('run_latest over a truncated window is refused rather than quietly broken', async () => {
+    const result = await call({ ...BODY, missedPolicy: 'run_latest', maxOccurrences: 2 });
+    expect(result?.status).toBe(422);
+    expect(errorOf(result).kind).toBe('truncated_window_under_run_latest');
+  });
+
+  it('high-risk work awaits confirmation — a tick never auto-catches it up', async () => {
+    const result = await call({ ...BODY, workClass: 'financial' });
+    expect(result?.status).toBe(200);
+    expect(dataOf(result).runsCreated).toBe(0);
+    expect((dataOf(result).occurrences as { outcome: string }[])
+      .every((o) => o.outcome === 'awaiting_confirmation')).toBe(true);
+    // Nothing was claimed either: a held occurrence is not a handled one.
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+});
+
+describe('the tick leaves the state root the way it says it does', () => {
+  it('claims exactly the occurrences it reports, and no others', async () => {
+    await call();
+    const claimed = readdirSync(occurrenceDir()).sort();
+    expect(claimed).toHaveLength(3);
+    for (const dir of claimed) {
+      expect(readdirSync(join(occurrenceDir(), dir)).sort())
+        .toEqual(['claimed.json', 'triggers.ndjson']);
+    }
+  });
+});

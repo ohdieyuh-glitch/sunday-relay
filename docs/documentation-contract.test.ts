@@ -334,8 +334,9 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     // The pinned phrase must keep naming what is MISSING, and review caught
     // it narrowing to "bridge wiring" while there was still no scheduler and
     // no timer at all — the softening this test's own header forbids.
-    expect(statusLine(cron)).toContain('NO SCHEDULER, NO TIMER, NO DISPATCH');
-    expect(statusLine(cron)).toContain('CALLS THE TICK');
+    expect(statusLine(cron)).toContain('NO SCHEDULER');
+    expect(statusLine(cron)).toContain('NO TIMER');
+    expect(statusLine(cron)).toContain('NEVER DISPATCHED');
   });
 
   it('the Unchain record carries the locked founder decisions', () => {

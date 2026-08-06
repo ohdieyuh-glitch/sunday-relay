@@ -32,6 +32,8 @@ import {
 } from './hosted-coding-agent/hosted-routes';
 import { decodeSegment } from './path-segment';
 import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
+import { handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
+import { createCronTickService } from './cron-service';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute,
@@ -129,6 +131,15 @@ export function createBridgeServer(
    * flag, which defaults OFF.
    */
   loopRuns: LoopRunPort | null = null,
+  /**
+   * The Cron tick service. Absent on a bridge with no mounted state root —
+   * the route then answers `cron_not_ready` rather than claiming an
+   * occurrence it cannot durably mark. Independent of `loopRuns` ON PURPOSE:
+   * a tick needs no agent, so it is wireable while the Loop run engine is
+   * still absent, and nesting it under the Loop routes would inherit a
+   * readiness failure that is not its own.
+   */
+  cronTicks: CronTickPort | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -349,6 +360,41 @@ export function createBridgeServer(
           }
         }
 
+        if (isCronRoute(path.replace('/relay-api', ''))) {
+          const cronResult = await handleCronRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string'
+              ? req.headers.authorization : undefined,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            env: process.env,
+            // THE SERVER'S CLOCK, and the only one the tick ever sees.
+            now: new Date().toISOString(),
+            authorize: () => {
+              const decision = authorizeReviewerCall({
+                method,
+                path: path.replace('/relay-api', ''),
+                authorization: typeof req.headers.authorization === 'string'
+                  ? req.headers.authorization : undefined,
+                origin,
+                env: process.env,
+                now: Date.now(),
+                store: browserSessions,
+              });
+              return decision.kind === 'rejected'
+                ? { kind: 'none' as const, principal: 'none' }
+                : {
+                    kind: decision.kind,
+                    principal: decision.kind === 'operator' ? 'operator' : 'browser',
+                  };
+            },
+          }, cronTicks);
+          if (cronResult !== null) {
+            send(res, cronResult.status, cronResult.body, cors);
+            return;
+          }
+        }
+
         /**
          * THE MISSION FAMILY IS AUTHENTICATED TOO.
          *
@@ -486,7 +532,19 @@ export function main(): void {
     baseEnv: process.env,
     architectEnv: process.env,
   });
-  const server = createBridgeServer(config, registry);
+  /**
+   * NO MOUNTED STATE ROOT MEANS NO TICK. The claim marker is what makes a
+   * cron occurrence at-most-once, and it has to live on a durable volume —
+   * so an unmounted bridge answers `cron_not_ready` rather than claiming
+   * occurrences it would forget.
+   */
+  const cronTicks = config.stateRoot === null
+    ? null
+    : createCronTickService({
+      root: config.stateRoot,
+      now: () => new Date().toISOString(),
+    });
+  const server = createBridgeServer(config, registry, null, null, null, cronTicks);
 
   /**
    * GRACEFUL SHUTDOWN. A managed host sends SIGTERM before replacing an

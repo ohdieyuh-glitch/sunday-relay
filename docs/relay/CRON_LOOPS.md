@@ -1,8 +1,9 @@
 # Cron Loops — architecture decision
 
 **Status: GRAMMAR + PURE EVALUATOR + CLAIM/OVERLAP/MISSED-RUN DECISIONS
-+ FILE-BACKED CLAIM ADAPTER + THE TICK PASS IMPLEMENTED. NO SCHEDULER, NO TIMER, NO DISPATCH: NOTHING
-CALLS THE TICK.**
++ FILE-BACKED CLAIM ADAPTER + THE TICK PASS AND AN AUTHENTICATED TICK ENDPOINT IMPLEMENTED. NO SCHEDULER
+AND NO TIMER: NOTHING CALLS THE TICK ON A SCHEDULE, AND A SCHEDULED RUN IS
+CREATED BUT NEVER DISPATCHED.**
 
 `/loop schedule`, `/loop cron`, `/loop schedules` parse today and produce typed
 commands. `src/relay/mission/loop/cron/` now holds the schedule stage this
@@ -27,11 +28,39 @@ it): `held` retries, `blocked` carries the remove-it-by-hand problem,
 (`runCronTick`): dispatch claims BEFORE creating, an overlap skip claims
 (handled-without-a-run), queue/replace/refused do not claim, overlap state
 evolves within the tick, and every due occurrence lands in the report with
-its outcome. Nothing yet CALLS it: `runCronTick` has no caller outside its own
-test — no timer, no authenticated tick endpoint, no scheduler process, and no
-bridge run-creation port binding `confirmLoopRun`. A pure pass that nothing
-invokes schedules nothing, and the status line says so rather than narrowing
-toward "almost done". The
+its outcome. `relay-bridge/cron-service.ts` binds it to the real ports (the Loop run
+store, the file-backed claim adapter, the Intl timezone port, and
+`confirmLoopRun` with `creationSource: 'schedule'`), and
+`relay-bridge/cron-routes.ts` exposes `POST /relay-api/cron/tick` —
+operator-only, flag-gated, explicit `authorized: true`, server-clocked.
+
+WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
+
+- **Nothing calls it on a schedule.** There is no timer and no scheduler
+  process. `GET /loop/capability` reports `cronScheduled: false` so no
+  surface can infer one from the endpoint's existence.
+- **A scheduled run is created, never advanced.** Three independent reasons:
+  `createRun` is synchronous and cannot await the engine; the run carries
+  `creationSource: 'schedule'`, which the Loop service turns into
+  `trigger: 'cron'`; and `preflightLoopDispatch` refuses a cron trigger. The
+  response says `dispatched: 0` as a claim about the code path.
+- **There is no schedule store.** Every schedule field arrives in the request
+  body. No `RelayLoopSchedule` exists anywhere; nothing lists, pauses or
+  versions a schedule. This ships a manual tick over a caller-declared
+  schedule, not a Cron Loop product.
+- **Queue policies are refused.** No occurrence queue exists, so `queue_one`
+  (this document's documented default) and `queue_all` answer 422
+  `no_queue_exists` rather than promising an enqueue nothing performs.
+
+**A NAMED DEVIATION from "server authority" above:** `afterExclusive` — the
+window's START — is client-supplied, and this document says a client-supplied
+time field must never influence due-ness. What bounds it today: the window's
+END and the evaluation instant are server-clocked; the eight-day evaluation
+limit refuses anything wider; the missed-run policy caps catch-up; the route
+is operator-only and needs explicit authorization; and the durable claim
+marker makes a replay free rather than a double dispatch. The durable
+watermark that would close the deviation belongs to the schedule store that
+does not exist yet. The
 `loop_cron` feature flag is off and depends on `loop_scheduler`, which
 depends on `loop_engine`.
 
@@ -241,8 +270,11 @@ hardcodes automatic Unchain consumption**.
 
 ## Not implemented
 
-The in-bridge scheduler and its tick endpoint · run creation from a trigger ·
-period budget caps · recurring approvals · circuit breakers · schedule
+The in-bridge scheduler and its timer · execution of a trigger-created run
+(the record is created; nothing advances it) · the schedule store, and
+therefore schedule listing, pausing and versioning · the occurrence queue,
+and therefore the `queue_one` and `queue_all` overlap policies · period
+budget caps · recurring approvals · circuit breakers · schedule
 versioning · conditional Cron Loops · the Cron UI.
 
 Cron expression semantics, timezone handling, DST resolution, the occurrence
