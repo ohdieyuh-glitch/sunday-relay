@@ -223,6 +223,130 @@ describe('who is not staffed, and why it is said', () => {
   });
 });
 
+describe('refusals happen BEFORE anything durable exists', () => {
+  it('a spend cap BigInt would throw on refuses the WHOLE decision with nothing created', () => {
+    // Mutation check: removing the up-front budget validation makes the
+    // report THROW after three durable creations — a report that dies
+    // mid-way, after spend was authorized, reporting nothing.
+    for (const maxSpendMicros of ['abc', '-100', '1.5', '', ' 100']) {
+      const { created, deps } = harness();
+      const bad = { ...BUDGET, maxSpendMicros };
+      const report = confirmLoopRunsForTarget(deps, {
+        target: target(),
+        base: base({ budget: bad }),
+        runIdFor,
+      });
+      expect(created, maxSpendMicros).toEqual([]);
+      expect(report.staffed).toEqual([]);
+      expect(report.failed.map((f) => f.role))
+        .toEqual(['prompt_architect', 'coding_agent', 'reviewer']);
+      for (const f of report.failed) {
+        expect(f.kind, maxSpendMicros).toBe('invalid_budget');
+        expect(f.status).toBe(422);
+        expect(f.problem).toContain('Nothing was created');
+      }
+      expect(report.runsAuthorized).toBe(0);
+      expect(report.authorizedSpendMicrosTotal).toBe('0');
+    }
+  });
+
+  it('a base request id carrying the reserved "#" is refused — a derived id must never be re-derivable', () => {
+    // 'req_1#coding_agent' as a BASE id would derive
+    // 'req_1#coding_agent#reviewer' and collide the decoder's contract.
+    const { created, deps } = harness();
+    const report = confirmLoopRunsForTarget(deps, {
+      target: target(),
+      base: base({ confirmationRequestId: 'req_1#coding_agent' }),
+      runIdFor,
+    });
+    expect(created).toEqual([]);
+    expect(report.staffed).toEqual([]);
+    expect(report.failed.every((f) => f.kind === 'reserved_request_id')).toBe(true);
+    expect(report.failed).toHaveLength(3);
+  });
+
+  it('a THROWING store backing is that role’s named failure, not a lost report', () => {
+    // The leak is in appendEvent: confirmLoopRun catches a throwing create
+    // (its create-race path answers 'conflict'), but the journal append is
+    // called BARE — an IO error there escaped the whole fan-out. Mutation
+    // check: removing the per-role catch loses the report — including the
+    // role already staffed — to the backing's exception.
+    const inner = createInMemoryLoopBacking([]);
+    const created: string[] = [];
+    const backing: typeof inner = {
+      ...inner,
+      create: (record) => {
+        inner.create(record);
+        created.push(record.runId);
+      },
+      appendEvent: (runId, event) => {
+        // The SECOND role's run: its create succeeded, its journal is broken.
+        if (runId === created[1]) throw new Error('disk full');
+        inner.appendEvent(runId, event);
+      },
+    };
+    let clock = 0;
+    const deps: LoopOperationDeps = {
+      backing,
+      digest: loopDigest,
+      now: () => new Date(Date.parse(AT) + (clock += 1000)).toISOString(),
+    };
+    const report = confirmLoopRunsForTarget(deps, { target: target(), base: base(), runIdFor });
+    expect(report.staffed.map((s) => s.role)).toEqual(['prompt_architect', 'reviewer']);
+    expect(report.failed).toHaveLength(1);
+    expect(report.failed[0]).toMatchObject({
+      role: 'coding_agent',
+      status: 500,
+      kind: 'store_failure',
+    });
+    expect(report.failed[0]?.problem).toContain('disk full');
+    expect(report.runsAuthorized).toBe(2);
+  });
+
+  it('a resolver that repeated a role does not double-count an authorization', () => {
+    const { created, deps } = harness();
+    const report = confirmLoopRunsForTarget(deps, {
+      target: target({
+        requestedRoles: ['coding_agent'],
+        resolvedRoles: ['coding_agent', 'coding_agent'],
+      }),
+      base: base(),
+      runIdFor,
+    });
+    expect(created).toHaveLength(1);
+    expect(report.staffed.map((s) => s.role)).toEqual(['coding_agent']);
+    expect(report.runsAuthorized).toBe(1);
+    expect(report.authorizedSpendMicrosTotal).toBe('2500000');
+  });
+
+  it('a duplicate run carrying a stored cap this validation never saw makes the total UNKNOWN, not a crash', () => {
+    const { deps } = harness();
+    // A run created at the raw layer with a cap the fan-out would refuse.
+    const raw = confirmLoopRun(deps, {
+      ...base({
+        confirmationRequestId: roleConfirmationRequestId('req_1', 'coding_agent'),
+        budget: { ...BUDGET, maxSpendMicros: 'not-micros' },
+      }),
+      runId: runIdFor(loopConfirmationKey({
+        principal: 'founder',
+        workspaceId: 'wsp_test',
+        projectId: 'prj_test',
+        contractBindingDigest: 'digest-1',
+        confirmationRequestId: roleConfirmationRequestId('req_1', 'coding_agent'),
+      })),
+    });
+    expect(raw.ok).toBe(true);
+
+    const report = confirmLoopRunsForTarget(deps, {
+      target: target({ resolvedRoles: ['coding_agent'] }),
+      base: base(),
+      runIdFor,
+    });
+    expect(report.staffed[0]?.duplicate).toBe(true);
+    expect(report.authorizedSpendMicrosTotal).toBeNull();
+  });
+});
+
 describe('which role a run was created for is a contract, not an accident', () => {
   it('recovers each staffed run’s role from its durable key', () => {
     const { deps } = harness();

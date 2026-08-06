@@ -85,8 +85,10 @@ export interface TargetConfirmationReport {
   readonly runsAuthorized: number;
   /**
    * The SUM of the staffed runs' spend caps, in integer micros — or `null`
-   * when any staffed run's cap is unbounded. Unknown is not zero, and an
-   * unbounded team total must not render as a bounded number.
+   * when the total cannot truthfully be stated: any cap unbounded, or a
+   * duplicate run carrying a stored cap that is not canonical micros. Unknown
+   * is not zero, and a team total that cannot be computed must not render as
+   * a bounded-looking number.
    */
   readonly authorizedSpendMicrosTotal: string | null;
 }
@@ -109,7 +111,11 @@ export function roleConfirmationRequestId(
  * role arrives only with `loop.agent_assigned`, and nothing here prefills it.
  * `null` means the key names no known role — a single-role run confirmed
  * before this layer existed, or a tampered suffix — and unknown is not
- * guessed at.
+ * guessed at. A non-null answer means the key ends in the RESERVED `#<role>`
+ * form: either this layer wrote it, or a caller minted an id in the reserved
+ * format at the raw `confirmLoopRun` layer — that caller opted into this
+ * contract and is taken at its word, which is why the reservation is stated
+ * on `LoopConfirmationInput` rather than implied here.
  */
 export function staffedRoleOf(run: RelayLoopRun): RelayAgentRole | null {
   const key = run.idempotencyKey;
@@ -120,21 +126,45 @@ export function staffedRoleOf(run: RelayLoopRun): RelayAgentRole | null {
   return role ?? null;
 }
 
+/** A canonical non-negative integer-micros string. `BigInt('abc')` THROWS, so
+ *  anything else must be refused before a run exists, not summed after. */
+const CANONICAL_MICROS = /^(0|[1-9]\d*)$/;
+
 /**
  * Staff every resolved role of one confirmed target.
  *
- * Deterministic: roles are processed in resolution order, ids derive from
- * content, and the same input converges to the same report. Total: a failing
- * role is reported, not thrown, and does not stop the roles after it.
+ * Deterministic: roles are processed in resolution order (deduplicated — a
+ * resolver that repeated a role must not double-count an authorization), ids
+ * derive from content, and the same input converges to the same report.
+ *
+ * Total, in the order that makes totality TRUE: everything that could refuse
+ * the whole decision — a spend cap `BigInt` would throw on, a negative cap, a
+ * request id using the reserved `#` — is checked BEFORE any run is created,
+ * because a refusal after durable creation is a report that dies mid-way; and
+ * each role's confirmation is caught, so a throwing store backing is that
+ * role's named failure, not a lost report.
  */
 export function confirmLoopRunsForTarget(
   deps: LoopOperationDeps,
   input: TargetConfirmationInput,
 ): TargetConfirmationReport {
+  const roles = [...new Set(input.target.resolvedRoles)];
+
+  const refusal = refuseBase(input.base);
+  if (refusal !== null) {
+    return {
+      staffed: [],
+      failed: roles.map((role) => ({ role, ...refusal })),
+      unstaffed: input.target.unavailableRoles,
+      runsAuthorized: 0,
+      authorizedSpendMicrosTotal: '0',
+    };
+  }
+
   const staffed: StaffedRole[] = [];
   const failed: FailedRole[] = [];
 
-  for (const role of input.target.resolvedRoles) {
+  for (const role of roles) {
     const confirmationRequestId = roleConfirmationRequestId(
       input.base.confirmationRequestId,
       role,
@@ -146,11 +176,25 @@ export function confirmLoopRunsForTarget(
       contractBindingDigest: input.base.contractBindingDigest,
       confirmationRequestId,
     });
-    const outcome = confirmLoopRun(deps, {
-      ...input.base,
-      confirmationRequestId,
-      runId: input.runIdFor(key),
-    });
+    let outcome: ReturnType<typeof confirmLoopRun>;
+    try {
+      outcome = confirmLoopRun(deps, {
+        ...input.base,
+        confirmationRequestId,
+        runId: input.runIdFor(key),
+      });
+    } catch (error) {
+      // A durable backing that throws mid-confirmation is THIS role's named
+      // failure. Letting it escape would lose the report for roles already
+      // staffed — spend authorized with nothing anywhere saying so.
+      failed.push({
+        role,
+        status: 500,
+        kind: 'store_failure',
+        problem: (error instanceof Error ? error.message : String(error)).slice(0, 200),
+      });
+      continue;
+    }
     if (outcome.ok) {
       staffed.push({ role, run: outcome.run, duplicate: outcome.duplicate });
     } else {
@@ -169,12 +213,41 @@ export function confirmLoopRunsForTarget(
   };
 }
 
-/** Integer-micros sum of spend caps; `null` the moment any cap is unbounded. */
+/** Why the WHOLE decision is refused before any run exists, or null. */
+function refuseBase(
+  base: TargetConfirmationBase,
+): Omit<FailedRole, 'role'> | null {
+  const cap = base.budget.maxSpendMicros;
+  if (cap !== null && !CANONICAL_MICROS.test(cap)) {
+    return {
+      status: 422,
+      kind: 'invalid_budget',
+      problem: `maxSpendMicros must be null or a canonical non-negative integer string; got ${JSON.stringify(cap)}. Nothing was created.`,
+    };
+  }
+  if (base.confirmationRequestId.includes('#')) {
+    return {
+      status: 422,
+      kind: 'reserved_request_id',
+      problem: 'The "#" character is reserved for role-scoped derivation; a request id carrying it could collide with a derived one. Nothing was created.',
+    };
+  }
+  return null;
+}
+
+/**
+ * Integer-micros sum of the staffed runs' spend caps, or `null` when the
+ * total cannot truthfully be stated: any cap unbounded, or a DUPLICATE run
+ * carrying a stored cap this validation never saw — `refuseBase` vets the
+ * base budget before creation, but a retry converges on runs whose budgets
+ * were stored earlier, possibly by the raw layer. A total that cannot be
+ * computed is answered as unknown, never thrown and never guessed.
+ */
 function totalSpendCap(staffed: readonly StaffedRole[]): string | null {
   let total = 0n;
   for (const { run } of staffed) {
     const cap = run.budget.maxSpendMicros;
-    if (cap === null) return null;
+    if (cap === null || !CANONICAL_MICROS.test(cap)) return null;
     total += BigInt(cap);
   }
   return total.toString();

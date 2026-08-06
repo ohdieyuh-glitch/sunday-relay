@@ -306,7 +306,14 @@ export interface LoopConfirmationInput {
   readonly contractVersion: number;
   /** The digest of the contract the user actually confirmed. */
   readonly contractBindingDigest: string;
-  /** The CLIENT's request identity. A retry reuses it; a new decision does not. */
+  /**
+   * The CLIENT's request identity. A retry reuses it; a new decision does not.
+   * The `#` character is RESERVED for role-scoped derivation by
+   * `confirmLoopRunsForTarget` (`<requestId>#<role>`): an id minted in that
+   * form here speaks that layer's contract — `staffedRoleOf` will read the
+   * suffix as the role this run was created for — and the fan-out itself
+   * refuses base ids carrying `#` so a derived id can never be re-derived.
+   */
   readonly confirmationRequestId: string;
   readonly creationSource: 'cli' | 'website' | 'api' | 'schedule';
   readonly budget: RelayLoopBudgetState;

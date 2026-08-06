@@ -365,8 +365,17 @@ multi-role target becomes ONE RUN PER RESOLVED ROLE, all under one Loop, via
   beside the successes, per role. Created runs are not rolled back: they are
   durable and idempotent, so the honest recovery is a retry that converges.
 - **N budgets are not one.** The budget is PER RUN; the report totals the
-  authorized spend caps in integer micros, or answers `null` the moment any
-  cap is unbounded.
+  authorized spend caps in integer micros, or answers `null` when the total
+  cannot truthfully be stated — any cap unbounded, or a duplicate run whose
+  stored cap is not canonical micros.
+
+Refusals come BEFORE anything durable exists: a spend cap `BigInt` would
+throw on, a negative cap, or a base request id using the reserved `#` refuse
+the whole decision with nothing created — a refusal after durable creation is
+a report that dies mid-way, after spend was authorized. A store backing that
+throws mid-confirmation is that role's named `store_failure`, never a lost
+report; and a resolver that repeated a role does not double-count an
+authorization.
 
 Which role a run was created for is recoverable from its durable idempotency
 key through `staffedRoleOf` — a stated contract, not a string someone parses
