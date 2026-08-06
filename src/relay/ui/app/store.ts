@@ -18,6 +18,8 @@ import { createRelayAppStorage } from './persistence';
 import type { RelayAppStorage } from './persistence';
 import { createDemoRelayApplicationAdapter } from './demo-adapter';
 import { createLiveRelayApplicationAdapter } from './live-adapter';
+import { createOperationalStore } from '../../shared/llmops';
+import type { RelayOperationalRecord, RunObservation } from '../../shared/llmops';
 
 /**
  * RELAY APPLICATION STORE — the service layer and single source of truth
@@ -62,6 +64,29 @@ export interface RelayAppStore {
   // brain service
   getProjectBrain(projectId: string): ReturnType<RelayApplicationAdapter['prepareProjectBrain']> | null;
 
+  // operations service
+  /**
+   * The operational record for a project, or `null` when nothing has been
+   * recorded — which is every project today, because no browser-side producer
+   * exists.
+   *
+   * DELIBERATELY NOT PERSISTED. `RelayAppData` is validated on load with an
+   * exact `schemaVersion` match and ANYTHING that fails recovers to the empty
+   * state, so adding a field there risks discarding a user's projects for the
+   * sake of a metric. A bounded record is also hundreds of kilobytes per
+   * project, and localStorage has a few megabytes in total — a quota failure
+   * would take the whole app state with it.
+   *
+   * So this lives in memory for the session. The store reports its own
+   * durability as `volatile-test-only`, and the panel shows that rather than
+   * implying a record survives a reload.
+   */
+  getOperations(projectId: string): RelayOperationalRecord | null;
+  /** Folds one observation in. Returns the record as it now stands, or null on failure. */
+  recordObservation(projectId: string, observation: RunObservation): Promise<RelayOperationalRecord | null>;
+  /** The store's own honest label, for a surface that wants to say what it is. */
+  operationsDurability(): 'durable' | 'volatile-test-only';
+
   // mission service
   getMission(missionId: string): RelayMission | null;
   getMissionEvents(missionId: string): RelayEvent[];
@@ -90,6 +115,20 @@ export function createRelayAppStore(
   adapter: RelayApplicationAdapter = createDemoRelayApplicationAdapter(),
 ): RelayAppStore {
   let data: RelayAppData = emptyRelayAppData();
+
+  /**
+   * IN MEMORY, for this session only — see `getOperations` on the interface for
+   * why this is not persisted. The backing declares itself volatile and the
+   * store carries that label out, so no surface can imply otherwise.
+   */
+  const operationBacking = new Map<string, string>();
+  const operationStore = createOperationalStore({
+    durability: 'volatile-test-only',
+    locationLabel: 'browser session memory',
+    async getText(key) { return operationBacking.get(key) ?? null; },
+    async putText(key, value) { operationBacking.set(key, value); },
+  });
+  const operationSnapshots = new Map<string, RelayOperationalRecord>();
   let initialized = false;
   let creating = false; // duplicate-submit guard for createDraftFromRequest
   const startingLive = new Set<string>(); // one-dispatch guard for live starts
@@ -354,6 +393,18 @@ export function createRelayAppStore(
     },
 
     getProjectBrain: (projectId) => data.brains[projectId] ?? null,
+
+    getOperations: (projectId) => operationSnapshots.get(projectId) ?? null,
+    operationsDurability: () => operationStore.status.durability,
+    recordObservation: async (projectId, observation) => {
+      const written = await operationStore.record(projectId, observation);
+      if (!written.ok) return null;
+      // The snapshot is what a synchronous projection can read; the store is
+      // the thing that folds and bounds. Keeping both in step here is what
+      // stops a surface rendering a record the store has already superseded.
+      operationSnapshots.set(projectId, written.record);
+      return written.record;
+    },
 
     getMission: (missionId) => data.missions[missionId] ?? null,
     getMissionEvents: (missionId) => data.events[missionId] ?? [],
