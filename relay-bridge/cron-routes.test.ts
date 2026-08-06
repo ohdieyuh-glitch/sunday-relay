@@ -136,29 +136,71 @@ describe('a tick creates records and dispatches nothing', () => {
     expect(dataOf(result).runsCreated).toBe(1);
     expect((dataOf(result).occurrences as { outcome: string }[]).map((o) => o.outcome))
       .toEqual(['run_created', 'skipped_by_capacity_unclaimed', 'skipped_by_capacity_unclaimed']);
-    expect(service.activeRunsFor('lpe_cron')).toBe(1);
+    // …and the run it created is QUEUED, not executing, so it occupies no
+    // execution slot in the journal-derived count. Nothing in this build
+    // advances a scheduled run, so counting it as occupancy would saturate
+    // the count forever — see the no-wedge test below.
+    expect(service.activeRunsFor('lpe_cron')).toBe(0);
   });
 
-  it('the overlap count is DERIVED from the journal — a caller cannot claim its way past a limit', async () => {
-    // The first tick leaves three ACTIVE runs on this Loop. A second tick for
-    // a DIFFERENT schedule (so nothing is already_handled) then hits the
-    // parallel limit no matter what the body says.
-    //
-    // Mutation check: this is the test that kills `activeRuns` being read
-    // from the request. An earlier version passed `activeRuns: 0` into a
-    // single tick and survived that mutation, because the tick's own
-    // within-pass evolution produced the identical outcome — a test passing
-    // for a reason other than the property it named.
-    await call();
-    expect(service.activeRunsFor('lpe_cron')).toBe(3);
+  it('the overlap count is DERIVED — a caller claiming runs are live cannot stop its own tick', async () => {
+    // Mutation check: reading `activeRuns` from the request body makes this
+    // fail — a claimed 99 against a limit of 1 would refuse the first
+    // occurrence. Derived, the journal says zero and the run is created.
+    const result = await call({ ...BODY, parallelLimit: 1, activeRuns: 99 });
+    expect(result?.status).toBe(200);
+    expect(dataOf(result).runsCreated).toBe(1);
+  });
 
-    const second = await call({
-      ...BODY, scheduleId: 'sched_other', parallelLimit: 1, activeRuns: 0,
+  it('a SECOND tick still creates runs — a created-but-unstarted run must not wedge the endpoint', async () => {
+    // THE DEFECT THIS PINS, found by review and reproduced across three
+    // ticks: a scheduled run is created `queued` and nothing in this build
+    // ever advances it. Counting `queued` as occupancy saturated the overlap
+    // count at the first tick and never came down, so every later occurrence
+    // hit the limit forever — and under `skip` each one was DURABLY CLAIMED
+    // with no run behind it, silently consuming occurrences that the claim
+    // marker then refuses to replay. Mutation check: counting `queued` as
+    // active fails this.
+    const first = await call();
+    expect(dataOf(first).runsCreated).toBe(3);
+
+    // A later window with three FRESH occurrences, under a limit the first
+    // tick's runs would exhaust if they counted as executing.
+    const later = await call(
+      { ...BODY, afterExclusive: '2026-08-06T12:00:00.000Z', parallelLimit: 3 },
+      { now: '2026-08-06T15:00:30.000Z' },
+    );
+    expect(later?.status).toBe(200);
+    expect(dataOf(later).runsCreated).toBe(3);
+    const outcomes = (dataOf(later).occurrences as { outcome: string }[]).map((o) => o.outcome);
+    expect(outcomes).toEqual(['run_created', 'run_created', 'run_created']);
+    // No occurrence was claimed without a run behind it.
+    expect(dataOf(later).claimedWithoutRun).toBe(0);
+  });
+
+  it('two projects using ONE schedule id do not suppress each other', async () => {
+    // The occurrence identity's first term must be globally unique, and
+    // nothing allocates one: the id is a caller-supplied string and the claim
+    // markers share one flat namespace on the volume. Un-namespaced, the
+    // first project to tick durably marked the second's occurrences
+    // already-handled — silent cross-tenant suppression, found by review.
+    // Mutation check: dropping the binding from the qualified schedule id
+    // makes the second project's tick report already_handled for everything.
+    const a = await call();
+    expect(dataOf(a).runsCreated).toBe(3);
+
+    const b = await call({
+      ...BODY,
+      binding: { ...BODY.binding, projectId: 'prj_other', loopId: 'lpe_other' },
     });
-    expect(second?.status).toBe(200);
-    expect(dataOf(second).runsCreated).toBe(0);
-    expect((dataOf(second).occurrences as { outcome: string }[])
-      .every((o) => o.outcome === 'skipped_by_capacity_unclaimed')).toBe(true);
+    expect(b?.status).toBe(200);
+    expect(dataOf(b).runsCreated).toBe(3);
+    expect((dataOf(b).occurrences as { outcome: string }[])
+      .every((o) => o.outcome === 'run_created')).toBe(true);
+    // Distinct occurrence identities, so distinct claim markers.
+    const idsA = (dataOf(a).occurrences as { occurrenceId: string }[]).map((o) => o.occurrenceId);
+    const idsB = (dataOf(b).occurrences as { occurrenceId: string }[]).map((o) => o.occurrenceId);
+    expect(idsA.some((id) => idsB.includes(id))).toBe(false);
   });
 });
 
@@ -230,12 +272,16 @@ describe('every gate refuses before touching disk', () => {
 });
 
 describe('what the endpoint refuses to promise', () => {
-  it('a QUEUE policy is refused by name — no queue exists to enqueue into', async () => {
-    for (const overlapPolicy of ['queue_one', 'queue_all']) {
+  it('every policy that would CONSUME an occurrence is refused by name', async () => {
+    // queue_one/queue_all: no queue to enqueue into. skip: it drops an
+    // occurrence because "a run is live", and in this build the live run is
+    // an inert record — the drop would be irreversible. Mutation check:
+    // putting 'skip' back into SERVABLE_OVERLAP fails this.
+    for (const overlapPolicy of ['queue_one', 'queue_all', 'skip']) {
       const result = await call({ ...BODY, overlapPolicy, queueLimit: 3 });
       expect(result?.status, overlapPolicy).toBe(422);
-      expect(errorOf(result).kind).toBe('no_queue_exists');
-      expect(errorOf(result).message).toContain('promise an enqueue nothing performs');
+      expect(errorOf(result).kind).toBe('overlap_policy_unservable');
+      expect(errorOf(result).message).toContain('never consume an occurrence they did not run');
     }
     expect(existsSync(occurrenceDir())).toBe(false);
   });

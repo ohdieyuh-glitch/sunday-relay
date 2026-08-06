@@ -48,9 +48,28 @@ WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
   body. No `RelayLoopSchedule` exists anywhere; nothing lists, pauses or
   versions a schedule. This ships a manual tick over a caller-declared
   schedule, not a Cron Loop product.
-- **Queue policies are refused.** No occurrence queue exists, so `queue_one`
-  (this document's documented default) and `queue_all` answer 422
-  `no_queue_exists` rather than promising an enqueue nothing performs.
+- **Every occurrence-CONSUMING overlap policy is refused.** The rule: no
+  policy may durably consume an occurrence on the strength of a run that is
+  not actually working. That excludes `queue_one` (this document's documented
+  default) and `queue_all`, which would promise an enqueue no queue performs;
+  and it excludes `skip`, whose meaning is "a run is live, drop this
+  occurrence" — a drop that is irreversible, because the claim marker exists
+  to refuse the replay, made against a record that never runs. Servable:
+  `parallel_with_limit` and `replace`, which answer capacity and
+  replace-pending WITHOUT claiming. The first version served `skip` and
+  steered callers to it; across ticks it permanently ate every occurrence
+  after the first, with one inert run to show for it.
+- **The overlap count is runs that are EXECUTING**, not runs that are
+  unfinished. A scheduled run is created `queued` and never advanced here, so
+  counting it as occupancy saturated the count at the first tick and wedged
+  the endpoint forever. A run that starts leaves `queued` and counts from
+  that moment, so this stays correct when dispatch lands.
+- **The occurrence identity is tenant-qualified.** The approved formula's
+  first term assumes a globally unique `scheduleId`, and nothing allocates
+  one — the id is a caller-supplied string and the claim markers share one
+  flat namespace on the volume. The bridge qualifies it with
+  (project, workspace, loop) so two projects using "daily-triage" cannot
+  silently mark each other's occurrences handled.
 
 **A NAMED DEVIATION from "server authority" above:** `afterExclusive` — the
 window's START — is client-supplied, and this document says a client-supplied

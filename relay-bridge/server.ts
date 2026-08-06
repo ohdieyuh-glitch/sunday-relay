@@ -381,12 +381,21 @@ export function createBridgeServer(
                 now: Date.now(),
                 store: browserSessions,
               });
-              return decision.kind === 'rejected'
-                ? { kind: 'none' as const, principal: 'none' }
-                : {
-                    kind: decision.kind,
-                    principal: decision.kind === 'operator' ? 'operator' : 'browser',
-                  };
+              // A 403 rejection means AUTHENTICATED BUT NOT PERMITTED — a
+              // paired browser session reaching an operator-only route. It
+              // must not flatten into 'none', which answers "authentication
+              // is required" to someone who is authenticated and needs to be
+              // told to ask an operator instead. Review caught the flattened
+              // version making the route's own 403 branch unreachable.
+              if (decision.kind === 'rejected') {
+                return decision.status === 403
+                  ? { kind: 'browser' as const, principal: 'browser' }
+                  : { kind: 'none' as const, principal: 'none' };
+              }
+              return {
+                kind: decision.kind,
+                principal: decision.kind === 'operator' ? 'operator' : 'browser',
+              };
             },
           }, cronTicks);
           if (cronResult !== null) {

@@ -26,9 +26,10 @@ import {
  * happened".
  *
  * THE OVERLAP COUNT IS DERIVED, NEVER ACCEPTED. `activeRuns` comes from the
- * journal — the runs this Loop actually has in an active state — because a
+ * journal — the runs of this Loop that are actually EXECUTING — because a
  * caller-supplied count would let the client that wants a run decide whether
- * the limit that would stop it applies.
+ * the limit that would stop it applies. What counts as executing is the
+ * subtlest thing in this file; see `activeRunsFor`.
  */
 
 /** What one schedule binds its runs to. Caller-supplied: no schedule store
@@ -41,11 +42,33 @@ export interface CronRunBinding {
   readonly contractBindingDigest: string;
 }
 
+/**
+ * The occurrence identity's first term.
+ *
+ * CRON_LOOPS.md's formula is
+ * `digest(scheduleId ‖ contractVersion ‖ intendedLocal ‖ resolvedUtc)`, which
+ * assumes `scheduleId` is globally unique. NOTHING ALLOCATES ONE: there is no
+ * schedule store, the id arrives as a caller-supplied string, and the claim
+ * markers live in one flat namespace on the volume. So two projects both
+ * using "daily-triage" would share occurrence ids, and the first to tick
+ * would durably mark the second's occurrences already-handled — silent
+ * cross-tenant suppression, found by review.
+ *
+ * Qualifying the term with the binding restores the formula's assumption
+ * without changing it: the schedule the digest names is now
+ * (project, workspace, loop, caller's id), which IS unique. The caller's own
+ * id is what the response echoes back.
+ */
+const qualifiedScheduleId = (scheduleId: string, binding: CronRunBinding): string =>
+  [binding.projectId, binding.workspaceId ?? 'no-workspace', binding.loopId, scheduleId].join('|');
+
 export interface CronTickService {
   tick(input: Omit<CronTickInput, 'tz' | 'digest'> & {
     readonly binding: CronRunBinding;
   }): CronTickReport;
-  /** How many runs of this Loop the journal reports active, right now. */
+  /** How many runs of this Loop are EXECUTING right now, per the journal.
+   *  A created-but-never-started run is not one of them — see the
+   *  implementation for why that distinction is load-bearing. */
   activeRunsFor(loopId: string): number;
   /** Exposed for diagnostics and tests; never reachable from a route. */
   readonly store: LoopRunNodeStore;
@@ -81,13 +104,36 @@ export function createCronTickService(options: {
   const claim = createCronClaimNodePort({ stateRoot: options.root, now: options.now });
   const tz = createIntlTimezonePort();
 
+  /**
+   * Runs of this Loop that are actually EXECUTING.
+   *
+   * `queued` is excluded deliberately, and the distinction is the difference
+   * between a working endpoint and a wedged one. Overlap policies decide what
+   * may run BESIDE work in flight; a run that has never started occupies no
+   * execution slot. Counting `queued` as occupancy — which `loopRunIsActive`
+   * does, correctly, for its own purpose of "not finished" — made this
+   * endpoint destroy itself: a scheduled run is created `queued` and, by this
+   * build's own safety property, nothing ever advances it, so the count
+   * saturated at the first tick and never came down. Every later occurrence
+   * then hit the overlap limit forever, and under `skip` each one was
+   * DURABLY CLAIMED with no run behind it — occurrences silently and
+   * irreversibly consumed, which is exactly what the claim marker exists to
+   * make unrecoverable. Found by review, reproduced across three ticks.
+   *
+   * WHEN DISPATCH LANDS this stays correct rather than becoming a lie: a run
+   * that starts leaves `queued` and is counted from that moment. What must
+   * NOT happen is someone widening this back to `loopRunIsActive` to "count
+   * everything" — the exhaustion tests below pin the queued case.
+   */
   const activeRunsFor = (loopId: string): number => {
     const runIds = store.runIdsForLoop(loopId);
     if (runIds === null) return 0;
     let active = 0;
     for (const runId of runIds) {
       const loaded = readLoopRun(store, runId, loopDigest);
-      if (loaded?.run != null && loopRunIsActive(loaded.run.state)) active += 1;
+      if (loaded?.run == null) continue;
+      if (loaded.run.state === 'queued') continue;
+      if (loopRunIsActive(loaded.run.state)) active += 1;
     }
     return active;
   };
@@ -132,6 +178,14 @@ export function createCronTickService(options: {
   return {
     store,
     activeRunsFor,
-    tick: (input) => runCronTick(claim, runsFor(input.binding), { ...input, tz, digest: loopDigest }),
+    tick: (input) => runCronTick(claim, runsFor(input.binding), {
+      ...input,
+      evaluation: {
+        ...input.evaluation,
+        scheduleId: qualifiedScheduleId(input.evaluation.scheduleId, input.binding),
+      },
+      tz,
+      digest: loopDigest,
+    }),
   };
 }

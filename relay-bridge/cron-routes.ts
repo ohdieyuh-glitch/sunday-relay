@@ -117,8 +117,28 @@ const positiveInteger = (body: unknown, field: string): number | null => {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null;
 };
 
-/** Overlap policies this build can serve HONESTLY. */
-const SERVABLE_OVERLAP = ['skip', 'replace', 'parallel_with_limit'];
+/**
+ * Overlap policies this build can serve HONESTLY.
+ *
+ * The rule is narrow and load-bearing: **no policy may durably CONSUME an
+ * occurrence on the strength of a run that is not actually working.** A
+ * scheduled run is created and never advanced here, so a decision of the form
+ * "a run is live, therefore drop this occurrence" is made against an inert
+ * record — and the drop is irreversible, because the claim marker exists
+ * precisely to refuse the replay.
+ *
+ * That excludes `skip`, whose whole meaning is that deliberate drop, and it
+ * excludes `queue_one` and `queue_all`, which would promise an enqueue no
+ * queue performs. What remains never consumes an occurrence it did not run:
+ * `parallel_with_limit` answers capacity (unclaimed, re-decided next tick)
+ * and `replace` answers replace-pending (unclaimed, and it never claims the
+ * safe stop happened).
+ *
+ * Review found the first version serving `skip` and steering callers to it:
+ * across ticks it silently and permanently ate every occurrence after the
+ * first, with one run to show for it.
+ */
+const SERVABLE_OVERLAP = ['replace', 'parallel_with_limit'];
 
 /**
  * An IANA zone name, or UTC.
@@ -226,9 +246,12 @@ export async function handleCronRoute(
   // default is the cost, stated where a caller will read it.
   if (!SERVABLE_OVERLAP.includes(overlapPolicy as string)) {
     return err(
-      422, 'no_queue_exists',
-      `No occurrence queue exists in this build, so "${safeText(overlapPolicy)}" cannot be served: `
-      + `a queued outcome would promise an enqueue nothing performs. Use ${SERVABLE_OVERLAP.join(', ')}.`,
+      422, 'overlap_policy_unservable',
+      `"${safeText(overlapPolicy)}" cannot be served honestly by this build. Nothing advances a `
+      + 'scheduled run, so a policy that drops an occurrence because "a run is live" would consume '
+      + 'it irreversibly against a record that never works; and no occurrence queue exists, so a '
+      + `queued outcome would promise an enqueue nothing performs. Use ${SERVABLE_OVERLAP.join(' or ')}, `
+      + 'which never consume an occurrence they did not run.',
     );
   }
 
