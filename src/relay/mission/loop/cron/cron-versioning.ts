@@ -62,7 +62,7 @@ export interface ScheduleEditInput {
 
 export type ScheduleEditRefusal =
   | 'empty_history'
-  | 'non_contiguous_history'
+  | 'duplicate_version_in_history'
   | 'unauthored_edit'
   | 'unreadable_authored_at'
   | 'no_change'
@@ -74,12 +74,22 @@ export interface ScheduleEditPlan {
   /** The full history AFTER the edit: every previous version, unchanged. */
   readonly history: readonly CronContractVersion[];
   /**
-   * Runs that must not be disturbed by this edit, each with the version it
-   * stays on. Returned rather than left to inference, because "an in-progress
-   * run continues under the version it started with" is a promise somebody
-   * has to keep and cannot keep from a list it was never given.
+   * The runs still IN PROGRESS, each with the version it stays on. Returned
+   * rather than left to inference, because "an in-progress run continues
+   * under the version it started with" is a promise somebody has to keep and
+   * cannot keep from a list it was never given.
+   *
+   * Named for what it is: review found this called `runsUnaffected`, which
+   * was true of every run and so said nothing.
    */
-  readonly runsUnaffected: readonly VersionedRun[];
+  readonly activeRuns: readonly VersionedRun[];
+  /**
+   * EVERY run and the version it came from, active or not. The spec requires
+   * an edit to preserve "which runs came from which version", and a plan that
+   * carried only the active ones dropped completed runs' attribution for any
+   * caller that persisted the plan.
+   */
+  readonly runAttribution: readonly VersionedRun[];
   /** What actually changed, named — a version whose diff nobody can state is
    *  a version nobody can review. */
   readonly changed: readonly ('cronExpression' | 'timeZone' | 'contractRef' | 'contractBindingDigest')[];
@@ -106,32 +116,28 @@ export function planScheduleEdit(input: ScheduleEditInput): ScheduleEditDecision
     };
   }
 
-  // A history with gaps or repeats cannot say which version a run came from,
-  // and that mapping is the thing versioning exists to preserve.
-  for (const [index, version] of input.history.entries()) {
-    if (version.version !== index + 1) {
+  // ONLY REPEATS ARE AMBIGUOUS. An earlier version also refused GAPS, on the
+  // stated grounds that they "cannot say which version a run came from" —
+  // which is false: a run citing v4 in [1, 2, 4] resolves unambiguously. The
+  // spec's four sentences never require contiguity, so refusing it was an
+  // invented constraint defended by an untrue reason. Review caught both.
+  const seen = new Set<number>();
+  for (const version of input.history) {
+    if (seen.has(version.version)) {
       return {
         ok: false,
-        refusal: 'non_contiguous_history',
-        problem: `Version ${version.version} appears at position ${index + 1}. A history with gaps `
-          + 'or repeats cannot say which version a run came from.',
+        refusal: 'duplicate_version_in_history',
+        problem: `Version ${version.version} appears more than once. Two versions sharing a number `
+          + 'genuinely cannot say which one a run citing it came from.',
       };
     }
+    seen.add(version.version);
   }
 
-  const head = input.history[input.history.length - 1] as CronContractVersion;
-
-  const known = new Set(input.history.map((v) => v.version));
-  const orphaned = input.runs.filter((r) => !known.has(r.contractVersion));
-  if (orphaned.length > 0) {
-    return {
-      ok: false,
-      refusal: 'run_cites_unknown_version',
-      problem: `These runs cite versions this history does not contain: `
-        + `${orphaned.map((r) => `${r.runId}@v${r.contractVersion}`).join(', ')}. Appending would `
-        + 'leave them permanently unexplainable.',
-    };
-  }
+  // The head is the HIGHEST version, not merely the last element: with gaps
+  // permitted, position no longer implies order.
+  const head = [...input.history].sort((a, b) => a.version - b.version)[input.history.length - 1] as
+    CronContractVersion;
 
   if (input.proposed.authoredBy.trim() === '') {
     return {
@@ -150,6 +156,18 @@ export function planScheduleEdit(input: ScheduleEditInput): ScheduleEditDecision
     };
   }
 
+  const known = new Set(input.history.map((v) => v.version));
+  const orphaned = input.runs.filter((r) => !known.has(r.contractVersion));
+  if (orphaned.length > 0) {
+    return {
+      ok: false,
+      refusal: 'run_cites_unknown_version',
+      problem: `These runs cite versions this history does not contain: `
+        + `${orphaned.map((r) => `${r.runId}@v${r.contractVersion}`).join(', ')}. Appending would `
+        + 'leave them permanently unexplainable.',
+    };
+  }
+
   const changed = ([
     'cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest',
   ] as const).filter((field) => input.proposed[field] !== head[field]);
@@ -160,8 +178,9 @@ export function planScheduleEdit(input: ScheduleEditInput): ScheduleEditDecision
     return {
       ok: false,
       refusal: 'no_change',
-      problem: 'The proposed version is identical to the current one. Appending it would split the '
-        + 'run history at a point where nothing changed.',
+      problem: 'The proposed version changes no schedule or contract field. Appending it would '
+        + 'split the run history at a point where nothing about the schedule changed. (Re-authoring '
+        + 'alone is not a schedule change: the versioned unit is the schedule and contract.)',
     };
   }
 
@@ -175,8 +194,10 @@ export function planScheduleEdit(input: ScheduleEditInput): ScheduleEditDecision
       // the one being superseded, whose schedule explains its own runs.
       history: [...input.history, nextVersion],
       // An in-progress run keeps the version it started under, whatever the
-      // edit does to the future.
-      runsUnaffected: input.runs.filter((r) => r.active),
+      // edit does to the future. Copied, not passed through: L3 found the
+      // caller's own objects handed back for anything to mutate.
+      activeRuns: input.runs.filter((r) => r.active).map((r) => ({ ...r })),
+      runAttribution: input.runs.map((r) => ({ ...r })),
       changed,
     },
   };
@@ -193,5 +214,9 @@ export function governingVersionFor(
   run: VersionedRun,
   history: readonly CronContractVersion[],
 ): CronContractVersion | null {
-  return history.find((v) => v.version === run.contractVersion) ?? null;
+  const matches = history.filter((v) => v.version === run.contractVersion);
+  // A duplicated version number is ambiguous, and answering the FIRST match
+  // would pick one silently — review found the two exports disagreeing about
+  // exactly the history `planScheduleEdit` refuses.
+  return matches.length === 1 ? (matches[0] as CronContractVersion) : null;
 }
