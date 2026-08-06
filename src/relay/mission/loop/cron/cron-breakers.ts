@@ -17,6 +17,18 @@
  * RESUMING IS THE SAME RULE FROM THE OTHER SIDE. A condition that cannot be
  * OBSERVED has not re-evaluated clean, so it does not permit a resume. Only
  * an observation that says "clear" clears anything; silence does not.
+ *
+ * WHAT THIS MODULE REFUSES TO DECIDE. Whether a schedule whose breakers
+ * cannot be READ AT ALL should keep running is NOT settled by CRON_LOOPS.md
+ * — the spec covers tripping and resuming, and says nothing about total
+ * unobservability. The first version of this module answered "keep running"
+ * and wrote that answer into the spec in the same commit, then cited the doc
+ * as though the founder had decided it. Review caught the circularity.
+ *
+ * So there is now a THIRD verdict state, `unobserved`, and the caller
+ * chooses. The module reports what it can see and what it cannot; it does not
+ * quietly pick fail-open for a scheduler that spends money, and it does not
+ * quietly pick fail-closed for a founder who never asked for that either.
  */
 
 /** One condition's current reading. `unknown` is a first-class answer. */
@@ -53,6 +65,12 @@ export const SECURITY_CLASS_CONDITIONS: readonly BreakerCondition[] = [
   'organization_membership_changed',
   'security_policy_changed',
   'credential_scopes_reduced',
+  // "Disappeared" covers access revoked, deleted AND renamed — and a name
+  // that resolves again later may be a DIFFERENT repository. The class's own
+  // basis applies verbatim: a schedule cannot tell whether the change was
+  // intended. Review found excluding it was a silent decision about when a
+  // human is needed.
+  'repository_or_workspace_disappeared',
 ];
 
 export interface BreakerSignals {
@@ -88,16 +106,70 @@ export interface BreakerDisclosure {
 
 export type BreakerVerdict =
   | { readonly state: 'running'; readonly disclosure: BreakerDisclosure }
-  | { readonly state: 'paused'; readonly disclosure: BreakerDisclosure };
+  | { readonly state: 'paused'; readonly disclosure: BreakerDisclosure }
+  /**
+   * NOTHING could be read. Deliberately not `running` and not `paused`: the
+   * spec does not say which a schedule should be here, so the caller decides
+   * with the facts in front of it rather than inheriting a default this
+   * module invented.
+   */
+  | { readonly state: 'unobserved'; readonly disclosure: BreakerDisclosure }
+  /** The signals could not be evaluated at all. */
+  | { readonly state: 'refused'; readonly refusal: BreakerRefusal; readonly problem: string };
+
+export type BreakerRefusal =
+  | 'malformed_reading'
+  | 'contradictory_external_effect';
+
+/** Conditions whose very meaning is that Relay acted on the outside world.
+ *  Reporting one of these alongside "no external effect" is a contradiction,
+ *  not a state — review found it answered confidently instead of refused. */
+const EXTERNAL_BY_DEFINITION: readonly BreakerCondition[] = [
+  'repeated_duplicate_external_actions',
+  'external_rate_limited',
+];
+
+const READINGS: readonly BreakerReading[] = ['clear', 'tripped', 'unknown'];
 
 /** Evaluate every condition and say what the user is owed. */
 export function evaluateCircuitBreakers(signals: BreakerSignals): BreakerVerdict {
+  // A READING THAT IS NOT A READING IS NOT "UNKNOWN". The first version's
+  // `!== 'clear'` fallback turned a producer's typo — 'TRIPPED' — into
+  // unreadable, and unreadable did not pause: a real trip silently downgraded
+  // into carrying on. Refused instead.
+  const malformed = BREAKER_CONDITIONS
+    .filter((c) => !READINGS.includes(signals.readings[c]));
+  if (malformed.length > 0) {
+    return {
+      state: 'refused',
+      refusal: 'malformed_reading',
+      problem: `These conditions carry values that are not readings: ${malformed.join(', ')}. `
+        + 'A malformed reading is not "unknown" — treating it as one would let a mistyped trip '
+        + 'read as carry-on.',
+    };
+  }
+
   const trippedBy: BreakerCondition[] = [];
   const unreadable: BreakerCondition[] = [];
   for (const condition of BREAKER_CONDITIONS) {
     const reading = signals.readings[condition];
     if (reading === 'tripped') trippedBy.push(condition);
-    else if (reading !== 'clear') unreadable.push(condition);
+    else if (reading === 'unknown') unreadable.push(condition);
+  }
+
+  // A CONTRADICTION IS NOT A STATE. "Repeated duplicate EXTERNAL actions"
+  // cannot coexist with "nothing reached outside Relay", and answering it
+  // emits exactly the confident "no external effect" this module's header
+  // calls worse than saying nothing.
+  const contradiction = trippedBy.filter((c) => EXTERNAL_BY_DEFINITION.includes(c));
+  if (contradiction.length > 0 && signals.externalEffectOccurred === false) {
+    return {
+      state: 'refused',
+      refusal: 'contradictory_external_effect',
+      problem: `${contradiction.join(', ')} means Relay acted on the outside world, but the `
+        + 'external effect is reported as none. One of the two observations is wrong, and '
+        + 'answering would assert a "no external effect" that cannot be true.',
+    };
   }
 
   // A HUMAN IS NEEDED when the outside world was touched, when it MIGHT have
@@ -108,6 +180,7 @@ export function evaluateCircuitBreakers(signals: BreakerSignals): BreakerVerdict
   const securityTripped = trippedBy.some((c) => SECURITY_CLASS_CONDITIONS.includes(c));
   const paused = trippedBy.length > 0;
   const manualReviewRequired = paused && (externalUnknownOrOccurred || securityTripped);
+  const nothingObserved = unreadable.length === BREAKER_CONDITIONS.length;
 
   const disclosure: BreakerDisclosure = {
     trippedBy,
@@ -119,7 +192,8 @@ export function evaluateCircuitBreakers(signals: BreakerSignals): BreakerVerdict
     requiredAction: requiredActionFor({ paused, trippedBy, unreadable, signals, manualReviewRequired }),
   };
 
-  return paused ? { state: 'paused', disclosure } : { state: 'running', disclosure };
+  if (paused) return { state: 'paused', disclosure };
+  return nothingObserved ? { state: 'unobserved', disclosure } : { state: 'running', disclosure };
 }
 
 export type ResumeDecision =
@@ -182,13 +256,21 @@ function requiredActionFor(input: {
 
   const external = input.signals.externalEffectOccurred;
   const externalSentence = external === true
-    ? ' This schedule DID reach outside Relay before pausing, so check what it changed there.'
+    ? ' An external EFFECT occurred before it paused, so check what changed out there.'
     : external === null
       ? ' Whether it reached outside Relay is UNKNOWN — that is not the same as no, and it has to '
         + 'be established before any resume.'
       : ' It did not reach outside Relay.';
 
-  return `Paused by: ${input.trippedBy.join(', ')}.${externalSentence}`
+  // The unreadable count belongs in the PAUSED sentence too: review found the
+  // user told the resume waits on the failure clearing when it actually waits
+  // on observability.
+  const unreadableSentence = input.unreadable.length === 0
+    ? ''
+    : ` ${input.unreadable.length} condition(s) also could not be read, and a resume needs every `
+      + 'one of them readable and clear.';
+
+  return `Paused by: ${input.trippedBy.join(', ')}.${externalSentence}${unreadableSentence}`
     + (input.manualReviewRequired
       ? ' A human must review before this schedule runs again.'
       : ' It resumes once every condition re-evaluates clean.');

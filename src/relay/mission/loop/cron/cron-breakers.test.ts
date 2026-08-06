@@ -30,27 +30,145 @@ const withReading = (
   condition: BreakerCondition, reading: BreakerReading,
 ): Record<BreakerCondition, BreakerReading> => ({ ...allClear(), [condition]: reading });
 
+/** Narrow past the `refused` state so a disclosure can be read. */
+const disclosureOf = (verdict: ReturnType<typeof evaluateCircuitBreakers>) => {
+  if (verdict.state === 'refused') throw new Error(`${verdict.refusal}: ${verdict.problem}`);
+  return verdict.disclosure;
+};
+
+describe('the specified conditions are pinned, literally', () => {
+  it('is exactly the twelve CRON_LOOPS.md names, in one list', () => {
+    // Review PROVED the old tests were self-referential: deleting a condition
+    // from the constant kept the suite green, because every assertion derived
+    // its expectations from the constant it was meant to check.
+    expect([...BREAKER_CONDITIONS]).toEqual([
+      'repeated_consecutive_failures',
+      'repeated_authentication_failures',
+      'mcp_revoked',
+      'provider_unavailable',
+      'cost_threshold_or_spike',
+      'repeated_reviewer_rejection',
+      'external_rate_limited',
+      'repeated_duplicate_external_actions',
+      'repository_or_workspace_disappeared',
+      'organization_membership_changed',
+      'security_policy_changed',
+      'credential_scopes_reduced',
+    ]);
+  });
+
+  it('the security class is exactly these six, literally', () => {
+    expect([...SECURITY_CLASS_CONDITIONS].sort()).toEqual([
+      'credential_scopes_reduced',
+      'mcp_revoked',
+      'organization_membership_changed',
+      'repeated_authentication_failures',
+      'repository_or_workspace_disappeared',
+      'security_policy_changed',
+    ]);
+  });
+});
+
+describe('what it refuses to answer', () => {
+  it('a malformed reading is refused, never downgraded to unknown', () => {
+    // Review: a producer's typo 'TRIPPED' fell into the !== 'clear' branch,
+    // became unreadable, and unreadable did not pause — a real trip silently
+    // downgraded into carrying on.
+    const readings = { ...allClear(), mcp_revoked: 'TRIPPED' } as unknown as
+      Record<BreakerCondition, BreakerReading>;
+    const verdict = evaluateCircuitBreakers(signals({ readings }));
+    expect(verdict).toMatchObject({ state: 'refused', refusal: 'malformed_reading' });
+  });
+
+  it('a missing reading is refused too', () => {
+    const readings = { ...allClear() } as Record<BreakerCondition, BreakerReading>;
+    delete (readings as Partial<Record<BreakerCondition, BreakerReading>>).provider_unavailable;
+    expect(evaluateCircuitBreakers(signals({ readings })))
+      .toMatchObject({ state: 'refused', refusal: 'malformed_reading' });
+  });
+
+  it('an external-by-definition trip with NO external effect is a contradiction, not a state', () => {
+    // Mutation check: answering this emits exactly the confident 'no external
+    // effect' the header calls worse than saying nothing.
+    for (const condition of ['repeated_duplicate_external_actions', 'external_rate_limited'] as const) {
+      const verdict = evaluateCircuitBreakers(signals({
+        readings: withReading(condition, 'tripped'),
+        externalEffectOccurred: false,
+      }));
+      expect(verdict, condition)
+        .toMatchObject({ state: 'refused', refusal: 'contradictory_external_effect' });
+    }
+  });
+
+  it('the same trips are answerable when the external effect is true or unknown', () => {
+    for (const externalEffectOccurred of [true, null]) {
+      const verdict = evaluateCircuitBreakers(signals({
+        readings: withReading('external_rate_limited', 'tripped'),
+        externalEffectOccurred,
+      }));
+      expect(verdict.state).toBe('paused');
+    }
+  });
+});
+
+describe('total unobservability is its own answer', () => {
+  it('is neither running nor paused when NOTHING could be read', () => {
+    // The spec settles tripping and resuming; it says nothing about total
+    // unobservability. The first version answered 'running' and wrote that
+    // answer into the spec in the same commit. The caller decides now.
+    const readings = Object.fromEntries(BREAKER_CONDITIONS.map((c) => [c, 'unknown'])) as
+      Record<BreakerCondition, BreakerReading>;
+    const verdict = evaluateCircuitBreakers(signals({ readings }));
+    expect(verdict.state).toBe('unobserved');
+    expect(disclosureOf(verdict).unreadable).toHaveLength(BREAKER_CONDITIONS.length);
+  });
+
+  it('one readable condition is enough to be running rather than unobserved', () => {
+    const readings = Object.fromEntries(BREAKER_CONDITIONS.map((c) => [c, 'unknown'])) as
+      Record<BreakerCondition, BreakerReading>;
+    readings.provider_unavailable = 'clear';
+    expect(evaluateCircuitBreakers(signals({ readings })).state).toBe('running');
+  });
+
+  it('a trip still pauses even when everything else is unreadable', () => {
+    const readings = Object.fromEntries(BREAKER_CONDITIONS.map((c) => [c, 'unknown'])) as
+      Record<BreakerCondition, BreakerReading>;
+    readings.repeated_consecutive_failures = 'tripped';
+    const verdict = evaluateCircuitBreakers(signals({ readings }));
+    expect(verdict.state).toBe('paused');
+    // …and the paused sentence SAYS the resume also waits on observability.
+    expect(disclosureOf(verdict).requiredAction).toContain('could not be read');
+  });
+});
+
 describe('every specified condition pauses the schedule', () => {
   it.each([...BREAKER_CONDITIONS])('%s trips it', (condition) => {
-    // Mutation check: dropping any condition from the loop lets that one
-    // trip silently and the schedule keep spending.
-    const verdict = evaluateCircuitBreakers(signals({ readings: withReading(condition, 'tripped') }));
+    // Mutation check: dropping any condition from the loop lets that one trip
+    // silently and the schedule keep spending. The external effect is left
+    // UNKNOWN so the external-by-definition conditions are answerable here
+    // rather than refused as contradictory.
+    const verdict = evaluateCircuitBreakers(signals({
+      readings: withReading(condition, 'tripped'),
+      externalEffectOccurred: null,
+    }));
     expect(verdict.state).toBe('paused');
-    expect(verdict.disclosure.trippedBy).toEqual([condition]);
+    expect(disclosureOf(verdict).trippedBy).toEqual([condition]);
   });
 
   it('all clear keeps it running', () => {
     const verdict = evaluateCircuitBreakers(signals());
     expect(verdict.state).toBe('running');
-    expect(verdict.disclosure.trippedBy).toEqual([]);
-    expect(verdict.disclosure.requiredAction).toContain('None');
+    expect(disclosureOf(verdict).trippedBy).toEqual([]);
+    expect(disclosureOf(verdict).requiredAction).toContain('None');
   });
 
   it('reports EVERY tripped condition, not the first', () => {
     const readings = { ...allClear(), mcp_revoked: 'tripped', external_rate_limited: 'tripped' } as
       Record<BreakerCondition, BreakerReading>;
-    const verdict = evaluateCircuitBreakers(signals({ readings }));
-    expect([...verdict.disclosure.trippedBy].sort())
+    // external_rate_limited is external BY DEFINITION, so 'no external
+    // effect' would be a contradiction and is refused; Unknown is answerable.
+    const verdict = evaluateCircuitBreakers(signals({ readings, externalEffectOccurred: null }));
+    expect([...disclosureOf(verdict).trippedBy].sort())
       .toEqual(['external_rate_limited', 'mcp_revoked']);
   });
 });
@@ -63,9 +181,9 @@ describe('unknown external effect is never rendered as no', () => {
       readings: withReading('provider_unavailable', 'tripped'),
       externalEffectOccurred: null,
     }));
-    expect(verdict.disclosure.externalEffectOccurred).toBeNull();
-    expect(verdict.disclosure.requiredAction).toContain('UNKNOWN');
-    expect(verdict.disclosure.requiredAction).toContain('not the same as no');
+    expect(disclosureOf(verdict).externalEffectOccurred).toBeNull();
+    expect(disclosureOf(verdict).requiredAction).toContain('UNKNOWN');
+    expect(disclosureOf(verdict).requiredAction).toContain('not the same as no');
   });
 
   it('requires manual review when the external effect is UNKNOWN', () => {
@@ -73,7 +191,7 @@ describe('unknown external effect is never rendered as no', () => {
       readings: withReading('provider_unavailable', 'tripped'),
       externalEffectOccurred: null,
     }));
-    expect(verdict.disclosure.manualReviewRequired).toBe(true);
+    expect(disclosureOf(verdict).manualReviewRequired).toBe(true);
   });
 
   it('requires manual review when an external effect DID occur', () => {
@@ -81,8 +199,10 @@ describe('unknown external effect is never rendered as no', () => {
       readings: withReading('repeated_consecutive_failures', 'tripped'),
       externalEffectOccurred: true,
     }));
-    expect(verdict.disclosure.manualReviewRequired).toBe(true);
-    expect(verdict.disclosure.requiredAction).toContain('DID reach outside');
+    expect(disclosureOf(verdict).manualReviewRequired).toBe(true);
+    // Wording corrected after review: reaching outside is not the same claim
+    // as an EFFECT occurring, and the spec asks about effects.
+    expect(disclosureOf(verdict).requiredAction).toContain('An external EFFECT occurred');
   });
 
   it('does not require manual review for a purely internal, non-security pause', () => {
@@ -92,8 +212,8 @@ describe('unknown external effect is never rendered as no', () => {
       readings: withReading('repeated_consecutive_failures', 'tripped'),
       externalEffectOccurred: false,
     }));
-    expect(verdict.disclosure.manualReviewRequired).toBe(false);
-    expect(verdict.disclosure.requiredAction).toContain('re-evaluates clean');
+    expect(disclosureOf(verdict).manualReviewRequired).toBe(false);
+    expect(disclosureOf(verdict).requiredAction).toContain('re-evaluates clean');
   });
 });
 
@@ -107,7 +227,7 @@ describe('access and policy changes always need a human', () => {
         readings: withReading(condition, 'tripped'),
         externalEffectOccurred: false,
       }));
-      expect(verdict.disclosure.manualReviewRequired).toBe(true);
+      expect(disclosureOf(verdict).manualReviewRequired).toBe(true);
     },
   );
 
@@ -126,7 +246,7 @@ describe('the disclosure carries what the spec requires', () => {
       lastFailureRunId: 'lpr_bad',
       externalEffectOccurred: true,
     }));
-    const d = verdict.disclosure;
+    const d = disclosureOf(verdict);
     expect(d.trippedBy).toEqual(['cost_threshold_or_spike']);
     expect(d.lastSafeRunId).toBe('lpr_good');
     expect(d.lastFailureRunId).toBe('lpr_bad');
@@ -137,15 +257,15 @@ describe('the disclosure carries what the spec requires', () => {
 
   it('a schedule with no safe run yet says null, which is not unknown', () => {
     const verdict = evaluateCircuitBreakers(signals({ lastSafeRunId: null }));
-    expect(verdict.disclosure.lastSafeRunId).toBeNull();
+    expect(disclosureOf(verdict).lastSafeRunId).toBeNull();
   });
 
   it('names conditions it could not read, separately from tripped ones', () => {
     const readings = { ...allClear(), mcp_revoked: 'unknown', provider_unavailable: 'tripped' } as
       Record<BreakerCondition, BreakerReading>;
     const verdict = evaluateCircuitBreakers(signals({ readings }));
-    expect(verdict.disclosure.trippedBy).toEqual(['provider_unavailable']);
-    expect(verdict.disclosure.unreadable).toEqual(['mcp_revoked']);
+    expect(disclosureOf(verdict).trippedBy).toEqual(['provider_unavailable']);
+    expect(disclosureOf(verdict).unreadable).toEqual(['mcp_revoked']);
   });
 
   it('an UNREADABLE condition alone does not pause — but it is disclosed', () => {
@@ -155,8 +275,8 @@ describe('the disclosure carries what the spec requires', () => {
       readings: withReading('mcp_revoked', 'unknown'),
     }));
     expect(verdict.state).toBe('running');
-    expect(verdict.disclosure.unreadable).toEqual(['mcp_revoked']);
-    expect(verdict.disclosure.requiredAction).toContain('could not be read');
+    expect(disclosureOf(verdict).unreadable).toEqual(['mcp_revoked']);
+    expect(disclosureOf(verdict).requiredAction).toContain('could not be read');
   });
 });
 

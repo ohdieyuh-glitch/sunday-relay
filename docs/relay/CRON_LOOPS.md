@@ -296,10 +296,27 @@ human review that a known effect does. Access and policy changes (MCP
 revocation, repeated authentication failures, organization membership,
 security policy, reduced credential scopes) always require review, because a
 schedule cannot tell whether the change was intended. A condition that could
-not be READ neither trips nor clears — it does not pause the schedule, and it
-does block a resume, because unobserved is not clean and resuming on silence
-is resuming on an assumption. NOT WIRED: nothing observes these conditions or
-consults the verdict.
+not be READ neither trips nor clears: it does not pause the schedule on its
+own, and it does block a resume, because unobserved is not clean and resuming
+on silence is resuming on an assumption.
+
+**AN OPEN QUESTION, NOT A DECISION MADE HERE.** What a schedule should do when
+NONE of its breakers can be read is not settled by this document. The first
+implementation answered "keep running" and wrote that answer into this
+section in the same commit, then cited it as though it were approved — review
+caught the circularity. The evaluator now returns a third state,
+`unobserved`, distinct from both running and paused, so the caller chooses
+with the facts in front of it. **Founder decision needed:** should a schedule
+whose breakers are entirely unreadable keep running, or stop? Everything else
+in this repository that meets an unknown fails closed.
+
+A malformed reading is refused rather than read as "unknown" — a producer's
+typo must not downgrade a real trip into carry-on — and a condition that is
+external BY DEFINITION (repeated duplicate external actions, external rate
+limiting) reported alongside "no external effect" is refused as
+contradictory rather than answered.
+
+NOT WIRED: nothing observes these conditions or consults the verdict.
 
 ## Versioning
 
