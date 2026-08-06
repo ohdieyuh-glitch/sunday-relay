@@ -112,6 +112,12 @@ export function renderOperationsView(input: OperationsViewInput): {
     lines.push('');
   }
 
+  if (view.droppedErrors > 0) {
+    // The count and the rate above are exact; the by-kind list is not.
+    lines.push(p.dim(`  ${view.droppedErrors} older error(s) evicted; the counts above `
+      + 'are exact and any breakdown covers the kept ones only.'), '');
+  }
+
   lines.push(p.dim('  LATENCY'));
   if (view.latency.length === 0) {
     lines.push(p.dim('  No phase has been timed for this project.'));

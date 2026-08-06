@@ -325,6 +325,20 @@ export interface RelayOperationalRecord {
    */
   readonly droppedLatency: number;
   readonly droppedErrors: number;
+  /**
+   * EXACT counts, never bounded.
+   *
+   * The `errors` array is capped so a record stays cheap to read, and that cap
+   * used to truncate the NUMERATOR of the error rate while `attempts` — a
+   * plain counter — kept growing. Ten thousand failures out of ten thousand
+   * attempts reported as 2%, and a project could evict its way from `failing`
+   * to `healthy` by failing MORE.
+   *
+   * So the list is the detail and these are the truth. A rate and a health
+   * verdict are computed from these; the by-kind breakdown comes from the list
+   * and says when it is partial.
+   */
+  readonly errorTotals: { readonly observed: number; readonly unrecovered: number };
 }
 
 /** An empty record — observed nothing, which is not the same as observed zero. */
@@ -341,5 +355,6 @@ export function emptyOperationalRecord(projectId: string): RelayOperationalRecor
     newestSignalAt: null,
     droppedLatency: 0,
     droppedErrors: 0,
+    errorTotals: { observed: 0, unrecovered: 0 },
   };
 }

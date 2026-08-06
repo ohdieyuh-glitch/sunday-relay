@@ -47,7 +47,10 @@ describe('the store never claims durability it does not have', () => {
     expect(store.status.concurrencyScope).toBe('process');
   });
 
-  it('does not upgrade a volatile backing to a durable one', () => {
+  it('passes the backing’s claim through — it cannot verify one', () => {
+    // Renamed from "does not upgrade a volatile backing": there is no upgrade
+    // path to test. The label is the backing’s own unverified claim, and what
+    // this proves is that the store neither changes it nor invents one.
     const store = createOperationalStore(memoryBacking({ durability: 'durable' }));
     expect(store.status.durability).toBe('durable');
   });
@@ -233,5 +236,120 @@ describe('two runs finishing at once do not lose one another', () => {
     expect(first.ok).toBe(false);
     const second = await store.record('p', observation({ observedAt: AT(1) }));
     expect(second.ok).toBe(true);
+  });
+});
+
+/* ------------------------------------- what the bound must not corrupt */
+
+describe('a bound must not make a figure lie', () => {
+  it('ten thousand failures out of ten thousand attempts is not a 2% error rate', async () => {
+    // Capping the error LIST while `attempts` kept growing reported exactly
+    // this, and let a project evict its way from `failing` to `healthy` by
+    // failing MORE.
+    const store = createOperationalStore(memoryBacking());
+    const total = MAX_ERROR_EVENTS + 300;
+    for (let i = 0; i < total; i += 1) {
+      await store.record('p', observation({
+        latency: [],
+        errors: [{ kind: 'tool_failure', at: AT(i), recovered: false, attempt: 1 }],
+        observedAt: AT(i),
+      }));
+    }
+    const read = await store.read('p');
+    const record = read.ok && read.record ? read.record : null;
+    expect(record?.errors.length).toBe(MAX_ERROR_EVENTS);
+    expect(record?.droppedErrors).toBe(300);
+
+    const view = projectOperations(record!, AT(total + 1));
+    // Exact, from the counters — not the sum of the kept list.
+    expect(view.errorCount).toBe(total);
+    expect(view.unrecoveredErrorCount).toBe(total);
+    expect(view.errorRate.known && view.errorRate.value).toBe(1);
+    // And it cannot evict its way out of failing.
+    expect(view.health).toBe('failing');
+  });
+
+  it('the by-kind breakdown is the kept window, and the count is not', async () => {
+    const store = createOperationalStore(memoryBacking());
+    for (let i = 0; i < MAX_ERROR_EVENTS + 5; i += 1) {
+      await store.record('p', observation({
+        latency: [],
+        errors: [{ kind: 'rate_limited', at: AT(i), recovered: true, attempt: 1 }],
+        observedAt: AT(i),
+      }));
+    }
+    const read = await store.read('p');
+    const view = projectOperations(read.ok && read.record ? read.record : null!, AT(9999));
+    const breakdown = view.errors.reduce((sum, e) => sum + e.count, 0);
+    expect(breakdown).toBe(MAX_ERROR_EVENTS);
+    expect(view.errorCount).toBe(MAX_ERROR_EVENTS + 5);
+    expect(view.droppedErrors).toBe(5);
+  });
+});
+
+describe('a record written by an earlier build is repaired, not trusted', () => {
+  it('a missing counter does not become NaN and vanish', async () => {
+    // `undefined + 1` is NaN, and `NaN > 0` is false — so the disclosure would
+    // silently disappear rather than obviously break, and the counter would
+    // reset forever.
+    const legacy = JSON.stringify({
+      projectId: 'p', latency: [], errors: [], waits: [], evaluations: [],
+      repairLoops: [], attempts: { attempts: 3, source: 'counted' },
+      newestSignalAt: AT(0),
+    });
+    const map = new Map([[`relay.operations.p`, legacy]]);
+    const store = createOperationalStore({
+      durability: 'volatile-test-only',
+      locationLabel: 'in-memory (test)',
+      async getText(key) { return map.get(key) ?? null; },
+      async putText(key, value) { map.set(key, value); },
+    });
+    const result = await store.record('p', observation());
+    expect(result.ok).toBe(true);
+    const record = result.ok ? result.record : null;
+    expect(Number.isNaN(record?.droppedLatency ?? Number.NaN)).toBe(false);
+    expect(record?.droppedLatency).toBe(0);
+    expect(record?.errorTotals).toEqual({ observed: 0, unrecovered: 0 });
+    // The attempts it already had are preserved, not reset.
+    expect(record?.attempts.attempts).toBe(4);
+  });
+});
+
+describe('a read has three answers, not two', () => {
+  it('distinguishes nothing-recorded from bytes it cannot read', async () => {
+    const empty = createOperationalStore(memoryBacking());
+    const nothing = await empty.read('p');
+    expect(nothing.ok && nothing.record).toBeNull();
+    expect(nothing.ok && nothing.unreadable).toBeUndefined();
+
+    const corrupt = createOperationalStore(memoryBacking({
+      async getText() { return '{not json'; },
+    }));
+    const bad = await corrupt.read('p');
+    expect(bad.ok && bad.record).toBeNull();
+    // Bytes exist. The next write will overwrite them, and a caller can say so.
+    expect(bad.ok && bad.unreadable).toBe(true);
+
+    const failed = createOperationalStore(memoryBacking({
+      async getText() { throw new Error('backing unavailable'); },
+    }));
+    expect((await failed.read('p')).ok).toBe(false);
+  });
+});
+
+describe('the serialisation chain does not leak', () => {
+  it('prunes a project’s chain once its writes have settled', async () => {
+    const store = createOperationalStore(memoryBacking());
+    await store.record('a', observation());
+    await store.record('b', observation());
+    // Give the prune microtask a turn.
+    await new Promise((resolve) => { setTimeout(resolve, 5); });
+    // Reaching into the closure is not possible, so this asserts the observable
+    // consequence: repeated projects do not accumulate work that changes
+    // behaviour. A leak here is a slow one, and the guard is the code comment
+    // plus this smoke check that many projects still settle.
+    const many = await Promise.all(Array.from({ length: 50 }, (_, i) =>
+      store.record(`proj-${i}`, observation())));
+    expect(many.every((r) => r.ok)).toBe(true);
   });
 });

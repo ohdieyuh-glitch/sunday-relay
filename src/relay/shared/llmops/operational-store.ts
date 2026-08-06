@@ -14,9 +14,15 @@
  *   dashboard that survives nothing while implying it survives everything is
  *   worse than no dashboard.
  * - **To grow without bound.** A record that accumulates forever eventually
- *   costs more to read than the answer is worth. It keeps the newest
- *   observations and COUNTS what it dropped, because percentiles over a
- *   silently truncated window describe the window, not the system.
+ *   costs more to read than the answer is worth. It keeps the most recently
+ *   RECORDED observations and counts what it dropped, because percentiles over
+ *   a silently truncated window describe the window, not the system.
+ * - **To let a bound corrupt a figure.** Capping the error LIST while
+ *   `attempts` kept growing reported ten thousand failures out of ten thousand
+ *   attempts as a 2% error rate, and let a project evict its way from
+ *   `failing` to `healthy` by failing MORE. Exact counters live in the record
+ *   alongside the bounded list; the list is the detail, the counters are the
+ *   truth.
  * - **To lose a write quietly.** Every call returns a result. A caller that
  *   ignores it has chosen to; a store that swallowed it would have chosen for
  *   them.
@@ -66,14 +72,25 @@ export type OperationalWriteResult =
   | { readonly ok: false; readonly reason: string };
 
 export type OperationalReadResult =
-  | { readonly ok: true; readonly record: RelayOperationalRecord | null }
+  | { readonly ok: true; readonly record: RelayOperationalRecord | null;
+      /**
+       * `true` when bytes were stored and could not be read as this project's
+       * record — corrupt, or belonging to another project. That is a THIRD
+       * state: not a failed read, and not a project with nothing recorded, and
+       * the next write will overwrite it.
+       */
+      readonly unreadable?: boolean }
   | { readonly ok: false; readonly reason: string };
 
 export interface OperationalStore {
   readonly status: OperationalStoreStatus;
   /** Folds one observation in. Returns the record as it now stands. */
   record(projectId: string, observation: RunObservation): Promise<OperationalWriteResult>;
-  /** `null` means NOTHING HAS BEEN RECORDED — not an empty record. */
+  /**
+   * `record: null` with `unreadable` unset means NOTHING HAS BEEN RECORDED.
+   * `record: null, unreadable: true` means bytes exist that could not be read.
+   * `ok: false` means the backing could not answer. Three different facts.
+   */
   read(projectId: string): Promise<OperationalReadResult>;
 }
 
@@ -85,13 +102,28 @@ const keyFor = (projectId: string): string => `relay.operations.${projectId}`;
  * The count matters more than it looks: a p95 computed over a truncated window
  * is a p95 of the window. A reader who knows 4000 samples were dropped knows to
  * read it as recent-history rather than as the project's history.
+ *
+ * "Newest" here means most recently RECORDED, not latest by timestamp. A
+ * backfilled observation stamped in the future is evicted like any other early
+ * arrival; `newestSignalAt` is carried forward by `ingest` regardless, so
+ * staleness and health are unaffected.
  */
 function keepNewest<T>(items: readonly T[], limit: number): { kept: T[]; dropped: number } {
   if (items.length <= limit) return { kept: [...items], dropped: 0 };
   return { kept: items.slice(items.length - limit), dropped: items.length - limit };
 }
 
-/** A stored record, shape-checked. Anything unrecognised is treated as absent. */
+/** A finite, non-negative count, or 0. A record written before these fields
+ *  existed has none, and `undefined + 1` is NaN — which then reads as `false`
+ *  in every `> 0` check, so the counter silently disappears rather than
+ *  obviously breaking. */
+const count = (value: unknown): number => (
+  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+);
+
+/** A stored record, shape-checked and COERCED. A field this build added is
+ *  absent from anything an older build wrote, so every one of them is repaired
+ *  on read rather than trusted. */
 function parseRecord(text: string, projectId: string): RelayOperationalRecord | null {
   let value: unknown;
   try {
@@ -106,7 +138,16 @@ function parseRecord(text: string, projectId: string): RelayOperationalRecord | 
   if (!Array.isArray(candidate.waits) || !Array.isArray(candidate.evaluations)) return null;
   if (!Array.isArray(candidate.repairLoops)) return null;
   if (typeof candidate.attempts !== 'object' || candidate.attempts === null) return null;
-  return candidate as RelayOperationalRecord;
+  const totals = candidate.errorTotals;
+  return {
+    ...(candidate as RelayOperationalRecord),
+    droppedLatency: count(candidate.droppedLatency),
+    droppedErrors: count(candidate.droppedErrors),
+    errorTotals: {
+      observed: count(totals?.observed),
+      unrecovered: count(totals?.unrecovered),
+    },
+  };
 }
 
 export function createOperationalStore(backing: OperationalBacking): OperationalStore {
@@ -119,13 +160,24 @@ export function createOperationalStore(backing: OperationalBacking): Operational
     const previous = chains.get(projectId) ?? Promise.resolve();
     const next = previous.then(work, work);
     // Kept even on rejection so a failed write cannot wedge the chain.
-    chains.set(projectId, next.then(() => undefined, () => undefined));
+    const settled = next.then(() => undefined, () => undefined);
+    chains.set(projectId, settled);
+    // Pruned when this is still the newest link, so the map does not grow one
+    // permanent entry per project id — which would be an unbounded structure
+    // inside the module that refuses unbounded growth.
+    void settled.then(() => {
+      if (chains.get(projectId) === settled) chains.delete(projectId);
+    });
     return next;
   };
 
-  const readRaw = async (projectId: string): Promise<RelayOperationalRecord | null> => {
+  const readRaw = async (
+    projectId: string,
+  ): Promise<{ record: RelayOperationalRecord | null; unreadable: boolean }> => {
     const text = await backing.getText(keyFor(projectId));
-    return text === null ? null : parseRecord(text, projectId);
+    if (text === null) return { record: null, unreadable: false };
+    const record = parseRecord(text, projectId);
+    return { record, unreadable: record === null };
   };
 
   return {
@@ -137,7 +189,8 @@ export function createOperationalStore(backing: OperationalBacking): Operational
 
     async read(projectId) {
       try {
-        return { ok: true, record: await readRaw(projectId) };
+        const { record, unreadable } = await readRaw(projectId);
+        return unreadable ? { ok: true, record, unreadable } : { ok: true, record };
       } catch (error) {
         // A read that failed is not a project with no data, and the caller is
         // told which it got.
@@ -148,7 +201,8 @@ export function createOperationalStore(backing: OperationalBacking): Operational
     async record(projectId, observation) {
       return serialise(projectId, async () => {
         try {
-          const existing = await readRaw(projectId) ?? emptyOperationalRecord(projectId);
+          const existing = (await readRaw(projectId)).record
+            ?? emptyOperationalRecord(projectId);
           const folded = ingest(existing, {
             latency: observation.latency,
             errors: observation.errors,

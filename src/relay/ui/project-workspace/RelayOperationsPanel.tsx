@@ -125,6 +125,15 @@ export function RelayOperationsPanel({ view }: {
           <dt>ERROR RATE</dt>
           <dd><Figure figure={view.errorRate} format={percent} /></dd>
         </div>
+        {view.droppedErrors > 0 && (
+          <div>
+            {/* The COUNT above is exact; the by-kind breakdown below is not. */}
+            <dt>ERRORS EVICTED</dt>
+            <dd className="rop-caveat">
+              {`${view.droppedErrors} — the breakdown below covers the kept ones only`}
+            </dd>
+          </div>
+        )}
         <div>
           <dt>EVALUATIONS</dt>
           <dd>

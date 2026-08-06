@@ -311,12 +311,31 @@ nothing is being measured, and both of ours did for two milestones.
 verbatim. A dashboard that survives nothing while implying it survives
 everything is worse than no dashboard.
 
-**It is bounded, and says what it dropped.** The newest 500 latency samples and
-200 error events are kept, and every eviction is counted into `droppedLatency` /
-`droppedErrors`, which both surfaces render. A percentile over a truncated
+**It is bounded, and says what it dropped.** The most recently RECORDED 500
+latency samples and 200 error events are kept — "newest" by arrival, not by
+timestamp — and every eviction is counted into `droppedLatency` /
+`droppedErrors`. Both surfaces render both counts. A percentile over a truncated
 window is a percentile OF THE WINDOW: a reader who knows four thousand samples
 fell off the end reads it as recent history, and a reader who does not reads it
 as the project's.
+
+**A bound must not corrupt a figure.** Capping the error LIST while `attempts`
+kept growing reported ten thousand failures out of ten thousand attempts as a
+**2% error rate**, and let a project evict its way from `failing` to `healthy`
+by failing more. The record now carries exact error counters beside the bounded
+list, and the figures take the LARGER of the two. The kept list is a subset of
+everything observed, so the true count can never be less than it sums to — which
+makes both kinds of record right: one folded through `ingest` carries counters
+that exceed the bounded list, and one built directly in a fixture carries no
+counters and simply IS its list. Under-reporting errors is always the flattering
+direction.
+
+**A read has three answers, not two.** `null` means nothing has been recorded;
+`null` with `unreadable` means bytes exist that could not be read as this
+project's record; `ok: false` means the backing could not answer. A record
+written by an earlier build is repaired on read rather than trusted — a missing
+counter would otherwise become `NaN`, and `NaN > 0` is false, so the disclosure
+would silently disappear instead of obviously breaking.
 
 **A failed read is not a project with no data**, and a failed write is returned
 rather than swallowed. `null` from a read means nothing has been recorded; an
@@ -332,8 +351,9 @@ have.
 
 ## Not implemented
 
-**Nothing calls `observeClaudeRun` on a live run.** The producer, the store and
-both surfaces exist and are proven against the connector's real types; what is
+**Nothing calls `observeClaudeRun` on a live run.** The producer is proven
+against the connector's real types; the store and both surfaces are proven
+against the domain's. What is
 missing is the CALL — a run handler that observes its own outcome and records
 it, and a host that reads the record back into `operationsView`. Until that
 exists both surfaces truthfully report that no operations source is wired,

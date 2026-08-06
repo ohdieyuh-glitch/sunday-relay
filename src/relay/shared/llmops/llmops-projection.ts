@@ -136,7 +136,12 @@ export interface RelayOperationsView {
   readonly waits: readonly RelayWaitView[];
   readonly waitingOnUserMs: number;
   readonly waitingOnUserOpen: boolean;
+  /**
+   * The by-kind breakdown, from the BOUNDED list. It sums to `errorCount` only
+   * while `droppedErrors` is zero; past that it describes the kept window.
+   */
   readonly errors: readonly RelayErrorView[];
+  /** Exact, from the record's own counters. Never the sum of the list. */
   readonly errorCount: number;
   readonly unrecoveredErrorCount: number;
   readonly errorRate: RelayFigure;
@@ -230,8 +235,22 @@ export function projectOperations(
     }))
     .sort((a, b) => b.count - a.count || a.kind.localeCompare(b.kind));
 
-  const errorCount = errors.reduce((sum, e) => sum + e.count, 0);
-  const unrecoveredErrorCount = errors.reduce((sum, e) => sum + e.unrecovered, 0);
+  // The kept list is a SUBSET of everything observed, so the true count can
+  // never be less than the list sums to. Taking the larger of the two is what
+  // makes both kinds of record right: one folded through `ingest` carries
+  // exact counters that exceed the bounded list, and one built directly in a
+  // test or a fixture carries no counters at all and IS its list.
+  //
+  // Trusting the counters alone under-reported a hand-built record to zero;
+  // trusting the list alone reported ten thousand failures out of ten thousand
+  // attempts as 2%, and let a project evict its way from `failing` to
+  // `healthy`. Under-reporting errors is always the flattering direction.
+  const listedErrors = errors.reduce((sum, e) => sum + e.count, 0);
+  const listedUnrecovered = errors.reduce((sum, e) => sum + e.unrecovered, 0);
+  const errorCount = Math.max(record.errorTotals?.observed ?? 0, listedErrors);
+  const unrecoveredErrorCount = Math.max(
+    record.errorTotals?.unrecovered ?? 0, listedUnrecovered,
+  );
 
   // Rule 3: a rate with an unknown denominator is unknown, not zero and not one.
   const attempts = record.attempts.attempts;
