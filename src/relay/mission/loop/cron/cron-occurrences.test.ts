@@ -100,7 +100,10 @@ describe('which occurrences a window owes', () => {
   it('the window is strictly-after / at-or-before, at the edges', () => {
     // An occurrence resolving exactly AT afterExclusive belongs to the
     // PREVIOUS window; one exactly at untilInclusive belongs to this one.
-    // Mutation check: either comparison flipped fails this.
+    // Mutation check: flipping the UNTIL comparison fails this. The AFTER
+    // side is enforced by where iteration starts, and its guard is pinned by
+    // the fall-back-window test below — review found this comment claiming a
+    // mutation it does not kill.
     const result = dueCronOccurrences(fakeZone(), input({
       afterExclusive: '2026-08-06T01:00:00.000Z',
       untilInclusive: '2026-08-06T03:00:00.000Z',
@@ -249,9 +252,10 @@ describe('composed with the real Intl adapter', () => {
     // opening at 09:00Z — between the passes — iterates local minutes from
     // 01:00 PST and meets 01:30 again; its resolution is the FIRST pass,
     // 08:30Z, which the PREVIOUS window already owed. Mutation check: this is
-    // the test the `resolvedMs <= afterMs` guard exists for — weakening it to
-    // `<` emits an occurrence BEFORE the window it was asked about, re-running
-    // paid work the last window handled.
+    // the test the after-guard exists for — REMOVING it emits an occurrence
+    // BEFORE the window it was asked about, re-running paid work the last
+    // window handled. (`<=` versus `<` is an equivalent mutant — equality is
+    // unreachable, as the guard's own comment explains.)
     const result = dueCronOccurrences(createIntlTimezonePort(), input({
       schedule: schedule('30 1 * * *'),
       timeZone: 'America/Los_Angeles',
