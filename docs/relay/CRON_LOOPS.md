@@ -1,7 +1,8 @@
 # Cron Loops — architecture decision
 
 **Status: GRAMMAR + PURE EVALUATOR + CLAIM/OVERLAP/MISSED-RUN DECISIONS
-IMPLEMENTED. THE CLAIM ADAPTER AND DISPATCH NOT IMPLEMENTED.**
++ FILE-BACKED CLAIM ADAPTER IMPLEMENTED. THE SCHEDULER AND DISPATCH NOT
+IMPLEMENTED.**
 
 `/loop schedule`, `/loop cron`, `/loop schedules` parse today and produce typed
 commands. `src/relay/mission/loop/cron/` now holds the schedule stage this
@@ -13,11 +14,14 @@ per the formula below, both DST rules, bounded windows, named refusals, said
 truncation), `cron-claim.ts` (the claim-before-effect sequence below, pure
 over an injected `OccurrenceClaimPort`), `cron-overlap.ts` (overlap policies,
 unknown fails closed) and `cron-missed.ts` (missed-run policies; high-risk
-work never auto-caught-up, whatever the policy says). Nothing yet PERSISTS or
-DISPATCHES: there is no file-backed claim adapter, no marker on disk, no
-timer, no tick endpoint and no run creation from a trigger. The `loop_cron`
-feature flag is off and depends on `loop_scheduler`, which depends on
-`loop_engine`.
+work never auto-caught-up, whatever the policy says).
+`src/relay/persistence/cron-claim-node.ts` is the file-backed
+`OccurrenceClaimPort`: the guarded run lock per occurrence directory, an
+O_EXCL claim marker (exclusive, not merely atomic), a durable trigger
+journal, and path-shaped occurrence ids refused. Nothing yet DISPATCHES:
+there is no timer, no tick endpoint and no run creation from a trigger. The
+`loop_cron` feature flag is off and depends on `loop_scheduler`, which
+depends on `loop_engine`.
 
 This document records the approved beta architecture so the runtime stage does
 not have to relitigate it.
@@ -225,13 +229,12 @@ hardcodes automatic Unchain consumption**.
 
 ## Not implemented
 
-The in-bridge scheduler and its tick endpoint · the FILE-BACKED
-`OccurrenceClaimPort` adapter (the pure claim sequence exists; nothing
-persists a marker) · run creation from a trigger · period budget caps ·
-recurring approvals · circuit breakers · schedule versioning · conditional
-Cron Loops · the Cron UI.
+The in-bridge scheduler and its tick endpoint · run creation from a trigger ·
+period budget caps · recurring approvals · circuit breakers · schedule
+versioning · conditional Cron Loops · the Cron UI.
 
 Cron expression semantics, timezone handling, DST resolution, the occurrence
-identity, the claim-before-effect sequence, overlap policies and missed-run
-policies ARE implemented (see status above) — listed apart because an
+identity, the claim-before-effect sequence, overlap policies, missed-run
+policies and the file-backed claim adapter ARE implemented (see status
+above) — listed apart because an
 implemented stage left on this list is an invitation to rebuild it.
