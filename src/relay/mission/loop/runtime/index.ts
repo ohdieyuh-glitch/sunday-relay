@@ -184,3 +184,16 @@ export {
   type LoopRecoveryInput,
   type LoopRecoveryReport,
 } from './loop-runtime-recovery';
+
+export {
+  bindLoopAdvance,
+  runLoopWorkerPass,
+} from './loop-worker';
+export type {
+  LoopAdvanceFn,
+  LoopSkipReason,
+  LoopWorkerAttempt,
+  LoopWorkerOptions,
+  LoopWorkerPass,
+  LoopWorkerPorts,
+} from './loop-worker';

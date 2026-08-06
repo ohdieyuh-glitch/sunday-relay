@@ -256,6 +256,53 @@ worktrees, the coding agent, the prompt architect and the reviewer harness are:
 the CLI boundary permits only the bare `../mission` path, and both surfaces
 must normalize through the same parser rather than each growing their own.
 
+## The background worker
+
+A run's journal, snapshot and lock survive a restart; `loop-worker.ts` is what
+PICKS IT UP. `runLoopWorkerPass` does ONE bounded pass — discover, claim,
+advance, release, report — and returns what it did. It is deliberately not a
+scheduler, a queue or a daemon: the thing that decides how often to run is
+somebody else's decision, which is what makes the pass testable without
+waiting.
+
+Every defect a worker can add is a CLAIM defect, so the pass refuses five ways:
+
+- It never claims a lock a LIVE owner holds, and treats a lock on another host
+  as live — cross-host liveness is unknowable, and reclaiming would run the
+  same iteration twice. An iteration is a paid dispatch.
+- An UNREADABLE lock is not a free one; it may be a live owner mid-write.
+- Every run it looked at appears in the report with why it was skipped. A
+  worker that skips silently is indistinguishable from one with nothing to do —
+  the second is fine, the first is an outage.
+- One bounded pass: at most `maxRuns` claims, at most `maxIterationsPerRun`
+  advances each, and `capacityReached` says whether it stopped early or ran out
+  of work — different facts a caller must be able to tell apart.
+- The lock releases AFTER the engine has journalled. A crash between them
+  leaves a stale lock and a complete journal, which recovery reads; the other
+  order leaves a claimable run whose last iteration is gone.
+
+The engine seam is one function, `LoopAdvanceFn`, bound to the real engine by
+`bindLoopAdvance`. The pass is TOTAL and labels every failure as what it was:
+a throwing `release()` is reported as `release_failed` and the pass continues;
+an engine failure is `advance_failed`, never a context problem; a refusal is
+DECLINED, not advanced — five refusals used to read as "advanced 5", a
+busy-looking pass that did no work; a duplicated discovery claims the run once
+and names the duplicate; and a failed discovery returns an empty REPORT rather
+than a rejected promise, because a pass that dies silently is indistinguishable
+from one that never ran.
+
+NOT WIRED: nothing schedules a pass yet — no daemon, no cron, no CLI verb
+invokes it. That is the next stage, not a footnote.
+
+**PRECONDITION FOR WIRING, found by review and not yet fixed:** the persistence
+lock's stale reclaim is not atomic. Two same-host processes can both observe
+`stale_owner_dead`; the loser's unconditional rename then displaces the
+winner's LIVE lock and both acquire. `acquireRunLock` also reclaims UNREADABLE
+locks, which this worker refuses — so a naive binding would leak the
+primitive's policy through the worker's refusal. `lock.ts` needs a post-acquire
+ownership re-read (or a guarded rename) before any two workers run against the
+same state root.
+
 ## Observing a run
 
 A drafted Loop and a running one are different questions, and the surfaces
