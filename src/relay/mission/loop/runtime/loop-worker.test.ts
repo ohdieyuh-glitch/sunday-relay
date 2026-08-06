@@ -161,3 +161,104 @@ describe('the pass is honest about time and count', () => {
     expect(pass.capacityReached).toBe(false);
   });
 });
+
+/* ---------------------------------------- what the review proved missing */
+
+describe('the pass is total, and labels every failure as what it was', () => {
+  it('a throwing release() does not kill the rest of the pass', async () => {
+    // The first version let this propagate out of the finally, rejecting the
+    // whole pass — unreported successful advances included — and falsifying
+    // its own header's totality claim.
+    const events: string[] = [];
+    let clock = 0;
+    const ports: LoopWorkerPorts = {
+      async discoverRunnable() { return ['r1', 'r2']; },
+      async inspectRunLock() { return { status: 'free' }; },
+      async acquireRunLock(runId) {
+        return {
+          async release() {
+            if (runId === 'r1') throw new Error('unlink EIO');
+            events.push(`release:${runId}`);
+          },
+        };
+      },
+      async contextFor(runId) { return { runId } as unknown as LoopEngineContext; },
+      async advance(context) {
+        events.push(`advance:${(context as unknown as { runId: string }).runId}`);
+        return { kind: 'terminal', run: {} as never, state: 'succeeded' } as unknown as LoopEngineOutcome;
+      },
+      now: () => AT(clock += 1),
+    };
+    const pass = await runLoopWorkerPass(ports, { maxRuns: 10, maxIterationsPerRun: 1 });
+    // r2 was still attempted and advanced.
+    expect(events).toContain('advance:r2');
+    // r1's successful advance is reported, AND its failed release is reported —
+    // the work is journalled and the lock is stale, which recovery handles.
+    const r1 = pass.attempts.filter((a) => a.runId === 'r1');
+    expect(r1.some((a) => a.outcome !== undefined)).toBe(true);
+    expect(r1.some((a) => a.skipped === 'release_failed' && a.detail?.includes('EIO'))).toBe(true);
+    expect(pass.advanced).toBe(2);
+  });
+
+  it('an engine failure is advance_failed, never a context problem', async () => {
+    const { ports } = harness({ exploding: { lock: 'free', advance: 'throws' } });
+    const pass = await runLoopWorkerPass(ports, { maxRuns: 1, maxIterationsPerRun: 1 });
+    // Paid iterations may have happened before the failure; a caller sent to
+    // debug context rebuilding is sent to fix the wrong thing.
+    expect(skipsOf(pass).exploding).toBe('advance_failed');
+  });
+
+  it('a refusal is DECLINED, not advanced — five refusals is not a busy pass', async () => {
+    let clock = 0;
+    const ports: LoopWorkerPorts = {
+      async discoverRunnable() { return ['a', 'b', 'c', 'd', 'e']; },
+      async inspectRunLock() { return { status: 'free' }; },
+      async acquireRunLock() { return { async release() {} }; },
+      async contextFor(runId) { return { runId } as unknown as LoopEngineContext; },
+      async advance() {
+        return { kind: 'refused', problem: 'feature disabled', blocker: null } as unknown as LoopEngineOutcome;
+      },
+      now: () => AT(clock += 1),
+    };
+    const pass = await runLoopWorkerPass(ports, { maxRuns: 10, maxIterationsPerRun: 1 });
+    // Nothing was dispatched. "advanced: 5" here was a busy-looking pass that
+    // did no work.
+    expect(pass.advanced).toBe(0);
+    expect(pass.declined).toBe(5);
+  });
+
+  it('a duplicated discovery claims the run ONCE and names the duplicate', async () => {
+    const events: string[] = [];
+    let clock = 0;
+    const ports: LoopWorkerPorts = {
+      async discoverRunnable() { return ['dup', 'dup', 'other']; },
+      async inspectRunLock() { return { status: 'free' }; },
+      async acquireRunLock(runId) { events.push(`acquire:${runId}`); return { async release() {} }; },
+      async contextFor(runId) { return { runId } as unknown as LoopEngineContext; },
+      async advance(context) {
+        events.push(`advance:${(context as unknown as { runId: string }).runId}`);
+        return { kind: 'terminal', run: {} as never, state: 'succeeded' } as unknown as LoopEngineOutcome;
+      },
+      now: () => AT(clock += 1),
+    };
+    const pass = await runLoopWorkerPass(ports, { maxRuns: 10, maxIterationsPerRun: 3 });
+    // Claimed once — a re-listed run must not get 2x the per-run bound.
+    expect(events.filter((e) => e === 'advance:dup')).toHaveLength(1);
+    expect(skipsOf(pass).dup).toBe('duplicate_discovery');
+  });
+
+  it('a discovery failure returns an empty REPORT, not a rejected promise', async () => {
+    let clock = 0;
+    const ports: LoopWorkerPorts = {
+      async discoverRunnable() { throw new Error('listing directory failed'); },
+      async inspectRunLock() { return { status: 'free' }; },
+      async acquireRunLock() { return null; },
+      async contextFor() { return null; },
+      async advance() { throw new Error('unreachable'); },
+      now: () => AT(clock += 1),
+    };
+    const pass = await runLoopWorkerPass(ports, { maxRuns: 1, maxIterationsPerRun: 1 });
+    expect(pass.attempts).toEqual([]);
+    expect(pass.discoveryFailed).toContain('listing directory failed');
+  });
+});

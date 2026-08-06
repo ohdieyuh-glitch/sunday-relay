@@ -282,8 +282,26 @@ Every defect a worker can add is a CLAIM defect, so the pass refuses five ways:
   order leaves a claimable run whose last iteration is gone.
 
 The engine seam is one function, `LoopAdvanceFn`, bound to the real engine by
-`bindLoopAdvance`. NOT WIRED: nothing schedules a pass yet — no daemon, no cron,
-no CLI verb invokes it. That is the next stage, not a footnote.
+`bindLoopAdvance`. The pass is TOTAL and labels every failure as what it was:
+a throwing `release()` is reported as `release_failed` and the pass continues;
+an engine failure is `advance_failed`, never a context problem; a refusal is
+DECLINED, not advanced — five refusals used to read as "advanced 5", a
+busy-looking pass that did no work; a duplicated discovery claims the run once
+and names the duplicate; and a failed discovery returns an empty REPORT rather
+than a rejected promise, because a pass that dies silently is indistinguishable
+from one that never ran.
+
+NOT WIRED: nothing schedules a pass yet — no daemon, no cron, no CLI verb
+invokes it. That is the next stage, not a footnote.
+
+**PRECONDITION FOR WIRING, found by review and not yet fixed:** the persistence
+lock's stale reclaim is not atomic. Two same-host processes can both observe
+`stale_owner_dead`; the loser's unconditional rename then displaces the
+winner's LIVE lock and both acquire. `acquireRunLock` also reclaims UNREADABLE
+locks, which this worker refuses — so a naive binding would leak the
+primitive's policy through the worker's refusal. `lock.ts` needs a post-acquire
+ownership re-read (or a guarded rename) before any two workers run against the
+same state root.
 
 ## Observing a run
 

@@ -64,6 +64,16 @@ export type LoopSkipReason =
   | 'lock_unreadable'
   | 'lock_acquisition_failed'
   | 'no_context'
+  /**
+   * The ENGINE failed while advancing. Kept apart from `no_context` because the
+   * first version folded them together, and a caller diagnosing "context could
+   * not be rebuilt" was sent to fix the wrong thing while paid iterations that
+   * actually happened were labelled a skip.
+   */
+  | 'advance_failed'
+  /** `release()` itself failed. The work is journalled; the lock is stale. */
+  | 'release_failed'
+  | 'duplicate_discovery'
   | 'pass_capacity_reached';
 
 export interface LoopWorkerAttempt {
@@ -80,8 +90,18 @@ export interface LoopWorkerPass {
   readonly finishedAt: string;
   /** Every run the worker looked at, advanced or not. */
   readonly attempts: readonly LoopWorkerAttempt[];
+  /**
+   * Runs where the engine genuinely moved: `iteration_recorded`, `terminal` or
+   * `paused`. A `refused` outcome dispatched NOTHING, and the first version
+   * counted five refusals as "advanced 5" — a busy-looking pass that did no
+   * work.
+   */
   readonly advanced: number;
+  /** Runs the engine answered with a refusal or recovery demand. */
+  readonly declined: number;
   readonly skipped: number;
+  /** Discovery itself failed; the pass is empty and says why. */
+  readonly discoveryFailed?: string;
   /**
    * True when the pass stopped because it hit `maxRuns`, not because it ran
    * out of work. A caller that cannot tell those apart cannot tell a busy
@@ -128,7 +148,38 @@ export async function runLoopWorkerPass(
   let claimed = 0;
   let capacityReached = false;
 
-  const runIds = await ports.discoverRunnable();
+  let discovered: readonly string[];
+  try {
+    discovered = await ports.discoverRunnable();
+  } catch (error) {
+    // Nothing was claimed, so nothing is lost — but a rejected promise loses
+    // the report itself, and a pass that dies silently is indistinguishable
+    // from one that never ran.
+    return {
+      startedAt,
+      finishedAt: ports.now(),
+      attempts: [],
+      advanced: 0,
+      declined: 0,
+      skipped: 0,
+      capacityReached: false,
+      discoveryFailed: (error instanceof Error ? error.message : String(error)).slice(0, 200),
+    };
+  }
+
+  // Deduplicated, and the duplicate is REPORTED. Discovery over a live
+  // filesystem can list a run twice under churn, and claiming it twice runs
+  // 2x the per-run iteration bound in one pass.
+  const seen = new Set<string>();
+  const runIds: string[] = [];
+  for (const runId of discovered) {
+    if (seen.has(runId)) {
+      attempts.push({ runId, skipped: 'duplicate_discovery' });
+      continue;
+    }
+    seen.add(runId);
+    runIds.push(runId);
+  }
 
   for (const runId of runIds) {
     if (claimed >= options.maxRuns) {
@@ -166,10 +217,23 @@ export async function runLoopWorkerPass(
         attempts.push({ runId, skipped: 'no_context' });
         continue;
       }
-      const outcome = await ports.advance(context, options.maxIterationsPerRun);
+      let outcome;
+      try {
+        outcome = await ports.advance(context, options.maxIterationsPerRun);
+      } catch (error) {
+        // An ENGINE failure, named as one. Iterations it journalled before
+        // failing happened and were paid for; calling this a context problem
+        // sent a caller to fix the wrong thing.
+        attempts.push({
+          runId,
+          skipped: 'advance_failed',
+          detail: (error instanceof Error ? error.message : String(error)).slice(0, 200),
+        });
+        continue;
+      }
       attempts.push({ runId, outcome });
     } catch (error) {
-      // One bad run must not stop every other run from advancing.
+      // Only contextFor can reach here now.
       attempts.push({
         runId,
         skipped: 'no_context',
@@ -179,17 +243,34 @@ export async function runLoopWorkerPass(
       // AFTER the engine has journalled. A crash before this leaves a stale
       // lock and a complete journal; releasing first would leave a claimable
       // run whose last iteration is gone.
-      await acquired.release();
+      //
+      // And guarded: a release that THROWS must not kill the rest of the pass.
+      // The first version let it propagate out of this finally, which rejected
+      // the whole pass, unreported successful advances included — falsifying
+      // the header's own totality claim.
+      try {
+        await acquired.release();
+      } catch (error) {
+        attempts.push({
+          runId,
+          skipped: 'release_failed',
+          detail: (error instanceof Error ? error.message : String(error)).slice(0, 200),
+        });
+      }
     }
   }
 
-  const advanced = attempts.filter((a) => a.outcome !== undefined).length;
+  const moved = (kind: string) =>
+    kind === 'iteration_recorded' || kind === 'terminal' || kind === 'paused';
+  const advanced = attempts.filter((a) => a.outcome !== undefined && moved(a.outcome.kind)).length;
+  const declined = attempts.filter((a) => a.outcome !== undefined && !moved(a.outcome.kind)).length;
   return {
     startedAt,
     finishedAt: ports.now(),
     attempts,
     advanced,
-    skipped: attempts.length - advanced,
+    declined,
+    skipped: attempts.length - advanced - declined,
     capacityReached,
   };
 }
