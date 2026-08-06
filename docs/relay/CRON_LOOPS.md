@@ -253,8 +253,17 @@ first. A bounded cap over an UNKNOWN spend refuses — substituting zero is how
 an unmetered schedule passes a spend check — and a reserved Reviewer
 allowance is subtracted from headroom before the comparison, because a run
 that eats the money its own verification needs produces an unreviewable
-result and a bill. It is NOT WIRED: the tick does not consult it yet, and
-nothing observes spend-to-date to feed it.
+result and a bill. An UNKNOWN run cap refuses against a bounded window for
+the same reason an unknown spend does — review found declaring it Unknown was
+strictly more permissive than declaring any number.
+
+WHAT IT DOES NOT COVER, named rather than implied: **token caps and
+provider-call caps are not implemented here** (the run's own budget carries
+them; nothing cross-checks them against a window), and neither is the
+"notify, compute the next eligible trigger truthfully" half of the rule above
+— a blocked decision is returned, and no caller notifies or re-computes
+anything. It is also NOT WIRED: the tick does not consult it, and nothing
+observes spend-to-date to feed it.
 
 Creating a schedule does **not** grant permanent approval to every future
 operation. Seven approval scopes are distinguished: schedule creation,
@@ -304,7 +313,9 @@ The in-bridge scheduler and its timer · execution of a trigger-created run
 therefore schedule listing, pausing and versioning · the occurrence queue,
 and therefore the `queue_one` and `queue_all` overlap policies · period
 budget caps · recurring approvals · circuit breakers · schedule
-versioning · conditional Cron Loops · the Cron UI.
+versioning · conditional Cron Loops · the Cron UI · token and provider-call
+caps at the schedule level · notification and next-eligible-trigger
+computation on a blocked run.
 
 Cron expression semantics, timezone handling, DST resolution, the occurrence
 identity, the claim-before-effect sequence, overlap policies, missed-run

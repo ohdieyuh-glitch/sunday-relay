@@ -51,7 +51,12 @@ export interface WindowBudget {
 }
 
 export interface ScheduledSpendRequest {
-  /** What this run is authorized to spend at most, from its own budget. */
+  /**
+   * What this run may spend at most, from its own budget. `null` means the
+   * ceiling is UNKNOWN — and an unknown ceiling cannot be shown to fit inside
+   * a bounded window, so it refuses there. It authorizes only where every
+   * window is unbounded, because then there is nothing to fit inside.
+   */
   readonly runCapMicros: Micros;
   readonly windows: Readonly<Record<SpendWindow, WindowBudget>>;
   /**
@@ -78,6 +83,10 @@ export interface ScheduledSpendRequest {
 export type SpendRefusalReason =
   | 'emergency_guard_engaged'
   | 'unknown_spend_against_a_cap'
+  /** The RUN's own ceiling is unknown while a window is bounded. Unknown is
+   *  not zero in this direction either — review found declaring it Unknown
+   *  was strictly MORE permissive than declaring any number. */
+  | 'unknown_run_cap_against_a_cap'
   | 'cap_exceeded'
   | 'reviewer_budget_would_be_consumed'
   | 'too_many_simultaneous_runs'
@@ -100,6 +109,10 @@ export type ScheduledSpendDecision =
    * reveal the next.
    */
   | { readonly kind: 'budget_blocked'; readonly refusals: readonly SpendRefusal[] };
+
+/** Exact-rational denominator for the pause threshold: one part per million.
+ *  Integer permille division truncated fail-open, so nothing divides now. */
+const PAUSE_DENOMINATOR = 1_000_000n;
 
 const parse = (value: Micros): bigint | null =>
   value !== null && CANONICAL_MICROS.test(value) ? BigInt(value) : null;
@@ -136,18 +149,43 @@ export function authorizeScheduledSpend(
   }
   if (request.autoPauseAtFraction !== null
     && !(Number.isFinite(request.autoPauseAtFraction)
-      && request.autoPauseAtFraction > 0 && request.autoPauseAtFraction <= 1)) {
+      && request.autoPauseAtFraction > 0 && request.autoPauseAtFraction <= 1
+      // A fraction below one part in PAUSE_DENOMINATOR would round to zero
+      // and then match every spend — review found 0.0004 blocking a window
+      // that had spent nothing. Refused as configuration rather than
+      // silently becoming "pause always".
+      && Math.round(request.autoPauseAtFraction * Number(PAUSE_DENOMINATOR)) >= 1)) {
     malformedFields.push('autoPauseAtFraction');
   }
   if (malformedFields.length > 0) {
+    // Reported ALONGSIDE the checks that do not depend on a malformed number,
+    // rather than instead of them: review found a malformed cap hiding an
+    // engaged guard and a breached concurrency ceiling, so fixing the config
+    // would have revealed two more refusals on the next attempt.
+    const alsoFailing: SpendRefusal[] = [];
+    if (request.emergencyGuardEngaged) {
+      alsoFailing.push({
+        reason: 'emergency_guard_engaged',
+        detail: 'The emergency global guard is engaged.',
+      });
+    }
+    if (Number.isInteger(request.simultaneousRuns) && request.simultaneousRuns >= 0
+      && Number.isInteger(request.maxSimultaneousRuns) && request.maxSimultaneousRuns >= 1
+      && request.simultaneousRuns >= request.maxSimultaneousRuns) {
+      alsoFailing.push({
+        reason: 'too_many_simultaneous_runs',
+        detail: `${request.simultaneousRuns} runs are already executing and the ceiling is `
+          + `${request.maxSimultaneousRuns}.`,
+      });
+    }
     return {
       kind: 'budget_blocked',
       refusals: [{
         reason: 'invalid_budget_configuration',
         detail: `These are not budget values: ${malformedFields.join(', ')}. A malformed cap is a `
           + 'configuration defect, not a budget of zero and not one of infinity, so nothing was '
-          + 'authorized.',
-      }],
+          + 'authorized and no window was compared.',
+      }, ...alsoFailing],
     };
   }
 
@@ -172,12 +210,21 @@ export function authorizeScheduledSpend(
 
   const reserved = parse(request.reservedReviewerMicros) ?? 0n;
   const runCap = parse(request.runCapMicros);
+  const pauseNumerator = request.autoPauseAtFraction === null
+    ? null
+    : BigInt(Math.round(request.autoPauseAtFraction * Number(PAUSE_DENOMINATOR)));
 
   let tightestHeadroom: bigint | null = null;
   for (const window of SPEND_WINDOWS) {
     const budget = request.windows[window];
     const cap = parse(budget.capMicros);
     if (cap === null) continue; // unbounded: no ceiling to violate
+
+    // EVERY applicable check runs for this window; none short-circuits the
+    // others. Review found each window returning at its first refusal, so an
+    // operator raising a cap only met the pause threshold on the next tick —
+    // the "budget review becoming four reviews" the header says it refuses.
+    let windowFailed = false;
 
     const spent = parse(budget.spentMicros);
     if (spent === null) {
@@ -191,62 +238,88 @@ export function authorizeScheduledSpend(
           + 'Unknown is not zero, so this cannot be shown to have headroom and nothing was '
           + 'authorized.',
       });
-      continue;
+      continue; // every later check needs a spend figure
     }
 
-    const remaining = cap - spent;
-    if (remaining <= 0n) {
+    if (cap === 0n) {
+      refusals.push({
+        reason: 'cap_exceeded',
+        window,
+        detail: `The ${window} cap is zero micros, so no spend is authorized in this window.`,
+      });
+      windowFailed = true;
+    } else if (spent >= cap) {
       refusals.push({
         reason: 'cap_exceeded',
         window,
         detail: `The ${window} cap of ${budget.capMicros} micros is already spent `
           + `(${budget.spentMicros}).`,
       });
-      continue;
+      windowFailed = true;
     }
 
-    // THE REVIEWER'S MONEY IS NOT HEADROOM. A run that eats the budget its
-    // own verification needs produces an unreviewable result and a bill.
+    const remaining = cap - spent;
     const spendable = remaining - reserved;
-    if (reserved > 0n && spendable <= 0n) {
-      refusals.push({
-        reason: 'reviewer_budget_would_be_consumed',
-        window,
-        detail: `Only ${remaining} micros remain in the ${window} window and `
-          + `${request.reservedReviewerMicros} is reserved for the Reviewer, so a run here would `
-          + 'consume the budget its own verification needs.',
-      });
-      continue;
-    }
 
-    if (runCap !== null && runCap > spendable) {
-      refusals.push({
-        reason: 'cap_exceeded',
-        window,
-        detail: `This run may spend up to ${request.runCapMicros} micros but only ${spendable} `
-          + `remain in the ${window} window after the Reviewer's reservation.`,
-      });
-      continue;
-    }
-
-    if (request.autoPauseAtFraction !== null) {
-      // Crossing the pause threshold is a DIFFERENT fact from exhausting the
-      // cap: the schedule pauses itself before the money runs out, which is
-      // the point of having a threshold at all.
-      const spentPermille = (spent * 1000n) / cap;
-      const thresholdPermille = BigInt(Math.round(request.autoPauseAtFraction * 1000));
-      if (spentPermille >= thresholdPermille) {
+    if (!windowFailed) {
+      if (runCap === null) {
+        // The other direction of the same rule: a run whose own ceiling is
+        // unknown cannot be shown to fit inside a bounded window. Review
+        // found this authorizing — declaring the cap Unknown was strictly
+        // more permissive than declaring any number, which is the rule this
+        // module is named for, inverted.
         refusals.push({
-          reason: 'auto_pause_threshold_reached',
+          reason: 'unknown_run_cap_against_a_cap',
           window,
-          detail: `The ${window} window is at ${spentPermille}‰ of its cap and the automatic pause `
-            + `threshold is ${thresholdPermille}‰. The schedule pauses itself rather than spending `
-            + 'to the limit.',
+          detail: `The ${window} window is bounded at ${budget.capMicros} micros but this run's own `
+            + 'ceiling is Unknown. An unknown ceiling cannot be shown to fit, and Unknown is not '
+            + 'zero.',
         });
-        continue;
+        windowFailed = true;
+      } else if (runCap > remaining) {
+        // It would not fit even if nothing were reserved: the cap is the
+        // binding constraint, and the reason says so.
+        refusals.push({
+          reason: 'cap_exceeded',
+          window,
+          detail: `This run may spend up to ${request.runCapMicros} micros but only ${remaining} `
+            + `remain in the ${window} window.`,
+        });
+        windowFailed = true;
+      } else if (runCap > spendable) {
+        // It fits the cap and fails only because of the reservation. Review
+        // found this reported as `cap_exceeded`, which was false: the cap was
+        // not exceeded, and a machine reading the reason would act on a lie.
+        refusals.push({
+          reason: 'reviewer_budget_would_be_consumed',
+          window,
+          detail: `This run may spend up to ${request.runCapMicros} micros and ${remaining} remain `
+            + `in the ${window} window, but ${request.reservedReviewerMicros} is reserved for the `
+            + 'Reviewer, so the run would consume the budget its own verification needs.',
+        });
+        windowFailed = true;
       }
     }
 
+    // INDEPENDENT of the cap checks: a window can be under its cap and over
+    // its pause threshold at the same time, and an operator needs both facts.
+    if (pauseNumerator !== null) {
+      // Exact integer comparison, no truncation: spent/cap >= num/den becomes
+      // spent*den >= num*cap. Review found the permille division truncating
+      // fail-open (66.67% read as 666‰ against a 667‰ threshold).
+      if (spent * PAUSE_DENOMINATOR >= pauseNumerator * cap) {
+        refusals.push({
+          reason: 'auto_pause_threshold_reached',
+          window,
+          detail: `The ${window} window has spent ${budget.spentMicros} of ${budget.capMicros} `
+            + 'micros, at or past the automatic pause threshold. The schedule pauses itself rather '
+            + 'than spending to the limit.',
+        });
+        windowFailed = true;
+      }
+    }
+
+    if (windowFailed) continue;
     tightestHeadroom = tightestHeadroom === null || spendable < tightestHeadroom
       ? spendable : tightestHeadroom;
   }

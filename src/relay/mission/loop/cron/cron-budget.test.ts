@@ -77,6 +77,85 @@ describe('unknown is not zero', () => {
   });
 });
 
+describe('an unknown RUN cap is not zero either', () => {
+  it('REFUSES a run whose own ceiling is Unknown against a bounded window', () => {
+    // The rule inverted, and the sharpest defect review found: declaring the
+    // run cap Unknown used to be strictly MORE permissive than declaring any
+    // number. Mutation check: skipping the runCap === null branch authorizes.
+    const decision = authorizeScheduledSpend(request({
+      runCapMicros: null,
+      windows: windows({ per_day: { capMicros: '10000000', spentMicros: '9000000' } }),
+    }));
+    expect(reasonsOf(decision)).toContain('unknown_run_cap_against_a_cap');
+  });
+
+  it('an unknown run cap authorizes only where every window is unbounded', () => {
+    expect(authorizeScheduledSpend(request({ runCapMicros: null })).kind).toBe('authorized');
+  });
+
+  it('an unknown run cap cannot slip past the Reviewer reservation either', () => {
+    const decision = authorizeScheduledSpend(request({
+      runCapMicros: null,
+      reservedReviewerMicros: '9000000',
+      windows: windows({ per_day: { capMicros: '10000000', spentMicros: '0' } }),
+    }));
+    expect(decision.kind).toBe('budget_blocked');
+  });
+});
+
+describe('the boundaries, in both directions', () => {
+  it('a run that fits EXACTLY is authorized', () => {
+    // Mutation check: `runCap > remaining` weakened to `>=` refuses this.
+    const decision = authorizeScheduledSpend(request({
+      runCapMicros: '2000000',
+      windows: windows({ per_day: { capMicros: '10000000', spentMicros: '8000000' } }),
+    }));
+    if (decision.kind !== 'authorized') throw new Error(JSON.stringify(decision));
+    expect(decision.headroomMicros).toBe('2000000');
+  });
+
+  it('one micro too large is refused', () => {
+    const decision = authorizeScheduledSpend(request({
+      runCapMicros: '2000001',
+      windows: windows({ per_day: { capMicros: '10000000', spentMicros: '8000000' } }),
+    }));
+    expect(reasonsOf(decision)).toContain('cap_exceeded');
+  });
+
+  it('spend EXACTLY at the pause threshold pauses', () => {
+    // Mutation check: `>=` weakened to `>` authorizes at exactly the
+    // threshold, which is the one point an operator set deliberately.
+    const decision = authorizeScheduledSpend(request({
+      runCapMicros: '1',
+      autoPauseAtFraction: 0.8,
+      windows: windows({ per_day: { capMicros: '10000000', spentMicros: '8000000' } }),
+    }));
+    expect(reasonsOf(decision)).toContain('auto_pause_threshold_reached');
+  });
+
+  it('a threshold comparison does not truncate fail-open', () => {
+    // 2/3 is 666666‰ against a 666667‰ threshold — under. The permille
+    // version truncated both to 666 and authorized at exactly the threshold.
+    const under = authorizeScheduledSpend(request({
+      runCapMicros: '1', autoPauseAtFraction: 0.666667,
+      windows: windows({ per_day: { capMicros: '3', spentMicros: '2' } }),
+    }));
+    expect(under.kind).toBe('authorized');
+    const at = authorizeScheduledSpend(request({
+      runCapMicros: '1', autoPauseAtFraction: 0.666666,
+      windows: windows({ per_day: { capMicros: '3', spentMicros: '2' } }),
+    }));
+    expect(reasonsOf(at)).toContain('auto_pause_threshold_reached');
+  });
+
+  it('a pause fraction that would round away to nothing is refused as configuration', () => {
+    // 0.0004 rounded to zero and then matched every spend, blocking a window
+    // that had spent nothing.
+    expect(reasonsOf(authorizeScheduledSpend(request({ autoPauseAtFraction: 0.0000004 }))))
+      .toEqual(['invalid_budget_configuration']);
+  });
+});
+
 describe('the caps themselves', () => {
   it('authorizes when the run fits inside every bounded window', () => {
     const decision = authorizeScheduledSpend(request({
@@ -105,6 +184,53 @@ describe('the caps themselves', () => {
       windows: windows({ per_day: { capMicros: '10000000', spentMicros: '8000000' } }),
     }));
     expect(reasonsOf(decision)).toEqual(['cap_exceeded']);
+  });
+
+  it('a zero cap says the cap is zero, not that something was already spent', () => {
+    const decision = authorizeScheduledSpend(request({
+      windows: windows({ per_day: { capMicros: '0', spentMicros: '0' } }),
+    }));
+    expect(reasonsOf(decision)).toContain('cap_exceeded');
+    if (decision.kind === 'budget_blocked') {
+      expect(decision.refusals[0]?.detail).toContain('cap is zero');
+      expect(decision.refusals[0]?.detail).not.toContain('already spent');
+    }
+  });
+
+  it('reports both refusals a SINGLE window earns at once', () => {
+    // Review found each window returning at its first refusal, so an operator
+    // raising the day cap would meet the pause threshold on the next tick.
+    // Mutation check: `continue`ing after the cap refusal drops the pause one.
+    const decision = authorizeScheduledSpend(request({
+      runCapMicros: '1000000',
+      autoPauseAtFraction: 0.9,
+      windows: windows({ per_day: { capMicros: '10000000', spentMicros: '9500000' } }),
+    }));
+    expect(reasonsOf(decision).sort())
+      .toEqual(['auto_pause_threshold_reached', 'cap_exceeded']);
+  });
+
+  it('names the RESERVATION when that is what the run does not fit past', () => {
+    // Review: this reported `cap_exceeded` when 5M remained and the 3M run
+    // fitted with room — the cap was not exceeded, and a machine reading the
+    // reason would act on a false one.
+    const decision = authorizeScheduledSpend(request({
+      runCapMicros: '3000000',
+      reservedReviewerMicros: '4000000',
+      windows: windows({ per_day: { capMicros: '10000000', spentMicros: '5000000' } }),
+    }));
+    expect(reasonsOf(decision)).toEqual(['reviewer_budget_would_be_consumed']);
+  });
+
+  it('a malformed config does not HIDE the guard or the ceiling', () => {
+    const decision = authorizeScheduledSpend(request({
+      emergencyGuardEngaged: true,
+      simultaneousRuns: 4,
+      maxSimultaneousRuns: 2,
+      windows: windows({ per_day: { capMicros: 'nonsense', spentMicros: '0' } }),
+    }));
+    expect(reasonsOf(decision).sort())
+      .toEqual(['emergency_guard_engaged', 'invalid_budget_configuration', 'too_many_simultaneous_runs']);
   });
 
   it('reports EVERY failing reason, not just the first', () => {
