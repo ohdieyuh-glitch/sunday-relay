@@ -324,7 +324,12 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     expect(statusLine(loop)).toContain('DEFAULT OFF');
     expect(statusLine(loop)).toContain('NO LOOP HAS RUN IN PRODUCTION');
     expect(statusLine(unchain)).toContain('SPECIFIED, NOT IMPLEMENTED');
-    expect(statusLine(cron)).toContain('SCHEDULER NOT IMPLEMENTED');
+    // SUPERSEDED 2026-08-06: this read 'SCHEDULER NOT IMPLEMENTED' until the
+    // pure evaluator landed (mission/loop/cron). The status must keep naming
+    // what is STILL missing — claiming and dispatch — not merely celebrate
+    // what exists, so the assertion pins the remaining gap by name.
+    expect(statusLine(cron)).toContain('GRAMMAR + PURE EVALUATOR IMPLEMENTED');
+    expect(statusLine(cron)).toContain('CLAIMING AND DISPATCH NOT');
   });
 
   it('the Unchain record carries the locked founder decisions', () => {

@@ -760,6 +760,12 @@
         "src/relay/cli/loop-execution.test.ts"
       ],
       "sharedDomainReferences": [
+        "src/relay/mission/loop/cron/cron-expression.test.ts",
+        "src/relay/mission/loop/cron/cron-expression.ts",
+        "src/relay/mission/loop/cron/cron-occurrences.test.ts",
+        "src/relay/mission/loop/cron/cron-occurrences.ts",
+        "src/relay/mission/loop/cron/timezone-port.test.ts",
+        "src/relay/mission/loop/cron/timezone-port.ts",
         "src/relay/mission/loop/runtime/loop-projections.ts",
         "src/relay/mission/loop/runtime/loop-scheduler.test.ts",
         "src/relay/mission/loop/runtime/loop-scheduler.ts",

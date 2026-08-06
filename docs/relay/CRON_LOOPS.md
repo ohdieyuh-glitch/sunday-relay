@@ -1,10 +1,17 @@
 # Cron Loops — architecture decision
 
-**Status: GRAMMAR IMPLEMENTED. SCHEDULER NOT IMPLEMENTED.**
+**Status: GRAMMAR + PURE EVALUATOR IMPLEMENTED. CLAIMING AND DISPATCH NOT
+IMPLEMENTED.**
 
 `/loop schedule`, `/loop cron`, `/loop schedules` parse today and produce typed
-commands. Nothing schedules anything. There is no timer, no occurrence store,
-no claiming, no timezone handling and no dispatch. The `loop_cron` feature flag
+commands. `src/relay/mission/loop/cron/` now holds the schedule stage this
+document approved: `cron-expression.ts` (five-field semantics, refusals by
+field and token), `timezone-port.ts` (the injected `TimezonePort` with its
+Intl adapter — zero/one/two instants per local minute), and
+`cron-occurrences.ts` (the pure evaluator: deterministic occurrence identity
+per the formula below, both DST rules, bounded windows, named refusals, said
+truncation). Nothing yet claims, stores or dispatches an occurrence — there is
+no timer, no claim marker and no tick endpoint. The `loop_cron` feature flag
 is off and depends on `loop_scheduler`, which depends on `loop_engine`.
 
 This document records the approved beta architecture so the runtime stage does
@@ -207,6 +214,11 @@ hardcodes automatic Unchain consumption**.
 
 ## Not implemented
 
-The scheduler · occurrence claiming · timezone handling · DST policy · overlap
-policies · missed-run policies · period budget caps · recurring approvals ·
-circuit breakers · schedule versioning · conditional Cron Loops · the Cron UI.
+The in-bridge scheduler and its tick endpoint · occurrence claiming (lock +
+claim marker + journal event) · overlap policies · missed-run policies ·
+period budget caps · recurring approvals · circuit breakers · schedule
+versioning · conditional Cron Loops · the Cron UI.
+
+Cron expression semantics, timezone handling, DST resolution and the
+occurrence identity ARE implemented (see status above) — listed apart because
+an implemented stage left on this list is an invitation to rebuild it.

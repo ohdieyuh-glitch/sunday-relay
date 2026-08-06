@@ -102,10 +102,21 @@ export interface ScheduleOptions {
 const ISO_WITH_OFFSET =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
+/**
+ * Epoch milliseconds of an ISO-8601 instant CARRYING ITS OFFSET, or `null`.
+ * The one rule, exported: the cron evaluator refuses offset-less window
+ * bounds for the same reason this module refuses offset-less timestamps, and
+ * two copies of one rule is the divergence the shared-options lesson names.
+ */
+export function readIsoInstantWithOffset(value: string): number | null {
+  if (!ISO_WITH_OFFSET.test(value)) return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : ms;
+}
+
 const parseAdvancedAt = (value: string | null): number => {
   if (value === null) return Number.NEGATIVE_INFINITY;
-  if (!ISO_WITH_OFFSET.test(value)) return Number.NaN;
-  return Date.parse(value);
+  return readIsoInstantWithOffset(value) ?? Number.NaN;
 };
 
 /**
