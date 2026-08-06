@@ -186,6 +186,19 @@ export {
 } from './loop-runtime-recovery';
 
 export {
+  confirmLoopRunsForTarget,
+  roleConfirmationRequestId,
+  staffedRoleOf,
+} from './loop-target-confirmation';
+export type {
+  FailedRole,
+  StaffedRole,
+  TargetConfirmationBase,
+  TargetConfirmationInput,
+  TargetConfirmationReport,
+} from './loop-target-confirmation';
+
+export {
   bindLoopAdvance,
   runLoopWorkerPass,
 } from './loop-worker';

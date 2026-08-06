@@ -346,6 +346,48 @@ not permission to overspend.
 NOT WIRED: nothing composes planner and worker yet — no daemon, no cron. The
 lock-reclaim precondition above still gates any second concurrent worker.
 
+## Staffing a resolved target (`/loop all`)
+
+`resolveLoopTarget` decides WHO; `confirmLoopRun` creates ONE run for one
+decision. `loop-target-confirmation.ts` is the layer between them: a confirmed
+multi-role target becomes ONE RUN PER RESOLVED ROLE, all under one Loop, via
+`confirmLoopRunsForTarget`. The fan-out refuses four ways:
+
+- **Nobody resolution did not staff.** `resolvedRoles` is the whole guest
+  list; unavailable roles — including `unknown`, which never staffs — ride the
+  report verbatim as `unstaffed`.
+- **No collapsing two roles into one decision.** Each role's confirmation
+  derives its own request id (`<requestId>#<role>`), so its own idempotency
+  key and its own derived run id. The store's one-key-one-run invariant stays
+  true, and a retry converges to the same runs as duplicates instead of
+  minting a second team.
+- **One role's failure never cancels the rest** — each failure is reported
+  beside the successes, per role. Created runs are not rolled back: they are
+  durable and idempotent, so the honest recovery is a retry that converges.
+- **N budgets are not one.** The budget is PER RUN; the report totals the
+  authorized spend caps in integer micros, or answers `null` when the total
+  cannot truthfully be stated — any cap unbounded, or a duplicate run whose
+  stored cap is not canonical micros.
+
+Refusals come BEFORE anything durable exists: a spend cap `BigInt` would
+throw on, a negative cap, or a base request id using the reserved `#` refuse
+the whole decision with nothing created — a refusal after durable creation is
+a report that dies mid-way, after spend was authorized. A store backing that
+throws mid-confirmation is that role's named `store_failure`, never a lost
+report; and a resolver that repeated a role does not double-count an
+authorization.
+
+Which role a run was created for is recoverable from its durable idempotency
+key through `staffedRoleOf` — a stated contract, not a string someone parses
+by accident. It is the confirmation's INTENT; the observed role still arrives
+only with `loop.agent_assigned`, and a key naming no known role answers
+`null`, because unknown is not guessed at.
+
+NOT WIRED: the bridge still confirms a single run per decision and parks the
+other roles in a side map; pointing it at `confirmLoopRunsForTarget`, and
+staffing agent ports for the non-coding roles, is the wiring this replaces —
+a follow-on change, reviewed as such.
+
 ## Observing a run
 
 A drafted Loop and a running one are different questions, and the surfaces
@@ -412,7 +454,9 @@ the panel keeps them in separate regions with different words.
 Scheduler WIRING (the pass planner exists; nothing invokes it) · agent slots ·
 work stealing · critical-path scheduling · scheduler telemetry · the watchdog ·
 multi-Loop concurrency ·
-multi-role execution (Stage 2 runs one role, `coding_agent`) · Cron scheduling
+multi-role BRIDGE WIRING (staffing exists — `confirmLoopRunsForTarget` creates
+one run per resolved role; the bridge still creates a single run and drives
+one role, `coding_agent`) · Cron scheduling
 (grammar only — see `CRON_LOOPS.md`) · Unchain (see `UNCHAIN.md`) · S-Loop
 runtime · swarm branches · convergence · Rechaining · Loop templates ·
 marketplace integration · starting a Loop from the website.
