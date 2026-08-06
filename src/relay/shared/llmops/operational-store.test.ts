@@ -338,18 +338,121 @@ describe('a read has three answers, not two', () => {
 });
 
 describe('the serialisation chain does not leak', () => {
-  it('prunes a project’s chain once its writes have settled', async () => {
-    const store = createOperationalStore(memoryBacking());
-    await store.record('a', observation());
-    await store.record('b', observation());
-    // Give the prune microtask a turn.
+  /**
+   * The Map is built inside `createOperationalStore`, so it can be reached by
+   * intercepting the constructor at call time. The previous version of this
+   * test asserted that fifty writes all settled — which they do with or without
+   * the prune — and its comment claimed reaching the closure was impossible.
+   * Deleting the prune left it green.
+   */
+  it('holds a chain while writes are in flight and releases it after', async () => {
+    const RealMap = globalThis.Map;
+    const captured: Map<string, unknown>[] = [];
+    // Wrapped rather than subclassed: the store calls `new Map()` with no
+    // arguments, and re-declaring a constructor signature here only invites a
+    // mismatch with the real one.
+    (globalThis as unknown as { Map: unknown }).Map = function CapturingMap(this: unknown) {
+      const made = new RealMap<string, unknown>();
+      captured.push(made);
+      return made;
+    };
+    let store: ReturnType<typeof createOperationalStore>;
+    try {
+      store = createOperationalStore(memoryBacking());
+    } finally {
+      (globalThis as unknown as { Map: unknown }).Map = RealMap;
+    }
+    const chains = captured[captured.length - 1];
+    expect(chains, 'the chain map was not captured').toBeDefined();
+
+    const inFlight = Promise.all(Array.from({ length: 12 }, (_, i) =>
+      store.record(`proj-${i}`, observation({ observedAt: AT(i) }))));
+    // Held while the writes are running — this is what a leak would keep.
+    expect(chains.size).toBeGreaterThan(0);
+
+    const results = await inFlight;
+    expect(results.every((r) => r.ok)).toBe(true);
+    // Pruned once settled. Deleting the prune leaves 12 entries here forever.
     await new Promise((resolve) => { setTimeout(resolve, 5); });
-    // Reaching into the closure is not possible, so this asserts the observable
-    // consequence: repeated projects do not accumulate work that changes
-    // behaviour. A leak here is a slow one, and the guard is the code comment
-    // plus this smoke check that many projects still settle.
-    const many = await Promise.all(Array.from({ length: 50 }, (_, i) =>
-      store.record(`proj-${i}`, observation())));
-    expect(many.every((r) => r.ok)).toBe(true);
+    expect(chains.size).toBe(0);
+  });
+
+  it('releases the chain even when a write fails', async () => {
+    const RealMap = globalThis.Map;
+    const captured: Map<string, unknown>[] = [];
+    // Wrapped rather than subclassed: the store calls `new Map()` with no
+    // arguments, and re-declaring a constructor signature here only invites a
+    // mismatch with the real one.
+    (globalThis as unknown as { Map: unknown }).Map = function CapturingMap(this: unknown) {
+      const made = new RealMap<string, unknown>();
+      captured.push(made);
+      return made;
+    };
+    let store: ReturnType<typeof createOperationalStore>;
+    try {
+      store = createOperationalStore(memoryBacking({
+        async putText() { throw new Error('transient'); },
+      }));
+    } finally {
+      (globalThis as unknown as { Map: unknown }).Map = RealMap;
+    }
+    const chains = captured[captured.length - 1];
+    const result = await store.record('p', observation());
+    expect(result.ok).toBe(false);
+    await new Promise((resolve) => { setTimeout(resolve, 5); });
+    expect(chains.size).toBe(0);
+  });
+});
+
+describe('a write that replaced unreadable bytes says so', () => {
+  it('reports the replacement rather than overwriting in silence', async () => {
+    const map = new Map<string, string>([['relay.operations.p', '{not json']]);
+    const store = createOperationalStore({
+      durability: 'volatile-test-only',
+      locationLabel: 'in-memory (test)',
+      async getText(key) { return map.get(key) ?? null; },
+      async putText(key, value) { map.set(key, value); },
+    });
+    const first = await store.record('p', observation());
+    expect(first.ok && first.replacedUnreadable).toBe(true);
+    // And the next write, over readable bytes, does not claim it.
+    const second = await store.record('p', observation({ observedAt: AT(1) }));
+    expect(second.ok && second.replacedUnreadable).toBeUndefined();
+  });
+});
+
+describe('an evicted error is still an error that happened', () => {
+  it('a record with no counters derives the exact total from what it dropped', async () => {
+    // kept + droppedErrors is EXACT — every error was one or the other — and
+    // ignoring it left the original defect intact on any record whose counters
+    // are absent: 200 kept and 5000 dropped reported 200 errors, a 3.85% rate
+    // where the truth was 100%, and `degraded` where the truth was `failing`.
+    const legacy = {
+      projectId: 'p', latency: [], waits: [], evaluations: [], repairLoops: [],
+      attempts: { attempts: 5200, source: 'counted' as const },
+      newestSignalAt: AT(0), droppedLatency: 0, droppedErrors: 5000,
+      errors: Array.from({ length: 200 }, (_, i) => ({
+        kind: 'tool_failure' as const, at: AT(i), recovered: true, attempt: 1,
+      })),
+    };
+    const view = projectOperations(legacy as never, AT(1));
+    expect(view.errorCount).toBe(5200);
+    expect(view.errorRate.known && view.errorRate.value).toBe(1);
+    // Unrecovered has NO exact bound — `droppedErrors` counts evictions, not
+    // how many of them the run survived — so it is a floor and says so.
+    expect(view.unrecoveredIsExact).toBe(false);
+    expect(view.healthReason).toContain('whether every one was recovered is not known');
+    expect(view.healthReason).not.toContain('every one was recovered.');
+  });
+
+  it('a record with counters states recovery exactly', async () => {
+    const store = createOperationalStore(memoryBacking());
+    await store.record('p', observation({
+      errors: [{ kind: 'rate_limited', at: AT(0), recovered: true, attempt: 1 }],
+    }));
+    const read = await store.read('p');
+    const view = projectOperations(read.ok && read.record ? read.record : null!, AT(1));
+    expect(view.unrecoveredIsExact).toBe(true);
+    expect(view.healthReason).toContain('every one was recovered.');
   });
 });

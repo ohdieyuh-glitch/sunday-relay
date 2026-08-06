@@ -141,9 +141,18 @@ export interface RelayOperationsView {
    * while `droppedErrors` is zero; past that it describes the kept window.
    */
   readonly errors: readonly RelayErrorView[];
-  /** Exact, from the record's own counters. Never the sum of the list. */
+  /**
+   * Every error observed. Exact: the kept list plus what was evicted, or the
+   * record's own counter where that is larger.
+   */
   readonly errorCount: number;
   readonly unrecoveredErrorCount: number;
+  /**
+   * `false` when errors were evicted from a record carrying no exact counter:
+   * `unrecoveredErrorCount` is then a FLOOR, and nothing may claim every error
+   * was recovered.
+   */
+  readonly unrecoveredIsExact: boolean;
   readonly errorRate: RelayFigure;
   readonly evaluations: RelayEvaluationView;
   readonly repairs: RelayRepairView;
@@ -235,19 +244,28 @@ export function projectOperations(
     }))
     .sort((a, b) => b.count - a.count || a.kind.localeCompare(b.kind));
 
-  // The kept list is a SUBSET of everything observed, so the true count can
-  // never be less than the list sums to. Taking the larger of the two is what
-  // makes both kinds of record right: one folded through `ingest` carries
-  // exact counters that exceed the bounded list, and one built directly in a
-  // test or a fixture carries no counters at all and IS its list.
+  // EVERY error ever ingested was either kept or dropped, so
+  // `kept + droppedErrors` is not an estimate — it is exact, and the record
+  // already carried it. Taking only `max(counters, kept)` left the original
+  // defect intact on any record whose counters are absent: a legacy record with
+  // 200 kept and 5000 dropped reported 200 errors, a 3.85% rate where the truth
+  // was 100%, and `degraded` where the truth was `failing`.
   //
-  // Trusting the counters alone under-reported a hand-built record to zero;
-  // trusting the list alone reported ten thousand failures out of ten thousand
-  // attempts as 2%, and let a project evict its way from `failing` to
-  // `healthy`. Under-reporting errors is always the flattering direction.
+  // The counters are still consulted and still win when larger, because
+  // over-reporting errors is the safe direction and a counter can only be high
+  // if something upstream double-counted.
   const listedErrors = errors.reduce((sum, e) => sum + e.count, 0);
   const listedUnrecovered = errors.reduce((sum, e) => sum + e.unrecovered, 0);
-  const errorCount = Math.max(record.errorTotals?.observed ?? 0, listedErrors);
+  const droppedErrorCount = Math.max(0, record.droppedErrors ?? 0);
+  const errorCount = Math.max(
+    record.errorTotals?.observed ?? 0, listedErrors + droppedErrorCount,
+  );
+
+  // UNRECOVERED has no such exact bound. `droppedErrors` counts evictions, not
+  // how many of them the run survived, so on a record without counters this is
+  // a FLOOR rather than a total — and a floor must not be reported as if it
+  // settled the question.
+  const unrecoveredExact = record.errorTotals !== undefined || droppedErrorCount === 0;
   const unrecoveredErrorCount = Math.max(
     record.errorTotals?.unrecovered ?? 0, listedUnrecovered,
   );
@@ -314,7 +332,7 @@ export function projectOperations(
 
   const { health, healthReason } = deriveHealth({
     hasSignal: record.newestSignalAt !== null,
-    ageKnown, ageMs, unrecoveredErrorCount, errorCount,
+    ageKnown, ageMs, unrecoveredErrorCount, errorCount, unrecoveredExact,
     endedUnfixed: repairs.endedUnfixed,
     failedEvaluations: failed,
     fromTheFuture,
@@ -334,6 +352,7 @@ export function projectOperations(
     errors,
     errorCount,
     unrecoveredErrorCount,
+    unrecoveredIsExact: unrecoveredExact,
     errorRate,
     evaluations,
     repairs,
@@ -352,6 +371,7 @@ function deriveHealth(input: {
   ageMs: number;
   unrecoveredErrorCount: number;
   errorCount: number;
+  unrecoveredExact: boolean;
   endedUnfixed: number;
   failedEvaluations: number;
   fromTheFuture: boolean;
@@ -403,7 +423,12 @@ function deriveHealth(input: {
   if (input.errorCount > 0) {
     return {
       health: 'degraded',
-      healthReason: `${input.errorCount} error(s) occurred, and every one was recovered.`,
+      // "every one was recovered" is a claim about errors this record can no
+      // longer see. It is only made where the count is exact.
+      healthReason: input.unrecoveredExact
+        ? `${input.errorCount} error(s) occurred, and every one was recovered.`
+        : `${input.errorCount} error(s) occurred; some were evicted, so whether `
+          + 'every one was recovered is not known.',
     };
   }
   return { health: 'healthy', healthReason: 'Recent signal, no unrecovered errors, no open repair loops.' };

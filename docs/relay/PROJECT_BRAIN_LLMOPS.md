@@ -322,13 +322,22 @@ as the project's.
 **A bound must not corrupt a figure.** Capping the error LIST while `attempts`
 kept growing reported ten thousand failures out of ten thousand attempts as a
 **2% error rate**, and let a project evict its way from `failing` to `healthy`
-by failing more. The record now carries exact error counters beside the bounded
-list, and the figures take the LARGER of the two. The kept list is a subset of
-everything observed, so the true count can never be less than it sums to — which
-makes both kinds of record right: one folded through `ingest` carries counters
-that exceed the bounded list, and one built directly in a fixture carries no
-counters and simply IS its list. Under-reporting errors is always the flattering
-direction.
+by failing more. Every error ever ingested was either KEPT or DROPPED, so `kept + droppedErrors`
+is not an estimate — it is exact, and the record already carried it. The count
+is that sum, or the record's own counter where that is larger. Consulting only
+the counters left the original defect intact on any record without them: 200
+kept and 5000 dropped still reported 200 errors, 3.85% where the truth was 100%,
+and `degraded` where the truth was `failing`.
+
+**Unrecovered has no such bound, and says so.** `droppedErrors` counts
+evictions, not how many of them the run survived. On a record carrying no
+counter it is a FLOOR, `unrecoveredIsExact` is false, and health declines to
+claim every error was recovered — a claim about errors the record can no longer
+see.
+
+**A write says when it replaced something.** Bytes that cannot be read are
+overwritten — a record nobody can parse helps nobody — but `replacedUnreadable`
+marks it, because doing it silently means the loss is mentioned nowhere.
 
 **A read has three answers, not two.** `null` means nothing has been recorded;
 `null` with `unreadable` means bytes exist that could not be read as this

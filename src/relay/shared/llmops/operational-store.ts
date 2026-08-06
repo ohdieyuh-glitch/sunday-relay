@@ -68,7 +68,14 @@ export interface OperationalStoreStatus {
 }
 
 export type OperationalWriteResult =
-  | { readonly ok: true; readonly record: RelayOperationalRecord }
+  | { readonly ok: true; readonly record: RelayOperationalRecord;
+      /**
+       * `true` when this write REPLACED bytes that could not be read as this
+       * project's record. Overwriting them is right — a record nobody can parse
+       * helps nobody — but doing it silently means the loss is never mentioned
+       * anywhere, and `read()` gained a third state while `record()` had none.
+       */
+      readonly replacedUnreadable?: boolean }
   | { readonly ok: false; readonly reason: string };
 
 export type OperationalReadResult =
@@ -118,7 +125,9 @@ function keepNewest<T>(items: readonly T[], limit: number): { kept: T[]; dropped
  *  in every `> 0` check, so the counter silently disappears rather than
  *  obviously breaking. */
 const count = (value: unknown): number => (
-  typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+  // INTEGER, not merely finite: a count of 1.5 rendered as "1.5 error(s) the
+  // run did not recover from", which is not a sentence about anything.
+  typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0
 );
 
 /** A stored record, shape-checked and COERCED. A field this build added is
@@ -201,8 +210,8 @@ export function createOperationalStore(backing: OperationalBacking): Operational
     async record(projectId, observation) {
       return serialise(projectId, async () => {
         try {
-          const existing = (await readRaw(projectId)).record
-            ?? emptyOperationalRecord(projectId);
+          const before = await readRaw(projectId);
+          const existing = before.record ?? emptyOperationalRecord(projectId);
           const folded = ingest(existing, {
             latency: observation.latency,
             errors: observation.errors,
@@ -224,7 +233,9 @@ export function createOperationalStore(backing: OperationalBacking): Operational
           };
 
           await backing.putText(keyFor(projectId), JSON.stringify(bounded));
-          return { ok: true as const, record: bounded };
+          return before.unreadable
+            ? { ok: true as const, record: bounded, replacedUnreadable: true }
+            : { ok: true as const, record: bounded };
         } catch (error) {
           return { ok: false as const, reason: describe(error) };
         }
