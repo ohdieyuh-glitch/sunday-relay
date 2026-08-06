@@ -410,6 +410,13 @@ it, and a host that reads the record back into `operationsView`. Until that
 exists both surfaces truthfully report that no operations source is wired,
 because none is.
 
+**This is not a completed Production Alpha.** A producer that can observe a run
+is not a run observed. Production Alpha requires a real bounded PAID Mission
+executed end to end, independently reviewed, repaired where necessary, and
+producing truthful token/model-unit, cost, latency, error, cancellation and
+completion evidence. None of that has happened, and no amount of offline proof
+substitutes for it.
+
 What is missing, exactly:
 
 - **No shipped host supplies an observation sink.** `createClaudeCodeAdapter`
