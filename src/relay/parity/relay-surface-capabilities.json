@@ -855,6 +855,8 @@
         "src/relay/shared/llmops/llmops-projection.ts",
         "src/relay/shared/llmops/operational-intake.test.ts",
         "src/relay/shared/llmops/operational-intake.ts",
+        "src/relay/shared/llmops/operational-store.test.ts",
+        "src/relay/shared/llmops/operational-store.ts",
         "src/relay/shared/llmops/run-observation.test.ts",
         "src/relay/shared/llmops/run-observation.ts",
         "src/relay/shared/llmops/spend-citation.test.ts",

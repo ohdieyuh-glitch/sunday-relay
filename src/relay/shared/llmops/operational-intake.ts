@@ -216,7 +216,16 @@ export function ingest(
     ? { attempts: (record.attempts.attempts ?? 0) + observed, source: 'counted' as const }
     : record.attempts;
 
-  return { ...record, latency, errors, attempts, newestSignalAt };
+  // Counted as they arrive, because the `errors` array is bounded downstream
+  // and a truncated numerator makes a rate lie in the flattering direction.
+  const incoming = input.errors ?? [];
+  const errorTotals = {
+    observed: (record.errorTotals?.observed ?? 0) + incoming.length,
+    unrecovered: (record.errorTotals?.unrecovered ?? 0)
+      + incoming.filter((e) => !e.recovered).length,
+  };
+
+  return { ...record, latency, errors, attempts, newestSignalAt, errorTotals };
 }
 
 /* ---------------------------------------------------- short-term echo */

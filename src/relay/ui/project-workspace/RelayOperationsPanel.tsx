@@ -125,6 +125,15 @@ export function RelayOperationsPanel({ view }: {
           <dt>ERROR RATE</dt>
           <dd><Figure figure={view.errorRate} format={percent} /></dd>
         </div>
+        {view.droppedErrors > 0 && (
+          <div>
+            {/* The COUNT above is exact; the by-kind breakdown below is not. */}
+            <dt>ERRORS EVICTED</dt>
+            <dd className="rop-caveat">
+              {`${view.droppedErrors} — the breakdown below covers the kept ones only`}
+            </dd>
+          </div>
+        )}
         <div>
           <dt>EVALUATIONS</dt>
           <dd>
@@ -237,6 +246,13 @@ export function RelayOperationsPanel({ view }: {
             ))}
           </tbody>
         </table>
+      )}
+      {view.droppedLatency > 0 && (
+        // A percentile over a truncated window is a percentile OF THE WINDOW.
+        <p className="rop-missing">
+          {`Showing the most recent samples; ${view.droppedLatency} older one(s) `}
+          {'have been evicted, so these figures describe recent history.'}
+        </p>
       )}
       {view.missingPhases.length > 0 && (
         // Named rather than shown as rows of zeroes.

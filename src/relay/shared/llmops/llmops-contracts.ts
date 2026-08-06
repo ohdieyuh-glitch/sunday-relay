@@ -315,6 +315,30 @@ export interface RelayOperationalRecord {
   readonly repairLoops: readonly RelayRepairLoop[];
   /** ISO-8601 of the newest signal of ANY kind, or null if nothing observed. */
   readonly newestSignalAt: string | null;
+  /**
+   * Observations evicted to keep the record bounded.
+   *
+   * Reported rather than silent, because a percentile computed over a truncated
+   * window is a percentile OF THE WINDOW. A reader who knows four thousand
+   * samples fell off the end reads the figure as recent history; a reader who
+   * does not read it as the project's history.
+   */
+  readonly droppedLatency: number;
+  readonly droppedErrors: number;
+  /**
+   * EXACT counts, never bounded.
+   *
+   * The `errors` array is capped so a record stays cheap to read, and that cap
+   * used to truncate the NUMERATOR of the error rate while `attempts` — a
+   * plain counter — kept growing. Ten thousand failures out of ten thousand
+   * attempts reported as 2%, and a project could evict its way from `failing`
+   * to `healthy` by failing MORE.
+   *
+   * So the list is the detail and these are the truth. A rate and a health
+   * verdict are computed from these; the by-kind breakdown comes from the list
+   * and says when it is partial.
+   */
+  readonly errorTotals: { readonly observed: number; readonly unrecovered: number };
 }
 
 /** An empty record — observed nothing, which is not the same as observed zero. */
@@ -329,5 +353,8 @@ export function emptyOperationalRecord(projectId: string): RelayOperationalRecor
     evaluations: [],
     repairLoops: [],
     newestSignalAt: null,
+    droppedLatency: 0,
+    droppedErrors: 0,
+    errorTotals: { observed: 0, unrecovered: 0 },
   };
 }

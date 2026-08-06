@@ -1,0 +1,458 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  MAX_ERROR_EVENTS, MAX_LATENCY_SAMPLES, createOperationalStore,
+  type OperationalBacking,
+} from './operational-store';
+import { projectOperations } from './llmops-projection';
+import type { RunObservation } from './run-observation';
+
+/**
+ * THE STORE THAT MAKES THE MODEL AN INSTRUMENT.
+ *
+ * What is tested is not that a Map round-trips. It is the four ways a store
+ * quietly lies: by claiming durability it does not have, by truncating without
+ * saying so, by losing a concurrent write, and by reporting a failed read as an
+ * empty project.
+ */
+
+const AT = (seconds: number) =>
+  new Date(Date.parse('2026-08-05T12:00:00.000Z') + seconds * 1000).toISOString();
+
+const observation = (over: Partial<RunObservation> = {}): RunObservation => ({
+  latency: [{ phase: 'total', durationMs: 1000, observedAt: AT(0) }],
+  errors: [],
+  observedAt: AT(0),
+  attemptsObserved: 1,
+  ...over,
+});
+
+function memoryBacking(over: Partial<OperationalBacking> = {}): OperationalBacking {
+  const map = new Map<string, string>();
+  return {
+    durability: 'volatile-test-only',
+    locationLabel: 'in-memory (test)',
+    async getText(key) { return map.get(key) ?? null; },
+    async putText(key, value) { map.set(key, value); },
+    ...over,
+  };
+}
+
+describe('the store never claims durability it does not have', () => {
+  it('carries the backing’s own label out verbatim', () => {
+    const store = createOperationalStore(memoryBacking());
+    expect(store.status.durability).toBe('volatile-test-only');
+    expect(store.status.locationLabel).toBe('in-memory (test)');
+    // And it is honest about what its serialisation does and does not cover.
+    expect(store.status.concurrencyScope).toBe('process');
+  });
+
+  it('passes the backing’s claim through — it cannot verify one', () => {
+    // Renamed from "does not upgrade a volatile backing": there is no upgrade
+    // path to test. The label is the backing’s own unverified claim, and what
+    // this proves is that the store neither changes it nor invents one.
+    const store = createOperationalStore(memoryBacking({ durability: 'durable' }));
+    expect(store.status.durability).toBe('durable');
+  });
+});
+
+describe('nothing recorded is not the same as an empty record', () => {
+  it('reads null before anything is written', async () => {
+    const result = await createOperationalStore(memoryBacking()).read('p');
+    expect(result.ok && result.record).toBeNull();
+  });
+
+  it('a FAILED read is not a project with no data', async () => {
+    const store = createOperationalStore(memoryBacking({
+      async getText() { throw new Error('backing unavailable'); },
+    }));
+    const result = await store.read('p');
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toContain('backing unavailable');
+  });
+
+  it('a failed write is reported, never swallowed', async () => {
+    const store = createOperationalStore(memoryBacking({
+      async putText() { throw new Error('disk full'); },
+    }));
+    const result = await store.record('p', observation());
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.reason).toContain('disk full');
+  });
+
+  it('unreadable stored text is treated as absent, not as a crash', async () => {
+    const store = createOperationalStore(memoryBacking({
+      async getText() { return '{not json'; },
+    }));
+    const result = await store.record('p', observation());
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.record.latency.length).toBe(1);
+  });
+
+  it('a record stored under another project is not adopted', async () => {
+    const store = createOperationalStore(memoryBacking({
+      async getText() { return JSON.stringify({ projectId: 'someone-else', latency: [] }); },
+    }));
+    const result = await store.record('p', observation());
+    expect(result.ok && result.record.projectId).toBe('p');
+    expect(result.ok && result.record.latency.length).toBe(1);
+  });
+});
+
+describe('observations accumulate across runs', () => {
+  it('folds many runs into one record, and the rate becomes knowable', async () => {
+    const store = createOperationalStore(memoryBacking());
+    for (let i = 0; i < 3; i += 1) await store.record('p', observation({ observedAt: AT(i) }));
+    await store.record('p', observation({
+      errors: [{ kind: 'provider_timeout', at: AT(3), recovered: false, attempt: 1 }],
+      observedAt: AT(3),
+    }));
+
+    const read = await store.read('p');
+    expect(read.ok && read.record).not.toBeNull();
+    const view = projectOperations(read.ok && read.record ? read.record : (() => { throw new Error('no record'); })(), AT(4));
+    expect(view.latency.find((l) => l.phase === 'total')?.samples).toBe(4);
+    expect(view.errorRate.known && view.errorRate.value).toBeCloseTo(0.25, 5);
+    expect(view.health).toBe('failing');
+  });
+
+  it('keeps projects apart', async () => {
+    const store = createOperationalStore(memoryBacking());
+    await store.record('a', observation());
+    await store.record('b', observation());
+    await store.record('b', observation({ observedAt: AT(1) }));
+    const a = await store.read('a');
+    const b = await store.read('b');
+    expect(a.ok && a.record?.latency.length).toBe(1);
+    expect(b.ok && b.record?.latency.length).toBe(2);
+  });
+});
+
+describe('the record is bounded, and says what it dropped', () => {
+  it('keeps the newest samples and counts the evictions', async () => {
+    const store = createOperationalStore(memoryBacking());
+    const extra = 7;
+    for (let i = 0; i < MAX_LATENCY_SAMPLES + extra; i += 1) {
+      await store.record('p', observation({
+        latency: [{ phase: 'total', durationMs: i, observedAt: AT(i) }],
+        observedAt: AT(i),
+      }));
+    }
+    const read = await store.read('p');
+    const record = read.ok && read.record ? read.record : null;
+    expect(record?.latency.length).toBe(MAX_LATENCY_SAMPLES);
+    // A p95 over a truncated window is a p95 OF THE WINDOW, so the count is
+    // reported rather than left for the reader to guess at.
+    expect(record?.droppedLatency).toBe(extra);
+    // The NEWEST survived, not the oldest.
+    expect(record?.latency[record.latency.length - 1].durationMs)
+      .toBe(MAX_LATENCY_SAMPLES + extra - 1);
+    // And the surface can see it.
+    expect(projectOperations(record!, AT(9999)).droppedLatency).toBe(extra);
+  });
+
+  it('bounds errors separately from latency', async () => {
+    const store = createOperationalStore(memoryBacking());
+    for (let i = 0; i < MAX_ERROR_EVENTS + 3; i += 1) {
+      await store.record('p', observation({
+        latency: [],
+        errors: [{ kind: 'tool_failure', at: AT(i), recovered: true, attempt: 1 }],
+        observedAt: AT(i),
+      }));
+    }
+    const read = await store.read('p');
+    expect(read.ok && read.record?.errors.length).toBe(MAX_ERROR_EVENTS);
+    expect(read.ok && read.record?.droppedErrors).toBe(3);
+  });
+});
+
+describe('two runs finishing at once do not lose one another', () => {
+  it('serialises writes per project through one store instance', async () => {
+    // Without the per-project chain both calls read the old record and the
+    // second overwrites the first's observation — silently, and exactly when
+    // the system is busiest.
+    let inFlight = 0;
+    let overlapped = false;
+    const store = createOperationalStore(memoryBacking({
+      async putText() {
+        inFlight += 1;
+        if (inFlight > 1) overlapped = true;
+        await new Promise((resolve) => { setTimeout(resolve, 1); });
+        inFlight -= 1;
+      },
+    }));
+
+    // A DETERMINISTIC race, not a hopeful one. Every read is held until all
+    // twenty have arrived, so unserialised writers all see the same empty
+    // record and the last one wins. Timing-based versions of this test pass
+    // without the chain — the first draft of it did.
+    const map = new Map<string, string>();
+    const arrived: (() => void)[] = [];
+    let release = () => {};
+    const allArrived = new Promise<void>((resolve) => { release = resolve; });
+    const real = createOperationalStore({
+      durability: 'volatile-test-only',
+      locationLabel: 'in-memory (test)',
+      async getText(key) {
+        arrived.push(() => {});
+        if (arrived.length >= 20) release();
+        // Serialised writers arrive one at a time and would deadlock on a
+        // barrier, so the wait is bounded rather than absolute.
+        await Promise.race([allArrived, new Promise((r) => { setTimeout(r, 5); })]);
+        return map.get(key) ?? null;
+      },
+      async putText(key, value) { map.set(key, value); },
+    });
+
+    await Promise.all(Array.from({ length: 20 }, (_, i) =>
+      real.record('p', observation({
+        latency: [{ phase: 'total', durationMs: i, observedAt: AT(i) }],
+        observedAt: AT(i),
+      }))));
+
+    const read = await real.read('p');
+    // All twenty survived. Unserialised, they all read the same empty record
+    // and the last write keeps one.
+    expect(read.ok && read.record?.latency.length).toBe(20);
+    expect(read.ok && read.record?.attempts.attempts).toBe(20);
+
+    await Promise.all([store.record('q', observation()), store.record('q', observation())]);
+    expect(overlapped).toBe(false);
+  });
+
+  it('a failed write does not wedge the chain for later ones', async () => {
+    let fail = true;
+    const map = new Map<string, string>();
+    const store = createOperationalStore({
+      durability: 'volatile-test-only',
+      locationLabel: 'in-memory (test)',
+      async getText(key) { return map.get(key) ?? null; },
+      async putText(key, value) {
+        if (fail) { fail = false; throw new Error('transient'); }
+        map.set(key, value);
+      },
+    });
+    const first = await store.record('p', observation());
+    expect(first.ok).toBe(false);
+    const second = await store.record('p', observation({ observedAt: AT(1) }));
+    expect(second.ok).toBe(true);
+  });
+});
+
+/* ------------------------------------- what the bound must not corrupt */
+
+describe('a bound must not make a figure lie', () => {
+  it('ten thousand failures out of ten thousand attempts is not a 2% error rate', async () => {
+    // Capping the error LIST while `attempts` kept growing reported exactly
+    // this, and let a project evict its way from `failing` to `healthy` by
+    // failing MORE.
+    const store = createOperationalStore(memoryBacking());
+    const total = MAX_ERROR_EVENTS + 300;
+    for (let i = 0; i < total; i += 1) {
+      await store.record('p', observation({
+        latency: [],
+        errors: [{ kind: 'tool_failure', at: AT(i), recovered: false, attempt: 1 }],
+        observedAt: AT(i),
+      }));
+    }
+    const read = await store.read('p');
+    const record = read.ok && read.record ? read.record : null;
+    expect(record?.errors.length).toBe(MAX_ERROR_EVENTS);
+    expect(record?.droppedErrors).toBe(300);
+
+    const view = projectOperations(record!, AT(total + 1));
+    // Exact, from the counters — not the sum of the kept list.
+    expect(view.errorCount).toBe(total);
+    expect(view.unrecoveredErrorCount).toBe(total);
+    expect(view.errorRate.known && view.errorRate.value).toBe(1);
+    // And it cannot evict its way out of failing.
+    expect(view.health).toBe('failing');
+  });
+
+  it('the by-kind breakdown is the kept window, and the count is not', async () => {
+    const store = createOperationalStore(memoryBacking());
+    for (let i = 0; i < MAX_ERROR_EVENTS + 5; i += 1) {
+      await store.record('p', observation({
+        latency: [],
+        errors: [{ kind: 'rate_limited', at: AT(i), recovered: true, attempt: 1 }],
+        observedAt: AT(i),
+      }));
+    }
+    const read = await store.read('p');
+    const view = projectOperations(read.ok && read.record ? read.record : null!, AT(9999));
+    const breakdown = view.errors.reduce((sum, e) => sum + e.count, 0);
+    expect(breakdown).toBe(MAX_ERROR_EVENTS);
+    expect(view.errorCount).toBe(MAX_ERROR_EVENTS + 5);
+    expect(view.droppedErrors).toBe(5);
+  });
+});
+
+describe('a record written by an earlier build is repaired, not trusted', () => {
+  it('a missing counter does not become NaN and vanish', async () => {
+    // `undefined + 1` is NaN, and `NaN > 0` is false — so the disclosure would
+    // silently disappear rather than obviously break, and the counter would
+    // reset forever.
+    const legacy = JSON.stringify({
+      projectId: 'p', latency: [], errors: [], waits: [], evaluations: [],
+      repairLoops: [], attempts: { attempts: 3, source: 'counted' },
+      newestSignalAt: AT(0),
+    });
+    const map = new Map([[`relay.operations.p`, legacy]]);
+    const store = createOperationalStore({
+      durability: 'volatile-test-only',
+      locationLabel: 'in-memory (test)',
+      async getText(key) { return map.get(key) ?? null; },
+      async putText(key, value) { map.set(key, value); },
+    });
+    const result = await store.record('p', observation());
+    expect(result.ok).toBe(true);
+    const record = result.ok ? result.record : null;
+    expect(Number.isNaN(record?.droppedLatency ?? Number.NaN)).toBe(false);
+    expect(record?.droppedLatency).toBe(0);
+    expect(record?.errorTotals).toEqual({ observed: 0, unrecovered: 0 });
+    // The attempts it already had are preserved, not reset.
+    expect(record?.attempts.attempts).toBe(4);
+  });
+});
+
+describe('a read has three answers, not two', () => {
+  it('distinguishes nothing-recorded from bytes it cannot read', async () => {
+    const empty = createOperationalStore(memoryBacking());
+    const nothing = await empty.read('p');
+    expect(nothing.ok && nothing.record).toBeNull();
+    expect(nothing.ok && nothing.unreadable).toBeUndefined();
+
+    const corrupt = createOperationalStore(memoryBacking({
+      async getText() { return '{not json'; },
+    }));
+    const bad = await corrupt.read('p');
+    expect(bad.ok && bad.record).toBeNull();
+    // Bytes exist. The next write will overwrite them, and a caller can say so.
+    expect(bad.ok && bad.unreadable).toBe(true);
+
+    const failed = createOperationalStore(memoryBacking({
+      async getText() { throw new Error('backing unavailable'); },
+    }));
+    expect((await failed.read('p')).ok).toBe(false);
+  });
+});
+
+describe('the serialisation chain does not leak', () => {
+  /**
+   * The Map is built inside `createOperationalStore`, so it can be reached by
+   * intercepting the constructor at call time. The previous version of this
+   * test asserted that fifty writes all settled — which they do with or without
+   * the prune — and its comment claimed reaching the closure was impossible.
+   * Deleting the prune left it green.
+   */
+  it('holds a chain while writes are in flight and releases it after', async () => {
+    const RealMap = globalThis.Map;
+    const captured: Map<string, unknown>[] = [];
+    // Wrapped rather than subclassed: the store calls `new Map()` with no
+    // arguments, and re-declaring a constructor signature here only invites a
+    // mismatch with the real one.
+    (globalThis as unknown as { Map: unknown }).Map = function CapturingMap(this: unknown) {
+      const made = new RealMap<string, unknown>();
+      captured.push(made);
+      return made;
+    };
+    let store: ReturnType<typeof createOperationalStore>;
+    try {
+      store = createOperationalStore(memoryBacking());
+    } finally {
+      (globalThis as unknown as { Map: unknown }).Map = RealMap;
+    }
+    const chains = captured[captured.length - 1];
+    expect(chains, 'the chain map was not captured').toBeDefined();
+
+    const inFlight = Promise.all(Array.from({ length: 12 }, (_, i) =>
+      store.record(`proj-${i}`, observation({ observedAt: AT(i) }))));
+    // Held while the writes are running — this is what a leak would keep.
+    expect(chains.size).toBeGreaterThan(0);
+
+    const results = await inFlight;
+    expect(results.every((r) => r.ok)).toBe(true);
+    // Pruned once settled. Deleting the prune leaves 12 entries here forever.
+    await new Promise((resolve) => { setTimeout(resolve, 5); });
+    expect(chains.size).toBe(0);
+  });
+
+  it('releases the chain even when a write fails', async () => {
+    const RealMap = globalThis.Map;
+    const captured: Map<string, unknown>[] = [];
+    // Wrapped rather than subclassed: the store calls `new Map()` with no
+    // arguments, and re-declaring a constructor signature here only invites a
+    // mismatch with the real one.
+    (globalThis as unknown as { Map: unknown }).Map = function CapturingMap(this: unknown) {
+      const made = new RealMap<string, unknown>();
+      captured.push(made);
+      return made;
+    };
+    let store: ReturnType<typeof createOperationalStore>;
+    try {
+      store = createOperationalStore(memoryBacking({
+        async putText() { throw new Error('transient'); },
+      }));
+    } finally {
+      (globalThis as unknown as { Map: unknown }).Map = RealMap;
+    }
+    const chains = captured[captured.length - 1];
+    const result = await store.record('p', observation());
+    expect(result.ok).toBe(false);
+    await new Promise((resolve) => { setTimeout(resolve, 5); });
+    expect(chains.size).toBe(0);
+  });
+});
+
+describe('a write that replaced unreadable bytes says so', () => {
+  it('reports the replacement rather than overwriting in silence', async () => {
+    const map = new Map<string, string>([['relay.operations.p', '{not json']]);
+    const store = createOperationalStore({
+      durability: 'volatile-test-only',
+      locationLabel: 'in-memory (test)',
+      async getText(key) { return map.get(key) ?? null; },
+      async putText(key, value) { map.set(key, value); },
+    });
+    const first = await store.record('p', observation());
+    expect(first.ok && first.replacedUnreadable).toBe(true);
+    // And the next write, over readable bytes, does not claim it.
+    const second = await store.record('p', observation({ observedAt: AT(1) }));
+    expect(second.ok && second.replacedUnreadable).toBeUndefined();
+  });
+});
+
+describe('an evicted error is still an error that happened', () => {
+  it('a record with no counters derives the exact total from what it dropped', async () => {
+    // kept + droppedErrors is EXACT — every error was one or the other — and
+    // ignoring it left the original defect intact on any record whose counters
+    // are absent: 200 kept and 5000 dropped reported 200 errors, a 3.85% rate
+    // where the truth was 100%, and `degraded` where the truth was `failing`.
+    const legacy = {
+      projectId: 'p', latency: [], waits: [], evaluations: [], repairLoops: [],
+      attempts: { attempts: 5200, source: 'counted' as const },
+      newestSignalAt: AT(0), droppedLatency: 0, droppedErrors: 5000,
+      errors: Array.from({ length: 200 }, (_, i) => ({
+        kind: 'tool_failure' as const, at: AT(i), recovered: true, attempt: 1,
+      })),
+    };
+    const view = projectOperations(legacy as never, AT(1));
+    expect(view.errorCount).toBe(5200);
+    expect(view.errorRate.known && view.errorRate.value).toBe(1);
+    // Unrecovered has NO exact bound — `droppedErrors` counts evictions, not
+    // how many of them the run survived — so it is a floor and says so.
+    expect(view.unrecoveredIsExact).toBe(false);
+    expect(view.healthReason).toContain('whether every one was recovered is not known');
+    expect(view.healthReason).not.toContain('every one was recovered.');
+  });
+
+  it('a record with counters states recovery exactly', async () => {
+    const store = createOperationalStore(memoryBacking());
+    await store.record('p', observation({
+      errors: [{ kind: 'rate_limited', at: AT(0), recovered: true, attempt: 1 }],
+    }));
+    const read = await store.read('p');
+    const view = projectOperations(read.ok && read.record ? read.record : null!, AT(1));
+    expect(view.unrecoveredIsExact).toBe(true);
+    expect(view.healthReason).toContain('every one was recovered.');
+  });
+});

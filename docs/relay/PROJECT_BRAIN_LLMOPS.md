@@ -299,14 +299,77 @@ claim "proven against the connector's real types" was worth less than it
 sounded. Without the cast, a new required field breaks the file, which is the
 whole reason to test against the real type rather than a hand-drawn shape.
 
+## The store
+
+The producer reads one run; `operational-store.ts` accumulates them. That is the
+difference between a model and an instrument — until something folds
+observations together across runs, every surface can only truthfully report that
+nothing is being measured, and both of ours did for two milestones.
+
+**It never claims durability it does not have.** The backing declares itself
+`durable` or `volatile-test-only`, and the store carries that label out
+verbatim. A dashboard that survives nothing while implying it survives
+everything is worse than no dashboard.
+
+**It is bounded, and says what it dropped.** The most recently RECORDED 500
+latency samples and 200 error events are kept — "newest" by arrival, not by
+timestamp — and every eviction is counted into `droppedLatency` /
+`droppedErrors`. Both surfaces render both counts. A percentile over a truncated
+window is a percentile OF THE WINDOW: a reader who knows four thousand samples
+fell off the end reads it as recent history, and a reader who does not reads it
+as the project's.
+
+**A bound must not corrupt a figure.** Capping the error LIST while `attempts`
+kept growing reported ten thousand failures out of ten thousand attempts as a
+**2% error rate**, and let a project evict its way from `failing` to `healthy`
+by failing more. Every error ever ingested was either KEPT or DROPPED, so `kept + droppedErrors`
+is not an estimate — it is exact, and the record already carried it. The count
+is that sum, or the record's own counter where that is larger. Consulting only
+the counters left the original defect intact on any record without them: 200
+kept and 5000 dropped still reported 200 errors, 3.85% where the truth was 100%,
+and `degraded` where the truth was `failing`.
+
+**Unrecovered has no such bound, and says so.** `droppedErrors` counts
+evictions, not how many of them the run survived. On a record carrying no
+counter it is a FLOOR, `unrecoveredIsExact` is false, and health declines to
+claim every error was recovered — a claim about errors the record can no longer
+see.
+
+**A write says when it replaced something.** Bytes that cannot be read are
+overwritten — a record nobody can parse helps nobody — but `replacedUnreadable`
+marks it, because doing it silently means the loss is mentioned nowhere.
+
+**A read has three answers, not two.** `null` means nothing has been recorded;
+`null` with `unreadable` means bytes exist that could not be read as this
+project's record; `ok: false` means the backing could not answer. A record
+written by an earlier build is repaired on read rather than trusted — a missing
+counter would otherwise become `NaN`, and `NaN > 0` is false, so the disclosure
+would silently disappear instead of obviously breaking.
+
+**A failed read is not a project with no data**, and a failed write is returned
+rather than swallowed. `null` from a read means nothing has been recorded; an
+`ok: false` means the store could not answer, and those are different sentences.
+
+**Two runs finishing at once do not lose one another.** Read-modify-write over a
+key/value seam is last-write-wins, so writes through one store instance are
+serialised per project. Twenty concurrent observations all survive; without the
+chain, nineteen are lost and the record keeps one. `concurrencyScope: 'process'`
+is the honest limit — two PROCESSES writing the same project are not protected,
+and nothing here can make them so without a compare-and-set the seam does not
+have.
+
 ## Not implemented
 
-**Nothing calls `observeClaudeRun` on a live run, nothing supplies receipts, and
-nothing persists memory.** The adapter now lives where a caller could reach it,
-and is proven against the connector's real types — but no caller exists. What is
-missing is a STORE: something accumulating a `RelayOperationalRecord` across runs
-and handing it to a surface. Until that exists, both surfaces truthfully report
-that no operations source is wired. The CLI's `brain` view generates a document from an empty memory on
+**Nothing calls `observeClaudeRun` on a live run.** The producer is proven
+against the connector's real types; the store and both surfaces are proven
+against the domain's. What is
+missing is the CALL — a run handler that observes its own outcome and records
+it, and a host that reads the record back into `operationsView`. Until that
+exists both surfaces truthfully report that no operations source is wired,
+because none is.
+
+Receipts still have no producer either, so `spend` remains `null` in every
+shipped host. The CLI's `brain` view generates a document from an empty memory on
 every invocation, which is why it truthfully reports that nothing has been
 recorded. The functions
 exist and are tested against fixtures; no adapter, run handler or bridge invokes
