@@ -294,14 +294,20 @@ from one that never ran.
 NOT WIRED: nothing schedules a pass yet — no daemon, no cron, no CLI verb
 invokes it. That is the next stage, not a footnote.
 
-**PRECONDITION FOR WIRING, found by review and not yet fixed:** the persistence
-lock's stale reclaim is not atomic. Two same-host processes can both observe
-`stale_owner_dead`; the loser's unconditional rename then displaces the
-winner's LIVE lock and both acquire. `acquireRunLock` also reclaims UNREADABLE
-locks, which this worker refuses — so a naive binding would leak the
-primitive's policy through the worker's refusal. `lock.ts` needs a post-acquire
-ownership re-read (or a guarded rename) before any two workers run against the
-same state root.
+**THE WIRING PRECONDITION IS FIXED** (found by the worker review, closed
+before any second claimant): the stale reclaim in `lock.ts` is now GUARDED —
+it takes the lock file to quarantine atomically, verifies what it actually
+took against the classification that justified taking it, and restores a
+wrongly-taken live lock with a no-clobber `link` (never a rename, which would
+displace whatever third lock appeared meanwhile). Acquisition verifies its own
+lock after creation, `stillHeld()` lets long-held work re-check at its own
+checkpoints, and UNREADABLE locks now fail acquisition by name instead of
+being reclaimed — the primitive no longer guesses under a worker that
+refuses to. Residual, stated plainly: a third process acquiring in the
+microseconds between a wrongful quarantine and its restore leaves the
+displaced holder unprotected; the failure is loud, names the displaced owner
+and preserves the evidence, but the primitive cannot hand protection back —
+which is why `stillHeld()` exists.
 
 ## The pass planner
 

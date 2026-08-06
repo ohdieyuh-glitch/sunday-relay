@@ -27,10 +27,14 @@ import type { LoopRunNodeStore } from './loop-run-node';
  * and both then believing they hold it.
  *
  * A LOCK WE CANNOT READ IS NOT A LOCK WE MAY TAKE. When the file exists but
- * cannot be parsed, `acquireRunLock` preserves it and reclaims; when a live
- * owner holds it, acquisition FAILS rather than waiting or stealing. The engine
- * turns that failure into a refusal, and a caller that cannot establish
- * ownership never dispatches.
+ * cannot be parsed, `acquireRunLock` now FAILS BY NAME rather than reclaiming
+ * — an unreadable lock may be a live owner mid-write, and the primitive
+ * guessing under a worker that refuses to guess was a policy leak, found in
+ * review. When a live owner holds it, acquisition fails rather than waiting
+ * or stealing; a stale reclaim is GUARDED (take-then-verify with a
+ * no-clobber restore), so a racing reclaimer cannot displace a live lock on
+ * an outdated classification. The engine turns every failure into a refusal,
+ * and a caller that cannot establish ownership never dispatches.
  */
 
 export interface LoopLockNodePortOptions {
