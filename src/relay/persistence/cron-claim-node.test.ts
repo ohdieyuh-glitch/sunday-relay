@@ -73,7 +73,9 @@ describe('claim-before-effect on real disk', () => {
       acquiredAt: '2026-08-06T14:00:00.000Z', purpose: 'someone-else-mid-claim',
     }));
     const port = createCronClaimNodePort({ stateRoot, now: NOW });
-    expect(claimOccurrence(port, occ('occ_held'))).toEqual({ kind: 'lock_unavailable' });
+    const held = claimOccurrence(port, occ('occ_held'));
+    expect(held.kind).toBe('lock_unavailable');
+    if (held.kind === 'lock_unavailable') expect(held.problem).toContain('live Relay process');
     expect(existsSync(join(dir, CLAIM_MARKER_FILE))).toBe(false);
   });
 

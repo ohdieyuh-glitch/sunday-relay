@@ -69,7 +69,8 @@ describe('the approved sequence', () => {
 
   it('an unavailable lock is its own answer, not a guess', () => {
     const { port } = harness({ lock: 'unavailable' });
-    expect(claimOccurrence(port, occurrence())).toEqual({ kind: 'lock_unavailable' });
+    expect(claimOccurrence(port, occurrence()))
+      .toEqual({ kind: 'lock_unavailable', problem: 'live claimant' });
   });
 });
 

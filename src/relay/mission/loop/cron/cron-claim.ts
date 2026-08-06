@@ -23,7 +23,7 @@ import type { CronOccurrence } from './cron-occurrences';
 
 export interface OccurrenceClaimPort {
   /** The generalized run-lock, against the occurrence's own directory.
-   *  `null` when it cannot be held right now — never a guess. EVERY writer
+   *  Refusals carry their kind and problem — never a guess. EVERY writer
    *  of a claim marker — scheduler pass, retry, manual run-now — must hold
    *  THIS lock first; a writer that skips it re-opens the double-claim this
    *  sequence exists to close. */
@@ -45,8 +45,9 @@ export interface OccurrenceClaimPort {
  * Why a lock was or was not acquired. Review of the adapter found every
  * failure collapsed into one "try later" — which hid an unreadable lock's
  * remove-it-by-hand instruction behind an answer that promised retrying was
- * the whole answer. `held` retries; `blocked` does not clear without a
- * human; `failed` names an IO problem a retry may clear.
+ * the whole answer. `held` retries; `blocked` is UNLIKELY to clear without
+ * a human (a live writer mid-write can wear it for microseconds — see the
+ * outcome doc); `failed` names an IO problem a retry may clear.
  */
 export type OccurrenceLockAnswer =
   | { readonly acquired: true; release(): void }
@@ -61,10 +62,17 @@ export type OccurrenceClaimOutcome =
    *  worker, or a manual run-now that got there first. Not a failure. */
   | { readonly kind: 'already_handled' }
   /** The occurrence lock is held by a live claimant. Somebody may be
-   *  mid-claim; trying again later is the whole answer. */
-  | { readonly kind: 'lock_unavailable' }
-  /** The lock will NOT clear on retry — an unreadable lock file or an
-   *  unrestorable displacement needs a human. The problem says which. */
+   *  mid-claim; trying again later is the answer. The problem carries the
+   *  refusal's own words — including, after an unrestorable displacement,
+   *  the hazard message naming the displaced owner, which the first
+   *  widening dropped here exactly the way the unreadable message was
+   *  dropped before it. */
+  | { readonly kind: 'lock_unavailable'; readonly problem: string }
+  /** The lock file is unreadable NOW and a retry is unlikely to clear it.
+   *  UNLIKELY, not never: a live writer between create and write looks like
+   *  this for microseconds (the adapter re-inspects once to shed most such
+   *  windows), so a scheduler may retry a bounded number of times before
+   *  surfacing the remove-it-by-hand problem to a human. */
   | { readonly kind: 'lock_blocked'; readonly problem: string }
   /** The marker could not be written. NOT claimed; a retry is safe. */
   | { readonly kind: 'claim_failed'; readonly problem: string };
@@ -91,7 +99,7 @@ export function claimOccurrence(
     return { kind: 'claim_failed', problem: problemOf(error) };
   }
   if (!lock.acquired) {
-    if (lock.kind === 'held') return { kind: 'lock_unavailable' };
+    if (lock.kind === 'held') return { kind: 'lock_unavailable', problem: lock.problem };
     if (lock.kind === 'blocked') return { kind: 'lock_blocked', problem: lock.problem };
     return { kind: 'claim_failed', problem: lock.problem };
   }
