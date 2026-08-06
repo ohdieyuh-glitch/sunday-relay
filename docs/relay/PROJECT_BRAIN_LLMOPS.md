@@ -104,6 +104,30 @@ Health always carries a REASON. A state without one is a colour.
 | `degraded` | a repair loop ended with its finding open, a failing evaluation, or any recovered error |
 | `healthy` | recent signal, nothing unrecovered, nothing open |
 
+## The repair loop runtime
+
+`mission/repair/repair-loop-engine.ts` runs one bounded loop to its end:
+dispatch a repair, re-verify, repeat, stop at the bound. Four rules are
+structural:
+
+- **Only the VERIFIER closes a finding.** The repairer's `claimsFixed` is
+  recorded and never decides — allowing it to decide fails four tests at once,
+  because it is the never-self-approve rule at the code level. An unverifiable
+  repair is an open finding with extra steps.
+- **Scope creep fails the cycle before verification**, through the one existing
+  `repairExpandsFileClaims` rule rather than a second copy of it. A repair that
+  touches files beyond the finding's claim is refused however good it looks.
+- **A bound that is not a bound is refused, not defaulted.** Zero, negative,
+  fractional, NaN and Infinity all end `abandoned` with nothing dispatched —
+  silently substituting a limit is how "unbounded" ships wearing a number.
+- **A crashed port is a paid, failed cycle — not a crashed loop.** The loop's
+  job is to report how the money was spent, and a report that dies mid-way
+  reports nothing.
+
+NOT WIRED: nothing dispatches a real repair agent or a real verifier into these
+ports yet. The loop's output is exactly the `RelayRepairLoop` the operations
+record already carries, so wiring it is a caller, not a new model.
+
 ## A repair loop that ran out of budget did not succeed
 
 `RELAY_REPAIR_OUTCOMES` distinguishes `converged`, `limit_reached`, `abandoned`
