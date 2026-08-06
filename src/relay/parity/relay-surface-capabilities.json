@@ -831,6 +831,8 @@
       "websiteStatus": "tested",
       "cliStatus": "tested",
       "websiteEntryPoints": [
+        "src/relay/ui/app/projection.ts",
+        "src/relay/ui/app/store.ts",
         "src/relay/ui/project-workspace/RelayOperationsPanel.tsx",
         "src/relay/ui/project-workspace/RelayProjectBrainStatus.tsx"
       ],
@@ -838,6 +840,7 @@
         "src/relay/cli/product/operations.ts"
       ],
       "websiteTestReferences": [
+        "src/relay/ui/app/operations-readback.test.ts",
         "src/relay/ui/project-workspace/brain-document.test.tsx",
         "src/relay/ui/project-workspace/operations-panel.test.tsx"
       ],

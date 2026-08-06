@@ -24,6 +24,8 @@ import type {
   RelayProject,
 } from './contracts';
 import type { StoredProjectSettings } from './contracts';
+import { projectOperations } from '../../shared/llmops';
+import type { RelayOperationalRecord } from '../../shared/llmops';
 
 /**
  * MISSION PROJECTION — derives the Active Workspace's display state from
@@ -345,12 +347,24 @@ export interface MissionProjectionInput {
   brain: ProjectBrain | null;
   mission: RelayMission;
   events: RelayEvent[];
+  /**
+   * The project's operational record, when one exists. Absent means nothing
+   * has been observed — not an empty record.
+   */
+  operations?: RelayOperationalRecord;
+  /**
+   * ISO-8601 instant the operations view is projected for. Required alongside
+   * `operations`, because staleness and health are both measured FROM it and a
+   * projection that invented one would be answering "is this system alive?"
+   * with a number it made up.
+   */
+  now?: string;
 }
 
 export function deriveMissionProjection(
   input: MissionProjectionInput,
 ): ConfiguredWorkspaceState & { codingTerminal?: CodingTerminalView; roleBilling?: RoleBillingRow[] } {
-  const { project, settings, brain, mission, events } = input;
+  const { project, settings, brain, mission, events, operations, now } = input;
   const s = mission.state;
 
   // Start from the honest configured baseline, then overlay mission truth.
@@ -476,6 +490,17 @@ export function deriveMissionProjection(
     findings,
     repairs,
     verificationSummary,
+    // THE OPERATIONAL RECORD, read back.
+    //
+    // Both conditions are required and both are honest. Without a record
+    // nothing has been observed for this project; without a clock the view's
+    // `asOf` would be invented, and every staleness and health answer derives
+    // from it. In either case `operationsView` stays undefined and the panel
+    // says no operations source is wired — which is TRUE for that host, rather
+    // than a constant that would rot the moment one surface was wired.
+    ...(operations !== undefined && now !== undefined
+      ? { operationsView: projectOperations(operations, now) }
+      : {}),
     projectBrainState: brain
       ? {
           entries:
