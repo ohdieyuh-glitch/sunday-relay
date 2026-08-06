@@ -140,11 +140,10 @@ describe('configured workspace render', () => {
     expect(html).not.toContain('rpw-tev-icon'); // no timeline rows exist
   });
 
-  it('phase rail starts at PLAN with nothing complete', () => {
+  it('renders no phase list in the status rail — the strip PHASE cell is the single phase surface', () => {
     const html = render();
-    // PLAN is the single active phase; no phase is complete yet.
-    expect(html).toMatch(/rpw-phase--active[^>]*>[\s\S]{0,200}?PLAN/);
-    expect(html).not.toContain('rpw-phase--complete');
+    expect(html).not.toContain('rpw-phase-rail');
+    expect(html).toContain('rpw-strip-cell--phase');
   });
 
   it('research panel states are truthful for enabled and disabled configurations', () => {
