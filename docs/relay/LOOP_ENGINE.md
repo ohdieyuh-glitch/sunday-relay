@@ -456,8 +456,8 @@ work stealing · critical-path scheduling · scheduler telemetry · the watchdog
 multi-Loop concurrency ·
 multi-role BRIDGE WIRING (staffing exists — `confirmLoopRunsForTarget` creates
 one run per resolved role; the bridge still creates a single run and drives
-one role, `coding_agent`) · Cron scheduling
-(grammar only — see `CRON_LOOPS.md`) · Unchain (see `UNCHAIN.md`) · S-Loop
+one role, `coding_agent`) · Cron CLAIMING and dispatch
+(grammar and the pure evaluator exist — see `CRON_LOOPS.md`) · Unchain (see `UNCHAIN.md`) · S-Loop
 runtime · swarm branches · convergence · Rechaining · Loop templates ·
 marketplace integration · starting a Loop from the website.
 
