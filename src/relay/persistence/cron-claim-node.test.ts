@@ -1,5 +1,5 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -58,6 +58,38 @@ describe('claim-before-effect on real disk', () => {
     const outcome = claimOccurrence(port, occ('../../escape'));
     expect(outcome.kind).toBe('claim_failed');
     if (outcome.kind === 'claim_failed') expect(outcome.problem).toContain('refusing to touch disk');
+  });
+
+  it('a lock held by a LIVE owner refuses the claim — the lock is real, not decorative', () => {
+    // Mutation check: gutting acquireOccurrenceLock (no acquireRunLock call)
+    // claims straight past this held lock — review proved all prior tests
+    // survived exactly that mutant, so the lock integration was pinned by
+    // nothing.
+    const stateRoot = mkdtempSync(join(tmpdir(), 'relay-cron-claim-'));
+    const dir = join(stateRoot, 'cron-occurrences', 'occ_held');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'lock'), JSON.stringify({
+      pid: process.pid, hostname: hostname(),
+      acquiredAt: '2026-08-06T14:00:00.000Z', purpose: 'someone-else-mid-claim',
+    }));
+    const port = createCronClaimNodePort({ stateRoot, now: NOW });
+    expect(claimOccurrence(port, occ('occ_held'))).toEqual({ kind: 'lock_unavailable' });
+    expect(existsSync(join(dir, CLAIM_MARKER_FILE))).toBe(false);
+  });
+
+  it('an existence CHECK creates nothing on disk', () => {
+    const stateRoot = mkdtempSync(join(tmpdir(), 'relay-cron-claim-'));
+    const port = createCronClaimNodePort({ stateRoot, now: NOW });
+    expect(port.claimMarkerExists('occ_ghost')).toBe(false);
+    expect(existsSync(join(stateRoot, 'cron-occurrences', 'occ_ghost'))).toBe(false);
+  });
+
+  it('a successful claim leaves the marker and journal, and NO temp litter', () => {
+    const stateRoot = mkdtempSync(join(tmpdir(), 'relay-cron-claim-'));
+    const port = createCronClaimNodePort({ stateRoot, now: NOW });
+    expect(claimOccurrence(port, occ()).kind).toBe('claimed');
+    const names = readdirSync(join(stateRoot, 'cron-occurrences', 'occ_abc123')).sort();
+    expect(names).toEqual([CLAIM_MARKER_FILE, TRIGGER_JOURNAL_FILE]);
   });
 
   it('two occurrences never share state', () => {

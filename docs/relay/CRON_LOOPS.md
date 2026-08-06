@@ -17,8 +17,13 @@ unknown fails closed) and `cron-missed.ts` (missed-run policies; high-risk
 work never auto-caught-up, whatever the policy says).
 `src/relay/persistence/cron-claim-node.ts` is the file-backed
 `OccurrenceClaimPort`: the guarded run lock per occurrence directory, an
-O_EXCL claim marker (exclusive, not merely atomic), a durable trigger
-journal, and path-shaped occurrence ids refused. Nothing yet DISPATCHES:
+claim marker written all-or-nothing, exclusively and DURABLY (fsynced temp +
+no-clobber link — the at-most-once authority must survive a crash), a durable
+trigger journal, and path-shaped occurrence ids refused. NAMED FOLLOW-UP
+before the scheduler lands: the `OccurrenceClaimPort` lock method collapses
+every acquisition failure into "try later", which hides an unreadable lock's
+remove-it-by-hand instruction — the port must widen to carry the reason
+before anything loops on it. Nothing yet DISPATCHES:
 there is no timer, no tick endpoint and no run creation from a trigger. The
 `loop_cron` feature flag is off and depends on `loop_scheduler`, which
 depends on `loop_engine`.

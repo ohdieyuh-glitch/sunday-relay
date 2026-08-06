@@ -1,7 +1,9 @@
-import { closeSync, existsSync, mkdirSync, openSync, writeSync } from 'node:fs';
+import {
+  closeSync, existsSync, fsyncSync, linkSync, mkdirSync, openSync, unlinkSync, writeSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { acquireRunLock } from './lock';
-import { appendLineDurable } from './atomic-file';
+import { appendLineDurable, fsyncDirBestEffort } from './atomic-file';
 import type { OccurrenceClaimPort } from '../mission/loop/cron/cron-claim';
 
 /**
@@ -53,18 +55,41 @@ export function createCronClaimNodePort(options: CronClaimNodeOptions): Occurren
     },
 
     claimMarkerExists(occurrenceId) {
-      return existsSync(join(dirFor(occurrenceId), CLAIM_MARKER_FILE));
+      if (!SAFE_OCCURRENCE_ID.test(occurrenceId)) {
+        throw new Error(`"${occurrenceId}" is not an evaluator-shaped occurrence id; refusing to touch disk with it.`);
+      }
+      // An existence CHECK creates nothing — review found the first version
+      // littering one directory per id ever inspected, and inspectLock's
+      // read-only precedent is the rule here.
+      return existsSync(join(options.stateRoot, 'cron-occurrences', occurrenceId, CLAIM_MARKER_FILE));
     },
 
     writeClaimMarker(occurrence, at) {
-      // O_EXCL: a second writer fails here even if a lock was ever wrongly
-      // held twice — at-most-once does not rest on the lock alone.
-      const fd = openSync(join(dirFor(occurrence.occurrenceId), CLAIM_MARKER_FILE), 'wx', 0o600);
+      // ALL-OR-NOTHING and EXCLUSIVE and DURABLE, each for a reviewed
+      // reason. Durable: this marker is the at-most-once authority, and an
+      // authority a crash can vanish re-arms the double dispatch it exists
+      // to prevent — the first version fsynced the subordinate journal but
+      // not this. All-or-nothing: a torn direct write left a marker that
+      // answered already_handled to the retry the claim_failed outcome had
+      // just promised was safe. Exclusive: linkSync fails EEXIST, the same
+      // no-clobber primitive the guarded lock restore uses — a second
+      // writer loses even if a lock were ever wrongly held twice.
+      const dir = dirFor(occurrence.occurrenceId);
+      const markerPath = join(dir, CLAIM_MARKER_FILE);
+      const tempPath = join(dir, `${CLAIM_MARKER_FILE}.tmp-${process.pid}-${at.replace(/[:.]/g, '-')}`);
+      const fd = openSync(tempPath, 'wx', 0o600);
       try {
         writeSync(fd, JSON.stringify({ occurrence, claimedAt: at }), null, 'utf8');
+        try { fsyncSync(fd); } catch { /* flush unsupported on this platform/fs */ }
       } finally {
         closeSync(fd);
       }
+      try {
+        linkSync(tempPath, markerPath);
+      } finally {
+        try { unlinkSync(tempPath); } catch { /* tidy-up only */ }
+      }
+      fsyncDirBestEffort(dir);
     },
 
     appendTriggerClaimed(occurrence, at) {
