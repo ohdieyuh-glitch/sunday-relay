@@ -288,6 +288,36 @@ The user must see why it paused, the last safe run, the last failure, the
 required action, **whether any external effect occurred**, and whether manual
 review is required. Resuming requires the condition to re-evaluate clean.
 
+`cron-breakers.ts` implements that decision. The external-effect answer is
+THREE-VALUED — occurred, did not, or UNKNOWN — and Unknown is never rendered
+as "no": a confident "no external effect" the code cannot support is what
+ends an investigation that should have happened, so Unknown requires the same
+human review that a known effect does. Access and policy changes (MCP
+revocation, repeated authentication failures, organization membership,
+security policy, reduced credential scopes) always require review, because a
+schedule cannot tell whether the change was intended. A condition that could
+not be READ neither trips nor clears: it does not pause the schedule on its
+own, and it does block a resume, because unobserved is not clean and resuming
+on silence is resuming on an assumption.
+
+**AN OPEN QUESTION, NOT A DECISION MADE HERE.** What a schedule should do when
+NONE of its breakers can be read is not settled by this document. The first
+implementation answered "keep running" and wrote that answer into this
+section in the same commit, then cited it as though it were approved — review
+caught the circularity. The evaluator now returns a third state,
+`unobserved`, distinct from both running and paused, so the caller chooses
+with the facts in front of it. **Founder decision needed:** should a schedule
+whose breakers are entirely unreadable keep running, or stop? Everything else
+in this repository that meets an unknown fails closed.
+
+A malformed reading is refused rather than read as "unknown" — a producer's
+typo must not downgrade a real trip into carry-on — and a condition that is
+external BY DEFINITION (repeated duplicate external actions, external rate
+limiting) reported alongside "no external effect" is refused as
+contradictory rather than answered.
+
+NOT WIRED: nothing observes these conditions or consults the verdict.
+
 ## Versioning
 
 Editing a Cron Loop creates a new contract version, preserving the previous
@@ -312,7 +342,8 @@ The in-bridge scheduler and its timer · execution of a trigger-created run
 (the record is created; nothing advances it) · the schedule store, and
 therefore schedule listing, pausing and versioning · the occurrence queue,
 and therefore the `queue_one` and `queue_all` overlap policies · period
-budget caps · recurring approvals · circuit breakers · schedule
+budget caps · recurring approvals · circuit-breaker OBSERVATION (the decision exists;
+nothing feeds it and nothing pauses a schedule) · schedule
 versioning · conditional Cron Loops · the Cron UI · token and provider-call
 caps at the schedule level · notification and next-eligible-trigger
 computation on a blocked run.
