@@ -88,7 +88,11 @@ export interface LoopWorkerAttempt {
 export interface LoopWorkerPass {
   readonly startedAt: string;
   readonly finishedAt: string;
-  /** Every run the worker looked at, advanced or not. */
+  /**
+   * Every ATTEMPT, advanced or not. A run can appear twice — a successful
+   * advance and a failed release are two facts about one run — so `skipped`
+   * counts entries, not runs.
+   */
   readonly attempts: readonly LoopWorkerAttempt[];
   /**
    * Runs where the engine genuinely moved: `iteration_recorded`, `terminal` or
