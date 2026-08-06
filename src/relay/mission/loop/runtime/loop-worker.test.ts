@@ -53,8 +53,21 @@ function harness(runs: Record<string, RunSpec>) {
   return { ports, events };
 }
 
-const skipsOf = (pass: { attempts: readonly { runId: string; skipped?: LoopSkipReason }[] }) =>
-  Object.fromEntries(pass.attempts.filter((a) => a.skipped).map((a) => [a.runId, a.skipped]));
+// GROUPED, not flattened: a run can legitimately appear twice (a successful
+// advance AND a failed release), and Object.fromEntries silently kept only the
+// last — shadowing one skip reason with another in any test that used it.
+const skipsOf = (pass: { attempts: readonly { runId: string; skipped?: LoopSkipReason }[] }) => {
+  const out: Record<string, LoopSkipReason[]> = {};
+  for (const a of pass.attempts) {
+    if (a.skipped) out[a.runId] = [...(out[a.runId] ?? []), a.skipped];
+  }
+  return new Proxy(out, {
+    get(target, key: string) {
+      const list = target[key];
+      return list === undefined ? undefined : list.length === 1 ? list[0] : list;
+    },
+  }) as Record<string, LoopSkipReason | LoopSkipReason[]>;
+};
 
 describe('the worker never claims work somebody else may be doing', () => {
   it('skips a live owner, an unreadable lock, and a lost race — each named', async () => {
@@ -150,7 +163,10 @@ describe('the pass is honest about time and count', () => {
     const { ports } = harness({ a: { lock: 'free' }, b: { lock: 'held_by_live_owner' } });
     const pass = await runLoopWorkerPass(ports, { maxRuns: 5, maxIterationsPerRun: 1 });
     expect(Date.parse(pass.finishedAt)).toBeGreaterThan(Date.parse(pass.startedAt));
-    expect(pass.advanced + pass.skipped).toBe(pass.attempts.length);
+    // All three counters, not two: this held with two only because the
+    // scenario had declined=0, which is a test passing for a reason other than
+    // the property it names.
+    expect(pass.advanced + pass.declined + pass.skipped).toBe(pass.attempts.length);
   });
 
   it('an empty discovery is an empty pass, not an error', async () => {
