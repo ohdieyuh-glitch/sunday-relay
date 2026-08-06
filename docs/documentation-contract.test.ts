@@ -323,7 +323,12 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     expect(statusLine(loop)).toContain('SINGLE-LOOP RUNTIME IMPLEMENTED');
     expect(statusLine(loop)).toContain('DEFAULT OFF');
     expect(statusLine(loop)).toContain('NO LOOP HAS RUN IN PRODUCTION');
-    expect(statusLine(unchain)).toContain('SPECIFIED, NOT IMPLEMENTED');
+    // SUPERSEDED 2026-08-06 when the controlled collapse landed. The pinned
+    // phrase must keep naming what is MISSING — a session still cannot exist
+    // in this build — rather than celebrating the one piece that now exists.
+    expect(statusLine(unchain)).toContain('THE METER');
+    expect(statusLine(unchain)).toContain('ARE NOT');
+    expect(statusLine(unchain)).toContain('No session can exist in this build');
     // SUPERSEDED 2026-08-06 twice: 'SCHEDULER NOT IMPLEMENTED' until the
     // pure evaluator landed; 'CLAIMING AND DISPATCH NOT' until the pure
     // claim/overlap/missed-run decisions landed. The status must keep naming

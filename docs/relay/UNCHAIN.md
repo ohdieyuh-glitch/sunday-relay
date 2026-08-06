@@ -1,11 +1,14 @@
 # Unchain
 
-**Status: SPECIFIED, NOT IMPLEMENTED.**
+**Status: SPECIFIED. THE GATE AND RECHAINING ARE IMPLEMENTED; THE METER,
+SESSION LIFECYCLE, UNCHAINED FORM AND S-LOOP RUNTIME ARE NOT.**
 
-Nothing in this repository implements Unchain. There is no meter, no session
-store, no activation path, no Unchained Form, and no skin that grants anything.
+No session can exist in this build: there is no meter, no session store, no
+activation path, no Unchained Form, and no skin that grants anything.
 `src/relay/mission/loop/loop-availability.ts` models the *gate* and refuses
-every S-Loop with a truthful reason; that is the whole of it.
+every S-Loop with a truthful reason. `src/relay/mission/loop/unchain/
+rechaining.ts` now plans the controlled collapse — pure, and reachable only
+once something can issue a session, which nothing can.
 
 This document exists because the founder's Unchain direction lived outside the
 repository, which meant the locked decisions could not be checked against code
@@ -144,6 +147,7 @@ These are genuinely unresolved and are **not** guessed anywhere in code:
 | `unchainSessionProblem()` | Implemented — every branch refuses with a reason |
 | `evaluateLoopAvailability()` | Implemented — S-Loops blocked, capacity granted only when nothing blocks |
 | `UNCHAIN_TEMPORARY_SLOTS` | Declared as literal `2` |
+| `planRechaining()` | Implemented — the controlled collapse, pure. Preserves before it cancels (an unpersisted branch is REFUSED, including a speculative one), reports interrupted work as interrupted and never as converged, accounts for every temporary slot, and targets the BASE slot count so a collapse can never promote. It answers none of the open decisions below: base capacity is an argument, and the plan does not vary by meter state. |
 | Meter | **Not implemented** |
 | Session issue / verify / revoke | **Not implemented** |
 | Unchained Form | **Not implemented** |
