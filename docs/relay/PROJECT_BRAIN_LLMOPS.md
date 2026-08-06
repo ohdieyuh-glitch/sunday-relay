@@ -110,10 +110,12 @@ Health always carries a REASON. A state without one is a colour.
 dispatch a repair, re-verify, repeat, stop at the bound. Four rules are
 structural:
 
-- **Only the VERIFIER closes a finding.** The repairer's `claimsFixed` is
-  recorded and never decides — allowing it to decide fails four tests at once,
-  because it is the never-self-approve rule at the code level. An unverifiable
-  repair is an open finding with extra steps.
+- **Only the VERIFIER closes a finding.** The repairer's `claimsFixed` never
+  decides — allowing it to decide fails four tests at once, because it is the
+  never-self-approve rule at the code level. An unverifiable repair is an open
+  finding with extra steps. A disagreement is not discarded: when the verifier
+  closes a fix the repairer itself disclaimed, the loop's reason says so,
+  because that closure rests on the verifier's evidence alone.
 - **Scope creep fails the cycle before verification**, through the one existing
   `repairExpandsFileClaims` rule rather than a second copy of it. A repair that
   touches files beyond the finding's claim is refused however good it looks.
@@ -126,7 +128,10 @@ structural:
 
 NOT WIRED: nothing dispatches a real repair agent or a real verifier into these
 ports yet. The loop's output is exactly the `RelayRepairLoop` the operations
-record already carries, so wiring it is a caller, not a new model.
+record already carries, so wiring it is a caller, not a new model — though not
+a trivial one: `runRepairLoop` is deliberately not exported from the mission
+barrel, and the CLI may import only the barrel, so wiring also means a barrel
+export and a boundary-allowlist entry, reviewed as such.
 
 ## A repair loop that ran out of budget did not succeed
 

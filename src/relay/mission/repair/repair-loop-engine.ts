@@ -26,16 +26,20 @@
  *   verdict.
  */
 
-import type {
-  RelayRepairCycle, RelayRepairLoop, RelayRepairOutcome,
-} from '../../shared/llmops';
+import type { RelayRepairCycle, RelayRepairLoop } from '../../shared/llmops';
 import { repairExpandsFileClaims } from '../review-repair';
 
 /** One attempt to fix the finding, as the ports report it. */
 export interface RepairAttemptReport {
   /** Files the repair actually touched, for the scope check. */
   readonly touchedFiles: readonly string[];
-  /** The repairer's own claim. Recorded, never trusted as the verdict. */
+  /**
+   * The repairer's own claim. Never the verdict — and when the verifier closes
+   * a finding the repairer itself disclaimed, the loop's reason SAYS so. The
+   * first version said "recorded" in three places while recording it nowhere,
+   * which is a doc claim the code does not support: the exact defect class
+   * this repository keeps finding in review.
+   */
   readonly claimsFixed: boolean;
 }
 
@@ -69,9 +73,6 @@ export interface RepairLoopResult {
   /** Why it ended, in a sentence a surface can print. */
   readonly reason: string;
 }
-
-const outcomeOf = (converged: boolean, exhausted: boolean): RelayRepairOutcome =>
-  converged ? 'converged' : exhausted ? 'limit_reached' : 'abandoned';
 
 /**
  * Run one bounded repair loop to its end.
@@ -136,13 +137,20 @@ export async function runRepairLoop(
       };
     }
 
-    // Only the VERIFIER closes a finding. The repairer's claimsFixed is
-    // recorded upstream but never decides — an unverifiable repair is an open
-    // finding with extra steps.
+    // Only the VERIFIER closes a finding — an unverifiable repair is an open
+    // finding with extra steps. The repairer's claimsFixed never decides, but
+    // a disagreement is not discarded either: a verifier closing a fix the
+    // repairer itself disclaimed may mean the finding was stale or the
+    // verifier checked the wrong thing, and a convergence that hides that is
+    // a verdict without its caveat.
     const repaired = verdict.finding === 'closed';
     cycles.push({ cycle, findingId: input.findingId, repaired, at: ports.now() });
 
     if (repaired) {
+      const disclaimed = attempt.claimsFixed
+        ? ''
+        : ' The repairer itself did not claim a fix on that cycle; the closure'
+          + ' rests on the verifier\'s evidence alone.';
       return {
         loop: {
           loopId: input.loopId,
@@ -150,7 +158,7 @@ export async function runRepairLoop(
           outcome: 'converged',
           ...(input.missionId === undefined ? {} : { missionId: input.missionId }),
         },
-        reason: `The verifier confirmed the finding closed on cycle ${cycle} of ${input.maxCycles}.`,
+        reason: `The verifier confirmed the finding closed on cycle ${cycle} of ${input.maxCycles}.${disclaimed}`,
       };
     }
   }
@@ -159,7 +167,7 @@ export async function runRepairLoop(
     loop: {
       loopId: input.loopId,
       cycles,
-      outcome: outcomeOf(false, true),
+      outcome: 'limit_reached',
       ...(input.missionId === undefined ? {} : { missionId: input.missionId }),
     },
     reason: `${input.maxCycles} cycle(s) spent and the finding is still open. `

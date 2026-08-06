@@ -75,6 +75,33 @@ describe('only the verifier closes a finding', () => {
     expect(reason).toContain('cycle 2 of 3');
   });
 
+  it('a closure the repairer itself DISCLAIMED converges, and the reason says so', async () => {
+    // The disagreement is a fact the record must carry: a verifier closing a
+    // fix the repairer disclaimed may mean the finding was stale or the
+    // verifier checked the wrong thing. Mutation check: dropping the
+    // disclaimer sentence from the converged reason fails this — the first
+    // version claimed `claimsFixed` was "recorded" while recording it nowhere.
+    const { ports } = harness({
+      attempts: () => ({ touchedFiles: ['src/a.ts'], claimsFixed: false }),
+      verdicts: () => ({ finding: 'closed' }),
+    });
+    const { loop, reason } = await runRepairLoop(ports, input());
+    expect(loop.outcome).toBe('converged');
+    expect(reason).toContain('cycle 1 of 3');
+    expect(reason).toContain('did not claim a fix');
+    expect(reason).toContain("verifier's evidence alone");
+
+    // And a closure the repairer DID claim carries no disclaimer — flagging
+    // agreement as disagreement would be the same lie mirrored.
+    const agreed = harness({
+      attempts: () => ({ touchedFiles: ['src/a.ts'], claimsFixed: true }),
+      verdicts: () => ({ finding: 'closed' }),
+    });
+    const agreedResult = await runRepairLoop(agreed.ports, input());
+    expect(agreedResult.loop.outcome).toBe('converged');
+    expect(agreedResult.reason).not.toContain('did not claim');
+  });
+
   it('an UNVERIFIABLE repair is an open finding with extra steps', async () => {
     const { ports } = harness({
       attempts: () => ({ touchedFiles: ['src/a.ts'], claimsFixed: true }),
