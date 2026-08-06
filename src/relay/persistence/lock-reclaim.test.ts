@@ -2,11 +2,67 @@ import { mkdtempSync, readdirSync, readFileSync, writeFileSync, existsSync } fro
 import { spawnSync } from 'node:child_process';
 import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   acquireRunLock, inspectLock, reclaimClassifiedStaleLock, LOCK_FILE, type LockOwner,
 } from './lock';
+
+/**
+ * Flag-driven fs interception. A single-threaded test cannot interleave a
+ * second process INSIDE a sync call, so the failure injections a real race
+ * would provide are staged here: one linkSync refusal (the third lock
+ * arriving inside the restore window), one unlinkSync refusal (tidy-up
+ * failing after a successful restore), and readFileSync answering ENOENT
+ * (the acquirer's fresh lock vanished into a racing quarantine). Every flag
+ * fires once and passes through otherwise.
+ */
+const fsFlags = {
+  failNextLink: false,
+  failNextUnlink: false,
+  vanishReadsRemaining: 0,
+  /** When set, the next lock-file read answers THIS content instead. */
+  serveForeignRead: null as string | null,
+};
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    linkSync: (...args: Parameters<typeof actual.linkSync>) => {
+      if (fsFlags.failNextLink) {
+        fsFlags.failNextLink = false;
+        const err = new Error('EEXIST: staged third lock') as NodeJS.ErrnoException;
+        err.code = 'EEXIST';
+        throw err;
+      }
+      return actual.linkSync(...args);
+    },
+    unlinkSync: (...args: Parameters<typeof actual.unlinkSync>) => {
+      if (fsFlags.failNextUnlink) {
+        fsFlags.failNextUnlink = false;
+        const err = new Error('EPERM: staged tidy failure') as NodeJS.ErrnoException;
+        err.code = 'EPERM';
+        throw err;
+      }
+      return actual.unlinkSync(...args);
+    },
+    readFileSync: ((...args: Parameters<typeof actual.readFileSync>) => {
+      const isLockFile = String(args[0]).endsWith(`/${LOCK_FILE}`);
+      if (fsFlags.vanishReadsRemaining > 0 && isLockFile) {
+        fsFlags.vanishReadsRemaining -= 1;
+        const err = new Error('ENOENT: staged vanish') as NodeJS.ErrnoException;
+        err.code = 'ENOENT';
+        throw err;
+      }
+      if (fsFlags.serveForeignRead !== null && isLockFile) {
+        const served = fsFlags.serveForeignRead;
+        fsFlags.serveForeignRead = null;
+        return served;
+      }
+      return actual.readFileSync(...args);
+    }) as typeof actual.readFileSync,
+  };
+});
 
 /**
  * THE GUARDED STALE RECLAIM.
@@ -101,34 +157,113 @@ describe('the displacement race, staged deterministically', () => {
     expect(existsSync(join(dir, `${LOCK_FILE}.stale-race-2`))).toBe(false);
   });
 
-  it('the unrestorable case refuses the acquisition and preserves the evidence', () => {
+  it('the UNRESTORABLE case, through the real function: loud, evidence preserved', () => {
+    // The third lock arrives inside the restore window — staged as one
+    // refused link, since no second process can interleave a sync call.
     const dir = tmp();
     const stale = deadOwner();
     writeLock(dir, stale);
     const losersView = inspectLock(dir);
-
-    // The loser quarantines a LIVE lock (the winner's)…
     const winner = acquireRunLock(dir, 'winner', () => '2026-08-06T00:01:00.000Z');
     expect(winner.ok).toBe(true);
-    const quarantine = `${LOCK_FILE}.stale-race-3`;
-    const { renameSync } = require('node:fs') as typeof import('node:fs');
-    renameSync(join(dir, LOCK_FILE), join(dir, quarantine));
-    // …a third lock occupies the path in the restore window…
-    const third: LockOwner = {
-      pid: process.pid, hostname: hostname(),
-      acquiredAt: '2026-08-06T00:02:00.000Z', purpose: 'third',
-    };
-    writeLock(dir, third);
-    // …so the no-clobber restore of the quarantined live lock must REFUSE —
-    // a rename here would displace the third lock and repeat the bug. This
-    // drives the restore step directly: link(quarantine → occupied path).
-    const { linkSync } = require('node:fs') as typeof import('node:fs');
-    expect(() => linkSync(join(dir, quarantine), join(dir, LOCK_FILE))).toThrow();
+
+    fsFlags.failNextLink = true;
+    const outcome = reclaimClassifiedStaleLock(
+      dir, losersView.owner as LockOwner, `${LOCK_FILE}.stale-race-3`,
+    );
+    expect(outcome.kind).toBe('displacement_unrestorable');
+    if (outcome.kind !== 'displacement_unrestorable') throw new Error('unreachable');
+    expect(outcome.displaced.purpose).toBe('winner');
     // The evidence survives for diagnosis.
-    expect(existsSync(join(dir, quarantine))).toBe(true);
-    expect((JSON.parse(readFileSync(join(dir, quarantine), 'utf8')) as LockOwner).purpose)
+    expect(existsSync(join(dir, `${LOCK_FILE}.stale-race-3`))).toBe(true);
+    expect((JSON.parse(readFileSync(join(dir, `${LOCK_FILE}.stale-race-3`), 'utf8')) as LockOwner).purpose)
       .toBe('winner');
-    void losersView;
+  });
+
+  it('a restore that RESTORED but could not tidy still reports restored', () => {
+    // Mutation check: one try spanning both the link and the tidy-up unlink
+    // reported "unrestorable" — work no longer protected — when the lock WAS
+    // back. Found in review; the split try is what this pins.
+    const dir = tmp();
+    const stale = deadOwner();
+    writeLock(dir, stale);
+    const losersView = inspectLock(dir);
+    const winner = acquireRunLock(dir, 'winner', () => '2026-08-06T00:01:00.000Z');
+    expect(winner.ok).toBe(true);
+
+    fsFlags.failNextUnlink = true;
+    const outcome = reclaimClassifiedStaleLock(
+      dir, losersView.owner as LockOwner, `${LOCK_FILE}.stale-race-4`,
+    );
+    expect(outcome.kind).toBe('displacement_restored');
+    // The winner's protection is intact; the quarantine name lingers as a
+    // second link to the SAME inode — harmless, and stated harmless.
+    if (!winner.ok) throw new Error('unreachable');
+    expect(winner.value.lock.stillHeld()).toBe(true);
+    expect(existsSync(join(dir, `${LOCK_FILE}.stale-race-4`))).toBe(true);
+  });
+});
+
+describe('the orphan found in review: a vanished fresh lock is waited out', () => {
+  it('accepts its own lock when the guarded restore puts it back within the wait', () => {
+    // The acquirer's post-create read answers ENOENT twice — a racing
+    // reclaim holds the file in quarantine — and then the restore lands.
+    // Mutation check: the pre-repair code failed on the FIRST missing read,
+    // leaving the restored live lock with no holder to release it: an
+    // orphan refusing every acquirer until this process exited.
+    const dir = tmp();
+    fsFlags.vanishReadsRemaining = 2;
+    const result = acquireRunLock(dir, 'holder', () => '2026-08-06T00:01:00.000Z');
+    expect(fsFlags.vanishReadsRemaining).toBe(0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('unreachable');
+    expect(result.value.lock.stillHeld()).toBe(true);
+    result.value.lock.release();
+    expect(inspectLock(dir).status).toBe('free');
+  });
+
+  it('refuses IMMEDIATELY when the wait meets FOREIGN content — no acceptance, no touching it', () => {
+    // The vanish is followed not by our restore but by someone else's lock:
+    // the wait must refuse on sight of foreign content, not keep waiting and
+    // not accept. Mutation check: a wait that only checks "is something
+    // there" accepts the foreign lock and reports a hold it does not have.
+    const dir = tmp();
+    const foreign: LockOwner = {
+      pid: process.pid, hostname: hostname(),
+      acquiredAt: '2026-08-06T00:09:00.000Z', purpose: 'foreign', nonce: 'not-ours',
+    };
+    fsFlags.vanishReadsRemaining = 1;
+    fsFlags.serveForeignRead = JSON.stringify(foreign);
+    const result = acquireRunLock(dir, 'holder', () => '2026-08-06T00:01:00.000Z');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain('displaced during acquisition');
+    // Both staged reads were consumed — the refusal came from the foreign
+    // sighting, not from the deadline.
+    expect(fsFlags.vanishReadsRemaining).toBe(0);
+    expect(fsFlags.serveForeignRead).toBeNull();
+  });
+});
+
+describe('two acquisitions in one millisecond are two owners', () => {
+  it('a stale handle’s second release never unlinks the successor’s lock', () => {
+    // Same pid, same purpose, same now() millisecond — before the nonce,
+    // the stale handle could not tell the new lock from its own and its
+    // second release() unlinked it. Found in review by direct probe.
+    const dir = tmp();
+    const at = () => '2026-08-06T00:01:00.000Z';
+    const h1 = acquireRunLock(dir, 'worker', at);
+    expect(h1.ok).toBe(true);
+    if (!h1.ok) throw new Error('unreachable');
+    h1.value.lock.release();
+
+    const h2 = acquireRunLock(dir, 'worker', at);
+    expect(h2.ok).toBe(true);
+    if (!h2.ok) throw new Error('unreachable');
+
+    // The stale handle releases AGAIN — it must not touch the new lock.
+    h1.value.lock.release();
+    expect(h2.value.lock.stillHeld()).toBe(true);
+    expect(existsSync(join(dir, LOCK_FILE))).toBe(true);
   });
 });
 

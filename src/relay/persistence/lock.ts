@@ -1,6 +1,7 @@
 import {
   closeSync, existsSync, linkSync, openSync, readFileSync, renameSync, unlinkSync, writeSync,
 } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
@@ -24,12 +25,18 @@ import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
  * with a no-clobber `link` — never a rename, which would displace whatever
  * third lock appeared meanwhile.
  *
- * WHAT REMAINS OPEN, said plainly: if a third process acquires in the
- * microseconds between a wrongful quarantine and its restore, the restore is
- * refused (the evidence is preserved, the failure names the displaced owner)
- * — but the displaced holder cannot be handed its protection back. Callers
- * doing long-held work can call `stillHeld()` at their own checkpoints; the
- * primitive cannot check it for them.
+ * WHAT REMAINS OPEN, said plainly. Two slivers, both loud, neither a double
+ * hold: (1) if a third process acquires in the microseconds between a
+ * wrongful quarantine and its restore, the restore is refused (evidence
+ * preserved, failure names the displaced owner) — the displaced holder
+ * cannot be handed its protection back. (2) An acquirer whose fresh lock
+ * vanishes mid-acquisition waits briefly for the guarded restore to put it
+ * back and accepts its own returned lock; a restore landing AFTER that wait
+ * leaves a lock nobody will release, refused by every later acquirer until
+ * this process exits — found in review as a longer-lived orphan when the
+ * acquirer failed immediately instead of waiting. Callers doing long-held
+ * work can call `stillHeld()` at their own checkpoints; the primitive cannot
+ * check it for them.
  *
  * AN UNREADABLE LOCK IS NOT RECLAIMED. It may be a live owner mid-write, and
  * the worker above this primitive already refused to guess — a primitive
@@ -44,6 +51,14 @@ export interface LockOwner {
   hostname: string;
   acquiredAt: string;
   purpose: string;
+  /**
+   * Distinguishes two acquisitions that share pid, host, purpose AND the
+   * same clock millisecond — reachable by an immediate same-process
+   * re-acquire, where a stale handle's second release() would otherwise
+   * unlink the NEW lock it can no longer tell from its own. Absent on locks
+   * written before this field existed; two absences compare equal.
+   */
+  nonce?: string;
 }
 
 export interface LockClassification {
@@ -63,7 +78,8 @@ function ownerAlive(owner: LockOwner): boolean {
 
 const sameOwner = (a: LockOwner, b: LockOwner): boolean =>
   a.pid === b.pid && a.hostname === b.hostname
-  && a.acquiredAt === b.acquiredAt && a.purpose === b.purpose;
+  && a.acquiredAt === b.acquiredAt && a.purpose === b.purpose
+  && a.nonce === b.nonce;
 
 function readOwner(path: string): LockOwner | null {
   try {
@@ -126,18 +142,25 @@ export function reclaimClassifiedStaleLock(
   const displaced = taken ?? { pid: -1, hostname: 'unknown', acquiredAt: 'unknown', purpose: 'unreadable' };
   try {
     linkSync(quarantinePath, lockPath);
-    unlinkSync(quarantinePath);
-    return { kind: 'displacement_restored', displaced };
   } catch {
     return { kind: 'displacement_unrestorable', displaced, preservedAs: quarantineName };
   }
+  // The RESTORE is what matters and it has happened; failing to tidy the
+  // quarantine name must not report the restore as having failed. Two names
+  // for one inode are harmless — either reads the same owner, and a release
+  // through the lock path leaves only the lingering name behind.
+  try { unlinkSync(quarantinePath); } catch { /* tidy-up only */ }
+  return { kind: 'displacement_restored', displaced };
 }
 
 export interface AcquiredLock {
   runDir: string;
   owner: LockOwner;
   /** Re-read the lock and answer whether it is still OURS. Long-held work
-   *  should ask at its own checkpoints; the primitive cannot ask for it. */
+   *  should ask at its own checkpoints; the primitive cannot ask for it.
+   *  May answer false TRANSIENTLY while a racing reclaim's quarantine→restore
+   *  is in flight — the false answer is the safe direction (work pauses or
+   *  aborts); it never answers held when it is not. */
   stillHeld(): boolean;
   release(): void;
 }
@@ -152,16 +175,33 @@ export function acquireRunLock(
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const owner: LockOwner = { pid: process.pid, hostname: hostname(), acquiredAt: now(), purpose };
+      const owner: LockOwner = {
+        pid: process.pid, hostname: hostname(), acquiredAt: now(), purpose, nonce: randomUUID(),
+      };
       const fd = openSync(lockPath, 'wx', 0o600);
       try { writeSync(fd, JSON.stringify(owner), null, 'utf8'); } finally { closeSync(fd); }
 
       // Post-acquire verification: a reclaimer racing on an older
       // classification could have quarantined this fresh lock between the
-      // create and here. A mismatch means the protection is already gone —
-      // refuse to pretend otherwise, and touch nothing that is not ours.
-      const check = readOwner(lockPath);
-      if (check === null || !sameOwner(check, owner)) {
+      // create and here. The guarded reclaim will then VERIFY, mismatch (we
+      // are alive; its classification named a dead owner) and RESTORE this
+      // very lock — so a vanished lock is waited out briefly: if our own
+      // content reappears, the restore landed and the acquisition is sound,
+      // because the restorer's own retry then fails on a live owner. What
+      // this wait bounds is the ORPHAN found in review — failing the moment
+      // the file was missing left the restored live lock with no holder to
+      // release it, refusing every acquirer until this process exited.
+      const deadline = Date.now() + 50;
+      let verified = false;
+      for (;;) {
+        const check = readOwner(lockPath);
+        if (check !== null && sameOwner(check, owner)) { verified = true; break; }
+        if (check !== null || Date.now() > deadline) break;
+      }
+      if (!verified) {
+        // Foreign content, or the restore never landed inside the wait.
+        // Refuse — and if our own lock surfaces AFTER this refusal, the
+        // orphan window has narrowed to that sliver, stated in the header.
         return fail(relayError('permission-denied',
           'The lock was displaced during acquisition — a racing reclaim took it. Nothing was mutated.'));
       }
