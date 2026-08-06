@@ -27,7 +27,7 @@ export interface OccurrenceClaimPort {
    *  of a claim marker — scheduler pass, retry, manual run-now — must hold
    *  THIS lock first; a writer that skips it re-opens the double-claim this
    *  sequence exists to close. */
-  acquireOccurrenceLock(occurrenceId: string): { release(): void } | null;
+  acquireOccurrenceLock(occurrenceId: string): OccurrenceLockAnswer;
   /** Has any process ever claimed this occurrence? The at-most-once truth. */
   claimMarkerExists(occurrenceId: string): boolean;
   /** Persist the claim marker ATOMICALLY and EXCLUSIVELY — the write must
@@ -41,6 +41,17 @@ export interface OccurrenceClaimPort {
   now(): string;
 }
 
+/**
+ * Why a lock was or was not acquired. Review of the adapter found every
+ * failure collapsed into one "try later" — which hid an unreadable lock's
+ * remove-it-by-hand instruction behind an answer that promised retrying was
+ * the whole answer. `held` retries; `blocked` does not clear without a
+ * human; `failed` names an IO problem a retry may clear.
+ */
+export type OccurrenceLockAnswer =
+  | { readonly acquired: true; release(): void }
+  | { readonly acquired: false; readonly kind: 'held' | 'blocked' | 'failed'; readonly problem: string };
+
 export type OccurrenceClaimOutcome =
   /** This process owns the occurrence. `journalRecorded: false` means the
    *  marker held but the trigger event could not be appended — the claim
@@ -49,9 +60,12 @@ export type OccurrenceClaimOutcome =
   /** A marker already exists: a retry, a duplicate delivery, a second
    *  worker, or a manual run-now that got there first. Not a failure. */
   | { readonly kind: 'already_handled' }
-  /** The occurrence lock could not be held. Somebody may be mid-claim;
-   *  trying again later is the whole answer. */
+  /** The occurrence lock is held by a live claimant. Somebody may be
+   *  mid-claim; trying again later is the whole answer. */
   | { readonly kind: 'lock_unavailable' }
+  /** The lock will NOT clear on retry — an unreadable lock file or an
+   *  unrestorable displacement needs a human. The problem says which. */
+  | { readonly kind: 'lock_blocked'; readonly problem: string }
   /** The marker could not be written. NOT claimed; a retry is safe. */
   | { readonly kind: 'claim_failed'; readonly problem: string };
 
@@ -69,14 +83,18 @@ export function claimOccurrence(
   const problemOf = (error: unknown): string =>
     (error instanceof Error ? error.message : String(error)).slice(0, 200);
 
-  let lock: { release(): void } | null;
+  let lock: OccurrenceLockAnswer;
   try {
     lock = port.acquireOccurrenceLock(occurrence.occurrenceId);
   } catch (error) {
     // A throwing lock port is unknown state, not "somebody holds it".
     return { kind: 'claim_failed', problem: problemOf(error) };
   }
-  if (lock === null) return { kind: 'lock_unavailable' };
+  if (!lock.acquired) {
+    if (lock.kind === 'held') return { kind: 'lock_unavailable' };
+    if (lock.kind === 'blocked') return { kind: 'lock_blocked', problem: lock.problem };
+    return { kind: 'claim_failed', problem: lock.problem };
+  }
 
   let outcome: OccurrenceClaimOutcome;
   try {

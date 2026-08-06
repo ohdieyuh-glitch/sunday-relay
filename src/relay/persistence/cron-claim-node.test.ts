@@ -77,6 +77,17 @@ describe('claim-before-effect on real disk', () => {
     expect(existsSync(join(dir, CLAIM_MARKER_FILE))).toBe(false);
   });
 
+  it('an UNREADABLE occurrence lock answers lock_blocked with the by-hand instruction', () => {
+    const stateRoot = mkdtempSync(join(tmpdir(), 'relay-cron-claim-'));
+    const dir = join(stateRoot, 'cron-occurrences', 'occ_stuck');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'lock'), 'not json at all');
+    const port = createCronClaimNodePort({ stateRoot, now: NOW });
+    const outcome = claimOccurrence(port, occ('occ_stuck'));
+    expect(outcome.kind).toBe('lock_blocked');
+    if (outcome.kind === 'lock_blocked') expect(outcome.problem).toContain('by hand');
+  });
+
   it('an existence CHECK creates nothing on disk', () => {
     const stateRoot = mkdtempSync(join(tmpdir(), 'relay-cron-claim-'));
     const port = createCronClaimNodePort({ stateRoot, now: NOW });

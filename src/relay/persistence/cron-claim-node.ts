@@ -2,7 +2,7 @@ import {
   closeSync, existsSync, fsyncSync, linkSync, mkdirSync, openSync, unlinkSync, writeSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { acquireRunLock } from './lock';
+import { acquireRunLock, inspectLock } from './lock';
 import { appendLineDurable, fsyncDirBestEffort } from './atomic-file';
 import type { OccurrenceClaimPort } from '../mission/loop/cron/cron-claim';
 
@@ -49,9 +49,23 @@ export function createCronClaimNodePort(options: CronClaimNodeOptions): Occurren
 
   return {
     acquireOccurrenceLock(occurrenceId) {
-      const acquired = acquireRunLock(dirFor(occurrenceId), 'cron-occurrence-claim', options.now);
-      if (!acquired.ok) return null;
-      return { release: () => { acquired.value.lock.release(); } };
+      const dir = dirFor(occurrenceId);
+      const acquired = acquireRunLock(dir, 'cron-occurrence-claim', options.now);
+      if (acquired.ok) {
+        return { acquired: true, release: () => { acquired.value.lock.release(); } };
+      }
+      // Classify by INSPECTION, not by matching message strings: an
+      // unreadable lock (or unrestorable displacement) will not clear on
+      // retry, and collapsing it into "try later" hid the remove-it-by-hand
+      // instruction — the review finding this widening exists for.
+      const why = inspectLock(dir);
+      if (why.status === 'held_by_live_owner') {
+        return { acquired: false, kind: 'held', problem: acquired.error.message };
+      }
+      if (why.status === 'unreadable') {
+        return { acquired: false, kind: 'blocked', problem: acquired.error.message };
+      }
+      return { acquired: false, kind: 'failed', problem: acquired.error.message };
     },
 
     claimMarkerExists(occurrenceId) {
