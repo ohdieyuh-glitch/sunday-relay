@@ -760,6 +760,8 @@
         "src/relay/cli/loop-execution.test.ts"
       ],
       "sharedDomainReferences": [
+        "src/relay/mission/loop/cron/cron-breakers.test.ts",
+        "src/relay/mission/loop/cron/cron-breakers.ts",
         "src/relay/mission/loop/cron/cron-budget.test.ts",
         "src/relay/mission/loop/cron/cron-budget.ts",
         "src/relay/mission/loop/cron/cron-claim.test.ts",

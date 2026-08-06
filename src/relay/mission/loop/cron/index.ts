@@ -34,6 +34,15 @@ export type {
   MissedRunDecision, MissedRunInput, RelayCronWorkClass, RelayMissedRunPolicy,
 } from './cron-missed';
 
+export {
+  BREAKER_CONDITIONS, SECURITY_CLASS_CONDITIONS,
+  evaluateCircuitBreakers, mayResumeAfterBreaker,
+} from './cron-breakers';
+export type {
+  BreakerCondition, BreakerDisclosure, BreakerReading, BreakerSignals,
+  BreakerVerdict, ResumeDecision,
+} from './cron-breakers';
+
 export { authorizeScheduledSpend, SPEND_WINDOWS } from './cron-budget';
 export type {
   Micros, ScheduledSpendDecision, ScheduledSpendRequest, SpendRefusal,
