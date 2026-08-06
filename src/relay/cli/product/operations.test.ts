@@ -168,3 +168,23 @@ describe('the route is reachable, not just the renderer', () => {
     expect(parseCli(['project', 'telemetry']).error).toBeDefined();
   });
 });
+
+describe('a surface with no store says so, and still emits a shape', () => {
+  it('renders the no-source state rather than an empty project', () => {
+    const { lines } = renderOperationsView({ caps, view: null });
+    const text = lines.join('\n');
+    expect(text).toContain('NO SOURCE CONFIGURED');
+    // "nothing has reported for this project" would imply a source that exists
+    // and is silent, which is a different fact.
+    expect(text).not.toContain('Nothing has reported for this project');
+  });
+
+  it('emits a json OBJECT, never null', () => {
+    // The CLI's `emit` is `result.json ?? { lines }`, so a null json silently
+    // printed the rendered lines as json — a breaking shape change for every
+    // `--json` consumer.
+    const { json } = renderOperationsView({ caps, view: null });
+    expect(json).not.toBeNull();
+    expect(json).toMatchObject({ operations: null });
+  });
+});

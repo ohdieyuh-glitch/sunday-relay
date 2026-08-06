@@ -1,12 +1,15 @@
 # Project Brain LLMOps
 
-**Status: CONTRACTS AND PROJECTION IMPLEMENTED AND TESTED. TWO SURFACES.
-NOTHING IS WIRED TO A LIVE RUN YET.**
+**Status: CONTRACTS, PROJECTION, PRODUCER, STORE AND THE CALL ALL IMPLEMENTED
+AND TESTED. THE CLAUDE ADAPTER OBSERVES ITS OWN RUN WHEN A HOST SUPPLIES A SINK.
+NO SHIPPED HOST SUPPLIES ONE, AND NO SURFACE READS A RECORD BACK.**
 
-Those are three different claims. Nothing in this document should be read as
-"Relay is measuring your production latency today" — the model exists, both
-surfaces render it, and no producer writes into it. When one does, that fact
-belongs in this section and nowhere else.
+Those are four different claims. Nothing here should be read as "Relay is
+measuring your production latency today": a live run IS measured wherever a sink
+is wired, and nothing ships one. When a host does, that fact belongs in this
+banner — the previous version said "NOTHING IS WIRED TO A LIVE RUN YET" while
+the section below described the wiring, which is the exact rot this file keeps
+warning about.
 
 ---
 
@@ -159,11 +162,16 @@ that generates nothing are different facts.
 
 ## Both surfaces, one projection
 
-`projectOperations` is called by the workspace panel and by
-`relay project operations`. Neither computes a figure of its own — the CLI's
-`--json` output IS the view object, asserted by identity rather than by
-equality, because a CLI that reshaped it would be a second implementation
-waiting to disagree with the website's. Two people reading different numbers off
+`projectOperations` is the ONE projection both surfaces are built to render, and
+neither computes a figure of its own — where the CLI has a view it emits THAT
+OBJECT, asserted by identity rather than by equality, because a CLI that
+reshaped it would be a second implementation waiting to disagree with the
+website's.
+
+Today NO SHIPPING CODE CALLS IT: the CLI's only call site passes `null` because
+it has no store, and the panel takes an `operationsView` no host supplies. The
+projection is exercised by tests and reachable by any host that wires a store —
+which is a statement about readiness, not about measurement. Two people reading different numbers off
 two screens in the same conversation is the failure a parity contract exists to
 prevent.
 
@@ -358,28 +366,78 @@ is the honest limit — two PROCESSES writing the same project are not protected
 and nothing here can make them so without a compare-and-set the seam does not
 have.
 
+## The call
+
+`createClaudeCodeAdapter` takes an optional `operations` sink. Absent — which is
+every host today — nothing is recorded, and both surfaces say so. Present, the
+adapter observes its own finished run and stores it.
+
+**An instrument must not break the thing it measures.** A store that throws,
+rejects, declines, or returns something that is not a write result cannot fail
+the run or change its report — and neither can one that HANGS. An unbounded
+await on a third-party sink is the worst version of this failure: the run never
+returns and nothing says why. The wait is bounded at
+`OBSERVATION_TIMEOUT_MS`, which turns a hung store into a reported failure and
+one lost observation.
+
+The host's own callback is guarded too. A logger that throws would otherwise
+escape the guard written to stop exactly that. But a failure that
+goes nowhere is a failure nobody knows about, so it goes to
+`onObservationFailed`; where no callback is supplied the failure is genuinely
+unobserved, and that is a cost of not passing one rather than a detail.
+
+**Awaited, not fired and forgotten.** A floating promise loses the write
+whenever the process exits first — precisely the timeout and cancellation cases,
+the ones most worth having recorded.
+
+The guard is ONE function, `recordClaudeObservation`, used by the adapter and
+called directly by its tests. A test that reimplemented the try/catch beside the
+adapter would be testing its own copy — the same mistake as defining a connector
+mapping inside the test that proves the mapping.
+
+**A malformed stream is a failure, whatever the exit code said.** The adapter
+rejects that report, and the observation is told — but only where the run
+otherwise COMPLETED. A killed process never prints its result line, so the
+structural check calls every timeout and cancellation malformed too, and a
+malformed-stream label on those would bury the reason the run actually ended.
+
+And the CLI's operations view now passes `null` rather than projecting an empty
+record. It reads no store, so "nothing has reported for this project" implied a
+source that exists and is silent; `null` says the true thing, that nothing is
+wired on that surface. The message is driven by whether a source exists, not by
+a constant — otherwise wiring one surface makes the other's sentence false.
+
 ## Not implemented
 
-**Nothing calls `observeClaudeRun` on a live run.** The producer is proven
-against the connector's real types; the store and both surfaces are proven
-against the domain's. What is
-missing is the CALL — a run handler that observes its own outcome and records
-it, and a host that reads the record back into `operationsView`. Until that
-exists both surfaces truthfully report that no operations source is wired,
-because none is.
+**The call exists; no shipped host supplies a sink.** The Claude adapter
+observes its own finished run and records it wherever one IS wired — that is
+built, tested against a real `invoke`, and cannot be deleted without a test
+failing. What is missing is a HOST that passes one, and a host that reads the
+record back into `operationsView`. Until then both surfaces truthfully report
+that no operations source is wired, because for them none is.
 
-Receipts still have no producer either, so `spend` remains `null` in every
-shipped host. The CLI's `brain` view generates a document from an empty memory on
-every invocation, which is why it truthfully reports that nothing has been
-recorded. The functions
-exist and are tested against fixtures; no adapter, run handler or bridge invokes
-them, so no live run is being measured and `spend` is `null` in every shipped
-host. Both surfaces say so in those words rather than rendering zeroes. Token counts are modelled by `mission/economics` receipts
-(`input_token`, `output_token`, `cached_input_token`) and are cited from there
-rather than duplicated here. There is no persistence for short-term memory, no
-UI for approving a promotion proposal, and no scheduled refresh of the Brain
-document; `refreshBrainDocument` is a pure function and something still has to
-call it.
+**This is not a completed Production Alpha.** A producer that can observe a run
+is not a run observed. Production Alpha requires a real bounded PAID Mission
+executed end to end, independently reviewed, repaired where necessary, and
+producing truthful token/model-unit, cost, latency, error, cancellation and
+completion evidence. None of that has happened, and no amount of offline proof
+substitutes for it.
+
+What is missing, exactly:
+
+- **No shipped host supplies an observation sink.** `createClaudeCodeAdapter`
+  accepts one and the adapter writes to it; every current caller passes none, so
+  every current run is unobserved.
+- **No surface reads a record back.** The panel's `operationsView` needs a host
+  to fetch and pass it; `relay project operations` reads no store and says so.
+- **Receipts have no producer**, so `spend` is `null` everywhere. Token counts
+  are modelled by `mission/economics` receipts (`input_token`, `output_token`,
+  `cached_input_token`) and cited from there rather than duplicated here.
+- **Short-term memory is not persisted**, there is no UI for approving a
+  promotion proposal, and nothing schedules a Brain refresh —
+  `refreshBrainDocument` is a pure function and something still has to call it.
+  The CLI's `brain` view generates from an empty memory on every invocation,
+  which is why it truthfully reports that nothing has been recorded.
 
 None of that is blocked on a founder action. It is simply not built yet, and
 this file will say so until it is.

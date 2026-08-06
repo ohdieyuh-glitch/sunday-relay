@@ -29,10 +29,30 @@ import { observeRun, type ObservedRun, type RunObservation } from '../../shared/
  * unrelated runs — a mistake the first version's only exemplar taught by
  * labelling four independent runs 1 through 4.
  */
+/**
+ * Options for observing one run. ONE type, shared by both functions below.
+ *
+ * The dead-parameter defect happened twice because each function declared its
+ * own inline copy of this shape: a field added to one and not the other was
+ * silently dropped, and `tsc` could not object because the value travelled as
+ * a variable. A single named type makes that divergence unrepresentable.
+ */
+export interface ObserveRunOptions {
+  readonly attempt?: number;
+  readonly missionId?: string;
+  readonly taskId?: string;
+  readonly recovered?: boolean;
+  /**
+   * `false` when the caller judged the stream malformed. Applied by the domain
+   * only where the run otherwise COMPLETED — a killed process never prints its
+   * result line, so every timeout and cancellation is "malformed" too.
+   */
+  readonly structurallyValid?: boolean;
+}
+
 export function observeClaudeRun(
   outcome: ClaudeRunOutcome,
-  options: { readonly attempt?: number; readonly missionId?: string; readonly taskId?: string;
-    readonly recovered?: boolean } = {},
+  options: ObserveRunOptions = {},
 ): RunObservation {
   return observeRun(toObservedRun(outcome, options));
 }
@@ -40,8 +60,7 @@ export function observeClaudeRun(
 /** The classification, separated so it can be tested against real outcomes. */
 export function toObservedRun(
   outcome: ClaudeRunOutcome,
-  options: { readonly attempt?: number; readonly missionId?: string; readonly taskId?: string;
-    readonly recovered?: boolean } = {},
+  options: ObserveRunOptions = {},
 ): ObservedRun {
   const parsed = outcome.parsed;
   return {
@@ -80,5 +99,110 @@ export function toObservedRun(
     ...(options.missionId === undefined ? {} : { missionId: options.missionId }),
     ...(options.taskId === undefined ? {} : { taskId: options.taskId }),
     ...(options.recovered === undefined ? {} : { recovered: options.recovered }),
+    ...(options.structurallyValid === undefined
+      ? {} : { structurallyValid: options.structurallyValid }),
   };
+}
+
+/**
+ * Where a finished run is observed.
+ *
+ * OPTIONAL at every call site, and its absence is the current state of every
+ * host: nothing is measured, and both surfaces say so.
+ */
+export interface ClaudeObservationSink {
+  record(projectId: string, observation: RunObservation): Promise<{ readonly ok: boolean }>;
+}
+
+/**
+ * How long a store may take before the run stops waiting for it.
+ *
+ * An unbounded `await` on a third-party sink is the worst way to break the
+ * thing you are measuring: the run never returns, and nothing says why. A
+ * bounded wait turns a hung store into a reported failure and one lost
+ * observation, which is the trade this module is willing to make.
+ */
+export const OBSERVATION_TIMEOUT_MS = 5_000;
+
+/**
+ * The timeout's own marker.
+ *
+ * A UNIQUE SYMBOL, not the string `'timed-out'`. A sink that returned that
+ * literal was reported as having timed out — a lie about a store that
+ * answered — and no value a sink can construct can equal this one.
+ */
+const TIMED_OUT: unique symbol = Symbol('relay.observation.timed-out');
+
+export interface ObservationDeps {
+  readonly operations?: ClaudeObservationSink;
+  /**
+   * Told when an observation could not be stored. Absent means such a failure
+   * is genuinely UNOBSERVED — nothing anywhere will mention it — which is a
+   * real cost of not passing one, not a detail.
+   */
+  readonly onObservationFailed?: (reason: string) => void;
+}
+
+/**
+ * Record one finished run, and NEVER let that fail the run.
+ *
+ * Exported and used by the adapter itself rather than reimplemented beside it.
+ * A test that reconstructs this guard would be testing its own copy — the same
+ * mistake as defining a connector mapping inside the test that proves the
+ * mapping — so this is the one implementation and the tests call it.
+ *
+ * An instrument must not break the thing it measures: a store that throws,
+ * rejects, or declines cannot change the run's result. But a failure that goes
+ * nowhere is a failure nobody knows about, so it is handed to
+ * `onObservationFailed` rather than swallowed.
+ */
+export async function recordClaudeObservation(
+  deps: ObservationDeps,
+  projectId: string,
+  outcome: ClaudeRunOutcome,
+  options: ObserveRunOptions = {},
+): Promise<void> {
+  if (deps.operations === undefined) return;
+
+  // The host's callback is not allowed to fail the run either. A logger that
+  // throws would otherwise escape the guard written to stop exactly that, and
+  // the previous version called it twice on the declined path — the second
+  // time reporting the HOST's error as the store's.
+  const report = (reason: string): void => {
+    try {
+      deps.onObservationFailed?.(reason);
+    } catch {
+      // Nowhere left to report it: the reporter is the thing that failed.
+    }
+  };
+
+  const observation = observeClaudeRun(outcome, options);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+      timer = setTimeout(() => resolve(TIMED_OUT), OBSERVATION_TIMEOUT_MS);
+    });
+    const written = await Promise.race([
+      deps.operations.record(projectId, observation),
+      timeout,
+    ]);
+
+    if (written === TIMED_OUT) {
+      report(`the operations store did not answer in ${OBSERVATION_TIMEOUT_MS}ms`);
+      return;
+    }
+    // Shape-checked: a sink returning `undefined` produced a raw
+    // "Cannot read properties of undefined" as its reason, and one returning a
+    // string was reported as having declined.
+    if (typeof written !== 'object' || written === null || typeof written.ok !== 'boolean') {
+      report('the operations store returned something that is not a write result');
+      return;
+    }
+    if (!written.ok) report('the operations store declined the write');
+  } catch (error) {
+    report((error instanceof Error ? error.message : String(error)).slice(0, 200));
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }

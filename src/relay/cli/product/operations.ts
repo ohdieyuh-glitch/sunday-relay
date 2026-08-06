@@ -26,7 +26,13 @@ const UNKNOWN_NOTE: Record<string, string> = {
 
 export interface OperationsViewInput {
   readonly caps: CliCaps;
-  readonly view: RelayOperationsView;
+  /**
+   * `null` means NO SOURCE IS CONFIGURED for this surface — a different fact
+   * from a project that has reported nothing, and the one that was previously
+   * being misreported: projecting an empty record made the CLI say "nothing has
+   * reported for this project", which implies a source exists and is silent.
+   */
+  readonly view: RelayOperationsView | null;
 }
 
 export function renderOperationsView(input: OperationsViewInput): {
@@ -34,6 +40,21 @@ export function renderOperationsView(input: OperationsViewInput): {
 } {
   const p = paint(input.caps);
   const { view } = input;
+
+  if (view === null) {
+    return {
+      lines: [
+        `  ${p.dim('OPERATIONS'.padEnd(18))} ${p.tone('gray', 'NO SOURCE CONFIGURED')}`,
+        `  ${p.dim(''.padEnd(18))} ${p.dim('This surface has no operations store wired, so nothing '
+          + 'is being measured. That is not the same as a project with nothing to report.')}`,
+      ],
+      // NOT `null`: the CLI's `emit` uses `result.json ?? {lines}`, so a null
+      // json silently fell back to printing the rendered LINES as json — a
+      // breaking shape change for every `--json` consumer, introduced by the
+      // change that was meant to make this surface more truthful.
+      json: { operations: null, reason: 'no operations store is wired on this surface' },
+    };
+  }
 
   const figure = (value: RelayFigure, format: (n: number) => string): string => (
     value.known ? format(value.value) : `— (${UNKNOWN_NOTE[value.reason] ?? value.reason})`
