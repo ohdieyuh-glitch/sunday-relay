@@ -153,7 +153,13 @@ export function createLoopService(options: LoopServiceOptions): LoopService {
       // The route already gated on the server flag; the engine re-checks it
       // rather than trusting that it was checked.
       features: { loop_engine: true },
-      trigger: 'api',
+      // THE TRIGGER IS A FACT OF THE RUN, NOT OF THE REQUEST THAT TOUCHED IT.
+      // Hardcoding 'api' here meant a schedule-created run reached through
+      // `POST /loop/resume/:runId` would be driven under an api label, and
+      // the engine's refusal of cron-triggered dispatch
+      // (`preflightLoopDispatch`) would never fire — the safety property
+      // bypassed by a mislabel rather than by a decision.
+      trigger: run.creationSource === 'schedule' ? 'cron' : 'api',
       isSLoop: false,
       reviewerConfiguration: 'not_required',
       contractBindingDigest: run.contractBindingDigest,
