@@ -49,6 +49,12 @@ export type {
   SpendRefusalReason, SpendWindow, WindowBudget,
 } from './cron-budget';
 
+export { governingVersionFor, planScheduleEdit } from './cron-versioning';
+export type {
+  CronContractVersion, ScheduleEditDecision, ScheduleEditInput,
+  ScheduleEditPlan, ScheduleEditRefusal, VersionedRun,
+} from './cron-versioning';
+
 export { runCronTick } from './cron-tick';
 export type {
   CronOccurrenceOutcome, CronRunCreationPort, CronTickInput,
