@@ -12,6 +12,8 @@ import { compileClaudePermissions, toolPolicyArgs } from './permission-compiler'
 import { compileClaudePrompt, compileRevisionPrompt, type PromptContext, type RevisionPromptContext } from './prompt-compiler';
 import { runClaudeProcess, type ClaudeRunHandle, type ClaudeRunOutcome } from './process-runner';
 import { normalizeClaudeRun } from './event-normalizer';
+import { recordClaudeObservation } from './run-observation-adapter';
+import type { ClaudeObservationSink } from './run-observation-adapter';
 import { parseAgentExecutionReport, type AgentExecutionReport } from './report-parser';
 import { streamIsStructurallyValid } from './stream-parser';
 import { createSessionManager, type SessionAssociation } from './session-manager';
@@ -117,7 +119,18 @@ export interface ClaudeCodeAdapter extends CodingAgentAdapterPort {
   readonly sessions: ReturnType<typeof createSessionManager>;
 }
 
-export function createClaudeCodeAdapter(deps: { now: () => string; ids: IdFactory }): ClaudeCodeAdapter {
+export function createClaudeCodeAdapter(deps: {
+  now: () => string;
+  ids: IdFactory;
+  /** Absent means nothing is recorded — see `ClaudeObservationSink`. */
+  operations?: ClaudeObservationSink;
+  /**
+   * Told when an observation could not be stored. Absent means such a failure
+   * is genuinely UNOBSERVED — nothing anywhere will mention it — which is a
+   * real cost of not passing one, not a detail.
+   */
+  onObservationFailed?: (reason: string) => void;
+}): ClaudeCodeAdapter {
   const sessions = createSessionManager(deps.now);
 
   const invoke = async (
@@ -152,6 +165,19 @@ export function createClaudeCodeAdapter(deps: { now: () => string; ids: IdFactor
       outcome.parsed,
       outcome,
     );
+
+    // OBSERVE THE RUN, through the one implementation of the guard rather than
+    // a copy of it. Deliberately here: after the events are normalised and
+    // before the report is built, so the observation sees exactly the outcome
+    // the rest of the adapter saw.
+    //
+    // AWAITED, not fired and forgotten. A floating promise loses the write
+    // whenever the process exits first — which is precisely the timeout and
+    // cancellation cases, the ones most worth having recorded.
+    await recordClaudeObservation(deps, input.association.projectId, outcome, {
+      attempt: input.attempt,
+      taskId: input.association.taskId,
+    });
 
     const report = outcome.parsed.isError || !structural.ok
       ? fail<AgentExecutionReport>(relayError('invalid-report',

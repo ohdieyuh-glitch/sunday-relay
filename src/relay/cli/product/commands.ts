@@ -11,7 +11,6 @@ import { safeText } from './safety';
 import { renderStageView } from './stage';
 import type { RelayStageActor } from '../../shared/relay-stage-layout';
 import { renderOperationsView } from './operations';
-import { emptyOperationalRecord, projectOperations } from '../../shared/llmops';
 import { emptyShortTermMemory, refreshBrainDocument } from '../../shared/llmops';
 
 /**
@@ -240,13 +239,11 @@ export function productProjectView(
       break;
     }
     case 'operations': {
-      // The SAME projection the workspace panel renders. Nothing has a producer
-      // yet, so an empty record is projected — which truthfully reports UNKNOWN
-      // health and says nothing has reported, rather than a wall of zeroes.
-      const view = renderOperationsView({
-        caps,
-        view: projectOperations(emptyOperationalRecord(project.projectId), new Date().toISOString()),
-      });
+      // NULL, not an empty record. The adapter can record a live run now, but
+      // this surface reads no store — so "nothing has reported for this
+      // project" would imply a source that exists and is silent. Passing null
+      // says the true thing: nothing is wired here.
+      const view = renderOperationsView({ caps, view: null });
       lines.push(...view.lines);
       json = view.json;
       break;

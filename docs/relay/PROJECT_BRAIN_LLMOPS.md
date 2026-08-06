@@ -358,11 +358,38 @@ is the honest limit — two PROCESSES writing the same project are not protected
 and nothing here can make them so without a compare-and-set the seam does not
 have.
 
+## The call
+
+`createClaudeCodeAdapter` takes an optional `operations` sink. Absent — which is
+every host today — nothing is recorded, and both surfaces say so. Present, the
+adapter observes its own finished run and stores it.
+
+**An instrument must not break the thing it measures.** A store that throws,
+rejects or declines cannot fail the run or change its report. But a failure that
+goes nowhere is a failure nobody knows about, so it goes to
+`onObservationFailed`; where no callback is supplied the failure is genuinely
+unobserved, and that is a cost of not passing one rather than a detail.
+
+**Awaited, not fired and forgotten.** A floating promise loses the write
+whenever the process exits first — precisely the timeout and cancellation cases,
+the ones most worth having recorded.
+
+The guard is ONE function, `recordClaudeObservation`, used by the adapter and
+called directly by its tests. A test that reimplemented the try/catch beside the
+adapter would be testing its own copy — the same mistake as defining a connector
+mapping inside the test that proves the mapping.
+
+And the CLI's operations view now passes `null` rather than projecting an empty
+record. It reads no store, so "nothing has reported for this project" implied a
+source that exists and is silent; `null` says the true thing, that nothing is
+wired on that surface. The message is driven by whether a source exists, not by
+a constant — otherwise wiring one surface makes the other's sentence false.
+
 ## Not implemented
 
-**Nothing calls `observeClaudeRun` on a live run.** The producer is proven
-against the connector's real types; the store and both surfaces are proven
-against the domain's. What is
+**The website reads no record yet.** The Claude adapter observes its own run and
+records it when a host supplies a sink, so a live run IS measured wherever one
+is wired. What is still
 missing is the CALL — a run handler that observes its own outcome and records
 it, and a host that reads the record back into `operationsView`. Until that
 exists both surfaces truthfully report that no operations source is wired,

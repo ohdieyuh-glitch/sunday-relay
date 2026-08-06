@@ -82,3 +82,53 @@ export function toObservedRun(
     ...(options.recovered === undefined ? {} : { recovered: options.recovered }),
   };
 }
+
+/**
+ * Where a finished run is observed.
+ *
+ * OPTIONAL at every call site, and its absence is the current state of every
+ * host: nothing is measured, and both surfaces say so.
+ */
+export interface ClaudeObservationSink {
+  record(projectId: string, observation: RunObservation): Promise<{ readonly ok: boolean }>;
+}
+
+export interface ObservationDeps {
+  readonly operations?: ClaudeObservationSink;
+  /**
+   * Told when an observation could not be stored. Absent means such a failure
+   * is genuinely UNOBSERVED — nothing anywhere will mention it — which is a
+   * real cost of not passing one, not a detail.
+   */
+  readonly onObservationFailed?: (reason: string) => void;
+}
+
+/**
+ * Record one finished run, and NEVER let that fail the run.
+ *
+ * Exported and used by the adapter itself rather than reimplemented beside it.
+ * A test that reconstructs this guard would be testing its own copy — the same
+ * mistake as defining a connector mapping inside the test that proves the
+ * mapping — so this is the one implementation and the tests call it.
+ *
+ * An instrument must not break the thing it measures: a store that throws,
+ * rejects, or declines cannot change the run's result. But a failure that goes
+ * nowhere is a failure nobody knows about, so it is handed to
+ * `onObservationFailed` rather than swallowed.
+ */
+export async function recordClaudeObservation(
+  deps: ObservationDeps,
+  projectId: string,
+  outcome: ClaudeRunOutcome,
+  options: { readonly attempt?: number; readonly taskId?: string } = {},
+): Promise<void> {
+  if (deps.operations === undefined) return;
+  try {
+    const written = await deps.operations.record(projectId, observeClaudeRun(outcome, options));
+    if (!written.ok) deps.onObservationFailed?.('the operations store declined the write');
+  } catch (error) {
+    deps.onObservationFailed?.(
+      (error instanceof Error ? error.message : String(error)).slice(0, 200),
+    );
+  }
+}
