@@ -1,8 +1,7 @@
 # Cron Loops — architecture decision
 
 **Status: GRAMMAR + PURE EVALUATOR + CLAIM/OVERLAP/MISSED-RUN DECISIONS
-+ FILE-BACKED CLAIM ADAPTER IMPLEMENTED. THE SCHEDULER AND DISPATCH NOT
-IMPLEMENTED.**
++ FILE-BACKED CLAIM ADAPTER + THE TICK PASS IMPLEMENTED. THE BRIDGE WIRING NOT IMPLEMENTED.**
 
 `/loop schedule`, `/loop cron`, `/loop schedules` parse today and produce typed
 commands. `src/relay/mission/loop/cron/` now holds the schedule stage this
@@ -23,8 +22,12 @@ trigger journal, and path-shaped occurrence ids refused. The lock answer is
 WIDENED (the follow-up its review named, closed before anything loops on
 it): `held` retries, `blocked` carries the remove-it-by-hand problem,
 `failed` names the IO — classified by inspection, never by message-matching.
-Nothing yet DISPATCHES:
-there is no timer, no tick endpoint and no run creation from a trigger. The
+`cron-tick.ts` composes the five pieces into one pure bounded pass
+(`runCronTick`): dispatch claims BEFORE creating, an overlap skip claims
+(handled-without-a-run), queue/replace/refused do not claim, overlap state
+evolves within the tick, and every due occurrence lands in the report with
+its outcome. Nothing yet WIRES it: there is no timer, no authenticated tick
+endpoint and no bridge run-creation port binding confirmLoopRun. The
 `loop_cron` feature flag is off and depends on `loop_scheduler`, which
 depends on `loop_engine`.
 
