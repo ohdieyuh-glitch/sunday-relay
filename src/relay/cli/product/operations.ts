@@ -48,7 +48,11 @@ export function renderOperationsView(input: OperationsViewInput): {
         `  ${p.dim(''.padEnd(18))} ${p.dim('This surface has no operations store wired, so nothing '
           + 'is being measured. That is not the same as a project with nothing to report.')}`,
       ],
-      json: null,
+      // NOT `null`: the CLI's `emit` uses `result.json ?? {lines}`, so a null
+      // json silently fell back to printing the rendered LINES as json — a
+      // breaking shape change for every `--json` consumer, introduced by the
+      // change that was meant to make this surface more truthful.
+      json: { operations: null, reason: 'no operations store is wired on this surface' },
     };
   }
 

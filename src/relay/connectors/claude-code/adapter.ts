@@ -167,9 +167,9 @@ export function createClaudeCodeAdapter(deps: {
     );
 
     // OBSERVE THE RUN, through the one implementation of the guard rather than
-    // a copy of it. Deliberately here: after the events are normalised and
-    // before the report is built, so the observation sees exactly the outcome
-    // the rest of the adapter saw.
+    // a copy of it. Deliberately here: after the events are normalised AND
+    // after the structural verdict, so the observation sees everything the
+    // adapter saw — including that it is about to reject the stream.
     //
     // AWAITED, not fired and forgotten. A floating promise loses the write
     // whenever the process exits first — which is precisely the timeout and
@@ -177,6 +177,9 @@ export function createClaudeCodeAdapter(deps: {
     await recordClaudeObservation(deps, input.association.projectId, outcome, {
       attempt: input.attempt,
       taskId: input.association.taskId,
+      // The adapter is about to reject a malformed stream; the observation must
+      // see that too, or it records a run the product refused as healthy.
+      structurallyValid: structural.ok,
     });
 
     const report = outcome.parsed.isError || !structural.ok

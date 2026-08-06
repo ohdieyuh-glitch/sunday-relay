@@ -93,6 +93,16 @@ export interface ClaudeObservationSink {
   record(projectId: string, observation: RunObservation): Promise<{ readonly ok: boolean }>;
 }
 
+/**
+ * How long a store may take before the run stops waiting for it.
+ *
+ * An unbounded `await` on a third-party sink is the worst way to break the
+ * thing you are measuring: the run never returns, and nothing says why. A
+ * bounded wait turns a hung store into a reported failure and one lost
+ * observation, which is the trade this module is willing to make.
+ */
+export const OBSERVATION_TIMEOUT_MS = 5_000;
+
 export interface ObservationDeps {
   readonly operations?: ClaudeObservationSink;
   /**
@@ -120,15 +130,59 @@ export async function recordClaudeObservation(
   deps: ObservationDeps,
   projectId: string,
   outcome: ClaudeRunOutcome,
-  options: { readonly attempt?: number; readonly taskId?: string } = {},
+  options: {
+    readonly attempt?: number;
+    readonly taskId?: string;
+    /**
+     * `false` when the adapter judged the stream malformed. Without it the
+     * observation recorded a run the adapter was about to REJECT as healthy,
+     * with no error and a 0% rate — the observation must see what the adapter
+     * saw, and the adapter saw this too.
+     */
+    readonly structurallyValid?: boolean;
+  } = {},
 ): Promise<void> {
   if (deps.operations === undefined) return;
+
+  // The host's callback is not allowed to fail the run either. A logger that
+  // throws would otherwise escape the guard written to stop exactly that, and
+  // the previous version called it twice on the declined path — the second
+  // time reporting the HOST's error as the store's.
+  const report = (reason: string): void => {
+    try {
+      deps.onObservationFailed?.(reason);
+    } catch {
+      // Nowhere left to report it: the reporter is the thing that failed.
+    }
+  };
+
+  const observation = observeClaudeRun(outcome, options);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const written = await deps.operations.record(projectId, observeClaudeRun(outcome, options));
-    if (!written.ok) deps.onObservationFailed?.('the operations store declined the write');
+    const timeout = new Promise<'timed-out'>((resolve) => {
+      timer = setTimeout(() => resolve('timed-out'), OBSERVATION_TIMEOUT_MS);
+    });
+    const written = await Promise.race([
+      deps.operations.record(projectId, observation),
+      timeout,
+    ]);
+
+    if (written === 'timed-out') {
+      report(`the operations store did not answer in ${OBSERVATION_TIMEOUT_MS}ms`);
+      return;
+    }
+    // Shape-checked: a sink returning `undefined` produced a raw
+    // "Cannot read properties of undefined" as its reason, and one returning a
+    // string was reported as having declined.
+    if (typeof written !== 'object' || written === null || typeof written.ok !== 'boolean') {
+      report('the operations store returned something that is not a write result');
+      return;
+    }
+    if (!written.ok) report('the operations store declined the write');
   } catch (error) {
-    deps.onObservationFailed?.(
-      (error instanceof Error ? error.message : String(error)).slice(0, 200),
-    );
+    report((error instanceof Error ? error.message : String(error)).slice(0, 200));
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { recordClaudeObservation } from './run-observation-adapter';
+import { createClaudeCodeAdapter } from './adapter';
 import type { ClaudeRunOutcome } from './process-runner';
 import type { ParsedStreamState } from './stream-parser';
 import {
@@ -153,4 +154,75 @@ describe('what reaches the store is what the run actually was', () => {
     expect(view.latency.find((l) => l.phase === 'total')?.samples).toBe(5);
     expect(view.newestSignalAt).not.toBeNull();
   });
+});
+
+/* ------------------------------------------------ the adapter's own path */
+
+describe('the adapter itself records — not just the guard it calls', () => {
+  /**
+   * Deleting the `await recordClaudeObservation(...)` line from `adapter.ts`
+   * left all 59 claude-code tests green: nothing bound the adapter to the
+   * guard, so the integration could be removed without a single failure.
+   *
+   * This drives the real `invoke` with an executable that does not exist. The
+   * process fails to spawn, which is a genuine terminal outcome, and the sink
+   * must receive it.
+   */
+  const invocation = () => ({
+    executablePath: '/nonexistent/claude-binary-for-this-test',
+    capabilities: {
+      executablePath: '/nonexistent/claude-binary-for-this-test', version: '2.1.0',
+      nonInteractiveSupported: true, streamJsonSupported: true, explicitResumeSupported: true,
+      maxTurnsSupported: false, allowedToolsSupported: true, disallowedToolsSupported: true,
+      toolsRestrictionSupported: true, permissionModeSupported: true, systemPromptSupported: true,
+      appendSystemPromptSupported: true, structuredSchemaSupported: true,
+      mcpIsolationSupported: 'available', settingsIsolationSupported: 'available',
+      cancellationSupported: true, probedAt: 't', provenance: 'live',
+    },
+    association: {
+      projectId: 'prj_obs', runId: 'run_obs', taskId: 'tsk_obs', workspaceId: 'ws_obs',
+    },
+    pkg: { objective: 'observe me', permittedTools: [] },
+    workspacePath: '/tmp',
+    toolPolicy: {
+      availableTools: ['Read'], allowedTools: ['Read'], disallowedTools: [],
+      permissionMode: 'acceptEdits' as const, editPathScopingEnforced: false,
+    },
+    prompt: 'do nothing',
+    attempt: 1 as const,
+    limits: { maxRuntimeMs: 2_000, maxStdoutBytes: 1024, maxStderrBytes: 1024 },
+    now: '2026-08-05T12:00:00.000Z',
+  });
+
+  it('hands a real spawn failure to the sink', async () => {
+    const seen: { projectId: string; observation: RunObservation }[] = [];
+    const adapter = createClaudeCodeAdapter({
+      now: () => '2026-08-05T12:00:00.000Z',
+      ids: (() => 'id_1') as never,
+      operations: {
+        async record(projectId, observation) {
+          seen.push({ projectId, observation });
+          return { ok: true };
+        },
+      },
+    });
+
+    await adapter.invoke(invocation() as never);
+
+    expect(seen.length, 'the adapter did not record anything').toBe(1);
+    expect(seen[0].projectId).toBe('prj_obs');
+    // A binary that does not exist cannot have run, so no latency — and the
+    // failure belongs to the workspace, not the provider.
+    expect(seen[0].observation.errors[0]?.kind).toBe('workspace_failure');
+    expect(seen[0].observation.latency).toEqual([]);
+    expect(seen[0].observation.attemptsObserved).toBe(1);
+  }, 30_000);
+
+  it('a run still completes when no sink is supplied', async () => {
+    const adapter = createClaudeCodeAdapter({
+      now: () => '2026-08-05T12:00:00.000Z', ids: (() => 'id_1') as never,
+    });
+    const result = await adapter.invoke(invocation() as never);
+    expect(result.outcome.spawnError).toBeDefined();
+  }, 30_000);
 });

@@ -1,12 +1,15 @@
 # Project Brain LLMOps
 
-**Status: CONTRACTS AND PROJECTION IMPLEMENTED AND TESTED. TWO SURFACES.
-NOTHING IS WIRED TO A LIVE RUN YET.**
+**Status: CONTRACTS, PROJECTION, PRODUCER, STORE AND THE CALL ALL IMPLEMENTED
+AND TESTED. THE CLAUDE ADAPTER OBSERVES ITS OWN RUN WHEN A HOST SUPPLIES A SINK.
+NO SHIPPED HOST SUPPLIES ONE, AND NO SURFACE READS A RECORD BACK.**
 
-Those are three different claims. Nothing in this document should be read as
-"Relay is measuring your production latency today" — the model exists, both
-surfaces render it, and no producer writes into it. When one does, that fact
-belongs in this section and nowhere else.
+Those are four different claims. Nothing here should be read as "Relay is
+measuring your production latency today": a live run IS measured wherever a sink
+is wired, and nothing ships one. When a host does, that fact belongs in this
+banner — the previous version said "NOTHING IS WIRED TO A LIVE RUN YET" while
+the section below described the wiring, which is the exact rot this file keeps
+warning about.
 
 ---
 
@@ -365,7 +368,15 @@ every host today — nothing is recorded, and both surfaces say so. Present, the
 adapter observes its own finished run and stores it.
 
 **An instrument must not break the thing it measures.** A store that throws,
-rejects or declines cannot fail the run or change its report. But a failure that
+rejects, declines, or returns something that is not a write result cannot fail
+the run or change its report — and neither can one that HANGS. An unbounded
+await on a third-party sink is the worst version of this failure: the run never
+returns and nothing says why. The wait is bounded at
+`OBSERVATION_TIMEOUT_MS`, which turns a hung store into a reported failure and
+one lost observation.
+
+The host's own callback is guarded too. A logger that throws would otherwise
+escape the guard written to stop exactly that. But a failure that
 goes nowhere is a failure nobody knows about, so it goes to
 `onObservationFailed`; where no callback is supplied the failure is genuinely
 unobserved, and that is a cost of not passing one rather than a detail.
@@ -379,6 +390,10 @@ called directly by its tests. A test that reimplemented the try/catch beside the
 adapter would be testing its own copy — the same mistake as defining a connector
 mapping inside the test that proves the mapping.
 
+**A malformed stream is a failure, whatever the exit code said.** The adapter
+rejects that report, and the observation is told, so a run the product refused
+is not recorded as a healthy one.
+
 And the CLI's operations view now passes `null` rather than projecting an empty
 record. It reads no store, so "nothing has reported for this project" implied a
 source that exists and is silent; `null` says the true thing, that nothing is
@@ -387,26 +402,29 @@ a constant — otherwise wiring one surface makes the other's sentence false.
 
 ## Not implemented
 
-**The website reads no record yet.** The Claude adapter observes its own run and
-records it when a host supplies a sink, so a live run IS measured wherever one
-is wired. What is still
+**No shipped host supplies a sink, and the website reads no record back.** The
+Claude adapter observes its own run and records it wherever one IS wired. What
+is still
 missing is the CALL — a run handler that observes its own outcome and records
 it, and a host that reads the record back into `operationsView`. Until that
 exists both surfaces truthfully report that no operations source is wired,
 because none is.
 
-Receipts still have no producer either, so `spend` remains `null` in every
-shipped host. The CLI's `brain` view generates a document from an empty memory on
-every invocation, which is why it truthfully reports that nothing has been
-recorded. The functions
-exist and are tested against fixtures; no adapter, run handler or bridge invokes
-them, so no live run is being measured and `spend` is `null` in every shipped
-host. Both surfaces say so in those words rather than rendering zeroes. Token counts are modelled by `mission/economics` receipts
-(`input_token`, `output_token`, `cached_input_token`) and are cited from there
-rather than duplicated here. There is no persistence for short-term memory, no
-UI for approving a promotion proposal, and no scheduled refresh of the Brain
-document; `refreshBrainDocument` is a pure function and something still has to
-call it.
+What is missing, exactly:
+
+- **No shipped host supplies an observation sink.** `createClaudeCodeAdapter`
+  accepts one and the adapter writes to it; every current caller passes none, so
+  every current run is unobserved.
+- **No surface reads a record back.** The panel's `operationsView` needs a host
+  to fetch and pass it; `relay project operations` reads no store and says so.
+- **Receipts have no producer**, so `spend` is `null` everywhere. Token counts
+  are modelled by `mission/economics` receipts (`input_token`, `output_token`,
+  `cached_input_token`) and cited from there rather than duplicated here.
+- **Short-term memory is not persisted**, there is no UI for approving a
+  promotion proposal, and nothing schedules a Brain refresh —
+  `refreshBrainDocument` is a pure function and something still has to call it.
+  The CLI's `brain` view generates from an empty memory on every invocation,
+  which is why it truthfully reports that nothing has been recorded.
 
 None of that is blocked on a founder action. It is simply not built yet, and
 this file will say so until it is.

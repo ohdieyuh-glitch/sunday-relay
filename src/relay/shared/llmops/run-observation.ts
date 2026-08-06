@@ -82,6 +82,12 @@ export interface ObservedRun {
   readonly missionId?: string;
   readonly taskId?: string;
   /**
+   * `false` when the consumer judged the stream malformed. A run whose output
+   * could not be parsed is a failure whatever its exit code said, and recording
+   * it as a clean completion reports a run the product REJECTED as healthy.
+   */
+  readonly structurallyValid?: boolean;
+  /**
    * Whether the RUN continued after this outcome — a later attempt succeeded,
    * or the mission carried on. Absent means NOT KNOWN to have recovered, and
    * unrecovered errors are what make health `failing`, so the default is the
@@ -169,7 +175,11 @@ export function observeRun(run: ObservedRun): RunObservation {
   // deflates the error rate, and `errorFromFailure` already holds the rule this
   // follows: the count of `unknown` is itself the signal that a case is missing.
   const known = Object.hasOwn(TERMINATION_TO_LABEL, run.termination);
-  const label = known ? TERMINATION_TO_LABEL[run.termination] : 'unrecognised_termination';
+  // A malformed stream is a validation failure regardless of how the process
+  // ended: the caller is about to reject the report, and the record must agree.
+  const label = run.structurallyValid === false
+    ? 'validation_failure'
+    : known ? TERMINATION_TO_LABEL[run.termination] : 'unrecognised_termination';
   const errors: RelayErrorEvent[] = [];
   if (label !== null && label !== undefined) {
     const event = errorFromFailure({
