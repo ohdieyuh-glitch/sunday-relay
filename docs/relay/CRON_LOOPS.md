@@ -246,6 +246,16 @@ not start paid execution, record `budget_blocked`, notify, compute the next
 eligible trigger truthfully, and **never treat a blocked run as successful**.
 Unknown cost remains Unknown; zero never substitutes.
 
+`cron-budget.ts` implements that decision: `authorizeScheduledSpend` checks
+every window, the emergency guard, the simultaneous-run ceiling and the
+automatic pause threshold, and reports EVERY failing reason rather than the
+first. A bounded cap over an UNKNOWN spend refuses — substituting zero is how
+an unmetered schedule passes a spend check — and a reserved Reviewer
+allowance is subtracted from headroom before the comparison, because a run
+that eats the money its own verification needs produces an unreviewable
+result and a bill. It is NOT WIRED: the tick does not consult it yet, and
+nothing observes spend-to-date to feed it.
+
 Creating a schedule does **not** grant permanent approval to every future
 operation. Seven approval scopes are distinguished: schedule creation,
 read-only recurring work, one external write, recurring external writes,

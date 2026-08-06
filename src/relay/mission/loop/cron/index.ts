@@ -34,6 +34,12 @@ export type {
   MissedRunDecision, MissedRunInput, RelayCronWorkClass, RelayMissedRunPolicy,
 } from './cron-missed';
 
+export { authorizeScheduledSpend, SPEND_WINDOWS } from './cron-budget';
+export type {
+  Micros, ScheduledSpendDecision, ScheduledSpendRequest, SpendRefusal,
+  SpendRefusalReason, SpendWindow, WindowBudget,
+} from './cron-budget';
+
 export { runCronTick } from './cron-tick';
 export type {
   CronOccurrenceOutcome, CronRunCreationPort, CronTickInput,
