@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 
 import { RelayProjectHeader } from './RelayProjectHeader';
+import { RelayWorkforceStrip } from './RelayWorkforceStrip';
 import { RelayConsole } from './RelayConsole';
 import { RelayProjectConversation } from './RelayProjectConversation';
 import { RelayLoopSurfaceHost, type RelayLoopSurface } from '../loop/RelayLoopSurface';
@@ -241,6 +242,16 @@ export function RelayProjectWorkspace(
         onOpenTerminal={onOpenTerminal}
       />
 
+
+      {/* THE CONTINUOUS WORKFORCE STRIP. The workspace's own docstring has
+          promised this since the founder screenshots, and the founder's #6
+          removed the status-rail phase list on the stated basis that "the
+          workforce strip's PHASE cell already carries the live phase" — but the
+          strip was exported and mounted by NOTHING, so that sentence was about
+          a component only tests ever rendered. Mounting it is what makes the
+          strip the single phase surface, which is also why `phase` is
+          destructured above. */}
+      <RelayWorkforceStrip workforce={workforce} mode={mode} phase={phase} />
 
       <main className="rpw-main">
         {/* THE RELAY STAGE, between the workforce strip and the Relay Console.

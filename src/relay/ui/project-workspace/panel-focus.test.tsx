@@ -101,11 +101,15 @@ describe('the workspace has no per-panel fullscreen control', () => {
     expect(document.querySelector('.rpw')?.getAttribute('data-panel-focused')).toBe('false');
   });
 
-  it('drops the workforce strip from the workspace entirely', () => {
+  it('mounts the workforce strip whose PHASE cell is the single phase surface', () => {
     renderWorkspace();
-    // The founder asked for the top band to go; it is not rendered here.
-    expect(document.querySelectorAll('.rpw-strip')).toHaveLength(0);
-    expect(document.querySelectorAll('.rpw-operating')).toHaveLength(0);
+    // Superseded direction: an earlier founder decision removed the top band,
+    // and this test pinned its absence. The founder's #6 (2026-08-06) then
+    // removed the status-rail phase list on the stated basis that "the
+    // workforce strip's PHASE cell already carries the live phase" — so the
+    // strip is mounted again and its phase cell is the one phase surface.
+    expect(document.querySelectorAll('.rpw-strip-cell--phase')).toHaveLength(1);
+    expect(document.querySelectorAll('.rpw-phase-rail')).toHaveLength(0);
   });
 });
 
