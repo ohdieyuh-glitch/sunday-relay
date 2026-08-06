@@ -226,3 +226,70 @@ describe('the adapter itself records — not just the guard it calls', () => {
     expect(result.outcome.spawnError).toBeDefined();
   }, 30_000);
 });
+
+/* ------------------------------------ what the review proved was missing */
+
+describe('a malformed stream is told, and does not bury a more specific ending', () => {
+  it('a COMPLETED run with an unparseable stream is a validation failure', async () => {
+    // The previous version accepted `structurallyValid` one layer up and never
+    // forwarded it. tsc could not see the gap because `options` is a variable
+    // and gets no excess-property check: the fix was dead code that read like
+    // a fix, and a run the product was rejecting recorded as HEALTHY.
+    const seen: RunObservation[] = [];
+    await recordClaudeObservation(
+      { operations: { async record(_p, o) { seen.push(o); return { ok: true }; } } },
+      'proj', outcome(), { attempt: 1, structurallyValid: false },
+    );
+    expect(seen[0].errors[0]?.kind).toBe('validation_failure');
+    expect(seen[0].attemptsObserved).toBe(1);
+  });
+
+  it('a TIMEOUT with an unparseable stream is still a timeout', async () => {
+    // A killed process never prints its result line, so the structural check
+    // calls every timeout malformed. Letting that win would relabel every
+    // timeout and bury the reason the run actually ended.
+    const seen: RunObservation[] = [];
+    await recordClaudeObservation(
+      { operations: { async record(_p, o) { seen.push(o); return { ok: true }; } } },
+      'proj', outcome({ timedOut: true }), { attempt: 1, structurallyValid: false },
+    );
+    expect(seen[0].errors[0]?.kind).toBe('provider_timeout');
+  });
+
+  it('a CANCELLATION with an unparseable stream records no error at all', async () => {
+    // Otherwise every cancelled run gains an error while still counting zero
+    // attempts — the cancellation-flattery defect running in reverse.
+    const seen: RunObservation[] = [];
+    await recordClaudeObservation(
+      { operations: { async record(_p, o) { seen.push(o); return { ok: true }; } } },
+      'proj', outcome({ cancelled: true }), { attempt: 1, structurallyValid: false },
+    );
+    expect(seen[0].errors).toEqual([]);
+    expect(seen[0].attemptsObserved).toBe(0);
+  });
+
+  it('a spawn failure with an unparseable stream stays the workspace’s', async () => {
+    const seen: RunObservation[] = [];
+    await recordClaudeObservation(
+      { operations: { async record(_p, o) { seen.push(o); return { ok: true }; } } },
+      'proj', outcome({ spawnError: 'ENOENT' }), { attempt: 1, structurallyValid: false },
+    );
+    expect(seen[0].errors[0]?.kind).toBe('workspace_failure');
+  });
+});
+
+describe('the timeout sentinel cannot be forged by a sink', () => {
+  it('a store that returns the string "timed-out" has not timed out', async () => {
+    const reasons: string[] = [];
+    await recordClaudeObservation(
+      {
+        operations: { async record() { return 'timed-out' as never; } },
+        onObservationFailed: (r) => reasons.push(r),
+      },
+      'proj', outcome(),
+    );
+    // It answered — with nonsense. Saying it timed out would be a lie about a
+    // store that responded.
+    expect(reasons).toEqual(['the operations store returned something that is not a write result']);
+  });
+});

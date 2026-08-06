@@ -82,9 +82,12 @@ export interface ObservedRun {
   readonly missionId?: string;
   readonly taskId?: string;
   /**
-   * `false` when the consumer judged the stream malformed. A run whose output
-   * could not be parsed is a failure whatever its exit code said, and recording
-   * it as a clean completion reports a run the product REJECTED as healthy.
+   * `false` when the consumer judged the stream malformed.
+   *
+   * Applied only to a run that otherwise COMPLETED. A killed process never
+   * prints its result line, so the structural check calls every timeout and
+   * cancellation malformed too — and a malformed-stream label on those would
+   * bury the reason the run actually ended.
    */
   readonly structurallyValid?: boolean;
   /**
@@ -175,9 +178,15 @@ export function observeRun(run: ObservedRun): RunObservation {
   // deflates the error rate, and `errorFromFailure` already holds the rule this
   // follows: the count of `unknown` is itself the signal that a case is missing.
   const known = Object.hasOwn(TERMINATION_TO_LABEL, run.termination);
-  // A malformed stream is a validation failure regardless of how the process
-  // ended: the caller is about to reject the report, and the record must agree.
-  const label = run.structurallyValid === false
+  // A malformed stream is a validation failure ONLY when the process otherwise
+  // completed normally. It must not override a more specific ending, and the
+  // reason is concrete: a killed run never prints its result line, so the
+  // structural check calls EVERY timeout and cancellation malformed. Letting
+  // that win would relabel every timeout as `validation_failure` — destroying
+  // the rule that failures stay distinct — and would give every cancellation an
+  // error while it still counts zero attempts, which is the cancellation
+  // flattery defect running in reverse.
+  const label = run.structurallyValid === false && run.termination === 'completed'
     ? 'validation_failure'
     : known ? TERMINATION_TO_LABEL[run.termination] : 'unrecognised_termination';
   const errors: RelayErrorEvent[] = [];

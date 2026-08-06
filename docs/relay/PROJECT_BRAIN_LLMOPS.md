@@ -163,10 +163,11 @@ that generates nothing are different facts.
 ## Both surfaces, one projection
 
 `projectOperations` is called by the workspace panel and by
-`relay project operations`. Neither computes a figure of its own — the CLI's
-`--json` output IS the view object, asserted by identity rather than by
-equality, because a CLI that reshaped it would be a second implementation
-waiting to disagree with the website's. Two people reading different numbers off
+`relay project operations`. Neither computes a figure of its own — where the CLI
+has a view it emits THAT OBJECT, asserted by identity rather than by equality,
+because a CLI that reshaped it would be a second implementation waiting to
+disagree with the website's. Its only shipped call site has no store, so what it
+actually emits today is `{ operations: null, reason }`. Two people reading different numbers off
 two screens in the same conversation is the failure a parity contract exists to
 prevent.
 
@@ -391,8 +392,10 @@ adapter would be testing its own copy — the same mistake as defining a connect
 mapping inside the test that proves the mapping.
 
 **A malformed stream is a failure, whatever the exit code said.** The adapter
-rejects that report, and the observation is told, so a run the product refused
-is not recorded as a healthy one.
+rejects that report, and the observation is told — but only where the run
+otherwise COMPLETED. A killed process never prints its result line, so the
+structural check calls every timeout and cancellation malformed too, and a
+malformed-stream label on those would bury the reason the run actually ended.
 
 And the CLI's operations view now passes `null` rather than projecting an empty
 record. It reads no store, so "nothing has reported for this project" implied a
@@ -402,13 +405,12 @@ a constant — otherwise wiring one surface makes the other's sentence false.
 
 ## Not implemented
 
-**No shipped host supplies a sink, and the website reads no record back.** The
-Claude adapter observes its own run and records it wherever one IS wired. What
-is still
-missing is the CALL — a run handler that observes its own outcome and records
-it, and a host that reads the record back into `operationsView`. Until that
-exists both surfaces truthfully report that no operations source is wired,
-because none is.
+**The call exists; no shipped host supplies a sink.** The Claude adapter
+observes its own finished run and records it wherever one IS wired — that is
+built, tested against a real `invoke`, and cannot be deleted without a test
+failing. What is missing is a HOST that passes one, and a host that reads the
+record back into `operationsView`. Until then both surfaces truthfully report
+that no operations source is wired, because for them none is.
 
 **This is not a completed Production Alpha.** A producer that can observe a run
 is not a run observed. Production Alpha requires a real bounded PAID Mission

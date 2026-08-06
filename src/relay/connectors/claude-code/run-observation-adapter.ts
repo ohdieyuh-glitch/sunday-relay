@@ -40,8 +40,20 @@ export function observeClaudeRun(
 /** The classification, separated so it can be tested against real outcomes. */
 export function toObservedRun(
   outcome: ClaudeRunOutcome,
-  options: { readonly attempt?: number; readonly missionId?: string; readonly taskId?: string;
-    readonly recovered?: boolean } = {},
+  options: {
+    readonly attempt?: number;
+    readonly missionId?: string;
+    readonly taskId?: string;
+    readonly recovered?: boolean;
+    /**
+     * `false` when the caller judged the stream malformed. DECLARED HERE, not
+     * only on the guard above it: the previous version accepted this option one
+     * layer up and never forwarded it, and `tsc` could not see the gap because
+     * `options` is a variable and gets no excess-property check. The fix was
+     * dead code that read like a fix.
+     */
+    readonly structurallyValid?: boolean;
+  } = {},
 ): ObservedRun {
   const parsed = outcome.parsed;
   return {
@@ -80,6 +92,8 @@ export function toObservedRun(
     ...(options.missionId === undefined ? {} : { missionId: options.missionId }),
     ...(options.taskId === undefined ? {} : { taskId: options.taskId }),
     ...(options.recovered === undefined ? {} : { recovered: options.recovered }),
+    ...(options.structurallyValid === undefined
+      ? {} : { structurallyValid: options.structurallyValid }),
   };
 }
 
@@ -102,6 +116,15 @@ export interface ClaudeObservationSink {
  * observation, which is the trade this module is willing to make.
  */
 export const OBSERVATION_TIMEOUT_MS = 5_000;
+
+/**
+ * The timeout's own marker.
+ *
+ * A UNIQUE SYMBOL, not the string `'timed-out'`. A sink that returned that
+ * literal was reported as having timed out — a lie about a store that
+ * answered — and no value a sink can construct can equal this one.
+ */
+const TIMED_OUT: unique symbol = Symbol('relay.observation.timed-out');
 
 export interface ObservationDeps {
   readonly operations?: ClaudeObservationSink;
@@ -160,15 +183,15 @@ export async function recordClaudeObservation(
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const timeout = new Promise<'timed-out'>((resolve) => {
-      timer = setTimeout(() => resolve('timed-out'), OBSERVATION_TIMEOUT_MS);
+    const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+      timer = setTimeout(() => resolve(TIMED_OUT), OBSERVATION_TIMEOUT_MS);
     });
     const written = await Promise.race([
       deps.operations.record(projectId, observation),
       timeout,
     ]);
 
-    if (written === 'timed-out') {
+    if (written === TIMED_OUT) {
       report(`the operations store did not answer in ${OBSERVATION_TIMEOUT_MS}ms`);
       return;
     }
