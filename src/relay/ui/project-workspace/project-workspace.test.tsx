@@ -80,13 +80,19 @@ describe('product flow + application surface', () => {
 /* ------------------------------------------------------------- workforce */
 
 describe('workforce strip', () => {
-  it('no longer carries the workforce strip (founder direction)', () => {
+  it('carries the workforce strip, whose PHASE cell is the single phase surface', () => {
+    // TWO founder directions met here. The older one removed the strip from
+    // the workspace, and this test asserted its absence. The founder's #6
+    // (2026-08-06) removed the status-rail phase list ON THE STATED BASIS that
+    // "the workforce strip's PHASE cell already carries the live phase" — a
+    // sentence about a component nothing rendered. The newer decision
+    // supersedes: the strip is mounted and its phase cell is the one phase
+    // surface. `rpw-strip-cell--phase` literally contains `rpw-strip-cell`,
+    // so the old absence assertion and #6's presence assertion could never
+    // both hold.
     const html = render('implementing');
-    // The top band was removed from the workspace. The strip component and its
-    // own tests still exist; the WORKSPACE simply does not render it.
-    expect(html).not.toContain('rpw-strip-square');
-    expect(html).not.toContain('rpw-strip-cell');
-    expect(html).not.toContain('rpw-operating-rows');
+    expect(html).toContain('rpw-strip-cell--phase');
+    expect(html).not.toContain('rpw-phase-rail');
     // The Reviewer is still named where it is actually acted on.
     expect(html).toContain('Codex');
   });

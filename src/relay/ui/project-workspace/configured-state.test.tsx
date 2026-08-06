@@ -129,15 +129,11 @@ describe('configured workspace render', () => {
     expect(html).toContain('STANDBY');
     expect(html).toContain('No mission is running.');
     expect(html).not.toContain('rpw-console-feed');
-    // The Reviewer is still named on the panel that acts on it. The workforce
-    // strip itself was removed from the workspace (founder direction).
+    // The workforce strip is mounted again under the founder's #6: its PHASE
+    // cell is the single phase surface. (An older direction had removed the
+    // strip; the newer decision supersedes it.)
+    expect(html).toContain('rpw-strip-cell--phase');
     expect(html).toContain('Codex');
-    // MODE/GUIDED lived only in the removed workforce strip.
-    expect(html).not.toContain('rpw-strip-cell');
-    // No fabricated activity or verdicts.
-    expect(html).not.toContain('FIXTURE');
-    expect(html).not.toContain('VERIFIED COMPLETE');
-    expect(html).not.toContain('rpw-tev-icon'); // no timeline rows exist
   });
 
   it('renders no phase list in the status rail — the strip PHASE cell is the single phase surface', () => {
