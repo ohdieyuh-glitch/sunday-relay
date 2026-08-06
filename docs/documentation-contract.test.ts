@@ -330,9 +330,12 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     // what is STILL missing — the persistence adapter and dispatch — not
     // merely celebrate what exists, so the assertion pins the remaining gap.
     expect(statusLine(cron)).toContain('DECISIONS');
-    // SUPERSEDED again 2026-08-06 when the file-backed adapter landed; the
-    // remaining gap is the scheduler and dispatch, pinned by name.
-    expect(statusLine(cron)).toContain('SCHEDULER AND DISPATCH NOT');
+    // SUPERSEDED repeatedly through 2026-08-06 as each pure stage landed.
+    // The pinned phrase must keep naming what is MISSING, and review caught
+    // it narrowing to "bridge wiring" while there was still no scheduler and
+    // no timer at all — the softening this test's own header forbids.
+    expect(statusLine(cron)).toContain('NO SCHEDULER, NO TIMER, NO DISPATCH');
+    expect(statusLine(cron)).toContain('CALLS THE TICK');
   });
 
   it('the Unchain record carries the locked founder decisions', () => {
