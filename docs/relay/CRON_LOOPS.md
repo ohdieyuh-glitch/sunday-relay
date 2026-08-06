@@ -1,18 +1,23 @@
 # Cron Loops — architecture decision
 
-**Status: GRAMMAR + PURE EVALUATOR IMPLEMENTED. CLAIMING AND DISPATCH NOT
-IMPLEMENTED.**
+**Status: GRAMMAR + PURE EVALUATOR + CLAIM/OVERLAP/MISSED-RUN DECISIONS
+IMPLEMENTED. THE CLAIM ADAPTER AND DISPATCH NOT IMPLEMENTED.**
 
 `/loop schedule`, `/loop cron`, `/loop schedules` parse today and produce typed
 commands. `src/relay/mission/loop/cron/` now holds the schedule stage this
 document approved: `cron-expression.ts` (five-field semantics, refusals by
 field and token), `timezone-port.ts` (the injected `TimezonePort` with its
-Intl adapter — zero/one/two instants per local minute), and
+Intl adapter — zero/one/two instants per local minute),
 `cron-occurrences.ts` (the pure evaluator: deterministic occurrence identity
 per the formula below, both DST rules, bounded windows, named refusals, said
-truncation). Nothing yet claims, stores or dispatches an occurrence — there is
-no timer, no claim marker and no tick endpoint. The `loop_cron` feature flag
-is off and depends on `loop_scheduler`, which depends on `loop_engine`.
+truncation), `cron-claim.ts` (the claim-before-effect sequence below, pure
+over an injected `OccurrenceClaimPort`), `cron-overlap.ts` (overlap policies,
+unknown fails closed) and `cron-missed.ts` (missed-run policies; high-risk
+work never auto-caught-up, whatever the policy says). Nothing yet PERSISTS or
+DISPATCHES: there is no file-backed claim adapter, no marker on disk, no
+timer, no tick endpoint and no run creation from a trigger. The `loop_cron`
+feature flag is off and depends on `loop_scheduler`, which depends on
+`loop_engine`.
 
 This document records the approved beta architecture so the runtime stage does
 not have to relitigate it.
@@ -109,6 +114,12 @@ colliding with its predecessor's occurrences.
 4. append the trigger-claimed journal event
 5. only then: preflight, budget check, run creation
 ```
+
+Resolved-instant TIES exist and are at most two: a spring-forward shift can
+land on an instant the schedule also matches natively (intended `02:00`
+shifted to `03:00`, beside a native `03:00`). They are two INTENTS with two
+identities — Vixie-cron-consistent — and the claim step treats them as two
+triggers, never deduplicates them by instant.
 
 A trigger creates **at most one** Cron Loop Run. This protects against
 scheduler retries, duplicate delivery, restart during dispatch, two workers
@@ -214,11 +225,13 @@ hardcodes automatic Unchain consumption**.
 
 ## Not implemented
 
-The in-bridge scheduler and its tick endpoint · occurrence claiming (lock +
-claim marker + journal event) · overlap policies · missed-run policies ·
-period budget caps · recurring approvals · circuit breakers · schedule
-versioning · conditional Cron Loops · the Cron UI.
+The in-bridge scheduler and its tick endpoint · the FILE-BACKED
+`OccurrenceClaimPort` adapter (the pure claim sequence exists; nothing
+persists a marker) · run creation from a trigger · period budget caps ·
+recurring approvals · circuit breakers · schedule versioning · conditional
+Cron Loops · the Cron UI.
 
-Cron expression semantics, timezone handling, DST resolution and the
-occurrence identity ARE implemented (see status above) — listed apart because
-an implemented stage left on this list is an invitation to rebuild it.
+Cron expression semantics, timezone handling, DST resolution, the occurrence
+identity, the claim-before-effect sequence, overlap policies and missed-run
+policies ARE implemented (see status above) — listed apart because an
+implemented stage left on this list is an invitation to rebuild it.
