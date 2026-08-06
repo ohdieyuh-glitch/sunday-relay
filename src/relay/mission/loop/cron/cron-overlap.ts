@@ -28,7 +28,14 @@ export interface OverlapState {
 
 export type OverlapDecision =
   | { readonly action: 'dispatch' }
-  | { readonly action: 'skip'; readonly reason: string }
+  /**
+   * Do not run this occurrence now. `handled` separates two things review
+   * found conflated: a DELIBERATE drop (the `skip` policy: a run is live and
+   * this occurrence is meant to be lost) from CAPACITY pressure (a queue or
+   * parallel limit is full right now). Only the first is "handled" — marking
+   * a capacity skip handled drops an occurrence for a shortage that clears.
+   */
+  | { readonly action: 'skip'; readonly reason: string; readonly handled: boolean }
   | { readonly action: 'queue'; readonly reason: string }
   /** Dispatch only AFTER the live run is safely stopped or checkpointed —
    *  the caller owns that step; this decision never implies it happened. */
@@ -56,7 +63,7 @@ export function decideOverlap(
     case 'skip':
       return state.activeRuns === 0
         ? { action: 'dispatch' }
-        : { action: 'skip', reason: 'A run is live and the policy skips overlaps.' };
+        : { action: 'skip', reason: 'A run is live and the policy skips overlaps.', handled: true };
 
     case 'queue_one':
       // A nonempty queue holds OLDER occurrences; dispatching past it would
@@ -66,7 +73,11 @@ export function decideOverlap(
       if (state.activeRuns === 0 && state.queuedRuns === 0) return { action: 'dispatch' };
       return state.queuedRuns === 0
         ? { action: 'queue', reason: 'A run is live; this occurrence waits as the one queued follower.' }
-        : { action: 'skip', reason: 'The queue of one is already full; the caller drains it first.' };
+        : {
+            action: 'skip',
+            reason: 'The queue of one is already full; the caller drains it first.',
+            handled: false,
+          };
 
     case 'queue_all':
       if (!bound(state.queueLimit)) {
@@ -78,7 +89,11 @@ export function decideOverlap(
       if (state.activeRuns === 0 && state.queuedRuns === 0) return { action: 'dispatch' };
       return state.queuedRuns < (state.queueLimit as number)
         ? { action: 'queue', reason: `Queued ${state.queuedRuns + 1} of ${state.queueLimit}; the queue drains in order.` }
-        : { action: 'skip', reason: `The queue limit of ${state.queueLimit} is reached.` };
+        : {
+            action: 'skip',
+            reason: `The queue limit of ${state.queueLimit} is reached.`,
+            handled: false,
+          };
 
     case 'replace':
       return state.activeRuns === 0
@@ -97,7 +112,11 @@ export function decideOverlap(
       }
       return state.activeRuns < (state.parallelLimit as number)
         ? { action: 'dispatch' }
-        : { action: 'skip', reason: `The parallel limit of ${state.parallelLimit} is reached.` };
+        : {
+            action: 'skip',
+            reason: `The parallel limit of ${state.parallelLimit} is reached.`,
+            handled: false,
+          };
 
     default:
       return {

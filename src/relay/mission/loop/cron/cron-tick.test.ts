@@ -57,8 +57,10 @@ function harness(script: {
 const input = (over: {
   expr?: string; overlapPolicy?: string; overlapState?: Partial<CronTickInput['overlap']['state']>;
   missedPolicy?: string; workClass?: string; maxCatchUpRuns?: number;
+  evaluatedAt?: string; maxCatchUpAgeMinutes?: number; maxOccurrences?: number;
 } = {}): CronTickInput => ({
   tz: utcZone,
+  evaluatedAt: over.evaluatedAt ?? '2026-08-06T12:00:30.000Z',
   evaluation: {
     schedule: schedule(over.expr ?? '0 * * * *'),
     timeZone: 'UTC',
@@ -66,12 +68,14 @@ const input = (over: {
     contractVersion: 1,
     afterExclusive: '2026-08-06T09:00:00.000Z',
     untilInclusive: '2026-08-06T12:00:00.000Z',
-    maxOccurrences: 50,
+    maxOccurrences: over.maxOccurrences ?? 50,
   },
   missed: {
     policy: over.missedPolicy ?? 'run_all_with_limit',
     workClass: over.workClass ?? 'read_only',
     maxCatchUpRuns: over.maxCatchUpRuns ?? 10,
+    ...(over.maxCatchUpAgeMinutes === undefined
+      ? {} : { maxCatchUpAgeMinutes: over.maxCatchUpAgeMinutes }),
   },
   overlap: {
     policy: over.overlapPolicy ?? 'parallel_with_limit',
@@ -149,9 +153,11 @@ describe('the claiming discipline per overlap action', () => {
     if (!report.ok) throw new Error(report.problem);
     // Two queue slots fill (queuedRuns evolves within the tick), third skips.
     expect(report.occurrences.map((o) => o.outcome)).toEqual([
-      'queued_unclaimed', 'queued_unclaimed', 'skipped_by_overlap_claimed',
+      'queued_unclaimed', 'queued_unclaimed', 'skipped_by_capacity_unclaimed',
     ]);
-    expect(claimed).toHaveLength(1);
+    // NOTHING is claimed: a queue overflow is capacity, not handling, and
+    // the queue this tick counted was never written anywhere.
+    expect(claimed).toHaveLength(0);
   });
 
   it('overlap state EVOLVES within the tick — a limit of one admits one', () => {
@@ -164,7 +170,7 @@ describe('the claiming discipline per overlap action', () => {
     if (!report.ok) throw new Error(report.problem);
     expect(created).toHaveLength(1);
     expect(report.occurrences.map((o) => o.outcome)).toEqual([
-      'run_created', 'skipped_by_overlap_claimed', 'skipped_by_overlap_claimed',
+      'run_created', 'skipped_by_capacity_unclaimed', 'skipped_by_capacity_unclaimed',
     ]);
   });
 
@@ -175,6 +181,100 @@ describe('the claiming discipline per overlap action', () => {
     expect(report.occurrences.every((o) => o.outcome === 'overlap_refused')).toBe(true);
     expect(claimed).toHaveLength(0);
     expect(created).toHaveLength(0);
+  });
+});
+
+describe('the repairs review demanded', () => {
+  it('a queue overflow claims NOTHING — the queue it counted was never written', () => {
+    // Review's HIGH finding, probed: two occurrences were claimed forever
+    // against a queue limit that existed only in a local variable, with zero
+    // runs created anywhere. Mutation check: marking capacity skips handled
+    // (claiming them) fails this.
+    const { claim, runs, claimed, created } = harness();
+    const report = runCronTick(claim, runs, input({
+      overlapPolicy: 'queue_all', overlapState: { activeRuns: 1, queueLimit: 1 },
+    }));
+    if (!report.ok) throw new Error(report.problem);
+    expect(report.occurrences.map((o) => o.outcome)).toEqual([
+      'queued_unclaimed', 'skipped_by_capacity_unclaimed', 'skipped_by_capacity_unclaimed',
+    ]);
+    expect(claimed).toEqual([]);
+    expect(created).toEqual([]);
+  });
+
+  it('a DUPLICATE run counts as live — unknown liveness is not assumed finished', () => {
+    // Mutation check: skipping the activeRuns increment for duplicates let a
+    // parallel limit of one admit two live runs.
+    const { claim, runs, created } = harness({
+      createRun: (id) => (id.includes('T1000')
+        ? { ok: true, runId: 'lpr_existing', duplicate: true } : undefined),
+    });
+    const report = runCronTick(claim, runs, input({
+      overlapPolicy: 'parallel_with_limit', overlapState: { parallelLimit: 1 },
+    }));
+    if (!report.ok) throw new Error(report.problem);
+    expect(report.occurrences.map((o) => o.outcome)).toEqual([
+      'duplicate_run', 'skipped_by_capacity_unclaimed', 'skipped_by_capacity_unclaimed',
+    ]);
+    expect(created).toEqual([]);
+  });
+
+  it('the age cap is measured from the REAL clock, not the window end', () => {
+    // A tick running six hours late: every occurrence is older than the cap.
+    // Mutation check: substituting untilInclusive for evaluatedAt dispatches
+    // two of them.
+    const late = runCronTick(...(() => {
+      const h = harness();
+      return [h.claim, h.runs, input({
+        evaluatedAt: '2026-08-06T18:00:00.000Z', maxCatchUpAgeMinutes: 60,
+      })] as const;
+    })());
+    if (!late.ok) throw new Error(late.problem);
+    expect(late.occurrences.every((o) => o.outcome === 'skipped_by_missed_policy')).toBe(true);
+  });
+
+  it('a window ending in the FUTURE is refused — an occurrence that has not happened is not due', () => {
+    const { claim, runs, created } = harness();
+    const report = runCronTick(claim, runs, input({ evaluatedAt: '2026-08-06T09:30:00.000Z' }));
+    expect(report).toMatchObject({ ok: false, refusal: 'future_window' });
+    expect(created).toEqual([]);
+  });
+
+  it('an offset-less evaluatedAt refuses the tick', () => {
+    const { claim, runs } = harness();
+    expect(runCronTick(claim, runs, input({ evaluatedAt: '2026-08-06T12:00:30' })))
+      .toMatchObject({ ok: false, refusal: 'invalid_clock' });
+  });
+
+  it('run_latest over a TRUNCATED window is refused — the policy cannot keep its promise', () => {
+    // Review's finding 5: the truncated window's last occurrence is not the
+    // latest, so run_latest would run one AND leave a newer one for the next
+    // tick — two runs from a policy that promised one.
+    const { claim, runs, created } = harness();
+    const report = runCronTick(claim, runs, input({
+      missedPolicy: 'run_latest', maxOccurrences: 2,
+    }));
+    expect(report).toMatchObject({ ok: false, refusal: 'truncated_window_under_run_latest' });
+    expect(created).toEqual([]);
+  });
+
+  it('a journal gap is a FIELD, not a phrase hidden in the detail string', () => {
+    // Mutation check: review blanked the note and all 12 tests stayed green
+    // — the signal was untested and only reachable by substring.
+    const { claim, runs } = harness();
+    claim.appendTriggerClaimed = () => { throw new Error('journal io'); };
+    const report = runCronTick(claim, runs, input());
+    if (!report.ok) throw new Error(report.problem);
+    expect(report.occurrences.every((o) => o.journalRecorded === false)).toBe(true);
+    // The run id stays parseable: no warning concatenated onto it.
+    expect(report.occurrences[0]?.detail).toMatch(/^lpr_occ_[A-Za-z0-9]+$/);
+  });
+
+  it('a recorded journal says so, positively', () => {
+    const { claim, runs } = harness();
+    const report = runCronTick(claim, runs, input());
+    if (!report.ok) throw new Error(report.problem);
+    expect(report.occurrences.every((o) => o.journalRecorded === true)).toBe(true);
   });
 });
 
@@ -214,6 +314,9 @@ describe('the missed-run and claim answers ride the report', () => {
       const { claim, runs } = harness();
       const report = runCronTick(claim, runs, config);
       if (!report.ok) throw new Error(report.problem);
+      // Exactly once: a set alone would accept a duplicated entry, which is
+      // the accounting lie this invariant exists to catch.
+      expect(report.occurrences).toHaveLength(3);
       expect(new Set(report.occurrences.map((o) => o.occurrenceId)).size).toBe(3);
     }
   });

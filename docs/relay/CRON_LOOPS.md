@@ -1,7 +1,8 @@
 # Cron Loops — architecture decision
 
 **Status: GRAMMAR + PURE EVALUATOR + CLAIM/OVERLAP/MISSED-RUN DECISIONS
-+ FILE-BACKED CLAIM ADAPTER + THE TICK PASS IMPLEMENTED. THE BRIDGE WIRING NOT IMPLEMENTED.**
++ FILE-BACKED CLAIM ADAPTER + THE TICK PASS IMPLEMENTED. NO SCHEDULER, NO TIMER, NO DISPATCH: NOTHING
+CALLS THE TICK.**
 
 `/loop schedule`, `/loop cron`, `/loop schedules` parse today and produce typed
 commands. `src/relay/mission/loop/cron/` now holds the schedule stage this
@@ -26,8 +27,11 @@ it): `held` retries, `blocked` carries the remove-it-by-hand problem,
 (`runCronTick`): dispatch claims BEFORE creating, an overlap skip claims
 (handled-without-a-run), queue/replace/refused do not claim, overlap state
 evolves within the tick, and every due occurrence lands in the report with
-its outcome. Nothing yet WIRES it: there is no timer, no authenticated tick
-endpoint and no bridge run-creation port binding confirmLoopRun. The
+its outcome. Nothing yet CALLS it: `runCronTick` has no caller outside its own
+test — no timer, no authenticated tick endpoint, no scheduler process, and no
+bridge run-creation port binding `confirmLoopRun`. A pure pass that nothing
+invokes schedules nothing, and the status line says so rather than narrowing
+toward "almost done". The
 `loop_cron` feature flag is off and depends on `loop_scheduler`, which
 depends on `loop_engine`.
 
