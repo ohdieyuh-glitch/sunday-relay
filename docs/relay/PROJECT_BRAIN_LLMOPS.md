@@ -162,12 +162,16 @@ that generates nothing are different facts.
 
 ## Both surfaces, one projection
 
-`projectOperations` is called by the workspace panel and by
-`relay project operations`. Neither computes a figure of its own — where the CLI
-has a view it emits THAT OBJECT, asserted by identity rather than by equality,
-because a CLI that reshaped it would be a second implementation waiting to
-disagree with the website's. Its only shipped call site has no store, so what it
-actually emits today is `{ operations: null, reason }`. Two people reading different numbers off
+`projectOperations` is the ONE projection both surfaces are built to render, and
+neither computes a figure of its own — where the CLI has a view it emits THAT
+OBJECT, asserted by identity rather than by equality, because a CLI that
+reshaped it would be a second implementation waiting to disagree with the
+website's.
+
+Today NO SHIPPING CODE CALLS IT: the CLI's only call site passes `null` because
+it has no store, and the panel takes an `operationsView` no host supplies. The
+projection is exercised by tests and reachable by any host that wires a store —
+which is a statement about readiness, not about measurement. Two people reading different numbers off
 two screens in the same conversation is the failure a parity contract exists to
 prevent.
 

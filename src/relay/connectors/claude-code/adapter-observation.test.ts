@@ -158,6 +158,32 @@ describe('what reaches the store is what the run actually was', () => {
 
 /* ------------------------------------------------ the adapter's own path */
 
+const invocation = () => ({
+  executablePath: '/nonexistent/claude-binary-for-this-test',
+  capabilities: {
+    executablePath: '/nonexistent/claude-binary-for-this-test', version: '2.1.0',
+    nonInteractiveSupported: true, streamJsonSupported: true, explicitResumeSupported: true,
+    maxTurnsSupported: false, allowedToolsSupported: true, disallowedToolsSupported: true,
+    toolsRestrictionSupported: true, permissionModeSupported: true, systemPromptSupported: true,
+    appendSystemPromptSupported: true, structuredSchemaSupported: true,
+    mcpIsolationSupported: 'available', settingsIsolationSupported: 'available',
+    cancellationSupported: true, probedAt: 't', provenance: 'live',
+  },
+  association: {
+    projectId: 'prj_obs', runId: 'run_obs', taskId: 'tsk_obs', workspaceId: 'ws_obs',
+  },
+  pkg: { objective: 'observe me', permittedTools: [] },
+  workspacePath: '/tmp',
+  toolPolicy: {
+    availableTools: ['Read'], allowedTools: ['Read'], disallowedTools: [],
+    permissionMode: 'acceptEdits' as const, editPathScopingEnforced: false,
+  },
+  prompt: 'do nothing',
+  attempt: 1 as const,
+  limits: { maxRuntimeMs: 2_000, maxStdoutBytes: 1024, maxStderrBytes: 1024 },
+  now: '2026-08-05T12:00:00.000Z',
+});
+
 describe('the adapter itself records — not just the guard it calls', () => {
   /**
    * Deleting the `await recordClaudeObservation(...)` line from `adapter.ts`
@@ -168,31 +194,7 @@ describe('the adapter itself records — not just the guard it calls', () => {
    * process fails to spawn, which is a genuine terminal outcome, and the sink
    * must receive it.
    */
-  const invocation = () => ({
-    executablePath: '/nonexistent/claude-binary-for-this-test',
-    capabilities: {
-      executablePath: '/nonexistent/claude-binary-for-this-test', version: '2.1.0',
-      nonInteractiveSupported: true, streamJsonSupported: true, explicitResumeSupported: true,
-      maxTurnsSupported: false, allowedToolsSupported: true, disallowedToolsSupported: true,
-      toolsRestrictionSupported: true, permissionModeSupported: true, systemPromptSupported: true,
-      appendSystemPromptSupported: true, structuredSchemaSupported: true,
-      mcpIsolationSupported: 'available', settingsIsolationSupported: 'available',
-      cancellationSupported: true, probedAt: 't', provenance: 'live',
-    },
-    association: {
-      projectId: 'prj_obs', runId: 'run_obs', taskId: 'tsk_obs', workspaceId: 'ws_obs',
-    },
-    pkg: { objective: 'observe me', permittedTools: [] },
-    workspacePath: '/tmp',
-    toolPolicy: {
-      availableTools: ['Read'], allowedTools: ['Read'], disallowedTools: [],
-      permissionMode: 'acceptEdits' as const, editPathScopingEnforced: false,
-    },
-    prompt: 'do nothing',
-    attempt: 1 as const,
-    limits: { maxRuntimeMs: 2_000, maxStdoutBytes: 1024, maxStderrBytes: 1024 },
-    now: '2026-08-05T12:00:00.000Z',
-  });
+
 
   it('hands a real spawn failure to the sink', async () => {
     const seen: { projectId: string; observation: RunObservation }[] = [];
@@ -292,4 +294,44 @@ describe('the timeout sentinel cannot be forged by a sink', () => {
     // store that responded.
     expect(reasons).toEqual(['the operations store returned something that is not a write result']);
   });
+});
+
+describe('the ADAPTER supplies the structural verdict — not only the guard', () => {
+  it('a real completed process with a malformed stream records validation_failure', async () => {
+    // `adapter.ts` passes `structurallyValid: structural.ok` into the
+    // observation. That one line could previously be deleted with ZERO test
+    // failures — the same untested-wiring hole this PR already fixed once for
+    // the call itself. This drives the real invoke: /bin/sh prints one
+    // non-JSON line and exits 0, which is a genuinely COMPLETED run whose
+    // stream the adapter is about to reject.
+    const seen: RunObservation[] = [];
+    const adapter = createClaudeCodeAdapter({
+      now: () => '2026-08-05T12:00:00.000Z',
+      ids: (() => 'id_1') as never,
+      operations: {
+        async record(_projectId, observation) {
+          seen.push(observation);
+          return { ok: true };
+        },
+      },
+    });
+
+    const base = invocation();
+    const result = await adapter.invoke({
+      ...base,
+      executablePath: '/bin/sh',
+      capabilities: { ...base.capabilities, executablePath: '/bin/sh' },
+      // `-c 'echo not-json'` — prints a line the stream parser cannot read,
+      // then exits 0. No timeout, no cancel, no spawn error.
+      prompt: 'ignored',
+    } as never);
+
+    expect(result.outcome.spawnError).toBeUndefined();
+    expect(result.outcome.timedOut).toBe(false);
+    expect(result.structurallyValid).toBe(false);
+    expect(seen.length).toBe(1);
+    // The observation saw what the adapter saw: a completed run it rejected.
+    expect(seen[0].errors[0]?.kind).toBe('validation_failure');
+    expect(seen[0].attemptsObserved).toBe(1);
+  }, 30_000);
 });

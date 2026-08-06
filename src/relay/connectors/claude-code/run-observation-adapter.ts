@@ -29,10 +29,30 @@ import { observeRun, type ObservedRun, type RunObservation } from '../../shared/
  * unrelated runs — a mistake the first version's only exemplar taught by
  * labelling four independent runs 1 through 4.
  */
+/**
+ * Options for observing one run. ONE type, shared by both functions below.
+ *
+ * The dead-parameter defect happened twice because each function declared its
+ * own inline copy of this shape: a field added to one and not the other was
+ * silently dropped, and `tsc` could not object because the value travelled as
+ * a variable. A single named type makes that divergence unrepresentable.
+ */
+export interface ObserveRunOptions {
+  readonly attempt?: number;
+  readonly missionId?: string;
+  readonly taskId?: string;
+  readonly recovered?: boolean;
+  /**
+   * `false` when the caller judged the stream malformed. Applied by the domain
+   * only where the run otherwise COMPLETED — a killed process never prints its
+   * result line, so every timeout and cancellation is "malformed" too.
+   */
+  readonly structurallyValid?: boolean;
+}
+
 export function observeClaudeRun(
   outcome: ClaudeRunOutcome,
-  options: { readonly attempt?: number; readonly missionId?: string; readonly taskId?: string;
-    readonly recovered?: boolean } = {},
+  options: ObserveRunOptions = {},
 ): RunObservation {
   return observeRun(toObservedRun(outcome, options));
 }
@@ -40,20 +60,7 @@ export function observeClaudeRun(
 /** The classification, separated so it can be tested against real outcomes. */
 export function toObservedRun(
   outcome: ClaudeRunOutcome,
-  options: {
-    readonly attempt?: number;
-    readonly missionId?: string;
-    readonly taskId?: string;
-    readonly recovered?: boolean;
-    /**
-     * `false` when the caller judged the stream malformed. DECLARED HERE, not
-     * only on the guard above it: the previous version accepted this option one
-     * layer up and never forwarded it, and `tsc` could not see the gap because
-     * `options` is a variable and gets no excess-property check. The fix was
-     * dead code that read like a fix.
-     */
-    readonly structurallyValid?: boolean;
-  } = {},
+  options: ObserveRunOptions = {},
 ): ObservedRun {
   const parsed = outcome.parsed;
   return {
@@ -153,17 +160,7 @@ export async function recordClaudeObservation(
   deps: ObservationDeps,
   projectId: string,
   outcome: ClaudeRunOutcome,
-  options: {
-    readonly attempt?: number;
-    readonly taskId?: string;
-    /**
-     * `false` when the adapter judged the stream malformed. Without it the
-     * observation recorded a run the adapter was about to REJECT as healthy,
-     * with no error and a 0% rate — the observation must see what the adapter
-     * saw, and the adapter saw this too.
-     */
-    readonly structurallyValid?: boolean;
-  } = {},
+  options: ObserveRunOptions = {},
 ): Promise<void> {
   if (deps.operations === undefined) return;
 
