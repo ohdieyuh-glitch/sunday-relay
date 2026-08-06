@@ -64,6 +64,29 @@ describe('planLoopPass — who goes first', () => {
     expect(plan.claim.map((c) => c.runId)).toEqual(['run_a', 'run_b', 'run_c']);
   });
 
+  it('ties break in CODEPOINT order — locale is a hidden input a pure planner must not have', () => {
+    // '-' (0x2D) sorts before '_' (0x5F) by codepoint; ICU locale collation
+    // orders them the other way. Mutation check: restoring localeCompare
+    // fails this on any host, not only on an unusually-configured one.
+    const at = null;
+    const plan = planLoopPass(
+      [run('run_b', at), run('run-b', at)],
+      { maxRuns: 2, perRunIterations: 1 },
+    );
+    expect(plan.claim.map((c) => c.runId)).toEqual(['run-b', 'run_b']);
+  });
+
+  it('orders offset-carrying timestamps by INSTANT, not by string', () => {
+    // 12:00+02:00 IS 10:00Z — equal instants tie and fall to runId, and an
+    // earlier +02:00 wall-clock that is a LATER instant sorts later.
+    const plan = planLoopPass([
+      run('run_b', '2026-08-06T12:00:00+02:00'),
+      run('run_a', '2026-08-06T10:00:00.000Z'),
+      run('run_c', '2026-08-06T11:30:00+02:00'),
+    ], { maxRuns: 3, perRunIterations: 1 });
+    expect(plan.claim.map((c) => c.runId)).toEqual(['run_c', 'run_a', 'run_b']);
+  });
+
   it('emits the same plan for the same snapshot regardless of input order', () => {
     const snapshot = [
       run('run_a', '2026-08-02T00:00:00.000Z'),
@@ -101,10 +124,23 @@ describe('planLoopPass — who is refused, by name', () => {
   });
 
   it('excludes a run with no remaining budget instead of claiming and refusing later', () => {
-    for (const remainingIterations of [0, -1, 2.5, Number.NaN]) {
+    for (const remainingIterations of [0, -1]) {
       const plan = planLoopPass([run('run_broke', null, { remainingIterations })], OPTS);
       expect(plan.claim).toEqual([]);
       expect(plan.excluded).toEqual([{ runId: 'run_broke', reason: 'no_remaining_budget' }]);
+    }
+  });
+
+  it('a budget that is not a budget is invalid_budget, never mistaken for exhaustion', () => {
+    // "This run spent its budget" and "this run's budget is corrupt" are
+    // different facts; an Infinity excluded as no_remaining_budget would be
+    // the exact opposite of the truth. Mutation check: folding these back
+    // into no_remaining_budget fails every case here.
+    for (const remainingIterations of [2.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const plan = planLoopPass([run('run_corrupt', null, { remainingIterations })], OPTS);
+      expect(plan.claim).toEqual([]);
+      expect(plan.excluded, String(remainingIterations))
+        .toEqual([{ runId: 'run_corrupt', reason: 'invalid_budget' }]);
     }
   });
 
@@ -125,6 +161,22 @@ describe('planLoopPass — who is refused, by name', () => {
     ]);
     // The corrupt run did not count as runnable work left behind by capacity.
     expect(plan.capacityReached).toBe(false);
+  });
+
+  it('refuses timestamps Date.parse would ACCEPT when they name no explicit offset', () => {
+    // An offset-less ISO string parses as HOST-LOCAL time, and 'Aug 6 2026'
+    // parses with V8 locale semantics — both let two hosts order one snapshot
+    // differently, which is the promise this module is named for. Mutation
+    // check: relaxing the guard back to bare Date.parse claims both of these.
+    for (const lastAdvancedAt of ['2026-08-06T10:00:00', 'Aug 6 2026', '0', '2026-08-06']) {
+      const plan = planLoopPass(
+        [run('run_local', lastAdvancedAt)],
+        { maxRuns: 1, perRunIterations: 1 },
+      );
+      expect(plan.claim, lastAdvancedAt).toEqual([]);
+      expect(plan.excluded, lastAdvancedAt)
+        .toEqual([{ runId: 'run_local', reason: 'unreadable_timestamp' }]);
+    }
   });
 });
 

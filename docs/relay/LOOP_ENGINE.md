@@ -318,14 +318,21 @@ a silent skip one level up — so the plan holds five rules:
 - **Least-recently-advanced goes first.** Recency of attention, not creation:
   a noisy new run must not shoulder past a quiet old one. A run never advanced
   has had the least attention of all and sorts oldest.
-- **A timestamp that does not parse is refused BY NAME**
-  (`unreadable_timestamp`), not guessed at. Mapping it to "oldest" would hand
-  a corrupt journal permanent first place — and a NaN inside the comparator
-  breaks sort transitivity, which makes "deterministic" silently false.
+- **A timestamp that does not parse — or names no explicit UTC offset — is
+  refused BY NAME** (`unreadable_timestamp`), not guessed at. Mapping an
+  unparseable one to "oldest" would hand a corrupt journal permanent first
+  place, a NaN inside the comparator breaks sort transitivity, and an
+  offset-less timestamp parses as HOST-LOCAL time — each makes
+  "deterministic" silently false. Ties break in CODEPOINT order, not
+  `localeCompare`: locale is a hidden input a pure planner must not have.
+- **A budget that is not a budget is `invalid_budget`**, kept apart from
+  `no_remaining_budget` — "spent its budget" and "budget is corrupt" are
+  different facts, and folding the second into the first masks journal
+  corruption as routine exhaustion.
 - **Every run in the snapshot is accounted for**: claimed, or excluded with a
   reason (`paused`, `terminal`, `recovery_required`, `no_remaining_budget`,
-  `unreadable_timestamp`, `invalid_options`, `capacity_reached`). "The pass
-  will get to it" is how starvation hides.
+  `invalid_budget`, `unreadable_timestamp`, `invalid_options`,
+  `capacity_reached`). "The pass will get to it" is how starvation hides.
 - **Invalid options refuse the whole plan as `invalid_options`**, the repair
   loop's bound rule again — and they do NOT set `capacityReached`, because
   "the planner refused to plan" and "the plan was too small for the work" are

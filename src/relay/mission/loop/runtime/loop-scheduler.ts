@@ -3,13 +3,14 @@
  *
  * The worker executes ONE bounded pass and was built so that deciding when
  * passes run and which runs they claim is somebody else's decision. This is
- * that somebody: a pure planner that takes a snapshot of runnable runs and
- * emits a PLAN — which runs, in what order, with what per-run iteration
+ * that somebody: a pure planner that takes a snapshot of runs and emits a
+ * PLAN — which runs, in what order, with what per-run iteration
  * budget — for a caller to feed to `runLoopWorkerPass`.
  *
- * PURE on purpose. No clock read, no filesystem, no dispatch: a plan is an
- * argument about fairness, and an argument you cannot test without waiting is
- * one nobody will ever check.
+ * PURE on purpose. No clock read, no filesystem, no dispatch — and no LOCALE:
+ * a plan is an argument about fairness, and an argument you cannot test
+ * without waiting, or that two hosts can disagree about, is one nobody will
+ * ever check.
  *
  * THE DEFECT CLASS HERE IS STARVATION. A run that never gets a turn is a
  * silent skip at the scheduling layer — the same lie as a worker that skips
@@ -19,11 +20,17 @@
  *   of creation: a noisy new run must not shoulder past a quiet old one.
  * - **A run that was never advanced sorts as OLDEST**, not newest — the freshly
  *   created run has had zero attention, which is the least attention.
- * - **A timestamp that does not parse is refused BY NAME**, not guessed at.
- *   Mapping it to "oldest" would hand a corrupt journal permanent first place —
- *   corrupt data monopolizing capacity is starvation with extra steps — and
- *   mapping it anywhere else is a guess. The worker refuses an unreadable
- *   lock for the same reason.
+ * - **A timestamp that does not parse — or that names no explicit UTC
+ *   offset — is refused BY NAME**, not guessed at. Mapping an unparseable one
+ *   to "oldest" would hand a corrupt journal permanent first place — corrupt
+ *   data monopolizing capacity is starvation with extra steps — and an
+ *   offset-less timestamp parses as HOST-LOCAL time, which lets two hosts
+ *   order one snapshot differently. The worker refuses an unreadable lock for
+ *   the same reason.
+ * - **A budget that is not a budget is refused as `invalid_budget`**, kept
+ *   apart from `no_remaining_budget`: "this run spent its budget" and "this
+ *   run's budget is corrupt" are different facts, and folding the second into
+ *   the first masks journal corruption as routine exhaustion.
  * - **Capacity is split, never implied.** The plan says exactly which runs did
  *   not fit and why, because "the pass will get to it" is how starvation hides.
  * - **A paused or terminal run is excluded BY REASON**, not silently dropped.
@@ -50,6 +57,7 @@ export type ScheduleExclusionReason =
   | 'terminal'
   | 'recovery_required'
   | 'no_remaining_budget'
+  | 'invalid_budget'
   | 'unreadable_timestamp'
   | 'invalid_options'
   | 'capacity_reached';
@@ -85,6 +93,22 @@ export interface ScheduleOptions {
 }
 
 /**
+ * ISO-8601 with an EXPLICIT UTC offset. `Date.parse` alone is not the
+ * contract: it accepts locale formats with V8 semantics, and it reads an
+ * offset-less ISO string as HOST-LOCAL time — either way, two hosts could
+ * order one snapshot differently, which breaks the promise this module is
+ * named for.
+ */
+const ISO_WITH_OFFSET =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+const parseAdvancedAt = (value: string | null): number => {
+  if (value === null) return Number.NEGATIVE_INFINITY;
+  if (!ISO_WITH_OFFSET.test(value)) return Number.NaN;
+  return Date.parse(value);
+};
+
+/**
  * Plan one pass.
  *
  * Total and pure: invalid options produce an empty plan with every run
@@ -114,7 +138,14 @@ export function planLoopPass(
       excluded.push({ runId: run.runId, reason: run.state });
       continue;
     }
-    if (!Number.isInteger(run.remainingIterations) || run.remainingIterations < 1) {
+    if (!Number.isInteger(run.remainingIterations)) {
+      // "This run's budget is corrupt" is a different fact from "this run
+      // spent its budget" — Infinity, NaN and fractions name an upstream
+      // defect, and folding them into normal exhaustion would mask it.
+      excluded.push({ runId: run.runId, reason: 'invalid_budget' });
+      continue;
+    }
+    if (run.remainingIterations < 1) {
       // A schedule is not permission to overspend: a run with no budget left
       // is excluded HERE, visibly, rather than claimed and refused later.
       excluded.push({ runId: run.runId, reason: 'no_remaining_budget' });
@@ -123,9 +154,7 @@ export function planLoopPass(
     // Parse ONCE, here, so a corrupt timestamp is a named exclusion and not a
     // NaN inside the comparator, where it would poison the sort's transitivity
     // and make the "deterministic plan" promise silently false.
-    const advancedAt = run.lastAdvancedAt === null
-      ? Number.NEGATIVE_INFINITY
-      : Date.parse(run.lastAdvancedAt);
+    const advancedAt = parseAdvancedAt(run.lastAdvancedAt);
     if (Number.isNaN(advancedAt)) {
       excluded.push({ runId: run.runId, reason: 'unreadable_timestamp' });
       continue;
@@ -138,7 +167,10 @@ export function planLoopPass(
   // given one snapshot cannot argue.
   const sorted = [...eligible].sort((a, b) => {
     if (a.advancedAt !== b.advancedAt) return a.advancedAt - b.advancedAt;
-    return a.run.runId.localeCompare(b.run.runId);
+    // Codepoint order, NOT localeCompare: locale is a hidden input a pure
+    // planner must not have, and ICU can return 0 for DISTINCT strings —
+    // either breaks "two planners given one snapshot cannot argue".
+    return a.run.runId < b.run.runId ? -1 : a.run.runId > b.run.runId ? 1 : 0;
   });
 
   const claim = sorted.slice(0, options.maxRuns).map(({ run }) => ({
