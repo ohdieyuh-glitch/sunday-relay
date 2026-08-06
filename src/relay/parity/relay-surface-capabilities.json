@@ -765,6 +765,8 @@
         "src/relay/mission/loop/cron/cron-budget.test.ts",
         "src/relay/mission/loop/cron/cron-budget.ts",
         "src/relay/mission/loop/cron/cron-claim.test.ts",
+        "src/relay/mission/loop/cron/cron-versioning.test.ts",
+        "src/relay/mission/loop/cron/cron-versioning.ts",
         "src/relay/mission/loop/unchain/rechaining.test.ts",
         "src/relay/mission/loop/unchain/rechaining.ts",
         "src/relay/mission/loop/cron/index.ts",

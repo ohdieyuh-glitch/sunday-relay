@@ -325,6 +325,18 @@ schedule and contract, the change author and time, and which runs came from
 which version. An in-progress run continues under the version it started with.
 Changing the future schedule never mutates an active run.
 
+`cron-versioning.ts` implements that decision. An edit APPENDS: every previous
+version rides through unchanged, including the one being superseded, whose
+schedule is what explains its own runs. `governingVersionFor` resolves a run
+to the version it STARTED under and answers `null` — not the head — when the
+run cites a version the history lacks. The plan returns the active runs the
+edit must not disturb rather than leaving a caller to infer them, and it names
+which fields changed, because a version whose diff nobody can state is a
+version nobody can review. Refused: an unattributed edit, an authored-at
+without an explicit offset, a history with gaps or repeats, a run citing an
+unknown version, and an edit that changes nothing. NOT WIRED: no schedule
+store exists, so nothing holds a history for this to append to.
+
 ## Cron S-Loops
 
 **Default: unavailable.** The `cron_sloop` flag is off and depends on `sloop`,
@@ -343,8 +355,8 @@ The in-bridge scheduler and its timer · execution of a trigger-created run
 therefore schedule listing, pausing and versioning · the occurrence queue,
 and therefore the `queue_one` and `queue_all` overlap policies · period
 budget caps · recurring approvals · circuit-breaker OBSERVATION (the decision exists;
-nothing feeds it and nothing pauses a schedule) · schedule
-versioning · conditional Cron Loops · the Cron UI · token and provider-call
+nothing feeds it and nothing pauses a schedule) · schedule-version STORAGE
+(the edit decision exists; nothing persists a history) · conditional Cron Loops · the Cron UI · token and provider-call
 caps at the schedule level · notification and next-eligible-trigger
 computation on a blocked run.
 
