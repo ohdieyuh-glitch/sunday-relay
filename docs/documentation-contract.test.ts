@@ -323,12 +323,23 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     expect(statusLine(loop)).toContain('SINGLE-LOOP RUNTIME IMPLEMENTED');
     expect(statusLine(loop)).toContain('DEFAULT OFF');
     expect(statusLine(loop)).toContain('NO LOOP HAS RUN IN PRODUCTION');
-    // SUPERSEDED 2026-08-06 when the controlled collapse landed. The pinned
-    // phrase must keep naming what is MISSING — a session still cannot exist
-    // in this build — rather than celebrating the one piece that now exists.
-    expect(statusLine(unchain)).toContain('THE METER');
-    expect(statusLine(unchain)).toContain('ARE NOT');
-    expect(statusLine(unchain)).toContain('No session can exist in this build');
+    // SUPERSEDED 2026-08-06 when the Rechaining PLANNER landed (nothing calls
+    // it, so the behaviour still does not exist).
+    //
+    // THE PIN IS ONE CONTIGUOUS CLAIM, deliberately. The first attempt at this
+    // supersession used three separate substrings — 'THE METER', 'ARE NOT',
+    // 'No session can exist' — and review proved a status rewritten to claim
+    // the Meter and session lifecycle WERE implemented still satisfied all
+    // three, because each matched somewhere in a seventeen-line preamble.
+    // That is exactly the defect class this test's own header describes, and
+    // it was committed here. A contiguous phrase cannot be satisfied by
+    // scattered fragments.
+    // (Whitespace is normalized above, so the phrase is written with single
+    // spaces and survives reflow — asserting on a raw line break is how a doc
+    // test starts failing for formatting rather than for meaning.)
+    expect(statusLine(unchain)).toContain(
+      'THE METER, SESSION LIFECYCLE, UNCHAINED FORM, RECHAINING EXECUTION AND S-LOOP RUNTIME ARE NOT IMPLEMENTED',
+    );
     // SUPERSEDED 2026-08-06 twice: 'SCHEDULER NOT IMPLEMENTED' until the
     // pure evaluator landed; 'CLAIMING AND DISPATCH NOT' until the pure
     // claim/overlap/missed-run decisions landed. The status must keep naming

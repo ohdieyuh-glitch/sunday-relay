@@ -1,14 +1,16 @@
 # Unchain
 
-**Status: SPECIFIED. THE GATE AND RECHAINING ARE IMPLEMENTED; THE METER,
-SESSION LIFECYCLE, UNCHAINED FORM AND S-LOOP RUNTIME ARE NOT.**
+**Status: SPECIFIED. THE GATE IS IMPLEMENTED AND A RECHAINING PLANNER EXISTS
+BUT IS UNWIRED. THE METER, SESSION LIFECYCLE, UNCHAINED FORM, RECHAINING
+EXECUTION AND S-LOOP RUNTIME ARE NOT IMPLEMENTED.**
 
 No session can exist in this build: there is no meter, no session store, no
 activation path, no Unchained Form, and no skin that grants anything.
 `src/relay/mission/loop/loop-availability.ts` models the *gate* and refuses
 every S-Loop with a truthful reason. `src/relay/mission/loop/unchain/
-rechaining.ts` now plans the controlled collapse — pure, and reachable only
-once something can issue a session, which nothing can.
+rechaining.ts` DECIDES what a collapse would do — and nothing calls it. A
+planner with no caller collapses nothing, so Rechaining as a behaviour does
+not exist; only the decision it would need does.
 
 This document exists because the founder's Unchain direction lived outside the
 repository, which meant the locked decisions could not be checked against code
@@ -147,9 +149,9 @@ These are genuinely unresolved and are **not** guessed anywhere in code:
 | `unchainSessionProblem()` | Implemented — every branch refuses with a reason |
 | `evaluateLoopAvailability()` | Implemented — S-Loops blocked, capacity granted only when nothing blocks |
 | `UNCHAIN_TEMPORARY_SLOTS` | Declared as literal `2` |
-| `planRechaining()` | Implemented — the controlled collapse, pure. Preserves before it cancels (an unpersisted branch is REFUSED, including a speculative one), reports interrupted work as interrupted and never as converged, accounts for every temporary slot, and targets the BASE slot count so a collapse can never promote. It answers none of the open decisions below: base capacity is an argument, and the plan does not vary by meter state. |
+| `planRechaining()` | Implemented as a PURE PLANNER with **no caller**. Decides three of the thirteen steps' worth of dispositions: preserves before it cancels (an unpersisted branch is REFUSED, including a speculative one), reports interrupted work as interrupted and never as converged, and accounts for every temporary slot. Targets the BASE slot count unconditionally, so it can never promote. It NAMES what it does not decide — steps 1, 3 and 11, plus every owed handoff — rather than omitting them. It answers none of the open decisions below: base capacity is an argument, and the plan is identical for every meter state. |
 | Meter | **Not implemented** |
 | Session issue / verify / revoke | **Not implemented** |
 | Unchained Form | **Not implemented** |
-| Rechaining | **Not implemented** |
+| Rechaining (the behaviour) | **Not implemented** — `planRechaining()` decides; nothing executes, and nothing calls it |
 | S-Loop runtime | **Not implemented** |

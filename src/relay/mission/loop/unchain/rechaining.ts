@@ -22,10 +22,15 @@
  *   accounted for in the plan, so a slot that keeps working is a slot the
  *   plan names.
  *
- * MONOTONICALLY DOWNWARD. Rechaining can never raise capacity. The plan's
- * target slot count is the BASE, never the expanded one, and a snapshot
- * claiming more base capacity than it had expanded capacity is refused rather
- * than treated as a promotion.
+ * MONOTONICALLY DOWNWARD. Rechaining can never raise capacity: the plan's
+ * target slot count is the BASE, never the expanded one, and it does not vary
+ * by meter state — including `active`, where a planner that "helpfully" kept
+ * the temporary slots would be granting capacity rather than collapsing it.
+ * (An earlier version wrapped the target in a `Math.min` against
+ * base + temporary and claimed in this header that an over-large base was
+ * refused. Neither was real: the min was provably a no-op, and no such
+ * refusal existed. Review caught the comment describing a gate the code did
+ * not have.)
  *
  * WHAT THIS MODULE REFUSES TO GUESS. UNCHAIN.md lists seven open founder
  * decisions, and this touches none of them: it takes the base slot count as
@@ -70,7 +75,8 @@ export interface RechainingSnapshot {
 export type BranchDisposition =
   /** Folded into the parent Loop's result. Complete work, kept. */
   | 'converge'
-  /** Persisted and handed off, then stopped. Work preserved, not finished. */
+  /** Persisted, then stopped. Work preserved, not finished — and the handoff
+   *  may still be owed; see `handoffsOwedFor`. */
   | 'preserve_and_stop'
   /** Speculative and safely discardable — but ONLY once persisted. */
   | 'cancel_speculative'
@@ -106,6 +112,21 @@ export interface RechainingPlan {
   /** Steps a caller still owes, named. Revoking temporary MCP and plugin
    *  access is not something a pure planner can perform. */
   readonly revokeTemporaryAccessFor: readonly string[];
+  /**
+   * Branches stopped without a structured Project Brain handoff (step 5).
+   * STRUCTURED, not a sentence: review found the missing handoff changing
+   * only a `reason` string, so a caller consuming the plan would stop a
+   * branch whose handoff was never written and have no way to discover it.
+   */
+  readonly handoffsOwedFor: readonly string[];
+  /**
+   * Steps of the thirteen this planner does NOT decide, named so their
+   * absence is a fact rather than an omission: stopping new branch creation
+   * (1), identifying safe checkpoints (3), and transitioning the parent
+   * S-Loop to a normal Loop (11). A pure planner cannot do any of them, and
+   * a plan that listed only what it handled would read as the whole collapse.
+   */
+  readonly stepsOwedToCaller: readonly string[];
 }
 
 export type RechainingDecision =
@@ -129,10 +150,6 @@ export function planRechaining(snapshot: RechainingSnapshot): RechainingDecision
     };
   }
 
-  // MONOTONICALLY DOWNWARD. A snapshot whose base already exceeds what the
-  // expanded session could hold is not a collapse — it is a promotion wearing
-  // a collapse's name, and this module has no authority to grant one.
-  const expandedSlots = snapshot.baseSlots + UNCHAIN_TEMPORARY_SLOTS;
   if (snapshot.temporaryBranches.length > UNCHAIN_TEMPORARY_SLOTS) {
     return {
       ok: false,
@@ -140,6 +157,29 @@ export function planRechaining(snapshot: RechainingSnapshot): RechainingDecision
       problem: `${snapshot.temporaryBranches.length} temporary branches were reported for `
         + `${UNCHAIN_TEMPORARY_SLOTS} temporary slots. A slot cannot carry two branches, so this `
         + 'snapshot cannot be trusted to say what a collapse would preserve.',
+    };
+  }
+
+  const branchIds = new Set(snapshot.temporaryBranches.map((b) => b.branchId));
+  if (branchIds.size !== snapshot.temporaryBranches.length) {
+    return {
+      ok: false,
+      refusal: 'duplicate_branch_ids',
+      problem: 'Two temporary branches share one branchId. A caller keying the plan by branch would '
+        + 'silently lose one disposition, so this snapshot cannot be trusted to say what a collapse '
+        + 'preserves.',
+    };
+  }
+  const slotIds = new Set(snapshot.temporaryBranches.map((b) => b.slotId));
+  if (slotIds.size !== snapshot.temporaryBranches.length) {
+    // The refusal below already asserted a slot cannot carry two branches;
+    // review found only the COUNT was checked, so two branches on one slot
+    // produced a duplicated revoke and left the other slot unnamed.
+    return {
+      ok: false,
+      refusal: 'slot_carries_two_branches',
+      problem: 'Two temporary branches report the same slot. A slot cannot carry two branches, so '
+        + 'this snapshot cannot be trusted to say which slots a collapse must revoke.',
     };
   }
 
@@ -163,8 +203,9 @@ export function planRechaining(snapshot: RechainingSnapshot): RechainingDecision
   return {
     ok: true,
     plan: {
-      // The BASE, never the expanded count, and never more than was expanded.
-      targetSlots: Math.min(snapshot.baseSlots, expandedSlots),
+      // The BASE, unconditionally. Not a function of the meter state, and
+      // never the expanded count — this module collapses, it never promotes.
+      targetSlots: snapshot.baseSlots,
       branches,
       queued,
       replanned,
@@ -173,9 +214,26 @@ export function planRechaining(snapshot: RechainingSnapshot): RechainingDecision
       // and pretending otherwise would leave temporary access live while a
       // report said it was gone.
       revokeTemporaryAccessFor: snapshot.temporaryBranches.map((b) => b.slotId),
+      handoffsOwedFor: branches
+        .filter((b) => b.disposition === 'preserve_and_stop')
+        .filter((b) => snapshot.temporaryBranches
+          .some((t) => t.branchId === b.branchId && !t.handoffWritten))
+        .map((b) => b.branchId),
+      stepsOwedToCaller: STEPS_OWED,
     },
   };
 }
+
+/**
+ * The steps of UNCHAIN.md's thirteen that a PURE planner cannot decide.
+ * Named rather than omitted: review found them missing from both the plan and
+ * its documentation, which let a partial collapse read as the whole one.
+ */
+const STEPS_OWED: readonly string[] = [
+  'stop creating new branches (step 1)',
+  'identify safe checkpoints (step 3)',
+  'transition the parent S-Loop to a normal Loop when possible (step 11)',
+];
 
 /** One branch's disposition, and the honest name for what its work became. */
 function disposeOf(branch: TemporaryBranch): BranchPlan {

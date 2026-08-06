@@ -144,6 +144,64 @@ describe('no temporary slot continues invisibly', () => {
   });
 });
 
+describe('a snapshot that cannot say what is running is refused', () => {
+  it('refuses duplicate branch ids — a caller keying by branch would lose one', () => {
+    const decision = planRechaining(snapshot({
+      temporaryBranches: [
+        branch({ branchId: 'SAME', slotId: 'slot_0', state: 'complete', convergeable: true }),
+        branch({ branchId: 'SAME', slotId: 'slot_1', state: 'speculative' }),
+      ],
+    }));
+    expect(decision).toMatchObject({ ok: false, refusal: 'duplicate_branch_ids' });
+  });
+
+  it('refuses two branches on ONE slot — the refusal text always claimed this', () => {
+    // Review found only the COUNT checked: two branches on slot_0 produced a
+    // duplicated revoke entry and never named slot_1.
+    const decision = planRechaining(snapshot({
+      temporaryBranches: [
+        branch({ branchId: 'br_a', slotId: 'slot_0' }),
+        branch({ branchId: 'br_b', slotId: 'slot_0' }),
+      ],
+    }));
+    expect(decision).toMatchObject({ ok: false, refusal: 'slot_carries_two_branches' });
+  });
+});
+
+describe('what the planner does NOT decide is named, not omitted', () => {
+  it('names an owed handoff structurally, not only in a sentence', () => {
+    // Mutation check: review found the missing handoff changing only a
+    // `reason` string, so a caller consuming the plan stopped a branch whose
+    // handoff was never written with no way to discover it.
+    const plan = planOf(snapshot({
+      temporaryBranches: [
+        branch({ branchId: 'br_owed', handoffWritten: false }),
+        branch({ branchId: 'br_done', slotId: 'slot_1', handoffWritten: true }),
+      ],
+    }));
+    expect(plan.handoffsOwedFor).toEqual(['br_owed']);
+  });
+
+  it('a converged or discarded branch owes no handoff', () => {
+    const plan = planOf(snapshot({
+      temporaryBranches: [
+        branch({ branchId: 'br_c', state: 'complete', convergeable: true, handoffWritten: false }),
+        branch({ branchId: 'br_s', slotId: 'slot_1', state: 'speculative', handoffWritten: false }),
+      ],
+    }));
+    expect(plan.handoffsOwedFor).toEqual([]);
+  });
+
+  it('names the steps a pure planner cannot decide', () => {
+    // Steps 1, 3 and 11 of the thirteen. Mutation check: dropping them lets a
+    // partial collapse read as the whole one.
+    const plan = planOf(snapshot());
+    expect(plan.stepsOwedToCaller.join(' ')).toContain('step 1');
+    expect(plan.stepsOwedToCaller.join(' ')).toContain('step 3');
+    expect(plan.stepsOwedToCaller.join(' ')).toContain('step 11');
+  });
+});
+
 describe('the collapse is monotonically downward', () => {
   it('targets the BASE slot count, never the expanded one', () => {
     // Mutation check: targeting baseSlots + UNCHAIN_TEMPORARY_SLOTS turns a
@@ -171,8 +229,11 @@ describe('what it refuses to decide', () => {
   it('plans the same way whatever meter state triggered the collapse', () => {
     // Whether expiry pauses a running Loop or only prevents new branches is
     // open founder decision #4. This module does not answer it, so a plan
-    // must not vary by meter state.
-    const states = ['low', 'critical', 'expired'] as const;
+    // must not vary by meter state — including `active`, which review found
+    // untested: a mutant that kept the temporary slots when the meter read
+    // `active` survived, granting exactly the promotion this module says it
+    // has no authority to grant.
+    const states = ['active', 'low', 'critical', 'expired'] as const;
     const plans = states.map((meterState) => planOf(snapshot({
       meterState,
       baseSlots: 2,
