@@ -31,9 +31,11 @@ function harness(script: {
   const events: string[] = [];
   const port: OccurrenceClaimPort = {
     acquireOccurrenceLock(id) {
-      if (script.lock === 'unavailable') return null;
+      if (script.lock === 'unavailable') {
+        return { acquired: false, kind: 'held', problem: 'live claimant' } as const;
+      }
       events.push(`lock:${id}`);
-      return { release: () => { events.push(`release:${id}`); } };
+      return { acquired: true, release: () => { events.push(`release:${id}`); } };
     },
     claimMarkerExists: () => script.markerExists ?? false,
     writeClaimMarker(o) {
@@ -67,7 +69,8 @@ describe('the approved sequence', () => {
 
   it('an unavailable lock is its own answer, not a guess', () => {
     const { port } = harness({ lock: 'unavailable' });
-    expect(claimOccurrence(port, occurrence())).toEqual({ kind: 'lock_unavailable' });
+    expect(claimOccurrence(port, occurrence()))
+      .toEqual({ kind: 'lock_unavailable', problem: 'live claimant' });
   });
 });
 
@@ -99,6 +102,14 @@ describe('crash honesty', () => {
     if (outcome.kind === 'claim_failed') expect(outcome.problem).toContain('marker dir corrupt');
   });
 
+  it('a BLOCKED lock carries its problem — retrying alone will not clear it', () => {
+    const { port } = harness();
+    port.acquireOccurrenceLock = () => (
+      { acquired: false, kind: 'blocked', problem: 'unreadable lock; remove it by hand' } as const);
+    expect(claimOccurrence(port, occurrence()))
+      .toEqual({ kind: 'lock_blocked', problem: 'unreadable lock; remove it by hand' });
+  });
+
   it('a throwing lock port is claim_failed, not a guess about who holds it', () => {
     const { port } = harness();
     port.acquireOccurrenceLock = () => { throw new Error('lock io'); };
@@ -112,7 +123,9 @@ describe('crash honesty', () => {
     const inner = port.acquireOccurrenceLock.bind(port);
     port.acquireOccurrenceLock = (id) => {
       const lock = inner(id);
-      return lock === null ? null : { release: () => { throw new Error('release io'); } };
+      return lock.acquired
+        ? { acquired: true, release: () => { throw new Error('release io'); } }
+        : lock;
     };
     expect(claimOccurrence(port, occurrence()))
       .toEqual({ kind: 'claimed', journalRecorded: false });

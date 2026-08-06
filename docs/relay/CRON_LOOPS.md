@@ -19,11 +19,11 @@ work never auto-caught-up, whatever the policy says).
 `OccurrenceClaimPort`: the guarded run lock per occurrence directory, an
 claim marker written all-or-nothing, exclusively and DURABLY (fsynced temp +
 no-clobber link — the at-most-once authority must survive a crash), a durable
-trigger journal, and path-shaped occurrence ids refused. NAMED FOLLOW-UP
-before the scheduler lands: the `OccurrenceClaimPort` lock method collapses
-every acquisition failure into "try later", which hides an unreadable lock's
-remove-it-by-hand instruction — the port must widen to carry the reason
-before anything loops on it. Nothing yet DISPATCHES:
+trigger journal, and path-shaped occurrence ids refused. The lock answer is
+WIDENED (the follow-up its review named, closed before anything loops on
+it): `held` retries, `blocked` carries the remove-it-by-hand problem,
+`failed` names the IO — classified by inspection, never by message-matching.
+Nothing yet DISPATCHES:
 there is no timer, no tick endpoint and no run creation from a trigger. The
 `loop_cron` feature flag is off and depends on `loop_scheduler`, which
 depends on `loop_engine`.
