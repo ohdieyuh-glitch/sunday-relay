@@ -761,6 +761,8 @@
       ],
       "sharedDomainReferences": [
         "src/relay/mission/loop/runtime/loop-projections.ts",
+        "src/relay/mission/loop/runtime/loop-scheduler.test.ts",
+        "src/relay/mission/loop/runtime/loop-scheduler.ts",
         "src/relay/mission/loop/runtime/loop-worker.test.ts",
         "src/relay/mission/loop/runtime/loop-worker.ts",
         "src/relay/ui/loop/loop-run-view.ts#restorePointFor"

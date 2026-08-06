@@ -303,6 +303,42 @@ primitive's policy through the worker's refusal. `lock.ts` needs a post-acquire
 ownership re-read (or a guarded rename) before any two workers run against the
 same state root.
 
+## The pass planner
+
+The worker executes ONE bounded pass; `loop-scheduler.ts` decides what the
+pass should touch. `planLoopPass` is PURE — no clock, no filesystem, no
+dispatch: it takes a snapshot of runs and emits a plan (which runs, in what
+order, with what per-run iteration grant) for a caller to feed to
+`runLoopWorkerPass`. A plan is an argument about fairness, and an argument you
+cannot test without waiting is one nobody will ever check.
+
+The defect class at this layer is STARVATION — a run that never gets a turn is
+a silent skip one level up — so the plan holds five rules:
+
+- **Least-recently-advanced goes first.** Recency of attention, not creation:
+  a noisy new run must not shoulder past a quiet old one. A run never advanced
+  has had the least attention of all and sorts oldest.
+- **A timestamp that does not parse is refused BY NAME**
+  (`unreadable_timestamp`), not guessed at. Mapping it to "oldest" would hand
+  a corrupt journal permanent first place — and a NaN inside the comparator
+  breaks sort transitivity, which makes "deterministic" silently false.
+- **Every run in the snapshot is accounted for**: claimed, or excluded with a
+  reason (`paused`, `terminal`, `recovery_required`, `no_remaining_budget`,
+  `unreadable_timestamp`, `invalid_options`, `capacity_reached`). "The pass
+  will get to it" is how starvation hides.
+- **Invalid options refuse the whole plan as `invalid_options`**, the repair
+  loop's bound rule again — and they do NOT set `capacityReached`, because
+  "the planner refused to plan" and "the plan was too small for the work" are
+  different outages.
+- **Same snapshot, same plan.** Ties break on runId, so two planners given one
+  snapshot cannot argue.
+
+The grant never exceeds the run's own `remainingIterations` — a schedule is
+not permission to overspend.
+
+NOT WIRED: nothing composes planner and worker yet — no daemon, no cron. The
+lock-reclaim precondition above still gates any second concurrent worker.
+
 ## Observing a run
 
 A drafted Loop and a running one are different questions, and the surfaces
@@ -366,8 +402,9 @@ the panel keeps them in separate regions with different words.
 
 ## Not implemented
 
-The work-conserving scheduler · agent slots · work stealing · critical-path
-scheduling · scheduler telemetry · the watchdog · multi-Loop concurrency ·
+Scheduler WIRING (the pass planner exists; nothing invokes it) · agent slots ·
+work stealing · critical-path scheduling · scheduler telemetry · the watchdog ·
+multi-Loop concurrency ·
 multi-role execution (Stage 2 runs one role, `coding_agent`) · Cron scheduling
 (grammar only — see `CRON_LOOPS.md`) · Unchain (see `UNCHAIN.md`) · S-Loop
 runtime · swarm branches · convergence · Rechaining · Loop templates ·
