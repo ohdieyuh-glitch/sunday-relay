@@ -64,59 +64,83 @@ export function decideMissedRuns(input: MissedRunInput): MissedRunDecision {
       'evaluatedAt must be an ISO-8601 instant with an explicit offset; nothing was decided.');
   }
 
-  if (!RELAY_CRON_WORK_CLASSES.includes(input.workClass as RelayCronWorkClass)) {
-    // An unknown work class cannot prove it is low-risk, so it is treated
-    // exactly as high-risk work is: held for a human.
-    return {
-      dispatch: [],
-      awaitingConfirmation: [...input.occurrences],
-      skipped: [],
-    };
+  // Configuration errors surface for EVERY work class — review found an
+  // unknown class masking an invalid age cap the known classes reported.
+  if (input.maxCatchUpAgeMinutes !== undefined
+    && (!Number.isInteger(input.maxCatchUpAgeMinutes) || input.maxCatchUpAgeMinutes < 1)) {
+    return allSkipped(input.occurrences,
+      `maxCatchUpAgeMinutes must be a positive integer; got ${String(input.maxCatchUpAgeMinutes)}. Nothing was decided.`);
   }
 
-  // Age first: an occurrence stale beyond the catch-up age is skipped BY
+  // Every occurrence instant must READ before it can be compared. Date.parse
+  // NaN compares false against every age bound, so a garbage instant sailed
+  // through the age gate as "fresh" — unknown guessed as new, found in
+  // review. The scheduler's own instant rule, applied to the one field this
+  // module compares.
+  let eligible: CronOccurrence[] = [];
+  const skipped: { occurrenceId: string; reason: string }[] = [];
+  for (const occurrence of input.occurrences) {
+    if (readIsoInstantWithOffset(occurrence.resolvedUtcInstant) === null) {
+      skipped.push({
+        occurrenceId: occurrence.occurrenceId,
+        reason: 'Its resolved instant cannot be read as an offset-carrying ISO-8601 instant; unreadable is not fresh.',
+      });
+    } else {
+      eligible.push(occurrence);
+    }
+  }
+
+  // Age next: an occurrence stale beyond the catch-up age is skipped BY
   // NAME whatever the policy — including run_latest, whose latest may
   // itself be too old to be worth pretending is fresh.
-  let eligible = [...input.occurrences];
-  const skipped: { occurrenceId: string; reason: string }[] = [];
   if (input.maxCatchUpAgeMinutes !== undefined) {
-    if (!Number.isInteger(input.maxCatchUpAgeMinutes) || input.maxCatchUpAgeMinutes < 1) {
-      return allSkipped(input.occurrences,
-        `maxCatchUpAgeMinutes must be a positive integer; got ${String(input.maxCatchUpAgeMinutes)}. Nothing was decided.`);
-    }
     const oldestAllowedMs = evaluatedMs - input.maxCatchUpAgeMinutes * 60_000;
+    const kept: CronOccurrence[] = [];
     for (const occurrence of eligible) {
       if (Date.parse(occurrence.resolvedUtcInstant) < oldestAllowedMs) {
         skipped.push({
           occurrenceId: occurrence.occurrenceId,
           reason: `Older than the ${input.maxCatchUpAgeMinutes}-minute catch-up age; stale work is named, not run.`,
         });
+      } else {
+        kept.push(occurrence);
       }
     }
-    const skippedIds = new Set(skipped.map((s) => s.occurrenceId));
-    eligible = eligible.filter((o) => !skippedIds.has(o.occurrenceId));
+    eligible = kept;
   }
 
-  // The rule that outranks the policy: high-risk work is NEVER auto-caught-
-  // up. It waits for renewed human approval, whatever the policy says.
+  // skip_missed dispatches NOTHING, so the high-risk gate has nothing to
+  // guard: honoring the never-replay policy for every class keeps high-risk
+  // work from being MORE replayable than low-risk under the same policy —
+  // the inverted posture review caught in the first version, which held
+  // skip_missed high-risk work for a confirmation that could run it.
+  if (input.policy === 'skip_missed') {
+    return {
+      dispatch: [],
+      awaitingConfirmation: [],
+      skipped: [
+        ...skipped,
+        ...eligible.map((o) => ({
+          occurrenceId: o.occurrenceId,
+          reason: 'The skip_missed policy: a missed occurrence is recorded, never replayed.',
+        })),
+      ],
+    };
+  }
+
+  if (!RELAY_CRON_WORK_CLASSES.includes(input.workClass as RelayCronWorkClass)) {
+    // An unknown work class cannot prove it is low-risk, so it is treated
+    // exactly as high-risk work is: held for a human.
+    return { dispatch: [], awaitingConfirmation: eligible, skipped };
+  }
+
+  // The rule that outranks every DISPATCHING policy: high-risk work is NEVER
+  // auto-caught-up. It waits for renewed human approval.
   if (HIGH_RISK.includes(input.workClass as RelayCronWorkClass)) {
     return { dispatch: [], awaitingConfirmation: eligible, skipped };
   }
 
   switch (input.policy as RelayMissedRunPolicy) {
-    case 'skip_missed':
-      return {
-        dispatch: [],
-        awaitingConfirmation: [],
-        skipped: [
-          ...skipped,
-          ...eligible.map((o) => ({
-            occurrenceId: o.occurrenceId,
-            reason: 'The skip_missed policy: a missed occurrence is recorded, never replayed.',
-          })),
-        ],
-      };
-
     case 'run_latest': {
       const latest = eligible[eligible.length - 1];
       return {

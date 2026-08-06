@@ -21,6 +21,21 @@ describe('an idle schedule dispatches under every known policy', () => {
   });
 });
 
+describe('a nonempty queue is a LINE, never jumped', () => {
+  it('queue policies at the drain boundary do not dispatch past older queued work', () => {
+    // No run is live but the queue holds older occurrences — the reachable
+    // instant between a run finishing and the caller promoting the queue.
+    // Mutation check: dispatching on activeRuns===0 alone jumps the line
+    // and fails both of these — the queue-jump review caught.
+    const one = decideOverlap('queue_one', { activeRuns: 0, queuedRuns: 1 });
+    expect(one.action).toBe('skip');
+    if (one.action === 'skip') expect(one.reason).toContain('drains it first');
+
+    expect(decideOverlap('queue_all', { activeRuns: 0, queuedRuns: 2, queueLimit: 5 }).action)
+      .toBe('queue');
+  });
+});
+
 describe('a live run changes the answer, per policy', () => {
   it('skip skips', () => {
     expect(decideOverlap('skip', { activeRuns: 1, queuedRuns: 0 }).action).toBe('skip');

@@ -59,10 +59,14 @@ export function decideOverlap(
         : { action: 'skip', reason: 'A run is live and the policy skips overlaps.' };
 
     case 'queue_one':
-      if (state.activeRuns === 0) return { action: 'dispatch' };
+      // A nonempty queue holds OLDER occurrences; dispatching past it would
+      // jump a line the reason strings promise is a line. Review caught the
+      // first version doing exactly that at the drain boundary (run just
+      // finished, queue not yet promoted).
+      if (state.activeRuns === 0 && state.queuedRuns === 0) return { action: 'dispatch' };
       return state.queuedRuns === 0
         ? { action: 'queue', reason: 'A run is live; this occurrence waits as the one queued follower.' }
-        : { action: 'skip', reason: 'A run is live and the queue of one is already full.' };
+        : { action: 'skip', reason: 'The queue of one is already full; the caller drains it first.' };
 
     case 'queue_all':
       if (!bound(state.queueLimit)) {
@@ -71,9 +75,9 @@ export function decideOverlap(
           reason: 'queue_all IS its bound: a positive integer queueLimit is required, not defaulted.',
         };
       }
-      if (state.activeRuns === 0) return { action: 'dispatch' };
+      if (state.activeRuns === 0 && state.queuedRuns === 0) return { action: 'dispatch' };
       return state.queuedRuns < (state.queueLimit as number)
-        ? { action: 'queue', reason: `A run is live; queued ${state.queuedRuns + 1} of ${state.queueLimit}.` }
+        ? { action: 'queue', reason: `Queued ${state.queuedRuns + 1} of ${state.queueLimit}; the queue drains in order.` }
         : { action: 'skip', reason: `The queue limit of ${state.queueLimit} is reached.` };
 
     case 'replace':

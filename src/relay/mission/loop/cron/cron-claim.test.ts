@@ -91,6 +91,33 @@ describe('crash honesty', () => {
     expect(events).toEqual(['lock:occ_1', 'marker:occ_1', 'release:occ_1']);
   });
 
+  it('a throwing markerExists fails CLOSED — writing on ignorance could double-claim', () => {
+    const { port } = harness();
+    port.claimMarkerExists = () => { throw new Error('marker dir corrupt'); };
+    const outcome = claimOccurrence(port, occurrence());
+    expect(outcome.kind).toBe('claim_failed');
+    if (outcome.kind === 'claim_failed') expect(outcome.problem).toContain('marker dir corrupt');
+  });
+
+  it('a throwing lock port is claim_failed, not a guess about who holds it', () => {
+    const { port } = harness();
+    port.acquireOccurrenceLock = () => { throw new Error('lock io'); };
+    expect(claimOccurrence(port, occurrence()).kind).toBe('claim_failed');
+  });
+
+  it('a throwing release is CONTAINED — the journal-gap report survives it', () => {
+    // Mutation check: letting release() escape destroys exactly the
+    // {claimed, journalRecorded:false} outcome this module exists to make.
+    const { port } = harness({ journal: 'throws' });
+    const inner = port.acquireOccurrenceLock.bind(port);
+    port.acquireOccurrenceLock = (id) => {
+      const lock = inner(id);
+      return lock === null ? null : { release: () => { throw new Error('release io'); } };
+    };
+    expect(claimOccurrence(port, occurrence()))
+      .toEqual({ kind: 'claimed', journalRecorded: false });
+  });
+
   it('the lock releases on EVERY path, including the throwing ones', () => {
     for (const script of [
       {}, { markerExists: true }, { markerWrite: 'throws' as const }, { journal: 'throws' as const },

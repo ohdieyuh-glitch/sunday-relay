@@ -43,11 +43,11 @@ const covered = (decision: ReturnType<typeof decideMissedRuns>): string[] =>
 
 describe('high-risk work outranks every policy', () => {
   it.each(['external_write', 'deployment', 'financial'])(
-    '%s waits for a human under EVERY policy — never auto-caught-up',
+    '%s waits for a human under every DISPATCHING policy — never auto-caught-up',
     (workClass) => {
       // Mutation check: removing the work-class gate dispatches stale
-      // high-risk work and fails all four policies here at once.
-      for (const policy of ['skip_missed', 'run_latest', 'run_all_with_limit', 'require_confirmation']) {
+      // high-risk work and fails all three policies here at once.
+      for (const policy of ['run_latest', 'run_all_with_limit', 'require_confirmation']) {
         const decision = decideMissedRuns(base({ policy, workClass, maxCatchUpRuns: 5 }));
         expect(decision.dispatch, `${workClass}/${policy}`).toEqual([]);
         expect(decision.awaitingConfirmation.map((o) => o.occurrenceId))
@@ -56,10 +56,40 @@ describe('high-risk work outranks every policy', () => {
     },
   );
 
+  it('skip_missed skips EVERY class — holding high-risk work for a confirmation that could run it would make it MORE replayable than read-only', () => {
+    // The inverted posture review caught. The gate guards auto-dispatch;
+    // skip_missed dispatches nothing, so the policy's never-replay wins.
+    const decision = decideMissedRuns(base({ policy: 'skip_missed', workClass: 'financial' }));
+    expect(decision.dispatch).toEqual([]);
+    expect(decision.awaitingConfirmation).toEqual([]);
+    expect(decision.skipped).toHaveLength(3);
+    expect(decision.skipped[0]?.reason).toContain('never replayed');
+  });
+
   it('an UNKNOWN work class cannot prove it is low-risk, so it is held like high-risk', () => {
     const decision = decideMissedRuns(base({ workClass: 'chaos' }));
     expect(decision.dispatch).toEqual([]);
     expect(decision.awaitingConfirmation).toHaveLength(3);
+  });
+
+  it('an unknown class does not MASK a configuration error the known classes surface', () => {
+    const decision = decideMissedRuns(base({ workClass: 'chaos', maxCatchUpAgeMinutes: -5 }));
+    expect(decision.awaitingConfirmation).toEqual([]);
+    expect(decision.skipped[0]?.reason).toContain('positive integer');
+  });
+
+  it('an occurrence whose instant cannot be read is SKIPPED by name, never guessed fresh', () => {
+    // Date.parse('garbage') is NaN; NaN < ageBound is false — the first
+    // version dispatched the unreadable occurrence while age-skipping a
+    // valid old one beside it. Mutation check: dropping the read guard
+    // dispatches occ_bad again.
+    const decision = decideMissedRuns(base({
+      occurrences: [...MISSED, occ('occ_bad', 'garbage')],
+      maxCatchUpAgeMinutes: 90,
+    }));
+    expect(decision.dispatch.map((o) => o.occurrenceId)).toEqual(['occ_c']);
+    const bad = decision.skipped.find((s) => s.occurrenceId === 'occ_bad');
+    expect(bad?.reason).toContain('unreadable is not fresh');
   });
 });
 
