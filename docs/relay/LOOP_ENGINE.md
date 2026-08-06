@@ -256,6 +256,35 @@ worktrees, the coding agent, the prompt architect and the reviewer harness are:
 the CLI boundary permits only the bare `../mission` path, and both surfaces
 must normalize through the same parser rather than each growing their own.
 
+## The background worker
+
+A run's journal, snapshot and lock survive a restart; `loop-worker.ts` is what
+PICKS IT UP. `runLoopWorkerPass` does ONE bounded pass — discover, claim,
+advance, release, report — and returns what it did. It is deliberately not a
+scheduler, a queue or a daemon: the thing that decides how often to run is
+somebody else's decision, which is what makes the pass testable without
+waiting.
+
+Every defect a worker can add is a CLAIM defect, so the pass refuses five ways:
+
+- It never claims a lock a LIVE owner holds, and treats a lock on another host
+  as live — cross-host liveness is unknowable, and reclaiming would run the
+  same iteration twice. An iteration is a paid dispatch.
+- An UNREADABLE lock is not a free one; it may be a live owner mid-write.
+- Every run it looked at appears in the report with why it was skipped. A
+  worker that skips silently is indistinguishable from one with nothing to do —
+  the second is fine, the first is an outage.
+- One bounded pass: at most `maxRuns` claims, at most `maxIterationsPerRun`
+  advances each, and `capacityReached` says whether it stopped early or ran out
+  of work — different facts a caller must be able to tell apart.
+- The lock releases AFTER the engine has journalled. A crash between them
+  leaves a stale lock and a complete journal, which recovery reads; the other
+  order leaves a claimable run whose last iteration is gone.
+
+The engine seam is one function, `LoopAdvanceFn`, bound to the real engine by
+`bindLoopAdvance`. NOT WIRED: nothing schedules a pass yet — no daemon, no cron,
+no CLI verb invokes it. That is the next stage, not a footnote.
+
 ## Observing a run
 
 A drafted Loop and a running one are different questions, and the surfaces

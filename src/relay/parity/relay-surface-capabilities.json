@@ -761,6 +761,8 @@
       ],
       "sharedDomainReferences": [
         "src/relay/mission/loop/runtime/loop-projections.ts",
+        "src/relay/mission/loop/runtime/loop-worker.test.ts",
+        "src/relay/mission/loop/runtime/loop-worker.ts",
         "src/relay/ui/loop/loop-run-view.ts#restorePointFor"
       ],
       "notes": "The WEBSITE half renders the run panel only when a host supplies a port and a store, and no shipped host supplies either \u2014 the website has no operator credential and no browser-session plumbing for Loop routes. What a user reaches today is the panel\u2019s no-session state, which says so. The CLI half is complete: `relay loop status|inspect|history|pause|resume|stop <id>` reach the bridge. Recorded here rather than implied by a \"tested\" status, because a capability that is reachable is not the same claim as a capability that can answer."
