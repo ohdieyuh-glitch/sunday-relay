@@ -5,6 +5,7 @@ import { featureEffectivelyEnabled } from '../src/relay/mission/loop/loop-availa
 import { parseCronExpression } from '../src/relay/mission/loop/cron';
 import type { CronSchedule, CronTickReport } from '../src/relay/mission/loop/cron';
 import type { CronRunBinding } from './cron-service';
+import type { ScheduleReadResult } from '../src/relay/persistence/cron-schedule-node';
 
 /**
  * SUNDAY RELAY — THE CRON TICK ENDPOINT.
@@ -88,6 +89,8 @@ export interface CronTickPort {
     readonly binding: CronRunBinding;
   }): CronTickReport;
   activeRunsFor(loopId: string): number;
+  /** What the durable store says about this schedule. */
+  inspectSchedule(scheduleId: string): ScheduleReadResult;
 }
 
 export interface CronRouteRequest {
@@ -207,33 +210,48 @@ export async function handleCronRoute(
   }
 
   const scheduleId = trimmed(body, 'scheduleId');
-  const cronExpression = trimmed(body, 'cronExpression');
-  const timeZone = trimmed(body, 'timeZone');
   const afterExclusive = trimmed(body, 'afterExclusive');
   const missedPolicy = trimmed(body, 'missedPolicy');
   const workClass = trimmed(body, 'workClass');
   const overlapPolicy = trimmed(body, 'overlapPolicy');
-  const contractVersion = positiveInteger(body, 'contractVersion');
   const maxOccurrences = positiveInteger(body, 'maxOccurrences');
 
   const missing = Object.entries({
-    scheduleId, cronExpression, timeZone, afterExclusive, missedPolicy,
-    workClass, overlapPolicy, contractVersion, maxOccurrences,
+    scheduleId, afterExclusive, missedPolicy, workClass, overlapPolicy, maxOccurrences,
   }).filter(([, value]) => value === null).map(([field]) => field);
   if (missing.length > 0) {
     return err(422, 'validation_failed', `Missing or invalid fields: ${missing.join(', ')}.`);
   }
 
+  // WHAT RUNS COMES FROM THE STORE, NOT THE REQUEST. A caller says WHICH
+  // schedule to tick and over what window; the expression, the timezone, the
+  // contract and the version are the schedule's own, so a request cannot run
+  // one schedule's window under another's rules.
+  const inspected = ticks.inspectSchedule(scheduleId as string);
+  if (inspected.kind === 'missing') {
+    return err(404, 'schedule_not_found',
+      `No schedule named ${safeText(scheduleId)} exists. A tick runs a stored schedule; it does not `
+      + 'accept one in the request.');
+  }
+  if (inspected.kind === 'corrupt') {
+    return err(409, 'schedule_corrupt', safeText(inspected.problem));
+  }
+  if (inspected.record.paused) {
+    return err(409, 'schedule_paused',
+      `${safeText(scheduleId)} is paused. A paused schedule is not evaluated, and nothing was `
+      + 'claimed or created.');
+  }
+  const head = inspected.record.history[inspected.record.history.length - 1] as
+    (typeof inspected.record.history)[number];
+
   const binding = (body as Record<string, unknown>).binding;
   const projectId = trimmed(binding, 'projectId');
   const loopId = trimmed(binding, 'loopId');
-  const contractRef = trimmed(binding, 'contractRef');
-  const contractBindingDigest = trimmed(binding, 'contractBindingDigest');
   const workspaceIdRaw = binding !== null && typeof binding === 'object'
     ? (binding as Record<string, unknown>).workspaceId : undefined;
   const workspaceId = typeof workspaceIdRaw === 'string' && workspaceIdRaw.trim() !== ''
     ? workspaceIdRaw.trim() : null;
-  const missingBinding = Object.entries({ projectId, loopId, contractRef, contractBindingDigest })
+  const missingBinding = Object.entries({ projectId, loopId })
     .filter(([, value]) => value === null).map(([field]) => `binding.${field}`);
   if (missingBinding.length > 0) {
     return err(422, 'validation_failed', `Missing or invalid fields: ${missingBinding.join(', ')}.`);
@@ -255,7 +273,9 @@ export async function handleCronRoute(
     );
   }
 
-  if (!IANA_ZONE.test(timeZone as string)) {
+  const timeZone = head.timeZone;
+  const cronExpression = head.cronExpression;
+  if (!IANA_ZONE.test(timeZone)) {
     return err(
       422, 'validation_failed',
       `"${safeText(timeZone)}" is not an IANA timezone name. A recurring schedule needs a zone `
@@ -264,7 +284,7 @@ export async function handleCronRoute(
     );
   }
 
-  const parsed = parseCronExpression(cronExpression as string);
+  const parsed = parseCronExpression(cronExpression);
   if (!parsed.ok) return err(422, 'validation_failed', safeText(parsed.problem));
 
   // THE WINDOW MAY ONLY REACH THE PRESENT. Clamping to the server clock is
@@ -276,9 +296,9 @@ export async function handleCronRoute(
     evaluatedAt: request.now,
     evaluation: {
       schedule: parsed.schedule,
-      timeZone: timeZone as string,
+      timeZone,
       scheduleId: scheduleId as string,
-      contractVersion: contractVersion as number,
+      contractVersion: head.version,
       afterExclusive: afterExclusive as string,
       untilInclusive,
       maxOccurrences: maxOccurrences as number,
@@ -308,8 +328,8 @@ export async function handleCronRoute(
       projectId: projectId as string,
       workspaceId,
       loopId: loopId as string,
-      contractRef: contractRef as string,
-      contractBindingDigest: contractBindingDigest as string,
+      contractRef: head.contractRef,
+      contractBindingDigest: head.contractBindingDigest,
     },
   });
 
@@ -322,6 +342,7 @@ export async function handleCronRoute(
 
   return ok({
     scheduleId,
+    contractVersion: head.version,
     evaluatedAt: request.now,
     window: { afterExclusive, untilInclusive },
     truncated: report.truncated,
