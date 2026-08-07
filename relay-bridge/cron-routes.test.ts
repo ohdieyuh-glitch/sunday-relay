@@ -358,15 +358,17 @@ describe('what the endpoint refuses to promise', () => {
       .toBe('2026-08-06T12:00:00.000Z');
   });
 
-  it('a bare UTC offset is not an IANA zone — Intl would have accepted it', async () => {
+  it('a bare UTC offset does not name a place — Intl would have accepted it', async () => {
     // The rule is CRON_LOOPS.md's, and it needs its own check: Intl accepts
     // "+05:30" happily, so without this the doc rule was unenforced. A fixed
-    // offset cannot express daylight saving.
+    // offset cannot express daylight saving. The message says Area/Location
+    // rather than "not an IANA timezone name", which was false: `Japan` and
+    // `EST` ARE IANA names, and this check refuses them for lacking a slash.
     for (const [i, timeZone] of ['+05:30', '-08:00', 'GMT+2'].entries()) {
       service.schedules.create(`sched-tz${i}`, { ...STORED, timeZone });
       const result = await call({ ...BODY, scheduleId: `sched-tz${i}` });
       expect(result?.status, timeZone).toBe(422);
-      expect(errorOf(result).message).toContain('not an IANA timezone name');
+      expect(errorOf(result).message).toContain('not an Area/Location timezone name');
     }
     expect(existsSync(occurrenceDir())).toBe(false);
   });
@@ -582,7 +584,7 @@ describe('an operator can create, list and pause a schedule', () => {
     expect(errorOf(badCron).message).toContain('is not a minute value');
     const badZone = await call({ ...CREATE, timeZone: '+05:30' }, { path: '/cron/schedules' });
     expect(badZone?.status).toBe(422);
-    expect(errorOf(badZone).message).toContain('not an IANA timezone name');
+    expect(errorOf(badZone).message).toContain('not an Area/Location timezone name');
     expect(service.schedules.list()).toEqual(['sched-triage']);
   });
 
@@ -606,7 +608,12 @@ describe('an operator can create, list and pause a schedule', () => {
     // Every spelling Intl accepts, because the refusal tests the CANONICAL
     // name: a case-sensitive pattern over the raw string refused one spelling
     // and stored the identical zone under another.
-    for (const timeZone of ['Etc/GMT+5', 'etc/gmt+5', 'ETC/GMT+5', 'Etc/GMT-14']) {
+    // SystemV/* are equally fixed and were missed entirely by the pattern the
+    // rule used to be — which is why the rule is now ICU's own list of places.
+    for (const timeZone of [
+      'Etc/GMT+5', 'etc/gmt+5', 'ETC/GMT+5', 'Etc/GMT-14',
+      'SystemV/EST5', 'SystemV/PST8', 'systemv/mst7',
+    ]) {
       const offset = await call({ ...CREATE, timeZone }, { path: '/cron/schedules' });
       expect(offset?.status, timeZone).toBe(422);
       expect(errorOf(offset).message, timeZone).toContain('fixed offset');
@@ -631,6 +638,10 @@ describe('an operator can create, list and pause a schedule', () => {
     const ticked = await call({ ...BODY, scheduleId: 'sched-drift' });
     expect(ticked?.status).toBe(422);
     expect(errorOf(ticked).message).toContain('fixed offset');
+    // Refused BEFORE anything is claimed. Without this the check could later
+    // drift below the claim loop and still satisfy the assertions above, which
+    // is the one way this repair regresses silently.
+    expect(existsSync(occurrenceDir())).toBe(false);
   });
 
   it('refuses an unusable schedule id as a validation failure, not a conflict', async () => {

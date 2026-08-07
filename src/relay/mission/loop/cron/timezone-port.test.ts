@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createIntlTimezonePort } from './timezone-port';
+import { createIntlTimezonePort, resolvedZoneName, zoneNamesAPlace } from './timezone-port';
 
 /**
  * THE INTL ADAPTER, against real zone data.
@@ -68,5 +68,55 @@ describe('localMinuteOf', () => {
   it('truncates seconds — cron is minute-resolution', () => {
     expect(port.localMinuteOf('2026-08-06T19:00:59.999Z', LA))
       .toEqual({ year: 2026, month: 8, dayOfMonth: 6, hour: 12, minute: 0 });
+  });
+});
+
+/**
+ * THE PLACE CHECK, at its own layer.
+ *
+ * This lived only in a bridge test, which meant the property the whole
+ * fixed-offset refusal rests on — that ICU folds case and aliases on lookup,
+ * and omits fixed-offset pseudo-zones from its list of real locations — was
+ * asserted nowhere in the domain that owns it.
+ */
+describe('a zone that names a place, versus a fixed offset wearing a zone name', () => {
+  it('resolves case variants and aliases to the same zone', () => {
+    expect(resolvedZoneName('etc/gmt+5')).toBe('Etc/GMT+5');
+    expect(resolvedZoneName('ETC/GMT+5')).toBe('Etc/GMT+5');
+    expect(resolvedZoneName('Japan')).toBe('Asia/Tokyo');
+    expect(resolvedZoneName('Not/AZone')).toBeNull();
+  });
+
+  it('does NOT promise the IANA canonical name', () => {
+    // ICU answers with the CLDR id, which for these is the LEGACY name — the
+    // opposite of the IANA canonical one. Pinned so nobody later trusts this
+    // to normalize a zone for storage or equality.
+    expect(resolvedZoneName('Asia/Kolkata')).toBe('Asia/Calcutta');
+    expect(resolvedZoneName('Europe/Kyiv')).toBe('Europe/Kiev');
+  });
+
+  it('refuses every fixed-offset family, whatever the spelling', () => {
+    for (const zone of [
+      'Etc/GMT+5', 'etc/gmt+5', 'ETC/GMT+5', 'Etc/GMT-14',
+      'SystemV/EST5', 'SystemV/PST8', 'systemv/mst7',
+    ]) {
+      expect(zoneNamesAPlace(zone), zone).toBe(false);
+    }
+  });
+
+  it('accepts real places, including ones with no daylight saving at all', () => {
+    // The tempting rule — "refuse any zone whose offset never changes" —
+    // would refuse every one of these. A place without DST is still a place.
+    for (const zone of [
+      'America/Los_Angeles', 'Asia/Tokyo', 'Pacific/Honolulu', 'Asia/Kathmandu',
+      'Australia/Lord_Howe', 'Asia/Kolkata', 'Japan', 'US/Pacific', 'UTC',
+    ]) {
+      expect(zoneNamesAPlace(zone), zone).toBe(true);
+    }
+  });
+
+  it('refuses a zone nothing can resolve', () => {
+    expect(zoneNamesAPlace('America/Atlantis')).toBe(false);
+    expect(zoneNamesAPlace('')).toBe(false);
   });
 });

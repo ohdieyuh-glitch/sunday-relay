@@ -108,8 +108,10 @@ export interface CronTickPort {
   /** What the durable store says about this schedule. */
   inspectSchedule(scheduleId: string): ScheduleReadResult;
   listSchedules(): CronScheduleListingPage;
-  /** The zone's canonical IANA name, or null when nothing can resolve it. */
-  canonicalZone(timeZone: string): string | null;
+  /** What ICU resolves this zone to, or null when nothing can. */
+  resolveZone(timeZone: string): string | null;
+  /** Whether the zone names a place rather than a fixed offset. */
+  zoneNamesAPlace(timeZone: string): boolean;
   createSchedule(
     scheduleId: string, first: CronContractVersion,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
@@ -123,20 +125,27 @@ export interface CronTickPort {
  *
  * `Etc/GMT+5` is a REAL, resolvable zone and a fixed offset at once, so it
  * satisfied both the pattern and the evaluator while being exactly what the
- * non-IANA refusal says is not allowed. The test is on the CANONICAL name,
- * never the caller's spelling: Intl resolves `etc/gmt+5` and `ETC/GMT+5` to
- * the same zone, and a pattern over the raw string refused one spelling while
- * accepting the others — measured in review as a live bypass.
+ * non-IANA refusal says is not allowed.
+ *
+ * THE RULE IS NO LONGER A PATTERN. Two successive attempts to enumerate this
+ * by regex were each one family behind: the first missed every case variant,
+ * the second refused `Etc/GMT±N` while all seven `SystemV/*` zones — equally
+ * fixed, equally drifting — walked past. `zoneNamesAPlace` asks ICU's own list
+ * of real locations instead, which decides the class rather than the instance
+ * and folds case and aliases on the way.
  *
  * Applied at CREATION and at the TICK. A schedule created before this rule, or
  * written straight into the store, would otherwise run under a zone the tick's
  * own refusal text says it will not run.
  */
-const FIXED_OFFSET_ZONE = /^Etc\/GMT[+-]\d{1,2}$/u;
-
-function refuseFixedOffsetZone(canonical: string, asWritten: string): ReviewerRouteResult | null {
-  if (!FIXED_OFFSET_ZONE.test(canonical)) return null;
-  const named = canonical === asWritten ? `"${safeText(asWritten)}"` : `"${safeText(asWritten)}" (${safeText(canonical)})`;
+function refuseFixedOffsetZone(
+  ticks: CronTickPort, asWritten: string,
+): ReviewerRouteResult | null {
+  if (ticks.zoneNamesAPlace(asWritten)) return null;
+  const resolved = ticks.resolveZone(asWritten);
+  const named = resolved === null || resolved === asWritten
+    ? `"${safeText(asWritten)}"`
+    : `"${safeText(asWritten)}" (${safeText(resolved)})`;
   return err(422, 'validation_failed',
     `${named} names a fixed offset, not a place. A recurring schedule needs a zone whose `
     + 'daylight-saving rules can change with it.');
@@ -180,8 +189,9 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   }
   if (!IANA_ZONE.test(timeZone as string)) {
     return err(422, 'validation_failed',
-      `"${safeText(timeZone)}" is not an IANA timezone name. A recurring schedule needs a zone, `
-      + 'not a fixed offset: an offset cannot express daylight saving.');
+      `"${safeText(timeZone)}" is not an Area/Location timezone name. A recurring schedule needs a `
+      + 'zone naming a place, such as "America/Los_Angeles" — not a fixed offset, which cannot '
+      + 'express daylight saving.');
   }
   // SHAPE IS NOT EXISTENCE. `America/Atlantis` satisfies the pattern and no
   // evaluator can resolve it, so accepting it stored a schedule whose every
@@ -189,13 +199,12 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   // delete route, that id was burned permanently. Resolvability is asked
   // FIRST so a string naming nothing is told it names nothing, rather than
   // being handed the diagnosis for a different problem.
-  const canonical = ticks.canonicalZone(timeZone as string);
-  if (canonical === null) {
+  if (ticks.resolveZone(timeZone as string) === null) {
     return err(422, 'validation_failed',
       `"${safeText(timeZone)}" is IANA-shaped but this server's timezone evaluator cannot resolve `
       + 'it. A schedule that could never be evaluated is not stored.');
   }
-  const offsetRefusal = refuseFixedOffsetZone(canonical, timeZone as string);
+  const offsetRefusal = refuseFixedOffsetZone(ticks, timeZone as string);
   if (offsetRefusal !== null) return offsetRefusal;
   const parsed = parseCronExpression(cronExpression as string);
   if (!parsed.ok) return err(422, 'validation_failed', safeText(parsed.problem));
@@ -516,9 +525,10 @@ export async function handleCronRoute(
   if (!IANA_ZONE.test(timeZone)) {
     return err(
       422, 'validation_failed',
-      `"${safeText(timeZone)}" is not an IANA timezone name. A recurring schedule needs a zone `
-      + '(for example "America/Los_Angeles"), not a fixed offset: an offset cannot express '
-      + 'daylight saving, so the schedule would drift an hour against the wall clock twice a year.',
+      `"${safeText(timeZone)}" is not an Area/Location timezone name. A recurring schedule needs `
+      + 'a zone naming a place (for example "America/Los_Angeles"), not a fixed offset: an offset '
+      + 'cannot express daylight saving, so the schedule would drift an hour against the wall '
+      + 'clock twice a year.',
     );
   }
   // AND THE REFUSAL ABOVE IS NOW TRUE. It promised that a fixed offset is not
@@ -526,9 +536,8 @@ export async function handleCronRoute(
   // before creation learned to refuse these, or written straight into the
   // store, is refused HERE rather than drifting an hour twice a year under a
   // rule the same message claims to enforce.
-  const canonicalStored = ticks.canonicalZone(timeZone);
-  if (canonicalStored !== null) {
-    const offsetRefusal = refuseFixedOffsetZone(canonicalStored, timeZone);
+  if (ticks.resolveZone(timeZone) !== null) {
+    const offsetRefusal = refuseFixedOffsetZone(ticks, timeZone);
     if (offsetRefusal !== null) return offsetRefusal;
   }
 

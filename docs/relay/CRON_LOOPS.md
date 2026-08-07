@@ -421,7 +421,9 @@ endpoint (create, list and pause are exposed; editing is store-only) · **a
 schedule that pins its own binding**, so a stored schedule can still be ticked
 into any project and Loop the caller names, and the claim marker that makes a
 replay free protects a (schedule, binding) pair rather than the schedule ·
-schedule DELETION, so an unusable schedule can only be paused · listing
+schedule DELETION, so an unusable schedule can only be paused — and since the
+tick now refuses a fixed-offset zone, a schedule stored with one before that
+rule existed is permanently un-tickable and can only be paused · listing
 PAGINATION: the listing replays at most 200 schedules and reports `truncated`
 truthfully, but nothing can reach schedule 201, so with more than 200 stored
 an operator cannot learn whether the ones past the cap are paused or corrupt ·

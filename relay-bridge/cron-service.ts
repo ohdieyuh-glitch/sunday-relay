@@ -9,7 +9,7 @@ import {
   type LoopOperationDeps,
 } from '../src/relay/mission/loop/runtime';
 import {
-  canonicalIanaZone, createIntlTimezonePort, runCronTick,
+  createIntlTimezonePort, resolvedZoneName, runCronTick, zoneNamesAPlace,
   type CronRunCreationPort, type CronTickInput, type CronTickReport,
 } from '../src/relay/mission/loop/cron';
 
@@ -100,11 +100,12 @@ export interface CronTickService {
    *  the store separates `inspect` from `list` precisely because that
    *  difference is the thing an operator needs to see. */
   listSchedules(): CronScheduleListingPage;
-  /** The zone's CANONICAL name, or null when no evaluator can resolve it. An
-   *  IANA-SHAPED string is not an IANA zone: `America/Atlantis` matches the
-   *  pattern and nothing can resolve it. Callers test the canonical name
-   *  because Intl accepts case variants and aliases of the same zone. */
-  canonicalZone(timeZone: string): string | null;
+  /** What ICU resolves this zone to, or null when nothing can. An IANA-SHAPED
+   *  string is not an IANA zone: `America/Atlantis` matches the pattern and
+   *  nothing resolves it. */
+  resolveZone(timeZone: string): string | null;
+  /** Whether the zone names a place rather than a fixed offset. */
+  zoneNamesAPlace(timeZone: string): boolean;
   createSchedule(
     scheduleId: string, first: CronContractVersion,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
@@ -251,7 +252,8 @@ export function createCronTickService(options: {
         }),
       };
     },
-    canonicalZone: (timeZone) => canonicalIanaZone(timeZone),
+    resolveZone: (timeZone) => resolvedZoneName(timeZone),
+    zoneNamesAPlace: (timeZone) => zoneNamesAPlace(timeZone),
     createSchedule: (scheduleId, first) => {
       const result = schedules.create(scheduleId, first);
       return result.ok ? { ok: true } : { ok: false, problem: result.problem };

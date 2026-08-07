@@ -92,6 +92,75 @@ const sameMinute = (a: CronLocalMinute, b: CronLocalMinute): boolean =>
   && a.hour === b.hour && a.minute === b.minute;
 
 /**
+ * The name ICU RESOLVES this zone to, or `null` when nothing can resolve it.
+ *
+ * NOT "the IANA canonical name", which is what an earlier version of this
+ * comment claimed. ICU answers with the CLDR id, which for several zones is
+ * the legacy name and the opposite of the IANA canonical one:
+ * `Asia/Kolkata` resolves to `Asia/Calcutta`, `Europe/Kyiv` to `Europe/Kiev`,
+ * `America/Nuuk` to `America/Godthab`. Do not use this to normalize a zone for
+ * storage or equality — it is a LOOKUP KEY, useful because the resolution
+ * folds case and aliases: `etc/gmt+5` and `ETC/GMT+5` both land on
+ * `Etc/GMT+5`, so a rule about a family of zones must be applied here rather
+ * than to the caller's spelling.
+ */
+export function resolvedZoneName(timeZone: string): string | null {
+  const cached = resolvedNames.get(timeZone);
+  if (cached !== undefined) return cached;
+  let resolved: string | null;
+  try {
+    resolved = new Intl.DateTimeFormat('en-US', { timeZone }).resolvedOptions().timeZone;
+  } catch {
+    resolved = null;
+  }
+  resolvedNames.set(timeZone, resolved);
+  return resolved;
+}
+
+/** Same rule as `formatters` above: building these is expensive and pure to
+ *  reuse, and this module already said so about its other Intl objects. */
+const resolvedNames = new Map<string, string | null>();
+
+/**
+ * Does this name a PLACE, rather than a fixed offset wearing a zone's name?
+ *
+ * `Etc/GMT+5` and `SystemV/EST5` are resolvable zones whose offset can never
+ * change, so a schedule on one drifts against its author's wall clock forever.
+ * Enumerating those families by pattern is how the rule stayed one prefix
+ * behind reality — `Etc/GMT±N` was refused while all seven `SystemV/*` zones
+ * walked past it.
+ *
+ * `Intl.supportedValuesOf('timeZone')` is ICU's OWN list of real locations,
+ * and it excludes both families while including every genuine place and
+ * resolving aliases correctly (`Japan` → `Asia/Tokyo`, `EST` →
+ * `America/Panama`). Asking it decides the CLASS instead of chasing instances.
+ *
+ * `UTC` is admitted deliberately: it is absent from that list because it names
+ * no location, and it is nonetheless the one offset a recurring schedule may
+ * legitimately choose — a Loop that means "midnight UTC" is not drifting.
+ *
+ * FAILS CLOSED. Where `Intl.supportedValuesOf` is unavailable the set is empty
+ * and every zone but `UTC` is refused. That is loud and immediately visible,
+ * which is the right direction for a guard that decides what runs unattended.
+ */
+export function zoneNamesAPlace(timeZone: string): boolean {
+  const resolved = resolvedZoneName(timeZone);
+  if (resolved === null) return false;
+  if (resolved === 'UTC') return true;
+  return supportedZones().has(resolved);
+}
+
+let supported: Set<string> | null = null;
+function supportedZones(): Set<string> {
+  if (supported !== null) return supported;
+  const values = typeof Intl.supportedValuesOf === 'function'
+    ? Intl.supportedValuesOf('timeZone')
+    : [];
+  supported = new Set(values);
+  return supported;
+}
+
+/**
  * The Intl-backed adapter.
  *
  * Candidate instants come from the zone's plausible offsets around the
@@ -100,24 +169,6 @@ const sameMinute = (a: CronLocalMinute, b: CronLocalMinute): boolean =>
  * proposes, the round-trip disposes. Zero verified candidates IS the
  * spring-forward answer, two the fall-back one.
  */
-/**
- * The zone's CANONICAL IANA name, or `null` when nothing can resolve it.
- *
- * A surface that wants to refuse a family of zones must test this, never the
- * caller's spelling. Intl resolves zone names case-insensitively and through
- * aliases, so `etc/gmt+5` and `ETC/GMT+5` both canonicalize to `Etc/GMT+5` —
- * a pattern matched against the raw string refuses one spelling of a zone and
- * accepts the same zone spelled differently, which review measured as a live
- * bypass of exactly such a refusal.
- */
-export function canonicalIanaZone(timeZone: string): string | null {
-  try {
-    return new Intl.DateTimeFormat('en-US', { timeZone }).resolvedOptions().timeZone;
-  } catch {
-    return null;
-  }
-}
-
 export function createIntlTimezonePort(): TimezonePort {
   const offsetAt = (utcMs: number, timeZone: string): number | null => {
     const local = localPartsAt(utcMs, timeZone);
