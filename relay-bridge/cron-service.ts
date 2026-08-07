@@ -3,7 +3,12 @@ import { createCronClaimNodePort } from '../src/relay/persistence/cron-claim-nod
 import {
   createCronScheduleStore, type CronScheduleStore, type ScheduleReadResult,
 } from '../src/relay/persistence/cron-schedule-node';
-import type { CronContractVersion } from '../src/relay/mission/loop/cron/cron-versioning';
+import {
+  VERSIONED_CONTRACT_FIELDS,
+} from '../src/relay/mission/loop/cron/cron-versioning';
+import type {
+  CronContractVersion, VersionedRun,
+} from '../src/relay/mission/loop/cron/cron-versioning';
 import {
   confirmLoopRun, emptyLoopBudget, loopDigest, loopRunIsActive, readLoopRun,
   type LoopOperationDeps,
@@ -88,6 +93,12 @@ export interface CronTickService {
   createSchedule(
     scheduleId: string, first: CronContractVersion,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+  editSchedule(
+    scheduleId: string,
+    proposed: Omit<CronContractVersion, 'version'>,
+    runs: readonly VersionedRun[],
+  ): { readonly ok: true; readonly version: number; readonly changed: readonly string[] }
+    | { readonly ok: false; readonly problem: string };
   setSchedulePaused(
     scheduleId: string, paused: boolean, at: string,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
@@ -240,6 +251,27 @@ export function createCronTickService(options: {
     setSchedulePaused: (scheduleId, paused, at) => {
       const result = schedules.setPaused(scheduleId, paused, at);
       return result.ok ? { ok: true } : { ok: false, problem: result.problem };
+    },
+    editSchedule: (scheduleId, proposed, runs) => {
+      const result = schedules.edit(scheduleId, proposed, runs);
+      if (!result.ok) return { ok: false, problem: result.problem };
+      // WHAT ACTUALLY LANDED, diffed from the returned history. Asking
+      // `planScheduleEdit` a second time out here would answer about a head
+      // read OUTSIDE the write lock: another writer appending between the two
+      // makes the report describe an edit that did not happen — and a
+      // `no_change` out here beside a success in there would answer 200 saying
+      // the new version changed nothing, a state the store guarantees cannot
+      // exist.
+      const appended = [...result.value.history].sort((a, b) => a.version - b.version);
+      const head = appended[appended.length - 1];
+      const previous = appended[appended.length - 2];
+      const changed = head === undefined || previous === undefined
+        ? []
+        // THE PLANNER'S OWN LIST, not a copy of it: a field added to one and
+        // not the other would be changed by an edit this response calls a
+        // change to nothing.
+        : VERSIONED_CONTRACT_FIELDS.filter((field) => head[field] !== previous[field]);
+      return { ok: true, version: head?.version ?? 0, changed };
     },
     activeRunsFor,
     // THE OCCURRENCE IDENTITY'S FIRST TERM IS THE SCHEDULE ID ITSELF. The

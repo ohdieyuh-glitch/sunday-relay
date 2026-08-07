@@ -10,7 +10,9 @@ import type { CronSchedule, CronTickReport } from '../src/relay/mission/loop/cro
 import type { CronRunBinding, CronScheduleListingPage } from './cron-service';
 import type { ZonePlaceVerdict } from '../src/relay/mission/loop/cron';
 import type { ScheduleReadResult } from '../src/relay/persistence/cron-schedule-node';
-import type { CronContractVersion } from '../src/relay/mission/loop/cron/cron-versioning';
+import type {
+  CronContractVersion, VersionedRun,
+} from '../src/relay/mission/loop/cron/cron-versioning';
 
 /**
  * SUNDAY RELAY — THE CRON ENDPOINTS.
@@ -120,6 +122,12 @@ export interface CronTickPort {
   setSchedulePaused(
     scheduleId: string, paused: boolean, at: string,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+  editSchedule(
+    scheduleId: string,
+    proposed: Omit<CronContractVersion, 'version'>,
+    runs: readonly VersionedRun[],
+  ): { readonly ok: true; readonly version: number; readonly changed: readonly string[] }
+    | { readonly ok: false; readonly problem: string };
 }
 
 /**
@@ -181,10 +189,33 @@ function requireAuthorization(body: unknown, what: string): ReviewerRouteResult 
   );
 }
 
-function createSchedule(request: CronRouteRequest, ticks: CronTickPort): ReviewerRouteResult {
-  const refusal = requireAuthorization(request.body, 'Creating a schedule');
-  if (refusal !== null) return refusal;
+/**
+ * The contract fields a create or an EDIT proposes, validated once.
+ *
+ * ONE READER FOR BOTH SURFACES. Every divergence this file has shipped came
+ * from a rule that lived on one path: the binding required at create and
+ * ignored at the tick, `contractRef` refused in one place and swallowed in
+ * another, a workspace rule the store enforced and the route did not. An edit
+ * that validated separately would be the fourth.
+ *
+ * `version` and `authoredAt` are NOT here: the store derives the first and the
+ * server clocks the second, on both paths.
+ */
+interface ProposedContract {
+  readonly scheduleId: string;
+  readonly projectId: string;
+  readonly workspaceId: string | null;
+  readonly loopId: string;
+  readonly cronExpression: string;
+  readonly timeZone: string;
+  readonly contractRef: string;
+  readonly contractBindingDigest: string;
+  readonly authoredBy: string;
+}
 
+function readProposedContract(
+  request: CronRouteRequest, ticks: CronTickPort, what: 'create' | 'edit',
+): ProposedContract | ReviewerRouteResult {
   const body = request.body;
   const scheduleId = trimmed(body, 'scheduleId');
   const cronExpression = trimmed(body, 'cronExpression');
@@ -214,10 +245,9 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   }
   // SHAPE IS NOT EXISTENCE. `America/Atlantis` satisfies the pattern and no
   // evaluator can resolve it, so accepting it stored a schedule whose every
-  // future tick fails `unknown_timezone` — and with editing store-only and no
-  // delete route, that id was burned permanently. Resolvability is asked
-  // FIRST so a string naming nothing is told it names nothing, rather than
-  // being handed the diagnosis for a different problem.
+  // future tick fails `unknown_timezone`. Resolvability is asked FIRST so a
+  // string naming nothing is told it names nothing, rather than being handed
+  // the diagnosis for a different problem.
   const zoneRefusal = refuseZoneThatNamesNoPlace(ticks, timeZone as string);
   if (zoneRefusal !== null) return zoneRefusal;
   const parsed = parseCronExpression(cronExpression as string);
@@ -227,21 +257,21 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   // field this route decides has the wrong model of it, and ignoring the field
   // silently lets them believe it took effect: `paused: true` was accepted,
   // discarded, and answered with a success for an ACTIVE schedule.
-  // `contractVersion` is the name the tick uses for `version`, and a caller who
-  // reaches for it deserves the same answer. `binding` is NOT refused any more:
-  // a schedule now pins what its runs belong to, so creation is exactly where
-  // it has to be given.
+  // `contractVersion` is the name the tick uses for `version`.
   const decided = ['version', 'contractVersion', 'authoredAt', 'paused']
     .filter((f) => (body as Record<string, unknown>)[f] !== undefined);
   if (decided.length > 0) {
     return err(422, 'field_not_accepted',
       `${decided.join(', ')} ${decided.length === 1 ? 'is' : 'are'} decided by this server, not by `
-      + 'the request. A new schedule is version 1, authored now, and active.');
+      + `the request. ${what === 'create'
+        ? 'A new schedule is version 1, authored now, and active.'
+        : 'An edit appends the next version, authored now, and never changes whether the '
+          + 'schedule is paused.'}`);
   }
 
-  // THE BINDING IS REQUIRED HERE, because it is what the occurrence claim is
-  // keyed on. A schedule without one could be ticked into any project and Loop
-  // a caller named, which is the hole this closes.
+  // THE BINDING IS REQUIRED, because it is what the runs are attributed
+  // through. A schedule without one could be ticked into any project and Loop
+  // a caller named, which is the hole it closes.
   const bindingBody = (body as Record<string, unknown>).binding;
   const projectId = trimmed(bindingBody, 'projectId');
   const loopId = trimmed(bindingBody, 'loopId');
@@ -252,16 +282,11 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   if (missingBinding.length > 0) {
     return err(422, 'validation_failed', `Missing or invalid fields: ${missingBinding.join(', ')}.`);
   }
-  // THE TWO FIELDS THE TICK ALSO NAMES. `contractRef` and
-  // `contractBindingDigest` are given at the top level, so ones sent INSIDE
-  // `binding` were read by nobody and answered with a success — a field
-  // accepted, discarded and reported as stored, which is what this route
-  // refuses twenty lines above. Creation and the tick disagreeing about what
-  // "the binding" contains is how the next reader learns the wrong shape.
-  //
+  // `contractRef` and `contractBindingDigest` are given at the top level, so
+  // ones sent INSIDE `binding` were read by nobody and answered with a success.
   // BY NAME, NOT BY CATEGORY, on both surfaces: an unrecognised key inside
-  // `binding` is still discarded silently here and at the tick. The two agree
-  // now; neither is exhaustive.
+  // `binding` is still discarded silently here and at the tick. The two agree;
+  // neither is exhaustive.
   const contractInBinding = ['contractRef', 'contractBindingDigest']
     .filter((f) => bindingBody !== null && typeof bindingBody === 'object'
       && (bindingBody as Record<string, unknown>)[f] !== undefined);
@@ -273,10 +298,6 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
 
   // STATED EXPLICITLY MEANS STATED. A project-level schedule has no workspace,
   // and `null` is how it says so — absent is not, and a blank string is not.
-  // A blank was already refused; ABSENT was accepted and normalised to `null`,
-  // which the store refuses outright — two rules for one field, and the message
-  // here already promised the stricter one.
-  //
   // Each shape is told what IT did, not what some other caller might have done.
   if (workspaceRaw === undefined) {
     return err(422, 'validation_failed',
@@ -292,23 +313,40 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
       'binding.workspaceId must name a workspace or be null, stated explicitly. A blank string '
       + 'names no workspace and is not a way to say there is none.');
   }
-  const workspaceId = typeof workspaceRaw === 'string' ? workspaceRaw.trim() : null;
-  const created = ticks.createSchedule(scheduleId as string, {
-    version: 1,
+
+  return {
+    scheduleId: scheduleId as string,
     projectId: projectId as string,
-    workspaceId,
+    workspaceId: typeof workspaceRaw === 'string' ? workspaceRaw.trim() : null,
     loopId: loopId as string,
     cronExpression: cronExpression as string,
     timeZone: timeZone as string,
     contractRef: contractRef as string,
     contractBindingDigest: contractBindingDigest as string,
-    // A CALLER-DECLARED LABEL, not an authenticated identity. There is one
-    // operator credential, so binding this to the principal would say less
-    // than the label does — but a later reader of `history[0].authoredBy`
-    // must not mistake it for proof of who acted.
     authoredBy: authoredBy as string,
-    // THE SERVER'S CLOCK. A caller does not get to say when it authored
-    // something: the authoring instant now bounds which moments a version may
+  };
+}
+
+const isRefusal = (v: ProposedContract | ReviewerRouteResult): v is ReviewerRouteResult =>
+  'status' in v;
+
+function createSchedule(request: CronRouteRequest, ticks: CronTickPort): ReviewerRouteResult {
+  const refusal = requireAuthorization(request.body, 'Creating a schedule');
+  if (refusal !== null) return refusal;
+  const proposed = readProposedContract(request, ticks, 'create');
+  if (isRefusal(proposed)) return proposed;
+  const { scheduleId } = proposed;
+  const { scheduleId: _id, ...contract } = proposed;
+  const created = ticks.createSchedule(scheduleId, {
+    version: 1,
+    ...contract,
+    // `authoredBy` is A CALLER-DECLARED LABEL, not an authenticated identity.
+    // There is one operator credential, so binding it to the principal would
+    // say less than the label does — but a later reader of
+    // `history[0].authoredBy` must not mistake it for proof of who acted.
+    //
+    // THE AUTHORING INSTANT IS THE SERVER'S. A caller does not get to say when
+    // it authored something: that instant bounds which moments a version may
     // own, so accepting it from the body would hand back the replay the tick
     // clamps against.
     authoredAt: request.now,
@@ -321,6 +359,92 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
     note: 'The schedule is stored and active. Nothing runs it: there is no timer, and a tick must '
       + 'be requested by an operator. A tick window is clamped to this authoring instant, so no '
       + 'occurrence before it can ever run.',
+  });
+}
+
+/**
+ * An EDIT appends a version; it never rewrites one and never runs anything.
+ *
+ * The whole decision is `planScheduleEdit`, which this route does not
+ * reimplement: it refuses an edit that changes nothing, one that would orphan
+ * a run citing a version the history lacks, and it reports the ACTIVE runs the
+ * change must not disturb. What the route adds is the same validation a create
+ * gets — from the same reader, so the two cannot drift — plus the server's
+ * clock for the authoring instant.
+ *
+ * PAUSING IS NOT AN EDIT and cannot be reached through here: `paused` is on the
+ * refused-field list, so an operator who wants a schedule stopped uses the
+ * control that stops it rather than one that appends a version.
+ */
+function editSchedule(
+  request: CronRouteRequest, ticks: CronTickPort, rawId: string,
+): ReviewerRouteResult {
+  const refusal = requireAuthorization(request.body, 'Editing a schedule');
+  if (refusal !== null) return refusal;
+  const scheduleId = decodeSegment(rawId);
+  if (scheduleId === null) {
+    return err(422, 'validation_failed', 'The schedule id is not a usable path segment.');
+  }
+  if (!isUsableScheduleId(scheduleId)) {
+    return err(422, 'validation_failed',
+      `"${safeText(scheduleId)}" cannot name a schedule: 1-64 characters, letters, digits, `
+      + 'underscore and hyphen, starting with a letter or digit.');
+  }
+  const proposed = readProposedContract(request, ticks, 'edit');
+  if (isRefusal(proposed)) return proposed;
+  // THE PATH NAMES THE SCHEDULE. A body that names a different one is refused
+  // rather than silently ignored or silently obeyed — either would edit a
+  // schedule the caller did not address.
+  if (proposed.scheduleId !== scheduleId) {
+    return err(422, 'validation_failed',
+      `The path names ${safeText(scheduleId)} and the body names ${safeText(proposed.scheduleId)}. `
+      + 'An edit changes the schedule in the path.');
+  }
+
+  // INSPECT BEFORE WRITING, exactly as the tick and pause do: missing is 404,
+  // corrupt is 409, and neither is a lock problem.
+  const inspected = ticks.inspectSchedule(scheduleId);
+  if (inspected.kind === 'missing') {
+    return err(404, 'schedule_not_found',
+      `No schedule named ${safeText(scheduleId)} exists. Nothing was edited.`);
+  }
+  if (inspected.kind === 'corrupt') {
+    return err(409, 'schedule_corrupt', safeText(inspected.problem));
+  }
+
+  // NO RUN LIST, deliberately, and not because one is impossible.
+  //
+  // `planScheduleEdit` uses it for two things. Refusing an edit that would
+  // ORPHAN a run is inert here: an append only grows the set of known versions,
+  // so nothing explainable before the edit is unexplainable after it. Reporting
+  // the runs the change must not disturb is a real feature, and this route does
+  // not claim it.
+  //
+  // What is NOT available cheaply is the right list. A run record names the
+  // LOOP it belongs to, not the schedule that created it — and two schedules
+  // may bind one Loop, so the Loop-wide list reports another schedule's runs as
+  // this one's. Review measured the cost: those runs cite versions this history
+  // lacks, so every future edit is refused as orphaning and the schedule can
+  // never be corrected again.
+  //
+  // The attribution DOES exist on disk — each claim marker stores the whole
+  // occurrence, which carries its `scheduleId` — so this is a walk nobody has
+  // written, not a fact nobody can know. Until it is written, claiming nothing
+  // is the honest answer. Named in CRON_LOOPS.md under "Not implemented".
+  const { scheduleId: _id, ...contract } = proposed;
+  const edited = ticks.editSchedule(scheduleId, { ...contract, authoredAt: request.now }, []);
+  if (!edited.ok) return err(409, 'schedule_not_edited', safeText(edited.problem));
+  return ok({
+    scheduleId,
+    version: edited.version,
+    authoredAt: request.now,
+    // NAMED, not left to inference: a version whose diff nobody can state is a
+    // version nobody can review. Diffed from the history the store returned, so
+    // it describes the version that actually landed.
+    changed: edited.changed,
+    note: 'The edit appended a version. Every earlier version is kept, and a run created under one '
+      + 'still resolves to the version it started under. A tick window is clamped to this '
+      + 'authoring instant, so the new version owns no moment that predates it.',
   });
 }
 
@@ -474,11 +598,13 @@ export async function handleCronRoute(
   // server is merely unready — two different things, and only one of them
   // becomes true later.
   const pauseMatch = /^\/cron\/schedules\/([^/]+)\/pause$/u.exec(request.path);
+  const editMatch = /^\/cron\/schedules\/([^/]+)\/edit$/u.exec(request.path);
   const isSchedules = request.path === `${CRON_PREFIX}schedules`;
   const isTick = request.path === `${CRON_PREFIX}tick`;
   const recognized =
     (isSchedules && (request.method === 'GET' || request.method === 'POST'))
     || (pauseMatch !== null && request.method === 'POST')
+    || (editMatch !== null && request.method === 'POST')
     || (isTick && request.method === 'POST');
   if (!recognized) {
     return err(422, 'validation_failed', 'Unknown Cron operation.');
@@ -500,6 +626,9 @@ export async function handleCronRoute(
   }
   if (pauseMatch !== null) {
     return pauseSchedule(request, ticks, pauseMatch[1] as string);
+  }
+  if (editMatch !== null) {
+    return editSchedule(request, ticks, editMatch[1] as string);
   }
 
   const body = request.body;

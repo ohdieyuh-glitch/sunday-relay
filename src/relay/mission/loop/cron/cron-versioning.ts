@@ -67,6 +67,22 @@ export interface CronContractVersion {
   readonly authoredAt: string;
 }
 
+/**
+ * The fields a version is COMPARED on — what "changed" means for an edit.
+ *
+ * Exported because the bridge diffs the two newest versions to report what an
+ * edit did, and a second copy of this list drifts silently: a field added here
+ * and not there would be changed by an edit the response says changed nothing.
+ * `version`, `authoredBy` and `authoredAt` are excluded because they describe
+ * THE EDIT, not what the schedule does — not because every edit changes them,
+ * which is false: the same operator editing twice repeats `authoredBy`, and two
+ * edits sharing a clock reading repeat `authoredAt`.
+ */
+export const VERSIONED_CONTRACT_FIELDS = [
+  'cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest',
+  'projectId', 'workspaceId', 'loopId',
+] as const;
+
 /** A run, and the version it started under. */
 export interface VersionedRun {
   readonly runId: string;
@@ -114,10 +130,7 @@ export interface ScheduleEditPlan {
   readonly runAttribution: readonly VersionedRun[];
   /** What actually changed, named — a version whose diff nobody can state is
    *  a version nobody can review. */
-  readonly changed: readonly (
-    'cronExpression' | 'timeZone' | 'contractRef' | 'contractBindingDigest'
-    | 'projectId' | 'workspaceId' | 'loopId'
-  )[];
+  readonly changed: readonly (typeof VERSIONED_CONTRACT_FIELDS)[number][];
 }
 
 export type ScheduleEditDecision =
@@ -193,10 +206,8 @@ export function planScheduleEdit(input: ScheduleEditInput): ScheduleEditDecision
     };
   }
 
-  const changed = ([
-    'cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest',
-    'projectId', 'workspaceId', 'loopId',
-  ] as const).filter((field) => input.proposed[field] !== head[field]);
+  const changed = VERSIONED_CONTRACT_FIELDS
+    .filter((field) => input.proposed[field] !== head[field]);
   if (changed.length === 0) {
     // A version that changes nothing still splits the run history in two for
     // no reason, and later readers would look for a difference there is none

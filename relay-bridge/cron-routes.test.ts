@@ -813,8 +813,128 @@ describe('an operator can create, list and pause a schedule', () => {
     expect(errorOf(result).message).not.toContain('lock');
   });
 
+  it('an EDIT appends a version, and the tick then runs the new one', async () => {
+    // `planScheduleEdit` and `store.edit` were fully built and reachable from
+    // no surface, so a stored schedule could never be corrected or rebound.
+    const edited = await call(
+      { ...CREATE, scheduleId: 'sched-triage', cronExpression: '*/30 * * * *' },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(edited?.status).toBe(200);
+    expect(dataOf(edited).version).toBe(2);
+    expect(dataOf(edited).authoredAt).toBe(T0);
+    // WHAT CHANGED IS NAMED. A version whose diff nobody can state is a
+    // version nobody can review.
+    // Both really did change: the fixture's zone differs from the stored one,
+    // and `changed` reports what the edit did rather than what it was called.
+    expect(dataOf(edited).changed).toEqual(['cronExpression', 'timeZone']);
+
+    const history = service.schedules.read('sched-triage')?.history ?? [];
+    expect(history).toHaveLength(2);
+    // EVERY EARLIER VERSION IS KEPT, unchanged — that is the whole rule.
+    expect(history[0]?.cronExpression).toBe('0 * * * *');
+    expect(history[1]?.cronExpression).toBe('*/30 * * * *');
+
+    // …and the tick runs the NEW one, reporting the version it came from.
+    const ticked = await call();
+    expect(ticked?.status).toBe(200);
+    expect(dataOf(ticked).contractVersion).toBe(2);
+  });
+
+  it('an edit survives another schedule\'s runs in the same Loop', async () => {
+    // THE DEFECT THIS PINS, and it needs a real VERSION MISMATCH to exist: an
+    // earlier version of this test gave both schedules version 1, so the
+    // orphan check never fired and the mutation it named passed.
+    //
+    // Two schedules may bind one Loop. `planScheduleEdit` reads every run's
+    // `contractVersion` as THIS schedule's, so the other's runs cite versions
+    // this history lacks: every future edit refused as orphaning, no delete
+    // route, the schedule never correctable again.
+    expect(service.schedules.create('sched-shared', {
+      ...STORED, loopId: 'lpe_cron',
+    }).ok).toBe(true);
+    // v2 for the OTHER schedule, authored before the window so its tick runs.
+    expect(service.schedules.edit('sched-shared', {
+      ...STORED, cronExpression: '0 * * * *', contractRef: 'contract-two',
+      authoredAt: '2026-08-02T10:00:00.000Z',
+    }, []).ok).toBe(true);
+    const ticked = await call({ ...BODY, scheduleId: 'sched-shared' });
+    expect(dataOf(ticked).runsCreated).toBe(3);
+    expect(dataOf(ticked).contractVersion).toBe(2);
+
+    // Three runs now sit in lpe_cron citing v2 — a version sched-triage's
+    // history does not contain. Its edit must still succeed.
+    const edited = await call(
+      { ...CREATE, scheduleId: 'sched-triage', cronExpression: '*/30 * * * *' },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(edited?.status).toBe(200);
+    expect(dataOf(edited).version).toBe(2);
+    // And nothing is claimed about runs this schedule cannot prove are its own.
+    expect(dataOf(edited).activeRunsUndisturbed).toBeUndefined();
+  });
+
+  it('an edit that changes nothing is refused, rather than splitting the history', async () => {
+    const same = await call(
+      { ...CREATE, scheduleId: 'sched-triage', cronExpression: '0 * * * *', timeZone: 'UTC' },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(same?.status).toBe(409);
+    expect(errorOf(same).kind).toBe('schedule_not_edited');
+    expect(service.schedules.read('sched-triage')?.history).toHaveLength(1);
+  });
+
+  it('the path names the schedule an edit changes, not the body', async () => {
+    // Obeying the body would edit a schedule the caller never addressed;
+    // ignoring it would answer 200 for a change that landed elsewhere.
+    const mismatched = await call(
+      { ...CREATE, scheduleId: 'sched-other' },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(mismatched?.status).toBe(422);
+    expect(errorOf(mismatched).message).toContain('changes the schedule in the path');
+    expect(service.schedules.read('sched-triage')?.history).toHaveLength(1);
+  });
+
+  it('editing a missing schedule is 404, and a corrupt one is 409', async () => {
+    const absent = await call(
+      { ...CREATE, scheduleId: 'sched-nope' }, { path: '/cron/schedules/sched-nope/edit' },
+    );
+    expect(absent?.status).toBe(404);
+    expect(errorOf(absent).message).not.toContain('lock');
+
+    writeFileSync(
+      join(root, 'cron-schedules', 'sched-triage', 'versions.ndjson'),
+      'torn\n{"kind":"version","version":2}\n',
+    );
+    const corrupt = await call(
+      { ...CREATE, scheduleId: 'sched-triage' }, { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(corrupt?.status).toBe(409);
+    expect(errorOf(corrupt).kind).toBe('schedule_corrupt');
+  });
+
+  it('an edit cannot pause, and requires the same authorization a create does', async () => {
+    const paused = await call(
+      { ...CREATE, scheduleId: 'sched-triage', paused: true },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(paused?.status).toBe(422);
+    expect(errorOf(paused).kind).toBe('field_not_accepted');
+    const { authorized: _drop, ...withoutConsent } = CREATE;
+    const unauthorized = await call(
+      { ...withoutConsent, scheduleId: 'sched-triage' },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(unauthorized?.status).toBe(403);
+    expect(service.schedules.read('sched-triage')?.history).toHaveLength(1);
+  });
+
   it('the schedule routes are behind the same gates as the tick', async () => {
-    for (const path of ['/cron/schedules', '/cron/schedules/sched-triage/pause']) {
+    for (const path of [
+      '/cron/schedules', '/cron/schedules/sched-triage/pause',
+      '/cron/schedules/sched-triage/edit',
+    ]) {
       expect((await call(CREATE, { path, authorize: () => ({ kind: 'none', principal: 'none' }) }))?.status)
         .toBe(401);
       expect((await call(CREATE, {
