@@ -346,6 +346,13 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
     edit(scheduleId, proposed, runs) {
       const dir = dirFor(scheduleId);
       if (dir === null) return refuse(`"${scheduleId}" is not a usable schedule id.`);
+      // BEFORE THE LOCK, because `underLock` writes this instant verbatim as
+      // the lock owner's `acquiredAt`, and the stale-reclaim logic reads it. A
+      // full validation cannot run yet — the planner assigns the version number
+      // — but the one field the lock itself consumes can.
+      if (readIsoInstantWithOffset(proposed.authoredAt) === null) {
+        return refuse('authoredAt must be an ISO-8601 instant carrying an explicit UTC offset.');
+      }
       return underLock(dir, proposed.authoredAt, () => {
         const current = replay(dir, scheduleId);
         if (current.kind === 'corrupt') return refuse(current.problem);

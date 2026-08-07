@@ -689,6 +689,26 @@ describe('an operator can create, list and pause a schedule', () => {
     const none = await call(withoutBinding, { path: '/cron/schedules' });
     expect(none?.status).toBe(422);
     expect(errorOf(none).message).toContain('binding.projectId');
+    // Leaving the workspace OUT is not a way to say there is none: the store
+    // refuses absent outright, so accepting it here would be two rules for one
+    // field — the split this branch spent a round removing for contractRef.
+    const absentWorkspace = await call(
+      { ...CREATE, binding: { projectId: 'prj_cron', loopId: 'lpe_cron' } },
+      { path: '/cron/schedules' },
+    );
+    expect(absentWorkspace?.status).toBe(422);
+    expect(errorOf(absentWorkspace).message).toContain('Leaving it out');
+    // And the contract fields belong at the top level, not inside the binding,
+    // where the tick already refuses them by name.
+    for (const field of ['contractRef', 'contractBindingDigest']) {
+      const inBinding = await call(
+        { ...CREATE, binding: { ...CREATE.binding, [field]: 'x' } },
+        { path: '/cron/schedules' },
+      );
+      expect(inBinding?.status, field).toBe(422);
+      expect(errorOf(inBinding).kind, field).toBe('field_not_accepted');
+    }
+    expect(service.schedules.list()).toEqual(['sched-triage']);
     // A workspace is optional, but a BLANK is not a way to say there is none:
     // accepting it and storing `null` would be a field discarded and answered
     // with a success, which is what this route refuses everywhere else.

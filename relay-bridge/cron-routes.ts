@@ -247,23 +247,42 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   const loopId = trimmed(bindingBody, 'loopId');
   const workspaceRaw = bindingBody !== null && typeof bindingBody === 'object'
     ? (bindingBody as Record<string, unknown>).workspaceId : undefined;
-  // ABSENT IS NULL, AND A BLANK IS NEITHER. A project-level schedule has no
-  // workspace; an empty string is not a workspace, and silently turning it into
-  // `null` would be the same defect this route refuses two checks above — a
-  // field accepted, discarded, and answered with a success.
-  if (workspaceRaw !== undefined && workspaceRaw !== null
-    && (typeof workspaceRaw !== 'string' || workspaceRaw.trim() === '')) {
-    return err(422, 'validation_failed',
-      'binding.workspaceId must name a workspace or be null, stated explicitly. A blank string '
-      + 'names no workspace and is not a way to say there is none.');
-  }
-  const workspaceId = typeof workspaceRaw === 'string' ? workspaceRaw.trim() : null;
   const missingBinding = Object.entries({ projectId, loopId })
     .filter(([, value]) => value === null).map(([field]) => `binding.${field}`);
   if (missingBinding.length > 0) {
     return err(422, 'validation_failed', `Missing or invalid fields: ${missingBinding.join(', ')}.`);
   }
+  // THE SAME FIVE FIELDS THE TICK NAMES. `contractRef` and
+  // `contractBindingDigest` are given at the top level, so ones sent INSIDE
+  // `binding` were read by nobody and answered with a success — a field
+  // accepted, discarded and reported as stored, which is what this route
+  // refuses twenty lines above. Creation and the tick disagreeing about what
+  // "the binding" contains is how the next reader learns the wrong shape.
+  const contractInBinding = ['contractRef', 'contractBindingDigest']
+    .filter((f) => bindingBody !== null && typeof bindingBody === 'object'
+      && (bindingBody as Record<string, unknown>)[f] !== undefined);
+  if (contractInBinding.length > 0) {
+    return err(422, 'field_not_accepted',
+      `${contractInBinding.map((f) => `binding.${f}`).join(', ')} belongs at the top level of the `
+      + 'request, not inside binding. Sent here it would be stored by nobody.');
+  }
 
+  // STATED EXPLICITLY MEANS STATED. A project-level schedule has no workspace,
+  // and `null` is how it says so — absent is not, and a blank string is not.
+  // The route used to accept both and normalise them to `null`, which the store
+  // refuses outright: two rules for one field, and the message here already
+  // promised the stricter one.
+  if (typeof workspaceRaw !== 'string' && workspaceRaw !== null) {
+    return err(422, 'validation_failed',
+      'binding.workspaceId must name a workspace or be null, stated explicitly. Leaving it out is '
+      + 'not a way to say there is none.');
+  }
+  if (typeof workspaceRaw === 'string' && workspaceRaw.trim() === '') {
+    return err(422, 'validation_failed',
+      'binding.workspaceId must name a workspace or be null, stated explicitly. A blank string '
+      + 'names no workspace and is not a way to say there is none.');
+  }
+  const workspaceId = typeof workspaceRaw === 'string' ? workspaceRaw.trim() : null;
   const created = ticks.createSchedule(scheduleId as string, {
     version: 1,
     projectId: projectId as string,
