@@ -190,9 +190,10 @@ describe('a tick creates records and dispatches nothing', () => {
     // nothing allocates one: the id is a caller-supplied string and the claim
     // markers share one flat namespace on the volume. Un-namespaced, the first
     // schedule to tick durably marked the second's occurrences already-handled
-    // — silent cross-tenant suppression, found by review. Mutation check:
-    // dropping the binding from the qualified schedule id makes the second
-    // schedule's tick report already_handled for everything.
+    // — silent cross-tenant suppression, found by review. The ids differ, so
+    // what keeps them apart now is the id itself: one state root holds one
+    // schedule per id, which is why the occurrence term no longer needs
+    // qualifying with a binding that could move under a rebinding.
     expect(service.schedules.create('sched-other', {
       ...STORED, projectId: 'prj_other', loopId: 'lpe_other',
     }).ok).toBe(true);
@@ -689,13 +690,22 @@ describe('an operator can create, list and pause a schedule', () => {
     const none = await call(withoutBinding, { path: '/cron/schedules' });
     expect(none?.status).toBe(422);
     expect(errorOf(none).message).toContain('binding.projectId');
-    // A workspace is optional, but stating it as an empty string is not a way
-    // to name one — it is stored as absent, never as a workspace called "".
+    // A workspace is optional, but a BLANK is not a way to say there is none:
+    // accepting it and storing `null` would be a field discarded and answered
+    // with a success, which is what this route refuses everywhere else.
     const blankWorkspace = await call(
       { ...CREATE, binding: { ...CREATE.binding, workspaceId: '  ' } },
       { path: '/cron/schedules' },
     );
-    expect(blankWorkspace?.status).toBe(200);
+    expect(blankWorkspace?.status).toBe(422);
+    expect(errorOf(blankWorkspace).message).toContain('names no workspace');
+    expect(service.schedules.list()).toEqual(['sched-triage']);
+    // Explicit null IS how you say it, and it stores as absent.
+    const noWorkspace = await call(
+      { ...CREATE, binding: { ...CREATE.binding, workspaceId: null } },
+      { path: '/cron/schedules' },
+    );
+    expect(noWorkspace?.status).toBe(200);
     expect(service.schedules.read('sched-new')?.history[0]?.workspaceId).toBeNull();
   });
 

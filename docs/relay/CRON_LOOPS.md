@@ -47,15 +47,14 @@ WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
   `creationSource: 'schedule'`, which the Loop service turns into
   `trigger: 'cron'`; and `preflightLoopDispatch` refuses a cron trigger. The
   response says `dispatched: 0` as a claim about the code path.
-- **A stored schedule PINS the binding its runs are attributed to.** The
-  occurrence claim namespace is `project|workspace|loop|scheduleId`, and the
-  first three are the schedule's own, given at creation and carried in the
-  contract version. While they arrived with the TICK the durable marker
-  protected a (schedule, binding) pair rather than the schedule: review
-  measured three ticks over one identical window, differing only in `binding`,
-  producing nine runs — six of them in the same Loop for the same three hours.
-  A tick that sends a binding is now refused by name, like any other field the
-  schedule owns. Rebinding is an EDIT, so it appends a version and the runs
+- **A stored schedule PINS the binding its runs are attributed to.** It is
+  given at creation and carried in the contract version, and a tick that sends
+  one is refused by name like any other field the schedule owns. While the
+  binding arrived with the TICK it was also part of the occurrence claim key,
+  so the durable marker protected a (schedule, binding) pair rather than the
+  schedule: review measured three ticks over one identical window, differing
+  only in `binding`, producing nine runs — six of them in the same Loop for the
+  same three hours. Rebinding is an EDIT, so it appends a version and the runs
   already created keep explaining themselves.
 - **Every occurrence-CONSUMING overlap policy is refused.** The rule: no
   policy may durably consume an occurrence on the strength of a run that is
@@ -73,12 +72,17 @@ WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
   counting it as occupancy saturated the count at the first tick and wedged
   the endpoint forever. A run that starts leaves `queued` and counts from
   that moment, so this stays correct when dispatch lands.
-- **The occurrence identity is tenant-qualified.** The approved formula's
-  first term assumes a globally unique `scheduleId`, and nothing allocates
-  one — the id is a caller-supplied string and the claim markers share one
-  flat namespace on the volume. The bridge qualifies it with
-  (project, workspace, loop) so two projects using "daily-triage" cannot
-  silently mark each other's occurrences handled.
+- **The occurrence identity's first term is the schedule id itself.** The
+  approved formula assumes that id is globally unique, and within the namespace
+  that matters it is: the claim markers share one flat namespace per state root,
+  and that root holds exactly one schedule per id. The bridge USED to qualify
+  the term with (project, workspace, loop), from the days when a schedule was
+  caller-declared and two projects could both say "daily-triage". With the
+  binding read from the very schedule the id already names, that qualification
+  could no longer distinguish anything — while it could still MOVE under a
+  rebinding, making every marker written under the old binding unreachable.
+  An identity term that varies with mutable data is how a handled window gets
+  replayed, so the qualification is gone rather than contained.
 
 **A NAMED DEVIATION from "server authority" above:** `afterExclusive` — the
 window's START — is client-supplied, and this document says a client-supplied
@@ -435,8 +439,10 @@ hardcodes automatic Unchain consumption**.
 The in-bridge scheduler and its timer · execution of a trigger-created run
 (the record is created; nothing advances it) · schedule EDITING through an
 endpoint (create, list and pause are exposed; editing is store-only, which now
-also means a schedule cannot be REBOUND through any endpoint) · schedule
-DELETION, so an unusable schedule can only be paused — and since the
+also means a schedule cannot be REBOUND through any endpoint) · a schedule
+stored before the binding was required, which replays as CORRUPT and must be
+recreated — refused rather than run with attribution nobody wrote ·
+schedule DELETION, so an unusable schedule can only be paused — and since the
 tick applies the same zone rules as creation, a schedule stored before those
 rules existed (a fixed offset, a `SystemV/*` zone, or a single-word IANA name)
 is permanently un-tickable and can only be paused · listing

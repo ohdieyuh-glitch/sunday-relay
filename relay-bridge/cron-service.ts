@@ -54,26 +54,22 @@ export interface CronRunBinding {
  *
  * CRON_LOOPS.md's formula is
  * `digest(scheduleId ‖ contractVersion ‖ intendedLocal ‖ resolvedUtc)`, which
- * assumes `scheduleId` is globally unique. NOTHING ALLOCATES ONE: the id is the
- * caller's string, and the store only refuses a DUPLICATE within one state
- * root. The claim markers live in one flat namespace on the volume. So two
- * projects both using "daily-triage" would share occurrence ids, and the first
- * to tick would durably mark the second's occurrences already-handled — silent
- * cross-tenant suppression, found by review.
+ * assumes `scheduleId` is globally unique. IT NOW IS, within the namespace that
+ * matters: the claim markers share one flat namespace per state root, and that
+ * same root holds exactly one schedule per id — `dirFor` gives one directory
+ * and `create` takes it with `O_EXCL`.
  *
- * Qualifying the term with the binding restores the formula's assumption
- * without changing it: the schedule the digest names is now
- * (project, workspace, loop, caller's id), which IS unique.
- *
- * THE BINDING IS THE SCHEDULE'S OWN, read from the stored contract version.
- * While it arrived with the TICK, this qualification was keyed on a value the
- * caller chose, so the durable claim protected a (schedule, binding) PAIR
- * rather than the schedule: the same window ticked under three bindings
- * produced nine runs where three were intended. A qualification whose terms a
- * requester picks is not a namespace, it is a suggestion.
+ * SO THE TERM IS THE ID ITSELF. It was qualified with (project, workspace,
+ * loop) back when a schedule was a caller-declared thing and two projects could
+ * both say "daily-triage"; with schedules stored, that qualification could no
+ * longer distinguish anything — the binding is read from the very schedule the
+ * id already names, making it a pure function of the id — while it COULD still
+ * move: a rebinding appends a version, the head's binding changes, and every
+ * marker written under the old one becomes unreachable. An identity term that
+ * varies with mutable data is how a handled window gets replayed, which is the
+ * defect the version clamp exists to prevent. Removing the qualification
+ * removes that possibility rather than relying on the clamp to contain it.
  */
-const qualifiedScheduleId = (scheduleId: string, binding: CronRunBinding): string =>
-  [binding.projectId, binding.workspaceId ?? 'no-workspace', binding.loopId, scheduleId].join('|');
 
 /** One stored schedule, and what the store can truthfully say about it. */
 export interface CronScheduleListing {
@@ -272,7 +268,7 @@ export function createCronTickService(options: {
       ...input,
       evaluation: {
         ...input.evaluation,
-        scheduleId: qualifiedScheduleId(input.evaluation.scheduleId, input.binding),
+        scheduleId: input.evaluation.scheduleId,
       },
       tz,
       digest: loopDigest,

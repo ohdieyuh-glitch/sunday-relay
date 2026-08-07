@@ -247,14 +247,17 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   const loopId = trimmed(bindingBody, 'loopId');
   const workspaceRaw = bindingBody !== null && typeof bindingBody === 'object'
     ? (bindingBody as Record<string, unknown>).workspaceId : undefined;
-  // ABSENT IS NULL. A project-level schedule has no workspace; an empty string
-  // is not a workspace and must not be stored as though it named one.
-  if (workspaceRaw !== undefined && workspaceRaw !== null && typeof workspaceRaw !== 'string') {
+  // ABSENT IS NULL, AND A BLANK IS NEITHER. A project-level schedule has no
+  // workspace; an empty string is not a workspace, and silently turning it into
+  // `null` would be the same defect this route refuses two checks above — a
+  // field accepted, discarded, and answered with a success.
+  if (workspaceRaw !== undefined && workspaceRaw !== null
+    && (typeof workspaceRaw !== 'string' || workspaceRaw.trim() === '')) {
     return err(422, 'validation_failed',
-      'binding.workspaceId must name a workspace or be null, stated explicitly.');
+      'binding.workspaceId must name a workspace or be null, stated explicitly. A blank string '
+      + 'names no workspace and is not a way to say there is none.');
   }
-  const workspaceId = typeof workspaceRaw === 'string' && workspaceRaw.trim() !== ''
-    ? workspaceRaw.trim() : null;
+  const workspaceId = typeof workspaceRaw === 'string' ? workspaceRaw.trim() : null;
   const missingBinding = Object.entries({ projectId, loopId })
     .filter(([, value]) => value === null).map(([field]) => `binding.${field}`);
   if (missingBinding.length > 0) {

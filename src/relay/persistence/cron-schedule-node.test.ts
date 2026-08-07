@@ -112,10 +112,57 @@ describe('a schedule is created, read back and listed', () => {
     // The route used to require contractRef and contractBindingDigest; now
     // they come from here, so this is where they must be real. Review found a
     // version storable with an empty contractRef flowing into run bindings.
-    for (const field of ['cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest'] as const) {
+    for (const field of [
+      'cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest',
+      // The BINDING keys the occurrence claim, so a blank one attributes a run
+      // to nowhere while durably consuming the occurrence.
+      'projectId', 'loopId',
+    ] as const) {
       const created = store.create(`s-${field}`, v({ [field]: '  ' }));
       expect(created.ok, field).toBe(false);
       if (!created.ok) expect(created.problem).toContain(field);
+    }
+    // Absent is `null`; a blank string is not a way to say a schedule has no
+    // workspace, and neither is leaving the field off.
+    for (const workspaceId of ['  ', undefined as unknown as string]) {
+      const created = store.create('s-workspace', v({ workspaceId }));
+      expect(created.ok).toBe(false);
+      if (!created.ok) expect(created.problem).toContain('workspaceId');
+    }
+    expect(store.create('s-null-workspace', v({ workspaceId: null })).ok).toBe(true);
+  });
+
+  it('an EDIT is held to the same bar as a create', () => {
+    // The bar lived on the create path only, so an edit could append what a
+    // create refuses — and the head is what the tick reads. Review found the
+    // identical split once before, for `contractRef`.
+    expect(store.create('s-edit', v()).ok).toBe(true);
+    const blanked = store.edit('s-edit', {
+      ...edit(), loopId: '  ', authoredAt: '2026-08-02T10:00:00.000Z',
+    }, []);
+    expect(blanked.ok).toBe(false);
+    if (!blanked.ok) expect(blanked.problem).toContain('loopId');
+    // The history is untouched: a refused edit appends nothing.
+    expect(store.read('s-edit')?.history).toHaveLength(1);
+  });
+
+  it('a schedule stored before a required field existed is CORRUPT, never run as-is', () => {
+    // THE DEFECT THIS PINS. A journal written by the build that shipped the
+    // create route has no binding, and the binding keys the occurrence claim.
+    // Replayed as `found`, such a schedule ticked with undefined attribution:
+    // it marked its occurrences handled durably, created no run, and answered
+    // 200 — consuming the window irreversibly while reporting success.
+    const { projectId: _p, workspaceId: _w, loopId: _l, ...legacy } = v();
+    mkdirSync(join(root, 'cron-schedules', 'sched-legacy'), { recursive: true });
+    writeFileSync(
+      join(root, 'cron-schedules', 'sched-legacy', 'versions.ndjson'),
+      `${JSON.stringify({ kind: 'version', version: legacy })}\n`,
+    );
+    const inspected = store.inspect('sched-legacy');
+    expect(inspected.kind).toBe('corrupt');
+    if (inspected.kind === 'corrupt') {
+      expect(inspected.problem).toContain('projectId');
+      expect(inspected.problem).toContain('recreated');
     }
   });
 

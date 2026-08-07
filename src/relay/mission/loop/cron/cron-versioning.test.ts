@@ -44,6 +44,44 @@ const planOf = (i: ScheduleEditInput) => {
   return decision.plan;
 };
 
+describe('a rebinding is an edit like any other', () => {
+  it('counts a changed project, workspace or Loop as a change', () => {
+    // Without this the planner answers `no_change` for a rebinding and refuses
+    // to append, so a schedule could never be moved at all — and the field
+    // that keys the occurrence claim would sit outside the versioning the rest
+    // of the contract gets.
+    for (const [field, value] of [
+      ['projectId', 'prj_other'], ['loopId', 'lpe_other'], ['workspaceId', 'ws_other'],
+    ] as const) {
+      const decision = planScheduleEdit({
+        history: [v()],
+        proposed: { ...v(), [field]: value, authoredAt: '2026-08-06T12:00:00.000Z' },
+        runs: [],
+      });
+      expect(decision.ok, field).toBe(true);
+      if (decision.ok) expect(decision.plan.changed, field).toContain(field);
+    }
+  });
+
+  it('keeps every earlier version, so runs made under the old binding still explain themselves', () => {
+    const decision = planScheduleEdit({
+      history: [v()],
+      proposed: { ...v(), loopId: 'lpe_other', authoredAt: '2026-08-06T12:00:00.000Z' },
+      runs: [{ runId: 'lpr_1', contractVersion: 1, active: false }],
+    });
+    expect(decision.ok).toBe(true);
+    if (!decision.ok) return;
+    expect(decision.plan.history).toHaveLength(2);
+    expect(decision.plan.history[0]?.loopId).toBe('lpe_cron');
+    const under = (contractVersion: number): string | undefined => governingVersionFor(
+      { runId: 'lpr_1', contractVersion, active: false }, decision.plan.history,
+    )?.loopId;
+    // The run made under v1 still resolves to the Loop it was made for.
+    expect(under(1)).toBe('lpe_cron');
+    expect(under(2)).toBe('lpe_other');
+  });
+});
+
 describe('an edit appends; it never rewrites', () => {
   it('keeps every previous version byte-identical and in order', () => {
     // Mutation check: replacing the head instead of appending destroys the
