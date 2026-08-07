@@ -831,14 +831,22 @@ describe('Claude Code adapter boundaries (Prompt 8)', () => {
     // version checked two hardcoded connectors and would have stayed green
     // while the third writer carried the live bug — which is exactly what
     // happened.
+    // The lookbehind is TOKEN-BOUNDED. `(?<!process)` alone also excluded
+    // `subprocess.stdin.write(` and `childprocess.stdin.write(` — real Node
+    // variable names — so a writer could be skipped by a test whose whole job
+    // is to skip nothing.
+    const WRITE = /(?<!(?<![A-Za-z0-9_$])process)\.stdin[?]?\.write\(/;
     const sources = [...walk(join(root, 'src')), ...walk(join(root, 'relay-bridge'))]
       .filter((f) => !/\.test\.tsx?$/.test(f));
-    const writers = sources.filter((f) => /(?<!process)\.stdin[?]?\.write\(/.test(read(f)));
+    const writers = sources.filter((f) => WRITE.test(read(f)));
     // If this ever finds nothing, the pattern has drifted, not the risk.
-    expect(writers.length, 'no child-stdin writer found — has the pattern changed?')
-      .toBeGreaterThanOrEqual(3);
+    expect(
+      writers.length,
+      `expected at least 3 child-stdin writers, found ${writers.length} — if one was `
+      + 'legitimately removed, lower this floor deliberately rather than deleting the check',
+    ).toBeGreaterThanOrEqual(3);
 
-    const GUARD = /(?<!process)\.stdin[?]?\.(?:on|once|addListener)\(\s*['"]error['"]/;
+    const GUARD = /(?<!(?<![A-Za-z0-9_$])process)\.stdin[?]?\.(?:on|once|addListener)\(\s*['"]error['"]/;
     for (const file of writers) {
       const source = read(file);
       const where = file.slice(root.length + 1);
@@ -849,7 +857,7 @@ describe('Claude Code adapter boundaries (Prompt 8)', () => {
       expect(
         source.search(GUARD),
         `${where} attaches its stdin guard after the first write`,
-      ).toBeLessThan(source.search(/(?<!process)\.stdin[?]?\.write\(/));
+      ).toBeLessThan(source.search(WRITE));
     }
   });
 

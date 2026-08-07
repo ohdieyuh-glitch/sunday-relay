@@ -145,14 +145,27 @@ export class RelayStdioProcessTransport implements Transport {
     // AND STDIN, which had no listener at all. A write callback does NOT
     // suppress the stream's `error` event — Node delivers both — so a server
     // that exits while a frame is being written crashed the host with an
-    // uncaught EPIPE. Reproduced with a 14-byte write against a child that
-    // closes its own stdin and stays alive.
+    // uncaught EPIPE. Reproduced with a ~16-byte write against a child that
+    // closes its own stdin and stays alive: `write` returned TRUE, the
+    // callback reported no error, and the stream emitted one anyway.
     //
-    // Routed to `onerror` rather than swallowed, unlike the agent runners: a
-    // broken pipe here means the transport is gone, `send` resolves eagerly
-    // when `write` returns true, and an error arriving after that resolve
-    // would otherwise reach no one at all.
-    child.stdin.on('error', (error: Error) => this.onerror?.(error));
+    // ROUTED TO `onFatal`, not just `onerror`, which is the difference between
+    // the error reaching someone and not. `onerror` is the Transport
+    // interface's channel and the SDK claims it at `connect()`; nothing in
+    // this repository sets `client.onerror`, so an error sent only there is
+    // dropped. `onFatal` is latched and surfaced in the returned `McpFailure`.
+    // The classification matches `mcp-sdk-client.ts`, which already maps EPIPE
+    // to `process_exited_early`. Both channels are called, as the spawn-error
+    // path above does.
+    child.stdin.on('error', (error: Error) => {
+      if (!this.closing) {
+        this.options.onFatal(mcpFailure(
+          'process_exited_early',
+          'the MCP server closed its input before the transport finished writing to it',
+        ));
+      }
+      this.onerror?.(error);
+    });
 
     child.stderr.on('data', (chunk: Buffer) => {
       if (this.stderrBytes >= MAX_STDERR_BYTES) return;   // bounded: a crash loop cannot flood evidence
