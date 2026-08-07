@@ -577,8 +577,10 @@ describe('usage is recorded truthfully', () => {
     // `executionUsage` forces `costMicros: null` for any unknown usage, so an
     // uncounted call always arrived with unknown spend, and the spend or token
     // `unaccountable` branch stopped the run first in every configuration this
-    // repository builds. It becomes reachable with a policy that caps calls but
-    // not spend, or an adapter that reports tokens and not calls.
+    // repository builds. Reachability needs the CONJUNCTION, not either half:
+    // a provider-call cap set, no spend cap, and no token cap left to catch it
+    // — an adapter change alone re-opens nothing, because unknown usage always
+    // nulls the cost as well.
     const { deps, backing } = harness([{ kind: 'unknown_usage' }]);
     admit(backing, seed(budget({ maxSpendMicros: null, maxTotalTokens: null, maxProviderCalls: 2 })));
     const outcome = await runLoopIteration(deps, context());
@@ -630,12 +632,11 @@ describe('usage is recorded truthfully', () => {
     expect(Number.isNaN(outcome.run.budget.tokensUsed)).toBe(false);
   });
 
-  it('reads a lost counter as Unknown rather than as NaN', async () => {
-    // Defence in depth for the same failure: even if a field does go missing,
-    // the total must become Unknown, never a number that is quietly wrong.
-    // The fixture LOSES the counters — an earlier version used a step that
-    // reported known ones, so the test named after this failure mode passed
-    // whether or not the code handled it.
+  it('carries Unknown counters through a DURABLE round-trip, not just in memory', async () => {
+    // The reducer's own handling of unknown and DELETED counters is pinned in
+    // loop-runtime.test.ts. What this adds is the read-back: a total that is
+    // Unknown in memory must still be Unknown after the journal is replayed
+    // from storage, because that is the value every later limit check sees.
     const { deps, backing } = harness([{ kind: 'unknown_usage' }]);
     admit(backing, seed(budget({
       maxSpendMicros: null, maxTotalTokens: null, maxProviderCalls: null,
@@ -645,8 +646,7 @@ describe('usage is recorded truthfully', () => {
     if (run === null || run === undefined) throw new Error('expected a run');
     expect(run.budget.tokensUsed).toBeNull();
     expect(run.budget.providerCallsUsed).toBeNull();
-    expect(Number.isNaN(run.budget.tokensUsed ?? 0)).toBe(false);
-    expect(Number.isNaN(run.budget.providerCallsUsed ?? 0)).toBe(false);
+    expect(run.budget.providerCallsHaveUnknownComponent).toBe(true);
   });
 
   it('does not double-count usage when a dispatch is retried', async () => {
