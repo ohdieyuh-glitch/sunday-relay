@@ -43,7 +43,7 @@ const BASE: LoopStatusProjection = {
     maxTotalDurationMinutes: 60, maxSpendMicros: '10000000',
     knownSpendMicros: '1000', spendUnknown: false, currency: 'USD',
     maxTotalTokens: 1000, tokensUsed: 100, tokensUnknown: false,
-    maxProviderCalls: 100, providerCallsUsed: 1,
+    maxProviderCalls: 100, providerCallsUsed: 1, providerCallsUnknown: false,
   },
   blocker: null,
   latestFailure: null,

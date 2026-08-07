@@ -45,7 +45,8 @@ export interface LoopUsageProjection {
   readonly tokensUsed: number | null;
   readonly tokensUnknown: boolean;
   readonly maxProviderCalls: number | null;
-  readonly providerCallsUsed: number;
+  readonly providerCallsUsed: number | null;
+  readonly providerCallsUnknown: boolean;
 }
 
 export interface LoopIdentityProjection {
@@ -124,6 +125,8 @@ export function projectLoopStatus(run: RelayLoopRun): LoopStatusProjection {
       tokensUnknown: run.budget.tokensHaveUnknownComponent || run.budget.tokensUsed === null,
       maxProviderCalls: run.budget.maxProviderCalls,
       providerCallsUsed: run.budget.providerCallsUsed,
+      providerCallsUnknown:
+        run.budget.providerCallsHaveUnknownComponent || run.budget.providerCallsUsed === null,
     },
     blocker: blocker === undefined || blocker === null ? null : {
       reason: blocker.reason,

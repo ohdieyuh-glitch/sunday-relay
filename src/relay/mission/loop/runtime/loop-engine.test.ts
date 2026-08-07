@@ -287,6 +287,27 @@ describe('limits are enforced before an agent is dispatched', () => {
     expect(checkLoopLimits(unknownSpend, 0).limit).toBe('spend');
     expect(checkLoopLimits(unknownSpend, 0).reason).toBe('unaccountable');
 
+    const unknownCalls = {
+      ...seed(budget({ maxProviderCalls: 5 })),
+    };
+    const blindCalls = {
+      ...unknownCalls,
+      budget: {
+        ...unknownCalls.budget,
+        providerCallsUsed: null,
+        providerCallsHaveUnknownComponent: true,
+      },
+    };
+    expect(checkLoopLimits(blindCalls, 0).limit).toBe('provider_calls');
+    expect(checkLoopLimits(blindCalls, 0).reason).toBe('unaccountable');
+    expect(checkLoopLimits(blindCalls, 0).detail).toContain('never treated as zero');
+    // An uncapped run may stay blind: there is nothing to fail closed against.
+    const uncapped = {
+      ...blindCalls,
+      budget: { ...blindCalls.budget, maxProviderCalls: null },
+    };
+    expect(checkLoopLimits(uncapped, 0).reason).toBe('within_bounds');
+
     // And a genuinely spent bound is `reached`, which is a different verdict
     // leading to a different terminal state.
     const spent = { ...run, budget: { ...run.budget, knownSpendMicros: '999999999' } };
@@ -521,14 +542,42 @@ describe('usage is recorded truthfully', () => {
   it('keeps an unreported cost Unknown rather than zero', async () => {
     // No cap is configured, so there is nothing to fail closed against and the
     // run may continue — carrying the truth that its spend is unknown.
+    // `maxProviderCalls` is nulled too: the helper sets one by default, and an
+    // unaccountable call count under a cap now stops the run, which is the
+    // whole point of the provider-call change and not what this test is about.
     const { deps, backing } = harness([{ kind: 'unknown_usage' }]);
-    admit(backing, seed(budget({ maxSpendMicros: null, maxTotalTokens: null })));
+    admit(backing, seed(budget({
+      maxSpendMicros: null, maxTotalTokens: null, maxProviderCalls: null,
+    })));
     const outcome = await runLoopIteration(deps, context());
     if (outcome.kind !== 'iteration_recorded') throw new Error('unreachable');
     expect(outcome.run.budget.knownSpendMicros).toBeNull();
     expect(outcome.run.budget.spendHasUnknownComponent).toBe(true);
     expect(outcome.run.budget.tokensUsed).toBeNull();
     expect(outcome.run.budget.knownSpendMicros).not.toBe('0');
+    // A provider that does not say how many calls it made leaves the count
+    // unknowable. Adding zero would let a call cap sit at 0 forever while the
+    // run kept dispatching underneath it.
+    expect(outcome.run.budget.providerCallsUsed).toBeNull();
+    expect(outcome.run.budget.providerCallsUsed).not.toBe(0);
+    expect(outcome.run.budget.providerCallsHaveUnknownComponent).toBe(true);
+  });
+
+  it('fails closed when a provider-call cap is set and the calls cannot be counted', async () => {
+    // THE BUG THIS EXISTS TO CATCH. `providerCallsUsed` used to add 0 for an
+    // unreported count, so a provider that never reports call counts left the
+    // total at 0 forever and `maxProviderCalls` never fired — an unbounded
+    // number of paid calls under a cap that appeared to be holding.
+    const { deps, backing } = harness([{ kind: 'unknown_usage' }]);
+    admit(backing, seed(budget({ maxSpendMicros: null, maxTotalTokens: null, maxProviderCalls: 2 })));
+    const outcome = await runLoopIteration(deps, context());
+    expect(outcome.kind).toBe('terminal');
+    if (outcome.kind !== 'terminal') throw new Error('unreachable');
+    expect(outcome.state).toBe('failed');
+    expect(outcome.state).not.toBe('budget_exhausted');
+    expect(outcome.run.failures[0].kind).toBe('limit_violation');
+    expect(outcome.run.failures[0].summary).toContain('never treated as zero');
+    expect(outcome.run.budget.providerCallsUsed).toBeNull();
   });
 
   it('fails closed when a cap is set and the run cannot account for its usage', async () => {
@@ -579,7 +628,7 @@ describe('usage is recorded truthfully', () => {
     const run = readLoopRun(backing, 'lpr_engine', loopDigest)?.run;
     if (run === null || run === undefined) throw new Error('expected a run');
     expect(Number.isNaN(run.budget.tokensUsed ?? 0)).toBe(false);
-    expect(Number.isNaN(run.budget.providerCallsUsed)).toBe(false);
+    expect(Number.isNaN(run.budget.providerCallsUsed ?? 0)).toBe(false);
   });
 
   it('does not double-count usage when a dispatch is retried', async () => {

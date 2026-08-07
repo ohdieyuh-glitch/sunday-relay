@@ -437,8 +437,9 @@ export function applyLoopEvent(run: RelayLoopRun, event: RelayLoopEvent): LoopAp
           tokensUsed: addCount(next.budget.tokensUsed, usage.modelUnits),
           tokensHaveUnknownComponent:
             next.budget.tokensHaveUnknownComponent || !isKnownCount(usage.modelUnits),
-          providerCallsUsed:
-            next.budget.providerCallsUsed + (isKnownCount(usage.providerCalls) ? usage.providerCalls : 0),
+          providerCallsUsed: addCount(next.budget.providerCallsUsed, usage.providerCalls),
+          providerCallsHaveUnknownComponent:
+            next.budget.providerCallsHaveUnknownComponent || !isKnownCount(usage.providerCalls),
           consecutiveFailures: failed ? next.budget.consecutiveFailures + 1 : 0,
         },
       };

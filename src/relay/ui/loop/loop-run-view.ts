@@ -238,8 +238,10 @@ export function projectLoopRunView(input: {
       },
       {
         label: 'Provider calls',
-        value: `${status.usage.providerCallsUsed} / ${status.usage.maxProviderCalls ?? 'no limit'}`,
-        unknown: false,
+        value: status.usage.providerCallsUnknown || status.usage.providerCallsUsed === null
+          ? UNKNOWN
+          : `${status.usage.providerCallsUsed} / ${status.usage.maxProviderCalls ?? 'no limit'}`,
+        unknown: status.usage.providerCallsUnknown || status.usage.providerCallsUsed === null,
       },
     ],
     blocker: status.blocker?.detail ?? null,
