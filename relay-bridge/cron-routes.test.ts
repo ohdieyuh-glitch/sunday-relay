@@ -536,6 +536,20 @@ describe('an operator can create, list and pause a schedule', () => {
     expect(dataOf(listed).schedules).toEqual([{ scheduleId: 'sched-triage', state: 'paused' }]);
   });
 
+  it('the listing says CORRUPT rather than presenting an unreadable schedule as ordinary', async () => {
+    // Mutation check: report 'active' here instead and an operator sees a
+    // healthy schedule that 409s on every tick. Corrupt is the half of this
+    // that actually misleads, so it is the half worth pinning.
+    writeFileSync(
+      join(root, 'cron-schedules', 'sched-triage', 'versions.ndjson'),
+      'torn\n{"kind":"version","version":2}\n',
+    );
+    const listed = await call(undefined, { method: 'GET', path: '/cron/schedules' });
+    expect(dataOf(listed).schedules).toEqual([{ scheduleId: 'sched-triage', state: 'corrupt' }]);
+    expect(dataOf(listed).totalStored).toBe(1);
+    expect(dataOf(listed).truncated).toBe(false);
+  });
+
   it('creating requires explicit authorization, like a tick', async () => {
     const { authorized: _drop, ...withoutConsent } = CREATE;
     const created = await call(withoutConsent, { path: '/cron/schedules' });
@@ -566,6 +580,17 @@ describe('an operator can create, list and pause a schedule', () => {
     expect(service.schedules.list()).toEqual(['sched-triage']);
   });
 
+  it('refuses a fixed offset wearing a zone name, which the refusal already claims', async () => {
+    // Etc/GMT+5 is a REAL zone, so the evaluator resolves it and both earlier
+    // checks pass — while being precisely the fixed offset the non-IANA
+    // message says is not allowed. Such a schedule drifts an hour against its
+    // author's wall clock twice a year, permanently.
+    const offset = await call({ ...CREATE, timeZone: 'Etc/GMT+5' }, { path: '/cron/schedules' });
+    expect(offset?.status).toBe(422);
+    expect(errorOf(offset).message).toContain('fixed offset');
+    expect(service.schedules.list()).toEqual(['sched-triage']);
+  });
+
   it('refuses an unusable schedule id as a validation failure, not a conflict', async () => {
     // 409 said "this conflicts with something"; nothing existed to conflict
     // with. A caller cannot tell "pick another name" from "fix this field".
@@ -581,7 +606,10 @@ describe('an operator can create, list and pause a schedule', () => {
     // `paused: true` was accepted, dropped, and answered with a success — so an
     // operator who created a schedule intending it to start paused got an
     // ACTIVE one and no indication of it.
-    for (const field of ['paused', 'version', 'authoredAt']) {
+    // `binding` matters most: a schedule does not pin one yet, so accepting it
+    // would look like pinning and pin nothing — and the response would say the
+    // schedule is stored while the thing the caller cared about was dropped.
+    for (const field of ['paused', 'version', 'contractVersion', 'authoredAt', 'binding']) {
       const result = await call(
         { ...CREATE, [field]: field === 'paused' ? true : 99 }, { path: '/cron/schedules' },
       );

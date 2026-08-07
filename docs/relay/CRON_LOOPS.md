@@ -1,9 +1,11 @@
 # Cron Loops — architecture decision
 
 **Status: GRAMMAR + PURE EVALUATOR + CLAIM/OVERLAP/MISSED-RUN DECISIONS
-+ FILE-BACKED CLAIM ADAPTER + THE TICK PASS AND AN AUTHENTICATED TICK ENDPOINT IMPLEMENTED. NO SCHEDULER
-AND NO TIMER: NOTHING CALLS THE TICK ON A SCHEDULE, AND A SCHEDULED RUN IS
-CREATED BUT NEVER DISPATCHED.**
++ FILE-BACKED CLAIM ADAPTER + THE TICK PASS + A DURABLE SCHEDULE STORE + AN
+AUTHENTICATED TICK ENDPOINT AND THE SCHEDULE FAMILY (CREATE, LIST, PAUSE)
+IMPLEMENTED. NO SCHEDULER AND NO TIMER: NOTHING CALLS THE TICK ON A SCHEDULE,
+AND A SCHEDULED RUN IS CREATED BUT NEVER DISPATCHED. A STORED SCHEDULE DOES
+NOT YET PIN THE BINDING ITS RUNS ARE ATTRIBUTED TO.**
 
 `/loop schedule`, `/loop cron`, `/loop schedules` parse today and produce typed
 commands. `src/relay/mission/loop/cron/` now holds the schedule stage this
@@ -85,8 +87,10 @@ END and the evaluation instant are server-clocked; the eight-day evaluation
 limit refuses anything wider; the missed-run policy caps catch-up; the route
 is operator-only and needs explicit authorization; and the durable claim
 marker makes a replay free rather than a double dispatch. The durable
-watermark that would close the deviation belongs to the schedule store that
-does not exist yet. The
+watermark that would close the deviation belongs to the schedule store, which
+exists now (`src/relay/persistence/cron-schedule-node.ts`) and does not hold
+one yet: what bounds the window today is the governing version's own
+`authoredAt`. The
 `loop_cron` feature flag is off and depends on `loop_scheduler`, which
 depends on `loop_engine`.
 
@@ -146,8 +150,9 @@ Options considered, against what actually exists:
   the journal and never trusts the snapshot's contents, so a stale, missing
   or wrong snapshot cannot make a schedule report a version its own history
   never recorded. An edit goes through `planScheduleEdit` rather than a second
-  copy of that rule. Schedules can be created, listed, edited and paused; what
-  The tick endpoint READS one, and a request that sends a field the schedule
+  copy of that rule. A schedule can be created, listed and paused through the
+  endpoints; EDITING exists in the store only, so a stored schedule has the one
+  version creation gave it. The tick endpoint READS one, and a request that sends a field the schedule
   owns is REFUSED rather than having it ignored. A request now says WHICH
   schedule to tick and
   over what window, while the expression, timezone, contract and version are

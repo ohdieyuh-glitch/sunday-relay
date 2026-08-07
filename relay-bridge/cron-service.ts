@@ -36,8 +36,11 @@ import {
  * subtlest thing in this file; see `activeRunsFor`.
  */
 
-/** What one schedule binds its runs to. Caller-supplied: no schedule store
- *  exists, and inventing one to make this look finished would be worse. */
+/** What one schedule binds its runs to. STILL CALLER-SUPPLIED, per tick: the
+ *  schedule store exists now (`cron-schedule-node.ts`) and holds the
+ *  expression, zone, contract and version, but it does not yet hold this. Until
+ *  it does, a stored schedule can be ticked into any project and Loop the
+ *  caller names. Named in CRON_LOOPS.md under "Not implemented". */
 export interface CronRunBinding {
   readonly projectId: string;
   readonly workspaceId: string | null;
@@ -51,9 +54,10 @@ export interface CronRunBinding {
  *
  * CRON_LOOPS.md's formula is
  * `digest(scheduleId ‖ contractVersion ‖ intendedLocal ‖ resolvedUtc)`, which
- * assumes `scheduleId` is globally unique. NOTHING ALLOCATES ONE: there is no
- * schedule store, the id arrives as a caller-supplied string, and the claim
- * markers live in one flat namespace on the volume. So two projects both
+ * assumes `scheduleId` is globally unique. THE STORE ALLOCATES ONE PER STATE
+ * ROOT and refuses to create over an existing id — but the claim markers live
+ * in one flat namespace on the volume, and the binding below is not part of
+ * the stored schedule. So two projects both
  * using "daily-triage" would share occurrence ids, and the first to tick
  * would durably mark the second's occurrences already-handled — silent
  * cross-tenant suppression, found by review.
@@ -72,6 +76,17 @@ export interface CronScheduleListing {
   readonly state: 'active' | 'paused' | 'corrupt' | 'missing';
 }
 
+/** How many schedules one listing will replay. Chosen to bound the work, not
+ *  because more cannot exist — `totalStored` always reports the real count. */
+const MAX_LISTED_SCHEDULES = 200;
+
+export interface CronScheduleListingPage {
+  readonly schedules: readonly CronScheduleListing[];
+  /** Every schedule on the volume, including any beyond the cap. */
+  readonly totalStored: number;
+  readonly truncated: boolean;
+}
+
 export interface CronTickService {
   /** The durable schedules. A tick reads what to run from HERE, not from the
    *  request that woke it. */
@@ -82,7 +97,7 @@ export interface CronTickService {
    *  list of ids reports a corrupt or paused schedule as an ordinary one, and
    *  the store separates `inspect` from `list` precisely because that
    *  difference is the thing an operator needs to see. */
-  listSchedules(): readonly CronScheduleListing[];
+  listSchedules(): CronScheduleListingPage;
   /** Whether the timezone evaluator can actually answer for this zone. An
    *  IANA-SHAPED string is not an IANA zone: `America/Atlantis` matches the
    *  pattern and no evaluator on earth can resolve it. */
@@ -210,17 +225,29 @@ export function createCronTickService(options: {
     store,
     schedules,
     inspectSchedule: (scheduleId) => schedules.inspect(scheduleId),
-    listSchedules: () => schedules.list().map((scheduleId) => {
-      const inspected = schedules.inspect(scheduleId);
-      if (inspected.kind === 'corrupt') return { scheduleId, state: 'corrupt' as const };
-      // `list` enumerates directories; `inspect` replays. A schedule that
-      // disappeared between the two is reported as gone, never as healthy.
-      if (inspected.kind === 'missing') return { scheduleId, state: 'missing' as const };
+    // BOUNDED ON PURPOSE. Stating each schedule's state costs a journal replay
+    // apiece, and the bridge is single-threaded: an unbounded list would block
+    // every other route for the total journal bytes on the volume. The cap is
+    // reported rather than applied silently — a truncated list that looks
+    // complete is how an operator concludes a schedule is gone.
+    listSchedules: () => {
+      const all = schedules.list();
       return {
-        scheduleId,
-        state: inspected.record.paused ? ('paused' as const) : ('active' as const),
+        totalStored: all.length,
+        truncated: all.length > MAX_LISTED_SCHEDULES,
+        schedules: all.slice(0, MAX_LISTED_SCHEDULES).map((scheduleId) => {
+          const inspected = schedules.inspect(scheduleId);
+          if (inspected.kind === 'corrupt') return { scheduleId, state: 'corrupt' as const };
+          // `list` enumerates directories; `inspect` replays. A schedule that
+          // disappeared between the two is reported as gone, never as healthy.
+          if (inspected.kind === 'missing') return { scheduleId, state: 'missing' as const };
+          return {
+            scheduleId,
+            state: inspected.record.paused ? ('paused' as const) : ('active' as const),
+          };
+        }),
       };
-    }),
+    },
     zoneIsKnown: (timeZone, at) => tz.localMinuteOf(at, timeZone) !== null,
     createSchedule: (scheduleId, first) => {
       const result = schedules.create(scheduleId, first);

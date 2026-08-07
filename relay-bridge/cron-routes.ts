@@ -7,7 +7,7 @@ import { featureEffectivelyEnabled } from '../src/relay/mission/loop/loop-availa
 import { parseCronExpression } from '../src/relay/mission/loop/cron';
 import { readIsoInstantWithOffset } from '../src/relay/mission/loop/runtime/loop-scheduler';
 import type { CronSchedule, CronTickReport } from '../src/relay/mission/loop/cron';
-import type { CronRunBinding, CronScheduleListing } from './cron-service';
+import type { CronRunBinding, CronScheduleListingPage } from './cron-service';
 import type { ScheduleReadResult } from '../src/relay/persistence/cron-schedule-node';
 import type { CronContractVersion } from '../src/relay/mission/loop/cron/cron-versioning';
 
@@ -107,7 +107,7 @@ export interface CronTickPort {
   activeRunsFor(loopId: string): number;
   /** What the durable store says about this schedule. */
   inspectSchedule(scheduleId: string): ScheduleReadResult;
-  listSchedules(): readonly CronScheduleListing[];
+  listSchedules(): CronScheduleListingPage;
   zoneIsKnown(timeZone: string, at: string): boolean;
   createSchedule(
     scheduleId: string, first: CronContractVersion,
@@ -163,6 +163,15 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   // future tick fails `unknown_timezone` — and with editing store-only and no
   // delete route, that id was burned permanently. The authority that can
   // answer is the same evaluator the tick uses.
+  // `Etc/GMT+5` is a real, resolvable zone AND a fixed offset — it satisfies
+  // both checks while being exactly what the refusal above says is not
+  // allowed. Left alone, such a schedule drifts an hour against its author's
+  // wall clock twice a year, permanently, with no edit or delete route.
+  if (/^Etc\/GMT[+-]\d{1,2}$/u.test(timeZone as string)) {
+    return err(422, 'validation_failed',
+      `"${safeText(timeZone)}" names a fixed offset, not a place. A recurring schedule needs a zone `
+      + 'whose daylight-saving rules can change with it.');
+  }
   if (!ticks.zoneIsKnown(timeZone as string, request.now)) {
     return err(422, 'validation_failed',
       `"${safeText(timeZone)}" is IANA-shaped but this server's timezone evaluator cannot resolve `
@@ -175,12 +184,19 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   // field this route decides has the wrong model of it, and ignoring the field
   // silently lets them believe it took effect: `paused: true` was accepted,
   // discarded, and answered with a success for an ACTIVE schedule.
-  const decided = ['version', 'authoredAt', 'paused']
+  // `binding` is here for a stronger reason than the rest. A schedule does not
+  // yet pin the project and Loop its runs are attributed to — the tick supplies
+  // them — so accepting one at creation would look like pinning and pin
+  // nothing, which is worse than refusing. `contractVersion` is the name the
+  // tick uses for `version`, and a caller who reaches for it deserves the same
+  // answer.
+  const decided = ['version', 'contractVersion', 'authoredAt', 'paused', 'binding']
     .filter((f) => (body as Record<string, unknown>)[f] !== undefined);
   if (decided.length > 0) {
     return err(422, 'field_not_accepted',
       `${decided.join(', ')} ${decided.length === 1 ? 'is' : 'are'} decided by this server, not by `
-      + 'the request. A new schedule is version 1, authored now, and active.');
+      + 'the request. A new schedule is version 1, authored now, and active — and it does not yet '
+      + 'carry a binding, so a tick still names the project and Loop.');
   }
 
   const created = ticks.createSchedule(scheduleId as string, {
@@ -239,8 +255,11 @@ function pauseSchedule(
     return err(409, 'schedule_corrupt', safeText(inspected.problem));
   }
   const result = ticks.setSchedulePaused(scheduleId, paused, request.now);
-  // Everything truthfully refusable is refused above, so what reaches here is
-  // a genuine conflict: a racing writer holding the lock.
+  // NOT a claim that this is contention. `underLock` returns one string for
+  // every lock failure it can meet, so this path narrows to "the schedule was
+  // there a moment ago and the write did not happen" — a racing writer, or the
+  // directory removed out-of-band between the inspect above and here. The
+  // store's own text is passed through rather than reinterpreted.
   if (!result.ok) return err(409, 'schedule_not_changed', safeText(result.problem));
   return ok({ scheduleId, paused });
 }
@@ -367,7 +386,7 @@ export async function handleCronRoute(
   // The schedule family. A schedule could previously only be made from a
   // test, which meant the whole Cron path was unreachable by an operator.
   if (isSchedules) {
-    if (request.method === 'GET') return ok({ schedules: ticks.listSchedules() });
+    if (request.method === 'GET') return ok(ticks.listSchedules());
     return createSchedule(request, ticks);
   }
   if (pauseMatch !== null) {
