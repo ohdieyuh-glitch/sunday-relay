@@ -142,6 +142,17 @@ export class RelayStdioProcessTransport implements Transport {
       this.drain();
     });
     child.stdout.on('error', (error: Error) => this.onerror?.(error));
+    // AND STDIN, which had no listener at all. A write callback does NOT
+    // suppress the stream's `error` event — Node delivers both — so a server
+    // that exits while a frame is being written crashed the host with an
+    // uncaught EPIPE. Reproduced with a 14-byte write against a child that
+    // closes its own stdin and stays alive.
+    //
+    // Routed to `onerror` rather than swallowed, unlike the agent runners: a
+    // broken pipe here means the transport is gone, `send` resolves eagerly
+    // when `write` returns true, and an error arriving after that resolve
+    // would otherwise reach no one at all.
+    child.stdin.on('error', (error: Error) => this.onerror?.(error));
 
     child.stderr.on('data', (chunk: Buffer) => {
       if (this.stderrBytes >= MAX_STDERR_BYTES) return;   // bounded: a crash loop cannot flood evidence

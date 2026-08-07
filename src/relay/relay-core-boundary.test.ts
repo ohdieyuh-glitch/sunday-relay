@@ -819,26 +819,37 @@ describe('Claude Code adapter boundaries (Prompt 8)', () => {
     expect(runner).not.toMatch(/shell:\s*true/);
   });
 
-  it('every runner that writes a prompt to a child listens for a broken pipe', () => {
+  it('every writer to a child process stdin listens for a broken pipe', () => {
     // THE DEFECT THIS PINS, and it is a DIVERGENCE rather than an oversight:
-    // the reviewer's runner attached this from the start and the Claude one
-    // did not, so a child exiting before its prompt was written crashed the
-    // process with an unlistened `error` event. A try/catch cannot catch it —
-    // the error is asynchronous — which is why the check is for the listener
-    // and why it covers BOTH runners: fixing one copy and leaving the other is
-    // how this comes back.
-    for (const dir of ['claude-code', 'codex-reviewer']) {
-      const source = read(relay(join('connectors', dir, 'process-runner.ts')));
-      const listener = source.indexOf(".stdin");
-      expect(listener, `${dir} runner writes no prompt to stdin`).toBeGreaterThan(-1);
+    // the reviewer's runner attached this from the start, the Claude runner did
+    // not, and the MCP transport was cleared by an author who believed a write
+    // callback suppressed the stream's `error` event. It does not — Node
+    // delivers both — so a child exiting mid-write crashed the host with an
+    // uncaught EPIPE. A try/catch cannot catch it; the error is asynchronous.
+    //
+    // ENUMERATED FROM THE TREE, not from a list of directories. An earlier
+    // version checked two hardcoded connectors and would have stayed green
+    // while the third writer carried the live bug — which is exactly what
+    // happened.
+    const sources = [...walk(join(root, 'src')), ...walk(join(root, 'relay-bridge'))]
+      .filter((f) => !/\.test\.tsx?$/.test(f));
+    const writers = sources.filter((f) => /(?<!process)\.stdin[?]?\.write\(/.test(read(f)));
+    // If this ever finds nothing, the pattern has drifted, not the risk.
+    expect(writers.length, 'no child-stdin writer found — has the pattern changed?')
+      .toBeGreaterThanOrEqual(3);
+
+    const GUARD = /(?<!process)\.stdin[?]?\.(?:on|once|addListener)\(\s*['"]error['"]/;
+    for (const file of writers) {
+      const source = read(file);
+      const where = file.slice(root.length + 1);
+      expect(GUARD.test(source), `${where} writes to a child stdin without listening for 'error'`)
+        .toBe(true);
+      // …and the listener must precede the first write, or the window it
+      // exists to close is still open when the write happens.
       expect(
-        /stdin[?]?\.on\(\s*'error'/.test(source),
-        `${dir}/process-runner.ts writes to child stdin without listening for 'error'`,
-      ).toBe(true);
-      // …and the listener precedes the first write, or the window stays open.
-      const guardAt = source.search(/stdin[?]?\.on\(\s*'error'/);
-      const writeAt = source.search(/stdin[?]?\.write\(/);
-      expect(guardAt, `${dir} attaches its stdin guard after the first write`).toBeLessThan(writeAt);
+        source.search(GUARD),
+        `${where} attaches its stdin guard after the first write`,
+      ).toBeLessThan(source.search(/(?<!process)\.stdin[?]?\.write\(/));
     }
   });
 
