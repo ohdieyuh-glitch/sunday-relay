@@ -1,6 +1,9 @@
 import { createLoopRunNodeStore, type LoopRunNodeStore } from '../src/relay/persistence/loop-run-node';
 import { createCronClaimNodePort } from '../src/relay/persistence/cron-claim-node';
 import {
+  createCronScheduleStore, type CronScheduleStore, type ScheduleReadResult,
+} from '../src/relay/persistence/cron-schedule-node';
+import {
   confirmLoopRun, emptyLoopBudget, loopDigest, loopRunIsActive, readLoopRun,
   type LoopOperationDeps,
 } from '../src/relay/mission/loop/runtime';
@@ -63,6 +66,11 @@ const qualifiedScheduleId = (scheduleId: string, binding: CronRunBinding): strin
   [binding.projectId, binding.workspaceId ?? 'no-workspace', binding.loopId, scheduleId].join('|');
 
 export interface CronTickService {
+  /** The durable schedules. A tick reads what to run from HERE, not from the
+   *  request that woke it. */
+  readonly schedules: CronScheduleStore;
+  /** What the store says about one schedule: found, missing or corrupt. */
+  inspectSchedule(scheduleId: string): ScheduleReadResult;
   tick(input: Omit<CronTickInput, 'tz' | 'digest'> & {
     readonly binding: CronRunBinding;
   }): CronTickReport;
@@ -102,6 +110,7 @@ export function createCronTickService(options: {
     now: options.now,
   };
   const claim = createCronClaimNodePort({ stateRoot: options.root, now: options.now });
+  const schedules = createCronScheduleStore({ root: options.root });
   const tz = createIntlTimezonePort();
 
   /**
@@ -177,6 +186,8 @@ export function createCronTickService(options: {
 
   return {
     store,
+    schedules,
+    inspectSchedule: (scheduleId) => schedules.inspect(scheduleId),
     activeRunsFor,
     tick: (input) => runCronTick(claim, runsFor(input.binding), {
       ...input,

@@ -147,6 +147,19 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
       if (parsed.kind === 'version') history.push(parsed.version);
       else if (parsed.kind === 'paused') paused = parsed.paused;
     }
+    const numbers = new Set<number>();
+    for (const version of history) {
+      if (numbers.has(version.version)) {
+        // planScheduleEdit calls this unambiguously fatal; a schedule too
+        // ambiguous to edit must not be tickable either.
+        return {
+          kind: 'corrupt',
+          problem: `Version ${version.version} appears more than once, so which one governs cannot `
+            + 'be stated.',
+        };
+      }
+      numbers.add(version.version);
+    }
     if (history.length === 0) {
       return {
         kind: 'corrupt',
@@ -191,6 +204,12 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
     }
     if (version.authoredBy.trim() === '') {
       return 'the first version must record who authored it, exactly as an edit must.';
+    }
+    // The route used to require these; now they come from here, so this is
+    // where they must be real. Review found a version storable with an empty
+    // contractRef flowing straight into run bindings.
+    for (const field of ['cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest'] as const) {
+      if (version[field].trim() === '') return `${field} must not be empty.`;
     }
     return null;
   };

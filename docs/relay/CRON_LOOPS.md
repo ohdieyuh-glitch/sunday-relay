@@ -140,8 +140,17 @@ Options considered, against what actually exists:
   or wrong snapshot cannot make a schedule report a version its own history
   never recorded. An edit goes through `planScheduleEdit` rather than a second
   copy of that rule. Schedules can be created, listed, edited and paused; what
-  is still missing is the tick endpoint reading one instead of taking the
-  schedule from its request body. Every write holds the guarded run lock and
+  The tick endpoint READS one, and a request that sends a field the schedule
+  owns is REFUSED rather than having it ignored. A request now says WHICH
+  schedule to tick and
+  over what window, while the expression, timezone, contract and version are
+  the schedule's own. A caller can no longer run one schedule's window under
+  rules it invented, a missing schedule is a 404, and a PAUSED or CORRUPT one
+  is refused rather than partially evaluated. The window's start is CLAMPED to
+  the governing version's authoring instant, so an edit cannot replay an
+  already-handled window: the occurrence identity carries the contract
+  version, and without the clamp a new version gave every past occurrence a
+  fresh identity and a fresh claim — six runs for the same three hours. Every write holds the guarded run lock and
   a corrupt journal interior is REPORTED rather than truncated — truncating
   let the next edit mint a duplicate version, which is the ambiguity the edit
   decision exists to refuse. The registry does not declare these files as
@@ -388,9 +397,9 @@ hardcodes automatic Unchain consumption**.
 ## Not implemented
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
-(the record is created; nothing advances it) · the tick endpoint READING a
-stored schedule (the store exists; the endpoint still takes the schedule from
-its request body) · the occurrence queue,
+(the record is created; nothing advances it) · schedule CREATION and pausing
+through an endpoint (the store supports both; no route exposes them) · the
+occurrence queue,
 and therefore the `queue_one` and `queue_all` overlap policies · period budget-cap ENFORCEMENT (the
 decision exists; nothing observes spend-to-date to feed it) ·
 recurring-approval STORAGE and enforcement (the decision exists; no grant is

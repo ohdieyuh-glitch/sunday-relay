@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -31,6 +31,7 @@ let service: CronTickService;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'relay-cron-route-'));
   service = createCronTickService({ root, now: () => T0 });
+  service.schedules.create('sched-triage', STORED);
 });
 afterEach(() => {
   rmSync(root, { recursive: true, force: true });
@@ -38,10 +39,7 @@ afterEach(() => {
 
 const BODY = {
   authorized: true,
-  scheduleId: 'sched_triage',
-  contractVersion: 3,
-  cronExpression: '0 * * * *',
-  timeZone: 'UTC',
+  scheduleId: 'sched-triage',
   afterExclusive: '2026-08-06T09:00:00.000Z',
   maxOccurrences: 20,
   missedPolicy: 'run_all_with_limit',
@@ -49,13 +47,18 @@ const BODY = {
   workClass: 'read_only',
   overlapPolicy: 'parallel_with_limit',
   parallelLimit: 5,
-  binding: {
-    projectId: 'prj_cron',
-    workspaceId: null,
-    loopId: 'lpe_cron',
-    contractRef: 'contract-ref',
-    contractBindingDigest: 'digest-1',
-  },
+  binding: { projectId: 'prj_cron', workspaceId: null, loopId: 'lpe_cron' },
+};
+
+/** The schedule the tick reads. Stored, not asserted by the request. */
+const STORED = {
+  version: 1,
+  cronExpression: '0 * * * *',
+  timeZone: 'UTC',
+  contractRef: 'contract-ref',
+  contractBindingDigest: 'digest-1',
+  authoredBy: 'founder',
+  authoredAt: '2026-08-01T10:00:00.000Z',
 };
 
 function call(
@@ -293,17 +296,61 @@ describe('what the endpoint refuses to promise', () => {
   });
 
   it('a bad cron expression is refused with the FIELD and TOKEN named', async () => {
-    const result = await call({ ...BODY, cronExpression: '99 * * * *' });
+    // The expression comes from the STORE now, so a bad one has to be stored.
+    service.schedules.create('sched-bad', { ...STORED, cronExpression: '99 * * * *' });
+    const result = await call({ ...BODY, scheduleId: 'sched-bad' });
     expect(result?.status).toBe(422);
     expect(errorOf(result).message).toContain('is not a minute value');
+  });
+
+  it('a cron expression in the REQUEST is REFUSED, not ignored', async () => {
+    // Ignoring it let a caller believe a value took effect that never did.
+    // Mutation check: dropping the store-owned-field check returns 200 and
+    // silently uses the stored expression.
+    for (const field of ['cronExpression', 'timeZone', 'contractVersion']) {
+      const result = await call({ ...BODY, [field]: field === 'contractVersion' ? 9 : 'x' });
+      expect(result?.status, field).toBe(422);
+      expect(errorOf(result).kind).toBe('field_owned_by_the_schedule');
+      expect(errorOf(result).message).toContain(field);
+    }
+    for (const field of ['contractRef', 'contractBindingDigest']) {
+      const result = await call({ ...BODY, binding: { ...BODY.binding, [field]: 'x' } });
+      expect(result?.status, field).toBe(422);
+      expect(errorOf(result).message).toContain(`binding.${field}`);
+    }
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('an EDIT cannot replay an already-handled window', async () => {
+    // Review measured six runs for the same three hours: a new version gave
+    // every occurrence a fresh identity and a fresh claim. The window's start
+    // is clamped to the governing version's authoredAt, so a version owns
+    // only moments after it existed. Mutation check: removing the clamp
+    // creates three more runs here.
+    const first = await call();
+    expect(dataOf(first).runsCreated).toBe(3);
+
+    service.schedules.edit('sched-triage', {
+      ...STORED, cronExpression: '0 * * * *', authoredAt: '2026-08-06T12:00:00.000Z',
+      contractRef: 'contract-ref-2',
+    }, []);
+
+    const second = await call();
+    expect(second?.status).toBe(200);
+    expect(dataOf(second).runsCreated).toBe(0);
+    // …and the window it actually evaluated starts at the new version, not
+    // at the caller's older request.
+    expect((dataOf(second).window as { afterExclusive: string }).afterExclusive)
+      .toBe('2026-08-06T12:00:00.000Z');
   });
 
   it('a bare UTC offset is not an IANA zone — Intl would have accepted it', async () => {
     // The rule is CRON_LOOPS.md's, and it needs its own check: Intl accepts
     // "+05:30" happily, so without this the doc rule was unenforced. A fixed
     // offset cannot express daylight saving.
-    for (const timeZone of ['+05:30', '-08:00', 'GMT+2']) {
-      const result = await call({ ...BODY, timeZone });
+    for (const [i, timeZone] of ['+05:30', '-08:00', 'GMT+2'].entries()) {
+      service.schedules.create(`sched-tz${i}`, { ...STORED, timeZone });
+      const result = await call({ ...BODY, scheduleId: `sched-tz${i}` });
       expect(result?.status, timeZone).toBe(422);
       expect(errorOf(result).message).toContain('not an IANA timezone name');
     }
@@ -311,17 +358,71 @@ describe('what the endpoint refuses to promise', () => {
   });
 
   it('a zone the host cannot answer for is refused by the evaluator', async () => {
-    const result = await call({ ...BODY, timeZone: 'Mars/Olympus_Mons' });
+    service.schedules.create('sched-mars', { ...STORED, timeZone: 'Mars/Olympus_Mons' });
+    const result = await call({ ...BODY, scheduleId: 'sched-mars' });
     expect(result?.status).toBe(422);
     expect(errorOf(result).kind).toBe('unknown_timezone');
   });
 
   it('missing fields are listed by name, and nothing is created', async () => {
-    const result = await call({ authorized: true, scheduleId: 'sched_x' });
+    const result = await call({ authorized: true, scheduleId: 'sched-triage' });
     expect(result?.status).toBe(422);
-    expect(errorOf(result).message).toContain('cronExpression');
-    expect(errorOf(result).message).toContain('timeZone');
+    expect(errorOf(result).message).toContain('afterExclusive');
+    expect(errorOf(result).message).toContain('missedPolicy');
     expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('a schedule that does not exist is 404 — a tick runs a STORED schedule', async () => {
+    const result = await call({ ...BODY, scheduleId: 'sched-nope' });
+    expect(result?.status).toBe(404);
+    expect(errorOf(result).kind).toBe('schedule_not_found');
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('a PAUSED schedule is not evaluated', async () => {
+    // Mutation check: ignoring the paused flag runs a schedule an operator
+    // deliberately stopped.
+    service.schedules.setPaused('sched-triage', true, T0);
+    const result = await call();
+    expect(result?.status).toBe(409);
+    expect(errorOf(result).kind).toBe('schedule_paused');
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('a CORRUPT schedule refuses rather than running a partial history', async () => {
+    writeFileSync(
+      join(root, 'cron-schedules', 'sched-triage', 'versions.ndjson'),
+      'torn\n{"kind":"version","version":2}\n',
+    );
+    const result = await call();
+    expect(result?.status).toBe(409);
+    expect(errorOf(result).kind).toBe('schedule_corrupt');
+  });
+
+  it('the response reports the contract version the run came from', async () => {
+    const result = await call();
+    expect(dataOf(result).contractVersion).toBe(1);
+  });
+
+  it('uses the HIGHEST version as head, not the last journal line', async () => {
+    // planScheduleEdit picks the head by version because gaps are permitted
+    // and position does not imply order. The route used the last array
+    // element, so a journal whose lines are out of order would run an older
+    // schedule while reporting a newer version. Mutation check: restoring
+    // history[length - 1] fails this.
+    writeFileSync(
+      join(root, 'cron-schedules', 'sched-triage', 'versions.ndjson'),
+      [
+        JSON.stringify({ kind: 'version', version: STORED }),
+        JSON.stringify({ kind: 'version', version: { ...STORED, version: 4, cronExpression: '0 * * * *' } }),
+        JSON.stringify({ kind: 'version', version: { ...STORED, version: 2, cronExpression: '0 0 1 1 *' } }),
+      ].join('\n') + '\n',
+    );
+    const result = await call();
+    expect(result?.status).toBe(200);
+    // Version 4 governs: hourly, three occurrences — not version 2's yearly.
+    expect(dataOf(result).contractVersion).toBe(4);
+    expect(dataOf(result).runsCreated).toBe(3);
   });
 
   it('a missing BINDING field is named as binding.<field>', async () => {
@@ -331,7 +432,12 @@ describe('what the endpoint refuses to promise', () => {
   });
 
   it('a window wider than the evaluation bound is refused, not scanned', async () => {
-    const result = await call({ ...BODY, afterExclusive: '2026-07-01T00:00:00.000Z' });
+    // The governing version must be old enough that the clamp does not shrink
+    // the window below the bound — otherwise this would test the clamp.
+    service.schedules.create('sched-old', { ...STORED, authoredAt: '2026-06-01T00:00:00.000Z' });
+    const result = await call({
+      ...BODY, scheduleId: 'sched-old', afterExclusive: '2026-07-01T00:00:00.000Z',
+    });
     expect(result?.status).toBe(422);
     expect(errorOf(result).kind).toBe('window_too_large');
     expect(existsSync(occurrenceDir())).toBe(false);
