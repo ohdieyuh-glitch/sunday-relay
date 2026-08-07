@@ -150,3 +150,25 @@ export const mcpFail = <T = never>(failure: McpFailure): McpOutcome<T> => ({ ok:
 /** True when the category forbids ever recording the invocation as completed. */
 export const forbidsSuccess = (category: McpFailureCategory): boolean =>
   MCP_NEVER_SUCCESS_CATEGORIES.includes(category);
+
+/**
+ * Which of two fatal conditions describes what actually happened.
+ *
+ * FIRST WINS, because a crash followed by a pipe error should report the
+ * crash — the cause, not its consequence. First-wins ALONE stopped delivering
+ * that rule once the transport began reporting broken pipes: a server killed
+ * mid-write emits the pipe error BEFORE `exit`, so the consequence latched
+ * first and the signal was lost, and which arrived first varied run to run.
+ *
+ * So a `process_crashed` — which carries the signal — may replace a
+ * `process_exited_early`, which does not. That is the same rule, applied to
+ * the order the events actually arrive in rather than the order they are
+ * caused in. Nothing else replaces anything.
+ */
+export function preferredFailure(
+  current: McpFailure | null, next: McpFailure,
+): McpFailure {
+  if (current === null) return next;
+  if (current.category === 'process_exited_early' && next.category === 'process_crashed') return next;
+  return current;
+}

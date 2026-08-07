@@ -819,7 +819,7 @@ describe('Claude Code adapter boundaries (Prompt 8)', () => {
     expect(runner).not.toMatch(/shell:\s*true/);
   });
 
-  it('every writer to a child process stdin listens for a broken pipe', () => {
+  it('every TypeScript child-stdin writer under src and relay-bridge listens for a broken pipe', () => {
     // THE DEFECT THIS PINS, and it is a DIVERGENCE rather than an oversight:
     // the reviewer's runner attached this from the start, the Claude runner did
     // not, and the MCP transport was cleared by an author who believed a write

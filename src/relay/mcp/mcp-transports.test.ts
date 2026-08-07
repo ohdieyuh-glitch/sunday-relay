@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import type { McpRegistryEntryId, McpServerDefinitionId } from '../protocol/ids';
 import { MCP_BASELINE_PROTOCOL_REVISION } from './domain/mcp-protocol';
+import { mcpFailure, preferredFailure } from './domain/mcp-failure';
 import type { McpTransportOpenRequest } from './domain/mcp-ports';
 import {
   MCP_DEFAULT_NETWORK_POLICY, MCP_LOOPBACK_TEST_NETWORK_POLICY,
@@ -208,6 +209,29 @@ describe('the child environment is built FROM EMPTY', () => {
 /* ==================================================================== *
  * STDIO — REAL SPAWNED PROCESSES
  * ==================================================================== */
+
+describe('which fatal condition describes what happened', () => {
+  it('lets a crash replace the pipe error it caused', () => {
+    // THE ORDER THESE ARRIVE IN IS NOT THE ORDER THEY ARE CAUSED IN. A server
+    // killed mid-write emits the broken pipe BEFORE `exit` — measured 5 of 5 —
+    // so first-wins alone latched the consequence and lost the signal, and
+    // which one won varied run to run.
+    const pipe = mcpFailure('process_exited_early', 'the MCP server closed its input');
+    const crash = mcpFailure('process_crashed', 'terminated by SIGSEGV');
+    expect(preferredFailure(pipe, crash)).toBe(crash);
+    expect(preferredFailure(null, pipe)).toBe(pipe);
+  });
+
+  it('does not let anything else overwrite a latched cause', () => {
+    const crash = mcpFailure('process_crashed', 'terminated by SIGSEGV');
+    const pipe = mcpFailure('process_exited_early', 'the MCP server closed its input');
+    // The crash is the cause; a later pipe error is its consequence.
+    expect(preferredFailure(crash, pipe)).toBe(crash);
+    // And an unrelated later failure never displaces the first one.
+    expect(preferredFailure(pipe, mcpFailure('internal_error', 'something else entirely'))).toBe(pipe);
+    expect(preferredFailure(crash, mcpFailure('process_crashed', 'second'))).toBe(crash);
+  });
+});
 
 describe('stdio transport against a real child process', () => {
   it('the executable shims exist and resolve', () => {

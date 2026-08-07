@@ -143,11 +143,11 @@ export class RelayStdioProcessTransport implements Transport {
     });
     child.stdout.on('error', (error: Error) => this.onerror?.(error));
     // AND STDIN, which had no listener at all. A write callback does NOT
-    // suppress the stream's `error` event — Node delivers both — so a server
-    // that exits while a frame is being written crashed the host with an
-    // uncaught EPIPE. Reproduced with a ~16-byte write against a child that
-    // closes its own stdin and stays alive: `write` returned TRUE, the
-    // callback reported no error, and the stream emitted one anyway.
+    // suppress the stream's `error` event: measured on Node 22, one broken pipe
+    // delivered EPIPE to the write callback AND emitted `error` on the stream,
+    // and an unlistened stream `error` is an uncaught exception. That is the
+    // whole reason this listener exists — a `try`/`catch` around the write sees
+    // neither, because both arrive asynchronously.
     //
     // ROUTED TO `onFatal`, not just `onerror`, which is the difference between
     // the error reaching someone and not. `onerror` is the Transport
@@ -159,6 +159,9 @@ export class RelayStdioProcessTransport implements Transport {
     // path above does.
     child.stdin.on('error', (error: Error) => {
       if (!this.closing) {
+        // A CONSEQUENCE, not a cause. When the server was killed, its `exit`
+        // handler knows the signal and this does not — so the latch in
+        // `stdio-transport.ts` lets a `process_crashed` replace this.
         this.options.onFatal(mcpFailure(
           'process_exited_early',
           'the MCP server closed its input before the transport finished writing to it',

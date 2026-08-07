@@ -30,7 +30,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { mcpFail, mcpFailure, mcpOk, type McpFailure, type McpOutcome } from '../domain/mcp-failure';
+import {
+  mcpFail, mcpFailure, mcpOk, preferredFailure, type McpFailure, type McpOutcome,
+} from '../domain/mcp-failure';
 import { MCP_BASELINE_PROTOCOL_REVISION, negotiateProtocol } from '../domain/mcp-protocol';
 import type {
   McpClientPort, McpTransportFactoryPort, McpTransportOpenRequest,
@@ -120,11 +122,7 @@ export class McpStdioTransportFactory implements McpTransportFactoryPort {
     /* --- fatal-condition latch --- */
     let fatal: McpFailure | null = null;
     const stderrChunks: string[] = [];
-    const latch = (failure: McpFailure): void => {
-      // FIRST failure wins: a crash followed by a pipe error should report the
-      // crash, which is the cause, not its consequence.
-      if (fatal === null) fatal = failure;
-    };
+    const latch = (failure: McpFailure): void => { fatal = preferredFailure(fatal, failure); };
 
     // Resolution happens AFTER the allowlist decision, never before: an
     // executable that policy refused is never looked up, so a resolver bug
