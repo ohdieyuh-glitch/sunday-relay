@@ -126,14 +126,8 @@ export interface CronTickPort {
     scheduleId: string,
     proposed: Omit<CronContractVersion, 'version'>,
     runs: readonly VersionedRun[],
-  ): {
-    readonly ok: true;
-    readonly version: number;
-    readonly changed: readonly string[];
-    readonly activeRuns: readonly string[];
-  } | { readonly ok: false; readonly problem: string };
-  /** Every run of this Loop with the version it started under. */
-  versionedRunsFor(loopId: string): readonly VersionedRun[];
+  ): { readonly ok: true; readonly version: number; readonly changed: readonly string[] }
+    | { readonly ok: false; readonly problem: string };
 }
 
 /**
@@ -418,25 +412,32 @@ function editSchedule(
     return err(409, 'schedule_corrupt', safeText(inspected.problem));
   }
 
-  // The runs of the Loop the schedule points at TODAY, which is what the
-  // planner checks the edit against — a rebinding is judged against the runs it
-  // is moving away from, not the ones it is moving toward.
-  const head = [...inspected.record.history]
-    .sort((a, b) => a.version - b.version)[inspected.record.history.length - 1] as
-    (typeof inspected.record.history)[number];
-  const runs = ticks.versionedRunsFor(head.loopId);
-
+  // NO RUN LIST, and that is a statement about what can be known rather than a
+  // shortcut. `planScheduleEdit` uses it for two things: refusing an edit that
+  // would orphan a run, and reporting the in-progress runs the change must not
+  // disturb. An APPEND can never orphan a run — every existing version stays —
+  // so the first is inert here. The second cannot be computed truthfully: a run
+  // records the Loop it belongs to but NOT the schedule that created it (its id
+  // is a digest of the occurrence id, which is not reversible), so the only
+  // available list is "every run in this Loop". Two schedules may bind one
+  // Loop, and review measured what that costs: the other schedule's runs cite
+  // versions this history lacks, so every future edit is refused as orphaning
+  // and the schedule can never be corrected again.
+  //
+  // An empty list is therefore honest — nothing is claimed about runs — where a
+  // Loop-wide list would report another schedule's runs as this one's.
+  // Attributing a run to its schedule is the follow-up that makes both real.
   const { scheduleId: _id, ...contract } = proposed;
-  const edited = ticks.editSchedule(scheduleId, { ...contract, authoredAt: request.now }, runs);
+  const edited = ticks.editSchedule(scheduleId, { ...contract, authoredAt: request.now }, []);
   if (!edited.ok) return err(409, 'schedule_not_edited', safeText(edited.problem));
   return ok({
     scheduleId,
     version: edited.version,
     authoredAt: request.now,
-    // NAMED, not left to inference: what the edit changed, and the runs already
-    // in progress that keep the version they started under.
+    // NAMED, not left to inference: a version whose diff nobody can state is a
+    // version nobody can review. Diffed from the history the store returned, so
+    // it describes the version that actually landed.
     changed: edited.changed,
-    activeRunsUndisturbed: edited.activeRuns,
     note: 'The edit appended a version. Every earlier version is kept, and a run created under one '
       + 'still resolves to the version it started under. A tick window is clamped to this '
       + 'authoring instant, so the new version owns no moment that predates it.',

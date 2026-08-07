@@ -410,10 +410,19 @@ Changing the future schedule never mutates an active run.
 
 `POST /relay-api/cron/schedules/:id/edit` exposes it: the same validation a
 create gets, from the same reader so the two cannot drift, with the server's
-clock for the authoring instant. The response NAMES what changed and the
-in-progress runs that keep the version they started under. Pausing is not an
-edit and cannot be reached through it — `paused` is a refused field, so a
-schedule is stopped by the control that stops it.
+clock for the authoring instant. The response NAMES what changed, diffed from
+the history the store returned so it describes the version that landed. Pausing
+is not an edit and cannot be reached through it — `paused` is a refused field,
+so a schedule is stopped by the control that stops it.
+
+It passes the planner NO run list, and that is a limit rather than a shortcut.
+An append cannot orphan a run, so the planner's orphan check is inert here; its
+other use — reporting the in-progress runs a change must not disturb — cannot
+be computed truthfully, because a run records the LOOP it belongs to and not
+the schedule that created it. Two schedules may bind one Loop, and using the
+Loop-wide list makes the other schedule's runs cite versions this history
+lacks: every future edit refused as orphaning, the schedule never correctable
+again. Attributing a run to its schedule is listed under "Not implemented".
 
 `cron-versioning.ts` implements that decision. An edit APPENDS: every previous
 version rides through unchanged, including the one being superseded, whose
@@ -445,7 +454,9 @@ hardcodes automatic Unchain consumption**.
 ## Not implemented
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
-(the record is created; nothing advances it) · a schedule
+(the record is created; nothing advances it) · ATTRIBUTING A RUN TO ITS
+SCHEDULE: a run records its Loop, not the schedule that created it, so an edit
+can claim nothing about the runs already in flight · a schedule
 stored before the binding was required, which replays as CORRUPT: refused
 rather than run with attribution nobody wrote, and repairable by NO endpoint —
 creating over it conflicts, pausing and editing read it first, so the record

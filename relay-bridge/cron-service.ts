@@ -1,6 +1,5 @@
 import { createLoopRunNodeStore, type LoopRunNodeStore } from '../src/relay/persistence/loop-run-node';
 import { createCronClaimNodePort } from '../src/relay/persistence/cron-claim-node';
-import { planScheduleEdit } from '../src/relay/mission/loop/cron/cron-versioning';
 import {
   createCronScheduleStore, type CronScheduleStore, type ScheduleReadResult,
 } from '../src/relay/persistence/cron-schedule-node';
@@ -95,12 +94,8 @@ export interface CronTickService {
     scheduleId: string,
     proposed: Omit<CronContractVersion, 'version'>,
     runs: readonly VersionedRun[],
-  ): {
-    readonly ok: true;
-    readonly version: number;
-    readonly changed: readonly string[];
-    readonly activeRuns: readonly string[];
-  } | { readonly ok: false; readonly problem: string };
+  ): { readonly ok: true; readonly version: number; readonly changed: readonly string[] }
+    | { readonly ok: false; readonly problem: string };
   setSchedulePaused(
     scheduleId: string, paused: boolean, at: string,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
@@ -111,11 +106,6 @@ export interface CronTickService {
    *  A created-but-never-started run is not one of them — see the
    *  implementation for why that distinction is load-bearing. */
   activeRunsFor(loopId: string): number;
-  /** Every run of this Loop with the contract version it started under. An
-   *  edit needs the list, not the count: `planScheduleEdit` refuses a change
-   *  that would orphan a run citing a version, and reports the ACTIVE ones an
-   *  edit must not disturb. */
-  versionedRunsFor(loopId: string): readonly VersionedRun[];
   /** Exposed for diagnostics and tests; never reachable from a route. */
   readonly store: LoopRunNodeStore;
 }
@@ -260,39 +250,25 @@ export function createCronTickService(options: {
       return result.ok ? { ok: true } : { ok: false, problem: result.problem };
     },
     editSchedule: (scheduleId, proposed, runs) => {
-      const decision = planScheduleEdit({
-        history: schedules.read(scheduleId)?.history ?? [], proposed, runs,
-      });
       const result = schedules.edit(scheduleId, proposed, runs);
       if (!result.ok) return { ok: false, problem: result.problem };
-      // The version the store actually appended, not one the route guessed.
+      // WHAT ACTUALLY LANDED, diffed from the returned history. Asking
+      // `planScheduleEdit` a second time out here would answer about a head
+      // read OUTSIDE the write lock: another writer appending between the two
+      // makes the report describe an edit that did not happen — and a
+      // `no_change` out here beside a success in there would answer 200 saying
+      // the new version changed nothing, a state the store guarantees cannot
+      // exist.
       const appended = [...result.value.history].sort((a, b) => a.version - b.version);
-      return {
-        ok: true,
-        version: appended[appended.length - 1]?.version ?? 0,
-        // WHAT CHANGED AND WHAT MUST NOT BE DISTURBED, both from the plan. A
-        // version whose diff nobody can state is a version nobody can review,
-        // and the in-progress runs are a promise somebody has to keep.
-        changed: decision.ok ? decision.plan.changed : [],
-        activeRuns: decision.ok ? decision.plan.activeRuns.map((r) => r.runId) : [],
-      };
+      const head = appended[appended.length - 1];
+      const previous = appended[appended.length - 2];
+      const changed = head === undefined || previous === undefined ? [] : ([
+        'cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest',
+        'projectId', 'workspaceId', 'loopId',
+      ] as const).filter((field) => head[field] !== previous[field]);
+      return { ok: true, version: head?.version ?? 0, changed };
     },
     activeRunsFor,
-    versionedRunsFor: (loopId) => (store.runIdsForLoop(loopId) ?? []).flatMap((runId) => {
-      const loaded = readLoopRun(store, runId, loopDigest);
-      const run = loaded?.run;
-      // A run that cannot be read is NOT reported as absent: the edit planner
-      // refuses a history that would orphan a run, and silently dropping an
-      // unreadable one would let exactly that edit through.
-      if (run === null || run === undefined) {
-        return [{ runId, contractVersion: -1, active: true }];
-      }
-      return [{
-        runId,
-        contractVersion: run.contractVersion,
-        active: loopRunIsActive(run.state),
-      }];
-    }),
     // THE OCCURRENCE IDENTITY'S FIRST TERM IS THE SCHEDULE ID ITSELF. The
     // approved formula assumes that id is globally unique, and within the
     // namespace that matters it is: the claim markers share one flat namespace

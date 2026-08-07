@@ -841,25 +841,29 @@ describe('an operator can create, list and pause a schedule', () => {
     expect(dataOf(ticked).contractVersion).toBe(2);
   });
 
-  it('an edit names the in-progress runs it must not disturb', async () => {
-    // The planner returns them rather than leaving a caller to infer them,
-    // because "an in-progress run continues under the version it started
-    // with" is a promise somebody has to keep — and cannot keep from a list it
-    // was never given. Mutation check: passing the planner an empty run list
-    // makes this report nothing while three runs are in flight.
-    const ticked = await call();
+  it('an edit does not claim anything about runs it cannot attribute', async () => {
+    // A run records the LOOP it belongs to, not the schedule that created it,
+    // so the only list available is "every run in this Loop" — and two
+    // schedules may bind one Loop. Review measured the cost of using it: the
+    // other schedule's runs cite versions this history lacks, every future
+    // edit is refused as orphaning, and the schedule can never be corrected.
+    // An append cannot orphan a run anyway, so claiming nothing is the honest
+    // answer until a run says which schedule made it.
+    expect(service.schedules.create('sched-shared', {
+      ...STORED, loopId: 'lpe_cron',
+    }).ok).toBe(true);
+    const ticked = await call({ ...BODY, scheduleId: 'sched-shared' });
     expect(dataOf(ticked).runsCreated).toBe(3);
 
+    // Those runs are in sched-triage's Loop and cite a version of the OTHER
+    // schedule. Editing sched-triage still succeeds.
     const edited = await call(
       { ...CREATE, scheduleId: 'sched-triage', cronExpression: '*/30 * * * *' },
       { path: '/cron/schedules/sched-triage/edit' },
     );
     expect(edited?.status).toBe(200);
-    expect((dataOf(edited).activeRunsUndisturbed as string[]).length).toBe(3);
-    // …and each of them still resolves to the version it started under.
-    for (const runId of dataOf(edited).activeRunsUndisturbed as string[]) {
-      expect(readLoopRun(service.store, runId, loopDigest)?.run?.contractVersion).toBe(1);
-    }
+    expect(dataOf(edited).version).toBe(2);
+    expect(dataOf(edited).activeRunsUndisturbed).toBeUndefined();
   });
 
   it('an edit that changes nothing is refused, rather than splitting the history', async () => {
@@ -919,7 +923,10 @@ describe('an operator can create, list and pause a schedule', () => {
   });
 
   it('the schedule routes are behind the same gates as the tick', async () => {
-    for (const path of ['/cron/schedules', '/cron/schedules/sched-triage/pause']) {
+    for (const path of [
+      '/cron/schedules', '/cron/schedules/sched-triage/pause',
+      '/cron/schedules/sched-triage/edit',
+    ]) {
       expect((await call(CREATE, { path, authorize: () => ({ kind: 'none', principal: 'none' }) }))?.status)
         .toBe(401);
       expect((await call(CREATE, {
