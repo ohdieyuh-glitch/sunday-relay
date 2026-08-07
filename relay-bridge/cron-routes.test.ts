@@ -265,7 +265,10 @@ describe('every gate refuses before touching disk', () => {
 
   it('a GET, or any other cron path, is refused as an unknown operation', async () => {
     expect(errorOf(await call(BODY, { method: 'GET' })).message).toContain('Unknown Cron operation');
-    expect(errorOf(await call(BODY, { path: '/cron/schedules' })).message)
+    expect(errorOf(await call(BODY, { path: '/cron/nonsense' })).message)
+      .toContain('Unknown Cron operation');
+    // …and a real family with the wrong method is still unknown.
+    expect(errorOf(await call(BODY, { method: 'DELETE', path: '/cron/schedules' })).message)
       .toContain('Unknown Cron operation');
   });
 
@@ -457,6 +460,109 @@ describe('what the endpoint refuses to promise', () => {
       .every((o) => o.outcome === 'awaiting_confirmation')).toBe(true);
     // Nothing was claimed either: a held occurrence is not a handled one.
     expect(existsSync(occurrenceDir())).toBe(false);
+  });
+});
+
+describe('an operator can create, list and pause a schedule', () => {
+  const CREATE = {
+    authorized: true,
+    scheduleId: 'sched-new',
+    cronExpression: '0 9 * * 1-5',
+    timeZone: 'America/Los_Angeles',
+    contractRef: 'contract-ref',
+    contractBindingDigest: 'digest-1',
+    authoredBy: 'founder',
+  };
+
+  it('creates a schedule an operator can then tick', async () => {
+    const created = await call(CREATE, { path: '/cron/schedules' });
+    expect(created?.status).toBe(200);
+    expect(dataOf(created).version).toBe(1);
+    // The AUTHORING INSTANT is the server's, not the caller's.
+    expect(dataOf(created).authoredAt).toBe(T0);
+    expect(String(dataOf(created).note)).toContain('Nothing runs it');
+    expect(service.schedules.read('sched-new')?.history).toHaveLength(1);
+  });
+
+  it('refuses a caller-supplied authoring instant by ignoring the field entirely', async () => {
+    // Mutation check: reading authoredAt from the body hands back the replay
+    // the tick's clamp exists to prevent — a caller could backdate a version
+    // and own moments that predate it.
+    const created = await call(
+      { ...CREATE, authoredAt: '2020-01-01T00:00:00.000Z' },
+      { path: '/cron/schedules' },
+    );
+    expect(created?.status).toBe(200);
+    expect(service.schedules.read('sched-new')?.history[0]?.authoredAt).toBe(T0);
+  });
+
+  it('lists the schedules that exist', async () => {
+    await call(CREATE, { path: '/cron/schedules' });
+    const listed = await call(undefined, { method: 'GET', path: '/cron/schedules' });
+    expect(listed?.status).toBe(200);
+    expect(dataOf(listed).scheduleIds).toEqual(['sched-new', 'sched-triage']);
+  });
+
+  it('creating requires explicit authorization, like a tick', async () => {
+    const { authorized: _drop, ...withoutConsent } = CREATE;
+    const created = await call(withoutConsent, { path: '/cron/schedules' });
+    expect(created?.status).toBe(403);
+    expect(errorOf(created).kind).toBe('authorization_required');
+    expect(service.schedules.list()).toEqual(['sched-triage']);
+  });
+
+  it('refuses a bad expression or a non-IANA zone at creation, not at tick time', async () => {
+    const badCron = await call({ ...CREATE, cronExpression: '99 * * * *' }, { path: '/cron/schedules' });
+    expect(badCron?.status).toBe(422);
+    expect(errorOf(badCron).message).toContain('is not a minute value');
+    const badZone = await call({ ...CREATE, timeZone: '+05:30' }, { path: '/cron/schedules' });
+    expect(badZone?.status).toBe(422);
+    expect(errorOf(badZone).message).toContain('not an IANA timezone name');
+    expect(service.schedules.list()).toEqual(['sched-triage']);
+  });
+
+  it('refuses to create over an existing schedule', async () => {
+    const again = await call({ ...CREATE, scheduleId: 'sched-triage' }, { path: '/cron/schedules' });
+    expect(again?.status).toBe(409);
+    expect(errorOf(again).kind).toBe('schedule_not_created');
+  });
+
+  it('pauses and resumes, and a paused schedule then refuses a tick', async () => {
+    const paused = await call({ authorized: true, paused: true },
+      { path: '/cron/schedules/sched-triage/pause' });
+    expect(paused?.status).toBe(200);
+    expect(dataOf(paused).paused).toBe(true);
+    expect((await call())?.status).toBe(409);
+
+    const resumed = await call({ authorized: true, paused: false },
+      { path: '/cron/schedules/sched-triage/pause' });
+    expect(resumed?.status).toBe(200);
+    expect((await call())?.status).toBe(200);
+  });
+
+  it('pausing requires explicit authorization and an explicit boolean', async () => {
+    expect((await call({ paused: true }, { path: '/cron/schedules/sched-triage/pause' }))?.status)
+      .toBe(403);
+    expect((await call({ authorized: true }, { path: '/cron/schedules/sched-triage/pause' }))?.status)
+      .toBe(422);
+    expect((await call({ authorized: true, paused: 'yes' },
+      { path: '/cron/schedules/sched-triage/pause' }))?.status).toBe(422);
+  });
+
+  it('pausing a schedule that does not exist is refused', async () => {
+    const result = await call({ authorized: true, paused: true },
+      { path: '/cron/schedules/sched-nope/pause' });
+    expect(result?.status).toBe(409);
+  });
+
+  it('the schedule routes are behind the same gates as the tick', async () => {
+    for (const path of ['/cron/schedules', '/cron/schedules/sched-triage/pause']) {
+      expect((await call(CREATE, { path, authorize: () => ({ kind: 'none', principal: 'none' }) }))?.status)
+        .toBe(401);
+      expect((await call(CREATE, {
+        path, env: { RELAY_BRIDGE_API_TOKEN: TOKEN, RELAY_LOOP_ENGINE_ENABLED: '1' },
+      }))?.status).toBe(403);
+    }
   });
 });
 

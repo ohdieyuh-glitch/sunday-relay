@@ -7,6 +7,7 @@ import { readIsoInstantWithOffset } from '../src/relay/mission/loop/runtime/loop
 import type { CronSchedule, CronTickReport } from '../src/relay/mission/loop/cron';
 import type { CronRunBinding } from './cron-service';
 import type { ScheduleReadResult } from '../src/relay/persistence/cron-schedule-node';
+import type { CronContractVersion } from '../src/relay/mission/loop/cron/cron-versioning';
 
 /**
  * SUNDAY RELAY — THE CRON TICK ENDPOINT.
@@ -104,6 +105,93 @@ export interface CronTickPort {
   activeRunsFor(loopId: string): number;
   /** What the durable store says about this schedule. */
   inspectSchedule(scheduleId: string): ScheduleReadResult;
+  listSchedules(): readonly string[];
+  createSchedule(
+    scheduleId: string, first: CronContractVersion,
+  ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+  setSchedulePaused(
+    scheduleId: string, paused: boolean, at: string,
+  ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+}
+
+/** Creating or pausing a schedule changes what Relay will do unattended, so
+ *  both require the same explicit consent a tick does. */
+function requireAuthorization(body: unknown, what: string): ReviewerRouteResult | null {
+  const authorized = body !== null && typeof body === 'object'
+    && (body as Record<string, unknown>).authorized === true;
+  return authorized ? null : err(
+    403, 'authorization_required',
+    `${what} changes what this server will do unattended and requires explicit authorization.`,
+  );
+}
+
+function createSchedule(request: CronRouteRequest, ticks: CronTickPort): ReviewerRouteResult {
+  const refusal = requireAuthorization(request.body, 'Creating a schedule');
+  if (refusal !== null) return refusal;
+
+  const body = request.body;
+  const scheduleId = trimmed(body, 'scheduleId');
+  const cronExpression = trimmed(body, 'cronExpression');
+  const timeZone = trimmed(body, 'timeZone');
+  const contractRef = trimmed(body, 'contractRef');
+  const contractBindingDigest = trimmed(body, 'contractBindingDigest');
+  const authoredBy = trimmed(body, 'authoredBy');
+  const missing = Object.entries({
+    scheduleId, cronExpression, timeZone, contractRef, contractBindingDigest, authoredBy,
+  }).filter(([, v]) => v === null).map(([f]) => f);
+  if (missing.length > 0) {
+    return err(422, 'validation_failed', `Missing or invalid fields: ${missing.join(', ')}.`);
+  }
+  if (!IANA_ZONE.test(timeZone as string)) {
+    return err(422, 'validation_failed',
+      `"${safeText(timeZone)}" is not an IANA timezone name. A recurring schedule needs a zone, `
+      + 'not a fixed offset: an offset cannot express daylight saving.');
+  }
+  const parsed = parseCronExpression(cronExpression as string);
+  if (!parsed.ok) return err(422, 'validation_failed', safeText(parsed.problem));
+
+  const created = ticks.createSchedule(scheduleId as string, {
+    version: 1,
+    cronExpression: cronExpression as string,
+    timeZone: timeZone as string,
+    contractRef: contractRef as string,
+    contractBindingDigest: contractBindingDigest as string,
+    authoredBy: authoredBy as string,
+    // THE SERVER'S CLOCK. A caller does not get to say when it authored
+    // something: the authoring instant now bounds which moments a version may
+    // own, so accepting it from the body would hand back the replay the tick
+    // clamps against.
+    authoredAt: request.now,
+  });
+  if (!created.ok) return err(409, 'schedule_not_created', safeText(created.problem));
+  return ok({
+    scheduleId,
+    version: 1,
+    authoredAt: request.now,
+    note: 'The schedule is stored. Nothing runs it: there is no timer, and a tick must be '
+      + 'requested by an operator.',
+  });
+}
+
+function pauseSchedule(
+  request: CronRouteRequest, ticks: CronTickPort, rawId: string,
+): ReviewerRouteResult {
+  const refusal = requireAuthorization(request.body, 'Pausing or resuming a schedule');
+  if (refusal !== null) return refusal;
+  const body = request.body as Record<string, unknown> | null;
+  const paused = body === null ? undefined : body.paused;
+  if (typeof paused !== 'boolean') {
+    return err(422, 'validation_failed', 'paused must be true or false, stated explicitly.');
+  }
+  let scheduleId: string;
+  try {
+    scheduleId = decodeURIComponent(rawId);
+  } catch {
+    return err(422, 'validation_failed', 'The schedule id is not a usable path segment.');
+  }
+  const result = ticks.setSchedulePaused(scheduleId, paused, request.now);
+  if (!result.ok) return err(409, 'schedule_not_changed', safeText(result.problem));
+  return ok({ scheduleId, paused });
 }
 
 export interface CronRouteRequest {
@@ -202,14 +290,31 @@ export async function handleCronRoute(
     );
   }
 
-  if (request.method !== 'POST' || request.path !== `${CRON_PREFIX}tick`) {
-    return err(422, 'validation_failed', 'Unknown Cron operation.');
-  }
   if (ticks === null) {
     return err(
       503, 'cron_not_ready',
-      'This Relay Bridge has no mounted state root, so no occurrence can be claimed durably.',
+      'This Relay Bridge has no mounted state root, so no schedule can be stored durably and no '
+      + 'occurrence can be claimed.',
     );
+  }
+
+  // The schedule family. A schedule could previously only be made from a
+  // test, which meant the whole Cron path was unreachable by an operator.
+  if (request.path === `${CRON_PREFIX}schedules`) {
+    if (request.method === 'GET') return ok({ scheduleIds: ticks.listSchedules() });
+    if (request.method === 'POST') return createSchedule(request, ticks);
+    return err(422, 'validation_failed', 'Unknown Cron operation.');
+  }
+  const pauseMatch = /^\/cron\/schedules\/([^/]+)\/pause$/u.exec(request.path);
+  if (pauseMatch !== null) {
+    if (request.method !== 'POST') {
+      return err(422, 'validation_failed', 'Unknown Cron operation.');
+    }
+    return pauseSchedule(request, ticks, pauseMatch[1] as string);
+  }
+
+  if (request.method !== 'POST' || request.path !== `${CRON_PREFIX}tick`) {
+    return err(422, 'validation_failed', 'Unknown Cron operation.');
   }
 
   const body = request.body;

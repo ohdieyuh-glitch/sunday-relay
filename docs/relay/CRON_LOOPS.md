@@ -146,7 +146,12 @@ Options considered, against what actually exists:
   over what window, while the expression, timezone, contract and version are
   the schedule's own. A caller can no longer run one schedule's window under
   rules it invented, a missing schedule is a 404, and a PAUSED or CORRUPT one
-  is refused rather than partially evaluated. The window's start is CLAMPED to
+  is refused rather than partially evaluated. An operator can create, list and
+  pause schedules through `/relay-api/cron/schedules` — creating and pausing
+  need the same explicit authorization a tick does, and the AUTHORING INSTANT
+  is the server's, because a caller who could backdate a version would own
+  moments that predate it and hand back the replay the clamp prevents. The
+  window's start is CLAMPED to
   the governing version's authoring instant, so an edit cannot replay an
   already-handled window: the occurrence identity carries the contract
   version, and without the clamp a new version gave every past occurrence a
@@ -397,8 +402,8 @@ hardcodes automatic Unchain consumption**.
 ## Not implemented
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
-(the record is created; nothing advances it) · schedule CREATION and pausing
-through an endpoint (the store supports both; no route exposes them) · the
+(the record is created; nothing advances it) · schedule EDITING through an
+endpoint (create, list and pause are exposed; editing is store-only) · the
 occurrence queue,
 and therefore the `queue_one` and `queue_all` overlap policies · period budget-cap ENFORCEMENT (the
 decision exists; nothing observes spend-to-date to feed it) ·

@@ -3,6 +3,7 @@ import { createCronClaimNodePort } from '../src/relay/persistence/cron-claim-nod
 import {
   createCronScheduleStore, type CronScheduleStore, type ScheduleReadResult,
 } from '../src/relay/persistence/cron-schedule-node';
+import type { CronContractVersion } from '../src/relay/mission/loop/cron/cron-versioning';
 import {
   confirmLoopRun, emptyLoopBudget, loopDigest, loopRunIsActive, readLoopRun,
   type LoopOperationDeps,
@@ -71,6 +72,13 @@ export interface CronTickService {
   readonly schedules: CronScheduleStore;
   /** What the store says about one schedule: found, missing or corrupt. */
   inspectSchedule(scheduleId: string): ScheduleReadResult;
+  listSchedules(): readonly string[];
+  createSchedule(
+    scheduleId: string, first: CronContractVersion,
+  ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+  setSchedulePaused(
+    scheduleId: string, paused: boolean, at: string,
+  ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
   tick(input: Omit<CronTickInput, 'tz' | 'digest'> & {
     readonly binding: CronRunBinding;
   }): CronTickReport;
@@ -188,6 +196,15 @@ export function createCronTickService(options: {
     store,
     schedules,
     inspectSchedule: (scheduleId) => schedules.inspect(scheduleId),
+    listSchedules: () => schedules.list(),
+    createSchedule: (scheduleId, first) => {
+      const result = schedules.create(scheduleId, first);
+      return result.ok ? { ok: true } : { ok: false, problem: result.problem };
+    },
+    setSchedulePaused: (scheduleId, paused, at) => {
+      const result = schedules.setPaused(scheduleId, paused, at);
+      return result.ok ? { ok: true } : { ok: false, problem: result.problem };
+    },
     activeRunsFor,
     tick: (input) => runCronTick(claim, runsFor(input.binding), {
       ...input,
