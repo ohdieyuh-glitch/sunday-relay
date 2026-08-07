@@ -241,7 +241,12 @@ export async function handleCronRoute(
       `${safeText(scheduleId)} is paused. A paused schedule is not evaluated, and nothing was `
       + 'claimed or created.');
   }
-  const head = inspected.record.history[inspected.record.history.length - 1] as
+  // THE HIGHEST VERSION, not the last element — the same rule
+  // `planScheduleEdit` uses, and for its reason: gaps are permitted, so
+  // position does not imply order. Two modules disagreeing about what "head"
+  // means would run an older schedule while reporting a newer version.
+  const head = [...inspected.record.history]
+    .sort((a, b) => a.version - b.version)[inspected.record.history.length - 1] as
     (typeof inspected.record.history)[number];
 
   const binding = (body as Record<string, unknown>).binding;

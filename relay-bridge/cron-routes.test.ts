@@ -372,6 +372,27 @@ describe('what the endpoint refuses to promise', () => {
     expect(dataOf(result).contractVersion).toBe(1);
   });
 
+  it('uses the HIGHEST version as head, not the last journal line', async () => {
+    // planScheduleEdit picks the head by version because gaps are permitted
+    // and position does not imply order. The route used the last array
+    // element, so a journal whose lines are out of order would run an older
+    // schedule while reporting a newer version. Mutation check: restoring
+    // history[length - 1] fails this.
+    writeFileSync(
+      join(root, 'cron-schedules', 'sched-triage', 'versions.ndjson'),
+      [
+        JSON.stringify({ kind: 'version', version: STORED }),
+        JSON.stringify({ kind: 'version', version: { ...STORED, version: 4, cronExpression: '0 * * * *' } }),
+        JSON.stringify({ kind: 'version', version: { ...STORED, version: 2, cronExpression: '0 0 1 1 *' } }),
+      ].join('\n') + '\n',
+    );
+    const result = await call();
+    expect(result?.status).toBe(200);
+    // Version 4 governs: hourly, three occurrences — not version 2's yearly.
+    expect(dataOf(result).contractVersion).toBe(4);
+    expect(dataOf(result).runsCreated).toBe(3);
+  });
+
   it('a missing BINDING field is named as binding.<field>', async () => {
     const result = await call({ ...BODY, binding: { projectId: 'prj_cron' } });
     expect(result?.status).toBe(422);
