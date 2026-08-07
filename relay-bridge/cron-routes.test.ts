@@ -254,6 +254,15 @@ describe('every gate refuses before touching disk', () => {
     expect(errorOf(result).kind).toBe('cron_not_ready');
   });
 
+  it('a path that names no operation is 422 even when the state root is missing', async () => {
+    // 503 says "this operation exists and the server is temporarily unready",
+    // which invites a retry for something that will never exist. Readiness is
+    // decided after the operation is recognized, not before.
+    const result = await call(BODY, { path: '/cron/nonsense' }, null);
+    expect(result?.status).toBe(422);
+    expect(errorOf(result).message).toContain('Unknown Cron operation');
+  });
+
   it('reaching the route is not consent — authorized must be explicitly true', async () => {
     for (const authorized of [undefined, false, 'true', 1]) {
       const result = await call({ ...BODY, authorized });
@@ -482,25 +491,49 @@ describe('an operator can create, list and pause a schedule', () => {
     expect(dataOf(created).authoredAt).toBe(T0);
     expect(String(dataOf(created).note)).toContain('Nothing runs it');
     expect(service.schedules.read('sched-new')?.history).toHaveLength(1);
+
+    // AND THEN TICKS IT. The whole point of the route is that the Cron path is
+    // reachable by an operator; a create test that never ticks proves half of
+    // it. The window opens before the schedule existed on purpose: the reply
+    // must show the clamp, not the requested start.
+    const ticked = await call(
+      { ...BODY, scheduleId: 'sched-new', afterExclusive: '2020-01-01T00:00:00.000Z' },
+    );
+    expect(ticked?.status).toBe(200);
+    expect(dataOf(ticked).contractVersion).toBe(1);
+    expect((dataOf(ticked).window as Record<string, unknown>).afterExclusive).toBe(T0);
   });
 
-  it('refuses a caller-supplied authoring instant by ignoring the field entirely', async () => {
-    // Mutation check: reading authoredAt from the body hands back the replay
-    // the tick's clamp exists to prevent — a caller could backdate a version
-    // and own moments that predate it.
+  it('refuses a caller-supplied authoring instant outright, and stores nothing', async () => {
+    // Reading authoredAt from the body would hand back the replay the tick's
+    // clamp exists to prevent: a caller could backdate a version and own
+    // moments that predate it. This used to be ignored silently, which let the
+    // caller believe a backdate had landed. Refusing says so.
     const created = await call(
       { ...CREATE, authoredAt: '2020-01-01T00:00:00.000Z' },
       { path: '/cron/schedules' },
     );
-    expect(created?.status).toBe(200);
-    expect(service.schedules.read('sched-new')?.history[0]?.authoredAt).toBe(T0);
+    expect(created?.status).toBe(422);
+    expect(errorOf(created).kind).toBe('field_not_accepted');
+    expect(service.schedules.list()).toEqual(['sched-triage']);
   });
 
   it('lists the schedules that exist', async () => {
     await call(CREATE, { path: '/cron/schedules' });
     const listed = await call(undefined, { method: 'GET', path: '/cron/schedules' });
     expect(listed?.status).toBe(200);
-    expect(dataOf(listed).scheduleIds).toEqual(['sched-new', 'sched-triage']);
+    expect(dataOf(listed).schedules).toEqual([
+      { scheduleId: 'sched-new', state: 'active' },
+      { scheduleId: 'sched-triage', state: 'active' },
+    ]);
+  });
+
+  it('the listing says which schedules are paused rather than showing them as ordinary', async () => {
+    // A bare list of ids reports a paused schedule identically to a running
+    // one, which is the state an operator most needs to see.
+    await call({ authorized: true, paused: true }, { path: '/cron/schedules/sched-triage/pause' });
+    const listed = await call(undefined, { method: 'GET', path: '/cron/schedules' });
+    expect(dataOf(listed).schedules).toEqual([{ scheduleId: 'sched-triage', state: 'paused' }]);
   });
 
   it('creating requires explicit authorization, like a tick', async () => {
@@ -521,10 +554,53 @@ describe('an operator can create, list and pause a schedule', () => {
     expect(service.schedules.list()).toEqual(['sched-triage']);
   });
 
-  it('refuses to create over an existing schedule', async () => {
-    const again = await call({ ...CREATE, scheduleId: 'sched-triage' }, { path: '/cron/schedules' });
+  it('refuses a zone that is IANA-SHAPED but that no evaluator can resolve', async () => {
+    // The pattern accepts any Word/Word. Storing `America/Atlantis` produced a
+    // schedule whose every tick failed `unknown_timezone` forever — and with
+    // no edit and no delete route, the id was burned.
+    const atlantis = await call(
+      { ...CREATE, timeZone: 'America/Atlantis' }, { path: '/cron/schedules' },
+    );
+    expect(atlantis?.status).toBe(422);
+    expect(errorOf(atlantis).message).toContain('cannot resolve');
+    expect(service.schedules.list()).toEqual(['sched-triage']);
+  });
+
+  it('refuses an unusable schedule id as a validation failure, not a conflict', async () => {
+    // 409 said "this conflicts with something"; nothing existed to conflict
+    // with. A caller cannot tell "pick another name" from "fix this field".
+    for (const scheduleId of ['../escape', 'has space', '_leading', 'x'.repeat(100)]) {
+      const result = await call({ ...CREATE, scheduleId }, { path: '/cron/schedules' });
+      expect(result?.status, scheduleId).toBe(422);
+      expect(errorOf(result).kind, scheduleId).toBe('validation_failed');
+    }
+    expect(service.schedules.list()).toEqual(['sched-triage']);
+  });
+
+  it('refuses a body field this server decides, rather than discarding it silently', async () => {
+    // `paused: true` was accepted, dropped, and answered with a success — so an
+    // operator who created a schedule intending it to start paused got an
+    // ACTIVE one and no indication of it.
+    for (const field of ['paused', 'version', 'authoredAt']) {
+      const result = await call(
+        { ...CREATE, [field]: field === 'paused' ? true : 99 }, { path: '/cron/schedules' },
+      );
+      expect(result?.status, field).toBe(422);
+      expect(errorOf(result).kind, field).toBe('field_not_accepted');
+    }
+    expect(service.schedules.list()).toEqual(['sched-triage']);
+  });
+
+  it('refuses to create over an existing schedule, and leaves it exactly as it was', async () => {
+    const before = service.schedules.read('sched-triage');
+    const again = await call(
+      { ...CREATE, scheduleId: 'sched-triage', contractRef: 'contract-OVERWRITE' },
+      { path: '/cron/schedules' },
+    );
     expect(again?.status).toBe(409);
     expect(errorOf(again).kind).toBe('schedule_not_created');
+    // The property that matters: a refused create is not a partial one.
+    expect(service.schedules.read('sched-triage')).toEqual(before);
   });
 
   it('pauses and resumes, and a paused schedule then refuses a tick', async () => {
@@ -549,10 +625,18 @@ describe('an operator can create, list and pause a schedule', () => {
       { path: '/cron/schedules/sched-triage/pause' }))?.status).toBe(422);
   });
 
-  it('pausing a schedule that does not exist is refused', async () => {
+  it('pausing a schedule that does not exist says so, and does not blame a lock', async () => {
+    // THE DEFECT THIS PINS. `setPaused` takes the write lock BEFORE it replays,
+    // and opening a lock inside a directory that does not exist fails ENOENT —
+    // which the store can only report as contention. An operator was sent to
+    // investigate a competing writer for a schedule that was never created.
+    // Asserting only the status let that false message pass.
     const result = await call({ authorized: true, paused: true },
       { path: '/cron/schedules/sched-nope/pause' });
-    expect(result?.status).toBe(409);
+    expect(result?.status).toBe(404);
+    expect(errorOf(result).kind).toBe('schedule_not_found');
+    expect(errorOf(result).message).not.toContain('another process');
+    expect(errorOf(result).message).not.toContain('lock');
   });
 
   it('the schedule routes are behind the same gates as the tick', async () => {

@@ -50,6 +50,14 @@ const SNAPSHOT = 'snapshot.json';
  *  schedule id becomes a path segment. */
 const SAFE_SCHEDULE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
+/** Whether an id can name a schedule at all. Exported so a surface can refuse
+ *  an unusable id as the VALIDATION failure it is, rather than discovering it
+ *  as a storage conflict — and so there is one definition of the rule instead
+ *  of a copy that drifts. */
+export function isUsableScheduleId(scheduleId: string): boolean {
+  return SAFE_SCHEDULE_ID.test(scheduleId);
+}
+
 export interface CronScheduleRecord {
   readonly scheduleId: string;
   /** Every version, oldest first. The journal, replayed. */

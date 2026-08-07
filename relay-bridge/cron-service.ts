@@ -66,13 +66,27 @@ export interface CronRunBinding {
 const qualifiedScheduleId = (scheduleId: string, binding: CronRunBinding): string =>
   [binding.projectId, binding.workspaceId ?? 'no-workspace', binding.loopId, scheduleId].join('|');
 
+/** One stored schedule, and what the store can truthfully say about it. */
+export interface CronScheduleListing {
+  readonly scheduleId: string;
+  readonly state: 'active' | 'paused' | 'corrupt' | 'missing';
+}
+
 export interface CronTickService {
   /** The durable schedules. A tick reads what to run from HERE, not from the
    *  request that woke it. */
   readonly schedules: CronScheduleStore;
   /** What the store says about one schedule: found, missing or corrupt. */
   inspectSchedule(scheduleId: string): ScheduleReadResult;
-  listSchedules(): readonly string[];
+  /** Every stored schedule WITH the state the store can actually state. A bare
+   *  list of ids reports a corrupt or paused schedule as an ordinary one, and
+   *  the store separates `inspect` from `list` precisely because that
+   *  difference is the thing an operator needs to see. */
+  listSchedules(): readonly CronScheduleListing[];
+  /** Whether the timezone evaluator can actually answer for this zone. An
+   *  IANA-SHAPED string is not an IANA zone: `America/Atlantis` matches the
+   *  pattern and no evaluator on earth can resolve it. */
+  zoneIsKnown(timeZone: string, at: string): boolean;
   createSchedule(
     scheduleId: string, first: CronContractVersion,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
@@ -196,7 +210,18 @@ export function createCronTickService(options: {
     store,
     schedules,
     inspectSchedule: (scheduleId) => schedules.inspect(scheduleId),
-    listSchedules: () => schedules.list(),
+    listSchedules: () => schedules.list().map((scheduleId) => {
+      const inspected = schedules.inspect(scheduleId);
+      if (inspected.kind === 'corrupt') return { scheduleId, state: 'corrupt' as const };
+      // `list` enumerates directories; `inspect` replays. A schedule that
+      // disappeared between the two is reported as gone, never as healthy.
+      if (inspected.kind === 'missing') return { scheduleId, state: 'missing' as const };
+      return {
+        scheduleId,
+        state: inspected.record.paused ? ('paused' as const) : ('active' as const),
+      };
+    }),
+    zoneIsKnown: (timeZone, at) => tz.localMinuteOf(at, timeZone) !== null,
     createSchedule: (scheduleId, first) => {
       const result = schedules.create(scheduleId, first);
       return result.ok ? { ok: true } : { ok: false, problem: result.problem };

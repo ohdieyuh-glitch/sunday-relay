@@ -31,8 +31,10 @@ evolves within the tick, and every due occurrence lands in the report with
 its outcome. `relay-bridge/cron-service.ts` binds it to the real ports (the Loop run
 store, the file-backed claim adapter, the Intl timezone port, and
 `confirmLoopRun` with `creationSource: 'schedule'`), and
-`relay-bridge/cron-routes.ts` exposes `POST /relay-api/cron/tick` —
-operator-only, flag-gated, explicit `authorized: true`, server-clocked.
+`relay-bridge/cron-routes.ts` exposes `POST /relay-api/cron/tick` plus the
+schedule family — `POST` and `GET /relay-api/cron/schedules` and
+`POST /relay-api/cron/schedules/:id/pause` — all operator-only, flag-gated,
+server-clocked, with explicit `authorized: true` on everything that writes.
 
 WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
 
@@ -44,10 +46,15 @@ WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
   `creationSource: 'schedule'`, which the Loop service turns into
   `trigger: 'cron'`; and `preflightLoopDispatch` refuses a cron trigger. The
   response says `dispatched: 0` as a claim about the code path.
-- **There is no schedule store.** Every schedule field arrives in the request
-  body. No `RelayLoopSchedule` exists anywhere; nothing lists, pauses or
-  versions a schedule. This ships a manual tick over a caller-declared
-  schedule, not a Cron Loop product.
+- **A stored schedule does not pin the binding its runs are attributed to.**
+  The occurrence claim namespace is `project|workspace|loop|scheduleId`, and
+  the first three arrive in the TICK request. The durable claim marker
+  therefore protects a (schedule, binding) pair rather than the schedule:
+  review measured three ticks over one identical window, differing only in
+  `binding`, producing nine runs — six of them in the same Loop for the same
+  three hours. Creation is where the binding must be pinned, and it is not
+  pinned yet. Named here rather than implied, and listed under
+  "Not implemented" below.
 - **Every occurrence-CONSUMING overlap policy is refused.** The rule: no
   policy may durably consume an occurrence on the strength of a run that is
   not actually working. That excludes `queue_one` (this document's documented
@@ -385,8 +392,10 @@ version nobody can review. Refused: an unattributed edit, an authored-at
 without an explicit offset, a history with a REPEATED version, a run citing an
 unknown version, and an edit that changes no schedule or contract field.
 GAPS are accepted — a run citing v4 in [1, 2, 4] resolves unambiguously, and
-an earlier version refused gaps on a stated reason that was simply untrue. NOT WIRED: no schedule
-store exists, so nothing holds a history for this to append to.
+an earlier version refused gaps on a stated reason that was simply untrue.
+The store holds the history this appends to, and the tick reads its head. What
+is still missing is the EDIT path: nothing calls `planScheduleEdit` from a
+surface, so a stored schedule has exactly the one version creation gave it.
 
 ## Cron S-Loops
 
@@ -403,7 +412,11 @@ hardcodes automatic Unchain consumption**.
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
 (the record is created; nothing advances it) · schedule EDITING through an
-endpoint (create, list and pause are exposed; editing is store-only) · the
+endpoint (create, list and pause are exposed; editing is store-only) · **a
+schedule that pins its own binding**, so a stored schedule can still be ticked
+into any project and Loop the caller names, and the claim marker that makes a
+replay free protects a (schedule, binding) pair rather than the schedule ·
+schedule DELETION, so an unusable schedule can only be paused · the
 occurrence queue,
 and therefore the `queue_one` and `queue_all` overlap policies · period budget-cap ENFORCEMENT (the
 decision exists; nothing observes spend-to-date to feed it) ·

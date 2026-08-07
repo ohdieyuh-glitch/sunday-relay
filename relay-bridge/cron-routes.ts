@@ -1,11 +1,13 @@
 import { type ReviewerRouteResult } from './reviewer-routes';
 import { LOOP_ENGINE_ENV, loopEngineEnabled } from './loop-routes';
 import { safeText } from './redact';
+import { decodeSegment } from './path-segment';
+import { isUsableScheduleId } from '../src/relay/persistence/cron-schedule-node';
 import { featureEffectivelyEnabled } from '../src/relay/mission/loop/loop-availability';
 import { parseCronExpression } from '../src/relay/mission/loop/cron';
 import { readIsoInstantWithOffset } from '../src/relay/mission/loop/runtime/loop-scheduler';
 import type { CronSchedule, CronTickReport } from '../src/relay/mission/loop/cron';
-import type { CronRunBinding } from './cron-service';
+import type { CronRunBinding, CronScheduleListing } from './cron-service';
 import type { ScheduleReadResult } from '../src/relay/persistence/cron-schedule-node';
 import type { CronContractVersion } from '../src/relay/mission/loop/cron/cron-versioning';
 
@@ -105,7 +107,8 @@ export interface CronTickPort {
   activeRunsFor(loopId: string): number;
   /** What the durable store says about this schedule. */
   inspectSchedule(scheduleId: string): ScheduleReadResult;
-  listSchedules(): readonly string[];
+  listSchedules(): readonly CronScheduleListing[];
+  zoneIsKnown(timeZone: string, at: string): boolean;
   createSchedule(
     scheduleId: string, first: CronContractVersion,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
@@ -142,13 +145,43 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   if (missing.length > 0) {
     return err(422, 'validation_failed', `Missing or invalid fields: ${missing.join(', ')}.`);
   }
+  // AN UNUSABLE ID IS A VALIDATION FAILURE, NOT A CONFLICT. Reserving 409 for
+  // the genuine already-exists case is what lets a caller tell "pick another
+  // name" apart from "fix this field".
+  if (!isUsableScheduleId(scheduleId as string)) {
+    return err(422, 'validation_failed',
+      `"${safeText(scheduleId)}" cannot name a schedule: 1-64 characters, letters, digits, `
+      + 'underscore and hyphen, starting with a letter or digit.');
+  }
   if (!IANA_ZONE.test(timeZone as string)) {
     return err(422, 'validation_failed',
       `"${safeText(timeZone)}" is not an IANA timezone name. A recurring schedule needs a zone, `
       + 'not a fixed offset: an offset cannot express daylight saving.');
   }
+  // SHAPE IS NOT EXISTENCE. `America/Atlantis` satisfies the pattern and no
+  // evaluator can resolve it, so accepting it stored a schedule whose every
+  // future tick fails `unknown_timezone` — and with editing store-only and no
+  // delete route, that id was burned permanently. The authority that can
+  // answer is the same evaluator the tick uses.
+  if (!ticks.zoneIsKnown(timeZone as string, request.now)) {
+    return err(422, 'validation_failed',
+      `"${safeText(timeZone)}" is IANA-shaped but this server's timezone evaluator cannot resolve `
+      + 'it. A schedule that could never be evaluated is not stored.');
+  }
   const parsed = parseCronExpression(cronExpression as string);
   if (!parsed.ok) return err(422, 'validation_failed', safeText(parsed.problem));
+
+  // THE SAME RULE THE TICK APPLIES, FOR THE SAME REASON. A caller sending a
+  // field this route decides has the wrong model of it, and ignoring the field
+  // silently lets them believe it took effect: `paused: true` was accepted,
+  // discarded, and answered with a success for an ACTIVE schedule.
+  const decided = ['version', 'authoredAt', 'paused']
+    .filter((f) => (body as Record<string, unknown>)[f] !== undefined);
+  if (decided.length > 0) {
+    return err(422, 'field_not_accepted',
+      `${decided.join(', ')} ${decided.length === 1 ? 'is' : 'are'} decided by this server, not by `
+      + 'the request. A new schedule is version 1, authored now, and active.');
+  }
 
   const created = ticks.createSchedule(scheduleId as string, {
     version: 1,
@@ -168,8 +201,9 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
     scheduleId,
     version: 1,
     authoredAt: request.now,
-    note: 'The schedule is stored. Nothing runs it: there is no timer, and a tick must be '
-      + 'requested by an operator.',
+    note: 'The schedule is stored and active. Nothing runs it: there is no timer, and a tick must '
+      + 'be requested by an operator. A tick window is clamped to this authoring instant, so no '
+      + 'occurrence before it can ever run.',
   });
 }
 
@@ -183,13 +217,30 @@ function pauseSchedule(
   if (typeof paused !== 'boolean') {
     return err(422, 'validation_failed', 'paused must be true or false, stated explicitly.');
   }
-  let scheduleId: string;
-  try {
-    scheduleId = decodeURIComponent(rawId);
-  } catch {
+  // The repository's ONE segment decoder. A private copy here is how a decoding
+  // defect comes back after the shared one is fixed.
+  const scheduleId = decodeSegment(rawId);
+  if (scheduleId === null || !isUsableScheduleId(scheduleId)) {
     return err(422, 'validation_failed', 'The schedule id is not a usable path segment.');
   }
+  // INSPECT BEFORE WRITING, exactly as the tick does. `setPaused` takes the
+  // write lock BEFORE it replays, and acquiring a lock inside a directory that
+  // does not exist fails ENOENT — which the store can only report as "another
+  // process holds the lock, or it cannot be read". Pausing a schedule that was
+  // never created therefore blamed contention, sending an operator to
+  // investigate a writer that does not exist. Missing is 404 here for the same
+  // reason it is 404 in the tick.
+  const inspected = ticks.inspectSchedule(scheduleId);
+  if (inspected.kind === 'missing') {
+    return err(404, 'schedule_not_found',
+      `No schedule named ${safeText(scheduleId)} exists. Nothing was paused or resumed.`);
+  }
+  if (inspected.kind === 'corrupt') {
+    return err(409, 'schedule_corrupt', safeText(inspected.problem));
+  }
   const result = ticks.setSchedulePaused(scheduleId, paused, request.now);
+  // Everything truthfully refusable is refused above, so what reaches here is
+  // a genuine conflict: a racing writer holding the lock.
   if (!result.ok) return err(409, 'schedule_not_changed', safeText(result.problem));
   return ok({ scheduleId, paused });
 }
@@ -290,6 +341,21 @@ export async function handleCronRoute(
     );
   }
 
+  // WHICH OPERATION THIS IS, decided before readiness. Answering 503 for a
+  // path that names no operation tells a caller the operation exists and the
+  // server is merely unready — two different things, and only one of them
+  // becomes true later.
+  const pauseMatch = /^\/cron\/schedules\/([^/]+)\/pause$/u.exec(request.path);
+  const isSchedules = request.path === `${CRON_PREFIX}schedules`;
+  const isTick = request.path === `${CRON_PREFIX}tick`;
+  const recognized =
+    (isSchedules && (request.method === 'GET' || request.method === 'POST'))
+    || (pauseMatch !== null && request.method === 'POST')
+    || (isTick && request.method === 'POST');
+  if (!recognized) {
+    return err(422, 'validation_failed', 'Unknown Cron operation.');
+  }
+
   if (ticks === null) {
     return err(
       503, 'cron_not_ready',
@@ -300,21 +366,12 @@ export async function handleCronRoute(
 
   // The schedule family. A schedule could previously only be made from a
   // test, which meant the whole Cron path was unreachable by an operator.
-  if (request.path === `${CRON_PREFIX}schedules`) {
-    if (request.method === 'GET') return ok({ scheduleIds: ticks.listSchedules() });
-    if (request.method === 'POST') return createSchedule(request, ticks);
-    return err(422, 'validation_failed', 'Unknown Cron operation.');
+  if (isSchedules) {
+    if (request.method === 'GET') return ok({ schedules: ticks.listSchedules() });
+    return createSchedule(request, ticks);
   }
-  const pauseMatch = /^\/cron\/schedules\/([^/]+)\/pause$/u.exec(request.path);
   if (pauseMatch !== null) {
-    if (request.method !== 'POST') {
-      return err(422, 'validation_failed', 'Unknown Cron operation.');
-    }
     return pauseSchedule(request, ticks, pauseMatch[1] as string);
-  }
-
-  if (request.method !== 'POST' || request.path !== `${CRON_PREFIX}tick`) {
-    return err(422, 'validation_failed', 'Unknown Cron operation.');
   }
 
   const body = request.body;
