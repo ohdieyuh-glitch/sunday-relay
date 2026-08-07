@@ -281,10 +281,20 @@ grant is not a recurring one, which is why the spec separates them. A recurring
 grant with NO expiry is refused rather than read as forever: an endless grant
 is precisely the permanent approval the paragraph above denies. It is
 argument-scoped, and an EMPTY argument scope covers nothing rather than
-everything. `schedule_creation` authorizes no operation at all. Deploying needs
-all three prerequisites, and any one missing means Relay may prepare a
-deployment and no more. NOT WIRED: nothing consults it, and no grant is stored
-anywhere.
+everything. `schedule_creation` authorizes no operation at all, and an operation naming NO
+arguments is refused rather than vacuously permitted. Deploying needs all three
+prerequisites, and any one missing means Relay may prepare a deployment and no
+more.
+
+**NO GRANT REACHES PAST A BOUNDARY STOP ACTION.** `financial_operations` and
+`credential_access` run into `new_financial_commitment` and `secret_export`,
+which stop execution in every mode including Autonomous. UNCHAIN.md says an
+unattended agent runs under the same seventeen, and mode policy is a ceiling an
+approval does not raise — an approval records that a human wanted the work, not
+that the boundary moved. Consumption of a single-act grant is returned as an
+OBLIGATION for the caller to record; this decision is pure and marks nothing.
+
+NOT WIRED: nothing consults it, and no grant is stored anywhere.
 
 ## Circuit breakers
 

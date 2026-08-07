@@ -32,8 +32,18 @@
  * UNKNOWN IS NOT GRANTED. Every check that cannot be evaluated refuses. This
  * is an authority boundary, and the whole repository's habit at an unknown is
  * to fail closed.
+ *
+ * AND NO GRANT REACHES PAST A STOP ACTION. Some scopes name work that
+ * `AUTONOMOUS_STOP_ACTIONS` stops in EVERY mode — a financial commitment, a
+ * secret export, a new credential. UNCHAIN.md is explicit that unattended
+ * agents run under those same seventeen, and mode policy is a ceiling, not a
+ * thing an approval raises. The first version of this module never consulted
+ * the list at all: a `financial_operations` grant authorized a wire transfer
+ * outright. Review found it, and it is exactly the authority expansion every
+ * module here exists to refuse.
  */
 
+import type { BoundaryAction } from '../../modes';
 import { readIsoInstantWithOffset } from '../runtime/loop-scheduler';
 
 /** The seven scopes, verbatim from CRON_LOOPS.md and in its order. */
@@ -51,7 +61,8 @@ export type CronApprovalScope = (typeof CRON_APPROVAL_SCOPES)[number];
 /**
  * Scopes whose grants MUST be time-limited and argument-scoped: the ones that
  * authorize repeated unattended action. `one_external_write` is deliberately
- * absent — it authorizes a single act, and is consumed by performing it.
+ * absent — it authorizes a single act. Recording that the act happened is the
+ * CALLER's job; this module is pure and marks nothing (see `consumesGrant`).
  */
 export const RECURRING_SCOPES: readonly CronApprovalScope[] = [
   'read_only_recurring_work',
@@ -60,6 +71,17 @@ export const RECURRING_SCOPES: readonly CronApprovalScope[] = [
   'financial_operations',
   'credential_access',
 ];
+
+/**
+ * Scopes whose work is stopped in every mode by the boundary list, and the
+ * action each one runs into. An approval grant records that a human WANTED
+ * the work; it does not lift a stop that applies to Autonomous itself.
+ */
+export const SCOPE_STOP_ACTIONS: Readonly<Partial<Record<CronApprovalScope, BoundaryAction>>> =
+  Object.freeze({
+    financial_operations: 'new_financial_commitment',
+    credential_access: 'secret_export',
+  });
 
 export interface ApprovalGrant {
   readonly scope: CronApprovalScope;
@@ -92,6 +114,10 @@ export interface DeploymentAuthority {
 
 export type ApprovalRefusalReason =
   | 'no_grant_for_scope'
+  | 'unknown_scope'
+  | 'ambiguous_grants_for_scope'
+  | 'operation_names_no_arguments'
+  | 'stopped_by_boundary_action'
   | 'schedule_creation_grants_no_operation'
   | 'grant_expired'
   | 'recurring_grant_without_expiry'
@@ -102,7 +128,18 @@ export type ApprovalRefusalReason =
   | 'unreadable_expiry';
 
 export type ApprovalDecision =
-  | { readonly ok: true; readonly grant: ApprovalGrant }
+  | {
+      readonly ok: true;
+      readonly grant: ApprovalGrant;
+      /**
+       * True when this grant authorized a SINGLE act and the caller must now
+       * record it as consumed. This module is pure and marks nothing —
+       * review found the code and its comments claiming a grant was "spent by
+       * use" when nothing anywhere spent it, so the obligation is returned
+       * instead of asserted.
+       */
+      readonly consumesGrant: boolean;
+    }
   | {
       readonly ok: false;
       readonly reason: ApprovalRefusalReason;
@@ -143,9 +180,46 @@ export function authorizeScheduledOperation(input: {
     };
   }
 
+  if (!CRON_APPROVAL_SCOPES.includes(input.request.scope)) {
+    // An unrecognized scope previously fell through to the SINGLE-ACT branch,
+    // which requires no expiry — the most permissive path in the module,
+    // reached by the least trustworthy input.
+    return {
+      ok: false,
+      reason: 'unknown_scope',
+      problem: `"${input.request.scope}" is not one of the seven approval scopes. An unrecognized `
+        + 'scope is refused rather than handled by whichever branch it happens to fall into.',
+    };
+  }
+
+  // AN OPERATION MUST NAME WHAT IT ACTS ON. With no arguments the scope check
+  // below is vacuously satisfied, so "no arguments" and "arguments not
+  // extracted" become indistinguishable — and the second one grants
+  // everything. Review found this permitting a wire transfer.
+  if (input.request.arguments.length === 0) {
+    return {
+      ok: false,
+      reason: 'operation_names_no_arguments',
+      problem: 'The operation names no arguments, so it cannot be shown to fall inside any '
+        + 'argument-scoped grant. An unstated argument is not an absent one.',
+    };
+  }
+
   // A grant covers ONE scope. No widening, no implication: a read-only grant
   // does not become a write grant because the work looked similar.
-  const grant = input.grants.find((g) => g.scope === input.request.scope);
+  const matching = input.grants.filter((g) => g.scope === input.request.scope);
+  if (matching.length > 1) {
+    // Order decided the answer before: [expired, valid] refused and
+    // [valid, expired] permitted. cron-versioning refuses exactly this
+    // ambiguity, and an authority decision may not be the looser one.
+    return {
+      ok: false,
+      reason: 'ambiguous_grants_for_scope',
+      problem: `${matching.length} grants exist for ${input.request.scope}. Which one applies would `
+        + 'be decided by array order, and an authority decision is not settled by ordering.',
+    };
+  }
+  const grant = matching[0];
   if (grant === undefined) {
     return {
       ok: false,
@@ -180,13 +254,37 @@ export function authorizeScheduledOperation(input: {
         problem: `The ${grant.scope} grant expired at ${grant.expiresAt}.`,
       };
     }
-  } else if (grant.consumed === true) {
-    // A single-act grant authorizes one act. Performing it spends it.
-    return {
-      ok: false,
-      reason: 'single_act_grant_already_consumed',
-      problem: `The ${grant.scope} grant authorized a single act and has already been used.`,
-    };
+  } else {
+    if (grant.consumed === true) {
+      // A single-act grant authorizes one act, and the caller records that it
+      // was used — see `consumesGrant` on the permitted decision.
+      return {
+        ok: false,
+        reason: 'single_act_grant_already_consumed',
+        problem: `The ${grant.scope} grant authorized a single act and has already been used.`,
+      };
+    }
+    // A single-act grant needs no expiry, but one it DOES carry is honoured.
+    // Review found an expired single-act grant authorizing in 2026 because
+    // the whole branch skipped the expiry check.
+    if (grant.expiresAt !== null) {
+      const expiryMs = readIsoInstantWithOffset(grant.expiresAt);
+      if (expiryMs === null) {
+        return {
+          ok: false,
+          reason: 'unreadable_expiry',
+          problem: `The ${grant.scope} grant carries an expiry that is not an ISO-8601 instant with `
+            + 'an explicit offset, so it cannot be shown to be unexpired.',
+        };
+      }
+      if (nowMs >= expiryMs) {
+        return {
+          ok: false,
+          reason: 'grant_expired',
+          problem: `The ${grant.scope} grant expired at ${grant.expiresAt}.`,
+        };
+      }
+    }
   }
 
   // ARGUMENT-SCOPED. Every argument the operation would act on must be named
@@ -224,5 +322,25 @@ export function authorizeScheduledOperation(input: {
     }
   }
 
-  return { ok: true, grant };
+  // NO GRANT REACHES PAST A STOP ACTION. Checked last so an operation that
+  // would be refused anyway is refused for its own reason first, and so the
+  // stop is reported as the final, unliftable one.
+  const stopAction = SCOPE_STOP_ACTIONS[input.request.scope];
+  if (stopAction !== undefined) {
+    return {
+      ok: false,
+      reason: 'stopped_by_boundary_action',
+      problem: `${input.request.scope} runs into "${stopAction}", which stops execution in EVERY `
+        + 'mode including Autonomous. An approval records that a human wanted the work; it does not '
+        + 'lift a boundary stop, and a schedule acting unattended runs under the same list.',
+    };
+  }
+
+  return {
+    ok: true,
+    grant,
+    // The obligation, returned rather than performed: this module is pure and
+    // marks nothing consumed.
+    consumesGrant: !RECURRING_SCOPES.includes(grant.scope),
+  };
 }

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  CRON_APPROVAL_SCOPES, RECURRING_SCOPES, authorizeScheduledOperation,
+  CRON_APPROVAL_SCOPES, RECURRING_SCOPES, SCOPE_STOP_ACTIONS,
+  authorizeScheduledOperation,
   type ApprovalGrant, type CronApprovalScope, type DeploymentAuthority,
 } from './cron-approvals';
+import { AUTONOMOUS_STOP_ACTIONS } from '../../modes';
 
 /**
  * RECURRING APPROVALS. The sentence under test is CRON_LOOPS.md's first one:
@@ -18,7 +20,7 @@ const T0 = '2026-08-06T12:00:00.000Z';
 const grant = (over: Partial<ApprovalGrant> = {}): ApprovalGrant => ({
   scope: 'recurring_external_writes',
   expiresAt: '2026-09-01T00:00:00.000Z',
-  argumentScope: ['repo:relay', 'issue:*'],
+  argumentScope: ['repo:relay'],
   ...over,
 });
 
@@ -103,8 +105,8 @@ describe('a recurring grant is time-limited', () => {
     // permanent approval the spec denies.
     for (const scope of RECURRING_SCOPES) {
       const decision = authorizeScheduledOperation({
-        request: { scope, arguments: [], at: T0 },
-        grants: [grant({ scope, expiresAt: null, argumentScope: [] })],
+        request: { scope, arguments: ['x'], at: T0 },
+        grants: [grant({ scope, expiresAt: null, argumentScope: ['x'] })],
         deployment: { hasDeploymentAuthority: true, hasRollbackPolicy: true, hasApproval: true },
       });
       expect(reasonOf(decision), scope).toBe('recurring_grant_without_expiry');
@@ -112,34 +114,34 @@ describe('a recurring grant is time-limited', () => {
   });
 
   it('an expired grant refuses, and expiry is exclusive at the instant', () => {
-    expect(reasonOf(authorize('recurring_external_writes', [], [
-      grant({ expiresAt: '2026-08-06T11:59:59.999Z', argumentScope: [] }),
+    expect(reasonOf(authorize('recurring_external_writes', ['x'], [
+      grant({ expiresAt: '2026-08-06T11:59:59.999Z', argumentScope: ['x'] }),
     ]))).toBe('grant_expired');
     // Exactly at the expiry it is already expired: a grant that expires "at"
     // an instant does not still authorize during it.
-    expect(reasonOf(authorize('recurring_external_writes', [], [
-      grant({ expiresAt: T0, argumentScope: [] }),
+    expect(reasonOf(authorize('recurring_external_writes', ['x'], [
+      grant({ expiresAt: T0, argumentScope: ['x'] }),
     ]))).toBe('grant_expired');
-    expect(authorize('recurring_external_writes', [], [
-      grant({ expiresAt: '2026-08-06T12:00:00.001Z', argumentScope: [] }),
+    expect(authorize('recurring_external_writes', ['x'], [
+      grant({ expiresAt: '2026-08-06T12:00:00.001Z', argumentScope: ['x'] }),
     ]).ok).toBe(true);
   });
 
   it('an unreadable expiry cannot be shown unexpired', () => {
-    expect(reasonOf(authorize('recurring_external_writes', [], [
-      grant({ expiresAt: '2026-08-06T12:00:00', argumentScope: [] }),
+    expect(reasonOf(authorize('recurring_external_writes', ['x'], [
+      grant({ expiresAt: '2026-08-06T12:00:00', argumentScope: ['x'] }),
     ]))).toBe('unreadable_expiry');
   });
 
   it('an unreadable clock refuses before anything else is considered', () => {
     const decision = authorizeScheduledOperation({
-      request: { scope: 'recurring_external_writes', arguments: [], at: 'whenever' },
-      grants: [grant({ argumentScope: [] })],
+      request: { scope: 'recurring_external_writes', arguments: ['x'], at: 'whenever' },
+      grants: [grant({ argumentScope: ['x'] })],
     });
     expect(reasonOf(decision)).toBe('unreadable_clock');
   });
 
-  it('a single-act grant needs no expiry but is spent by use', () => {
+  it('a single-act grant needs no expiry, and a consumed one refuses', () => {
     const fresh = [grant({ scope: 'one_external_write', expiresAt: null, argumentScope: ['a'] })];
     expect(authorize('one_external_write', ['a'], fresh).ok).toBe(true);
     const used = [grant({
@@ -147,6 +149,113 @@ describe('a recurring grant is time-limited', () => {
     })];
     expect(reasonOf(authorize('one_external_write', ['a'], used)))
       .toBe('single_act_grant_already_consumed');
+  });
+});
+
+describe('an authority decision refuses what it cannot settle', () => {
+  it('refuses an operation that names NO arguments', () => {
+    // Mutation check: with no arguments the scope filter is vacuously
+    // satisfied, so "no arguments" and "arguments not extracted" become
+    // indistinguishable — and review probed that permitting a wire transfer.
+    for (const scope of CRON_APPROVAL_SCOPES) {
+      if (scope === 'schedule_creation') continue;
+      const decision = authorizeScheduledOperation({
+        request: { scope, arguments: [], at: T0 },
+        grants: [grant({ scope, argumentScope: ['repo:relay'] })],
+        deployment: { hasDeploymentAuthority: true, hasRollbackPolicy: true, hasApproval: true },
+      });
+      expect(reasonOf(decision), scope).toBe('operation_names_no_arguments');
+    }
+  });
+
+  it('refuses an unrecognized scope instead of taking the loosest branch', () => {
+    // An unknown scope used to fall through to the single-act path, which
+    // requires no expiry — the most permissive branch, reached by the least
+    // trustworthy input.
+    const decision = authorizeScheduledOperation({
+      request: { scope: 'delete_everything' as CronApprovalScope, arguments: ['x'], at: T0 },
+      grants: [grant({ scope: 'delete_everything' as CronApprovalScope, expiresAt: null })],
+    });
+    expect(reasonOf(decision)).toBe('unknown_scope');
+  });
+
+  it('refuses when TWO grants exist for one scope, whatever their order', () => {
+    // Order used to decide: [expired, valid] refused and [valid, expired]
+    // permitted. Mutation check: `find` (first) or last-match both fail this.
+    const expired = grant({ expiresAt: '2020-01-01T00:00:00.000Z' });
+    const valid = grant();
+    for (const grants of [[expired, valid], [valid, expired]]) {
+      expect(reasonOf(authorize('recurring_external_writes', ['repo:relay'], grants)))
+        .toBe('ambiguous_grants_for_scope');
+    }
+  });
+
+  it('matches arguments LITERALLY — a star is a character, not a wildcard', () => {
+    const grants = [grant({ argumentScope: ['issue:*'] })];
+    expect(reasonOf(authorize('recurring_external_writes', ['issue:5'], grants)))
+      .toBe('arguments_outside_grant');
+    expect(authorize('recurring_external_writes', ['issue:*'], grants).ok).toBe(true);
+  });
+});
+
+describe('no grant reaches past a boundary stop action', () => {
+  it.each([
+    ['financial_operations', 'new_financial_commitment'],
+    ['credential_access', 'secret_export'],
+  ] as const)('%s is stopped even with a perfect grant', (scope, action) => {
+    // UNCHAIN.md: unattended agents run under the same seventeen stop actions
+    // that stop Autonomous itself. Mode policy is a ceiling an approval does
+    // not raise. Mutation check: dropping SCOPE_STOP_ACTIONS permits a wire
+    // transfer and a secret export outright.
+    const decision = authorizeScheduledOperation({
+      request: { scope, arguments: ['wire:vendor-x'], at: T0 },
+      grants: [grant({ scope, argumentScope: ['wire:vendor-x'] })],
+    });
+    expect(reasonOf(decision)).toBe('stopped_by_boundary_action');
+    if (!decision.ok) {
+      expect(decision.problem).toContain(action);
+      expect(decision.problem).toContain('does not lift a boundary stop');
+    }
+  });
+
+  it('every stop-mapped scope names a REAL boundary action', () => {
+    for (const action of Object.values(SCOPE_STOP_ACTIONS)) {
+      expect(AUTONOMOUS_STOP_ACTIONS).toContain(action);
+    }
+  });
+
+  it('a scope with no stop mapping is unaffected', () => {
+    expect(authorize('recurring_external_writes', ['repo:relay'], [grant()]).ok).toBe(true);
+  });
+});
+
+describe('consumption is an obligation returned, not an act performed', () => {
+  it('a single-act permit tells the caller to record it as consumed', () => {
+    // Mutation check: review found the code and its comments claiming a grant
+    // was "spent by use" while nothing anywhere spent it — the same grant
+    // object permitted twice.
+    const decision = authorize('one_external_write', ['a'], [
+      grant({ scope: 'one_external_write', expiresAt: null, argumentScope: ['a'] }),
+    ]);
+    expect(decision.ok).toBe(true);
+    if (decision.ok) expect(decision.consumesGrant).toBe(true);
+  });
+
+  it('a recurring permit carries no consumption obligation', () => {
+    const decision = authorize('recurring_external_writes', ['repo:relay'], [grant()]);
+    expect(decision.ok).toBe(true);
+    if (decision.ok) expect(decision.consumesGrant).toBe(false);
+  });
+
+  it('a single-act grant HONOURS an expiry it carries', () => {
+    // Review: the whole single-act branch skipped the expiry check, so an
+    // expiry from 2020 authorized in 2026.
+    expect(reasonOf(authorize('one_external_write', ['a'], [
+      grant({ scope: 'one_external_write', expiresAt: '2020-01-01T00:00:00.000Z', argumentScope: ['a'] }),
+    ]))).toBe('grant_expired');
+    expect(reasonOf(authorize('one_external_write', ['a'], [
+      grant({ scope: 'one_external_write', expiresAt: 'not-a-date', argumentScope: ['a'] }),
+    ]))).toBe('unreadable_expiry');
   });
 });
 
