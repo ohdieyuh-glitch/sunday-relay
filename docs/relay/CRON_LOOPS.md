@@ -140,11 +140,17 @@ Options considered, against what actually exists:
   or wrong snapshot cannot make a schedule report a version its own history
   never recorded. An edit goes through `planScheduleEdit` rather than a second
   copy of that rule. Schedules can be created, listed, edited and paused; what
-  The tick endpoint READS one: a request now says WHICH schedule to tick and
+  The tick endpoint READS one, and a request that sends a field the schedule
+  owns is REFUSED rather than having it ignored. A request now says WHICH
+  schedule to tick and
   over what window, while the expression, timezone, contract and version are
   the schedule's own. A caller can no longer run one schedule's window under
   rules it invented, a missing schedule is a 404, and a PAUSED or CORRUPT one
-  is refused rather than partially evaluated. Every write holds the guarded run lock and
+  is refused rather than partially evaluated. The window's start is CLAMPED to
+  the governing version's authoring instant, so an edit cannot replay an
+  already-handled window: the occurrence identity carries the contract
+  version, and without the clamp a new version gave every past occurrence a
+  fresh identity and a fresh claim — six runs for the same three hours. Every write holds the guarded run lock and
   a corrupt journal interior is REPORTED rather than truncated — truncating
   let the next edit mint a duplicate version, which is the ambiguity the edit
   decision exists to refuse. The registry does not declare these files as

@@ -3,6 +3,7 @@ import { LOOP_ENGINE_ENV, loopEngineEnabled } from './loop-routes';
 import { safeText } from './redact';
 import { featureEffectivelyEnabled } from '../src/relay/mission/loop/loop-availability';
 import { parseCronExpression } from '../src/relay/mission/loop/cron';
+import { readIsoInstantWithOffset } from '../src/relay/mission/loop/runtime/loop-scheduler';
 import type { CronSchedule, CronTickReport } from '../src/relay/mission/loop/cron';
 import type { CronRunBinding } from './cron-service';
 import type { ScheduleReadResult } from '../src/relay/persistence/cron-schedule-node';
@@ -19,18 +20,30 @@ import type { ScheduleReadResult } from '../src/relay/persistence/cron-schedule-
  * - **Not a scheduler.** Nothing calls this on a schedule. No timer exists.
  * - **Not a dispatcher.** A tick creates durable Loop run RECORDS and
  *   advances none of them; the engine refuses cron-triggered dispatch.
- * - **Not a schedule store.** Every schedule field arrives in the request.
- *   There is no `RelayLoopSchedule` anywhere in this repository, and
- *   inventing storage to make this endpoint look finished would be the
- *   larger lie.
+ * - **Not a scheduler still, but no longer schedule-less.** The schedule is
+ *   READ from the durable store: a request says which schedule and over what
+ *   window, and the expression, timezone, contract and version are the
+ *   schedule's own. (This block previously said the opposite — that no store
+ *   existed and every field arrived in the request — for one commit after the
+ *   store landed. A header describing the behaviour a file used to have is
+ *   the defect this repository keeps finding.)
  *
  * THE CLOCK IS THE SERVER'S. `evaluatedAt` and the window's end come from the
  * server, never the body: CRON_LOOPS.md says a client-supplied time field
  * must never influence due-ness, and that is a test, not a convention. The
  * window's START is still client-supplied — a named deviation, bounded by the
- * server-clocked end, the eight-day evaluation limit, and the claim marker
- * that makes a replay free. The durable watermark that would close it belongs
- * to the schedule store that does not exist.
+ * server-clocked end, the eight-day evaluation limit, the claim marker that
+ * makes a replay free, and now by the governing version's own authoring
+ * instant: a version cannot own a moment that predates it.
+ *
+ * THAT LAST BOUND EXISTS BECAUSE AN EDIT WOULD OTHERWISE REPLAY THE PAST.
+ * The occurrence identity digests the contract version, so a new version gave
+ * every occurrence in an already-handled window a fresh identity and a fresh
+ * claim — review measured six runs for the same three hours. Clamping the
+ * window's start to the version's `authoredAt` means a new version owns only
+ * moments after it existed, which is what "a trigger creates at most one Cron
+ * Loop Run" has to mean across an edit. A durable per-schedule watermark
+ * would bound it further and does not exist yet.
  */
 
 export const CRON_PREFIX = '/cron/';
@@ -209,6 +222,25 @@ export async function handleCronRoute(
     );
   }
 
+  // A caller sending a field the SCHEDULE owns has the wrong model of this
+  // endpoint, and silently ignoring it lets them believe it took effect.
+  const storeOwned = ['cronExpression', 'timeZone', 'contractVersion']
+    .filter((f) => body !== null && typeof body === 'object'
+      && (body as Record<string, unknown>)[f] !== undefined);
+  const bindingOwned = ['contractRef', 'contractBindingDigest']
+    .filter((f) => (body as Record<string, unknown>).binding !== null
+      && typeof (body as Record<string, unknown>).binding === 'object'
+      && ((body as Record<string, unknown>).binding as Record<string, unknown>)[f] !== undefined);
+  if (storeOwned.length + bindingOwned.length > 0) {
+    return err(
+      422, 'field_owned_by_the_schedule',
+      `These belong to the stored schedule, not the request: `
+      + `${[...storeOwned, ...bindingOwned.map((f) => `binding.${f}`)].join(', ')}. `
+      + 'Edit the schedule to change them; sending them here would let a caller believe a value '
+      + 'took effect that never did.',
+    );
+  }
+
   const scheduleId = trimmed(body, 'scheduleId');
   const afterExclusive = trimmed(body, 'afterExclusive');
   const missedPolicy = trimmed(body, 'missedPolicy');
@@ -292,6 +324,24 @@ export async function handleCronRoute(
   const parsed = parseCronExpression(cronExpression);
   if (!parsed.ok) return err(422, 'validation_failed', safeText(parsed.problem));
 
+  // A VERSION CANNOT OWN A MOMENT THAT PREDATES IT. Without this an edit
+  // re-ran every occurrence of an already-handled window under new
+  // identities.
+  const authoredMs = readIsoInstantWithOffset(head.authoredAt);
+  if (authoredMs === null) {
+    return err(422, 'validation_failed',
+      'The governing version records an authoring instant that is not ISO-8601 with an explicit '
+      + 'offset, so the window cannot be bounded by it.');
+  }
+  const requestedStartMs = readIsoInstantWithOffset(afterExclusive as string);
+  if (requestedStartMs === null) {
+    return err(422, 'invalid_window',
+      'afterExclusive must be an ISO-8601 instant carrying an explicit UTC offset.');
+  }
+  const effectiveAfter = requestedStartMs >= authoredMs
+    ? (afterExclusive as string)
+    : head.authoredAt;
+
   // THE WINDOW MAY ONLY REACH THE PRESENT. Clamping to the server clock is
   // what makes the tick's own `future_window` refusal structurally
   // unreachable from this route rather than merely unlikely.
@@ -304,7 +354,7 @@ export async function handleCronRoute(
       timeZone,
       scheduleId: scheduleId as string,
       contractVersion: head.version,
-      afterExclusive: afterExclusive as string,
+      afterExclusive: effectiveAfter,
       untilInclusive,
       maxOccurrences: maxOccurrences as number,
     },
@@ -349,7 +399,7 @@ export async function handleCronRoute(
     scheduleId,
     contractVersion: head.version,
     evaluatedAt: request.now,
-    window: { afterExclusive, untilInclusive },
+    window: { afterExclusive: effectiveAfter, untilInclusive },
     truncated: report.truncated,
     occurrences: report.occurrences.map((o) => ({
       occurrenceId: o.occurrenceId,

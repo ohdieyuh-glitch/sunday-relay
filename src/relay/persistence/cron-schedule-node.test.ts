@@ -105,6 +105,30 @@ describe('a schedule is created, read back and listed', () => {
     if (!created.ok) expect(created.problem).toContain('who authored it');
   });
 
+  it('refuses a version with an empty contract or schedule field', () => {
+    // The route used to require contractRef and contractBindingDigest; now
+    // they come from here, so this is where they must be real. Review found a
+    // version storable with an empty contractRef flowing into run bindings.
+    for (const field of ['cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest'] as const) {
+      const created = store.create(`s-${field}`, v({ [field]: '  ' }));
+      expect(created.ok, field).toBe(false);
+      if (!created.ok) expect(created.problem).toContain(field);
+    }
+  });
+
+  it('a DUPLICATED version is corrupt — too ambiguous to edit is too ambiguous to read', () => {
+    // planScheduleEdit calls a repeated version unambiguously fatal; a
+    // schedule that cannot be edited must not be tickable either.
+    store.create('dup', v());
+    appendFileSync(
+      journalPath('dup'),
+      `${JSON.stringify({ kind: 'version', version: v({ cronExpression: '0 3 * * *' }) })}\n`,
+    );
+    const inspected = store.inspect('dup');
+    expect(inspected.kind).toBe('corrupt');
+    if (inspected.kind === 'corrupt') expect(inspected.problem).toContain('more than once');
+  });
+
   it('refuses a first version whose number is not a version', () => {
     for (const version of [-1, 1.5, Number.NaN]) {
       expect(store.create(`s${Math.abs(Math.trunc(version)) || 0}x`, v({ version })).ok, String(version))

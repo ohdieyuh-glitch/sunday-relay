@@ -303,13 +303,45 @@ describe('what the endpoint refuses to promise', () => {
     expect(errorOf(result).message).toContain('is not a minute value');
   });
 
-  it('a cron expression in the REQUEST changes nothing — the schedule owns it', async () => {
-    // Mutation check: reading the expression from the body again lets one
-    // request run another schedule's window under rules it invented.
-    const result = await call({ ...BODY, cronExpression: '0 0 1 1 *' });
-    expect(result?.status).toBe(200);
-    // Still the stored hourly schedule: three occurrences, not zero.
-    expect(dataOf(result).runsCreated).toBe(3);
+  it('a cron expression in the REQUEST is REFUSED, not ignored', async () => {
+    // Ignoring it let a caller believe a value took effect that never did.
+    // Mutation check: dropping the store-owned-field check returns 200 and
+    // silently uses the stored expression.
+    for (const field of ['cronExpression', 'timeZone', 'contractVersion']) {
+      const result = await call({ ...BODY, [field]: field === 'contractVersion' ? 9 : 'x' });
+      expect(result?.status, field).toBe(422);
+      expect(errorOf(result).kind).toBe('field_owned_by_the_schedule');
+      expect(errorOf(result).message).toContain(field);
+    }
+    for (const field of ['contractRef', 'contractBindingDigest']) {
+      const result = await call({ ...BODY, binding: { ...BODY.binding, [field]: 'x' } });
+      expect(result?.status, field).toBe(422);
+      expect(errorOf(result).message).toContain(`binding.${field}`);
+    }
+    expect(existsSync(occurrenceDir())).toBe(false);
+  });
+
+  it('an EDIT cannot replay an already-handled window', async () => {
+    // Review measured six runs for the same three hours: a new version gave
+    // every occurrence a fresh identity and a fresh claim. The window's start
+    // is clamped to the governing version's authoredAt, so a version owns
+    // only moments after it existed. Mutation check: removing the clamp
+    // creates three more runs here.
+    const first = await call();
+    expect(dataOf(first).runsCreated).toBe(3);
+
+    service.schedules.edit('sched-triage', {
+      ...STORED, cronExpression: '0 * * * *', authoredAt: '2026-08-06T12:00:00.000Z',
+      contractRef: 'contract-ref-2',
+    }, []);
+
+    const second = await call();
+    expect(second?.status).toBe(200);
+    expect(dataOf(second).runsCreated).toBe(0);
+    // …and the window it actually evaluated starts at the new version, not
+    // at the caller's older request.
+    expect((dataOf(second).window as { afterExclusive: string }).afterExclusive)
+      .toBe('2026-08-06T12:00:00.000Z');
   });
 
   it('a bare UTC offset is not an IANA zone — Intl would have accepted it', async () => {
@@ -400,7 +432,12 @@ describe('what the endpoint refuses to promise', () => {
   });
 
   it('a window wider than the evaluation bound is refused, not scanned', async () => {
-    const result = await call({ ...BODY, afterExclusive: '2026-07-01T00:00:00.000Z' });
+    // The governing version must be old enough that the clamp does not shrink
+    // the window below the bound — otherwise this would test the clamp.
+    service.schedules.create('sched-old', { ...STORED, authoredAt: '2026-06-01T00:00:00.000Z' });
+    const result = await call({
+      ...BODY, scheduleId: 'sched-old', afterExclusive: '2026-07-01T00:00:00.000Z',
+    });
     expect(result?.status).toBe(422);
     expect(errorOf(result).kind).toBe('window_too_large');
     expect(existsSync(occurrenceDir())).toBe(false);
