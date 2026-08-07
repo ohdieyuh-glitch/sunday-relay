@@ -136,8 +136,12 @@ export function runClaudeProcess(
     // ASYNCHRONOUSLY as an `error` event on the stream, so the catch below —
     // which only sees a synchronous throw — never ran, and an unlistened
     // stream `error` is an uncaught exception that takes the process down.
-    // A child that exits before its prompt is written is enough: observed as
-    // `Error: write EPIPE` in a full suite run. The reviewer's runner
+    // THE TRIGGER IS A PIPE THAT BREAKS MID-WRITE, not a child that has already
+    // gone: a child that exits BEFORE the write survives, because the stream is
+    // destroyed and the write is discarded (measured 11 of 11). What crashes is
+    // the read end closing while this stream is still writable — a large frame
+    // in flight when the child dies, or a live child that closes its own stdin.
+    // Observed as `Error: write EPIPE` in a full suite run. The reviewer's runner
     // (`connectors/codex-reviewer/process-runner.ts`) has always attached
     // this; this one diverged from its own sibling.
     //

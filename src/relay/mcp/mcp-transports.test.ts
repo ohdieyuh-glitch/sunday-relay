@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import type { McpRegistryEntryId, McpServerDefinitionId } from '../protocol/ids';
 import { MCP_BASELINE_PROTOCOL_REVISION } from './domain/mcp-protocol';
-import { mcpFailure, preferredFailure } from './domain/mcp-failure';
+import { CONSEQUENTIAL_DETAIL, mcpFailure, preferredFailure } from './domain/mcp-failure';
 import type { McpTransportOpenRequest } from './domain/mcp-ports';
 import {
   MCP_DEFAULT_NETWORK_POLICY, MCP_LOOPBACK_TEST_NETWORK_POLICY,
@@ -211,25 +211,33 @@ describe('the child environment is built FROM EMPTY', () => {
  * ==================================================================== */
 
 describe('which fatal condition describes what happened', () => {
-  it('lets a crash replace the pipe error it caused', () => {
+  const pipe = (): ReturnType<typeof mcpFailure> => mcpFailure(
+    'process_exited_early', 'the MCP server closed its input',
+    { details: [CONSEQUENTIAL_DETAIL] },
+  );
+
+  it('lets whatever the process reports replace the pipe error it caused', () => {
     // THE ORDER THESE ARRIVE IN IS NOT THE ORDER THEY ARE CAUSED IN. A server
-    // killed mid-write emits the broken pipe BEFORE `exit` — measured 5 of 5 —
-    // so first-wins alone latched the consequence and lost the signal, and
-    // which one won varied run to run.
-    const pipe = mcpFailure('process_exited_early', 'the MCP server closed its input');
+    // dying mid-write emits the broken pipe BEFORE `exit` — measured 5 of 5 —
+    // so first-wins alone latched the consequence and discarded what the exit
+    // knew. Both halves matter: a SIGNAL and a plain exit CODE.
     const crash = mcpFailure('process_crashed', 'terminated by SIGSEGV');
-    expect(preferredFailure(pipe, crash)).toBe(crash);
-    expect(preferredFailure(null, pipe)).toBe(pipe);
+    expect(preferredFailure(pipe(), crash)).toBe(crash);
+    const exited = mcpFailure('process_exited_early', 'exited with code 1');
+    // Same category as the consequence, and still the better answer — an
+    // earlier rule replaced only a crash and lost this one.
+    expect(preferredFailure(pipe(), exited)).toBe(exited);
+    expect(preferredFailure(null, crash)).toBe(crash);
   });
 
-  it('does not let anything else overwrite a latched cause', () => {
+  it('never lets an unmarked cause be overwritten', () => {
     const crash = mcpFailure('process_crashed', 'terminated by SIGSEGV');
-    const pipe = mcpFailure('process_exited_early', 'the MCP server closed its input');
-    // The crash is the cause; a later pipe error is its consequence.
-    expect(preferredFailure(crash, pipe)).toBe(crash);
-    // And an unrelated later failure never displaces the first one.
-    expect(preferredFailure(pipe, mcpFailure('internal_error', 'something else entirely'))).toBe(pipe);
-    expect(preferredFailure(crash, mcpFailure('process_crashed', 'second'))).toBe(crash);
+    // A crash is a cause; a pipe error arriving after it is its consequence.
+    expect(preferredFailure(crash, pipe())).toBe(crash);
+    expect(preferredFailure(crash, mcpFailure('internal_error', 'later noise'))).toBe(crash);
+    // An UNMARKED early exit is an observation, not a consequence, so it holds.
+    const plain = mcpFailure('process_exited_early', 'exited with code 1');
+    expect(preferredFailure(plain, mcpFailure('internal_error', 'later noise'))).toBe(plain);
   });
 });
 

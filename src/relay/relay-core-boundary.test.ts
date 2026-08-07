@@ -832,9 +832,12 @@ describe('Claude Code adapter boundaries (Prompt 8)', () => {
     // while the third writer carried the live bug — which is exactly what
     // happened.
     // The lookbehind is TOKEN-BOUNDED. `(?<!process)` alone also excluded
-    // `subprocess.stdin.write(` and `childprocess.stdin.write(` — real Node
-    // variable names — so a writer could be skipped by a test whose whole job
-    // is to skip nothing.
+    // a writer whose variable name merely ENDS in those seven characters —
+    // `sub`+`process`, `child`+`process`, both ordinary Node names — so a writer
+    // could be skipped by a test whose whole job is to skip nothing. Named in
+    // pieces on purpose: spelled out, this comment matches the pattern it
+    // describes, and the test passed only because its own file is excluded by
+    // name.
     const WRITE = /(?<!(?<![A-Za-z0-9_$])process)\.stdin[?]?\.write\(/;
     const sources = [...walk(join(root, 'src')), ...walk(join(root, 'relay-bridge'))]
       .filter((f) => !/\.test\.tsx?$/.test(f));
@@ -859,6 +862,15 @@ describe('Claude Code adapter boundaries (Prompt 8)', () => {
         `${where} attaches its stdin guard after the first write`,
       ).toBeLessThan(source.search(WRITE));
     }
+  });
+
+  it('the transport marks its broken-pipe failure as a consequence', () => {
+    // The rule that lets a later observation replace it is unit-tested; THIS
+    // is the wiring, and without it that rule never fires. Removing the marker
+    // failed no test until this one existed.
+    const transport = read(relay(join('mcp', 'transports', 'stdio-process-transport.ts')));
+    const handler = transport.slice(transport.indexOf("child.stdin.on('error'"));
+    expect(handler.slice(0, 600)).toContain('CONSEQUENTIAL_DETAIL');
   });
 
   it('the adapter strips API-key / provider credentials from the child environment', () => {

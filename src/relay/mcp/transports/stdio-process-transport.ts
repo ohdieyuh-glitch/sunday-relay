@@ -44,7 +44,7 @@ import { ReadBuffer, serializeMessage } from '@modelcontextprotocol/sdk/shared/s
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 
-import { mcpFailure, type McpFailure } from '../domain/mcp-failure';
+import { CONSEQUENTIAL_DETAIL, mcpFailure, type McpFailure } from '../domain/mcp-failure';
 import { redactStderr } from './stdio-launch-policy';
 
 export interface RelayStdioProcessTransportOptions {
@@ -165,6 +165,7 @@ export class RelayStdioProcessTransport implements Transport {
         this.options.onFatal(mcpFailure(
           'process_exited_early',
           'the MCP server closed its input before the transport finished writing to it',
+          { details: [CONSEQUENTIAL_DETAIL] },
         ));
       }
       this.onerror?.(error);
