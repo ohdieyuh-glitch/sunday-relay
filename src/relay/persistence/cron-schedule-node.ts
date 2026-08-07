@@ -1,7 +1,10 @@
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync } from 'node:fs';
+import {
+  closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, rmSync, unlinkSync,
+} from 'node:fs';
 import { join, sep } from 'node:path';
 import { appendLineDurable, fsyncDirBestEffort, readTextIfExists, writeFileAtomic } from './atomic-file';
 import { acquireRunLock } from './lock';
+import { CLAIM_MARKER_FILE } from './cron-claim-node';
 import { planScheduleEdit } from '../mission/loop/cron/cron-versioning';
 import { readIsoInstantWithOffset } from '../mission/loop/runtime/loop-scheduler';
 import type { CronContractVersion, VersionedRun } from '../mission/loop/cron/cron-versioning';
@@ -100,6 +103,14 @@ export interface CronScheduleStore {
     proposed: Omit<CronContractVersion, 'version'>,
     runs: readonly VersionedRun[],
   ): ScheduleStoreOutcome<CronScheduleRecord>;
+  /**
+   * Delete a schedule and FREE ITS ID, purging the occurrence claims it made.
+   *
+   * Reads nothing first, deliberately — the case that motivates deletion is a
+   * schedule too corrupt to read, and a delete that had to replay it could not
+   * remove the thing it exists to remove.
+   */
+  remove(scheduleId: string, at: string): ScheduleStoreOutcome<{ readonly claimsPurged: number }>;
   /** Pause or resume. Recorded in the journal like everything else. */
   setPaused(scheduleId: string, paused: boolean, at: string): ScheduleStoreOutcome<CronScheduleRecord>;
 }
@@ -157,6 +168,7 @@ export function versionProblem(version: CronContractVersion): string | null {
 }
 
 export function createCronScheduleStore(options: { root: string }): CronScheduleStore {
+  const stateRoot = options.root;
   const root = join(options.root, SCHEDULES_DIR);
   mkdirSync(root, { recursive: true, mode: 0o700 });
 
@@ -385,6 +397,55 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
         };
         writeSnapshot(dir, record);
         return { ok: true, value: record };
+      });
+    },
+
+    remove(scheduleId, at) {
+      const dir = dirFor(scheduleId);
+      if (dir === null) return refuse(`"${scheduleId}" is not a usable schedule id.`);
+      if (readIsoInstantWithOffset(at) === null) {
+        return refuse('the deletion instant must be an ISO-8601 instant carrying an explicit UTC '
+          + 'offset.');
+      }
+      if (!existsSync(join(dir, VERSIONS_JOURNAL))) {
+        return refuse(`There is no schedule named ${scheduleId} to delete.`);
+      }
+      return underLock(dir, at, () => {
+        // THE CLAIMS GO FIRST, and they can be found: every marker stores the
+        // occurrence that produced it, and the occurrence names its schedule.
+        //
+        // This is DEFENCE IN DEPTH, not the thing that makes reuse safe. A
+        // recreated schedule is authored NOW, and the tick clamps its window to
+        // its own authoring instant, so it can only own moments that postdate
+        // its creation and could not reach an older marker anyway. Purging
+        // means a freed id leaves nothing behind that has to be reasoned about.
+        let claimsPurged = 0;
+        const occurrences = join(stateRoot, 'cron-occurrences');
+        if (existsSync(occurrences)) {
+          for (const entry of readdirSync(occurrences, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
+            const marker = readTextIfExists(join(occurrences, entry.name, CLAIM_MARKER_FILE));
+            if (marker === null) continue;
+            let owner: string | null = null;
+            try {
+              const parsed = JSON.parse(marker) as { occurrence?: { scheduleId?: unknown } };
+              if (typeof parsed.occurrence?.scheduleId === 'string') {
+                owner = parsed.occurrence.scheduleId;
+              }
+            } catch { /* an unreadable marker names no schedule; leave it */ }
+            if (owner !== scheduleId) continue;
+            rmSync(join(occurrences, entry.name), { recursive: true, force: true });
+            claimsPurged += 1;
+          }
+        }
+        // THE SCHEDULE LAST. A crash mid-purge leaves a schedule that still
+        // reads, so the operator can run the delete again; the reverse would
+        // leave orphaned claims under an id nothing remembers.
+        for (const name of [VERSIONS_JOURNAL, SNAPSHOT]) {
+          try { unlinkSync(join(dir, name)); } catch { /* already gone */ }
+        }
+        fsyncDirBestEffort(dir);
+        return { ok: true, value: { claimsPurged } };
       });
     },
 

@@ -2,7 +2,8 @@
 
 **Status: GRAMMAR + PURE EVALUATOR + CLAIM/OVERLAP/MISSED-RUN DECISIONS
 + FILE-BACKED CLAIM ADAPTER + THE TICK PASS + A DURABLE SCHEDULE STORE + AN
-AUTHENTICATED TICK ENDPOINT AND THE SCHEDULE FAMILY (CREATE, LIST, PAUSE, EDIT)
+AUTHENTICATED TICK ENDPOINT AND THE SCHEDULE FAMILY (CREATE, LIST, PAUSE,
+EDIT, DELETE)
 IMPLEMENTED. NO SCHEDULER AND NO TIMER: NOTHING CALLS THE TICK ON A SCHEDULE,
 AND A SCHEDULED RUN IS CREATED BUT NEVER DISPATCHED.**
 
@@ -35,7 +36,8 @@ store, the file-backed claim adapter, the Intl timezone port, and
 `relay-bridge/cron-routes.ts` exposes `POST /relay-api/cron/tick` plus the
 schedule family — `POST` and `GET /relay-api/cron/schedules` and
 `POST /relay-api/cron/schedules/:id/pause` and
-`POST /relay-api/cron/schedules/:id/edit` — all operator-only, flag-gated,
+`POST /relay-api/cron/schedules/:id/edit` and
+`POST /relay-api/cron/schedules/:id/delete` — all operator-only, flag-gated,
 server-clocked, with explicit `authorized: true` on everything that writes.
 
 WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
@@ -454,21 +456,52 @@ enterprise-granted scheduled entitlement. Until the founder approves exact
 behaviour the policy stays configurable, defaults to unavailable, and **never
 hardcodes automatic Unchain consumption**.
 
+## Deleting a schedule
+
+Deletion frees the id, and purges the occurrence claims the schedule made.
+
+It READS NOTHING FIRST, deliberately. The case that motivates deletion is a
+schedule too CORRUPT to read — a journal written before a required field
+existed, or a zone no evaluator resolves — and every other operation replays
+before acting. Until deletion existed, such a record could only be removed by
+editing the volume by hand.
+
+THE ID COMES BACK, and an earlier design of this said it must not. The worry
+was that claim markers survive deletion, are keyed on a digest including
+`scheduleId` and `contractVersion`, and would be inherited by a schedule
+recreated under the same name — its occurrences reading as already handled,
+which is the mirror of a replay. Measured, that collision is unreachable: a
+recreated schedule is authored NOW, and the tick clamps its window to its own
+authoring instant, so it can only own moments that postdate its creation. A
+tombstone would have burned the name permanently to prevent something that
+cannot happen, and reclaiming one would have meant editing the volume by hand —
+the very remedy deletion exists to abolish.
+
+The claims are purged regardless, as defence in depth, so a freed id leaves
+nothing behind that has to be reasoned about. Only this schedule's claims: a
+marker naming another schedule is left alone, because removing it would replay
+that schedule's handled windows. The purge is counted and reported.
+
+The claims go FIRST and the schedule LAST. A crash between them leaves a
+schedule that still reads, so the delete can simply be run again; the reverse
+would leave orphaned claims under an id nothing remembers.
+
+Deleting a schedule does not touch the runs it created: they keep their own
+records and stay attributed to the version they started under. Whether any are
+still in flight is not checked, because a run records its Loop and not its
+schedule.
+
+This is also the remedy for a schedule the tick refuses on rules that arrived
+after it was stored — a fixed offset, a `SystemV/*` zone, a single-word IANA
+name, or a version predating the binding.
+
 ## Not implemented
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
 (the record is created; nothing advances it) · ATTRIBUTING A RUN TO ITS
 SCHEDULE FROM THE RUN RECORD: a run names its Loop, not its schedule. The
 occurrence claim markers carry `scheduleId` and could be walked to recover it;
-until something does, an edit claims nothing about the runs already created · a schedule
-stored before the binding was required, which replays as CORRUPT: refused
-rather than run with attribution nobody wrote, and repairable by NO endpoint —
-creating over it conflicts, pausing and editing read it first, so the record
-must be removed from the state root by hand · schedule DELETION, so an
-otherwise unusable schedule can only be paused — and since the
-tick applies the same zone rules as creation, a schedule stored before those
-rules existed (a fixed offset, a `SystemV/*` zone, or a single-word IANA name)
-is permanently un-tickable and can only be paused · listing
+until something does, an edit claims nothing about the runs already created · listing
 PAGINATION: the listing replays at most 200 schedules and reports `truncated`
 truthfully, but nothing can reach schedule 201, so with more than 200 stored
 an operator cannot learn whether the ones past the cap are paused or corrupt ·
