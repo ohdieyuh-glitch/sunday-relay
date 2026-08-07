@@ -186,6 +186,21 @@ describe('Unknown is rendered as Unknown', () => {
     expect(JSON.stringify(view.usageLines)).not.toContain('0.0000');
   });
 
+  it('never turns an uncounted provider call into a number either', () => {
+    // Without this the row rendered `null / 100` and declared itself known —
+    // the confident number nobody measured that this projection forbids.
+    const view = projectLoopRunView({
+      status: {
+        ...BASE,
+        usage: { ...BASE.usage, providerCallsUsed: null, providerCallsUnknown: true },
+      },
+    });
+    const calls = view.usageLines.find((l) => l.label === 'Provider calls');
+    expect(calls?.value).toBe('Unknown');
+    expect(calls?.unknown).toBe(true);
+    expect(JSON.stringify(view.usageLines)).not.toContain('null');
+  });
+
   it('shows a known total when it is known', () => {
     const view = projectLoopRunView({ status: BASE });
     expect(view.usageLines.find((l) => l.label === 'Spend')?.value).toContain('0.0010');

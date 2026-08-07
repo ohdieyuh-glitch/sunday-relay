@@ -12,6 +12,7 @@ import {
   isTerminalLoopState,
   loopDigest,
   preflightLoopDispatch,
+  projectLoopStatus,
   readLoopRun,
   runLoopIteration,
   runLoopUntilSettled,
@@ -561,13 +562,23 @@ describe('usage is recorded truthfully', () => {
     expect(outcome.run.budget.providerCallsUsed).toBeNull();
     expect(outcome.run.budget.providerCallsUsed).not.toBe(0);
     expect(outcome.run.budget.providerCallsHaveUnknownComponent).toBe(true);
+
+    // …and the projection every surface reads says so too. Without this the
+    // panel rendered `null / 100` and declared the row known.
+    const projected = projectLoopStatus(outcome.run).usage;
+    expect(projected.providerCallsUsed).toBeNull();
+    expect(projected.providerCallsUnknown).toBe(true);
   });
 
   it('fails closed when a provider-call cap is set and the calls cannot be counted', async () => {
-    // THE BUG THIS EXISTS TO CATCH. `providerCallsUsed` used to add 0 for an
-    // unreported count, so a provider that never reports call counts left the
-    // total at 0 forever and `maxProviderCalls` never fired — an unbounded
-    // number of paid calls under a cap that appeared to be holding.
+    // THE BUG THIS EXISTS TO CATCH, and its true scope. `providerCallsUsed`
+    // used to add 0 for an unreported count, so the total sat at 0 forever and
+    // `maxProviderCalls` could never fire. It was LATENT rather than live:
+    // `executionUsage` forces `costMicros: null` for any unknown usage, so an
+    // uncounted call always arrived with unknown spend, and the spend or token
+    // `unaccountable` branch stopped the run first in every configuration this
+    // repository builds. It becomes reachable with a policy that caps calls but
+    // not spend, or an adapter that reports tokens and not calls.
     const { deps, backing } = harness([{ kind: 'unknown_usage' }]);
     admit(backing, seed(budget({ maxSpendMicros: null, maxTotalTokens: null, maxProviderCalls: 2 })));
     const outcome = await runLoopIteration(deps, context());
@@ -622,11 +633,18 @@ describe('usage is recorded truthfully', () => {
   it('reads a lost counter as Unknown rather than as NaN', async () => {
     // Defence in depth for the same failure: even if a field does go missing,
     // the total must become Unknown, never a number that is quietly wrong.
-    const { deps, backing } = harness([{ kind: 'continuing' }]);
-    admit(backing);
+    // The fixture LOSES the counters — an earlier version used a step that
+    // reported known ones, so the test named after this failure mode passed
+    // whether or not the code handled it.
+    const { deps, backing } = harness([{ kind: 'unknown_usage' }]);
+    admit(backing, seed(budget({
+      maxSpendMicros: null, maxTotalTokens: null, maxProviderCalls: null,
+    })));
     await runLoopIteration(deps, context());
     const run = readLoopRun(backing, 'lpr_engine', loopDigest)?.run;
     if (run === null || run === undefined) throw new Error('expected a run');
+    expect(run.budget.tokensUsed).toBeNull();
+    expect(run.budget.providerCallsUsed).toBeNull();
     expect(Number.isNaN(run.budget.tokensUsed ?? 0)).toBe(false);
     expect(Number.isNaN(run.budget.providerCallsUsed ?? 0)).toBe(false);
   });
