@@ -127,34 +127,32 @@ export type ZonePlaceVerdict = 'place' | 'not_a_place' | 'cannot_verify';
 /**
  * Does this name a PLACE, rather than a zone whose rules cannot follow one?
  *
- * TWO FAMILIES ARE REFUSED, and they are refused for DIFFERENT reasons — which
- * matters, because an earlier message told an operator the wrong one:
+ * TWO FAMILIES ARE REFUSED, for DIFFERENT reasons — which matters, because a
+ * refusal that gave the wrong one is what this check has been corrected for
+ * twice:
  *
- * - `Etc/GMT±N` is a fixed offset. Its offset can never change, so a schedule
- *   on one drifts against its author's wall clock forever.
- * - `SystemV/*` is a FROZEN LEGACY zone. Six of its thirteen members do observe
- *   daylight saving — measured, `SystemV/EST5EDT` is GMT-05:00 in January and
- *   GMT-04:00 in July — but on the pre-1987 US ruleset, so they diverge from
- *   the places they appear to name for weeks each spring and autumn. Calling
- *   them fixed offsets was false; refusing them is still right.
+ * - `Etc/GMT±N` is a fixed offset. It can never express daylight saving, so a
+ *   schedule on one drifts against its author's wall clock forever.
+ * - `SystemV/*` is a FROZEN LEGACY zone. Six of its thirteen members DO observe
+ *   daylight saving — `SystemV/EST5EDT` is GMT-05:00 in January and GMT-04:00
+ *   in July — but on the pre-1987 US ruleset, so they diverge from the places
+ *   they appear to name for weeks each spring and autumn.
  *
- * Enumerating either family by pattern is how the rule stayed one step behind
- * reality twice: first every case variant, then all thirteen `SystemV/*` zones
- * while `Etc/GMT±N` alone was refused.
+ * `Intl.supportedValuesOf('timeZone')` is ICU's OWN list of real locations and
+ * excludes both families while including every genuine place, resolving
+ * aliases on the way (`Japan` → `Asia/Tokyo`, `EST` → `America/Panama`).
+ * Asking it decides the CLASS; two attempts to enumerate these families by
+ * pattern were each a step behind, missing first every case variant and then
+ * all thirteen `SystemV/*` zones.
  *
- * `Intl.supportedValuesOf('timeZone')` is ICU's OWN list of real locations, and
- * it excludes both families while including every genuine place and resolving
- * aliases correctly (`Japan` → `Asia/Tokyo`, `EST` → `America/Panama`). Asking
- * it decides the CLASS instead of chasing instances.
- *
- * `UTC` is admitted deliberately: it is absent from that list because it names
- * no location, and it is nonetheless the one offset a recurring schedule may
- * legitimately choose — a Loop that means "midnight UTC" is not drifting.
+ * `UTC` is admitted deliberately: absent from that list because it names no
+ * location, and still the one offset a recurring schedule may legitimately
+ * choose — a Loop that means "midnight UTC" is not drifting.
  *
  * WHERE THE LIST CANNOT BE READ the answer is `cannot_verify`, never
- * `not_a_place`. Callers still refuse — an unverifiable zone must not schedule
- * unattended work — but they say so truthfully rather than telling an operator
- * that `America/Los_Angeles` is a fixed offset.
+ * `not_a_place`. Callers still refuse, because unverifiable work must not be
+ * scheduled unattended — but they do not tell an operator that
+ * `America/Los_Angeles` is a fixed offset.
  */
 export function zoneNamesAPlace(timeZone: string): ZonePlaceVerdict {
   return zonePlaceVerdict(resolvedZoneName(timeZone), supportedZones());
@@ -163,11 +161,11 @@ export function zoneNamesAPlace(timeZone: string): ZonePlaceVerdict {
 /**
  * The decision alone, over values a caller supplies.
  *
- * Split out because the `cannot_verify` branch is otherwise unreachable from a
- * test: the supported-zone set is read once and cached for the process, so
- * nothing can make a real host lose it. Collapsing that branch into
- * `not_a_place` therefore survived every test — a guard with no test is a
- * comment, and this is the shape that gives it one.
+ * Split out so the three verdicts can be exercised directly. The
+ * `cannot_verify` branch is ALSO reachable through the real function by
+ * removing `Intl.supportedValuesOf`, and the tests do both — an earlier
+ * version of this comment claimed it was unreachable, which is how the branch
+ * shipped with no test at all.
  */
 export function zonePlaceVerdict(
   resolved: string | null, known: ReadonlySet<string> | null,
@@ -184,21 +182,20 @@ export function resolvedZoneCacheSize(): number {
   return resolvedNames.size;
 }
 
-/** `null` once the list has been asked for and could not be read. The earlier
- *  version caught only an ABSENT `supportedValuesOf`; one that THROWS escaped
- *  as an unhandled route error, and because the cache stayed unset it threw
- *  again on every later request instead of degrading. */
-let supported: Set<string> | null | undefined;
+/** The list, once read. A FAILURE IS NOT CACHED: caching it wedged a healthy
+ *  bridge into refusing every create and every tick until restart, because a
+ *  single transient failure was remembered forever. Retrying costs one Intl
+ *  call on a host that cannot answer, and the host that can heals itself. */
+let supported: Set<string> | null = null;
 function supportedZones(): Set<string> | null {
-  if (supported !== undefined) return supported;
+  if (supported !== null) return supported;
   try {
-    supported = typeof Intl.supportedValuesOf === 'function'
-      ? new Set(Intl.supportedValuesOf('timeZone'))
-      : null;
+    if (typeof Intl.supportedValuesOf !== 'function') return null;
+    supported = new Set(Intl.supportedValuesOf('timeZone'));
+    return supported;
   } catch {
-    supported = null;
+    return null;
   }
-  return supported;
 }
 
 /**

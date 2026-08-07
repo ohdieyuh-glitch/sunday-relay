@@ -122,27 +122,25 @@ export interface CronTickPort {
 }
 
 /**
- * A zone that is really a fixed offset, refused wherever it appears.
+ * A zone this server will not schedule against, refused wherever it appears.
  *
- * `Etc/GMT+5` is a REAL, resolvable zone and a fixed offset at once, so it
- * satisfied both the pattern and the evaluator while being exactly what the
- * non-IANA refusal says is not allowed.
+ * Named for what it does: it refuses THREE things, not one. A fixed offset
+ * (`Etc/GMT±N`), a frozen legacy zone (`SystemV/*`, six of whose thirteen
+ * members do observe daylight saving, on a ruleset frozen in 1987), and a zone
+ * this server cannot check at all. The rule is not a pattern — two attempts to
+ * enumerate these families by regex were each a step behind reality — it is
+ * ICU's own list of real locations.
  *
- * THE RULE IS NO LONGER A PATTERN. Two successive attempts to enumerate this
- * by regex were each one step behind: the first missed every case variant, the
- * second refused `Etc/GMT±N` while all THIRTEEN `SystemV/*` zones walked past.
- * `zoneNamesAPlace` asks ICU's own list of real locations instead, which
- * decides the class rather than the instance and folds case and aliases on the
- * way. The two families are refused for different reasons — a fixed offset
- * cannot express daylight saving at all, while six SystemV zones DO observe it
- * on a ruleset frozen in 1987 — and the refusal says so rather than telling an
- * operator that a DST-observing zone has none.
+ * IT STATES ITS OWN PRECONDITION rather than trusting callers. An unresolvable
+ * zone gets the unresolvable message here, so a third call site added without
+ * the caller-side guard cannot tell an operator `America/Atlantis` is a fixed
+ * offset.
  *
- * Applied at CREATION and at the TICK. A schedule created before this rule, or
- * written straight into the store, would otherwise run under a zone the tick's
- * own refusal text says it will not run.
+ * Applied at CREATION and at the TICK: a schedule written straight into the
+ * store would otherwise run under a zone the tick's own refusal says it will
+ * not run.
  */
-function refuseFixedOffsetZone(
+function refuseZoneThatNamesNoPlace(
   ticks: CronTickPort, asWritten: string,
 ): ReviewerRouteResult | null {
   const verdict = ticks.zoneNamesAPlace(asWritten);
@@ -151,10 +149,18 @@ function refuseFixedOffsetZone(
   const named = resolved === null || resolved === asWritten
     ? `"${safeText(asWritten)}"`
     : `"${safeText(asWritten)}" (${safeText(resolved)})`;
+  if (resolved === null) {
+    return err(422, 'validation_failed',
+      `${named} is IANA-shaped but this server's timezone evaluator cannot resolve it. A schedule `
+      + 'that could never be evaluated is not stored.');
+  }
   if (verdict === 'cannot_verify') {
+    // NO CLAIM ABOUT THE ZONE. Saying "this is a server fault, not a bad zone"
+    // asserted the very thing the sentence before it says cannot be checked —
+    // and was plainly false when the zone was `Etc/GMT+5`.
     return err(422, 'validation_failed',
       `${named} cannot be checked against this server's list of real locations, so it is refused `
-      + 'rather than scheduled unverified. This is a server fault, not a bad zone.');
+      + 'rather than scheduled unverified.');
   }
   return err(422, 'validation_failed',
     `${named} does not name a place this server can schedule against — it is a fixed offset `
@@ -211,13 +217,8 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   // delete route, that id was burned permanently. Resolvability is asked
   // FIRST so a string naming nothing is told it names nothing, rather than
   // being handed the diagnosis for a different problem.
-  if (ticks.resolveZone(timeZone as string) === null) {
-    return err(422, 'validation_failed',
-      `"${safeText(timeZone)}" is IANA-shaped but this server's timezone evaluator cannot resolve `
-      + 'it. A schedule that could never be evaluated is not stored.');
-  }
-  const offsetRefusal = refuseFixedOffsetZone(ticks, timeZone as string);
-  if (offsetRefusal !== null) return offsetRefusal;
+  const zoneRefusal = refuseZoneThatNamesNoPlace(ticks, timeZone as string);
+  if (zoneRefusal !== null) return zoneRefusal;
   const parsed = parseCronExpression(cronExpression as string);
   if (!parsed.ok) return err(422, 'validation_failed', safeText(parsed.problem));
 
@@ -548,9 +549,12 @@ export async function handleCronRoute(
   // before creation learned to refuse these, or written straight into the
   // store, is refused HERE rather than drifting an hour twice a year under a
   // rule the same message claims to enforce.
+  // The `!== null` guard is deliberate HERE and not at creation: a stored zone
+  // nothing can resolve is left to the evaluator, whose `unknown_timezone` is
+  // the answer this endpoint has always given for it.
   if (ticks.resolveZone(timeZone) !== null) {
-    const offsetRefusal = refuseFixedOffsetZone(ticks, timeZone);
-    if (offsetRefusal !== null) return offsetRefusal;
+    const zoneRefusal = refuseZoneThatNamesNoPlace(ticks, timeZone);
+    if (zoneRefusal !== null) return zoneRefusal;
   }
 
   const parsed = parseCronExpression(cronExpression);

@@ -608,8 +608,10 @@ describe('an operator can create, list and pause a schedule', () => {
     // Every spelling Intl accepts, because the refusal tests the CANONICAL
     // name: a case-sensitive pattern over the raw string refused one spelling
     // and stored the identical zone under another.
-    // SystemV/* are equally fixed and were missed entirely by the pattern the
-    // rule used to be — which is why the rule is now ICU's own list of places.
+    // SystemV/* was missed entirely by the pattern this rule used to be, which
+    // is why the rule is now ICU's own list of places. Six of its thirteen
+    // members DO observe daylight saving; they are refused because their rules
+    // are frozen at the pre-1987 ruleset, not because they are fixed offsets.
     for (const timeZone of [
       'Etc/GMT+5', 'etc/gmt+5', 'ETC/GMT+5', 'Etc/GMT-14',
       'SystemV/EST5', 'SystemV/PST8', 'systemv/mst7',

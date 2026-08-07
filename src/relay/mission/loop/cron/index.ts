@@ -11,9 +11,10 @@
 export { cronMatches, parseCronExpression } from './cron-expression';
 export type { CronField, CronParseResult, CronSchedule } from './cron-expression';
 
-export {
-  createIntlTimezonePort, resolvedZoneName, zoneNamesAPlace, zonePlaceVerdict,
-} from './timezone-port';
+// `zonePlaceVerdict` and `resolvedZoneCacheSize` are deliberately NOT here:
+// they exist for tests in the same directory, and a barrel export would make
+// a test seam part of the domain's public surface.
+export { createIntlTimezonePort, resolvedZoneName, zoneNamesAPlace } from './timezone-port';
 export type { CronLocalMinute, TimezonePort, ZonePlaceVerdict } from './timezone-port';
 
 export { dueCronOccurrences, MAX_CRON_WINDOW_MINUTES } from './cron-occurrences';

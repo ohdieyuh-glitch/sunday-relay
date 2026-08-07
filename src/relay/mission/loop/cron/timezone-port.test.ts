@@ -111,7 +111,7 @@ describe('a zone that names a place, versus a fixed offset wearing a zone name',
     }
   });
 
-  it('records that six SystemV zones DO observe daylight saving', () => {
+  it('records that all six DST-observing SystemV zones really do observe it', () => {
     // The reason they are refused is that their rules are FROZEN at the
     // pre-1987 US ruleset, not that they are fixed offsets — a refusal that
     // called them fixed offsets was simply false, and this pins the fact that
@@ -121,11 +121,20 @@ describe('a zone that names a place, versus a fixed offset wearing a zone name',
       return new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longOffset' })
         .formatToParts(at).find((part) => part.type === 'timeZoneName')?.value ?? '';
     };
-    expect(offsetIn('SystemV/EST5EDT', 0)).not.toBe(offsetIn('SystemV/EST5EDT', 6));
-    expect(offsetIn('SystemV/PST8PDT', 0)).not.toBe(offsetIn('SystemV/PST8PDT', 6));
-    // …while the non-DST members really are fixed.
-    expect(offsetIn('SystemV/EST5', 0)).toBe(offsetIn('SystemV/EST5', 6));
-    expect(offsetIn('Etc/GMT+5', 0)).toBe(offsetIn('Etc/GMT+5', 6));
+    for (const zone of [
+      'SystemV/AST4ADT', 'SystemV/CST6CDT', 'SystemV/EST5EDT',
+      'SystemV/MST7MDT', 'SystemV/PST8PDT', 'SystemV/YST9YDT',
+    ]) {
+      expect(offsetIn(zone, 0), zone).not.toBe(offsetIn(zone, 6));
+      expect(zoneNamesAPlace(zone), zone).toBe('not_a_place');
+    }
+    // …while the other seven, and every Etc/GMT±N, really are fixed.
+    for (const zone of [
+      'SystemV/AST4', 'SystemV/CST6', 'SystemV/EST5', 'SystemV/HST10',
+      'SystemV/MST7', 'SystemV/PST8', 'SystemV/YST9', 'Etc/GMT+5',
+    ]) {
+      expect(offsetIn(zone, 0), zone).toBe(offsetIn(zone, 6));
+    }
   });
 
   it('accepts real places, including ones with no daylight saving at all', () => {
