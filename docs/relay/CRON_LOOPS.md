@@ -236,9 +236,26 @@ action, consume a duplicate approval, or produce conflicting mission records.
 
 ## Timezones
 
-Every Cron Loop carries an explicit **IANA timezone** (`America/Los_Angeles`).
-A bare numeric UTC offset is a validation failure for recurring schedules. The
-timezone is shown before confirmation.
+Every Cron Loop carries an explicit **IANA timezone naming a PLACE**
+(`America/Los_Angeles`). The timezone is shown before confirmation. Three rules
+are enforced, at creation and again at the tick, because a stored schedule can
+outlive the rule that admitted it:
+
+1. A bare numeric UTC offset (`+05:30`) is a validation failure.
+2. The name must be **Area/Location**. This refuses the single-word IANA names
+   (`Japan`, `EST`, `Singapore`) too — they ARE IANA names, so the refusal says
+   "not an Area/Location timezone name" rather than claiming otherwise. Write
+   `Asia/Tokyo`.
+3. The name must resolve into ICU's list of real locations
+   (`Intl.supportedValuesOf('timeZone')`). This refuses `Etc/GMT±N`, which is a
+   fixed offset, and all thirteen `SystemV/*` zones, which are frozen at the
+   pre-1987 US ruleset — six of them do observe daylight saving, so they are
+   refused for having rules that no longer follow the place they name, not for
+   being fixed. Where that list cannot be read the zone is refused as
+   unverifiable, which says so rather than blaming the zone.
+
+`UTC` is accepted: it names no location and is deliberately admitted, because a
+Loop meaning "midnight UTC" is not drifting.
 
 - **Spring-forward** (the local time does not exist): default to the next valid
   local time, and record that the occurrence was shifted.
@@ -422,8 +439,9 @@ schedule that pins its own binding**, so a stored schedule can still be ticked
 into any project and Loop the caller names, and the claim marker that makes a
 replay free protects a (schedule, binding) pair rather than the schedule ·
 schedule DELETION, so an unusable schedule can only be paused — and since the
-tick now refuses a fixed-offset zone, a schedule stored with one before that
-rule existed is permanently un-tickable and can only be paused · listing
+tick applies the same zone rules as creation, a schedule stored before those
+rules existed (a fixed offset, a `SystemV/*` zone, or a single-word IANA name)
+is permanently un-tickable and can only be paused · listing
 PAGINATION: the listing replays at most 200 schedules and reports `truncated`
 truthfully, but nothing can reach schedule 201, so with more than 200 stored
 an operator cannot learn whether the ones past the cap are paused or corrupt ·

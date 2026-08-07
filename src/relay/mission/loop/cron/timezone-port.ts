@@ -139,11 +139,15 @@ export type ZonePlaceVerdict = 'place' | 'not_a_place' | 'cannot_verify';
  *   they appear to name for weeks each spring and autumn.
  *
  * `Intl.supportedValuesOf('timeZone')` is ICU's OWN list of real locations and
- * excludes both families while including every genuine place, resolving
- * aliases on the way (`Japan` → `Asia/Tokyo`, `EST` → `America/Panama`).
- * Asking it decides the CLASS; two attempts to enumerate these families by
- * pattern were each a step behind, missing first every case variant and then
- * all thirteen `SystemV/*` zones.
+ * excludes both families while including every genuine place. THE LIST ITSELF
+ * RESOLVES NOTHING and contains neither `Japan` nor `EST`: the folding is done
+ * by `resolvedZoneName` before the lookup, which is why `Japan` (→
+ * `Asia/Tokyo`), `EST` (→ `America/Panama`) and every case variant are
+ * accepted. Looking the caller's raw string up in the list directly would
+ * refuse all of them — the exact regression two earlier rounds removed.
+ * Asking the list decides the CLASS; two attempts to enumerate these families
+ * by pattern were each a step behind, missing first every case variant and
+ * then all thirteen `SystemV/*` zones.
  *
  * `UTC` is admitted deliberately: absent from that list because it names no
  * location, and still the one offset a recurring schedule may legitimately

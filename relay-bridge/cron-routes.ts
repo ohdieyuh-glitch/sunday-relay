@@ -13,41 +13,42 @@ import type { ScheduleReadResult } from '../src/relay/persistence/cron-schedule-
 import type { CronContractVersion } from '../src/relay/mission/loop/cron/cron-versioning';
 
 /**
- * SUNDAY RELAY — THE CRON TICK ENDPOINT.
+ * SUNDAY RELAY — THE CRON ENDPOINTS.
  *
- * CRON_LOOPS.md approved an in-bridge scheduler woken by an authenticated
- * tick, with the platform's own cron as a WAKER that "must never define
- * occurrences, hold state, or be required for correctness". This is that
- * seam — and only that seam. What it is NOT, stated here because a surface
- * that guesses would guess generously:
+ * FOUR OPERATIONS, all operator-only and flag-gated: the tick, and the schedule
+ * family (create, list, pause). CRON_LOOPS.md approved an in-bridge scheduler
+ * woken by an authenticated tick, with the platform's own cron as a WAKER that
+ * "must never define occurrences, hold state, or be required for correctness".
+ * This is that seam plus the operations that make a schedule reachable by an
+ * operator at all. What it is NOT, stated because a surface that guesses would
+ * guess generously:
  *
- * - **Not a scheduler.** Nothing calls this on a schedule. No timer exists.
- * - **Not a dispatcher.** A tick creates durable Loop run RECORDS and
- *   advances none of them; the engine refuses cron-triggered dispatch.
- * - **Not a scheduler still, but no longer schedule-less.** The schedule is
- *   READ from the durable store: a request says which schedule and over what
- *   window, and the expression, timezone, contract and version are the
- *   schedule's own. (This block previously said the opposite — that no store
- *   existed and every field arrived in the request — for one commit after the
- *   store landed. A header describing the behaviour a file used to have is
- *   the defect this repository keeps finding.)
+ * - **Not a scheduler.** Nothing calls the tick on a schedule. No timer exists.
+ * - **Not a dispatcher.** A tick creates durable Loop run RECORDS and advances
+ *   none of them; the engine refuses cron-triggered dispatch.
+ * - **Not schedule-less.** The schedule is READ from the durable store: a
+ *   request says which schedule and over what window, and the expression,
+ *   timezone, contract and version are the schedule's own.
+ * - **Not attributing its own runs.** A stored schedule does not pin the
+ *   project and Loop its runs belong to; the tick still names them, so the
+ *   occurrence claim protects a (schedule, binding) pair rather than the
+ *   schedule. Named in CRON_LOOPS.md under "Not implemented".
  *
  * THE CLOCK IS THE SERVER'S. `evaluatedAt` and the window's end come from the
- * server, never the body: CRON_LOOPS.md says a client-supplied time field
- * must never influence due-ness, and that is a test, not a convention. The
- * window's START is still client-supplied — a named deviation, bounded by the
+ * server, never the body: CRON_LOOPS.md says a client-supplied time field must
+ * never influence due-ness, and that is a test, not a convention. The window's
+ * START is still client-supplied — a named deviation, bounded by the
  * server-clocked end, the eight-day evaluation limit, the claim marker that
- * makes a replay free, and now by the governing version's own authoring
- * instant: a version cannot own a moment that predates it.
+ * makes a replay free, and by the governing version's own authoring instant.
  *
- * THAT LAST BOUND EXISTS BECAUSE AN EDIT WOULD OTHERWISE REPLAY THE PAST.
- * The occurrence identity digests the contract version, so a new version gave
- * every occurrence in an already-handled window a fresh identity and a fresh
- * claim — review measured six runs for the same three hours. Clamping the
- * window's start to the version's `authoredAt` means a new version owns only
- * moments after it existed, which is what "a trigger creates at most one Cron
- * Loop Run" has to mean across an edit. A durable per-schedule watermark
- * would bound it further and does not exist yet.
+ * THAT LAST BOUND EXISTS BECAUSE AN EDIT WOULD OTHERWISE REPLAY THE PAST. The
+ * occurrence identity digests the contract version, so a new version gave every
+ * occurrence in an already-handled window a fresh identity and a fresh claim —
+ * review measured six runs for the same three hours. Clamping the window's
+ * start to the version's `authoredAt` means a new version owns only moments
+ * after it existed, which is what "a trigger creates at most one Cron Loop Run"
+ * has to mean across an edit. A durable per-schedule watermark would bound it
+ * further and does not exist yet.
  */
 
 export const CRON_PREFIX = '/cron/';
@@ -247,6 +248,10 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
     timeZone: timeZone as string,
     contractRef: contractRef as string,
     contractBindingDigest: contractBindingDigest as string,
+    // A CALLER-DECLARED LABEL, not an authenticated identity. There is one
+    // operator credential, so binding this to the principal would say less
+    // than the label does — but a later reader of `history[0].authoredBy`
+    // must not mistake it for proof of who acted.
     authoredBy: authoredBy as string,
     // THE SERVER'S CLOCK. A caller does not get to say when it authored
     // something: the authoring instant now bounds which moments a version may
@@ -278,8 +283,16 @@ function pauseSchedule(
   // The repository's ONE segment decoder. A private copy here is how a decoding
   // defect comes back after the shared one is fixed.
   const scheduleId = decodeSegment(rawId);
-  if (scheduleId === null || !isUsableScheduleId(scheduleId)) {
+  // TWO DIFFERENT FAILURES, TWO DIFFERENT SENTENCES. `_leading` IS a usable
+  // path segment and is not a usable schedule id; one message for both named
+  // the wrong rule and sent an operator to check their URL encoding.
+  if (scheduleId === null) {
     return err(422, 'validation_failed', 'The schedule id is not a usable path segment.');
+  }
+  if (!isUsableScheduleId(scheduleId)) {
+    return err(422, 'validation_failed',
+      `"${safeText(scheduleId)}" cannot name a schedule: 1-64 characters, letters, digits, `
+      + 'underscore and hyphen, starting with a letter or digit.');
   }
   // INSPECT BEFORE WRITING, exactly as the tick does. `setPaused` takes the
   // write lock BEFORE it replays, and acquiring a lock inside a directory that
