@@ -3,12 +3,14 @@ import { createCronClaimNodePort } from '../src/relay/persistence/cron-claim-nod
 import {
   createCronScheduleStore, type CronScheduleStore, type ScheduleReadResult,
 } from '../src/relay/persistence/cron-schedule-node';
+import type { CronContractVersion } from '../src/relay/mission/loop/cron/cron-versioning';
 import {
   confirmLoopRun, emptyLoopBudget, loopDigest, loopRunIsActive, readLoopRun,
   type LoopOperationDeps,
 } from '../src/relay/mission/loop/runtime';
 import {
-  createIntlTimezonePort, runCronTick,
+  createIntlTimezonePort, resolvedZoneName, runCronTick, zoneNamesAPlace,
+  type ZonePlaceVerdict,
   type CronRunCreationPort, type CronTickInput, type CronTickReport,
 } from '../src/relay/mission/loop/cron';
 
@@ -35,8 +37,11 @@ import {
  * subtlest thing in this file; see `activeRunsFor`.
  */
 
-/** What one schedule binds its runs to. Caller-supplied: no schedule store
- *  exists, and inventing one to make this look finished would be worse. */
+/** What one schedule binds its runs to. STILL CALLER-SUPPLIED, per tick: the
+ *  schedule store exists now (`cron-schedule-node.ts`) and holds the
+ *  expression, zone, contract and version, but it does not yet hold this. Until
+ *  it does, a stored schedule can be ticked into any project and Loop the
+ *  caller names. Named in CRON_LOOPS.md under "Not implemented". */
 export interface CronRunBinding {
   readonly projectId: string;
   readonly workspaceId: string | null;
@@ -50,9 +55,10 @@ export interface CronRunBinding {
  *
  * CRON_LOOPS.md's formula is
  * `digest(scheduleId ‖ contractVersion ‖ intendedLocal ‖ resolvedUtc)`, which
- * assumes `scheduleId` is globally unique. NOTHING ALLOCATES ONE: there is no
- * schedule store, the id arrives as a caller-supplied string, and the claim
- * markers live in one flat namespace on the volume. So two projects both
+ * assumes `scheduleId` is globally unique. NOTHING ALLOCATES ONE: the id is the
+ * caller's string, and the store only refuses a DUPLICATE within one state
+ * root. The claim markers live in one flat namespace on the volume, and the
+ * binding below is not part of the stored schedule. So two projects both
  * using "daily-triage" would share occurrence ids, and the first to tick
  * would durably mark the second's occurrences already-handled — silent
  * cross-tenant suppression, found by review.
@@ -65,12 +71,48 @@ export interface CronRunBinding {
 const qualifiedScheduleId = (scheduleId: string, binding: CronRunBinding): string =>
   [binding.projectId, binding.workspaceId ?? 'no-workspace', binding.loopId, scheduleId].join('|');
 
+/** One stored schedule, and what the store can truthfully say about it. */
+export interface CronScheduleListing {
+  readonly scheduleId: string;
+  readonly state: 'active' | 'paused' | 'corrupt' | 'missing';
+}
+
+/** How many schedules one listing will replay. Chosen to bound the work, not
+ *  because more cannot exist — `totalStored` always reports the real count.
+ *  EXPORTED so a test can reach the boundary: a cap no test can approach is a
+ *  cap nothing proves, and `truncated` would pass while hardcoded false. */
+export const MAX_LISTED_SCHEDULES = 200;
+
+export interface CronScheduleListingPage {
+  readonly schedules: readonly CronScheduleListing[];
+  /** Every schedule on the volume, including any beyond the cap. */
+  readonly totalStored: number;
+  readonly truncated: boolean;
+}
+
 export interface CronTickService {
   /** The durable schedules. A tick reads what to run from HERE, not from the
    *  request that woke it. */
   readonly schedules: CronScheduleStore;
   /** What the store says about one schedule: found, missing or corrupt. */
   inspectSchedule(scheduleId: string): ScheduleReadResult;
+  /** Every stored schedule WITH the state the store can actually state. A bare
+   *  list of ids reports a corrupt or paused schedule as an ordinary one, and
+   *  the store separates `inspect` from `list` precisely because that
+   *  difference is the thing an operator needs to see. */
+  listSchedules(): CronScheduleListingPage;
+  /** What ICU resolves this zone to, or null when nothing can. An IANA-SHAPED
+   *  string is not an IANA zone: `America/Atlantis` matches the pattern and
+   *  nothing resolves it. */
+  resolveZone(timeZone: string): string | null;
+  /** Whether the zone names a place, does not, or cannot be verified. */
+  zoneNamesAPlace(timeZone: string): ZonePlaceVerdict;
+  createSchedule(
+    scheduleId: string, first: CronContractVersion,
+  ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+  setSchedulePaused(
+    scheduleId: string, paused: boolean, at: string,
+  ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
   tick(input: Omit<CronTickInput, 'tz' | 'digest'> & {
     readonly binding: CronRunBinding;
   }): CronTickReport;
@@ -188,6 +230,39 @@ export function createCronTickService(options: {
     store,
     schedules,
     inspectSchedule: (scheduleId) => schedules.inspect(scheduleId),
+    // BOUNDED ON PURPOSE. Stating each schedule's state costs a journal replay
+    // apiece, and the bridge is single-threaded: an unbounded list would block
+    // every other route for the total journal bytes on the volume. The cap is
+    // reported rather than applied silently — a truncated list that looks
+    // complete is how an operator concludes a schedule is gone.
+    listSchedules: () => {
+      const all = schedules.list();
+      return {
+        totalStored: all.length,
+        truncated: all.length > MAX_LISTED_SCHEDULES,
+        schedules: all.slice(0, MAX_LISTED_SCHEDULES).map((scheduleId) => {
+          const inspected = schedules.inspect(scheduleId);
+          if (inspected.kind === 'corrupt') return { scheduleId, state: 'corrupt' as const };
+          // `list` enumerates directories; `inspect` replays. A schedule that
+          // disappeared between the two is reported as gone, never as healthy.
+          if (inspected.kind === 'missing') return { scheduleId, state: 'missing' as const };
+          return {
+            scheduleId,
+            state: inspected.record.paused ? ('paused' as const) : ('active' as const),
+          };
+        }),
+      };
+    },
+    resolveZone: (timeZone) => resolvedZoneName(timeZone),
+    zoneNamesAPlace: (timeZone) => zoneNamesAPlace(timeZone),
+    createSchedule: (scheduleId, first) => {
+      const result = schedules.create(scheduleId, first);
+      return result.ok ? { ok: true } : { ok: false, problem: result.problem };
+    },
+    setSchedulePaused: (scheduleId, paused, at) => {
+      const result = schedules.setPaused(scheduleId, paused, at);
+      return result.ok ? { ok: true } : { ok: false, problem: result.problem };
+    },
     activeRunsFor,
     tick: (input) => runCronTick(claim, runsFor(input.binding), {
       ...input,

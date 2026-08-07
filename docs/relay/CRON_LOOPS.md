@@ -1,9 +1,11 @@
 # Cron Loops — architecture decision
 
 **Status: GRAMMAR + PURE EVALUATOR + CLAIM/OVERLAP/MISSED-RUN DECISIONS
-+ FILE-BACKED CLAIM ADAPTER + THE TICK PASS AND AN AUTHENTICATED TICK ENDPOINT IMPLEMENTED. NO SCHEDULER
-AND NO TIMER: NOTHING CALLS THE TICK ON A SCHEDULE, AND A SCHEDULED RUN IS
-CREATED BUT NEVER DISPATCHED.**
++ FILE-BACKED CLAIM ADAPTER + THE TICK PASS + A DURABLE SCHEDULE STORE + AN
+AUTHENTICATED TICK ENDPOINT AND THE SCHEDULE FAMILY (CREATE, LIST, PAUSE)
+IMPLEMENTED. NO SCHEDULER AND NO TIMER: NOTHING CALLS THE TICK ON A SCHEDULE,
+AND A SCHEDULED RUN IS CREATED BUT NEVER DISPATCHED. A STORED SCHEDULE DOES
+NOT YET PIN THE BINDING ITS RUNS ARE ATTRIBUTED TO.**
 
 `/loop schedule`, `/loop cron`, `/loop schedules` parse today and produce typed
 commands. `src/relay/mission/loop/cron/` now holds the schedule stage this
@@ -31,8 +33,10 @@ evolves within the tick, and every due occurrence lands in the report with
 its outcome. `relay-bridge/cron-service.ts` binds it to the real ports (the Loop run
 store, the file-backed claim adapter, the Intl timezone port, and
 `confirmLoopRun` with `creationSource: 'schedule'`), and
-`relay-bridge/cron-routes.ts` exposes `POST /relay-api/cron/tick` —
-operator-only, flag-gated, explicit `authorized: true`, server-clocked.
+`relay-bridge/cron-routes.ts` exposes `POST /relay-api/cron/tick` plus the
+schedule family — `POST` and `GET /relay-api/cron/schedules` and
+`POST /relay-api/cron/schedules/:id/pause` — all operator-only, flag-gated,
+server-clocked, with explicit `authorized: true` on everything that writes.
 
 WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
 
@@ -44,10 +48,15 @@ WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
   `creationSource: 'schedule'`, which the Loop service turns into
   `trigger: 'cron'`; and `preflightLoopDispatch` refuses a cron trigger. The
   response says `dispatched: 0` as a claim about the code path.
-- **There is no schedule store.** Every schedule field arrives in the request
-  body. No `RelayLoopSchedule` exists anywhere; nothing lists, pauses or
-  versions a schedule. This ships a manual tick over a caller-declared
-  schedule, not a Cron Loop product.
+- **A stored schedule does not pin the binding its runs are attributed to.**
+  The occurrence claim namespace is `project|workspace|loop|scheduleId`, and
+  the first three arrive in the TICK request. The durable claim marker
+  therefore protects a (schedule, binding) pair rather than the schedule:
+  review measured three ticks over one identical window, differing only in
+  `binding`, producing nine runs — six of them in the same Loop for the same
+  three hours. Creation is where the binding must be pinned, and it is not
+  pinned yet. Named here rather than implied, and listed under
+  "Not implemented" below.
 - **Every occurrence-CONSUMING overlap policy is refused.** The rule: no
   policy may durably consume an occurrence on the strength of a run that is
   not actually working. That excludes `queue_one` (this document's documented
@@ -78,8 +87,10 @@ END and the evaluation instant are server-clocked; the eight-day evaluation
 limit refuses anything wider; the missed-run policy caps catch-up; the route
 is operator-only and needs explicit authorization; and the durable claim
 marker makes a replay free rather than a double dispatch. The durable
-watermark that would close the deviation belongs to the schedule store that
-does not exist yet. The
+watermark that would close the deviation belongs to the schedule store, which
+exists now (`src/relay/persistence/cron-schedule-node.ts`) and does not hold
+one yet: what bounds the window today is the governing version's own
+`authoredAt`. The
 `loop_cron` feature flag is off and depends on `loop_scheduler`, which
 depends on `loop_engine`.
 
@@ -139,14 +150,20 @@ Options considered, against what actually exists:
   the journal and never trusts the snapshot's contents, so a stale, missing
   or wrong snapshot cannot make a schedule report a version its own history
   never recorded. An edit goes through `planScheduleEdit` rather than a second
-  copy of that rule. Schedules can be created, listed, edited and paused; what
-  The tick endpoint READS one, and a request that sends a field the schedule
+  copy of that rule. A schedule can be created, listed and paused through the
+  endpoints; EDITING exists in the store only, so a stored schedule has the one
+  version creation gave it. The tick endpoint READS one, and a request that sends a field the schedule
   owns is REFUSED rather than having it ignored. A request now says WHICH
   schedule to tick and
   over what window, while the expression, timezone, contract and version are
   the schedule's own. A caller can no longer run one schedule's window under
   rules it invented, a missing schedule is a 404, and a PAUSED or CORRUPT one
-  is refused rather than partially evaluated. The window's start is CLAMPED to
+  is refused rather than partially evaluated. An operator can create, list and
+  pause schedules through `/relay-api/cron/schedules` — creating and pausing
+  need the same explicit authorization a tick does, and the AUTHORING INSTANT
+  is the server's, because a caller who could backdate a version would own
+  moments that predate it and hand back the replay the clamp prevents. The
+  window's start is CLAMPED to
   the governing version's authoring instant, so an edit cannot replay an
   already-handled window: the occurrence identity carries the contract
   version, and without the clamp a new version gave every past occurrence a
@@ -219,9 +236,26 @@ action, consume a duplicate approval, or produce conflicting mission records.
 
 ## Timezones
 
-Every Cron Loop carries an explicit **IANA timezone** (`America/Los_Angeles`).
-A bare numeric UTC offset is a validation failure for recurring schedules. The
-timezone is shown before confirmation.
+Every Cron Loop carries an explicit **IANA timezone naming a PLACE**
+(`America/Los_Angeles`). The timezone is shown before confirmation. Three rules
+are enforced, at creation and again at the tick, because a stored schedule can
+outlive the rule that admitted it:
+
+1. A bare numeric UTC offset (`+05:30`) is a validation failure.
+2. The name must be **Area/Location**. This refuses the single-word IANA names
+   (`Japan`, `EST`, `Singapore`) too — they ARE IANA names, so the refusal says
+   "not an Area/Location timezone name" rather than claiming otherwise. Write
+   `Asia/Tokyo`.
+3. The name must resolve into ICU's list of real locations
+   (`Intl.supportedValuesOf('timeZone')`). This refuses `Etc/GMT±N`, which is a
+   fixed offset, and all thirteen `SystemV/*` zones, which are frozen at the
+   pre-1987 US ruleset — six of them do observe daylight saving, so they are
+   refused for having rules that no longer follow the place they name, not for
+   being fixed. Where that list cannot be read the zone is refused as
+   unverifiable, which says so rather than blaming the zone.
+
+`UTC` is accepted: it names no location and is deliberately admitted, because a
+Loop meaning "midnight UTC" is not drifting.
 
 - **Spring-forward** (the local time does not exist): default to the next valid
   local time, and record that the occurrence was shifted.
@@ -380,8 +414,10 @@ version nobody can review. Refused: an unattributed edit, an authored-at
 without an explicit offset, a history with a REPEATED version, a run citing an
 unknown version, and an edit that changes no schedule or contract field.
 GAPS are accepted — a run citing v4 in [1, 2, 4] resolves unambiguously, and
-an earlier version refused gaps on a stated reason that was simply untrue. NOT WIRED: no schedule
-store exists, so nothing holds a history for this to append to.
+an earlier version refused gaps on a stated reason that was simply untrue.
+The store holds the history this appends to, and the tick reads its head. What
+is still missing is the EDIT path: nothing calls `planScheduleEdit` from a
+surface, so a stored schedule has exactly the one version creation gave it.
 
 ## Cron S-Loops
 
@@ -397,9 +433,19 @@ hardcodes automatic Unchain consumption**.
 ## Not implemented
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
-(the record is created; nothing advances it) · schedule CREATION and pausing
-through an endpoint (the store supports both; no route exposes them) · the
-occurrence queue,
+(the record is created; nothing advances it) · schedule EDITING through an
+endpoint (create, list and pause are exposed; editing is store-only) · **a
+schedule that pins its own binding**, so a stored schedule can still be ticked
+into any project and Loop the caller names, and the claim marker that makes a
+replay free protects a (schedule, binding) pair rather than the schedule ·
+schedule DELETION, so an unusable schedule can only be paused — and since the
+tick applies the same zone rules as creation, a schedule stored before those
+rules existed (a fixed offset, a `SystemV/*` zone, or a single-word IANA name)
+is permanently un-tickable and can only be paused · listing
+PAGINATION: the listing replays at most 200 schedules and reports `truncated`
+truthfully, but nothing can reach schedule 201, so with more than 200 stored
+an operator cannot learn whether the ones past the cap are paused or corrupt ·
+the occurrence queue,
 and therefore the `queue_one` and `queue_all` overlap policies · period budget-cap ENFORCEMENT (the
 decision exists; nothing observes spend-to-date to feed it) ·
 recurring-approval STORAGE and enforcement (the decision exists; no grant is

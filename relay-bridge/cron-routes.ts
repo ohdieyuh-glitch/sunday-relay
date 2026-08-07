@@ -1,49 +1,54 @@
 import { type ReviewerRouteResult } from './reviewer-routes';
 import { LOOP_ENGINE_ENV, loopEngineEnabled } from './loop-routes';
 import { safeText } from './redact';
+import { decodeSegment } from './path-segment';
+import { isUsableScheduleId } from '../src/relay/persistence/cron-schedule-node';
 import { featureEffectivelyEnabled } from '../src/relay/mission/loop/loop-availability';
 import { parseCronExpression } from '../src/relay/mission/loop/cron';
 import { readIsoInstantWithOffset } from '../src/relay/mission/loop/runtime/loop-scheduler';
 import type { CronSchedule, CronTickReport } from '../src/relay/mission/loop/cron';
-import type { CronRunBinding } from './cron-service';
+import type { CronRunBinding, CronScheduleListingPage } from './cron-service';
+import type { ZonePlaceVerdict } from '../src/relay/mission/loop/cron';
 import type { ScheduleReadResult } from '../src/relay/persistence/cron-schedule-node';
+import type { CronContractVersion } from '../src/relay/mission/loop/cron/cron-versioning';
 
 /**
- * SUNDAY RELAY — THE CRON TICK ENDPOINT.
+ * SUNDAY RELAY — THE CRON ENDPOINTS.
  *
- * CRON_LOOPS.md approved an in-bridge scheduler woken by an authenticated
- * tick, with the platform's own cron as a WAKER that "must never define
- * occurrences, hold state, or be required for correctness". This is that
- * seam — and only that seam. What it is NOT, stated here because a surface
- * that guesses would guess generously:
+ * FOUR OPERATIONS, all operator-only and flag-gated: the tick, and the schedule
+ * family (create, list, pause). CRON_LOOPS.md approved an in-bridge scheduler
+ * woken by an authenticated tick, with the platform's own cron as a WAKER that
+ * "must never define occurrences, hold state, or be required for correctness".
+ * This is that seam plus the operations that make a schedule reachable by an
+ * operator at all. What it is NOT, stated because a surface that guesses would
+ * guess generously:
  *
- * - **Not a scheduler.** Nothing calls this on a schedule. No timer exists.
- * - **Not a dispatcher.** A tick creates durable Loop run RECORDS and
- *   advances none of them; the engine refuses cron-triggered dispatch.
- * - **Not a scheduler still, but no longer schedule-less.** The schedule is
- *   READ from the durable store: a request says which schedule and over what
- *   window, and the expression, timezone, contract and version are the
- *   schedule's own. (This block previously said the opposite — that no store
- *   existed and every field arrived in the request — for one commit after the
- *   store landed. A header describing the behaviour a file used to have is
- *   the defect this repository keeps finding.)
+ * - **Not a scheduler.** Nothing calls the tick on a schedule. No timer exists.
+ * - **Not a dispatcher.** A tick creates durable Loop run RECORDS and advances
+ *   none of them; the engine refuses cron-triggered dispatch.
+ * - **Not schedule-less.** The schedule is READ from the durable store: a
+ *   request says which schedule and over what window, and the expression,
+ *   timezone, contract and version are the schedule's own.
+ * - **Not attributing its own runs.** A stored schedule does not pin the
+ *   project and Loop its runs belong to; the tick still names them, so the
+ *   occurrence claim protects a (schedule, binding) pair rather than the
+ *   schedule. Named in CRON_LOOPS.md under "Not implemented".
  *
  * THE CLOCK IS THE SERVER'S. `evaluatedAt` and the window's end come from the
- * server, never the body: CRON_LOOPS.md says a client-supplied time field
- * must never influence due-ness, and that is a test, not a convention. The
- * window's START is still client-supplied — a named deviation, bounded by the
+ * server, never the body: CRON_LOOPS.md says a client-supplied time field must
+ * never influence due-ness, and that is a test, not a convention. The window's
+ * START is still client-supplied — a named deviation, bounded by the
  * server-clocked end, the eight-day evaluation limit, the claim marker that
- * makes a replay free, and now by the governing version's own authoring
- * instant: a version cannot own a moment that predates it.
+ * makes a replay free, and by the governing version's own authoring instant.
  *
- * THAT LAST BOUND EXISTS BECAUSE AN EDIT WOULD OTHERWISE REPLAY THE PAST.
- * The occurrence identity digests the contract version, so a new version gave
- * every occurrence in an already-handled window a fresh identity and a fresh
- * claim — review measured six runs for the same three hours. Clamping the
- * window's start to the version's `authoredAt` means a new version owns only
- * moments after it existed, which is what "a trigger creates at most one Cron
- * Loop Run" has to mean across an edit. A durable per-schedule watermark
- * would bound it further and does not exist yet.
+ * THAT LAST BOUND EXISTS BECAUSE AN EDIT WOULD OTHERWISE REPLAY THE PAST. The
+ * occurrence identity digests the contract version, so a new version gave every
+ * occurrence in an already-handled window a fresh identity and a fresh claim —
+ * review measured six runs for the same three hours. Clamping the window's
+ * start to the version's `authoredAt` means a new version owns only moments
+ * after it existed, which is what "a trigger creates at most one Cron Loop Run"
+ * has to mean across an edit. A durable per-schedule watermark would bound it
+ * further and does not exist yet.
  */
 
 export const CRON_PREFIX = '/cron/';
@@ -104,6 +109,214 @@ export interface CronTickPort {
   activeRunsFor(loopId: string): number;
   /** What the durable store says about this schedule. */
   inspectSchedule(scheduleId: string): ScheduleReadResult;
+  listSchedules(): CronScheduleListingPage;
+  /** What ICU resolves this zone to, or null when nothing can. */
+  resolveZone(timeZone: string): string | null;
+  /** Whether the zone names a place, does not, or cannot be verified. */
+  zoneNamesAPlace(timeZone: string): ZonePlaceVerdict;
+  createSchedule(
+    scheduleId: string, first: CronContractVersion,
+  ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+  setSchedulePaused(
+    scheduleId: string, paused: boolean, at: string,
+  ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+}
+
+/**
+ * A zone this server will not schedule against, refused wherever it appears.
+ *
+ * Named for what it does: it refuses THREE things, not one. A fixed offset
+ * (`Etc/GMT±N`), a frozen legacy zone (`SystemV/*`, six of whose thirteen
+ * members do observe daylight saving, on a ruleset frozen in 1987), and a zone
+ * this server cannot check at all. The rule is not a pattern — two attempts to
+ * enumerate these families by regex were each a step behind reality — it is
+ * ICU's own list of real locations.
+ *
+ * IT STATES ITS OWN PRECONDITION rather than trusting callers. An unresolvable
+ * zone gets the unresolvable message here, so a third call site added without
+ * the caller-side guard cannot tell an operator `America/Atlantis` is a fixed
+ * offset.
+ *
+ * Applied at CREATION and at the TICK: a schedule written straight into the
+ * store would otherwise run under a zone the tick's own refusal says it will
+ * not run.
+ */
+function refuseZoneThatNamesNoPlace(
+  ticks: CronTickPort, asWritten: string,
+): ReviewerRouteResult | null {
+  const verdict = ticks.zoneNamesAPlace(asWritten);
+  if (verdict === 'place') return null;
+  const resolved = ticks.resolveZone(asWritten);
+  const named = resolved === null || resolved === asWritten
+    ? `"${safeText(asWritten)}"`
+    : `"${safeText(asWritten)}" (${safeText(resolved)})`;
+  if (resolved === null) {
+    return err(422, 'validation_failed',
+      `${named} is IANA-shaped but this server's timezone evaluator cannot resolve it. A schedule `
+      + 'that could never be evaluated is not stored.');
+  }
+  if (verdict === 'cannot_verify') {
+    // NO CLAIM ABOUT THE ZONE. Saying "this is a server fault, not a bad zone"
+    // asserted the very thing the sentence before it says cannot be checked —
+    // and was plainly false when the zone was `Etc/GMT+5`.
+    return err(422, 'validation_failed',
+      `${named} cannot be checked against this server's list of real locations, so it is refused `
+      + 'rather than scheduled unverified.');
+  }
+  return err(422, 'validation_failed',
+    `${named} does not name a place this server can schedule against — it is a fixed offset `
+    + '(Etc/GMT±N) or a frozen legacy zone (SystemV/*) whose daylight-saving rules no longer '
+    + 'follow the location it appears to name. A recurring schedule needs a zone whose rules '
+    + 'change with its place.');
+}
+
+/** Creating or pausing a schedule changes what Relay will do unattended, so
+ *  both require the same explicit consent a tick does. */
+function requireAuthorization(body: unknown, what: string): ReviewerRouteResult | null {
+  const authorized = body !== null && typeof body === 'object'
+    && (body as Record<string, unknown>).authorized === true;
+  return authorized ? null : err(
+    403, 'authorization_required',
+    `${what} changes what this server will do unattended and requires explicit authorization.`,
+  );
+}
+
+function createSchedule(request: CronRouteRequest, ticks: CronTickPort): ReviewerRouteResult {
+  const refusal = requireAuthorization(request.body, 'Creating a schedule');
+  if (refusal !== null) return refusal;
+
+  const body = request.body;
+  const scheduleId = trimmed(body, 'scheduleId');
+  const cronExpression = trimmed(body, 'cronExpression');
+  const timeZone = trimmed(body, 'timeZone');
+  const contractRef = trimmed(body, 'contractRef');
+  const contractBindingDigest = trimmed(body, 'contractBindingDigest');
+  const authoredBy = trimmed(body, 'authoredBy');
+  const missing = Object.entries({
+    scheduleId, cronExpression, timeZone, contractRef, contractBindingDigest, authoredBy,
+  }).filter(([, v]) => v === null).map(([f]) => f);
+  if (missing.length > 0) {
+    return err(422, 'validation_failed', `Missing or invalid fields: ${missing.join(', ')}.`);
+  }
+  // AN UNUSABLE ID IS A VALIDATION FAILURE, NOT A CONFLICT. Reserving 409 for
+  // the genuine already-exists case is what lets a caller tell "pick another
+  // name" apart from "fix this field".
+  if (!isUsableScheduleId(scheduleId as string)) {
+    return err(422, 'validation_failed',
+      `"${safeText(scheduleId)}" cannot name a schedule: 1-64 characters, letters, digits, `
+      + 'underscore and hyphen, starting with a letter or digit.');
+  }
+  if (!IANA_ZONE.test(timeZone as string)) {
+    return err(422, 'validation_failed',
+      `"${safeText(timeZone)}" is not an Area/Location timezone name. A recurring schedule needs a `
+      + 'zone naming a place, such as "America/Los_Angeles" — not a fixed offset, which cannot '
+      + 'express daylight saving.');
+  }
+  // SHAPE IS NOT EXISTENCE. `America/Atlantis` satisfies the pattern and no
+  // evaluator can resolve it, so accepting it stored a schedule whose every
+  // future tick fails `unknown_timezone` — and with editing store-only and no
+  // delete route, that id was burned permanently. Resolvability is asked
+  // FIRST so a string naming nothing is told it names nothing, rather than
+  // being handed the diagnosis for a different problem.
+  const zoneRefusal = refuseZoneThatNamesNoPlace(ticks, timeZone as string);
+  if (zoneRefusal !== null) return zoneRefusal;
+  const parsed = parseCronExpression(cronExpression as string);
+  if (!parsed.ok) return err(422, 'validation_failed', safeText(parsed.problem));
+
+  // THE SAME RULE THE TICK APPLIES, FOR THE SAME REASON. A caller sending a
+  // field this route decides has the wrong model of it, and ignoring the field
+  // silently lets them believe it took effect: `paused: true` was accepted,
+  // discarded, and answered with a success for an ACTIVE schedule.
+  // `binding` is here for a stronger reason than the rest. A schedule does not
+  // yet pin the project and Loop its runs are attributed to — the tick supplies
+  // them — so accepting one at creation would look like pinning and pin
+  // nothing, which is worse than refusing. `contractVersion` is the name the
+  // tick uses for `version`, and a caller who reaches for it deserves the same
+  // answer.
+  const decided = ['version', 'contractVersion', 'authoredAt', 'paused', 'binding']
+    .filter((f) => (body as Record<string, unknown>)[f] !== undefined);
+  if (decided.length > 0) {
+    return err(422, 'field_not_accepted',
+      `${decided.join(', ')} ${decided.length === 1 ? 'is' : 'are'} decided by this server, not by `
+      + 'the request. A new schedule is version 1, authored now, and active — and it does not yet '
+      + 'carry a binding, so a tick still names the project and Loop.');
+  }
+
+  const created = ticks.createSchedule(scheduleId as string, {
+    version: 1,
+    cronExpression: cronExpression as string,
+    timeZone: timeZone as string,
+    contractRef: contractRef as string,
+    contractBindingDigest: contractBindingDigest as string,
+    // A CALLER-DECLARED LABEL, not an authenticated identity. There is one
+    // operator credential, so binding this to the principal would say less
+    // than the label does — but a later reader of `history[0].authoredBy`
+    // must not mistake it for proof of who acted.
+    authoredBy: authoredBy as string,
+    // THE SERVER'S CLOCK. A caller does not get to say when it authored
+    // something: the authoring instant now bounds which moments a version may
+    // own, so accepting it from the body would hand back the replay the tick
+    // clamps against.
+    authoredAt: request.now,
+  });
+  if (!created.ok) return err(409, 'schedule_not_created', safeText(created.problem));
+  return ok({
+    scheduleId,
+    version: 1,
+    authoredAt: request.now,
+    note: 'The schedule is stored and active. Nothing runs it: there is no timer, and a tick must '
+      + 'be requested by an operator. A tick window is clamped to this authoring instant, so no '
+      + 'occurrence before it can ever run.',
+  });
+}
+
+function pauseSchedule(
+  request: CronRouteRequest, ticks: CronTickPort, rawId: string,
+): ReviewerRouteResult {
+  const refusal = requireAuthorization(request.body, 'Pausing or resuming a schedule');
+  if (refusal !== null) return refusal;
+  const body = request.body as Record<string, unknown> | null;
+  const paused = body === null ? undefined : body.paused;
+  if (typeof paused !== 'boolean') {
+    return err(422, 'validation_failed', 'paused must be true or false, stated explicitly.');
+  }
+  // The repository's ONE segment decoder. A private copy here is how a decoding
+  // defect comes back after the shared one is fixed.
+  const scheduleId = decodeSegment(rawId);
+  // TWO DIFFERENT FAILURES, TWO DIFFERENT SENTENCES. `_leading` IS a usable
+  // path segment and is not a usable schedule id; one message for both named
+  // the wrong rule and sent an operator to check their URL encoding.
+  if (scheduleId === null) {
+    return err(422, 'validation_failed', 'The schedule id is not a usable path segment.');
+  }
+  if (!isUsableScheduleId(scheduleId)) {
+    return err(422, 'validation_failed',
+      `"${safeText(scheduleId)}" cannot name a schedule: 1-64 characters, letters, digits, `
+      + 'underscore and hyphen, starting with a letter or digit.');
+  }
+  // INSPECT BEFORE WRITING, exactly as the tick does. `setPaused` takes the
+  // write lock BEFORE it replays, and acquiring a lock inside a directory that
+  // does not exist fails ENOENT — which the store can only report as "another
+  // process holds the lock, or it cannot be read". Pausing a schedule that was
+  // never created therefore blamed contention, sending an operator to
+  // investigate a writer that does not exist. Missing is 404 here for the same
+  // reason it is 404 in the tick.
+  const inspected = ticks.inspectSchedule(scheduleId);
+  if (inspected.kind === 'missing') {
+    return err(404, 'schedule_not_found',
+      `No schedule named ${safeText(scheduleId)} exists. Nothing was paused or resumed.`);
+  }
+  if (inspected.kind === 'corrupt') {
+    return err(409, 'schedule_corrupt', safeText(inspected.problem));
+  }
+  const result = ticks.setSchedulePaused(scheduleId, paused, request.now);
+  // NOT a claim that this is contention. `underLock` returns one string for
+  // every lock failure it can meet, so this path narrows to "the schedule was
+  // there a moment ago and the write did not happen" — a racing writer, or the
+  // directory removed out-of-band between the inspect above and here. The
+  // store's own text is passed through rather than reinterpreted.
+  if (!result.ok) return err(409, 'schedule_not_changed', safeText(result.problem));
+  return ok({ scheduleId, paused });
 }
 
 export interface CronRouteRequest {
@@ -202,14 +415,37 @@ export async function handleCronRoute(
     );
   }
 
-  if (request.method !== 'POST' || request.path !== `${CRON_PREFIX}tick`) {
+  // WHICH OPERATION THIS IS, decided before readiness. Answering 503 for a
+  // path that names no operation tells a caller the operation exists and the
+  // server is merely unready — two different things, and only one of them
+  // becomes true later.
+  const pauseMatch = /^\/cron\/schedules\/([^/]+)\/pause$/u.exec(request.path);
+  const isSchedules = request.path === `${CRON_PREFIX}schedules`;
+  const isTick = request.path === `${CRON_PREFIX}tick`;
+  const recognized =
+    (isSchedules && (request.method === 'GET' || request.method === 'POST'))
+    || (pauseMatch !== null && request.method === 'POST')
+    || (isTick && request.method === 'POST');
+  if (!recognized) {
     return err(422, 'validation_failed', 'Unknown Cron operation.');
   }
+
   if (ticks === null) {
     return err(
       503, 'cron_not_ready',
-      'This Relay Bridge has no mounted state root, so no occurrence can be claimed durably.',
+      'This Relay Bridge has no mounted state root, so no schedule can be stored durably and no '
+      + 'occurrence can be claimed.',
     );
+  }
+
+  // The schedule family. A schedule could previously only be made from a
+  // test, which meant the whole Cron path was unreachable by an operator.
+  if (isSchedules) {
+    if (request.method === 'GET') return ok(ticks.listSchedules());
+    return createSchedule(request, ticks);
+  }
+  if (pauseMatch !== null) {
+    return pauseSchedule(request, ticks, pauseMatch[1] as string);
   }
 
   const body = request.body;
@@ -315,10 +551,23 @@ export async function handleCronRoute(
   if (!IANA_ZONE.test(timeZone)) {
     return err(
       422, 'validation_failed',
-      `"${safeText(timeZone)}" is not an IANA timezone name. A recurring schedule needs a zone `
-      + '(for example "America/Los_Angeles"), not a fixed offset: an offset cannot express '
-      + 'daylight saving, so the schedule would drift an hour against the wall clock twice a year.',
+      `"${safeText(timeZone)}" is not an Area/Location timezone name. A recurring schedule needs `
+      + 'a zone naming a place (for example "America/Los_Angeles"), not a fixed offset: an offset '
+      + 'cannot express daylight saving, so the schedule would drift an hour against the wall '
+      + 'clock twice a year.',
     );
+  }
+  // AND THE REFUSAL ABOVE IS NOW TRUE. It promised that a fixed offset is not
+  // run, while `Etc/GMT+5` — a real zone — sailed past it. A schedule stored
+  // before creation learned to refuse these, or written straight into the
+  // store, is refused HERE rather than drifting an hour twice a year under a
+  // rule the same message claims to enforce.
+  // The `!== null` guard is deliberate HERE and not at creation: a stored zone
+  // nothing can resolve is left to the evaluator, whose `unknown_timezone` is
+  // the answer this endpoint has always given for it.
+  if (ticks.resolveZone(timeZone) !== null) {
+    const zoneRefusal = refuseZoneThatNamesNoPlace(ticks, timeZone);
+    if (zoneRefusal !== null) return zoneRefusal;
   }
 
   const parsed = parseCronExpression(cronExpression);

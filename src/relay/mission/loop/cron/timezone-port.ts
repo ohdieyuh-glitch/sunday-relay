@@ -92,6 +92,117 @@ const sameMinute = (a: CronLocalMinute, b: CronLocalMinute): boolean =>
   && a.hour === b.hour && a.minute === b.minute;
 
 /**
+ * The name ICU RESOLVES this zone to, or `null` when nothing can resolve it.
+ *
+ * NOT "the IANA canonical name", which is what an earlier version of this
+ * comment claimed. ICU answers with the CLDR id, which for several zones is
+ * the legacy name and the opposite of the IANA canonical one:
+ * `Asia/Kolkata` resolves to `Asia/Calcutta`, `Europe/Kyiv` to `Europe/Kiev`,
+ * `America/Nuuk` to `America/Godthab`. Do not use this to normalize a zone for
+ * storage or equality — it is a LOOKUP KEY, useful because the resolution
+ * folds case and aliases: `etc/gmt+5` and `ETC/GMT+5` both land on
+ * `Etc/GMT+5`, so a rule about a family of zones must be applied here rather
+ * than to the caller's spelling.
+ */
+export function resolvedZoneName(timeZone: string): string | null {
+  const cached = resolvedNames.get(timeZone);
+  if (cached !== undefined) return cached;
+  try {
+    const resolved = new Intl.DateTimeFormat('en-US', { timeZone }).resolvedOptions().timeZone;
+    resolvedNames.set(timeZone, resolved);
+    return resolved;
+  } catch {
+    return null;
+  }
+}
+
+/** Successes only, exactly as `formatterFor` above does it. Caching failures
+ *  too would let any caller grow this map without bound with strings that name
+ *  nothing; the successes are bounded by the zone database. */
+const resolvedNames = new Map<string, string>();
+
+/** What this server can say about whether a zone names a real location. */
+export type ZonePlaceVerdict = 'place' | 'not_a_place' | 'cannot_verify';
+
+/**
+ * Does this name a PLACE, rather than a zone whose rules cannot follow one?
+ *
+ * TWO FAMILIES ARE REFUSED, for DIFFERENT reasons — which matters, because a
+ * refusal that gave the wrong one is what this check has been corrected for
+ * twice:
+ *
+ * - `Etc/GMT±N` is a fixed offset. It can never express daylight saving, so a
+ *   schedule on one drifts against its author's wall clock forever.
+ * - `SystemV/*` is a FROZEN LEGACY zone. Six of its thirteen members DO observe
+ *   daylight saving — `SystemV/EST5EDT` is GMT-05:00 in January and GMT-04:00
+ *   in July — but on the pre-1987 US ruleset, so they diverge from the places
+ *   they appear to name for weeks each spring and autumn.
+ *
+ * `Intl.supportedValuesOf('timeZone')` is ICU's OWN list of real locations and
+ * excludes both families while including every genuine place. THE LIST ITSELF
+ * RESOLVES NOTHING and contains neither `Japan` nor `EST`: the folding is done
+ * by `resolvedZoneName` before the lookup, which is why `Japan` (→
+ * `Asia/Tokyo`), `EST` (→ `America/Panama`) and every case variant are
+ * accepted. Looking the caller's raw string up in the list directly would
+ * refuse all of them — the exact regression two earlier rounds removed.
+ * Asking the list decides the CLASS; two attempts to enumerate these families
+ * by pattern were each a step behind, missing first every case variant and
+ * then all thirteen `SystemV/*` zones.
+ *
+ * `UTC` is admitted deliberately: absent from that list because it names no
+ * location, and still the one offset a recurring schedule may legitimately
+ * choose — a Loop that means "midnight UTC" is not drifting.
+ *
+ * WHERE THE LIST CANNOT BE READ the answer is `cannot_verify`, never
+ * `not_a_place`. Callers still refuse, because unverifiable work must not be
+ * scheduled unattended — but they do not tell an operator that
+ * `America/Los_Angeles` is a fixed offset.
+ */
+export function zoneNamesAPlace(timeZone: string): ZonePlaceVerdict {
+  return zonePlaceVerdict(resolvedZoneName(timeZone), supportedZones());
+}
+
+/**
+ * The decision alone, over values a caller supplies.
+ *
+ * Split out so the three verdicts can be exercised directly. The
+ * `cannot_verify` branch is ALSO reachable through the real function by
+ * removing `Intl.supportedValuesOf`, and the tests do both — an earlier
+ * version of this comment claimed it was unreachable, which is how the branch
+ * shipped with no test at all.
+ */
+export function zonePlaceVerdict(
+  resolved: string | null, known: ReadonlySet<string> | null,
+): ZonePlaceVerdict {
+  if (resolved === null) return 'not_a_place';
+  if (resolved === 'UTC') return 'place';
+  if (known === null) return 'cannot_verify';
+  return known.has(resolved) ? 'place' : 'not_a_place';
+}
+
+/** How many resolutions are memoized. Exported so a test can prove the cache
+ *  cannot be grown without bound by strings that name no zone. */
+export function resolvedZoneCacheSize(): number {
+  return resolvedNames.size;
+}
+
+/** The list, once read. A FAILURE IS NOT CACHED: caching it wedged a healthy
+ *  bridge into refusing every create and every tick until restart, because a
+ *  single transient failure was remembered forever. Retrying costs one Intl
+ *  call on a host that cannot answer, and the host that can heals itself. */
+let supported: Set<string> | null = null;
+function supportedZones(): Set<string> | null {
+  if (supported !== null) return supported;
+  try {
+    if (typeof Intl.supportedValuesOf !== 'function') return null;
+    supported = new Set(Intl.supportedValuesOf('timeZone'));
+    return supported;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The Intl-backed adapter.
  *
  * Candidate instants come from the zone's plausible offsets around the
