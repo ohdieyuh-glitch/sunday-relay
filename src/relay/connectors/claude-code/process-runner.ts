@@ -131,10 +131,23 @@ export function runClaudeProcess(
     });
 
     // Relay controls stdin: deliver the prompt, then close it.
+    //
+    // THE LISTENER IS THE GUARD, NOT THE try/catch. A broken pipe arrives
+    // ASYNCHRONOUSLY as an `error` event on the stream, so the catch below —
+    // which only sees a synchronous throw — never ran, and an unlistened
+    // stream `error` is an uncaught exception that takes the process down.
+    // A child that exits before its prompt is written is enough: observed as
+    // `Error: write EPIPE` in a full suite run. The reviewer's runner
+    // (`connectors/codex-reviewer/process-runner.ts`) has always attached
+    // this; this one diverged from its own sibling.
+    //
+    // Attached BEFORE the write, because attaching after leaves the window it
+    // exists to close.
+    child.stdin?.on('error', () => { /* the process may have exited already */ });
     try {
       child.stdin?.write(request.prompt);
       child.stdin?.end();
-    } catch { /* the process may have exited already */ }
+    } catch { /* the same, arriving synchronously */ }
 
     timeoutTimer = setTimeout(() => { timedOut = true; requestKill(); }, request.maxRuntimeMs);
 

@@ -819,6 +819,29 @@ describe('Claude Code adapter boundaries (Prompt 8)', () => {
     expect(runner).not.toMatch(/shell:\s*true/);
   });
 
+  it('every runner that writes a prompt to a child listens for a broken pipe', () => {
+    // THE DEFECT THIS PINS, and it is a DIVERGENCE rather than an oversight:
+    // the reviewer's runner attached this from the start and the Claude one
+    // did not, so a child exiting before its prompt was written crashed the
+    // process with an unlistened `error` event. A try/catch cannot catch it —
+    // the error is asynchronous — which is why the check is for the listener
+    // and why it covers BOTH runners: fixing one copy and leaving the other is
+    // how this comes back.
+    for (const dir of ['claude-code', 'codex-reviewer']) {
+      const source = read(relay(join('connectors', dir, 'process-runner.ts')));
+      const listener = source.indexOf(".stdin");
+      expect(listener, `${dir} runner writes no prompt to stdin`).toBeGreaterThan(-1);
+      expect(
+        /stdin[?]?\.on\(\s*'error'/.test(source),
+        `${dir}/process-runner.ts writes to child stdin without listening for 'error'`,
+      ).toBe(true);
+      // …and the listener precedes the first write, or the window stays open.
+      const guardAt = source.search(/stdin[?]?\.on\(\s*'error'/);
+      const writeAt = source.search(/stdin[?]?\.write\(/);
+      expect(guardAt, `${dir} attaches its stdin guard after the first write`).toBeLessThan(writeAt);
+    }
+  });
+
   it('the adapter strips API-key / provider credentials from the child environment', () => {
     const env = read(join(claudeDir, 'environment.ts'));
     expect(env).toContain('ANTHROPIC_API_KEY');
