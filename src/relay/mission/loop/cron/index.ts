@@ -35,6 +35,14 @@ export type {
 } from './cron-missed';
 
 export {
+  CRON_APPROVAL_SCOPES, RECURRING_SCOPES, authorizeScheduledOperation,
+} from './cron-approvals';
+export type {
+  ApprovalDecision, ApprovalGrant, ApprovalRefusalReason, CronApprovalScope,
+  DeploymentAuthority, OperationRequest,
+} from './cron-approvals';
+
+export {
   BREAKER_CONDITIONS, SECURITY_CLASS_CONDITIONS,
   evaluateCircuitBreakers, mayResumeAfterBreaker,
 } from './cron-breakers';

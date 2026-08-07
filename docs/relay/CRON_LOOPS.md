@@ -275,6 +275,27 @@ A Cron Loop may inspect issues. It may not merge arbitrary pull requests unless
 a policy authorizes that exact operation class. It may prepare a deployment. It
 may not deploy without deployment authority, rollback policy and approval.
 
+`cron-approvals.ts` implements that decision. A grant covers ONE scope and
+never widens — a read-only grant is not a write grant, and a one-external-write
+grant is not a recurring one, which is why the spec separates them. A recurring
+grant with NO expiry is refused rather than read as forever: an endless grant
+is precisely the permanent approval the paragraph above denies. It is
+argument-scoped, and an EMPTY argument scope covers nothing rather than
+everything. `schedule_creation` authorizes no operation at all, and an operation naming NO
+arguments is refused rather than vacuously permitted. Deploying needs all three
+prerequisites, and any one missing means Relay may prepare a deployment and no
+more.
+
+**NO GRANT REACHES PAST A BOUNDARY STOP ACTION.** `financial_operations` and
+`credential_access` run into `new_financial_commitment` and `secret_export`,
+which stop execution in every mode including Autonomous. UNCHAIN.md says an
+unattended agent runs under the same seventeen, and mode policy is a ceiling an
+approval does not raise — an approval records that a human wanted the work, not
+that the boundary moved. Consumption of a single-act grant is returned as an
+OBLIGATION for the caller to record; this decision is pure and marks nothing.
+
+NOT WIRED: nothing consults it, and no grant is stored anywhere.
+
 ## Circuit breakers
 
 A schedule pauses automatically on repeated consecutive failures, repeated
@@ -356,7 +377,8 @@ The in-bridge scheduler and its timer · execution of a trigger-created run
 (the record is created; nothing advances it) · the schedule store, and
 therefore schedule listing and pausing · the occurrence queue,
 and therefore the `queue_one` and `queue_all` overlap policies · period
-budget caps · recurring approvals · circuit-breaker OBSERVATION (the decision exists;
+budget caps · recurring-approval STORAGE and enforcement (the decision exists; no grant is
+persisted and nothing consults it) · circuit-breaker OBSERVATION (the decision exists;
 nothing feeds it and nothing pauses a schedule) · schedule-version STORAGE
 (the edit decision exists; nothing persists a history) · conditional Cron Loops · the Cron UI · token and provider-call
 caps at the schedule level · notification and next-eligible-trigger
