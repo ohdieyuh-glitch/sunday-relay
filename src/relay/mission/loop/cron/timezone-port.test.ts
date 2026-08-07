@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { createIntlTimezonePort, resolvedZoneName, zoneNamesAPlace } from './timezone-port';
+import {
+  createIntlTimezonePort, resolvedZoneCacheSize, resolvedZoneName, zoneNamesAPlace, zonePlaceVerdict,
+} from './timezone-port';
 
 /**
  * THE INTL ADAPTER, against real zone data.
@@ -95,13 +97,35 @@ describe('a zone that names a place, versus a fixed offset wearing a zone name',
     expect(resolvedZoneName('Europe/Kyiv')).toBe('Europe/Kiev');
   });
 
-  it('refuses every fixed-offset family, whatever the spelling', () => {
+  it('refuses both refused families, whatever the spelling', () => {
     for (const zone of [
       'Etc/GMT+5', 'etc/gmt+5', 'ETC/GMT+5', 'Etc/GMT-14',
-      'SystemV/EST5', 'SystemV/PST8', 'systemv/mst7',
+      // All THIRTEEN SystemV zones ICU resolves, not the seven an earlier
+      // comment claimed — including the six that DO observe daylight saving.
+      'SystemV/AST4', 'SystemV/AST4ADT', 'SystemV/CST6', 'SystemV/CST6CDT',
+      'SystemV/EST5', 'SystemV/EST5EDT', 'SystemV/HST10', 'SystemV/MST7',
+      'SystemV/MST7MDT', 'SystemV/PST8', 'SystemV/PST8PDT', 'SystemV/YST9',
+      'SystemV/YST9YDT', 'systemv/mst7',
     ]) {
-      expect(zoneNamesAPlace(zone), zone).toBe(false);
+      expect(zoneNamesAPlace(zone), zone).toBe('not_a_place');
     }
+  });
+
+  it('records that six SystemV zones DO observe daylight saving', () => {
+    // The reason they are refused is that their rules are FROZEN at the
+    // pre-1987 US ruleset, not that they are fixed offsets — a refusal that
+    // called them fixed offsets was simply false, and this pins the fact that
+    // made it false.
+    const offsetIn = (zone: string, month: number): string => {
+      const at = new Date(Date.UTC(2026, month, 15, 12));
+      return new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longOffset' })
+        .formatToParts(at).find((part) => part.type === 'timeZoneName')?.value ?? '';
+    };
+    expect(offsetIn('SystemV/EST5EDT', 0)).not.toBe(offsetIn('SystemV/EST5EDT', 6));
+    expect(offsetIn('SystemV/PST8PDT', 0)).not.toBe(offsetIn('SystemV/PST8PDT', 6));
+    // …while the non-DST members really are fixed.
+    expect(offsetIn('SystemV/EST5', 0)).toBe(offsetIn('SystemV/EST5', 6));
+    expect(offsetIn('Etc/GMT+5', 0)).toBe(offsetIn('Etc/GMT+5', 6));
   });
 
   it('accepts real places, including ones with no daylight saving at all', () => {
@@ -111,12 +135,42 @@ describe('a zone that names a place, versus a fixed offset wearing a zone name',
       'America/Los_Angeles', 'Asia/Tokyo', 'Pacific/Honolulu', 'Asia/Kathmandu',
       'Australia/Lord_Howe', 'Asia/Kolkata', 'Japan', 'US/Pacific', 'UTC',
     ]) {
-      expect(zoneNamesAPlace(zone), zone).toBe(true);
+      expect(zoneNamesAPlace(zone), zone).toBe('place');
     }
   });
 
   it('refuses a zone nothing can resolve', () => {
-    expect(zoneNamesAPlace('America/Atlantis')).toBe(false);
-    expect(zoneNamesAPlace('')).toBe(false);
+    expect(zoneNamesAPlace('America/Atlantis')).toBe('not_a_place');
+    expect(zoneNamesAPlace('')).toBe('not_a_place');
+  });
+});
+
+describe('the verdict when the list of real locations cannot be read', () => {
+  it('says it cannot verify, rather than calling a real place a fixed offset', () => {
+    // A host without a readable `Intl.supportedValuesOf` must not tell an
+    // operator that America/Los_Angeles is a fixed offset. Callers still
+    // refuse — unverifiable is not schedulable — but for the true reason.
+    expect(zonePlaceVerdict('America/Los_Angeles', null)).toBe('cannot_verify');
+    // UTC is decided before the list is consulted, so it survives the outage.
+    expect(zonePlaceVerdict('UTC', null)).toBe('place');
+    // And a string that resolves to nothing needs no list to be refused.
+    expect(zonePlaceVerdict(null, null)).toBe('not_a_place');
+  });
+
+  it('uses the list when it has one', () => {
+    const known = new Set(['America/Los_Angeles']);
+    expect(zonePlaceVerdict('America/Los_Angeles', known)).toBe('place');
+    expect(zonePlaceVerdict('Etc/GMT+5', known)).toBe('not_a_place');
+  });
+
+  it('does not memoize strings that name no zone', () => {
+    // Caching failures let any caller grow the map without bound with junk;
+    // the successes are bounded by the zone database.
+    const before = resolvedZoneCacheSize();
+    for (let i = 0; i < 50; i += 1) expect(resolvedZoneName(`No/Such_${i}`)).toBeNull();
+    expect(resolvedZoneCacheSize()).toBe(before);
+    // A zone no other test in this file touches, so the growth is this call's.
+    expect(resolvedZoneName('Africa/Nairobi')).toBe('Africa/Nairobi');
+    expect(resolvedZoneCacheSize()).toBe(before + 1);
   });
 });

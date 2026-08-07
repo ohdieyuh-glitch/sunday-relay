@@ -8,6 +8,7 @@ import { parseCronExpression } from '../src/relay/mission/loop/cron';
 import { readIsoInstantWithOffset } from '../src/relay/mission/loop/runtime/loop-scheduler';
 import type { CronSchedule, CronTickReport } from '../src/relay/mission/loop/cron';
 import type { CronRunBinding, CronScheduleListingPage } from './cron-service';
+import type { ZonePlaceVerdict } from '../src/relay/mission/loop/cron';
 import type { ScheduleReadResult } from '../src/relay/persistence/cron-schedule-node';
 import type { CronContractVersion } from '../src/relay/mission/loop/cron/cron-versioning';
 
@@ -110,8 +111,8 @@ export interface CronTickPort {
   listSchedules(): CronScheduleListingPage;
   /** What ICU resolves this zone to, or null when nothing can. */
   resolveZone(timeZone: string): string | null;
-  /** Whether the zone names a place rather than a fixed offset. */
-  zoneNamesAPlace(timeZone: string): boolean;
+  /** Whether the zone names a place, does not, or cannot be verified. */
+  zoneNamesAPlace(timeZone: string): ZonePlaceVerdict;
   createSchedule(
     scheduleId: string, first: CronContractVersion,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
@@ -128,11 +129,14 @@ export interface CronTickPort {
  * non-IANA refusal says is not allowed.
  *
  * THE RULE IS NO LONGER A PATTERN. Two successive attempts to enumerate this
- * by regex were each one family behind: the first missed every case variant,
- * the second refused `Etc/GMT±N` while all seven `SystemV/*` zones — equally
- * fixed, equally drifting — walked past. `zoneNamesAPlace` asks ICU's own list
- * of real locations instead, which decides the class rather than the instance
- * and folds case and aliases on the way.
+ * by regex were each one step behind: the first missed every case variant, the
+ * second refused `Etc/GMT±N` while all THIRTEEN `SystemV/*` zones walked past.
+ * `zoneNamesAPlace` asks ICU's own list of real locations instead, which
+ * decides the class rather than the instance and folds case and aliases on the
+ * way. The two families are refused for different reasons — a fixed offset
+ * cannot express daylight saving at all, while six SystemV zones DO observe it
+ * on a ruleset frozen in 1987 — and the refusal says so rather than telling an
+ * operator that a DST-observing zone has none.
  *
  * Applied at CREATION and at the TICK. A schedule created before this rule, or
  * written straight into the store, would otherwise run under a zone the tick's
@@ -141,14 +145,22 @@ export interface CronTickPort {
 function refuseFixedOffsetZone(
   ticks: CronTickPort, asWritten: string,
 ): ReviewerRouteResult | null {
-  if (ticks.zoneNamesAPlace(asWritten)) return null;
+  const verdict = ticks.zoneNamesAPlace(asWritten);
+  if (verdict === 'place') return null;
   const resolved = ticks.resolveZone(asWritten);
   const named = resolved === null || resolved === asWritten
     ? `"${safeText(asWritten)}"`
     : `"${safeText(asWritten)}" (${safeText(resolved)})`;
+  if (verdict === 'cannot_verify') {
+    return err(422, 'validation_failed',
+      `${named} cannot be checked against this server's list of real locations, so it is refused `
+      + 'rather than scheduled unverified. This is a server fault, not a bad zone.');
+  }
   return err(422, 'validation_failed',
-    `${named} names a fixed offset, not a place. A recurring schedule needs a zone whose `
-    + 'daylight-saving rules can change with it.');
+    `${named} does not name a place this server can schedule against — it is a fixed offset `
+    + '(Etc/GMT±N) or a frozen legacy zone (SystemV/*) whose daylight-saving rules no longer '
+    + 'follow the location it appears to name. A recurring schedule needs a zone whose rules '
+    + 'change with its place.');
 }
 
 /** Creating or pausing a schedule changes what Relay will do unattended, so

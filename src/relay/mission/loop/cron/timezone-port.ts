@@ -107,56 +107,97 @@ const sameMinute = (a: CronLocalMinute, b: CronLocalMinute): boolean =>
 export function resolvedZoneName(timeZone: string): string | null {
   const cached = resolvedNames.get(timeZone);
   if (cached !== undefined) return cached;
-  let resolved: string | null;
   try {
-    resolved = new Intl.DateTimeFormat('en-US', { timeZone }).resolvedOptions().timeZone;
+    const resolved = new Intl.DateTimeFormat('en-US', { timeZone }).resolvedOptions().timeZone;
+    resolvedNames.set(timeZone, resolved);
+    return resolved;
   } catch {
-    resolved = null;
+    return null;
   }
-  resolvedNames.set(timeZone, resolved);
-  return resolved;
 }
 
-/** Same rule as `formatters` above: building these is expensive and pure to
- *  reuse, and this module already said so about its other Intl objects. */
-const resolvedNames = new Map<string, string | null>();
+/** Successes only, exactly as `formatterFor` above does it. Caching failures
+ *  too would let any caller grow this map without bound with strings that name
+ *  nothing; the successes are bounded by the zone database. */
+const resolvedNames = new Map<string, string>();
+
+/** What this server can say about whether a zone names a real location. */
+export type ZonePlaceVerdict = 'place' | 'not_a_place' | 'cannot_verify';
 
 /**
- * Does this name a PLACE, rather than a fixed offset wearing a zone's name?
+ * Does this name a PLACE, rather than a zone whose rules cannot follow one?
  *
- * `Etc/GMT+5` and `SystemV/EST5` are resolvable zones whose offset can never
- * change, so a schedule on one drifts against its author's wall clock forever.
- * Enumerating those families by pattern is how the rule stayed one prefix
- * behind reality — `Etc/GMT±N` was refused while all seven `SystemV/*` zones
- * walked past it.
+ * TWO FAMILIES ARE REFUSED, and they are refused for DIFFERENT reasons — which
+ * matters, because an earlier message told an operator the wrong one:
  *
- * `Intl.supportedValuesOf('timeZone')` is ICU's OWN list of real locations,
- * and it excludes both families while including every genuine place and
- * resolving aliases correctly (`Japan` → `Asia/Tokyo`, `EST` →
- * `America/Panama`). Asking it decides the CLASS instead of chasing instances.
+ * - `Etc/GMT±N` is a fixed offset. Its offset can never change, so a schedule
+ *   on one drifts against its author's wall clock forever.
+ * - `SystemV/*` is a FROZEN LEGACY zone. Six of its thirteen members do observe
+ *   daylight saving — measured, `SystemV/EST5EDT` is GMT-05:00 in January and
+ *   GMT-04:00 in July — but on the pre-1987 US ruleset, so they diverge from
+ *   the places they appear to name for weeks each spring and autumn. Calling
+ *   them fixed offsets was false; refusing them is still right.
+ *
+ * Enumerating either family by pattern is how the rule stayed one step behind
+ * reality twice: first every case variant, then all thirteen `SystemV/*` zones
+ * while `Etc/GMT±N` alone was refused.
+ *
+ * `Intl.supportedValuesOf('timeZone')` is ICU's OWN list of real locations, and
+ * it excludes both families while including every genuine place and resolving
+ * aliases correctly (`Japan` → `Asia/Tokyo`, `EST` → `America/Panama`). Asking
+ * it decides the CLASS instead of chasing instances.
  *
  * `UTC` is admitted deliberately: it is absent from that list because it names
  * no location, and it is nonetheless the one offset a recurring schedule may
  * legitimately choose — a Loop that means "midnight UTC" is not drifting.
  *
- * FAILS CLOSED. Where `Intl.supportedValuesOf` is unavailable the set is empty
- * and every zone but `UTC` is refused. That is loud and immediately visible,
- * which is the right direction for a guard that decides what runs unattended.
+ * WHERE THE LIST CANNOT BE READ the answer is `cannot_verify`, never
+ * `not_a_place`. Callers still refuse — an unverifiable zone must not schedule
+ * unattended work — but they say so truthfully rather than telling an operator
+ * that `America/Los_Angeles` is a fixed offset.
  */
-export function zoneNamesAPlace(timeZone: string): boolean {
-  const resolved = resolvedZoneName(timeZone);
-  if (resolved === null) return false;
-  if (resolved === 'UTC') return true;
-  return supportedZones().has(resolved);
+export function zoneNamesAPlace(timeZone: string): ZonePlaceVerdict {
+  return zonePlaceVerdict(resolvedZoneName(timeZone), supportedZones());
 }
 
-let supported: Set<string> | null = null;
-function supportedZones(): Set<string> {
-  if (supported !== null) return supported;
-  const values = typeof Intl.supportedValuesOf === 'function'
-    ? Intl.supportedValuesOf('timeZone')
-    : [];
-  supported = new Set(values);
+/**
+ * The decision alone, over values a caller supplies.
+ *
+ * Split out because the `cannot_verify` branch is otherwise unreachable from a
+ * test: the supported-zone set is read once and cached for the process, so
+ * nothing can make a real host lose it. Collapsing that branch into
+ * `not_a_place` therefore survived every test — a guard with no test is a
+ * comment, and this is the shape that gives it one.
+ */
+export function zonePlaceVerdict(
+  resolved: string | null, known: ReadonlySet<string> | null,
+): ZonePlaceVerdict {
+  if (resolved === null) return 'not_a_place';
+  if (resolved === 'UTC') return 'place';
+  if (known === null) return 'cannot_verify';
+  return known.has(resolved) ? 'place' : 'not_a_place';
+}
+
+/** How many resolutions are memoized. Exported so a test can prove the cache
+ *  cannot be grown without bound by strings that name no zone. */
+export function resolvedZoneCacheSize(): number {
+  return resolvedNames.size;
+}
+
+/** `null` once the list has been asked for and could not be read. The earlier
+ *  version caught only an ABSENT `supportedValuesOf`; one that THROWS escaped
+ *  as an unhandled route error, and because the cache stayed unset it threw
+ *  again on every later request instead of degrading. */
+let supported: Set<string> | null | undefined;
+function supportedZones(): Set<string> | null {
+  if (supported !== undefined) return supported;
+  try {
+    supported = typeof Intl.supportedValuesOf === 'function'
+      ? new Set(Intl.supportedValuesOf('timeZone'))
+      : null;
+  } catch {
+    supported = null;
+  }
   return supported;
 }
 

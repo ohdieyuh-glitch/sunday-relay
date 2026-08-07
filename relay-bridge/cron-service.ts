@@ -10,6 +10,7 @@ import {
 } from '../src/relay/mission/loop/runtime';
 import {
   createIntlTimezonePort, resolvedZoneName, runCronTick, zoneNamesAPlace,
+  type ZonePlaceVerdict,
   type CronRunCreationPort, type CronTickInput, type CronTickReport,
 } from '../src/relay/mission/loop/cron';
 
@@ -104,8 +105,8 @@ export interface CronTickService {
    *  string is not an IANA zone: `America/Atlantis` matches the pattern and
    *  nothing resolves it. */
   resolveZone(timeZone: string): string | null;
-  /** Whether the zone names a place rather than a fixed offset. */
-  zoneNamesAPlace(timeZone: string): boolean;
+  /** Whether the zone names a place, does not, or cannot be verified. */
+  zoneNamesAPlace(timeZone: string): ZonePlaceVerdict;
   createSchedule(
     scheduleId: string, first: CronContractVersion,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };

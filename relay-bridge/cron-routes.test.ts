@@ -613,10 +613,15 @@ describe('an operator can create, list and pause a schedule', () => {
     for (const timeZone of [
       'Etc/GMT+5', 'etc/gmt+5', 'ETC/GMT+5', 'Etc/GMT-14',
       'SystemV/EST5', 'SystemV/PST8', 'systemv/mst7',
+      // DST-OBSERVING and still refused: frozen on the pre-1987 US ruleset, so
+      // it diverges from the place it names for weeks each spring. Including
+      // it is what caught a refusal that called it a fixed offset.
+      'SystemV/EST5EDT', 'SystemV/PST8PDT',
     ]) {
       const offset = await call({ ...CREATE, timeZone }, { path: '/cron/schedules' });
       expect(offset?.status, timeZone).toBe(422);
-      expect(errorOf(offset).message, timeZone).toContain('fixed offset');
+      expect(errorOf(offset).message, timeZone).toContain('does not name a place');
+      expect(errorOf(offset).message, timeZone).not.toContain('names a fixed offset, not a place');
     }
     // A string that names NO zone gets the diagnosis for naming no zone, not
     // the one for naming an offset.
@@ -637,7 +642,7 @@ describe('an operator can create, list and pause a schedule', () => {
       { ...STORED, timeZone: 'Etc/GMT+5', authoredAt: T0 }).ok).toBe(true);
     const ticked = await call({ ...BODY, scheduleId: 'sched-drift' });
     expect(ticked?.status).toBe(422);
-    expect(errorOf(ticked).message).toContain('fixed offset');
+    expect(errorOf(ticked).message).toContain('does not name a place');
     // Refused BEFORE anything is claimed. Without this the check could later
     // drift below the claim loop and still satisfy the assertions above, which
     // is the one way this repair regresses silently.
