@@ -37,11 +37,10 @@ import {
  * subtlest thing in this file; see `activeRunsFor`.
  */
 
-/** What one schedule binds its runs to. STILL CALLER-SUPPLIED, per tick: the
- *  schedule store exists now (`cron-schedule-node.ts`) and holds the
- *  expression, zone, contract and version, but it does not yet hold this. Until
- *  it does, a stored schedule can be ticked into any project and Loop the
- *  caller names. Named in CRON_LOOPS.md under "Not implemented". */
+/** What one schedule binds its runs to. THE SCHEDULE'S OWN: given at creation
+ *  and read from the governing contract version, never from the tick that woke
+ *  it. While it was caller-supplied per tick, a stored schedule could be run
+ *  into any project and Loop a request named. */
 export interface CronRunBinding {
   readonly projectId: string;
   readonly workspaceId: string | null;
@@ -57,16 +56,21 @@ export interface CronRunBinding {
  * `digest(scheduleId ‖ contractVersion ‖ intendedLocal ‖ resolvedUtc)`, which
  * assumes `scheduleId` is globally unique. NOTHING ALLOCATES ONE: the id is the
  * caller's string, and the store only refuses a DUPLICATE within one state
- * root. The claim markers live in one flat namespace on the volume, and the
- * binding below is not part of the stored schedule. So two projects both
- * using "daily-triage" would share occurrence ids, and the first to tick
- * would durably mark the second's occurrences already-handled — silent
+ * root. The claim markers live in one flat namespace on the volume. So two
+ * projects both using "daily-triage" would share occurrence ids, and the first
+ * to tick would durably mark the second's occurrences already-handled — silent
  * cross-tenant suppression, found by review.
  *
  * Qualifying the term with the binding restores the formula's assumption
  * without changing it: the schedule the digest names is now
- * (project, workspace, loop, caller's id), which IS unique. The caller's own
- * id is what the response echoes back.
+ * (project, workspace, loop, caller's id), which IS unique.
+ *
+ * THE BINDING IS THE SCHEDULE'S OWN, read from the stored contract version.
+ * While it arrived with the TICK, this qualification was keyed on a value the
+ * caller chose, so the durable claim protected a (schedule, binding) PAIR
+ * rather than the schedule: the same window ticked under three bindings
+ * produced nine runs where three were intended. A qualification whose terms a
+ * requester picks is not a namespace, it is a suggestion.
  */
 const qualifiedScheduleId = (scheduleId: string, binding: CronRunBinding): string =>
   [binding.projectId, binding.workspaceId ?? 'no-workspace', binding.loopId, scheduleId].join('|');

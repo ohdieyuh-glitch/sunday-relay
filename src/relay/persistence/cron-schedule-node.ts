@@ -216,8 +216,19 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
     // The route used to require these; now they come from here, so this is
     // where they must be real. Review found a version storable with an empty
     // contractRef flowing straight into run bindings.
-    for (const field of ['cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest'] as const) {
+    for (const field of [
+      'cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest',
+      // The BINDING is stored, so it must be real here for the same reason: the
+      // occurrence claim is keyed on it, and an empty project or Loop id would
+      // collapse distinct schedules into one claim namespace.
+      'projectId', 'loopId',
+    ] as const) {
       if (version[field].trim() === '') return `${field} must not be empty.`;
+    }
+    // `workspaceId` is legitimately absent — a project-level schedule has none —
+    // but ABSENT is `null`, never an empty string pretending to be a workspace.
+    if (version.workspaceId !== null && version.workspaceId.trim() === '') {
+      return 'workspaceId must be a real workspace or null, never an empty string.';
     }
     return null;
   };

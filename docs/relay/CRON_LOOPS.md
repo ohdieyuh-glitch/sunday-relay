@@ -4,8 +4,7 @@
 + FILE-BACKED CLAIM ADAPTER + THE TICK PASS + A DURABLE SCHEDULE STORE + AN
 AUTHENTICATED TICK ENDPOINT AND THE SCHEDULE FAMILY (CREATE, LIST, PAUSE)
 IMPLEMENTED. NO SCHEDULER AND NO TIMER: NOTHING CALLS THE TICK ON A SCHEDULE,
-AND A SCHEDULED RUN IS CREATED BUT NEVER DISPATCHED. A STORED SCHEDULE DOES
-NOT YET PIN THE BINDING ITS RUNS ARE ATTRIBUTED TO.**
+AND A SCHEDULED RUN IS CREATED BUT NEVER DISPATCHED.**
 
 `/loop schedule`, `/loop cron`, `/loop schedules` parse today and produce typed
 commands. `src/relay/mission/loop/cron/` now holds the schedule stage this
@@ -48,15 +47,16 @@ WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
   `creationSource: 'schedule'`, which the Loop service turns into
   `trigger: 'cron'`; and `preflightLoopDispatch` refuses a cron trigger. The
   response says `dispatched: 0` as a claim about the code path.
-- **A stored schedule does not pin the binding its runs are attributed to.**
-  The occurrence claim namespace is `project|workspace|loop|scheduleId`, and
-  the first three arrive in the TICK request. The durable claim marker
-  therefore protects a (schedule, binding) pair rather than the schedule:
-  review measured three ticks over one identical window, differing only in
-  `binding`, producing nine runs — six of them in the same Loop for the same
-  three hours. Creation is where the binding must be pinned, and it is not
-  pinned yet. Named here rather than implied, and listed under
-  "Not implemented" below.
+- **A stored schedule PINS the binding its runs are attributed to.** The
+  occurrence claim namespace is `project|workspace|loop|scheduleId`, and the
+  first three are the schedule's own, given at creation and carried in the
+  contract version. While they arrived with the TICK the durable marker
+  protected a (schedule, binding) pair rather than the schedule: review
+  measured three ticks over one identical window, differing only in `binding`,
+  producing nine runs — six of them in the same Loop for the same three hours.
+  A tick that sends a binding is now refused by name, like any other field the
+  schedule owns. Rebinding is an EDIT, so it appends a version and the runs
+  already created keep explaining themselves.
 - **Every occurrence-CONSUMING overlap policy is refused.** The rule: no
   policy may durably consume an occurrence on the strength of a run that is
   not actually working. That excludes `queue_one` (this document's documented
@@ -434,11 +434,9 @@ hardcodes automatic Unchain consumption**.
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
 (the record is created; nothing advances it) · schedule EDITING through an
-endpoint (create, list and pause are exposed; editing is store-only) · **a
-schedule that pins its own binding**, so a stored schedule can still be ticked
-into any project and Loop the caller names, and the claim marker that makes a
-replay free protects a (schedule, binding) pair rather than the schedule ·
-schedule DELETION, so an unusable schedule can only be paused — and since the
+endpoint (create, list and pause are exposed; editing is store-only, which now
+also means a schedule cannot be REBOUND through any endpoint) · schedule
+DELETION, so an unusable schedule can only be paused — and since the
 tick applies the same zone rules as creation, a schedule stored before those
 rules existed (a fixed offset, a `SystemV/*` zone, or a single-word IANA name)
 is permanently un-tickable and can only be paused · listing

@@ -40,6 +40,22 @@ export interface CronContractVersion {
   readonly timeZone: string;
   readonly contractRef: string;
   readonly contractBindingDigest: string;
+  /**
+   * WHAT THIS SCHEDULE'S RUNS BELONG TO, and part of the version because a
+   * rebinding is an edit like any other — it changes what the schedule does
+   * without changing when it does it, and the runs already created under the
+   * old binding must keep explaining themselves.
+   *
+   * It lives HERE rather than in the tick request because the occurrence claim
+   * is keyed on `project|workspace|loop|scheduleId`: while the first three came
+   * from the caller, the durable marker protected a (schedule, binding) PAIR
+   * rather than the schedule, and the same window ticked under three bindings
+   * produced nine runs where three were intended — six of them in one Loop for
+   * the same three hours.
+   */
+  readonly projectId: string;
+  readonly workspaceId: string | null;
+  readonly loopId: string;
   /** Who made this version, and when. Both are evidence, never derived. */
   readonly authoredBy: string;
   readonly authoredAt: string;
@@ -92,7 +108,10 @@ export interface ScheduleEditPlan {
   readonly runAttribution: readonly VersionedRun[];
   /** What actually changed, named — a version whose diff nobody can state is
    *  a version nobody can review. */
-  readonly changed: readonly ('cronExpression' | 'timeZone' | 'contractRef' | 'contractBindingDigest')[];
+  readonly changed: readonly (
+    'cronExpression' | 'timeZone' | 'contractRef' | 'contractBindingDigest'
+    | 'projectId' | 'workspaceId' | 'loopId'
+  )[];
 }
 
 export type ScheduleEditDecision =
@@ -170,6 +189,7 @@ export function planScheduleEdit(input: ScheduleEditInput): ScheduleEditDecision
 
   const changed = ([
     'cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest',
+    'projectId', 'workspaceId', 'loopId',
   ] as const).filter((field) => input.proposed[field] !== head[field]);
   if (changed.length === 0) {
     // A version that changes nothing still splits the run history in two for
