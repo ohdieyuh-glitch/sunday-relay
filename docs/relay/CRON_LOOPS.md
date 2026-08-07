@@ -415,14 +415,17 @@ the history the store returned so it describes the version that landed. Pausing
 is not an edit and cannot be reached through it — `paused` is a refused field,
 so a schedule is stopped by the control that stops it.
 
-It passes the planner NO run list, and that is a limit rather than a shortcut.
-An append cannot orphan a run, so the planner's orphan check is inert here; its
-other use — reporting the in-progress runs a change must not disturb — cannot
-be computed truthfully, because a run records the LOOP it belongs to and not
-the schedule that created it. Two schedules may bind one Loop, and using the
-Loop-wide list makes the other schedule's runs cite versions this history
-lacks: every future edit refused as orphaning, the schedule never correctable
-again. Attributing a run to its schedule is listed under "Not implemented".
+It passes the planner NO run list. An append cannot orphan a run — the known
+versions only grow — so the planner's orphan check is inert here. Its other
+use, reporting the runs a change must not disturb, is a real feature this route
+does not claim: a run record names the LOOP it belongs to and not the schedule
+that created it, and two schedules may bind one Loop, so the Loop-wide list
+reports another schedule's runs as this one's. Using it makes those runs cite
+versions this history lacks: every future edit refused as orphaning, the
+schedule never correctable again. The attribution exists on disk — every claim
+marker stores the occurrence, which carries its `scheduleId` — so this is a
+walk nobody has written rather than something nobody can know. Listed under
+"Not implemented".
 
 `cron-versioning.ts` implements that decision. An edit APPENDS: every previous
 version rides through unchanged, including the one being superseded, whose
@@ -455,8 +458,9 @@ hardcodes automatic Unchain consumption**.
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
 (the record is created; nothing advances it) · ATTRIBUTING A RUN TO ITS
-SCHEDULE: a run records its Loop, not the schedule that created it, so an edit
-can claim nothing about the runs already in flight · a schedule
+SCHEDULE FROM THE RUN RECORD: a run names its Loop, not its schedule. The
+occurrence claim markers carry `scheduleId` and could be walked to recover it;
+until something does, an edit claims nothing about the runs already created · a schedule
 stored before the binding was required, which replays as CORRUPT: refused
 rather than run with attribution nobody wrote, and repairable by NO endpoint —
 creating over it conflicts, pausing and editing read it first, so the record

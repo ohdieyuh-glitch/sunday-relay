@@ -412,21 +412,25 @@ function editSchedule(
     return err(409, 'schedule_corrupt', safeText(inspected.problem));
   }
 
-  // NO RUN LIST, and that is a statement about what can be known rather than a
-  // shortcut. `planScheduleEdit` uses it for two things: refusing an edit that
-  // would orphan a run, and reporting the in-progress runs the change must not
-  // disturb. An APPEND can never orphan a run — every existing version stays —
-  // so the first is inert here. The second cannot be computed truthfully: a run
-  // records the Loop it belongs to but NOT the schedule that created it (its id
-  // is a digest of the occurrence id, which is not reversible), so the only
-  // available list is "every run in this Loop". Two schedules may bind one
-  // Loop, and review measured what that costs: the other schedule's runs cite
-  // versions this history lacks, so every future edit is refused as orphaning
-  // and the schedule can never be corrected again.
+  // NO RUN LIST, deliberately, and not because one is impossible.
   //
-  // An empty list is therefore honest — nothing is claimed about runs — where a
-  // Loop-wide list would report another schedule's runs as this one's.
-  // Attributing a run to its schedule is the follow-up that makes both real.
+  // `planScheduleEdit` uses it for two things. Refusing an edit that would
+  // ORPHAN a run is inert here: an append only grows the set of known versions,
+  // so nothing explainable before the edit is unexplainable after it. Reporting
+  // the runs the change must not disturb is a real feature, and this route does
+  // not claim it.
+  //
+  // What is NOT available cheaply is the right list. A run record names the
+  // LOOP it belongs to, not the schedule that created it — and two schedules
+  // may bind one Loop, so the Loop-wide list reports another schedule's runs as
+  // this one's. Review measured the cost: those runs cite versions this history
+  // lacks, so every future edit is refused as orphaning and the schedule can
+  // never be corrected again.
+  //
+  // The attribution DOES exist on disk — each claim marker stores the whole
+  // occurrence, which carries its `scheduleId` — so this is a walk nobody has
+  // written, not a fact nobody can know. Until it is written, claiming nothing
+  // is the honest answer. Named in CRON_LOOPS.md under "Not implemented".
   const { scheduleId: _id, ...contract } = proposed;
   const edited = ticks.editSchedule(scheduleId, { ...contract, authoredAt: request.now }, []);
   if (!edited.ok) return err(409, 'schedule_not_edited', safeText(edited.problem));

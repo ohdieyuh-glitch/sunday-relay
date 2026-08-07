@@ -841,28 +841,36 @@ describe('an operator can create, list and pause a schedule', () => {
     expect(dataOf(ticked).contractVersion).toBe(2);
   });
 
-  it('an edit does not claim anything about runs it cannot attribute', async () => {
-    // A run records the LOOP it belongs to, not the schedule that created it,
-    // so the only list available is "every run in this Loop" — and two
-    // schedules may bind one Loop. Review measured the cost of using it: the
-    // other schedule's runs cite versions this history lacks, every future
-    // edit is refused as orphaning, and the schedule can never be corrected.
-    // An append cannot orphan a run anyway, so claiming nothing is the honest
-    // answer until a run says which schedule made it.
+  it('an edit survives another schedule\'s runs in the same Loop', async () => {
+    // THE DEFECT THIS PINS, and it needs a real VERSION MISMATCH to exist: an
+    // earlier version of this test gave both schedules version 1, so the
+    // orphan check never fired and the mutation it named passed.
+    //
+    // Two schedules may bind one Loop. `planScheduleEdit` reads every run's
+    // `contractVersion` as THIS schedule's, so the other's runs cite versions
+    // this history lacks: every future edit refused as orphaning, no delete
+    // route, the schedule never correctable again.
     expect(service.schedules.create('sched-shared', {
       ...STORED, loopId: 'lpe_cron',
     }).ok).toBe(true);
+    // v2 for the OTHER schedule, authored before the window so its tick runs.
+    expect(service.schedules.edit('sched-shared', {
+      ...STORED, cronExpression: '0 * * * *', contractRef: 'contract-two',
+      authoredAt: '2026-08-02T10:00:00.000Z',
+    }, []).ok).toBe(true);
     const ticked = await call({ ...BODY, scheduleId: 'sched-shared' });
     expect(dataOf(ticked).runsCreated).toBe(3);
+    expect(dataOf(ticked).contractVersion).toBe(2);
 
-    // Those runs are in sched-triage's Loop and cite a version of the OTHER
-    // schedule. Editing sched-triage still succeeds.
+    // Three runs now sit in lpe_cron citing v2 — a version sched-triage's
+    // history does not contain. Its edit must still succeed.
     const edited = await call(
       { ...CREATE, scheduleId: 'sched-triage', cronExpression: '*/30 * * * *' },
       { path: '/cron/schedules/sched-triage/edit' },
     );
     expect(edited?.status).toBe(200);
     expect(dataOf(edited).version).toBe(2);
+    // And nothing is claimed about runs this schedule cannot prove are its own.
     expect(dataOf(edited).activeRunsUndisturbed).toBeUndefined();
   });
 

@@ -67,6 +67,20 @@ export interface CronContractVersion {
   readonly authoredAt: string;
 }
 
+/**
+ * The fields a version is COMPARED on — what "changed" means for an edit.
+ *
+ * Exported because the bridge diffs the two newest versions to report what an
+ * edit did, and a second copy of this list drifts silently: a field added here
+ * and not there would be changed by an edit the response says changed nothing.
+ * `version`, `authoredBy` and `authoredAt` are excluded — every edit changes
+ * them, so they say nothing about what the edit DID.
+ */
+export const VERSIONED_CONTRACT_FIELDS = [
+  'cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest',
+  'projectId', 'workspaceId', 'loopId',
+] as const;
+
 /** A run, and the version it started under. */
 export interface VersionedRun {
   readonly runId: string;
@@ -193,10 +207,8 @@ export function planScheduleEdit(input: ScheduleEditInput): ScheduleEditDecision
     };
   }
 
-  const changed = ([
-    'cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest',
-    'projectId', 'workspaceId', 'loopId',
-  ] as const).filter((field) => input.proposed[field] !== head[field]);
+  const changed = VERSIONED_CONTRACT_FIELDS
+    .filter((field) => input.proposed[field] !== head[field]);
   if (changed.length === 0) {
     // A version that changes nothing still splits the run history in two for
     // no reason, and later readers would look for a difference there is none

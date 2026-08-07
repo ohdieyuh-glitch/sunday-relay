@@ -3,6 +3,9 @@ import { createCronClaimNodePort } from '../src/relay/persistence/cron-claim-nod
 import {
   createCronScheduleStore, type CronScheduleStore, type ScheduleReadResult,
 } from '../src/relay/persistence/cron-schedule-node';
+import {
+  VERSIONED_CONTRACT_FIELDS,
+} from '../src/relay/mission/loop/cron/cron-versioning';
 import type {
   CronContractVersion, VersionedRun,
 } from '../src/relay/mission/loop/cron/cron-versioning';
@@ -262,10 +265,12 @@ export function createCronTickService(options: {
       const appended = [...result.value.history].sort((a, b) => a.version - b.version);
       const head = appended[appended.length - 1];
       const previous = appended[appended.length - 2];
-      const changed = head === undefined || previous === undefined ? [] : ([
-        'cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest',
-        'projectId', 'workspaceId', 'loopId',
-      ] as const).filter((field) => head[field] !== previous[field]);
+      const changed = head === undefined || previous === undefined
+        ? []
+        // THE PLANNER'S OWN LIST, not a copy of it: a field added to one and
+        // not the other would be changed by an edit this response calls a
+        // change to nothing.
+        : VERSIONED_CONTRACT_FIELDS.filter((field) => head[field] !== previous[field]);
       return { ok: true, version: head?.version ?? 0, changed };
     },
     activeRunsFor,
