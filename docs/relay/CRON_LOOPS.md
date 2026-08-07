@@ -2,7 +2,7 @@
 
 **Status: GRAMMAR + PURE EVALUATOR + CLAIM/OVERLAP/MISSED-RUN DECISIONS
 + FILE-BACKED CLAIM ADAPTER + THE TICK PASS + A DURABLE SCHEDULE STORE + AN
-AUTHENTICATED TICK ENDPOINT AND THE SCHEDULE FAMILY (CREATE, LIST, PAUSE)
+AUTHENTICATED TICK ENDPOINT AND THE SCHEDULE FAMILY (CREATE, LIST, PAUSE, EDIT)
 IMPLEMENTED. NO SCHEDULER AND NO TIMER: NOTHING CALLS THE TICK ON A SCHEDULE,
 AND A SCHEDULED RUN IS CREATED BUT NEVER DISPATCHED.**
 
@@ -34,7 +34,8 @@ store, the file-backed claim adapter, the Intl timezone port, and
 `confirmLoopRun` with `creationSource: 'schedule'`), and
 `relay-bridge/cron-routes.ts` exposes `POST /relay-api/cron/tick` plus the
 schedule family — `POST` and `GET /relay-api/cron/schedules` and
-`POST /relay-api/cron/schedules/:id/pause` — all operator-only, flag-gated,
+`POST /relay-api/cron/schedules/:id/pause` and
+`POST /relay-api/cron/schedules/:id/edit` — all operator-only, flag-gated,
 server-clocked, with explicit `authorized: true` on everything that writes.
 
 WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
@@ -407,6 +408,13 @@ schedule and contract, the change author and time, and which runs came from
 which version. An in-progress run continues under the version it started with.
 Changing the future schedule never mutates an active run.
 
+`POST /relay-api/cron/schedules/:id/edit` exposes it: the same validation a
+create gets, from the same reader so the two cannot drift, with the server's
+clock for the authoring instant. The response NAMES what changed and the
+in-progress runs that keep the version they started under. Pausing is not an
+edit and cannot be reached through it — `paused` is a refused field, so a
+schedule is stopped by the control that stops it.
+
 `cron-versioning.ts` implements that decision. An edit APPENDS: every previous
 version rides through unchanged, including the one being superseded, whose
 schedule is what explains its own runs. `governingVersionFor` resolves a run
@@ -437,9 +445,7 @@ hardcodes automatic Unchain consumption**.
 ## Not implemented
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
-(the record is created; nothing advances it) · schedule EDITING through an
-endpoint (create, list and pause are exposed; editing is store-only, which now
-also means a schedule cannot be REBOUND through any endpoint) · a schedule
+(the record is created; nothing advances it) · a schedule
 stored before the binding was required, which replays as CORRUPT: refused
 rather than run with attribution nobody wrote, and repairable by NO endpoint —
 creating over it conflicts, pausing and editing read it first, so the record
