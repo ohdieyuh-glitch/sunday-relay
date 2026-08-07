@@ -29,10 +29,10 @@ import type { CronContractVersion } from '../src/relay/mission/loop/cron/cron-ve
  * - **Not schedule-less.** The schedule is READ from the durable store: a
  *   request says which schedule and over what window, and the expression,
  *   timezone, contract and version are the schedule's own.
- * - **Not attributing its own runs.** A stored schedule does not pin the
- *   project and Loop its runs belong to; the tick still names them, so the
- *   occurrence claim protects a (schedule, binding) pair rather than the
- *   schedule. Named in CRON_LOOPS.md under "Not implemented".
+ * - **Not rebindable.** A schedule pins the project and Loop its runs belong
+ *   to, given at creation and carried in the contract version, so the
+ *   occurrence claim protects the schedule rather than a (schedule, binding)
+ *   pair. Changing it is an EDIT, and no endpoint exposes editing.
  *
  * THE CLOCK IS THE SERVER'S. `evaluatedAt` and the window's end come from the
  * server, never the body: CRON_LOOPS.md says a client-supplied time field must
@@ -227,23 +227,77 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   // field this route decides has the wrong model of it, and ignoring the field
   // silently lets them believe it took effect: `paused: true` was accepted,
   // discarded, and answered with a success for an ACTIVE schedule.
-  // `binding` is here for a stronger reason than the rest. A schedule does not
-  // yet pin the project and Loop its runs are attributed to — the tick supplies
-  // them — so accepting one at creation would look like pinning and pin
-  // nothing, which is worse than refusing. `contractVersion` is the name the
-  // tick uses for `version`, and a caller who reaches for it deserves the same
-  // answer.
-  const decided = ['version', 'contractVersion', 'authoredAt', 'paused', 'binding']
+  // `contractVersion` is the name the tick uses for `version`, and a caller who
+  // reaches for it deserves the same answer. `binding` is NOT refused any more:
+  // a schedule now pins what its runs belong to, so creation is exactly where
+  // it has to be given.
+  const decided = ['version', 'contractVersion', 'authoredAt', 'paused']
     .filter((f) => (body as Record<string, unknown>)[f] !== undefined);
   if (decided.length > 0) {
     return err(422, 'field_not_accepted',
       `${decided.join(', ')} ${decided.length === 1 ? 'is' : 'are'} decided by this server, not by `
-      + 'the request. A new schedule is version 1, authored now, and active — and it does not yet '
-      + 'carry a binding, so a tick still names the project and Loop.');
+      + 'the request. A new schedule is version 1, authored now, and active.');
   }
 
+  // THE BINDING IS REQUIRED HERE, because it is what the occurrence claim is
+  // keyed on. A schedule without one could be ticked into any project and Loop
+  // a caller named, which is the hole this closes.
+  const bindingBody = (body as Record<string, unknown>).binding;
+  const projectId = trimmed(bindingBody, 'projectId');
+  const loopId = trimmed(bindingBody, 'loopId');
+  const workspaceRaw = bindingBody !== null && typeof bindingBody === 'object'
+    ? (bindingBody as Record<string, unknown>).workspaceId : undefined;
+  const missingBinding = Object.entries({ projectId, loopId })
+    .filter(([, value]) => value === null).map(([field]) => `binding.${field}`);
+  if (missingBinding.length > 0) {
+    return err(422, 'validation_failed', `Missing or invalid fields: ${missingBinding.join(', ')}.`);
+  }
+  // THE TWO FIELDS THE TICK ALSO NAMES. `contractRef` and
+  // `contractBindingDigest` are given at the top level, so ones sent INSIDE
+  // `binding` were read by nobody and answered with a success — a field
+  // accepted, discarded and reported as stored, which is what this route
+  // refuses twenty lines above. Creation and the tick disagreeing about what
+  // "the binding" contains is how the next reader learns the wrong shape.
+  //
+  // BY NAME, NOT BY CATEGORY, on both surfaces: an unrecognised key inside
+  // `binding` is still discarded silently here and at the tick. The two agree
+  // now; neither is exhaustive.
+  const contractInBinding = ['contractRef', 'contractBindingDigest']
+    .filter((f) => bindingBody !== null && typeof bindingBody === 'object'
+      && (bindingBody as Record<string, unknown>)[f] !== undefined);
+  if (contractInBinding.length > 0) {
+    return err(422, 'field_not_accepted',
+      `${contractInBinding.map((f) => `binding.${f}`).join(', ')} belongs at the top level of the `
+      + 'request, not inside binding. Sent here it would be stored by nobody.');
+  }
+
+  // STATED EXPLICITLY MEANS STATED. A project-level schedule has no workspace,
+  // and `null` is how it says so — absent is not, and a blank string is not.
+  // A blank was already refused; ABSENT was accepted and normalised to `null`,
+  // which the store refuses outright — two rules for one field, and the message
+  // here already promised the stricter one.
+  //
+  // Each shape is told what IT did, not what some other caller might have done.
+  if (workspaceRaw === undefined) {
+    return err(422, 'validation_failed',
+      'binding.workspaceId must name a workspace or be null, stated explicitly. Leaving it out is '
+      + 'not a way to say there is none.');
+  }
+  if (workspaceRaw !== null && typeof workspaceRaw !== 'string') {
+    return err(422, 'validation_failed',
+      'binding.workspaceId must be a string naming a workspace, or null. It is neither.');
+  }
+  if (typeof workspaceRaw === 'string' && workspaceRaw.trim() === '') {
+    return err(422, 'validation_failed',
+      'binding.workspaceId must name a workspace or be null, stated explicitly. A blank string '
+      + 'names no workspace and is not a way to say there is none.');
+  }
+  const workspaceId = typeof workspaceRaw === 'string' ? workspaceRaw.trim() : null;
   const created = ticks.createSchedule(scheduleId as string, {
     version: 1,
+    projectId: projectId as string,
+    workspaceId,
+    loopId: loopId as string,
     cronExpression: cronExpression as string,
     timeZone: timeZone as string,
     contractRef: contractRef as string,
@@ -463,7 +517,11 @@ export async function handleCronRoute(
   const storeOwned = ['cronExpression', 'timeZone', 'contractVersion']
     .filter((f) => body !== null && typeof body === 'object'
       && (body as Record<string, unknown>)[f] !== undefined);
-  const bindingOwned = ['contractRef', 'contractBindingDigest']
+  // The WHOLE binding is the schedule's now, not just the contract fields
+  // inside it. A caller sending one has the wrong model of this endpoint, and
+  // accepting it silently is how a run gets attributed somewhere the schedule
+  // never named.
+  const bindingOwned = ['projectId', 'workspaceId', 'loopId', 'contractRef', 'contractBindingDigest']
     .filter((f) => (body as Record<string, unknown>).binding !== null
       && typeof (body as Record<string, unknown>).binding === 'object'
       && ((body as Record<string, unknown>).binding as Record<string, unknown>)[f] !== undefined);
@@ -517,18 +575,17 @@ export async function handleCronRoute(
     .sort((a, b) => a.version - b.version)[inspected.record.history.length - 1] as
     (typeof inspected.record.history)[number];
 
-  const binding = (body as Record<string, unknown>).binding;
-  const projectId = trimmed(binding, 'projectId');
-  const loopId = trimmed(binding, 'loopId');
-  const workspaceIdRaw = binding !== null && typeof binding === 'object'
-    ? (binding as Record<string, unknown>).workspaceId : undefined;
-  const workspaceId = typeof workspaceIdRaw === 'string' && workspaceIdRaw.trim() !== ''
-    ? workspaceIdRaw.trim() : null;
-  const missingBinding = Object.entries({ projectId, loopId })
-    .filter(([, value]) => value === null).map(([field]) => `binding.${field}`);
-  if (missingBinding.length > 0) {
-    return err(422, 'validation_failed', `Missing or invalid fields: ${missingBinding.join(', ')}.`);
-  }
+  // WHAT THE RUNS BELONG TO IS THE SCHEDULE'S, NOT THE REQUEST'S. While these
+  // arrived in the body they were also part of the occurrence claim key, so the
+  // durable marker protected a (schedule, binding) PAIR: the same window ticked
+  // under three bindings produced nine runs where three were intended, six of
+  // them in one Loop for the same three hours. The key is the schedule id alone
+  // now, and the binding is read from the governing version — so a tick creates
+  // at most one run per occurrence, which is what that rule has always claimed
+  // to mean.
+  const projectId = head.projectId;
+  const loopId = head.loopId;
+  const workspaceId = head.workspaceId;
 
   // A QUEUE POLICY CANNOT BE SERVED HONESTLY: no occurrence queue exists in
   // this build, so a `queued` outcome would promise an enqueue nothing

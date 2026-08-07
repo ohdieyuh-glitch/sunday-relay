@@ -49,7 +49,6 @@ const BODY = {
   workClass: 'read_only',
   overlapPolicy: 'parallel_with_limit',
   parallelLimit: 5,
-  binding: { projectId: 'prj_cron', workspaceId: null, loopId: 'lpe_cron' },
 };
 
 /** The schedule the tick reads. Stored, not asserted by the request. */
@@ -59,6 +58,9 @@ const STORED = {
   timeZone: 'UTC',
   contractRef: 'contract-ref',
   contractBindingDigest: 'digest-1',
+  projectId: 'prj_cron',
+  workspaceId: null,
+  loopId: 'lpe_cron',
   authoredBy: 'founder',
   authoredAt: '2026-08-01T10:00:00.000Z',
 };
@@ -183,33 +185,53 @@ describe('a tick creates records and dispatches nothing', () => {
     expect(dataOf(later).claimedWithoutRun).toBe(0);
   });
 
-  it('two projects using ONE schedule id do not suppress each other', async () => {
+  it('two schedules in different projects do not suppress each other', async () => {
     // The occurrence identity's first term must be globally unique, and
     // nothing allocates one: the id is a caller-supplied string and the claim
-    // markers share one flat namespace on the volume. Un-namespaced, the
-    // first project to tick durably marked the second's occurrences
-    // already-handled — silent cross-tenant suppression, found by review.
-    // Mutation check: dropping the binding from the qualified schedule id
-    // makes the second project's tick report already_handled for everything.
+    // markers share one flat namespace on the volume. Un-namespaced, the first
+    // schedule to tick durably marked the second's occurrences already-handled
+    // — silent cross-tenant suppression, found by review. The ids differ, so
+    // what keeps them apart now is the id itself: one state root holds one
+    // schedule per id, which is why the occurrence term no longer needs
+    // qualifying with a binding that could move under a rebinding.
+    expect(service.schedules.create('sched-other', {
+      ...STORED, projectId: 'prj_other', loopId: 'lpe_other',
+    }).ok).toBe(true);
+
     const a = await call();
     expect(dataOf(a).runsCreated).toBe(3);
 
-    const b = await call({
-      ...BODY,
-      binding: { ...BODY.binding, projectId: 'prj_other', loopId: 'lpe_other' },
-    });
+    const b = await call({ ...BODY, scheduleId: 'sched-other' });
     expect(b?.status).toBe(200);
     expect(dataOf(b).runsCreated).toBe(3);
     expect((dataOf(b).occurrences as { outcome: string }[])
       .every((o) => o.outcome === 'run_created')).toBe(true);
-    // Distinct occurrence identities, so distinct claim markers.
-    const idsA = (dataOf(a).occurrences as { occurrenceId: string }[]).map((o) => o.occurrenceId);
-    const idsB = (dataOf(b).occurrences as { occurrenceId: string }[]).map((o) => o.occurrenceId);
-    expect(idsA.some((id) => idsB.includes(id))).toBe(false);
+    // Each schedule's runs land in ITS OWN Loop, per its stored binding.
+    expect(service.store.runIdsForLoop('lpe_cron')).toHaveLength(3);
+    expect(service.store.runIdsForLoop('lpe_other')).toHaveLength(3);
   });
-});
 
-describe('every gate refuses before touching disk', () => {
+  it('a caller cannot tick one schedule into a Loop it does not name', async () => {
+    // THE DEFECT THIS PINS. The binding arrived in the REQUEST and was also
+    // part of the claim key, so the durable marker protected a (schedule,
+    // binding) pair rather than the schedule: review measured three ticks over
+    // one identical window, differing only in binding, producing NINE runs —
+    // six of them in the same Loop for the same three hours. The binding is the
+    // schedule's now, so a request carrying one is refused rather than obeyed.
+    const first = await call();
+    expect(dataOf(first).runsCreated).toBe(3);
+
+    const hijack = await call({
+      ...BODY,
+      binding: { projectId: 'prj_other', workspaceId: null, loopId: 'lpe_other' },
+    });
+    expect(hijack?.status).toBe(422);
+    expect(errorOf(hijack).kind).toBe('field_owned_by_the_schedule');
+    // Nothing was created anywhere, and the window stays handled exactly once.
+    expect(service.store.runIdsForLoop('lpe_other') ?? []).toHaveLength(0);
+    expect(service.store.runIdsForLoop('lpe_cron')).toHaveLength(3);
+  });
+
   it('an unauthenticated call is 401 and evaluates nothing', async () => {
     const result = await call(BODY, { authorize: () => ({ kind: 'none', principal: 'none' }) });
     expect(result?.status).toBe(401);
@@ -327,8 +349,8 @@ describe('what the endpoint refuses to promise', () => {
       expect(errorOf(result).kind).toBe('field_owned_by_the_schedule');
       expect(errorOf(result).message).toContain(field);
     }
-    for (const field of ['contractRef', 'contractBindingDigest']) {
-      const result = await call({ ...BODY, binding: { ...BODY.binding, [field]: 'x' } });
+    for (const field of ['projectId', 'workspaceId', 'loopId', 'contractRef', 'contractBindingDigest']) {
+      const result = await call({ ...BODY, binding: { [field]: 'x' } });
       expect(result?.status, field).toBe(422);
       expect(errorOf(result).message).toContain(`binding.${field}`);
     }
@@ -441,10 +463,14 @@ describe('what the endpoint refuses to promise', () => {
     expect(dataOf(result).runsCreated).toBe(3);
   });
 
-  it('a missing BINDING field is named as binding.<field>', async () => {
+  it('a tick carrying a binding is refused, not obeyed and not ignored', async () => {
+    // The tick used to REQUIRE one and name the missing field; the binding is
+    // the schedule's now, so the same request is refused by name. The
+    // equivalent naming test lives at creation, where the binding is given.
     const result = await call({ ...BODY, binding: { projectId: 'prj_cron' } });
     expect(result?.status).toBe(422);
-    expect(errorOf(result).message).toContain('binding.loopId');
+    expect(errorOf(result).kind).toBe('field_owned_by_the_schedule');
+    expect(errorOf(result).message).toContain('binding.projectId');
   });
 
   it('a window wider than the evaluation bound is refused, not scanned', async () => {
@@ -485,6 +511,7 @@ describe('an operator can create, list and pause a schedule', () => {
     contractRef: 'contract-ref',
     contractBindingDigest: 'digest-1',
     authoredBy: 'founder',
+    binding: { projectId: 'prj_cron', workspaceId: null, loopId: 'lpe_cron' },
   };
 
   it('creates a schedule an operator can then tick', async () => {
@@ -651,6 +678,65 @@ describe('an operator can create, list and pause a schedule', () => {
     expect(existsSync(occurrenceDir())).toBe(false);
   });
 
+  it('names a missing binding field as binding.<field> at creation', async () => {
+    const partial = await call(
+      { ...CREATE, binding: { projectId: 'prj_cron' } }, { path: '/cron/schedules' },
+    );
+    expect(partial?.status).toBe(422);
+    expect(errorOf(partial).message).toContain('binding.loopId');
+    // An absent binding entirely is the same failure, not a stored schedule.
+    const { binding: _drop, ...withoutBinding } = CREATE;
+    const none = await call(withoutBinding, { path: '/cron/schedules' });
+    expect(none?.status).toBe(422);
+    expect(errorOf(none).message).toContain('binding.projectId');
+    // Leaving the workspace OUT is not a way to say there is none: the store
+    // refuses absent outright, so accepting it here would be two rules for one
+    // field — the split this branch spent a round removing for contractRef.
+    const absentWorkspace = await call(
+      { ...CREATE, binding: { projectId: 'prj_cron', loopId: 'lpe_cron' } },
+      { path: '/cron/schedules' },
+    );
+    expect(absentWorkspace?.status).toBe(422);
+    expect(errorOf(absentWorkspace).message).toContain('Leaving it out');
+    // A wrong-TYPED workspace is told what it did, not what someone else did:
+    // one message for absent, one for blank, one for neither.
+    const numberWorkspace = await call(
+      { ...CREATE, binding: { ...CREATE.binding, workspaceId: 5 } },
+      { path: '/cron/schedules' },
+    );
+    expect(numberWorkspace?.status).toBe(422);
+    expect(errorOf(numberWorkspace).message).toContain('It is neither');
+    expect(errorOf(numberWorkspace).message).not.toContain('Leaving it out');
+    // And the contract fields belong at the top level, not inside the binding,
+    // where the tick already refuses them by name.
+    for (const field of ['contractRef', 'contractBindingDigest']) {
+      const inBinding = await call(
+        { ...CREATE, binding: { ...CREATE.binding, [field]: 'x' } },
+        { path: '/cron/schedules' },
+      );
+      expect(inBinding?.status, field).toBe(422);
+      expect(errorOf(inBinding).kind, field).toBe('field_not_accepted');
+    }
+    expect(service.schedules.list()).toEqual(['sched-triage']);
+    // A workspace is optional, but a BLANK is not a way to say there is none:
+    // accepting it and storing `null` would be a field discarded and answered
+    // with a success, which is what this route refuses everywhere else.
+    const blankWorkspace = await call(
+      { ...CREATE, binding: { ...CREATE.binding, workspaceId: '  ' } },
+      { path: '/cron/schedules' },
+    );
+    expect(blankWorkspace?.status).toBe(422);
+    expect(errorOf(blankWorkspace).message).toContain('names no workspace');
+    expect(service.schedules.list()).toEqual(['sched-triage']);
+    // Explicit null IS how you say it, and it stores as absent.
+    const noWorkspace = await call(
+      { ...CREATE, binding: { ...CREATE.binding, workspaceId: null } },
+      { path: '/cron/schedules' },
+    );
+    expect(noWorkspace?.status).toBe(200);
+    expect(service.schedules.read('sched-new')?.history[0]?.workspaceId).toBeNull();
+  });
+
   it('refuses an unusable schedule id as a validation failure, not a conflict', async () => {
     // 409 said "this conflicts with something"; nothing existed to conflict
     // with. A caller cannot tell "pick another name" from "fix this field".
@@ -666,10 +752,10 @@ describe('an operator can create, list and pause a schedule', () => {
     // `paused: true` was accepted, dropped, and answered with a success — so an
     // operator who created a schedule intending it to start paused got an
     // ACTIVE one and no indication of it.
-    // `binding` matters most: a schedule does not pin one yet, so accepting it
-    // would look like pinning and pin nothing — and the response would say the
-    // schedule is stored while the thing the caller cared about was dropped.
-    for (const field of ['paused', 'version', 'contractVersion', 'authoredAt', 'binding']) {
+    // `binding` is deliberately NOT here: a schedule pins what its runs belong
+    // to, so creation is where it must be given, and the tick is where it is
+    // refused. Its own tests are above.
+    for (const field of ['paused', 'version', 'contractVersion', 'authoredAt']) {
       const result = await call(
         { ...CREATE, [field]: field === 'paused' ? true : 99 }, { path: '/cron/schedules' },
       );

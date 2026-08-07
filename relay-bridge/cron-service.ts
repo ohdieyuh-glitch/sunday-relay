@@ -37,11 +37,10 @@ import {
  * subtlest thing in this file; see `activeRunsFor`.
  */
 
-/** What one schedule binds its runs to. STILL CALLER-SUPPLIED, per tick: the
- *  schedule store exists now (`cron-schedule-node.ts`) and holds the
- *  expression, zone, contract and version, but it does not yet hold this. Until
- *  it does, a stored schedule can be ticked into any project and Loop the
- *  caller names. Named in CRON_LOOPS.md under "Not implemented". */
+/** What one schedule binds its runs to. THE SCHEDULE'S OWN: given at creation
+ *  and read from the governing contract version, never from the tick that woke
+ *  it. While it was caller-supplied per tick, a stored schedule could be run
+ *  into any project and Loop a request named. */
 export interface CronRunBinding {
   readonly projectId: string;
   readonly workspaceId: string | null;
@@ -49,27 +48,6 @@ export interface CronRunBinding {
   readonly contractRef: string;
   readonly contractBindingDigest: string;
 }
-
-/**
- * The occurrence identity's first term.
- *
- * CRON_LOOPS.md's formula is
- * `digest(scheduleId ‖ contractVersion ‖ intendedLocal ‖ resolvedUtc)`, which
- * assumes `scheduleId` is globally unique. NOTHING ALLOCATES ONE: the id is the
- * caller's string, and the store only refuses a DUPLICATE within one state
- * root. The claim markers live in one flat namespace on the volume, and the
- * binding below is not part of the stored schedule. So two projects both
- * using "daily-triage" would share occurrence ids, and the first to tick
- * would durably mark the second's occurrences already-handled — silent
- * cross-tenant suppression, found by review.
- *
- * Qualifying the term with the binding restores the formula's assumption
- * without changing it: the schedule the digest names is now
- * (project, workspace, loop, caller's id), which IS unique. The caller's own
- * id is what the response echoes back.
- */
-const qualifiedScheduleId = (scheduleId: string, binding: CronRunBinding): string =>
-  [binding.projectId, binding.workspaceId ?? 'no-workspace', binding.loopId, scheduleId].join('|');
 
 /** One stored schedule, and what the store can truthfully say about it. */
 export interface CronScheduleListing {
@@ -264,12 +242,19 @@ export function createCronTickService(options: {
       return result.ok ? { ok: true } : { ok: false, problem: result.problem };
     },
     activeRunsFor,
+    // THE OCCURRENCE IDENTITY'S FIRST TERM IS THE SCHEDULE ID ITSELF. The
+    // approved formula assumes that id is globally unique, and within the
+    // namespace that matters it is: the claim markers share one flat namespace
+    // per state root, and that root holds one schedule per id — `dirFor` gives
+    // one directory and `create` takes it with `O_EXCL`. It was qualified with
+    // (project, workspace, loop) back when a schedule was caller-declared and
+    // two projects could both say "daily-triage"; once the binding was read
+    // from the very schedule the id already names, that qualification could no
+    // longer distinguish anything, while it COULD still move under a rebinding
+    // and orphan every marker written before it. An identity term that varies
+    // with mutable data is how a handled window gets replayed.
     tick: (input) => runCronTick(claim, runsFor(input.binding), {
       ...input,
-      evaluation: {
-        ...input.evaluation,
-        scheduleId: qualifiedScheduleId(input.evaluation.scheduleId, input.binding),
-      },
       tz,
       digest: loopDigest,
     }),
