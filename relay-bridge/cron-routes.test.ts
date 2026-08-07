@@ -212,13 +212,12 @@ describe('a tick creates records and dispatches nothing', () => {
   });
 
   it('a caller cannot tick one schedule into a Loop it does not name', async () => {
-    // THE DEFECT THIS PINS. The claim namespace is
-    // project|workspace|loop|scheduleId, and while the first three arrived in
-    // the REQUEST the durable marker protected a (schedule, binding) pair
-    // rather than the schedule: review measured three ticks over one identical
-    // window, differing only in binding, producing NINE runs — six of them in
-    // the same Loop for the same three hours. The binding is the schedule's
-    // now, so a request carrying one is refused rather than obeyed.
+    // THE DEFECT THIS PINS. The binding arrived in the REQUEST and was also
+    // part of the claim key, so the durable marker protected a (schedule,
+    // binding) pair rather than the schedule: review measured three ticks over
+    // one identical window, differing only in binding, producing NINE runs —
+    // six of them in the same Loop for the same three hours. The binding is the
+    // schedule's now, so a request carrying one is refused rather than obeyed.
     const first = await call();
     expect(dataOf(first).runsCreated).toBe(3);
 

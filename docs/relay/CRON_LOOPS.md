@@ -440,9 +440,11 @@ The in-bridge scheduler and its timer · execution of a trigger-created run
 (the record is created; nothing advances it) · schedule EDITING through an
 endpoint (create, list and pause are exposed; editing is store-only, which now
 also means a schedule cannot be REBOUND through any endpoint) · a schedule
-stored before the binding was required, which replays as CORRUPT and must be
-recreated — refused rather than run with attribution nobody wrote ·
-schedule DELETION, so an unusable schedule can only be paused — and since the
+stored before the binding was required, which replays as CORRUPT: refused
+rather than run with attribution nobody wrote, and repairable by NO endpoint —
+creating over it conflicts, pausing and editing read it first, so the record
+must be removed from the state root by hand · schedule DELETION, so an
+otherwise unusable schedule can only be paused — and since the
 tick applies the same zone rules as creation, a schedule stored before those
 rules existed (a fixed offset, a `SystemV/*` zone, or a single-word IANA name)
 is permanently un-tickable and can only be paused · listing

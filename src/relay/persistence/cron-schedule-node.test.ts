@@ -132,6 +132,29 @@ describe('a schedule is created, read back and listed', () => {
     expect(store.create('s-null-workspace', v({ workspaceId: null })).ok).toBe(true);
   });
 
+  it('refuses a version that cannot say when it was authored', () => {
+    // `authoredAt` CLAMPS the tick window, so a version that cannot state it
+    // cannot state which moments it owns — the same reason the binding and the
+    // expression must be real here.
+    for (const authoredAt of ['', '  ', 'not-a-time', '2026-08-01T10:00:00.000']) {
+      const created = store.create(`s-at-${authoredAt.length}`, v({ authoredAt }));
+      expect(created.ok, authoredAt).toBe(false);
+      if (!created.ok) expect(created.problem).toContain('authoredAt');
+    }
+  });
+
+  it('a version line that records no version object is CORRUPT, never a crash', () => {
+    // `.version` was read off whatever the line carried, so a null threw out of
+    // `inspect` — a crash where the store's own word is `corrupt`.
+    mkdirSync(join(root, 'cron-schedules', 'sched-null'), { recursive: true });
+    writeFileSync(
+      join(root, 'cron-schedules', 'sched-null', 'versions.ndjson'),
+      `${JSON.stringify({ kind: 'version', version: null })}\n`,
+    );
+    const inspected = store.inspect('sched-null');
+    expect(inspected.kind).toBe('corrupt');
+  });
+
   it('an EDIT is held to the same bar as a create', () => {
     // The bar lived on the create path only, so an edit could append what a
     // create refuses — and the head is what the tick reads. Review found the
@@ -162,7 +185,7 @@ describe('a schedule is created, read back and listed', () => {
     expect(inspected.kind).toBe('corrupt');
     if (inspected.kind === 'corrupt') {
       expect(inspected.problem).toContain('projectId');
-      expect(inspected.problem).toContain('recreated');
+      expect(inspected.problem).toContain('removed from the state root by hand');
     }
   });
 

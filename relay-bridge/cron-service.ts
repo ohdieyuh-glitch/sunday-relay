@@ -49,28 +49,6 @@ export interface CronRunBinding {
   readonly contractBindingDigest: string;
 }
 
-/**
- * The occurrence identity's first term.
- *
- * CRON_LOOPS.md's formula is
- * `digest(scheduleId ‖ contractVersion ‖ intendedLocal ‖ resolvedUtc)`, which
- * assumes `scheduleId` is globally unique. IT NOW IS, within the namespace that
- * matters: the claim markers share one flat namespace per state root, and that
- * same root holds exactly one schedule per id — `dirFor` gives one directory
- * and `create` takes it with `O_EXCL`.
- *
- * SO THE TERM IS THE ID ITSELF. It was qualified with (project, workspace,
- * loop) back when a schedule was a caller-declared thing and two projects could
- * both say "daily-triage"; with schedules stored, that qualification could no
- * longer distinguish anything — the binding is read from the very schedule the
- * id already names, making it a pure function of the id — while it COULD still
- * move: a rebinding appends a version, the head's binding changes, and every
- * marker written under the old one becomes unreachable. An identity term that
- * varies with mutable data is how a handled window gets replayed, which is the
- * defect the version clamp exists to prevent. Removing the qualification
- * removes that possibility rather than relying on the clamp to contain it.
- */
-
 /** One stored schedule, and what the store can truthfully say about it. */
 export interface CronScheduleListing {
   readonly scheduleId: string;
@@ -264,12 +242,19 @@ export function createCronTickService(options: {
       return result.ok ? { ok: true } : { ok: false, problem: result.problem };
     },
     activeRunsFor,
+    // THE OCCURRENCE IDENTITY'S FIRST TERM IS THE SCHEDULE ID ITSELF. The
+    // approved formula assumes that id is globally unique, and within the
+    // namespace that matters it is: the claim markers share one flat namespace
+    // per state root, and that root holds one schedule per id — `dirFor` gives
+    // one directory and `create` takes it with `O_EXCL`. It was qualified with
+    // (project, workspace, loop) back when a schedule was caller-declared and
+    // two projects could both say "daily-triage"; once the binding was read
+    // from the very schedule the id already names, that qualification could no
+    // longer distinguish anything, while it COULD still move under a rebinding
+    // and orphan every marker written before it. An identity term that varies
+    // with mutable data is how a handled window gets replayed.
     tick: (input) => runCronTick(claim, runsFor(input.binding), {
       ...input,
-      evaluation: {
-        ...input.evaluation,
-        scheduleId: input.evaluation.scheduleId,
-      },
       tz,
       digest: loopDigest,
     }),

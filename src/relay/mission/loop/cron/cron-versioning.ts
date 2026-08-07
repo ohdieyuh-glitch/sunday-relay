@@ -46,12 +46,18 @@ export interface CronContractVersion {
    * without changing when it does it, and the runs already created under the
    * old binding must keep explaining themselves.
    *
-   * It lives HERE rather than in the tick request because the occurrence claim
-   * is keyed on `project|workspace|loop|scheduleId`: while the first three came
-   * from the caller, the durable marker protected a (schedule, binding) PAIR
-   * rather than the schedule, and the same window ticked under three bindings
-   * produced nine runs where three were intended — six of them in one Loop for
-   * the same three hours.
+   * It lives HERE rather than in the tick request for the reason every stored
+   * field does: what a schedule does must not be something the request that
+   * wakes it gets to choose. While the binding came from the caller, the same
+   * window ticked under three bindings produced nine runs where three were
+   * intended — six of them in one Loop for the same three hours, each carrying
+   * the stored schedule's contract.
+   *
+   * It lives in the VERSION rather than on the record because changing it is an
+   * edit: it must be attributable, and a run created before the change has to
+   * go on explaining itself. `governingVersionFor` resolves a run to the
+   * version it started under, so its Loop is the one it was made for, not the
+   * one the schedule points at now.
    */
   readonly projectId: string;
   readonly workspaceId: string | null;

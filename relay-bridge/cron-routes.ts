@@ -546,14 +546,14 @@ export async function handleCronRoute(
     .sort((a, b) => a.version - b.version)[inspected.record.history.length - 1] as
     (typeof inspected.record.history)[number];
 
-  // WHAT THE RUNS BELONG TO IS THE SCHEDULE'S, NOT THE REQUEST'S. The
-  // occurrence claim is keyed on `project|workspace|loop|scheduleId`, so while
-  // these arrived in the body the durable marker protected a (schedule,
-  // binding) PAIR: the same window ticked under three bindings produced nine
-  // runs where three were intended, six of them in one Loop for the same three
-  // hours. Reading them from the governing version makes the claim protect the
-  // schedule, which is what "a trigger creates at most one Cron Loop Run" has
-  // always claimed to mean.
+  // WHAT THE RUNS BELONG TO IS THE SCHEDULE'S, NOT THE REQUEST'S. While these
+  // arrived in the body they were also part of the occurrence claim key, so the
+  // durable marker protected a (schedule, binding) PAIR: the same window ticked
+  // under three bindings produced nine runs where three were intended, six of
+  // them in one Loop for the same three hours. The key is the schedule id alone
+  // now, and the binding is read from the governing version — so a tick creates
+  // at most one run per occurrence, which is what that rule has always claimed
+  // to mean.
   const projectId = head.projectId;
   const loopId = head.loopId;
   const workspaceId = head.workspaceId;

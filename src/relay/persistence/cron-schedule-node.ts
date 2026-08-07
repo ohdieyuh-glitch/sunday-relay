@@ -3,6 +3,7 @@ import { join, sep } from 'node:path';
 import { appendLineDurable, fsyncDirBestEffort, readTextIfExists, writeFileAtomic } from './atomic-file';
 import { acquireRunLock } from './lock';
 import { planScheduleEdit } from '../mission/loop/cron/cron-versioning';
+import { readIsoInstantWithOffset } from '../mission/loop/runtime/loop-scheduler';
 import type { CronContractVersion, VersionedRun } from '../mission/loop/cron/cron-versioning';
 
 /**
@@ -115,8 +116,8 @@ type JournalLine =
  * append what a create refuses, and — once the BINDING moved into the version —
  * a schedule written before that field existed replayed with `undefined`
  * attribution, claimed its occurrences durably, created nothing, and answered
- * 200. A field the claim marker is keyed on must be real everywhere the record
- * can enter the system, including from a journal written by an older build.
+ * 200. A field the tick depends on must be real everywhere the record can enter
+ * the system, including from a journal written by an older build.
  */
 export function versionProblem(version: CronContractVersion): string | null {
   if (!Number.isInteger(version.version) || version.version < 0) {
@@ -131,13 +132,19 @@ export function versionProblem(version: CronContractVersion): string | null {
   for (const field of [
     'cronExpression', 'timeZone', 'contractRef', 'contractBindingDigest',
     // The BINDING is stored, so it must be real here for the same reason: the
-    // occurrence claim is keyed on it, and an absent project or Loop id would
-    // attribute a run to nowhere while durably consuming the occurrence.
+    // run this schedule creates is attributed through it, and an absent project
+    // or Loop id would attribute a run to nowhere while the occurrence it came
+    // from is durably consumed.
     'projectId', 'loopId',
   ] as const) {
     if (typeof version[field] !== 'string' || version[field].trim() === '') {
       return `${field} must not be empty.`;
     }
+  }
+  // `authoredAt` is load-bearing too: it CLAMPS the tick window, so a version
+  // that cannot say when it was authored cannot say which moments it owns.
+  if (readIsoInstantWithOffset(version.authoredAt) === null) {
+    return 'authoredAt must be an ISO-8601 instant carrying an explicit UTC offset.';
   }
   // `workspaceId` is legitimately absent — a project-level schedule has none —
   // but ABSENT is `null`, never undefined and never an empty string pretending
@@ -199,6 +206,15 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
     }
     const numbers = new Set<number>();
     for (const version of history) {
+      // A line whose `version` is not an object at all reached `.version` and
+      // threw out of `inspect` — a crash where the store's own word is
+      // `corrupt`. Pre-existing, and exactly the class this validation closes.
+      if (version === null || typeof version !== 'object') {
+        return {
+          kind: 'corrupt',
+          problem: 'A version line records no version object, so the history cannot be stated.',
+        };
+      }
       if (numbers.has(version.version)) {
         // planScheduleEdit calls this unambiguously fatal; a schedule too
         // ambiguous to edit must not be tickable either.
@@ -230,8 +246,9 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
         return {
           kind: 'corrupt',
           problem: `Version ${String(version.version)} cannot be stated by this build: ${problem} `
-            + 'A schedule stored before this field was required must be recreated; it is refused '
-            + 'rather than run with attribution nobody wrote.',
+            + 'It is refused rather than run with attribution nobody wrote. No endpoint can '
+            + 'repair it — creating over it conflicts, pausing and editing read it first — so the '
+            + 'record has to be removed from the state root by hand.',
         };
       }
     }
@@ -266,7 +283,6 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
     }
   };
 
-  const validateVersion = versionProblem;
 
   return {
     create(scheduleId, first) {
@@ -275,7 +291,7 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
         return refuse(`"${scheduleId}" is not a usable schedule id, or it resolves outside the `
           + 'state root.');
       }
-      const invalid = validateVersion(first);
+      const invalid = versionProblem(first);
       if (invalid !== null) {
         // `edit` refuses an unattributed version; `create` used to accept one,
         // so a schedule could begin with a version nobody signed.
