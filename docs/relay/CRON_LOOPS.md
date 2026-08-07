@@ -133,6 +133,15 @@ Options considered, against what actually exists:
 ### The approved shape
 
 - **Relay's journal and snapshots remain the source of truth.** Always.
+  `src/relay/persistence/cron-schedule-node.ts` is that store: one directory
+  per schedule holding an append-only version journal and a derived snapshot.
+  The JOURNAL is the authority and the snapshot is a cache — a read replays
+  the journal and never trusts the snapshot's contents, so a stale, missing
+  or wrong snapshot cannot make a schedule report a version its own history
+  never recorded. An edit goes through `planScheduleEdit` rather than a second
+  copy of that rule. Schedules can be created, listed, edited and paused; what
+  is still missing is the tick endpoint reading one instead of taking the
+  schedule from its request body.
 - The **in-bridge scheduler** may dispatch occurrences during beta. The bridge
   is the only component with continuous uptime, the mounted volume
   (`RELAY_DATA_DIR`) and the operator credential.
@@ -374,10 +383,12 @@ hardcodes automatic Unchain consumption**.
 ## Not implemented
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
-(the record is created; nothing advances it) · the schedule store, and
-therefore schedule listing and pausing · the occurrence queue,
-and therefore the `queue_one` and `queue_all` overlap policies · period
-budget caps · recurring-approval STORAGE and enforcement (the decision exists; no grant is
+(the record is created; nothing advances it) · the tick endpoint READING a
+stored schedule (the store exists; the endpoint still takes the schedule from
+its request body) · the occurrence queue,
+and therefore the `queue_one` and `queue_all` overlap policies · period budget-cap ENFORCEMENT (the
+decision exists; nothing observes spend-to-date to feed it) ·
+recurring-approval STORAGE and enforcement (the decision exists; no grant is
 persisted and nothing consults it) · circuit-breaker OBSERVATION (the decision exists;
 nothing feeds it and nothing pauses a schedule) · schedule-version STORAGE
 (the edit decision exists; nothing persists a history) · conditional Cron Loops · the Cron UI · token and provider-call
