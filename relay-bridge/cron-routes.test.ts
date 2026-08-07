@@ -698,6 +698,15 @@ describe('an operator can create, list and pause a schedule', () => {
     );
     expect(absentWorkspace?.status).toBe(422);
     expect(errorOf(absentWorkspace).message).toContain('Leaving it out');
+    // A wrong-TYPED workspace is told what it did, not what someone else did:
+    // one message for absent, one for blank, one for neither.
+    const numberWorkspace = await call(
+      { ...CREATE, binding: { ...CREATE.binding, workspaceId: 5 } },
+      { path: '/cron/schedules' },
+    );
+    expect(numberWorkspace?.status).toBe(422);
+    expect(errorOf(numberWorkspace).message).toContain('It is neither');
+    expect(errorOf(numberWorkspace).message).not.toContain('Leaving it out');
     // And the contract fields belong at the top level, not inside the binding,
     // where the tick already refuses them by name.
     for (const field of ['contractRef', 'contractBindingDigest']) {

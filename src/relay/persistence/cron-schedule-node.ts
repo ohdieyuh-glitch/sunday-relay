@@ -391,6 +391,15 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
     setPaused(scheduleId, paused, at) {
       const dir = dirFor(scheduleId);
       if (dir === null) return refuse(`"${scheduleId}" is not a usable schedule id.`);
+      // BEFORE THE LOCK, for the reason `edit` does it: `underLock` writes this
+      // instant verbatim as the lock owner's `acquiredAt`, and the stale-reclaim
+      // path interpolates it into a quarantine filename. Every caller in this
+      // repository passes the server clock, so this guards the store's API
+      // rather than a reachable defect — but `create` and `edit` both check it
+      // and this was the sibling left out.
+      if (readIsoInstantWithOffset(at) === null) {
+        return refuse('the pause instant must be an ISO-8601 instant carrying an explicit UTC offset.');
+      }
       return underLock(dir, at, () => {
         const current = replay(dir, scheduleId);
         if (current.kind === 'corrupt') return refuse(current.problem);

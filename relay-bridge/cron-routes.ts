@@ -252,12 +252,16 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   if (missingBinding.length > 0) {
     return err(422, 'validation_failed', `Missing or invalid fields: ${missingBinding.join(', ')}.`);
   }
-  // THE SAME FIVE FIELDS THE TICK NAMES. `contractRef` and
+  // THE TWO FIELDS THE TICK ALSO NAMES. `contractRef` and
   // `contractBindingDigest` are given at the top level, so ones sent INSIDE
   // `binding` were read by nobody and answered with a success — a field
   // accepted, discarded and reported as stored, which is what this route
   // refuses twenty lines above. Creation and the tick disagreeing about what
   // "the binding" contains is how the next reader learns the wrong shape.
+  //
+  // BY NAME, NOT BY CATEGORY, on both surfaces: an unrecognised key inside
+  // `binding` is still discarded silently here and at the tick. The two agree
+  // now; neither is exhaustive.
   const contractInBinding = ['contractRef', 'contractBindingDigest']
     .filter((f) => bindingBody !== null && typeof bindingBody === 'object'
       && (bindingBody as Record<string, unknown>)[f] !== undefined);
@@ -269,13 +273,19 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
 
   // STATED EXPLICITLY MEANS STATED. A project-level schedule has no workspace,
   // and `null` is how it says so — absent is not, and a blank string is not.
-  // The route used to accept both and normalise them to `null`, which the store
-  // refuses outright: two rules for one field, and the message here already
-  // promised the stricter one.
-  if (typeof workspaceRaw !== 'string' && workspaceRaw !== null) {
+  // A blank was already refused; ABSENT was accepted and normalised to `null`,
+  // which the store refuses outright — two rules for one field, and the message
+  // here already promised the stricter one.
+  //
+  // Each shape is told what IT did, not what some other caller might have done.
+  if (workspaceRaw === undefined) {
     return err(422, 'validation_failed',
       'binding.workspaceId must name a workspace or be null, stated explicitly. Leaving it out is '
       + 'not a way to say there is none.');
+  }
+  if (workspaceRaw !== null && typeof workspaceRaw !== 'string') {
+    return err(422, 'validation_failed',
+      'binding.workspaceId must be a string naming a workspace, or null. It is neither.');
   }
   if (typeof workspaceRaw === 'string' && workspaceRaw.trim() === '') {
     return err(422, 'validation_failed',

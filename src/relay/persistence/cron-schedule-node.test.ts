@@ -143,6 +143,17 @@ describe('a schedule is created, read back and listed', () => {
     }
   });
 
+  it('refuses a pause instant the lock would write verbatim', () => {
+    // `underLock` records it as the lock owner's `acquiredAt`, and the
+    // stale-reclaim path builds a quarantine filename from it. `create` and
+    // `edit` both check the instant; this was the sibling left out.
+    expect(store.create('s-pause', v()).ok).toBe(true);
+    const bad = store.setPaused('s-pause', true, 'not-a-time');
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.problem).toContain('ISO-8601');
+    expect(store.read('s-pause')?.paused).toBe(false);
+  });
+
   it('a version line that records no version object is CORRUPT, never a crash', () => {
     // `.version` was read off whatever the line carried, so a null threw out of
     // `inspect` — a crash where the store's own word is `corrupt`.
