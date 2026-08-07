@@ -1,4 +1,7 @@
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync,
+  rmSync, symlinkSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -74,7 +77,39 @@ describe('a schedule is created, read back and listed', () => {
   it('refuses a path-shaped id rather than touching disk with it', () => {
     const created = store.create('../escape', v());
     expect(created.ok).toBe(false);
-    expect(store.list()).toEqual([]);
+    // The old assertion here was vacuous: `../escape` targets root/escape,
+    // which list() never reads. Check the filesystem instead.
+    expect(existsSync(join(root, 'escape'))).toBe(false);
+    expect(existsSync(join(root, 'cron-schedules', '..', 'escape'))).toBe(false);
+  });
+
+  it('refuses a SYMLINKED schedule directory — a regex on the id is not containment', () => {
+    // Review wrote exactly this and watched a journal land outside the state
+    // root. Mutation check: dropping the realpath containment check writes
+    // versions.ndjson into `outside`.
+    const outside = mkdtempSync(join(tmpdir(), 'relay-outside-'));
+    try {
+      mkdirSync(join(root, 'cron-schedules'), { recursive: true });
+      symlinkSync(outside, join(root, 'cron-schedules', 'leak'));
+      const created = store.create('leak', v());
+      expect(created.ok).toBe(false);
+      expect(readdirSync(outside)).toEqual([]);
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses a first version that nobody authored, exactly as an edit is refused', () => {
+    const created = store.create('s', v({ authoredBy: '  ' }));
+    expect(created.ok).toBe(false);
+    if (!created.ok) expect(created.problem).toContain('who authored it');
+  });
+
+  it('refuses a first version whose number is not a version', () => {
+    for (const version of [-1, 1.5, Number.NaN]) {
+      expect(store.create(`s${Math.abs(Math.trunc(version)) || 0}x`, v({ version })).ok, String(version))
+        .toBe(false);
+    }
   });
 });
 
@@ -106,6 +141,50 @@ describe('the journal is the authority; the snapshot is a cache', () => {
     appendFileSync(journalPath('s'), '{"kind":"version","versi');
     const record = store.read('s');
     expect(record?.history).toHaveLength(2);
+  });
+
+  it('a malformed INTERIOR line is corruption, never a shorter history', () => {
+    // THE DEFECT REVIEW FOUND. Truncating there returned history [1], and the
+    // next edit then minted a SECOND version 2 — writing the very ambiguity
+    // planScheduleEdit exists to refuse. Mutation check: `break`ing on any
+    // line instead of only the last fails this and the next test.
+    store.create('s', v());
+    store.edit('s', edit(), []);
+    store.edit('s', edit({ cronExpression: '0 6 * * *' }), []);
+    const lines = readFileSync(journalPath('s'), 'utf8').split('\n').filter((l) => l !== '');
+    lines[1] = '{"kind":"version","tor';
+    writeFileSync(journalPath('s'), `${lines.join('\n')}\n`);
+
+    const inspected = store.inspect('s');
+    expect(inspected.kind).toBe('corrupt');
+    if (inspected.kind === 'corrupt') expect(inspected.problem).toContain('interior line 2');
+    expect(store.read('s')).toBeNull();
+  });
+
+  it('a corrupt history refuses an edit rather than minting a duplicate version', () => {
+    store.create('s', v());
+    store.edit('s', edit(), []);
+    store.edit('s', edit({ cronExpression: '0 6 * * *' }), []);
+    const lines = readFileSync(journalPath('s'), 'utf8').split('\n').filter((l) => l !== '');
+    lines[1] = 'torn';
+    writeFileSync(journalPath('s'), `${lines.join('\n')}\n`);
+
+    const result = store.edit('s', edit({ cronExpression: '0 5 * * *' }), []);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.problem).toContain('interior line');
+    // …and a paused flag after the tear is not silently read as running.
+    expect(store.inspect('s').kind).toBe('corrupt');
+  });
+
+  it('a journal with no version at all is CORRUPT, not missing', () => {
+    // Reachable: the file is created before the first line is written, so a
+    // crash between them leaves zero bytes. Review found that id stranded —
+    // list() showed it, read() said absent, create() said it existed.
+    mkdirSync(join(root, 'cron-schedules', 'ghost'), { recursive: true });
+    writeFileSync(journalPath('ghost'), '');
+    const inspected = store.inspect('ghost');
+    expect(inspected.kind).toBe('corrupt');
+    if (inspected.kind === 'corrupt') expect(inspected.problem).toContain('records no version');
   });
 
   it('the journal is appended BEFORE the snapshot is rewritten', () => {

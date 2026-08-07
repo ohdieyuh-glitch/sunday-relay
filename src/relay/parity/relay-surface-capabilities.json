@@ -761,8 +761,6 @@
       ],
       "sharedDomainReferences": [
         "src/relay/mission/loop/cron/cron-approvals.test.ts",
-        "src/relay/persistence/cron-schedule-node.test.ts",
-        "src/relay/persistence/cron-schedule-node.ts",
         "src/relay/mission/loop/cron/cron-approvals.ts",
         "src/relay/mission/loop/cron/cron-breakers.test.ts",
         "src/relay/mission/loop/cron/cron-breakers.ts",

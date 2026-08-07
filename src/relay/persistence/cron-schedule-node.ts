@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { appendLineDurable, readTextIfExists, writeFileAtomic } from './atomic-file';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync } from 'node:fs';
+import { join, sep } from 'node:path';
+import { appendLineDurable, fsyncDirBestEffort, readTextIfExists, writeFileAtomic } from './atomic-file';
+import { acquireRunLock } from './lock';
 import { planScheduleEdit } from '../mission/loop/cron/cron-versioning';
 import type { CronContractVersion, VersionedRun } from '../mission/loop/cron/cron-versioning';
 
@@ -29,6 +30,16 @@ import type { CronContractVersion, VersionedRun } from '../mission/loop/cron/cro
  * what that decision produced. Two implementations of one rule is the
  * divergence bug this repository keeps naming, and an authority rule is the
  * worst place to have two.
+ *
+ * AND IT FOLLOWS ITS SIBLINGS RATHER THAN INVENTING WEAKER RULES. Review
+ * found the first version diverging from the very modules it cited as
+ * precedent, in three ways that each turned corruption into a confident wrong
+ * answer: a malformed INTERIOR line truncated the history instead of
+ * reporting corruption (so the next edit minted a DUPLICATE version — the
+ * exact ambiguity `planScheduleEdit` exists to refuse); a symlinked schedule
+ * directory wrote outside the state root; and nothing took a lock, so two
+ * writers could brick a schedule permanently. `loop-run-node.ts` and
+ * `cron-claim-node.ts` already solved all three.
  */
 
 const SCHEDULES_DIR = 'cron-schedules';
@@ -51,11 +62,24 @@ export type ScheduleStoreOutcome<T> =
   | { readonly ok: true; readonly value: T }
   | { readonly ok: false; readonly problem: string };
 
+/**
+ * What a read found. `corrupt` is NOT `missing`: a journal whose interior is
+ * damaged has a history nobody can state, and answering with the prefix would
+ * report a schedule as being at a version its own record cannot support.
+ */
+export type ScheduleReadResult =
+  | { readonly kind: 'found'; readonly record: CronScheduleRecord }
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'corrupt'; readonly problem: string };
+
 export interface CronScheduleStore {
   /** Create a schedule with its first version. Refuses if it already exists. */
   create(scheduleId: string, first: CronContractVersion): ScheduleStoreOutcome<CronScheduleRecord>;
-  /** Replay the journal. `null` when the schedule does not exist. */
+  /** Replay the journal. `null` for missing OR corrupt — use `inspect` when
+   *  the difference matters, which it does before writing anything. */
   read(scheduleId: string): CronScheduleRecord | null;
+  /** The full answer, including corruption, which `read` cannot express. */
+  inspect(scheduleId: string): ScheduleReadResult;
   /** Every schedule id on disk, sorted. */
   list(): readonly string[];
   /**
@@ -79,34 +103,58 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
   const root = join(options.root, SCHEDULES_DIR);
   mkdirSync(root, { recursive: true, mode: 0o700 });
 
-  const dirFor = (scheduleId: string): string | null =>
-    SAFE_SCHEDULE_ID.test(scheduleId) ? join(root, scheduleId) : null;
+  /**
+   * The directory, or null when the id or the resolved path escapes.
+   * A regex on the id is NOT containment: review wrote a symlink into the
+   * schedules directory and this module happily wrote a journal outside the
+   * state root. `loop-run-node.ts` realpaths and re-checks; so does this now.
+   */
+  const dirFor = (scheduleId: string): string | null => {
+    if (!SAFE_SCHEDULE_ID.test(scheduleId)) return null;
+    const canonicalRoot = realpathSync(root);
+    const dir = join(canonicalRoot, scheduleId);
+    if (!(dir + sep).startsWith(canonicalRoot + sep)) return null;
+    if (existsSync(dir)) {
+      const real = realpathSync(dir);
+      if (!(real + sep).startsWith(canonicalRoot + sep)) return null;
+    }
+    return dir;
+  };
 
-  const replay = (dir: string): CronScheduleRecord | null => {
+  const replay = (dir: string, scheduleId: string): ScheduleReadResult => {
     const raw = readTextIfExists(join(dir, VERSIONS_JOURNAL));
-    if (raw === null) return null;
+    if (raw === null) return { kind: 'missing' };
+    const lines = raw.split('\n').filter((l) => l.trim() !== '');
     const history: CronContractVersion[] = [];
     let paused = false;
-    for (const line of raw.split('\n')) {
-      if (line.trim() === '') continue;
+    for (const [index, line] of lines.entries()) {
+      const isLast = index === lines.length - 1;
       let parsed: JournalLine;
       try {
         parsed = JSON.parse(line) as JournalLine;
       } catch {
-        // A torn tail is the last line only — appendLineDurable fsyncs each
-        // one — so a line that will not parse ends the replay rather than
-        // discrediting the versions already read.
-        break;
+        // ONLY A TORN TAIL IS RECOVERABLE. Anything earlier is corruption —
+        // the sibling's rule, verbatim. Truncating there let the next edit
+        // mint a second version N, which is the ambiguity the edit decision
+        // exists to refuse.
+        if (isLast) break;
+        return {
+          kind: 'corrupt',
+          problem: `Malformed interior line ${index + 1} of the version journal. Only a torn final `
+            + 'line is recoverable; earlier damage means the history cannot be stated.',
+        };
       }
       if (parsed.kind === 'version') history.push(parsed.version);
       else if (parsed.kind === 'paused') paused = parsed.paused;
     }
-    if (history.length === 0) return null;
-    return {
-      scheduleId: dir.slice(dir.lastIndexOf('/') + 1),
-      history,
-      paused,
-    };
+    if (history.length === 0) {
+      return {
+        kind: 'corrupt',
+        problem: 'The version journal exists but records no version. A schedule with no history '
+          + 'cannot be read, edited or paused, and it is not absent either.',
+      };
+    }
+    return { kind: 'found', record: { scheduleId, history, paused } };
   };
 
   const writeSnapshot = (dir: string, record: CronScheduleRecord): void => {
@@ -117,29 +165,84 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
 
   const refuse = <T>(problem: string): ScheduleStoreOutcome<T> => ({ ok: false, problem });
 
+  /** Every write holds the guarded run lock, as `cron-claim-node.ts` does.
+   *  Without one, two writers replay the same history and both append version
+   *  N+1 — and the duplicate bricks the schedule permanently. */
+  const underLock = <T>(
+    dir: string,
+    at: string,
+    body: () => ScheduleStoreOutcome<T>,
+  ): ScheduleStoreOutcome<T> => {
+    const acquired = acquireRunLock(dir, 'cron-schedule-write', () => at);
+    if (!acquired.ok) {
+      return refuse('The schedule is being written by another process, or its lock cannot be read. '
+        + 'Nothing was changed.');
+    }
+    try {
+      return body();
+    } finally {
+      try { acquired.value.lock.release(); } catch { /* contained */ }
+    }
+  };
+
+  const validateVersion = (version: CronContractVersion): string | null => {
+    if (!Number.isInteger(version.version) || version.version < 0) {
+      return `version must be a non-negative integer; got ${String(version.version)}.`;
+    }
+    if (version.authoredBy.trim() === '') {
+      return 'the first version must record who authored it, exactly as an edit must.';
+    }
+    return null;
+  };
+
   return {
     create(scheduleId, first) {
       const dir = dirFor(scheduleId);
       if (dir === null) {
-        return refuse(`"${scheduleId}" is not a usable schedule id; it becomes a path segment.`);
+        return refuse(`"${scheduleId}" is not a usable schedule id, or it resolves outside the `
+          + 'state root.');
       }
-      if (existsSync(join(dir, VERSIONS_JOURNAL))) {
-        return refuse(`A schedule named ${scheduleId} already exists. Creating would overwrite its `
-          + 'version history, which is the evidence explaining every run it has produced.');
+      const invalid = validateVersion(first);
+      if (invalid !== null) {
+        // `edit` refuses an unattributed version; `create` used to accept one,
+        // so a schedule could begin with a version nobody signed.
+        return refuse(`The first version is not usable: ${invalid}`);
       }
       mkdirSync(dir, { recursive: true, mode: 0o700 });
-      appendLineDurable(
-        join(dir, VERSIONS_JOURNAL),
-        JSON.stringify({ kind: 'version', version: first } satisfies JournalLine),
-      );
-      const record = { scheduleId, history: [first], paused: false };
-      writeSnapshot(dir, record);
-      return { ok: true, value: record };
+      return underLock(dir, first.authoredAt, () => {
+        const journal = join(dir, VERSIONS_JOURNAL);
+        // O_EXCL, not existsSync: the check-then-write was a race where the
+        // sibling claim adapter deliberately uses an exclusive create.
+        try {
+          closeSync(openSync(journal, 'wx', 0o600));
+        } catch {
+          return refuse(`A schedule named ${scheduleId} already exists. Creating would overwrite `
+            + 'its version history, which is the evidence explaining every run it has produced.');
+        }
+        appendLineDurable(
+          journal,
+          JSON.stringify({ kind: 'version', version: first } satisfies JournalLine),
+        );
+        // The journal's own directory entry must be durable too, or the file
+        // can vanish and take the authority with it.
+        fsyncDirBestEffort(dir);
+        const record = { scheduleId, history: [first], paused: false };
+        writeSnapshot(dir, record);
+        return { ok: true, value: record };
+      });
+    },
+
+    inspect(scheduleId) {
+      const dir = dirFor(scheduleId);
+      if (dir === null) return { kind: 'missing' };
+      return replay(dir, scheduleId);
     },
 
     read(scheduleId) {
       const dir = dirFor(scheduleId);
-      return dir === null ? null : replay(dir);
+      if (dir === null) return null;
+      const result = replay(dir, scheduleId);
+      return result.kind === 'found' ? result.record : null;
     },
 
     list() {
@@ -154,34 +257,48 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
     edit(scheduleId, proposed, runs) {
       const dir = dirFor(scheduleId);
       if (dir === null) return refuse(`"${scheduleId}" is not a usable schedule id.`);
-      const current = replay(dir);
-      if (current === null) return refuse(`There is no schedule named ${scheduleId} to edit.`);
+      return underLock(dir, proposed.authoredAt, () => {
+        const current = replay(dir, scheduleId);
+        if (current.kind === 'corrupt') return refuse(current.problem);
+        if (current.kind === 'missing') {
+          return refuse(`There is no schedule named ${scheduleId} to edit.`);
+        }
 
-      // THE ONE DECISION, not a second copy of it.
-      const decision = planScheduleEdit({ history: current.history, proposed, runs });
-      if (!decision.ok) return refuse(`${decision.refusal}: ${decision.problem}`);
+        // THE ONE DECISION, not a second copy of it.
+        const decision = planScheduleEdit({ history: current.record.history, proposed, runs });
+        if (!decision.ok) return refuse(`${decision.refusal}: ${decision.problem}`);
 
-      appendLineDurable(
-        join(dir, VERSIONS_JOURNAL),
-        JSON.stringify({ kind: 'version', version: decision.plan.nextVersion } satisfies JournalLine),
-      );
-      const record = { scheduleId, history: decision.plan.history, paused: current.paused };
-      writeSnapshot(dir, record);
-      return { ok: true, value: record };
+        appendLineDurable(
+          join(dir, VERSIONS_JOURNAL),
+          JSON.stringify({ kind: 'version', version: decision.plan.nextVersion } satisfies JournalLine),
+        );
+        const record = {
+          scheduleId,
+          history: decision.plan.history,
+          paused: current.record.paused,
+        };
+        writeSnapshot(dir, record);
+        return { ok: true, value: record };
+      });
     },
 
     setPaused(scheduleId, paused, at) {
       const dir = dirFor(scheduleId);
       if (dir === null) return refuse(`"${scheduleId}" is not a usable schedule id.`);
-      const current = replay(dir);
-      if (current === null) return refuse(`There is no schedule named ${scheduleId} to pause.`);
-      appendLineDurable(
-        join(dir, VERSIONS_JOURNAL),
-        JSON.stringify({ kind: 'paused', paused, at } satisfies JournalLine),
-      );
-      const record = { ...current, paused };
-      writeSnapshot(dir, record);
-      return { ok: true, value: record };
+      return underLock(dir, at, () => {
+        const current = replay(dir, scheduleId);
+        if (current.kind === 'corrupt') return refuse(current.problem);
+        if (current.kind === 'missing') {
+          return refuse(`There is no schedule named ${scheduleId} to pause.`);
+        }
+        appendLineDurable(
+          join(dir, VERSIONS_JOURNAL),
+          JSON.stringify({ kind: 'paused', paused, at } satisfies JournalLine),
+        );
+        const record = { ...current.record, paused };
+        writeSnapshot(dir, record);
+        return { ok: true, value: record };
+      });
     },
   };
 }
