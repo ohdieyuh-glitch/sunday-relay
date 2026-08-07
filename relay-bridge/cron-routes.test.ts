@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { handleCronRoute, type CronRouteRequest } from './cron-routes';
-import { createCronTickService, type CronTickService } from './cron-service';
+import {
+  createCronTickService, MAX_LISTED_SCHEDULES, type CronTickService,
+} from './cron-service';
 import { loopDigest, readLoopRun } from '../src/relay/mission/loop/runtime';
 
 /**
@@ -550,6 +552,22 @@ describe('an operator can create, list and pause a schedule', () => {
     expect(dataOf(listed).truncated).toBe(false);
   });
 
+  it('reports the REAL total when the listing is capped, and says it was capped', async () => {
+    // Both fields were previously asserted only against a single schedule,
+    // where `totalStored: slice(...).length` and a hardcoded `truncated: false`
+    // would pass identically. This crosses the boundary, which is the only
+    // place either field can be wrong.
+    const extra = MAX_LISTED_SCHEDULES; // plus the sched-triage the harness makes
+    for (let i = 0; i < extra; i += 1) {
+      const id = `bulk-${String(i).padStart(4, '0')}`;
+      expect(service.schedules.create(id, { ...STORED, authoredAt: T0 }).ok, id).toBe(true);
+    }
+    const listed = await call(undefined, { method: 'GET', path: '/cron/schedules' });
+    expect(dataOf(listed).totalStored).toBe(MAX_LISTED_SCHEDULES + 1);
+    expect(dataOf(listed).truncated).toBe(true);
+    expect((dataOf(listed).schedules as unknown[]).length).toBe(MAX_LISTED_SCHEDULES);
+  }, 30_000);
+
   it('creating requires explicit authorization, like a tick', async () => {
     const { authorized: _drop, ...withoutConsent } = CREATE;
     const created = await call(withoutConsent, { path: '/cron/schedules' });
@@ -585,10 +603,34 @@ describe('an operator can create, list and pause a schedule', () => {
     // checks pass — while being precisely the fixed offset the non-IANA
     // message says is not allowed. Such a schedule drifts an hour against its
     // author's wall clock twice a year, permanently.
-    const offset = await call({ ...CREATE, timeZone: 'Etc/GMT+5' }, { path: '/cron/schedules' });
-    expect(offset?.status).toBe(422);
-    expect(errorOf(offset).message).toContain('fixed offset');
-    expect(service.schedules.list()).toEqual(['sched-triage']);
+    // Every spelling Intl accepts, because the refusal tests the CANONICAL
+    // name: a case-sensitive pattern over the raw string refused one spelling
+    // and stored the identical zone under another.
+    for (const timeZone of ['Etc/GMT+5', 'etc/gmt+5', 'ETC/GMT+5', 'Etc/GMT-14']) {
+      const offset = await call({ ...CREATE, timeZone }, { path: '/cron/schedules' });
+      expect(offset?.status, timeZone).toBe(422);
+      expect(errorOf(offset).message, timeZone).toContain('fixed offset');
+    }
+    // A string that names NO zone gets the diagnosis for naming no zone, not
+    // the one for naming an offset.
+    const nonsense = await call({ ...CREATE, timeZone: 'Etc/GMT+05' }, { path: '/cron/schedules' });
+    expect(nonsense?.status).toBe(422);
+    expect(errorOf(nonsense).message).toContain('cannot resolve');
+    // And a real place still passes all of it.
+    expect((await call({ ...CREATE, timeZone: 'America/New_York' },
+      { path: '/cron/schedules' }))?.status).toBe(200);
+    expect(service.schedules.list()).toEqual(['sched-new', 'sched-triage']);
+  });
+
+  it('the tick refuses a stored fixed-offset zone, as its own message promises', async () => {
+    // A schedule written straight into the store — or created before creation
+    // learned to refuse these — would otherwise run under exactly the zone the
+    // tick's refusal text says it will not run.
+    expect(service.schedules.create('sched-drift',
+      { ...STORED, timeZone: 'Etc/GMT+5', authoredAt: T0 }).ok).toBe(true);
+    const ticked = await call({ ...BODY, scheduleId: 'sched-drift' });
+    expect(ticked?.status).toBe(422);
+    expect(errorOf(ticked).message).toContain('fixed offset');
   });
 
   it('refuses an unusable schedule id as a validation failure, not a conflict', async () => {

@@ -100,6 +100,24 @@ const sameMinute = (a: CronLocalMinute, b: CronLocalMinute): boolean =>
  * proposes, the round-trip disposes. Zero verified candidates IS the
  * spring-forward answer, two the fall-back one.
  */
+/**
+ * The zone's CANONICAL IANA name, or `null` when nothing can resolve it.
+ *
+ * A surface that wants to refuse a family of zones must test this, never the
+ * caller's spelling. Intl resolves zone names case-insensitively and through
+ * aliases, so `etc/gmt+5` and `ETC/GMT+5` both canonicalize to `Etc/GMT+5` —
+ * a pattern matched against the raw string refuses one spelling of a zone and
+ * accepts the same zone spelled differently, which review measured as a live
+ * bypass of exactly such a refusal.
+ */
+export function canonicalIanaZone(timeZone: string): string | null {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone }).resolvedOptions().timeZone;
+  } catch {
+    return null;
+  }
+}
+
 export function createIntlTimezonePort(): TimezonePort {
   const offsetAt = (utcMs: number, timeZone: string): number | null => {
     const local = localPartsAt(utcMs, timeZone);

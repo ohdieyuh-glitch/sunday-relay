@@ -9,7 +9,7 @@ import {
   type LoopOperationDeps,
 } from '../src/relay/mission/loop/runtime';
 import {
-  createIntlTimezonePort, runCronTick,
+  canonicalIanaZone, createIntlTimezonePort, runCronTick,
   type CronRunCreationPort, type CronTickInput, type CronTickReport,
 } from '../src/relay/mission/loop/cron';
 
@@ -54,10 +54,10 @@ export interface CronRunBinding {
  *
  * CRON_LOOPS.md's formula is
  * `digest(scheduleId ‖ contractVersion ‖ intendedLocal ‖ resolvedUtc)`, which
- * assumes `scheduleId` is globally unique. THE STORE ALLOCATES ONE PER STATE
- * ROOT and refuses to create over an existing id — but the claim markers live
- * in one flat namespace on the volume, and the binding below is not part of
- * the stored schedule. So two projects both
+ * assumes `scheduleId` is globally unique. NOTHING ALLOCATES ONE: the id is the
+ * caller's string, and the store only refuses a DUPLICATE within one state
+ * root. The claim markers live in one flat namespace on the volume, and the
+ * binding below is not part of the stored schedule. So two projects both
  * using "daily-triage" would share occurrence ids, and the first to tick
  * would durably mark the second's occurrences already-handled — silent
  * cross-tenant suppression, found by review.
@@ -77,8 +77,10 @@ export interface CronScheduleListing {
 }
 
 /** How many schedules one listing will replay. Chosen to bound the work, not
- *  because more cannot exist — `totalStored` always reports the real count. */
-const MAX_LISTED_SCHEDULES = 200;
+ *  because more cannot exist — `totalStored` always reports the real count.
+ *  EXPORTED so a test can reach the boundary: a cap no test can approach is a
+ *  cap nothing proves, and `truncated` would pass while hardcoded false. */
+export const MAX_LISTED_SCHEDULES = 200;
 
 export interface CronScheduleListingPage {
   readonly schedules: readonly CronScheduleListing[];
@@ -98,10 +100,11 @@ export interface CronTickService {
    *  the store separates `inspect` from `list` precisely because that
    *  difference is the thing an operator needs to see. */
   listSchedules(): CronScheduleListingPage;
-  /** Whether the timezone evaluator can actually answer for this zone. An
+  /** The zone's CANONICAL name, or null when no evaluator can resolve it. An
    *  IANA-SHAPED string is not an IANA zone: `America/Atlantis` matches the
-   *  pattern and no evaluator on earth can resolve it. */
-  zoneIsKnown(timeZone: string, at: string): boolean;
+   *  pattern and nothing can resolve it. Callers test the canonical name
+   *  because Intl accepts case variants and aliases of the same zone. */
+  canonicalZone(timeZone: string): string | null;
   createSchedule(
     scheduleId: string, first: CronContractVersion,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
@@ -248,7 +251,7 @@ export function createCronTickService(options: {
         }),
       };
     },
-    zoneIsKnown: (timeZone, at) => tz.localMinuteOf(at, timeZone) !== null,
+    canonicalZone: (timeZone) => canonicalIanaZone(timeZone),
     createSchedule: (scheduleId, first) => {
       const result = schedules.create(scheduleId, first);
       return result.ok ? { ok: true } : { ok: false, problem: result.problem };

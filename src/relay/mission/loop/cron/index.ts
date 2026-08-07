@@ -11,7 +11,7 @@
 export { cronMatches, parseCronExpression } from './cron-expression';
 export type { CronField, CronParseResult, CronSchedule } from './cron-expression';
 
-export { createIntlTimezonePort } from './timezone-port';
+export { createIntlTimezonePort, canonicalIanaZone } from './timezone-port';
 export type { CronLocalMinute, TimezonePort } from './timezone-port';
 
 export { dueCronOccurrences, MAX_CRON_WINDOW_MINUTES } from './cron-occurrences';

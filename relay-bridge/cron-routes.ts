@@ -108,13 +108,38 @@ export interface CronTickPort {
   /** What the durable store says about this schedule. */
   inspectSchedule(scheduleId: string): ScheduleReadResult;
   listSchedules(): CronScheduleListingPage;
-  zoneIsKnown(timeZone: string, at: string): boolean;
+  /** The zone's canonical IANA name, or null when nothing can resolve it. */
+  canonicalZone(timeZone: string): string | null;
   createSchedule(
     scheduleId: string, first: CronContractVersion,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
   setSchedulePaused(
     scheduleId: string, paused: boolean, at: string,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+}
+
+/**
+ * A zone that is really a fixed offset, refused wherever it appears.
+ *
+ * `Etc/GMT+5` is a REAL, resolvable zone and a fixed offset at once, so it
+ * satisfied both the pattern and the evaluator while being exactly what the
+ * non-IANA refusal says is not allowed. The test is on the CANONICAL name,
+ * never the caller's spelling: Intl resolves `etc/gmt+5` and `ETC/GMT+5` to
+ * the same zone, and a pattern over the raw string refused one spelling while
+ * accepting the others — measured in review as a live bypass.
+ *
+ * Applied at CREATION and at the TICK. A schedule created before this rule, or
+ * written straight into the store, would otherwise run under a zone the tick's
+ * own refusal text says it will not run.
+ */
+const FIXED_OFFSET_ZONE = /^Etc\/GMT[+-]\d{1,2}$/u;
+
+function refuseFixedOffsetZone(canonical: string, asWritten: string): ReviewerRouteResult | null {
+  if (!FIXED_OFFSET_ZONE.test(canonical)) return null;
+  const named = canonical === asWritten ? `"${safeText(asWritten)}"` : `"${safeText(asWritten)}" (${safeText(canonical)})`;
+  return err(422, 'validation_failed',
+    `${named} names a fixed offset, not a place. A recurring schedule needs a zone whose `
+    + 'daylight-saving rules can change with it.');
 }
 
 /** Creating or pausing a schedule changes what Relay will do unattended, so
@@ -161,22 +186,17 @@ function createSchedule(request: CronRouteRequest, ticks: CronTickPort): Reviewe
   // SHAPE IS NOT EXISTENCE. `America/Atlantis` satisfies the pattern and no
   // evaluator can resolve it, so accepting it stored a schedule whose every
   // future tick fails `unknown_timezone` — and with editing store-only and no
-  // delete route, that id was burned permanently. The authority that can
-  // answer is the same evaluator the tick uses.
-  // `Etc/GMT+5` is a real, resolvable zone AND a fixed offset — it satisfies
-  // both checks while being exactly what the refusal above says is not
-  // allowed. Left alone, such a schedule drifts an hour against its author's
-  // wall clock twice a year, permanently, with no edit or delete route.
-  if (/^Etc\/GMT[+-]\d{1,2}$/u.test(timeZone as string)) {
-    return err(422, 'validation_failed',
-      `"${safeText(timeZone)}" names a fixed offset, not a place. A recurring schedule needs a zone `
-      + 'whose daylight-saving rules can change with it.');
-  }
-  if (!ticks.zoneIsKnown(timeZone as string, request.now)) {
+  // delete route, that id was burned permanently. Resolvability is asked
+  // FIRST so a string naming nothing is told it names nothing, rather than
+  // being handed the diagnosis for a different problem.
+  const canonical = ticks.canonicalZone(timeZone as string);
+  if (canonical === null) {
     return err(422, 'validation_failed',
       `"${safeText(timeZone)}" is IANA-shaped but this server's timezone evaluator cannot resolve `
       + 'it. A schedule that could never be evaluated is not stored.');
   }
+  const offsetRefusal = refuseFixedOffsetZone(canonical, timeZone as string);
+  if (offsetRefusal !== null) return offsetRefusal;
   const parsed = parseCronExpression(cronExpression as string);
   if (!parsed.ok) return err(422, 'validation_failed', safeText(parsed.problem));
 
@@ -500,6 +520,16 @@ export async function handleCronRoute(
       + '(for example "America/Los_Angeles"), not a fixed offset: an offset cannot express '
       + 'daylight saving, so the schedule would drift an hour against the wall clock twice a year.',
     );
+  }
+  // AND THE REFUSAL ABOVE IS NOW TRUE. It promised that a fixed offset is not
+  // run, while `Etc/GMT+5` — a real zone — sailed past it. A schedule stored
+  // before creation learned to refuse these, or written straight into the
+  // store, is refused HERE rather than drifting an hour twice a year under a
+  // rule the same message claims to enforce.
+  const canonicalStored = ticks.canonicalZone(timeZone);
+  if (canonicalStored !== null) {
+    const offsetRefusal = refuseFixedOffsetZone(canonicalStored, timeZone);
+    if (offsetRefusal !== null) return offsetRefusal;
   }
 
   const parsed = parseCronExpression(cronExpression);
