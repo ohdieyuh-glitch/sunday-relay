@@ -298,12 +298,23 @@ export function checkLoopLimits(run: RelayLoopRun, elapsedMinutes: number): Loop
       return { limit: 'tokens', reason: 'reached', detail: `The token cap of ${budget.maxTotalTokens} has been reached.` };
     }
   }
-  if (budget.maxProviderCalls !== null && budget.providerCallsUsed >= budget.maxProviderCalls) {
-    return {
-      limit: 'provider_calls',
-      reason: 'reached',
-      detail: `The provider-call cap of ${budget.maxProviderCalls} has been reached.`,
-    };
+  if (budget.maxProviderCalls !== null) {
+    if (budget.providerCallsUsed === null) {
+      return {
+        limit: 'provider_calls',
+        reason: 'unaccountable',
+        detail:
+          `A provider-call cap of ${budget.maxProviderCalls} is set, but this run cannot account for the provider calls it has made. `
+          + 'Unknown usage is never treated as zero, so the run stops rather than continuing blind.',
+      };
+    }
+    if (budget.providerCallsUsed >= budget.maxProviderCalls) {
+      return {
+        limit: 'provider_calls',
+        reason: 'reached',
+        detail: `The provider-call cap of ${budget.maxProviderCalls} has been reached.`,
+      };
+    }
   }
   if (budget.maxSpendMicros !== null) {
     if (budget.knownSpendMicros === null) {

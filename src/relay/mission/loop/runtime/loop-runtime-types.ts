@@ -142,7 +142,12 @@ export interface RelayLoopBudgetState {
   readonly tokensHaveUnknownComponent: boolean;
 
   readonly maxProviderCalls: number | null;
-  readonly providerCallsUsed: number;
+  /** `null` means Unknown, exactly as `tokensUsed` does. A provider that does
+   *  not report how many calls it made leaves this unknowable, and an unknown
+   *  count must never present itself as a small one. */
+  readonly providerCallsUsed: number | null;
+  /** True once ANY iteration reported an unknown provider-call count. */
+  readonly providerCallsHaveUnknownComponent: boolean;
 
   readonly maxConsecutiveFailures: number;
   readonly consecutiveFailures: number;
@@ -394,6 +399,7 @@ export function emptyLoopBudget(input: {
     tokensHaveUnknownComponent: false,
     maxProviderCalls: input.maxProviderCalls,
     providerCallsUsed: 0,
+    providerCallsHaveUnknownComponent: false,
     maxConsecutiveFailures: input.maxConsecutiveFailures,
     consecutiveFailures: 0,
   };

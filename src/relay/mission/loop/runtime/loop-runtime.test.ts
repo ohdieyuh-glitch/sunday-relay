@@ -552,9 +552,45 @@ describe('unknown never becomes zero', () => {
     expect(run.budget.spendHasUnknownComponent).toBe(true);
     expect(run.budget.tokensUsed).toBeNull();
     expect(run.budget.tokensHaveUnknownComponent).toBe(true);
+    expect(run.budget.providerCallsUsed).toBeNull();
+    expect(run.budget.providerCallsHaveUnknownComponent).toBe(true);
     // Specifically NOT zero.
     expect(run.budget.knownSpendMicros).not.toBe('0');
     expect(run.budget.tokensUsed).not.toBe(0);
+    expect(run.budget.providerCallsUsed).not.toBe(0);
+  });
+
+  it('reads a counter the sanitizer DELETED as Unknown, never as NaN', () => {
+    // THE FAILURE THIS IS NAMED FOR, and the one an explicit `null` does not
+    // reach. The shared redaction rules drop any key containing "token", so a
+    // usage field can arrive MISSING rather than null — and arithmetic over
+    // `undefined` yields NaN, a number that compares, serializes, and defeats
+    // every limit check without anything looking wrong.
+    resetSequence();
+    const events = [
+      ...admissionEvents(),
+      event({ kind: 'loop.iteration_started', iterationId: 'lpi_1', ordinal: 1 }),
+      event({
+        kind: 'loop.iteration_finished',
+        iterationId: 'lpi_1',
+        execution: execution('lpi_1', {
+          // Fields OMITTED, not nulled — exactly what survives sanitization.
+          usage: { currency: null } as unknown as {
+            costMicros: string | null; currency: string | null;
+            modelUnits: number | null; providerCalls: number | null;
+          },
+        }),
+      }),
+    ];
+    const run = replayLoopJournal(seed(), events).run;
+    if (run === null) throw new Error('expected a run');
+    for (const total of [run.budget.tokensUsed, run.budget.providerCallsUsed]) {
+      expect(total).toBeNull();
+      expect(Number.isNaN(total ?? 0)).toBe(false);
+    }
+    expect(run.budget.knownSpendMicros).toBeNull();
+    expect(run.budget.tokensHaveUnknownComponent).toBe(true);
+    expect(run.budget.providerCallsHaveUnknownComponent).toBe(true);
   });
 
   it('keeps a known total known when every report is known', () => {

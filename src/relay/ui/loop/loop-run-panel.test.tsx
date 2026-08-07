@@ -54,6 +54,7 @@ function status(overrides: Partial<LoopStatusProjection> = {}): LoopStatusProjec
       maxTotalTokens: null,
       tokensUnknown: true,
       providerCallsUsed: 3,
+      providerCallsUnknown: false,
       maxProviderCalls: null,
     },
     blocker: null,

@@ -53,7 +53,7 @@ const projection = (): LoopStatusProjection => ({
     maxTotalDurationMinutes: 60, maxSpendMicros: null,
     knownSpendMicros: null, spendUnknown: true, currency: null,
     maxTotalTokens: null, tokensUsed: null, tokensUnknown: true,
-    maxProviderCalls: null, providerCallsUsed: 0,
+    maxProviderCalls: null, providerCallsUsed: 0, providerCallsUnknown: false,
   },
   blocker: null,
   latestFailure: null,

@@ -43,7 +43,7 @@ const BASE: LoopStatusProjection = {
     maxTotalDurationMinutes: 60, maxSpendMicros: '10000000',
     knownSpendMicros: '1000', spendUnknown: false, currency: 'USD',
     maxTotalTokens: 1000, tokensUsed: 100, tokensUnknown: false,
-    maxProviderCalls: 100, providerCallsUsed: 1,
+    maxProviderCalls: 100, providerCallsUsed: 1, providerCallsUnknown: false,
   },
   blocker: null,
   latestFailure: null,
@@ -184,6 +184,21 @@ describe('Unknown is rendered as Unknown', () => {
     expect(spend?.unknown).toBe(true);
     expect(tokens?.value).toBe('Unknown');
     expect(JSON.stringify(view.usageLines)).not.toContain('0.0000');
+  });
+
+  it('never turns an uncounted provider call into a number either', () => {
+    // Without this the row rendered `null / 100` and declared itself known —
+    // the confident number nobody measured that this projection forbids.
+    const view = projectLoopRunView({
+      status: {
+        ...BASE,
+        usage: { ...BASE.usage, providerCallsUsed: null, providerCallsUnknown: true },
+      },
+    });
+    const calls = view.usageLines.find((l) => l.label === 'Provider calls');
+    expect(calls?.value).toBe('Unknown');
+    expect(calls?.unknown).toBe(true);
+    expect(JSON.stringify(view.usageLines)).not.toContain('null');
   });
 
   it('shows a known total when it is known', () => {
