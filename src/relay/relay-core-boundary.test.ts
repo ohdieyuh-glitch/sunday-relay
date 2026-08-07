@@ -819,6 +819,60 @@ describe('Claude Code adapter boundaries (Prompt 8)', () => {
     expect(runner).not.toMatch(/shell:\s*true/);
   });
 
+  it('every TypeScript child-stdin writer under src and relay-bridge listens for a broken pipe', () => {
+    // THE DEFECT THIS PINS, and it is a DIVERGENCE rather than an oversight:
+    // the reviewer's runner attached this from the start, the Claude runner did
+    // not, and the MCP transport was cleared by an author who believed a write
+    // callback suppressed the stream's `error` event. It does not — Node
+    // delivers both — so a child exiting mid-write crashed the host with an
+    // uncaught EPIPE. A try/catch cannot catch it; the error is asynchronous.
+    //
+    // ENUMERATED FROM THE TREE, not from a list of directories. An earlier
+    // version checked two hardcoded connectors and would have stayed green
+    // while the third writer carried the live bug — which is exactly what
+    // happened.
+    // The lookbehind is TOKEN-BOUNDED. `(?<!process)` alone also excluded
+    // a writer whose variable name merely ENDS in those seven characters —
+    // `sub`+`process`, `child`+`process`, both ordinary Node names — so a writer
+    // could be skipped by a test whose whole job is to skip nothing. Named in
+    // pieces on purpose: spelled out, this comment matches the pattern it
+    // describes, and the test passed only because its own file is excluded by
+    // name.
+    const WRITE = /(?<!(?<![A-Za-z0-9_$])process)\.stdin[?]?\.write\(/;
+    const sources = [...walk(join(root, 'src')), ...walk(join(root, 'relay-bridge'))]
+      .filter((f) => !/\.test\.tsx?$/.test(f));
+    const writers = sources.filter((f) => WRITE.test(read(f)));
+    // If this ever finds nothing, the pattern has drifted, not the risk.
+    expect(
+      writers.length,
+      `expected at least 3 child-stdin writers, found ${writers.length} — if one was `
+      + 'legitimately removed, lower this floor deliberately rather than deleting the check',
+    ).toBeGreaterThanOrEqual(3);
+
+    const GUARD = /(?<!(?<![A-Za-z0-9_$])process)\.stdin[?]?\.(?:on|once|addListener)\(\s*['"]error['"]/;
+    for (const file of writers) {
+      const source = read(file);
+      const where = file.slice(root.length + 1);
+      expect(GUARD.test(source), `${where} writes to a child stdin without listening for 'error'`)
+        .toBe(true);
+      // …and the listener must precede the first write, or the window it
+      // exists to close is still open when the write happens.
+      expect(
+        source.search(GUARD),
+        `${where} attaches its stdin guard after the first write`,
+      ).toBeLessThan(source.search(WRITE));
+    }
+  });
+
+  it('the transport marks its broken-pipe failure as a consequence', () => {
+    // The rule that lets a later observation replace it is unit-tested; THIS
+    // is the wiring, and without it that rule never fires. Removing the marker
+    // failed no test until this one existed.
+    const transport = read(relay(join('mcp', 'transports', 'stdio-process-transport.ts')));
+    const handler = transport.slice(transport.indexOf("child.stdin.on('error'"));
+    expect(handler.slice(0, 600)).toContain('CONSEQUENTIAL_DETAIL');
+  });
+
   it('the adapter strips API-key / provider credentials from the child environment', () => {
     const env = read(join(claudeDir, 'environment.ts'));
     expect(env).toContain('ANTHROPIC_API_KEY');

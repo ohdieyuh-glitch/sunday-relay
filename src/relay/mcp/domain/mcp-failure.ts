@@ -150,3 +150,34 @@ export const mcpFail = <T = never>(failure: McpFailure): McpOutcome<T> => ({ ok:
 /** True when the category forbids ever recording the invocation as completed. */
 export const forbidsSuccess = (category: McpFailureCategory): boolean =>
   MCP_NEVER_SUCCESS_CATEGORIES.includes(category);
+
+/**
+ * A failure the reporter knows is a CONSEQUENCE of something not yet observed.
+ *
+ * The transport notices a broken pipe before the process object reports why the
+ * pipe broke, so its failure is real but provisional: whatever the exit says
+ * next — a signal, an exit code — describes the same event better.
+ */
+export const CONSEQUENTIAL_DETAIL = 'consequence: observed by the writer before the process reported';
+
+/**
+ * Which of two fatal conditions describes what actually happened.
+ *
+ * FIRST WINS, because a crash followed by a pipe error should report the
+ * crash — the cause, not its consequence. First-wins ALONE stopped delivering
+ * that rule once the transport began reporting broken pipes: a server dying
+ * mid-write emits the pipe error BEFORE `exit` — measured 5 of 5 — so the
+ * consequence latched first and whatever the exit knew was discarded.
+ *
+ * So a failure MARKED as a consequence yields to the next observation. The rule
+ * is general on purpose: an earlier version replaced only a `process_crashed`,
+ * which recovered the signal and still lost the exit CODE of a server that died
+ * without one — fixing the instance and leaving the class.
+ */
+export function preferredFailure(
+  current: McpFailure | null, next: McpFailure,
+): McpFailure {
+  if (current === null) return next;
+  if (current.details?.includes(CONSEQUENTIAL_DETAIL) === true) return next;
+  return current;
+}
