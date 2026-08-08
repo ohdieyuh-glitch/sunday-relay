@@ -1,6 +1,7 @@
+import { randomBytes } from 'node:crypto';
 import {
   closeSync, fsyncSync, linkSync, mkdirSync, openSync, readdirSync, realpathSync,
-  unlinkSync, writeSync,
+  rmSync, unlinkSync, writeSync,
 } from 'node:fs';
 import { join, sep } from 'node:path';
 import { fsyncDirBestEffort, readTextIfExists } from './atomic-file';
@@ -102,6 +103,19 @@ export interface BetaEnrolmentStore {
    * genuinely zero — a wave nobody has joined.
    */
   countFor(wave: RelayBetaWave): number | null;
+  /**
+   * Remove one enrolment, freeing its seat.
+   *
+   * THE RECOVERY PATH A CONTROLLED BETA CANNOT DO WITHOUT. Review filled all
+   * one hundred seats with anonymous requests in under a second and found no
+   * way back: the only remedy was deleting files on the volume by hand. A cap
+   * that can be consumed and never released is a denial of service with a
+   * seat count.
+   *
+   * `removed: false` for a participant that was not there is the truth, not a
+   * failure — the seat is free either way.
+   */
+  remove(participantId: string, wave: RelayBetaWave): { readonly ok: boolean; readonly removed: boolean };
 }
 
 export function createBetaEnrolmentStore(options: { readonly root: string }): BetaEnrolmentStore {
@@ -121,15 +135,28 @@ export function createBetaEnrolmentStore(options: { readonly root: string }): Be
     } catch {
       root = options.root;
     }
+    const inside = (path: string): boolean => (`${path}${sep}`).startsWith(`${root}${sep}`);
     const dir = join(root, ENROLMENTS_DIR, wave);
-    let resolved = dir;
     try {
-      resolved = realpathSync(dir);
+      return inside(realpathSync(dir)) ? realpathSync(dir) : null;
     } catch {
-      // Not created yet: the joined path is inside by construction.
-      return dir;
+      /**
+       * NOT CREATED YET IS NOT "INSIDE BY CONSTRUCTION", and an earlier comment
+       * here said it was. If an INTERMEDIATE component is a symlink — an
+       * operator moving `beta-enrollments` onto another disk is enough —
+       * `realpathSync` throws ENOENT for the leaf, and `mkdirSync(recursive)`
+       * then follows the link and writes outside the state root while
+       * reporting `created`. So the nearest EXISTING ancestor is resolved and
+       * re-checked instead.
+       */
+      const parent = join(root, ENROLMENTS_DIR);
+      try {
+        return inside(realpathSync(parent)) ? dir : null;
+      } catch {
+        // Neither exists yet; the root itself was resolved above.
+        return dir;
+      }
     }
-    return (`${resolved}${sep}`).startsWith(`${root}${sep}`) ? resolved : null;
   };
 
   const readOne = (dir: string, file: string): BetaEnrollment | null => {
@@ -178,9 +205,20 @@ export function createBetaEnrolmentStore(options: { readonly root: string }): Be
 
       const file = join(dir, `${participantId}.json`);
       const record: BetaEnrollment = { participantId, wave, enrolledAt: at };
-      // A DISTINCT TEMP PER WRITER, so two concurrent enrolments for the same
-      // participant cannot share one and tear each other's contents.
-      const temp = join(dir, `${participantId}.json.tmp-${String(process.pid)}-${at.replace(/[:.]/g, '-')}`);
+      /**
+       * A DISTINCT TEMP PER WRITER — and `pid` + instant is NOT distinct. Two
+       * threads in one process, or two containers sharing the volume (separate
+       * PID namespaces routinely hand both the same low pid) with requests in
+       * the same millisecond, collided: the loser's `openSync` got EEXIST, its
+       * error handler unlinked the WINNER'S in-flight temp, and review measured
+       * 256 of 400 participants silently lost. Random bytes cannot collide by
+       * construction.
+       */
+      const temp = join(dir, `${participantId}.json.tmp-${randomBytes(8).toString('hex')}`);
+      // Only unlink a temp THIS call created; otherwise an EEXIST from the
+      // temp open destroys another writer's work and is then misreported as
+      // an occupied record.
+      let created = false;
 
       try {
         // INSIDE the try: a read-only or full volume is a refusal this Result
@@ -188,6 +226,7 @@ export function createBetaEnrolmentStore(options: { readonly root: string }): Be
         mkdirSync(dir, { recursive: true, mode: 0o700 });
 
         const fd = openSync(temp, 'wx', 0o600);
+        created = true;
         try {
           // ALL-OR-NOTHING and DURABLE before it is visible under its real
           // name. A short write is a failed write, not a truncated record
@@ -212,8 +251,9 @@ export function createBetaEnrolmentStore(options: { readonly root: string }): Be
         fsyncDirBestEffort(dir);
         return { ok: true, outcome: 'created', enrollment: record };
       } catch (error) {
-        // Never leave a temp behind to be counted or read as a record.
-        try { unlinkSync(temp); } catch { /* already gone */ }
+        // Never leave a temp behind to be counted or read as a record — but
+        // only ours.
+        if (created) { try { unlinkSync(temp); } catch { /* already gone */ } }
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
           return { ok: false, problem: 'The enrolment could not be written durably.' };
         }
@@ -242,6 +282,24 @@ export function createBetaEnrolmentStore(options: { readonly root: string }): Be
         if (record !== null) out.push(record);
       }
       return out;
+    },
+
+    remove(participantId, wave) {
+      if (!isUsableParticipantId(participantId)) return { ok: false, removed: false };
+      const dir = dirFor(wave);
+      if (dir === null) return { ok: false, removed: false };
+      const file = join(dir, `${participantId}.json`);
+      try {
+        // `rmSync` with force: absent is success, because the seat is free
+        // either way and reporting a failure would invite a retry loop.
+        const existed = readOne(dir, `${participantId}.json`) !== null
+          || readTextIfExists(file) !== null;
+        rmSync(file, { force: true });
+        fsyncDirBestEffort(dir);
+        return { ok: true, removed: existed };
+      } catch {
+        return { ok: false, removed: false };
+      }
     },
 
     countFor(wave) {

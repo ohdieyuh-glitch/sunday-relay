@@ -101,8 +101,7 @@ config, so "all waves are not_open" is true only because nothing configures one)
 And four more the first version of this list did not disclose, each needed in
 week one of a real beta:
 
-**REVOCATION** — `BetaEnrollment` has no `revoked` state, so removing one
-participant means closing the wave for everyone · **EXPIRY** — no `endsAt`, and
+**EXPIRY** — no `endsAt`, and
 no clock to compare one against · **PROVENANCE** — `BetaWaveConfig` records
 neither who opened a wave nor when, although this document calls a wave "a
 decision someone made" · **a BLOCKLIST**.
@@ -230,3 +229,35 @@ refused with **the gate's own reason** — `not_enrolled`, `wave_full`,
 `wave_not_open`, `occupancy_unknown` — because "you never asked", "we are full"
 and "it has not opened yet" are three different things for the person being
 turned away to do next.
+
+## What stops a stranger consuming the wave
+
+Review filled all one hundred production seats with **anonymous requests in 671
+milliseconds**, and found no way back: every real customer was number 101,
+forever, and the only remedy was deleting files on the volume by hand. Seats
+could even be consumed while the wave was still `not_open`, so the beta would
+open already full.
+
+Two things close that, and neither is a complete answer:
+
+**The public route refuses a NEW request once the wave is full** — `429`, and it
+records nothing. Someone who already holds a seat is still answered, because
+they do hold it and saying otherwise would be false. Permanent destruction
+becomes a bounded refusal.
+
+**A seat can be given back.** `store.remove(participantId, wave)` frees one, and
+`removed: false` for someone who was never there is the truth rather than a
+failure — the seat is free either way. Revocation comes off the
+not-implemented list.
+
+**The public route is no longer a membership oracle.** Its body is identical
+whether the request was a first or a repeat, and it echoes the *request's*
+instant rather than the stored one. The old body differed on `alreadyRequested`
+and returned the stored `enrolledAt` — so anyone could ask "is this id in the
+beta, and when did they join?", and since that instant orders the queue, the
+answer also leaked their seat position. Probing was not passive either: a miss
+created an enrolment, so enumeration *was* the exhaustion attack.
+
+**Still missing, and required before the flag is set in production:** a per-IP
+**rate limit** on `POST /beta/request`, and a **blocklist**. The cap bounds the
+damage; it does not stop a determined caller filling the wave with distinct ids.

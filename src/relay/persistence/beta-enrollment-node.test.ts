@@ -212,7 +212,7 @@ describe('a record is all-or-nothing and durable before it is visible', () => {
     expect(files.some((f) => f.includes('.tmp'))).toBe(false);
   });
 
-  it('a FAILED write is reported as failed and leaves nothing enrolled', () => {
+  it.skipIf(process.getuid?.() === 0)('a FAILED write is reported as failed and leaves nothing enrolled', () => {
     // The mutant that survived every earlier test: a non-EEXIST failure
     // announced as `created`. A read-only wave directory is the realistic
     // Railway shape — a full or read-only volume.
@@ -221,8 +221,11 @@ describe('a record is all-or-nothing and durable before it is visible', () => {
     chmodSync(dir, 0o500);
     try {
       const result = store.enrol('alice', 'wave_0', T);
-      // Root ignores the mode; skip rather than assert a false pass.
-      if (result.ok) return;
+      // ASSERTED UNCONDITIONALLY. The earlier `if (result.ok) return;` was an
+      // escape hatch for running as root that a LYING implementation also
+      // satisfied — the mutant reporting a failed write as `created` exited
+      // this test green. Root is skipped at the `it`, so the assertion here
+      // can only pass by being true.
       expect(result.ok).toBe(false);
       expect(store.list('wave_0')).toEqual([]);
     } finally {
@@ -247,12 +250,10 @@ describe('neither enrol nor list throws where the contract says it refuses', () 
     expect(() => store.enrol('other', 'wave_0', T)).not.toThrow();
   });
 
-  it('a read-only volume refuses rather than throwing out of the Result type', () => {
+  it.skipIf(process.getuid?.() === 0)('a read-only volume refuses rather than throwing out of the Result type', () => {
     chmodSync(root, 0o500);
     try {
-      const result = store.enrol('alice', 'wave_0', T);
-      if (result.ok) return; // running as root
-      expect(result.ok).toBe(false);
+      expect(store.enrol('alice', 'wave_0', T).ok).toBe(false);
     } finally {
       chmodSync(root, 0o700);
     }
@@ -294,5 +295,56 @@ describe('the wave directory is contained, not merely well-named', () => {
     } finally {
       rmSync(outside, { recursive: true, force: true });
     }
+  });
+});
+
+describe('a seat can be given back', () => {
+  it('removing an enrolment frees the seat for the next person', () => {
+    // Review filled every seat anonymously and found no way back: the only
+    // remedy was deleting files on the volume by hand.
+    store.enrol('squatter', 'wave_0', '2026-08-04T00:00:00.000Z');
+    store.enrol('real', 'wave_0', '2026-08-05T00:00:00.000Z');
+    const waves = [{ wave: 'wave_0' as const, state: 'open' as const, seats: 1 }];
+    const before = decideBetaAccess({
+      participantId: 'real', enrollments: store.list('wave_0'), waves,
+      occupancy: { wave_0: store.countFor('wave_0') },
+    });
+    expect(before.admitted).toBe(false);
+
+    expect(store.remove('squatter', 'wave_0')).toEqual({ ok: true, removed: true });
+    expect(store.countFor('wave_0')).toBe(1);
+
+    const after = decideBetaAccess({
+      participantId: 'real', enrollments: store.list('wave_0'), waves,
+      occupancy: { wave_0: store.countFor('wave_0') },
+    });
+    expect(after.admitted).toBe(true);
+  });
+
+  it('removing someone who was never there is the truth, not a failure', () => {
+    expect(store.remove('ghost', 'wave_0')).toEqual({ ok: true, removed: false });
+  });
+
+  it('refuses an unusable id or an unknown wave rather than touching the volume', () => {
+    expect(store.remove('../../etc/passwd', 'wave_0').ok).toBe(false);
+    expect(store.remove('alice', 'wave_9' as never).ok).toBe(false);
+  });
+});
+
+describe('two writers sharing a pid do not destroy each other', () => {
+  it('a stale temp from another writer is not deleted, and is not read as a record', () => {
+    // The temp name used to be pid+instant, so a second writer's EEXIST made
+    // it unlink the FIRST writer's in-flight temp and then report an occupied
+    // record. Review measured 256 of 400 participants silently lost.
+    const dir = join(root, 'beta-enrollments', 'wave_0');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'alice.json.tmp-deadbeefdeadbeef'), '{"half":');
+
+    const result = store.enrol('alice', 'wave_0', T);
+    expect(result.ok).toBe(true);
+    // The other writer's temp survives, and is invisible to both readers.
+    expect(readdirSync(dir).some((f) => f.includes('.tmp-deadbeef'))).toBe(true);
+    expect(store.list('wave_0').map((e) => e.participantId)).toEqual(['alice']);
+    expect(store.countFor('wave_0')).toBe(1);
   });
 });

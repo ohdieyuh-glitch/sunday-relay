@@ -116,20 +116,57 @@ export async function handleBetaRoute(
         'A participantId is required, matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$.');
     }
 
+    /**
+     * THE WAVE CANNOT BE CONSUMED BY STRANGERS.
+     *
+     * Review filled all one hundred seats with anonymous requests in 671 ms and
+     * found no way back — every real customer was then number 101, forever, and
+     * the only remedy was deleting files on the volume by hand. Seats could
+     * even be consumed while the wave was still `not_open`, so the founder
+     * would open a wave already full of bots.
+     *
+     * A NEW participant is refused once the wave is full; an EXISTING one is
+     * still answered, because they already hold their seat and telling them
+     * otherwise would be false. This turns permanent destruction into a bounded
+     * refusal — and it is a bound, not a fix: a rate limit and a blocklist are
+     * named in BETA_WAVES.md as still missing.
+     */
+    const configured = request.waves.find((w) => w.wave === PUBLIC_SIGNUP_WAVE);
+    const taken = store.countFor(PUBLIC_SIGNUP_WAVE);
+    const held = store.list(PUBLIC_SIGNUP_WAVE)
+      .some((e) => e.participantId === participantId);
+    if (!held) {
+      if (configured === undefined) {
+        return err(503, 'beta_not_ready', 'No wave is configured to receive requests.');
+      }
+      if (taken === null) {
+        // Recording against a count nobody has is how the cap stops existing.
+        return err(503, 'beta_not_ready', 'Relay cannot count the wave, so it will not record against it.');
+      }
+      if (taken >= configured.seats) {
+        return err(429, 'wave_full', 'This wave has no seats left, so no new request is recorded.');
+      }
+    }
+
     const result = store.enrol(participantId, PUBLIC_SIGNUP_WAVE, request.now);
     if (!result.ok) return err(422, 'enrolment_failed', safeText(result.problem));
 
     /**
      * A REQUEST IS NOT AN ADMISSION, and the response says so in the same
-     * breath rather than leaving a caller to infer it. `recorded` is the only
-     * fact this route establishes; whether it leads anywhere is the gate's
-     * answer, asked separately and at the time it matters.
+     * breath rather than leaving a caller to infer it.
+     *
+     * IT IS ALSO NOT AN ORACLE. The body is IDENTICAL whether this was a first
+     * request or a repeat, and it echoes the REQUEST's instant rather than the
+     * stored one. Review used the old response to ask "is <id> in the beta, and
+     * exactly when did they join?" — and since `enrolledAt` orders the queue,
+     * the answer leaked their seat position too. Probing was not even passive:
+     * a miss created an enrolment, so enumeration was also the exhaustion
+     * attack. The operator route still distinguishes the two.
      */
     return ok({
       recorded: true,
-      alreadyRequested: result.outcome === 'already_enrolled',
       wave: PUBLIC_SIGNUP_WAVE,
-      requestedAt: result.enrollment.enrolledAt,
+      receivedAt: request.now,
       admitted: false,
       note: 'Requesting access is recorded, not granted. Admission is decided separately '
         + 'and is capped; this response never means you may use Relay.',

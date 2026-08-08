@@ -62,15 +62,13 @@ describe('anyone may ask, and asking admits nobody', () => {
     expect(result?.status).toBe(200);
   });
 
-  it('a repeat request is recorded once and says so', async () => {
+  it('a repeat request is recorded once', async () => {
     await call('POST', '/beta/request', { body: { participantId: 'alice' } });
     const again = await call('POST', '/beta/request', {
       body: { participantId: 'alice' }, now: '2026-08-09T00:00:00.000Z',
     });
     const data = (again?.body as { data: Record<string, unknown> }).data;
-    expect(data.alreadyRequested).toBe(true);
-    // The ORIGINAL instant — a retry must not move a participant's place.
-    expect(data.requestedAt).toBe(T);
+    expect(data.recorded).toBe(true);
     expect(store.countFor('wave_0')).toBe(1);
   });
 
@@ -132,19 +130,23 @@ describe('the 100-seat cap is enforced by the route, not merely configured', () 
         now: `2026-08-08T10:${String(Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}.000Z`,
       });
     }
-    expect(store.countFor('wave_0')).toBe(101);
+    // THE HUNDRED-AND-FIRST NEVER GOT A RECORD. The cap is now enforced at
+    // signup too, so a stranger cannot consume a seat they can never use.
+    expect(store.countFor('wave_0')).toBe(100);
+    expect(store.list('wave_0').some((e) => e.participantId === 'p100')).toBe(false);
 
     const hundredth = await call('POST', '/beta/access', {
       ...asOperator, body: { participantId: 'p099' },
     });
     expect((hundredth?.body as { data: { admitted: boolean } }).data.admitted).toBe(true);
 
+    // And the gate agrees about the one that was turned away at the door.
     const overflow = await call('POST', '/beta/access', {
       ...asOperator, body: { participantId: 'p100' },
     });
     const data = (overflow?.body as { data: Record<string, unknown> }).data;
     expect(data.admitted).toBe(false);
-    expect(data.reason).toBe('wave_full');
+    expect(data.reason).toBe('not_enrolled');
   });
 });
 
@@ -214,5 +216,62 @@ describe('opening the wave is a deliberate act, never a side effect of deploying
     const data = (result?.body as { data: Record<string, unknown> }).data;
     expect(data.admitted).toBe(false);
     expect(data.reason).toBe('wave_not_open');
+  });
+});
+
+describe('strangers cannot consume the wave, and cannot read it back', () => {
+  const SEATS_3: BetaWaveConfig[] = [{ wave: 'wave_0', state: 'open', seats: 3 }];
+
+  it('refuses a NEW request once the wave is full, instead of recording it', async () => {
+    // Review filled all 100 production seats anonymously in 671ms; every real
+    // customer was then number 101, forever, with no in-product remedy.
+    for (const id of ['a', 'b', 'c']) {
+      await call('POST', '/beta/request', { body: { participantId: id }, waves: SEATS_3 });
+    }
+    expect(store.countFor('wave_0')).toBe(3);
+
+    const overflow = await call('POST', '/beta/request', {
+      body: { participantId: 'bot' }, waves: SEATS_3,
+    });
+    expect(overflow?.status).toBe(429);
+    // THE SEAT WAS NOT TAKEN. A refusal that still records is not a refusal.
+    expect(store.countFor('wave_0')).toBe(3);
+    expect(store.list('wave_0').some((e) => e.participantId === 'bot')).toBe(false);
+  });
+
+  it('still answers someone who ALREADY holds a seat in a full wave', async () => {
+    for (const id of ['a', 'b', 'c']) {
+      await call('POST', '/beta/request', { body: { participantId: id }, waves: SEATS_3 });
+    }
+    const again = await call('POST', '/beta/request', {
+      body: { participantId: 'a' }, waves: SEATS_3,
+    });
+    // They already hold it; telling them the wave is full would be false.
+    expect(again?.status).toBe(200);
+  });
+
+  it('cannot be used to ask whether someone is already in the beta', async () => {
+    // The old body differed on `alreadyRequested` and echoed the STORED
+    // instant, so anyone could ask "is <id> enrolled, and when did they join?"
+    // — and `enrolledAt` orders the queue, so that leaked their seat position.
+    await call('POST', '/beta/request', { body: { participantId: 'known' } });
+    const known = await call('POST', '/beta/request', {
+      body: { participantId: 'known' }, now: '2026-12-25T00:00:00.000Z',
+    });
+    const unknown = await call('POST', '/beta/request', {
+      body: { participantId: 'unknown' }, now: '2026-12-25T00:00:00.000Z',
+    });
+    expect(known?.body).toEqual(unknown?.body);
+    // And it echoes the REQUEST's instant, never the stored one.
+    expect((known?.body as { data: { receivedAt: string } }).data.receivedAt)
+      .toBe('2026-12-25T00:00:00.000Z');
+  });
+
+  it('records nothing against a count it does not have', async () => {
+    const blind = { ...store, countFor: () => null };
+    const result = await call('POST', '/beta/request', {
+      body: { participantId: 'alice' },
+    }, blind as typeof store);
+    expect(result?.status).toBe(503);
   });
 });
