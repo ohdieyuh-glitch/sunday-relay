@@ -184,12 +184,34 @@ it **only when that user's setting is actually on**. Without a handler the
 picker draws no input at all: a control that cannot act is not drawn, the same
 rule the run panel and the MCP settings surface hold.
 
+## The choice is remembered
+
+`RelayPreviewApp` supplies `onSelectStageBackdrop` and stores the answer on
+`RelayAppData.stageBackdrop`, beside the colorway — the same store, the same
+localStorage envelope, the same commit path. It is **scenery in the store as
+well as on the stage**: it gates nothing, enters no mission record, and
+choosing one commits nothing else, which is asserted rather than asserted-of.
+
+Two things a stored preference has to survive, both tested:
+
+- **A payload written before this field existed.** The structural check does
+  NOT require `stageBackdrop`, because requiring it would fail the check and
+  recover to empty — discarding a user's real projects to recover a piece of
+  scenery. Absent means no scene, which is exactly what those builds showed.
+- **A backdrop this build does not have**, from a newer or forked build. It
+  normalizes to None on load rather than to `jungle`, the rule
+  `resolveBackdrop` already held: substituting a different scene would be the
+  surface deciding something the user did not.
+
+`null` here is a CHOICE ("None"), not a missing value, so no surface renders
+it as Unknown.
+
 ## Not implemented
 
 Parallax content for the `far` layer · the Leopard, cubs, vehicle and
-transformation sprites · any cinematic sequence · **persistence of the backdrop
-choice** (the picker reports a selection and changes the scene; no shipped host
-stores it, so a reload returns to None).
+transformation sprites · any cinematic sequence · carrying the choice
+BETWEEN browsers (it is a local preference, stored per browser, and no
+account syncs it).
 
 Two things are asserted where the decision lives rather than in a browser,
 because jsdom computes no cascade and reports `clientWidth === 0`: that `.rst`

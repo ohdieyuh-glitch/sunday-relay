@@ -150,6 +150,71 @@ describe('persistence and recovery', () => {
     expect(() => store.init()).not.toThrow();
     expect(store.listProjects()).toEqual([]);
   });
+
+  it('the chosen backdrop survives a reload', () => {
+    const backing = memStorage();
+    const { store } = freshStore(backing);
+    expect(store.getState().stageBackdrop).toBeNull();
+    store.setStageBackdrop('space_station');
+
+    const reloaded = createRelayAppStore(createRelayAppStorage(backing));
+    reloaded.init();
+    expect(reloaded.getState().stageBackdrop).toBe('space_station');
+  });
+
+  it('a store written before backdrops existed keeps its projects and shows no scene', () => {
+    const backing = memStorage();
+    const { store } = freshStore(backing);
+    store.createDraftFromRequest('Older build');
+
+    // Exactly what a pre-backdrop build wrote: the same schema version, and no
+    // `stageBackdrop` key at all. Requiring the field would discard this user's
+    // real project to recover a piece of scenery.
+    const stored = JSON.parse(backing.getItem(RELAY_APP_STORAGE_KEY)!) as Record<string, unknown>;
+    delete stored.stageBackdrop;
+    backing.setItem(RELAY_APP_STORAGE_KEY, JSON.stringify(stored));
+
+    const reloaded = createRelayAppStore(createRelayAppStorage(backing));
+    reloaded.init();
+    expect(reloaded.listProjects()).toHaveLength(1);
+    // None is what those builds showed, so it is what they keep showing.
+    expect(reloaded.getState().stageBackdrop).toBeNull();
+  });
+
+  it('a backdrop this build does not have becomes None, never another scene', () => {
+    const backing = memStorage();
+    const { store } = freshStore(backing);
+    store.createDraftFromRequest('Newer build wrote this');
+
+    for (const foreign of ['volcano', '', 42, null, { id: 'jungle' }]) {
+      const stored = JSON.parse(backing.getItem(RELAY_APP_STORAGE_KEY)!) as Record<string, unknown>;
+      stored.stageBackdrop = foreign;
+      backing.setItem(RELAY_APP_STORAGE_KEY, JSON.stringify(stored));
+
+      const reloaded = createRelayAppStore(createRelayAppStorage(backing));
+      reloaded.init();
+      // Substituting a real scene would be the surface deciding something the
+      // user did not — and the project must survive either way.
+      expect(reloaded.getState().stageBackdrop, JSON.stringify(foreign)).toBeNull();
+      expect(reloaded.listProjects()).toHaveLength(1);
+    }
+  });
+
+  it('scenery is not a mission fact: choosing one commits nothing else', () => {
+    const backing = memStorage();
+    const { store } = freshStore(backing);
+    const { value } = store.createDraftFromRequest('Unaffected') as { value: { project: { id: string } } };
+    store.startProject(value.project.id, DRAFT);
+    const before = store.getState();
+
+    store.setStageBackdrop('jungle');
+    const after = store.getState();
+    expect(after.stageBackdrop).toBe('jungle');
+    expect(after.projects).toEqual(before.projects);
+    expect(after.missions).toEqual(before.missions);
+    expect(after.events).toEqual(before.events);
+    expect(after.colorway).toBe(before.colorway);
+  });
 });
 
 describe('mission state machine', () => {
