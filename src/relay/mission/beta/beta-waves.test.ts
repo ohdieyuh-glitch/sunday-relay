@@ -19,6 +19,9 @@ const enrolled = (participantId: string, wave = 'wave_0' as const): BetaEnrollme
 const openWave = (seats: number): BetaWaveConfig =>
   ({ wave: 'wave_0', state: 'open', seats });
 
+/** Occupancy that agrees with the enrollment list, which is the normal case. */
+const consistent = (n: number) => ({ wave_0: n });
+
 describe('a wave admits only someone it actually holds a record for', () => {
   it('admits an enrolled participant inside the seats, and says when they enrolled', () => {
     const decision = decideBetaAccess({
@@ -121,7 +124,8 @@ describe('UNKNOWN OCCUPANCY IS NOT AN EMPTY WAVE', () => {
 
 describe('what an operator is shown about a wave', () => {
   it('reports seats remaining, and that it is ADMITTING, when everything is known', () => {
-    const status = projectWaveStatus(openWave(10), { wave_0: 4 });
+    const four = ['a', 'b', 'c', 'd'].map((id) => enrolled(id));
+    const status = projectWaveStatus(openWave(10), { wave_0: 4 }, four);
     expect(status).toMatchObject({
       wave: 'wave_0', state: 'open', seats: 10, seatsTaken: 4, seatsRemaining: 6, admitting: true,
     });
@@ -130,7 +134,7 @@ describe('what an operator is shown about a wave', () => {
   it('reports Unknown — never zero — when occupancy cannot be counted', () => {
     // "The wave is full" and "we cannot tell" are different facts, and only one
     // of them is a reason to stop inviting people.
-    const status = projectWaveStatus(openWave(10), { wave_0: null });
+    const status = projectWaveStatus(openWave(10), { wave_0: null }, [enrolled('a')]);
     expect(status.seatsTaken).toBeNull();
     expect(status.seatsRemaining).toBeNull();
     expect(status.seatsRemaining).not.toBe(0);
@@ -138,14 +142,169 @@ describe('what an operator is shown about a wave', () => {
   });
 
   it('a full wave remains open but stops admitting', () => {
-    const status = projectWaveStatus(openWave(4), { wave_0: 4 });
+    const four = ['a', 'b', 'c', 'd'].map((id) => enrolled(id));
+    const status = projectWaveStatus(openWave(4), { wave_0: 4 }, four);
     expect(status.state).toBe('open');
     expect(status.seatsRemaining).toBe(0);
     expect(status.admitting).toBe(false);
   });
 
   it('an unopened wave never admits, however many seats it has', () => {
-    const status = projectWaveStatus({ wave: 'wave_0', state: 'not_open', seats: 100 }, { wave_0: 0 });
+    const status = projectWaveStatus({ wave: 'wave_0', state: 'not_open', seats: 100 }, { wave_0: 0 }, []);
     expect(status.admitting).toBe(false);
+  });
+});
+
+/* ================================ what review proved by RUNNING the module === */
+
+describe('a seat belongs to when you enrolled, not to array order', () => {
+  const alice: BetaEnrollment = { participantId: 'alice', wave: 'wave_0', enrolledAt: '2026-08-04T00:00:00.000Z' };
+  const bob: BetaEnrollment = { participantId: 'bob', wave: 'wave_0', enrolledAt: '2026-08-05T00:00:00.000Z' };
+
+  it.each([
+    ['recorded order', [alice, bob]],
+    ['reshuffled', [bob, alice]],
+  ])('alice keeps the only seat (%s)', (_label, enrollments) => {
+    // The first version used the array index, so alice lost her seat to bob
+    // purely because a caller returned rows differently — a SELECT without
+    // ORDER BY would have done it. `enrolledAt` was carried and never read.
+    const seats = { waves: [openWave(1)], occupancy: consistent(2) };
+    expect(decideBetaAccess({ participantId: 'alice', enrollments, ...seats }).admitted).toBe(true);
+    const denied = decideBetaAccess({ participantId: 'bob', enrollments, ...seats });
+    expect(denied.admitted).toBe(false);
+    if (!denied.admitted) expect(denied.reason).toBe('wave_full');
+  });
+
+  it('two enrolments sharing a timestamp still resolve one stable way', () => {
+    const at = '2026-08-04T00:00:00.000Z';
+    const x: BetaEnrollment = { participantId: 'x', wave: 'wave_0', enrolledAt: at };
+    const y: BetaEnrollment = { participantId: 'y', wave: 'wave_0', enrolledAt: at };
+    const seats = { waves: [openWave(1)], occupancy: consistent(2) };
+    const forward = decideBetaAccess({ participantId: 'x', enrollments: [x, y], ...seats });
+    const reverse = decideBetaAccess({ participantId: 'x', enrollments: [y, x], ...seats });
+    expect(forward.admitted).toBe(reverse.admitted);
+  });
+
+  it('a duplicate write does not evict a real participant', () => {
+    // A retried enrolment used to consume a second seat and then tell the
+    // operator "enrollment number 3" when only two people existed.
+    const p1a: BetaEnrollment = { participantId: 'p1', wave: 'wave_0', enrolledAt: '2026-08-04T00:00:00.000Z' };
+    const p1b: BetaEnrollment = { ...p1a, enrolledAt: '2026-08-04T00:00:01.000Z' };
+    const p2: BetaEnrollment = { participantId: 'p2', wave: 'wave_0', enrolledAt: '2026-08-05T00:00:00.000Z' };
+    const decision = decideBetaAccess({
+      participantId: 'p2', enrollments: [p1a, p1b, p2], waves: [openWave(2)], occupancy: consistent(2),
+    });
+    expect(decision.admitted).toBe(true);
+  });
+});
+
+describe('the APPLICABLE enrollment wins, not the first one in the array', () => {
+  it('a participant promoted from a closed wave into an open one is admitted', () => {
+    // A plain `find` returned the first record across ALL waves, so anyone
+    // carried forward was refused `wave_closed` forever.
+    const enrollments: BetaEnrollment[] = [
+      { participantId: 'p1', wave: 'wave_0', enrolledAt: '2026-08-01T00:00:00.000Z' },
+      { participantId: 'p1', wave: 'wave_1', enrolledAt: '2026-08-06T00:00:00.000Z' },
+    ];
+    const waves: BetaWaveConfig[] = [
+      { wave: 'wave_0', state: 'closed', seats: 10 },
+      { wave: 'wave_1', state: 'open', seats: 10 },
+    ];
+    for (const order of [enrollments, [...enrollments].reverse()]) {
+      const d = decideBetaAccess({
+        participantId: 'p1', enrollments: order, waves, occupancy: { wave_1: 1 },
+      });
+      expect(d.admitted).toBe(true);
+      if (d.admitted) expect(d.wave).toBe('wave_1');
+    }
+  });
+});
+
+describe('the cap cannot silently vanish', () => {
+  it('REFUSES when occupancy exceeds the enrollments it can see', () => {
+    // The caller optimisation "fetch only this participant's enrollments"
+    // admitted everyone while occupancy reported 1000 against 10 seats. A count
+    // higher than the records we hold proves the list is partial.
+    const decision = decideBetaAccess({
+      participantId: 'p1',
+      enrollments: [{ participantId: 'p1', wave: 'wave_0', enrolledAt: '2026-08-04T00:00:00.000Z' }],
+      waves: [openWave(10)],
+      occupancy: { wave_0: 1000 },
+    });
+    expect(decision.admitted).toBe(false);
+    if (!decision.admitted) {
+      expect(decision.reason).toBe('occupancy_unknown');
+      expect(decision.detail).toContain('incomplete');
+    }
+  });
+
+  it.each([
+    ['NaN', Number.NaN],
+    ['a string', '5' as never],
+    ['negative', -5],
+    ['fractional', 1.5],
+  ])('treats %s occupancy as uncountable rather than admitting against it', (_l, taken) => {
+    const decision = decideBetaAccess({
+      participantId: 'p1',
+      enrollments: [{ participantId: 'p1', wave: 'wave_0', enrolledAt: '2026-08-04T00:00:00.000Z' }],
+      waves: [openWave(10)],
+      occupancy: { wave_0: taken },
+    });
+    expect(decision.admitted).toBe(false);
+    if (!decision.admitted) expect(decision.reason).toBe('occupancy_unknown');
+  });
+
+  it('a prototype member cannot satisfy the seat count', () => {
+    const decision = decideBetaAccess({
+      participantId: 'p1',
+      enrollments: [{ participantId: 'p1', wave: 'constructor' as never, enrolledAt: '2026-08-04T00:00:00.000Z' }],
+      waves: [{ wave: 'constructor' as never, state: 'open', seats: 10 }],
+      occupancy: {},
+    });
+    expect(decision.admitted).toBe(false);
+    if (!decision.admitted) expect(decision.reason).toBe('unknown_wave');
+  });
+});
+
+describe('the operator board and the gate never disagree', () => {
+  it('does not report free seats the gate will refuse', () => {
+    // 12 enrollments against 10 seats used to show "6 free, admitting" while
+    // every one of those six invitations was refused at the door.
+    const enrollments: BetaEnrollment[] = Array.from({ length: 12 }, (_, i) => ({
+      participantId: `p${String(i)}`,
+      wave: 'wave_0' as const,
+      enrolledAt: `2026-08-04T00:00:${String(i).padStart(2, '0')}.000Z`,
+    }));
+    const status = projectWaveStatus(openWave(10), { wave_0: 4 }, enrollments);
+    const lastAdmitted = decideBetaAccess({
+      participantId: 'p11', enrollments, waves: [openWave(10)], occupancy: { wave_0: 4 },
+    });
+    // The gate refuses p11 (position 12 of 10 seats); the board must not
+    // simultaneously advertise room.
+    expect(lastAdmitted.admitted).toBe(false);
+    // Twelve enrollments against ten seats: the board must say full, not free.
+    expect(status.seatsTaken).toBe(12);
+    expect(status.seatsRemaining).toBe(0);
+    expect(status.admitting).toBe(false);
+  });
+
+  it('reports Unknown when occupancy contradicts the records', () => {
+    const status = projectWaveStatus(openWave(10), { wave_0: 1000 }, []);
+    expect(status.seatsTaken).toBeNull();
+    expect(status.seatsRemaining).toBeNull();
+    expect(status.admitting).toBe(false);
+  });
+});
+
+describe('not_enrolled states a record, and passes no judgement', () => {
+  it('contains no word implying we refused them', () => {
+    const decision = decideBetaAccess({
+      participantId: 'stranger', enrollments: [], waves: [openWave(10)], occupancy: consistent(0),
+    });
+    expect(decision.admitted).toBe(false);
+    if (!decision.admitted) {
+      expect(decision.detail).toContain('not a decision about them');
+      expect(decision.detail).not.toMatch(/denied|refused|rejected|blocked|ineligible/i);
+    }
   });
 });

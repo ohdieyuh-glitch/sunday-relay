@@ -2,51 +2,57 @@
  * SUNDAY RELAY — CONTROLLED BETA WAVES.
  *
  * WHAT A WAVE IS. A named, capped, explicitly-opened cohort. Wave 0 is the
- * controlled public beta; waves 1-3 are the private waves that follow. A wave is
- * not a date and not a feature flag: it is a decision someone made, recorded
- * durably, with a seat count that can run out.
+ * controlled public beta (see `WAVE_0.md`); waves 1-3 are the private waves that
+ * follow. A wave is not a date and not a feature flag: it is a decision someone
+ * made, with a seat count that can run out.
  *
- * WHY THIS EXISTS AS A DOMAIN AND NOT A FLAG. "Is this person in the beta?" has
- * four different answers — admitted, never enrolled, enrolled in a wave that has
- * not opened, and turned away because the wave is full — and a boolean collapses
- * all four into "no". An operator who cannot tell "we have not invited them"
- * from "we invited them and ran out of seats" cannot run a beta.
+ * WHY THIS IS A DOMAIN AND NOT A BOOLEAN. "Is this person in the beta?" has SIX
+ * answers — see `BetaRefusal` — and a boolean collapses all of them into "no".
+ * An operator who cannot tell "we never invited them" from "we invited them and
+ * ran out of seats" from "our records are incomplete" cannot run a beta.
  *
- * THE RULES THIS PRODUCT HOLDS ITSELF TO, applied here:
+ * THE FIRST VERSION OF THIS MODULE FAILED ITS OWN THREE GUARANTEES, and review
+ * proved each by running it rather than reading it. They are the reason the code
+ * below looks the way it does:
  *
- * - **Unknown is not denied.** A participant with no enrollment record is
- *   `not_enrolled`, which is a fact about our records, not a judgement about
- *   them. It is never rendered as a refusal we made.
- * - **Unknown occupancy is not zero.** If the seats taken cannot be counted,
- *   admission is REFUSED rather than granted on an assumed empty wave. Counting
- *   an uncountable cohort as empty is how a capped beta becomes uncapped.
- * - **Announce facts, not intentions.** `admitted` is returned only for an
- *   enrollment that already exists. Deciding to admit and having admitted are
- *   different events, and this module performs only the first.
- * - **A closed wave stays closed.** Reopening is an explicit act, not the
- *   absence of a closing one.
+ * 1. **Seats moved when the array was reordered.** Position came from array
+ *    index, so alice lost her seat to bob purely because a caller returned rows
+ *    in a different order — a `SELECT` without `ORDER BY` would have done it.
+ *    `enrolledAt` was carried on every record and never read. It is now the
+ *    ordering, with `participantId` as a total tie-break so the result is
+ *    deterministic even for two enrolments sharing a timestamp.
+ * 2. **The wrong enrollment won.** A plain `find` returned the first record for
+ *    the participant across ALL waves, so anyone carried from a closed wave into
+ *    an open one was refused `wave_closed` forever. The APPLICABLE enrollment is
+ *    now chosen: an open wave beats a non-open one.
+ * 3. **The cap was unenforceable.** `occupancy` was read once to check for
+ *    `null` and never used again, so a caller that fetched only this
+ *    participant's enrollments admitted everyone while occupancy reported
+ *    1000/10 — the capped beta silently becoming uncapped that the whole design
+ *    was meant to prevent. Occupancy and the enrollment list are now
+ *    RECONCILED: a count that exceeds the enrollments we can see PROVES the list
+ *    is incomplete, and an incomplete list makes every position meaningless.
  *
- * PURE. No clock, no I/O, no storage. Time enters as an injected ISO string and
- * the caller owns the durable record — the same split every other Relay domain
- * uses, so the browser and the CLI reach identical verdicts.
+ * PURE. No clock, no I/O, no storage. Times enter as data on records the caller
+ * already holds, and the caller owns the durable write.
  */
 
 export const RELAY_BETA_WAVES = ['wave_0', 'wave_1', 'wave_2', 'wave_3'] as const;
 export type RelayBetaWave = (typeof RELAY_BETA_WAVES)[number];
 
-/**
- * A wave's lifecycle. `not_open` is the default and the safe one: a wave nobody
- * opened admits nobody, which is what makes "controlled" mean anything.
- */
+const KNOWN_WAVE = new Set<string>(RELAY_BETA_WAVES);
+
+/** A wave nobody opened admits nobody, which is what "controlled" means. */
 export type BetaWaveState = 'not_open' | 'open' | 'closed';
 
 export interface BetaWaveConfig {
   readonly wave: RelayBetaWave;
+  /** Required, not defaulted: a wave's state is a decision, never an omission. */
   readonly state: BetaWaveState;
   /**
-   * How many participants this wave may hold. A cap is the whole point of a
-   * controlled beta, so it is required rather than defaulted — an absent cap
-   * would have to mean either zero or infinity, and both are guesses.
+   * How many participants this wave may hold. Required for the same reason —
+   * an absent cap would have to mean zero or infinity, and both are guesses.
+   * Wave 0's cap is 100 (`WAVE_0.md`), and this module does not choose it.
    */
   readonly seats: number;
 }
@@ -54,7 +60,7 @@ export interface BetaWaveConfig {
 export interface BetaEnrollment {
   readonly participantId: string;
   readonly wave: RelayBetaWave;
-  /** When the enrollment was durably recorded. Never a request's own clock. */
+  /** When it was durably recorded. This ORDERS the wave; it is not decoration. */
   readonly enrolledAt: string;
 }
 
@@ -62,44 +68,110 @@ export type BetaAccessDecision =
   | { readonly admitted: true; readonly wave: RelayBetaWave; readonly enrolledAt: string }
   | { readonly admitted: false; readonly reason: BetaRefusal; readonly detail: string };
 
+/** SIX refusals. Any surface handling fewer is handling some of them as "no". */
 export type BetaRefusal =
-  /** We hold no enrollment for them. A fact about our records, not a refusal. */
+  /** We hold no enrollment. A fact about our records, not a judgement. */
   | 'not_enrolled'
   /** Enrolled in a wave nobody has opened yet. */
   | 'wave_not_open'
   /** Enrolled in a wave that has been closed. */
   | 'wave_closed'
-  /** The wave is full and this participant is beyond its seats. */
+  /** Their enrollment is past the wave's seats. */
   | 'wave_full'
-  /** The seats taken could not be counted, so admission is not granted. */
+  /** The seats taken cannot be counted, so admission is not granted. */
   | 'occupancy_unknown'
-  /** The wave named by the enrollment is not one this build has. */
+  /** The enrollment names a wave this build does not have. */
   | 'unknown_wave';
 
 export interface BetaAccessInput {
   readonly participantId: string;
-  /** Every enrollment this build knows about, in the order they were recorded. */
+  /** Every enrollment this build knows about. Order here does NOT decide seats. */
   readonly enrollments: readonly BetaEnrollment[];
-  /** The waves and their state. A wave absent from here is `unknown_wave`. */
   readonly waves: readonly BetaWaveConfig[];
   /**
-   * How many seats each wave currently holds, or `null` when it cannot be
-   * counted. `null` REFUSES; it never reads as an empty wave.
+   * Seats currently held per wave, or `null` when it cannot be counted.
+   *
+   * It is RECONCILED against `enrollments`, not merely null-checked: a count
+   * higher than the enrollments we can see proves the list is partial, and a
+   * partial list cannot place anyone in a queue.
    */
   readonly occupancy: Readonly<Record<string, number | null>>;
 }
 
 /**
- * Whether this participant may use Relay, and — when they may not — which of the
- * five distinct reasons applies.
+ * A seat total we can actually reason about.
  *
- * SEATS ARE DECIDED BY ENROLMENT ORDER, not by arrival. A participant admitted
- * on Tuesday does not lose their seat because someone else opened the app first
- * on Wednesday: the wave's own enrollment list is the authority, and a
- * participant beyond the seat count is over the line wherever they connect from.
+ * `Number.isFinite` and not `typeof === 'number'`, because `NaN` is the
+ * canonical result of an uncomputable count — `Number(undefined)`,
+ * `parseInt('')`, arithmetic on a missing field — and it used to pass straight
+ * through the "cannot count" gate and be admitted against.
  */
+function countableSeats(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+    && Number.isInteger(value) && value >= 0;
+}
+
+function seatsTakenFor(
+  wave: RelayBetaWave, occupancy: BetaAccessInput['occupancy'],
+): number | null {
+  // `hasOwn`, so a bare bracket read cannot be satisfied by `Object.prototype`.
+  if (!Object.hasOwn(occupancy, wave)) return null;
+  const taken = occupancy[wave];
+  return countableSeats(taken) ? taken : null;
+}
+
+/**
+ * The wave's enrollment queue: deduplicated, then ordered by when each was
+ * recorded.
+ *
+ * DEDUPLICATED FIRST, because a retried write with no store-side idempotency —
+ * and there is no store — used to consume a second seat and evict a real
+ * participant, while telling the operator a false ordinal ("enrollment number
+ * 3" when only two people existed). The earliest record for a participant wins.
+ *
+ * ORDERED BY `enrolledAt` with `participantId` as a total tie-break, so two
+ * enrolments sharing a timestamp still produce one stable answer everywhere.
+ */
+function queueFor(
+  wave: RelayBetaWave, enrollments: readonly BetaEnrollment[],
+): readonly BetaEnrollment[] {
+  const earliest = new Map<string, BetaEnrollment>();
+  for (const e of enrollments) {
+    if (e.wave !== wave) continue;
+    const held = earliest.get(e.participantId);
+    if (held === undefined || e.enrolledAt < held.enrolledAt) earliest.set(e.participantId, e);
+  }
+  return [...earliest.values()].sort((a, b) => (
+    a.enrolledAt === b.enrolledAt
+      ? a.participantId.localeCompare(b.participantId)
+      : a.enrolledAt.localeCompare(b.enrolledAt)
+  ));
+}
+
+/**
+ * Which enrollment actually applies to this participant.
+ *
+ * AN OPEN WAVE BEATS A NON-OPEN ONE. A participant promoted from a closed wave 0
+ * into an open wave 1 holds two records, and returning whichever sorted first
+ * refused them `wave_closed` forever. Among equals the earliest wins, so the
+ * answer does not depend on array order.
+ */
+function applicableEnrollment(
+  input: BetaAccessInput,
+): BetaEnrollment | undefined {
+  const mine = input.enrollments
+    .filter((e) => e.participantId === input.participantId)
+    .sort((a, b) => (
+      a.enrolledAt === b.enrolledAt ? a.wave.localeCompare(b.wave)
+        : a.enrolledAt.localeCompare(b.enrolledAt)
+    ));
+  const isOpen = (e: BetaEnrollment): boolean =>
+    input.waves.find((w) => w.wave === e.wave)?.state === 'open';
+  return mine.find(isOpen) ?? mine[0];
+}
+
 export function decideBetaAccess(input: BetaAccessInput): BetaAccessDecision {
-  const enrollment = input.enrollments.find((e) => e.participantId === input.participantId);
+  const enrollment = applicableEnrollment(input);
   if (enrollment === undefined) {
     return {
       admitted: false,
@@ -109,7 +181,11 @@ export function decideBetaAccess(input: BetaAccessInput): BetaAccessDecision {
     };
   }
 
-  const wave = input.waves.find((w) => w.wave === enrollment.wave);
+  // BOTH the build's own enumeration and the caller's config. The caller's list
+  // is the same trust tier as the enrollment this check exists to distrust.
+  const wave = KNOWN_WAVE.has(enrollment.wave)
+    ? input.waves.find((w) => w.wave === enrollment.wave)
+    : undefined;
   if (wave === undefined) {
     return {
       admitted: false,
@@ -133,11 +209,17 @@ export function decideBetaAccess(input: BetaAccessInput): BetaAccessDecision {
       detail: `${enrollment.wave} is closed. Reopening it is an explicit act.`,
     };
   }
+  if (!countableSeats(wave.seats)) {
+    return {
+      admitted: false,
+      reason: 'occupancy_unknown',
+      detail: `${enrollment.wave} declares no usable seat count, so nobody is admitted against it.`,
+    };
+  }
 
-  // UNKNOWN OCCUPANCY REFUSES. Reading an uncountable cohort as empty is how a
-  // capped beta silently becomes an uncapped one.
-  const taken = input.occupancy[enrollment.wave];
-  if (taken === undefined || taken === null) {
+  const queue = queueFor(wave.wave, input.enrollments);
+  const taken = seatsTakenFor(wave.wave, input.occupancy);
+  if (taken === null) {
     return {
       admitted: false,
       reason: 'occupancy_unknown',
@@ -145,12 +227,21 @@ export function decideBetaAccess(input: BetaAccessInput): BetaAccessDecision {
         + 'against a number it does not have.',
     };
   }
+  // RECONCILED. A count higher than the enrollments we can see proves the list
+  // is partial, and a partial list cannot place anyone in a queue — which is
+  // exactly how a capped beta would otherwise admit everyone while the operator
+  // watched the count climb past the cap.
+  if (taken > queue.length) {
+    return {
+      admitted: false,
+      reason: 'occupancy_unknown',
+      detail: `${enrollment.wave} reports ${String(taken)} seats taken but Relay can see only `
+        + `${String(queue.length)} enrollments, so the records it holds are incomplete and no `
+        + 'position in the queue can be trusted.',
+    };
+  }
 
-  // THE PARTICIPANT'S OWN POSITION, not the current total. Someone inside the
-  // cap keeps their seat even after later enrollments push the wave over it.
-  const position = input.enrollments
-    .filter((e) => e.wave === enrollment.wave)
-    .findIndex((e) => e.participantId === input.participantId);
+  const position = queue.findIndex((e) => e.participantId === input.participantId);
   if (position >= wave.seats) {
     return {
       admitted: false,
@@ -163,13 +254,6 @@ export function decideBetaAccess(input: BetaAccessInput): BetaAccessDecision {
   return { admitted: true, wave: enrollment.wave, enrolledAt: enrollment.enrolledAt };
 }
 
-/**
- * What an operator needs to see about one wave.
- *
- * `seatsRemaining` is `null` — never `0` — when occupancy cannot be counted,
- * because "the wave is full" and "we cannot tell" are different facts and only
- * one of them is a reason to stop inviting people.
- */
 export interface BetaWaveStatus {
   readonly wave: RelayBetaWave;
   readonly state: BetaWaveState;
@@ -179,19 +263,43 @@ export interface BetaWaveStatus {
   readonly admitting: boolean;
 }
 
+/**
+ * What an operator sees about one wave — FROM THE SAME SEAT MODEL THE GATE USES.
+ *
+ * The first version computed this from `occupancy` while the gate computed
+ * refusals from position, so the board could report "6 seats free, admitting"
+ * while every one of those six invitations was refused at the door. An operator
+ * view that disagrees with the gate is worse than no view.
+ *
+ * `seatsRemaining` is `null` and never `0` when the count is unknown: "full" and
+ * "cannot tell" are different facts, and only one is a reason to stop inviting.
+ */
 export function projectWaveStatus(
-  wave: BetaWaveConfig, occupancy: Readonly<Record<string, number | null>>,
+  wave: BetaWaveConfig,
+  occupancy: Readonly<Record<string, number | null>>,
+  /** REQUIRED. The board cannot answer from a count alone — see below. */
+  enrollments: readonly BetaEnrollment[],
 ): BetaWaveStatus {
-  const taken = occupancy[wave.wave];
-  const known = typeof taken === 'number';
+  const reported = seatsTakenFor(wave.wave, occupancy);
+  const queue = queueFor(wave.wave, enrollments);
+  /**
+   * SEATS TAKEN IS THE QUEUE, NOT THE REPORTED COUNT — because the queue is
+   * what the gate actually admits from. Reporting `occupancy` here is what let
+   * the board advertise "6 seats free, admitting" over twelve enrollments
+   * against ten seats, while the gate refused every one of those six
+   * invitations at the door. `occupancy` keeps one job: proving the records are
+   * complete enough to trust.
+   */
+  const known = reported !== null && countableSeats(wave.seats) && reported <= queue.length;
+  const taken = queue.length;
   return {
     wave: wave.wave,
     state: wave.state,
     seats: wave.seats,
     seatsTaken: known ? taken : null,
     seatsRemaining: known ? Math.max(0, wave.seats - taken) : null,
-    // A wave admits only when it is open AND its occupancy is known AND a seat
-    // is left. Any unknown collapses this to false, never to an optimistic true.
+    // The next enrollment would take position `taken`; it is admitted exactly
+    // when the gate would admit it.
     admitting: wave.state === 'open' && known && taken < wave.seats,
   };
 }
