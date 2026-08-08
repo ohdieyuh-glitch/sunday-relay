@@ -81,6 +81,26 @@ describe('the CLI offers the same scenes, and refuses the same substitution', ()
     expect(lines.join('\n')).toContain('not a scene this build has');
   });
 
+  it('says Unknown when it cannot read the preference, rather than None', () => {
+    // The website stores the backdrop per BROWSER and this surface has no
+    // reader for it. Printing `None` asserted the founder had no scene
+    // selected, when the true statement is that the CLI cannot see one — so a
+    // founder who picked Jungle on the website was told None here.
+    const { lines } = view() as { lines: string[] };
+    const text = lines.join('\n');
+    expect(text).toContain('Unknown');
+    expect(text).toContain('cannot read it');
+  });
+
+  it('sanitizes a stored id before printing it to a terminal', () => {
+    // The stored value became genuinely user-controlled the moment the website
+    // began persisting it, and a terminal is an ANSI sink.
+    const { lines } = view({ selectedBackdrop: '[31mred' }) as { lines: string[] };
+    const text = lines.join('\n');
+    expect(text).toContain('not a scene this build has');
+    expect(text).not.toContain('[31m');
+  });
+
   it('a known preference is reported as selected', () => {
     const { json } = view({ selectedBackdrop: 'space_station' }) as {
       json: { backdrop: string; backdropChoices: { id: string; selected: boolean }[] };

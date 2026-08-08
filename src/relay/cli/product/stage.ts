@@ -1,4 +1,5 @@
 import { paint } from './theme';
+import { safeText } from './safety';
 import type { CliCaps } from './contracts';
 import {
   layoutStage, stageCapacity, stageShapeFor, type RelayStageActor,
@@ -79,12 +80,26 @@ export function renderStageView(input: StageViewInput): { lines: string[]; json:
     );
   }
 
-  lines.push(`  ${p.dim('BACKDROP'.padEnd(18))} ${p.tone(resolved.id === 'none' ? 'gray' : 'amber', resolved.label)}`);
-  if (input.selectedBackdrop !== undefined && resolved.id === 'none'
-      && input.selectedBackdrop !== 'none') {
+  /**
+   * ABSENT IS UNKNOWN, NOT NONE.
+   *
+   * The browser stores the backdrop per BROWSER, in its own local storage, and
+   * this surface has no reader for it — `project.stageBackdrop` exists on the
+   * draft and nothing ever sets it. Printing `None` for that said the founder
+   * had no scene selected when what is true is that this surface cannot see
+   * their selection, and a founder who picked Jungle on the website was told
+   * `None` here. A missing value is Unknown; it is never a default.
+   */
+  const unreadable = input.selectedBackdrop === undefined;
+  lines.push(`  ${p.dim('BACKDROP'.padEnd(18))} `
+    + (unreadable
+      ? p.dim('Unknown — the website stores this per browser, and the CLI cannot read it')
+      : p.tone(resolved.id === 'none' ? 'gray' : 'amber', resolved.label)));
+  if (!unreadable && resolved.id === 'none' && input.selectedBackdrop !== 'none') {
     // A preference from an older build is a fact about that build, not an
     // instruction to show something else.
-    lines.push(p.dim(`  "${input.selectedBackdrop}" is not a scene this build has, so no scene is drawn.`));
+    lines.push(p.dim(`  "${safeText(input.selectedBackdrop as string, { maxLength: 40 })}" `
+      + 'is not a scene this build has, so no scene is drawn.'));
   }
   lines.push('');
 

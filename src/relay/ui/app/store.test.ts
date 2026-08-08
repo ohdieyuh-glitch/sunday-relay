@@ -160,6 +160,13 @@ describe('persistence and recovery', () => {
     const reloaded = createRelayAppStore(createRelayAppStorage(backing));
     reloaded.init();
     expect(reloaded.getState().stageBackdrop).toBe('space_station');
+
+    // Choosing None stores `'none'`, not null: it is a real catalog id, and it
+    // must survive a reload as itself rather than collapsing into "never chose".
+    reloaded.setStageBackdrop('none');
+    const again = createRelayAppStore(createRelayAppStorage(backing));
+    again.init();
+    expect(again.getState().stageBackdrop).toBe('none');
   });
 
   it('a store written before backdrops existed keeps its projects and shows no scene', () => {
@@ -186,7 +193,9 @@ describe('persistence and recovery', () => {
     const { store } = freshStore(backing);
     store.createDraftFromRequest('Newer build wrote this');
 
-    for (const foreign of ['volcano', '', 42, null, { id: 'jungle' }]) {
+    // `null` is deliberately NOT in this list: it is the expected OUTPUT, so it
+    // would pass with the normalization deleted and prove nothing.
+    for (const foreign of ['volcano', '', 42, true, { id: 'jungle' }]) {
       const stored = JSON.parse(backing.getItem(RELAY_APP_STORAGE_KEY)!) as Record<string, unknown>;
       stored.stageBackdrop = foreign;
       backing.setItem(RELAY_APP_STORAGE_KEY, JSON.stringify(stored));
@@ -205,7 +214,11 @@ describe('persistence and recovery', () => {
     const { store } = freshStore(backing);
     const { value } = store.createDraftFromRequest('Unaffected') as { value: { project: { id: string } } };
     store.startProject(value.project.id, DRAFT);
-    const before = store.getState();
+    // CLONED, not captured. `commit` spreads shallowly, so the nested
+    // containers keep their identity and `toEqual` against the live objects
+    // would be comparing three references to themselves — it would still pass
+    // if setStageBackdrop mutated a mission in place.
+    const before = structuredClone(store.getState());
 
     store.setStageBackdrop('jungle');
     const after = store.getState();

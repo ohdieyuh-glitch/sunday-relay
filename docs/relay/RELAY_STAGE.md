@@ -203,15 +203,35 @@ Two things a stored preference has to survive, both tested:
   `resolveBackdrop` already held: substituting a different scene would be the
   surface deciding something the user did not.
 
-`null` here is a CHOICE ("None"), not a missing value, so no surface renders
-it as Unknown.
+`null` means NO CHOICE HAS BEEN RECORDED — never picked, or what was stored is
+not a scene this build has. Choosing "None" stores the string `'none'`, which is
+a real catalog id. The two draw the same thing and are not the same fact.
+
+ONE SOURCE OF TRUTH AT A TIME. When a host passes `onSelectStageBackdrop` it
+owns the value, and the workspace's local state stands down. Reading
+`localBackdrop ?? stageBackdrop` unconditionally was harmless while no host
+stored anything and became a second source the moment one did — the local one
+winning permanently, so a host could never move the scene again. Worse, a
+handler that stored NOTHING still got the scene drawn, which is announcing an
+intention as a fact. Without a handler the local state remains, and the picker
+stays operable exactly as before.
+
+THE CLI SAYS `Unknown`, NOT `None`. This preference lives in one browser's
+storage and `relay project stage` has no reader for it. Printing `None` asserted
+that no scene was selected, when the true statement is that this surface cannot
+see the selection — a founder who picked Jungle on the website was told `None`
+in the terminal. The two surfaces still read one projection; what differs is
+that only one of them has the input, and it now says so.
 
 ## Not implemented
 
 Parallax content for the `far` layer · the Leopard, cubs, vehicle and
 transformation sprites · any cinematic sequence · carrying the choice
-BETWEEN browsers (it is a local preference, stored per browser, and no
-account syncs it).
+BETWEEN browsers (it is a local preference, stored per browser, and no account
+syncs it) · carrying it to the CLI, which reports `Unknown` rather than
+guessing · remembering it AT ALL where the browser denies storage — private
+mode, or over quota — in which case the session runs in memory and nothing
+reports the failed write, exactly as for the colorway.
 
 Two things are asserted where the decision lives rather than in a browser,
 because jsdom computes no cascade and reports `clientWidth === 0`: that `.rst`

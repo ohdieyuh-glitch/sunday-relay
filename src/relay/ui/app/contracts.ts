@@ -182,9 +182,17 @@ export interface RelayAppData {
    * cannot change what any surface reports — it is stored beside the colorway
    * because it is the same kind of thing: how this browser looks, to this user.
    *
-   * `null` is a CHOICE ("None"), not a missing value, which is why no surface
-   * renders it as Unknown. Data written before this field existed has no scene,
-   * which is exactly what those builds showed.
+   * `null` MEANS NO CHOICE HAS BEEN RECORDED — either this browser has never
+   * picked one, or what it stored is not a backdrop this build has. Choosing
+   * "None" in the picker stores the string `'none'`, because `'none'` is a real
+   * member of the catalog. The two draw the same thing and are not the same
+   * fact, and an earlier version of this comment claimed `null` was the chosen
+   * one, which the picker's own radio value contradicts.
+   *
+   * Neither is rendered as Unknown on the website: a radio group has to show
+   * something selected, and None is the honest default to show when nothing has
+   * been chosen. The CLI, which cannot read this store at all, says Unknown —
+   * that is a different question with a different answer.
    */
   stageBackdrop: RelayBackdropId | null;
   updatedAt: string;
