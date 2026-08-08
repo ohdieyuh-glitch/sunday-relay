@@ -39,3 +39,7 @@ export {
   DURABLE_MISSIONS_DIR, createNodeDurableBacking, createNodeDurableMissionStore,
   createNodeCodingAgentStore, createNodeMissionWorktreeStore, createNodePromptArchitectStore, createNodeReviewerHarnessStore, readPreviousDurableRecordText,
 } from './durable-mission-file';
+export {
+  createBetaEnrolmentStore, isUsableParticipantId,
+  type BetaEnrolmentStore, type EnrolResult,
+} from './beta-enrollment-node';

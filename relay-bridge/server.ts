@@ -33,6 +33,13 @@ import {
 import { decodeSegment } from './path-segment';
 import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
 import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
+import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
+import { guardBetaAdmission, participantFromBody } from './beta-guard';
+import { claimedClientKey, createBetaRateLimiter } from './beta-rate-limit';
+import type { BetaRateLimiter } from './beta-rate-limit';
+import { createBetaEnrolmentStore } from '../src/relay/persistence';
+import type { BetaWaveConfig } from '../src/relay/mission/beta';
+import type { BetaEnrolmentStore } from '../src/relay/persistence';
 import { createCronTickService } from './cron-service';
 import {
   createCronScheduler, cronSchedulerEnabled, schedulerIntervalSeconds,
@@ -153,6 +160,25 @@ export function createBridgeServer(
    * tests, and including a bridge whose volume never mounted.
    */
   cronSchedulerRunning: () => boolean = () => false,
+  /**
+   * The durable beta enrolment store. Absent on a bridge with no mounted state
+   * root — the routes then answer `beta_not_ready` rather than recording an
+   * enrolment that would not survive a restart.
+   */
+  betaStore: BetaEnrolmentStore | null = null,
+  /**
+   * The waves this deployment configures, and their seats. From the
+   * DEPLOYMENT, never a request: a caller who could name their wave would name
+   * the one with room. An empty list admits nobody, which is the only thing an
+   * absent configuration can honestly mean.
+   */
+  betaWaves: readonly BetaWaveConfig[] = [],
+  /**
+   * The rate limiter for the public beta request route. Absent means no limit
+   * — correct for a host that constructs no beta surface, and never the
+   * default in `main()`.
+   */
+  betaLimiter: BetaRateLimiter | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -374,6 +400,40 @@ export function createBridgeServer(
           }
         }
 
+        /**
+         * THE CONTROLLED BETA. One public route and two operator ones; the
+         * split is the security shape. `betaWaves` comes from the deployment
+         * rather than a request, so no caller can name the wave they join or
+         * the seats it holds — see WAVE_0.md.
+         */
+        if (isBetaRoute(path.replace('/relay-api', ''))) {
+          const betaResult = await handleBetaRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string'
+              ? req.headers.authorization : undefined,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            env: process.env,
+            // THE SERVER'S CLOCK. It orders the wave's queue, so a caller's
+            // would let anyone place themselves at the front of it.
+            now: new Date().toISOString(),
+            waves: betaWaves,
+            // The public route is the only unauthenticated write surface, so
+            // it is the only one that carries a limit.
+            ...(betaLimiter === null ? {} : {
+              rateLimit: {
+                limiter: betaLimiter,
+                clientKey: claimedClientKey(req.headers),
+                nowMs: Date.now(),
+              },
+            }),
+          }, betaStore);
+          if (betaResult !== null) {
+            send(res, betaResult.status, betaResult.body, cors);
+            return;
+          }
+        }
+
         if (isCronRoute(path.replace('/relay-api', ''))) {
           const cronResult = await handleCronRoute({
             method,
@@ -458,6 +518,23 @@ export function createBridgeServer(
             send(res, 400, { error: 'missionId and objective are required' }, cors);
             return;
           }
+          /**
+           * THE CONTROLLED BETA BITES HERE, and only here, because this is
+           * the operation it exists to control: `registry.start` runs the
+           * real three-role pipeline and spends real money. With the beta off
+           * this is `null` and the route behaves exactly as it always did.
+           */
+          const refusal = guardBetaAdmission({
+            env: process.env,
+            participantId: participantFromBody(body),
+            store: betaStore,
+            waves: betaWaves,
+          });
+          if (refusal !== null) {
+            send(res, refusal.status, refusal.body, cors);
+            return;
+          }
+
           const view = registry.start({ missionId, objective });
           send(res, 200, { missionId, view }, cors);
           return;
@@ -483,6 +560,22 @@ export function createBridgeServer(
             return send(res, 200, { missionId: id, view }, cors);
           }
           if (method === 'POST' && action === 'retry') {
+            /**
+             * RETRY RE-DRIVES THE SAME PIPELINE, so it is where money is spent
+             * too. Guarding only `start` meant a mission begun while the beta
+             * was off could be re-driven after it was on, by a caller the gate
+             * refuses — which contradicts the boundary the guard states.
+             */
+            const retryRefusal = guardBetaAdmission({
+              env: process.env,
+              participantId: participantFromBody(await readBody(req)),
+              store: betaStore,
+              waves: betaWaves,
+            });
+            if (retryRefusal !== null) {
+              send(res, retryRefusal.status, retryRefusal.body, cors);
+              return;
+            }
             const view = registry.retry(id);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
@@ -646,12 +739,37 @@ export function main(): void {
 
   // The capability route answers from THIS object, not from the flags that ask
   // for it: the flags can be set on a bridge whose volume never mounted.
+  /**
+   * THE BETA STORE AND THE WAVES THIS DEPLOYMENT OPENS.
+   *
+   * The store needs a mounted volume for the same reason the cron claim marker
+   * does: an enrolment that does not survive a restart is not an enrolment.
+   *
+   * WAVE 0'S CAP IS 100 AND IT IS SET HERE, from `WAVE_0.md`, because it is a
+   * deployment decision rather than a domain constant — the gate does not
+   * choose any wave's cap. The wave ships `not_open`: opening it is an
+   * explicit act, and the safe default is the one a missing decision means.
+   * Waves 1-3 are deliberately unconfigured, so `/beta/status` names them as
+   * unconfigured rather than showing them merely closed.
+   */
+  const betaStore = config.stateRoot === null
+    ? null
+    : createBetaEnrolmentStore({ root: config.stateRoot });
+  // One limiter for the process, so its windows are shared across requests.
+  const betaLimiter = createBetaRateLimiter();
+  const betaWaves: readonly BetaWaveConfig[] = Object.freeze([
+    Object.freeze({ wave: 'wave_0' as const, state: betaWaveZeroState(process.env), seats: 100 }),
+  ]);
+
   const server = createBridgeServer(
     config, registry, null, null, null, cronTicks,
     // Not "was one constructed" — "will it still fire". Shutdown stops the
     // timer and then drains for up to ten seconds, and for that whole window
     // the old getter reported a scheduler that would never run again.
     () => scheduler?.isRunning() === true,
+    betaStore,
+    betaWaves,
+    betaLimiter,
   );
 
   /**

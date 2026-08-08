@@ -373,10 +373,20 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     // IS OPEN. This line previously said NO STORE, NO ROUTE…" passed both while
     // announcing the opposite. That is verbatim the LOOP_ENGINE defect recorded
     // twelve lines above, committed again in the fix for it.
-    expect(beta).toContain(
-      '**Status: THE ACCESS DECISION IS IMPLEMENTED AND PURE. NO STORE, NO ROUTE, NO '
-      + 'ENROLMENT PATH, AND NO WAVE HAS BEEN OPENED. NOBODY HAS BEEN ADMITTED TO ANYTHING.**',
-    );
+    // SUPERSEDED when the durable enrolment store landed: "NO STORE" became
+    // false, and a pin that is false is not a guard. The replacement keeps
+    // naming what is still MISSING — the route, the signup path, enforcement,
+    // and an opened wave — as ONE contiguous claim, so a status rewritten to
+    // announce an opened wave cannot satisfy it with a withdrawal preamble.
+    // AND IT MUST BE THE DOCUMENT'S FIRST `**Status:`. Asserting containment
+    // alone was defeated by a withdrawal preamble — a status announcing an
+    // opened wave that then QUOTED the old line passed. Pinning the position
+    // makes the quotation useless.
+    const BETA_PIN = '**Status: THE DECISION, THE DURABLE STORE, THE ADMISSION ROUTES AND '
+      + 'ENFORCEMENT ON MISSION START ARE IMPLEMENTED AND WIRED INTO THE BRIDGE. NO WAVE '
+      + 'HAS BEEN OPENED IN PRODUCTION AND NOBODY HAS BEEN ADMITTED TO ANYTHING.**';
+    expect(beta).toContain(BETA_PIN);
+    expect(beta.indexOf(BETA_PIN)).toBe(beta.indexOf('**Status:'));
   });
 
   it('the Unchain record carries the locked founder decisions', () => {
