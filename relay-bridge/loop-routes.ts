@@ -1,6 +1,7 @@
 import { safeText } from './redact';
 import { bearerMatches, BRIDGE_TOKEN_ENV, type ReviewerRouteResult } from './reviewer-routes';
 import { cronEnabled } from './cron-routes';
+import { cronSchedulerEnabled } from './cron-scheduler';
 import type {
   LoopHistoryEntry,
   LoopInspectionProjection,
@@ -195,10 +196,10 @@ export async function handleLoopRoute(
       multiRoleSupported: false,
       // An authenticated operator MAY call the cron tick when the flag is on.
       cronSupported: cronEnabled(env),
-      // …and nothing calls it on a schedule. A surface must not infer a
-      // scheduler from the existence of an endpoint: there is no timer, no
-      // scheduler process, and a scheduled run is created but never advanced.
-      cronScheduled: false,
+      // …and whether anything CALLS it on a schedule is now a real question
+      // rather than a flat no. A surface must still not infer execution from
+      // it: a scheduled run is created and never advanced, whoever asked.
+      cronScheduled: cronEnabled(env) && cronSchedulerEnabled(env),
       swarmSupported: false,
     });
   }

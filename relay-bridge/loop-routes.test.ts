@@ -3,6 +3,8 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LOOP_ENGINE_ENV, handleLoopRoute, loopEngineEnabled, type LoopRouteRequest } from './loop-routes';
+import { CRON_ENABLED_ENV } from './cron-routes';
+import { CRON_SCHEDULER_ENABLED_ENV } from './cron-scheduler';
 import { createLoopService, type LoopService } from './loop-service';
 import { createFakeLoopAgent, loopDigest, readLoopRun, type FakeLoopAgentStep } from '../src/relay/mission/loop/runtime';
 import { parseSlashCommand } from '../src/relay/mission/loop/loop-command-parser';
@@ -128,6 +130,32 @@ describe('the Loop engine flag is server-authoritative and defaults off', () => 
     // And it tells a surface what Stage 2 can actually execute.
     expect(data.multiRoleSupported).toBe(false);
     expect(data.supportedRoles).toEqual(['coding_agent']);
+  });
+
+  it('reports cronScheduled from the scheduler that actually runs, not from the route', async () => {
+    const read = async (env: NodeJS.ProcessEnv): Promise<Record<string, unknown>> => {
+      const result = await handleLoopRoute({
+        method: 'GET', path: '/loop/capability', authorization: `Bearer ${TOKEN}`,
+        body: undefined, env, now: T0,
+      }, service);
+      return (result?.body as { data: Record<string, unknown> }).data;
+    };
+
+    // The tick ENDPOINT existing is not a scheduler. Cron on, timer off.
+    const endpointOnly = await read({ ...ENABLED, [CRON_ENABLED_ENV]: '1' });
+    expect(endpointOnly.cronSupported).toBe(true);
+    expect(endpointOnly.cronScheduled).toBe(false);
+
+    // Both gates open is the only combination that may claim it.
+    const scheduled = await read({
+      ...ENABLED, [CRON_ENABLED_ENV]: '1', [CRON_SCHEDULER_ENABLED_ENV]: '1',
+    });
+    expect(scheduled.cronScheduled).toBe(true);
+
+    // A timer flag without Cron cannot schedule anything, and must not say it can.
+    const orphaned = await read({ ...ENABLED, [CRON_SCHEDULER_ENABLED_ENV]: '1' });
+    expect(orphaned.cronSupported).toBe(false);
+    expect(orphaned.cronScheduled).toBe(false);
   });
 });
 

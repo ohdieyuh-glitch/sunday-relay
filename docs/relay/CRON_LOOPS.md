@@ -4,8 +4,8 @@
 + FILE-BACKED CLAIM ADAPTER + THE TICK PASS + A DURABLE SCHEDULE STORE + AN
 AUTHENTICATED TICK ENDPOINT AND THE SCHEDULE FAMILY (CREATE, LIST, PAUSE,
 EDIT, DELETE)
-IMPLEMENTED. NO SCHEDULER AND NO TIMER: NOTHING CALLS THE TICK ON A SCHEDULE,
-AND A SCHEDULED RUN IS CREATED BUT NEVER DISPATCHED.**
+IMPLEMENTED, PLUS AN IN-BRIDGE SCHEDULER THAT IS OFF BY DEFAULT. A SCHEDULED
+RUN IS CREATED AND NEVER DISPATCHED, WHETHER AN OPERATOR OR THE TIMER ASKED.**
 
 `/loop schedule`, `/loop cron`, `/loop schedules` parse today and produce typed
 commands. `src/relay/mission/loop/cron/` now holds the schedule stage this
@@ -42,9 +42,13 @@ server-clocked, with explicit `authorized: true` on everything that writes.
 
 WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
 
-- **Nothing calls it on a schedule.** There is no timer and no scheduler
-  process. `GET /loop/capability` reports `cronScheduled: false` so no
-  surface can infer one from the endpoint's existence.
+- **A timer may call it, and only if switched on.** The in-bridge scheduler
+  (`relay-bridge/cron-scheduler.ts`) is gated on its own flag, on Cron, on the
+  Loop engine and on a mounted state root — four switches, all off by default.
+  `GET /loop/capability` reports `cronScheduled` as what is actually true
+  rather than a constant, so a surface reads the state instead of inferring it.
+  A pass creates run RECORDS and dispatches nothing: automatic creation is not
+  automatic execution.
 - **A scheduled run is created, never advanced.** Three independent reasons:
   `createRun` is synchronous and cannot await the engine; the run carries
   `creationSource: 'schedule'`, which the Loop service turns into
@@ -513,9 +517,37 @@ This is also the remedy for a schedule the tick refuses on rules that arrived
 after it was stored — a fixed offset, a `SystemV/*` zone, a single-word IANA
 name, or a version predating the binding.
 
+## The in-bridge scheduler
+
+A Cron Loop is only recurring if something asks. `relay-bridge/cron-scheduler.ts`
+is that something: a timer inside the bridge, off unless
+`RELAY_LOOP_CRON_SCHEDULER_ENABLED=1`, which also needs Cron on, the Loop engine
+on and a state root mounted. Four switches, all off by default — a background
+process nobody chose is worse than none.
+
+`planSchedulerPass` decides what a pass covers and is pure: it holds no clock,
+reads no disk and performs no tick. The bridge owns the effects.
+
+A PASS LOOKS BACK RATHER THAN REMEMBERING. There is no durable per-schedule
+watermark, so a pass cannot ask what it already did — it asks again. The claim
+marker makes a replayed occurrence `already_handled` rather than a second run,
+so an overlapping window costs nothing and a missed pass is caught up by the
+next one. The lookback is a CATCH-UP BOUND, not a schedule, and it can never
+exceed the evaluator's own window limit.
+
+It is bounded the other way too: a pass ticks at most a stated number of
+schedules, because the bridge answers requests on the same event loop that
+walks them, and a schedule left for the next pass is NAMED rather than dropped.
+One pass runs at a time; a pass that overran its interval would otherwise race
+itself for the same occurrence claim, so the timer skips the beat and says so.
+
+A REFUSED TICK IS NOT A TICK. The evaluator's refusals are the authority — an
+unresolvable zone, a window it will not accept — and such a schedule is
+reported as refused rather than counted as done.
+
 ## Not implemented
 
-The in-bridge scheduler and its timer · execution of a trigger-created run
+execution of a trigger-created run
 (the record is created; nothing advances it) · listing
 PAGINATION: the listing replays at most 200 schedules and reports `truncated`
 truthfully, but nothing can reach schedule 201, so with more than 200 stored

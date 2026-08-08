@@ -32,8 +32,11 @@ import {
 } from './hosted-coding-agent/hosted-routes';
 import { decodeSegment } from './path-segment';
 import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
-import { handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
+import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
 import { createCronTickService } from './cron-service';
+import {
+  createCronScheduler, cronSchedulerEnabled, schedulerIntervalSeconds,
+} from './cron-scheduler';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute,
@@ -556,6 +559,34 @@ export function main(): void {
   const server = createBridgeServer(config, registry, null, null, null, cronTicks);
 
   /**
+   * THE TIMER, only if every gate above it is open.
+   *
+   * It depends on a mounted state root (no claim marker, no at-most-once), on
+   * Cron being enabled, and on its own flag — a background process nobody
+   * switched on is one nobody chose. It creates durable run records and
+   * dispatches nothing, exactly as an operator tick does.
+   */
+  const scheduler = cronTicks !== null && cronEnabled(process.env)
+    && cronSchedulerEnabled(process.env)
+    ? createCronScheduler({
+      ticks: cronTicks,
+      now: () => new Date().toISOString(),
+      binding: { workClass: 'read_only', overlapPolicy: 'parallel_with_limit' },
+      intervalSeconds: schedulerIntervalSeconds(process.env),
+      onPass: (report) => {
+        // Quiet when there is nothing to say: a line per minute per instance
+        // buries the passes that did something.
+        if (report.ticked === 0 && report.refused.length === 0) return;
+        console.log(`Relay cron pass ${report.at}: ticked ${String(report.ticked)}, `
+          + `created ${String(report.runsCreated)}, refused ${String(report.refused.length)}`);
+      },
+    })
+    : null;
+  if (scheduler !== null) {
+    console.log('Relay cron scheduler is ON — it creates run records and dispatches nothing.');
+  }
+
+  /**
    * GRACEFUL SHUTDOWN. A managed host sends SIGTERM before replacing an
    * instance. Stop accepting new connections, let in-flight requests finish,
    * and exit — rather than dying mid-request and leaving a caller unsure
@@ -566,6 +597,7 @@ export function main(): void {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`Relay bridge received ${signal} — closing.`);
+    scheduler?.stop();
     server.close(() => process.exit(0));
     // A caller that never finishes must not hold the deploy open forever.
     const forced = setTimeout(() => process.exit(0), 10_000);
