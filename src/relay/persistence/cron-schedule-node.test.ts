@@ -209,6 +209,19 @@ describe('a schedule is created, read back and listed', () => {
     expect(store.inspect('sched-legacy').kind).toBe('missing');
   });
 
+  it('refuses when the journal cannot be removed, rather than reporting success', () => {
+    // A swallowed unlink failure answered "the schedule is gone and its id is
+    // free" while it sat on disk. Only ENOENT is benign; everything else is a
+    // deletion that did not happen.
+    expect(store.create('s-stuck', v()).ok).toBe(true);
+    const journal = join(root, 'cron-schedules', 's-stuck', 'versions.ndjson');
+    rmSync(journal);
+    mkdirSync(journal);   // a directory where the journal was: unlink fails EISDIR
+    const removed = store.remove('s-stuck', '2026-08-06T12:00:00.000Z');
+    expect(removed.ok).toBe(false);
+    if (!removed.ok) expect(removed.problem).toContain('still there');
+  });
+
   it('refuses to delete what was never there, and a clock it cannot read', () => {
     const absent = store.remove('s-nope', '2026-08-06T12:00:00.000Z');
     expect(absent.ok).toBe(false);
@@ -262,7 +275,8 @@ describe('a schedule is created, read back and listed', () => {
     expect(inspected.kind).toBe('corrupt');
     if (inspected.kind === 'corrupt') {
       expect(inspected.problem).toContain('projectId');
-      expect(inspected.problem).toContain('removed from the state root by hand');
+      // The remedy the message names must be one that exists — deletion does.
+      expect(inspected.problem).toContain('delete it and create it again');
     }
   });
 

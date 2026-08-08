@@ -455,11 +455,16 @@ function editSchedule(
 /**
  * Deletion, which frees the id.
  *
- * IT READS NOTHING FIRST, and that is the point. The case that motivates
- * deletion is a schedule too CORRUPT to read — a journal written before a
- * required field existed, a zone no evaluator resolves — and an endpoint that
- * inspected before acting could not remove the one thing it exists to remove.
- * Until this existed, the answer was to edit the volume by hand.
+ * IT READS ONLY TO TELL MISSING FROM PRESENT, and that read cannot stop the
+ * delete. The case that motivates deletion is a schedule too CORRUPT to read —
+ * a journal written before a required field existed, a zone no evaluator
+ * resolves, a file that cannot be opened at all — so an inspect whose failure
+ * refused the request would block exactly the removal this exists to perform.
+ * A journal that THROWS on read (EACCES, EISDIR) reached the server's catch-all
+ * and answered 500, leaving the record undeletable through the endpoint while
+ * the store beneath it would have removed it happily. Present-and-unreadable is
+ * therefore treated as present. Until this existed, the answer was to edit the
+ * volume by hand.
  *
  * THE ID COMES BACK. An earlier version of this left a tombstone so a reused id
  * could not inherit the deleted schedule's occurrence claims — and review
@@ -491,8 +496,14 @@ function deleteSchedule(
   // MISSING IS 404 HERE TOO. Every sibling answers 404 for a schedule that is
   // not there; answering 409 would tell an operator retrying a timed-out delete
   // that they conflicted with something, when what happened is that it worked.
-  const inspected = ticks.inspectSchedule(scheduleId);
-  if (inspected.kind === 'missing') {
+  let present = true;
+  try {
+    present = ticks.inspectSchedule(scheduleId).kind !== 'missing';
+  } catch {
+    // A record too damaged to inspect is still a record to delete.
+    present = true;
+  }
+  if (!present) {
     return err(404, 'schedule_not_found',
       `No schedule named ${safeText(scheduleId)} exists. Nothing was deleted.`);
   }

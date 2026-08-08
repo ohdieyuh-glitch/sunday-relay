@@ -1,4 +1,6 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -963,6 +965,23 @@ describe('an operator can create, list and pause a schedule', () => {
     expect((await call({ authorized: true },
       { path: '/cron/schedules/sched-triage/delete' }))?.status).toBe(200);
     expect((await call())?.status).toBe(404);
+  });
+
+  it('deletes a record too damaged to even READ, which is the whole point', async () => {
+    // A journal that cannot be opened at all — not merely one that replays as
+    // corrupt — made `inspectSchedule` THROW, which the server turned into a
+    // 500 and left the record undeletable through the endpoint while the store
+    // beneath would have removed it happily. Present-and-unreadable is present.
+    const journal = join(root, 'cron-schedules', 'sched-triage', 'versions.ndjson');
+    rmSync(journal);
+    mkdirSync(journal);   // a directory where the file was: reading throws EISDIR
+    const deleted = await call({ authorized: true },
+      { path: '/cron/schedules/sched-triage/delete' });
+    expect(deleted?.status).not.toBe(500);
+    // The unlink cannot remove a directory either, so this refuses TRUTHFULLY
+    // rather than reporting a deletion that did not happen.
+    expect(deleted?.status).toBe(409);
+    expect(errorOf(deleted).message).toContain('still there');
   });
 
   it('deleting a schedule that is not there is 404, as everywhere else', async () => {

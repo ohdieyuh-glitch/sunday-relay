@@ -258,9 +258,9 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
         return {
           kind: 'corrupt',
           problem: `Version ${String(version.version)} cannot be stated by this build: ${problem} `
-            + 'It is refused rather than run with attribution nobody wrote. No endpoint can '
-            + 'repair it — creating over it conflicts, pausing and editing read it first — so the '
-            + 'record has to be removed from the state root by hand.',
+            + 'It is refused rather than run with attribution nobody wrote. Nothing can repair '
+            + 'it in place — creating over it conflicts, and pausing and editing read it first — '
+            + 'so delete it and create it again.',
         };
       }
     }
@@ -441,8 +441,19 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
         // THE SCHEDULE LAST. A crash mid-purge leaves a schedule that still
         // reads, so the operator can run the delete again; the reverse would
         // leave orphaned claims under an id nothing remembers.
+        // ONLY "ALREADY GONE" IS SWALLOWED. Catching everything reported a
+        // deletion that did not happen: with `versions.ndjson` replaced by a
+        // directory the unlink fails EISDIR, and the answer was still `ok` with
+        // "the schedule is gone and its id is free" while it sat on disk.
         for (const name of [VERSIONS_JOURNAL, SNAPSHOT]) {
-          try { unlinkSync(join(dir, name)); } catch { /* already gone */ }
+          try {
+            unlinkSync(join(dir, name));
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+              return refuse(`${name} could not be removed: `
+                + `${(error as Error).message.slice(0, 120)}. The schedule is still there.`);
+            }
+          }
         }
         fsyncDirBestEffort(dir);
         return { ok: true, value: { claimsPurged } };
