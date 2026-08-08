@@ -43,20 +43,31 @@ const DEFAULT_VIEWPORT_WIDTH_PX = 1440;
  * with a mission, so the Dog belongs on the stage whenever this screen renders,
  * and its state — not its presence — is what says what it is doing.
  *
- * THE REVIEWER HAS NO IDLE PRESENCE, so for it the question really is "is it
- * running", read from `reviewerState`. `changes_required` and `approved` are
- * verdicts it has already delivered, not work in progress. It has no sprite, so
- * the projection names it rather than drawing an empty box —
- * `relay-bridge/mission.ts` is a three-role production orchestrator, so a
- * running reviewer is a real thing this surface can see.
+ * THE OTHER TWO ROLES HAVE NO IDLE PRESENCE, so for them the question really
+ * is "is it running", read from the workforce assignment this screen already
+ * displays. `preparing_handoff` is the architect finishing, not idling;
+ * `changes_required` and `approved` are verdicts the reviewer has already
+ * delivered, not work in progress.
+ *
+ * BOTH ARE PASSED EVEN THOUGH NEITHER CAN BE DRAWN. The projection names them
+ * in `workingWithoutSprite`; leaving them out would be the silent drop this
+ * module's own contract forbids, and review caught exactly that — the architect
+ * was omitted here eighteen lines below the rule saying it must not be.
  */
-function workspaceCastRoles(reviewerState: ReviewerStateKind): readonly CastRoleInput[] {
+/** What a human calls each role. The stage names them; it never draws them. */
+const ROLE_LABEL: Readonly<Record<CastRoleInput['role'], string>> = Object.freeze({
+  prompt_architect: 'Prompt Architect',
+  coding_agent: 'Coding Agent',
+  reviewer: 'Reviewer',
+});
+
+function workspaceCastRoles(workforce: WorkforceAssignment): readonly CastRoleInput[] {
+  const architect = workforce.promptArchitect.status;
+  const reviewer = workforce.reviewer.state;
   return [
+    { role: 'prompt_architect', onStage: architect !== 'waiting' },
     { role: 'coding_agent', onStage: true },
-    {
-      role: 'reviewer',
-      onStage: reviewerState === 'reviewing' || reviewerState === 're_reviewing',
-    },
+    { role: 'reviewer', onStage: reviewer === 'reviewing' || reviewer === 're_reviewing' },
   ];
 }
 import { RelayProjectFooter } from './RelayProjectFooter';
@@ -68,7 +79,7 @@ import type { CodingAgentView } from '../../mission/coding-agent';
 import type { PromptArchitectView } from '../../mission/prompt-architect';
 import { projectHarnessCatalog, type ReviewerHarnessView } from '../../mission/reviewer-harness';
 import { OUTPUT_STATE_LABEL, completionDisplay } from './projections';
-import type { RelayProjectWorkspaceProps, ReviewerStateKind } from './contracts';
+import type { RelayProjectWorkspaceProps, WorkforceAssignment } from './contracts';
 import type {
   PSPAgentImportRecord,
   PSPEntitlementServicePort,
@@ -202,13 +213,13 @@ export function RelayProjectWorkspace(
 
   // Derived once per render from a frozen input, so the identity is stable and
   // the stage does not re-place actors because React re-rendered.
-  // Deps are real, so this stays correct the moment the inputs move — an
-  // empty dep array was defensible only while the input was a module constant,
-  // which is exactly what this change stops being true.
-  const workspaceCast = useMemo(
-    () => projectWorkspaceCast({ roles: workspaceCastRoles(reviewerState) }),
-    [reviewerState],
-  );
+  // Real deps: an empty array was defensible only while the input was a module
+  // constant, which is what this change stops being true. `RelayStage` calls
+  // `layoutStage` on every render regardless, so this memoizes the projection
+  // and nothing downstream — which is all it claims to do.
+  const workspaceCast = useMemo(() => projectWorkspaceCast({
+    roles: workspaceCastRoles(workforce),
+  }), [workforce]);
 
   /**
    * THE BACKDROP CHOICE, with EXACTLY ONE SOURCE OF TRUTH at a time.
@@ -301,6 +312,9 @@ export function RelayProjectWorkspace(
           <RelayStage
             className="rpw-stage"
             actors={workspaceCast.actors}
+            {...(workspaceCast.emptyReason === null
+              ? {}
+              : { emptyReason: workspaceCast.emptyReason })}
             viewportWidthPx={observedViewportWidthPx}
             reducedMotion={reducedMotion}
             label="Relay stage"
@@ -311,6 +325,17 @@ export function RelayProjectWorkspace(
               ? <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} />
               : null)}
           />
+          {/* WHO IS WORKING AND CANNOT BE DRAWN. Computing this and showing it
+              to nobody is the defect it was built to prevent: a working
+              reviewer would still be indistinguishable from no reviewer. It
+              names roles, never invents one — the list is empty whenever they
+              are idle, and the element is not rendered at all. */}
+          {workspaceCast.workingWithoutSprite.length > 0 && (
+            <p className="rpw-stage-offstage" role="status">
+              {`Working, with no sprite on this stage yet: ${workspaceCast.workingWithoutSprite
+                .map((r) => ROLE_LABEL[r]).join(', ')}.`}
+            </p>
+          )}
         </div>
         {/* The picker is MOUNTED, so "two selectable backdrops" is a fact about
             the shipped website and not only about the catalog. Selection is

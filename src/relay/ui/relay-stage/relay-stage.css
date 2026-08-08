@@ -69,6 +69,18 @@
   overflow-x: clip;
 }
 
+/* WHO IS WORKING AND HAS NO SPRITE. Below the stage rather than on it: it is a
+   statement ABOUT the cast, not a member of it, and putting it inside would
+   make it an actor the stage never placed. */
+.rpw-stage-offstage {
+  margin: 0.5rem 0 0;
+  text-align: center;
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--text-dim, #8b8578);
+}
+
 .rst-empty,
 .rst-overflow {
   position: absolute;

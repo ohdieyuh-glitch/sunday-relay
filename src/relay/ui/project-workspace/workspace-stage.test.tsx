@@ -210,3 +210,37 @@ describe('the dog is on the stage, in a box it can patrol', () => {
     expect(document.querySelector('.rpw-stage-bounds')).not.toBeNull();
   });
 });
+
+describe('a role that is working and cannot be drawn is NAMED to the user', () => {
+  it('says so, rather than computing it and showing nobody', () => {
+    // `workingWithoutSprite` and `emptyReason` were both computed, unit-tested
+    // and documented as shipped behaviour while reaching no surface at all.
+    // A working reviewer was still indistinguishable from no reviewer.
+    const fixture = WORKSPACE_FIXTURES.implementing;
+    workspace({
+      workforce: {
+        ...fixture.workforce,
+        reviewer: { ...fixture.workforce.reviewer, state: 'reviewing' },
+      },
+    });
+    const note = document.querySelector('.rpw-stage-offstage');
+    expect(note).not.toBeNull();
+    expect(note?.textContent).toContain('Reviewer');
+    // The Dog is still drawn; the note is ABOUT the cast, not a member of it.
+    expect(document.querySelector('[data-stage-actor="relay-dog"]')).not.toBeNull();
+  });
+
+  it('renders nothing at all when every other role is idle', () => {
+    // It names roles; it never invents one, and it does not leave an empty
+    // element behind to be styled around.
+    const fixture = WORKSPACE_FIXTURES.implementing;
+    workspace({
+      workforce: {
+        ...fixture.workforce,
+        promptArchitect: { ...fixture.workforce.promptArchitect, status: 'waiting' },
+        reviewer: { ...fixture.workforce.reviewer, state: 'waiting' },
+      },
+    });
+    expect(document.querySelector('.rpw-stage-offstage')).toBeNull();
+  });
+});

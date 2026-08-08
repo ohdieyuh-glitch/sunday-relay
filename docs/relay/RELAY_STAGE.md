@@ -170,9 +170,18 @@ role and the stage under-reports the team. Place one and the stage announces an
 actor it renders as an empty box, while the overflow warning counts a sprite
 nobody can see — which is exactly what the Stage says it refuses to do.
 
-So a working role with no sprite is **named** in `workingWithoutSprite`. An
-empty stage with work running says *"No agent on this stage has artwork yet.
-Work is running"* — never *"no agent is working"*, which would be false.
+So a role with no sprite is **named** in `workingWithoutSprite`, and the
+workspace RENDERS that name beneath the stage: *"Working, with no sprite on this
+stage yet: Reviewer."* Review caught the first version computing it, unit-testing
+it, documenting it as shipped, and showing it to nobody — which left a working
+reviewer indistinguishable from no reviewer, the exact thing the field was added
+to prevent.
+
+The two empty-stage messages are wired through to `RelayStage`, and on THIS
+surface they are unreachable: the workspace always places the Dog, so the cast is
+never empty. They are reachable for a host that does not — the CLI, or a future
+screen without a mission — and are stated here as what such a host would show,
+not as something a founder sees today.
 
 **Relay runs three roles in production.** `relay-bridge/mission.ts` is a
 three-role orchestrator — Prompt Architect → Coding Agent → Reviewer — and it is
