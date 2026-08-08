@@ -382,9 +382,9 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     // alone was defeated by a withdrawal preamble — a status announcing an
     // opened wave that then QUOTED the old line passed. Pinning the position
     // makes the quotation useless.
-    const BETA_PIN = '**Status: THE DECISION, THE DURABLE STORE AND THE ADMISSION ROUTES ARE '
-      + 'IMPLEMENTED AND WIRED INTO THE BRIDGE. NO WAVE HAS BEEN OPENED IN PRODUCTION '
-      + 'AND NOBODY HAS BEEN ADMITTED TO ANYTHING.**';
+    const BETA_PIN = '**Status: THE DECISION, THE DURABLE STORE, THE ADMISSION ROUTES AND '
+      + 'ENFORCEMENT ON MISSION START ARE IMPLEMENTED AND WIRED INTO THE BRIDGE. NO WAVE '
+      + 'HAS BEEN OPENED IN PRODUCTION AND NOBODY HAS BEEN ADMITTED TO ANYTHING.**';
     expect(beta).toContain(BETA_PIN);
     expect(beta.indexOf(BETA_PIN)).toBe(beta.indexOf('**Status:'));
   });

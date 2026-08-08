@@ -34,6 +34,7 @@ import { decodeSegment } from './path-segment';
 import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
 import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
 import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
+import { guardBetaAdmission, participantFromBody } from './beta-guard';
 import { createBetaEnrolmentStore } from '../src/relay/persistence';
 import type { BetaWaveConfig } from '../src/relay/mission/beta';
 import type { BetaEnrolmentStore } from '../src/relay/persistence';
@@ -500,6 +501,23 @@ export function createBridgeServer(
             send(res, 400, { error: 'missionId and objective are required' }, cors);
             return;
           }
+          /**
+           * THE CONTROLLED BETA BITES HERE, and only here, because this is
+           * the operation it exists to control: `registry.start` runs the
+           * real three-role pipeline and spends real money. With the beta off
+           * this is `null` and the route behaves exactly as it always did.
+           */
+          const refusal = guardBetaAdmission({
+            env: process.env,
+            participantId: participantFromBody(body),
+            store: betaStore,
+            waves: betaWaves,
+          });
+          if (refusal !== null) {
+            send(res, refusal.status, refusal.body, cors);
+            return;
+          }
+
           const view = registry.start({ missionId, objective });
           send(res, 200, { missionId, view }, cors);
           return;

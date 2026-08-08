@@ -1,8 +1,8 @@
 # Controlled beta waves
 
-**Status: THE DECISION, THE DURABLE STORE AND THE ADMISSION ROUTES ARE
-IMPLEMENTED AND WIRED INTO THE BRIDGE. NO WAVE HAS BEEN OPENED IN PRODUCTION
-AND NOBODY HAS BEEN ADMITTED TO ANYTHING.**
+**Status: THE DECISION, THE DURABLE STORE, THE ADMISSION ROUTES AND ENFORCEMENT
+ON MISSION START ARE IMPLEMENTED AND WIRED INTO THE BRIDGE. NO WAVE HAS BEEN
+OPENED IN PRODUCTION AND NOBODY HAS BEEN ADMITTED TO ANYTHING.**
 
 Those are seven different claims and this file keeps them apart. The last one is
 the honest limit: Relay decides and records, and no wave has been opened. The status line is pinned by
@@ -93,7 +93,7 @@ door. A board that disagrees with the gate is worse than no board.
 ## Not implemented
 
  enforcement anywhere in the
-PRODUCT (the routes answer, and nothing downstream yet consults the answer) ·
+
 opening a wave (no artifact records any wave's state; there is no default
 config, so "all waves are not_open" is true only because nothing configures one)
 · invitations · waitlists · per-wave entitlements or spend caps · any UI.
@@ -203,3 +203,30 @@ Wave 0's cap is **100 seats**, set in `main()` from `WAVE_0.md`, because it is a
 deployment decision — the gate does not choose any wave's cap. Waves 1-3 are
 deliberately unconfigured, so `/beta/status` reports them as `unconfigured`
 rather than showing them merely closed.
+
+## Enforcement
+
+`relay-bridge/beta-guard.ts`, called from `POST /relay-api/mission/start`.
+
+**That is where it bites, and only there**, because that is the operation a
+controlled beta exists to control: `registry.start` runs the real three-role
+pipeline — Prompt Architect, Coding Agent, independent Reviewer — and spends
+real money. Gating the API in general would be a different product.
+
+**With the beta off it is not a gate.** The guard returns `null` and the route
+behaves exactly as it always did. Turning the beta *on* is what makes admission
+required — the only reading of "controlled" that does not silently change an
+unrelated deployment.
+
+**It adds a gate and never removes one.** `WAVE_0.md` requires that existing
+authentication, permissions, Mission controls, usage limits, security boundaries
+and verification all remain enforced; this runs alongside them. Admission is not
+permission. A participant who is admitted and not authorised is still refused by
+whatever already refuses them.
+
+**No anonymous execution.** With the beta on, a request naming no participant is
+refused `beta_admission_required`. One that names an unadmitted participant is
+refused with **the gate's own reason** — `not_enrolled`, `wave_full`,
+`wave_not_open`, `occupancy_unknown` — because "you never asked", "we are full"
+and "it has not opened yet" are three different things for the person being
+turned away to do next.
