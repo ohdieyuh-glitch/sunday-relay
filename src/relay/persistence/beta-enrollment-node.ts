@@ -86,8 +86,17 @@ export interface BetaEnrolmentStore {
    * orders the wave's queue, so a retry that replaced it would move their seat.
    */
   enrol(participantId: string, wave: RelayBetaWave, at: string): EnrolResult;
-  /** Every enrolment in the wave. Unordered — the gate orders by `enrolledAt`. */
-  list(wave: RelayBetaWave): readonly BetaEnrollment[];
+  /**
+   * Every enrolment in the wave, or `null` when the directory cannot be read.
+   *
+   * `null`, NOT `[]`, FOR THE SAME REASON `countFor` IS NOT `0`. Its sibling
+   * was repaired and this was not, and review found the consequence: `list`
+   * runs first in the gate, so an unreadable directory made an admitted
+   * participant `not_enrolled` — told, in the product's own truthfulness
+   * wording, that Relay holds no record for them while the record sat on the
+   * volume. Only `ENOENT` is an empty wave.
+   */
+  list(wave: RelayBetaWave): readonly BetaEnrollment[] | null;
   /**
    * How many enrolments the VOLUME holds for this wave, or `null` when it
    * cannot be counted.
@@ -267,12 +276,13 @@ export function createBetaEnrolmentStore(options: { readonly root: string }): Be
 
     list(wave) {
       const dir = dirFor(wave);
-      if (dir === null) return [];
+      // Uncontained or unknown is unanswerable, not empty.
+      if (dir === null) return null;
       let files: string[];
       try {
         files = readdirSync(dir);
-      } catch {
-        return [];
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === 'ENOENT' ? [] : null;
       }
       const out: BetaEnrollment[] = [];
       for (const file of files) {

@@ -133,7 +133,7 @@ describe('the 100-seat cap is enforced by the route, not merely configured', () 
     // THE HUNDRED-AND-FIRST NEVER GOT A RECORD. The cap is now enforced at
     // signup too, so a stranger cannot consume a seat they can never use.
     expect(store.countFor('wave_0')).toBe(100);
-    expect(store.list('wave_0').some((e) => e.participantId === 'p100')).toBe(false);
+    expect((store.list('wave_0') ?? []).some((e) => e.participantId === 'p100')).toBe(false);
 
     const hundredth = await call('POST', '/beta/access', {
       ...asOperator, body: { participantId: 'p099' },
@@ -236,18 +236,30 @@ describe('strangers cannot consume the wave, and cannot read it back', () => {
     expect(overflow?.status).toBe(429);
     // THE SEAT WAS NOT TAKEN. A refusal that still records is not a refusal.
     expect(store.countFor('wave_0')).toBe(3);
-    expect(store.list('wave_0').some((e) => e.participantId === 'bot')).toBe(false);
+    expect((store.list('wave_0') ?? []).some((e) => e.participantId === 'bot')).toBe(false);
   });
 
-  it('still answers someone who ALREADY holds a seat in a full wave', async () => {
+  it('answers a full wave the SAME WAY for members and strangers', async () => {
+    // Skipping the cap for an existing holder was kind and made the route a
+    // membership oracle the moment the wave filled — a state an attacker can
+    // create in three seconds, after which 200-versus-429 answered "is this id
+    // enrolled?" for free and without writing anything. A member loses nothing
+    // by being refused here: they already hold their seat, and this route
+    // grants nothing either way.
     for (const id of ['a', 'b', 'c']) {
       await call('POST', '/beta/request', { body: { participantId: id }, waves: SEATS_3 });
     }
-    const again = await call('POST', '/beta/request', {
+    const member = await call('POST', '/beta/request', {
       body: { participantId: 'a' }, waves: SEATS_3,
     });
-    // They already hold it; telling them the wave is full would be false.
-    expect(again?.status).toBe(200);
+    const stranger = await call('POST', '/beta/request', {
+      body: { participantId: 'zz' }, waves: SEATS_3,
+    });
+    expect(member?.status).toBe(429);
+    expect(member?.status).toBe(stranger?.status);
+    expect(member?.body).toEqual(stranger?.body);
+    // And neither took a seat.
+    expect(store.countFor('wave_0')).toBe(3);
   });
 
   it('cannot be used to ask whether someone is already in the beta', async () => {
@@ -273,5 +285,54 @@ describe('strangers cannot consume the wave, and cannot read it back', () => {
       body: { participantId: 'alice' },
     }, blind as typeof store);
     expect(result?.status).toBe(503);
+  });
+});
+
+describe('a seat can be given back, through a route an operator can reach', () => {
+  it('frees a seat, and the next person gets in', async () => {
+    // `store.remove` existed and nothing called it, so "a seat can be given
+    // back" was true of a function and false of the product.
+    const SEATS_1: BetaWaveConfig[] = [{ wave: 'wave_0', state: 'open', seats: 1 }];
+    await call('POST', '/beta/request', { body: { participantId: 'squatter' }, waves: SEATS_1 });
+
+    const blocked = await call('POST', '/beta/request', {
+      body: { participantId: 'real' }, waves: SEATS_1,
+    });
+    expect(blocked?.status).toBe(429);
+
+    const removed = await call('POST', '/beta/remove', {
+      ...asOperator, body: { participantId: 'squatter', wave: 'wave_0' }, waves: SEATS_1,
+    });
+    expect((removed?.body as { data: { removed: boolean; seatsTaken: number } }).data)
+      .toMatchObject({ removed: true, seatsTaken: 0 });
+
+    const admitted = await call('POST', '/beta/request', {
+      body: { participantId: 'real' }, waves: SEATS_1,
+    });
+    expect(admitted?.status).toBe(200);
+  });
+
+  it('is operator-only — a stranger cannot free somebody else\'s seat', async () => {
+    await call('POST', '/beta/request', { body: { participantId: 'alice' } });
+    const result = await call('POST', '/beta/remove', {
+      body: { participantId: 'alice', wave: 'wave_0' },
+    });
+    expect(result?.status).toBe(401);
+    expect(store.countFor('wave_0')).toBe(1);
+  });
+
+  it('removing someone who was never there is the truth, not an error', async () => {
+    const result = await call('POST', '/beta/remove', {
+      ...asOperator, body: { participantId: 'ghost', wave: 'wave_0' },
+    });
+    expect(result?.status).toBe(200);
+    expect((result?.body as { data: { removed: boolean } }).data.removed).toBe(false);
+  });
+
+  it('refuses a wave outside the closed set', async () => {
+    const result = await call('POST', '/beta/remove', {
+      ...asOperator, body: { participantId: 'alice', wave: 'wave_9' },
+    });
+    expect(result?.status).toBe(422);
   });
 });

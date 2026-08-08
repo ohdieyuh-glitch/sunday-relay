@@ -127,3 +127,37 @@ describe('the participant a request claims is read, never trusted', () => {
     expect((result?.body as { error: { reason: string } }).error.reason).toBe('not_enrolled');
   });
 });
+
+describe('the guard counts the volume, not the list it was given', () => {
+  it('refuses when the count disagrees with the records, rather than admitting', () => {
+    // THE PROPERTY THREE COMMITS WERE SPENT ESTABLISHING, pinned here because
+    // mutation showed the guard could be changed to derive `occupancy` from
+    // `list().length` — the exact no-op the store exists to prevent — with
+    // every other test still passing.
+    store.enrol('alice', 'wave_0', T);
+    const partial = {
+      ...store,
+      // The caller optimisation: fetch only the asker's record.
+      list: (w: 'wave_0' | 'wave_1' | 'wave_2' | 'wave_3') =>
+        (store.list(w) ?? []).filter((e) => e.participantId === 'alice'),
+      // …while the volume genuinely holds more.
+      countFor: () => 5,
+    };
+    const result = guardBetaAdmission({
+      env: ON, participantId: 'alice', store: partial as typeof store, waves: OPEN_1,
+    });
+    expect(result).not.toBeNull();
+    expect((result?.body as { error: { reason: string } }).error.reason).toBe('occupancy_unknown');
+  });
+
+  it('refuses when the records cannot be read at all, rather than saying not_enrolled', () => {
+    // `list` runs before occupancy in the gate, so an unreadable directory
+    // told an admitted participant that Relay holds no record for them.
+    const blind = { ...store, list: () => null };
+    const result = guardBetaAdmission({
+      env: ON, participantId: 'alice', store: blind as unknown as typeof store, waves: OPEN_1,
+    });
+    expect(result?.status).toBe(503);
+    expect((result?.body as { error: { kind: string } }).error.kind).toBe('beta_not_ready');
+  });
+});

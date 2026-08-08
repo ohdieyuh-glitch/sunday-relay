@@ -39,6 +39,17 @@ class BridgeUnreachableError extends Error {
 export function createLiveRelayApplicationAdapter(config: {
   bridgeBaseUrl?: string;
   fetchImpl?: typeof fetch;
+  /**
+   * Who this browser is, for the controlled beta.
+   *
+   * WITHOUT THIS, TURNING THE BETA ON DOES NOT RESTRICT IT — IT TURNS MISSION
+   * START OFF. Review found the guard shipped with no client able to satisfy
+   * it: every mission start from the website would have been refused 403 the
+   * instant the flag was set, the founder's included. Absent is still absent,
+   * and the bridge refuses it when the beta is on, which is the honest
+   * behaviour for a browser that has not been told who it is.
+   */
+  participantId?: string;
 } = {}): RelayApplicationAdapter {
   const base = (config.bridgeBaseUrl ?? RELAY_BRIDGE_API_BASE).replace(/\/$/, '');
   const doFetch: typeof fetch =
@@ -109,7 +120,13 @@ export function createLiveRelayApplicationAdapter(config: {
       return call('/mission/start', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ missionId: mission.id, objective: mission.objective }),
+        body: JSON.stringify({
+          missionId: mission.id,
+          objective: mission.objective,
+          // Omitted entirely when unknown, rather than sent as an empty string
+          // that would read as a participant nobody enrolled.
+          ...(config.participantId === undefined ? {} : { participantId: config.participantId }),
+        }),
       });
     },
 

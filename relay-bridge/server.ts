@@ -560,6 +560,22 @@ export function createBridgeServer(
             return send(res, 200, { missionId: id, view }, cors);
           }
           if (method === 'POST' && action === 'retry') {
+            /**
+             * RETRY RE-DRIVES THE SAME PIPELINE, so it is where money is spent
+             * too. Guarding only `start` meant a mission begun while the beta
+             * was off could be re-driven after it was on, by a caller the gate
+             * refuses — which contradicts the boundary the guard states.
+             */
+            const retryRefusal = guardBetaAdmission({
+              env: process.env,
+              participantId: participantFromBody(await readBody(req)),
+              store: betaStore,
+              waves: betaWaves,
+            });
+            if (retryRefusal !== null) {
+              send(res, retryRefusal.status, retryRefusal.body, cors);
+              return;
+            }
             const view = registry.retry(id);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);

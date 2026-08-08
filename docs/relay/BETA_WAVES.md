@@ -245,14 +245,18 @@ records nothing. Someone who already holds a seat is still answered, because
 they do hold it and saying otherwise would be false. Permanent destruction
 becomes a bounded refusal.
 
-**A seat can be given back.** `store.remove(participantId, wave)` frees one, and
-`removed: false` for someone who was never there is the truth rather than a
-failure — the seat is free either way. Revocation comes off the
-not-implemented list.
+**A seat can be given back, through a route an operator can reach.**
+`POST /relay-api/beta/remove` (operator-only) frees one, and `removed: false`
+for someone who was never there is the truth rather than a failure — the seat is
+free either way. `store.remove` existed for one commit with no caller, which
+made this claim true of a function and false of the product.
 
-**The public route is no longer a membership oracle.** Its body is identical
-whether the request was a first or a repeat, and it echoes the *request's*
-instant rather than the stored one. The old body differed on `alreadyRequested`
+**The public route is no longer a membership oracle**, including on a full
+wave. Its body is identical whether the request was a first or a repeat, and it
+echoes the *request's* instant rather than the stored one. A full wave answers
+`429` for members and strangers alike — skipping the cap for an existing holder
+was kind and re-opened the oracle in the one state an attacker can create in
+three seconds. The old body differed on `alreadyRequested`
 and returned the stored `enrolledAt` — so anyone could ask "is this id in the
 beta, and when did they join?", and since that instant orders the queue, the
 answer also leaked their seat position. Probing was not passive either: a miss
@@ -279,6 +283,21 @@ global limit carries, which is the safe direction.
 
 Neither limit is a security boundary on its own, and this document does not
 claim otherwise.
+
+## What a client must send
+
+`participantId`, on `POST /mission/start` and `/mission/<id>/retry`.
+
+Without it, **turning the beta on would not restrict the beta — it would turn
+mission start off.** The guard shipped for one commit with no client able to
+satisfy it, so every mission start from the website, the founder's included,
+would have been refused `403` the instant the flag was set. `StartMissionRequest`
+carries it optionally and `live-adapter.ts` sends it when the host supplies one;
+a bridge with the beta off never reads it.
+
+Retry is guarded for the same reason `start` is: it re-drives the same
+three-role pipeline, so a mission begun while the beta was off could otherwise
+be re-driven after it was on, by a caller the gate refuses.
 
 **Still missing before the flag is set in production:** a **blocklist**. The cap
 and the limit bound the damage; they do not let an operator turn away a caller

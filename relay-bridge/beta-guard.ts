@@ -84,13 +84,32 @@ export function guardBetaAdmission(input: BetaAdmissionInput): ReviewerRouteResu
     };
   }
 
+  /**
+   * A LIST WE COULD NOT READ IS NOT AN EMPTY ONE. `list` runs before occupancy
+   * in the gate, so passing `[]` for an unreadable directory answered
+   * `not_enrolled` — telling an admitted participant that Relay holds no record
+   * for them while it sat on the volume. Refuse instead.
+   */
+  const lists = RELAY_BETA_WAVES.map((w) => input.store!.list(w));
+  if (lists.some((l) => l === null)) {
+    return {
+      status: 503,
+      body: {
+        error: {
+          kind: 'beta_not_ready',
+          message: 'Relay cannot read its beta records, so it will not decide admission against them.',
+        },
+      },
+    };
+  }
+
   const decision = decideBetaAccess({
     participantId: input.participantId,
     // TWO READS OF THE SAME TRUTH, exactly as the routes do it: the list orders
     // the queue, the count proves the list is complete. `countFor` may answer
     // `null`, and the gate refuses on that rather than admitting against a
     // count nobody has.
-    enrollments: RELAY_BETA_WAVES.flatMap((w) => input.store!.list(w)),
+    enrollments: lists.flatMap((l) => l ?? []),
     waves: input.waves,
     occupancy: Object.fromEntries(RELAY_BETA_WAVES.map((w) => [w, input.store!.countFor(w)])),
   });

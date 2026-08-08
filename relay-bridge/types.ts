@@ -55,4 +55,13 @@ export interface StartMissionRequest {
   missionId: string;
   /** The controlled task objective (the founder's Ask Relay request). */
   objective: string;
+  /**
+   * Who is asking, for the controlled beta.
+   *
+   * OPTIONAL IN THE TYPE, REQUIRED BY THE GUARD WHEN THE BETA IS ON. A bridge
+   * with the beta off never reads it, and making it mandatory here would break
+   * every existing caller for a feature they have not opted into. When the beta
+   * IS on, a request without it is refused — which is the point.
+   */
+  participantId?: string;
 }

@@ -170,19 +170,25 @@ export async function handleBetaRoute(
      */
     const configured = request.waves.find((w) => w.wave === PUBLIC_SIGNUP_WAVE);
     const taken = store.countFor(PUBLIC_SIGNUP_WAVE);
-    const held = store.list(PUBLIC_SIGNUP_WAVE)
-      .some((e) => e.participantId === participantId);
-    if (!held) {
-      if (configured === undefined) {
-        return err(503, 'beta_not_ready', 'No wave is configured to receive requests.');
-      }
-      if (taken === null) {
-        // Recording against a count nobody has is how the cap stops existing.
-        return err(503, 'beta_not_ready', 'Relay cannot count the wave, so it will not record against it.');
-      }
-      if (taken >= configured.seats) {
-        return err(429, 'wave_full', 'This wave has no seats left, so no new request is recorded.');
-      }
+    if (configured === undefined) {
+      return err(503, 'beta_not_ready', 'No wave is configured to receive requests.');
+    }
+    if (taken === null) {
+      // Recording against a count nobody has is how the cap stops existing.
+      return err(503, 'beta_not_ready', 'Relay cannot count the wave, so it will not record against it.');
+    }
+    /**
+     * THE SAME ANSWER FOR EVERYONE ON A FULL WAVE.
+     *
+     * The first version skipped the cap for an existing holder, which was
+     * kind and made the route a membership oracle again the moment the wave
+     * filled — a state an attacker can create in three seconds, after which
+     * `200` versus `429` answered "is this id enrolled?" for free and without
+     * writing anything. A member loses nothing by being refused here: they
+     * already hold their seat, and this route grants nothing either way.
+     */
+    if (taken >= configured.seats) {
+      return err(429, 'wave_full', 'This wave has no seats left, so no new request is recorded.');
     }
 
     const result = store.enrol(participantId, PUBLIC_SIGNUP_WAVE, request.now);
@@ -222,7 +228,9 @@ export async function handleBetaRoute(
       // BOTH from the store, and deliberately by two different reads: the list
       // orders the queue, the count proves the list is complete. Deriving one
       // from the other would make the cap unenforceable.
-      enrollments: RELAY_BETA_WAVES.flatMap((w) => store.list(w)),
+      // A wave we cannot read is refused by the gate rather than read as
+      // empty — `list` answers `null`, never `[]`, for an unreadable directory.
+      enrollments: RELAY_BETA_WAVES.flatMap((w) => store.list(w) ?? []),
       waves: request.waves,
       // `countFor` may answer `null` — a directory it could not read. That
       // flows straight through to the gate, which refuses `occupancy_unknown`
@@ -235,11 +243,32 @@ export async function handleBetaRoute(
       : { admitted: false, reason: decision.reason, detail: safeText(decision.detail) });
   }
 
+  if (request.method === 'POST' && request.path === '/beta/remove') {
+    /**
+     * THE RECOVERY PATH, REACHABLE. `store.remove` existed and nothing called
+     * it, so the doc's claim that "a seat can be given back" was true of a
+     * function and false of the product — an operator still had only volume
+     * surgery. Operator-only, because freeing someone else's seat is exactly
+     * the thing a stranger must not do.
+     */
+    if (!operator()) return err(401, 'authentication_failed', 'Removing an enrolment is operator-only.');
+    const participantId = readParticipantId(request.body);
+    if (participantId === null) return err(422, 'validation_failed', 'A participantId is required.');
+    const wave = readWave(request.body);
+    if (wave === null) return err(422, 'validation_failed', 'A known wave is required.');
+
+    const result = store.remove(participantId, wave);
+    if (!result.ok) return err(422, 'removal_failed', 'That enrolment could not be removed.');
+    // `removed: false` is the truth, not a failure — the seat is free either
+    // way, and reporting an error would invite a retry loop over nothing.
+    return ok({ removed: result.removed, wave, seatsTaken: store.countFor(wave) });
+  }
+
   if (request.method === 'GET' && request.path === '/beta/status') {
     if (!operator()) return err(401, 'authentication_failed', 'The wave board is operator-only.');
     const occupancy = Object.fromEntries(RELAY_BETA_WAVES.map((w) => [w, store.countFor(w)]));
     return ok({
-      waves: request.waves.map((w) => projectWaveStatus(w, occupancy, store.list(w.wave))),
+      waves: request.waves.map((w) => projectWaveStatus(w, occupancy, store.list(w.wave) ?? [])),
       // A wave the deployment never configured is absent from `waves`, and
       // absent is stated rather than rendered as a wave that is merely closed.
       unconfigured: RELAY_BETA_WAVES.filter((w) => !request.waves.some((c) => c.wave === w)),
@@ -247,6 +276,15 @@ export async function handleBetaRoute(
   }
 
   return err(404, 'unknown_beta_route', 'No such beta route.');
+}
+
+/** The wave an operator names, checked against the closed set. */
+function readWave(body: unknown): RelayBetaWave | null {
+  if (body === null || typeof body !== 'object') return null;
+  const value = (body as Record<string, unknown>).wave;
+  return typeof value === 'string' && (RELAY_BETA_WAVES as readonly string[]).includes(value)
+    ? value as RelayBetaWave
+    : null;
 }
 
 function readParticipantId(body: unknown): string | null {

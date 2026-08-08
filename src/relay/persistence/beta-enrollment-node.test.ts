@@ -48,7 +48,7 @@ describe('an enrolment is recorded once, and a retry cannot take a second seat',
     // The gate places bob second, exactly as if the retries never happened.
     const decision = decideBetaAccess({
       participantId: 'bob',
-      enrollments: store.list('wave_0'),
+      enrollments: store.list('wave_0') ?? [],
       waves: [{ wave: 'wave_0', state: 'open', seats: 1 }],
       occupancy: { wave_0: store.countFor('wave_0') },
     });
@@ -64,7 +64,7 @@ describe('the count is INDEPENDENT of the list, which is what the gate needs', (
     // The caller fetches only one participant's enrolment — the optimisation
     // that used to admit everyone against an unenforced cap. The store's own
     // count still knows there are three, so the gate can catch the mismatch.
-    const partial = store.list('wave_0').filter((e) => e.participantId === 'a');
+    const partial = (store.list('wave_0') ?? []).filter((e) => e.participantId === 'a');
     const decision = decideBetaAccess({
       participantId: 'a',
       enrollments: partial,
@@ -82,7 +82,7 @@ describe('the count is INDEPENDENT of the list, which is what the gate needs', (
     for (const id of ['a', 'b', 'c']) store.enrol(id, 'wave_0', T);
     const decision = decideBetaAccess({
       participantId: 'a',
-      enrollments: store.list('wave_0'),
+      enrollments: store.list('wave_0') ?? [],
       waves: [{ wave: 'wave_0', state: 'open', seats: 10 }],
       occupancy: { wave_0: store.countFor('wave_0') },
     });
@@ -125,14 +125,14 @@ describe('a corrupt record is skipped, never handed to a decision', () => {
     mkdirSync(join(root, 'beta-enrollments', 'wave_0'), { recursive: true });
     writeFileSync(join(root, 'beta-enrollments', 'wave_0', 'torn.json'), '{ not json');
 
-    expect(store.list('wave_0').map((e) => e.participantId)).toEqual(['good']);
+    expect((store.list('wave_0') ?? []).map((e) => e.participantId)).toEqual(['good']);
     // The file is real and occupies the volume, so the count includes it. The
     // gate then sees count 2 against 1 readable record and refuses rather than
     // seating anyone against records it cannot fully read.
     expect(store.countFor('wave_0')).toBe(2);
     const decision = decideBetaAccess({
       participantId: 'good',
-      enrollments: store.list('wave_0'),
+      enrollments: store.list('wave_0') ?? [],
       waves: [{ wave: 'wave_0', state: 'open', seats: 10 }],
       occupancy: { wave_0: store.countFor('wave_0') },
     });
@@ -246,7 +246,7 @@ describe('neither enrol nor list throws where the contract says it refuses', () 
     store.enrol('good', 'wave_0', T);
     mkdirSync(join(root, 'beta-enrollments', 'wave_0', 'evil.json'), { recursive: true });
     expect(() => store.list('wave_0')).not.toThrow();
-    expect(store.list('wave_0').map((e) => e.participantId)).toEqual(['good']);
+    expect((store.list('wave_0') ?? []).map((e) => e.participantId)).toEqual(['good']);
     expect(() => store.enrol('other', 'wave_0', T)).not.toThrow();
   });
 
@@ -306,7 +306,7 @@ describe('a seat can be given back', () => {
     store.enrol('real', 'wave_0', '2026-08-05T00:00:00.000Z');
     const waves = [{ wave: 'wave_0' as const, state: 'open' as const, seats: 1 }];
     const before = decideBetaAccess({
-      participantId: 'real', enrollments: store.list('wave_0'), waves,
+      participantId: 'real', enrollments: store.list('wave_0') ?? [], waves,
       occupancy: { wave_0: store.countFor('wave_0') },
     });
     expect(before.admitted).toBe(false);
@@ -315,7 +315,7 @@ describe('a seat can be given back', () => {
     expect(store.countFor('wave_0')).toBe(1);
 
     const after = decideBetaAccess({
-      participantId: 'real', enrollments: store.list('wave_0'), waves,
+      participantId: 'real', enrollments: store.list('wave_0') ?? [], waves,
       occupancy: { wave_0: store.countFor('wave_0') },
     });
     expect(after.admitted).toBe(true);
@@ -344,7 +344,7 @@ describe('two writers sharing a pid do not destroy each other', () => {
     expect(result.ok).toBe(true);
     // The other writer's temp survives, and is invisible to both readers.
     expect(readdirSync(dir).some((f) => f.includes('.tmp-deadbeef'))).toBe(true);
-    expect(store.list('wave_0').map((e) => e.participantId)).toEqual(['alice']);
+    expect((store.list('wave_0') ?? []).map((e) => e.participantId)).toEqual(['alice']);
     expect(store.countFor('wave_0')).toBe(1);
   });
 });
