@@ -318,6 +318,14 @@ export interface RelayProjectWorkspaceProps {
    * disable the picker: selection works either way and simply does not survive
    * a reload. Reporting a choice and storing one are different jobs, and the
    * workspace only does the first.
+   *
+   * SUPPLYING THIS MAKES `stageBackdrop` THE ONLY SOURCE OF TRUTH, and so
+   * obliges the host to supply it and to echo back what it stored. The local
+   * state stands down precisely so a write the host REJECTS is not drawn as
+   * though it had been kept — the cost being that a host passing this handler
+   * with no `stageBackdrop`, or one that never echoes, ships radios that
+   * visibly refuse to move. Two optional props whose COMBINATION is the
+   * contract; the type cannot express it, so this does, and a test pins it.
    */
   onSelectStageBackdrop?: (id: RelayBackdropId) => void;
   /**

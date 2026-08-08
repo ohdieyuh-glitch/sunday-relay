@@ -86,10 +86,33 @@ describe('the CLI offers the same scenes, and refuses the same substitution', ()
     // reader for it. Printing `None` asserted the founder had no scene
     // selected, when the true statement is that the CLI cannot see one — so a
     // founder who picked Jungle on the website was told None here.
-    const { lines } = view() as { lines: string[] };
+    const { lines, json } = view() as {
+      lines: string[];
+      json: { backdrop: string | null; backdropChoices: { selected: boolean }[] };
+    };
     const text = lines.join('\n');
     expect(text).toContain('Unknown');
     expect(text).toContain('cannot read it');
+    // AND NOTHING IS TICKED. Saying the selection is unknown and then marking
+    // None `[x]` two lines below is one surface contradicting itself.
+    expect(text).not.toContain('[x]');
+    // The machine-readable answer has to agree with the human-readable one.
+    // `"none"` here is a definite claim, and there is nothing to claim.
+    expect(json.backdrop).toBeNull();
+    expect(json.backdropChoices.some((c) => c.selected)).toBe(false);
+  });
+
+  it('separates "no reader here" from "read, nothing stored"', () => {
+    // `undefined` is a fact about this SURFACE; `null` is a fact about the
+    // PROJECT. Both print Unknown and neither may borrow the other's reason.
+    const noReader = (view() as { lines: string[] }).lines.join('\n');
+    const readNothing = (view({ selectedBackdrop: null }) as { lines: string[] })
+      .lines.join('\n');
+    expect(noReader).toContain('cannot read it');
+    expect(readNothing).toContain('nothing has been stored');
+    expect(readNothing).not.toContain('cannot read it');
+    expect((view({ selectedBackdrop: null }) as { json: { backdrop: string | null } }).json.backdrop)
+      .toBeNull();
   });
 
   it('sanitizes a stored id before printing it to a terminal', () => {

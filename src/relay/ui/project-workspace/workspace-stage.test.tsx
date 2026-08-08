@@ -124,6 +124,23 @@ describe('exactly one source of truth owns the scene', () => {
     expect(document.querySelector('[data-backdrop="jungle"]')).toBeNull();
   });
 
+  it('a handler with no value is a control that cannot move, and that is stated', () => {
+    // The cost of the fix, pinned rather than discovered later: a host that
+    // supplies the handler and no `stageBackdrop`, or one that never echoes,
+    // gets radios that visibly refuse to move. `contracts.ts` obliges the host
+    // to supply both; this is what happens when it does not.
+    workspace({ onSelectStageBackdrop: vi.fn() });
+    const jungle = document.querySelector('input[value="jungle"]') as HTMLInputElement;
+    act(() => { jungle.click(); });
+    expect(document.querySelector('[data-backdrop]')).toBeNull();
+    const checked = [...document.querySelectorAll('input[type="radio"]')]
+      .filter((i) => (i as HTMLInputElement).checked)
+      .map((i) => (i as HTMLInputElement).value);
+    // The radio agrees with the stage, which is the property that must hold
+    // even in the case nobody should ship.
+    expect(checked).toEqual(['none']);
+  });
+
   it('WITHOUT a host, local state still makes the picker operable', () => {
     // The handler-less surface is the one the docstring promises, and it must
     // keep working: the scene changes, and simply does not survive a reload.

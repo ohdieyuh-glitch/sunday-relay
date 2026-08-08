@@ -253,9 +253,13 @@ kind of thing this repository's parity gate exists to catch.
 
 That argument is only honest if the CLI genuinely has an equivalent, so it was
 given one. `relay project stage` (`src/relay/cli/product/stage.ts`) reports the
-shape, the capacity, who is on the stage, which scene is selected and what the
-other choices are — calling `layoutStage` and `projectBackdropChoices`, the SAME
-functions the website calls.
+shape, the capacity, who is on the stage and what the scenes are — calling
+`layoutStage` and `projectBackdropChoices`, the SAME functions the website calls.
+
+WHICH SCENE IS SELECTED IS THE ONE IT CANNOT ANSWER, and it says so rather than
+guessing. That question needs an INPUT, not a projection, and the input lives in
+one browser's local storage. Both surfaces still compute from one projection;
+only one of them is handed the preference.
 
 Which is why the projection does not live under `ui/`. `relay-ui-boundary`
 forbids any non-UI module importing the website tree, and the first version of
@@ -263,5 +267,9 @@ the CLI surface broke it: the rule is that the UI CONSUMES the domain and never
 supplies it. `relay-stage-layout.ts` and `relay-stage-backdrop.ts` are in
 `src/relay/shared/`, where both surfaces may reach them, and are declared as
 `sharedDomainReferences` rather than as website entry points. A terminal cannot draw the stage; it can answer
-every question the stage answers, and `stage.test.ts` asserts the two surfaces
-read one projection and so cannot disagree.
+every question the stage answers THAT IT HAS AN INPUT FOR, and `stage.test.ts`
+asserts the two surfaces read one projection and so cannot disagree about
+anything they both compute. Where the CLI has no input it reports `Unknown` — in
+the header, in the choice list, and in `--json` — because a surface that
+answered `None` there would be disagreeing with the website by inventing the
+one fact it was never given.
