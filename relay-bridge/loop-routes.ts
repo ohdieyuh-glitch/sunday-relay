@@ -1,7 +1,6 @@
 import { safeText } from './redact';
 import { bearerMatches, BRIDGE_TOKEN_ENV, type ReviewerRouteResult } from './reviewer-routes';
 import { cronEnabled } from './cron-routes';
-import { cronSchedulerEnabled } from './cron-scheduler';
 import type {
   LoopHistoryEntry,
   LoopInspectionProjection,
@@ -109,6 +108,15 @@ export interface LoopRouteRequest {
   readonly body: unknown;
   readonly env: NodeJS.ProcessEnv;
   readonly now: string;
+  /**
+   * Whether a cron scheduler OBJECT actually exists on this server.
+   *
+   * Injected by the composition root, because only it knows: the flags are
+   * necessary but not sufficient — the timer also needs a mounted state root,
+   * and a bridge without one starts anyway. Absent means no, which is the
+   * safe answer for every host that does not construct a scheduler.
+   */
+  readonly cronSchedulerRunning?: boolean;
   /** Decides WHO is calling. Injected — this module asks and enforces. */
   readonly authorize?: () => { kind: 'operator'; principal: string } | { kind: 'browser'; principal: string }
     | { kind: 'rejected'; status: number; message: string };
@@ -196,10 +204,23 @@ export async function handleLoopRoute(
       multiRoleSupported: false,
       // An authenticated operator MAY call the cron tick when the flag is on.
       cronSupported: cronEnabled(env),
-      // …and whether anything CALLS it on a schedule is now a real question
-      // rather than a flat no. A surface must still not infer execution from
-      // it: a scheduled run is created and never advanced, whoever asked.
-      cronScheduled: cronEnabled(env) && cronSchedulerEnabled(env),
+      /**
+       * …and whether anything CALLS it on a schedule is now a real question
+       * rather than a flat no.
+       *
+       * IT REPORTS THE SCHEDULER THAT EXISTS, NOT THE FLAGS THAT ASK FOR ONE.
+       * The first version read two env vars, and review found the gap: the
+       * timer is only created when a state root is mounted, and an absent
+       * volume is deliberately NOT fatal — so a bridge with both flags set and
+       * no volume boots, runs no timer, answers 503 on the tick, and told
+       * every surface `cronScheduled: true`. This field exists to be believed
+       * without checking the deployment, which is exactly why it may not
+       * assert a recurrence that cannot happen.
+       *
+       * A surface must still not infer EXECUTION from it: a scheduled run is
+       * created and never advanced, whoever asked.
+       */
+      cronScheduled: request.cronSchedulerRunning === true,
       swarmSupported: false,
     });
   }

@@ -132,30 +132,40 @@ describe('the Loop engine flag is server-authoritative and defaults off', () => 
     expect(data.supportedRoles).toEqual(['coding_agent']);
   });
 
-  it('reports cronScheduled from the scheduler that actually runs, not from the route', async () => {
-    const read = async (env: NodeJS.ProcessEnv): Promise<Record<string, unknown>> => {
+  it('reports cronScheduled from the scheduler that exists, not from the flags', async () => {
+    const read = async (
+      env: NodeJS.ProcessEnv, cronSchedulerRunning?: boolean,
+    ): Promise<Record<string, unknown>> => {
       const result = await handleLoopRoute({
         method: 'GET', path: '/loop/capability', authorization: `Bearer ${TOKEN}`,
-        body: undefined, env, now: T0,
+        body: undefined, env, now: T0, cronSchedulerRunning,
       }, service);
       return (result?.body as { data: Record<string, unknown> }).data;
     };
 
-    // The tick ENDPOINT existing is not a scheduler. Cron on, timer off.
-    const endpointOnly = await read({ ...ENABLED, [CRON_ENABLED_ENV]: '1' });
+    // The tick ENDPOINT existing is not a scheduler. Cron on, no timer built.
+    const endpointOnly = await read({ ...ENABLED, [CRON_ENABLED_ENV]: '1' }, false);
     expect(endpointOnly.cronSupported).toBe(true);
     expect(endpointOnly.cronScheduled).toBe(false);
 
-    // Both gates open is the only combination that may claim it.
-    const scheduled = await read({
-      ...ENABLED, [CRON_ENABLED_ENV]: '1', [CRON_SCHEDULER_ENABLED_ENV]: '1',
-    });
+    // A scheduler that was actually constructed is the only thing that says yes.
+    const scheduled = await read({ ...ENABLED, [CRON_ENABLED_ENV]: '1' }, true);
     expect(scheduled.cronScheduled).toBe(true);
 
-    // A timer flag without Cron cannot schedule anything, and must not say it can.
-    const orphaned = await read({ ...ENABLED, [CRON_SCHEDULER_ENABLED_ENV]: '1' });
-    expect(orphaned.cronSupported).toBe(false);
-    expect(orphaned.cronScheduled).toBe(false);
+    // THE CASE REVIEW FOUND. Both flags set, but no state root mounted, so
+    // `main()` builds no scheduler — an absent volume is deliberately not
+    // fatal. The flags say yes and the deployment has no timer; the field must
+    // follow the timer, because its whole purpose is to be believed without
+    // checking the deployment.
+    const flagsWithoutVolume = await read({
+      ...ENABLED, [CRON_ENABLED_ENV]: '1', [CRON_SCHEDULER_ENABLED_ENV]: '1',
+    }, false);
+    expect(flagsWithoutVolume.cronSupported).toBe(true);
+    expect(flagsWithoutVolume.cronScheduled).toBe(false);
+
+    // A host that never says anything gets the safe answer.
+    const unstated = await read({ ...ENABLED, [CRON_ENABLED_ENV]: '1' });
+    expect(unstated.cronScheduled).toBe(false);
   });
 });
 

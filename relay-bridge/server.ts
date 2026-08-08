@@ -143,6 +143,16 @@ export function createBridgeServer(
    * readiness failure that is not its own.
    */
   cronTicks: CronTickPort | null = null,
+  /**
+   * Whether a cron SCHEDULER exists on this server, asked at request time.
+   *
+   * A getter rather than a boolean because the scheduler is constructed after
+   * the server in `main()`, and a snapshot taken here would answer for the
+   * moment of construction rather than the moment of the request. Absent means
+   * no, which is correct for every host that never builds one — including the
+   * tests, and including a bridge whose volume never mounted.
+   */
+  cronSchedulerRunning: () => boolean = () => false,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -339,6 +349,7 @@ export function createBridgeServer(
             body: method === 'POST' ? await readBody(req) : undefined,
             env: process.env,
             now: new Date().toISOString(),
+            cronSchedulerRunning: cronSchedulerRunning(),
             authorize: () => {
               const decision = authorizeReviewerCall({
                 method,
@@ -556,8 +567,6 @@ export function main(): void {
       root: config.stateRoot,
       now: () => new Date().toISOString(),
     });
-  const server = createBridgeServer(config, registry, null, null, null, cronTicks);
-
   /**
    * THE TIMER, only if every gate above it is open.
    *
@@ -571,20 +580,53 @@ export function main(): void {
     ? createCronScheduler({
       ticks: cronTicks,
       now: () => new Date().toISOString(),
-      binding: { workClass: 'read_only', overlapPolicy: 'parallel_with_limit' },
       intervalSeconds: schedulerIntervalSeconds(process.env),
       onPass: (report) => {
-        // Quiet when there is nothing to say: a line per minute per instance
-        // buries the passes that did something.
-        if (report.ticked === 0 && report.refused.length === 0) return;
+        /**
+         * QUIET WHEN THERE IS NOTHING TO SAY — but "nothing to say" is not the
+         * same as "ticked nothing". The first version logged only ticks,
+         * creations and refusals, so a pass that deferred five schedules, or
+         * durably claimed an occurrence with no run behind it, printed a line
+         * indistinguishable from a clean one. Every field that represents work
+         * NOT done is a reason to speak.
+         */
+        const quiet = report.ticked === 0 && report.refused.length === 0
+          && report.deferred.length === 0 && report.claimedWithoutRun === 0
+          && report.capacitySkipped === 0 && !report.truncated
+          && !report.occurrencesTruncated && !report.listingTruncated
+          && report.refusal === null;
+        if (quiet) return;
+        const notes: string[] = [];
+        if (report.deferred.length > 0) {
+          notes.push(`deferred ${String(report.deferred.length)} to the next pass`);
+        }
+        if (report.claimedWithoutRun > 0) {
+          // The loudest thing this report can carry: a human has to decide.
+          notes.push(`CLAIMED WITHOUT A RUN ${String(report.claimedWithoutRun)}`);
+        }
+        if (report.capacitySkipped > 0) {
+          notes.push(`dropped by overlap capacity ${String(report.capacitySkipped)}`);
+        }
+        if (report.occurrencesTruncated) notes.push('occurrences truncated');
+        if (report.listingTruncated) {
+          notes.push('the schedule listing is truncated — schedules past the cap are unreachable');
+        }
+        if (report.refusal !== null) notes.push(`refusal ${report.refusal}`);
         console.log(`Relay cron pass ${report.at}: ticked ${String(report.ticked)}, `
-          + `created ${String(report.runsCreated)}, refused ${String(report.refused.length)}`);
+          + `created ${String(report.runsCreated)}, refused ${String(report.refused.length)}`
+          + (notes.length > 0 ? ` — ${notes.join('; ')}` : ''));
       },
     })
     : null;
   if (scheduler !== null) {
     console.log('Relay cron scheduler is ON — it creates run records and dispatches nothing.');
   }
+
+  // The capability route answers from THIS object, not from the flags that ask
+  // for it: the flags can be set on a bridge whose volume never mounted.
+  const server = createBridgeServer(
+    config, registry, null, null, null, cronTicks, () => scheduler !== null,
+  );
 
   /**
    * GRACEFUL SHUTDOWN. A managed host sends SIGTERM before replacing an

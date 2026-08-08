@@ -55,6 +55,48 @@ describe('an automatic pass is bounded in both directions', () => {
     expect(pass.ticks.map((t) => t.scheduleId)).toEqual(['a', 'b']);
     expect(pass.truncated).toBe(true);
     expect(pass.skipped).toEqual([{ scheduleId: 'c', reason: 'over_pass_limit' }]);
+    // The one it did NOT reach must not move the cursor, or it is skipped
+    // rather than deferred.
+    expect(pass.nextCursor).toBe('b');
+  });
+
+  it('resumes after the cursor, so the cap defers rather than starves', () => {
+    // Review's finding: the store lists ids sorted and the pass always walked
+    // from the beginning, so beyond the cap the tail was never ticked ONCE —
+    // reported as `skipped`, as though the next pass would take it.
+    const candidates = [active('a'), active('b'), active('c'), active('d'), active('e')];
+    const plan = (resumeAfterId: string | null) => ok(planSchedulerPass({
+      candidates, now: NOW, lookbackMinutes: 30, maxPerPass: 2, resumeAfterId,
+    }));
+
+    const first = plan(null);
+    expect(first.ticks.map((t) => t.scheduleId)).toEqual(['a', 'b']);
+    const second = plan(first.nextCursor);
+    expect(second.ticks.map((t) => t.scheduleId)).toEqual(['c', 'd']);
+    const third = plan(second.nextCursor);
+    // 'e', then it wraps — every schedule reached within three passes.
+    expect(third.ticks.map((t) => t.scheduleId)).toEqual(['e', 'a']);
+  });
+
+  it('a cursor naming a schedule that no longer exists starts over', () => {
+    // Deleted between passes. Guessing at a position would silently skip the
+    // schedules before it.
+    const pass = ok(planSchedulerPass({
+      candidates: [active('b'), active('c')],
+      now: NOW, lookbackMinutes: 30, maxPerPass: 1, resumeAfterId: 'a-was-deleted',
+    }));
+    expect(pass.ticks.map((t) => t.scheduleId)).toEqual(['b']);
+  });
+
+  it('an untruncated pass walks the store order exactly, cursor or not', () => {
+    // The rotation must be unobservable when nothing is deferred, or it
+    // becomes a second ordering nobody asked for.
+    const candidates = [active('a'), active('b'), active('c')];
+    const withCursor = ok(planSchedulerPass({
+      candidates, now: NOW, lookbackMinutes: 30, maxPerPass: 10, resumeAfterId: 'b',
+    }));
+    expect(withCursor.truncated).toBe(false);
+    expect([...withCursor.ticks.map((t) => t.scheduleId)].sort()).toEqual(['a', 'b', 'c']);
   });
 
   it('names every schedule it declined, rather than reporting a smaller list', () => {

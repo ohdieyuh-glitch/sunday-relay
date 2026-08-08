@@ -35,6 +35,18 @@ export interface SchedulerPassInput {
   readonly lookbackMinutes: number;
   /** How many schedules one pass may tick. */
   readonly maxPerPass: number;
+  /**
+   * The last schedule the PREVIOUS pass reached, so this one starts after it.
+   *
+   * WITHOUT THIS THE LIMIT IS A CLIFF, not a bound. The store lists ids sorted,
+   * so a pass that always walked from the beginning ticked the same first
+   * `maxPerPass` schedules forever and never reached the rest — review measured
+   * 30 active schedules over 10 passes and found five that never ran once,
+   * while the report called them `skipped` as though the next pass would take
+   * them. `null` starts at the beginning, which is also what the first pass
+   * after a restart does.
+   */
+  readonly resumeAfterId?: string | null;
 }
 
 export interface PlannedTick {
@@ -54,6 +66,14 @@ export interface SchedulerPass {
   readonly skipped: readonly SkippedSchedule[];
   /** True when the pass limit cut the list, so the caller can say so. */
   readonly truncated: boolean;
+  /**
+   * Where the NEXT pass should resume, or `null` to start from the beginning.
+   *
+   * This is what turns `over_pass_limit` from "never" into "not yet". It is the
+   * last schedule this pass reached — ticked or skipped — so the next pass
+   * starts past it and the walk rotates through every stored schedule.
+   */
+  readonly nextCursor: string | null;
 }
 
 export type SchedulerPassResult =
@@ -103,20 +123,53 @@ export function planSchedulerPass(input: SchedulerPassInput): SchedulerPassResul
   const skipped: SkippedSchedule[] = [];
   let truncated = false;
 
-  for (const candidate of input.candidates) {
+  /**
+   * ROTATE, so the pass limit defers rather than starves.
+   *
+   * The cursor names the last schedule the previous pass reached. Everything at
+   * or before it goes to the back of this walk, so the schedules that hit the
+   * limit last time are the ones reached first now. A cursor naming a schedule
+   * that has since been deleted simply finds no match, and the walk starts at
+   * the beginning — the same place a restart starts.
+   */
+  const ordered = rotateAfter(input.candidates, input.resumeAfterId ?? null);
+
+  let lastReached: string | null = null;
+  for (const candidate of ordered) {
     if (candidate.state !== 'active') {
       // NAMED, not silently dropped. "Nothing ran" and "nothing ran because
       // eleven schedules are corrupt" are the same count and different facts.
       skipped.push({ scheduleId: candidate.scheduleId, reason: candidate.state });
+      lastReached = candidate.scheduleId;
       continue;
     }
     if (ticks.length >= input.maxPerPass) {
+      // NOT REACHED, so it does not move the cursor: the next pass must start
+      // here, which is the whole point of the rotation.
       truncated = true;
       skipped.push({ scheduleId: candidate.scheduleId, reason: 'over_pass_limit' });
       continue;
     }
     ticks.push({ scheduleId: candidate.scheduleId, afterExclusive, untilInclusive: input.now });
+    lastReached = candidate.scheduleId;
   }
 
-  return { ok: true, pass: { ticks, skipped, truncated } };
+  return { ok: true, pass: { ticks, skipped, truncated, nextCursor: lastReached } };
+}
+
+/**
+ * The candidates, reordered to begin just after `cursor`.
+ *
+ * Order is otherwise preserved exactly, so a pass that is not truncated walks
+ * the store's own sorted order and the rotation is unobservable.
+ */
+function rotateAfter(
+  candidates: readonly SchedulerCandidate[], cursor: string | null,
+): readonly SchedulerCandidate[] {
+  if (cursor === null || candidates.length === 0) return candidates;
+  const at = candidates.findIndex((c) => c.scheduleId === cursor);
+  // A cursor that names nothing stored — deleted between passes — starts over
+  // rather than guessing at a position, which would silently skip schedules.
+  if (at < 0) return candidates;
+  return [...candidates.slice(at + 1), ...candidates.slice(0, at + 1)];
 }
