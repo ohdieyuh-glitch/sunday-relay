@@ -299,6 +299,30 @@ Retry is guarded for the same reason `start` is: it re-drives the same
 three-role pipeline, so a mission begun while the beta was off could otherwise
 be re-driven after it was on, by a caller the gate refuses.
 
-**Still missing before the flag is set in production:** a **blocklist**. The cap
-and the limit bound the damage; they do not let an operator turn away a caller
-they have identified as hostile.
+## The blocklist
+
+The one control the cap and the rate limit cannot substitute for: both bound how
+much damage a caller can do, and neither lets an operator turn away someone they
+have already identified as hostile.
+
+`POST /relay-api/beta/block` and `/beta/unblock` (operator-only).
+
+**Blocking takes the seat back**, in every wave. A block that left the seat held
+would stop the caller and keep the damage.
+
+**The block outlives the seat.** It is stored beside the enrolments rather than
+inside a wave, so freeing the seat does not quietly let them re-enrol.
+
+**A blocked participant is refused exactly as a full wave refuses** — same
+status, same body. A distinct "you are blocked" would be a free oracle telling
+someone their id is known and singled out, and it would tell them to come back
+under another one. The operator's board still shows the truth.
+
+**A block outranks an enrolment**: someone blocked *after* they were admitted
+stops working, not merely stops signing up — the guard checks it before the
+gate.
+
+**An unanswerable blocklist blocks.** A store that cannot read its own blocklist
+must not answer "not blocked" — that is the same uncountable-reads-as-empty
+defect as the seat count, and here it would let through precisely the caller an
+operator went out of their way to stop.

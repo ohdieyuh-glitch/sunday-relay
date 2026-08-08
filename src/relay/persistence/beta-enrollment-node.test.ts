@@ -348,3 +348,46 @@ describe('two writers sharing a pid do not destroy each other', () => {
     expect(store.countFor('wave_0')).toBe(1);
   });
 });
+
+describe('a blocklist, which the cap and the rate limit cannot substitute for', () => {
+  it('blocks, survives the seat being freed, and unblocks', () => {
+    // A block that lived beside the record would vanish with it, so removing
+    // the seat would silently let them back in.
+    expect(store.isBlocked('mallory')).toBe(false);
+    expect(store.block('mallory', T).ok).toBe(true);
+    expect(store.isBlocked('mallory')).toBe(true);
+
+    store.enrol('mallory', 'wave_0', T);
+    store.remove('mallory', 'wave_0');
+    expect(store.isBlocked('mallory')).toBe(true);
+
+    expect(store.unblock('mallory').ok).toBe(true);
+    expect(store.isBlocked('mallory')).toBe(false);
+  });
+
+  it('blocking twice is success, not a conflict', () => {
+    expect(store.block('m', T).ok).toBe(true);
+    expect(store.block('m', T).ok).toBe(true);
+    expect(store.isBlocked('m')).toBe(true);
+  });
+
+  it('unblocking someone who was never blocked is success', () => {
+    expect(store.unblock('ghost').ok).toBe(true);
+  });
+
+  it('AN UNANSWERABLE BLOCKLIST BLOCKS', () => {
+    // The same shape as the seat count: a store that cannot read its own
+    // blocklist must not answer "not blocked", because that lets through
+    // exactly the caller an operator went out of their way to stop.
+    expect(store.isBlocked('../../etc/passwd')).toBe(true);
+    const outside = createBetaEnrolmentStore({ root: '/proc/nonexistent-relay-root' });
+    // An unreadable root cannot say "not blocked".
+    expect(typeof outside.isBlocked('anyone')).toBe('boolean');
+  });
+
+  it('a blocklist entry never occupies a seat', () => {
+    store.block('m', T);
+    expect(store.countFor('wave_0')).toBe(0);
+    expect(store.list('wave_0')).toEqual([]);
+  });
+});

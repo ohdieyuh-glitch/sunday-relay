@@ -57,6 +57,8 @@ import { RELAY_BETA_WAVES } from '../mission/beta';
  */
 
 const ENROLMENTS_DIR = 'beta-enrollments';
+/** Beside the enrolments, never inside a wave: a block is not a seat. */
+const BLOCKLIST_DIR = 'beta-blocked';
 
 /**
  * What may name a participant on disk.
@@ -125,6 +127,21 @@ export interface BetaEnrolmentStore {
    * failure — the seat is free either way.
    */
   remove(participantId: string, wave: RelayBetaWave): { readonly ok: boolean; readonly removed: boolean };
+  /**
+   * Refuse this participant, and remove any seat they hold.
+   *
+   * THE ONE CONTROL THE CAP AND THE RATE LIMIT CANNOT PROVIDE. Both bound how
+   * much damage a caller can do; neither lets an operator turn away someone
+   * they have already identified as hostile. A blocked participant cannot
+   * enrol, and the block outlives the seat — otherwise removing them would
+   * simply let them enrol again.
+   *
+   * Blocking is durable and separate from enrolment: it must survive the seat
+   * being freed, and a block that lived beside the record would vanish with it.
+   */
+  block(participantId: string, at: string): { readonly ok: boolean };
+  unblock(participantId: string): { readonly ok: boolean };
+  isBlocked(participantId: string): boolean;
 }
 
 export function createBetaEnrolmentStore(options: { readonly root: string }): BetaEnrolmentStore {
@@ -165,6 +182,18 @@ export function createBetaEnrolmentStore(options: { readonly root: string }): Be
         // Neither exists yet; the root itself was resolved above.
         return dir;
       }
+    }
+  };
+
+  const blockDir = (): string | null => {
+    let root: string;
+    try { root = realpathSync(options.root); } catch { root = options.root; }
+    const dir = join(root, BLOCKLIST_DIR);
+    try {
+      const resolved = realpathSync(dir);
+      return (`${resolved}${sep}`).startsWith(`${root}${sep}`) ? resolved : null;
+    } catch {
+      return dir;
     }
   };
 
@@ -292,6 +321,66 @@ export function createBetaEnrolmentStore(options: { readonly root: string }): Be
         if (record !== null) out.push(record);
       }
       return out;
+    },
+
+    block(participantId, at) {
+      if (!isUsableParticipantId(participantId)) return { ok: false };
+      const dir = blockDir();
+      if (dir === null) return { ok: false };
+      try {
+        mkdirSync(dir, { recursive: true, mode: 0o700 });
+        // Idempotent by the same primitive as an enrolment, and blocking an
+        // already-blocked participant is success rather than a conflict.
+        const file = join(dir, `${participantId}.json`);
+        const temp = join(dir, `${participantId}.json.tmp-${randomBytes(8).toString('hex')}`);
+        let made = false;
+        try {
+          const fd = openSync(temp, 'wx', 0o600);
+          made = true;
+          try {
+            writeSync(fd, JSON.stringify({ participantId, blockedAt: at }), null, 'utf8');
+            try { fsyncSync(fd); } catch { /* unsupported on this fs */ }
+          } finally { closeSync(fd); }
+          try { linkSync(temp, file); } catch (e) {
+            if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+          }
+        } finally {
+          if (made) { try { unlinkSync(temp); } catch { /* tidy-up only */ } }
+        }
+        fsyncDirBestEffort(dir);
+        return { ok: true };
+      } catch {
+        return { ok: false };
+      }
+    },
+
+    unblock(participantId) {
+      if (!isUsableParticipantId(participantId)) return { ok: false };
+      const dir = blockDir();
+      if (dir === null) return { ok: false };
+      try {
+        rmSync(join(dir, `${participantId}.json`), { force: true });
+        fsyncDirBestEffort(dir);
+        return { ok: true };
+      } catch {
+        return { ok: false };
+      }
+    },
+
+    isBlocked(participantId) {
+      // AN UNANSWERABLE BLOCKLIST BLOCKS. A store that cannot read its own
+      // blocklist must not answer "not blocked" — that is the same
+      // uncountable-reads-as-empty defect as the seat count, and here it would
+      // let through precisely the caller an operator went out of their way to
+      // stop.
+      if (!isUsableParticipantId(participantId)) return true;
+      const dir = blockDir();
+      if (dir === null) return true;
+      try {
+        return readdirSync(dir).includes(`${participantId}.json`);
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code !== 'ENOENT';
+      }
     },
 
     remove(participantId, wave) {

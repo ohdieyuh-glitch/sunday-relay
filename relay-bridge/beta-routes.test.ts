@@ -336,3 +336,39 @@ describe('a seat can be given back, through a route an operator can reach', () =
     expect(result?.status).toBe(422);
   });
 });
+
+describe('an operator can turn away a caller they know is hostile', () => {
+  it('blocks, frees their seat, and refuses them indistinguishably from a full wave', async () => {
+    await call('POST', '/beta/request', { body: { participantId: 'mallory' } });
+    expect(store.countFor('wave_0')).toBe(1);
+
+    const blocked = await call('POST', '/beta/block', {
+      ...asOperator, body: { participantId: 'mallory' },
+    });
+    const data = (blocked?.body as { data: { blocked: boolean; seatsFreed: string[] } }).data;
+    expect(data.blocked).toBe(true);
+    // A block that left the seat held would stop the caller and keep the damage.
+    expect(data.seatsFreed).toEqual(['wave_0']);
+    expect(store.countFor('wave_0')).toBe(0);
+
+    const again = await call('POST', '/beta/request', { body: { participantId: 'mallory' } });
+    const fresh = await call('POST', '/beta/request', { body: { participantId: 'ok' } });
+    expect(again?.status).toBe(429);
+    // INDISTINGUISHABLE FROM A FULL WAVE on purpose: a distinct "you are
+    // blocked" is a free oracle, and it tells them to come back as someone else.
+    expect(store.countFor('wave_0')).toBe(1); // only `ok` got in
+    expect(fresh?.status).toBe(200);
+  });
+
+  it('is operator-only', async () => {
+    const result = await call('POST', '/beta/block', { body: { participantId: 'x' } });
+    expect(result?.status).toBe(401);
+  });
+
+  it('unblocking lets them back in', async () => {
+    await call('POST', '/beta/block', { ...asOperator, body: { participantId: 'm' } });
+    expect((await call('POST', '/beta/request', { body: { participantId: 'm' } }))?.status).toBe(429);
+    await call('POST', '/beta/unblock', { ...asOperator, body: { participantId: 'm' } });
+    expect((await call('POST', '/beta/request', { body: { participantId: 'm' } }))?.status).toBe(200);
+  });
+});

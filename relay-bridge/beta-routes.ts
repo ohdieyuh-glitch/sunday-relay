@@ -154,6 +154,18 @@ export async function handleBetaRoute(
     }
 
     /**
+     * A BLOCKED PARTICIPANT IS REFUSED THE SAME WAY A FULL WAVE REFUSES.
+     *
+     * Deliberately indistinguishable from `wave_full`: a distinct "you are
+     * blocked" answer would be a free oracle telling someone their id is known
+     * and singled out, and would tell them to come back under another one.
+     * The operator's board still shows the truth.
+     */
+    if (store.isBlocked(participantId)) {
+      return err(429, 'wave_full', 'This wave has no seats left, so no new request is recorded.');
+    }
+
+    /**
      * THE WAVE CANNOT BE CONSUMED BY STRANGERS.
      *
      * Review filled all one hundred seats with anonymous requests in 671 ms and
@@ -262,6 +274,29 @@ export async function handleBetaRoute(
     // `removed: false` is the truth, not a failure — the seat is free either
     // way, and reporting an error would invite a retry loop over nothing.
     return ok({ removed: result.removed, wave, seatsTaken: store.countFor(wave) });
+  }
+
+  if (request.method === 'POST' && (request.path === '/beta/block' || request.path === '/beta/unblock')) {
+    if (!operator()) return err(401, 'authentication_failed', 'Blocking is operator-only.');
+    const participantId = readParticipantId(request.body);
+    if (participantId === null) return err(422, 'validation_failed', 'A participantId is required.');
+
+    if (request.path === '/beta/unblock') {
+      return store.unblock(participantId).ok
+        ? ok({ blocked: false, participantId })
+        : err(422, 'unblock_failed', 'That block could not be removed.');
+    }
+
+    const blocked = store.block(participantId, request.now);
+    if (!blocked.ok) return err(422, 'block_failed', 'That participant could not be blocked.');
+    /**
+     * BLOCKING ALSO TAKES THE SEAT BACK. A block that left the seat held would
+     * leave the wave full of people who can never use it — the operator would
+     * have stopped the caller and kept the damage.
+     */
+    const freed = RELAY_BETA_WAVES.map((w) => ({ wave: w, removed: store.remove(participantId, w).removed }))
+      .filter((x) => x.removed).map((x) => x.wave);
+    return ok({ blocked: true, participantId, seatsFreed: freed });
   }
 
   if (request.method === 'GET' && request.path === '/beta/status') {

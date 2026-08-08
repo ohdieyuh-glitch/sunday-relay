@@ -84,6 +84,21 @@ export function guardBetaAdmission(input: BetaAdmissionInput): ReviewerRouteResu
     };
   }
 
+  // A BLOCK OUTRANKS AN ENROLMENT. Someone blocked after they were admitted
+  // must stop working, not merely stop signing up.
+  if (input.store.isBlocked(input.participantId)) {
+    return {
+      status: 403,
+      body: {
+        error: {
+          kind: 'beta_not_admitted',
+          message: 'This participant is not admitted to the controlled beta.',
+          reason: 'not_enrolled',
+        },
+      },
+    };
+  }
+
   /**
    * A LIST WE COULD NOT READ IS NOT AN EMPTY ONE. `list` runs before occupancy
    * in the gate, so passing `[]` for an unreadable directory answered

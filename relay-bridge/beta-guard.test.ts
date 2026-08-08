@@ -161,3 +161,15 @@ describe('the guard counts the volume, not the list it was given', () => {
     expect((result?.body as { error: { kind: string } }).error.kind).toBe('beta_not_ready');
   });
 });
+
+describe('a block outranks an enrolment', () => {
+  it('stops someone blocked AFTER they were admitted', () => {
+    // Blocking must stop them working, not merely stop them signing up.
+    store.enrol('mallory', 'wave_0', T);
+    expect(guardBetaAdmission({ env: ON, participantId: 'mallory', store, waves: OPEN_1 })).toBeNull();
+
+    store.block('mallory', T);
+    const result = guardBetaAdmission({ env: ON, participantId: 'mallory', store, waves: OPEN_1 });
+    expect(result?.status).toBe(403);
+  });
+});
