@@ -219,6 +219,27 @@ describe('a schedule is created, read back and listed', () => {
     expect(existsSync(join(claims, 'occ_owned'))).toBe(false);
   });
 
+  it('counts a SYMLINKED occurrence, which the already-handled gate still honours', () => {
+    // `isDirectory()` is lstat-based so a symlink reads as false, while the
+    // gate uses `existsSync`, which follows it. Skipping one silently would
+    // leave a live claim uncounted and make the upper bound a lie. It is not
+    // followed — that could delete outside the state root.
+    const claims = join(root, 'cron-occurrences');
+    const real = join(root, 'elsewhere');
+    mkdirSync(real, { recursive: true });
+    writeFileSync(join(real, 'claimed.json'),
+      JSON.stringify({ occurrence: { occurrenceId: 'occ_link', scheduleId: 's-link' } }));
+    mkdirSync(claims, { recursive: true });
+    symlinkSync(real, join(claims, 'occ_link'));
+
+    expect(store.create('s-link', v()).ok).toBe(true);
+    const removed = store.remove('s-link', '2026-08-06T12:00:00.000Z');
+    expect(removed.ok).toBe(true);
+    if (removed.ok) expect(removed.value.claimsLeft).toBe(1);
+    // The target survives: nothing outside the state root was touched.
+    expect(existsSync(join(real, 'claimed.json'))).toBe(true);
+  });
+
   it('deletes a schedule too CORRUPT to read, which is the case it exists for', () => {
     // A journal written before a required field existed replays as corrupt, and
     // every other operation reads it first — so before this the only remedy was

@@ -522,7 +522,8 @@ function deleteSchedule(
       'The schedule was removed, but purging its occurrence claims failed: '
       + `${safeText(error instanceof Error ? error.message : 'unknown error')}. The claims that `
       + 'remain cannot be inherited — a schedule created under this name is authored now — but '
-      + 'they were not cleaned up.');
+      + 'they were not cleaned up. DO NOT RETRY: the schedule is already gone, and a second '
+      + 'attempt answers 404.');
   }
   if (!removed.ok) return err(409, 'schedule_not_deleted', safeText(removed.problem));
   return ok({
@@ -538,8 +539,7 @@ function deleteSchedule(
       'The schedule is gone and its id is free.',
       removed.claimsLeft === 0
         ? 'The occurrence claims it made were purged.'
-        : `${String(removed.claimsLeft)} occurrence marker(s) could not be purged or attributed `
-          + 'and were left in place.',
+        : `${String(removed.claimsLeft)} occurrence marker(s) could not be purged or attributed.`,
       'A schedule created under this name is authored now, so its ticks can only own moments '
       + 'after it exists. Runs it created are untouched and keep the version they started under.',
     ].join(' '),

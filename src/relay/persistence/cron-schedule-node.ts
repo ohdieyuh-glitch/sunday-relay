@@ -464,6 +464,13 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
         const occurrences = join(stateRoot, 'cron-occurrences');
         if (existsSync(occurrences)) {
           for (const entry of readdirSync(occurrences, { withFileTypes: true })) {
+            // A SYMLINK IS NOT FOLLOWED AND NOT IGNORED. `isDirectory()` is
+            // lstat-based so a symlinked occurrence reads as false, while the
+            // already-handled gate uses `existsSync`, which DOES follow it — so
+            // skipping one silently would leave a live claim uncounted and make
+            // the upper bound below a lie. It is counted and left: following it
+            // could delete outside the state root.
+            if (entry.isSymbolicLink()) { claimsLeft += 1; continue; }
             if (!entry.isDirectory()) continue;
             let marker: string | null = null;
             try {
