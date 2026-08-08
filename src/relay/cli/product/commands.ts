@@ -10,6 +10,7 @@ import { paint } from './theme';
 import { safeText } from './safety';
 import { renderStageView } from './stage';
 import type { RelayStageActor } from '../../shared/relay-stage-layout';
+import { projectWorkspaceCast } from '../../shared/relay-stage-cast';
 import { renderOperationsView } from './operations';
 import { emptyShortTermMemory, refreshBrainDocument } from '../../shared/llmops';
 
@@ -131,15 +132,21 @@ export function productProjectStatus(store: StateStore, caps: CliCaps, reference
 }
 
 /**
- * The cast the CLI knows about — one actor, for the same reason the website
- * has one: the Relay Dog is the only agent with artwork and a state model.
- * Naming a Leopard here would be inventing a cast.
+ * THE CLI ASKS THE SAME PROJECTION THE WEBSITE ASKS.
+ *
+ * It used to DECLARE its cast, with a comment giving the same reason the
+ * website's constant gave — so the two surfaces agreed only by the coincidence
+ * of both being one Dog at x=0.5, and would have diverged silently the first
+ * time the projection placed a second actor. The parity gate could not have
+ * caught it: the registry lists files, not derivations.
+ *
+ * The CLI has no per-role runtime state to read, so it asks about the one role
+ * it can speak for and says nothing about the others. That is a narrower claim
+ * than the website's, and it is the true one.
  */
-const RELAY_CLI_STAGE_CAST: readonly RelayStageActor[] = Object.freeze([
-  Object.freeze({
-    id: 'relay-dog', x: 0.5, depth: 1, width: 1, track: 6, layer: 'actors' as const,
-  }),
-]);
+const RELAY_CLI_STAGE_CAST: readonly RelayStageActor[] = projectWorkspaceCast({
+  roles: [{ role: 'coding_agent', working: true }],
+}).actors;
 
 export type ProjectView =
   | 'tasks' | 'findings' | 'repairs' | 'evidence' | 'history' | 'settings' | 'workforce'

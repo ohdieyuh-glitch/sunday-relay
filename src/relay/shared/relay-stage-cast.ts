@@ -3,39 +3,40 @@ import type { RelayStageActor } from './relay-stage-layout';
 /**
  * SUNDAY RELAY — WHO IS ON THE STAGE, DERIVED RATHER THAN DECLARED.
  *
- * The workspace held its cast as a frozen one-row constant. That was honest
- * while there was exactly one actor and one thing it could mean, and it stopped
- * being a fact about the product the moment a second role could work: a
- * constant cannot be wrong, but it also cannot be right — it says the same
- * thing whether the reviewer is running or has never been configured.
+ * The workspace held its cast as a frozen one-row constant. A constant cannot
+ * be wrong, but it also cannot be right — it said the same thing whether the
+ * coding agent was implementing or the project had only just been configured.
  *
- * THIS IS THE RULE THE STAGE ALREADY STATES, APPLIED. `RELAY_STAGE.md`: "An
- * empty cast renders an empty stage that says why. It does not helpfully draw a
- * Dog so the space looks used." An actor appears here because a role is ACTUALLY
- * WORKING, and for no other reason. A role that is configured, idle, absent,
- * unavailable or merely *requested* is not on the stage — requesting a role and
- * staffing one are different facts, which is the distinction `loop-roles.ts`
- * exists to keep.
+ * THE FIRST VERSION OF THIS MODULE REPLACED THAT CONSTANT WITH A CONSTANT
+ * INPUT, which was worse: the caller passed a literal `working: true` for an
+ * agent the same render tree was simultaneously labelling `waiting`. Nothing
+ * was derived, and a false datum had been written into the code. Review caught
+ * it by reading the only caller. `working` now comes from the workspace's own
+ * state, which is the only thing that makes this projection worth having.
  *
- * WHY NO LEOPARD AND NO CUBS YET, stated rather than quietly omitted. The stage
- * contract sizes a Leopard at 2 dog-units and a cub at 0.6, and this projection
- * places neither, because nothing in this build produces the thing either one
- * would represent. A cub is a subordinate or temporarily-expanded agent: Unchain
- * is the feature that would create one, and `UNCHAIN.md` records that the meter,
- * the session lifecycle and Rechaining execution are all unimplemented, so no
- * cub can exist to be drawn. Giving the architect a cub sprite because a cub
- * sprite was available would be assigning a meaning nothing produced — the same
- * defect as a panel rendering a run it never fetched, in artwork instead of
- * data. The slots stay open; the sizes are already agreed.
+ * TWO QUESTIONS, KEPT APART. "Is this role working?" and "can this build draw
+ * it?" are different, and collapsing them produces the two opposite lies: drop
+ * an undrawable working role and the stage under-reports the team; place one
+ * and the stage announces an actor it renders as an empty box, while the
+ * overflow warning counts a sprite nobody can see. So a working role this build
+ * has no sprite for is NAMED in `workingWithoutSprite`, never silently dropped
+ * and never silently placed.
+ *
+ * FIXED SLOTS, NOT EVEN SPREAD. Each role stands in the same place whenever it
+ * stands at all. Spacing actors by how many are on stage meant a reviewer
+ * finishing slid the coding agent a quarter of the stage sideways — motion
+ * nothing in the product performed, which is exactly what the Relay Dog's
+ * motion system refuses to invent. A departure now leaves a gap.
  *
  * PURE. No clock, no DOM, no I/O — the browser and the CLI can both ask who is
  * on the stage and get the same answer.
  */
 
+export type CastRole = 'prompt_architect' | 'coding_agent' | 'reviewer';
+
 /** A role that can appear, and what the surface knows about it right now. */
 export interface CastRoleInput {
-  /** The canonical Relay agent role. */
-  readonly role: 'coding_agent' | 'prompt_architect' | 'reviewer';
+  readonly role: CastRole;
   /**
    * Whether this role is DOING something right now.
    *
@@ -46,24 +47,31 @@ export interface CastRoleInput {
   readonly working: boolean;
 }
 
-/** The sprite the stage has artwork and a state model for, per role. */
-const ACTOR_ID: Readonly<Record<CastRoleInput['role'], string>> = Object.freeze({
-  coding_agent: 'relay-dog',
-  prompt_architect: 'relay-architect',
-  reviewer: 'relay-reviewer',
-});
-
 /**
- * ORDER IS FIXED, NOT INPUT ORDER. The cast must not reshuffle because a
- * caller listed roles differently or because a role finished — an actor
- * jumping across the stage when an unrelated one stops is the stage inventing
- * movement that nothing in the product did.
+ * WHERE EACH ROLE STANDS, AND WHETHER IT CAN BE DRAWN AT ALL.
+ *
+ * `coding_agent` is the only role with a sprite and a state model: the Relay
+ * Dog. `relay-architect` and `relay-reviewer` exist as ids and as nothing else
+ * — no CSS, no component, no `render()` branch — so placing one puts an empty
+ * full-width box on the stage and inflates the overflow warning. They are
+ * declared here so the projection can NAME them rather than forget them.
+ *
+ * The coding agent's slot is 0.5, which is exactly where the constant put it,
+ * so the shipped stage does not move.
  */
-const ROLE_ORDER: readonly CastRoleInput['role'][] = Object.freeze([
+const ROLE_SLOT: Readonly<Record<CastRole, { readonly x: number; readonly id: string | null }>> =
+  Object.freeze({
+    prompt_architect: Object.freeze({ x: 1 / 6, id: null }),
+    coding_agent: Object.freeze({ x: 0.5, id: 'relay-dog' }),
+    reviewer: Object.freeze({ x: 5 / 6, id: null }),
+  });
+
+/** Fixed, so the cast never reorders because a caller listed roles differently. */
+const ROLE_ORDER: readonly CastRole[] = Object.freeze([
   'prompt_architect', 'coding_agent', 'reviewer',
 ]);
 
-/** One dog-unit each: these are PEERS, and nothing here is subordinate to anything. */
+/** One dog-unit each: these are PEERS, and nothing here is subordinate. */
 const ACTOR_WIDTH = 1;
 /**
  * The patrol track. The Dog measures this to decide whether to patrol at all,
@@ -75,6 +83,12 @@ const ACTOR_TRACK = 6;
 export interface WorkspaceCast {
   readonly actors: readonly RelayStageActor[];
   /**
+   * Roles that ARE working and that this build cannot draw. Named rather than
+   * dropped: "nobody else is working" and "two agents are working and we have
+   * no artwork for them" are the same empty stage and different facts.
+   */
+  readonly workingWithoutSprite: readonly CastRole[];
+  /**
    * Why the stage is empty, or `null` when it is not. The stage says why rather
    * than drawing something so the space looks used.
    */
@@ -84,36 +98,46 @@ export interface WorkspaceCast {
 /**
  * The cast, from what each role is actually doing.
  *
- * Actors are spread evenly across the stage and share one depth: they are
- * peers on one ground plane. Depth is reserved for the parallax the `far`
- * layer will carry, not spent on implying a hierarchy this product does not
- * have.
+ * A role appearing twice is resolved by "working wins": a caller that appends a
+ * stale idle entry after a live one must not be able to erase a working agent
+ * from the stage and have the stage then state that nobody is working.
  */
 export function projectWorkspaceCast(input: {
   readonly roles: readonly CastRoleInput[];
 }): WorkspaceCast {
-  const byRole = new Map(input.roles.map((r) => [r.role, r]));
-  const working = ROLE_ORDER.filter((role) => byRole.get(role)?.working === true);
-
-  if (working.length === 0) {
-    return {
-      actors: [],
-      emptyReason: 'No agent is working. The stage fills when one starts.',
-    };
+  const working = new Set<CastRole>();
+  for (const entry of input.roles) {
+    // WORKING WINS over a duplicate. Last-wins would let ordering decide
+    // whether an agent is on stage.
+    if (entry.working && ROLE_SLOT[entry.role] !== undefined) working.add(entry.role);
   }
 
-  // Evenly spaced across the full width, each actor centred in its own share.
-  // One actor lands at 0.5, which is exactly where the single-actor cast stood,
-  // so today's shipped stage does not move.
-  const share = 1 / working.length;
-  const actors = working.map((role, index) => Object.freeze({
-    id: ACTOR_ID[role],
-    x: share * (index + 0.5),
-    depth: 1,
-    width: ACTOR_WIDTH,
-    track: ACTOR_TRACK,
-    layer: 'actors' as const,
-  }));
+  const order = ROLE_ORDER.filter((role) => working.has(role));
+  const actors: RelayStageActor[] = [];
+  const workingWithoutSprite: CastRole[] = [];
 
-  return { actors: Object.freeze(actors), emptyReason: null };
+  for (const role of order) {
+    const slot = ROLE_SLOT[role];
+    if (slot.id === null) { workingWithoutSprite.push(role); continue; }
+    actors.push(Object.freeze({
+      id: slot.id,
+      x: slot.x,
+      depth: 1,
+      width: ACTOR_WIDTH,
+      track: ACTOR_TRACK,
+      layer: 'actors' as const,
+    }));
+  }
+
+  return {
+    actors: Object.freeze(actors),
+    workingWithoutSprite: Object.freeze(workingWithoutSprite),
+    emptyReason: actors.length > 0
+      ? null
+      : workingWithoutSprite.length > 0
+        // The honest empty stage: someone IS working, and this build cannot
+        // draw them. Saying "no agent is working" here would be false.
+        ? 'No agent on this stage has artwork yet. Work is running.'
+        : 'No agent is working. The stage fills when one starts.',
+  };
 }

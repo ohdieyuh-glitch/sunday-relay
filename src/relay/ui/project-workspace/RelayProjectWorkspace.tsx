@@ -28,30 +28,36 @@ import { useViewportWidth } from './use-viewport-width';
 const DEFAULT_VIEWPORT_WIDTH_PX = 1440;
 
 /**
- * WHO IS ON THE WORKSPACE STAGE TODAY — THE CAST IS NOW DERIVED, and this is
- * the one role it can honestly derive.
+ * WHO IS ON THE WORKSPACE STAGE — DERIVED FROM THIS WORKSPACE'S OWN STATE.
  *
- * `projectWorkspaceCast` places an actor for every role that is ACTUALLY
- * WORKING, and can place three. The workspace passes one, because one is what
- * this build produces: `LOOP_ENGINE.md` records that multi-role staffing exists
- * (`confirmLoopRunsForTarget` creates a run per resolved role) while THE BRIDGE
- * STILL CREATES A SINGLE RUN AND DRIVES ONE ROLE, `coding_agent`. Passing the
- * architect and the reviewer would put actors on the stage for work no run
- * performs.
+ * The first attempt passed a literal `working: true`, which was a constant
+ * input replacing a constant cast: false in fourteen of fifteen mission states,
+ * and contradicted by the same render tree labelling the coding agent
+ * `waiting`. `dogState` and `reviewerState` are what the workspace already
+ * believes, so they are what the stage is told.
  *
- * AND `present` IS NOT `working`. `codingRuntime`, `architectRuntime` and
- * `reviewerHarness` report whether a runtime is configured and connected —
- * which is a different question, and answering the stage's question with it
- * would draw a reviewer that has only ever been configured. The Dog is drawn
- * because the workspace is showing a mission, which is the meaning it already
- * had and the one `dogState` is derived from.
+ * `wandering` is the Dog's idle state — it is what `configured`, `failed` and
+ * `cancelled` all project to. Everything else is the coding agent doing
+ * something, which is the question the stage asks.
  *
- * The second and third actors arrive when the bridge drives a second role, not
- * when a second sprite exists.
+ * THE REVIEWER IS PASSED TOO, and it has no sprite, so the projection names it
+ * in `workingWithoutSprite` rather than placing an empty box. Dropping it
+ * instead would make a working reviewer indistinguishable from no reviewer.
+ * `relay-bridge/mission.ts` is a three-role production orchestrator — architect,
+ * coder, reviewer — so a working reviewer is a real thing this surface can see.
  */
-const WORKSPACE_CAST_ROLES: readonly CastRoleInput[] = Object.freeze([
-  Object.freeze({ role: 'coding_agent' as const, working: true }),
-]);
+function workspaceCastRoles(input: {
+  readonly dogState: WorkspaceDogState;
+  readonly reviewerState: ReviewerStateKind;
+}): readonly CastRoleInput[] {
+  return [
+    { role: 'coding_agent', working: input.dogState !== 'wandering' },
+    {
+      role: 'reviewer',
+      working: input.reviewerState === 'reviewing' || input.reviewerState === 're_reviewing',
+    },
+  ];
+}
 import { RelayProjectFooter } from './RelayProjectFooter';
 import { RelayPspAgentImport } from '../psp-import';
 import type { RelayWorkspaceUsage } from '../usage';
@@ -61,7 +67,9 @@ import type { CodingAgentView } from '../../mission/coding-agent';
 import type { PromptArchitectView } from '../../mission/prompt-architect';
 import { projectHarnessCatalog, type ReviewerHarnessView } from '../../mission/reviewer-harness';
 import { OUTPUT_STATE_LABEL, completionDisplay } from './projections';
-import type { RelayProjectWorkspaceProps } from './contracts';
+import type {
+  RelayProjectWorkspaceProps, ReviewerStateKind, WorkspaceDogState,
+} from './contracts';
 import type {
   PSPAgentImportRecord,
   PSPEntitlementServicePort,
@@ -195,9 +203,12 @@ export function RelayProjectWorkspace(
 
   // Derived once per render from a frozen input, so the identity is stable and
   // the stage does not re-place actors because React re-rendered.
+  // Deps are real, so this stays correct the moment the inputs move — an
+  // empty dep array was defensible only while the input was a module constant,
+  // which is exactly what this change stops being true.
   const workspaceCast = useMemo(
-    () => projectWorkspaceCast({ roles: WORKSPACE_CAST_ROLES }),
-    [],
+    () => projectWorkspaceCast({ roles: workspaceCastRoles({ dogState, reviewerState }) }),
+    [dogState, reviewerState],
   );
 
   /**
