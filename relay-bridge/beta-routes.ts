@@ -3,6 +3,7 @@ import { bearerMatches, BRIDGE_TOKEN_ENV, type ReviewerRouteResult } from './rev
 import { decideBetaAccess, projectWaveStatus, RELAY_BETA_WAVES } from '../src/relay/mission/beta';
 import type { BetaWaveConfig, BetaWaveState, RelayBetaWave } from '../src/relay/mission/beta';
 import type { BetaEnrolmentStore } from '../src/relay/persistence';
+import type { BetaRateLimiter } from './beta-rate-limit';
 import { isUsableParticipantId } from '../src/relay/persistence';
 
 /**
@@ -87,6 +88,17 @@ export interface BetaRouteRequest {
    * only one a missing config can honestly mean.
    */
   readonly waves: readonly BetaWaveConfig[];
+  /**
+   * The client as the platform edge reports it, and the clock, for the rate
+   * limit on the one unauthenticated write surface Relay has. Absent means no
+   * limit is applied — a host that cannot identify callers should not pretend
+   * to.
+   */
+  readonly rateLimit?: {
+    readonly limiter: BetaRateLimiter;
+    readonly clientKey: string;
+    readonly nowMs: number;
+  };
 }
 
 export async function handleBetaRoute(
@@ -110,6 +122,31 @@ export async function handleBetaRoute(
   /* ---------------------------------------------------------- public ask */
 
   if (request.method === 'POST' && request.path === '/beta/request') {
+    /**
+     * THE LIMIT COMES FIRST, before the body is even read. Review consumed
+     * every production seat in 671 ms through this route; the seat cap made
+     * that a bounded refusal and this is what stops the bound being reached in
+     * a second. Refusing before any work also means a flood costs a map lookup
+     * rather than a volume read.
+     */
+    if (request.rateLimit !== undefined) {
+      const verdict = request.rateLimit.limiter.check(
+        request.rateLimit.clientKey, request.rateLimit.nowMs,
+      );
+      if (!verdict.allowed) {
+        return {
+          status: 429,
+          body: {
+            error: {
+              kind: 'rate_limited',
+              message: `Too many beta requests. Try again in ${String(verdict.retryAfterSeconds)}s.`,
+              retryAfterSeconds: verdict.retryAfterSeconds,
+            },
+          },
+        };
+      }
+    }
+
     const participantId = readParticipantId(request.body);
     if (participantId === null) {
       return err(422, 'validation_failed',

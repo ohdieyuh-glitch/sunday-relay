@@ -35,6 +35,8 @@ import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
 import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
 import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
 import { guardBetaAdmission, participantFromBody } from './beta-guard';
+import { claimedClientKey, createBetaRateLimiter } from './beta-rate-limit';
+import type { BetaRateLimiter } from './beta-rate-limit';
 import { createBetaEnrolmentStore } from '../src/relay/persistence';
 import type { BetaWaveConfig } from '../src/relay/mission/beta';
 import type { BetaEnrolmentStore } from '../src/relay/persistence';
@@ -171,6 +173,12 @@ export function createBridgeServer(
    * absent configuration can honestly mean.
    */
   betaWaves: readonly BetaWaveConfig[] = [],
+  /**
+   * The rate limiter for the public beta request route. Absent means no limit
+   * — correct for a host that constructs no beta surface, and never the
+   * default in `main()`.
+   */
+  betaLimiter: BetaRateLimiter | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -410,6 +418,15 @@ export function createBridgeServer(
             // would let anyone place themselves at the front of it.
             now: new Date().toISOString(),
             waves: betaWaves,
+            // The public route is the only unauthenticated write surface, so
+            // it is the only one that carries a limit.
+            ...(betaLimiter === null ? {} : {
+              rateLimit: {
+                limiter: betaLimiter,
+                clientKey: claimedClientKey(req.headers),
+                nowMs: Date.now(),
+              },
+            }),
           }, betaStore);
           if (betaResult !== null) {
             send(res, betaResult.status, betaResult.body, cors);
@@ -722,6 +739,8 @@ export function main(): void {
   const betaStore = config.stateRoot === null
     ? null
     : createBetaEnrolmentStore({ root: config.stateRoot });
+  // One limiter for the process, so its windows are shared across requests.
+  const betaLimiter = createBetaRateLimiter();
   const betaWaves: readonly BetaWaveConfig[] = Object.freeze([
     Object.freeze({ wave: 'wave_0' as const, state: betaWaveZeroState(process.env), seats: 100 }),
   ]);
@@ -734,6 +753,7 @@ export function main(): void {
     () => scheduler?.isRunning() === true,
     betaStore,
     betaWaves,
+    betaLimiter,
   );
 
   /**

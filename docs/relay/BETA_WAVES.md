@@ -258,6 +258,28 @@ beta, and when did they join?", and since that instant orders the queue, the
 answer also leaked their seat position. Probing was not passive either: a miss
 created an enrolment, so enumeration *was* the exhaustion attack.
 
-**Still missing, and required before the flag is set in production:** a per-IP
-**rate limit** on `POST /beta/request`, and a **blocklist**. The cap bounds the
-damage; it does not stop a determined caller filling the wave with distinct ids.
+## The rate limit
+
+`relay-bridge/beta-rate-limit.ts`, applied to `POST /beta/request` **before the
+body is even read** — so a flood costs a map lookup rather than a volume read.
+
+**Two limits, because one of them can be lied to.** The per-key limit (5 per
+minute) rests on `x-forwarded-for`, which is the platform edge's word and not a
+fact: a caller reaching the bridge directly can set a fresh value per request
+and defeat it entirely. That is precisely why the **global** limit (60 per
+minute, against 100 seats) exists — it is the bound that holds when the header
+is a lie, and a test sprays 500 distinct keys to prove it stops at exactly the
+global figure.
+
+A refused request does **not** extend the window, or a caller who keeps
+hammering could never recover — that would be a permanent ban nobody decided to
+issue. Key tracking is bounded, so the limiter cannot be turned into the memory
+attack it exists to prevent; beyond the bound the per-key limit degrades and the
+global limit carries, which is the safe direction.
+
+Neither limit is a security boundary on its own, and this document does not
+claim otherwise.
+
+**Still missing before the flag is set in production:** a **blocklist**. The cap
+and the limit bound the damage; they do not let an operator turn away a caller
+they have identified as hostile.
