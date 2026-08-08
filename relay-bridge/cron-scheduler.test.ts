@@ -314,6 +314,41 @@ describe('a pass is bounded in the direction that costs', () => {
     ]);
   }, 30_000);
 
+  it('the documented remedy actually works: rebinding to a fresh Loop resumes it', () => {
+    // CRON_LOOPS.md and the deployment log both tell an operator to edit the
+    // schedule so it binds to a fresh Loop. A remedy that does not work is
+    // worse than the silence it replaced, so it is asserted rather than
+    // described.
+    let minutes = 0;
+    const now = () => new Date(Date.parse(T0) + minutes * 60_000).toISOString();
+    const svc = createCronTickService({ root, now });
+    expect(svc.schedules.create('sched-a', STORED).ok).toBe(true);
+    const s = createCronScheduler({
+      ticks: svc, now, intervalSeconds: 3600, lookbackMinutes: 180, maxRunRecordsPerLoop: 6,
+    });
+
+    let stopped = false;
+    for (let pass = 0; pass < 40 && !stopped; pass += 1) {
+      stopped = s.runOnce().refused.some((r) => r.reason === 'run_records_at_ceiling');
+      minutes += 120;
+    }
+    expect(stopped).toBe(true);
+
+    // Rebind: an edit appends a version, and `loopId` is a versioned field.
+    const edited = svc.editSchedule('sched-a', {
+      ...STORED, loopId: 'lpe_fresh', authoredAt: now(),
+    }, []);
+    expect(edited.ok, edited.ok ? '' : edited.problem).toBe(true);
+
+    minutes += 120;
+    const after = s.runOnce();
+    s.stop();
+    expect(after.refused).toEqual([]);
+    expect(after.ticked).toBe(1);
+    // It recurs again, into the Loop it was rebound to.
+    expect((svc.store.runIdsForLoop('lpe_fresh') ?? []).length).toBeGreaterThan(0);
+  }, 30_000);
+
   it('reads each Loop execution count once per pass, however many schedules share it', () => {
     // Two schedules, one Loop. The answer cannot change mid-pass: a pass is
     // synchronous and nothing in it starts a run.
