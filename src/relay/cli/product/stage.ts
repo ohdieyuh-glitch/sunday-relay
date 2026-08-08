@@ -1,4 +1,5 @@
 import { paint } from './theme';
+import { safeText } from './safety';
 import type { CliCaps } from './contracts';
 import {
   layoutStage, stageCapacity, stageShapeFor, type RelayStageActor,
@@ -31,8 +32,18 @@ export interface StageViewInput {
   readonly caps: CliCaps;
   /** The cast the host knows about. Empty is a real answer. */
   readonly actors: readonly RelayStageActor[];
-  /** The stored preference, which may name a scene this build does not have. */
-  readonly selectedBackdrop?: string | undefined;
+  /**
+   * The stored preference, which may name a scene this build does not have.
+   *
+   * THREE STATES, DELIBERATELY. A string is a preference that was read.
+   * `null` means a reader ran and found nothing stored. `undefined` means THIS
+   * SURFACE HAS NO READER — which is today's only case, because the browser
+   * keeps this in its own local storage and `project.stageBackdrop` is a field
+   * nothing sets. They print different sentences because they are different
+   * facts, and collapsing them is how a surface starts asserting a reason it
+   * cannot verify.
+   */
+  readonly selectedBackdrop?: string | null | undefined;
   readonly reducedMotion?: boolean;
 }
 
@@ -79,17 +90,42 @@ export function renderStageView(input: StageViewInput): { lines: string[]; json:
     );
   }
 
-  lines.push(`  ${p.dim('BACKDROP'.padEnd(18))} ${p.tone(resolved.id === 'none' ? 'gray' : 'amber', resolved.label)}`);
-  if (input.selectedBackdrop !== undefined && resolved.id === 'none'
-      && input.selectedBackdrop !== 'none') {
+  /**
+   * ABSENT IS UNKNOWN, NOT NONE.
+   *
+   * The browser stores the backdrop per BROWSER, in its own local storage, and
+   * this surface has no reader for it — `project.stageBackdrop` exists on the
+   * draft and nothing ever sets it. Printing `None` for that said the founder
+   * had no scene selected when what is true is that this surface cannot see
+   * their selection, and a founder who picked Jungle on the website was told
+   * `None` here. A missing value is Unknown; it is never a default.
+   */
+  const noReader = input.selectedBackdrop === undefined;
+  const readNothing = input.selectedBackdrop === null;
+  const unreadable = noReader || readNothing;
+  lines.push(`  ${p.dim('BACKDROP'.padEnd(18))} `
+    + (noReader
+      ? p.dim('Unknown — the website stores this per browser, and the CLI cannot read it')
+      : readNothing
+        ? p.dim('Unknown — nothing has been stored for this project')
+        : p.tone(resolved.id === 'none' ? 'gray' : 'amber', resolved.label)));
+  if (!unreadable && resolved.id === 'none' && input.selectedBackdrop !== 'none') {
     // A preference from an older build is a fact about that build, not an
     // instruction to show something else.
-    lines.push(p.dim(`  "${input.selectedBackdrop}" is not a scene this build has, so no scene is drawn.`));
+    // `safeText` takes `unknown`, so the cast was never needed — and once the
+    // declared type admitted `null` it was a wider untruth than it began as.
+    lines.push(p.dim(`  "${safeText(input.selectedBackdrop, { maxLength: 40 })}" `
+      + 'is not a scene this build has, so no scene is drawn.'));
   }
   lines.push('');
 
   for (const choice of choices) {
-    const marker = choice.selected ? p.tone('gold', '  [x] ') : p.dim('  [ ] ');
+    // NOTHING IS TICKED WHEN NOTHING IS KNOWN. Marking None `[x]` two lines
+    // under "the CLI cannot read it" made this surface contradict itself: the
+    // header said the selection is unknown and the list asserted one.
+    const marker = !unreadable && choice.selected
+      ? p.tone('gold', '  [x] ')
+      : p.dim('  [ ] ');
     lines.push(`${marker}${p.tone('cream', choice.label)}`);
     lines.push(`      ${p.dim(choice.description)}`);
     if (choice.animated) {
@@ -109,9 +145,12 @@ export function renderStageView(input: StageViewInput): { lines: string[]; json:
       overflowing: layout.overflowing,
       emptyReason: layout.emptyReason,
       placements: layout.placements,
-      backdrop: resolved.id,
+      // `null`, NOT `'none'`, when this surface has no reader. A machine
+      // consumer piping `--json` was told `backdrop: "none"` — a definite
+      // claim — while the human-readable output beside it said Unknown.
+      backdrop: unreadable ? null : resolved.id,
       backdropChoices: choices.map((c) => ({
-        id: c.id, selected: c.selected, animated: c.animated,
+        id: c.id, selected: !unreadable && c.selected, animated: c.animated,
         changesWithReducedMotion: c.changesWithReducedMotion,
       })),
       catalog: RELAY_BACKDROPS.map((entry) => entry.id),

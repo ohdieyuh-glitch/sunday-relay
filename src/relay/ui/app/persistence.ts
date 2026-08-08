@@ -1,3 +1,4 @@
+import { isKnownBackdrop, type RelayBackdropId } from '../../shared/relay-stage-backdrop';
 import { RELAY_APP_SCHEMA_VERSION, emptyRelayAppData } from './contracts';
 import type { RelayAppData } from './contracts';
 
@@ -40,7 +41,25 @@ function isRelayAppData(value: unknown): value is RelayAppData {
     typeof v.events === 'object' && v.events !== null &&
     (v.activeProjectId === null || typeof v.activeProjectId === 'string') &&
     (v.colorway === 'obsidian' || v.colorway === 'midnight' || v.colorway === 'manual')
+    // `stageBackdrop` is DELIBERATELY NOT CHECKED HERE. Requiring it would make
+    // every store written before the field existed fail this check and recover
+    // to empty — discarding a user's real projects to recover a piece of
+    // scenery. It is normalized on load instead, below.
   );
+}
+
+/**
+ * NORMALIZE THE SCENERY, rather than reject the store over it.
+ *
+ * Three cases collapse to the same safe answer, `null` (No scene): the field is
+ * absent because an older build wrote this payload; the field names a backdrop
+ * THIS build does not have, which describes a newer or forked build; or it is
+ * the wrong type entirely. Substituting a different scene would be the surface
+ * deciding something the user did not — the rule `resolveBackdrop` already
+ * holds — and dropping the whole store would cost far more than it recovers.
+ */
+function normalizeStageBackdrop(value: unknown): RelayBackdropId | null {
+  return isKnownBackdrop(value) ? value : null;
 }
 
 export function createRelayAppStorage(backing?: Storage): RelayAppStorage {
@@ -59,7 +78,14 @@ export function createRelayAppStorage(backing?: Storage): RelayAppStorage {
       if (raw === null) return emptyRelayAppData();
       try {
         const parsed: unknown = JSON.parse(raw);
-        if (isRelayAppData(parsed)) return parsed;
+        if (isRelayAppData(parsed)) {
+          return {
+            ...parsed,
+            stageBackdrop: normalizeStageBackdrop(
+              (parsed as unknown as Record<string, unknown>).stageBackdrop,
+            ),
+          };
+        }
         // Future schema versions migrate here; unknown shapes recover clean.
         return emptyRelayAppData();
       } catch {

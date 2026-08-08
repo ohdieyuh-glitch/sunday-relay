@@ -1,11 +1,22 @@
 # The Relay Stage
 
 **Status: IMPLEMENTED. ONE ACTOR ON IT. TWO BACKDROPS, SELECTABLE FROM THE
-WORKSPACE AND LISTED BY `relay project stage`. NONE SELECTED BY DEFAULT. THE
-CHOICE DOES NOT SURVIVE A RELOAD.**
+WORKSPACE AND LISTED BY `relay project stage`. NOTHING SELECTED UNTIL SOMEONE
+SELECTS IT. THE CHOICE SURVIVES A RELOAD IN THE BROWSER THAT MADE IT, AND
+NOWHERE ELSE.**
 
-Those are five different claims and this file keeps them apart. The last one is
-the honest limit: the picker reports a selection and nothing stores it yet.
+Those are five different claims and this file keeps them apart. The last one
+carries the honest limits: the preference is stored per BROWSER, so it does not
+cross to another one and no account syncs it; `relay project stage` cannot read
+it at all and reports `Unknown` rather than guessing `None`; and where the
+browser denies storage — private mode, or over quota — the session runs in
+memory and nothing reports the failed write.
+
+This header said "THE CHOICE DOES NOT SURVIVE A RELOAD" for three commits after
+it began surviving one. It under-claimed rather than over-claimed, which is the
+gentler direction and still the same defect: a reader who trusts the summary —
+which the sentence above invites — was told the feature this document goes on to
+describe had not shipped.
 
 ---
 
@@ -184,12 +195,54 @@ it **only when that user's setting is actually on**. Without a handler the
 picker draws no input at all: a control that cannot act is not drawn, the same
 rule the run panel and the MCP settings surface hold.
 
+## The choice is remembered
+
+`RelayPreviewApp` supplies `onSelectStageBackdrop` and stores the answer on
+`RelayAppData.stageBackdrop`, beside the colorway — the same store, the same
+localStorage envelope, the same commit path. It is **scenery in the store as
+well as on the stage**: it gates nothing, enters no mission record, and
+choosing one commits nothing else, which is asserted rather than asserted-of.
+
+Two things a stored preference has to survive, both tested:
+
+- **A payload written before this field existed.** The structural check does
+  NOT require `stageBackdrop`, because requiring it would fail the check and
+  recover to empty — discarding a user's real projects to recover a piece of
+  scenery. Absent means no scene, which is exactly what those builds showed.
+- **A backdrop this build does not have**, from a newer or forked build. It
+  normalizes to None on load rather than to `jungle`, the rule
+  `resolveBackdrop` already held: substituting a different scene would be the
+  surface deciding something the user did not.
+
+`null` means NO CHOICE HAS BEEN RECORDED — never picked, or what was stored is
+not a scene this build has. Choosing "None" stores the string `'none'`, which is
+a real catalog id. The two draw the same thing and are not the same fact.
+
+ONE SOURCE OF TRUTH AT A TIME. When a host passes `onSelectStageBackdrop` it
+owns the value, and the workspace's local state stands down. Reading
+`localBackdrop ?? stageBackdrop` unconditionally was harmless while no host
+stored anything and became a second source the moment one did — the local one
+winning permanently, so a host could never move the scene again. Worse, a
+handler that stored NOTHING still got the scene drawn, which is announcing an
+intention as a fact. Without a handler the local state remains, and the picker
+stays operable exactly as before.
+
+THE CLI SAYS `Unknown`, NOT `None`. This preference lives in one browser's
+storage and `relay project stage` has no reader for it. Printing `None` asserted
+that no scene was selected, when the true statement is that this surface cannot
+see the selection — a founder who picked Jungle on the website was told `None`
+in the terminal. The two surfaces still read one projection; what differs is
+that only one of them has the input, and it now says so.
+
 ## Not implemented
 
 Parallax content for the `far` layer · the Leopard, cubs, vehicle and
-transformation sprites · any cinematic sequence · **persistence of the backdrop
-choice** (the picker reports a selection and changes the scene; no shipped host
-stores it, so a reload returns to None).
+transformation sprites · any cinematic sequence · carrying the choice
+BETWEEN browsers (it is a local preference, stored per browser, and no account
+syncs it) · carrying it to the CLI, which reports `Unknown` rather than
+guessing · remembering it AT ALL where the browser denies storage — private
+mode, or over quota — in which case the session runs in memory and nothing
+reports the failed write, exactly as for the colorway.
 
 Two things are asserted where the decision lives rather than in a browser,
 because jsdom computes no cascade and reports `clientWidth === 0`: that `.rst`
@@ -211,9 +264,13 @@ kind of thing this repository's parity gate exists to catch.
 
 That argument is only honest if the CLI genuinely has an equivalent, so it was
 given one. `relay project stage` (`src/relay/cli/product/stage.ts`) reports the
-shape, the capacity, who is on the stage, which scene is selected and what the
-other choices are — calling `layoutStage` and `projectBackdropChoices`, the SAME
-functions the website calls.
+shape, the capacity, who is on the stage and what the scenes are — calling
+`layoutStage` and `projectBackdropChoices`, the SAME functions the website calls.
+
+WHICH SCENE IS SELECTED IS THE ONE IT CANNOT ANSWER, and it says so rather than
+guessing. That question needs an INPUT, not a projection, and the input lives in
+one browser's local storage. Both surfaces still compute from one projection;
+only one of them is handed the preference.
 
 Which is why the projection does not live under `ui/`. `relay-ui-boundary`
 forbids any non-UI module importing the website tree, and the first version of
@@ -221,5 +278,9 @@ the CLI surface broke it: the rule is that the UI CONSUMES the domain and never
 supplies it. `relay-stage-layout.ts` and `relay-stage-backdrop.ts` are in
 `src/relay/shared/`, where both surfaces may reach them, and are declared as
 `sharedDomainReferences` rather than as website entry points. A terminal cannot draw the stage; it can answer
-every question the stage answers, and `stage.test.ts` asserts the two surfaces
-read one projection and so cannot disagree.
+every question the stage answers THAT IT HAS AN INPUT FOR, and `stage.test.ts`
+asserts the two surfaces read one projection and so cannot disagree about
+anything they both compute. Where the CLI has no input it reports `Unknown` — in
+the header, in the choice list, and in `--json` — because a surface that
+answered `None` there would be disagreeing with the website by inventing the
+one fact it was never given.

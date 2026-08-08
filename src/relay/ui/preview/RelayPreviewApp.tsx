@@ -56,6 +56,7 @@ import type { PSPAgentImportRecord } from '../../psp';
 import { createFixtureEntitlementService } from '../../psp/psp-fixtures';
 import { COLORWAY_LABEL, RELAY_COLORWAYS, applyRelayColorway } from './colorway';
 import type { RelayColorway } from './colorway';
+import type { RelayBackdropId } from '../../shared/relay-stage-backdrop';
 import { siblingProductTarget } from './environment';
 import {
   EMPTY_USAGE_LATCH,
@@ -230,6 +231,11 @@ export function RelayPreviewApp() {
     applyRelayColorway(colorway, document.documentElement);
   }, [colorway]);
   const setColorway = (c: RelayColorway) => store.setColorway(c);
+
+  // The stage backdrop persists the same way, through the same store. Until
+  // now the picker changed the scene and a reload returned it to None.
+  const stageBackdrop = state.stageBackdrop;
+  const selectStageBackdrop = (id: RelayBackdropId) => store.setStageBackdrop(id);
 
   /* -------- live mission driver: begin once + poll authoritative state ----- */
   // The active non-demo mission id for the current workspace route. A stable
@@ -829,6 +835,8 @@ export function RelayPreviewApp() {
         reviewerHarness={reviewerHarnessView}
         onHarnessUnavailable={onHarnessUnavailable}
         loopSurface={loopSurface}
+        stageBackdrop={stageBackdrop ?? undefined}
+        onSelectStageBackdrop={selectStageBackdrop}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -907,6 +915,8 @@ export function RelayPreviewApp() {
         reviewerHarness={reviewerHarnessView}
         onHarnessUnavailable={onHarnessUnavailable}
         loopSurface={loopSurface}
+        stageBackdrop={stageBackdrop ?? undefined}
+        onSelectStageBackdrop={selectStageBackdrop}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen

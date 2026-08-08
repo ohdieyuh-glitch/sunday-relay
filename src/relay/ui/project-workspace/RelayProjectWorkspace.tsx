@@ -186,13 +186,25 @@ export function RelayProjectWorkspace(
   const observedViewportWidthPx = viewportWidthPx ?? measuredWidthPx;
 
   /**
-   * THE BACKDROP CHOICE lives here so the picker is genuinely operable. A host
-   * that wants the choice remembered passes `onSelectStageBackdrop` and stores
-   * it; without one the scene still changes, and simply does not survive a
-   * reload. Reporting a selection and persisting it are different jobs.
+   * THE BACKDROP CHOICE, with EXACTLY ONE SOURCE OF TRUTH at a time.
+   *
+   * A host that wants the choice remembered passes `onSelectStageBackdrop` and
+   * stores it; without one the local state keeps the picker genuinely operable,
+   * and the scene simply does not survive a reload.
+   *
+   * WHEN A HOST OWNS THE VALUE, THE HOST OWNS IT. The first version read
+   * `localBackdrop ?? stageBackdrop` unconditionally, which was harmless while
+   * `stageBackdrop` was always absent and became a second source the moment a
+   * host started supplying one — and the local one won permanently, because
+   * nothing ever cleared it. Review proved the three consequences: a host that
+   * re-asserted a different value was ignored; a reset that cleared the store
+   * left the old scene on screen; and a host that took the callback and
+   * REJECTED the write still had the scene drawn as though it had been stored.
+   * That last one is the rule about announcing facts rather than intentions,
+   * broken by a `??`.
    */
   const [localBackdrop, setLocalBackdrop] = useState<RelayBackdropId | null>(null);
-  const selectedBackdrop = localBackdrop ?? stageBackdrop;
+  const selectedBackdrop = onSelectStageBackdrop ? stageBackdrop : (localBackdrop ?? stageBackdrop);
   const handleSelectBackdrop = useCallback((id: RelayBackdropId) => {
     setLocalBackdrop(id);
     onSelectStageBackdrop?.(id);

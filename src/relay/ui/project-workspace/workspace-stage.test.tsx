@@ -79,19 +79,75 @@ describe('the backdrop picker is MOUNTED, so the scenes are selectable', () => {
     expect(document.querySelector('.rsb-planet')).not.toBeNull();
   });
 
-  it('tells a host that wants to store the choice, without needing one', () => {
+  it('tells a host that wants to store the choice', () => {
     const onSelectStageBackdrop = vi.fn();
     workspace({ onSelectStageBackdrop });
     const jungle = document.querySelector('input[value="jungle"]') as HTMLInputElement;
     act(() => { jungle.click(); });
     expect(onSelectStageBackdrop).toHaveBeenCalledWith('jungle');
-    // And the scene changed regardless of whether anyone stored it.
-    expect(document.querySelector('[data-backdrop="jungle"]')).not.toBeNull();
   });
 
   it('a stored preference naming a scene this build lacks draws nothing', () => {
     workspace({ stageBackdrop: 'savannah' });
     expect(document.querySelector('[data-backdrop]')).toBeNull();
+  });
+});
+
+describe('exactly one source of truth owns the scene', () => {
+  it('a host that REJECTS the write does not get the scene drawn anyway', () => {
+    // ANNOUNCE FACTS, NOT INTENTIONS. The picker reporting a choice and the
+    // stage drawing it are different events. A handler that stores nothing —
+    // quota exceeded, a rejected write, a host that ignores it — must not
+    // leave the surface asserting a selection nobody kept.
+    const onSelectStageBackdrop = vi.fn(); // takes it, stores nothing
+    workspace({ onSelectStageBackdrop });
+    const jungle = document.querySelector('input[value="jungle"]') as HTMLInputElement;
+    act(() => { jungle.click(); });
+    expect(onSelectStageBackdrop).toHaveBeenCalledWith('jungle');
+    expect(document.querySelector('[data-backdrop]')).toBeNull();
+  });
+
+  it('a host that owns the value can move it, and is obeyed', () => {
+    // The first version read `localBackdrop ?? stageBackdrop`, so once a user
+    // clicked anything the local value won permanently and the host could
+    // never move the scene again — including a reset that cleared the store.
+    const onSelectStageBackdrop = vi.fn();
+    workspace({ stageBackdrop: 'space_station', onSelectStageBackdrop });
+    expect(document.querySelector('[data-backdrop="space_station"]')).not.toBeNull();
+
+    const jungle = document.querySelector('input[value="jungle"]') as HTMLInputElement;
+    act(() => { jungle.click(); });
+
+    // The host stored nothing, so it still holds space_station — and that,
+    // not the click, is what the stage shows.
+    expect(document.querySelector('[data-backdrop="space_station"]')).not.toBeNull();
+    expect(document.querySelector('[data-backdrop="jungle"]')).toBeNull();
+  });
+
+  it('a handler with no value is a control that cannot move, and that is stated', () => {
+    // The cost of the fix, pinned rather than discovered later: a host that
+    // supplies the handler and no `stageBackdrop`, or one that never echoes,
+    // gets radios that visibly refuse to move. `contracts.ts` obliges the host
+    // to supply both; this is what happens when it does not.
+    workspace({ onSelectStageBackdrop: vi.fn() });
+    const jungle = document.querySelector('input[value="jungle"]') as HTMLInputElement;
+    act(() => { jungle.click(); });
+    expect(document.querySelector('[data-backdrop]')).toBeNull();
+    const checked = [...document.querySelectorAll('input[type="radio"]')]
+      .filter((i) => (i as HTMLInputElement).checked)
+      .map((i) => (i as HTMLInputElement).value);
+    // The radio agrees with the stage, which is the property that must hold
+    // even in the case nobody should ship.
+    expect(checked).toEqual(['none']);
+  });
+
+  it('WITHOUT a host, local state still makes the picker operable', () => {
+    // The handler-less surface is the one the docstring promises, and it must
+    // keep working: the scene changes, and simply does not survive a reload.
+    workspace();
+    const jungle = document.querySelector('input[value="jungle"]') as HTMLInputElement;
+    act(() => { jungle.click(); });
+    expect(document.querySelector('[data-backdrop="jungle"]')).not.toBeNull();
   });
 });
 

@@ -1,3 +1,4 @@
+import type { RelayBackdropId } from '../../shared/relay-stage-backdrop';
 import type { ProjectBriefDraft } from '../entry-home/contracts';
 import type { ProjectSettingsDraft } from '../project-settings/contracts';
 import type {
@@ -174,6 +175,26 @@ export interface RelayAppData {
   events: Record<string, RelayEvent[]>;
   activeProjectId: string | null;
   colorway: 'obsidian' | 'midnight' | 'manual';
+  /**
+   * The chosen stage scenery, or `null` for no scene.
+   *
+   * SCENERY ONLY. It gates nothing, is never part of a mission record, and
+   * cannot change what any surface reports — it is stored beside the colorway
+   * because it is the same kind of thing: how this browser looks, to this user.
+   *
+   * `null` MEANS NO CHOICE HAS BEEN RECORDED — either this browser has never
+   * picked one, or what it stored is not a backdrop this build has. Choosing
+   * "None" in the picker stores the string `'none'`, because `'none'` is a real
+   * member of the catalog. The two draw the same thing and are not the same
+   * fact, and an earlier version of this comment claimed `null` was the chosen
+   * one, which the picker's own radio value contradicts.
+   *
+   * Neither is rendered as Unknown on the website: a radio group has to show
+   * something selected, and None is the honest default to show when nothing has
+   * been chosen. The CLI, which cannot read this store at all, says Unknown —
+   * that is a different question with a different answer.
+   */
+  stageBackdrop: RelayBackdropId | null;
   updatedAt: string;
 }
 
@@ -188,6 +209,7 @@ export function emptyRelayAppData(): RelayAppData {
     events: {},
     activeProjectId: null,
     colorway: 'obsidian',
+    stageBackdrop: null,
     updatedAt: new Date(0).toISOString(),
   };
 }

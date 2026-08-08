@@ -81,6 +81,49 @@ describe('the CLI offers the same scenes, and refuses the same substitution', ()
     expect(lines.join('\n')).toContain('not a scene this build has');
   });
 
+  it('says Unknown when it cannot read the preference, rather than None', () => {
+    // The website stores the backdrop per BROWSER and this surface has no
+    // reader for it. Printing `None` asserted the founder had no scene
+    // selected, when the true statement is that the CLI cannot see one — so a
+    // founder who picked Jungle on the website was told None here.
+    const { lines, json } = view() as {
+      lines: string[];
+      json: { backdrop: string | null; backdropChoices: { selected: boolean }[] };
+    };
+    const text = lines.join('\n');
+    expect(text).toContain('Unknown');
+    expect(text).toContain('cannot read it');
+    // AND NOTHING IS TICKED. Saying the selection is unknown and then marking
+    // None `[x]` two lines below is one surface contradicting itself.
+    expect(text).not.toContain('[x]');
+    // The machine-readable answer has to agree with the human-readable one.
+    // `"none"` here is a definite claim, and there is nothing to claim.
+    expect(json.backdrop).toBeNull();
+    expect(json.backdropChoices.some((c) => c.selected)).toBe(false);
+  });
+
+  it('separates "no reader here" from "read, nothing stored"', () => {
+    // `undefined` is a fact about this SURFACE; `null` is a fact about the
+    // PROJECT. Both print Unknown and neither may borrow the other's reason.
+    const noReader = (view() as { lines: string[] }).lines.join('\n');
+    const readNothing = (view({ selectedBackdrop: null }) as { lines: string[] })
+      .lines.join('\n');
+    expect(noReader).toContain('cannot read it');
+    expect(readNothing).toContain('nothing has been stored');
+    expect(readNothing).not.toContain('cannot read it');
+    expect((view({ selectedBackdrop: null }) as { json: { backdrop: string | null } }).json.backdrop)
+      .toBeNull();
+  });
+
+  it('sanitizes a stored id before printing it to a terminal', () => {
+    // The stored value became genuinely user-controlled the moment the website
+    // began persisting it, and a terminal is an ANSI sink.
+    const { lines } = view({ selectedBackdrop: '[31mred' }) as { lines: string[] };
+    const text = lines.join('\n');
+    expect(text).toContain('not a scene this build has');
+    expect(text).not.toContain('[31m');
+  });
+
   it('a known preference is reported as selected', () => {
     const { json } = view({ selectedBackdrop: 'space_station' }) as {
       json: { backdrop: string; backdropChoices: { id: string; selected: boolean }[] };

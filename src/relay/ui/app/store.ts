@@ -105,6 +105,8 @@ export interface RelayAppStore {
 
   // appearance
   setColorway(colorway: RelayAppData['colorway']): void;
+  /** Scenery. Stored beside the colorway, and reported by nothing else. */
+  setStageBackdrop(backdrop: RelayAppData['stageBackdrop']): void;
 
   // demo reset — wipes browser-demo state only
   resetAll(): void;
@@ -549,6 +551,11 @@ export function createRelayAppStore(
     setColorway(colorway) {
       if (data.colorway === colorway) return;
       commit({ ...data, colorway });
+    },
+
+    setStageBackdrop(stageBackdrop) {
+      if (data.stageBackdrop === stageBackdrop) return;
+      commit({ ...data, stageBackdrop });
     },
 
     resetAll() {
