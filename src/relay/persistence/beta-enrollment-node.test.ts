@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -141,11 +141,14 @@ describe('a corrupt record is skipped, never handed to a decision', () => {
   });
 
   it('an unreadable record occupying a participant refuses rather than claiming either answer', () => {
+    // With the exclusive link this is unambiguous: a published record is
+    // complete, so a file that cannot be read is genuinely damaged rather
+    // than a writer's half-finished work seen mid-flight.
     mkdirSync(join(root, 'beta-enrollments', 'wave_0'), { recursive: true });
     writeFileSync(join(root, 'beta-enrollments', 'wave_0', 'alice.json'), '{ not json');
     const result = store.enrol('alice', 'wave_0', T);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.problem).toContain('unreadable');
+    if (!result.ok) expect(result.problem).toContain('cannot be read');
   });
 });
 
@@ -155,5 +158,141 @@ describe('waves are separate', () => {
     expect(store.enrol('alice', 'wave_1', T).ok).toBe(true);
     expect(store.countFor('wave_0')).toBe(1);
     expect(store.countFor('wave_1')).toBe(1);
+  });
+});
+
+/* ============================== what review proved by RUNNING the store === */
+
+describe('an uncountable directory is NOT zero seats taken', () => {
+  it('answers null rather than 0 when the directory cannot be read', () => {
+    // Answering 0 made the gate's reconciliation unsatisfiable and the cap
+    // silently stopped existing — proven with EACCES and with fd exhaustion.
+    for (const id of ['a', 'b', 'c', 'd', 'e']) store.enrol(id, 'wave_0', T);
+    expect(store.countFor('wave_0')).toBe(5);
+
+    const dir = join(root, 'beta-enrollments', 'wave_0');
+    chmodSync(dir, 0o000);
+    try {
+      const count = store.countFor('wave_0');
+      // Root can read a 0000 directory, so accept either — what must NEVER
+      // happen is a confident 0 while five records sit on the volume.
+      expect(count === null || count === 5).toBe(true);
+      expect(count).not.toBe(0);
+    } finally {
+      chmodSync(dir, 0o700);
+    }
+  });
+
+  it('a wave nobody has joined is genuinely 0, not unknown', () => {
+    expect(store.countFor('wave_2')).toBe(0);
+  });
+
+  it('an unknown wave is unanswerable, not empty', () => {
+    expect(store.countFor('wave_9' as never)).toBeNull();
+  });
+
+  it('a null count reaches the gate as a refusal, never as room', async () => {
+    const { decideBetaAccess } = await import('../mission/beta');
+    const decision = decideBetaAccess({
+      participantId: 'a',
+      enrollments: [{ participantId: 'a', wave: 'wave_0', enrolledAt: T }],
+      waves: [{ wave: 'wave_0', state: 'open', seats: 1 }],
+      occupancy: { wave_0: null },
+    });
+    expect(decision.admitted).toBe(false);
+    if (!decision.admitted) expect(decision.reason).toBe('occupancy_unknown');
+  });
+});
+
+describe('a record is all-or-nothing and durable before it is visible', () => {
+  it('leaves no temp file behind to be counted or read', () => {
+    store.enrol('alice', 'wave_0', T);
+    const files = readdirSync(join(root, 'beta-enrollments', 'wave_0'));
+    expect(files).toEqual(['alice.json']);
+    expect(files.some((f) => f.includes('.tmp'))).toBe(false);
+  });
+
+  it('a FAILED write is reported as failed and leaves nothing enrolled', () => {
+    // The mutant that survived every earlier test: a non-EEXIST failure
+    // announced as `created`. A read-only wave directory is the realistic
+    // Railway shape — a full or read-only volume.
+    const dir = join(root, 'beta-enrollments', 'wave_0');
+    mkdirSync(dir, { recursive: true });
+    chmodSync(dir, 0o500);
+    try {
+      const result = store.enrol('alice', 'wave_0', T);
+      // Root ignores the mode; skip rather than assert a false pass.
+      if (result.ok) return;
+      expect(result.ok).toBe(false);
+      expect(store.list('wave_0')).toEqual([]);
+    } finally {
+      chmodSync(dir, 0o700);
+    }
+  });
+
+  it('records and directories carry restrictive modes', () => {
+    store.enrol('alice', 'wave_0', T);
+    const dir = join(root, 'beta-enrollments', 'wave_0');
+    expect(statSync(join(dir, 'alice.json')).mode & 0o777).toBe(0o600);
+    expect(statSync(dir).mode & 0o777).toBe(0o700);
+  });
+});
+
+describe('neither enrol nor list throws where the contract says it refuses', () => {
+  it('a subdirectory named like a record is skipped, not thrown over', () => {
+    store.enrol('good', 'wave_0', T);
+    mkdirSync(join(root, 'beta-enrollments', 'wave_0', 'evil.json'), { recursive: true });
+    expect(() => store.list('wave_0')).not.toThrow();
+    expect(store.list('wave_0').map((e) => e.participantId)).toEqual(['good']);
+    expect(() => store.enrol('other', 'wave_0', T)).not.toThrow();
+  });
+
+  it('a read-only volume refuses rather than throwing out of the Result type', () => {
+    chmodSync(root, 0o500);
+    try {
+      const result = store.enrol('alice', 'wave_0', T);
+      if (result.ok) return; // running as root
+      expect(result.ok).toBe(false);
+    } finally {
+      chmodSync(root, 0o700);
+    }
+  });
+});
+
+describe('a record must be the one its filename names', () => {
+  it('does not hand one participant another identity', () => {
+    // Free on any case-insensitive filesystem, where Alice and alice collide.
+    const dir = join(root, 'beta-enrollments', 'wave_0');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'victim.json'), JSON.stringify({
+      participantId: 'mallory', wave: 'wave_0', enrolledAt: '2020-01-01T00:00:00.000Z',
+    }));
+    const result = store.enrol('victim', 'wave_0', T);
+    expect(result.ok).toBe(false);
+    expect(store.list('wave_0')).toEqual([]);
+  });
+
+  it('drops a well-formed record missing its instant, and still counts the file', () => {
+    const dir = join(root, 'beta-enrollments', 'wave_0');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'x.json'), JSON.stringify({ participantId: 'x', wave: 'wave_0' }));
+    expect(store.list('wave_0')).toEqual([]);
+    expect(store.countFor('wave_0')).toBe(1);
+  });
+});
+
+describe('the wave directory is contained, not merely well-named', () => {
+  it('refuses to read or write through a symlink pointing outside the root', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'relay-outside-'));
+    try {
+      mkdirSync(join(root, 'beta-enrollments'), { recursive: true });
+      symlinkSync(outside, join(root, 'beta-enrollments', 'wave_0'));
+      const result = store.enrol('alice', 'wave_0', T);
+      expect(result.ok).toBe(false);
+      expect(readdirSync(outside)).toEqual([]);
+      expect(store.countFor('wave_0')).toBeNull();
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
   });
 });

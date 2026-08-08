@@ -378,11 +378,15 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     // naming what is still MISSING — the route, the signup path, enforcement,
     // and an opened wave — as ONE contiguous claim, so a status rewritten to
     // announce an opened wave cannot satisfy it with a withdrawal preamble.
-    expect(beta).toContain(
-      '**Status: THE DECISION, THE DURABLE STORE AND THE ADMISSION ROUTES ARE '
+    // AND IT MUST BE THE DOCUMENT'S FIRST `**Status:`. Asserting containment
+    // alone was defeated by a withdrawal preamble — a status announcing an
+    // opened wave that then QUOTED the old line passed. Pinning the position
+    // makes the quotation useless.
+    const BETA_PIN = '**Status: THE DECISION, THE DURABLE STORE AND THE ADMISSION ROUTES ARE '
       + 'IMPLEMENTED AND WIRED INTO THE BRIDGE. NO WAVE HAS BEEN OPENED IN PRODUCTION '
-      + 'AND NOBODY HAS BEEN ADMITTED TO ANYTHING.**',
-    );
+      + 'AND NOBODY HAS BEEN ADMITTED TO ANYTHING.**';
+    expect(beta).toContain(BETA_PIN);
+    expect(beta.indexOf(BETA_PIN)).toBe(beta.indexOf('**Status:'));
   });
 
   it('the Unchain record carries the locked founder decisions', () => {

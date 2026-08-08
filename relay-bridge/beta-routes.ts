@@ -150,6 +150,9 @@ export async function handleBetaRoute(
       // from the other would make the cap unenforceable.
       enrollments: RELAY_BETA_WAVES.flatMap((w) => store.list(w)),
       waves: request.waves,
+      // `countFor` may answer `null` — a directory it could not read. That
+      // flows straight through to the gate, which refuses `occupancy_unknown`
+      // rather than admitting against a count nobody has.
       occupancy: Object.fromEntries(RELAY_BETA_WAVES.map((w) => [w, store.countFor(w)])),
     });
 

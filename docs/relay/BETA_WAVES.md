@@ -4,9 +4,8 @@
 IMPLEMENTED AND WIRED INTO THE BRIDGE. NO WAVE HAS BEEN OPENED IN PRODUCTION
 AND NOBODY HAS BEEN ADMITTED TO ANYTHING.**
 
-Those are six different claims and this file keeps them apart. The last one is
-the honest limit: this module decides, and nothing yet records, serves or
-enforces the decision. The status line is pinned by
+Those are seven different claims and this file keeps them apart. The last one is
+the honest limit: Relay decides and records, and no wave has been opened. The status line is pinned by
 `documentation-contract.test.ts`, so it fails the day it stops being true —
 which it previously had no way to do.
 
@@ -94,12 +93,12 @@ door. A board that disagrees with the gate is worse than no board.
 ## Not implemented
 
  enforcement anywhere in the
-product (no surface consults this — `mission/beta` is imported by nothing) ·
+PRODUCT (the routes answer, and nothing downstream yet consults the answer) ·
 opening a wave (no artifact records any wave's state; there is no default
 config, so "all waves are not_open" is true only because nothing configures one)
 · invitations · waitlists · per-wave entitlements or spend caps · any UI.
 
-And five more the first version of this list did not disclose, each needed in
+And four more the first version of this list did not disclose, each needed in
 week one of a real beta:
 
 **REVOCATION** — `BetaEnrollment` has no `revoked` state, so removing one
@@ -120,12 +119,32 @@ un-learned.
 `src/relay/persistence/beta-enrollment-node.ts` — one file per participant per
 wave, under `<root>/beta-enrollments/<wave>/<participantId>.json`.
 
-**Idempotency is structural, not checked.** The file is created with `O_EXCL`,
-so a second enrolment for the same participant *cannot* create a second record —
-the kernel refuses it and the store reports `already_enrolled` **with the
-original instant**, because the first instant is what orders the queue and a
-retry that replaced it would move that participant's seat. There is no
-read-modify-write, and therefore no lock.
+**Idempotency is structural, not checked.** The record is written to a temp
+file, fsynced, then `linkSync`ed into place — the same all-or-nothing,
+exclusive, durable primitive `cron-claim-node.ts` uses. `linkSync` fails
+`EEXIST`, so a second enrolment for the same participant *cannot* create a
+second record, and the store reports `already_enrolled` **with the original
+instant**, because the first instant orders the queue and a retry that replaced
+it would move that participant's seat.
+
+The first version created the file with `O_EXCL` and wrote the contents in place
+afterwards, fsyncing neither — and review proved the consequence by running it:
+**one genuinely failed write left a zero-byte file that permanently blocked that
+participant and refused every other member of the wave forever**, with no repair
+path anywhere in the product. The name was made durable while the contents were
+not, so the crash window was every unflushed write.
+
+**An uncountable directory answers `null`, never `0`.** Only `ENOENT` is
+genuinely zero. Swallowing every error and answering zero made the gate's
+reconciliation unsatisfiable — proven with `EACCES` and with file-descriptor
+exhaustion — and the cap silently stopped existing, which is the exact defect
+this store exists to close.
+
+**The directory is contained, not merely well-named**, and a record must be the
+one its filename names. A regex on an id is not containment (`cron-schedule-node.ts`
+records that lesson from a planted symlink), and without the filename check the
+store handed one participant another's identity — free on any case-insensitive
+filesystem, where `Alice` and `alice` collide.
 
 **The count is independent of the list**, which is the property the gate's
 reconciliation needs and previously could not get. `countFor` is a directory
