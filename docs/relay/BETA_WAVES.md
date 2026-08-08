@@ -1,8 +1,8 @@
 # Controlled beta waves
 
-**Status: THE ACCESS DECISION IS IMPLEMENTED AND PURE. NO STORE, NO ROUTE, NO
-ENROLMENT PATH, AND NO WAVE HAS BEEN OPENED. NOBODY HAS BEEN ADMITTED TO
-ANYTHING.**
+**Status: THE ACCESS DECISION AND THE DURABLE ENROLMENT STORE ARE IMPLEMENTED.
+NO ROUTE, NO SIGNUP PATH, NO ENFORCEMENT, AND NO WAVE HAS BEEN OPENED. NOBODY
+HAS BEEN ADMITTED TO ANYTHING.**
 
 Those are six different claims and this file keeps them apart. The last one is
 the honest limit: this module decides, and nothing yet records, serves or
@@ -93,7 +93,7 @@ door. A board that disagrees with the gate is worse than no board.
 
 ## Not implemented
 
-The durable enrollment STORE · the enrolment path (nothing can enroll anyone) ·
+the enrolment path (no surface can enrol anyone) ·
 the bridge route that would answer the decision · enforcement anywhere in the
 product (no surface consults this — `mission/beta` is imported by nothing) ·
 opening a wave (no artifact records any wave's state; there is no default
@@ -107,10 +107,37 @@ week one of a real beta:
 participant means closing the wave for everyone · **EXPIRY** — no `endsAt`, and
 no clock to compare one against · **PROVENANCE** — `BetaWaveConfig` records
 neither who opened a wave nor when, although this document calls a wave "a
-decision someone made" · **ENROLMENT IDEMPOTENCY** — deduplication happens at
-read time here; nothing prevents the duplicate write · **a BLOCKLIST**.
+decision someone made" · **a BLOCKLIST**.
+
+Enrolment idempotency WAS on this list and is now closed by the store below.
 
 **No wave has been opened and nobody has been admitted to anything.** This
 module is the decision, stated so the rest can be built against something that
 already refuses correctly rather than against a boolean that would have to be
 un-learned.
+
+## The store
+
+`src/relay/persistence/beta-enrollment-node.ts` — one file per participant per
+wave, under `<root>/beta-enrollments/<wave>/<participantId>.json`.
+
+**Idempotency is structural, not checked.** The file is created with `O_EXCL`,
+so a second enrolment for the same participant *cannot* create a second record —
+the kernel refuses it and the store reports `already_enrolled` **with the
+original instant**, because the first instant is what orders the queue and a
+retry that replaced it would move that participant's seat. There is no
+read-modify-write, and therefore no lock.
+
+**The count is independent of the list**, which is the property the gate's
+reconciliation needs and previously could not get. `countFor` is a directory
+read: it counts what is *on the volume*, not what a caller assembled. An
+`occupancy` derived from the same array passed as `enrollments` would make the
+reconciliation a permanent no-op and the cap would silently stop existing.
+
+A corrupt record is **skipped by `list` and still counted by `countFor`** — so
+the gate sees more seats taken than records it can read, and refuses. That is
+the honest outcome: the volume holds something we cannot order.
+
+Only `RELAY_BETA_WAVES` can name a directory, and a participant id must match
+`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` — no dot, so `..` cannot form; no separator,
+so no directory can be escaped.
