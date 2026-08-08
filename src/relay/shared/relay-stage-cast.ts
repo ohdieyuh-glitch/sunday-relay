@@ -7,20 +7,31 @@ import type { RelayStageActor } from './relay-stage-layout';
  * be wrong, but it also cannot be right — it said the same thing whether the
  * coding agent was implementing or the project had only just been configured.
  *
- * THE FIRST VERSION OF THIS MODULE REPLACED THAT CONSTANT WITH A CONSTANT
- * INPUT, which was worse: the caller passed a literal `working: true` for an
- * agent the same render tree was simultaneously labelling `waiting`. Nothing
- * was derived, and a false datum had been written into the code. Review caught
- * it by reading the only caller. `working` now comes from the workspace's own
- * state, which is the only thing that makes this projection worth having.
+ * THE FIRST VERSION REPLACED THAT CONSTANT WITH A CONSTANT INPUT, which was
+ * worse: the caller passed a literal `working: true` for an agent the same
+ * render tree was labelling `waiting`. Nothing was derived, and a false datum
+ * had been written into the code.
  *
- * TWO QUESTIONS, KEPT APART. "Is this role working?" and "can this build draw
- * it?" are different, and collapsing them produces the two opposite lies: drop
- * an undrawable working role and the stage under-reports the team; place one
+ * THE SECOND VERSION DERIVED THE WRONG THING. `dogState !== 'wandering'` reads
+ * as activity and is not: `verified_complete` maps to `complete`, so it claimed
+ * the coding agent was working after the mission finished, and
+ * `architect_working` maps to `trotting`, so it claimed the coding agent was
+ * working when a different role was. In the other direction it deleted the Dog
+ * from an idle workspace — and `wandering` is the Dog's IDLE ANIMATION, a thing
+ * to show rather than a reason to hide.
+ *
+ * SO THE QUESTION IS `onStage`, NOT `working`. The Dog is the mission's avatar
+ * and is present whenever the workspace is showing one; a role with no idle
+ * presence is present only while it runs. Naming the field for what it decides
+ * is what stops the next author deriving activity from it again.
+ *
+ * TWO QUESTIONS, KEPT APART. "Does this role belong on the stage?" and "can this
+ * build draw it?" are different, and collapsing them produces the two opposite
+ * lies: drop an undrawable role and the stage under-reports the team; place one
  * and the stage announces an actor it renders as an empty box, while the
- * overflow warning counts a sprite nobody can see. So a working role this build
- * has no sprite for is NAMED in `workingWithoutSprite`, never silently dropped
- * and never silently placed.
+ * overflow warning counts a sprite nobody can see. So a role this build has no
+ * sprite for is NAMED in `workingWithoutSprite`, never silently dropped and
+ * never silently placed.
  *
  * FIXED SLOTS, NOT EVEN SPREAD. Each role stands in the same place whenever it
  * stands at all. Spacing actors by how many are on stage meant a reviewer
@@ -38,13 +49,23 @@ export type CastRole = 'prompt_architect' | 'coding_agent' | 'reviewer';
 export interface CastRoleInput {
   readonly role: CastRole;
   /**
-   * Whether this role is DOING something right now.
+   * Whether this role HAS SOMETHING TO SHOW on the stage right now.
    *
-   * Not "is it configured", not "was it requested", not "is it available" —
-   * those are three other questions with three other answers, and a stage that
-   * conflated them would put an actor on it for a reviewer nobody ran.
+   * Deliberately not called `working`, because for the Relay Dog that would be
+   * false. The Dog is the mission's avatar and owns an IDLE animation —
+   * `wandering` is a state to show, not a reason to hide — so its presence is
+   * not conditional on activity, and a first attempt at deriving one produced
+   * two opposite errors at once: it claimed the coding agent was working at
+   * `verified_complete` (the mission is finished) and at `architect_working`
+   * (a different role is), while deleting the Dog entirely from an idle
+   * workspace.
+   *
+   * For a role with no idle presence — the reviewer — this IS "is it running",
+   * and it is not "is it configured", "was it requested" or "is it available".
+   * Those are three other questions and `loop-roles.ts` exists to keep them
+   * apart.
    */
-  readonly working: boolean;
+  readonly onStage: boolean;
 }
 
 /**
@@ -83,9 +104,9 @@ const ACTOR_TRACK = 6;
 export interface WorkspaceCast {
   readonly actors: readonly RelayStageActor[];
   /**
-   * Roles that ARE working and that this build cannot draw. Named rather than
-   * dropped: "nobody else is working" and "two agents are working and we have
-   * no artwork for them" are the same empty stage and different facts.
+   * Roles that belong on the stage and that this build cannot draw. Named
+   * rather than dropped: "nobody else is here" and "two agents are here and we
+   * have no artwork for them" are the same empty stage and different facts.
    */
   readonly workingWithoutSprite: readonly CastRole[];
   /**
@@ -96,23 +117,23 @@ export interface WorkspaceCast {
 }
 
 /**
- * The cast, from what each role is actually doing.
+ * The cast, from what each role has to show.
  *
- * A role appearing twice is resolved by "working wins": a caller that appends a
- * stale idle entry after a live one must not be able to erase a working agent
- * from the stage and have the stage then state that nobody is working.
+ * A role appearing twice is resolved by "present wins": a caller that appends a
+ * stale absent entry after a live one must not be able to erase an agent from
+ * the stage and have the stage then state that nobody is there.
  */
 export function projectWorkspaceCast(input: {
   readonly roles: readonly CastRoleInput[];
 }): WorkspaceCast {
-  const working = new Set<CastRole>();
+  const present = new Set<CastRole>();
   for (const entry of input.roles) {
-    // WORKING WINS over a duplicate. Last-wins would let ordering decide
+    // PRESENT WINS over a duplicate. Last-wins would let ordering decide
     // whether an agent is on stage.
-    if (entry.working && ROLE_SLOT[entry.role] !== undefined) working.add(entry.role);
+    if (entry.onStage && ROLE_SLOT[entry.role] !== undefined) present.add(entry.role);
   }
 
-  const order = ROLE_ORDER.filter((role) => working.has(role));
+  const order = ROLE_ORDER.filter((role) => present.has(role));
   const actors: RelayStageActor[] = [];
   const workingWithoutSprite: CastRole[] = [];
 
@@ -138,6 +159,6 @@ export function projectWorkspaceCast(input: {
         // The honest empty stage: someone IS working, and this build cannot
         // draw them. Saying "no agent is working" here would be false.
         ? 'No agent on this stage has artwork yet. Work is running.'
-        : 'No agent is working. The stage fills when one starts.',
+        : 'No agent is on the stage. It fills when one arrives.',
   };
 }

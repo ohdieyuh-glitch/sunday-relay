@@ -28,33 +28,34 @@ import { useViewportWidth } from './use-viewport-width';
 const DEFAULT_VIEWPORT_WIDTH_PX = 1440;
 
 /**
- * WHO IS ON THE WORKSPACE STAGE — DERIVED FROM THIS WORKSPACE'S OWN STATE.
+ * WHO IS ON THE WORKSPACE STAGE.
  *
- * The first attempt passed a literal `working: true`, which was a constant
- * input replacing a constant cast: false in fourteen of fifteen mission states,
- * and contradicted by the same render tree labelling the coding agent
- * `waiting`. `dogState` and `reviewerState` are what the workspace already
- * believes, so they are what the stage is told.
+ * THE DOG IS NOT CONDITIONAL, and two failed attempts say why. A literal
+ * `working: true` was a constant input replacing a constant cast. Deriving
+ * `dogState !== 'wandering'` was worse in a quieter way: `verified_complete`
+ * maps to `complete`, so it claimed the coding agent was working after the
+ * mission had finished, and `architect_working` maps to `trotting`, so it
+ * claimed the coding agent was working when the architect was. It also deleted
+ * the Dog from an idle workspace — and `wandering` is the Dog's IDLE
+ * ANIMATION, which exists precisely to be shown.
  *
- * `wandering` is the Dog's idle state — it is what `configured`, `failed` and
- * `cancelled` all project to. Everything else is the coding agent doing
- * something, which is the question the stage asks.
+ * The Relay Dog is the mission's avatar. This screen exists only for a project
+ * with a mission, so the Dog belongs on the stage whenever this screen renders,
+ * and its state — not its presence — is what says what it is doing.
  *
- * THE REVIEWER IS PASSED TOO, and it has no sprite, so the projection names it
- * in `workingWithoutSprite` rather than placing an empty box. Dropping it
- * instead would make a working reviewer indistinguishable from no reviewer.
- * `relay-bridge/mission.ts` is a three-role production orchestrator — architect,
- * coder, reviewer — so a working reviewer is a real thing this surface can see.
+ * THE REVIEWER HAS NO IDLE PRESENCE, so for it the question really is "is it
+ * running", read from `reviewerState`. `changes_required` and `approved` are
+ * verdicts it has already delivered, not work in progress. It has no sprite, so
+ * the projection names it rather than drawing an empty box —
+ * `relay-bridge/mission.ts` is a three-role production orchestrator, so a
+ * running reviewer is a real thing this surface can see.
  */
-function workspaceCastRoles(input: {
-  readonly dogState: WorkspaceDogState;
-  readonly reviewerState: ReviewerStateKind;
-}): readonly CastRoleInput[] {
+function workspaceCastRoles(reviewerState: ReviewerStateKind): readonly CastRoleInput[] {
   return [
-    { role: 'coding_agent', working: input.dogState !== 'wandering' },
+    { role: 'coding_agent', onStage: true },
     {
       role: 'reviewer',
-      working: input.reviewerState === 'reviewing' || input.reviewerState === 're_reviewing',
+      onStage: reviewerState === 'reviewing' || reviewerState === 're_reviewing',
     },
   ];
 }
@@ -67,9 +68,7 @@ import type { CodingAgentView } from '../../mission/coding-agent';
 import type { PromptArchitectView } from '../../mission/prompt-architect';
 import { projectHarnessCatalog, type ReviewerHarnessView } from '../../mission/reviewer-harness';
 import { OUTPUT_STATE_LABEL, completionDisplay } from './projections';
-import type {
-  RelayProjectWorkspaceProps, ReviewerStateKind, WorkspaceDogState,
-} from './contracts';
+import type { RelayProjectWorkspaceProps, ReviewerStateKind } from './contracts';
 import type {
   PSPAgentImportRecord,
   PSPEntitlementServicePort,
@@ -207,8 +206,8 @@ export function RelayProjectWorkspace(
   // empty dep array was defensible only while the input was a module constant,
   // which is exactly what this change stops being true.
   const workspaceCast = useMemo(
-    () => projectWorkspaceCast({ roles: workspaceCastRoles({ dogState, reviewerState }) }),
-    [dogState, reviewerState],
+    () => projectWorkspaceCast({ roles: workspaceCastRoles(reviewerState) }),
+    [reviewerState],
   );
 
   /**

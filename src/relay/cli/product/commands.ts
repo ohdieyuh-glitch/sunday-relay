@@ -145,7 +145,7 @@ export function productProjectStatus(store: StateStore, caps: CliCaps, reference
  * than the website's, and it is the true one.
  */
 const RELAY_CLI_STAGE_CAST: readonly RelayStageActor[] = projectWorkspaceCast({
-  roles: [{ role: 'coding_agent', working: true }],
+  roles: [{ role: 'coding_agent', onStage: true }],
 }).actors;
 
 export type ProjectView =

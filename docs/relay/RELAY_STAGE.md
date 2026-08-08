@@ -145,12 +145,22 @@ cannot be right: it said the same thing whether the coding agent was
 implementing or the project had only just been configured.
 
 `projectWorkspaceCast` (`src/relay/shared/relay-stage-cast.ts`) places an actor
-for every role that is **actually working** and that this build can draw. The
-workspace derives `working` from `dogState` and `reviewerState` — what it
-already believes — rather than asserting it. The first version of this change
-passed a literal `working: true`, replacing a constant cast with a constant
-input; it was false in fourteen of fifteen mission states and contradicted by
-the same render tree labelling the coding agent `waiting`.
+for every role that **belongs on the stage** and that this build can draw.
+
+The field is `onStage`, not `working`, and two failed attempts are why. A literal
+`working: true` was a constant input replacing a constant cast. Deriving
+`dogState !== 'wandering'` was worse in a quieter way: `verified_complete` maps
+to `complete`, so it claimed the coding agent was working *after the mission
+finished*, and `architect_working` maps to `trotting`, so it claimed the coding
+agent was working when *the architect* was — while deleting the Dog entirely
+from an idle workspace.
+
+**The Dog's presence is not conditional.** It is the mission's avatar and owns
+an idle animation: `wandering` is a state to show, not a reason to hide. Its
+STATE says what is happening; its presence says a mission is open. The reviewer
+has no idle presence, so for it the question really is "is it running", read
+from `reviewerState` — and `changes_required` and `approved` are verdicts it has
+already delivered, not work in progress.
 
 ### Two questions, kept apart
 

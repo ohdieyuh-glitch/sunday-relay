@@ -6,22 +6,26 @@ import { layoutStage } from './relay-stage-layout';
 /**
  * WHO IS ON THE STAGE.
  *
- * An actor is on the stage because a role is ACTUALLY WORKING and this build
- * can draw it. Those are two questions, and the tests keep them apart, because
- * collapsing them produces the two opposite lies: an under-reported team, or an
- * empty box counted as a sprite.
+ * An actor is drawn because a role BELONGS on the stage and this build can draw
+ * it. Those are two questions, and the tests keep them apart, because collapsing
+ * them produces the two opposite lies: an under-reported team, or an empty box
+ * counted as a sprite.
+ *
+ * `onStage` is not `working`, and the name matters: the Relay Dog is the
+ * mission's avatar with an idle animation, so its presence is unconditional,
+ * while the reviewer has no idle presence and appears only while it runs.
  */
 
-const role = (r: CastRole, working: boolean): CastRoleInput => ({ role: r, working });
+const role = (r: CastRole, onStage: boolean): CastRoleInput => ({ role: r, onStage });
 
-describe('an actor appears because a role is working, never because it exists', () => {
-  it('draws nothing, and says why, when no role is working', () => {
+describe('an actor appears because a role belongs there, never because it exists', () => {
+  it('draws nothing, and says why, when no role belongs on the stage', () => {
     const cast = projectWorkspaceCast({
       roles: [role('coding_agent', false), role('reviewer', false)],
     });
     expect(cast.actors).toEqual([]);
     expect(cast.workingWithoutSprite).toEqual([]);
-    expect(cast.emptyReason).toBe('No agent is working. The stage fills when one starts.');
+    expect(cast.emptyReason).toBe('No agent is on the stage. It fills when one arrives.');
   });
 
   it('draws nothing when it is told about no roles at all', () => {
@@ -30,7 +34,7 @@ describe('an actor appears because a role is working, never because it exists', 
     expect(cast.emptyReason).not.toBeNull();
   });
 
-  it('a working coding agent stands exactly where the single-actor constant stood', () => {
+  it('the coding agent stands exactly where the single-actor constant stood', () => {
     const cast = projectWorkspaceCast({ roles: [role('coding_agent', true)] });
     expect(cast.actors).toHaveLength(1);
     expect(cast.actors[0]).toMatchObject({
@@ -48,7 +52,7 @@ describe('an actor appears because a role is working, never because it exists', 
   });
 });
 
-describe('a working role with no sprite is NAMED, never dropped and never placed', () => {
+describe('a role with no sprite is NAMED, never dropped and never placed', () => {
   it('reports a working reviewer instead of drawing an empty box for it', () => {
     // `relay-reviewer` has no CSS, no component and no render branch. Placing
     // it puts an invisible full-width box on the stage and inflates the
@@ -61,14 +65,14 @@ describe('a working role with no sprite is NAMED, never dropped and never placed
     expect(cast.workingWithoutSprite).toEqual(['reviewer']);
   });
 
-  it('an empty stage with work running does NOT claim nobody is working', () => {
+  it('an empty stage with work running does NOT claim nobody is there', () => {
     const cast = projectWorkspaceCast({
       roles: [role('coding_agent', false), role('reviewer', true), role('prompt_architect', true)],
     });
     expect(cast.actors).toEqual([]);
     expect(cast.workingWithoutSprite).toEqual(['prompt_architect', 'reviewer']);
     expect(cast.emptyReason).toBe('No agent on this stage has artwork yet. Work is running.');
-    expect(cast.emptyReason).not.toContain('No agent is working');
+    expect(cast.emptyReason).not.toContain('No agent is on the stage');
   });
 
   it('never emits an id the host has no renderer for', () => {
@@ -78,7 +82,7 @@ describe('a working role with no sprite is NAMED, never dropped and never placed
     const cast = projectWorkspaceCast({ roles: all.map((r) => role(r, true)) });
     expect(cast.actors.map((a) => a.id)).toEqual(['relay-dog']);
     expect(cast.workingWithoutSprite).toEqual(['prompt_architect', 'reviewer']);
-    // EVERY working role is accounted for exactly once — drawn, or named as
+    // EVERY role on stage is accounted for exactly once — drawn, or named as
     // undrawable. Neither list may quietly swallow one.
     expect(cast.actors.length + cast.workingWithoutSprite.length).toBe(all.length);
   });
@@ -110,9 +114,9 @@ describe('a role stands in the same place whenever it stands at all', () => {
     expect(a.actors.map((x) => x.id)).toEqual(b.actors.map((x) => x.id));
   });
 
-  it('WORKING WINS over a duplicate entry, whichever order they arrive in', () => {
-    // Last-wins let a stale idle entry erase a working agent, and the stage
-    // then stated as a fact that nobody was working.
+  it('PRESENT WINS over a duplicate entry, whichever order they arrive in', () => {
+    // Last-wins let a stale absent entry erase an agent, and the stage then
+    // stated as a fact that nobody was there.
     const idleLast = projectWorkspaceCast({
       roles: [role('coding_agent', true), role('coding_agent', false)],
     });
