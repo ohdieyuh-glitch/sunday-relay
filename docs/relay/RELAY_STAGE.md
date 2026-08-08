@@ -155,12 +155,23 @@ finished*, and `architect_working` maps to `trotting`, so it claimed the coding
 agent was working when *the architect* was — while deleting the Dog entirely
 from an idle workspace.
 
-**The Dog's presence is not conditional.** It is the mission's avatar and owns
-an idle animation: `wandering` is a state to show, not a reason to hide. Its
-STATE says what is happening; its presence says a mission is open. The reviewer
-has no idle presence, so for it the question really is "is it running", read
-from `reviewerState` — and `changes_required` and `approved` are verdicts it has
-already delivered, not work in progress.
+**The Dog's presence is not conditional.** It is this product's avatar and owns
+an idle animation: `wandering` is a state to show, not a reason to hide. It is
+drawn whenever the workspace is, INCLUDING BEFORE THE FIRST MISSION —
+`configured-state.ts` builds this screen for a configured project and fabricates
+an "Awaiting first mission" record. Its STATE, not its presence, says what is
+happening. (An earlier draft justified this with "the screen exists only for a
+project with a mission", which that file refutes.)
+
+The other two roles have no idle presence, so for them the question really is
+"is it running" — and it is answered by an **exhaustive `Record` over each
+status union**, not a chain of comparisons. Three commits running read a status
+NAME as activity and got it wrong: `verified_complete` for the coder,
+`dogState !== 'wandering'`, then `preparing_handoff` for the architect — which
+the bridge assigns *after* that role's ledger reads `complete`. It is the
+architect FINISHED, not finishing. The `Record` caught a ninth reviewer state
+(`sign_in_required`) the moment it was written, and it fails the build when a
+state is added rather than silently defaulting a role off the stage.
 
 ### Two questions, kept apart
 
@@ -177,11 +188,13 @@ it, documenting it as shipped, and showing it to nobody — which left a working
 reviewer indistinguishable from no reviewer, the exact thing the field was added
 to prevent.
 
-The two empty-stage messages are wired through to `RelayStage`, and on THIS
-surface they are unreachable: the workspace always places the Dog, so the cast is
-never empty. They are reachable for a host that does not — the CLI, or a future
-screen without a mission — and are stated here as what such a host would show,
-not as something a founder sees today.
+The two empty-stage messages are wired through to `RelayStage` and **neither is
+reachable anywhere in this build.** The workspace always places the Dog, and the
+CLI always passes exactly one actor — and `StageViewInput` has no `emptyReason`
+field at all, so even handed an empty cast it would print `layoutStage`'s own
+default. They exist for a host that places no Dog, and there is not one. Saying
+"reachable via the CLI" was the second wrong version of this paragraph; the first
+claimed a founder sees them today.
 
 **Relay runs three roles in production.** `relay-bridge/mission.ts` is a
 three-role orchestrator — Prompt Architect → Coding Agent → Reviewer — and it is

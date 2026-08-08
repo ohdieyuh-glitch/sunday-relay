@@ -30,7 +30,15 @@ const DEFAULT_VIEWPORT_WIDTH_PX = 1440;
 /**
  * WHO IS ON THE WORKSPACE STAGE.
  *
- * THE DOG IS NOT CONDITIONAL, and two failed attempts say why. A literal
+ * THE DOG IS NOT CONDITIONAL. It is this product's avatar and is drawn whenever
+ * the workspace is — INCLUDING BEFORE THE FIRST MISSION, because
+ * `configured-state.ts` builds this screen for a configured project and
+ * fabricates an "Awaiting first mission" record. Its STATE, not its presence,
+ * says what is happening. An earlier version of this comment justified the same
+ * conclusion with "this screen exists only for a project with a mission", which
+ * that file refutes.
+ *
+ * Two failed attempts say why it must not be derived from activity. A literal
  * `working: true` was a constant input replacing a constant cast. Deriving
  * `dogState !== 'wandering'` was worse in a quieter way: `verified_complete`
  * maps to `complete`, so it claimed the coding agent was working after the
@@ -44,16 +52,42 @@ const DEFAULT_VIEWPORT_WIDTH_PX = 1440;
  * and its state — not its presence — is what says what it is doing.
  *
  * THE OTHER TWO ROLES HAVE NO IDLE PRESENCE, so for them the question really
- * is "is it running", read from the workforce assignment this screen already
- * displays. `preparing_handoff` is the architect finishing, not idling;
- * `changes_required` and `approved` are verdicts the reviewer has already
- * delivered, not work in progress.
+ * is "is it running", read from the workforce assignment this screen displays.
  *
- * BOTH ARE PASSED EVEN THOUGH NEITHER CAN BE DRAWN. The projection names them
- * in `workingWithoutSprite`; leaving them out would be the silent drop this
- * module's own contract forbids, and review caught exactly that — the architect
- * was omitted here eighteen lines below the rule saying it must not be.
+ * EXHAUSTIVE RECORDS, NOT `===` CHAINS. Three commits in a row read a status
+ * NAME as activity and got it wrong — `verified_complete` for the coder,
+ * `dogState !== wandering`, then `preparing_handoff` for the architect, which
+ * `relay-bridge/mission.ts` assigns AFTER that role's ledger reads `complete`
+ * and its event carries `done: true`. It is the architect FINISHED, not
+ * finishing. A chain of comparisons let each of those through silently and
+ * would let a fourth through when a state is added to either union. A `Record`
+ * over the whole union fails the build until someone decides, which is the only
+ * fix that outlives the next state.
  */
+const ARCHITECT_RUNNING: Readonly<Record<ArchitectStatus, boolean>> = Object.freeze({
+  planning: true,
+  researching: true,
+  // FINISHED, not finishing: the bridge sets this after the ledger is complete.
+  preparing_handoff: false,
+  waiting: false,
+});
+
+const REVIEWER_RUNNING: Readonly<Record<ReviewerStateKind, boolean>> = Object.freeze({
+  not_configured: false,
+  not_required: false,
+  waiting: false,
+  reviewing: true,
+  // Verdicts already delivered, not work in progress.
+  changes_required: false,
+  re_reviewing: true,
+  approved: false,
+  unavailable: false,
+  // Caught by this Record the moment it was written: the `===` chain it
+  // replaced would have swallowed this state silently. Nobody is reviewing
+  // while Relay waits for a human to sign in.
+  sign_in_required: false,
+});
+
 /** What a human calls each role. The stage names them; it never draws them. */
 const ROLE_LABEL: Readonly<Record<CastRoleInput['role'], string>> = Object.freeze({
   prompt_architect: 'Prompt Architect',
@@ -62,12 +96,10 @@ const ROLE_LABEL: Readonly<Record<CastRoleInput['role'], string>> = Object.freez
 });
 
 function workspaceCastRoles(workforce: WorkforceAssignment): readonly CastRoleInput[] {
-  const architect = workforce.promptArchitect.status;
-  const reviewer = workforce.reviewer.state;
   return [
-    { role: 'prompt_architect', onStage: architect !== 'waiting' },
+    { role: 'prompt_architect', onStage: ARCHITECT_RUNNING[workforce.promptArchitect.status] },
     { role: 'coding_agent', onStage: true },
-    { role: 'reviewer', onStage: reviewer === 'reviewing' || reviewer === 're_reviewing' },
+    { role: 'reviewer', onStage: REVIEWER_RUNNING[workforce.reviewer.state] },
   ];
 }
 import { RelayProjectFooter } from './RelayProjectFooter';
@@ -79,7 +111,9 @@ import type { CodingAgentView } from '../../mission/coding-agent';
 import type { PromptArchitectView } from '../../mission/prompt-architect';
 import { projectHarnessCatalog, type ReviewerHarnessView } from '../../mission/reviewer-harness';
 import { OUTPUT_STATE_LABEL, completionDisplay } from './projections';
-import type { RelayProjectWorkspaceProps, WorkforceAssignment } from './contracts';
+import type {
+  ArchitectStatus, RelayProjectWorkspaceProps, ReviewerStateKind, WorkforceAssignment,
+} from './contracts';
 import type {
   PSPAgentImportRecord,
   PSPEntitlementServicePort,
@@ -213,10 +247,12 @@ export function RelayProjectWorkspace(
 
   // Derived once per render from a frozen input, so the identity is stable and
   // the stage does not re-place actors because React re-rendered.
-  // Real deps: an empty array was defensible only while the input was a module
-  // constant, which is what this change stops being true. `RelayStage` calls
-  // `layoutStage` on every render regardless, so this memoizes the projection
-  // and nothing downstream — which is all it claims to do.
+  // The deps are honest even though the memo almost never hits: `workforce` is
+  // rebuilt as a fresh literal by the projection on every call, so this
+  // recomputes each render. Kept because a correct dep list that rarely helps
+  // is better than an empty one that pins a stale cast — and said plainly,
+  // because the two previous comments here each claimed a benefit it did not
+  // have.
   const workspaceCast = useMemo(() => projectWorkspaceCast({
     roles: workspaceCastRoles(workforce),
   }), [workforce]);

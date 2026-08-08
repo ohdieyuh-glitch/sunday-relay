@@ -230,6 +230,35 @@ describe('a role that is working and cannot be drawn is NAMED to the user', () =
     expect(document.querySelector('[data-stage-actor="relay-dog"]')).not.toBeNull();
   });
 
+  it('does NOT claim the architect is working once its handoff is ready', () => {
+    // `preparing_handoff` is assigned AFTER the bridge sets that role's ledger
+    // to `complete` and emits its event with `done: true`. It is the architect
+    // FINISHED, not finishing — and this was visible text telling a founder
+    // otherwise, the third status-name-read-as-activity defect in a row.
+    const fixture = WORKSPACE_FIXTURES.implementing;
+    workspace({
+      workforce: {
+        ...fixture.workforce,
+        promptArchitect: { ...fixture.workforce.promptArchitect, status: 'preparing_handoff' },
+        reviewer: { ...fixture.workforce.reviewer, state: 'waiting' },
+      },
+    });
+    expect(document.querySelector('.rpw-stage-offstage')).toBeNull();
+  });
+
+  it('DOES name the architect while it is genuinely planning', () => {
+    const fixture = WORKSPACE_FIXTURES.implementing;
+    workspace({
+      workforce: {
+        ...fixture.workforce,
+        promptArchitect: { ...fixture.workforce.promptArchitect, status: 'planning' },
+        reviewer: { ...fixture.workforce.reviewer, state: 'waiting' },
+      },
+    });
+    expect(document.querySelector('.rpw-stage-offstage')?.textContent)
+      .toContain('Prompt Architect');
+  });
+
   it('renders nothing at all when every other role is idle', () => {
     // It names roles; it never invents one, and it does not leave an empty
     // element behind to be styled around.
