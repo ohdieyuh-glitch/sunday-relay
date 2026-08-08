@@ -507,10 +507,11 @@ function editSchedule(
  * unreachable collision is a worse trade than the dead end it replaced. The
  * store purges the claims anyway, so nothing is left to reason about.
  *
- * WHAT IT DOES NOT CHECK: whether runs this schedule created are still in
- * flight. A run records its Loop and not its schedule, so that question cannot
- * be answered today. Deleting a schedule does not touch its runs, which keep
- * their own records and their attribution to the version they started under.
+ * WHAT IT DOES NOT CHECK: whether runs this schedule created are still
+ * unfinished. A run records its schedule now, so the question COULD be
+ * answered — deletion simply does not ask. Deleting a schedule does not touch
+ * its runs, which keep their own records and their attribution to the version
+ * they started under.
  */
 function deleteSchedule(
   request: CronRouteRequest, ticks: CronTickPort, rawId: string,

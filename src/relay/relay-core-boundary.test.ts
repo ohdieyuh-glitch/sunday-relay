@@ -875,20 +875,32 @@ describe('Claude Code adapter boundaries (Prompt 8)', () => {
     // is correct about work that genuinely executes.
     const describing = [
       relay(join('mission', 'loop', 'runtime', 'loop-operations.ts')),
+      relay(join('mission', 'loop', 'runtime', 'loop-engine.test.ts')),
       join(root, 'relay-bridge', 'cron-routes.ts'),
       join(root, 'relay-bridge', 'cron-service.ts'),
       join(root, 'docs', 'relay', 'CRON_LOOPS.md'),
     ];
+    // COMMENT MARKERS COME OUT FIRST. Collapsing whitespace alone only defeats
+    // wrapping in prose: inside `//` and `/** */` a wrap inserts a marker, so
+    // "in\n * flight" normalises to "in * flight" and slips through — and
+    // three of these five files carry every occurrence inside a comment, which
+    // is to say the first version of this check could not see the very form
+    // that defeated the greps before it.
+    const flatten = (text: string): string =>
+      text.replace(/\s*(?:\/\/+|\*+)\s*/gu, ' ').replace(/\s+/gu, ' ');
     // The two deliberate survivors: the contrast itself, and `activeRunsFor`,
     // which is about runs that really are executing.
     const ALLOWED = [/NOT "in flight"/, /may run BESIDE work in flight/];
     for (const file of describing) {
-      const flat = read(file).replace(/\s+/gu, ' ');
-      for (const match of flat.matchAll(/[^.]*in[- ]flight[^.]*/giu)) {
-        const sentence = match[0];
+      const flat = flatten(read(file));
+      for (const match of flat.matchAll(/in[- ]flight/giu)) {
+        // ADJACENT, not anywhere in the sentence. A chunk-scoped allowance let
+        // a bad phrasing pass by sharing a sentence with the contrast — and
+        // that sentence is the most-reworked one in the rule.
+        const window = flat.slice(Math.max(0, match.index - 60), match.index + 60);
         expect(
-          ALLOWED.some((allowed) => allowed.test(sentence)),
-          `${file.slice(root.length + 1)} calls a schedule's unfinished runs "in flight": ${sentence.trim().slice(0, 120)}`,
+          ALLOWED.some((allowed) => allowed.test(window)),
+          `${file.slice(root.length + 1)} calls a schedule's unfinished runs "in flight": ${window.trim().slice(0, 140)}`,
         ).toBe(true);
       }
     }
