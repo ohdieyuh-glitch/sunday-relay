@@ -308,6 +308,7 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
   const loop = unwrap(read('docs/relay/LOOP_ENGINE.md'));
   const unchain = unwrap(read('docs/relay/UNCHAIN.md'));
   const cron = unwrap(read('docs/relay/CRON_LOOPS.md'));
+  const beta = unwrap(read('docs/relay/BETA_WAVES.md'));
 
   it('each one declares its implementation status up front', () => {
     /*
@@ -364,6 +365,18 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     // they did not switch on. A status that quietly dropped this would be
     // describing a background process the operator never chose.
     expect(statusLine(cron)).toContain('AN IN-BRIDGE SCHEDULER THAT IS OFF BY DEFAULT');
+    // WAVE 0's GATE. The most load-bearing sentence in that document had no
+    // mechanism to fail the day it stopped being true.
+    //
+    // ONE `toContain` INCLUDING THE `**Status:` MARKER, because two separate
+    // assertions were both satisfied by a WITHDRAWAL PREAMBLE — "Status: WAVE 0
+    // IS OPEN. This line previously said NO STORE, NO ROUTE…" passed both while
+    // announcing the opposite. That is verbatim the LOOP_ENGINE defect recorded
+    // twelve lines above, committed again in the fix for it.
+    expect(beta).toContain(
+      '**Status: THE ACCESS DECISION IS IMPLEMENTED AND PURE. NO STORE, NO ROUTE, NO '
+      + 'ENROLMENT PATH, AND NO WAVE HAS BEEN OPENED. NOBODY HAS BEEN ADMITTED TO ANYTHING.**',
+    );
   });
 
   it('the Unchain record carries the locked founder decisions', () => {
