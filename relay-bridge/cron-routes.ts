@@ -124,7 +124,7 @@ export interface CronTickPort {
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
   removeSchedule(
     scheduleId: string, at: string,
-  ): { readonly ok: true; readonly claimsPurged: number }
+  ): { readonly ok: true; readonly claimsPurged: number; readonly claimsLeft: number }
     | { readonly ok: false; readonly problem: string };
   editSchedule(
     scheduleId: string,
@@ -455,16 +455,18 @@ function editSchedule(
 /**
  * Deletion, which frees the id.
  *
- * IT READS ONLY TO TELL MISSING FROM PRESENT, and that read cannot stop the
- * delete. The case that motivates deletion is a schedule too CORRUPT to read —
- * a journal written before a required field existed, a zone no evaluator
- * resolves, a file that cannot be opened at all — so an inspect whose failure
- * refused the request would block exactly the removal this exists to perform.
- * A journal that THROWS on read (EACCES, EISDIR) reached the server's catch-all
- * and answered 500, leaving the record undeletable through the endpoint while
- * the store beneath it would have removed it happily. Present-and-unreadable is
- * therefore treated as present. Until this existed, the answer was to edit the
- * volume by hand.
+ * IT READS ONLY TO TELL MISSING FROM PRESENT, and a read that FAILS does not
+ * refuse the request. The case that motivates deletion is a schedule too
+ * CORRUPT to read — a journal written before a required field existed, a zone
+ * no evaluator resolves — and an inspect whose failure refused would block
+ * exactly the removal this exists to perform. Such a read used to reach the
+ * server's catch-all and answer 500; present-and-unreadable is treated as
+ * present now. Until this existed, the answer was to edit the volume by hand.
+ *
+ * WHAT IT STILL CANNOT REMOVE, said plainly: a journal the filesystem will not
+ * let go of — a directory in its place, an immutable file — is refused with
+ * what the unlink said, not deleted. That refusal is truthful and destroys
+ * nothing, which is the part worth having; the record still needs a hand.
  *
  * THE ID COMES BACK. An earlier version of this left a tombstone so a reused id
  * could not inherit the deleted schedule's occurrence claims — and review
@@ -514,6 +516,10 @@ function deleteSchedule(
     deletedAt: request.now,
     // NAMED, because a purge nobody can count is a purge nobody can check.
     claimsPurged: removed.claimsPurged,
+    // Markers this could not remove. The deletion still happened — an orphan
+    // cannot be inherited — but the count is reported rather than rounded to
+    // zero, because a purge nobody can check is a purge nobody should trust.
+    claimsLeft: removed.claimsLeft,
     note: 'The schedule is gone and its id is free. The occurrence claims it made were purged, and '
       + 'a schedule created under this name is authored now, so its ticks can only own moments '
       + 'after it exists. Runs it created are untouched and keep the version they started under.',

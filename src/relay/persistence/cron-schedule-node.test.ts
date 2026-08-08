@@ -222,6 +222,28 @@ describe('a schedule is created, read back and listed', () => {
     if (!removed.ok) expect(removed.problem).toContain('still there');
   });
 
+  it('a refused deletion destroys nothing — the claims are still there', () => {
+    // THE DEFECT THIS PINS. The purge used to run FIRST, so a failed unlink
+    // refused with "the schedule is still there" after the markers were
+    // already gone — and marker existence IS the already-handled gate, so the
+    // next tick re-fired occurrences it had already run. The schedule goes
+    // first now, and a refusal has destroyed nothing.
+    const claims = join(root, 'cron-occurrences');
+    mkdirSync(join(claims, 'occ_keep'), { recursive: true });
+    writeFileSync(join(claims, 'occ_keep', 'claimed.json'),
+      JSON.stringify({ occurrence: { occurrenceId: 'occ_keep', scheduleId: 's-stuck2' } }));
+
+    expect(store.create('s-stuck2', v()).ok).toBe(true);
+    const journal = join(root, 'cron-schedules', 's-stuck2', 'versions.ndjson');
+    rmSync(journal);
+    mkdirSync(journal);   // unlink will fail EISDIR
+    const removed = store.remove('s-stuck2', '2026-08-06T12:00:00.000Z');
+    expect(removed.ok).toBe(false);
+    if (!removed.ok) expect(removed.problem).toContain('no occurrence claim was purged');
+    // The claim survives, so the window it marks is still handled.
+    expect(existsSync(join(claims, 'occ_keep', 'claimed.json'))).toBe(true);
+  });
+
   it('refuses to delete what was never there, and a clock it cannot read', () => {
     const absent = store.remove('s-nope', '2026-08-06T12:00:00.000Z');
     expect(absent.ok).toBe(false);

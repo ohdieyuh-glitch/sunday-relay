@@ -104,7 +104,7 @@ export interface CronTickService {
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
   removeSchedule(
     scheduleId: string, at: string,
-  ): { readonly ok: true; readonly claimsPurged: number }
+  ): { readonly ok: true; readonly claimsPurged: number; readonly claimsLeft: number }
     | { readonly ok: false; readonly problem: string };
   tick(input: Omit<CronTickInput, 'tz' | 'digest'> & {
     readonly binding: CronRunBinding;
@@ -255,7 +255,11 @@ export function createCronTickService(options: {
     removeSchedule: (scheduleId, at) => {
       const result = schedules.remove(scheduleId, at);
       return result.ok
-        ? { ok: true, claimsPurged: result.value.claimsPurged }
+        ? {
+          ok: true,
+          claimsPurged: result.value.claimsPurged,
+          claimsLeft: result.value.claimsLeft,
+        }
         : { ok: false, problem: result.problem };
     },
     setSchedulePaused: (scheduleId, paused, at) => {

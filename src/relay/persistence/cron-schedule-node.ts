@@ -110,7 +110,13 @@ export interface CronScheduleStore {
    * schedule too corrupt to read, and a delete that had to replay it could not
    * remove the thing it exists to remove.
    */
-  remove(scheduleId: string, at: string): ScheduleStoreOutcome<{ readonly claimsPurged: number }>;
+  remove(scheduleId: string, at: string): ScheduleStoreOutcome<{
+    readonly claimsPurged: number;
+    /** Markers naming this schedule that could NOT be removed. The deletion
+     *  still succeeded — the clamp makes an orphan harmless — but a purge
+     *  nobody can count is a purge nobody can check. */
+    readonly claimsLeft: number;
+  }>;
   /** Pause or resume. Recorded in the journal like everything else. */
   setPaused(scheduleId: string, paused: boolean, at: string): ScheduleStoreOutcome<CronScheduleRecord>;
 }
@@ -411,20 +417,51 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
         return refuse(`There is no schedule named ${scheduleId} to delete.`);
       }
       return underLock(dir, at, () => {
-        // THE CLAIMS GO FIRST, and they can be found: every marker stores the
-        // occurrence that produced it, and the occurrence names its schedule.
+        // THE SCHEDULE GOES FIRST, and the ORDER inside it is snapshot then
+        // journal — the journal is the authority, so while it survives the
+        // schedule still reads and a refusal below can say so truthfully.
         //
-        // This is DEFENCE IN DEPTH, not the thing that makes reuse safe. A
-        // recreated schedule is authored NOW, and the tick clamps its window to
-        // its own authoring instant, so it can only own moments that postdate
-        // its creation and could not reach an older marker anyway. Purging
-        // means a freed id leaves nothing behind that has to be reasoned about.
+        // An earlier version purged the claims first, and review showed what
+        // that cost: a failed unlink refused with "the schedule is still
+        // there" AFTER destroying the markers, and marker existence IS the
+        // already-handled gate, so the next tick re-fired occurrences it had
+        // already run. Removing the schedule first means a refusal has
+        // destroyed nothing, and a crash after it leaves orphaned claims —
+        // which the clamp makes harmless, since a recreated schedule is
+        // authored NOW and can only own moments that postdate its creation.
+        //
+        // ONLY "ALREADY GONE" IS SWALLOWED. Catching everything reported a
+        // deletion that did not happen: with `versions.ndjson` replaced by a
+        // directory the unlink fails EISDIR, and the answer was still `ok` with
+        // "the schedule is gone and its id is free" while it sat on disk.
+        for (const name of [SNAPSHOT, VERSIONS_JOURNAL]) {
+          try {
+            unlinkSync(join(dir, name));
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+              return refuse(`${name} could not be removed: `
+                + `${(error as Error).message.slice(0, 120)}. The schedule is still there and no `
+                + 'occurrence claim was purged.');
+            }
+          }
+        }
+        fsyncDirBestEffort(dir);
+
+        // THE CLAIMS LAST, and they can be found: every marker stores the
+        // occurrence that produced it, and the occurrence names its schedule.
+        // This is DEFENCE IN DEPTH rather than what makes reuse safe — the
+        // clamp is that — so a marker this cannot remove is reported, not
+        // treated as a failure of the deletion that already succeeded.
         let claimsPurged = 0;
+        let claimsLeft = 0;
         const occurrences = join(stateRoot, 'cron-occurrences');
         if (existsSync(occurrences)) {
           for (const entry of readdirSync(occurrences, { withFileTypes: true })) {
             if (!entry.isDirectory()) continue;
-            const marker = readTextIfExists(join(occurrences, entry.name, CLAIM_MARKER_FILE));
+            let marker: string | null = null;
+            try {
+              marker = readTextIfExists(join(occurrences, entry.name, CLAIM_MARKER_FILE));
+            } catch { claimsLeft += 1; continue; }
             if (marker === null) continue;
             let owner: string | null = null;
             try {
@@ -434,29 +471,13 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
               }
             } catch { /* an unreadable marker names no schedule; leave it */ }
             if (owner !== scheduleId) continue;
-            rmSync(join(occurrences, entry.name), { recursive: true, force: true });
-            claimsPurged += 1;
+            try {
+              rmSync(join(occurrences, entry.name), { recursive: true, force: true });
+              claimsPurged += 1;
+            } catch { claimsLeft += 1; }
           }
         }
-        // THE SCHEDULE LAST. A crash mid-purge leaves a schedule that still
-        // reads, so the operator can run the delete again; the reverse would
-        // leave orphaned claims under an id nothing remembers.
-        // ONLY "ALREADY GONE" IS SWALLOWED. Catching everything reported a
-        // deletion that did not happen: with `versions.ndjson` replaced by a
-        // directory the unlink fails EISDIR, and the answer was still `ok` with
-        // "the schedule is gone and its id is free" while it sat on disk.
-        for (const name of [VERSIONS_JOURNAL, SNAPSHOT]) {
-          try {
-            unlinkSync(join(dir, name));
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-              return refuse(`${name} could not be removed: `
-                + `${(error as Error).message.slice(0, 120)}. The schedule is still there.`);
-            }
-          }
-        }
-        fsyncDirBestEffort(dir);
-        return { ok: true, value: { claimsPurged } };
+        return { ok: true, value: { claimsPurged, claimsLeft } };
       });
     },
 
