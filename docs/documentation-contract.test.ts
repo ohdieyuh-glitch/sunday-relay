@@ -366,13 +366,17 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     // describing a background process the operator never chose.
     expect(statusLine(cron)).toContain('AN IN-BRIDGE SCHEDULER THAT IS OFF BY DEFAULT');
     // WAVE 0's GATE. The most load-bearing sentence in that document had no
-    // mechanism to fail the day it stopped being true — which is the defect
-    // this whole test exists for. One contiguous claim, so a status rewritten
-    // to say a wave was opened cannot satisfy it with scattered fragments.
-    expect(statusLine(beta)).toContain(
-      'NO STORE, NO ROUTE, NO ENROLMENT PATH, AND NO WAVE HAS BEEN OPENED',
+    // mechanism to fail the day it stopped being true.
+    //
+    // ONE `toContain` INCLUDING THE `**Status:` MARKER, because two separate
+    // assertions were both satisfied by a WITHDRAWAL PREAMBLE — "Status: WAVE 0
+    // IS OPEN. This line previously said NO STORE, NO ROUTE…" passed both while
+    // announcing the opposite. That is verbatim the LOOP_ENGINE defect recorded
+    // twelve lines above, committed again in the fix for it.
+    expect(beta).toContain(
+      '**Status: THE ACCESS DECISION IS IMPLEMENTED AND PURE. NO STORE, NO ROUTE, NO '
+      + 'ENROLMENT PATH, AND NO WAVE HAS BEEN OPENED. NOBODY HAS BEEN ADMITTED TO ANYTHING.**',
     );
-    expect(statusLine(beta)).toContain('NOBODY HAS BEEN ADMITTED TO ANYTHING');
   });
 
   it('the Unchain record carries the locked founder decisions', () => {

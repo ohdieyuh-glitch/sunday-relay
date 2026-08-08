@@ -8,7 +8,7 @@ import {
 /**
  * CONTROLLED BETA WAVES.
  *
- * The point of these tests is that "no" has five different meanings and the
+ * The point of these tests is that "no" has SEVEN different meanings and the
  * product must not collapse them. An operator who cannot tell "we never invited
  * them" from "we invited them and ran out of seats" cannot run a beta.
  */
@@ -52,7 +52,7 @@ describe('a wave admits only someone it actually holds a record for', () => {
   });
 });
 
-describe('the five refusals stay five different facts', () => {
+describe('the refusals stay separate facts', () => {
   it.each([
     ['not opened', 'not_open' as const, 'wave_not_open'],
     ['closed', 'closed' as const, 'wave_closed'],
@@ -306,5 +306,88 @@ describe('not_enrolled states a record, and passes no judgement', () => {
       expect(decision.detail).toContain('not a decision about them');
       expect(decision.detail).not.toMatch(/denied|refused|rejected|blocked|ineligible/i);
     }
+  });
+});
+
+describe('a malformed record REFUSES; it never throws', () => {
+  // Reading `enrolledAt` for ordering made validating it mandatory. Sorting on
+  // an unwritten field threw a TypeError out of the gate AND the operator
+  // board, so one bad row denied a verdict to every participant in the wave.
+  // A crash is not a refusal — it is the absence of a verdict.
+  const bad: BetaEnrollment[] = [
+    { participantId: 'p1', wave: 'wave_0', enrolledAt: undefined as never },
+    { participantId: 'p2', wave: 'wave_0', enrolledAt: null as never },
+    { participantId: 'p3', wave: 'wave_0', enrolledAt: 7 as never },
+    { participantId: undefined as never, wave: 'wave_0', enrolledAt: '2026-08-04T00:00:00.000Z' },
+  ];
+
+  it.each(bad.map((b, i) => [i, b] as const))('does not throw on malformed record %i', (_i, row) => {
+    const good = enrolled('good');
+    expect(() => decideBetaAccess({
+      participantId: 'good', enrollments: [row, good], waves: [openWave(10)], occupancy: { wave_0: 1 },
+    })).not.toThrow();
+    expect(() => projectWaveStatus(openWave(10), { wave_0: 1 }, [row, good])).not.toThrow();
+  });
+
+  it('one bad row does not deny every OTHER participant in the wave', () => {
+    const good = enrolled('good');
+    const decision = decideBetaAccess({
+      participantId: 'good',
+      enrollments: [{ participantId: 'x', wave: 'wave_0', enrolledAt: null as never }, good],
+      waves: [openWave(10)],
+      occupancy: { wave_0: 1 },
+    });
+    expect(decision.admitted).toBe(true);
+  });
+});
+
+describe('a malformed CAP is a config bug, not an uncountable cohort', () => {
+  it.each([-3, 1.5, Number.NaN, Number.POSITIVE_INFINITY])('refuses seats=%s by its own name', (seats) => {
+    const decision = decideBetaAccess({
+      participantId: 'p1',
+      enrollments: [enrolled('p1')],
+      waves: [{ wave: 'wave_0', state: 'open', seats }],
+      occupancy: { wave_0: 1 },
+    });
+    expect(decision.admitted).toBe(false);
+    if (!decision.admitted) expect(decision.reason).toBe('wave_misconfigured');
+  });
+
+  it('the board reports Unknown for a malformed cap rather than a number', () => {
+    const status = projectWaveStatus(
+      { wave: 'wave_0', state: 'open', seats: Number.NaN }, { wave_0: 1 }, [enrolled('p1')],
+    );
+    expect(status.seatsTaken).toBeNull();
+    expect(status.seatsRemaining).toBeNull();
+    expect(status.admitting).toBe(false);
+  });
+});
+
+describe('the queue keeps the EARLIEST record, and does not depend on array order', () => {
+  it('a duplicate keeps the earliest enrolledAt, so position does not move', () => {
+    // Keeping the latest would silently change queue position.
+    const early: BetaEnrollment = { participantId: 'p1', wave: 'wave_0', enrolledAt: '2026-08-01T00:00:00.000Z' };
+    const late: BetaEnrollment = { ...early, enrolledAt: '2026-08-09T00:00:00.000Z' };
+    const other: BetaEnrollment = { participantId: 'p2', wave: 'wave_0', enrolledAt: '2026-08-05T00:00:00.000Z' };
+    for (const order of [[early, late, other], [late, early, other], [other, late, early]]) {
+      const d = decideBetaAccess({
+        participantId: 'p1', enrollments: order, waves: [openWave(1)], occupancy: { wave_0: 2 },
+      });
+      // p1 enrolled first, so p1 holds the single seat in every ordering.
+      expect(d.admitted).toBe(true);
+    }
+  });
+
+  it('applicableEnrollment does not depend on array order either', () => {
+    const a: BetaEnrollment = { participantId: 'p1', wave: 'wave_0', enrolledAt: '2026-08-01T00:00:00.000Z' };
+    const b: BetaEnrollment = { participantId: 'p1', wave: 'wave_1', enrolledAt: '2026-08-02T00:00:00.000Z' };
+    const waves: BetaWaveConfig[] = [
+      { wave: 'wave_0', state: 'open', seats: 10 },
+      { wave: 'wave_1', state: 'open', seats: 10 },
+    ];
+    const occupancy = { wave_0: 1, wave_1: 1 };
+    const forward = decideBetaAccess({ participantId: 'p1', enrollments: [a, b], waves, occupancy });
+    const reverse = decideBetaAccess({ participantId: 'p1', enrollments: [b, a], waves, occupancy });
+    expect(forward).toEqual(reverse);
   });
 });

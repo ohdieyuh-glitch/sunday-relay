@@ -4,7 +4,7 @@
 ENROLMENT PATH, AND NO WAVE HAS BEEN OPENED. NOBODY HAS BEEN ADMITTED TO
 ANYTHING.**
 
-Those are five different claims and this file keeps them apart. The last one is
+Those are six different claims and this file keeps them apart. The last one is
 the honest limit: this module decides, and nothing yet records, serves or
 enforces the decision. The status line is pinned by
 `documentation-contract.test.ts`, so it fails the day it stops being true —
@@ -22,7 +22,7 @@ recorded durably, with a seat count that can run out.
 
 ## Why this is a domain and not a boolean
 
-"Is this person in the beta?" has **six** answers, and a boolean collapses all of
+"Is this person in the beta?" has **seven** answers, and a boolean collapses all of
 them into "no". (This document said "five" and its table listed five while the
 type had six — the omitted one being `unknown_wave`, the only refusal that fires
 on data from a newer build.)
@@ -35,6 +35,7 @@ on data from a newer build.)
 | `wave_full` | Their enrollment is beyond the wave's seats. |
 | `occupancy_unknown` | We cannot count the seats taken — or the count contradicts our records — so we will not admit against a number we do not have. |
 | `unknown_wave` | The enrollment names a wave this build does not have. |
+| `wave_misconfigured` | A stored record or the wave's own cap is malformed. A config bug, not an uncountable cohort — different things to go and fix. |
 
 An operator who cannot tell *"we never invited them"* from *"we invited them and
 ran out of seats"* cannot run a beta. The first is a to-do; the second is a

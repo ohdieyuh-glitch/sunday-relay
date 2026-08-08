@@ -2,8 +2,7 @@
  * SUNDAY RELAY — CONTROLLED BETA WAVES.
  *
  * WHAT A WAVE IS. A named, capped, explicitly-opened cohort. Wave 0 is the
- * controlled public beta (see `WAVE_0.md`); waves 1-3 are the private waves that
- * follow. A wave is not a date and not a feature flag: it is a decision someone
+ * controlled public beta; waves 1-3 are the private waves that follow. A wave is not a date and not a feature flag: it is a decision someone
  * made, with a seat count that can run out.
  *
  * WHY THIS IS A DOMAIN AND NOT A BOOLEAN. "Is this person in the beta?" has SIX
@@ -52,7 +51,7 @@ export interface BetaWaveConfig {
   /**
    * How many participants this wave may hold. Required for the same reason —
    * an absent cap would have to mean zero or infinity, and both are guesses.
-   * Wave 0's cap is 100 (`WAVE_0.md`), and this module does not choose it.
+   * This module does not choose any wave's cap; the caller supplies it.
    */
   readonly seats: number;
 }
@@ -80,6 +79,8 @@ export type BetaRefusal =
   | 'wave_full'
   /** The seats taken cannot be counted, so admission is not granted. */
   | 'occupancy_unknown'
+  /** A stored record or the wave's own cap is malformed. A config/records bug. */
+  | 'wave_misconfigured'
   /** The enrollment names a wave this build does not have. */
   | 'unknown_wave';
 
@@ -101,14 +102,31 @@ export interface BetaAccessInput {
 /**
  * A seat total we can actually reason about.
  *
- * `Number.isFinite` and not `typeof === 'number'`, because `NaN` is the
+ * `Number.isInteger` rather than `typeof === 'number'`, because `NaN` is the
  * canonical result of an uncomputable count — `Number(undefined)`,
  * `parseInt('')`, arithmetic on a missing field — and it used to pass straight
- * through the "cannot count" gate and be admitted against.
+ * through the "cannot count" gate and be admitted against. `isInteger` already
+ * implies finite, so a separate `isFinite` clause would be redundant.
  */
 function countableSeats(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
-    && Number.isInteger(value) && value >= 0;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+/**
+ * A record we can actually order by.
+ *
+ * READING `enrolledAt` MADE VALIDATING IT MANDATORY. The first repair started
+ * sorting on it without checking it, so a persisted row whose `enrolledAt` was
+ * never written threw a `TypeError` out of the gate — and out of the operator
+ * board — instead of refusing. One malformed row denied a verdict to EVERY
+ * participant in that wave. This module's whole argument is that a malformed
+ * stored record is refused rather than trusted (`unknown_wave` exists for
+ * exactly that); a crash is not a refusal, it is the absence of a verdict.
+ */
+function usableRecord(e: BetaEnrollment): boolean {
+  return typeof e.participantId === 'string' && e.participantId !== ''
+    && typeof e.enrolledAt === 'string' && e.enrolledAt !== ''
+    && typeof e.wave === 'string';
 }
 
 function seatsTakenFor(
@@ -137,7 +155,7 @@ function queueFor(
 ): readonly BetaEnrollment[] {
   const earliest = new Map<string, BetaEnrollment>();
   for (const e of enrollments) {
-    if (e.wave !== wave) continue;
+    if (e.wave !== wave || !usableRecord(e)) continue;
     const held = earliest.get(e.participantId);
     if (held === undefined || e.enrolledAt < held.enrolledAt) earliest.set(e.participantId, e);
   }
@@ -160,7 +178,7 @@ function applicableEnrollment(
   input: BetaAccessInput,
 ): BetaEnrollment | undefined {
   const mine = input.enrollments
-    .filter((e) => e.participantId === input.participantId)
+    .filter((e) => usableRecord(e) && e.participantId === input.participantId)
     .sort((a, b) => (
       a.enrolledAt === b.enrolledAt ? a.wave.localeCompare(b.wave)
         : a.enrolledAt.localeCompare(b.enrolledAt)
@@ -210,9 +228,12 @@ export function decideBetaAccess(input: BetaAccessInput): BetaAccessDecision {
     };
   }
   if (!countableSeats(wave.seats)) {
+    // A MALFORMED CAP IS A CONFIG BUG, not an uncountable cohort. Collapsing
+    // them gave an operator one `reason` for two different things to go fix,
+    // in a module whose thesis is that collapsing distinct facts is the defect.
     return {
       admitted: false,
-      reason: 'occupancy_unknown',
+      reason: 'wave_misconfigured',
       detail: `${enrollment.wave} declares no usable seat count, so nobody is admitted against it.`,
     };
   }
