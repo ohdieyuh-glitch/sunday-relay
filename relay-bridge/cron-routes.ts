@@ -122,6 +122,10 @@ export interface CronTickPort {
   setSchedulePaused(
     scheduleId: string, paused: boolean, at: string,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+  scheduleRunsFor(loopIds: readonly string[], scheduleId: string): {
+    readonly runs: readonly VersionedRun[];
+    readonly unattributed: number;
+  };
   removeSchedule(
     scheduleId: string, at: string,
   ): { readonly ok: true; readonly claimsPurged: number; readonly claimsLeft: number }
@@ -416,27 +420,40 @@ function editSchedule(
     return err(409, 'schedule_corrupt', safeText(inspected.problem));
   }
 
-  // NO RUN LIST, deliberately, and not because one is impossible.
+  // THE RUNS THIS SCHEDULE ACTUALLY MADE. A run now records the schedule that
+  // created it, so the planner gets the right list rather than every run in the
+  // Loop — which reported another schedule's runs as this one's, and made every
+  // future edit refuse as orphaning once that schedule moved to a new version.
+  //
+  // WHAT CANNOT BE ATTRIBUTED IS COUNTED, not dropped: a schedule-created run
+  // written before runs recorded their schedule carries `null`, and calling
+  // those "not ours" would report a clean list of this schedule's own unfinished work over runs that may be.
+  // EVERY LOOP THE SCHEDULE HAS NAMED, not just the one its head names. A
+  // rebinding is an edit like any other, so runs made before one live in the
+  // Loop that version named; scanning only the head's made them invisible in
+  // both outputs.
+  const scheduleRuns = ticks.scheduleRunsFor(
+    inspected.record.history.map((v) => v.loopId), scheduleId,
+  );
+
+  // WHY THE LIST IS THIS ONE, since it has been three different lists.
   //
   // `planScheduleEdit` uses it for two things. Refusing an edit that would
   // ORPHAN a run is inert here: an append only grows the set of known versions,
   // so nothing explainable before the edit is unexplainable after it. Reporting
-  // the runs the change must not disturb is a real feature, and this route does
-  // not claim it.
+  // the runs a change must not disturb is the half that matters, and it needs
+  // those runs to be THIS schedule's.
   //
-  // What is NOT available cheaply is the right list. A run record names the
-  // LOOP it belongs to, not the schedule that created it — and two schedules
-  // may bind one Loop, so the Loop-wide list reports another schedule's runs as
-  // this one's. Review measured the cost: those runs cite versions this history
-  // lacks, so every future edit is refused as orphaning and the schedule can
-  // never be corrected again.
-  //
-  // The attribution DOES exist on disk — each claim marker stores the whole
-  // occurrence, which carries its `scheduleId` — so this is a walk nobody has
-  // written, not a fact nobody can know. Until it is written, claiming nothing
-  // is the honest answer. Named in CRON_LOOPS.md under "Not implemented".
+  // The Loop-wide list was wrong in both directions — two schedules may bind
+  // one Loop, so it reported another schedule's runs as this one's, and once
+  // that schedule moved to a new version its runs cited a version this history
+  // lacked and every future edit was refused as orphaning. Passing none was
+  // honest but silent. A run names its schedule now, so the list is exact and
+  // what cannot be attributed is counted rather than dropped.
   const { scheduleId: _id, ...contract } = proposed;
-  const edited = ticks.editSchedule(scheduleId, { ...contract, authoredAt: request.now }, []);
+  const edited = ticks.editSchedule(
+    scheduleId, { ...contract, authoredAt: request.now }, scheduleRuns.runs,
+  );
   if (!edited.ok) return err(409, 'schedule_not_edited', safeText(edited.problem));
   return ok({
     scheduleId,
@@ -446,9 +463,23 @@ function editSchedule(
     // version nobody can review. Diffed from the history the store returned, so
     // it describes the version that actually landed.
     changed: edited.changed,
+    // THIS SCHEDULE'S UNFINISHED RUNS, which keep the version they started
+    // under. NOT "in flight": nothing in this build advances a scheduled run,
+    // so an unfinished one has not been DISPATCHED — it is normally `queued`,
+    // though an operator stop can move it out of that state, which is why the
+    // claim here is about dispatch and not about the state. `activeRunsFor`
+    // twenty lines away deliberately excludes `queued` for that reason, and one
+    // file using the same word for two different things is how the next reader
+    // learns the wrong one.
+    unfinishedRunsUndisturbed: scheduleRuns.runs.filter((r) => r.active).map((r) => r.runId),
+    // Runs in those Loops that could not be attributed to any schedule.
+    // Unknown, reported as Unknown.
+    unattributedRuns: scheduleRuns.unattributed,
     note: 'The edit appended a version. Every earlier version is kept, and a run created under one '
       + 'still resolves to the version it started under. A tick window is clamped to this '
-      + 'authoring instant, so the new version owns no moment that predates it.',
+      + 'authoring instant, so the new version owns no moment that predates it. Nothing in this '
+      + 'build advances a scheduled run, so the unfinished runs named here have not been '
+      + 'dispatched.',
   });
 }
 
@@ -476,10 +507,11 @@ function editSchedule(
  * unreachable collision is a worse trade than the dead end it replaced. The
  * store purges the claims anyway, so nothing is left to reason about.
  *
- * WHAT IT DOES NOT CHECK: whether runs this schedule created are still in
- * flight. A run records its Loop and not its schedule, so that question cannot
- * be answered today. Deleting a schedule does not touch its runs, which keep
- * their own records and their attribution to the version they started under.
+ * WHAT IT DOES NOT CHECK: whether runs this schedule created are still
+ * unfinished. A run records its schedule now, so the question COULD be
+ * answered — deletion simply does not ask. Deleting a schedule does not touch
+ * its runs, which keep their own records and their attribution to the version
+ * they started under.
  */
 function deleteSchedule(
   request: CronRouteRequest, ticks: CronTickPort, rawId: string,

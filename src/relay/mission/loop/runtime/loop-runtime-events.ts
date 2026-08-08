@@ -191,7 +191,15 @@ export const LOOP_EVENT_KINDS_REQUIRING_IDEMPOTENCY: readonly RelayLoopEventKind
  */
 export type RelayLoopEventPayload =
   | { readonly kind: 'loop.contract_confirmed'; readonly contractRef: string; readonly contractVersion: number; readonly bindingDigest: string; readonly confirmedBy: string }
-  | { readonly kind: 'loop.run_created'; readonly idempotencyKey: string; readonly creationSource: 'cli' | 'website' | 'api' | 'schedule'; readonly createdBy: string }
+  | {
+    readonly kind: 'loop.run_created';
+    readonly idempotencyKey: string;
+    readonly creationSource: 'cli' | 'website' | 'api' | 'schedule';
+    /** The schedule that produced this run, when one did. Absent on a journal
+     *  written before the field existed, which reduces to `null`. */
+    readonly scheduleId?: string | null;
+    readonly createdBy: string;
+  }
   | { readonly kind: 'loop.run_claimed'; readonly sessionId: string; readonly expiresAt: string; readonly recoveryGeneration: number }
   | { readonly kind: 'loop.agent_assigned'; readonly assignment: RelayLoopAssignment }
   | { readonly kind: 'loop.iteration_started'; readonly iterationId: string; readonly ordinal: number }

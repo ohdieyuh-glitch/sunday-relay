@@ -417,17 +417,33 @@ the history the store returned so it describes the version that landed. Pausing
 is not an edit and cannot be reached through it — `paused` is a refused field,
 so a schedule is stopped by the control that stops it.
 
-It passes the planner NO run list. An append cannot orphan a run — the known
-versions only grow — so the planner's orphan check is inert here. Its other
-use, reporting the runs a change must not disturb, is a real feature this route
-does not claim: a run record names the LOOP it belongs to and not the schedule
-that created it, and two schedules may bind one Loop, so the Loop-wide list
-reports another schedule's runs as this one's. Using it makes those runs cite
-versions this history lacks: every future edit refused as orphaning, the
-schedule never correctable again. The attribution exists on disk — every claim
-marker stores the occurrence, which carries its `scheduleId` — so this is a
-walk nobody has written rather than something nobody can know. Listed under
-"Not implemented".
+It passes the planner THIS SCHEDULE'S runs, and reports the ones still
+unfinished. A run records the schedule that created it — `confirmLoopRun` refuses a
+schedule-created run that does not name one, because the run id is a digest of
+the occurrence and does not reverse, so nothing could attribute it afterwards.
+
+The Loop-wide list it used to have was wrong in both directions: two schedules
+may bind one Loop, so it reported another schedule's runs as this one's, and
+once that schedule moved to a new version its runs cited a version this history
+lacked and every future edit was refused as orphaning.
+
+The scan covers EVERY LOOP the schedule has ever named, not just its head's:
+`loopId` is a versioned field, so runs made before a rebinding live in the Loop
+that version named.
+
+WHAT CANNOT BE ATTRIBUTED IS COUNTED, never dropped. Four cases reduce to
+Unknown rather than to "not ours": a run that reads back as nothing; one whose
+journal is torn or corrupt, which does NOT read back as null but as a partial
+record; one that never got its IDENTITY, because only `loop.run_created`
+confers it and a record can sit durably at the event before it, carrying the
+seed's `api` default; and a schedule-created run written before runs recorded
+their schedule. Each would otherwise let an edit report a clean list over this
+schedule's own unfinished work.
+
+The runs it names are UNFINISHED, which is not the same as running: nothing in
+this build advances a scheduled run, so none of them has been dispatched. They
+are normally `queued`; an operator control can move a run out of that state, so
+the claim is about dispatch rather than about the state.
 
 `cron-versioning.ts` implements that decision. An edit APPENDS: every previous
 version rides through unchanged, including the one being superseded, whose
@@ -488,8 +504,10 @@ would leave orphaned claims under an id nothing remembers.
 
 Deleting a schedule does not touch the runs it created: they keep their own
 records and stay attributed to the version they started under. Whether any are
-still in flight is not checked, because a run records its Loop and not its
-schedule.
+still UNFINISHED is not checked — a run records its schedule now, so it could
+be, and deletion simply does not ask. Nothing in this build advances a
+scheduled run, so an unfinished one has not been dispatched — it is normally
+`queued`, though an operator control can move it out of that state.
 
 This is also the remedy for a schedule the tick refuses on rules that arrived
 after it was stored — a fixed offset, a `SystemV/*` zone, a single-word IANA
@@ -498,10 +516,7 @@ name, or a version predating the binding.
 ## Not implemented
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
-(the record is created; nothing advances it) · ATTRIBUTING A RUN TO ITS
-SCHEDULE FROM THE RUN RECORD: a run names its Loop, not its schedule. The
-occurrence claim markers carry `scheduleId` and could be walked to recover it;
-until something does, an edit claims nothing about the runs already created · listing
+(the record is created; nothing advances it) · listing
 PAGINATION: the listing replays at most 200 schedules and reports `truncated`
 truthfully, but nothing can reach schedule 201, so with more than 200 stored
 an operator cannot learn whether the ones past the cap are paused or corrupt ·

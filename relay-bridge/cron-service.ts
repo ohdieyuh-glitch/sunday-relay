@@ -113,6 +113,19 @@ export interface CronTickService {
    *  A created-but-never-started run is not one of them — see the
    *  implementation for why that distinction is load-bearing. */
   activeRunsFor(loopId: string): number;
+  /**
+   * The runs of THIS SCHEDULE in this Loop, with the version each started
+   * under, plus how many runs in the Loop could not be attributed at all.
+   *
+   * The unattributed count is not decoration: a schedule-created run written
+   * before runs recorded their schedule carries `scheduleId: null`, and
+   * treating those as "not ours" would let an edit report a clean list over
+   * runs that may well be ours. Unknown is reported as unknown.
+   */
+  scheduleRunsFor(loopIds: readonly string[], scheduleId: string): {
+    readonly runs: readonly VersionedRun[];
+    readonly unattributed: number;
+  };
   /** Exposed for diagnostics and tests; never reachable from a route. */
   readonly store: LoopRunNodeStore;
 }
@@ -208,6 +221,10 @@ export function createCronTickService(options: {
         // role-scoped derivation.
         confirmationRequestId: occurrence.occurrenceId,
         creationSource: 'schedule',
+        // THE OCCURRENCE KNOWS WHICH SCHEDULE IT CAME FROM, so the run does
+        // too. Without it the edit endpoint can say nothing about the runs a
+        // schedule already has unfinished.
+        scheduleId: occurrence.scheduleId,
         budget: emptyLoopBudget({ ...SCHEDULED_RUN_BUDGET, currency: 'USD', maxConsecutiveFailures: 3 }),
         // Nothing contacted a provider. Still true, and the tick is the
         // reason it stays true.
@@ -288,6 +305,42 @@ export function createCronTickService(options: {
       return { ok: true, version: head?.version ?? 0, changed };
     },
     activeRunsFor,
+    scheduleRunsFor: (loopIds, scheduleId) => {
+      const runs: VersionedRun[] = [];
+      let unattributed = 0;
+      // EVERY LOOP THIS SCHEDULE HAS EVER NAMED, not just the one its head
+      // names. `loopId` is a versioned field and rebinding is a supported edit,
+      // so runs made under an earlier version live in an earlier Loop — and
+      // scanning only the current one made them vanish from both outputs.
+      for (const runId of [...new Set(loopIds)].flatMap((id) => store.runIdsForLoop(id) ?? [])) {
+        const loaded = readLoopRun(store, runId, loopDigest);
+        // A RUN THAT CANNOT BE READ IS NOT ABSENT. It might be this schedule's,
+        // so it counts as unattributed rather than being dropped.
+        if (loaded === null || loaded.run === null) { unattributed += 1; continue; }
+        // NOR IS A RUN WHOSE JOURNAL IS DAMAGED. A torn or corrupt journal
+        // still replays into a partial run — it does NOT read back as null —
+        // and that partial record cannot be trusted to say whose run it is.
+        if (loaded.journalIntegrity !== 'ok') { unattributed += 1; continue; }
+        // NOR IS A RECORD WITH NO IDENTITY YET. Only `loop.run_created` gives a
+        // run its identity; until it folds, the record is the bare SEED, whose
+        // `creationSource` defaults to `api` — so a schedule's run would read
+        // as somebody else's ordinary run and be skipped in silence.
+        //
+        // `lastSequence === 0` was the first attempt and is NOT sound:
+        // `confirmLoopRun` writes the record, then `contract_confirmed`, then
+        // `run_created`, so a crash or a refused third append leaves a durable
+        // record at sequence 1 that still carries the seed's defaults — and a
+        // re-tick finds it and answers `duplicate`, so nothing ever repairs it.
+        // The empty key is what actually means "no identity".
+        if (loaded.run.idempotencyKey === '') { unattributed += 1; continue; }
+        const run = loaded.run;
+        if (run.creationSource !== 'schedule') continue;
+        if (run.scheduleId === null) { unattributed += 1; continue; }
+        if (run.scheduleId !== scheduleId) continue;
+        runs.push({ runId, contractVersion: run.contractVersion, active: loopRunIsActive(run.state) });
+      }
+      return { runs, unattributed };
+    },
     // THE OCCURRENCE IDENTITY'S FIRST TERM IS THE SCHEDULE ID ITSELF. The
     // approved formula assumes that id is globally unique, and within the
     // namespace that matters it is: the claim markers share one flat namespace
