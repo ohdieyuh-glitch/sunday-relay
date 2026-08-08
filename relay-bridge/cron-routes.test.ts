@@ -9,7 +9,9 @@ import { handleCronRoute, type CronRouteRequest } from './cron-routes';
 import {
   createCronTickService, MAX_LISTED_SCHEDULES, type CronTickService,
 } from './cron-service';
-import { loopDigest, readLoopRun } from '../src/relay/mission/loop/runtime';
+import {
+  appendLoopRunEvent, emptyLoopBudget, emptyLoopRunRecord, loopDigest, readLoopRun, seedLoopRun,
+} from '../src/relay/mission/loop/runtime';
 
 /**
  * THE CRON TICK ENDPOINT, through the real handler and a real state root.
@@ -872,8 +874,130 @@ describe('an operator can create, list and pause a schedule', () => {
     );
     expect(edited?.status).toBe(200);
     expect(dataOf(edited).version).toBe(2);
-    // And nothing is claimed about runs this schedule cannot prove are its own.
-    expect(dataOf(edited).activeRunsUndisturbed).toBeUndefined();
+    // AND THE OTHER SCHEDULE'S RUNS ARE NOT REPORTED AS THIS ONE'S. A run
+    // records the schedule that created it now, so the list is this schedule's
+    // — previously the only list available was every run in the Loop, which
+    // both misreported them and refused every future edit as orphaning.
+    expect(dataOf(edited).activeRunsUndisturbed).toEqual([]);
+    expect(dataOf(edited).unattributedRunsInLoop).toBe(0);
+  });
+
+  it('counts a run that names NO schedule as unknown, never as another schedule\'s absence', async () => {
+    // A schedule-created run written before runs recorded their schedule
+    // carries `null`. Calling those "not ours" would report a clean in-flight
+    // list over runs that may well be ours — unknown reported as zero, which
+    // is the one thing this codebase refuses everywhere else.
+    const legacy = seedLoopRun({
+      runId: 'lpr_legacy',
+      loopId: 'lpe_cron',
+      projectId: 'prj_cron',
+      workspaceId: null,
+      contractRef: 'contract-ref',
+      contractVersion: 1,
+      contractBindingDigest: 'digest-1',
+      budget: emptyLoopBudget({
+        maxIterations: null, maxTotalDurationMinutes: null, maxSpendMicros: null, currency: null,
+        maxTotalTokens: null, maxProviderCalls: null, maxConsecutiveFailures: 0,
+      }),
+      createdAt: T0,
+      provenance: 'offline',
+    });
+    service.store.create(emptyLoopRunRecord(legacy));
+    const base = (payload: Record<string, unknown>, key: string | null) => ({
+      at: T0,
+      runId: 'lpr_legacy',
+      loopId: 'lpe_cron',
+      projectId: 'prj_cron',
+      kind: payload.kind as string,
+      actor: 'relay-schedule',
+      recoveryGeneration: 0,
+      expectedPreviousState: null,
+      idempotencyKey: key,
+      payload,
+    });
+    const confirmed = appendLoopRunEvent(service.store, {
+      runId: 'lpr_legacy',
+      digest: loopDigest,
+      base: base({
+        kind: 'loop.contract_confirmed',
+        contractRef: 'contract-ref',
+        contractVersion: 1,
+        bindingDigest: 'digest-1',
+        confirmedBy: 'relay-schedule',
+      }, null) as never,
+    });
+    expect(confirmed.ok).toBe(true);
+    const appended = appendLoopRunEvent(service.store, {
+      runId: 'lpr_legacy',
+      digest: loopDigest,
+      // NO scheduleId in the payload — exactly what an older build wrote.
+      base: base({
+        kind: 'loop.run_created',
+        idempotencyKey: 'legacy-1',
+        creationSource: 'schedule',
+        createdBy: 'relay-schedule',
+      }, 'legacy-1') as never,
+    });
+    expect(appended.ok).toBe(true);
+    expect(readLoopRun(service.store, 'lpr_legacy', loopDigest)?.run?.scheduleId).toBeNull();
+
+    const edited = await call(
+      { ...CREATE, scheduleId: 'sched-triage', cronExpression: '*/30 * * * *' },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(edited?.status).toBe(200);
+    expect(dataOf(edited).unattributedRunsInLoop).toBe(1);
+    // …and it is NOT silently listed as this schedule's in-flight work.
+    expect(dataOf(edited).activeRunsUndisturbed).toEqual([]);
+  });
+
+  it('counts a run it cannot READ as unknown too', async () => {
+    // A run whose journal is unreadable might be this schedule's. Dropping it
+    // would report a clean in-flight list over work that may be in flight —
+    // the same unknown-as-zero this refuses for an unattributed run.
+    const ticked = await call();
+    expect(dataOf(ticked).runsCreated).toBe(3);
+    const runIds = service.store.runIdsForLoop('lpe_cron') ?? [];
+    expect(runIds.length).toBe(3);
+    writeFileSync(
+      join(root, 'loops', 'lpe_cron', 'runs', runIds[0] as string, 'journal.jsonl'),
+      'this is not a journal\n',
+    );
+    // …and one whose journal is EMPTY, which replays to no run at all rather
+    // than to a damaged one. Both are unknown; neither is absent.
+    writeFileSync(
+      join(root, 'loops', 'lpe_cron', 'runs', runIds[1] as string, 'journal.jsonl'),
+      '',
+    );
+
+    const edited = await call(
+      { ...CREATE, scheduleId: 'sched-triage', cronExpression: '*/30 * * * *' },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(edited?.status).toBe(200);
+    expect(dataOf(edited).unattributedRunsInLoop).toBe(2);
+    // The one it CAN read is still reported as its own.
+    expect((dataOf(edited).activeRunsUndisturbed as string[])).toHaveLength(1);
+  });
+
+  it('reports its OWN in-flight runs, and counts what it cannot attribute', async () => {
+    // The planner returns the runs a change must not disturb, and the route
+    // used to discard them because no run said which schedule made it.
+    const ticked = await call();
+    expect(dataOf(ticked).runsCreated).toBe(3);
+
+    const edited = await call(
+      { ...CREATE, scheduleId: 'sched-triage', cronExpression: '*/30 * * * *' },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(edited?.status).toBe(200);
+    const inFlight = dataOf(edited).activeRunsUndisturbed as string[];
+    expect(inFlight).toHaveLength(3);
+    // Each still resolves to the version it started under.
+    for (const runId of inFlight) {
+      expect(readLoopRun(service.store, runId, loopDigest)?.run?.contractVersion).toBe(1);
+    }
+    expect(dataOf(edited).unattributedRunsInLoop).toBe(0);
   });
 
   it('an edit that changes nothing is refused, rather than splitting the history', async () => {

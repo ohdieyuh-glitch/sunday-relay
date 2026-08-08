@@ -122,6 +122,10 @@ export interface CronTickPort {
   setSchedulePaused(
     scheduleId: string, paused: boolean, at: string,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+  scheduleRunsFor(loopId: string, scheduleId: string): {
+    readonly runs: readonly VersionedRun[];
+    readonly unattributed: number;
+  };
   removeSchedule(
     scheduleId: string, at: string,
   ): { readonly ok: true; readonly claimsPurged: number; readonly claimsLeft: number }
@@ -416,7 +420,20 @@ function editSchedule(
     return err(409, 'schedule_corrupt', safeText(inspected.problem));
   }
 
-  // NO RUN LIST, deliberately, and not because one is impossible.
+  // THE RUNS THIS SCHEDULE ACTUALLY MADE. A run now records the schedule that
+  // created it, so the planner gets the right list rather than every run in the
+  // Loop — which reported another schedule's runs as this one's, and made every
+  // future edit refuse as orphaning once that schedule moved to a new version.
+  //
+  // WHAT CANNOT BE ATTRIBUTED IS COUNTED, not dropped: a schedule-created run
+  // written before runs recorded their schedule carries `null`, and calling
+  // those "not ours" would report a clean in-flight list over runs that may be.
+  const head = [...inspected.record.history]
+    .sort((a, b) => a.version - b.version)[inspected.record.history.length - 1] as
+    (typeof inspected.record.history)[number];
+  const scheduleRuns = ticks.scheduleRunsFor(head.loopId, scheduleId);
+
+  // LEGACY NOTE, kept because the reason the list was once empty matters:
   //
   // `planScheduleEdit` uses it for two things. Refusing an edit that would
   // ORPHAN a run is inert here: an append only grows the set of known versions,
@@ -436,7 +453,9 @@ function editSchedule(
   // written, not a fact nobody can know. Until it is written, claiming nothing
   // is the honest answer. Named in CRON_LOOPS.md under "Not implemented".
   const { scheduleId: _id, ...contract } = proposed;
-  const edited = ticks.editSchedule(scheduleId, { ...contract, authoredAt: request.now }, []);
+  const edited = ticks.editSchedule(
+    scheduleId, { ...contract, authoredAt: request.now }, scheduleRuns.runs,
+  );
   if (!edited.ok) return err(409, 'schedule_not_edited', safeText(edited.problem));
   return ok({
     scheduleId,
@@ -446,6 +465,11 @@ function editSchedule(
     // version nobody can review. Diffed from the history the store returned, so
     // it describes the version that actually landed.
     changed: edited.changed,
+    // The runs of this schedule still in flight, which keep the version they
+    // started under — and how many runs in this Loop could not be attributed to
+    // any schedule, which is Unknown and reported as such.
+    activeRunsUndisturbed: scheduleRuns.runs.filter((r) => r.active).map((r) => r.runId),
+    unattributedRunsInLoop: scheduleRuns.unattributed,
     note: 'The edit appended a version. Every earlier version is kept, and a run created under one '
       + 'still resolves to the version it started under. A tick window is clamped to this '
       + 'authoring instant, so the new version owns no moment that predates it.',

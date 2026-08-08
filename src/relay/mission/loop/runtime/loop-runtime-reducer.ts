@@ -96,6 +96,7 @@ export function seedLoopRun(input: {
     recoveryGeneration: 0,
     createdBy: '',
     creationSource: 'api',
+    scheduleId: null,
     idempotencyKey: '',
     provenance: input.provenance,
     createdAt: input.createdAt,
@@ -272,6 +273,9 @@ export function applyLoopEvent(run: RelayLoopRun, event: RelayLoopEvent): LoopAp
         ...next,
         idempotencyKey: payload.idempotencyKey,
         creationSource: payload.creationSource,
+        // ABSENT REDUCES TO null, which readers must treat as unknown for a
+        // schedule-created run rather than as belonging to no schedule.
+        scheduleId: payload.scheduleId ?? null,
         createdBy: payload.createdBy,
       };
       break;

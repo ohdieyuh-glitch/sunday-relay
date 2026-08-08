@@ -316,6 +316,14 @@ export interface LoopConfirmationInput {
    */
   readonly confirmationRequestId: string;
   readonly creationSource: 'cli' | 'website' | 'api' | 'schedule';
+  /**
+   * The schedule that produced this run. REQUIRED when `creationSource` is
+   * `schedule`, because the run id is a digest of the occurrence and does not
+   * reverse — a run created without it can never be attributed to its schedule
+   * afterwards, and an edit to that schedule cannot say which of its runs are
+   * still in flight.
+   */
+  readonly scheduleId?: string | null;
   readonly budget: RelayLoopBudgetState;
   readonly provenance: RelayLoopRun['provenance'];
 }
@@ -364,6 +372,21 @@ export function confirmLoopRun(
   deps: LoopOperationDeps,
   input: LoopConfirmationInput,
 ): LoopConfirmationOutcome {
+  // A SCHEDULED RUN MUST NAME ITS SCHEDULE, and it must do so HERE, because
+  // nothing can recover it later: the run id is a digest of the occurrence and
+  // does not reverse. Without it an edit to that schedule cannot say which of
+  // its runs are still in flight, and the only list available — every run in
+  // the Loop — reports another schedule's runs as this one's.
+  if (input.creationSource === 'schedule'
+    && (typeof input.scheduleId !== 'string' || input.scheduleId.trim() === '')) {
+    return {
+      ok: false,
+      status: 422,
+      kind: 'validation_failed',
+      problem: 'a run created by a schedule must name the schedule that created it; nothing can '
+        + 'attribute it afterwards.',
+    };
+  }
   const key = loopConfirmationKey(input);
 
   const existing = readLoopRun(deps.backing, input.runId, deps.digest);
@@ -431,6 +454,7 @@ export function confirmLoopRun(
       kind: 'loop.run_created',
       idempotencyKey: key,
       creationSource: input.creationSource,
+      scheduleId: input.scheduleId ?? null,
       createdBy: input.principal,
     },
     key, input.principal,

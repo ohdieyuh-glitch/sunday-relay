@@ -417,17 +417,23 @@ the history the store returned so it describes the version that landed. Pausing
 is not an edit and cannot be reached through it — `paused` is a refused field,
 so a schedule is stopped by the control that stops it.
 
-It passes the planner NO run list. An append cannot orphan a run — the known
-versions only grow — so the planner's orphan check is inert here. Its other
-use, reporting the runs a change must not disturb, is a real feature this route
-does not claim: a run record names the LOOP it belongs to and not the schedule
-that created it, and two schedules may bind one Loop, so the Loop-wide list
-reports another schedule's runs as this one's. Using it makes those runs cite
-versions this history lacks: every future edit refused as orphaning, the
-schedule never correctable again. The attribution exists on disk — every claim
-marker stores the occurrence, which carries its `scheduleId` — so this is a
-walk nobody has written rather than something nobody can know. Listed under
-"Not implemented".
+It passes the planner THIS SCHEDULE'S runs, and reports the ones still in
+flight. A run records the schedule that created it — `confirmLoopRun` refuses a
+schedule-created run that does not name one, because the run id is a digest of
+the occurrence and does not reverse, so nothing could attribute it afterwards.
+
+The Loop-wide list it used to have was wrong in both directions: two schedules
+may bind one Loop, so it reported another schedule's runs as this one's, and
+once that schedule moved to a new version its runs cited a version this history
+lacked and every future edit was refused as orphaning.
+
+WHAT CANNOT BE ATTRIBUTED IS COUNTED, never dropped. Four cases reduce to
+Unknown rather than to "not ours": a run that reads back as nothing, one whose
+journal is torn or corrupt, one whose journal folded no events at all (an empty
+journal replays to the bare seed, whose source defaults to `api`), and a
+schedule-created run written before runs recorded their schedule. Each would
+otherwise let an edit report a clean in-flight list over work that may be in
+flight.
 
 `cron-versioning.ts` implements that decision. An edit APPENDS: every previous
 version rides through unchanged, including the one being superseded, whose
@@ -498,10 +504,7 @@ name, or a version predating the binding.
 ## Not implemented
 
 The in-bridge scheduler and its timer · execution of a trigger-created run
-(the record is created; nothing advances it) · ATTRIBUTING A RUN TO ITS
-SCHEDULE FROM THE RUN RECORD: a run names its Loop, not its schedule. The
-occurrence claim markers carry `scheduleId` and could be walked to recover it;
-until something does, an edit claims nothing about the runs already created · listing
+(the record is created; nothing advances it) · listing
 PAGINATION: the listing replays at most 200 schedules and reports `truncated`
 truthfully, but nothing can reach schedule 201, so with more than 200 stored
 an operator cannot learn whether the ones past the cap are paused or corrupt ·

@@ -365,6 +365,16 @@ export interface RelayLoopRun {
   /** Who confirmed the contract. An identity label, never an account record. */
   readonly createdBy: string;
   readonly creationSource: 'cli' | 'website' | 'api' | 'schedule';
+  /**
+   * WHICH SCHEDULE MADE THIS RUN, when one did.
+   *
+   * `null` for every other source — and also for a schedule-created run
+   * written before this field existed, which is UNATTRIBUTED rather than
+   * unscheduled. A reader grouping runs by schedule must treat those as
+   * unknown, never as belonging to no schedule: the run id is a digest of the
+   * occurrence and does not reverse, so nothing can recover it after the fact.
+   */
+  readonly scheduleId: string | null;
   /** Binds one confirmation attempt to at most one run. */
   readonly idempotencyKey: string;
   readonly provenance: 'live' | 'offline' | 'simulated';

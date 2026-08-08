@@ -11,6 +11,7 @@ import {
   emptyLoopRunRecord,
   isTerminalLoopState,
   loopDigest,
+  confirmLoopRun,
   preflightLoopDispatch,
   projectLoopStatus,
   readLoopRun,
@@ -524,6 +525,63 @@ describe('what actually ran is recorded only once it is observed', () => {
     if (outcome.kind !== 'terminal') throw new Error('unreachable');
     expect(outcome.run.assignment?.actualModel).toBeNull();
     expect(outcome.run.assignment?.requestedModel).toBe('model-we-asked-for');
+  });
+});
+
+describe('a scheduled run names the schedule that made it', () => {
+  it('refuses a schedule-created run that names no schedule', () => {
+    // Nothing can attribute it afterwards: the run id is a digest of the
+    // occurrence and does not reverse. Without this, an edit to that schedule
+    // cannot say which of its runs are in flight, and the only list available —
+    // every run in the Loop — reports another schedule's runs as this one's.
+    const { deps } = harness([]);
+    const base = {
+      principal: 'relay-schedule',
+      projectId: 'prj_a',
+      workspaceId: null,
+      loopId: 'lpe_a',
+      runId: 'lpr_sched',
+      contractRef: 'contract-1',
+      contractVersion: 1,
+      contractBindingDigest: 'digest-1',
+      confirmationRequestId: 'occ_1',
+      budget: budget(),
+      provenance: 'offline' as const,
+    };
+    const nameless = confirmLoopRun(deps, { ...base, creationSource: 'schedule' });
+    expect(nameless.ok).toBe(false);
+    if (!nameless.ok) expect(nameless.problem).toContain('must name the schedule');
+    // A blank one is not a name either.
+    expect(confirmLoopRun(deps, {
+      ...base, creationSource: 'schedule', scheduleId: '  ',
+    }).ok).toBe(false);
+    // Every other source is legitimately scheduleless.
+    const cli = confirmLoopRun(deps, { ...base, creationSource: 'cli' });
+    expect(cli.ok).toBe(true);
+    if (cli.ok) expect(cli.run.scheduleId).toBeNull();
+  });
+
+  it('records the schedule on the run, and a replay keeps it', () => {
+    const { deps, backing } = harness([]);
+    const created = confirmLoopRun(deps, {
+      principal: 'relay-schedule',
+      projectId: 'prj_a',
+      workspaceId: null,
+      loopId: 'lpe_a',
+      runId: 'lpr_sched2',
+      contractRef: 'contract-1',
+      contractVersion: 1,
+      contractBindingDigest: 'digest-1',
+      confirmationRequestId: 'occ_2',
+      budget: budget(),
+      provenance: 'offline',
+      creationSource: 'schedule',
+      scheduleId: 'sched-triage',
+    });
+    expect(created.ok).toBe(true);
+    if (created.ok) expect(created.run.scheduleId).toBe('sched-triage');
+    // …and it survives the journal, which is the value every later read sees.
+    expect(readLoopRun(backing, 'lpr_sched2', loopDigest)?.run?.scheduleId).toBe('sched-triage');
   });
 });
 
