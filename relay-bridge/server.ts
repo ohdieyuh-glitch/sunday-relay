@@ -32,8 +32,11 @@ import {
 } from './hosted-coding-agent/hosted-routes';
 import { decodeSegment } from './path-segment';
 import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
-import { handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
+import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
 import { createCronTickService } from './cron-service';
+import {
+  createCronScheduler, cronSchedulerEnabled, schedulerIntervalSeconds,
+} from './cron-scheduler';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute,
@@ -140,6 +143,16 @@ export function createBridgeServer(
    * readiness failure that is not its own.
    */
   cronTicks: CronTickPort | null = null,
+  /**
+   * Whether a cron SCHEDULER exists on this server, asked at request time.
+   *
+   * A getter rather than a boolean because the scheduler is constructed after
+   * the server in `main()`, and a snapshot taken here would answer for the
+   * moment of construction rather than the moment of the request. Absent means
+   * no, which is correct for every host that never builds one — including the
+   * tests, and including a bridge whose volume never mounted.
+   */
+  cronSchedulerRunning: () => boolean = () => false,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -336,6 +349,7 @@ export function createBridgeServer(
             body: method === 'POST' ? await readBody(req) : undefined,
             env: process.env,
             now: new Date().toISOString(),
+            cronSchedulerRunning: cronSchedulerRunning(),
             authorize: () => {
               const decision = authorizeReviewerCall({
                 method,
@@ -553,7 +567,92 @@ export function main(): void {
       root: config.stateRoot,
       now: () => new Date().toISOString(),
     });
-  const server = createBridgeServer(config, registry, null, null, null, cronTicks);
+  /**
+   * THE TIMER, only if every gate above it is open.
+   *
+   * It depends on a mounted state root (no claim marker, no at-most-once), on
+   * Cron being enabled, and on its own flag — a background process nobody
+   * switched on is one nobody chose. It creates durable run records and
+   * dispatches nothing, exactly as an operator tick does.
+   */
+  const scheduler = cronTicks !== null && cronEnabled(process.env)
+    && cronSchedulerEnabled(process.env)
+    ? createCronScheduler({
+      ticks: cronTicks,
+      now: () => new Date().toISOString(),
+      intervalSeconds: schedulerIntervalSeconds(process.env),
+      onPass: (report) => {
+        /**
+         * QUIET WHEN THERE IS NOTHING TO SAY — but "nothing to say" is not the
+         * same as "ticked nothing". The first version logged only ticks,
+         * creations and refusals, so a pass that deferred five schedules, or
+         * durably claimed an occurrence with no run behind it, printed a line
+         * indistinguishable from a clean one. Every field that represents work
+         * NOT done is a reason to speak.
+         */
+        const quiet = report.ticked === 0 && report.refused.length === 0
+          && report.deferred.length === 0 && report.claimedWithoutRun === 0
+          && report.capacitySkipped === 0 && !report.truncated
+          && !report.occurrencesTruncated && !report.listingTruncated
+          && report.corrupt.length === 0 && report.missing.length === 0
+          && report.refusal === null;
+        if (quiet) return;
+        const notes: string[] = [];
+        if (report.deferred.length > 0) {
+          notes.push(`deferred ${String(report.deferred.length)} to the next pass`);
+        }
+        /**
+         * A REFUSAL IS PRINTED AS A REASON, NOT A COUNT. "Fix your timezone",
+         * "this schedule is unparseable" and "this Loop has stopped recurring
+         * and will not resume" were one integer, which is no more actionable
+         * than silence — and the last of those is permanent.
+         */
+        const byReason = new Map<string, string[]>();
+        for (const r of report.refused) {
+          byReason.set(r.reason, [...(byReason.get(r.reason) ?? []), r.scheduleId]);
+        }
+        for (const [reason, ids] of byReason) {
+          const loud = reason === 'run_records_at_ceiling'
+            ? ' — THESE SCHEDULES HAVE STOPPED RECURRING and will not resume on '
+              + 'their own; rebind each to a fresh Loop by editing it'
+            : '';
+          notes.push(`refused (${reason}): ${ids.join(', ')}${loud}`);
+        }
+        if (report.corrupt.length > 0) {
+          notes.push(`CORRUPT, a human must look: ${report.corrupt.join(', ')}`);
+        }
+        if (report.missing.length > 0) notes.push(`missing: ${report.missing.join(', ')}`);
+        if (report.claimedWithoutRun > 0) {
+          // The loudest thing this report can carry: a human has to decide.
+          notes.push(`CLAIMED WITHOUT A RUN ${String(report.claimedWithoutRun)}`);
+        }
+        if (report.capacitySkipped > 0) {
+          notes.push(`dropped by overlap capacity ${String(report.capacitySkipped)}`);
+        }
+        if (report.occurrencesTruncated) notes.push('occurrences truncated');
+        if (report.listingTruncated) {
+          notes.push('the schedule listing is truncated — schedules past the cap are unreachable');
+        }
+        if (report.refusal !== null) notes.push(`refusal ${report.refusal}`);
+        console.log(`Relay cron pass ${report.at}: ticked ${String(report.ticked)}, `
+          + `created ${String(report.runsCreated)}`
+          + (notes.length > 0 ? ` — ${notes.join('; ')}` : ''));
+      },
+    })
+    : null;
+  if (scheduler !== null) {
+    console.log('Relay cron scheduler is ON — it creates run records and dispatches nothing.');
+  }
+
+  // The capability route answers from THIS object, not from the flags that ask
+  // for it: the flags can be set on a bridge whose volume never mounted.
+  const server = createBridgeServer(
+    config, registry, null, null, null, cronTicks,
+    // Not "was one constructed" — "will it still fire". Shutdown stops the
+    // timer and then drains for up to ten seconds, and for that whole window
+    // the old getter reported a scheduler that would never run again.
+    () => scheduler?.isRunning() === true,
+  );
 
   /**
    * GRACEFUL SHUTDOWN. A managed host sends SIGTERM before replacing an
@@ -566,6 +665,7 @@ export function main(): void {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`Relay bridge received ${signal} — closing.`);
+    scheduler?.stop();
     server.close(() => process.exit(0));
     // A caller that never finishes must not hold the deploy open forever.
     const forced = setTimeout(() => process.exit(0), 10_000);

@@ -4,8 +4,8 @@
 + FILE-BACKED CLAIM ADAPTER + THE TICK PASS + A DURABLE SCHEDULE STORE + AN
 AUTHENTICATED TICK ENDPOINT AND THE SCHEDULE FAMILY (CREATE, LIST, PAUSE,
 EDIT, DELETE)
-IMPLEMENTED. NO SCHEDULER AND NO TIMER: NOTHING CALLS THE TICK ON A SCHEDULE,
-AND A SCHEDULED RUN IS CREATED BUT NEVER DISPATCHED.**
+IMPLEMENTED, PLUS AN IN-BRIDGE SCHEDULER THAT IS OFF BY DEFAULT. A SCHEDULED
+RUN IS CREATED AND NEVER DISPATCHED, WHETHER AN OPERATOR OR THE TIMER ASKED.**
 
 `/loop schedule`, `/loop cron`, `/loop schedules` parse today and produce typed
 commands. `src/relay/mission/loop/cron/` now holds the schedule stage this
@@ -42,9 +42,13 @@ server-clocked, with explicit `authorized: true` on everything that writes.
 
 WHAT A TICK STILL DOES NOT DO, because a surface would guess generously:
 
-- **Nothing calls it on a schedule.** There is no timer and no scheduler
-  process. `GET /loop/capability` reports `cronScheduled: false` so no
-  surface can infer one from the endpoint's existence.
+- **A timer may call it, and only if switched on.** The in-bridge scheduler
+  (`relay-bridge/cron-scheduler.ts`) is gated on its own flag, on Cron, on the
+  Loop engine and on a mounted state root — four switches, all off by default.
+  `GET /loop/capability` reports `cronScheduled` as what is actually true
+  rather than a constant, so a surface reads the state instead of inferring it.
+  A pass creates run RECORDS and dispatches nothing: automatic creation is not
+  automatic execution.
 - **A scheduled run is created, never advanced.** Three independent reasons:
   `createRun` is synchronous and cannot await the engine; the run carries
   `creationSource: 'schedule'`, which the Loop service turns into
@@ -513,13 +517,146 @@ This is also the remedy for a schedule the tick refuses on rules that arrived
 after it was stored — a fixed offset, a `SystemV/*` zone, a single-word IANA
 name, or a version predating the binding.
 
+## The in-bridge scheduler
+
+A Cron Loop is only recurring if something asks. `relay-bridge/cron-scheduler.ts`
+is that something: a timer inside the bridge, off unless
+`RELAY_LOOP_CRON_SCHEDULER_ENABLED=1`, which also needs Cron on, the Loop engine
+on and a state root mounted. Four switches, all off by default — a background
+process nobody chose is worse than none.
+
+`planSchedulerPass` decides what a pass covers and is pure: it holds no clock,
+reads no disk and performs no tick. The bridge owns the effects.
+
+A PASS LOOKS BACK RATHER THAN REMEMBERING. There is no durable per-schedule
+watermark, so a pass cannot ask what it already did — it asks again. The claim
+marker makes a replayed occurrence `already_handled` rather than a second run,
+so an overlapping window costs nothing and a missed pass is caught up by the
+next one. The lookback is a CATCH-UP BOUND, not a schedule, and it can never
+exceed the evaluator's own window limit.
+
+THE LOOKBACK IS DERIVED FROM THE INTERVAL, not fixed. A window narrower than the
+gap between passes does not even OFFER that gap to the evaluator, so
+`schedulerLookbackMinutes` takes two intervals of headroom, floored at fifteen
+minutes and capped by the evaluator's own limit.
+
+THE WINDOW IS NOT THE THING THAT BOUNDS CATCH-UP, and an earlier version of this
+section said it was. Re-measured against the derived window: a per-minute
+schedule with a hundred occurrences due still produced FIFTY runs, exactly as
+before. `PARALLEL_LIMIT_PER_PASS` caps run creation at five per schedule per
+pass whatever the window holds — the window decides what is offered, that limit
+decides what is taken. A backlog therefore drains at five per pass and no
+faster, and the surplus is reported as `capacitySkipped` rather than implied by
+a smaller number. Widening the lookback alone does not make a long interval
+safe.
+
+IT IS BOUNDED THE OTHER WAY TOO, and the bound ROTATES. A pass ticks at most a
+stated number of schedules, because the bridge answers requests on the same
+event loop that walks them. The first version walked from the beginning every
+time, and since the store lists ids sorted, a deployment with more schedules
+than the cap ticked the same first ones forever and never reached the tail —
+reported as `skipped`, as though the next pass would take it. A pass now resumes
+after the last schedule it reached, so the cap DEFERS rather than starves, and
+the deferred ids are named in the report and in the log.
+
+A PASS IS ALSO BOUNDED BY THE RECORDS IT CREATED. Every overlap policy needs to
+know how many of a Loop's runs are executing, and answering that walks the
+Loop's run records and replays each journal. Nothing in this build advances a
+scheduled run and nothing prunes one, so that walk grows without limit on the
+event loop that answers `/health` — 115 ms at a hundred records, 390 ms at seven
+hundred, paid every pass whether or not anything was due. Two bounds close it:
+each Loop's count is read at most once per pass, and a Loop holding
+`MAX_RUN_RECORDS_PER_LOOP` (200) records is refused rather than grown — that
+constant counts EVERY run record in the Loop, including an operator's own, which
+is what its name says and what the cost actually follows. The
+residual worst case is arithmetic on the shipped constants — 25 distinct Loops
+at the ceiling ≈ 2.8 s of counting per pass — which is bounded and still past a
+health-check budget. A cheap index of executing runs is the real fix and is not
+built.
+
+**A LOOP AT THE CEILING STOPS RECURRING, AND STAYS STOPPED.** Nothing in this
+build reduces a run count: no run is advanced, none is pruned, and no route
+deletes one. This is a STOP, not a pause that clears itself, and it is reached
+in about three hours by a per-minute schedule and eight days by an hourly one.
+Because it is that severe, it is not reported as a number: the refusal carries
+`run_records_at_ceiling` by name and the deployment log says the schedules have
+stopped and will not resume on their own. **The remedy is to edit the schedule
+so it binds to a fresh Loop** — an edit appends a version, and the runs already
+created keep explaining themselves under the version they started with. That
+path is tested end to end rather than described.
+
+**AND THE REMEDY IS A TREADMILL, WHICH IS THE PART A READER WOULD NOT INFER.**
+The fresh Loop refills at exactly the same rate, so until a run record is
+prunable this is a RECURRING operator action every ~200 runs — every few hours
+for a per-minute schedule. It also gets slower each time: the edit route replays
+the journal of every run in every Loop the schedule has ever named, so each
+rebind makes the next edit more expensive. Nothing about the ceiling is a
+solution; it is a bound on a cost, bought with an operator's time.
+
+**IT REACHES NO SURFACE BUT THE DEPLOYMENT LOG.** A founder on the website
+cannot learn that a Cron Loop has permanently stopped — only someone reading
+Railway logs can. `cronScheduled` stays true and stays truthful, because it is a
+bridge-level fact and not a per-schedule one. Carrying per-schedule health onto
+a route is listed under *Not implemented* rather than left to be discovered.
+
+A REFUSAL IS A REASON, NOT A COUNT. Eight distinct causes used to arrive as one
+integer — a bad timezone, an unparseable expression, a vanished schedule, and a
+Loop that had permanently stopped were indistinguishable. Each refusal now
+carries `vanished_or_paused`, `no_version`, `zone_not_tickable`,
+`expression_unparseable`, `run_records_at_ceiling`, `unreadable_instant` or
+`evaluator_refused`, and a corrupt schedule is named separately from a paused
+one all the way to the log — a paused schedule is a choice and stays quiet, a
+corrupt one needs a human and does not.
+
+ONE PASS AT A TIME, for a RE-ENTRANT CALLER. A pass is fully synchronous, so a
+`setInterval` callback cannot begin while one is executing — Node fires the
+timer late instead. The guard therefore protects a host that calls `runOnce`
+from inside `onPass`, and it is stated that way rather than advertised as
+protection against an overrunning timer, which cannot happen in this shape.
+
+A REFUSED TICK IS NOT A TICK. The evaluator's refusals are the authority — an
+unresolvable zone, a window it will not accept — and such a schedule is
+reported as refused rather than counted as done.
+
+THE TIMER REFUSES WHAT THE OPERATOR TICK REFUSES. `relay-bridge/cron-tickability.ts`
+is the one gate both callers use. They disagreed at first, and review reproduced
+it: three schedules the endpoint answers 422 for — a fixed offset, a `SystemV/*`
+zone and a single-word IANA name — produced nine runs under the timer, at
+instants that drift an hour twice a year. Those are exactly the schedules this
+document tells an operator to edit or delete because they will not run.
+
+WHAT A PASS SAYS IT DID NOT DO. An occurrence durably claimed with no run behind
+it, an occurrence the overlap limit dropped, a truncated occurrence list, a
+truncated schedule listing, a deferred schedule and a caught failure each reach
+the log. The first version logged ticks, creations and refusals only, so a pass
+that deferred five schedules or claimed an occurrence without a run printed a
+line indistinguishable from a clean one — and a pass that threw printed nothing
+at all, which is what a healthy idle bridge prints.
+
+`GET /loop/capability` reports `cronScheduled` FROM THE SCHEDULER OBJECT, not
+from the flags. The flags are necessary and not sufficient: the timer also needs
+a mounted state root, and an absent volume is deliberately not fatal, so a
+bridge with both flags set and no volume boots, runs no timer, answers 503 on
+the tick — and used to tell every surface it was scheduled.
+
 ## Not implemented
 
-The in-bridge scheduler and its timer · execution of a trigger-created run
+Execution of a trigger-created run
 (the record is created; nothing advances it) · listing
 PAGINATION: the listing replays at most 200 schedules and reports `truncated`
-truthfully, but nothing can reach schedule 201, so with more than 200 stored
-an operator cannot learn whether the ones past the cap are paused or corrupt ·
+truthfully, but nothing can reach schedule 201, so with more than 200 stored an
+operator cannot learn whether the ones past the cap are paused or corrupt — and
+since the automatic pass reads the same listing, schedule 201 is not merely
+invisible, it never runs. The pass reports `listingTruncated` so the loss is at
+least stated · a durable per-schedule watermark (the pass rotation lives in
+memory, so a restart begins the walk at the first schedule again, and a bridge
+restarting more often than one full rotation never reaches its tail) ·
+PER-SCHEDULE HEALTH ON A ROUTE: a schedule stopped by the run-record ceiling is
+named in the deployment log and nowhere a surface can read, so the website
+cannot tell a founder that one of their Cron Loops has permanently stopped ·
+run-record PRUNING, whose absence is what makes that ceiling terminal and its
+remedy recurring · a cheap index of EXECUTING runs, whose absence is why the
+count is walked at all ·
 the occurrence queue,
 and therefore the `queue_one` and `queue_all` overlap policies · period budget-cap ENFORCEMENT (the
 decision exists; nothing observes spend-to-date to feed it) ·

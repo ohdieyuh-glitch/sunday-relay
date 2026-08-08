@@ -114,6 +114,16 @@ export interface CronTickService {
    *  implementation for why that distinction is load-bearing. */
   activeRunsFor(loopId: string): number;
   /**
+   * How many run records this Loop holds AT ALL, in whatever state.
+   *
+   * The cheap counterpart to `activeRunsFor`: one directory listing, with no
+   * journal replayed. It exists so a caller can bound the cost of the
+   * expensive count before paying it — nothing prunes a run record, and this
+   * build creates scheduled runs it never advances, so a Loop's directory only
+   * grows and `activeRunsFor` grows with it.
+   */
+  runCountFor(loopId: string): number;
+  /**
    * The runs of THIS SCHEDULE in this Loop, with the version each started
    * under, plus how many runs in the Loop could not be attributed at all.
    *
@@ -182,6 +192,9 @@ export function createCronTickService(options: {
    * NOT happen is someone widening this back to `loopRunIsActive` to "count
    * everything" — the exhaustion tests below pin the queued case.
    */
+  /** One directory listing, no journal replay. See the interface for why. */
+  const runCountFor = (loopId: string): number => store.runIdsForLoop(loopId)?.length ?? 0;
+
   const activeRunsFor = (loopId: string): number => {
     const runIds = store.runIdsForLoop(loopId);
     if (runIds === null) return 0;
@@ -305,6 +318,7 @@ export function createCronTickService(options: {
       return { ok: true, version: head?.version ?? 0, changed };
     },
     activeRunsFor,
+    runCountFor,
     scheduleRunsFor: (loopIds, scheduleId) => {
       const runs: VersionedRun[] = [];
       let unattributed = 0;

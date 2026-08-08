@@ -2,6 +2,7 @@ import { type ReviewerRouteResult } from './reviewer-routes';
 import { LOOP_ENGINE_ENV, loopEngineEnabled } from './loop-routes';
 import { safeText } from './redact';
 import { decodeSegment } from './path-segment';
+import { IANA_ZONE, refuseStoredZone } from './cron-tickability';
 import { isUsableScheduleId } from '../src/relay/persistence/cron-schedule-node';
 import { featureEffectivelyEnabled } from '../src/relay/mission/loop/loop-availability';
 import { parseCronExpression } from '../src/relay/mission/loop/cron';
@@ -688,7 +689,8 @@ const SERVABLE_OVERLAP = ['replace', 'parallel_with_limit'];
  * express daylight saving, so a schedule written with one silently drifts an
  * hour twice a year against the wall clock its author meant.
  */
-const IANA_ZONE = /^(UTC|[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)+)$/;
+// The pattern now lives beside the shared tickability gate, because the
+// in-bridge timer has to apply the same one to the same stored schedules.
 
 export async function handleCronRoute(
   request: CronRouteRequest,
@@ -869,7 +871,13 @@ export async function handleCronRoute(
 
   const timeZone = head.timeZone;
   const cronExpression = head.cronExpression;
-  if (!IANA_ZONE.test(timeZone)) {
+  // THE SHARED GATE. The decision is `refuseStoredZone`'s, so the in-bridge
+  // timer refuses exactly what this endpoint refuses — review found the two
+  // disagreeing, and a schedule an operator is told will not run was run by
+  // the timer anyway. The wording of each refusal stays here, where a human
+  // reads it.
+  const zoneRefusal = refuseStoredZone(timeZone, ticks);
+  if (zoneRefusal === 'not_iana_shaped') {
     return err(
       422, 'validation_failed',
       `"${safeText(timeZone)}" is not an Area/Location timezone name. A recurring schedule needs `
@@ -883,12 +891,9 @@ export async function handleCronRoute(
   // before creation learned to refuse these, or written straight into the
   // store, is refused HERE rather than drifting an hour twice a year under a
   // rule the same message claims to enforce.
-  // The `!== null` guard is deliberate HERE and not at creation: a stored zone
-  // nothing can resolve is left to the evaluator, whose `unknown_timezone` is
-  // the answer this endpoint has always given for it.
-  if (ticks.resolveZone(timeZone) !== null) {
-    const zoneRefusal = refuseZoneThatNamesNoPlace(ticks, timeZone);
-    if (zoneRefusal !== null) return zoneRefusal;
+  if (zoneRefusal !== null) {
+    const refusal = refuseZoneThatNamesNoPlace(ticks, timeZone);
+    if (refusal !== null) return refusal;
   }
 
   const parsed = parseCronExpression(cronExpression);

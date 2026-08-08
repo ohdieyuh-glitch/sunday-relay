@@ -71,3 +71,9 @@ export type {
   CronOccurrenceOutcome, CronRunCreationPort, CronTickInput,
   CronTickOccurrenceReport, CronTickReport,
 } from './cron-tick';
+
+export { planSchedulerPass } from './cron-scheduler-pass';
+export type {
+  PlannedTick, SchedulerCandidate, SchedulerPass, SchedulerPassInput, SchedulerPassResult,
+  SkippedSchedule,
+} from './cron-scheduler-pass';

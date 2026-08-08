@@ -3,6 +3,8 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LOOP_ENGINE_ENV, handleLoopRoute, loopEngineEnabled, type LoopRouteRequest } from './loop-routes';
+import { CRON_ENABLED_ENV } from './cron-routes';
+import { CRON_SCHEDULER_ENABLED_ENV } from './cron-scheduler';
 import { createLoopService, type LoopService } from './loop-service';
 import { createFakeLoopAgent, loopDigest, readLoopRun, type FakeLoopAgentStep } from '../src/relay/mission/loop/runtime';
 import { parseSlashCommand } from '../src/relay/mission/loop/loop-command-parser';
@@ -128,6 +130,50 @@ describe('the Loop engine flag is server-authoritative and defaults off', () => 
     // And it tells a surface what Stage 2 can actually execute.
     expect(data.multiRoleSupported).toBe(false);
     expect(data.supportedRoles).toEqual(['coding_agent']);
+  });
+
+  it('reports cronScheduled from the scheduler that exists, not from the flags', async () => {
+    const read = async (
+      env: NodeJS.ProcessEnv, cronSchedulerRunning?: boolean,
+    ): Promise<Record<string, unknown>> => {
+      const result = await handleLoopRoute({
+        method: 'GET', path: '/loop/capability', authorization: `Bearer ${TOKEN}`,
+        body: undefined, env, now: T0, cronSchedulerRunning,
+      }, service);
+      return (result?.body as { data: Record<string, unknown> }).data;
+    };
+
+    // The tick ENDPOINT existing is not a scheduler. Cron on, no timer built.
+    const endpointOnly = await read({ ...ENABLED, [CRON_ENABLED_ENV]: '1' }, false);
+    expect(endpointOnly.cronSupported).toBe(true);
+    expect(endpointOnly.cronScheduled).toBe(false);
+
+    // A scheduler that was actually constructed is the only thing that says yes.
+    const scheduled = await read({ ...ENABLED, [CRON_ENABLED_ENV]: '1' }, true);
+    expect(scheduled.cronScheduled).toBe(true);
+
+    // THE CASE REVIEW FOUND. Both flags set, but no state root mounted, so
+    // `main()` builds no scheduler — an absent volume is deliberately not
+    // fatal. The flags say yes and the deployment has no timer; the field must
+    // follow the timer, because its whole purpose is to be believed without
+    // checking the deployment.
+    const flagsWithoutVolume = await read({
+      ...ENABLED, [CRON_ENABLED_ENV]: '1', [CRON_SCHEDULER_ENABLED_ENV]: '1',
+    }, false);
+    expect(flagsWithoutVolume.cronSupported).toBe(true);
+    expect(flagsWithoutVolume.cronScheduled).toBe(false);
+
+    // A host that never says anything gets the safe answer.
+    const unstated = await read({ ...ENABLED, [CRON_ENABLED_ENV]: '1' });
+    expect(unstated.cronScheduled).toBe(false);
+
+    // AND cronScheduled STILL IMPLIES cronSupported. The two are read at
+    // different moments — this one from the env now, the other from a
+    // scheduler built at boot — so without conjoining them a surface could be
+    // told "nothing may tick, and something ticks on a schedule".
+    const timerWithoutCron = await read({ ...ENABLED }, true);
+    expect(timerWithoutCron.cronSupported).toBe(false);
+    expect(timerWithoutCron.cronScheduled).toBe(false);
   });
 });
 

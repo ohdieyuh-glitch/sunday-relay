@@ -346,13 +346,24 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     // what is STILL missing — the persistence adapter and dispatch — not
     // merely celebrate what exists, so the assertion pins the remaining gap.
     expect(statusLine(cron)).toContain('DECISIONS');
-    // SUPERSEDED repeatedly through 2026-08-06 as each pure stage landed.
-    // The pinned phrase must keep naming what is MISSING, and review caught
-    // it narrowing to "bridge wiring" while there was still no scheduler and
-    // no timer at all — the softening this test's own header forbids.
-    expect(statusLine(cron)).toContain('NO SCHEDULER');
-    expect(statusLine(cron)).toContain('NO TIMER');
-    expect(statusLine(cron)).toContain('NEVER DISPATCHED');
+    // SUPERSEDED repeatedly through 2026-08-06 as each pure stage landed, and
+    // again on 2026-08-08 when the in-bridge scheduler landed. 'NO SCHEDULER'
+    // and 'NO TIMER' were retired because they became FALSE — there is now a
+    // timer — and a pin that is false is not a guard, it is a lie the suite
+    // enforces. What replaces them must still name what is MISSING, which is
+    // dispatch, and must survive the scheduler being switched on.
+    //
+    // ONE CONTIGUOUS CLAIM, for the reason the Unchain pin above records: a
+    // status rewritten to claim dispatch works cannot satisfy this phrase,
+    // whereas scattered fragments ('NEVER', 'DISPATCHED') could.
+    expect(statusLine(cron)).toContain('DECISIONS');
+    expect(statusLine(cron)).toContain(
+      'A SCHEDULED RUN IS CREATED AND NEVER DISPATCHED, WHETHER AN OPERATOR OR THE TIMER ASKED',
+    );
+    // The timer exists, so the honest remaining limit is that nobody gets one
+    // they did not switch on. A status that quietly dropped this would be
+    // describing a background process the operator never chose.
+    expect(statusLine(cron)).toContain('AN IN-BRIDGE SCHEDULER THAT IS OFF BY DEFAULT');
   });
 
   it('the Unchain record carries the locked founder decisions', () => {
