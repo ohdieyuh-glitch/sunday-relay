@@ -212,7 +212,7 @@ describe('a record is all-or-nothing and durable before it is visible', () => {
     expect(files.some((f) => f.includes('.tmp'))).toBe(false);
   });
 
-  it.skipIf(process.getuid?.() === 0)('a FAILED write is reported as failed and leaves nothing enrolled', () => {
+  it('a FAILED write is reported as failed and leaves nothing enrolled', () => {
     // The mutant that survived every earlier test: a non-EEXIST failure
     // announced as `created`. A read-only wave directory is the realistic
     // Railway shape — a full or read-only volume.
@@ -221,13 +221,26 @@ describe('a record is all-or-nothing and durable before it is visible', () => {
     chmodSync(dir, 0o500);
     try {
       const result = store.enrol('alice', 'wave_0', T);
-      // ASSERTED UNCONDITIONALLY. The earlier `if (result.ok) return;` was an
-      // escape hatch for running as root that a LYING implementation also
-      // satisfied — the mutant reporting a failed write as `created` exited
-      // this test green. Root is skipped at the `it`, so the assertion here
-      // can only pass by being true.
-      expect(result.ok).toBe(false);
-      expect(store.list('wave_0')).toEqual([]);
+      /**
+       * BOTH BRANCHES ASSERT, which is this repository's rule and a better one
+       * than mine. `if (result.ok) return;` was an escape hatch for running as
+       * root that a LYING implementation satisfied identically — the mutant
+       * reporting a failed write as `created` exited green. `it.skipIf` fixed
+       * that and introduced a worse problem: a skipped test reports as
+       * "nothing to see", which `ci-test-accounting` forbids for exactly that
+       * reason.
+       *
+       * So: as root the write SUCCEEDS (root ignores the mode) and the record
+       * must be real; as anyone else it must fail and enrol nobody. Neither
+       * branch is silent, and a lying implementation fails one of them.
+       */
+      if (process.getuid?.() === 0) {
+        expect(result.ok).toBe(true);
+        expect((store.list('wave_0') ?? []).map((e) => e.participantId)).toEqual(['alice']);
+      } else {
+        expect(result.ok).toBe(false);
+        expect(store.list('wave_0')).toEqual([]);
+      }
     } finally {
       chmodSync(dir, 0o700);
     }
@@ -250,10 +263,13 @@ describe('neither enrol nor list throws where the contract says it refuses', () 
     expect(() => store.enrol('other', 'wave_0', T)).not.toThrow();
   });
 
-  it.skipIf(process.getuid?.() === 0)('a read-only volume refuses rather than throwing out of the Result type', () => {
+  it('a read-only volume refuses rather than throwing out of the Result type', () => {
     chmodSync(root, 0o500);
     try {
-      expect(store.enrol('alice', 'wave_0', T).ok).toBe(false);
+      // Both branches assert: the point is that it RETURNS either way rather
+      // than throwing out of a Result type, and root genuinely may write.
+      const result = store.enrol('alice', 'wave_0', T);
+      expect(result.ok).toBe(process.getuid?.() === 0);
     } finally {
       chmodSync(root, 0o700);
     }
