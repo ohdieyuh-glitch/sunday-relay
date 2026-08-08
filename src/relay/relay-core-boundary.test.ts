@@ -882,22 +882,32 @@ describe('Claude Code adapter boundaries (Prompt 8)', () => {
     ];
     // COMMENT MARKERS COME OUT FIRST. Collapsing whitespace alone only defeats
     // wrapping in prose: inside `//` and `/** */` a wrap inserts a marker, so
-    // "in\n * flight" normalises to "in * flight" and slips through — and
-    // three of these five files carry every occurrence inside a comment, which
-    // is to say the first version of this check could not see the very form
-    // that defeated the greps before it.
+    // "in\n * flight" normalises to "in * flight" and slips through. Both
+    // files that carry an occurrence carry it inside a comment, which is to say
+    // the first version of this check could not see the form that defeated the
+    // greps before it — and the moment it could, it found one nobody had named.
+    //
+    // The separator is `[-\s]*` because the phrase is spelled BOTH ways: a
+    // wrap at the hyphen of "in-flight" leaves "in- flight", which a
+    // single-separator pattern misses, and that is the likeliest wrap of all.
     const flatten = (text: string): string =>
-      text.replace(/\s*(?:\/\/+|\*+)\s*/gu, ' ').replace(/\s+/gu, ' ');
+      text.replace(/\s*(?:\/\/+|\*+|>+)\s*/gu, ' ').replace(/\s+/gu, ' ');
     // The two deliberate survivors: the contrast itself, and `activeRunsFor`,
     // which is about runs that really are executing.
     const ALLOWED = [/NOT "in flight"/, /may run BESIDE work in flight/];
     for (const file of describing) {
       const flat = flatten(read(file));
-      for (const match of flat.matchAll(/in[- ]flight/giu)) {
-        // ADJACENT, not anywhere in the sentence. A chunk-scoped allowance let
-        // a bad phrasing pass by sharing a sentence with the contrast — and
-        // that sentence is the most-reworked one in the rule.
-        const window = flat.slice(Math.max(0, match.index - 60), match.index + 60);
+      for (const match of flat.matchAll(/\bin[-\s]*flight\b/giu)) {
+        // ADJACENT AND WITHIN THE SENTENCE — both bounds matter. A chunk-scoped
+        // allowance let a bad phrasing pass by sharing a sentence with the
+        // contrast; a fixed window alone would be WIDER than a short sentence
+        // and exempt the one next to it, which is a loosening rather than the
+        // tightening it looks like. Clamped at the nearest full stop on each
+        // side, so the allowance can never reach past the sentence it is in.
+        const from = Math.max(flat.lastIndexOf('.', match.index) + 1, match.index - 80);
+        const stop = flat.indexOf('.', match.index);
+        const to = Math.min(stop === -1 ? flat.length : stop, match.index + 80);
+        const window = flat.slice(from, Math.max(to, match.index + match[0].length));
         expect(
           ALLOWED.some((allowed) => allowed.test(window)),
           `${file.slice(root.length + 1)} calls a schedule's unfinished runs "in flight": ${window.trim().slice(0, 140)}`,
