@@ -295,7 +295,6 @@ describe('a pass is bounded in the direction that costs', () => {
       if (report.refused.some((r) => r.scheduleId === 'sched-a')) refusedAt = pass;
       minutes += 120; // two more hourly occurrences become due each pass
     }
-    s.stop();
     // It must refuse rather than grow forever, and the backlog must be bounded.
     expect(refusedAt).not.toBeNull();
     const backlog = (movingService.store.runIdsForLoop('lpe_cron') ?? []).length;
@@ -304,8 +303,11 @@ describe('a pass is bounded in the direction that costs', () => {
 
     // And it STAYS refused rather than resuming once more time passes: the
     // backlog is what bounds it, and nothing in this build reduces one.
+    // (Before `stop()` — a stopped scheduler refuses everything, which would
+    // pass this assertion for the wrong reason.)
     minutes += 10_000;
     const later = s.runOnce();
+    s.stop();
     // AND IT SAYS WHY, by name. This refusal is terminal — nothing in this
     // build reduces a run count — so reporting it as an anonymous id in a
     // count would be an automation that stopped forever and said a number.
@@ -405,6 +407,18 @@ describe('a pass says what it did not do', () => {
     // A paused schedule is a CHOICE, and stays quiet.
     expect(report.corrupt).not.toContain('p1');
     expect(report.skipped).toBe(3);
+  });
+
+  it('a stopped scheduler writes nothing, even when asked directly', () => {
+    // `isRunning()` answering false while `runOnce()` still claimed occurrences
+    // and wrote durable records was an object contradicting itself.
+    expect(service.schedules.create('sched-a', STORED).ok).toBe(true);
+    const s = scheduler();
+    s.stop();
+    const report = s.runOnce();
+    expect(report.refusal).toBe('stopped');
+    expect(report.runsCreated).toBe(0);
+    expect(service.store.runIdsForLoop('lpe_cron') ?? []).toHaveLength(0);
   });
 
   it('stops claiming a live scheduler the moment the timer is stopped', () => {

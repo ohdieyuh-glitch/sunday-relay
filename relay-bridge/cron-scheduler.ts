@@ -232,6 +232,16 @@ export function createCronScheduler(options: {
     // same channel as every other path. The re-entrant caller receives the
     // refusal as the return value, where it asked for it.
     if (running) return empty(at, 'pass_in_flight');
+    /**
+     * A STOPPED SCHEDULER DOES NOT TICK, ON DEMAND EITHER.
+     *
+     * `isRunning()` answering false while `runOnce()` still claimed occurrences
+     * and wrote durable run records was an object contradicting itself. No
+     * caller in the deployment does this — `main()` never calls `runOnce`, and
+     * `stop()` happens only during shutdown — but "the timer will not fire" and
+     * "this will not write" should not be two separate promises.
+     */
+    if (stopped) return empty(at, 'stopped');
     running = true;
     try {
       const listing = options.ticks.listSchedules();

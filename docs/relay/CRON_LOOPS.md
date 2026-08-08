@@ -582,7 +582,22 @@ Because it is that severe, it is not reported as a number: the refusal carries
 `run_records_at_ceiling` by name and the deployment log says the schedules have
 stopped and will not resume on their own. **The remedy is to edit the schedule
 so it binds to a fresh Loop** — an edit appends a version, and the runs already
-created keep explaining themselves under the version they started with.
+created keep explaining themselves under the version they started with. That
+path is tested end to end rather than described.
+
+**AND THE REMEDY IS A TREADMILL, WHICH IS THE PART A READER WOULD NOT INFER.**
+The fresh Loop refills at exactly the same rate, so until a run record is
+prunable this is a RECURRING operator action every ~200 runs — every few hours
+for a per-minute schedule. It also gets slower each time: the edit route replays
+the journal of every run in every Loop the schedule has ever named, so each
+rebind makes the next edit more expensive. Nothing about the ceiling is a
+solution; it is a bound on a cost, bought with an operator's time.
+
+**IT REACHES NO SURFACE BUT THE DEPLOYMENT LOG.** A founder on the website
+cannot learn that a Cron Loop has permanently stopped — only someone reading
+Railway logs can. `cronScheduled` stays true and stays truthful, because it is a
+bridge-level fact and not a per-schedule one. Carrying per-schedule health onto
+a route is listed under *Not implemented* rather than left to be discovered.
 
 A REFUSAL IS A REASON, NOT A COUNT. Eight distinct causes used to arrive as one
 integer — a bad timezone, an unparseable expression, a vanished schedule, and a
@@ -634,7 +649,14 @@ operator cannot learn whether the ones past the cap are paused or corrupt — an
 since the automatic pass reads the same listing, schedule 201 is not merely
 invisible, it never runs. The pass reports `listingTruncated` so the loss is at
 least stated · a durable per-schedule watermark (the pass rotation lives in
-memory, so a restart begins the walk at the first schedule again) ·
+memory, so a restart begins the walk at the first schedule again, and a bridge
+restarting more often than one full rotation never reaches its tail) ·
+PER-SCHEDULE HEALTH ON A ROUTE: a schedule stopped by the run-record ceiling is
+named in the deployment log and nowhere a surface can read, so the website
+cannot tell a founder that one of their Cron Loops has permanently stopped ·
+run-record PRUNING, whose absence is what makes that ceiling terminal and its
+remedy recurring · a cheap index of EXECUTING runs, whose absence is why the
+count is walked at all ·
 the occurrence queue,
 and therefore the `queue_one` and `queue_all` overlap policies · period budget-cap ENFORCEMENT (the
 decision exists; nothing observes spend-to-date to feed it) ·
