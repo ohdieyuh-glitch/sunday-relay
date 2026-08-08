@@ -235,14 +235,24 @@ export async function handleBetaRoute(
     const participantId = readParticipantId(request.body);
     if (participantId === null) return err(422, 'validation_failed', 'A participantId is required.');
 
+    /**
+     * THE DIAGNOSTIC ROUTE MUST NOT BE THE ONE THAT LIES. The guard was
+     * repaired to refuse on an unreadable list; this re-coerced `null` to `[]`
+     * and so answered `not_enrolled` for an enrolled participant — on exactly
+     * the surface an operator uses to ask "why was this person refused?".
+     */
+    const lists = RELAY_BETA_WAVES.map((w) => store.list(w));
+    if (lists.some((l) => l === null)) {
+      return err(503, 'beta_not_ready',
+        'Relay cannot read its beta records, so it will not decide admission against them.');
+    }
+
     const decision = decideBetaAccess({
       participantId,
       // BOTH from the store, and deliberately by two different reads: the list
       // orders the queue, the count proves the list is complete. Deriving one
       // from the other would make the cap unenforceable.
-      // A wave we cannot read is refused by the gate rather than read as
-      // empty — `list` answers `null`, never `[]`, for an unreadable directory.
-      enrollments: RELAY_BETA_WAVES.flatMap((w) => store.list(w) ?? []),
+      enrollments: lists.flatMap((l) => l ?? []),
       waves: request.waves,
       // `countFor` may answer `null` — a directory it could not read. That
       // flows straight through to the gate, which refuses `occupancy_unknown`

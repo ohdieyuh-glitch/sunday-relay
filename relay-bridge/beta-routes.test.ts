@@ -372,3 +372,39 @@ describe('an operator can turn away a caller they know is hostile', () => {
     expect((await call('POST', '/beta/request', { body: { participantId: 'm' } }))?.status).toBe(200);
   });
 });
+
+describe('the route CONSULTS the limiter — wiring, not just the unit', () => {
+  it('refuses when the limiter refuses, and records nothing', async () => {
+    // THREE CONTROLS IN THIS FEATURE SHIPPED WITH THEIR TOP-LEVEL WIRING
+    // MISSING: `store.remove` with no caller, `participantId` with no host,
+    // and the limiter's own call site unpinned. Mutation showed "the route
+    // never applies the rate limit" passing every test. This is the cheapest
+    // way to stop the fourth.
+    const refusing = { check: () => ({ allowed: false, limit: 'per_key' as const, retryAfterSeconds: 42 }) };
+    const result = await call('POST', '/beta/request', {
+      body: { participantId: 'alice' },
+      rateLimit: { limiter: refusing, clientKey: '1.2.3.4', nowMs: 0 },
+    });
+    expect(result?.status).toBe(429);
+    const error = (result?.body as { error: { kind: string; retryAfterSeconds: number } }).error;
+    expect(error.kind).toBe('rate_limited');
+    expect(error.retryAfterSeconds).toBe(42);
+    // Refused before any volume write.
+    expect(store.countFor('wave_0')).toBe(0);
+  });
+
+  it('passes the claimed client key through, so the limiter can tell callers apart', async () => {
+    const seen: string[] = [];
+    const spy = {
+      check: (key: string) => {
+        seen.push(key);
+        return { allowed: true, limit: null, retryAfterSeconds: 0 };
+      },
+    };
+    await call('POST', '/beta/request', {
+      body: { participantId: 'alice' },
+      rateLimit: { limiter: spy, clientKey: '9.9.9.9', nowMs: 0 },
+    });
+    expect(seen).toEqual(['9.9.9.9']);
+  });
+});

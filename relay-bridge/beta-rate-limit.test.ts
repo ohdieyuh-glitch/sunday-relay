@@ -121,3 +121,29 @@ describe('the client key is the platform\'s word, and bounded', () => {
     expect(key.length).toBeLessThanOrEqual(64);
   });
 });
+
+describe('one machine cannot deny signup to everyone else', () => {
+  it('reserves the tail of the global window for callers who have barely used it', () => {
+    // Measured before the reserve: attacker allowed 600 over ten minutes,
+    // honest callers allowed ZERO. The global bucket had no fairness at all.
+    const limiter = createBetaRateLimiter({ perKey: 5, global: 10, windowMs: 60_000, maxTrackedKeys: 100 });
+    // One machine paces the whole global budget.
+    let attacker = 0;
+    for (let i = 0; i < 20; i += 1) {
+      if (limiter.check('attacker', T0 + i).allowed) attacker += 1;
+    }
+    // An honest first-time caller still gets in.
+    expect(limiter.check('honest', T0 + 100).allowed).toBe(true);
+    expect(attacker).toBeLessThan(10);
+  });
+});
+
+describe('a backwards clock does not freeze the window', () => {
+  it('an NTP step back reopens the window instead of refusing everyone for an hour', () => {
+    const limiter = createBetaRateLimiter({ perKey: 100, global: 1, windowMs: 60_000, maxTrackedKeys: 100 });
+    expect(limiter.check('a', T0).allowed).toBe(true);
+    expect(limiter.check('a', T0).allowed).toBe(false);
+    // Clock steps back an hour — routine in a container.
+    expect(limiter.check('a', T0 - 3_600_000).allowed).toBe(true);
+  });
+});

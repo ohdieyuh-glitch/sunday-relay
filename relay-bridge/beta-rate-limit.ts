@@ -68,6 +68,12 @@ export const BETA_RATE_LIMIT: RateLimitConfig = Object.freeze({
   maxTrackedKeys: 10_000,
 });
 
+/**
+ * How many requests one key may have made before the global reserve applies.
+ * Two, so a human retrying a form is never the caller that gets squeezed.
+ */
+const RESERVE_AFTER_PER_KEY = 2;
+
 export function createBetaRateLimiter(
   config: RateLimitConfig = BETA_RATE_LIMIT,
 ): BetaRateLimiter {
@@ -82,7 +88,11 @@ export function createBetaRateLimiter(
   return {
     check(key, nowMs) {
       // THE GLOBAL WINDOW FIRST, because it is the one a lie cannot get past.
-      if (nowMs - globalStart >= config.windowMs) {
+      // `nowMs < globalStart` catches a BACKWARDS CLOCK STEP, which is routine
+      // in containers: without it, an NTP correction after the window was spent
+      // froze the window and answered 429 to everyone until the clock caught
+      // up — for an hour, in the measured case.
+      if (nowMs - globalStart >= config.windowMs || nowMs < globalStart) {
         globalStart = nowMs;
         globalCount = 0;
       }
@@ -92,8 +102,29 @@ export function createBetaRateLimiter(
 
       const held = perKey.get(key);
       const window = held !== undefined && nowMs - held.start < config.windowMs
+        && nowMs >= held.start
         ? held
         : { start: nowMs, count: 0 };
+
+      /**
+       * A RESERVE, SO ONE MACHINE CANNOT DENY SIGNUP TO EVERYONE.
+       *
+       * The global bucket has no per-key fairness, so a caller pacing at the
+       * global rate consumed all of it forever: review measured the attacker
+       * allowed 600 over ten minutes and honest callers allowed ZERO. Once the
+       * global window is mostly spent, the remainder is reserved for keys that
+       * have barely used it — a first request still gets through while a key
+       * already holding several is asked to wait.
+       *
+       * It is a mitigation, not a fix: the same caller rotating
+       * `x-forwarded-for` looks like many first-time keys. It raises the cost
+       * from "one machine, one header" to "many distinct claimed clients", and
+       * the blocklist is what an operator uses once they know who that is.
+       */
+      const globalMostlySpent = globalCount >= Math.floor(config.global * 0.8);
+      if (globalMostlySpent && window.count >= RESERVE_AFTER_PER_KEY) {
+        return { allowed: false, limit: 'global', retryAfterSeconds: retryIn(globalStart, nowMs) };
+      }
 
       if (window.count >= config.perKey) {
         // A refused request does NOT extend the window. Otherwise a caller who

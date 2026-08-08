@@ -207,8 +207,8 @@ rather than showing them merely closed.
 
 `relay-bridge/beta-guard.ts`, called from `POST /relay-api/mission/start`.
 
-**That is where it bites, and only there**, because that is the operation a
-controlled beta exists to control: `registry.start` runs the real three-role
+**It bites on `POST /mission/start` and `POST /mission/<id>/retry`**, because
+both run the operation a controlled beta exists to control: `registry.start` runs the real three-role
 pipeline — Prompt Architect, Coding Agent, independent Reviewer — and spends
 real money. Gating the API in general would be a different product.
 
@@ -286,14 +286,30 @@ claim otherwise.
 
 ## What a client must send
 
-`participantId`, on `POST /mission/start` and `/mission/<id>/retry`.
+`participantId`, on `POST /mission/start` and `/mission/<id>/retry`, supplied by
+the host as `VITE_RELAY_PARTICIPANT_ID`.
 
 Without it, **turning the beta on would not restrict the beta — it would turn
 mission start off.** The guard shipped for one commit with no client able to
 satisfy it, so every mission start from the website, the founder's included,
 would have been refused `403` the instant the flag was set. `StartMissionRequest`
-carries it optionally and `live-adapter.ts` sends it when the host supplies one;
-a bridge with the beta off never reads it.
+carries it optionally, `live-adapter.ts` sends it on **both** routes, and
+`store.ts` supplies it from the environment. Adding the field without a host to
+supply it left the flag just as fatal — review proved that against a running
+bridge — and `retryMission` sent no body at all, so it could never have carried
+one. That was the third control in this feature whose top-level wiring was
+missing, after `store.remove` and the limiter's own call site; a test now pins
+that the route consults the limiter.
+
+**The named participant is a CLAIM, not an authenticated identity.** What makes
+that acceptable for Wave 0: `/mission/start`, `/cancel` and `/retry` are already
+operator-only — a browser session cannot call them — so the only principal who
+reaches the guard is the operator, and anyone able to spoof a participant would
+already hold the operator token. The guard is operator-side bookkeeping ("do not
+spend money without naming an admitted participant"), not an authentication
+boundary. It satisfies "no anonymous execution" in the sense that every run
+names someone. **An admitted participant has no participant-facing execution
+path**; the operator acts for them.
 
 Retry is guarded for the same reason `start` is: it re-drives the same
 three-role pipeline, so a mission begun while the beta was off could otherwise
@@ -326,3 +342,21 @@ gate.
 must not answer "not blocked" — that is the same uncountable-reads-as-empty
 defect as the seat count, and here it would let through precisely the caller an
 operator went out of their way to stop.
+
+## The limits are mitigations, and the document says which
+
+The global bucket had **no per-key fairness**: one machine pacing at the global
+rate consumed all of it forever, and review measured the attacker allowed 600
+requests over ten minutes while honest callers were allowed **zero**. A reserve
+now keeps the tail of each global window for keys that have barely used it, so a
+first-time caller still gets through.
+
+That is a mitigation. The same caller rotating `x-forwarded-for` looks like many
+first-time keys; it raises the cost from "one machine, one header" to "many
+distinct claimed clients", and the **blocklist** is what an operator reaches for
+once they know who that is. At the shipped settings, filling 100 seats went from
+671 ms to at least 100 seconds — slower, not impossible.
+
+A backwards clock step no longer freezes a window. Without that check an NTP
+correction after the window was spent answered `429` to everyone until the clock
+caught up — an hour, in the measured case.

@@ -139,7 +139,17 @@ export function createLiveRelayApplicationAdapter(config: {
     },
 
     retryMission({ mission }: { mission: RelayMission }) {
-      return call(`/mission/${encodeURIComponent(mission.id)}/retry`, { method: 'POST' });
+      // RETRY CARRIES THE PARTICIPANT TOO. It sent no body at all, so it could
+      // never satisfy the guard even once a host supplied a value — and retry
+      // re-drives the same paid pipeline, so it is guarded for the same reason
+      // start is.
+      return call(`/mission/${encodeURIComponent(mission.id)}/retry`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(
+          config.participantId === undefined ? {} : { participantId: config.participantId },
+        ),
+      });
     },
   };
 }

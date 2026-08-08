@@ -576,10 +576,28 @@ let appStore: RelayAppStore | null = null;
     or an explicit `VITE_RELAY_BRIDGE_URL`. No provider key is ever read here. */
 function selectAdapter(): RelayApplicationAdapter {
   const env = (typeof import.meta !== 'undefined' ? import.meta.env : undefined) as
-    | { VITE_RELAY_LIVE?: string; VITE_RELAY_BRIDGE_URL?: string }
+    | { VITE_RELAY_LIVE?: string; VITE_RELAY_BRIDGE_URL?: string; VITE_RELAY_PARTICIPANT_ID?: string }
     | undefined;
   if (env?.VITE_RELAY_LIVE === '1') {
-    return createLiveRelayApplicationAdapter({ bridgeBaseUrl: env.VITE_RELAY_BRIDGE_URL || undefined });
+    /**
+     * THE HOST SUPPLIES THE PARTICIPANT, or the controlled beta cannot be
+     * turned on at all.
+     *
+     * Review proved against a running bridge that the type and the adapter
+     * gained the ABILITY to carry `participantId` while no host supplied the
+     * value — so with `RELAY_BETA_ENABLED=1` every mission start from the
+     * website returned 403, the founder's included. The flag would not have
+     * restricted the beta; it would have turned Relay off. That is the third
+     * control in this feature whose top-level wiring was missing.
+     *
+     * Absent stays absent: a bridge with the beta off never reads it, and a
+     * bridge with the beta on refuses honestly rather than running work for a
+     * browser that has not been told who it is.
+     */
+    return createLiveRelayApplicationAdapter({
+      bridgeBaseUrl: env.VITE_RELAY_BRIDGE_URL || undefined,
+      participantId: env.VITE_RELAY_PARTICIPANT_ID || undefined,
+    });
   }
   return createDemoRelayApplicationAdapter();
 }
