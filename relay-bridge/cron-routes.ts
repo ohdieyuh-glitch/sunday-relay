@@ -122,7 +122,7 @@ export interface CronTickPort {
   setSchedulePaused(
     scheduleId: string, paused: boolean, at: string,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
-  scheduleRunsFor(loopId: string, scheduleId: string): {
+  scheduleRunsFor(loopIds: readonly string[], scheduleId: string): {
     readonly runs: readonly VersionedRun[];
     readonly unattributed: number;
   };
@@ -428,30 +428,28 @@ function editSchedule(
   // WHAT CANNOT BE ATTRIBUTED IS COUNTED, not dropped: a schedule-created run
   // written before runs recorded their schedule carries `null`, and calling
   // those "not ours" would report a clean in-flight list over runs that may be.
-  const head = [...inspected.record.history]
-    .sort((a, b) => a.version - b.version)[inspected.record.history.length - 1] as
-    (typeof inspected.record.history)[number];
-  const scheduleRuns = ticks.scheduleRunsFor(head.loopId, scheduleId);
+  // EVERY LOOP THE SCHEDULE HAS NAMED, not just the one its head names. A
+  // rebinding is an edit like any other, so runs made before one live in the
+  // Loop that version named; scanning only the head's made them invisible in
+  // both outputs.
+  const scheduleRuns = ticks.scheduleRunsFor(
+    inspected.record.history.map((v) => v.loopId), scheduleId,
+  );
 
-  // LEGACY NOTE, kept because the reason the list was once empty matters:
+  // WHY THE LIST IS THIS ONE, since it has been three different lists.
   //
   // `planScheduleEdit` uses it for two things. Refusing an edit that would
   // ORPHAN a run is inert here: an append only grows the set of known versions,
   // so nothing explainable before the edit is unexplainable after it. Reporting
-  // the runs the change must not disturb is a real feature, and this route does
-  // not claim it.
+  // the runs a change must not disturb is the half that matters, and it needs
+  // those runs to be THIS schedule's.
   //
-  // What is NOT available cheaply is the right list. A run record names the
-  // LOOP it belongs to, not the schedule that created it — and two schedules
-  // may bind one Loop, so the Loop-wide list reports another schedule's runs as
-  // this one's. Review measured the cost: those runs cite versions this history
-  // lacks, so every future edit is refused as orphaning and the schedule can
-  // never be corrected again.
-  //
-  // The attribution DOES exist on disk — each claim marker stores the whole
-  // occurrence, which carries its `scheduleId` — so this is a walk nobody has
-  // written, not a fact nobody can know. Until it is written, claiming nothing
-  // is the honest answer. Named in CRON_LOOPS.md under "Not implemented".
+  // The Loop-wide list was wrong in both directions — two schedules may bind
+  // one Loop, so it reported another schedule's runs as this one's, and once
+  // that schedule moved to a new version its runs cited a version this history
+  // lacked and every future edit was refused as orphaning. Passing none was
+  // honest but silent. A run names its schedule now, so the list is exact and
+  // what cannot be attributed is counted rather than dropped.
   const { scheduleId: _id, ...contract } = proposed;
   const edited = ticks.editSchedule(
     scheduleId, { ...contract, authoredAt: request.now }, scheduleRuns.runs,
@@ -465,14 +463,21 @@ function editSchedule(
     // version nobody can review. Diffed from the history the store returned, so
     // it describes the version that actually landed.
     changed: edited.changed,
-    // The runs of this schedule still in flight, which keep the version they
-    // started under — and how many runs in this Loop could not be attributed to
-    // any schedule, which is Unknown and reported as such.
-    activeRunsUndisturbed: scheduleRuns.runs.filter((r) => r.active).map((r) => r.runId),
-    unattributedRunsInLoop: scheduleRuns.unattributed,
+    // THIS SCHEDULE'S UNFINISHED RUNS, which keep the version they started
+    // under. NOT "in flight": nothing in this build advances a scheduled run,
+    // so every one of these is `queued` and has never executed. `activeRunsFor`
+    // twenty lines away deliberately excludes `queued` for that reason, and one
+    // file using the same word for two different things is how the next reader
+    // learns the wrong one.
+    unfinishedRunsUndisturbed: scheduleRuns.runs.filter((r) => r.active).map((r) => r.runId),
+    // Runs in those Loops that could not be attributed to any schedule.
+    // Unknown, reported as Unknown.
+    unattributedRuns: scheduleRuns.unattributed,
     note: 'The edit appended a version. Every earlier version is kept, and a run created under one '
       + 'still resolves to the version it started under. A tick window is clamped to this '
-      + 'authoring instant, so the new version owns no moment that predates it.',
+      + 'authoring instant, so the new version owns no moment that predates it. The unfinished '
+      + 'runs named here are queued and have never executed: nothing in this build advances a '
+      + 'scheduled run.',
   });
 }
 

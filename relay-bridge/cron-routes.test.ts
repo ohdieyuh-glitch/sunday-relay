@@ -878,8 +878,40 @@ describe('an operator can create, list and pause a schedule', () => {
     // records the schedule that created it now, so the list is this schedule's
     // — previously the only list available was every run in the Loop, which
     // both misreported them and refused every future edit as orphaning.
-    expect(dataOf(edited).activeRunsUndisturbed).toEqual([]);
-    expect(dataOf(edited).unattributedRunsInLoop).toBe(0);
+    expect(dataOf(edited).unfinishedRunsUndisturbed).toEqual([]);
+    expect(dataOf(edited).unattributedRuns).toBe(0);
+  });
+
+  it('still sees its own runs after a REBINDING moved it to another Loop', async () => {
+    // `loopId` is a versioned field and rebinding is a supported edit, so runs
+    // made before one live in the Loop that version named. Scanning only the
+    // head's Loop made them vanish from both outputs — a clean in-flight list
+    // over this schedule's own unfinished work.
+    const ticked = await call();
+    expect(dataOf(ticked).runsCreated).toBe(3);
+
+    const rebound = await call(
+      {
+        ...CREATE,
+        scheduleId: 'sched-triage',
+        binding: { projectId: 'prj_cron', workspaceId: null, loopId: 'lpe_moved' },
+      },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(rebound?.status).toBe(200);
+    expect(dataOf(rebound).changed).toContain('loopId');
+    // The three runs are in lpe_cron, which the schedule no longer points at.
+    expect((dataOf(rebound).unfinishedRunsUndisturbed as string[])).toHaveLength(3);
+
+    // A SECOND edit still sees them, because the scan covers every Loop the
+    // history names, not only the current one.
+    const again = await call(
+      { ...CREATE, scheduleId: 'sched-triage', cronExpression: '*/15 * * * *',
+        binding: { projectId: 'prj_cron', workspaceId: null, loopId: 'lpe_moved' } },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(again?.status).toBe(200);
+    expect((dataOf(again).unfinishedRunsUndisturbed as string[])).toHaveLength(3);
   });
 
   it('counts a run that names NO schedule as unknown, never as another schedule\'s absence', async () => {
@@ -946,13 +978,72 @@ describe('an operator can create, list and pause a schedule', () => {
       { path: '/cron/schedules/sched-triage/edit' },
     );
     expect(edited?.status).toBe(200);
-    expect(dataOf(edited).unattributedRunsInLoop).toBe(1);
+    expect(dataOf(edited).unattributedRuns).toBe(1);
     // …and it is NOT silently listed as this schedule's in-flight work.
-    expect(dataOf(edited).activeRunsUndisturbed).toEqual([]);
+    expect(dataOf(edited).unfinishedRunsUndisturbed).toEqual([]);
+  });
+
+  it('counts a record that never got its identity, at sequence ONE', async () => {
+    // THE DEFECT THIS PINS. `confirmLoopRun` writes the record, then
+    // `contract_confirmed`, then `run_created`. A crash or a refused third
+    // append leaves a DURABLE record at sequence 1 that still carries the
+    // seed's defaults — `creationSource: 'api'`, no scheduleId — and a re-tick
+    // finds it and answers `duplicate`, so nothing ever repairs it. Keying the
+    // unknown on `lastSequence === 0` missed it by exactly one event; only
+    // `loop.run_created` gives a run its identity.
+    const half = seedLoopRun({
+      runId: 'lpr_half',
+      loopId: 'lpe_cron',
+      projectId: 'prj_cron',
+      workspaceId: null,
+      contractRef: 'contract-ref',
+      contractVersion: 1,
+      contractBindingDigest: 'digest-1',
+      budget: emptyLoopBudget({
+        maxIterations: null, maxTotalDurationMinutes: null, maxSpendMicros: null, currency: null,
+        maxTotalTokens: null, maxProviderCalls: null, maxConsecutiveFailures: 0,
+      }),
+      createdAt: T0,
+      provenance: 'offline',
+    });
+    service.store.create(emptyLoopRunRecord(half));
+    const confirmed = appendLoopRunEvent(service.store, {
+      runId: 'lpr_half',
+      digest: loopDigest,
+      base: {
+        at: T0,
+        runId: 'lpr_half',
+        loopId: 'lpe_cron',
+        projectId: 'prj_cron',
+        kind: 'loop.contract_confirmed',
+        actor: 'relay-schedule',
+        recoveryGeneration: 0,
+        expectedPreviousState: null,
+        idempotencyKey: null,
+        payload: {
+          kind: 'loop.contract_confirmed',
+          contractRef: 'contract-ref',
+          contractVersion: 1,
+          bindingDigest: 'digest-1',
+          confirmedBy: 'relay-schedule',
+        },
+      },
+    });
+    expect(confirmed.ok).toBe(true);
+    // It reads as an ordinary `api` run — which is exactly the trap.
+    expect(readLoopRun(service.store, 'lpr_half', loopDigest)?.run?.creationSource).toBe('api');
+
+    const edited = await call(
+      { ...CREATE, scheduleId: 'sched-triage', cronExpression: '*/30 * * * *' },
+      { path: '/cron/schedules/sched-triage/edit' },
+    );
+    expect(edited?.status).toBe(200);
+    expect(dataOf(edited).unattributedRuns).toBe(1);
   });
 
   it('counts a run it cannot READ as unknown too', async () => {
-    // A run whose journal is unreadable might be this schedule's. Dropping it
+    // A run whose journal is TORN — a damaged final line — might be this
+    // schedule's. Dropping it
     // would report a clean in-flight list over work that may be in flight —
     // the same unknown-as-zero this refuses for an unattributed run.
     const ticked = await call();
@@ -975,9 +1066,9 @@ describe('an operator can create, list and pause a schedule', () => {
       { path: '/cron/schedules/sched-triage/edit' },
     );
     expect(edited?.status).toBe(200);
-    expect(dataOf(edited).unattributedRunsInLoop).toBe(2);
+    expect(dataOf(edited).unattributedRuns).toBe(2);
     // The one it CAN read is still reported as its own.
-    expect((dataOf(edited).activeRunsUndisturbed as string[])).toHaveLength(1);
+    expect((dataOf(edited).unfinishedRunsUndisturbed as string[])).toHaveLength(1);
   });
 
   it('reports its OWN in-flight runs, and counts what it cannot attribute', async () => {
@@ -991,13 +1082,13 @@ describe('an operator can create, list and pause a schedule', () => {
       { path: '/cron/schedules/sched-triage/edit' },
     );
     expect(edited?.status).toBe(200);
-    const inFlight = dataOf(edited).activeRunsUndisturbed as string[];
+    const inFlight = dataOf(edited).unfinishedRunsUndisturbed as string[];
     expect(inFlight).toHaveLength(3);
     // Each still resolves to the version it started under.
     for (const runId of inFlight) {
       expect(readLoopRun(service.store, runId, loopDigest)?.run?.contractVersion).toBe(1);
     }
-    expect(dataOf(edited).unattributedRunsInLoop).toBe(0);
+    expect(dataOf(edited).unattributedRuns).toBe(0);
   });
 
   it('an edit that changes nothing is refused, rather than splitting the history', async () => {

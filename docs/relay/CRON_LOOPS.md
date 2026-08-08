@@ -427,13 +427,21 @@ may bind one Loop, so it reported another schedule's runs as this one's, and
 once that schedule moved to a new version its runs cited a version this history
 lacked and every future edit was refused as orphaning.
 
+The scan covers EVERY LOOP the schedule has ever named, not just its head's:
+`loopId` is a versioned field, so runs made before a rebinding live in the Loop
+that version named.
+
 WHAT CANNOT BE ATTRIBUTED IS COUNTED, never dropped. Four cases reduce to
-Unknown rather than to "not ours": a run that reads back as nothing, one whose
-journal is torn or corrupt, one whose journal folded no events at all (an empty
-journal replays to the bare seed, whose source defaults to `api`), and a
-schedule-created run written before runs recorded their schedule. Each would
-otherwise let an edit report a clean in-flight list over work that may be in
-flight.
+Unknown rather than to "not ours": a run that reads back as nothing; one whose
+journal is torn or corrupt, which does NOT read back as null but as a partial
+record; one that never got its IDENTITY, because only `loop.run_created`
+confers it and a record can sit durably at the event before it, carrying the
+seed's `api` default; and a schedule-created run written before runs recorded
+their schedule. Each would otherwise let an edit report a clean list over this
+schedule's own unfinished work.
+
+The runs it names are UNFINISHED, not in flight: nothing in this build advances
+a scheduled run, so every one of them is `queued` and has never executed.
 
 `cron-versioning.ts` implements that decision. An edit APPENDS: every previous
 version rides through unchanged, including the one being superseded, whose

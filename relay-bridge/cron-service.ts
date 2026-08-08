@@ -122,7 +122,7 @@ export interface CronTickService {
    * treating those as "not ours" would let an edit report a clean in-flight
    * list over runs that may well be ours. Unknown is reported as unknown.
    */
-  scheduleRunsFor(loopId: string, scheduleId: string): {
+  scheduleRunsFor(loopIds: readonly string[], scheduleId: string): {
     readonly runs: readonly VersionedRun[];
     readonly unattributed: number;
   };
@@ -305,10 +305,14 @@ export function createCronTickService(options: {
       return { ok: true, version: head?.version ?? 0, changed };
     },
     activeRunsFor,
-    scheduleRunsFor: (loopId, scheduleId) => {
+    scheduleRunsFor: (loopIds, scheduleId) => {
       const runs: VersionedRun[] = [];
       let unattributed = 0;
-      for (const runId of store.runIdsForLoop(loopId) ?? []) {
+      // EVERY LOOP THIS SCHEDULE HAS EVER NAMED, not just the one its head
+      // names. `loopId` is a versioned field and rebinding is a supported edit,
+      // so runs made under an earlier version live in an earlier Loop — and
+      // scanning only the current one made them vanish from both outputs.
+      for (const runId of [...new Set(loopIds)].flatMap((id) => store.runIdsForLoop(id) ?? [])) {
         const loaded = readLoopRun(store, runId, loopDigest);
         // A RUN THAT CANNOT BE READ IS NOT ABSENT. It might be this schedule's,
         // so it counts as unattributed rather than being dropped.
@@ -317,12 +321,18 @@ export function createCronTickService(options: {
         // still replays into a partial run — it does NOT read back as null —
         // and that partial record cannot be trusted to say whose run it is.
         if (loaded.journalIntegrity !== 'ok') { unattributed += 1; continue; }
-        // NOR IS A RECORD THAT FOLDED NO EVENTS. An absent or empty journal
-        // replays to the bare SEED, whose `creationSource` defaults to `api` —
-        // so a schedule's run whose journal was lost would read as somebody
-        // else's ordinary run and be skipped in silence. Nothing was recorded,
-        // so nothing is known.
-        if (loaded.lastSequence === 0) { unattributed += 1; continue; }
+        // NOR IS A RECORD WITH NO IDENTITY YET. Only `loop.run_created` gives a
+        // run its identity; until it folds, the record is the bare SEED, whose
+        // `creationSource` defaults to `api` — so a schedule's run would read
+        // as somebody else's ordinary run and be skipped in silence.
+        //
+        // `lastSequence === 0` was the first attempt and is NOT sound:
+        // `confirmLoopRun` writes the record, then `contract_confirmed`, then
+        // `run_created`, so a crash or a refused third append leaves a durable
+        // record at sequence 1 that still carries the seed's defaults — and a
+        // re-tick finds it and answers `duplicate`, so nothing ever repairs it.
+        // The empty key is what actually means "no identity".
+        if (loaded.run.idempotencyKey === '') { unattributed += 1; continue; }
         const run = loaded.run;
         if (run.creationSource !== 'schedule') continue;
         if (run.scheduleId === null) { unattributed += 1; continue; }
