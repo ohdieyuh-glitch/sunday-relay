@@ -63,6 +63,8 @@
         "src/relay/shared/official-relay-dog-states.ts",
         "src/relay/shared/relay-stage-backdrop.test.ts",
         "src/relay/shared/relay-stage-backdrop.ts",
+        "src/relay/shared/relay-stage-cast.test.ts",
+        "src/relay/shared/relay-stage-cast.ts",
         "src/relay/shared/relay-stage-layout.test.ts",
         "src/relay/shared/relay-stage-layout.ts"
       ]

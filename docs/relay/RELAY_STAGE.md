@@ -138,13 +138,96 @@ user who asked for less motion does not get a different scene.
 
 ## Who is on it today
 
-**One actor: the Relay Dog.** The honest reason is that it is the only agent
-this surface has artwork and a state model for. The Leopard, the cubs and the
-vehicles have slots in the contract and no sprites yet, and a stage that drew
-them from nothing would be inventing a cast — the same defect as a panel
-rendering a run it never fetched.
+**One actor: the Relay Dog** — and it is now DERIVED rather than declared.
 
-A second actor arrives by adding a row to `RELAY_WORKSPACE_CAST`.
+The cast was a frozen one-row constant. A constant cannot be wrong, but it also
+cannot be right: it said the same thing whether the coding agent was
+implementing or the project had only just been configured.
+
+`projectWorkspaceCast` (`src/relay/shared/relay-stage-cast.ts`) places an actor
+for every role that **belongs on the stage** and that this build can draw.
+
+The field is `onStage`, not `working`, and two failed attempts are why. A literal
+`working: true` was a constant input replacing a constant cast. Deriving
+`dogState !== 'wandering'` was worse in a quieter way: `verified_complete` maps
+to `complete`, so it claimed the coding agent was working *after the mission
+finished*, and `architect_working` maps to `trotting`, so it claimed the coding
+agent was working when *the architect* was — while deleting the Dog entirely
+from an idle workspace.
+
+**The Dog's presence is not conditional.** It is this product's avatar and owns
+an idle animation: `wandering` is a state to show, not a reason to hide. It is
+drawn whenever the workspace is, INCLUDING BEFORE THE FIRST MISSION —
+`configured-state.ts` builds this screen for a configured project and fabricates
+an "Awaiting first mission" record. Its STATE, not its presence, says what is
+happening. (An earlier draft justified this with "the screen exists only for a
+project with a mission", which that file refutes.)
+
+The other two roles have no idle presence, so for them the question really is
+"is it running" — and it is answered by an **exhaustive `Record` over each
+status union**, not a chain of comparisons. Three commits running read a status
+NAME as activity and got it wrong: `verified_complete` for the coder,
+`dogState !== 'wandering'`, then `preparing_handoff` for the architect — which
+the bridge assigns *after* that role's ledger reads `complete`. It is the
+architect FINISHED, not finishing. The `Record` caught a ninth reviewer state
+(`sign_in_required`) the moment it was written, and it fails the build when a
+state is added rather than silently defaulting a role off the stage.
+
+### Two questions, kept apart
+
+*Is this role working?* and *can this build draw it?* are different questions,
+and collapsing them produces the two opposite lies. Drop an undrawable working
+role and the stage under-reports the team. Place one and the stage announces an
+actor it renders as an empty box, while the overflow warning counts a sprite
+nobody can see — which is exactly what the Stage says it refuses to do.
+
+So a role with no sprite is **named** in `workingWithoutSprite`, and the
+workspace RENDERS that name beneath the stage: *"Working, with no sprite on this
+stage yet: Reviewer."* Review caught the first version computing it, unit-testing
+it, documenting it as shipped, and showing it to nobody — which left a working
+reviewer indistinguishable from no reviewer, the exact thing the field was added
+to prevent.
+
+The two empty-stage messages are wired through to `RelayStage` and **neither is
+reachable anywhere in this build.** The workspace always places the Dog, and the
+CLI always passes exactly one actor — and `StageViewInput` has no `emptyReason`
+field at all, so even handed an empty cast it would print `layoutStage`'s own
+default. They exist for a host that places no Dog, and there is not one. Saying
+"reachable via the CLI" was the second wrong version of this paragraph; the first
+claimed a founder sees them today.
+
+**Relay runs three roles in production.** `relay-bridge/mission.ts` is a
+three-role orchestrator — Prompt Architect → Coding Agent → Reviewer — and it is
+what the website calls. An earlier draft of this section claimed the bridge
+"drives one role"; that is true only of the **Loop** path
+(`loop-routes.ts` reports `multiRoleSupported: false`), and lifting it out of
+that scope stated something the production orchestrator contradicts.
+
+The real reason only one actor is drawn is narrower and checkable: **the Relay
+Dog is the only role with a sprite, a state model and a render branch.**
+`relay-architect` and `relay-reviewer` exist as ids and as nothing else.
+
+### Fixed slots, so a departure leaves a gap
+
+Each role stands in the same place whenever it stands at all. Spacing actors by
+how many are on stage meant a reviewer finishing slid the coding agent a quarter
+of the stage sideways — motion nothing in the product performed, which is what
+the Dog's motion system exists to refuse. The coding agent's slot is `0.5`,
+exactly where the constant put it, so the shipped stage does not move.
+
+### Why no cub and no Leopard
+
+The contract sizes a Leopard at 2 dog-units and a cub at 0.6, and the projection
+declares neither. A cub is a subordinate or temporarily-expanded agent —
+**Unchain is the feature that would create one**, and `UNCHAIN.md` records that
+its meter, session lifecycle and Rechaining execution are all unimplemented, so
+no cub can exist to be drawn. Giving the architect a cub sprite because a cub
+sprite was available would assign a meaning nothing produced: the same defect as
+a panel rendering a run it never fetched, in artwork instead of data.
+
+The three roles this product does have are **peers** — one dog-unit each, one
+depth, one layer — because nothing makes one subordinate to another. The slots
+stay open; the sizes are already agreed.
 
 ## The two scenes
 
@@ -236,7 +319,10 @@ that only one of them has the input, and it now says so.
 
 ## Not implemented
 
-Parallax content for the `far` layer · the Leopard, cubs, vehicle and
+Parallax content for the `far` layer · SPRITES FOR THE ARCHITECT AND THE
+REVIEWER: both roles genuinely work in production, the projection names them
+when they do, and neither has artwork, a state model or a render branch — so
+the stage reports them rather than drawing them · the Leopard, cubs, vehicle and
 transformation sprites · any cinematic sequence · carrying the choice
 BETWEEN browsers (it is a local preference, stored per browser, and no account
 syncs it) · carrying it to the CLI, which reports `Unknown` rather than

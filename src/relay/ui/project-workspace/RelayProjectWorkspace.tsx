@@ -17,33 +17,91 @@ import { RelayOperationsPanel } from './RelayOperationsPanel';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
 import {
   RelayStage, RelayStageBackdrop, RelayStageBackdropPicker,
-  type RelayBackdropId, type RelayStageActor,
+  type RelayBackdropId,
 } from '../relay-stage';
+import {
+  projectWorkspaceCast, type CastRoleInput,
+} from '../../shared/relay-stage-cast';
 import { useViewportWidth } from './use-viewport-width';
 
 /** The width assumed only when there is no window to ask. */
 const DEFAULT_VIEWPORT_WIDTH_PX = 1440;
 
 /**
- * WHO IS ON THE WORKSPACE STAGE TODAY.
+ * WHO IS ON THE WORKSPACE STAGE.
  *
- * One actor, and the honest reason there is one: the Relay Dog is the only
- * agent this surface has artwork and a state model for. The Leopard, the cubs
- * and the vehicles have slots in the stage's contract and no sprites yet, and
- * a stage that drew them from nothing would be inventing a cast — the same
- * defect as a panel that renders a run it never fetched.
+ * THE DOG IS NOT CONDITIONAL. It is this product's avatar and is drawn whenever
+ * the workspace is — INCLUDING BEFORE THE FIRST MISSION, because
+ * `configured-state.ts` builds this screen for a configured project and
+ * fabricates an "Awaiting first mission" record. Its STATE, not its presence,
+ * says what is happening. An earlier version of this comment justified the same
+ * conclusion with "this screen exists only for a project with a mission", which
+ * that file refutes.
  *
- * `depth: 1` puts the Dog at the front of the ground plane, where the old band
- * effectively pinned it. A second actor arrives by adding a row here.
+ * Two failed attempts say why it must not be derived from activity. A literal
+ * `working: true` was a constant input replacing a constant cast. Deriving
+ * `dogState !== 'wandering'` was worse in a quieter way: `verified_complete`
+ * maps to `complete`, so it claimed the coding agent was working after the
+ * mission had finished, and `architect_working` maps to `trotting`, so it
+ * claimed the coding agent was working when the architect was. It also deleted
+ * the Dog from an idle workspace — and `wandering` is the Dog's IDLE
+ * ANIMATION, which exists precisely to be shown.
+ *
+ * The Relay Dog is the mission's avatar. This screen exists only for a project
+ * with a mission, so the Dog belongs on the stage whenever this screen renders,
+ * and its state — not its presence — is what says what it is doing.
+ *
+ * THE OTHER TWO ROLES HAVE NO IDLE PRESENCE, so for them the question really
+ * is "is it running", read from the workforce assignment this screen displays.
+ *
+ * EXHAUSTIVE RECORDS, NOT `===` CHAINS. Three commits in a row read a status
+ * NAME as activity and got it wrong — `verified_complete` for the coder,
+ * `dogState !== wandering`, then `preparing_handoff` for the architect, which
+ * `relay-bridge/mission.ts` assigns AFTER that role's ledger reads `complete`
+ * and its event carries `done: true`. It is the architect FINISHED, not
+ * finishing. A chain of comparisons let each of those through silently and
+ * would let a fourth through when a state is added to either union. A `Record`
+ * over the whole union fails the build until someone decides, which is the only
+ * fix that outlives the next state.
  */
-const RELAY_WORKSPACE_CAST: readonly RelayStageActor[] = Object.freeze([
-  // One dog-width of footprint, but it patrols the whole stage: `track` is what
-  // its patrol engine measures, and a track the size of the sprite would switch
-  // patrol off without failing anywhere.
-  Object.freeze({
-    id: 'relay-dog', x: 0.5, depth: 1, width: 1, track: 6, layer: 'actors' as const,
-  }),
-]);
+const ARCHITECT_RUNNING: Readonly<Record<ArchitectStatus, boolean>> = Object.freeze({
+  planning: true,
+  researching: true,
+  // FINISHED, not finishing: the bridge sets this after the ledger is complete.
+  preparing_handoff: false,
+  waiting: false,
+});
+
+const REVIEWER_RUNNING: Readonly<Record<ReviewerStateKind, boolean>> = Object.freeze({
+  not_configured: false,
+  not_required: false,
+  waiting: false,
+  reviewing: true,
+  // Verdicts already delivered, not work in progress.
+  changes_required: false,
+  re_reviewing: true,
+  approved: false,
+  unavailable: false,
+  // Caught by this Record the moment it was written: the `===` chain it
+  // replaced would have swallowed this state silently. Nobody is reviewing
+  // while Relay waits for a human to sign in.
+  sign_in_required: false,
+});
+
+/** What a human calls each role. The stage names them; it never draws them. */
+const ROLE_LABEL: Readonly<Record<CastRoleInput['role'], string>> = Object.freeze({
+  prompt_architect: 'Prompt Architect',
+  coding_agent: 'Coding Agent',
+  reviewer: 'Reviewer',
+});
+
+function workspaceCastRoles(workforce: WorkforceAssignment): readonly CastRoleInput[] {
+  return [
+    { role: 'prompt_architect', onStage: ARCHITECT_RUNNING[workforce.promptArchitect.status] },
+    { role: 'coding_agent', onStage: true },
+    { role: 'reviewer', onStage: REVIEWER_RUNNING[workforce.reviewer.state] },
+  ];
+}
 import { RelayProjectFooter } from './RelayProjectFooter';
 import { RelayPspAgentImport } from '../psp-import';
 import type { RelayWorkspaceUsage } from '../usage';
@@ -53,7 +111,9 @@ import type { CodingAgentView } from '../../mission/coding-agent';
 import type { PromptArchitectView } from '../../mission/prompt-architect';
 import { projectHarnessCatalog, type ReviewerHarnessView } from '../../mission/reviewer-harness';
 import { OUTPUT_STATE_LABEL, completionDisplay } from './projections';
-import type { RelayProjectWorkspaceProps } from './contracts';
+import type {
+  ArchitectStatus, RelayProjectWorkspaceProps, ReviewerStateKind, WorkforceAssignment,
+} from './contracts';
 import type {
   PSPAgentImportRecord,
   PSPEntitlementServicePort,
@@ -185,6 +245,18 @@ export function RelayProjectWorkspace(
   const measuredWidthPx = useViewportWidth(DEFAULT_VIEWPORT_WIDTH_PX);
   const observedViewportWidthPx = viewportWidthPx ?? measuredWidthPx;
 
+  // Derived once per render from a frozen input, so the identity is stable and
+  // the stage does not re-place actors because React re-rendered.
+  // The deps are honest even though the memo almost never hits: `workforce` is
+  // rebuilt as a fresh literal by the projection on every call, so this
+  // recomputes each render. Kept because a correct dep list that rarely helps
+  // is better than an empty one that pins a stale cast — and said plainly,
+  // because the two previous comments here each claimed a benefit it did not
+  // have.
+  const workspaceCast = useMemo(() => projectWorkspaceCast({
+    roles: workspaceCastRoles(workforce),
+  }), [workforce]);
+
   /**
    * THE BACKDROP CHOICE, with EXACTLY ONE SOURCE OF TRUTH at a time.
    *
@@ -275,7 +347,10 @@ export function RelayProjectWorkspace(
         <div className="rpw-stage-bounds">
           <RelayStage
             className="rpw-stage"
-            actors={RELAY_WORKSPACE_CAST}
+            actors={workspaceCast.actors}
+            {...(workspaceCast.emptyReason === null
+              ? {}
+              : { emptyReason: workspaceCast.emptyReason })}
             viewportWidthPx={observedViewportWidthPx}
             reducedMotion={reducedMotion}
             label="Relay stage"
@@ -286,6 +361,17 @@ export function RelayProjectWorkspace(
               ? <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} />
               : null)}
           />
+          {/* WHO IS WORKING AND CANNOT BE DRAWN. Computing this and showing it
+              to nobody is the defect it was built to prevent: a working
+              reviewer would still be indistinguishable from no reviewer. It
+              names roles, never invents one — the list is empty whenever they
+              are idle, and the element is not rendered at all. */}
+          {workspaceCast.workingWithoutSprite.length > 0 && (
+            <p className="rpw-stage-offstage" role="status">
+              {`Working, with no sprite on this stage yet: ${workspaceCast.workingWithoutSprite
+                .map((r) => ROLE_LABEL[r]).join(', ')}.`}
+            </p>
+          )}
         </div>
         {/* The picker is MOUNTED, so "two selectable backdrops" is a fact about
             the shipped website and not only about the catalog. Selection is
