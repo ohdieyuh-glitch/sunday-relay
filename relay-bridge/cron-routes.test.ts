@@ -885,7 +885,7 @@ describe('an operator can create, list and pause a schedule', () => {
   it('still sees its own runs after a REBINDING moved it to another Loop', async () => {
     // `loopId` is a versioned field and rebinding is a supported edit, so runs
     // made before one live in the Loop that version named. Scanning only the
-    // head's Loop made them vanish from both outputs — a clean in-flight list
+    // head's Loop made them vanish from both outputs — a clean list of its own unfinished work
     // over this schedule's own unfinished work.
     const ticked = await call();
     expect(dataOf(ticked).runsCreated).toBe(3);
@@ -916,8 +916,8 @@ describe('an operator can create, list and pause a schedule', () => {
 
   it('counts a run that names NO schedule as unknown, never as another schedule\'s absence', async () => {
     // A schedule-created run written before runs recorded their schedule
-    // carries `null`. Calling those "not ours" would report a clean in-flight
-    // list over runs that may well be ours — unknown reported as zero, which
+    // carries `null`. Calling those "not ours" would report a clean list of unfinished
+    // work over runs that may well be ours — unknown reported as zero, which
     // is the one thing this codebase refuses everywhere else.
     const legacy = seedLoopRun({
       runId: 'lpr_legacy',
@@ -979,7 +979,7 @@ describe('an operator can create, list and pause a schedule', () => {
     );
     expect(edited?.status).toBe(200);
     expect(dataOf(edited).unattributedRuns).toBe(1);
-    // …and it is NOT silently listed as this schedule's in-flight work.
+    // …and it is NOT silently listed as this schedule's unfinished work.
     expect(dataOf(edited).unfinishedRunsUndisturbed).toEqual([]);
   });
 
@@ -1044,7 +1044,7 @@ describe('an operator can create, list and pause a schedule', () => {
   it('counts a run it cannot READ as unknown too', async () => {
     // A run whose journal is TORN — a damaged final line — might be this
     // schedule's. Dropping it
-    // would report a clean in-flight list over work that may be in flight —
+    // would report a clean list over work that may be unfinished —
     // the same unknown-as-zero this refuses for an unattributed run.
     const ticked = await call();
     expect(dataOf(ticked).runsCreated).toBe(3);
@@ -1071,7 +1071,7 @@ describe('an operator can create, list and pause a schedule', () => {
     expect((dataOf(edited).unfinishedRunsUndisturbed as string[])).toHaveLength(1);
   });
 
-  it('reports its OWN in-flight runs, and counts what it cannot attribute', async () => {
+  it('reports its OWN unfinished runs, and counts what it cannot attribute', async () => {
     // The planner returns the runs a change must not disturb, and the route
     // used to discard them because no run said which schedule made it.
     const ticked = await call();
@@ -1082,10 +1082,10 @@ describe('an operator can create, list and pause a schedule', () => {
       { path: '/cron/schedules/sched-triage/edit' },
     );
     expect(edited?.status).toBe(200);
-    const inFlight = dataOf(edited).unfinishedRunsUndisturbed as string[];
-    expect(inFlight).toHaveLength(3);
+    const unfinished = dataOf(edited).unfinishedRunsUndisturbed as string[];
+    expect(unfinished).toHaveLength(3);
     // Each still resolves to the version it started under.
-    for (const runId of inFlight) {
+    for (const runId of unfinished) {
       expect(readLoopRun(service.store, runId, loopDigest)?.run?.contractVersion).toBe(1);
     }
     expect(dataOf(edited).unattributedRuns).toBe(0);

@@ -119,8 +119,8 @@ export interface CronTickService {
    *
    * The unattributed count is not decoration: a schedule-created run written
    * before runs recorded their schedule carries `scheduleId: null`, and
-   * treating those as "not ours" would let an edit report a clean in-flight
-   * list over runs that may well be ours. Unknown is reported as unknown.
+   * treating those as "not ours" would let an edit report a clean list over
+   * runs that may well be ours. Unknown is reported as unknown.
    */
   scheduleRunsFor(loopIds: readonly string[], scheduleId: string): {
     readonly runs: readonly VersionedRun[];
@@ -223,7 +223,7 @@ export function createCronTickService(options: {
         creationSource: 'schedule',
         // THE OCCURRENCE KNOWS WHICH SCHEDULE IT CAME FROM, so the run does
         // too. Without it the edit endpoint can say nothing about the runs a
-        // schedule already has in flight.
+        // schedule already has unfinished.
         scheduleId: occurrence.scheduleId,
         budget: emptyLoopBudget({ ...SCHEDULED_RUN_BUDGET, currency: 'USD', maxConsecutiveFailures: 3 }),
         // Nothing contacted a provider. Still true, and the tick is the

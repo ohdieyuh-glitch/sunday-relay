@@ -502,8 +502,9 @@ would leave orphaned claims under an id nothing remembers.
 
 Deleting a schedule does not touch the runs it created: they keep their own
 records and stay attributed to the version they started under. Whether any are
-still in flight is not checked, because a run records its Loop and not its
-schedule.
+still UNFINISHED is not checked — a run records its schedule now, so it could
+be, and deletion simply does not ask. Nothing in this build advances a
+scheduled run, so an unfinished one is queued and has never executed.
 
 This is also the remedy for a schedule the tick refuses on rules that arrived
 after it was stored — a fixed offset, a `SystemV/*` zone, a single-word IANA

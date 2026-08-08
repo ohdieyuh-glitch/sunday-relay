@@ -427,7 +427,7 @@ function editSchedule(
   //
   // WHAT CANNOT BE ATTRIBUTED IS COUNTED, not dropped: a schedule-created run
   // written before runs recorded their schedule carries `null`, and calling
-  // those "not ours" would report a clean in-flight list over runs that may be.
+  // those "not ours" would report a clean list of this schedule's own unfinished work over runs that may be.
   // EVERY LOOP THE SCHEDULE HAS NAMED, not just the one its head names. A
   // rebinding is an edit like any other, so runs made before one live in the
   // Loop that version named; scanning only the head's made them invisible in
@@ -465,7 +465,7 @@ function editSchedule(
     changed: edited.changed,
     // THIS SCHEDULE'S UNFINISHED RUNS, which keep the version they started
     // under. NOT "in flight": nothing in this build advances a scheduled run,
-    // so every one of these is `queued` and has never executed. `activeRunsFor`
+    // so an unfinished one is `queued`. `activeRunsFor`
     // twenty lines away deliberately excludes `queued` for that reason, and one
     // file using the same word for two different things is how the next reader
     // learns the wrong one.
@@ -475,9 +475,9 @@ function editSchedule(
     unattributedRuns: scheduleRuns.unattributed,
     note: 'The edit appended a version. Every earlier version is kept, and a run created under one '
       + 'still resolves to the version it started under. A tick window is clamped to this '
-      + 'authoring instant, so the new version owns no moment that predates it. The unfinished '
-      + 'runs named here are queued and have never executed: nothing in this build advances a '
-      + 'scheduled run.',
+      + 'authoring instant, so the new version owns no moment that predates it. Nothing in this '
+      + 'build advances a scheduled run, so the unfinished runs named here have not been '
+      + 'dispatched.',
   });
 }
 
