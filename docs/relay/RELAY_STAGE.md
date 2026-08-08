@@ -1,11 +1,22 @@
 # The Relay Stage
 
 **Status: IMPLEMENTED. ONE ACTOR ON IT. TWO BACKDROPS, SELECTABLE FROM THE
-WORKSPACE AND LISTED BY `relay project stage`. NONE SELECTED BY DEFAULT. THE
-CHOICE DOES NOT SURVIVE A RELOAD.**
+WORKSPACE AND LISTED BY `relay project stage`. NOTHING SELECTED UNTIL SOMEONE
+SELECTS IT. THE CHOICE SURVIVES A RELOAD IN THE BROWSER THAT MADE IT, AND
+NOWHERE ELSE.**
 
-Those are five different claims and this file keeps them apart. The last one is
-the honest limit: the picker reports a selection and nothing stores it yet.
+Those are five different claims and this file keeps them apart. The last one
+carries the honest limits: the preference is stored per BROWSER, so it does not
+cross to another one and no account syncs it; `relay project stage` cannot read
+it at all and reports `Unknown` rather than guessing `None`; and where the
+browser denies storage — private mode, or over quota — the session runs in
+memory and nothing reports the failed write.
+
+This header said "THE CHOICE DOES NOT SURVIVE A RELOAD" for three commits after
+it began surviving one. It under-claimed rather than over-claimed, which is the
+gentler direction and still the same defect: a reader who trusts the summary —
+which the sentence above invites — was told the feature this document goes on to
+describe had not shipped.
 
 ---
 

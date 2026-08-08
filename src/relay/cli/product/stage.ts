@@ -112,7 +112,9 @@ export function renderStageView(input: StageViewInput): { lines: string[]; json:
   if (!unreadable && resolved.id === 'none' && input.selectedBackdrop !== 'none') {
     // A preference from an older build is a fact about that build, not an
     // instruction to show something else.
-    lines.push(p.dim(`  "${safeText(input.selectedBackdrop as string, { maxLength: 40 })}" `
+    // `safeText` takes `unknown`, so the cast was never needed — and once the
+    // declared type admitted `null` it was a wider untruth than it began as.
+    lines.push(p.dim(`  "${safeText(input.selectedBackdrop, { maxLength: 40 })}" `
       + 'is not a scene this build has, so no scene is drawn.'));
   }
   lines.push('');
