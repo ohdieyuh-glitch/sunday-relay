@@ -33,9 +33,15 @@ import type { CronTickService } from './cron-service';
  * THE PASS IS BOUNDED IN THE DIRECTION THAT COSTS. It walks at most a stated
  * number of schedules, ROTATING so the ones it defers are reached next time
  * rather than never; it reads each Loop's execution count at most once; and it
- * stops ticking a Loop whose undispatched backlog has reached the ceiling,
- * because that count is what every overlap policy needs and its cost grows with
- * the records this build creates and never advances.
+ * stops ticking a Loop whose run records have reached the ceiling, because that
+ * count is what every overlap policy needs and its cost grows with the records
+ * this build creates and never advances.
+ *
+ * WHAT IT DOES NOT BOUND: how fast a schedule catches up. `PARALLEL_LIMIT_PER_PASS`
+ * caps run CREATION at five per schedule per pass whatever the window holds, so
+ * a backlog drains at five per pass and no faster. Widening the lookback does
+ * not change that — measured — and the surplus is reported as `capacitySkipped`
+ * rather than implied by a smaller number.
  */
 
 export const CRON_SCHEDULER_ENABLED_ENV = 'RELAY_LOOP_CRON_SCHEDULER_ENABLED';
@@ -50,7 +56,12 @@ const MAX_OCCURRENCES_PER_PASS = 20;
 const PARALLEL_LIMIT_PER_PASS = 5;
 
 /**
- * How many run records a Loop may hold before the timer stops adding to it.
+ * How many run RECORDS a Loop may hold before the timer stops adding to it.
+ *
+ * It counts every run record in the Loop, whoever created it and whatever state
+ * it is in — an operator's `/loop/confirm` run counts, and once dispatch lands a
+ * completed run will too. The name says records for that reason; an earlier name
+ * said "undispatched" and counted something else.
  *
  * NOT A POLICY, A BOUND ON THIS BUILD'S OWN COST. Every overlap policy needs to
  * know how many of a Loop's runs are executing, and answering that walks the
@@ -59,11 +70,36 @@ const PARALLEL_LIMIT_PER_PASS = 5;
  * the same event loop that answers `/health` — review measured 115 ms at 100
  * records, 390 ms at 700, paid every pass whether or not anything was due.
  *
- * A Loop at the ceiling is REFUSED BY NAME rather than quietly skipped, because
- * "your schedule stopped running" and "your schedule has 500 runs nothing will
- * ever start" are the same silence and very different facts.
+ * A LOOP AT THE CEILING STOPS RECURRING, AND STAYS STOPPED. Nothing in this
+ * build reduces a run count, so this is not a pause that clears itself. That is
+ * a severe thing to do quietly, which is why the refusal carries this reason by
+ * name, the deployment log says it in words, and CRON_LOOPS.md states the
+ * remedy: edit the schedule to bind it to a fresh Loop, which appends a version
+ * and leaves the existing runs explaining themselves.
  */
-const MAX_UNDISPATCHED_RUNS_PER_LOOP = 200;
+const MAX_RUN_RECORDS_PER_LOOP = 200;
+
+/** Why a schedule the pass planned was not ticked after all. */
+export type RefusalReason =
+  /** Deleted or paused between the listing and the read. */
+  | 'vanished_or_paused'
+  /** Stored with no contract version at all. */
+  | 'no_version'
+  /** A zone the operator tick refuses by name — offset, legacy, non-IANA. */
+  | 'zone_not_tickable'
+  /** A stored expression this build can no longer parse. */
+  | 'expression_unparseable'
+  /** The Loop holds too many run records for this pass to walk. TERMINAL. */
+  | 'run_records_at_ceiling'
+  /** An authoring or window instant that is not ISO-8601 with an offset. */
+  | 'unreadable_instant'
+  /** The evaluator's own refusal — an unresolvable zone, an unacceptable window. */
+  | 'evaluator_refused';
+
+export interface RefusedSchedule {
+  readonly scheduleId: string;
+  readonly reason: RefusalReason;
+}
 
 export interface SchedulerPassReport {
   readonly at: string;
@@ -72,8 +108,8 @@ export interface SchedulerPassReport {
   readonly runsCreated: number;
   readonly skipped: number;
   readonly truncated: boolean;
-  /** Ticks the service refused, by schedule. Named, never counted as done. */
-  readonly refused: readonly string[];
+  /** Ticks the service refused, each with WHY. Named, never counted as done. */
+  readonly refused: readonly RefusedSchedule[];
   /** Schedules deferred to the next pass by the pass limit, by id. */
   readonly deferred: readonly string[];
   /**
@@ -87,6 +123,10 @@ export interface SchedulerPassReport {
   readonly capacitySkipped: number;
   /** Occurrences a tick truncated: more were due than one pass may take. */
   readonly occurrencesTruncated: boolean;
+  /** Schedules the store could not read at all. A human has to look. */
+  readonly corrupt: readonly string[];
+  /** Schedules the listing named and the store no longer holds. */
+  readonly missing: readonly string[];
   /** True when the STORE's own listing cap hid schedules from this pass. */
   readonly listingTruncated: boolean;
   /** Set when the pass could not be planned, or could not run at all. */
@@ -96,6 +136,15 @@ export interface SchedulerPassReport {
 export interface CronScheduler {
   /** Run one pass now. Exposed so a test drives it without a timer. */
   runOnce(): SchedulerPassReport;
+  /**
+   * Whether the timer will still fire. False the instant `stop()` is called.
+   *
+   * The capability route answers from this rather than from "a scheduler object
+   * was constructed": shutdown stops the timer and lets in-flight requests
+   * finish, so without it `/loop/capability` reported a live scheduler for the
+   * whole drain window after the last pass it would ever run.
+   */
+  isRunning(): boolean;
   stop(): void;
 }
 
@@ -113,13 +162,18 @@ export function schedulerIntervalSeconds(env: NodeJS.ProcessEnv): number {
 /**
  * The catch-up window for a given interval.
  *
- * THE LOOKBACK MUST COVER THE INTERVAL, or the gap between passes is simply
- * lost. Review set the interval to 600 s against the fixed 15-minute lookback
- * and measured a per-minute schedule producing 50 runs where 100 occurrences
- * were due — the backlog aged out of the window between passes, and the report
- * had no field that said so. Two intervals of headroom absorbs one missed beat;
- * the evaluator's own limit is still the ceiling, because a wider window is
- * refused per schedule and would report work it never had a chance to do.
+ * THE LOOKBACK MUST COVER THE INTERVAL, or the gap between passes is not even
+ * offered to the evaluator. A fixed fifteen minutes against a ten-minute
+ * interval left the window narrower than the outage it was meant to absorb, so
+ * two intervals of headroom is the floor and the evaluator's own limit the
+ * ceiling — a wider window is refused per schedule and would report work it
+ * never had a chance to do.
+ *
+ * IT IS NOT, BY ITSELF, THE CURE FOR A BACKLOG, and an earlier version of this
+ * comment claimed it was. Re-measured with the derived window: a per-minute
+ * schedule over 100 due occurrences still produced 50 runs, because
+ * `PARALLEL_LIMIT_PER_PASS` caps creation at five per schedule per pass. The
+ * window decides what is OFFERED; that limit decides what is TAKEN.
  */
 export function schedulerLookbackMinutes(intervalSeconds: number, windowLimitMinutes: number): number {
   const twoIntervals = Math.ceil((intervalSeconds * 2) / 60);
@@ -135,8 +189,8 @@ export function createCronScheduler(options: {
   readonly onPass?: (report: SchedulerPassReport) => void;
   /** Where a caught failure is reported. Defaults to the deployment log. */
   readonly onError?: (message: string) => void;
-  /** The backlog ceiling. Injectable so a test can reach it in a second. */
-  readonly maxUndispatchedRunsPerLoop?: number;
+  /** The run-record ceiling. Injectable so a test can reach it in a second. */
+  readonly maxRunRecordsPerLoop?: number;
 }): CronScheduler {
   let running = false;
   let stopped = false;
@@ -154,6 +208,8 @@ export function createCronScheduler(options: {
     claimedWithoutRun: 0,
     capacitySkipped: 0,
     occurrencesTruncated: false,
+    corrupt: [],
+    missing: [],
     listingTruncated: false,
     refusal,
   });
@@ -194,7 +250,7 @@ export function createCronScheduler(options: {
       }
       cursor = planned.pass.nextCursor;
 
-      const refused: string[] = [];
+      const refused: RefusedSchedule[] = [];
       let ticked = 0;
       let created = 0;
       let claimedWithoutRun = 0;
@@ -226,22 +282,28 @@ export function createCronScheduler(options: {
         // process sharing the volume can change a schedule between them. A test
         // that faked the change would prove the fake works.
         if (inspected.kind !== 'found' || inspected.record.paused) {
-          refused.push(tick.scheduleId);
+          refused.push({ scheduleId: tick.scheduleId, reason: 'vanished_or_paused' });
           continue;
         }
         const head = [...inspected.record.history].sort((a, b) => a.version - b.version).at(-1);
-        if (head === undefined) { refused.push(tick.scheduleId); continue; }
+        if (head === undefined) {
+          refused.push({ scheduleId: tick.scheduleId, reason: 'no_version' });
+          continue;
+        }
 
         // THE SHARED GATE, so this agrees with the operator tick by
         // construction rather than by two lists staying in step.
         if (refuseStoredZone(head.timeZone, options.ticks) !== null) {
-          refused.push(tick.scheduleId);
+          refused.push({ scheduleId: tick.scheduleId, reason: 'zone_not_tickable' });
           continue;
         }
 
         const parsed = parseCronExpression(head.cronExpression);
         // A stored expression that no longer parses is refused, not guessed at.
-        if (!parsed.ok) { refused.push(tick.scheduleId); continue; }
+        if (!parsed.ok) {
+          refused.push({ scheduleId: tick.scheduleId, reason: 'expression_unparseable' });
+          continue;
+        }
 
         // THE BOUND ON THIS BUILD'S OWN COST. A Loop already holding a backlog
         // of runs nothing will advance is refused rather than grown: the
@@ -249,8 +311,8 @@ export function createCronScheduler(options: {
         // records, so an unbounded backlog is an unbounded stall on the loop
         // that answers HTTP.
         const backlog = options.ticks.runCountFor(head.loopId);
-        if (backlog >= (options.maxUndispatchedRunsPerLoop ?? MAX_UNDISPATCHED_RUNS_PER_LOOP)) {
-          refused.push(tick.scheduleId);
+        if (backlog >= (options.maxRunRecordsPerLoop ?? MAX_RUN_RECORDS_PER_LOOP)) {
+          refused.push({ scheduleId: tick.scheduleId, reason: 'run_records_at_ceiling' });
           continue;
         }
 
@@ -260,9 +322,15 @@ export function createCronScheduler(options: {
         // refusing it — the opposite direction from the route this comment
         // claims to match.
         const authoredMs = readIsoInstantWithOffset(head.authoredAt);
-        if (authoredMs === null) { refused.push(tick.scheduleId); continue; }
+        if (authoredMs === null) {
+          refused.push({ scheduleId: tick.scheduleId, reason: 'unreadable_instant' });
+          continue;
+        }
         const requestedMs = readIsoInstantWithOffset(tick.afterExclusive);
-        if (requestedMs === null) { refused.push(tick.scheduleId); continue; }
+        if (requestedMs === null) {
+          refused.push({ scheduleId: tick.scheduleId, reason: 'unreadable_instant' });
+          continue;
+        }
         const afterExclusive = requestedMs >= authoredMs ? tick.afterExclusive : head.authoredAt;
 
         const report = options.ticks.tick({
@@ -305,7 +373,10 @@ export function createCronScheduler(options: {
         });
         // A REFUSED TICK IS NOT A TICK. The report says what the evaluator
         // decided; counting it as done would report work that never happened.
-        if (!report.ok) { refused.push(tick.scheduleId); continue; }
+        if (!report.ok) {
+          refused.push({ scheduleId: tick.scheduleId, reason: 'evaluator_refused' });
+          continue;
+        }
         ticked += 1;
         occurrencesTruncated = occurrencesTruncated || report.truncated;
         for (const occurrence of report.occurrences) {
@@ -327,6 +398,14 @@ export function createCronScheduler(options: {
         claimedWithoutRun,
         capacitySkipped,
         occurrencesTruncated,
+        // NAMED ALL THE WAY UP. The planner distinguishes paused from corrupt
+        // precisely because they are different facts; collapsing both into one
+        // `skipped` integer one level higher made them the same fact again, and
+        // a pass in which every schedule was corrupt logged nothing at all.
+        corrupt: planned.pass.skipped
+          .filter((sk) => sk.reason === 'corrupt').map((sk) => sk.scheduleId),
+        missing: planned.pass.skipped
+          .filter((sk) => sk.reason === 'missing').map((sk) => sk.scheduleId),
         listingTruncated: listing.truncated,
         refusal: null,
       };
@@ -356,6 +435,7 @@ export function createCronScheduler(options: {
 
   return {
     runOnce,
+    isRunning: () => !stopped,
     stop: () => { stopped = true; clearInterval(timer); },
   };
 }

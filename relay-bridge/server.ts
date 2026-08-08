@@ -594,12 +594,34 @@ export function main(): void {
           && report.deferred.length === 0 && report.claimedWithoutRun === 0
           && report.capacitySkipped === 0 && !report.truncated
           && !report.occurrencesTruncated && !report.listingTruncated
+          && report.corrupt.length === 0 && report.missing.length === 0
           && report.refusal === null;
         if (quiet) return;
         const notes: string[] = [];
         if (report.deferred.length > 0) {
           notes.push(`deferred ${String(report.deferred.length)} to the next pass`);
         }
+        /**
+         * A REFUSAL IS PRINTED AS A REASON, NOT A COUNT. "Fix your timezone",
+         * "this schedule is unparseable" and "this Loop has stopped recurring
+         * and will not resume" were one integer, which is no more actionable
+         * than silence — and the last of those is permanent.
+         */
+        const byReason = new Map<string, string[]>();
+        for (const r of report.refused) {
+          byReason.set(r.reason, [...(byReason.get(r.reason) ?? []), r.scheduleId]);
+        }
+        for (const [reason, ids] of byReason) {
+          const loud = reason === 'run_records_at_ceiling'
+            ? ' — THESE SCHEDULES HAVE STOPPED RECURRING and will not resume on '
+              + 'their own; rebind each to a fresh Loop by editing it'
+            : '';
+          notes.push(`refused (${reason}): ${ids.join(', ')}${loud}`);
+        }
+        if (report.corrupt.length > 0) {
+          notes.push(`CORRUPT, a human must look: ${report.corrupt.join(', ')}`);
+        }
+        if (report.missing.length > 0) notes.push(`missing: ${report.missing.join(', ')}`);
         if (report.claimedWithoutRun > 0) {
           // The loudest thing this report can carry: a human has to decide.
           notes.push(`CLAIMED WITHOUT A RUN ${String(report.claimedWithoutRun)}`);
@@ -613,7 +635,7 @@ export function main(): void {
         }
         if (report.refusal !== null) notes.push(`refusal ${report.refusal}`);
         console.log(`Relay cron pass ${report.at}: ticked ${String(report.ticked)}, `
-          + `created ${String(report.runsCreated)}, refused ${String(report.refused.length)}`
+          + `created ${String(report.runsCreated)}`
           + (notes.length > 0 ? ` — ${notes.join('; ')}` : ''));
       },
     })
@@ -625,7 +647,11 @@ export function main(): void {
   // The capability route answers from THIS object, not from the flags that ask
   // for it: the flags can be set on a bridge whose volume never mounted.
   const server = createBridgeServer(
-    config, registry, null, null, null, cronTicks, () => scheduler !== null,
+    config, registry, null, null, null, cronTicks,
+    // Not "was one constructed" — "will it still fire". Shutdown stops the
+    // timer and then drains for up to ten seconds, and for that whole window
+    // the old getter reported a scheduler that would never run again.
+    () => scheduler?.isRunning() === true,
   );
 
   /**

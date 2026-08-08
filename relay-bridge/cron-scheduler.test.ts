@@ -108,7 +108,7 @@ describe('an automatic pass creates records and dispatches nothing', () => {
     const report = s.runOnce();
     s.stop();
     expect(report.ticked).toBe(1);
-    expect(report.refused).toEqual(['sched-mars']);
+    expect(report.refused).toEqual([{ scheduleId: 'sched-mars', reason: 'evaluator_refused' }]);
     expect(report.runsCreated).toBe(3);
     expect(service.store.runIdsForLoop('lpe_mars') ?? []).toHaveLength(0);
   });
@@ -198,6 +198,34 @@ describe('the pass limit defers work rather than starving it', () => {
     expect(report.deferred).toEqual(['s2', 's3']);
   });
 
+  it('a PAUSED schedule sorting last does not defeat the rotation', () => {
+    // THE ORIGINAL DEFECT, REPRODUCED AGAINST ITS OWN FIX. The first repair
+    // advanced the cursor in the not-active branch, which was tested BEFORE the
+    // cap — so one paused schedule sorting after the truncation point moved the
+    // cursor past everything the pass had just deferred, and when it sorted
+    // last the rotation became a no-op. Review measured s3, s4 and s5 never
+    // ticking once across twelve passes. Pausing is an ordinary operation.
+    const active = ['s1', 's2', 's3', 's4', 's5'];
+    for (const id of active) {
+      expect(service.schedules.create(id, { ...STORED, loopId: `lpe_${id}` }).ok).toBe(true);
+    }
+    expect(service.schedules.create('zz-paused', { ...STORED, loopId: 'lpe_z' }).ok).toBe(true);
+    expect(service.schedules.setPaused('zz-paused', true, T0).ok).toBe(true);
+
+    const s = scheduler({ maxPerPass: 2 });
+    const reached = new Set<string>();
+    for (let pass = 0; pass < 3; pass += 1) {
+      s.runOnce();
+      for (const id of active) {
+        if ((service.store.runIdsForLoop(`lpe_${id}`) ?? []).length > 0) reached.add(id);
+      }
+    }
+    s.stop();
+    expect([...reached].sort()).toEqual(active);
+    // …and the paused one still never ran.
+    expect(service.store.runIdsForLoop('lpe_z') ?? []).toHaveLength(0);
+  });
+
   it('a cursor naming a deleted schedule starts over rather than skipping past it', () => {
     for (const id of ['s1', 's2']) {
       expect(service.schedules.create(id, { ...STORED, loopId: `lpe_${id}` }).ok).toBe(true);
@@ -230,7 +258,7 @@ describe('the timer refuses exactly what the operator tick refuses', () => {
     const s = scheduler();
     const report = s.runOnce();
     s.stop();
-    expect(report.refused).toEqual(['sched-bad']);
+    expect(report.refused).toEqual([{ scheduleId: 'sched-bad', reason: 'zone_not_tickable' }]);
     expect(report.ticked).toBe(0);
     expect(service.store.runIdsForLoop('lpe_bad') ?? []).toHaveLength(0);
   });
@@ -258,13 +286,13 @@ describe('a pass is bounded in the direction that costs', () => {
       lookbackMinutes: 180,
       // The shipped ceiling is 200; reaching it here would spend the whole
       // test budget proving arithmetic. The BEHAVIOUR is what is under test.
-      maxUndispatchedRunsPerLoop: 10,
+      maxRunRecordsPerLoop: 10,
     });
 
     let refusedAt: number | null = null;
     for (let pass = 0; pass < 40 && refusedAt === null; pass += 1) {
       const report = s.runOnce();
-      if (report.refused.includes('sched-a')) refusedAt = pass;
+      if (report.refused.some((r) => r.scheduleId === 'sched-a')) refusedAt = pass;
       minutes += 120; // two more hourly occurrences become due each pass
     }
     s.stop();
@@ -278,7 +306,12 @@ describe('a pass is bounded in the direction that costs', () => {
     // backlog is what bounds it, and nothing in this build reduces one.
     minutes += 10_000;
     const later = s.runOnce();
-    expect(later.refused).toContain('sched-a');
+    // AND IT SAYS WHY, by name. This refusal is terminal — nothing in this
+    // build reduces a run count — so reporting it as an anonymous id in a
+    // count would be an automation that stopped forever and said a number.
+    expect(later.refused).toEqual([
+      { scheduleId: 'sched-a', reason: 'run_records_at_ceiling' },
+    ]);
   }, 30_000);
 
   it('reads each Loop execution count once per pass, however many schedules share it', () => {
@@ -312,6 +345,41 @@ describe('a pass says what it did not do', () => {
     // The evaluator's own limit is still the ceiling: a wider window would be
     // refused per schedule and report work it never had a chance to do.
     expect(schedulerLookbackMinutes(3600, 30)).toBe(30);
+  });
+
+  it('names corrupt and missing schedules, so an all-corrupt pass is not silent', () => {
+    // The planner separates paused from corrupt because they are different
+    // facts. One level up they were both a single `skipped` integer — and the
+    // deployment's quiet-pass rule did not even consider it, so a pass in which
+    // every schedule was corrupt logged nothing at all.
+    for (const id of ['c1', 'c2']) {
+      expect(service.schedules.create(id, { ...STORED, loopId: `lpe_${id}` }).ok).toBe(true);
+      writeFileSync(
+        join(root, 'cron-schedules', id, 'versions.ndjson'),
+        'torn\n{"kind":"version","version":2}\n',
+      );
+    }
+    expect(service.schedules.create('p1', { ...STORED, loopId: 'lpe_p1' }).ok).toBe(true);
+    expect(service.schedules.setPaused('p1', true, T0).ok).toBe(true);
+
+    const s = scheduler();
+    const report = s.runOnce();
+    s.stop();
+    expect(report.ticked).toBe(0);
+    expect([...report.corrupt].sort()).toEqual(['c1', 'c2']);
+    // A paused schedule is a CHOICE, and stays quiet.
+    expect(report.corrupt).not.toContain('p1');
+    expect(report.skipped).toBe(3);
+  });
+
+  it('stops claiming a live scheduler the moment the timer is stopped', () => {
+    // Shutdown stops the timer and then drains for up to ten seconds. Reporting
+    // "was one constructed" told every surface it was scheduled for that whole
+    // window, about a timer that would never fire again.
+    const s = scheduler();
+    expect(s.isRunning()).toBe(true);
+    s.stop();
+    expect(s.isRunning()).toBe(false);
   });
 
   it('reports a refusal through onPass, not only through the return value', () => {

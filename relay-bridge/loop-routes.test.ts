@@ -166,6 +166,14 @@ describe('the Loop engine flag is server-authoritative and defaults off', () => 
     // A host that never says anything gets the safe answer.
     const unstated = await read({ ...ENABLED, [CRON_ENABLED_ENV]: '1' });
     expect(unstated.cronScheduled).toBe(false);
+
+    // AND cronScheduled STILL IMPLIES cronSupported. The two are read at
+    // different moments — this one from the env now, the other from a
+    // scheduler built at boot — so without conjoining them a surface could be
+    // told "nothing may tick, and something ticks on a schedule".
+    const timerWithoutCron = await read({ ...ENABLED }, true);
+    expect(timerWithoutCron.cronSupported).toBe(false);
+    expect(timerWithoutCron.cronScheduled).toBe(false);
   });
 });
 

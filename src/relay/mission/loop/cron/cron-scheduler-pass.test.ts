@@ -88,15 +88,49 @@ describe('an automatic pass is bounded in both directions', () => {
     expect(pass.ticks.map((t) => t.scheduleId)).toEqual(['b']);
   });
 
-  it('an untruncated pass walks the store order exactly, cursor or not', () => {
-    // The rotation must be unobservable when nothing is deferred, or it
-    // becomes a second ordering nobody asked for.
+  it('an untruncated pass covers every schedule, entering the cycle at the cursor', () => {
+    // NOT the store's order — the same cycle entered elsewhere. An earlier
+    // version of this test sorted the ids before comparing, under a comment
+    // claiming the rotation was "unobservable", so it could not have caught
+    // the claim being false. The SET is the property that matters.
     const candidates = [active('a'), active('b'), active('c')];
     const withCursor = ok(planSchedulerPass({
       candidates, now: NOW, lookbackMinutes: 30, maxPerPass: 10, resumeAfterId: 'b',
     }));
     expect(withCursor.truncated).toBe(false);
-    expect([...withCursor.ticks.map((t) => t.scheduleId)].sort()).toEqual(['a', 'b', 'c']);
+    expect(withCursor.ticks.map((t) => t.scheduleId)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('the cap stops the cursor, whatever state the candidates after it are in', () => {
+    // Review reproduced the original starvation against the first fix: the
+    // not-active branch ran BEFORE the cap check and advanced the cursor, so a
+    // paused schedule after the truncation point carried the cursor past every
+    // schedule the pass had just deferred.
+    const candidates = [
+      active('a'), active('b'), active('c'), { scheduleId: 'z', state: 'paused' as const },
+    ];
+    const first = ok(planSchedulerPass({
+      candidates, now: NOW, lookbackMinutes: 30, maxPerPass: 2,
+    }));
+    expect(first.ticks.map((t) => t.scheduleId)).toEqual(['a', 'b']);
+    // 'z' comes after the cap was spent, so it must NOT move the cursor.
+    expect(first.nextCursor).toBe('b');
+
+    const second = ok(planSchedulerPass({
+      candidates, now: NOW, lookbackMinutes: 30, maxPerPass: 2, resumeAfterId: first.nextCursor,
+    }));
+    expect(second.ticks.map((t) => t.scheduleId)).toEqual(['c', 'a']);
+  });
+
+  it('a non-active schedule BEFORE the cap still advances the cursor', () => {
+    // The converse: it was genuinely reached, so the next pass must not
+    // re-walk it. Only the cap stops the cursor.
+    const pass = ok(planSchedulerPass({
+      candidates: [{ scheduleId: 'p', state: 'paused' }, active('a'), active('b')],
+      now: NOW, lookbackMinutes: 30, maxPerPass: 1,
+    }));
+    expect(pass.ticks.map((t) => t.scheduleId)).toEqual(['a']);
+    expect(pass.nextCursor).toBe('a');
   });
 
   it('names every schedule it declined, rather than reporting a smaller list', () => {

@@ -136,16 +136,31 @@ export function planSchedulerPass(input: SchedulerPassInput): SchedulerPassResul
 
   let lastReached: string | null = null;
   for (const candidate of ordered) {
+    /**
+     * THE CAP IS CHECKED FIRST, FOR EVERY CANDIDATE, and this is the whole
+     * correctness of the rotation.
+     *
+     * The first version tested `state !== 'active'` first and advanced the
+     * cursor there, so ONE paused schedule sorting after the truncation point
+     * moved the cursor past everything the pass had just deferred — and if it
+     * sorted last, the rotation became a no-op and the identical first
+     * `maxPerPass` schedules ticked forever. Review reproduced the original
+     * starvation end to end against the "fixed" code with a single paused
+     * schedule present, which pausing makes an ordinary state to be in.
+     *
+     * The cursor means "the last candidate this pass actually reached". Once
+     * the cap is spent nothing further is reached, whatever its state.
+     */
+    const capReached = ticks.length >= input.maxPerPass;
+
     if (candidate.state !== 'active') {
       // NAMED, not silently dropped. "Nothing ran" and "nothing ran because
       // eleven schedules are corrupt" are the same count and different facts.
       skipped.push({ scheduleId: candidate.scheduleId, reason: candidate.state });
-      lastReached = candidate.scheduleId;
+      if (!capReached) lastReached = candidate.scheduleId;
       continue;
     }
-    if (ticks.length >= input.maxPerPass) {
-      // NOT REACHED, so it does not move the cursor: the next pass must start
-      // here, which is the whole point of the rotation.
+    if (capReached) {
       truncated = true;
       skipped.push({ scheduleId: candidate.scheduleId, reason: 'over_pass_limit' });
       continue;
@@ -160,8 +175,12 @@ export function planSchedulerPass(input: SchedulerPassInput): SchedulerPassResul
 /**
  * The candidates, reordered to begin just after `cursor`.
  *
- * Order is otherwise preserved exactly, so a pass that is not truncated walks
- * the store's own sorted order and the rotation is unobservable.
+ * Relative order is preserved MODULO THE ROTATION POINT: the walk is the same
+ * cycle, entered at a different place. It is not the store's sorted order, and
+ * an earlier comment here claimed it was "unobservable" on an untruncated pass
+ * — which was false, and the test asserting it sorted the ticks before
+ * comparing, so it could not have caught the claim. The SET a pass covers is
+ * unaffected, which is the property that matters; the entry point is not.
  */
 function rotateAfter(
   candidates: readonly SchedulerCandidate[], cursor: string | null,

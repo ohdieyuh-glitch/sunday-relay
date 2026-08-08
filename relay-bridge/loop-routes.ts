@@ -217,10 +217,16 @@ export async function handleLoopRoute(
        * without checking the deployment, which is exactly why it may not
        * assert a recurrence that cannot happen.
        *
+       * `cronEnabled` IS STILL CONJOINED, so `cronScheduled` continues to imply
+       * `cronSupported`. Dropping it lost the invariant: the two are read at
+       * different moments — this one from the env at request time, the other
+       * from a scheduler built at boot — so without it a surface could be told
+       * "nothing may tick, and something ticks on a schedule".
+       *
        * A surface must still not infer EXECUTION from it: a scheduled run is
        * created and never advanced, whoever asked.
        */
-      cronScheduled: request.cronSchedulerRunning === true,
+      cronScheduled: cronEnabled(env) && request.cronSchedulerRunning === true,
       swarmSupported: false,
     });
   }

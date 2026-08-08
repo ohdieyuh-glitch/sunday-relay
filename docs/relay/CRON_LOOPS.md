@@ -535,13 +535,20 @@ so an overlapping window costs nothing and a missed pass is caught up by the
 next one. The lookback is a CATCH-UP BOUND, not a schedule, and it can never
 exceed the evaluator's own window limit.
 
-THE LOOKBACK IS DERIVED FROM THE INTERVAL, not fixed. A window that does not
-cover the gap between passes simply loses it: review set the interval to ten
-minutes against a fixed fifteen-minute lookback and measured a per-minute
-schedule producing fifty runs where a hundred occurrences were due — the backlog
-aged out between passes, and no field said so. `schedulerLookbackMinutes` takes
-two intervals of headroom, floored at fifteen minutes and capped by the
-evaluator's own limit.
+THE LOOKBACK IS DERIVED FROM THE INTERVAL, not fixed. A window narrower than the
+gap between passes does not even OFFER that gap to the evaluator, so
+`schedulerLookbackMinutes` takes two intervals of headroom, floored at fifteen
+minutes and capped by the evaluator's own limit.
+
+THE WINDOW IS NOT THE THING THAT BOUNDS CATCH-UP, and an earlier version of this
+section said it was. Re-measured against the derived window: a per-minute
+schedule with a hundred occurrences due still produced FIFTY runs, exactly as
+before. `PARALLEL_LIMIT_PER_PASS` caps run creation at five per schedule per
+pass whatever the window holds — the window decides what is offered, that limit
+decides what is taken. A backlog therefore drains at five per pass and no
+faster, and the surplus is reported as `capacitySkipped` rather than implied by
+a smaller number. Widening the lookback alone does not make a long interval
+safe.
 
 IT IS BOUNDED THE OTHER WAY TOO, and the bound ROTATES. A pass ticks at most a
 stated number of schedules, because the bridge answers requests on the same
@@ -552,16 +559,39 @@ reported as `skipped`, as though the next pass would take it. A pass now resumes
 after the last schedule it reached, so the cap DEFERS rather than starves, and
 the deferred ids are named in the report and in the log.
 
-A PASS IS ALSO BOUNDED BY THE BACKLOG IT CREATED. Every overlap policy needs to
+A PASS IS ALSO BOUNDED BY THE RECORDS IT CREATED. Every overlap policy needs to
 know how many of a Loop's runs are executing, and answering that walks the
 Loop's run records and replays each journal. Nothing in this build advances a
 scheduled run and nothing prunes one, so that walk grows without limit on the
 event loop that answers `/health` — 115 ms at a hundred records, 390 ms at seven
 hundred, paid every pass whether or not anything was due. Two bounds close it:
 each Loop's count is read at most once per pass, and a Loop holding
-`MAX_UNDISPATCHED_RUNS_PER_LOOP` records is refused by name rather than grown.
-"Your schedule stopped running" and "your schedule has five hundred runs nothing
-will ever start" are the same silence and very different facts.
+`MAX_RUN_RECORDS_PER_LOOP` (200) records is refused rather than grown — that
+constant counts EVERY run record in the Loop, including an operator's own, which
+is what its name says and what the cost actually follows. The
+residual worst case is arithmetic on the shipped constants — 25 distinct Loops
+at the ceiling ≈ 2.8 s of counting per pass — which is bounded and still past a
+health-check budget. A cheap index of executing runs is the real fix and is not
+built.
+
+**A LOOP AT THE CEILING STOPS RECURRING, AND STAYS STOPPED.** Nothing in this
+build reduces a run count: no run is advanced, none is pruned, and no route
+deletes one. This is a STOP, not a pause that clears itself, and it is reached
+in about three hours by a per-minute schedule and eight days by an hourly one.
+Because it is that severe, it is not reported as a number: the refusal carries
+`run_records_at_ceiling` by name and the deployment log says the schedules have
+stopped and will not resume on their own. **The remedy is to edit the schedule
+so it binds to a fresh Loop** — an edit appends a version, and the runs already
+created keep explaining themselves under the version they started with.
+
+A REFUSAL IS A REASON, NOT A COUNT. Eight distinct causes used to arrive as one
+integer — a bad timezone, an unparseable expression, a vanished schedule, and a
+Loop that had permanently stopped were indistinguishable. Each refusal now
+carries `vanished_or_paused`, `no_version`, `zone_not_tickable`,
+`expression_unparseable`, `run_records_at_ceiling`, `unreadable_instant` or
+`evaluator_refused`, and a corrupt schedule is named separately from a paused
+one all the way to the log — a paused schedule is a choice and stays quiet, a
+corrupt one needs a human and does not.
 
 ONE PASS AT A TIME, for a RE-ENTRANT CALLER. A pass is fully synchronous, so a
 `setInterval` callback cannot begin while one is executing — Node fires the
