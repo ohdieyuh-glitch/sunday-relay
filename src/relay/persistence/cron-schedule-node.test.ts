@@ -194,6 +194,31 @@ describe('a schedule is created, read back and listed', () => {
     expect(existsSync(join(claims, 'occ_ddd'))).toBe(true);
   });
 
+  it('counts a marker it cannot attribute as possibly ours, never as purged', () => {
+    // `claimsLeft` is an UPPER bound on purpose: a marker whose file cannot be
+    // read, or whose JSON will not parse, might be this schedule's. Counting it
+    // can overcount; not counting it would report a clean purge that was not
+    // one, and only one of those errors is safe.
+    const claims = join(root, 'cron-occurrences');
+    mkdirSync(join(claims, 'occ_torn'), { recursive: true });
+    writeFileSync(join(claims, 'occ_torn', 'claimed.json'), 'not json at all');
+    mkdirSync(join(claims, 'occ_owned'), { recursive: true });
+    writeFileSync(join(claims, 'occ_owned', 'claimed.json'),
+      JSON.stringify({ occurrence: { occurrenceId: 'occ_owned', scheduleId: 's-count' } }));
+
+    expect(store.create('s-count', v()).ok).toBe(true);
+    const removed = store.remove('s-count', '2026-08-06T12:00:00.000Z');
+    expect(removed.ok).toBe(true);
+    if (removed.ok) {
+      expect(removed.value.claimsPurged).toBe(1);
+      expect(removed.value.claimsLeft).toBe(1);
+    }
+    // The unattributable one is LEFT on disk: removing it could delete another
+    // schedule's already-handled window.
+    expect(existsSync(join(claims, 'occ_torn'))).toBe(true);
+    expect(existsSync(join(claims, 'occ_owned'))).toBe(false);
+  });
+
   it('deletes a schedule too CORRUPT to read, which is the case it exists for', () => {
     // A journal written before a required field existed replays as corrupt, and
     // every other operation reads it first — so before this the only remedy was

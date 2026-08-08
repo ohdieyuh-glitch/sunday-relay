@@ -112,9 +112,14 @@ export interface CronScheduleStore {
    */
   remove(scheduleId: string, at: string): ScheduleStoreOutcome<{
     readonly claimsPurged: number;
-    /** Markers naming this schedule that could NOT be removed. The deletion
-     *  still succeeded — the clamp makes an orphan harmless — but a purge
-     *  nobody can count is a purge nobody can check. */
+    /**
+     * An UPPER BOUND on markers of this schedule left behind: every marker the
+     * purge could not remove, plus every one whose owner it could not
+     * establish — an unreadable file, or JSON that will not parse. Those may
+     * belong to another schedule, so this can overcount; it can never
+     * undercount, which is the direction that matters. The deletion still
+     * succeeded, because the clamp makes an orphan unreachable.
+     */
     readonly claimsLeft: number;
   }>;
   /** Pause or resume. Recorded in the journal like everything else. */
@@ -425,8 +430,10 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
         // that cost: a failed unlink refused with "the schedule is still
         // there" AFTER destroying the markers, and marker existence IS the
         // already-handled gate, so the next tick re-fired occurrences it had
-        // already run. Removing the schedule first means a refusal has
-        // destroyed nothing, and a crash after it leaves orphaned claims —
+        // already run. Removing the schedule first means a refusal destroys no
+        // CLAIM and leaves a record that still reads — the snapshot may already
+        // be gone, which nothing reads and the next write rebuilds — and a
+        // crash after it leaves orphaned claims —
         // which the clamp makes harmless, since a recreated schedule is
         // authored NOW and can only own moments that postdate its creation.
         //
@@ -469,7 +476,15 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
               if (typeof parsed.occurrence?.scheduleId === 'string') {
                 owner = parsed.occurrence.scheduleId;
               }
-            } catch { /* an unreadable marker names no schedule; leave it */ }
+            } catch {
+              // JSON that will not parse names nobody, and it MIGHT be ours —
+              // counted so the bound stays an upper one, and left on disk
+              // because removing what cannot be attributed would delete
+              // another schedule's already-handled window.
+              claimsLeft += 1;
+              continue;
+            }
+            if (owner === null) { claimsLeft += 1; continue; }
             if (owner !== scheduleId) continue;
             try {
               rmSync(join(occurrences, entry.name), { recursive: true, force: true });

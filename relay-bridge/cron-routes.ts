@@ -509,7 +509,21 @@ function deleteSchedule(
     return err(404, 'schedule_not_found',
       `No schedule named ${safeText(scheduleId)} exists. Nothing was deleted.`);
   }
-  const removed = ticks.removeSchedule(scheduleId, request.now);
+  // WRAPPED FOR THE SAME REASON THE INSPECT IS. A throw from inside the purge —
+  // an unreadable occurrences root, a file where that directory should be —
+  // reached the catch-all as a 500, and since the schedule is removed BEFORE
+  // the purge, that 500 would follow a deletion that had already happened. An
+  // unknown answer about a completed delete is worse than a named one.
+  let removed: ReturnType<CronTickPort['removeSchedule']>;
+  try {
+    removed = ticks.removeSchedule(scheduleId, request.now);
+  } catch (error) {
+    return err(500, 'schedule_delete_incomplete',
+      'The schedule was removed, but purging its occurrence claims failed: '
+      + `${safeText(error instanceof Error ? error.message : 'unknown error')}. The claims that `
+      + 'remain cannot be inherited — a schedule created under this name is authored now — but '
+      + 'they were not cleaned up.');
+  }
   if (!removed.ok) return err(409, 'schedule_not_deleted', safeText(removed.problem));
   return ok({
     scheduleId,
@@ -520,9 +534,15 @@ function deleteSchedule(
     // cannot be inherited — but the count is reported rather than rounded to
     // zero, because a purge nobody can check is a purge nobody should trust.
     claimsLeft: removed.claimsLeft,
-    note: 'The schedule is gone and its id is free. The occurrence claims it made were purged, and '
-      + 'a schedule created under this name is authored now, so its ticks can only own moments '
+    note: [
+      'The schedule is gone and its id is free.',
+      removed.claimsLeft === 0
+        ? 'The occurrence claims it made were purged.'
+        : `${String(removed.claimsLeft)} occurrence marker(s) could not be purged or attributed `
+          + 'and were left in place.',
+      'A schedule created under this name is authored now, so its ticks can only own moments '
       + 'after it exists. Runs it created are untouched and keep the version they started under.',
+    ].join(' '),
   });
 }
 
