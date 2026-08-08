@@ -379,9 +379,9 @@ describe('the Loop Engine documents state what exists, truthfully', () => {
     // and an opened wave — as ONE contiguous claim, so a status rewritten to
     // announce an opened wave cannot satisfy it with a withdrawal preamble.
     expect(beta).toContain(
-      '**Status: THE ACCESS DECISION AND THE DURABLE ENROLMENT STORE ARE IMPLEMENTED. '
-      + 'NO ROUTE, NO SIGNUP PATH, NO ENFORCEMENT, AND NO WAVE HAS BEEN OPENED. NOBODY '
-      + 'HAS BEEN ADMITTED TO ANYTHING.**',
+      '**Status: THE DECISION, THE DURABLE STORE AND THE ADMISSION ROUTES ARE '
+      + 'IMPLEMENTED AND WIRED INTO THE BRIDGE. NO WAVE HAS BEEN OPENED IN PRODUCTION '
+      + 'AND NOBODY HAS BEEN ADMITTED TO ANYTHING.**',
     );
   });
 

@@ -1,8 +1,8 @@
 # Controlled beta waves
 
-**Status: THE ACCESS DECISION AND THE DURABLE ENROLMENT STORE ARE IMPLEMENTED.
-NO ROUTE, NO SIGNUP PATH, NO ENFORCEMENT, AND NO WAVE HAS BEEN OPENED. NOBODY
-HAS BEEN ADMITTED TO ANYTHING.**
+**Status: THE DECISION, THE DURABLE STORE AND THE ADMISSION ROUTES ARE
+IMPLEMENTED AND WIRED INTO THE BRIDGE. NO WAVE HAS BEEN OPENED IN PRODUCTION
+AND NOBODY HAS BEEN ADMITTED TO ANYTHING.**
 
 Those are six different claims and this file keeps them apart. The last one is
 the honest limit: this module decides, and nothing yet records, serves or
@@ -93,8 +93,7 @@ door. A board that disagrees with the gate is worse than no board.
 
 ## Not implemented
 
-the enrolment path (no surface can enrol anyone) ·
-the bridge route that would answer the decision · enforcement anywhere in the
+ enforcement anywhere in the
 product (no surface consults this — `mission/beta` is imported by nothing) ·
 opening a wave (no artifact records any wave's state; there is no default
 config, so "all waves are not_open" is true only because nothing configures one)
@@ -141,3 +140,47 @@ the honest outcome: the volume holds something we cannot order.
 Only `RELAY_BETA_WAVES` can name a directory, and a participant id must match
 `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` — no dot, so `..` cannot form; no separator,
 so no directory can be escaped.
+
+## The routes
+
+`relay-bridge/beta-routes.ts`, and the split between them IS the security shape:
+
+| Route | Who | What it does |
+|---|---|---|
+| `POST /relay-api/beta/request` | **public** | records a request. Cannot admit. |
+| `POST /relay-api/beta/access` | operator | asks the gate about one participant |
+| `GET /relay-api/beta/status` | operator | the wave board |
+
+**A request is not an admission**, and the response says so in the same breath
+rather than leaving a caller to infer it: it returns `admitted: false` always,
+with a note that recording is not granting. A public route that could admit
+would make the cap decorative.
+
+**The caller cannot choose their wave.** Naming your own wave means naming the
+one with room. Public signup reaches `wave_0` and nothing else; the body is read
+for a participant id and for nothing else.
+
+**No anonymous execution.** These routes record and answer. They issue no
+session, no token and no capability — what an admitted participant may then *do*
+is the existing authentication and permission surface's decision, unchanged.
+
+**Off unless switched on.** `RELAY_BETA_ENABLED=1`, and without a mounted state
+root there is no store, so the routes answer `beta_not_ready` rather than
+recording an enrolment that would not survive a restart.
+
+## Opening the wave
+
+`RELAY_BETA_WAVE_0_OPEN` — three states from one variable:
+
+- unset, or anything else → **`not_open`** (admits nobody)
+- `1` → **`open`**
+- `closed` → **`closed`**
+
+An unset variable meaning `not_open` is the only thing a missing decision can
+honestly say, so **opening the controlled public beta is a deliberate act by
+whoever sets it, never a side effect of deploying.**
+
+Wave 0's cap is **100 seats**, set in `main()` from `WAVE_0.md`, because it is a
+deployment decision — the gate does not choose any wave's cap. Waves 1-3 are
+deliberately unconfigured, so `/beta/status` reports them as `unconfigured`
+rather than showing them merely closed.
