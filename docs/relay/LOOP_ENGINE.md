@@ -457,13 +457,20 @@ the panel keeps them in separate regions with different words.
 
 ## Not implemented
 
-Scheduler WIRING (the pass planner exists; nothing invokes it) · agent slots ·
+WORKER-scheduler WIRING (the fairness pass planner exists; nothing invokes it).
+This is the MULTI-AGENT scheduler and is not the Cron scheduler, which is wired
+and is a different thing — a distinction this line did not have to make until
+now · agent slots ·
 work stealing · critical-path scheduling · scheduler telemetry · the watchdog ·
 multi-Loop concurrency ·
 multi-role BRIDGE WIRING (staffing exists — `confirmLoopRunsForTarget` creates
 one run per resolved role; the bridge still creates a single run and drives
-one role, `coding_agent`) · Cron CLAIMING and dispatch
-(grammar and the pure evaluator exist — see `CRON_LOOPS.md`) · Unchain (see `UNCHAIN.md`) · S-Loop
+one role, `coding_agent`) · Cron DISPATCH, and dispatch ALONE — claiming
+shipped, and listing it here after it landed is the defect this section's own
+closing paragraph names: the claim-before-effect sequence, the durable marker,
+the tick, a schedule store, the operator endpoints and a timer inside the bridge
+all exist, and a scheduled run is still created and never advanced
+(see `CRON_LOOPS.md`) · Unchain (see `UNCHAIN.md`) · S-Loop
 runtime · swarm branches · convergence · Rechaining · Loop templates ·
 marketplace integration · starting a Loop from the website.
 
