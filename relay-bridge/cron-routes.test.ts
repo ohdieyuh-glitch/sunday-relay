@@ -885,8 +885,8 @@ describe('an operator can create, list and pause a schedule', () => {
   it('still sees its own runs after a REBINDING moved it to another Loop', async () => {
     // `loopId` is a versioned field and rebinding is a supported edit, so runs
     // made before one live in the Loop that version named. Scanning only the
-    // head's Loop made them vanish from both outputs — a clean list of its own unfinished work
-    // over this schedule's own unfinished work.
+    // head's Loop made them vanish from both outputs — an empty report over
+    // this schedule's own unfinished work.
     const ticked = await call();
     expect(dataOf(ticked).runsCreated).toBe(3);
 

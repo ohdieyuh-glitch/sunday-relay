@@ -465,7 +465,9 @@ function editSchedule(
     changed: edited.changed,
     // THIS SCHEDULE'S UNFINISHED RUNS, which keep the version they started
     // under. NOT "in flight": nothing in this build advances a scheduled run,
-    // so an unfinished one is `queued`. `activeRunsFor`
+    // so an unfinished one has not been DISPATCHED — it is normally `queued`,
+    // though an operator stop can move it out of that state, which is why the
+    // claim here is about dispatch and not about the state. `activeRunsFor`
     // twenty lines away deliberately excludes `queued` for that reason, and one
     // file using the same word for two different things is how the next reader
     // learns the wrong one.

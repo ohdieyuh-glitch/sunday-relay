@@ -417,8 +417,8 @@ the history the store returned so it describes the version that landed. Pausing
 is not an edit and cannot be reached through it — `paused` is a refused field,
 so a schedule is stopped by the control that stops it.
 
-It passes the planner THIS SCHEDULE'S runs, and reports the ones still in
-flight. A run records the schedule that created it — `confirmLoopRun` refuses a
+It passes the planner THIS SCHEDULE'S runs, and reports the ones still
+unfinished. A run records the schedule that created it — `confirmLoopRun` refuses a
 schedule-created run that does not name one, because the run id is a digest of
 the occurrence and does not reverse, so nothing could attribute it afterwards.
 
@@ -440,8 +440,10 @@ seed's `api` default; and a schedule-created run written before runs recorded
 their schedule. Each would otherwise let an edit report a clean list over this
 schedule's own unfinished work.
 
-The runs it names are UNFINISHED, not in flight: nothing in this build advances
-a scheduled run, so every one of them is `queued` and has never executed.
+The runs it names are UNFINISHED, which is not the same as running: nothing in
+this build advances a scheduled run, so none of them has been dispatched. They
+are normally `queued`; an operator control can move a run out of that state, so
+the claim is about dispatch rather than about the state.
 
 `cron-versioning.ts` implements that decision. An edit APPENDS: every previous
 version rides through unchanged, including the one being superseded, whose
@@ -504,7 +506,8 @@ Deleting a schedule does not touch the runs it created: they keep their own
 records and stay attributed to the version they started under. Whether any are
 still UNFINISHED is not checked — a run records its schedule now, so it could
 be, and deletion simply does not ask. Nothing in this build advances a
-scheduled run, so an unfinished one is queued and has never executed.
+scheduled run, so an unfinished one has not been dispatched — it is normally
+`queued`, though an operator control can move it out of that state.
 
 This is also the remedy for a schedule the tick refuses on rules that arrived
 after it was stored — a fixed offset, a `SystemV/*` zone, a single-word IANA
