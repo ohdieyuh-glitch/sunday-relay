@@ -17,32 +17,40 @@ import { RelayOperationsPanel } from './RelayOperationsPanel';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
 import {
   RelayStage, RelayStageBackdrop, RelayStageBackdropPicker,
-  type RelayBackdropId, type RelayStageActor,
+  type RelayBackdropId,
 } from '../relay-stage';
+import {
+  projectWorkspaceCast, type CastRoleInput,
+} from '../../shared/relay-stage-cast';
 import { useViewportWidth } from './use-viewport-width';
 
 /** The width assumed only when there is no window to ask. */
 const DEFAULT_VIEWPORT_WIDTH_PX = 1440;
 
 /**
- * WHO IS ON THE WORKSPACE STAGE TODAY.
+ * WHO IS ON THE WORKSPACE STAGE TODAY — THE CAST IS NOW DERIVED, and this is
+ * the one role it can honestly derive.
  *
- * One actor, and the honest reason there is one: the Relay Dog is the only
- * agent this surface has artwork and a state model for. The Leopard, the cubs
- * and the vehicles have slots in the stage's contract and no sprites yet, and
- * a stage that drew them from nothing would be inventing a cast — the same
- * defect as a panel that renders a run it never fetched.
+ * `projectWorkspaceCast` places an actor for every role that is ACTUALLY
+ * WORKING, and can place three. The workspace passes one, because one is what
+ * this build produces: `LOOP_ENGINE.md` records that multi-role staffing exists
+ * (`confirmLoopRunsForTarget` creates a run per resolved role) while THE BRIDGE
+ * STILL CREATES A SINGLE RUN AND DRIVES ONE ROLE, `coding_agent`. Passing the
+ * architect and the reviewer would put actors on the stage for work no run
+ * performs.
  *
- * `depth: 1` puts the Dog at the front of the ground plane, where the old band
- * effectively pinned it. A second actor arrives by adding a row here.
+ * AND `present` IS NOT `working`. `codingRuntime`, `architectRuntime` and
+ * `reviewerHarness` report whether a runtime is configured and connected —
+ * which is a different question, and answering the stage's question with it
+ * would draw a reviewer that has only ever been configured. The Dog is drawn
+ * because the workspace is showing a mission, which is the meaning it already
+ * had and the one `dogState` is derived from.
+ *
+ * The second and third actors arrive when the bridge drives a second role, not
+ * when a second sprite exists.
  */
-const RELAY_WORKSPACE_CAST: readonly RelayStageActor[] = Object.freeze([
-  // One dog-width of footprint, but it patrols the whole stage: `track` is what
-  // its patrol engine measures, and a track the size of the sprite would switch
-  // patrol off without failing anywhere.
-  Object.freeze({
-    id: 'relay-dog', x: 0.5, depth: 1, width: 1, track: 6, layer: 'actors' as const,
-  }),
+const WORKSPACE_CAST_ROLES: readonly CastRoleInput[] = Object.freeze([
+  Object.freeze({ role: 'coding_agent' as const, working: true }),
 ]);
 import { RelayProjectFooter } from './RelayProjectFooter';
 import { RelayPspAgentImport } from '../psp-import';
@@ -185,6 +193,13 @@ export function RelayProjectWorkspace(
   const measuredWidthPx = useViewportWidth(DEFAULT_VIEWPORT_WIDTH_PX);
   const observedViewportWidthPx = viewportWidthPx ?? measuredWidthPx;
 
+  // Derived once per render from a frozen input, so the identity is stable and
+  // the stage does not re-place actors because React re-rendered.
+  const workspaceCast = useMemo(
+    () => projectWorkspaceCast({ roles: WORKSPACE_CAST_ROLES }),
+    [],
+  );
+
   /**
    * THE BACKDROP CHOICE, with EXACTLY ONE SOURCE OF TRUTH at a time.
    *
@@ -275,7 +290,7 @@ export function RelayProjectWorkspace(
         <div className="rpw-stage-bounds">
           <RelayStage
             className="rpw-stage"
-            actors={RELAY_WORKSPACE_CAST}
+            actors={workspaceCast.actors}
             viewportWidthPx={observedViewportWidthPx}
             reducedMotion={reducedMotion}
             label="Relay stage"

@@ -138,13 +138,45 @@ user who asked for less motion does not get a different scene.
 
 ## Who is on it today
 
-**One actor: the Relay Dog.** The honest reason is that it is the only agent
-this surface has artwork and a state model for. The Leopard, the cubs and the
-vehicles have slots in the contract and no sprites yet, and a stage that drew
-them from nothing would be inventing a cast — the same defect as a panel
-rendering a run it never fetched.
+**One actor: the Relay Dog** — and it is now DERIVED rather than declared.
 
-A second actor arrives by adding a row to `RELAY_WORKSPACE_CAST`.
+The cast was a frozen one-row constant. That was honest while there was exactly
+one actor and one thing it could mean, and it stopped being a fact about the
+product the moment a second role could work: a constant cannot be wrong, but it
+also cannot be right — it says the same thing whether the reviewer is running or
+has never been configured.
+
+`projectWorkspaceCast` (`src/relay/shared/relay-stage-cast.ts`) places an actor
+for every role that is **actually working**, and can place three. The workspace
+passes one, because one is what this build produces: `LOOP_ENGINE.md` records
+that multi-role staffing exists — `confirmLoopRunsForTarget` creates a run per
+resolved role — while **the bridge still creates a single run and drives one
+role**, `coding_agent`. Passing the architect and the reviewer would put actors
+on the stage for work no run performs.
+
+**`present` is not `working`.** `codingRuntime`, `architectRuntime` and
+`reviewerHarness` report whether a runtime is configured and connected, which is
+a different question; answering the stage's question with it would draw a
+reviewer that has only ever been configured. Configured, requested, available
+and working are four facts, and `loop-roles.ts` exists to keep the first three
+apart already.
+
+The second and third actors arrive **when the bridge drives a second role**, not
+when a second sprite exists.
+
+### Why no cub and no Leopard, stated rather than quietly omitted
+
+The contract sizes a Leopard at 2 dog-units and a cub at 0.6, and the projection
+places neither. A cub is a subordinate or temporarily-expanded agent — **Unchain
+is the feature that would create one**, and `UNCHAIN.md` records that the meter,
+the session lifecycle and Rechaining execution are all unimplemented, so no cub
+can exist to be drawn. Giving the architect a cub sprite because a cub sprite
+was available would assign a meaning nothing produced: the same defect as a
+panel rendering a run it never fetched, in artwork instead of data.
+
+The three roles this product does have are drawn as **peers** — one dog-unit
+each, one depth, one layer — because nothing in this build makes one of them
+subordinate to another. The slots stay open; the sizes are already agreed.
 
 ## The two scenes
 
@@ -236,7 +268,10 @@ that only one of them has the input, and it now says so.
 
 ## Not implemented
 
-Parallax content for the `far` layer · the Leopard, cubs, vehicle and
+Parallax content for the `far` layer · a SECOND ACTOR ON A REAL STAGE: the
+projection places three, and the bridge drives one role, so the multi-agent cast
+is reachable and unreached until multi-role bridge wiring lands
+(`LOOP_ENGINE.md`) · the Leopard, cubs, vehicle and
 transformation sprites · any cinematic sequence · carrying the choice
 BETWEEN browsers (it is a local preference, stored per browser, and no account
 syncs it) · carrying it to the CLI, which reports `Unknown` rather than
