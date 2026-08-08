@@ -532,7 +532,7 @@ describe('a scheduled run names the schedule that made it', () => {
   it('refuses a schedule-created run that names no schedule', () => {
     // Nothing can attribute it afterwards: the run id is a digest of the
     // occurrence and does not reverse. Without this, an edit to that schedule
-    // cannot say which of its runs are in flight, and the only list available —
+    // cannot say which of its runs are unfinished, and the only list available —
     // every run in the Loop — reports another schedule's runs as this one's.
     const { deps } = harness([]);
     const base = {

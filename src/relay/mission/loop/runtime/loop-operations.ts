@@ -321,7 +321,7 @@ export interface LoopConfirmationInput {
    * `schedule`, because the run id is a digest of the occurrence and does not
    * reverse — a run created without it can never be attributed to its schedule
    * afterwards, and an edit to that schedule cannot say which of its runs are
-   * still in flight.
+   * still unfinished.
    */
   readonly scheduleId?: string | null;
   readonly budget: RelayLoopBudgetState;
@@ -375,7 +375,7 @@ export function confirmLoopRun(
   // A SCHEDULED RUN MUST NAME ITS SCHEDULE, and it must do so HERE, because
   // nothing can recover it later: the run id is a digest of the occurrence and
   // does not reverse. Without it an edit to that schedule cannot say which of
-  // its runs are still in flight, and the only list available — every run in
+  // its runs are still unfinished, and the only list available — every run in
   // the Loop — reports another schedule's runs as this one's.
   if (input.creationSource === 'schedule'
     && (typeof input.scheduleId !== 'string' || input.scheduleId.trim() === '')) {

@@ -864,6 +864,36 @@ describe('Claude Code adapter boundaries (Prompt 8)', () => {
     }
   });
 
+  it('nothing describing a SCHEDULE\'s unfinished runs calls them "in flight"', () => {
+    // The edit endpoint reports the runs a schedule change must not disturb.
+    // Nothing in this build dispatches a scheduled run, so those runs have not
+    // executed — and three commits in a row declared this wording fixed while
+    // leaving instances behind, twice because the phrase was line-WRAPPED and a
+    // line-based grep cannot see it. So the check is here rather than in a
+    // commit message: it normalises whitespace, and it names the files that
+    // describe this list rather than the whole repository, where "in flight"
+    // is correct about work that genuinely executes.
+    const describing = [
+      relay(join('mission', 'loop', 'runtime', 'loop-operations.ts')),
+      join(root, 'relay-bridge', 'cron-routes.ts'),
+      join(root, 'relay-bridge', 'cron-service.ts'),
+      join(root, 'docs', 'relay', 'CRON_LOOPS.md'),
+    ];
+    // The two deliberate survivors: the contrast itself, and `activeRunsFor`,
+    // which is about runs that really are executing.
+    const ALLOWED = [/NOT "in flight"/, /may run BESIDE work in flight/];
+    for (const file of describing) {
+      const flat = read(file).replace(/\s+/gu, ' ');
+      for (const match of flat.matchAll(/[^.]*in[- ]flight[^.]*/giu)) {
+        const sentence = match[0];
+        expect(
+          ALLOWED.some((allowed) => allowed.test(sentence)),
+          `${file.slice(root.length + 1)} calls a schedule's unfinished runs "in flight": ${sentence.trim().slice(0, 120)}`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it('the transport marks its broken-pipe failure as a consequence', () => {
     // The rule that lets a later observation replace it is unit-tested; THIS
     // is the wiring, and without it that rule never fires. Removing the marker
