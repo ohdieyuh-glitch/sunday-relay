@@ -1,7 +1,10 @@
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync } from 'node:fs';
+import {
+  closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, rmSync, unlinkSync,
+} from 'node:fs';
 import { join, sep } from 'node:path';
 import { appendLineDurable, fsyncDirBestEffort, readTextIfExists, writeFileAtomic } from './atomic-file';
 import { acquireRunLock } from './lock';
+import { CLAIM_MARKER_FILE } from './cron-claim-node';
 import { planScheduleEdit } from '../mission/loop/cron/cron-versioning';
 import { readIsoInstantWithOffset } from '../mission/loop/runtime/loop-scheduler';
 import type { CronContractVersion, VersionedRun } from '../mission/loop/cron/cron-versioning';
@@ -100,6 +103,25 @@ export interface CronScheduleStore {
     proposed: Omit<CronContractVersion, 'version'>,
     runs: readonly VersionedRun[],
   ): ScheduleStoreOutcome<CronScheduleRecord>;
+  /**
+   * Delete a schedule and FREE ITS ID, purging the occurrence claims it made.
+   *
+   * Reads nothing first, deliberately — the case that motivates deletion is a
+   * schedule too corrupt to read, and a delete that had to replay it could not
+   * remove the thing it exists to remove.
+   */
+  remove(scheduleId: string, at: string): ScheduleStoreOutcome<{
+    readonly claimsPurged: number;
+    /**
+     * An UPPER BOUND on markers of this schedule left behind: every marker the
+     * purge could not remove, plus every one whose owner it could not
+     * establish — an unreadable file, or JSON that will not parse. Those may
+     * belong to another schedule, so this can overcount; it can never
+     * undercount, which is the direction that matters. The deletion still
+     * succeeded, because the clamp makes an orphan unreachable.
+     */
+    readonly claimsLeft: number;
+  }>;
   /** Pause or resume. Recorded in the journal like everything else. */
   setPaused(scheduleId: string, paused: boolean, at: string): ScheduleStoreOutcome<CronScheduleRecord>;
 }
@@ -157,6 +179,7 @@ export function versionProblem(version: CronContractVersion): string | null {
 }
 
 export function createCronScheduleStore(options: { root: string }): CronScheduleStore {
+  const stateRoot = options.root;
   const root = join(options.root, SCHEDULES_DIR);
   mkdirSync(root, { recursive: true, mode: 0o700 });
 
@@ -246,9 +269,9 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
         return {
           kind: 'corrupt',
           problem: `Version ${String(version.version)} cannot be stated by this build: ${problem} `
-            + 'It is refused rather than run with attribution nobody wrote. No endpoint can '
-            + 'repair it — creating over it conflicts, pausing and editing read it first — so the '
-            + 'record has to be removed from the state root by hand.',
+            + 'It is refused rather than run with attribution nobody wrote. Nothing can repair '
+            + 'it in place — creating over it conflicts, and pausing and editing read it first — '
+            + 'so delete it and create it again.',
         };
       }
     }
@@ -385,6 +408,98 @@ export function createCronScheduleStore(options: { root: string }): CronSchedule
         };
         writeSnapshot(dir, record);
         return { ok: true, value: record };
+      });
+    },
+
+    remove(scheduleId, at) {
+      const dir = dirFor(scheduleId);
+      if (dir === null) return refuse(`"${scheduleId}" is not a usable schedule id.`);
+      if (readIsoInstantWithOffset(at) === null) {
+        return refuse('the deletion instant must be an ISO-8601 instant carrying an explicit UTC '
+          + 'offset.');
+      }
+      if (!existsSync(join(dir, VERSIONS_JOURNAL))) {
+        return refuse(`There is no schedule named ${scheduleId} to delete.`);
+      }
+      return underLock(dir, at, () => {
+        // THE SCHEDULE GOES FIRST, and the ORDER inside it is snapshot then
+        // journal — the journal is the authority, so while it survives the
+        // schedule still reads and a refusal below can say so truthfully.
+        //
+        // An earlier version purged the claims first, and review showed what
+        // that cost: a failed unlink refused with "the schedule is still
+        // there" AFTER destroying the markers, and marker existence IS the
+        // already-handled gate, so the next tick re-fired occurrences it had
+        // already run. Removing the schedule first means a refusal destroys no
+        // CLAIM and leaves a record that still reads — the snapshot may already
+        // be gone, which nothing reads and the next write rebuilds — and a
+        // crash after it leaves orphaned claims —
+        // which the clamp makes harmless, since a recreated schedule is
+        // authored NOW and can only own moments that postdate its creation.
+        //
+        // ONLY "ALREADY GONE" IS SWALLOWED. Catching everything reported a
+        // deletion that did not happen: with `versions.ndjson` replaced by a
+        // directory the unlink fails EISDIR, and the answer was still `ok` with
+        // "the schedule is gone and its id is free" while it sat on disk.
+        for (const name of [SNAPSHOT, VERSIONS_JOURNAL]) {
+          try {
+            unlinkSync(join(dir, name));
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+              return refuse(`${name} could not be removed: `
+                + `${(error as Error).message.slice(0, 120)}. The schedule is still there and no `
+                + 'occurrence claim was purged.');
+            }
+          }
+        }
+        fsyncDirBestEffort(dir);
+
+        // THE CLAIMS LAST, and they can be found: every marker stores the
+        // occurrence that produced it, and the occurrence names its schedule.
+        // This is DEFENCE IN DEPTH rather than what makes reuse safe — the
+        // clamp is that — so a marker this cannot remove is reported, not
+        // treated as a failure of the deletion that already succeeded.
+        let claimsPurged = 0;
+        let claimsLeft = 0;
+        const occurrences = join(stateRoot, 'cron-occurrences');
+        if (existsSync(occurrences)) {
+          for (const entry of readdirSync(occurrences, { withFileTypes: true })) {
+            // A SYMLINK IS NOT FOLLOWED AND NOT IGNORED. `isDirectory()` is
+            // lstat-based so a symlinked occurrence reads as false, while the
+            // already-handled gate uses `existsSync`, which DOES follow it — so
+            // skipping one silently would leave a live claim uncounted and make
+            // the upper bound below a lie. It is counted and left: following it
+            // could delete outside the state root.
+            if (entry.isSymbolicLink()) { claimsLeft += 1; continue; }
+            if (!entry.isDirectory()) continue;
+            let marker: string | null = null;
+            try {
+              marker = readTextIfExists(join(occurrences, entry.name, CLAIM_MARKER_FILE));
+            } catch { claimsLeft += 1; continue; }
+            if (marker === null) continue;
+            let owner: string | null = null;
+            try {
+              const parsed = JSON.parse(marker) as { occurrence?: { scheduleId?: unknown } };
+              if (typeof parsed.occurrence?.scheduleId === 'string') {
+                owner = parsed.occurrence.scheduleId;
+              }
+            } catch {
+              // JSON that will not parse names nobody, and it MIGHT be ours —
+              // counted so the bound stays an upper one, and left on disk
+              // because removing what cannot be attributed would delete
+              // another schedule's already-handled window.
+              claimsLeft += 1;
+              continue;
+            }
+            if (owner === null) { claimsLeft += 1; continue; }
+            if (owner !== scheduleId) continue;
+            try {
+              rmSync(join(occurrences, entry.name), { recursive: true, force: true });
+              claimsPurged += 1;
+            } catch { claimsLeft += 1; }
+          }
+        }
+        return { ok: true, value: { claimsPurged, claimsLeft } };
       });
     },
 

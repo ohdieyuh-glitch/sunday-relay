@@ -1,4 +1,6 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -930,10 +932,78 @@ describe('an operator can create, list and pause a schedule', () => {
     expect(service.schedules.read('sched-triage')?.history).toHaveLength(1);
   });
 
+  it('deletes a schedule, purges its claims, and frees the id', async () => {
+    // Tick first so there are real claims to purge.
+    expect(dataOf(await call()).runsCreated).toBe(3);
+    expect(existsSync(occurrenceDir())).toBe(true);
+
+    const deleted = await call({ authorized: true },
+      { path: '/cron/schedules/sched-triage/delete' });
+    expect(deleted?.status).toBe(200);
+    expect(dataOf(deleted).claimsPurged).toBe(3);
+    expect(readdirSync(occurrenceDir())).toEqual([]);
+
+    // GONE IS MISSING, and the id is free: a create under the same name works,
+    // and its ticks can only own moments after it exists.
+    expect((await call())?.status).toBe(404);
+    const recreated = await call(
+      { ...CREATE, scheduleId: 'sched-triage' }, { path: '/cron/schedules' },
+    );
+    expect(recreated?.status).toBe(200);
+    const listed = await call(undefined, { method: 'GET', path: '/cron/schedules' });
+    expect(dataOf(listed).schedules).toEqual([{ scheduleId: 'sched-triage', state: 'active' }]);
+  });
+
+  it('deletes a CORRUPT schedule, which no other operation can touch', async () => {
+    // Before this the doc said such a record had to be removed from the state
+    // root by hand: create conflicts, pause and edit read it first.
+    writeFileSync(
+      join(root, 'cron-schedules', 'sched-triage', 'versions.ndjson'),
+      'torn\n{"kind":"version","version":2}\n',
+    );
+    expect((await call())?.status).toBe(409);
+    expect((await call({ authorized: true },
+      { path: '/cron/schedules/sched-triage/delete' }))?.status).toBe(200);
+    expect((await call())?.status).toBe(404);
+  });
+
+  it('deletes a record too damaged to even READ, which is the whole point', async () => {
+    // A journal that cannot be opened at all — not merely one that replays as
+    // corrupt — made `inspectSchedule` THROW, which the server turned into a
+    // 500 and left the record undeletable through the endpoint while the store
+    // beneath would have removed it happily. Present-and-unreadable is present.
+    const journal = join(root, 'cron-schedules', 'sched-triage', 'versions.ndjson');
+    rmSync(journal);
+    mkdirSync(journal);   // a directory where the file was: reading throws EISDIR
+    const deleted = await call({ authorized: true },
+      { path: '/cron/schedules/sched-triage/delete' });
+    expect(deleted?.status).not.toBe(500);
+    // The unlink cannot remove a directory either, so this refuses TRUTHFULLY
+    // rather than reporting a deletion that did not happen.
+    expect(deleted?.status).toBe(409);
+    expect(errorOf(deleted).message).toContain('still there');
+  });
+
+  it('deleting a schedule that is not there is 404, as everywhere else', async () => {
+    // 409 would tell an operator retrying a timed-out delete that they
+    // conflicted with something, when what happened is that it worked.
+    const absent = await call({ authorized: true },
+      { path: '/cron/schedules/sched-nope/delete' });
+    expect(absent?.status).toBe(404);
+    expect(errorOf(absent).kind).toBe('schedule_not_found');
+  });
+
+  it('deleting requires explicit authorization, like every other write', async () => {
+    const unauthorized = await call({}, { path: '/cron/schedules/sched-triage/delete' });
+    expect(unauthorized?.status).toBe(403);
+    expect(errorOf(unauthorized).kind).toBe('authorization_required');
+    expect(service.schedules.read('sched-triage')?.history).toHaveLength(1);
+  });
+
   it('the schedule routes are behind the same gates as the tick', async () => {
     for (const path of [
       '/cron/schedules', '/cron/schedules/sched-triage/pause',
-      '/cron/schedules/sched-triage/edit',
+      '/cron/schedules/sched-triage/edit', '/cron/schedules/sched-triage/delete',
     ]) {
       expect((await call(CREATE, { path, authorize: () => ({ kind: 'none', principal: 'none' }) }))?.status)
         .toBe(401);

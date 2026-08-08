@@ -122,6 +122,10 @@ export interface CronTickPort {
   setSchedulePaused(
     scheduleId: string, paused: boolean, at: string,
   ): { readonly ok: true } | { readonly ok: false; readonly problem: string };
+  removeSchedule(
+    scheduleId: string, at: string,
+  ): { readonly ok: true; readonly claimsPurged: number; readonly claimsLeft: number }
+    | { readonly ok: false; readonly problem: string };
   editSchedule(
     scheduleId: string,
     proposed: Omit<CronContractVersion, 'version'>,
@@ -448,6 +452,100 @@ function editSchedule(
   });
 }
 
+/**
+ * Deletion, which frees the id.
+ *
+ * IT READS ONLY TO TELL MISSING FROM PRESENT, and a read that FAILS does not
+ * refuse the request. The case that motivates deletion is a schedule too
+ * CORRUPT to read — a journal written before a required field existed, a zone
+ * no evaluator resolves — and an inspect whose failure refused would block
+ * exactly the removal this exists to perform. Such a read used to reach the
+ * server's catch-all and answer 500; present-and-unreadable is treated as
+ * present now. Until this existed, the answer was to edit the volume by hand.
+ *
+ * WHAT IT STILL CANNOT REMOVE, said plainly: a journal the filesystem will not
+ * let go of — a directory in its place, an immutable file — is refused with
+ * what the unlink said, not deleted. That refusal is truthful and destroys
+ * nothing, which is the part worth having; the record still needs a hand.
+ *
+ * THE ID COMES BACK. An earlier version of this left a tombstone so a reused id
+ * could not inherit the deleted schedule's occurrence claims — and review
+ * showed the hazard it guarded cannot occur: a recreated schedule is authored
+ * NOW, and the tick clamps its window to its own authoring instant, so it can
+ * only own moments that postdate its creation. Permanent id exhaustion for an
+ * unreachable collision is a worse trade than the dead end it replaced. The
+ * store purges the claims anyway, so nothing is left to reason about.
+ *
+ * WHAT IT DOES NOT CHECK: whether runs this schedule created are still in
+ * flight. A run records its Loop and not its schedule, so that question cannot
+ * be answered today. Deleting a schedule does not touch its runs, which keep
+ * their own records and their attribution to the version they started under.
+ */
+function deleteSchedule(
+  request: CronRouteRequest, ticks: CronTickPort, rawId: string,
+): ReviewerRouteResult {
+  const refusal = requireAuthorization(request.body, 'Deleting a schedule');
+  if (refusal !== null) return refusal;
+  const scheduleId = decodeSegment(rawId);
+  if (scheduleId === null) {
+    return err(422, 'validation_failed', 'The schedule id is not a usable path segment.');
+  }
+  if (!isUsableScheduleId(scheduleId)) {
+    return err(422, 'validation_failed',
+      `"${safeText(scheduleId)}" cannot name a schedule: 1-64 characters, letters, digits, `
+      + 'underscore and hyphen, starting with a letter or digit.');
+  }
+  // MISSING IS 404 HERE TOO. Every sibling answers 404 for a schedule that is
+  // not there; answering 409 would tell an operator retrying a timed-out delete
+  // that they conflicted with something, when what happened is that it worked.
+  let present = true;
+  try {
+    present = ticks.inspectSchedule(scheduleId).kind !== 'missing';
+  } catch {
+    // A record too damaged to inspect is still a record to delete.
+    present = true;
+  }
+  if (!present) {
+    return err(404, 'schedule_not_found',
+      `No schedule named ${safeText(scheduleId)} exists. Nothing was deleted.`);
+  }
+  // WRAPPED FOR THE SAME REASON THE INSPECT IS. A throw from inside the purge —
+  // an unreadable occurrences root, a file where that directory should be —
+  // reached the catch-all as a 500, and since the schedule is removed BEFORE
+  // the purge, that 500 would follow a deletion that had already happened. An
+  // unknown answer about a completed delete is worse than a named one.
+  let removed: ReturnType<CronTickPort['removeSchedule']>;
+  try {
+    removed = ticks.removeSchedule(scheduleId, request.now);
+  } catch (error) {
+    return err(500, 'schedule_delete_incomplete',
+      'The schedule was removed, but purging its occurrence claims failed: '
+      + `${safeText(error instanceof Error ? error.message : 'unknown error')}. The claims that `
+      + 'remain cannot be inherited — a schedule created under this name is authored now — but '
+      + 'they were not cleaned up. DO NOT RETRY: the schedule is already gone, and a second '
+      + 'attempt answers 404.');
+  }
+  if (!removed.ok) return err(409, 'schedule_not_deleted', safeText(removed.problem));
+  return ok({
+    scheduleId,
+    deletedAt: request.now,
+    // NAMED, because a purge nobody can count is a purge nobody can check.
+    claimsPurged: removed.claimsPurged,
+    // Markers this could not remove. The deletion still happened — an orphan
+    // cannot be inherited — but the count is reported rather than rounded to
+    // zero, because a purge nobody can check is a purge nobody should trust.
+    claimsLeft: removed.claimsLeft,
+    note: [
+      'The schedule is gone and its id is free.',
+      removed.claimsLeft === 0
+        ? 'The occurrence claims it made were purged.'
+        : `${String(removed.claimsLeft)} occurrence marker(s) could not be purged or attributed.`,
+      'A schedule created under this name is authored now, so its ticks can only own moments '
+      + 'after it exists. Runs it created are untouched and keep the version they started under.',
+    ].join(' '),
+  });
+}
+
 function pauseSchedule(
   request: CronRouteRequest, ticks: CronTickPort, rawId: string,
 ): ReviewerRouteResult {
@@ -599,12 +697,14 @@ export async function handleCronRoute(
   // becomes true later.
   const pauseMatch = /^\/cron\/schedules\/([^/]+)\/pause$/u.exec(request.path);
   const editMatch = /^\/cron\/schedules\/([^/]+)\/edit$/u.exec(request.path);
+  const deleteMatch = /^\/cron\/schedules\/([^/]+)\/delete$/u.exec(request.path);
   const isSchedules = request.path === `${CRON_PREFIX}schedules`;
   const isTick = request.path === `${CRON_PREFIX}tick`;
   const recognized =
     (isSchedules && (request.method === 'GET' || request.method === 'POST'))
     || (pauseMatch !== null && request.method === 'POST')
     || (editMatch !== null && request.method === 'POST')
+    || (deleteMatch !== null && request.method === 'POST')
     || (isTick && request.method === 'POST');
   if (!recognized) {
     return err(422, 'validation_failed', 'Unknown Cron operation.');
@@ -629,6 +729,9 @@ export async function handleCronRoute(
   }
   if (editMatch !== null) {
     return editSchedule(request, ticks, editMatch[1] as string);
+  }
+  if (deleteMatch !== null) {
+    return deleteSchedule(request, ticks, deleteMatch[1] as string);
   }
 
   const body = request.body;

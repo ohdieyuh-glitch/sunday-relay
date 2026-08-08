@@ -154,6 +154,153 @@ describe('a schedule is created, read back and listed', () => {
     expect(store.read('s-pause')?.paused).toBe(false);
   });
 
+  it('deletes a schedule and frees its id', () => {
+    expect(store.create('s-del', v()).ok).toBe(true);
+    const removed = store.remove('s-del', '2026-08-06T12:00:00.000Z');
+    expect(removed.ok).toBe(true);
+    expect(store.inspect('s-del').kind).toBe('missing');
+    expect(store.list()).not.toContain('s-del');
+    // THE ID COMES BACK. An earlier design left a tombstone to stop a reuse
+    // inheriting the old claims; the tick clamps a new schedule's window to its
+    // own authoring instant, so that collision cannot be reached, and burning
+    // the name forever was the worse trade.
+    expect(store.create('s-del', v()).ok).toBe(true);
+  });
+
+  it('purges the occurrence claims the deleted schedule made, and only those', () => {
+    // Defence in depth rather than the thing that makes reuse safe — but a
+    // freed id should leave nothing behind that has to be reasoned about.
+    const claims = join(root, 'cron-occurrences');
+    const marker = (occ: string, scheduleId: string): void => {
+      mkdirSync(join(claims, occ), { recursive: true });
+      writeFileSync(join(claims, occ, 'claimed.json'),
+        JSON.stringify({ occurrence: { occurrenceId: occ, scheduleId }, claimedAt: '2026-08-01' }));
+    };
+    expect(store.create('s-mine', v()).ok).toBe(true);
+    marker('occ_aaa', 's-mine');
+    marker('occ_bbb', 's-mine');
+    marker('occ_ccc', 's-other');
+    mkdirSync(join(claims, 'occ_ddd'), { recursive: true });   // no marker at all
+
+    const removed = store.remove('s-mine', '2026-08-06T12:00:00.000Z');
+    expect(removed.ok).toBe(true);
+    if (removed.ok) expect(removed.value.claimsPurged).toBe(2);
+    expect(existsSync(join(claims, 'occ_aaa'))).toBe(false);
+    expect(existsSync(join(claims, 'occ_bbb'))).toBe(false);
+    // ANOTHER SCHEDULE'S CLAIM SURVIVES — purging it would silently replay its
+    // handled windows, which is the defect this whole area guards against.
+    expect(existsSync(join(claims, 'occ_ccc'))).toBe(true);
+    // …and a directory naming no schedule is left alone rather than guessed at.
+    expect(existsSync(join(claims, 'occ_ddd'))).toBe(true);
+  });
+
+  it('counts a marker it cannot attribute as possibly ours, never as purged', () => {
+    // `claimsLeft` is an UPPER bound on purpose: a marker whose file cannot be
+    // read, or whose JSON will not parse, might be this schedule's. Counting it
+    // can overcount; not counting it would report a clean purge that was not
+    // one, and only one of those errors is safe.
+    const claims = join(root, 'cron-occurrences');
+    mkdirSync(join(claims, 'occ_torn'), { recursive: true });
+    writeFileSync(join(claims, 'occ_torn', 'claimed.json'), 'not json at all');
+    mkdirSync(join(claims, 'occ_owned'), { recursive: true });
+    writeFileSync(join(claims, 'occ_owned', 'claimed.json'),
+      JSON.stringify({ occurrence: { occurrenceId: 'occ_owned', scheduleId: 's-count' } }));
+
+    expect(store.create('s-count', v()).ok).toBe(true);
+    const removed = store.remove('s-count', '2026-08-06T12:00:00.000Z');
+    expect(removed.ok).toBe(true);
+    if (removed.ok) {
+      expect(removed.value.claimsPurged).toBe(1);
+      expect(removed.value.claimsLeft).toBe(1);
+    }
+    // The unattributable one is LEFT on disk: removing it could delete another
+    // schedule's already-handled window.
+    expect(existsSync(join(claims, 'occ_torn'))).toBe(true);
+    expect(existsSync(join(claims, 'occ_owned'))).toBe(false);
+  });
+
+  it('counts a SYMLINKED occurrence, which the already-handled gate still honours', () => {
+    // `isDirectory()` is lstat-based so a symlink reads as false, while the
+    // gate uses `existsSync`, which follows it. Skipping one silently would
+    // leave a live claim uncounted and make the upper bound a lie. It is not
+    // followed — that could delete outside the state root.
+    const claims = join(root, 'cron-occurrences');
+    const real = join(root, 'elsewhere');
+    mkdirSync(real, { recursive: true });
+    writeFileSync(join(real, 'claimed.json'),
+      JSON.stringify({ occurrence: { occurrenceId: 'occ_link', scheduleId: 's-link' } }));
+    mkdirSync(claims, { recursive: true });
+    symlinkSync(real, join(claims, 'occ_link'));
+
+    expect(store.create('s-link', v()).ok).toBe(true);
+    const removed = store.remove('s-link', '2026-08-06T12:00:00.000Z');
+    expect(removed.ok).toBe(true);
+    if (removed.ok) expect(removed.value.claimsLeft).toBe(1);
+    // The target survives: nothing outside the state root was touched.
+    expect(existsSync(join(real, 'claimed.json'))).toBe(true);
+  });
+
+  it('deletes a schedule too CORRUPT to read, which is the case it exists for', () => {
+    // A journal written before a required field existed replays as corrupt, and
+    // every other operation reads it first — so before this the only remedy was
+    // editing the volume by hand.
+    const { projectId: _p, workspaceId: _w, loopId: _l, ...legacy } = v();
+    mkdirSync(join(root, 'cron-schedules', 'sched-legacy'), { recursive: true });
+    writeFileSync(
+      join(root, 'cron-schedules', 'sched-legacy', 'versions.ndjson'),
+      `${JSON.stringify({ kind: 'version', version: legacy })}\n`,
+    );
+    expect(store.inspect('sched-legacy').kind).toBe('corrupt');
+    expect(store.remove('sched-legacy', '2026-08-06T12:00:00.000Z').ok).toBe(true);
+    expect(store.inspect('sched-legacy').kind).toBe('missing');
+  });
+
+  it('refuses when the journal cannot be removed, rather than reporting success', () => {
+    // A swallowed unlink failure answered "the schedule is gone and its id is
+    // free" while it sat on disk. Only ENOENT is benign; everything else is a
+    // deletion that did not happen.
+    expect(store.create('s-stuck', v()).ok).toBe(true);
+    const journal = join(root, 'cron-schedules', 's-stuck', 'versions.ndjson');
+    rmSync(journal);
+    mkdirSync(journal);   // a directory where the journal was: unlink fails EISDIR
+    const removed = store.remove('s-stuck', '2026-08-06T12:00:00.000Z');
+    expect(removed.ok).toBe(false);
+    if (!removed.ok) expect(removed.problem).toContain('still there');
+  });
+
+  it('a refused deletion destroys nothing — the claims are still there', () => {
+    // THE DEFECT THIS PINS. The purge used to run FIRST, so a failed unlink
+    // refused with "the schedule is still there" after the markers were
+    // already gone — and marker existence IS the already-handled gate, so the
+    // next tick re-fired occurrences it had already run. The schedule goes
+    // first now, and a refusal has destroyed nothing.
+    const claims = join(root, 'cron-occurrences');
+    mkdirSync(join(claims, 'occ_keep'), { recursive: true });
+    writeFileSync(join(claims, 'occ_keep', 'claimed.json'),
+      JSON.stringify({ occurrence: { occurrenceId: 'occ_keep', scheduleId: 's-stuck2' } }));
+
+    expect(store.create('s-stuck2', v()).ok).toBe(true);
+    const journal = join(root, 'cron-schedules', 's-stuck2', 'versions.ndjson');
+    rmSync(journal);
+    mkdirSync(journal);   // unlink will fail EISDIR
+    const removed = store.remove('s-stuck2', '2026-08-06T12:00:00.000Z');
+    expect(removed.ok).toBe(false);
+    if (!removed.ok) expect(removed.problem).toContain('no occurrence claim was purged');
+    // The claim survives, so the window it marks is still handled.
+    expect(existsSync(join(claims, 'occ_keep', 'claimed.json'))).toBe(true);
+  });
+
+  it('refuses to delete what was never there, and a clock it cannot read', () => {
+    const absent = store.remove('s-nope', '2026-08-06T12:00:00.000Z');
+    expect(absent.ok).toBe(false);
+    if (!absent.ok) expect(absent.problem).toContain('no schedule named');
+    expect(store.create('s-clock', v()).ok).toBe(true);
+    const badClock = store.remove('s-clock', 'not-a-time');
+    expect(badClock.ok).toBe(false);
+    if (!badClock.ok) expect(badClock.problem).toContain('ISO-8601');
+    expect(store.read('s-clock')?.history).toHaveLength(1);
+  });
+
   it('a version line that records no version object is CORRUPT, never a crash', () => {
     // `.version` was read off whatever the line carried, so a null threw out of
     // `inspect` — a crash where the store's own word is `corrupt`.
@@ -196,7 +343,8 @@ describe('a schedule is created, read back and listed', () => {
     expect(inspected.kind).toBe('corrupt');
     if (inspected.kind === 'corrupt') {
       expect(inspected.problem).toContain('projectId');
-      expect(inspected.problem).toContain('removed from the state root by hand');
+      // The remedy the message names must be one that exists — deletion does.
+      expect(inspected.problem).toContain('delete it and create it again');
     }
   });
 
