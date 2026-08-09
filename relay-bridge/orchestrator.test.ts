@@ -1199,24 +1199,75 @@ describe('role slots decide who may hold each role, before anything is dispatche
    * declares `founder_machine` and the fake needs no CLI at all. It is a
    * different occupant, and this is the proof that saying so restored it.
    */
-  it('stops blaming the Coding Agent for the keyless offline pipeline on a host', async () => {
+  /**
+   * THE KEYLESS OFFLINE PIPELINE ON A HOST — the regression this branch caused
+   * and then repaired twice.
+   *
+   * `RELAY_BRIDGE_FAKE_CLAUDE=1` with the development architect is a whole
+   * mission with no credential and no spend, and it worked on a container
+   * before this branch. It broke twice: first because the fake was modelled as
+   * a MODE of the installed-CLI occupant, and then because binding demanded a
+   * REVIEWER the development path never dispatches — a dead end whose stated
+   * remedy could not be performed, since no reviewer occupant runs on a
+   * container. Binding now mirrors dispatch.
+   */
+  it('runs the keyless offline pipeline on a hosted deployment', async () => {
     const h = harness();
     const { view } = await runMission(
       h,
-      // No coding-agent name and no ANTHROPIC_API_KEY, on a hosted host.
-      { ...HOSTED_BASE, RELAY_ROLE_REVIEWER: 'hermes_local' },
+      // No coding-agent name, no reviewer, no credential — on a hosted host.
+      { RAILWAY_ENVIRONMENT: 'production', RELAY_PROMPT_ARCHITECT_MODE: 'fusion' },
       'm-role-hosted-fake',
       'fake',
     );
-    // The fake coding runtime needs no installed CLI, so it binds on a
-    // container — which is the regression this occupant repairs. What remains
-    // unrunnable there is the REVIEWER, and the refusal now says so precisely
-    // instead of blaming the agent that could have run.
+    expect(view.error?.code).not.toBe('role_binding_refused');
+    expect(view.error?.code).not.toBe('occupant_not_dispatchable');
+    const preflight = view.events.find((e) => e.headline.startsWith('Preflight'));
+    expect(preflight).toBeDefined();
+    expect(h.calls.fusion).toBe(1);
+    // The unstaffed role is named as unstaffed, not silently omitted.
+    expect(h.calls.reviewer).toBe(0);
+  });
+
+  /**
+   * A LIVE mission still requires a Reviewer everywhere. Optionality is derived
+   * from the architect path because that is the same signal the mission uses to
+   * decide whether it reviews at all — it is not a way to opt out of review.
+   */
+  it('still requires a Reviewer on the live path', async () => {
+    const h = harness();
+    const { view } = await runMission(
+      h,
+      { ...HOSTED_BASE, RELAY_ROLE_CODING_AGENT: 'claude_agent_sdk_hosted',
+        ANTHROPIC_API_KEY: 'sk-ant-FAKETESTNOTREAL-never-served', // relay-boundary:allow-fixture — synthetic
+        RELAY_HOSTED_CODING_MODEL: 'claude-test' },
+      'm-role-live-needs-reviewer',
+      'live',
+    );
     expect(view.error?.code).toBe('role_binding_refused');
-    expect(view.error?.safeMessage).toContain('hermes_local');
-    expect(view.error?.safeMessage).toContain('founder_machine');
-    expect(view.error?.safeMessage).not.toContain('claude_code_fake');
+    expect(view.error?.safeMessage).toContain('RELAY_ROLE_REVIEWER');
     expect(h.calls.architect).toBe(0);
+  });
+
+  /**
+   * Fake mode and a named occupant are a CONFLICT, not a precedence. Silently
+   * overriding ran a simulated agent under a name the operator chose — and on
+   * the development path nothing reviews the result, so it could reach
+   * `verified_complete`.
+   */
+  it('refuses fake mode and an explicitly named Coding Agent together', async () => {
+    const h = harness();
+    const { view } = await runMission(
+      h,
+      { RELAY_PROMPT_ARCHITECT_MODE: 'fusion', RELAY_ROLE_CODING_AGENT: 'claude_agent_sdk_hosted' },
+      'm-role-conflict',
+      'fake',
+    );
+    expect(view.error?.code).toBe('role_binding_refused');
+    expect(view.error?.safeMessage).toContain('RELAY_ROLE_CODING_AGENT');
+    expect(view.error?.safeMessage).toContain('claude_agent_sdk_hosted');
+    expect(h.calls.fusion).toBe(0);
+    expect(h.calls.coding).toBe(0);
   });
 
   it('binds the fake coding occupant on a hosted deployment', () => {
@@ -1235,7 +1286,7 @@ describe('role slots decide who may hold each role, before anything is dispatche
     });
     expect(resolution.binding.ok).toBe(true);
     if (!resolution.binding.ok) return;
-    expect(resolution.binding.bindings.coding_agent.occupant.occupantId).toBe('claude_code_fake');
+    expect(resolution.binding.bindings.coding_agent?.occupant.occupantId).toBe('claude_code_fake');
   });
 
   it('lets a bound, dispatchable combination proceed', async () => {

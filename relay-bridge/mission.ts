@@ -526,6 +526,21 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         return;
       }
       const boundRoles = roles.binding.bindings;
+      /**
+       * The two roles every mission dispatches. The Reviewer may legitimately
+       * be unstaffed — the development path never calls it — so it is read
+       * defensively below rather than asserted here.
+       */
+      const boundArchitect = boundRoles.prompt_architect;
+      const boundCoding = boundRoles.coding_agent;
+      if (boundArchitect === undefined || boundCoding === undefined) {
+        fail(rec, 'preflight_blocked',
+          'Relay could not staff the Prompt Architect and Coding Agent roles for this mission.', {
+            code: 'role_binding_refused',
+            retryable: false,
+          });
+        return;
+      }
 
       /**
        * AND CAN THIS BRIDGE ACTUALLY DRIVE THEM?
@@ -604,14 +619,13 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
          * The slot assignment, separate from readiness: what was REQUESTED for
          * each role. What actually answers is attested per role.
          *
-         * The Coding Agent entry carries its runtime PROVENANCE, because
-         * `RELAY_BRIDGE_FAKE_CLAUDE=1` resolves a synthetic executable while
-         * the occupant is still `claude_code_local` — an unqualified id there
-         * would claim the installed CLI held the role when a fake ran.
+         * The Coding Agent entry carries its runtime PROVENANCE because the
+         * occupant id is what was REQUESTED and the provenance is what was
+         * OBSERVED, and only the second can contradict the first.
          */
-        meta: `ROLES ${boundRoles.prompt_architect.requestedOccupantId} · `
-          + `${boundRoles.coding_agent.requestedOccupantId}(${runtime.runtime.provenance}) · `
-          + `${boundRoles.reviewer.requestedOccupantId}`,
+        meta: `ROLES ${boundArchitect.requestedOccupantId} · `
+          + `${boundCoding.requestedOccupantId}(${runtime.runtime.provenance}) · `
+          + `${boundRoles.reviewer?.requestedOccupantId ?? 'unstaffed'}`,
       });
 
       if (rec.cancelRequested) return cancelled(rec);
@@ -918,12 +932,19 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           // The REQUESTED identity, from the binding. What actually ran is
           // observed inside the coding leg and never copied from here.
           requestedOccupant: {
-            actorName: boundRoles.coding_agent.occupant.actorName,
-            adapterId: boundRoles.coding_agent.occupant.adapterId,
-            // Passed through, not narrowed. The coding leg owns the
-            // translation into the attestation's vocabulary, and a run that
-            // spends nothing must not be laundered into one that does.
-            billingPath: boundRoles.coding_agent.occupant.billingPath,
+            actorName: boundCoding.occupant.actorName,
+            adapterId: boundCoding.occupant.adapterId,
+            /**
+             * Narrowed at the boundary, and the narrowing is REAL: the
+             * registry's own test forbids a Coding Agent occupant from
+             * declaring `unknown`, so this branch documents an invariant
+             * rather than inventing a value. The coding leg owns the
+             * translation into the attestation's vocabulary — a run that
+             * spends nothing must not be laundered into one that does.
+             */
+            billingPath: boundCoding.occupant.billingPath === 'unknown'
+              ? 'none'
+              : boundCoding.occupant.billingPath,
           },
           requiresIndependentReview: live,
           onState: (s) => {

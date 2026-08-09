@@ -74,6 +74,14 @@ export interface RoleSlotRequest {
    */
   readonly invalidSelectors?: readonly RoleSlot[];
   /**
+   * Roles this caller will NOT dispatch, and therefore does not require.
+   *
+   * An optional role that binds is still bound and still checked; an optional
+   * role that cannot bind is simply absent. Binding mirrors dispatch — see
+   * `RoleSlotBindingResult`.
+   */
+  readonly optionalRoles?: readonly RoleSlot[];
+  /**
    * The occupants to bind against. Overridable ONLY for tests, and for one
    * specific reason: the shipped registry deliberately contains no
    * non-independent Coding-Agent/Reviewer pair, so without a seam the
@@ -226,8 +234,26 @@ export function bindRoleSlots(request: RoleSlotRequest): RoleSlotBindingResult {
 
   for (const role of ROLE_SLOTS) {
     const result = bindOne(request, role);
-    problems.push(...result.problems);
-    if (result.binding !== null) bound.set(role, result.binding);
+    if (result.binding !== null) {
+      bound.set(role, result.binding);
+      continue;
+    }
+    /**
+     * OPTIONAL MEANS "YOU NEED NOT NAME ONE", NOT "ANYTHING YOU NAME IS
+     * IGNORED".
+     *
+     * An unstaffed optional role is silent: the caller will not dispatch it,
+     * so a refusal an operator neither needs nor could act on is noise. But an
+     * operator who DID name something and got it wrong — a misspelled
+     * selector, an unregistered occupant, one that cannot run here, one whose
+     * configuration is absent — asked a question that deserves an answer.
+     * Swallowing those would be the silent-substitution failure again, wearing
+     * the word "optional".
+     */
+    const optional = request.optionalRoles?.includes(role) === true;
+    problems.push(...(optional
+      ? result.problems.filter((p) => p.reason !== 'no_occupant_requested')
+      : result.problems));
   }
 
   const implementer = bound.get('coding_agent');
@@ -247,14 +273,9 @@ export function bindRoleSlots(request: RoleSlotRequest): RoleSlotBindingResult {
 
   if (problems.length > 0) return { ok: false, problems };
 
-  return {
-    ok: true,
-    bindings: Object.freeze({
-      prompt_architect: bound.get('prompt_architect') as RoleBinding,
-      coding_agent: implementer as RoleBinding,
-      reviewer: reviewer as RoleBinding,
-    }),
-  };
+  const bindings: Partial<Record<RoleSlot, RoleBinding>> = {};
+  for (const [role, binding] of bound) bindings[role] = binding;
+  return { ok: true, bindings: Object.freeze(bindings) };
 }
 
 /**

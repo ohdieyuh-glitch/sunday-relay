@@ -310,9 +310,14 @@ export async function runCodingMission(input: {
      * claimed the other two would be "a type error rather than a billing path
      * invented at run time"; nothing enforced that, and the single call site
      * mapped everything-not-`api` to `subscription` — attesting a run that
-     * spent nothing as subscription-paid. `unknown` stays unknown.
+     * spent nothing as subscription-paid.
+     *
+     * `unknown` is deliberately NOT accepted. The registry's own test forbids
+     * a Coding Agent occupant from declaring it, so accepting it here would be
+     * a branch no input could reach — the same dead code an earlier round
+     * removed from the binder.
      */
-    readonly billingPath: 'subscription' | 'api' | 'none' | 'unknown';
+    readonly billingPath: 'subscription' | 'api' | 'none';
   };
 }): Promise<CodingOutcome> {
   const { executablePath, capabilities, now, ids, emit } = input;
@@ -510,11 +515,9 @@ export async function runCodingMission(input: {
     // previously carried two independent literals that happened to agree.
     const codingBillingPath = requestedOccupant.billingPath === 'api'
       ? 'api_billed' as const
-      : requestedOccupant.billingPath === 'subscription'
-        ? 'subscription' as const
-        : requestedOccupant.billingPath === 'none'
-          ? 'simulated' as const
-          : 'unknown' as const;
+      : requestedOccupant.billingPath === 'none'
+        ? 'simulated' as const
+        : 'subscription' as const;
     const codingAttestation = buildAttestation({
       missionId: input.missionId ?? String(taskId),
       missionRevision: input.missionRevision,

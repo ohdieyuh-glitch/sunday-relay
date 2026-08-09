@@ -137,14 +137,14 @@ describe('binding a deployment request', () => {
     const result = laptop();
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.bindings.coding_agent.occupant.occupantId).toBe('claude_code_local');
-    expect(result.bindings.reviewer.occupant.occupantId).toBe('hermes_local');
+    expect(result.bindings.coding_agent?.occupant.occupantId).toBe('claude_code_local');
+    expect(result.bindings.reviewer?.occupant.occupantId).toBe('hermes_local');
     // THE UNMETERED ARCHITECT. A development default that names the API-billed
     // provider is the kind of default that becomes load-bearing later; before
     // role slots existed an unconfigured machine had no architect at all, so
     // there is no prior behaviour that required the paid one.
-    expect(result.bindings.prompt_architect.occupant.occupantId).toBe('fusion_architect');
-    expect(result.bindings.prompt_architect.occupant.billingPath).toBe('none');
+    expect(result.bindings.prompt_architect?.occupant.occupantId).toBe('fusion_architect');
+    expect(result.bindings.prompt_architect?.occupant.billingPath).toBe('none');
   });
 
   it('binds a fully hosted combination', () => {
@@ -155,7 +155,7 @@ describe('binding a deployment request', () => {
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.bindings.coding_agent.requestedOccupantId).toBe('claude_agent_sdk_hosted');
+    expect(result.bindings.coding_agent?.requestedOccupantId).toBe('claude_agent_sdk_hosted');
   });
 
   /**
@@ -363,6 +363,64 @@ describe('binding a deployment request', () => {
     for (const problem of result.problems) {
       expect(problem.safeMessage).not.toMatch(/sk-[A-Za-z0-9]/);
     }
+  });
+});
+
+describe('a role the caller will not dispatch', () => {
+  const optionalReviewer = (requested: Partial<Record<RoleSlot, string>>) => bindRoleSlots({
+    requested,
+    environment: 'hosted',
+    configuredNames: ALL_NAMES,
+    allowDevelopmentDefaults: false,
+    optionalRoles: ['reviewer'],
+    selectorNames: { reviewer: 'RELAY_ROLE_REVIEWER' },
+  });
+
+  /**
+   * Binding must mirror dispatch. Demanding a reviewer the mission will never
+   * call turned a working zero-spend hosted pipeline into a dead end whose
+   * stated remedy could not be performed — no reviewer occupant runs on a
+   * container.
+   */
+  it('binds without it, and leaves the slot empty rather than filling it', () => {
+    const result = optionalReviewer({
+      prompt_architect: 'fusion_architect',
+      coding_agent: 'claude_code_fake',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.bindings.reviewer).toBeUndefined();
+    expect(result.bindings.coding_agent?.occupant.occupantId).toBe('claude_code_fake');
+  });
+
+  /**
+   * "You need not name one" is not "anything you name is ignored". An operator
+   * who named something and got it wrong asked a question that deserves an
+   * answer — swallowing it would be silent substitution wearing the word
+   * "optional".
+   */
+  it.each([
+    ['an unregistered occupant', 'nope_reviewer', 'unknown_occupant'],
+    ['one that cannot run here', 'hermes_local', 'environment_unsupported'],
+  ])('still refuses %s that was explicitly named', (_label, occupantId, reason) => {
+    const result = optionalReviewer({
+      prompt_architect: 'fusion_architect',
+      coding_agent: 'claude_code_fake',
+      reviewer: occupantId,
+    });
+    expect(result.ok).toBe(false);
+    expect(reasons(result)).toEqual([reason]);
+  });
+
+  it('accepts one that is named and can run', () => {
+    const result = optionalReviewer({
+      prompt_architect: 'fusion_architect',
+      coding_agent: 'claude_code_fake',
+      reviewer: 'hermes_remote_service',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.bindings.reviewer?.occupant.occupantId).toBe('hermes_remote_service');
   });
 });
 

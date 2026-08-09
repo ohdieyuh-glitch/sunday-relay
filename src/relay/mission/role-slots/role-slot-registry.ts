@@ -197,6 +197,7 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
     verificationNotes: [
       'A development path. No provider is contacted and no credential is read; it must never be presented as a real run.',
       'Selected by RELAY_BRIDGE_FAKE_CLAUDE=1, which is a deployment mode rather than a role choice.',
+      'Needs git and node on the host: it builds a throwaway fixture repository and runs the tests itself. Those are process requirements this registry cannot probe, so they are named here rather than claimed absent.',
     ],
   },
 

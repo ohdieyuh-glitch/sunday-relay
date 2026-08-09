@@ -3,6 +3,8 @@ import { runCodingMission } from './coding';
 import { resolveClaudeRuntime } from './claude-runtime';
 import { createRandomIdFactory } from '../src/relay/protocol/ids';
 import type { BridgeEventInput, CodingTerminalState } from './types';
+import { actorMatches, isPaidApiCall } from './attestation';
+import { findOccupant, type RoleOccupant } from '../src/relay/mission/role-slots';
 
 /**
  * CODING LEG — OFFLINE END-TO-END.
@@ -178,6 +180,41 @@ describe('the coding attestation separates who was asked for from what ran', () 
     // before it can happen; the fields still have to tell the truth if it did.)
     expect(attestation?.actualActor).toBe('Claude Code');
     expect(attestation?.actualRuntime).toBe('claude-code-local');
+  }, 30_000);
+
+  /**
+   * THE REGRESSION BARRIER. The vocabulary split — `requestedActor` from the
+   * registry's UI label, `actualActor` from the adapter — made `actorMatches`
+   * false on every ordinary local mission, and a whole bridge suite stayed
+   * green with the defect present. This binds the two halves through the REAL
+   * registry occupant, so a wrong `actorName` fails here rather than shipping.
+   */
+  it('reports the shipped local occupant as the actor that actually ran', async () => {
+    const local = findOccupant('coding_agent', 'claude_code_local') as RoleOccupant;
+    const { outcome } = await runOffline({
+      requestedOccupant: {
+        actorName: local.actorName,
+        adapterId: local.adapterId,
+        billingPath: local.billingPath as 'subscription',
+      },
+    });
+    expect(outcome.attestation).not.toBeNull();
+    expect(actorMatches(outcome.attestation ?? undefined)).toBe(true);
+  }, 30_000);
+
+  /** A run that spends nothing is `simulated`, never a payer. */
+  it('attests the offline pipeline as simulated rather than subscription-paid', async () => {
+    const fake = findOccupant('coding_agent', 'claude_code_fake') as RoleOccupant;
+    expect(fake.billingPath).toBe('none');
+    const { outcome } = await runOffline({
+      requestedOccupant: {
+        actorName: fake.actorName,
+        adapterId: fake.adapterId,
+        billingPath: fake.billingPath as 'none',
+      },
+    });
+    expect(outcome.attestation?.billingPath).toBe('simulated');
+    expect(isPaidApiCall(outcome.attestation ?? undefined)).toBe(false);
   }, 30_000);
 
   it('falls back to the local identity when no occupant is supplied', async () => {

@@ -178,6 +178,15 @@ export const ROLE_BINDING_REFUSALS = [
   'configuration_missing',
   'reviewer_not_independent',
   /**
+   * Two settings that both decide the same slot, disagreeing.
+   *
+   * `RELAY_BRIDGE_FAKE_CLAUDE=1` used to silently discard an explicitly named
+   * `RELAY_ROLE_CODING_AGENT`, binding the fake instead and saying nothing —
+   * substituting a different occupant under the operator's chosen name, which
+   * is the one thing this module exists to prevent. It refuses instead.
+   */
+  'selector_conflict',
+  /**
    * Registered, coherent, configured — and this pipeline cannot drive it.
    *
    * The refusal that stops a mission narrating one occupant while another does
@@ -206,6 +215,20 @@ export interface RoleBinding {
   readonly occupant: RoleOccupant;
 }
 
+/**
+ * A ROLE MAY BE UNSTAFFED WHEN THE MISSION WILL NOT DISPATCH IT.
+ *
+ * `bindings` is PARTIAL, and that is the repair for a real regression. Binding
+ * originally demanded all three slots always, which is stricter than the
+ * mission: on the development path the reviewer leg is never dispatched
+ * (`requiresIndependentReview` is false and the Hermes probe is skipped), so a
+ * hosted zero-spend pipeline that worked before was refused for the absence of
+ * a reviewer it would never have called — and no value of the new selector
+ * could satisfy it, because no reviewer occupant runs on a container.
+ *
+ * Binding now mirrors dispatch. A slot the mission will not use is allowed to
+ * be empty, and is empty rather than filled with a fiction.
+ */
 export type RoleSlotBindingResult =
-  | { readonly ok: true; readonly bindings: Readonly<Record<RoleSlot, RoleBinding>> }
+  | { readonly ok: true; readonly bindings: Readonly<Partial<Record<RoleSlot, RoleBinding>>> }
   | { readonly ok: false; readonly problems: readonly RoleBindingProblem[] };

@@ -142,7 +142,7 @@ describe('role-slot disclosure on the unauthenticated health route', () => {
     expect(resolution.hosted).toBe(false);
     expect(resolution.binding.ok).toBe(true);
     if (!resolution.binding.ok) return;
-    expect(resolution.binding.bindings.prompt_architect.occupant.billingPath).toBe('none');
+    expect(resolution.binding.bindings.prompt_architect?.occupant.billingPath).toBe('none');
   });
 
   it('binds a laptop that has chosen the live architect and configured it', () => {
