@@ -73,7 +73,8 @@
 .rpw > header,
 .rpw > main,
 .rpw > footer,
-.rpw > .rpw-strip {
+.rpw > .rpw-strip,
+.rpw > .rpw-stripzone {
   position: relative;
   z-index: 2;
 }
@@ -272,6 +273,153 @@
 .rpw-strip-square { color: var(--rpw-gold); font-size: 9px; vertical-align: 1px; }
 .rpw-strip-status { font-size: 9px; letter-spacing: 0.16em; color: var(--rpw-gold); }
 .rpw-strip-cell--phase { background: var(--rpw-panel-2); }
+
+/* A ROLE CELL IS A CONTROL.
+   The three permanent roles are the only things in this strip a founder can
+   change; MODE and PHASE are reports. They were visually identical, so the
+   control carries the whole difference: it fills its cell, keeps the exact
+   layout of the text it replaced, and only lifts on hover/focus. No new
+   colour, no badge — the strip has to stay one continuous system bar. */
+.rpw-strip-cell:has(> .rpw-strip-choose) { padding: 0; }
+.rpw-strip-choose {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 18px;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.rpw-strip-choose::after {
+  /* The affordance, at the weight of a hint rather than a button. */
+  content: 'CHANGE';
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  color: var(--rpw-faint);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.rpw-strip-choose:hover,
+.rpw-strip-choose:focus-visible {
+  background: rgba(224, 178, 92, 0.08);
+  border-left-color: var(--rpw-gold);
+  outline: none;
+}
+.rpw-strip-choose:hover::after,
+.rpw-strip-choose:focus-visible::after { opacity: 1; }
+.rpw-strip-choose:focus-visible { box-shadow: inset 0 0 0 1px rgba(224, 178, 92, 0.55); }
+
+/* ------------------------------------------------------- role selector */
+
+/* Anchored under the strip it belongs to — deliberately NOT a right-hand
+   sidebar, and deliberately not a route change into the 15-step flow. */
+.rpw-stripzone { position: relative; }
+.rpw-roleselect {
+  position: absolute;
+  top: 100%;
+  z-index: 45;
+  left: 18px;
+  right: auto;
+  width: min(420px, calc(100% - 36px));
+  margin-top: -1px;
+  padding: 14px 16px 12px;
+  background: var(--rpw-panel-2, #12141c);
+  border: 1px solid var(--rpw-line);
+  border-top: 2px solid var(--rpw-gold);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.55);
+}
+.rpw-roleselect-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.rpw-roleselect-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--rpw-gold);
+}
+.rpw-roleselect-close {
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--rpw-faint);
+  background: transparent;
+  border: 1px solid var(--rpw-line);
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.rpw-roleselect-close:hover { color: var(--rpw-cream); border-color: var(--rpw-gold); }
+.rpw-roleselect-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rpw-roleselect-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--rpw-cream);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--rpw-line);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.rpw-roleselect-option:hover:not(:disabled) {
+  border-color: var(--rpw-gold);
+  background: rgba(224, 178, 92, 0.07);
+}
+.rpw-roleselect-option:disabled { cursor: not-allowed; opacity: 0.55; }
+.rpw-roleselect-option.is-selected { border-color: var(--rpw-gold); }
+.rpw-roleselect-option.is-selected .rpw-roleselect-name::before {
+  content: '\25A0';
+  color: var(--rpw-gold);
+  font-size: 9px;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.rpw-roleselect-name { font-size: 12px; font-weight: 700; }
+.rpw-roleselect-state {
+  flex: none;
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  white-space: nowrap;
+  color: var(--rpw-faint);
+}
+.rpw-roleselect-state--available { color: var(--rpw-gold); }
+.rpw-roleselect-state--needs_configuration { color: var(--rpw-amber, #e0b25c); }
+.rpw-roleselect-note {
+  margin: 4px 0 0;
+  padding-left: 10px;
+  font-size: 9px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  color: var(--rpw-faint);
+}
+.rpw-roleselect-foot {
+  margin: 10px 0 0;
+  font-size: 9px;
+  line-height: 1.6;
+  color: var(--rpw-faint);
+  border-top: 1px solid var(--rpw-line);
+  padding-top: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rpw-strip-choose,
+  .rpw-strip-choose::after,
+  .rpw-roleselect-option { transition: none; }
+}
 
 /* --------------------------------------------------------------- main */
 

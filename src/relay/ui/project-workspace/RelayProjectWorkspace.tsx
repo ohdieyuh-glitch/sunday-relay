@@ -14,6 +14,8 @@ import { RelayVerificationSummary } from './RelayVerificationSummary';
 import { RelayResearchStatus } from './RelayResearchStatus';
 import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
 import { RelayProjectBrainOrb } from './RelayProjectBrainOrb';
+import { RelayRoleSelector } from './RelayRoleSelector';
+import type { WorkforceRole } from '../project-settings';
 import { RelayOperationsPanel } from './RelayOperationsPanel';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
 import {
@@ -224,6 +226,9 @@ export function RelayProjectWorkspace(
     onCloseTerminal,
     onOpenProjectSettings,
     onOpenProjectBrain,
+    onSelectRoleOccupant,
+    workforceSelection,
+    deployment = null,
     onOpenManualTask,
     onApproveManualTask,
     onRejectManualTask,
@@ -278,6 +283,16 @@ export function RelayProjectWorkspace(
    * broken by a `??`.
    */
   const [localBackdrop, setLocalBackdrop] = useState<RelayBackdropId | null>(null);
+  /** Which role's selector is open, if any. Local to the surface: it is a
+   *  disclosure state, not a fact about the project. */
+  const [roleBeingChosen, setRoleBeingChosen] = useState<WorkforceRole | null>(null);
+  /**
+   * A workspace whose host supplies no selection cannot offer to change one:
+   * there would be nothing to write into, and a selector over an invented
+   * default would be the second configuration store this must not become.
+   */
+  const roleSwitchingAvailable =
+    onSelectRoleOccupant !== undefined && workforceSelection !== undefined;
   const selectedBackdrop = onSelectStageBackdrop ? stageBackdrop : (localBackdrop ?? stageBackdrop);
   const handleSelectBackdrop = useCallback((id: RelayBackdropId) => {
     setLocalBackdrop(id);
@@ -337,7 +352,37 @@ export function RelayProjectWorkspace(
           a component only tests ever rendered. Mounting it is what makes the
           strip the single phase surface, which is also why `phase` is
           destructured above. */}
-      <RelayWorkforceStrip workforce={workforce} mode={mode} phase={phase} />
+      {/* The strip and its selector share one positioned zone, so the selector
+          opens UNDER THE CELL IT BELONGS TO. Anchoring it to the page instead
+          would put a floating panel somewhere near the strip, which is how a
+          selector turns into the sidebar this direction forbids. */}
+      <div className="rpw-stripzone">
+        <RelayWorkforceStrip
+          workforce={workforce}
+          mode={mode}
+          phase={phase}
+            {...(roleSwitchingAvailable ? { onSelectRole: setRoleBeingChosen } : {})}
+        />
+        {/* THE SELECTOR, mounted beside the strip it belongs to rather than in a
+            new right-hand sidebar. It is a small dialog over the registry, and
+            it closes on choice. */}
+        {roleBeingChosen !== null && workforceSelection !== undefined && (
+          <RelayRoleSelector
+            role={roleBeingChosen}
+            selection={workforceSelection}
+            deployment={deployment}
+            {...(onSelectRoleOccupant === undefined
+              ? {}
+              : {
+                onSelect: (role: WorkforceRole, agentId: string) => {
+                  onSelectRoleOccupant(role, agentId);
+                  setRoleBeingChosen(null);
+                },
+              })}
+            onDismiss={() => setRoleBeingChosen(null)}
+          />
+        )}
+      </div>
 
       <main className="rpw-main">
         {/* THE PROJECT BRAIN, ABOVE THE DOG, ABOVE THE MISSION BOX.

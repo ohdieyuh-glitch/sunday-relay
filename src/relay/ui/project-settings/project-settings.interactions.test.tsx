@@ -73,8 +73,13 @@ describe('click-first workforce selection', () => {
   it('unavailable agents are disabled and cannot silently appear connected', () => {
     setup();
     gotoSection('05 WORKFORCE');
-    const hermes = screen.getByRole('radio', { name: /Hermes/ }) as HTMLInputElement;
-    expect(hermes.disabled).toBe(true);
+    // Scoped to the CODING AGENT group: Hermes now appears twice, as the
+    // coding agent that does not exist yet and as the reviewer harness Relay
+    // genuinely ships. The claim under test is about the first one.
+    const hermesCoding = screen
+      .getAllByRole('radio', { name: /Hermes/ })
+      .find((r) => (r as HTMLInputElement).value === 'coding-hermes') as HTMLInputElement;
+    expect(hermesCoding.disabled).toBe(true);
     expect(screen.getAllByText('COMING LATER').length).toBeGreaterThan(0);
     // Exactly one CONNECTED status — Claude Code.
     expect(screen.getAllByText('CONNECTED')).toHaveLength(1);

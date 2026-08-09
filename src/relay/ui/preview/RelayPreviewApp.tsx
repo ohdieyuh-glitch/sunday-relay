@@ -31,6 +31,7 @@ import {
 import type { RelayMissionState } from '../app';
 import type { ProjectMessage, WorkspaceFixtureKey } from '../project-workspace';
 import { AGENT_OPTIONS, RelayProjectSettings } from '../project-settings';
+import type { WorkforceRole } from '../project-settings';
 import type { ProjectSettingsDraft } from '../project-settings';
 import { buildRelayMcpSettingsView } from '../mcp';
 import { RelayProjectBrainView } from '../project-workspace/RelayProjectBrainView';
@@ -59,6 +60,7 @@ import { COLORWAY_LABEL, RELAY_COLORWAYS, applyRelayColorway } from './colorway'
 import type { RelayColorway } from './colorway';
 import type { RelayBackdropId } from '../../shared/relay-stage-backdrop';
 import { siblingProductTarget } from './environment';
+import { configuredDeploymentKind } from '../app/bridge-session';
 import {
   EMPTY_USAGE_LATCH,
   demoUsageSnapshot,
@@ -208,8 +210,25 @@ function writeUsageLatch(latch: RelayUsageLatch): void {
   }
 }
 
+/** Role titles for the confirmation line. The strip's own labels. */
+const ROLE_TITLE_FOR_MESSAGE: Readonly<Record<WorkforceRole, string>> = Object.freeze({
+  prompt_architect: 'Prompt Architect',
+  coding_agent: 'Coding Agent',
+  reviewer: 'Reviewer',
+});
+
+/** The catalog name for a stored id. Unknown stays unknown — an id the catalog
+ *  does not have is not a name this surface may invent. */
+function agentNameFor(agentId: string): string {
+  return AGENT_OPTIONS.find((o) => o.id === agentId)?.name ?? agentId;
+}
+
 export function RelayPreviewApp() {
   const store = useMemo(() => getRelayAppStore(), []);
+  /* Which machine this browser talks to. Build-time and constant for the
+     session, so it is resolved once — and `null` (no bridge) is a real answer
+     the workspace shows as UNKNOWN rather than as "runs nowhere". */
+  const deploymentKind = useMemo(() => configuredDeploymentKind(), []);
   useEffect(() => {
     store.init();
   }, [store]);
@@ -929,6 +948,35 @@ export function RelayPreviewApp() {
         onCloseTerminal={() => navigate(`/relay/project/${projectId}`)}
         onOpenProjectSettings={() => navigate(`/relay/project/${projectId}/settings`)}
         onOpenProjectBrain={() => navigate(`/relay/project/${projectId}/brain`)}
+        /* ROLE SWITCHING WRITES THE PROJECT'S REAL CONFIGURATION.
+           `saveSettings` is the SAME writer the 15-step Project Settings uses,
+           and the strip's names come back through the same projection, so the
+           workspace has no second copy of the stack to disagree with. The next
+           Mission reads this draft; a Mission already running keeps whatever it
+           actually used, because its record is not this draft. */
+        workforceSelection={settings.draft.workforce}
+        deployment={deploymentKind}
+        onSelectRoleOccupant={(role, agentId) => {
+          const field = role === 'prompt_architect'
+            ? 'promptArchitectId'
+            : role === 'coding_agent' ? 'codingAgentId' : 'reviewerId';
+          const next = {
+            ...settings.draft,
+            workforce: { ...settings.draft.workforce, [field]: agentId },
+          };
+          const saved = store.saveSettings(projectId, next);
+          // ANNOUNCE FACTS, NOT INTENTIONS. The confirmation names the role
+          // only after the durable write resolved, and a refusal is reported
+          // rather than swallowed into a surface that looks changed.
+          if (!saved.ok) {
+            setNotice(saved.message);
+            return;
+          }
+          pushWsMessage(
+            'relay',
+            `${ROLE_TITLE_FOR_MESSAGE[role]} set to ${agentNameFor(agentId)}. Missions started from now on use it; this mission keeps what it actually ran.`,
+          );
+        }}
         onOpenManualTask={(id) => pushWsMessage('relay', `Opened Manual Task ${id}.`)}
         onApproveManualTask={(id) => pushWsMessage('relay', `Manual Task ${id} approved.`)}
         onRejectManualTask={(id) => pushWsMessage('relay', `Manual Task ${id} kept blocked.`)}

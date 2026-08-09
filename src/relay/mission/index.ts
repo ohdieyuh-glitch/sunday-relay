@@ -219,3 +219,22 @@ export {
   type ReviewerHarnessRecordDraft, type ReviewerHarnessStorePort,
   type ReviewerHarnessView, type ReviewerIdentityEvidence, type ReviewerIdentityRow,
 } from './reviewer-harness';
+
+/**
+ * ROLE SLOTS — the permanent roles and the occupants that may hold them.
+ *
+ * Exported through the barrel so the WEBSITE can read the registry. It is pure
+ * domain (its only non-sibling import is `../entitlement`, itself pure), which
+ * is what makes this legal: the UI consumes the domain and never the reverse.
+ * Until now the registry was reachable only from the bridge, so the workspace
+ * could not name the occupants a founder is allowed to choose between.
+ */
+export {
+  DEVELOPMENT_DEFAULT_OCCUPANTS, ROLE_OCCUPANTS, ROLE_SLOTS,
+  bindRoleSlots, findOccupant, occupantsAreIndependent, occupantsForRole,
+  registryIsComplete, renderBindingLine, requestedOccupantId,
+} from './role-slots';
+export type {
+  BillingPath, ExecutionEnvironment, OccupantKind, RoleBinding, RoleBindingProblem,
+  RoleBindingRefusal, RoleOccupant, RoleSlot, RoleSlotBindingResult, RoleSlotRequest,
+} from './role-slots';

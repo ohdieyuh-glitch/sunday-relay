@@ -46,6 +46,7 @@ export function RelayWorkforceStrip({
   mode,
   phase,
   operating,
+  onSelectRole,
 }: {
   workforce: WorkforceAssignment;
   mode: RelayWorkspaceMode;
@@ -56,6 +57,11 @@ export function RelayWorkforceStrip({
    * than showing an empty inspector — a missing profile is not a blank one.
    */
   operating?: readonly RelayAgentOperatingProjection[];
+  /**
+   * Open the selector for one role. Absent means this strip reports and does
+   * not offer to change anything, which is what it did before.
+   */
+  onSelectRole?: (role: RelayAgentRole) => void;
 }) {
   const profileFor = (role: RelayAgentRole) => operating?.find((p) => p.role === role);
 
@@ -66,8 +72,19 @@ export function RelayWorkforceStrip({
     options: { phaseCell?: boolean; role?: RelayAgentRole } = {},
   ) => {
     const projection = options.role === undefined ? undefined : profileFor(options.role);
-    return (
-      <div className={`rpw-strip-cell${options.phaseCell ? ' rpw-strip-cell--phase' : ''}`}>
+    /**
+     * A ROLE IS A CHOICE, AND SAYS SO BY BEING PRESSABLE.
+     *
+     * These were plain text. The three permanent roles are the one thing in
+     * this strip a founder can actually change, and nothing indicated it —
+     * MODE and PHASE are reports, and looked identical to them.
+     *
+     * Only when a host supplies `onSelectRole`. Without one the cell renders
+     * exactly as before, rather than as a control that does nothing.
+     */
+    const selectable = options.role !== undefined && onSelectRole !== undefined;
+    const body = (
+      <>
         <span className="rpw-key">{key}</span>
         <span className="rpw-strip-name">
           <span className="rpw-strip-square" aria-hidden="true">
@@ -76,6 +93,21 @@ export function RelayWorkforceStrip({
           {name}
         </span>
         <span className="rpw-strip-status">{status}</span>
+      </>
+    );
+    return (
+      <div className={`rpw-strip-cell${options.phaseCell ? ' rpw-strip-cell--phase' : ''}`}>
+        {selectable ? (
+          <button
+            type="button"
+            className="rpw-strip-choose"
+            aria-label={`Change the ${key.toLowerCase()}`}
+            aria-haspopup="dialog"
+            onClick={() => { onSelectRole(options.role as RelayAgentRole); }}
+          >
+            {body}
+          </button>
+        ) : body}
         {projection !== undefined && <RelayAgentOperatingInspector projection={projection} />}
       </div>
     );

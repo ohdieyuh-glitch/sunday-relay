@@ -14,6 +14,8 @@ import type { EventTruthClass, TerminalEventCategory } from '../../mission/wire-
 import type { RelayAgentOperatingProjection } from '../../mission';
 import type { RelayBackdropId } from '../relay-stage';
 import type { RelayBrainDocument, RelayOperationsView } from '../../shared/llmops';
+import type { RelayWorkforceSelection, WorkforceRole } from '../project-settings';
+import type { DeploymentKind } from './role-occupant-map';
 
 /* ----------------------------------------------------------------- modes */
 
@@ -357,6 +359,29 @@ export interface RelayProjectWorkspaceProps {
    * instead of a control that appears to open something and does nothing.
    */
   onOpenProjectBrain?: () => void;
+  /**
+   * The project's workforce selection — the SAME record Project Settings
+   * writes. Present means the strip's three role cells become controls;
+   * absent means this workspace reports the stack and cannot change it, which
+   * is what it did before, and the cells stay text rather than becoming
+   * controls that do nothing.
+   */
+  workforceSelection?: RelayWorkforceSelection;
+  /**
+   * Change who holds a role, through the project's real configuration.
+   * Absent for the same reason as above.
+   */
+  onSelectRoleOccupant?: (role: WorkforceRole, agentId: string) => void;
+  /**
+   * Which machine this workspace is talking to.
+   *
+   * An INPUT. A browser cannot tell a container from a laptop, and an occupant
+   * that can only run on one of them is the difference between "not set up
+   * yet" and "never, on this host" — so this is supplied rather than inferred.
+   * Absent, or `null`, means no bridge is connected and the answer is UNKNOWN
+   * rather than "founder machine".
+   */
+  deployment?: DeploymentKind;
   onOpenManualTask: (taskId: string) => void;
   onApproveManualTask: (taskId: string) => void;
   onRejectManualTask: (taskId: string) => void;
