@@ -59,8 +59,8 @@ export interface RoleOptionView {
   readonly option: AgentOption;
   readonly state: RoleOptionState;
   readonly selected: boolean;
-  /** Server-side variable NAMES this choice reads. Never values. */
-  readonly requiredConfig: readonly string[];
+  /** Whether the occupant that would run reads server configuration. Never which. */
+  readonly needsServerConfig: boolean | null;
   /** Why it cannot be chosen, when it cannot. */
   readonly blockedReason: string | null;
 }
@@ -105,7 +105,7 @@ export function roleOptionViews(input: {
           option,
           state: 'not_selectable' as const,
           selected,
-          requiredConfig: dispatch.requiredConfig,
+          needsServerConfig: dispatch.needsServerConfig,
           blockedReason: `${AVAILABILITY_LABEL[option.availability]} — this cannot be selected yet.`,
         };
       }
@@ -119,7 +119,7 @@ export function roleOptionViews(input: {
           option,
           state: 'conflicts' as const,
           selected,
-          requiredConfig: dispatch.requiredConfig,
+          needsServerConfig: dispatch.needsServerConfig,
           blockedReason: `Not independent from the Coding Agent (${coding?.name ?? 'unknown'}).`,
         };
       }
@@ -128,7 +128,7 @@ export function roleOptionViews(input: {
           option,
           state: 'conflicts' as const,
           selected,
-          requiredConfig: dispatch.requiredConfig,
+          needsServerConfig: dispatch.needsServerConfig,
           blockedReason: `The Reviewer already chosen (${reviewer?.name ?? 'unknown'}) would not be independent from it.`,
         };
       }
@@ -141,7 +141,7 @@ export function roleOptionViews(input: {
             ? ('selectable_dispatchable' as const)
             : ('selectable_not_dispatchable' as const),
         selected,
-        requiredConfig: dispatch.requiredConfig,
+        needsServerConfig: dispatch.needsServerConfig,
         blockedReason: null,
       };
     });
@@ -233,10 +233,15 @@ export function RelayRoleSelector({
                   No Relay bridge is connected, so where this would run is unknown.
                 </p>
               )}
-              {view.state === 'selectable_dispatchable' && view.requiredConfig.length > 0 && (
+              {view.state === 'selectable_dispatchable' && view.needsServerConfig === true && (
                 <p className="rpw-roleselect-note">
-                  {/* NAMES ONLY. */}
-                  {`Reads ${view.requiredConfig.join(', ')} on the server.`}
+                  {/* THAT it reads configuration, never WHICH. The variables
+                      belong to the machine that runs the mission, and a
+                      browser that lists them is publishing the server's
+                      configuration surface to a client. The bridge's readiness
+                      output names them, to an operator. */}
+                  Reads server configuration before it can run. Whether it is set is
+                  answered by the bridge, not here.
                 </p>
               )}
             </li>

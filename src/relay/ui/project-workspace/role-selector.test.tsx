@@ -118,14 +118,21 @@ describe('what the selector offers', () => {
     expect(hermesRow?.textContent).not.toMatch(/refused rather than dispatched/);
   });
 
-  it('names the server variables a hosted choice reads, and never a value', () => {
+  it('says that a hosted choice reads server configuration, and never which', () => {
     render(
       <RelayRoleSelector role="reviewer" selection={SELECTION} deployment="hosted" onSelect={vi.fn()} onDismiss={vi.fn()} />,
     );
+    const hermesRow = screen.getByRole('button', { name: /Hermes/ }).closest('li');
+    expect(hermesRow?.textContent).toMatch(/Reads server configuration/);
+
+    // NOT the variable names. Publishing the server's configuration surface to
+    // a browser is a boundary this repository already decided, and
+    // `browser-isolation.test.ts` walks the real import graph to hold it. The
+    // assertion here is on the RENDERED page, which is the other half.
     const html = document.body.innerHTML;
-    expect(html).toContain('RELAY_HERMES');
-    // A variable NAME is the disclosure. A value would be a credential, and no
-    // credential-shaped string may reach this surface.
+    for (const name of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'RELAY_HERMES', 'RELAY_HOSTED']) {
+      expect(html, `the selector rendered ${name}`).not.toContain(name);
+    }
     expect(html).not.toMatch(/sk-[A-Za-z0-9]/);
     expect(html).not.toMatch(/Bearer\s+\S/);
   });

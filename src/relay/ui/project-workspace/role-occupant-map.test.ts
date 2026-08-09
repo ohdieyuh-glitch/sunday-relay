@@ -1,23 +1,87 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
   OCCUPANTS_FOR_AGENT_OPTION,
+  OCCUPANT_FACTS,
   UNMAPPED_OCCUPANTS,
   dispatchForAgentOption,
 } from './role-occupant-map';
 import { AGENT_OPTIONS, SELECTABLE_AVAILABILITY, type AgentOption } from '../project-settings';
-import { ROLE_OCCUPANTS, ROLE_SLOTS } from '../../mission';
+import { ROLE_OCCUPANTS, ROLE_SLOTS } from '../../mission/role-slots';
 
 /**
  * THE JOIN IS THE CLAIM, SO THE JOIN IS WHAT IS TESTED.
  *
- * A table matching two hand-written vocabularies rots silently: renaming an
- * occupant or a catalog id leaves a mapping that points at nothing and a
- * selector that quietly says "no occupant runs this". These fail instead.
+ * The browser cannot import the occupant registry: occupants carry the
+ * server-side variable names their adapters read, and a module reachable from
+ * `main.tsx` must name none of them. So the workspace holds its own table of
+ * browser-safe occupant FACTS — where each one runs, and whether it reads
+ * configuration, never which.
+ *
+ * A hand-copied table rots silently. This file imports the real registry,
+ * which is free of consequence in a test — a test is not in the browser's
+ * import graph — and fails the moment the two disagree. That is the price of
+ * the boundary, paid here rather than by a founder reading a stale list.
  */
 
 const optionById = (id: string): AgentOption | undefined =>
   AGENT_OPTIONS.find((o) => o.id === id);
+
+describe('the browser-safe occupant facts match the real registry', () => {
+  it('covers every registered occupant, and invents none', () => {
+    expect(OCCUPANT_FACTS.map((o) => o.occupantId).sort())
+      .toEqual(ROLE_OCCUPANTS.map((o) => o.occupantId).sort());
+  });
+
+  it('reports each occupant’s role, name, hosts and adapter exactly', () => {
+    for (const occupant of ROLE_OCCUPANTS) {
+      const facts = OCCUPANT_FACTS.find((o) => o.occupantId === occupant.occupantId);
+      expect(facts, `${occupant.occupantId} has no browser-safe facts`).toBeDefined();
+      expect(facts?.role).toBe(occupant.role);
+      expect(facts?.displayName).toBe(occupant.displayName);
+      expect(facts?.adapterAvailable).toBe(occupant.adapterAvailable);
+      expect([...(facts?.environments ?? [])].sort()).toEqual([...occupant.environments].sort());
+    }
+  });
+
+  it('reports THAT configuration is read, matching the registry, on both hosts', () => {
+    for (const occupant of ROLE_OCCUPANTS) {
+      const facts = OCCUPANT_FACTS.find((o) => o.occupantId === occupant.occupantId);
+      const onMachine = occupant.requiredConfig.length > 0;
+      const onHost = occupant.requiredConfig.length + (occupant.hostedOnlyConfig?.length ?? 0) > 0;
+      expect(facts?.needsServerConfig.founder_machine, occupant.occupantId).toBe(onMachine);
+      expect(facts?.needsServerConfig.hosted, occupant.occupantId).toBe(onHost);
+    }
+  });
+
+  it('names no server variable anywhere in the browser-safe module', () => {
+    // The class barrier, not the instance. `browser-isolation.test.ts` catches
+    // the OpenAI credential specifically; this catches the NEXT one, whatever
+    // provider it belongs to, before it reaches a bundle.
+    const source = readFileSync(
+      join(process.cwd(), 'src', 'relay', 'ui', 'project-workspace', 'role-occupant-map.ts'),
+      'utf8',
+    );
+    const named = new Set<string>();
+    for (const occupant of ROLE_OCCUPANTS) {
+      for (const name of [...occupant.requiredConfig, ...(occupant.hostedOnlyConfig ?? [])]) {
+        named.add(name);
+      }
+    }
+    expect(named.size, 'the registry names no configuration at all — this test proves nothing')
+      .toBeGreaterThan(0);
+    // The docstring may DISCUSS a credential as the reason this rule exists; a
+    // declaration or a use is what would ship, so comments are stripped first.
+    const outsideComments = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '');
+    for (const name of named) {
+      expect(outsideComments, `the browser-safe module names ${name}`).not.toContain(name);
+    }
+  });
+});
 
 describe('agent option → occupant map', () => {
   it('names only catalog options that exist', () => {
@@ -70,35 +134,29 @@ describe('agent option → occupant map', () => {
 });
 
 describe('dispatchForAgentOption', () => {
-  it('reports a hosted-only occupant as not running on a founder machine', () => {
-    const hosted = optionById('coding-claude-code');
-    expect(hosted).toBeDefined();
-    // Claude Code has BOTH a local CLI and a hosted SDK occupant, so it runs
-    // in either place — that is the point of the pair.
-    expect(dispatchForAgentOption(hosted as AgentOption, 'coding_agent', 'hosted').runsHere).toBe(true);
-    expect(dispatchForAgentOption(hosted as AgentOption, 'coding_agent', 'founder_machine').runsHere).toBe(true);
+  it('reports Claude Code as running in either place, because both occupants exist', () => {
+    const claude = optionById('coding-claude-code') as AgentOption;
+    expect(dispatchForAgentOption(claude, 'coding_agent', 'hosted').runsHere).toBe(true);
+    expect(dispatchForAgentOption(claude, 'coding_agent', 'founder_machine').runsHere).toBe(true);
   });
 
-  it('names the configuration a hosted Hermes reviewer reads, because only the remote occupant can run there', () => {
-    const reviewer = optionById('reviewer-hermes');
-    expect(reviewer).toBeDefined();
-    const onHost = dispatchForAgentOption(reviewer as AgentOption, 'reviewer', 'hosted');
-    // The remote service occupant is what makes hosted possible at all, and it
-    // reads configuration — which must be NAMED so the founder can set it.
-    expect(onHost.runsHere).toBe(true);
-    expect(onHost.requiredConfig.length).toBeGreaterThan(0);
-    for (const name of onHost.requiredConfig) {
-      expect(name).toMatch(/^[A-Z0-9_]+$/);
-    }
-  });
-
-  it('takes the least configuration among occupants that run here, not the union', () => {
-    // The local Hermes process needs nothing; the remote service needs a URL
-    // and a token. On a founder machine the answer is "nothing", because that
-    // is the occupant that would run — reporting the union would demand
-    // variables this deployment never reads.
+  it('says a hosted Hermes reviewer reads configuration, without saying what', () => {
     const reviewer = optionById('reviewer-hermes') as AgentOption;
-    expect(dispatchForAgentOption(reviewer, 'reviewer', 'founder_machine').requiredConfig).toHaveLength(0);
+    const onHost = dispatchForAgentOption(reviewer, 'reviewer', 'hosted');
+    // Only the remote service occupant runs on a hosted bridge, and it reads a
+    // service URL and a token — so the answer is yes.
+    expect(onHost.runsHere).toBe(true);
+    expect(onHost.needsServerConfig).toBe(true);
+  });
+
+  it('answers for the occupant that would run, not for the strictest one', () => {
+    // The local Hermes process reads nothing; the remote service does. On a
+    // founder machine the answer is NO, because that is the occupant that
+    // would run — answering for the stricter one would report configuration
+    // this deployment never reads.
+    const reviewer = optionById('reviewer-hermes') as AgentOption;
+    expect(dispatchForAgentOption(reviewer, 'reviewer', 'founder_machine').needsServerConfig)
+      .toBe(false);
   });
 
   it('reports an unmapped option as running nowhere', () => {
@@ -106,9 +164,9 @@ describe('dispatchForAgentOption', () => {
       (o) => o.role === 'reviewer' && OCCUPANTS_FOR_AGENT_OPTION[o.id] === undefined,
     );
     expect(unmapped).toBeDefined();
-    expect(dispatchForAgentOption(unmapped as AgentOption, 'reviewer', 'hosted').runsHere).toBe(false);
-    expect(dispatchForAgentOption(unmapped as AgentOption, 'reviewer', 'hosted').occupants)
-      .toHaveLength(0);
+    const dispatch = dispatchForAgentOption(unmapped as AgentOption, 'reviewer', 'hosted');
+    expect(dispatch.runsHere).toBe(false);
+    expect(dispatch.occupants).toHaveLength(0);
   });
 
   it('answers UNKNOWN, not "nowhere", when no bridge is connected', () => {
@@ -119,7 +177,7 @@ describe('dispatchForAgentOption', () => {
     const claude = optionById('coding-claude-code') as AgentOption;
     const unknown = dispatchForAgentOption(claude, 'coding_agent', null);
     expect(unknown.runsHere).toBeNull();
-    expect(unknown.requiredConfig).toHaveLength(0);
+    expect(unknown.needsServerConfig).toBeNull();
     // The registered occupants are still reported — the registry is knowable
     // without a deployment; only "does it run here" is not.
     expect(unknown.occupants.length).toBeGreaterThan(0);

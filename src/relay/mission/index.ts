@@ -221,20 +221,32 @@ export {
 } from './reviewer-harness';
 
 /**
- * ROLE SLOTS — the permanent roles and the occupants that may hold them.
+ * ROLE SLOTS — the permanent roles, as TYPES and vocabulary only.
  *
- * Exported through the barrel so the WEBSITE can read the registry. It is pure
- * domain (its only non-sibling import is `../entitlement`, itself pure), which
- * is what makes this legal: the UI consumes the domain and never the reverse.
- * Until now the registry was reachable only from the bridge, so the workspace
- * could not name the occupants a founder is allowed to choose between.
+ * Straight from the CONTRACTS module rather than through the `role-slots`
+ * barrel, and that is the whole point. Occupants carry the server-side
+ * variable names their adapters read — a provider key among them — and this
+ * barrel is reachable from the browser entry point, so re-exporting anything
+ * through the sub-barrel pulled the registry, and therefore those names, into
+ * the browser's import graph and into its bundle. Type-only exports do not
+ * help: the graph is walked as text, because that is what a bundler resolves.
+ *
+ * A variable name is not a secret. Publishing the server's configuration
+ * surface to a client that has no business knowing it is still a boundary this
+ * repository already decided, and `connectors/gpt-architect/browser-isolation
+ * .test.ts` walks the real graph from `main.tsx` to hold it.
+ *
+ * So the website gets the ROLE VOCABULARY, and reads occupant facts through
+ * `src/relay/ui/project-workspace/role-occupant-map.ts`, whose table carries
+ * no configuration name at all and is parity-tested against the registry from
+ * a test — where importing it is free of consequence.
  */
-export {
-  DEVELOPMENT_DEFAULT_OCCUPANTS, ROLE_OCCUPANTS, ROLE_SLOTS,
-  bindRoleSlots, findOccupant, occupantsAreIndependent, occupantsForRole,
-  registryIsComplete, renderBindingLine, requestedOccupantId,
-} from './role-slots';
+export { ROLE_SLOTS } from './role-slots/role-slot-contracts';
 export type {
   BillingPath, ExecutionEnvironment, OccupantKind, RoleBinding, RoleBindingProblem,
-  RoleBindingRefusal, RoleOccupant, RoleSlot, RoleSlotBindingResult, RoleSlotRequest,
-} from './role-slots';
+  RoleBindingRefusal, RoleOccupant, RoleSlot, RoleSlotBindingResult,
+} from './role-slots/role-slot-contracts';
+// `RoleSlotRequest` is deliberately absent: it lives beside `bindRoleSlots`,
+// which imports the registry, so re-exporting it here would put the registry
+// back into the browser's graph. The bridge — its only consumer — imports it
+// from `./role-slots` directly, where that costs nothing.
