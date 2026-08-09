@@ -3,7 +3,14 @@ import { createMissionRegistry, selectArchitectPath } from './mission';
 import type { MissionRoleDeps } from './mission';
 import { buildAttestation, decideCompletion, digest } from './attestation';
 import type { ExecutionAttestation } from './attestation';
-import { runHermesReview, hermesPreflight, parseHermesStatus } from './hermes-reviewer';
+import {
+  runHermesReview,
+  hermesPreflight,
+  parseHermesStatus,
+  classifyHermesUpstreamFailure,
+  validateHermesReview,
+  escapeInvalidJsonEscapes,
+} from './hermes-reviewer';
 import type { HermesOutcome, ReviewPacket } from './hermes-reviewer';
 import { codingHandoffDigest, type CodingOutcome } from './coding';
 import type { OpenAiArchitectResult } from './openai-architect';
@@ -167,6 +174,7 @@ const approvedReview = (): HermesOutcome => ({
     summary: 'The implementation satisfies every acceptance criterion.',
     findings: [],
     requirementsChecked: [{ requirement: 'Existing tests pass', status: 'passed', evidence: 'Relay ran the tests.' }],
+    parseRepaired: false,
   },
 });
 
@@ -220,14 +228,15 @@ function harness(
       return over.hermesReady === false
         ? {
             ready: false,
-            missing: ['hermes authenticated provider'],
-            reason: 'The Hermes reviewer is not available. Missing: hermes authenticated provider.',
+            missing: ['hermes provider authentication (the configured provider rejected the reviewer credential)'],
+            reason: 'The Hermes reviewer is not available. Missing: hermes provider authentication.',
             executable: 'hermes',
             oneShotSupported: true,
             readOnlySupported: true,
             model: null,
             provider: null,
             authenticatedProviders: [],
+            livenessVerified: false,
             billingPath: 'subscription',
           }
         : {
@@ -239,6 +248,7 @@ function harness(
             model: 'claude-opus-4-8',
             provider: 'Anthropic',
             authenticatedProviders: ['Nous Portal'],
+            livenessVerified: true,
             billingPath: 'subscription',
           };
     },
@@ -543,6 +553,7 @@ describe('14-20. only a genuine, current, approving review can complete the miss
             { findingId: 'F-1', severity: 'blocking', requirement: 'Edge cases', explanation: 'Empty input crashes.', evidence: 'line 3' },
           ],
           requirementsChecked: [],
+          parseRepaired: false,
         },
       }),
     });
@@ -806,24 +817,31 @@ describe('27-30. console events, secrecy, terminal regression, and reviewer bill
 
 /* -------------------------------------------------- reviewer preflight */
 
-describe('the reviewer preflight proves availability without consuming a review', () => {
-  it('reads the real execution configuration from local probes only', () => {
-    const help = 'usage: hermes [-h] [-z PROMPT] [--safe-mode] [--provider PROVIDER]';
-    const status = [
-      '◆ Environment',
-      '  Model:        claude-opus-4-8',
-      '  Provider:     Anthropic',
-      '◆ Auth Providers',
-      '  Nous Portal   ✓ logged in',
-      '  OpenAI Codex  ✗ not logged in',
-    ].join('\n');
-    const probe = (_exe: string, args: string[]) => ({
-      ok: true,
-      text: args[0] === '--help' ? help : status,
-    });
+const PREFLIGHT_HELP = 'usage: hermes [-h] [-z PROMPT] [--safe-mode] [--provider PROVIDER]';
+const PREFLIGHT_STATUS = [
+  '◆ Environment',
+  '  Model:        claude-opus-4-8',
+  '  Provider:     Anthropic',
+  '◆ Auth Providers',
+  '  Nous Portal   ✓ logged in',
+  '  OpenAI Codex  ✗ not logged in',
+].join('\n');
+
+/** A probe whose one-shot (`-z`) answer the test chooses. */
+const probeWithLiveness = (livenessText: string, seen?: { args: string[][] }) =>
+  (_exe: string, args: string[]) => {
+    seen?.args.push(args);
+    if (args[0] === '--help') return { ok: true, text: PREFLIGHT_HELP };
+    if (args[0] === 'status') return { ok: true, text: PREFLIGHT_STATUS };
+    return { ok: true, text: livenessText };
+  };
+
+describe('the reviewer preflight proves the reviewer can actually answer', () => {
+  it('reads the real execution configuration and confirms liveness', () => {
+    const seen = { args: [] as string[][] };
     const result = hermesPreflight(
       { executable: 'hermes', timeoutMs: 1000, maxOutputBytes: 1024 },
-      { probe },
+      { probe: probeWithLiveness('OK', seen) },
     );
     expect(result.ready).toBe(true);
     expect(result.oneShotSupported).toBe(true);
@@ -831,16 +849,210 @@ describe('the reviewer preflight proves availability without consuming a review'
     expect(result.model).toBe('claude-opus-4-8');
     expect(result.provider).toBe('Anthropic');
     expect(result.billingPath).toBe('subscription');
-    expect(parseHermesStatus(status).authenticatedProviders).toContain('Nous Portal');
+    expect(result.livenessVerified).toBe(true);
+    expect(parseHermesStatus(PREFLIGHT_STATUS).authenticatedProviders).toContain('Nous Portal');
+
+    // The liveness probe must exercise the SAME path the review will take.
+    const liveness = seen.args.find((a) => a[0] === '-z');
+    expect(liveness).toBeDefined();
+    expect(liveness).toContain('--safe-mode');
   });
 
-  it('an unrunnable or unauthenticated reviewer is reported as unavailable', () => {
+  it('an unrunnable reviewer is reported as unavailable, and is not asked to answer', () => {
+    const seen = { args: [] as string[][] };
     const dead = hermesPreflight(
       { executable: 'hermes', timeoutMs: 1000, maxOutputBytes: 1024 },
-      { probe: () => ({ ok: false, text: '' }) },
+      {
+        probe: (_exe: string, args: string[]) => {
+          seen.args.push(args);
+          return { ok: false, text: '' };
+        },
+      },
     );
     expect(dead.ready).toBe(false);
     expect(dead.reason).toMatch(/not available/i);
     expect(dead.missing.join(' ')).toContain('hermes executable');
+    expect(dead.livenessVerified).toBe(false);
+    // No spawn is spent asking a missing executable to generate anything.
+    expect(seen.args.some((a) => a[0] === '-z')).toBe(false);
+  });
+
+  /**
+   * THE REGRESSION. This exact output — exit 0, HTTP 400, "Incorrect API key"
+   * — passed preflight in production and cost a metered Prompt Architect call
+   * and a full Coding Agent run before the reviewer was found to be dead.
+   */
+  it('a present-but-rejected credential fails preflight instead of passing it', () => {
+    const result = hermesPreflight(
+      { executable: 'hermes', timeoutMs: 1000, maxOutputBytes: 1024 },
+      {
+        probe: probeWithLiveness(
+          'HTTP 400: {"code":"invalid-argument","error":"Incorrect API key provided. '
+          + 'You can obtain an API key from https://console.x.ai."}',
+        ),
+      },
+    );
+    expect(result.ready).toBe(false);
+    expect(result.livenessVerified).toBe(false);
+    expect(result.missing.join(' ')).toContain('provider authentication');
+  });
+
+  it('a reviewer that answers nothing at all is not ready', () => {
+    const result = hermesPreflight(
+      { executable: 'hermes', timeoutMs: 1000, maxOutputBytes: 1024 },
+      { probe: probeWithLiveness('   \n  ') },
+    );
+    expect(result.ready).toBe(false);
+    expect(result.missing.join(' ')).toContain('no output');
+  });
+
+  /**
+   * A Hermes authenticated by API KEY has no "logged in" line anywhere, and a
+   * logged-in unrelated service is not evidence about the model provider. The
+   * old gate treated both as authentication, which is how a dead key passed.
+   */
+  it('readiness comes from the liveness answer, not from who is logged in', () => {
+    const noLogins = (_exe: string, args: string[]) => {
+      if (args[0] === '--help') return { ok: true, text: PREFLIGHT_HELP };
+      if (args[0] === 'status') {
+        return { ok: true, text: '◆ Environment\n  Model:        grok-4.3\n  Provider:     xAI' };
+      }
+      return { ok: true, text: 'OK' };
+    };
+    const result = hermesPreflight(
+      { executable: 'hermes', timeoutMs: 1000, maxOutputBytes: 1024 },
+      { probe: noLogins },
+    );
+    expect(result.authenticatedProviders).toEqual([]);
+    expect(result.livenessVerified).toBe(true);
+    expect(result.ready).toBe(true);
+  });
+
+  it('classifies upstream failures without repeating the vendor body', () => {
+    const auth = classifyHermesUpstreamFailure('HTTP 400: {"error":"Incorrect API key provided."}');
+    expect(auth).toEqual({ kind: 'authentication', status: 400 });
+    expect(classifyHermesUpstreamFailure('HTTP 401: {"error":"nope"}')?.kind).toBe('authentication');
+    expect(classifyHermesUpstreamFailure('HTTP 503: {"error":"overloaded"}'))
+      .toEqual({ kind: 'upstream', status: 503 });
+    // A real review that merely mentions the words is not an upstream failure.
+    expect(classifyHermesUpstreamFailure('{"verdict":"approved","summary":"checked the api key handling"}'))
+      .toBeNull();
+  });
+});
+
+describe('a review that quotes code still parses, without loosening validation', () => {
+  /** The exact shape the real reviewer produced: a regex pasted into evidence. */
+  const QUOTED_REGEX_REVIEW =
+    '{"verdict":"approved","summary":"Implementation satisfies the acceptance criteria.",'
+    + '"findings":[],"requirementsChecked":[{"requirement":"Collapse repeated hyphens.",'
+    + '"status":"passed","evidence":"Code: .replace(/[\\s_]+/g, \'-\').replace(/-+/g, \'-\')"}]}';
+
+  it('recovers the review the reviewer actually wrote', () => {
+    // Precondition: this is genuinely invalid JSON, not a test that proves nothing.
+    expect(() => JSON.parse(QUOTED_REGEX_REVIEW)).toThrow();
+
+    const parsed = validateHermesReview(QUOTED_REGEX_REVIEW);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.verdict).toBe('approved');
+    expect(parsed?.requirementsChecked[0]?.status).toBe('passed');
+    // The backslash was the reviewer's intent, and it survives as one.
+    expect(parsed?.requirementsChecked[0]?.evidence).toContain('[\\s_]+');
+    expect(parsed?.parseRepaired).toBe(true);
+  });
+
+  it('valid output is not touched, and is not reported as repaired', () => {
+    const clean = validateHermesReview(
+      '{"verdict":"changes_required","summary":"no","findings":[],"requirementsChecked":[]}',
+    );
+    expect(clean?.verdict).toBe('changes_required');
+    expect(clean?.parseRepaired).toBe(false);
+  });
+
+  it('the repair cannot manufacture a verdict', () => {
+    // Escapes repaired, but the verdict is still not one Relay accepts.
+    expect(validateHermesReview(
+      '{"verdict":"looks-good","summary":"s","findings":[],"requirementsChecked":[{"evidence":"\\s"}]}',
+    )).toBeNull();
+    // A missing summary is still fatal after a repair.
+    expect(validateHermesReview('{"verdict":"approved","summary":"","findings":[],"x":"\\s"}'))
+      .toBeNull();
+  });
+
+  it('the repair cannot rescue truncated or structurally broken output', () => {
+    // Cut mid-string: braces unbalanced, so no repair can close it.
+    expect(validateHermesReview('{"verdict":"approved","summary":"it was fine and the \\s')).toBeNull();
+    expect(validateHermesReview('not a review at all')).toBeNull();
+    expect(validateHermesReview('')).toBeNull();
+  });
+
+  it('escapes only what JSON does not define', () => {
+    // Valid escapes pass through untouched — including an already-escaped pair.
+    expect(escapeInvalidJsonEscapes('a\\nb\\"c\\\\d')).toBe('a\\nb\\"c\\\\d');
+    // \s is not a JSON escape, so the backslash becomes a literal one.
+    expect(escapeInvalidJsonEscapes('\\s')).toBe('\\\\s');
+    // An escaped backslash followed by s must NOT be double-processed.
+    expect(escapeInvalidJsonEscapes('\\\\s')).toBe('\\\\s');
+  });
+});
+
+describe('a reviewer that cannot authenticate says so', () => {
+  const spawnReturning = (text: string, code: number) => ((
+    _exe: string,
+    _args: string[],
+    _opts: { cwd: string },
+  ) => {
+    const child = {
+      stdout: { on: (_e: string, cb: (c: Buffer) => void) => cb(Buffer.from(text)) },
+      stderr: { on: () => undefined },
+      on: (event: string, cb: (arg?: unknown) => void) => {
+        if (event === 'close') setTimeout(() => cb(code), 0);
+      },
+      kill: () => undefined,
+    };
+    return child as never;
+  }) as never;
+
+  const packet = {
+    missionId: 'm1',
+    originalRequest: 'req',
+    handoffJson: '{}',
+    baseRevision: 'rev1',
+    artifactDigest: ARTIFACT_DIGEST,
+    changedFiles: ['src/normalize.js'],
+    unifiedDiff: 'diff',
+    changedFileContents: 'content',
+    testCommand: 'node --test',
+    testOutput: 'ok',
+    relayEvidence: ['tests passed'],
+  };
+
+  it('reports a rejected credential rather than a malformed review', async () => {
+    const outcome = await runHermesReview({
+      packet,
+      config: { executable: 'hermes', timeoutMs: 1000, maxOutputBytes: 4096 },
+      now: () => AT,
+      spawnImpl: spawnReturning(
+        'HTTP 400: {"code":"invalid-argument","error":"Incorrect API key provided."}',
+        0,
+      ),
+    });
+    expect(outcome.kind).toBe('review_incomplete');
+    if (outcome.kind !== 'review_incomplete') throw new Error('unreachable');
+    expect(outcome.safeMessage).toMatch(/could not authenticate/i);
+    // The vendor's body is classified, never echoed.
+    expect(outcome.safeMessage).not.toContain('console.x.ai');
+    expect(outcome.safeMessage).not.toMatch(/no valid structured review/i);
+  });
+
+  it('still reports a genuinely malformed review as malformed', async () => {
+    const outcome = await runHermesReview({
+      packet,
+      config: { executable: 'hermes', timeoutMs: 1000, maxOutputBytes: 4096 },
+      now: () => AT,
+      spawnImpl: spawnReturning('I have reviewed it and it looks fine to me.', 0),
+    });
+    expect(outcome.kind).toBe('review_incomplete');
+    if (outcome.kind !== 'review_incomplete') throw new Error('unreachable');
+    expect(outcome.safeMessage).toMatch(/no valid structured review/i);
   });
 });
