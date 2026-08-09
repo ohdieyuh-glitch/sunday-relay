@@ -14,6 +14,8 @@ import { RelayVerificationSummary } from './RelayVerificationSummary';
 import { RelayResearchStatus } from './RelayResearchStatus';
 import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
 import { RelayProjectBrainOrb } from './RelayProjectBrainOrb';
+import { chakraAccent as chakraAccentFor } from '../../shared/relay-chakra';
+import { RelayChakraTierPicker } from './RelayChakraTierPicker';
 import { RelayRoleSelector } from './RelayRoleSelector';
 import type { WorkforceRole } from '../project-settings';
 import { RelayOperationsPanel } from './RelayOperationsPanel';
@@ -229,6 +231,8 @@ export function RelayProjectWorkspace(
     onSelectRoleOccupant,
     workforceSelection,
     deployment = null,
+    chakraTier = null,
+    onSelectChakraTier,
     onOpenManualTask,
     onApproveManualTask,
     onRejectManualTask,
@@ -394,7 +398,17 @@ export function RelayProjectWorkspace(
             column of light joins them rather than an arrow or a label.
             The counts and the document did not move — they are what the Brain
             view shows when it is opened. */}
-        <div className="rpw-brainstage">
+        <div
+          className="rpw-brainstage"
+          /* ONE ACCENT FOR THE WHOLE COLUMN. The Brain reads `--rpb-accent`
+             and the Dog reads `--rpd-accent`; setting both here from the same
+             tier is what makes the two objects look like one system rather
+             than two decorated widgets that happen to sit above each other. */
+          style={{
+            ['--rpb-accent' as string]: chakraAccentFor(chakraTier).accent,
+            ['--rpb-glow' as string]: chakraAccentFor(chakraTier).glow,
+          }}
+        >
           {/* A CONTROL ONLY WHERE THERE IS SOMETHING TO OPEN. A host without
               the Brain view renders the object and no button, rather than a
               button that looks like it opens something and does not. */}
@@ -446,7 +460,7 @@ export function RelayProjectWorkspace(
               <RelayStageBackdrop backdrop={selectedBackdrop} reducedMotion={reducedMotion} />
             )}
             render={(id) => (id === 'relay-dog'
-              ? <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} />
+              ? <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} tier={chakraTier} />
               : null)}
           />
           {/* WHO IS WORKING AND CANNOT BE DRAWN. Computing this and showing it
@@ -469,6 +483,14 @@ export function RelayProjectWorkspace(
           selected={selectedBackdrop}
           reducedMotion={reducedMotion}
           onSelect={handleSelectBackdrop}
+        />
+        {/* The tier sits beside the backdrop because it is the same kind of
+            setting: how this browser looks, changing nothing Relay reports.
+            A host that cannot store it passes no handler and the control
+            renders read-only rather than silently forgetting a choice. */}
+        <RelayChakraTierPicker
+          selected={chakraTier}
+          {...(onSelectChakraTier === undefined ? {} : { onSelect: onSelectChakraTier })}
         />
         {completion.showVerifiedComplete ? (
           <section className="rpw-completion rpw-completion--verified" aria-label="Mission verdict">

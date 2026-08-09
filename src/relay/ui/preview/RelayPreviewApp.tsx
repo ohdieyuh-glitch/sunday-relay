@@ -59,6 +59,7 @@ import { createFixtureEntitlementService } from '../../psp/psp-fixtures';
 import { COLORWAY_LABEL, RELAY_COLORWAYS, applyRelayColorway } from './colorway';
 import type { RelayColorway } from './colorway';
 import type { RelayBackdropId } from '../../shared/relay-stage-backdrop';
+import type { ChakraTier } from '../../shared/relay-chakra';
 import { siblingProductTarget } from './environment';
 import { configuredDeploymentKind } from '../app/bridge-session';
 import {
@@ -259,6 +260,9 @@ export function RelayPreviewApp() {
   // now the picker changed the scene and a reload returned it to None.
   const stageBackdrop = state.stageBackdrop;
   const selectStageBackdrop = (id: RelayBackdropId) => store.setStageBackdrop(id);
+  /* Appearance, stored the same way and in the same place as the backdrop. */
+  const chakraTier = state.chakraTier;
+  const selectChakraTier = (tier: ChakraTier | null) => { store.setChakraTier(tier); };
 
   /* -------- live mission driver: begin once + poll authoritative state ----- */
   // The active non-demo mission id for the current workspace route. A stable
@@ -898,6 +902,8 @@ export function RelayPreviewApp() {
         loopSurface={loopSurface}
         stageBackdrop={stageBackdrop ?? undefined}
         onSelectStageBackdrop={selectStageBackdrop}
+        chakraTier={chakraTier}
+        onSelectChakraTier={selectChakraTier}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -1008,6 +1014,8 @@ export function RelayPreviewApp() {
         loopSurface={loopSurface}
         stageBackdrop={stageBackdrop ?? undefined}
         onSelectStageBackdrop={selectStageBackdrop}
+        chakraTier={chakraTier}
+        onSelectChakraTier={selectChakraTier}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen

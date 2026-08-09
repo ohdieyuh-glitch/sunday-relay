@@ -1,5 +1,6 @@
 import { isKnownBackdrop, type RelayBackdropId } from '../../shared/relay-stage-backdrop';
 import { RELAY_APP_SCHEMA_VERSION, emptyRelayAppData } from './contracts';
+import { isChakraTier, type ChakraTier } from '../../shared/relay-chakra';
 import type { RelayAppData } from './contracts';
 
 /**
@@ -41,10 +42,11 @@ function isRelayAppData(value: unknown): value is RelayAppData {
     typeof v.events === 'object' && v.events !== null &&
     (v.activeProjectId === null || typeof v.activeProjectId === 'string') &&
     (v.colorway === 'obsidian' || v.colorway === 'midnight' || v.colorway === 'manual')
-    // `stageBackdrop` is DELIBERATELY NOT CHECKED HERE. Requiring it would make
-    // every store written before the field existed fail this check and recover
-    // to empty — discarding a user's real projects to recover a piece of
-    // scenery. It is normalized on load instead, below.
+    // `stageBackdrop` and `chakraTier` are DELIBERATELY NOT CHECKED HERE.
+    // Requiring either would make every store written before the field existed
+    // fail this check and recover to empty — discarding a user's real projects
+    // to recover a piece of scenery. They are normalized on load instead,
+    // below.
   );
 }
 
@@ -84,6 +86,12 @@ export function createRelayAppStorage(backing?: Storage): RelayAppStorage {
             stageBackdrop: normalizeStageBackdrop(
               (parsed as unknown as Record<string, unknown>).stageBackdrop,
             ),
+            // Same rule, same reason: an absent, unknown or forked tier is NO
+            // TIER, never root — substituting a level nobody chose is the one
+            // thing a progression accent must not do.
+            chakraTier: isChakraTier((parsed as unknown as Record<string, unknown>).chakraTier)
+              ? ((parsed as unknown as Record<string, unknown>).chakraTier as ChakraTier)
+              : null,
           };
         }
         // Future schema versions migrate here; unknown shapes recover clean.

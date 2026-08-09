@@ -16,6 +16,7 @@ import type { RelayBackdropId } from '../relay-stage';
 import type { RelayBrainDocument, RelayOperationsView } from '../../shared/llmops';
 import type { RelayWorkforceSelection, WorkforceRole } from '../project-settings';
 import type { DeploymentKind } from './role-occupant-map';
+import type { ChakraTier } from '../../shared/relay-chakra';
 
 /* ----------------------------------------------------------------- modes */
 
@@ -382,6 +383,17 @@ export interface RelayProjectWorkspaceProps {
    * rather than "founder machine".
    */
   deployment?: DeploymentKind;
+  /**
+   * The Relay Dog's progression tier, shared with the Project Brain above it
+   * so the two read as one system. `null` — the default — renders both exactly
+   * as shipped, because Relay awards no levels.
+   */
+  chakraTier?: ChakraTier | null;
+  /**
+   * Store a tier choice. Absent means this surface cannot remember one, and
+   * the picker renders read-only rather than accepting a choice it will drop.
+   */
+  onSelectChakraTier?: (tier: ChakraTier | null) => void;
   onOpenManualTask: (taskId: string) => void;
   onApproveManualTask: (taskId: string) => void;
   onRejectManualTask: (taskId: string) => void;

@@ -2325,7 +2325,11 @@
    =========================================================================== */
 
 .rpw-brainstage {
+  /* Defaults. A workspace with no tier chosen keeps exactly this, and a tier
+     overrides both variables inline — one accent for the Brain, the link and
+     the Dog beneath it. */
   --rpb-accent: #8f7cf0;
+  --rpb-glow: rgba(143, 124, 240, 0.25);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -2391,13 +2395,18 @@
 /* THE CONNECTION, communicated by proximity and light rather than an arrow.
    A single faint column of the accent colour descends from the Brain toward
    the stage below it. */
+/* THE CONNECTION BETWEEN THE BRAIN AND THE DOG.
+   A single thread of the shared accent, falling from the Brain toward the
+   animal below it. Deliberately one pixel wide and short: the direction asks
+   for proximity and light rather than an arrow or a label, and anything
+   heavier here becomes a diagram. */
 .rpw-brainstage-link {
   width: 1px;
   height: 18px;
   background: linear-gradient(
     to bottom,
     var(--rpb-accent) 0%,
-    rgba(143, 124, 240, 0.25) 60%,
+    var(--rpb-glow) 60%,
     transparent 100%
   );
   opacity: 0.7;
@@ -2444,3 +2453,19 @@
 }
 .rpb-view-memory dt { font-size: 0.58rem; letter-spacing: 0.14em; opacity: 0.6; }
 .rpb-view-memory dd { margin: 0.1rem 0 0; font-size: 0.95rem; }
+
+/* ------------------------------------------------ Relay Dog tier picker */
+
+/* The tier picker reuses the backdrop picker's presentation — it is the same
+   kind of appearance control — and adds only the colour chip, which is the one
+   thing a tier has that a backdrop name does not. */
+.rctp-list { --rctp-chip: 9px; }
+.rctp-swatch {
+  display: inline-block;
+  width: var(--rctp-chip);
+  height: var(--rctp-chip);
+  margin-right: 7px;
+  border-radius: 2px;
+  vertical-align: 0;
+  box-shadow: 0 0 6px currentColor;
+}

@@ -209,6 +209,46 @@ describe('persistence and recovery', () => {
     }
   });
 
+  it('the chosen Relay Dog tier survives a reload, and an unknown one becomes NO TIER', () => {
+    const backing = memStorage();
+    const { store } = freshStore(backing);
+    store.createDraftFromRequest('Tiered');
+    expect(store.getState().chakraTier).toBeNull();
+    store.setChakraTier('third_eye');
+
+    const reloaded = createRelayAppStore(createRelayAppStorage(backing));
+    reloaded.init();
+    expect(reloaded.getState().chakraTier).toBe('third_eye');
+
+    // A tier this build does not have — an older store, a forked build — is NO
+    // TIER, never root. Substituting the first rung would be the surface
+    // asserting a level nobody chose, which is the one thing an appearance
+    // that looks like progression must not do. The project survives either way.
+    for (const foreign of ['kundalini', '', 3, true, { tier: 'root' }]) {
+      const stored = JSON.parse(backing.getItem(RELAY_APP_STORAGE_KEY)!) as Record<string, unknown>;
+      stored.chakraTier = foreign;
+      backing.setItem(RELAY_APP_STORAGE_KEY, JSON.stringify(stored));
+      const again = createRelayAppStore(createRelayAppStorage(backing));
+      again.init();
+      expect(again.getState().chakraTier, JSON.stringify(foreign)).toBeNull();
+      expect(again.listProjects()).toHaveLength(1);
+    }
+  });
+
+  it('a store written before tiers existed keeps its projects and shows no tier', () => {
+    const backing = memStorage();
+    const { store } = freshStore(backing);
+    store.createDraftFromRequest('Older build');
+    const stored = JSON.parse(backing.getItem(RELAY_APP_STORAGE_KEY)!) as Record<string, unknown>;
+    delete stored.chakraTier;
+    backing.setItem(RELAY_APP_STORAGE_KEY, JSON.stringify(stored));
+
+    const reloaded = createRelayAppStore(createRelayAppStorage(backing));
+    reloaded.init();
+    expect(reloaded.listProjects()).toHaveLength(1);
+    expect(reloaded.getState().chakraTier).toBeNull();
+  });
+
   it('scenery is not a mission fact: choosing one commits nothing else', () => {
     const backing = memStorage();
     const { store } = freshStore(backing);

@@ -7,6 +7,8 @@
  * motion. SVG pixel grid, crisp edges, no external assets.
  */
 
+import { chakraAccent, chakraDogPalette, type ChakraTier } from '../../shared/relay-chakra';
+
 export type PixelDogPose =
   | 'standing'
   | 'trotting'
@@ -39,6 +41,13 @@ export interface RelayPixelDogProps {
   /** Draw the glowing perspective grid floor under the dog. */
   floor?: boolean;
   className?: string;
+  /**
+   * Progression tier, as CONTROLLED ACCENTS on the eyes, collar and cast
+   * light. `null` — the default — renders the Dog exactly as shipped, because
+   * Relay awards no levels and a default tier would be this component
+   * asserting one. See `src/relay/shared/relay-chakra.ts`.
+   */
+  tier?: ChakraTier | null;
 }
 
 /* 18×14 pixel grids.
@@ -232,7 +241,12 @@ export function pixelDogPart(x: number, y: number): PixelDogPart {
   return 'leg-rear-far';
 }
 
-function PixelGrid({ grid, unit }: { grid: string[]; unit: number }) {
+function PixelGrid({ grid, unit, palette }: {
+  grid: string[];
+  unit: number;
+  /** Overrides for palette LETTERS. Absent letters keep the shipped colour. */
+  palette?: Readonly<Record<string, string>>;
+}) {
   const w = 18 * unit;
   const h = 14 * unit;
   return (
@@ -249,7 +263,7 @@ function PixelGrid({ grid, unit }: { grid: string[]; unit: number }) {
         const rects = grid.flatMap((row, y) =>
           row.split('').map((ch, x) => {
             if (pixelDogPart(x, y) !== part) return null;
-            const fill = PIXEL_FILL[ch];
+            const fill = palette?.[ch] ?? PIXEL_FILL[ch];
             if (!fill) return null;
             return (
               <rect key={`${x}-${y}`} x={x * unit} y={y * unit} width={unit} height={unit} fill={fill} />
@@ -284,15 +298,31 @@ export function RelayPixelDog({
   reducedMotion = false,
   floor = false,
   className = '',
+  tier = null,
 }: RelayPixelDogProps) {
   const grid = POSES[pose] ?? POSES.standing;
   const animate = moving && !reducedMotion;
+  /**
+   * THE TIER IS AN ACCENT, AND ONLY AN ACCENT.
+   *
+   * Two palette letters — the eyes and the collar — plus the light the figure
+   * casts, which the stylesheet reads from these variables. The body, its
+   * shading and the visor are untouched, so a tier can never turn the animal
+   * into a solid colour. Untiered leaves every value exactly as shipped.
+   */
+  const accent = chakraAccent(tier);
+  const palette = tier === null ? undefined : chakraDogPalette(tier);
 
   return (
     <figure
-      className={`rpd rpd--${pose}${animate ? ' rpd--moving' : ''}${floor ? ' rpd--floored' : ''} ${className}`.trim()}
+      className={`rpd rpd--${pose}${animate ? ' rpd--moving' : ''}${floor ? ' rpd--floored' : ''}${tier === null ? '' : ` rpd--tier rpd--tier-${tier}`} ${className}`.trim()}
       role="img"
       aria-label={`Relay Dog: ${label}`}
+      style={{
+        ['--rpd-accent' as string]: accent.accent,
+        ['--rpd-accent-bright' as string]: accent.bright,
+        ['--rpd-accent-glow' as string]: accent.glow,
+      }}
     >
       <div className="rpd-stage">
         {marker !== 'none' && (
@@ -300,7 +330,7 @@ export function RelayPixelDog({
             {MARKER_GLYPH[marker]}
           </span>
         )}
-        <PixelGrid grid={grid} unit={unit} />
+        <PixelGrid grid={grid} unit={unit} {...(palette === undefined ? {} : { palette })} />
         {floor && <div className="rpd-floor" aria-hidden="true" />}
       </div>
       <figcaption className="rpd-caption">

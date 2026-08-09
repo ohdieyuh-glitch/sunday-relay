@@ -1,4 +1,5 @@
 import type { RelayBackdropId } from '../../shared/relay-stage-backdrop';
+import type { ChakraTier } from '../../shared/relay-chakra';
 import type { ProjectBriefDraft } from '../entry-home/contracts';
 import type { ProjectSettingsDraft } from '../project-settings/contracts';
 import type {
@@ -176,6 +177,17 @@ export interface RelayAppData {
   activeProjectId: string | null;
   colorway: 'obsidian' | 'midnight' | 'manual';
   /**
+   * The Relay Dog's chosen progression tier, or `null` for no tier.
+   *
+   * APPEARANCE, exactly like the colorway and the backdrop, and stored with
+   * them for that reason. Relay awards no levels — nothing here counts
+   * missions toward a rank — so this is chosen and never earned, and no
+   * surface may present it as a rank. `null` means no choice has been
+   * recorded and renders the Dog as shipped, rather than defaulting to root
+   * and thereby asserting a level nobody reached.
+   */
+  chakraTier: ChakraTier | null;
+  /**
    * The chosen stage scenery, or `null` for no scene.
    *
    * SCENERY ONLY. It gates nothing, is never part of a mission record, and
@@ -210,6 +222,7 @@ export function emptyRelayAppData(): RelayAppData {
     activeProjectId: null,
     colorway: 'obsidian',
     stageBackdrop: null,
+    chakraTier: null,
     updatedAt: new Date(0).toISOString(),
   };
 }

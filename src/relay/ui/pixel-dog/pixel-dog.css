@@ -61,6 +61,49 @@
 }
 .rpd--floored { padding-bottom: 22px; }
 
+/* ------------------------------------------------- progression accents */
+
+/* A TIER IS LIGHT, NOT PAINT.
+   The eyes and collar recolour through the sprite palette (see
+   `chakraDogPalette`); everything below is light the figure CASTS — a soft
+   internal glow, an edge lift, and the same colour reaching the floor it
+   stands on. The body, its shading and the visor never change, so no tier can
+   flatten the animal into a colour swatch. */
+.rpd--tier .rpd-art {
+  filter: drop-shadow(0 0 3px var(--rpd-accent-glow, transparent));
+}
+.rpd--tier .rpd-stage::before {
+  /* Internal light, sat behind the sprite and kept small on purpose: this
+     lives above a workspace someone is trying to work in. */
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 8%;
+  width: 62%;
+  height: 62%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--rpd-accent-glow, transparent), transparent 70%);
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 0;
+}
+/* The floor takes the tier's colour, which is what makes the accent read as
+   the animal's own energy rather than a sticker on it. */
+.rpd--tier .rpd-floor {
+  background-image:
+    radial-gradient(ellipse at 50% 0%, var(--rpd-accent-glow, transparent), transparent 62%),
+    linear-gradient(color-mix(in srgb, var(--rpd-accent) 40%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--rpd-accent) 40%, transparent) 1px, transparent 1px);
+}
+/* THE MARKER KEEPS ITS OWN COLOUR. `!`, `✓`, `?` and `▚` are state, not
+   decoration — a check mark recoloured to the tier would trade a meaning for
+   a flourish. */
+
+/* Under reduced motion the accent STAYS — it is colour, not movement, and
+   removing it would strip the progression from the people who most need a
+   still image to read. Only breathing and gait stop, further down. */
+
 .rpd-caption {
   display: flex;
   flex-direction: column;

@@ -107,6 +107,12 @@ export interface RelayAppStore {
   setColorway(colorway: RelayAppData['colorway']): void;
   /** Scenery. Stored beside the colorway, and reported by nothing else. */
   setStageBackdrop(backdrop: RelayAppData['stageBackdrop']): void;
+  /**
+   * The Relay Dog's progression tier. Appearance, chosen and never earned —
+   * Relay has no level ledger, and this store keeps no counter that could
+   * become one.
+   */
+  setChakraTier(tier: RelayAppData['chakraTier']): void;
 
   // demo reset — wipes browser-demo state only
   resetAll(): void;
@@ -551,6 +557,11 @@ export function createRelayAppStore(
     setColorway(colorway) {
       if (data.colorway === colorway) return;
       commit({ ...data, colorway });
+    },
+
+    setChakraTier(chakraTier) {
+      if (data.chakraTier === chakraTier) return;
+      commit({ ...data, chakraTier });
     },
 
     setStageBackdrop(stageBackdrop) {
