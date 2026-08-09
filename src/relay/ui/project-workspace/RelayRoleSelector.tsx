@@ -44,6 +44,15 @@ import { dispatchForAgentOption, type DeploymentKind } from './role-occupant-map
  */
 
 export type RoleOptionState =
+  /**
+   * The ABSENCE of an occupant, chosen deliberately — "No Reviewer".
+   *
+   * It has its own state because every sentence about dispatch is false for
+   * it: nothing is registered to run it, and a mission naming it is not
+   * refused, it simply runs no review. Folding it in with the options Relay
+   * cannot dispatch would have printed exactly that falsehood.
+   */
+  | 'selectable_absence'
   /** Choosable, and Relay registers an occupant that runs on this deployment. */
   | 'selectable_dispatchable'
   /** Choosable as configuration; no registered occupant runs it here. */
@@ -70,6 +79,14 @@ const ROLE_TITLE: Readonly<Record<WorkforceRole, string>> = Object.freeze({
   coding_agent: 'CODING AGENT',
   reviewer: 'REVIEWER',
 });
+
+/**
+ * The catalog id that means "no occupant at all".
+ *
+ * `validation.ts` already special-cases it in two places for the same reason:
+ * it is a real, selectable choice that names nobody.
+ */
+const ABSENCE_OPTION_ID = 'reviewer-none';
 
 const findOption = (options: readonly AgentOption[], id: string | null): AgentOption | null =>
   id === null ? null : options.find((o) => o.id === id) ?? null;
@@ -130,6 +147,18 @@ export function roleOptionViews(input: {
           selected,
           needsServerConfig: dispatch.needsServerConfig,
           blockedReason: `The Reviewer already chosen (${reviewer?.name ?? 'unknown'}) would not be independent from it.`,
+        };
+      }
+
+      // "No Reviewer" is the absence of an occupant, not an occupant Relay
+      // failed to register. Nothing about where it runs applies.
+      if (option.id === ABSENCE_OPTION_ID) {
+        return {
+          option,
+          state: 'selectable_absence' as const,
+          selected,
+          needsServerConfig: null,
+          blockedReason: null,
         };
       }
 
@@ -228,7 +257,7 @@ export function RelayRoleSelector({
               {/* UNKNOWN IS NOT "NOWHERE". With no bridge connected there is no
                   machine to ask, and saying the choice cannot run would be a
                   claim about a computer this browser has never seen. */}
-              {view.state === 'selectable_host_unknown' && view.option.id !== 'reviewer-none' && (
+              {view.state === 'selectable_host_unknown' && (
                 <p className="rpw-roleselect-note">
                   No Relay bridge is connected, so where this would run is unknown.
                 </p>

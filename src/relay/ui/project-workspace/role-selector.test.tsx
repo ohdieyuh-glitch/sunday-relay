@@ -118,6 +118,42 @@ describe('what the selector offers', () => {
     expect(hermesRow?.textContent).not.toMatch(/refused rather than dispatched/);
   });
 
+  it('says nothing about dispatch for the choice that names nobody', () => {
+    // "No Reviewer" is the ABSENCE of an occupant. Every sentence about
+    // dispatch is false for it: nothing is registered to run it because there
+    // is nothing to run, and a mission naming it is not refused — it simply
+    // runs no review. It fell through to the generic branch and printed the
+    // refusal sentence, which is a lie a founder would act on.
+    for (const deployment of ['hosted', 'founder_machine', null] as const) {
+      cleanup();
+      render(
+        <RelayRoleSelector
+          role="reviewer"
+          selection={SELECTION}
+          deployment={deployment}
+          onSelect={vi.fn()}
+          onDismiss={vi.fn()}
+        />,
+      );
+      const row = screen.getByRole('button', { name: /No Reviewer/ }).closest('li');
+      expect(row?.textContent, String(deployment)).not.toMatch(/refused rather than dispatched/);
+      expect(row?.textContent, String(deployment)).not.toMatch(/where this would run is unknown/);
+      expect(row?.textContent, String(deployment)).not.toMatch(/Reads server configuration/);
+      // And it stays choosable — declining a reviewer is a real decision.
+      expect((screen.getByRole('button', { name: /No Reviewer/ }) as HTMLButtonElement).disabled)
+        .toBe(false);
+    }
+  });
+
+  it('gives the absence its own state rather than folding it in with the undispatchable', () => {
+    const views = roleOptionViews({ role: 'reviewer', selection: SELECTION, deployment: 'hosted' });
+    expect(views.find((v) => v.option.id === 'reviewer-none')?.state).toBe('selectable_absence');
+    // The genuinely undispatchable option still reports as such — the new
+    // state must not have swallowed it.
+    expect(views.find((v) => v.option.id === 'reviewer-codex')?.state)
+      .toBe('selectable_not_dispatchable');
+  });
+
   it('says that a hosted choice reads server configuration, and never which', () => {
     render(
       <RelayRoleSelector role="reviewer" selection={SELECTION} deployment="hosted" onSelect={vi.fn()} onDismiss={vi.fn()} />,
