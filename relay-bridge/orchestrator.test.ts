@@ -1182,8 +1182,10 @@ describe('role slots decide who may hold each role, before anything is dispatche
     expect(view.state).toBe('failed');
     expect(view.error?.code).toBe('occupant_not_dispatchable');
     expect(view.error?.retryable).toBe(false);
-    expect(view.error?.safeMessage).toContain('claude_agent_sdk_hosted');
+    // The hosted CODING surface is wired; the hosted Reviewer is not, and the
+    // refusal names the one that is actually missing rather than both.
     expect(view.error?.safeMessage).toContain('hermes_remote_service');
+    expect(view.error?.safeMessage).not.toContain('claude_agent_sdk_hosted');
     // Refused before anything ran, so nothing was spent under the wrong name.
     expect(h.calls.architect).toBe(0);
     expect(h.calls.coding).toBe(0);

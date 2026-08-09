@@ -49,6 +49,10 @@ import {
 } from './hermes-reviewer';
 import { buildAttestation, decideCompletion, digest, type ExecutionAttestation } from './attestation';
 import { isProductionDeployment } from './deployment-environment';
+import { createHostedClaudeInvoker } from './hosted-coding-agent/hosted-invoker';
+import {
+  HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV,
+} from './hosted-coding-agent/hosted-readiness';
 import {
   CODING_AGENT_ROLE_ENV, REVIEWER_ROLE_ENV, configuredNames, describeBinding,
   missionDispatchProblems, resolveRoleSlots,
@@ -231,6 +235,9 @@ export type ArchitectPathMode = 'live' | 'fusion' | 'blocked';
 
 /** Injectable role boundaries. Every default is the REAL production
     implementation — tests replace them so no provider is ever contacted. */
+/** The occupant whose execution surface is the hosted Agent SDK. */
+const HOSTED_CODING_OCCUPANT = 'claude_agent_sdk_hosted';
+
 export interface MissionRoleDeps {
   runOpenAiArchitect?: typeof runOpenAiArchitect;
   runFusionArchitect?: typeof runArchitect;
@@ -240,6 +247,9 @@ export interface MissionRoleDeps {
   hermesPreflight?: typeof hermesPreflight;
   /** Relay-side preflight override (persistence / write-scope probes). */
   relayPreflight?: () => { ready: boolean; missing: string[] };
+  /** Builds the hosted Coding Agent invoker. Replaced in tests so the whole
+      hosted pipeline is proven with no paid call. */
+  createHostedInvoker?: typeof createHostedClaudeInvoker;
 }
 
 export interface MissionRegistryConfig {
@@ -311,6 +321,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   const resolveRuntime = deps.resolveClaudeRuntime ?? resolveClaudeRuntime;
   const checkHermes = deps.hermesPreflight ?? hermesPreflight;
   const checkRelay = deps.relayPreflight ?? defaultRelayPreflight;
+  const makeHostedInvoker = deps.createHostedInvoker ?? createHostedClaudeInvoker;
 
   const append = (rec: MissionRecord, e: BridgeEventInput): void => {
     rec.events.push({
@@ -940,6 +951,19 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           projectLabel: 'Relay controlled fixture (throwaway repository)',
           missionId: rec.missionId,
           missionRevision: rec.missionRevision,
+          /**
+           * WHICH SURFACE RUNS THE AGENT. Absent means the installed CLI, so
+           * every existing caller is unchanged. The hosted surface is chosen
+           * by the BOUND OCCUPANT — never by a credential being present, which
+           * is the same rule the architect follows.
+           */
+          invokeAgent: boundCoding.occupant.occupantId === HOSTED_CODING_OCCUPANT
+            ? makeHostedInvoker({
+              apiKey: hermesEnv[HOSTED_API_KEY_ENV] ?? architectEnv[HOSTED_API_KEY_ENV] ?? '',
+              requestedModel: hermesEnv[HOSTED_MODEL_ENV] ?? architectEnv[HOSTED_MODEL_ENV] ?? null,
+            })
+            : undefined,
+          runtimeLabel: boundCoding.occupant.displayName,
           // The REQUESTED identity, from the binding. What actually ran is
           // observed inside the coding leg and never copied from here.
           requestedOccupant: {

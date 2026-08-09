@@ -42,7 +42,6 @@ import {
   CLAUDE_ADAPTER_ID,
   claudePromptFor,
   claudeToolPolicyFor,
-  createClaudeCodeAdapter,
 } from '../src/relay/connectors/claude-code/adapter';
 import {
   DEFAULT_LIVE_LIMITS,
@@ -52,6 +51,9 @@ import {
 import { buildSafeEditFixture, RELAY_TEST_ARGS, TEST_FILE } from '../src/relay/connectors/claude-code/fixture';
 import { runGit } from '../src/relay/workspace/repository-inspector';
 import { buildAttestation, digest, type ExecutionAttestation } from './attestation';
+import {
+  createLocalClaudeInvoker, type AgentInvoker, type CancelHandle,
+} from './agent-invoker';
 import { createTerminalCapture, type TerminalCapture } from './coding-terminal';
 import { safeText } from './redact';
 import type { BridgeEventInput, RelayMissionState } from './types';
@@ -140,10 +142,9 @@ export interface CodingOutcome {
 }
 
 /** Cancellation handle exposed to the mission so a browser Stop can abort a
-    live Claude process (SIGTERM → SIGKILL). */
-export interface CancelHandle {
-  cancel(): boolean;
-}
+    live Claude process (SIGTERM → SIGKILL). Declared with the invoker seam and
+    re-exported here so existing importers are unaffected. */
+export type { CancelHandle } from './agent-invoker';
 
 /**
  * The coding leg's completion policy.
@@ -291,6 +292,17 @@ export async function runCodingMission(input: {
    * The ACTUAL half is never taken from here. It stays what this function
    * observed: the adapter it really drove.
    */
+  /**
+   * WHICH SURFACE RUNS THE AGENT — the one step of this leg that depends on it.
+   *
+   * Absent means the local installed CLI, which is what every caller before
+   * the seam existed was doing. Everything else here — fixture, worktree,
+   * handoff, prompt, inspection, `node --test`, completion policy — is
+   * surface-independent and must never be duplicated for a second surface.
+   */
+  invokeAgent?: AgentInvoker;
+  /** How the terminal names the runtime this mission asked for. */
+  runtimeLabel?: string;
   requestedOccupant?: {
     /** The name the RUNTIME calls itself — `actorMatches` compares this with
      *  what the adapter reports, so both halves need one vocabulary. Building
@@ -443,7 +455,10 @@ export async function runCodingMission(input: {
     terminal = createTerminalCapture({
       executionId: String(runId).slice(-8),
       projectLabel: input.projectLabel ?? 'Relay controlled fixture (throwaway repository)',
-      runtime: 'Claude Code (local CLI)',
+      // The terminal is built BEFORE the agent runs, so this names the runtime
+      // the mission REQUESTED. What actually answered is observed afterwards
+      // and carried by the attestation, which is where the two can differ.
+      runtime: input.runtimeLabel ?? 'Claude Code (local CLI)',
       permissions: {
         allowedTools: toolPolicy.allowedTools.length ? toolPolicy.allowedTools : toolPolicy.availableTools,
         allowedFiles: [fixture.claimedFile],
@@ -461,37 +476,27 @@ export async function runCodingMission(input: {
     terminal.markStarted();
     terminal.setStatus('live');
 
-    const adapter = createClaudeCodeAdapter({ now, ids });
-    const invocation = await adapter.invoke(
-      {
-        executablePath,
-        capabilities,
-        association: { projectId, runId, taskId, workspaceId: ws.workspaceId, adapterId: CLAUDE_ADAPTER_ID },
-        pkg,
-        workspacePath: ws.workspacePath,
-        toolPolicy,
-        prompt,
-        attempt: 1,
-        limits,
-        baseEnv: input.baseEnv,
-        now: now(),
-      },
-      (h) => input.registerHandle?.(h),
-    );
-
-    if (invocation.sessionId) {
-      adapter.sessions.capture(
-        { projectId, runId, taskId, workspaceId: ws.workspaceId, adapterId: CLAUDE_ADAPTER_ID },
-        invocation.sessionId,
-      );
-    }
+    const invokeAgent = input.invokeAgent ?? createLocalClaudeInvoker({ executablePath, capabilities });
+    const invocation = await invokeAgent({
+      association: { projectId, runId, taskId, workspaceId: ws.workspaceId, adapterId: CLAUDE_ADAPTER_ID },
+      pkg,
+      workspacePath: ws.workspacePath,
+      toolPolicy,
+      prompt,
+      limits,
+      baseEnv: input.baseEnv,
+      registerHandle: (h) => input.registerHandle?.(h),
+      now,
+      ids,
+      requestedModel: null,
+    });
 
     // The connector's own normalized lifecycle events are the terminal body:
     // real session records, real observed tool activity with real targets,
     // and the real process outcome. Hidden reasoning was already dropped by
     // the stream parser and is never reconstructed here.
     terminal.setExternalSession(invocation.sessionId);
-    terminal.ingestConnectorEvents(invocation.events);
+    terminal.ingestConnectorEvents([...invocation.events]);
     terminal.markEnded(invocation.outcome.completedAt);
 
     /**
@@ -527,15 +532,17 @@ export async function runCodingMission(input: {
       missionRevision: input.missionRevision,
       role: 'coding_agent',
       requestedActor: requestedOccupant.actorName,
-      actualActor: 'Claude Code',
+      // OBSERVED, from the surface that ran — not the constant this file used
+      // to write, which was correct only while one surface could ever run.
+      actualActor: invocation.actualActor,
       requestedRuntime: requestedOccupant.adapterId,
-      actualRuntime: CLAUDE_ADAPTER_ID,
+      actualRuntime: invocation.actualRuntimeId,
       // `api` in the registry is `api_billed` here, which is the value
       // `isPaidApiCall` tests for. Translated, never aliased.
       billingPath: codingBillingPath,
-      launchVerified: !invocation.outcome.spawnError,
+      launchVerified: !invocation.outcome.launchFailed,
       completionVerified:
-        !invocation.outcome.spawnError &&
+        !invocation.outcome.launchFailed &&
         !invocation.outcome.timedOut &&
         !invocation.outcome.cancelled &&
         invocation.structurallyValid &&
@@ -561,7 +568,7 @@ export async function runCodingMission(input: {
       return stop('The coding agent was cancelled.');
     }
     if (invocation.outcome.timedOut) return stop('The coding agent timed out.');
-    if (invocation.outcome.spawnError) return stop('The coding agent could not start.');
+    if (invocation.outcome.launchFailed) return stop('The coding agent could not start.');
     if (!invocation.structurallyValid) {
       return stop(`The coding agent output was not usable: ${invocation.structuralReason ?? 'unknown'}.`);
     }
