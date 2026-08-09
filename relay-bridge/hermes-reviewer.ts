@@ -36,6 +36,11 @@ export interface HermesReviewResult {
   summary: string;
   findings: HermesFinding[];
   requirementsChecked: Array<{ requirement: string; status: 'passed' | 'failed' | 'uncertain'; evidence: string }>;
+  /**
+   * Relay had to normalise invalid JSON escapes before this parsed. The review
+   * itself is the reviewer's; this records that the bytes were not.
+   */
+  parseRepaired: boolean;
 }
 
 export type HermesOutcome =
@@ -66,18 +71,62 @@ export function loadHermesConfig(env: NodeJS.ProcessEnv = process.env): HermesCo
 /* --------------------------------------------------------- preflight */
 
 /**
- * Reviewer availability, proven WITHOUT consuming a review.
+ * Reviewer availability, proven before a single paid request is made.
  *
- * Two local, read-only probes: `--help` (does this build support the one-shot
- * + read-only flags Relay depends on?) and `status` (which provider/model does
- * the real Hermes configuration resolve to, and is any provider authenticated?).
- * Neither probe contacts an inference provider, so a full-team preflight costs
- * nothing and can run before the first paid OpenAI request.
+ * Three local, read-only probes: `--help` (does this build support the one-shot
+ * and read-only flags Relay depends on?), `status` (which provider and model
+ * does the real Hermes configuration resolve to?), and ONE minimal generation
+ * that proves the configured provider actually answers.
+ *
+ * THE THIRD PROBE EXISTS BECAUSE THE FIRST TWO CANNOT SEE A DEAD CREDENTIAL.
+ * Hermes reports a key that is merely PRESENT as configured — `status` prints a
+ * ✓ and `doctor` prints "API key or custom endpoint configured" — and then
+ * exits 0 while writing `HTTP 400 ... Incorrect API key provided` to stdout. A
+ * preflight built on those two probes passed a Reviewer that could not
+ * authenticate, so Relay spent a metered Prompt Architect call and an entire
+ * Coding Agent run before finding out. That contradicted the guarantee this
+ * preflight exists to make.
+ *
+ * Relay never holds this credential — it lives in the operator's own Hermes
+ * configuration and is billed by subscription — so there is no authenticated
+ * zero-inference endpoint Relay could ask instead. One tiny generation is the
+ * cheapest honest question available.
+ *
+ * It spends no MONEY (subscription-billed) but it is not free: it consumes one
+ * request and a few seconds. That is the deliberate trade. A reviewer that
+ * cannot answer must fail HERE, not after the mission has already paid for
+ * everything upstream of it.
  */
 export interface HermesProbeResult {
   ok: boolean;
   /** stdout+stderr combined — auth state is not always on stdout. */
   text: string;
+}
+
+/** The liveness probe's prompt and its own timeout, kept small on purpose. */
+const LIVENESS_PROMPT = 'Reply with the single word: OK';
+const LIVENESS_TIMEOUT_MS = 60_000;
+
+/**
+ * An upstream provider failure, recognised from output Hermes prints on a
+ * SUCCESSFUL exit.
+ *
+ * Hermes exits 0 when its provider rejects the request, so exit status carries
+ * no signal here and the text is the only evidence. The upstream body is
+ * classified and discarded rather than surfaced: it can quote the request, and
+ * callers get a category instead of a vendor's prose.
+ */
+export function classifyHermesUpstreamFailure(
+  text: string,
+): { kind: 'authentication' | 'upstream'; status: number | null } | null {
+  const http = text.match(/(^|\n)\s*HTTP\s+(\d{3})\s*:/);
+  if (!http) return null;
+  const status = Number(http[2]);
+  const credentialRejected = /\b(api[- ]?key|unauthorized|authentication|invalid[- ]token)\b/i.test(text);
+  if (status === 401 || status === 403 || credentialRejected) {
+    return { kind: 'authentication', status: Number.isFinite(status) ? status : null };
+  }
+  return { kind: 'upstream', status: Number.isFinite(status) ? status : null };
 }
 
 export interface HermesPreflightResult {
@@ -90,15 +139,28 @@ export interface HermesPreflightResult {
   /** Resolved from the real Hermes execution configuration. */
   model: string | null;
   provider: string | null;
+  /**
+   * Services `hermes status` lists as logged in. INFORMATIONAL ONLY — it is
+   * not evidence about the configured inference provider. A Hermes
+   * authenticated by API key has no "logged in" line at all, and a logged-in
+   * unrelated service (a tool gateway, a portal) says nothing about whether
+   * the model provider will answer. `livenessVerified` is the authority.
+   */
   authenticatedProviders: string[];
+  /** The configured provider answered a minimal request. */
+  livenessVerified: boolean;
   billingPath: 'subscription';
 }
 
-const defaultProbe = (executable: string, args: string[]): HermesProbeResult => {
+const defaultProbe = (
+  executable: string,
+  args: string[],
+  timeoutMs = 20_000,
+): HermesProbeResult => {
   try {
     const r = spawnSync(executable, args, {
       encoding: 'utf8',
-      timeout: 20_000,
+      timeout: timeoutMs,
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
@@ -133,7 +195,9 @@ export function parseHermesStatus(text: string): {
 
 export function hermesPreflight(
   cfg: HermesConfig,
-  deps: { probe?: (executable: string, args: string[]) => HermesProbeResult } = {},
+  deps: {
+    probe?: (executable: string, args: string[], timeoutMs?: number) => HermesProbeResult;
+  } = {},
 ): HermesPreflightResult {
   const probe = deps.probe ?? defaultProbe;
   const missing: string[] = [];
@@ -153,9 +217,36 @@ export function hermesPreflight(
   const provider = cfg.provider ?? parsed.provider;
   if (!model) missing.push('hermes model (RELAY_HERMES_MODEL or a configured default)');
   if (!provider) missing.push('hermes provider (RELAY_HERMES_PROVIDER or a configured default)');
-  if (parsed.authenticatedProviders.length === 0) missing.push('hermes authenticated provider');
   if (!Number.isFinite(cfg.timeoutMs) || cfg.timeoutMs <= 0) missing.push('RELAY_HERMES_TIMEOUT_MS');
   if (!Number.isFinite(cfg.maxOutputBytes) || cfg.maxOutputBytes <= 0) missing.push('RELAY_HERMES_MAX_OUTPUT');
+
+  /**
+   * THE LIVENESS PROBE, and only once everything structural already holds.
+   *
+   * Asking a reviewer to answer when the executable is missing or the model is
+   * unresolved wastes a spawn and a timeout to learn what is already known.
+   * The arguments mirror `runHermesReview` exactly, so this proves the path the
+   * mission will actually take rather than a neighbouring one.
+   */
+  let livenessVerified = false;
+  if (missing.length === 0) {
+    const args = ['-z', LIVENESS_PROMPT, '--safe-mode'];
+    if (cfg.model) args.push('-m', cfg.model);
+    if (cfg.provider) args.push('--provider', cfg.provider);
+    const live = probe(cfg.executable, args, Math.min(cfg.timeoutMs, LIVENESS_TIMEOUT_MS));
+    const failure = classifyHermesUpstreamFailure(live.text);
+    if (failure !== null) {
+      missing.push(
+        failure.kind === 'authentication'
+          ? 'hermes provider authentication (the configured provider rejected the reviewer credential)'
+          : `hermes provider availability (the configured provider returned HTTP ${String(failure.status ?? 0)})`,
+      );
+    } else if (!live.text.trim()) {
+      missing.push('hermes reviewer response (the one-shot probe produced no output)');
+    } else {
+      livenessVerified = true;
+    }
+  }
 
   return {
     ready: missing.length === 0,
@@ -167,6 +258,7 @@ export function hermesPreflight(
     model,
     provider,
     authenticatedProviders: parsed.authenticatedProviders,
+    livenessVerified,
     billingPath: 'subscription',
   };
 }
@@ -242,6 +334,36 @@ export function buildReviewPrompt(p: ReviewPacket): string {
 
 const SEVERITIES = new Set(['blocking', 'major', 'minor', 'informational']);
 
+/** The escapes JSON actually defines. Everything else is a syntax error. */
+const VALID_JSON_ESCAPES = new Set(['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u']);
+
+/**
+ * THE ONE REPAIR RELAY WILL ATTEMPT ON REVIEWER OUTPUT, and the reasoning that
+ * bounds it.
+ *
+ * A reviewer of CODE quotes code, and quoted code contains backslashes. The
+ * real reviewer failed on `.replace(/[\s_]+/g, '-')` pasted into an evidence
+ * string: `\s` is not a JSON escape, so `JSON.parse` rejected an otherwise
+ * complete and correct review. That is not an exotic edge — it is the single
+ * most likely thing a code reviewer writes, so the Reviewer role failed on
+ * output that was substantively fine.
+ *
+ * This escapes ONLY a backslash that begins no valid escape sequence, which is
+ * a faithful recovery rather than a guess: the model meant a literal
+ * backslash, and a literal backslash is spelled `\\`. Already-valid escapes are
+ * matched as a pair and pass through untouched, so `\\s` is never re-processed.
+ *
+ * WHAT IT DELIBERATELY CANNOT DO: balance braces, close quotes, invent fields,
+ * or recover a truncated response. Those still fail. And the repaired text is
+ * handed to exactly the same strict field validation below, so a repair can
+ * never manufacture a verdict — an approval still has to be spelled out by the
+ * reviewer itself.
+ */
+export function escapeInvalidJsonEscapes(text: string): string {
+  return text.replace(/\\(.)/gs, (whole, ch: string) =>
+    (VALID_JSON_ESCAPES.has(ch) ? whole : `\\\\${ch}`));
+}
+
 /** Strict validation — malformed output NEVER approves. */
 export function validateHermesReview(text: string): HermesReviewResult | null {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -249,11 +371,18 @@ export function validateHermesReview(text: string): HermesReviewResult | null {
   const start = candidate.indexOf('{');
   const end = candidate.lastIndexOf('}');
   if (start === -1 || end === -1 || end <= start) return null;
+  const slice = candidate.slice(start, end + 1);
   let raw: unknown;
+  let parseRepaired = false;
   try {
-    raw = JSON.parse(candidate.slice(start, end + 1));
+    raw = JSON.parse(slice);
   } catch {
-    return null;
+    try {
+      raw = JSON.parse(escapeInvalidJsonEscapes(slice));
+      parseRepaired = true;
+    } catch {
+      return null;
+    }
   }
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
@@ -289,7 +418,7 @@ export function validateHermesReview(text: string): HermesReviewResult | null {
       })
     : [];
 
-  return { verdict, summary: safeText(o.summary), findings, requirementsChecked };
+  return { verdict, summary: safeText(o.summary), findings, requirementsChecked, parseRepaired };
 }
 
 export function hasBlockingFinding(r: HermesReviewResult): boolean {
@@ -354,12 +483,23 @@ export async function runHermesReview(input: {
       const completedAt = now();
       const parsed = validateHermesReview(out);
       if (!parsed) {
+        /**
+         * NAME THE ACTUAL FAILURE. Hermes exits 0 when its provider rejects
+         * the request, so "no valid structured review" was reported for a dead
+         * credential — which sends an operator to read the reviewer's prompt
+         * and rubric when the fix is an expired key.
+         */
+        const upstream = classifyHermesUpstreamFailure(out);
         finish({
           kind: 'review_incomplete',
           safeMessage:
-            code === 0
-              ? 'The Hermes reviewer returned no valid structured review.'
-              : `The Hermes reviewer exited without a valid review (code ${code ?? 'unknown'}).`,
+            upstream?.kind === 'authentication'
+              ? 'The Hermes reviewer could not authenticate with its configured provider.'
+              : upstream !== null
+                ? `The Hermes reviewer's provider returned HTTP ${String(upstream.status ?? 0)}.`
+                : code === 0
+                  ? 'The Hermes reviewer returned no valid structured review.'
+                  : `The Hermes reviewer exited without a valid review (code ${code ?? 'unknown'}).`,
           startedAt,
           completedAt,
         });
