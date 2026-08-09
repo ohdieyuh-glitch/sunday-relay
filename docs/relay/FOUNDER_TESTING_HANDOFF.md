@@ -91,7 +91,7 @@ Independence is decided by `reviewerIsIndependent` — the rule Relay already ha
 | prompt_architect | `fusion_architect` | anywhere | none | yes |
 | coding_agent | `claude_code_local` | founder machine | subscription | yes |
 | coding_agent | `claude_code_fake` | anywhere | none → `simulated` | yes |
-| coding_agent | `claude_agent_sdk_hosted` | anywhere | api | **no — not wired** |
+| coding_agent | `claude_agent_sdk_hosted` | anywhere | api | **yes** — wired, needs `ANTHROPIC_API_KEY` + `RELAY_HOSTED_CODING_MODEL` |
 | reviewer | `hermes_local` | founder machine | api | yes |
 | reviewer | `hermes_remote_service` | anywhere | api | **no — not wired** |
 
@@ -115,7 +115,8 @@ both.
 | Founder machine, nothing configured | runs (development defaults) |
 | Founder machine, live architect + Claude Code + Hermes | **runs — the full three-role mission** |
 | Hosted, `RELAY_PROMPT_ARCHITECT_MODE=fusion` + `RELAY_BRIDGE_FAKE_CLAUDE=1` | runs — the keyless offline pipeline, no spend |
-| Hosted, live three-role | **cannot run.** Neither a hosted Coding Agent nor a hosted Reviewer is dispatchable |
+| Hosted, `fusion` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` | a real, API-billed coding run with no Reviewer (the development architect dispatches none) |
+| Hosted, live three-role | **cannot run.** The hosted Reviewer is still not dispatchable — the mission's reviewer leg spawns a local Hermes and does not use the remote transport |
 
 Production today refuses with `role_binding_refused`, **naming the variables to
 set** — where before it said `coding_agent_not_ready`. No capability is lost.
@@ -186,7 +187,7 @@ cd "$(mktemp -d)" && env -i PATH="$PATH" HOME="$HOME" hermes -z 'Reply with the 
 | Id | What | Blocks |
 |---|---|---|
 | DFA-001 | Railway CLI is **Unauthorized**; creating a second Railway service needs browser consent | The dedicated Hermes service |
-| — | `ANTHROPIC_API_KEY` + `RELAY_HOSTED_CODING_MODEL` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` on Railway | Hosted Coding Agent execution, **once wired** |
+| — | `ANTHROPIC_API_KEY` + `RELAY_HOSTED_CODING_MODEL` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` on Railway | Hosted Coding Agent execution — the code is wired; only the credentials are outstanding |
 | DFA-003 | Supabase password rotation | Nothing in this repository |
 
 **This session held no `RELAY_BRIDGE_API_TOKEN`**, so every production check
@@ -195,18 +196,18 @@ provider call was made by this session**.
 
 ## 9. Recommended next Missions, in order
 
-1. **Hosted Coding Agent execution.** `@anthropic-ai/claude-agent-sdk` is
-   already a production dependency with its linux-x64 runtime installed, so
-   Railway's `npm ci` ships it. The single surface-specific step is
-   `relay-bridge/coding.ts`, which constructs `createClaudeCodeAdapter()`
-   inline and calls `.invoke()`. Extract that one call behind an injected
-   invoker and add a hosted implementation over `runHostedCodingAgent`.
-   Fixture, worktree, handoff, prompt, git inspection, `node --test` and the
-   completion policy are surface-independent — do **not** duplicate them; the
-   repo's own rule is that two copies of safety logic drift and the drifted one
-   is always the one in production. Then remove `claude_agent_sdk_hosted` from
-   the exclusion in `MISSION_DISPATCHABLE_OCCUPANTS`; that removal is the whole
-   change.
+1. ~~**Hosted Coding Agent execution.**~~ **DONE** — `relay-bridge/agent-invoker.ts`
+   isolates the one step of eight that depends on the surface, and
+   `hosted-coding-agent/hosted-invoker.ts` implements it over
+   `runHostedCodingAgent`. Nothing else was duplicated. Set the two Railway
+   variables above to use it.
+
+   Worth recording: "remove it from the exclusion and that is the whole change"
+   was WRONG, and an independent review proved it by running the real mission
+   registry on a host with no `claude` on PATH. The mission probed for the
+   local CLI unconditionally, so the hosted occupant still died with "Install
+   Claude Code" — the wrong-machine instruction the registry exists to remove,
+   surviving one layer beneath it.
 2. **Hosted Reviewer.** Either DFA-001 (a Hermes service, plus teaching the
    mission's reviewer leg to use the remote transport — today it always spawns
    locally), or register a Reviewer occupant that needs no installed binary.

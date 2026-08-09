@@ -446,7 +446,10 @@ export async function runCodingMission(input: {
       role: 'coding_agent',
       category: 'coding_agent',
       truth: 'system_notice',
-      headline: 'Claude Code session started.',
+      // The occupant the mission BOUND — the stream narrated "Claude Code"
+      // regardless of which surface was about to run, which is the defect the
+      // role registry exists to make impossible.
+      headline: `${safeText(input.runtimeLabel ?? 'Claude Code')} session started.`,
       detail: 'Working in an isolated throwaway workspace. Source repository protected.',
     });
 
@@ -471,7 +474,8 @@ export async function runCodingMission(input: {
     terminal.note({
       kind: 'session',
       truth: 'system_notice',
-      text: 'Claude Code session started in an isolated throwaway workspace. Source repository protected.',
+      text: `${safeText(input.runtimeLabel ?? 'Claude Code')} session started in an isolated `
+        + 'throwaway workspace. Source repository protected.',
     });
     terminal.markStarted();
     terminal.setStatus('live');
@@ -540,6 +544,9 @@ export async function runCodingMission(input: {
       // `api` in the registry is `api_billed` here, which is the value
       // `isPaidApiCall` tests for. Translated, never aliased.
       billingPath: codingBillingPath,
+      // The model that ANSWERED, when the surface reported one. Absent stays
+      // absent — a requested model is not evidence that it ran.
+      ...(invocation.actualModel === null ? {} : { model: invocation.actualModel }),
       launchVerified: !invocation.outcome.launchFailed,
       completionVerified:
         !invocation.outcome.launchFailed &&
@@ -555,6 +562,9 @@ export async function runCodingMission(input: {
     outcome.attestation = codingAttestation;
     terminal.setAttestation({
       attestationId: codingAttestation.attestationId,
+      // Observed, so the website can name the agent that did the work.
+      actualActor: codingAttestation.actualActor,
+      actualRuntime: codingAttestation.actualRuntime,
       launchVerified: codingAttestation.launchVerified,
       completionVerified: codingAttestation.completionVerified,
       fallbackOccurred: codingAttestation.fallbackOccurred,
@@ -570,7 +580,12 @@ export async function runCodingMission(input: {
     if (invocation.outcome.timedOut) return stop('The coding agent timed out.');
     if (invocation.outcome.launchFailed) return stop('The coding agent could not start.');
     if (!invocation.structurallyValid) {
-      return stop(`The coding agent output was not usable: ${invocation.structuralReason ?? 'unknown'}.`);
+      // The reason is the surface's own sentence, which already says what
+      // happened — an unusable stream, an envelope the runtime did not honour,
+      // a spend ceiling. Prefixing it with "output was not usable" asserted a
+      // cause for all three. A trailing full stop is not doubled.
+      const reason = (invocation.structuralReason ?? 'the reason was not reported').trim();
+      return stop(`The coding agent run could not be trusted: ${reason.replace(/\.$/, '')}.`);
     }
     if (!invocation.report.ok) {
       return stop(`The coding agent report could not be trusted: ${invocation.report.error.message}`);

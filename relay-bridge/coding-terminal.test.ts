@@ -186,13 +186,26 @@ describe('one capture describes exactly one process', () => {
     expect(c.snapshot().lines).toHaveLength(2);
   });
 
-  it('keeps one start time and one billing path for the run', () => {
+  it('keeps one start time, and reports no payer until one is attested', () => {
     const c = capture();
     c.markStarted('2026-07-23T10:00:00.000Z');
     c.markStarted('2026-07-23T10:05:00.000Z');
     const s = c.snapshot();
     expect(s.startedAt).toBe('2026-07-23T10:00:00.000Z');
-    expect(s.billing).toBe('subscription');
+    // Nothing has been paid for before a run, and the field used to assert
+    // `subscription` from the moment the terminal was created — true only
+    // while one surface could ever run it.
+    expect(s.billing).toBe('unknown');
+  });
+
+  it('takes the payer from the attestation, whichever surface ran', () => {
+    const c = capture();
+    c.setAttestation({
+      attestationId: 'att_1', actualActor: 'Claude Agent SDK',
+      actualRuntime: 'claude-agent-sdk-hosted', launchVerified: true,
+      completionVerified: true, fallbackOccurred: false, billingPath: 'api_billed',
+    });
+    expect(c.snapshot().billing).toBe('api_billed');
   });
 
   it('records changed files from Relay inspection, separately from the claim', () => {

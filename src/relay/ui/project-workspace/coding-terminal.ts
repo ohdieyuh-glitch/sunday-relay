@@ -71,8 +71,8 @@ export interface CodingTerminalView {
   executionId: string;
   externalSessionRedacted: string | null;
   runtime: string;
-  /** Claude Code is authenticated by the local subscription login. */
-  billingLabel: 'SUBSCRIPTION';
+  /** Who paid, derived from the attestation — never a fixed label. */
+  billingLabel: string;
   projectLabel: string;
   phaseLabel: string;
   permissions: CodingTerminalPermissions;
@@ -218,7 +218,7 @@ export function buildCodingTerminalView(input: {
       ? sanitizeTerminalLine(t.externalSessionRedacted, 20)
       : null,
     runtime: sanitizeTerminalLine(t.runtime, 80) || 'Claude Code (local CLI)',
-    billingLabel: 'SUBSCRIPTION',
+    billingLabel: BILLING_LABEL[t.attestation?.billingPath ?? t.billing],
     projectLabel: sanitizeTerminalLine(t.projectLabel, 120) || '—',
     phaseLabel: PHASE_LABEL[input.phase],
     permissions,
@@ -255,6 +255,21 @@ export function buildCodingTerminalView(input: {
  * receipt label overrides this whenever a request has actually happened.
  */
 export const ARCHITECT_ROUTE_LABEL = 'Coordinated by Sunday Alcatraz';
+
+/**
+ * ONE LABEL PER BILLING PATH, and no default that asserts.
+ *
+ * `unknown` renders as UNKNOWN rather than falling back to SUBSCRIPTION —
+ * unknown is not zero, and it is certainly not "somebody else already paid".
+ */
+export const BILLING_LABEL: Readonly<Record<CodingTerminalAttestation['billingPath'], string>> =
+  Object.freeze({
+    subscription: 'SUBSCRIPTION',
+    api_billed: 'API PAID',
+    local: 'NOT BILLED',
+    simulated: 'SIMULATED — NO SPEND',
+    unknown: 'UNKNOWN',
+  });
 
 export interface RoleBillingRow {
   roleKey: 'prompt_architect' | 'coding_agent' | 'reviewer';
@@ -311,10 +326,20 @@ export function buildRoleBilling(input: {
     },
     {
       roleKey: 'coding_agent',
-      actor: 'Claude Code',
+      /**
+       * FROM THE ATTESTATION, WHICH IS THE ONLY THING THAT KNOWS.
+       *
+       * These three were the literals `'Claude Code'`, `'Authenticated local
+       * runtime'` and `'SUBSCRIPTION'`. They were true while one surface could
+       * ever run; a hosted, API-billed run rendered as a local subscription
+       * one, on the same screen whose header correctly named the hosted
+       * runtime. Before a run exists there is nothing to attest, so the row
+       * says so rather than naming an agent that has not started.
+       */
+      actor: coding ? sanitizeTerminalLine(coding.actualActor, 60) : 'Not yet run',
       role: 'Coding Agent',
-      runtime: 'Authenticated local runtime',
-      billingLabel: 'SUBSCRIPTION',
+      runtime: coding ? sanitizeTerminalLine(coding.actualRuntime, 60) : '—',
+      billingLabel: coding ? BILLING_LABEL[coding.billingPath] : 'NOT BILLED',
       statusLabel: codingAttested ? 'EXECUTION ATTESTED' : coding ? 'NOT ATTESTED' : 'NOT RUN',
     },
     {

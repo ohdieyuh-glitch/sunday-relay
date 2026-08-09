@@ -38,6 +38,7 @@ const fakeQuery = (over: { report?: string; tools?: string[]; cwd?: string } = {
     yield {
       type: 'system',
       subtype: 'init',
+      session_id: 'hosted-session-abc123',
       // The model the RUNTIME names — deliberately not one Relay requested.
       model: 'claude-sonnet-5-20260114',
       cwd,
@@ -134,12 +135,56 @@ describe('the hosted Coding Agent runs through the one existing pipeline', () =>
    * runtime reported GRANTING. A clean result message does not certify that a
    * run stayed inside its boundary.
    */
+  /**
+   * The MODEL that answered and the SESSION the runtime named are both facts
+   * about the run, and both were being discarded. A requested model with no
+   * actual counterpart is the exact defect this repository has now fixed once
+   * for the architect and once for the local coding agent.
+   */
+  it('records the model that answered and the session the runtime named', async () => {
+    const { outcome } = await runHosted();
+    // Requested `claude-sonnet-5`; the runtime named a dated variant, which is
+    // why the two are separate and the actual one is read back.
+    expect(outcome.attestation?.model).toBe('claude-sonnet-5-20260114');
+    expect(outcome.attestation?.model).not.toBe('claude-sonnet-5');
+  }, 60_000);
+
   it('refuses a run whose granted tools exceed the compiled envelope', async () => {
     const { outcome } = await runHosted({ tools: ['Read', 'Edit', 'Bash'] });
     expect(outcome.stopped).toBe(true);
     expect(outcome.stopReason).toMatch(/not usable|envelope|honour/i);
     expect(outcome.verifiedComplete).toBe(false);
   }, 60_000);
+
+  /**
+   * A MISSING SDK IS A PERMANENT, NAMED CONDITION. Unguarded it reached the
+   * pipeline's outer catch as "the mission stopped unexpectedly",
+   * `verification_failed` and RETRYABLE, with the coding ledger left in flight
+   * — so a retry reported an outcome it could not know, about a dispatch that
+   * never happened.
+   */
+  it('reports a missing hosted runtime as a launch failure, not a mission fault', async () => {
+    const invoker = createHostedClaudeInvoker({
+      apiKey: 'sk-ant-FAKETESTNOTREAL-never-served', // relay-boundary:allow-fixture — synthetic
+      requestedModel: null,
+      // No queryFn, and the loader will fail to resolve inside vitest's
+      // transform of a package it cannot dynamically import here.
+    });
+    const result = await invoker({
+      association: { projectId: 'p', runId: 'r', taskId: 't', workspaceId: 'w', adapterId: 'a' } as never,
+      pkg: {} as never,
+      workspacePath: '/tmp/nowhere',
+      toolPolicy: {} as never,
+      prompt: 'x',
+      limits: {} as never,
+      now: () => '2026-01-01T00:00:00.000Z',
+      ids: { next: () => 'id' } as never,
+      requestedModel: null,
+    });
+    expect(result.outcome.launchFailed).toBe(true);
+    expect(result.structurallyValid).toBe(false);
+    expect(result.structuralReason).toMatch(/could not be loaded/i);
+  }, 30_000);
 
   it('refuses a run that returns no parseable Relay report', async () => {
     const { outcome } = await runHosted({ report: 'I finished, looks good to me.' });

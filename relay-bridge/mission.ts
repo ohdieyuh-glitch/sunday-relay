@@ -51,8 +51,9 @@ import { buildAttestation, decideCompletion, digest, type ExecutionAttestation }
 import { isProductionDeployment } from './deployment-environment';
 import { createHostedClaudeInvoker } from './hosted-coding-agent/hosted-invoker';
 import {
-  HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV,
+  HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV, probeHostedReadiness,
 } from './hosted-coding-agent/hosted-readiness';
+import type { ClaudeCodeCapabilityProfile } from '../src/relay/connectors/claude-code/contracts';
 import {
   CODING_AGENT_ROLE_ENV, REVIEWER_ROLE_ENV, configuredNames, describeBinding,
   missionDispatchProblems, resolveRoleSlots,
@@ -237,6 +238,27 @@ export type ArchitectPathMode = 'live' | 'fusion' | 'blocked';
     implementation — tests replace them so no provider is ever contacted. */
 /** The occupant whose execution surface is the hosted Agent SDK. */
 const HOSTED_CODING_OCCUPANT = 'claude_agent_sdk_hosted';
+
+/**
+ * The capability profile handed to the coding leg on the hosted path.
+ *
+ * It describes the CLI, and the hosted surface has no CLI — the invoker seam
+ * replaces the spawn entirely, so nothing here reaches a process. What it does
+ * still feed is the tool-policy compiler, so it declares the restrictions the
+ * hosted envelope genuinely enforces rather than a permissive default.
+ */
+const HOSTED_PLACEHOLDER_CAPABILITIES: ClaudeCodeCapabilityProfile = Object.freeze({
+  executablePath: null, version: null,
+  nonInteractiveSupported: true, streamJsonSupported: true,
+  explicitResumeSupported: false, maxTurnsSupported: true,
+  allowedToolsSupported: true, disallowedToolsSupported: true,
+  toolsRestrictionSupported: true, permissionModeSupported: true,
+  systemPromptSupported: true, appendSystemPromptSupported: true,
+  structuredSchemaSupported: true,
+  mcpIsolationSupported: 'available', settingsIsolationSupported: 'available',
+  cancellationSupported: true,
+  probedAt: '1970-01-01T00:00:00.000Z', provenance: 'live',
+});
 
 export interface MissionRoleDeps {
   runOpenAiArchitect?: typeof runOpenAiArchitect;
@@ -584,15 +606,49 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         return;
       }
 
-      // Coding runtime — resolved (never invoked) before any spend.
-      const runtime = resolveRuntime(config.claudeMode, now, config.confirmLive);
-      if (!runtime.ok) {
-        fail(rec, 'preflight_blocked', `Coding Agent unavailable — ${runtime.safeMessage}`, {
-          code: 'coding_agent_not_ready',
-          retryable: false,
+      /**
+       * CODING RUNTIME — resolved (never invoked) before any spend, AND ONLY
+       * FOR THE SURFACE THE BOUND OCCUPANT ACTUALLY USES.
+       *
+       * This probe asks whether an installed `claude` CLI exists on this
+       * machine. It ran unconditionally, so binding the hosted Agent SDK
+       * occupant — whose whole purpose is to need no CLI — still died on a
+       * container with "Install Claude Code: Claude Code is not installed on
+       * this machine." That is the wrong-machine instruction the role-slot
+       * registry documents itself as removing, surviving one layer below the
+       * registry that removed it.
+       *
+       * The hosted surface has its OWN readiness probe, which is free, offline
+       * and asks the right question: is the SDK package resolvable, is its
+       * platform runtime present, is a credential variable set.
+       */
+      const hostedCoding = boundCoding.occupant.occupantId === HOSTED_CODING_OCCUPANT;
+      let runtime: ReturnType<typeof resolveRuntime> | null = null;
+      if (hostedCoding) {
+        const hostedReady = probeHostedReadiness({
+          env: { ...architectEnv, ...hermesEnv },
+          now: now(),
         });
-        return;
+        if (hostedReady.blockedReason !== null) {
+          fail(rec, 'preflight_blocked', `Coding Agent unavailable — ${hostedReady.blockedReason}`, {
+            code: 'coding_agent_not_ready',
+            retryable: false,
+          });
+          return;
+        }
+      } else {
+        runtime = resolveRuntime(config.claudeMode, now, config.confirmLive);
+        if (!runtime.ok) {
+          fail(rec, 'preflight_blocked', `Coding Agent unavailable — ${runtime.safeMessage}`, {
+            code: 'coding_agent_not_ready',
+            retryable: false,
+          });
+          return;
+        }
       }
+      /** What the runtime probe OBSERVED, for the preflight line. The hosted
+          surface reports its own provenance rather than borrowing the CLI's. */
+      const codingProvenance = runtime === null ? 'hosted' : runtime.runtime.provenance;
 
       // Reviewer — proven available from local read-only probes only. This is
       // deliberately BEFORE the OpenAI request: an unavailable reviewer must
@@ -646,7 +702,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
          * OBSERVED, and only the second can contradict the first.
          */
         meta: `ROLES ${boundArchitect.requestedOccupantId} · `
-          + `${boundCoding.requestedOccupantId}(${runtime.runtime.provenance}) · `
+          + `${boundCoding.requestedOccupantId}(${codingProvenance}) · `
           + `${boundRoles.reviewer?.requestedOccupantId ?? 'unstaffed'}`,
       });
 
@@ -927,7 +983,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           role: 'coding_agent',
           category: 'coding_agent',
           truth: 'system_notice',
-          headline: 'Coding Agent assignment created — Claude Code.',
+          headline: `Coding Agent assignment created — ${safeText(boundCoding.occupant.displayName)}.`,
           detail:
             'Relay compiled the persisted handoff into the task package: founder request, mission contract, ' +
             'instructions, constraints, acceptance criteria, allowed file, prohibited files, verification command, ' +
@@ -939,8 +995,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
 
         coding = await callCoding({
           handoff: codingHandoff,
-          executablePath: runtime.runtime.executablePath,
-          capabilities: runtime.runtime.capabilities,
+          // Unused by the hosted surface: the seam replaces the spawn entirely.
+          executablePath: runtime?.runtime.executablePath ?? '',
+          capabilities: runtime?.runtime.capabilities ?? HOSTED_PLACEHOLDER_CAPABILITIES,
           now,
           ids,
           baseEnv: config.baseEnv,

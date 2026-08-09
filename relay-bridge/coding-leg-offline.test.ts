@@ -103,7 +103,10 @@ describe('the terminal is powered by the one process that did the work', () => {
     expect(final.permissions.allowedFiles).toEqual(['src/normalize.js']);
     expect(final.permissions.protectedPaths).toContain('package.json');
     expect(final.permissions.deniedCapabilities).toContain('Bash');
+    // From the attestation, not a literal beside it: the local CLI runs on the
+    // founder's subscription, and a hosted API-billed run would say so instead.
     expect(final.billing).toBe('subscription');
+    expect(final.billing).toBe(final.attestation?.billingPath);
   }, 120_000);
 
   it('leaks no secret, absolute path, or full session id into the captured terminal', async () => {

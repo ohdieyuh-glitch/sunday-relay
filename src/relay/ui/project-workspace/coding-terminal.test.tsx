@@ -94,6 +94,8 @@ function terminalState(over: Partial<CodingTerminalState> = {}): CodingTerminalS
     },
     attestation: {
       attestationId: 'att_coding_agent_abc123',
+      actualActor: 'Claude Code',
+      actualRuntime: 'claude-code-local',
       launchVerified: true,
       completionVerified: true,
       fallbackOccurred: false,
@@ -592,6 +594,8 @@ describe('12 + 13. Hermes billing is truthful and never a blocker', () => {
     const notLaunched = buildRoleBilling({
       codingAttestation: {
         attestationId: 'att_x',
+        actualActor: 'Claude Code',
+        actualRuntime: 'claude-code-local',
         launchVerified: false,
         completionVerified: false,
         fallbackOccurred: false,

@@ -66,6 +66,12 @@ export interface AgentInvocationResult {
   readonly actualActor: string;
   /** OBSERVED: the adapter that really executed. */
   readonly actualRuntimeId: string;
+  /**
+   * OBSERVED: the model that answered, as the runtime named it. Null stays
+   * null and renders Unknown — never the model that was requested, which is
+   * the whole reason a deployment may name one and a run may answer another.
+   */
+  readonly actualModel: string | null;
 }
 
 export interface AgentInvocationRequest {
@@ -91,7 +97,9 @@ export type AgentInvoker = (request: AgentInvocationRequest) => Promise<AgentInv
  * Byte-identical to what `runCodingMission` did inline before the seam existed
  * — the adapter is constructed here, the session is captured here, and the
  * observed identity is the adapter's own constant rather than anything the
- * caller asked for.
+ * caller asked for. Behaviourally identical, not byte-identical: it gained a
+ * `requestedModel` argument that `buildClaudeArgs` ignores when null, which is
+ * what every existing caller passes.
  */
 export function createLocalClaudeInvoker(input: {
   readonly executablePath: string;
@@ -140,6 +148,9 @@ export function createLocalClaudeInvoker(input: {
       report: invocation.report,
       actualActor: 'Claude Code',
       actualRuntimeId: CLAUDE_ADAPTER_ID,
+      // The local stream surfaces the model as a normalized event line rather
+      // than a field; the adapter does not hand one back here.
+      actualModel: null,
     };
   };
 }

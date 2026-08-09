@@ -101,6 +101,8 @@ function terminalState(): CodingTerminalState {
     claim: { summary: 'Implemented the normalizer.', filesChanged: ['src/normalize.js'], checksRun: ['Reported completing the task'] },
     attestation: {
       attestationId: 'att_coding_x',
+      actualActor: 'Claude Code',
+      actualRuntime: 'claude-code-local',
       launchVerified: true,
       completionVerified: true,
       fallbackOccurred: false,
@@ -1445,5 +1447,104 @@ describe('role slots decide who may hold each role, before anything is dispatche
     const serialized = JSON.stringify(view);
     expect(serialized).not.toContain('sk-ant-FAKETESTNOTREAL');
     expect(serialized).not.toContain('not-a-real-token');
+  });
+});
+
+/**
+ * THE HOSTED CODING SURFACE, THROUGH THE REAL MISSION REGISTRY.
+ *
+ * The seam and the invoker were proven by driving `runCodingMission` directly.
+ * That is exactly why a blocker survived: the mission probed for an installed
+ * `claude` CLI unconditionally, so on a container the hosted occupant — whose
+ * whole purpose is to need no CLI — still died with "Install Claude Code". No
+ * test noticed, because every other orchestrator test injects
+ * `resolveClaudeRuntime`.
+ *
+ * These do NOT inject it. The mission must reach the hosted invoker without a
+ * CLI existing anywhere.
+ */
+describe('a hosted Coding Agent reaches its own surface, with no CLI on the host', () => {
+  const HOSTED_CODER_ENV: NodeJS.ProcessEnv = {
+    RAILWAY_ENVIRONMENT: 'production',
+    RELAY_PROMPT_ARCHITECT_MODE: 'fusion',
+    RELAY_ROLE_CODING_AGENT: 'claude_agent_sdk_hosted',
+    ANTHROPIC_API_KEY: 'sk-ant-FAKETESTNOTREAL-never-served', // relay-boundary:allow-fixture — synthetic
+    RELAY_HOSTED_CODING_MODEL: 'claude-test',
+  };
+
+  /** A registry with the real runtime resolution left in place. */
+  const hostedRegistry = (h: Harness, built: { invoker: boolean }) => createMissionRegistry({
+    fusionBaseUrl: 'http://localhost:3000',
+    sundayMode: 'fast',
+    claudeMode: 'live',
+    confirmLive: true,
+    architectEnv: HOSTED_CODER_ENV,
+    hermesEnv: HOSTED_CODER_ENV,
+    now: () => AT,
+    deps: {
+      ...h.deps,
+      // The ONLY stub: the runtime resolver stays real, so a CLI probe would
+      // still refuse. Recording construction is what proves the leg was reached.
+      resolveClaudeRuntime: undefined,
+      createHostedInvoker: () => {
+        built.invoker = true;
+        return async () => { throw new Error('not reached in this test'); };
+      },
+    },
+  });
+
+  it('does not refuse for a Claude Code CLI it will never spawn', async () => {
+    /**
+     * A CLI-LESS HOST, SIMULATED HONESTLY. `probeClaudeCapabilities` resolves
+     * the executable by scanning `process.env.PATH` directly, so emptying PATH
+     * is exactly a container with no `claude` on it. Without this the test
+     * passes on a developer machine that HAS the CLI — which is precisely how
+     * this blocker survived a full green gate.
+     */
+    const savedPath = process.env.PATH;
+    process.env.PATH = '';
+    try {
+      const h = harness();
+      const built = { invoker: false };
+      const reg = hostedRegistry(h, built);
+      reg.start({ missionId: 'm-hosted-no-cli', objective: 'Normalize project names.' });
+      const view = await settle(reg, 'm-hosted-no-cli');
+      // The CLI probe's refusal is the thing that must NOT happen.
+      expect(view.error?.code).not.toBe('coding_agent_not_ready');
+      expect(JSON.stringify(view)).not.toContain('Install Claude Code');
+      // And the hosted surface really was the one selected.
+      expect(built.invoker).toBe(true);
+    } finally {
+      if (savedPath === undefined) delete process.env.PATH;
+      else process.env.PATH = savedPath;
+    }
+  });
+
+  it('still refuses a hosted Coding Agent whose SDK credential is unset', async () => {
+    const h = harness();
+    const built = { invoker: false };
+    const reg = createMissionRegistry({
+      fusionBaseUrl: 'http://localhost:3000',
+      sundayMode: 'fast',
+      claudeMode: 'live',
+      confirmLive: true,
+      architectEnv: { ...HOSTED_CODER_ENV, ANTHROPIC_API_KEY: '' },
+      hermesEnv: { ...HOSTED_CODER_ENV, ANTHROPIC_API_KEY: '' },
+      now: () => AT,
+      deps: {
+        ...h.deps,
+        resolveClaudeRuntime: undefined,
+        createHostedInvoker: () => { built.invoker = true; return async () => { throw new Error('x'); }; },
+      },
+    });
+    reg.start({ missionId: 'm-hosted-no-key', objective: 'Normalize project names.' });
+    const view = await settle(reg, 'm-hosted-no-key');
+    expect(view.state).toBe('failed');
+    // Binding refuses first — the credential is declared configuration for
+    // this occupant, so the refusal names the variable rather than a probe.
+    expect(view.error?.code).toBe('role_binding_refused');
+    expect(view.error?.safeMessage).toContain('ANTHROPIC_API_KEY');
+    expect(built.invoker).toBe(false);
+    expect(h.calls.coding).toBe(0);
   });
 });
