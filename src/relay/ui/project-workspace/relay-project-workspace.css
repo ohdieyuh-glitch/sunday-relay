@@ -2324,12 +2324,14 @@
    presence.
    =========================================================================== */
 
-.rpw-brainstage {
-  /* Defaults. A workspace with no tier chosen keeps exactly this, and a tier
-     overrides both variables inline — one accent for the Brain, the link and
-     the Dog beneath it. */
+.rpw-main {
+  /* Defaults for the column's shared accent. A tier overrides both inline on
+     this same element, so the Brain, the threads and the Dog move together. */
   --rpb-accent: #8f7cf0;
   --rpb-glow: rgba(143, 124, 240, 0.25);
+}
+
+.rpw-brainstage {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -2410,6 +2412,18 @@
     transparent 100%
   );
   opacity: 0.7;
+}
+
+/* Dog → Mission. Shorter and fainter than the Brain's thread: the Brain is
+   what the Dog draws on, and the mission box is what the founder is typing
+   into, so the light thins as it travels toward the person. */
+.rpw-stagelink {
+  display: block;
+  width: 1px;
+  height: 14px;
+  margin: 2px auto 0;
+  background: linear-gradient(to bottom, var(--rpb-glow) 0%, transparent 100%);
+  opacity: 0.55;
 }
 
 .rpw-brainstage-caption {

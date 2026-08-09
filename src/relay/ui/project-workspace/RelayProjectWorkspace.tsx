@@ -388,7 +388,17 @@ export function RelayProjectWorkspace(
         )}
       </div>
 
-      <main className="rpw-main">
+      <main
+        className="rpw-main"
+        /* ONE ACCENT FOR THE WHOLE COLUMN. The Brain, the threads between the
+           objects and the Dog all read from here, so the three things a
+           founder is looking at are lit by one source rather than decorated
+           separately. Untiered resolves to the shipped colours. */
+        style={{
+          ['--rpb-accent' as string]: chakraAccentFor(chakraTier).accent,
+          ['--rpb-glow' as string]: chakraAccentFor(chakraTier).glow,
+        }}
+      >
         {/* THE PROJECT BRAIN, ABOVE THE DOG, ABOVE THE MISSION BOX.
             It lived in the right-hand rail as a definition list — a status
             panel beside the workspace rather than part of it. The composition
@@ -398,17 +408,7 @@ export function RelayProjectWorkspace(
             column of light joins them rather than an arrow or a label.
             The counts and the document did not move — they are what the Brain
             view shows when it is opened. */}
-        <div
-          className="rpw-brainstage"
-          /* ONE ACCENT FOR THE WHOLE COLUMN. The Brain reads `--rpb-accent`
-             and the Dog reads `--rpd-accent`; setting both here from the same
-             tier is what makes the two objects look like one system rather
-             than two decorated widgets that happen to sit above each other. */
-          style={{
-            ['--rpb-accent' as string]: chakraAccentFor(chakraTier).accent,
-            ['--rpb-glow' as string]: chakraAccentFor(chakraTier).glow,
-          }}
-        >
+        <div className="rpw-brainstage">
           {/* A CONTROL ONLY WHERE THERE IS SOMETHING TO OPEN. A host without
               the Brain view renders the object and no button, rather than a
               button that looks like it opens something and does not. */}
@@ -474,6 +474,12 @@ export function RelayProjectWorkspace(
                 .map((r) => ROLE_LABEL[r]).join(', ')}.`}
             </p>
           )}
+          {/* THE SECOND HALF OF THE CONNECTION. Brain → Dog → Mission, joined
+              by the same thread of light rather than by an arrow or a label.
+              Decorative and hidden from assistive technology: the
+              relationship it draws is stated in words by the surfaces
+              themselves, and a screen reader gains nothing from a line. */}
+          <span className="rpw-stagelink" aria-hidden="true" />
         </div>
         {/* The picker is MOUNTED, so "two selectable backdrops" is a fact about
             the shipped website and not only about the catalog. Selection is

@@ -69,9 +69,11 @@
    internal glow, an edge lift, and the same colour reaching the floor it
    stands on. The body, its shading and the visor never change, so no tier can
    flatten the animal into a colour swatch. */
-.rpd--tier .rpd-art {
-  filter: drop-shadow(0 0 3px var(--rpd-accent-glow, transparent));
-}
+/* NO FILTER ON THE ANIMATED ART.
+   A drop-shadow on `.rpd-art` looks identical to the glow below it and costs
+   a re-rasterization of the whole sprite on every frame of the breathing and
+   the gait — which is exactly the GPU-heavy effect the direction rules out.
+   The light comes from the layer behind instead, which composites once. */
 .rpd--tier .rpd-stage::before {
   /* Internal light, sat behind the sprite and kept small on purpose: this
      lives above a workspace someone is trying to work in. */
