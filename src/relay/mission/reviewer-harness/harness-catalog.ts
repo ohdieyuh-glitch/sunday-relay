@@ -108,7 +108,7 @@ export const REVIEWER_HARNESS_CATALOG: readonly ReviewerHarnessCatalogEntry[] = 
     capabilities: HERMES_PROVEN_CAPABILITIES,
     experimental: true,
     verificationNotes: [
-      'Runs as a local one-shot Hermes process behind the Relay Bridge; the browser never reaches it.',
+      'Runs behind the Relay Bridge — either as a local one-shot Hermes process or, on a hosted deployment, as a dedicated Hermes service reached over authenticated HTTP to an allowlisted origin. The browser never reaches either.',
       'Read-only is structural: the adapter grants Hermes no toolset, so it holds no file, terminal or network tool.',
       'The provider credential is read only inside the bridge process and is never returned, persisted or logged.',
       'Live execution stays unproven until a founder-authorized run records a real provider response.',

@@ -142,3 +142,50 @@ describe('cancellation stops the run without claiming anything', () => {
     expect(final).toBeUndefined();
   }, 120_000);
 });
+
+/**
+ * REQUESTED AND ACTUAL ARE TWO FIELDS BECAUSE THEY CAN DIFFER.
+ *
+ * The attestation used to write `requestedActor: 'Claude Code'`,
+ * `actualActor: 'Claude Code'` and `billingPath: 'subscription'` as literals
+ * three lines apart. That was merely redundant while one runtime could ever
+ * hold the slot, and a misreport the moment a second one could: a hosted
+ * Agent-SDK run is API-billed, so `subscription` names the wrong payer.
+ *
+ * The REQUESTED half now comes from the occupant the mission bound. The ACTUAL
+ * half stays what this leg observed — the adapter it really drove.
+ */
+describe('the coding attestation separates who was asked for from what ran', () => {
+  it('takes the requested identity from the bound occupant', async () => {
+    const { outcome } = await runOffline({
+      requestedOccupant: {
+        displayName: 'Claude Agent SDK (hosted)',
+        adapterId: 'claude-agent-sdk-hosted',
+        billingPath: 'api',
+      },
+    });
+    const attestation = outcome.attestation;
+    expect(attestation).not.toBeNull();
+    expect(attestation?.requestedActor).toBe('Claude Agent SDK (hosted)');
+    expect(attestation?.requestedRuntime).toBe('claude-agent-sdk-hosted');
+    // `api` in the registry's vocabulary is `api_billed` in the attestation's,
+    // which is the value `isPaidApiCall` tests for.
+    expect(attestation?.billingPath).toBe('api_billed');
+
+    // AND THE ACTUAL HALF DOES NOT FOLLOW IT. This leg drove the Claude Code
+    // adapter, so that is what it attests — which is exactly the mismatch a
+    // founder must be able to see. (The mission refuses this combination
+    // before it can happen; the fields still have to tell the truth if it did.)
+    expect(attestation?.actualActor).toBe('Claude Code');
+    expect(attestation?.actualRuntime).toBe('claude-code-local');
+  }, 30_000);
+
+  it('falls back to the local identity when no occupant is supplied', async () => {
+    // Every caller that predates role slots drove this same adapter, so that
+    // is what it was requesting.
+    const { outcome } = await runOffline();
+    expect(outcome.attestation?.requestedActor).toBe('Claude Code');
+    expect(outcome.attestation?.requestedRuntime).toBe('claude-code-local');
+    expect(outcome.attestation?.billingPath).toBe('subscription');
+  }, 30_000);
+});

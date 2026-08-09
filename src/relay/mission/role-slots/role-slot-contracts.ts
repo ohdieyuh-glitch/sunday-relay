@@ -16,7 +16,18 @@
  * are false — a hosted Agent-SDK run is API-billed, and an attestation that
  * says `subscription` misreports who paid. Requested and actual are separate
  * fields precisely so that a swap is visible; hard-coding both to the same
- * literal is how a swap becomes invisible.
+ * literal is how a swap becomes invisible. The REQUESTED half now comes from
+ * the bound occupant; the ACTUAL half stays observed, which is the whole point.
+ *
+ * REGISTERED IS NOT DISPATCHABLE, AND THE DIFFERENCE IS LOAD-BEARING. This
+ * registry says what Relay has an adapter for. Whether a PARTICULAR pipeline
+ * can drive that adapter is a separate fact owned by that pipeline, and
+ * conflating the two produced a real defect in the first version of this
+ * module: binding accepted `claude_agent_sdk_hosted`, the preflight event
+ * announced "Coding Agent: Claude Agent SDK (hosted)", and the Claude Code CLI
+ * then ran and attested itself — the mission narrating one occupant while
+ * another did the work. A dispatcher must refuse an occupant it cannot drive;
+ * see `missionDispatchProblems` in the bridge, which owns dispatch.
  *
  * WHAT A SLOT BINDING IS, AND IS NOT. Binding resolves what a deployment
  * REQUESTED and proves the request is coherent — a registered occupant, for
@@ -107,6 +118,16 @@ export interface RoleOccupant {
    * rendered to a browser without redaction.
    */
   readonly requiredConfig: readonly string[];
+  /**
+   * Names required only on a HOSTED deployment.
+   *
+   * Some gates are armed by production and deliberately relaxed elsewhere —
+   * the Hermes trusted-origin allowlist is required on a server and not on a
+   * laptop pointing at loopback. Demanding those names everywhere would refuse
+   * a setup the gate itself permits; omitting them entirely lets a hosted
+   * deployment bind and then fail its own transport selection.
+   */
+  readonly hostedOnlyConfig?: readonly string[];
   /** What is NOT proven about this occupant. Written down so a surface cannot
    *  present a registry entry as a capability guarantee. */
   readonly verificationNotes: readonly string[];
@@ -123,12 +144,29 @@ export interface RoleOccupant {
  */
 export const ROLE_BINDING_REFUSALS = [
   'no_occupant_requested',
+  /**
+   * A selector was set to something that is not a valid choice.
+   *
+   * Separate from `no_occupant_requested` because the remedies are opposite:
+   * one says set the variable, the other says the variable you set is
+   * misspelled. Collapsing them told an operator "no occupant is configured"
+   * for `RELAY_HERMES_MODE=romote`, which is configured, and wrong.
+   */
+  'invalid_selector',
   'unknown_occupant',
   'occupant_role_mismatch',
   'adapter_unavailable',
   'environment_unsupported',
   'configuration_missing',
   'reviewer_not_independent',
+  /**
+   * Registered, coherent, configured — and this pipeline cannot drive it.
+   *
+   * The refusal that stops a mission narrating one occupant while another does
+   * the work. Registration is a fact about Relay; dispatchability is a fact
+   * about the caller, and only the caller knows it.
+   */
+  'occupant_not_dispatchable',
 ] as const;
 export type RoleBindingRefusal = (typeof ROLE_BINDING_REFUSALS)[number];
 

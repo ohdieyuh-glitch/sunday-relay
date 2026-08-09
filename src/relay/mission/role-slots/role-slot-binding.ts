@@ -55,6 +55,25 @@ export interface RoleSlotRequest {
    */
   readonly allowDevelopmentDefaults: boolean;
   /**
+   * The environment variable that SELECTS each role, by name.
+   *
+   * Carried so a refusal can say which variable to set. Without it the message
+   * was "No occupant is configured for the coding_agent role" — true, and
+   * useless to the operator who has to go and find out that the variable is
+   * called `RELAY_ROLE_CODING_AGENT`. Names only; no value ever enters here.
+   */
+  readonly selectorNames?: Partial<Readonly<Record<RoleSlot, string>>>;
+  /**
+   * Roles whose selector was SET to something that is not a valid choice.
+   *
+   * The caller owns this judgement because the caller owns the selector's
+   * vocabulary — `RELAY_HERMES_MODE` is validated by `selectHermesMode`, and a
+   * second copy of that vocabulary here is how the two would disagree. What
+   * this module contributes is that "set to nonsense" refuses differently from
+   * "not set".
+   */
+  readonly invalidSelectors?: readonly RoleSlot[];
+  /**
    * The occupants to bind against. Overridable ONLY for tests, and for one
    * specific reason: the shipped registry deliberately contains no
    * non-independent Coding-Agent/Reviewer pair, so without a seam the
@@ -108,6 +127,20 @@ function bindOne(
   role: RoleSlot,
 ): { binding: RoleBinding | null; problems: RoleBindingProblem[] } {
   const problems: RoleBindingProblem[] = [];
+  const selector = request.selectorNames?.[role];
+  const setIt = selector === undefined ? '' : ` Set ${selector}.`;
+
+  if (request.invalidSelectors?.includes(role) === true) {
+    problems.push({
+      role,
+      reason: 'invalid_selector',
+      safeMessage:
+        `The ${role} selector is set to a value that is not one of its choices, so no occupant `
+        + `could be resolved for the role.${setIt}`,
+    });
+    return { binding: null, problems };
+  }
+
   const wanted = requestedOccupantId(request, role);
 
   if (wanted === null) {
@@ -116,7 +149,7 @@ function bindOne(
       reason: 'no_occupant_requested',
       safeMessage:
         `No occupant is configured for the ${role} role. A hosted Relay must be told explicitly which `
-        + 'agent, model or harness holds each role; it will not guess.',
+        + `agent, model or harness holds each role; it will not guess.${setIt}`,
     });
     return { binding: null, problems };
   }
@@ -161,7 +194,10 @@ function bindOne(
     });
   }
 
-  const missing = occupant.requiredConfig.filter((name) => !request.configuredNames.has(name));
+  const required = request.environment === 'hosted'
+    ? [...occupant.requiredConfig, ...(occupant.hostedOnlyConfig ?? [])]
+    : occupant.requiredConfig;
+  const missing = required.filter((name) => !request.configuredNames.has(name));
   if (missing.length > 0) {
     problems.push({
       role,
@@ -221,8 +257,14 @@ export function bindRoleSlots(request: RoleSlotRequest): RoleSlotBindingResult {
   };
 }
 
-/** One truthful line per bound slot, shared by the CLI, the website and the
- *  mission event stream so all three say the same thing. */
+/**
+ * One truthful line per bound slot.
+ *
+ * The bridge composes its preflight description from these, so the occupant
+ * name a founder reads is the one the binding produced rather than a sentence
+ * written alongside it. Any surface that later needs the same line uses this
+ * one — that is the only way three surfaces stay in agreement.
+ */
 export function renderBindingLine(binding: RoleBinding): string {
   return `${binding.role}: ${binding.occupant.displayName} (${binding.occupant.occupantId})`;
 }

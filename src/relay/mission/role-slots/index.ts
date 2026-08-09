@@ -1,8 +1,11 @@
 /**
  * ROLE SLOTS — permanent roles, swappable occupants.
  *
- * Pure domain. The browser, the CLI and the bridge read the same registry and
- * reach the same conclusions, and none of them can widen it.
+ * Pure domain: no Node, no network, no clock. The bridge is the only consumer
+ * today; the browser and the CLI can read it unchanged when they need it, and
+ * none of the three can widen it. (Stated as capability rather than fact —
+ * this module is not re-exported from the mission barrel, so no UI or CLI
+ * import is even possible through the sanctioned path yet.)
  */
 
 export {

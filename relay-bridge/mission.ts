@@ -51,7 +51,8 @@ import { buildAttestation, decideCompletion, digest, type ExecutionAttestation }
 import { isProductionDeployment } from './deployment-environment';
 import { HERMES_MODE_ENV } from './reviewer-harness/hermes/hermes-transport';
 import {
-  CODING_AGENT_ROLE_ENV, configuredNames, describeBinding, resolveRoleSlots,
+  CODING_AGENT_ROLE_ENV, configuredNames, describeBinding, missionDispatchProblems,
+  resolveRoleSlots,
 } from './role-slot-config';
 import { safeError, safeText } from './redact';
 import type {
@@ -493,7 +494,20 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         architectMode: architectEnv.RELAY_PROMPT_ARCHITECT_MODE,
         hermesMode: hermesEnv[HERMES_MODE_ENV],
         codingAgentOccupant: hermesEnv[CODING_AGENT_ROLE_ENV] ?? architectEnv[CODING_AGENT_ROLE_ENV],
-        hosted: isProductionDeployment(hermesEnv),
+        /**
+         * ONE-WAY, LIKE THE FUNCTION ITSELF.
+         *
+         * `isProductionDeployment` is documented as a signal that can only
+         * turn production ON, because "a host that can be talked out of being
+         * a production host is not one". Asking only the INJECTED environment
+         * reintroduced exactly that: a caller handing this registry a curated
+         * `architectEnv` would make a real server evaluate as a founder
+         * machine, switch development defaults on, and bind an installed CLI
+         * inside a container. Not reachable today — `server.ts` passes
+         * `process.env` — which makes it a latent fail-OPEN, and the only kind
+         * worth closing before it is reachable.
+         */
+        hosted: isProductionDeployment(process.env) || isProductionDeployment(hermesEnv),
         // Both environments count: a deployment sets one process environment,
         // and only the tests hand these two apart.
         configuredNames: new Set([
@@ -508,6 +522,26 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         return;
       }
       const boundRoles = roles.binding.bindings;
+
+      /**
+       * AND CAN THIS BRIDGE ACTUALLY DRIVE THEM?
+       *
+       * Binding proves the request is coherent. It cannot prove this pipeline
+       * has an execution path, because that is not a property of the occupant.
+       * Without this check the mission bound `claude_agent_sdk_hosted`,
+       * announced it in the preflight, and then ran the Claude Code CLI, which
+       * attested itself — the mission narrating one occupant while another did
+       * the work. Refusing is the only honest answer until the surface is
+       * wired.
+       */
+      const undispatchable = missionDispatchProblems(boundRoles);
+      if (undispatchable.length > 0) {
+        fail(rec, 'preflight_blocked', undispatchable.map((p) => p.safeMessage).join(' '), {
+          code: 'occupant_not_dispatchable',
+          retryable: false,
+        });
+        return;
+      }
 
       // Coding runtime — resolved (never invoked) before any spend.
       const runtime = resolveRuntime(config.claudeMode, now, config.confirmLive);
@@ -864,6 +898,17 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           projectLabel: 'Relay controlled fixture (throwaway repository)',
           missionId: rec.missionId,
           missionRevision: rec.missionRevision,
+          // The REQUESTED identity, from the binding. What actually ran is
+          // observed inside the coding leg and never copied from here.
+          requestedOccupant: {
+            displayName: boundRoles.coding_agent.occupant.displayName,
+            adapterId: boundRoles.coding_agent.occupant.adapterId,
+            // Narrowed at the boundary: a Coding Agent occupant is paid for
+            // by a subscription or by the API, and the registry's other two
+            // values cannot describe one.
+            billingPath: boundRoles.coding_agent.occupant.billingPath === 'api'
+              ? 'api' : 'subscription',
+          },
           requiresIndependentReview: live,
           onState: (s) => {
             if (s === 'claim_submitted') setPhase(rec, 'claim_submitted');

@@ -1075,9 +1075,11 @@ const HOSTED_ENV: NodeJS.ProcessEnv = {
   ...HOSTED_BASE,
   RELAY_ROLE_CODING_AGENT: 'claude_agent_sdk_hosted',
   ANTHROPIC_API_KEY: 'sk-ant-FAKETESTNOTREAL-never-served', // relay-boundary:allow-fixture — synthetic
+  RELAY_HOSTED_CODING_MODEL: 'claude-test',
   RELAY_HERMES_MODE: 'remote',
   RELAY_HERMES_SERVICE_URL: 'https://hermes.internal',
   RELAY_HERMES_SERVICE_TOKEN: 'not-a-real-token',
+  RELAY_HERMES_TRUSTED_ORIGINS: 'https://hermes.internal',
 };
 
 describe('role slots decide who may hold each role, before anything is dispatched', () => {
@@ -1122,12 +1124,58 @@ describe('role slots decide who may hold each role, before anything is dispatche
     expect(h.calls.architect).toBe(0);
   });
 
-  it('binds a coherent hosted combination and lets the mission proceed', async () => {
+  /**
+   * BOUND IS NOT DISPATCHABLE, AND THE MISSION MUST SAY SO RATHER THAN RUN
+   * SOMETHING ELSE.
+   *
+   * This combination binds — every occupant is registered, hosted-capable and
+   * configured. It is still refused, because `runCodingMission` drives the
+   * Claude Code CLI and `runHermesReview` spawns a local Hermes; neither
+   * consults the hosted runner or the remote transport. Without this refusal
+   * the mission announced "Claude Agent SDK (hosted)" in its preflight and
+   * then ran the local CLI, which attested itself — one occupant narrated,
+   * another doing the work.
+   */
+  it('refuses a bound occupant this bridge cannot dispatch, and names it', async () => {
     const h = harness();
-    const { view } = await runMission(h, HOSTED_ENV, 'm-role-hosted-ok');
-    // Binding is not the blocker here; the mission runs its normal course.
+    const { view } = await runMission(h, HOSTED_ENV, 'm-role-hosted-undispatchable');
+    expect(view.state).toBe('failed');
+    expect(view.error?.code).toBe('occupant_not_dispatchable');
+    expect(view.error?.retryable).toBe(false);
+    expect(view.error?.safeMessage).toContain('claude_agent_sdk_hosted');
+    expect(view.error?.safeMessage).toContain('hermes_remote_service');
+    // Refused before anything ran, so nothing was spent under the wrong name.
+    expect(h.calls.architect).toBe(0);
+    expect(h.calls.coding).toBe(0);
+    expect(h.calls.reviewer).toBe(0);
+  });
+
+  it('lets a bound, dispatchable combination proceed', async () => {
+    const h = harness();
+    const { view } = await runMission(h, LIVE_ENV, 'm-role-dispatchable');
     expect(view.error?.code).not.toBe('role_binding_refused');
+    expect(view.error?.code).not.toBe('occupant_not_dispatchable');
     expect(h.calls.architect).toBe(1);
+  });
+
+  /**
+   * THE REQUESTED HALF OF THE ATTESTATION COMES FROM THE BINDING.
+   *
+   * It used to be the literal `'Claude Code'` / `'claude-code-local'` /
+   * `'subscription'`, written three lines apart. The ACTUAL half stays what the
+   * coding leg observed, which is why the two are separate fields at all.
+   */
+  it('hands the bound occupant to the coding leg, which is where identity is attested', async () => {
+    const h = harness();
+    await runMission(h, LIVE_ENV, 'm-role-attestation');
+    // The coding leg is faked here, so this asserts the HANDOVER. That the
+    // attestation is then built from it is asserted against the real
+    // `runCodingMission` in `coding-leg-offline.test.ts`.
+    expect(h.codingInput?.requestedOccupant).toEqual({
+      displayName: 'Claude Code (installed CLI)',
+      adapterId: 'claude-code-local',
+      billingPath: 'subscription',
+    });
   });
 
   it('names the bound occupants in the preflight event, from the binding itself', async () => {
@@ -1139,6 +1187,35 @@ describe('role slots decide who may hold each role, before anything is dispatche
     expect(preflight?.meta).toContain('claude_code_local');
     expect(preflight?.meta).toContain('hermes_local');
     expect(preflight?.detail).toContain('Claude Code (installed CLI)');
+  });
+
+  /**
+   * PRODUCTION IS ONE-WAY, INCLUDING HERE.
+   *
+   * `isProductionDeployment` is documented as a signal that can only turn
+   * production ON, because "a host that can be talked out of being a
+   * production host is not one". Asking only the INJECTED environment
+   * reintroduced exactly that: a curated `architectEnv` would make a real
+   * server evaluate as a founder machine, switch development defaults on, and
+   * bind an installed CLI inside a container. This drives the real process
+   * environment against an injected one that says nothing about Railway.
+   */
+  it('treats the real process environment as production even when the injected one is silent', async () => {
+    const saved = process.env.RAILWAY_ENVIRONMENT;
+    process.env.RAILWAY_ENVIRONMENT = 'production';
+    try {
+      const h = harness();
+      // LIVE_ENV carries no Railway marker at all, and names no coding agent.
+      const { view } = await runMission(h, LIVE_ENV, 'm-role-oneway-production');
+      expect(view.state).toBe('failed');
+      // Hosted, so development defaults are OFF and the unnamed slots refuse.
+      expect(view.error?.code).toBe('role_binding_refused');
+      expect(view.error?.safeMessage).toContain('will not guess');
+      expect(h.calls.architect).toBe(0);
+    } finally {
+      if (saved === undefined) delete process.env.RAILWAY_ENVIRONMENT;
+      else process.env.RAILWAY_ENVIRONMENT = saved;
+    }
   });
 
   it('carries no credential value into any mission event', async () => {

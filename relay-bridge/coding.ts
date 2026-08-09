@@ -278,6 +278,33 @@ export async function runCodingMission(input: {
   /** Mission identity carried into the execution attestation. */
   missionId?: string;
   missionRevision?: string;
+  /**
+   * The occupant the mission BOUND to this role.
+   *
+   * The requested half of the attestation is derived from it. It used to be a
+   * literal `'Claude Code'` / `'claude-code-local'` / `'subscription'` written
+   * three lines apart, which was merely redundant while one runtime could ever
+   * hold the slot and became a misreport the moment a second one could — a
+   * hosted Agent-SDK run is API-billed, and an attestation saying
+   * `subscription` names the wrong payer.
+   *
+   * The ACTUAL half is never taken from here. It stays what this function
+   * observed: the adapter it really drove.
+   */
+  requestedOccupant?: {
+    readonly displayName: string;
+    readonly adapterId: string;
+    /**
+     * The REGISTRY's vocabulary, translated below.
+     *
+     * Two vocabularies exist and neither is wrong: the registry says how an
+     * occupant is paid for (`api`), the attestation says what a run consumed
+     * (`api_billed`, which `isPaidApiCall` tests for exactly). Narrowed to the
+     * two a Coding Agent can be, so a `none` or `unknown` occupant is a type
+     * error here rather than a billing path invented at run time.
+     */
+    readonly billingPath: 'subscription' | 'api';
+  };
 }): Promise<CodingOutcome> {
   const { executablePath, capabilities, now, ids, emit } = input;
   const limits = input.limits ?? DEFAULT_LIVE_LIMITS;
@@ -451,17 +478,41 @@ export async function runCodingMission(input: {
     terminal.ingestConnectorEvents(invocation.events);
     terminal.markEnded(invocation.outcome.completedAt);
 
-    // One attestation for the one process that actually ran. Claude Code is
-    // authenticated by the local subscription login — never an API bill.
+    /**
+     * One attestation for the one process that actually ran.
+     *
+     * REQUESTED comes from the bound occupant; ACTUAL is what this function
+     * drove, which is the Claude Code adapter — a constant here because this
+     * function invokes exactly one adapter, and naming it from the request
+     * would be the identity literal in a new costume. When the two differ the
+     * attestation shows it, which is the entire purpose of two fields.
+     *
+     * Absent binding falls back to the local identity: every caller before
+     * role slots existed drove this same adapter, so that is what they were
+     * requesting, and it keeps `runCodingMission` usable from the offline
+     * harnesses unchanged.
+     */
+    const requestedOccupant = input.requestedOccupant ?? {
+      displayName: 'Claude Code',
+      adapterId: CLAUDE_ADAPTER_ID,
+      billingPath: 'subscription' as const,
+    };
+    // Computed once and used by both the attestation and the terminal, which
+    // previously carried two independent literals that happened to agree.
+    const codingBillingPath = requestedOccupant.billingPath === 'api'
+      ? 'api_billed' as const
+      : 'subscription' as const;
     const codingAttestation = buildAttestation({
       missionId: input.missionId ?? String(taskId),
       missionRevision: input.missionRevision,
       role: 'coding_agent',
-      requestedActor: 'Claude Code',
+      requestedActor: requestedOccupant.displayName,
       actualActor: 'Claude Code',
-      requestedRuntime: 'claude-code-local',
-      actualRuntime: 'claude-code-local',
-      billingPath: 'subscription',
+      requestedRuntime: requestedOccupant.adapterId,
+      actualRuntime: CLAUDE_ADAPTER_ID,
+      // `api` in the registry is `api_billed` here, which is the value
+      // `isPaidApiCall` tests for. Translated, never aliased.
+      billingPath: codingBillingPath,
       launchVerified: !invocation.outcome.spawnError,
       completionVerified:
         !invocation.outcome.spawnError &&
@@ -480,7 +531,9 @@ export async function runCodingMission(input: {
       launchVerified: codingAttestation.launchVerified,
       completionVerified: codingAttestation.completionVerified,
       fallbackOccurred: codingAttestation.fallbackOccurred,
-      billingPath: 'subscription',
+      // The same computed value the attestation carries, not a second literal
+      // beside it. These two were independent strings that happened to agree.
+      billingPath: codingBillingPath,
     });
 
     if (invocation.outcome.cancelled) {

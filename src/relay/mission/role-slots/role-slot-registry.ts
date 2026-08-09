@@ -30,19 +30,42 @@ import {
  * the problem.
  */
 
-/** Environment variable names, declared here because THIS module is the
- *  authority on what an occupant needs. `role-slot-registry.test.ts` holds
- *  these against the bridge's own constants so the two cannot drift. */
+/**
+ * Environment variable names, declared here because THIS module is the
+ * authority on what an occupant needs. `relay-bridge/role-slots-parity.test.ts`
+ * holds these against the bridge's own constants so the two cannot drift.
+ *
+ * UNDER-DECLARING IS AS BAD AS OVER-DECLARING. A missing name makes binding
+ * report "configuration present" for an occupant that a probe one layer later
+ * refuses — a refusal arriving too late to be useful, which is the exact thing
+ * binding-before-spend exists to prevent. Two names were missing in the first
+ * version: `RELAY_HOSTED_CODING_MODEL`, which `probeHostedReadiness` refuses
+ * without because Relay will not choose a model on the operator's behalf, and
+ * `RELAY_HERMES_TRUSTED_ORIGINS`, without which a PRODUCTION bridge sends its
+ * bearer token nowhere.
+ */
 const OPENAI_ARCHITECT_CONFIG = Object.freeze([
   'RELAY_PROMPT_ARCHITECT_MODE',
   'OPENAI_API_KEY',
   'OPENAI_PROMPT_ARCHITECT_MODEL',
 ]);
-const HOSTED_CODING_CONFIG = Object.freeze(['ANTHROPIC_API_KEY']);
+const HOSTED_CODING_CONFIG = Object.freeze([
+  'ANTHROPIC_API_KEY',
+  'RELAY_HOSTED_CODING_MODEL',
+]);
 const HERMES_REMOTE_CONFIG = Object.freeze([
   'RELAY_HERMES_MODE',
   'RELAY_HERMES_SERVICE_URL',
   'RELAY_HERMES_SERVICE_TOKEN',
+]);
+/**
+ * Required only where the trusted-origin gate is armed, which is production.
+ * Kept separate from `requiredConfig` rather than folded into it, because
+ * demanding an allowlist on a laptop pointing at `127.0.0.1` would refuse a
+ * setup `checkServiceUrl` deliberately permits.
+ */
+const HERMES_REMOTE_PRODUCTION_CONFIG = Object.freeze([
+  'RELAY_HERMES_TRUSTED_ORIGINS',
 ]);
 
 export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
@@ -157,6 +180,7 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
     adapterAvailable: true,
     billingPath: 'api',
     requiredConfig: HERMES_REMOTE_CONFIG,
+    hostedOnlyConfig: HERMES_REMOTE_PRODUCTION_CONFIG,
     verificationNotes: [
       'A production bridge must additionally list the service origin in RELAY_HERMES_TRUSTED_ORIGINS; the bearer token goes nowhere else.',
       'Configuration proves the bridge is set up to reach a service, never that one answered.',
@@ -187,7 +211,13 @@ export function occupantsForRole(role: RoleSlot): readonly RoleOccupant[] {
  * was the original bug.
  */
 export const DEVELOPMENT_DEFAULT_OCCUPANTS: Readonly<Record<RoleSlot, string>> = Object.freeze({
-  prompt_architect: 'openai_gpt_architect',
+  // THE UNMETERED ONE. Before role slots existed, an unconfigured machine had
+  // no architect at all (`selectArchitectPath` answered `blocked`), so there is
+  // no prior behaviour to reproduce here — and a default that names the
+  // API-billed provider is the kind of default that becomes load-bearing later.
+  // In practice the architect is selected by its own mode and never falls back
+  // to this; when it does, it falls back to the path that spends nothing.
+  prompt_architect: 'fusion_architect',
   coding_agent: 'claude_code_local',
   reviewer: 'hermes_local',
 });

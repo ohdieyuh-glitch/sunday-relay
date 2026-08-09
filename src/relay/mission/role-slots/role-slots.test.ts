@@ -14,7 +14,7 @@ import {
  * is never accidentally also exercising `configuration_missing`.
  */
 const ALL_NAMES: ReadonlySet<string> = new Set(
-  ROLE_OCCUPANTS.flatMap((o) => [...o.requiredConfig]),
+  ROLE_OCCUPANTS.flatMap((o) => [...o.requiredConfig, ...(o.hostedOnlyConfig ?? [])]),
 );
 
 const hosted = (requested: Partial<Record<RoleSlot, string>>, names = ALL_NAMES) => bindRoleSlots({
@@ -101,7 +101,12 @@ describe('binding a deployment request', () => {
     if (!result.ok) return;
     expect(result.bindings.coding_agent.occupant.occupantId).toBe('claude_code_local');
     expect(result.bindings.reviewer.occupant.occupantId).toBe('hermes_local');
-    expect(result.bindings.prompt_architect.occupant.occupantId).toBe('openai_gpt_architect');
+    // THE UNMETERED ARCHITECT. A development default that names the API-billed
+    // provider is the kind of default that becomes load-bearing later; before
+    // role slots existed an unconfigured machine had no architect at all, so
+    // there is no prior behaviour that required the paid one.
+    expect(result.bindings.prompt_architect.occupant.occupantId).toBe('fusion_architect');
+    expect(result.bindings.prompt_architect.occupant.billingPath).toBe('none');
   });
 
   it('binds a fully hosted combination', () => {
@@ -126,6 +131,112 @@ describe('binding a deployment request', () => {
     expect(reasons(result)).toEqual([
       'no_occupant_requested', 'no_occupant_requested', 'no_occupant_requested',
     ]);
+  });
+
+  /**
+   * "No occupant is configured for the coding_agent role" is true and useless
+   * to the operator who then has to go and discover what the variable is
+   * called. The refusal names it.
+   */
+  it('names the variable that would configure an unnamed slot', () => {
+    const result = bindRoleSlots({
+      requested: {},
+      environment: 'hosted',
+      configuredNames: ALL_NAMES,
+      allowDevelopmentDefaults: false,
+      selectorNames: { coding_agent: 'RELAY_ROLE_CODING_AGENT' },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const coding = result.problems.find((p) => p.role === 'coding_agent');
+    expect(coding?.safeMessage).toContain('Set RELAY_ROLE_CODING_AGENT.');
+    // A role with no declared selector says nothing rather than inventing one.
+    const reviewer = result.problems.find((p) => p.role === 'reviewer');
+    expect(reviewer?.safeMessage).not.toContain('Set ');
+  });
+
+  /**
+   * Set-to-nonsense and not-set are opposite remedies. Collapsing them told an
+   * operator "no occupant is configured" for a variable that is configured.
+   */
+  it('refuses a selector set to an invalid value differently from an unset one', () => {
+    const result = bindRoleSlots({
+      requested: { prompt_architect: 'fusion_architect', coding_agent: 'claude_code_local' },
+      environment: 'founder_machine',
+      configuredNames: ALL_NAMES,
+      allowDevelopmentDefaults: true,
+      invalidSelectors: ['reviewer'],
+      selectorNames: { reviewer: 'RELAY_HERMES_MODE' },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(reasons(result)).toEqual(['invalid_selector']);
+    expect(result.problems[0].safeMessage).toContain('Set RELAY_HERMES_MODE.');
+  });
+
+  /**
+   * An occupant with no adapter is refused. The shipped registry has no such
+   * entry by design, so without the documented seam this branch could be
+   * asserted and never executed.
+   */
+  it('refuses an occupant Relay ships no adapter for', () => {
+    const result = bindRoleSlots({
+      requested: {
+        prompt_architect: 'fusion_architect',
+        coding_agent: 'paper_agent',
+        reviewer: 'hermes_local',
+      },
+      environment: 'founder_machine',
+      configuredNames: ALL_NAMES,
+      allowDevelopmentDefaults: false,
+      occupants: [
+        ...ROLE_OCCUPANTS.filter((o) => o.role !== 'coding_agent'),
+        {
+          ...(findOccupant('coding_agent', 'claude_code_local') as RoleOccupant),
+          occupantId: 'paper_agent',
+          adapterAvailable: false,
+        },
+      ],
+    });
+    expect(result.ok).toBe(false);
+    expect(reasons(result)).toEqual(['adapter_unavailable']);
+  });
+
+  /**
+   * Some configuration is required only where the gate it feeds is armed. The
+   * Hermes trusted-origin allowlist is required on a server and deliberately
+   * not on a laptop pointing at loopback — so binding must ask for it in one
+   * environment and not the other, or it refuses a setup `checkServiceUrl`
+   * permits.
+   */
+  it('requires hosted-only configuration on a host and not on a laptop', () => {
+    const remote = findOccupant('reviewer', 'hermes_remote_service') as RoleOccupant;
+    expect(remote.hostedOnlyConfig?.length).toBeGreaterThan(0);
+    const withoutHostedOnly = new Set(
+      [...ALL_NAMES].filter((n) => !(remote.hostedOnlyConfig ?? []).includes(n)),
+    );
+
+    const onHost = hosted({
+      prompt_architect: 'openai_gpt_architect',
+      coding_agent: 'claude_agent_sdk_hosted',
+      reviewer: 'hermes_remote_service',
+    }, withoutHostedOnly);
+    expect(onHost.ok).toBe(false);
+    if (onHost.ok) return;
+    expect(onHost.problems.find((p) => p.role === 'reviewer')?.reason)
+      .toBe('configuration_missing');
+
+    const onLaptop = bindRoleSlots({
+      requested: {
+        prompt_architect: 'openai_gpt_architect',
+        coding_agent: 'claude_code_local',
+        reviewer: 'hermes_remote_service',
+      },
+      environment: 'founder_machine',
+      configuredNames: withoutHostedOnly,
+      allowDevelopmentDefaults: false,
+    });
+    expect(onLaptop.ok).toBe(true);
   });
 
   it('resolves an unnamed slot to the development default only when defaults are allowed', () => {

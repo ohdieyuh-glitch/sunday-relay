@@ -1,5 +1,6 @@
 import {
-  bindRoleSlots, type RoleSlot, type RoleSlotBindingResult,
+  ROLE_SLOTS, bindRoleSlots, renderBindingLine,
+  type RoleSlot, type RoleSlotBindingResult,
 } from '../src/relay/mission/role-slots';
 import { isProductionDeployment } from './deployment-environment';
 import { HERMES_MODE_ENV } from './reviewer-harness/hermes/hermes-transport';
@@ -41,19 +42,80 @@ export function architectOccupantFor(mode: string | undefined): string | null {
 }
 
 /**
- * The Hermes transport mode, expressed as an occupant.
+ * The Hermes transport mode, expressed as an occupant — in three states.
  *
- * Unset is deliberately NOT defaulted here. `selectHermesMode` already decides
+ * UNSET is deliberately not defaulted here. `selectHermesMode` already decides
  * what unset means — local on a developer machine, a configuration error in
  * production — and duplicating that judgement is how the two would drift.
- * Returning null lets the binder apply the development default on a laptop and
- * refuse on a hosted deployment, which is the same answer arrived at once.
+ * Reporting `unset` lets the binder apply the development default on a laptop
+ * and refuse on a hosted deployment, which is the same answer arrived at once.
+ *
+ * INVALID is separate because collapsing it into `unset` made this module and
+ * `selectHermesMode` disagree in both directions at once.
  */
-export function reviewerOccupantFor(mode: string | undefined): string | null {
+export type SelectorResolution =
+  | { readonly kind: 'unset' }
+  | { readonly kind: 'invalid' }
+  | { readonly kind: 'occupant'; readonly occupantId: string };
+
+export function reviewerOccupantFor(mode: string | undefined): SelectorResolution {
   const raw = (mode ?? '').trim();
-  if (raw === 'local') return 'hermes_local';
-  if (raw === 'remote') return 'hermes_remote_service';
-  return null;
+  if (raw === '') return { kind: 'unset' };
+  if (raw === 'local') return { kind: 'occupant', occupantId: 'hermes_local' };
+  if (raw === 'remote') return { kind: 'occupant', occupantId: 'hermes_remote_service' };
+  /**
+   * SET, AND NOT ONE OF THE CHOICES.
+   *
+   * `selectHermesMode` refuses this outright, so returning `unset` here made
+   * the two disagree in both directions: on a laptop `RELAY_HERMES_MODE=REMOTE`
+   * silently bound the LOCAL reviewer while the transport refused the value,
+   * and on a host `romote` reported "no occupant is configured" for a variable
+   * that is configured, misspelled. The vocabulary still lives in
+   * `selectHermesMode` — this only distinguishes the two failures.
+   */
+  return { kind: 'invalid' };
+}
+
+/**
+ * THE OCCUPANTS THIS MISSION PIPELINE CAN ACTUALLY DRIVE.
+ *
+ * Registration says Relay ships an adapter. Dispatchability says THIS caller
+ * can drive it, and only this caller knows. The bridge's mission runs the
+ * Coding Agent through `runCodingMission` (the Claude Code CLI) and the
+ * Reviewer through `runHermesReview` (a spawned local Hermes); neither
+ * consults the hosted runner or the remote transport. Binding an occupant the
+ * pipeline cannot drive produced a mission that ANNOUNCED "Claude Agent SDK
+ * (hosted)" in its preflight while the local CLI ran and attested itself —
+ * one occupant narrated, another doing the work, which is the precise defect
+ * the registry exists to make impossible.
+ *
+ * Entries are removed from this set as each surface is wired, and the removal
+ * is the whole change: nothing else has to know.
+ */
+export const MISSION_DISPATCHABLE_OCCUPANTS: ReadonlySet<string> = new Set([
+  'openai_gpt_architect',
+  'fusion_architect',
+  'claude_code_local',
+  'hermes_local',
+]);
+
+/** Bound, coherent, configured — and undrivable here. Named per role. */
+export function missionDispatchProblems(
+  bindings: Readonly<Record<RoleSlot, { readonly occupant: { readonly occupantId: string; readonly displayName: string } }>>,
+): readonly { readonly role: RoleSlot; readonly safeMessage: string }[] {
+  const problems: { role: RoleSlot; safeMessage: string }[] = [];
+  for (const role of Object.keys(bindings) as RoleSlot[]) {
+    const { occupant } = bindings[role];
+    if (MISSION_DISPATCHABLE_OCCUPANTS.has(occupant.occupantId)) continue;
+    problems.push({
+      role,
+      safeMessage:
+        `"${occupant.occupantId}" is registered for the ${role} role, but this Relay Bridge cannot yet `
+        + `dispatch it: the mission pipeline has no execution path for ${occupant.displayName}. `
+        + 'Relay refuses rather than run a different occupant under its name.',
+    });
+  }
+  return problems;
 }
 
 /** Variable names whose value is set and non-empty. NAMES only. */
@@ -96,12 +158,14 @@ export interface RoleSlotInputs {
  */
 export function resolveRoleSlots(inputs: RoleSlotInputs): RoleSlotResolution {
   const requested: Partial<Record<RoleSlot, string>> = {};
+  const invalidSelectors: RoleSlot[] = [];
 
   const architect = architectOccupantFor(inputs.architectMode);
   if (architect !== null) requested.prompt_architect = architect;
 
   const reviewer = reviewerOccupantFor(inputs.hermesMode);
-  if (reviewer !== null) requested.reviewer = reviewer;
+  if (reviewer.kind === 'occupant') requested.reviewer = reviewer.occupantId;
+  if (reviewer.kind === 'invalid') invalidSelectors.push('reviewer');
 
   const coding = (inputs.codingAgentOccupant ?? '').trim();
   if (coding !== '') requested.coding_agent = coding;
@@ -114,6 +178,14 @@ export function resolveRoleSlots(inputs: RoleSlotInputs): RoleSlotResolution {
       environment: inputs.hosted ? 'hosted' : 'founder_machine',
       configuredNames: inputs.configuredNames,
       allowDevelopmentDefaults: !inputs.hosted,
+      invalidSelectors,
+      // So a refusal says which variable to set, rather than leaving an
+      // operator to discover the name.
+      selectorNames: {
+        prompt_architect: 'RELAY_PROMPT_ARCHITECT_MODE',
+        coding_agent: CODING_AGENT_ROLE_ENV,
+        reviewer: HERMES_MODE_ENV,
+      },
     }),
   };
 }
@@ -135,7 +207,7 @@ export function describeBinding(resolution: RoleSlotResolution): string {
     return resolution.binding.problems.map((p) => p.safeMessage).join(' ');
   }
   const { bindings } = resolution.binding;
-  return `Prompt Architect: ${bindings.prompt_architect.occupant.displayName} · `
-    + `Coding Agent: ${bindings.coding_agent.occupant.displayName} · `
-    + `Reviewer: ${bindings.reviewer.occupant.displayName}.`;
+  // Composed from `renderBindingLine`, so the occupant name a founder reads is
+  // the one the binding produced and not a second sentence describing it.
+  return ROLE_SLOTS.map((role) => renderBindingLine(bindings[role])).join(' · ');
 }
