@@ -305,11 +305,11 @@ describe('the real /relay-api/health response', () => {
       RELAY_HERMES_SERVICE_TOKEN: 'not-a-real-token',
       RELAY_HERMES_TRUSTED_ORIGINS: 'https://hermes.internal',
     }, (body) => {
+      // The Coding Agent's hosted surface IS wired now, so only the Reviewer
+      // remains undrivable — which is exactly what the founder needs to read
+      // off this route to know what is left.
       expect(body.roleSlotsBound).toBe(false);
-      expect(body.roleSlotRefusals).toEqual([
-        'coding_agent:occupant_not_dispatchable',
-        'reviewer:occupant_not_dispatchable',
-      ]);
+      expect(body.roleSlotRefusals).toEqual(['reviewer:occupant_not_dispatchable']);
       const serialized = JSON.stringify(body);
       expect(serialized).not.toContain('sk-ant-FAKETESTNOTREAL');
       expect(serialized).not.toContain('not-a-real-token');

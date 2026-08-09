@@ -30,13 +30,25 @@ import type { ProjectPhase } from './contracts';
  * tampered with in localStorage.
  */
 
-/** The exact sentence the terminal shows while Claude is running and no new
-    verified execution event has arrived. Never paraphrased. */
-export const CODING_TERMINAL_WAITING_MESSAGE =
-  'Claude Code is running. Awaiting the next verified execution event.';
+/**
+ * THE SENTENCES THE TERMINAL SHOWS, NAMING THE RUNTIME THAT IS ACTUALLY THERE.
+ *
+ * These were literals mentioning Claude Code. The header was corrected to read
+ * `view.runtime` and these were not, so on a hosted Agent-SDK run — which
+ * emits no lifecycle events, and therefore shows the waiting line for its whole
+ * duration — the live-progress sentence named a different agent than the one
+ * running, underneath a header naming the right one. Fixing the header alone
+ * was fixing a fourth instance of one defect and calling it the class.
+ */
+export const codingTerminalWaitingMessage = (runtime: string): string =>
+  `${runtime} is running. Awaiting the next verified execution event.`;
 
-export const CODING_TERMINAL_EMPTY_MESSAGE =
-  'No Claude Code execution has run for this project yet.';
+export const codingTerminalEmptyMessage = (runtime: string): string =>
+  `No ${runtime} execution has run for this project yet.`;
+
+/** The neutral runtime name, for a view built before any run exists. A
+ *  deployment that has never run one must not be told which agent it uses. */
+export const CODING_TERMINAL_UNRUN_RUNTIME = 'Coding Agent';
 
 const STATUS_LABEL: Record<CodingTerminalStatus, string> = {
   waiting: 'WAITING',
@@ -71,8 +83,8 @@ export interface CodingTerminalView {
   executionId: string;
   externalSessionRedacted: string | null;
   runtime: string;
-  /** Claude Code is authenticated by the local subscription login. */
-  billingLabel: 'SUBSCRIPTION';
+  /** Who paid, derived from the attestation — never a fixed label. */
+  billingLabel: string;
   projectLabel: string;
   phaseLabel: string;
   permissions: CodingTerminalPermissions;
@@ -105,8 +117,8 @@ export function emptyCodingTerminalView(phase: ProjectPhase = 'plan'): CodingTer
     statusLabel: STATUS_LABEL.waiting,
     executionId: '—',
     externalSessionRedacted: null,
-    runtime: 'Claude Code (local CLI)',
-    billingLabel: 'SUBSCRIPTION',
+    runtime: CODING_TERMINAL_UNRUN_RUNTIME,
+    billingLabel: billingLabelFor(null, 'unknown'),
     projectLabel: '—',
     phaseLabel: PHASE_LABEL[phase],
     permissions: { allowedTools: [], allowedFiles: [], protectedPaths: [], deniedCapabilities: [] },
@@ -217,8 +229,15 @@ export function buildCodingTerminalView(input: {
     externalSessionRedacted: t.externalSessionRedacted
       ? sanitizeTerminalLine(t.externalSessionRedacted, 20)
       : null,
-    runtime: sanitizeTerminalLine(t.runtime, 80) || 'Claude Code (local CLI)',
-    billingLabel: 'SUBSCRIPTION',
+    // The FIFTH instance of the same class, sitting one line above its own
+    // fix: a blank runtime fell back to a Claude Code literal, so all four
+    // derived strings derived from it. `Unknown is not zero, never a default`.
+    runtime: sanitizeTerminalLine(t.runtime, 80) || CODING_TERMINAL_UNRUN_RUNTIME,
+    // GATED ON EXECUTION, not on the occupant's cost model. `billingPath` says
+    // how this occupant is paid for; only `launchVerified` says whether
+    // anything was. Ungated, a run that never started rendered "API PAID" —
+    // the exact mirror of the money defect this field was widened to fix.
+    billingLabel: billingLabelFor(t.attestation, t.billing),
     projectLabel: sanitizeTerminalLine(t.projectLabel, 120) || '—',
     phaseLabel: PHASE_LABEL[input.phase],
     permissions,
@@ -227,7 +246,9 @@ export function buildCodingTerminalView(input: {
     endedAt: t.endedAt ?? null,
     lines,
     // Truthful only while the process is genuinely running.
-    waitingMessage: t.status === 'live' ? CODING_TERMINAL_WAITING_MESSAGE : null,
+    waitingMessage: t.status === 'live'
+      ? codingTerminalWaitingMessage(sanitizeTerminalLine(t.runtime, 80) || 'The Coding Agent')
+      : null,
     activeFile: t.activeFile ? sanitizeTerminalLine(t.activeFile, 160) : null,
     changedFiles,
     changedFileCount: changedFiles.length,
@@ -255,6 +276,38 @@ export function buildCodingTerminalView(input: {
  * receipt label overrides this whenever a request has actually happened.
  */
 export const ARCHITECT_ROUTE_LABEL = 'Coordinated by Sunday Alcatraz';
+
+/**
+ * ONE LABEL PER BILLING PATH, and no default that asserts.
+ *
+ * `unknown` renders as UNKNOWN rather than falling back to SUBSCRIPTION —
+ * unknown is not zero, and it is certainly not "somebody else already paid".
+ */
+export const BILLING_LABEL: Readonly<Record<CodingTerminalAttestation['billingPath'], string>> =
+  Object.freeze({
+    subscription: 'SUBSCRIPTION',
+    api_billed: 'API PAID',
+    local: 'NOT BILLED',
+    simulated: 'SIMULATED — NO SPEND',
+    unknown: 'UNKNOWN',
+  });
+
+/**
+ * The payer, or the honest absence of one.
+ *
+ * `billingPath` is the OCCUPANT's cost model and exists before anything runs.
+ * `launchVerified` is the only field that says a run happened. A label built
+ * from the first alone announces an intention; this repository's rule is to
+ * announce facts.
+ */
+export function billingLabelFor(
+  attestation: CodingTerminalAttestation | null,
+  fallback: CodingTerminalAttestation['billingPath'],
+): string {
+  if (attestation === null) return BILLING_LABEL[fallback];
+  if (!attestation.launchVerified) return 'NOT BILLED';
+  return BILLING_LABEL[attestation.billingPath];
+}
 
 export interface RoleBillingRow {
   roleKey: 'prompt_architect' | 'coding_agent' | 'reviewer';
@@ -311,10 +364,22 @@ export function buildRoleBilling(input: {
     },
     {
       roleKey: 'coding_agent',
-      actor: 'Claude Code',
+      /**
+       * FROM THE ATTESTATION, WHICH IS THE ONLY THING THAT KNOWS.
+       *
+       * These three were the literals `'Claude Code'`, `'Authenticated local
+       * runtime'` and `'SUBSCRIPTION'`. They were true while one surface could
+       * ever run; a hosted, API-billed run rendered as a local subscription
+       * one, on the same screen whose header correctly named the hosted
+       * runtime. Before a run exists there is nothing to attest, so the row
+       * says so rather than naming an agent that has not started.
+       */
+      actor: coding ? sanitizeTerminalLine(coding.actualActor, 60) : 'Not yet run',
       role: 'Coding Agent',
-      runtime: 'Authenticated local runtime',
-      billingLabel: 'SUBSCRIPTION',
+      runtime: coding ? sanitizeTerminalLine(coding.actualRuntime, 60) : '—',
+      // A role that has not run demonstrably was NOT billed; `unknown` would
+      // retreat from a known fact beside a `NOT RUN` status.
+      billingLabel: coding === null ? 'NOT BILLED' : billingLabelFor(coding, 'unknown'),
       statusLabel: codingAttested ? 'EXECUTION ATTESTED' : coding ? 'NOT ATTESTED' : 'NOT RUN',
     },
     {

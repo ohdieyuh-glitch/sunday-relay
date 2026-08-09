@@ -2,6 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { runCodingMission } from './coding';
 import { resolveClaudeRuntime } from './claude-runtime';
 import { createRandomIdFactory } from '../src/relay/protocol/ids';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { writeFakeClaude } from '../src/relay/connectors/claude-code/fake-executable';
+import { CLAIMED_FILE, REFERENCE_IMPLEMENTATION } from '../src/relay/connectors/claude-code/fixture';
 import type { BridgeEventInput, CodingTerminalState } from './types';
 import { actorMatches, isPaidApiCall } from './attestation';
 import { findOccupant, type RoleOccupant } from '../src/relay/mission/role-slots';
@@ -18,6 +23,13 @@ import { findOccupant, type RoleOccupant } from '../src/relay/mission/role-slots
  * did the work: one process, one stream, and every terminal fact traceable
  * to something that actually happened in this run.
  */
+
+/** The synthetic capability profile the fake runtime advertises. */
+const fakeCapabilities = (now: () => string) => {
+  const resolved = resolveClaudeRuntime('fake', now, true);
+  if (!resolved.ok) throw new Error('fake runtime unavailable');
+  return resolved.runtime.capabilities;
+};
 
 const runOffline = async (over: Partial<Parameters<typeof runCodingMission>[0]> = {}) => {
   const now = () => new Date().toISOString();
@@ -103,7 +115,10 @@ describe('the terminal is powered by the one process that did the work', () => {
     expect(final.permissions.allowedFiles).toEqual(['src/normalize.js']);
     expect(final.permissions.protectedPaths).toContain('package.json');
     expect(final.permissions.deniedCapabilities).toContain('Bash');
+    // From the attestation, not a literal beside it: the local CLI runs on the
+    // founder's subscription, and a hosted API-billed run would say so instead.
     expect(final.billing).toBe('subscription');
+    expect(final.billing).toBe(final.attestation?.billingPath);
   }, 120_000);
 
   it('leaks no secret, absolute path, or full session id into the captured terminal', async () => {
@@ -216,6 +231,71 @@ describe('the coding attestation separates who was asked for from what ran', () 
     expect(outcome.attestation?.billingPath).toBe('simulated');
     expect(isPaidApiCall(outcome.attestation ?? undefined)).toBe(false);
   }, 30_000);
+
+  /**
+   * `launchVerified` IS OBSERVED, NOT INFERRED. It was `!launchFailed` — the
+   * absence of an error — so a run that never started was attested as launched
+   * and the website then rendered it API PAID.
+   */
+  it('does not attest a launch the surface never observed', async () => {
+    const { outcome } = await runOffline({
+      invokeAgent: async () => ({
+        outcome: {
+          startedAt: '2026-01-01T00:00:00.000Z', completedAt: '2026-01-01T00:00:01.000Z',
+          cancelled: true, timedOut: false, launchFailed: false, launchObserved: false,
+        },
+        events: [], sessionId: null,
+        structurallyValid: false, structuralReason: 'cancelled during startup',
+        report: { ok: false, error: { code: 'invalid-report', message: 'x' } } as never,
+        actualActor: 'Claude Agent SDK', actualRuntimeId: 'claude-agent-sdk-hosted',
+        actualModel: null,
+      }),
+      requestedOccupant: {
+        actorName: 'Claude Agent SDK', adapterId: 'claude-agent-sdk-hosted', billingPath: 'api',
+      },
+    });
+    expect(outcome.attestation?.launchVerified).toBe(false);
+    // And therefore not a paid call, which is what the browser reads.
+    expect(isPaidApiCall(outcome.attestation ?? undefined)).toBe(false);
+  }, 30_000);
+
+  /**
+   * THE LOCAL HALF OF THE SAME RULE. `launchObserved` was proven on the hosted
+   * surface and left unheld on the local one — which is the surface that has
+   * actually completed a real three-role mission. A stream with no init record
+   * is a process that never announced itself.
+   */
+  it('does not observe a launch from a local stream that never initialised', async () => {
+    // THE REAL LOCAL INVOKER, not an injected one — an injected invoker would
+    // prove only that the field is passed through, and the mutation that
+    // forced it true survived exactly that test.
+    const now = () => new Date().toISOString();
+    const dir = mkdtempSync(join(tmpdir(), 'relay-no-init-'));
+    try {
+      const exe = writeFakeClaude(dir, {
+        scenario: 'no_init',
+        sessionId: 'no-init-session', taskId: 'tsk', runId: 'run',
+        editPath: CLAIMED_FILE, editContent: REFERENCE_IMPLEMENTATION,
+      });
+      const events: BridgeEventInput[] = [];
+      const outcome = await runCodingMission({
+        handoff: {
+          objective: 'Implement normalizeProjectName so the existing tests pass.',
+          instructions: ['Trim, lowercase, and collapse separators.'],
+          acceptanceCriteria: ['The existing test suite passes when Relay runs it.'],
+          constraints: ['Edit only the claimed file.'],
+        },
+        executablePath: exe,
+        capabilities: fakeCapabilities(now),
+        now,
+        ids: createRandomIdFactory(),
+        emit: (e) => events.push(e),
+      });
+      expect(outcome.attestation?.launchVerified).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 
   it('falls back to the local identity when no occupant is supplied', async () => {
     // Every caller that predates role slots drove this same adapter, so that

@@ -12,8 +12,9 @@ export {
   buildCodingTerminalView,
   buildRoleBilling,
   emptyCodingTerminalView,
-  CODING_TERMINAL_WAITING_MESSAGE,
-  CODING_TERMINAL_EMPTY_MESSAGE,
+  CODING_TERMINAL_UNRUN_RUNTIME,
+  codingTerminalWaitingMessage,
+  codingTerminalEmptyMessage,
 } from './coding-terminal';
 export type { CodingTerminalView, RoleBillingRow } from './coding-terminal';
 export { RelayTerminalEvent } from './RelayTerminalEvent';

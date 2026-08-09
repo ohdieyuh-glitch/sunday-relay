@@ -49,6 +49,11 @@ import {
 } from './hermes-reviewer';
 import { buildAttestation, decideCompletion, digest, type ExecutionAttestation } from './attestation';
 import { isProductionDeployment } from './deployment-environment';
+import { createHostedClaudeInvoker } from './hosted-coding-agent/hosted-invoker';
+import {
+  HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV, probeHostedReadiness,
+} from './hosted-coding-agent/hosted-readiness';
+import type { ClaudeCodeCapabilityProfile } from '../src/relay/connectors/claude-code/contracts';
 import {
   CODING_AGENT_ROLE_ENV, REVIEWER_ROLE_ENV, configuredNames, describeBinding,
   missionDispatchProblems, resolveRoleSlots,
@@ -231,6 +236,33 @@ export type ArchitectPathMode = 'live' | 'fusion' | 'blocked';
 
 /** Injectable role boundaries. Every default is the REAL production
     implementation — tests replace them so no provider is ever contacted. */
+/** The occupant whose execution surface is the hosted Agent SDK. */
+const HOSTED_CODING_OCCUPANT = 'claude_agent_sdk_hosted';
+
+/**
+ * The capability profile handed to the coding leg on the hosted path.
+ *
+ * It describes the CLI, and the hosted surface has no CLI — the invoker seam
+ * replaces the spawn entirely, so nothing here reaches a process. NOTHING READS
+ * IT on the hosted path either: `compileClaudePermissions` consults one field
+ * behind a disabled branch, so the compiled policy is identical for any
+ * profile. It exists to satisfy the parameter's type, and saying that is more
+ * useful than a claim about enforcement it does not perform. The hosted run's
+ * real restrictions live in `hosted-envelope.ts`.
+ */
+const HOSTED_PLACEHOLDER_CAPABILITIES: ClaudeCodeCapabilityProfile = Object.freeze({
+  executablePath: null, version: null,
+  nonInteractiveSupported: true, streamJsonSupported: true,
+  explicitResumeSupported: false, maxTurnsSupported: true,
+  allowedToolsSupported: true, disallowedToolsSupported: true,
+  toolsRestrictionSupported: true, permissionModeSupported: true,
+  systemPromptSupported: true, appendSystemPromptSupported: true,
+  structuredSchemaSupported: true,
+  mcpIsolationSupported: 'available', settingsIsolationSupported: 'available',
+  cancellationSupported: true,
+  probedAt: '1970-01-01T00:00:00.000Z', provenance: 'live',
+});
+
 export interface MissionRoleDeps {
   runOpenAiArchitect?: typeof runOpenAiArchitect;
   runFusionArchitect?: typeof runArchitect;
@@ -240,6 +272,9 @@ export interface MissionRoleDeps {
   hermesPreflight?: typeof hermesPreflight;
   /** Relay-side preflight override (persistence / write-scope probes). */
   relayPreflight?: () => { ready: boolean; missing: string[] };
+  /** Builds the hosted Coding Agent invoker. Replaced in tests so the whole
+      hosted pipeline is proven with no paid call. */
+  createHostedInvoker?: typeof createHostedClaudeInvoker;
 }
 
 export interface MissionRegistryConfig {
@@ -311,6 +346,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   const resolveRuntime = deps.resolveClaudeRuntime ?? resolveClaudeRuntime;
   const checkHermes = deps.hermesPreflight ?? hermesPreflight;
   const checkRelay = deps.relayPreflight ?? defaultRelayPreflight;
+  const makeHostedInvoker = deps.createHostedInvoker ?? createHostedClaudeInvoker;
 
   const append = (rec: MissionRecord, e: BridgeEventInput): void => {
     rec.events.push({
@@ -573,15 +609,49 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         return;
       }
 
-      // Coding runtime — resolved (never invoked) before any spend.
-      const runtime = resolveRuntime(config.claudeMode, now, config.confirmLive);
-      if (!runtime.ok) {
-        fail(rec, 'preflight_blocked', `Coding Agent unavailable — ${runtime.safeMessage}`, {
-          code: 'coding_agent_not_ready',
-          retryable: false,
+      /**
+       * CODING RUNTIME — resolved (never invoked) before any spend, AND ONLY
+       * FOR THE SURFACE THE BOUND OCCUPANT ACTUALLY USES.
+       *
+       * This probe asks whether an installed `claude` CLI exists on this
+       * machine. It ran unconditionally, so binding the hosted Agent SDK
+       * occupant — whose whole purpose is to need no CLI — still died on a
+       * container with "Install Claude Code: Claude Code is not installed on
+       * this machine." That is the wrong-machine instruction the role-slot
+       * registry documents itself as removing, surviving one layer below the
+       * registry that removed it.
+       *
+       * The hosted surface has its OWN readiness probe, which is free, offline
+       * and asks the right question: is the SDK package resolvable, is its
+       * platform runtime present, is a credential variable set.
+       */
+      const hostedCoding = boundCoding.occupant.occupantId === HOSTED_CODING_OCCUPANT;
+      let runtime: ReturnType<typeof resolveRuntime> | null = null;
+      if (hostedCoding) {
+        const hostedReady = probeHostedReadiness({
+          env: { ...architectEnv, ...hermesEnv },
+          now: now(),
         });
-        return;
+        if (hostedReady.blockedReason !== null) {
+          fail(rec, 'preflight_blocked', `Coding Agent unavailable — ${hostedReady.blockedReason}`, {
+            code: 'coding_agent_not_ready',
+            retryable: false,
+          });
+          return;
+        }
+      } else {
+        runtime = resolveRuntime(config.claudeMode, now, config.confirmLive);
+        if (!runtime.ok) {
+          fail(rec, 'preflight_blocked', `Coding Agent unavailable — ${runtime.safeMessage}`, {
+            code: 'coding_agent_not_ready',
+            retryable: false,
+          });
+          return;
+        }
       }
+      /** What the runtime probe OBSERVED, for the preflight line. The hosted
+          surface reports its own provenance rather than borrowing the CLI's. */
+      const codingProvenance = runtime === null ? 'hosted' : runtime.runtime.provenance;
 
       // Reviewer — proven available from local read-only probes only. This is
       // deliberately BEFORE the OpenAI request: an unavailable reviewer must
@@ -635,7 +705,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
          * OBSERVED, and only the second can contradict the first.
          */
         meta: `ROLES ${boundArchitect.requestedOccupantId} · `
-          + `${boundCoding.requestedOccupantId}(${runtime.runtime.provenance}) · `
+          + `${boundCoding.requestedOccupantId}(${codingProvenance}) · `
           + `${boundRoles.reviewer?.requestedOccupantId ?? 'unstaffed'}`,
       });
 
@@ -916,7 +986,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           role: 'coding_agent',
           category: 'coding_agent',
           truth: 'system_notice',
-          headline: 'Coding Agent assignment created — Claude Code.',
+          headline: `Coding Agent assignment created — ${safeText(boundCoding.occupant.displayName)}.`,
           detail:
             'Relay compiled the persisted handoff into the task package: founder request, mission contract, ' +
             'instructions, constraints, acceptance criteria, allowed file, prohibited files, verification command, ' +
@@ -928,8 +998,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
 
         coding = await callCoding({
           handoff: codingHandoff,
-          executablePath: runtime.runtime.executablePath,
-          capabilities: runtime.runtime.capabilities,
+          // Unused by the hosted surface: the seam replaces the spawn entirely.
+          executablePath: runtime?.runtime.executablePath ?? '',
+          capabilities: runtime?.runtime.capabilities ?? HOSTED_PLACEHOLDER_CAPABILITIES,
           now,
           ids,
           baseEnv: config.baseEnv,
@@ -940,6 +1011,19 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           projectLabel: 'Relay controlled fixture (throwaway repository)',
           missionId: rec.missionId,
           missionRevision: rec.missionRevision,
+          /**
+           * WHICH SURFACE RUNS THE AGENT. Absent means the installed CLI, so
+           * every existing caller is unchanged. The hosted surface is chosen
+           * by the BOUND OCCUPANT — never by a credential being present, which
+           * is the same rule the architect follows.
+           */
+          invokeAgent: boundCoding.occupant.occupantId === HOSTED_CODING_OCCUPANT
+            ? makeHostedInvoker({
+              apiKey: hermesEnv[HOSTED_API_KEY_ENV] ?? architectEnv[HOSTED_API_KEY_ENV] ?? '',
+              requestedModel: hermesEnv[HOSTED_MODEL_ENV] ?? architectEnv[HOSTED_MODEL_ENV] ?? null,
+            })
+            : undefined,
+          runtimeLabel: boundCoding.occupant.displayName,
           // The REQUESTED identity, from the binding. What actually ran is
           // observed inside the coding leg and never copied from here.
           requestedOccupant: {

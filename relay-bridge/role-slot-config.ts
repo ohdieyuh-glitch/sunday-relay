@@ -106,6 +106,10 @@ export const MISSION_DISPATCHABLE_OCCUPANTS: ReadonlySet<string> = new Set([
   'fusion_architect',
   'claude_code_local',
   'claude_code_fake',
+  // The hosted Agent SDK, wired through `agent-invoker.ts`. Adding an entry
+  // here is the whole wiring change once a surface can actually be driven —
+  // which is the point of keeping dispatchability separate from registration.
+  'claude_agent_sdk_hosted',
   'hermes_local',
 ]);
 

@@ -286,6 +286,16 @@ export interface CodingTerminalPermissions {
 /** Who actually ran — mirrors the bridge's execution attestation. */
 export interface CodingTerminalAttestation {
   attestationId: string;
+  /**
+   * WHAT ACTUALLY RAN, observed by the surface that ran it.
+   *
+   * Carried so the website presents the agent that did the work rather than a
+   * literal. The role row hard-coded "Claude Code" on an "Authenticated local
+   * runtime", which was true while one surface could ever run and became a
+   * misreport the moment a hosted, API-billed one could.
+   */
+  actualActor: string;
+  actualRuntime: string;
   launchVerified: boolean;
   completionVerified: boolean;
   fallbackOccurred: boolean;
@@ -299,8 +309,15 @@ export interface CodingTerminalState {
   externalSessionRedacted: string | null;
   /** Honest runtime label, e.g. "Claude Code (local CLI)". */
   runtime: string;
-  /** Claude Code runs on the authenticated local subscription login. */
-  billing: 'subscription';
+  /**
+   * WHO PAID FOR THIS RUN — the same vocabulary the attestation uses.
+   *
+   * It was the literal `'subscription'`, which was true while the only
+   * dispatchable Coding Agents were a subscription CLI and a fake. A hosted,
+   * API-billed surface makes it a misreport, and money spent shown as money not
+   * spent is the worst direction for this field to be wrong in.
+   */
+  billing: CodingTerminalAttestation['billingPath'];
   status: CodingTerminalStatus;
   /** The controlled project the agent was allowed to touch. */
   projectLabel: string;

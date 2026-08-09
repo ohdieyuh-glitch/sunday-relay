@@ -36,6 +36,16 @@ export const UNKNOWN_HOSTED_USAGE: HostedUsage = Object.freeze({
 export interface HostedObservation {
   /** True once the runtime's own init message was seen. */
   readonly initSeen: boolean;
+  /**
+   * The SDK's own session id, from its init message.
+   *
+   * It was not read, and a comment on the invoker asserted the SDK "reports no
+   * resumable session id through this surface" — which the SDK's own type
+   * declarations disprove: every message carries `session_id`, and `Options`
+   * declares `resume`. Not reading a field is a fact about this code; it is
+   * not a fact about the runtime, and stating the second was the defect.
+   */
+  readonly sessionId: string | null;
   /** The model the RUNTIME named. Never the requested one. */
   readonly actualModel: string | null;
   /** The Claude Code version the hosted runtime reported. */
@@ -61,7 +71,7 @@ export interface HostedObservation {
 }
 
 const EMPTY: HostedObservation = {
-  initSeen: false, actualModel: null, runtimeVersion: null, apiKeySource: null,
+  initSeen: false, sessionId: null, actualModel: null, runtimeVersion: null, apiKeySource: null,
   reportedCwd: null, reportedTools: [], toolTargets: [], toolsUsed: [],
   permissionDenials: 0, numTurns: null, durationMs: null, usage: UNKNOWN_HOSTED_USAGE,
   resultSubtype: null, isError: null, finalText: null,
@@ -91,6 +101,9 @@ export function foldHostedMessage(
     return {
       ...state,
       initSeen: true,
+      sessionId: typeof m.session_id === 'string' && m.session_id.trim() !== ''
+        ? m.session_id
+        : null,
       actualModel: typeof m.model === 'string' && m.model.trim() !== '' ? m.model : null,
       runtimeVersion: typeof m.claude_code_version === 'string' ? m.claude_code_version : null,
       apiKeySource: typeof m.apiKeySource === 'string' ? m.apiKeySource : null,

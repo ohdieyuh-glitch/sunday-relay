@@ -106,7 +106,7 @@ export function createTerminalCapture(options: TerminalCaptureOptions): Terminal
     executionId: sanitizeTerminalLine(options.executionId, 40),
     externalSessionRedacted: null,
     runtime: sanitizeTerminalLine(options.runtime, 80),
-    billing: 'subscription',
+    billing: 'unknown',
     status: 'waiting',
     projectLabel: sanitizeTerminalLine(options.projectLabel, 120),
     startedAt: null,
@@ -256,6 +256,14 @@ export function createTerminalCapture(options: TerminalCaptureOptions): Terminal
 
     setAttestation(attestation) {
       state.attestation = attestation ? { ...attestation } : null;
+      /**
+       * ONE VALUE, NOT TWO THAT AGREE. `billing` and the attestation's
+       * `billingPath` were independent fields that happened to say the same
+       * thing while one surface could ever run. It starts `unknown` — nothing
+       * has been paid for before a run — and becomes what the attestation
+       * observed.
+       */
+      state.billing = attestation?.billingPath ?? 'unknown';
       publish();
     },
 

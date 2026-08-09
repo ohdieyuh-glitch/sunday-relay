@@ -473,6 +473,11 @@ describe('the Hermes Reviewer environment contract', () => {
       // list is the thing that was supposed to catch exactly that, and did not,
       // for the same reason it missed the trusted-origin allowlist.
       'RELAY_ROLE_CODING_AGENT', 'RELAY_ROLE_REVIEWER',
+      // The hosted Coding Agent's model. It is REQUIRED config for a now
+      // dispatchable occupant and appeared only inside a comment — exactly the
+      // "a refusal naming a variable an operator cannot find in any file"
+      // this list exists to prevent.
+      'RELAY_HOSTED_CODING_MODEL',
       // Selected by presence, and the reason a named coding occupant beside it
       // is a conflict rather than a precedence.
       'RELAY_BRIDGE_FAKE_CLAUDE',
