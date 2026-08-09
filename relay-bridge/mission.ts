@@ -48,6 +48,12 @@ import {
   type HermesPreflightResult,
 } from './hermes-reviewer';
 import { buildAttestation, decideCompletion, digest, type ExecutionAttestation } from './attestation';
+import { isProductionDeployment } from './deployment-environment';
+import {
+  CODING_AGENT_ROLE_ENV, REVIEWER_ROLE_ENV, configuredNames, describeBinding,
+  missionDispatchProblems, resolveRoleSlots,
+} from './role-slot-config';
+import type { RoleSlot } from '../src/relay/mission/role-slots';
 import { safeError, safeText } from './redact';
 import type {
   BridgeEventInput,
@@ -464,6 +470,109 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         return;
       }
 
+      /**
+       * WHO HOLDS EACH ROLE — bound before anything is resolved, probed or
+       * spent.
+       *
+       * Binding proves the requested combination is coherent: registered
+       * occupants, in the right slots, able to run on THIS host, configured,
+       * and with a Reviewer that is independent of the implementer. It proves
+       * nothing about readiness, which the probes below still decide. Refusing
+       * here costs nothing; refusing after the architect call costs a paid
+       * request for a mission that could never have finished.
+       *
+       * DELIBERATELY AFTER THE ARCHITECT'S OWN CHECK, AND ONLY THAT ONE. The
+       * architect names its missing variables precisely
+       * (`architect_not_configured`); binding would answer the same situation
+       * with the blunter `role_binding_refused` and an operator would lose the
+       * better message. Every other role has no earlier check to defer to, so
+       * binding is the first thing that speaks for them — which is the point,
+       * since the Coding Agent runtime probe below is what a hosted deployment
+       * must never reach with an occupant that could not run there anyway.
+       */
+      const roles = resolveRoleSlots({
+        architectMode: architectEnv.RELAY_PROMPT_ARCHITECT_MODE,
+        reviewerOccupant: hermesEnv[REVIEWER_ROLE_ENV] ?? architectEnv[REVIEWER_ROLE_ENV],
+        codingAgentOccupant: hermesEnv[CODING_AGENT_ROLE_ENV] ?? architectEnv[CODING_AGENT_ROLE_ENV],
+        // The mode the bridge already resolved, not a second reading of the
+        // variable behind it.
+        fakeCodingRuntime: config.claudeMode === 'fake',
+        // The mission's own decision, the same `live` that drives
+        // `requiresIndependentReview`, the Hermes probe and the review leg —
+        // passed rather than re-derived, so the three cannot disagree.
+        requiresReview: live,
+        /**
+         * ONE-WAY, LIKE THE FUNCTION ITSELF.
+         *
+         * `isProductionDeployment` is documented as a signal that can only
+         * turn production ON, because "a host that can be talked out of being
+         * a production host is not one". Asking only the INJECTED environment
+         * reintroduced exactly that: a caller handing this registry a curated
+         * `architectEnv` would make a real server evaluate as a founder
+         * machine, switch development defaults on, and bind an installed CLI
+         * inside a container. Not reachable today — `server.ts` passes
+         * `process.env` — which makes it a latent fail-OPEN, and the only kind
+         * worth closing before it is reachable.
+         */
+        hosted: isProductionDeployment(process.env)
+          || isProductionDeployment(architectEnv)
+          || isProductionDeployment(hermesEnv),
+        // Both environments count: a deployment sets one process environment,
+        // and only the tests hand these two apart.
+        configuredNames: new Set([
+          ...configuredNames(architectEnv), ...configuredNames(hermesEnv),
+        ]),
+      });
+      if (!roles.binding.ok) {
+        fail(rec, 'preflight_blocked', describeBinding(roles), {
+          code: 'role_binding_refused',
+          retryable: false,
+        });
+        return;
+      }
+      const boundRoles = roles.binding.bindings;
+      /**
+       * The two roles every mission dispatches. The Reviewer may legitimately
+       * be unstaffed — the development path never calls it — so it is read
+       * defensively below rather than asserted here.
+       */
+      const boundArchitect = boundRoles.prompt_architect;
+      const boundCoding = boundRoles.coding_agent;
+      if (boundArchitect === undefined || boundCoding === undefined) {
+        fail(rec, 'preflight_blocked',
+          'Relay could not staff the Prompt Architect and Coding Agent roles for this mission.', {
+            code: 'role_binding_refused',
+            retryable: false,
+          });
+        return;
+      }
+
+      /**
+       * AND CAN THIS BRIDGE ACTUALLY DRIVE THEM?
+       *
+       * Binding proves the request is coherent. It cannot prove this pipeline
+       * has an execution path, because that is not a property of the occupant.
+       * Without this check the mission bound `claude_agent_sdk_hosted`,
+       * announced it in the preflight, and then ran the Claude Code CLI, which
+       * attested itself — the mission narrating one occupant while another did
+       * the work. Refusing is the only honest answer until the surface is
+       * wired.
+       */
+      // Bounded to the roles this mission will actually dispatch. A reviewer
+      // the development path never calls must not block it for being
+      // undrivable.
+      const dispatchedRoles: RoleSlot[] = live
+        ? ['prompt_architect', 'coding_agent', 'reviewer']
+        : ['prompt_architect', 'coding_agent'];
+      const undispatchable = missionDispatchProblems(boundRoles, dispatchedRoles);
+      if (undispatchable.length > 0) {
+        fail(rec, 'preflight_blocked', undispatchable.map((p) => p.safeMessage).join(' '), {
+          code: 'occupant_not_dispatchable',
+          retryable: false,
+        });
+        return;
+      }
+
       // Coding runtime — resolved (never invoked) before any spend.
       const runtime = resolveRuntime(config.claudeMode, now, config.confirmLive);
       if (!runtime.ok) {
@@ -502,12 +611,32 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         category: 'relay',
         truth: 'relay_evidence',
         headline: 'Preflight passed — Prompt Architect, Coding Agent, and Reviewer are all available.',
+        /**
+         * WHO HOLDS EACH ROLE, FROM THE BINDING ITSELF.
+         *
+         * `describeBinding` composes this from `renderBindingLine`, so the
+         * occupant names a founder reads here are the ones the binding
+         * produced. The previous version built its own sentence from the same
+         * fields, which made `renderBindingLine` dead code carrying a claim
+         * that three surfaces shared it.
+         */
         detail: live
-          ? `Prompt Architect: OpenAI (${safeText(architectConfig.model ?? 'model configured')}) · ` +
-            `Coding Agent: Claude Code (${runtime.runtime.provenance}) · ` +
-            `Reviewer: Hermes Agent CLI (${safeText(hermesReady?.provider ?? 'configured provider')}, ` +
-            `${safeText(hermesReady?.model ?? 'configured model')}, read-only).`
+          ? `${describeBinding(roles)} · Architect model ` +
+            `${safeText(architectConfig.model ?? 'configured')} · Reviewer ` +
+            `${safeText(hermesReady?.provider ?? 'configured provider')}/` +
+            `${safeText(hermesReady?.model ?? 'configured model')}, read-only.`
           : 'Development path: Sunday Alcatraz (Fusion) architect · no live Prompt Architect or Reviewer call.',
+        /**
+         * The slot assignment, separate from readiness: what was REQUESTED for
+         * each role. What actually answers is attested per role.
+         *
+         * The Coding Agent entry carries its runtime PROVENANCE because the
+         * occupant id is what was REQUESTED and the provenance is what was
+         * OBSERVED, and only the second can contradict the first.
+         */
+        meta: `ROLES ${boundArchitect.requestedOccupantId} · `
+          + `${boundCoding.requestedOccupantId}(${runtime.runtime.provenance}) · `
+          + `${boundRoles.reviewer?.requestedOccupantId ?? 'unstaffed'}`,
       });
 
       if (rec.cancelRequested) return cancelled(rec);
@@ -811,6 +940,16 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           projectLabel: 'Relay controlled fixture (throwaway repository)',
           missionId: rec.missionId,
           missionRevision: rec.missionRevision,
+          // The REQUESTED identity, from the binding. What actually ran is
+          // observed inside the coding leg and never copied from here.
+          requestedOccupant: {
+            actorName: boundCoding.occupant.actorName,
+            adapterId: boundCoding.occupant.adapterId,
+            // Passed through whole. The coding leg owns the translation into
+            // the attestation's vocabulary, and `unknown` survives as unknown
+            // rather than being converted into a claim.
+            billingPath: boundCoding.occupant.billingPath,
+          },
           requiresIndependentReview: live,
           onState: (s) => {
             if (s === 'claim_submitted') setPhase(rec, 'claim_submitted');

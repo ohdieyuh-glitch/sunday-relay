@@ -467,6 +467,15 @@ describe('the Hermes Reviewer environment contract', () => {
       // have been deleted with the whole gate still green. A contract that
       // does not name the newest variable is not covering the newest risk.
       'RELAY_HERMES_TRUSTED_ORIGINS',
+      // The role-slot selectors. Both are REQUIRED on a hosted deployment that
+      // dispatches the role, and both were introduced documented nowhere — a
+      // refusal naming a variable an operator cannot find in any file. This
+      // list is the thing that was supposed to catch exactly that, and did not,
+      // for the same reason it missed the trusted-origin allowlist.
+      'RELAY_ROLE_CODING_AGENT', 'RELAY_ROLE_REVIEWER',
+      // Selected by presence, and the reason a named coding occupant beside it
+      // is a conflict rather than a precedence.
+      'RELAY_BRIDGE_FAKE_CLAUDE',
     ]) {
       expect(env, `${name} must be documented`).toContain(name);
     }

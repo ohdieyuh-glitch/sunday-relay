@@ -95,14 +95,21 @@ export const REVIEWER_HARNESS_CATALOG: readonly ReviewerHarnessCatalogEntry[] = 
     // the browser must never guess it, so it stays `unknown` until a Relay
     // Bridge reports what it actually found.
     installState: 'unknown',
-    supportedEnvironments: ['local'],
+    // BOTH, since the remote transport shipped. This said `['local']` for as
+    // long as local was the only way to reach Hermes, and stayed saying it
+    // after a dedicated Reviewer service and an authenticated remote transport
+    // were added — an entry that under-claimed a capability the code had. It
+    // is the same defect as over-claiming one: a description the source does
+    // not support, which the next change then trusts.
+    supportedEnvironments: ['local', 'remote'],
     modelConfiguration: 'configurable',
     // Proven per run by the adapter's zero-toolset enforcement, not asserted.
     readOnlyReviewSupported: 'unknown',
     capabilities: HERMES_PROVEN_CAPABILITIES,
     experimental: true,
     verificationNotes: [
-      'Runs as a local one-shot Hermes process behind the Relay Bridge; the browser never reaches it.',
+      'Runs behind the Relay Bridge — either as a local one-shot Hermes process or, through the Reviewer routes, as a dedicated Hermes service reached over authenticated HTTP to an allowlisted origin. The browser never reaches either.',
+      "The MISSION's reviewer leg spawns a local process today and does not use the remote transport, so a hosted mission cannot yet be reviewed remotely.",
       'Read-only is structural: the adapter grants Hermes no toolset, so it holds no file, terminal or network tool.',
       'The provider credential is read only inside the bridge process and is never returned, persisted or logged.',
       'Live execution stays unproven until a founder-authorized run records a real provider response.',
