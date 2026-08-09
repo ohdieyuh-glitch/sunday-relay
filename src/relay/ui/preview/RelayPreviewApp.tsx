@@ -31,8 +31,10 @@ import {
 import type { RelayMissionState } from '../app';
 import type { ProjectMessage, WorkspaceFixtureKey } from '../project-workspace';
 import { AGENT_OPTIONS, RelayProjectSettings } from '../project-settings';
+import type { WorkforceRole } from '../project-settings';
 import type { ProjectSettingsDraft } from '../project-settings';
 import { buildRelayMcpSettingsView } from '../mcp';
+import { RelayProjectBrainView } from '../project-workspace/RelayProjectBrainView';
 import {
   deriveMissionProjection,
   getRelayAppStore,
@@ -57,7 +59,9 @@ import { createFixtureEntitlementService } from '../../psp/psp-fixtures';
 import { COLORWAY_LABEL, RELAY_COLORWAYS, applyRelayColorway } from './colorway';
 import type { RelayColorway } from './colorway';
 import type { RelayBackdropId } from '../../shared/relay-stage-backdrop';
+import type { ChakraTier } from '../../shared/relay-chakra';
 import { siblingProductTarget } from './environment';
+import { configuredDeploymentKind } from '../app/bridge-session';
 import {
   EMPTY_USAGE_LATCH,
   demoUsageSnapshot,
@@ -112,7 +116,9 @@ export type PreviewRoute =
   | { screen: 'home' }
   | { screen: 'settings'; projectId: string }
   | { screen: 'console' }
-  | { screen: 'workspace'; projectId: string; terminal: boolean };
+  | { screen: 'workspace'; projectId: string; terminal: boolean }
+  /** The Project Brain's own view, opened from the Brain in the workspace. */
+  | { screen: 'brain'; projectId: string };
 
 export function parsePreviewHash(hash: string): PreviewRoute {
   const clean = hash.replace(/^#/, '');
@@ -123,6 +129,7 @@ export function parsePreviewHash(hash: string): PreviewRoute {
   if (parts[1] === 'project-settings') return { screen: 'settings', projectId: '' };
   if (parts[1] === 'project' && parts[2]) {
     if (parts[3] === 'settings') return { screen: 'settings', projectId: parts[2] };
+    if (parts[3] === 'brain') return { screen: 'brain', projectId: parts[2] };
     return { screen: 'workspace', projectId: parts[2], terminal: parts[3] === 'terminal' };
   }
   return { screen: 'home' };
@@ -204,8 +211,25 @@ function writeUsageLatch(latch: RelayUsageLatch): void {
   }
 }
 
+/** Role titles for the confirmation line. The strip's own labels. */
+const ROLE_TITLE_FOR_MESSAGE: Readonly<Record<WorkforceRole, string>> = Object.freeze({
+  prompt_architect: 'Prompt Architect',
+  coding_agent: 'Coding Agent',
+  reviewer: 'Reviewer',
+});
+
+/** The catalog name for a stored id. Unknown stays unknown — an id the catalog
+ *  does not have is not a name this surface may invent. */
+function agentNameFor(agentId: string): string {
+  return AGENT_OPTIONS.find((o) => o.id === agentId)?.name ?? agentId;
+}
+
 export function RelayPreviewApp() {
   const store = useMemo(() => getRelayAppStore(), []);
+  /* Which machine this browser talks to. Build-time and constant for the
+     session, so it is resolved once — and `null` (no bridge) is a real answer
+     the workspace shows as UNKNOWN rather than as "runs nowhere". */
+  const deploymentKind = useMemo(() => configuredDeploymentKind(), []);
   useEffect(() => {
     store.init();
   }, [store]);
@@ -236,6 +260,9 @@ export function RelayPreviewApp() {
   // now the picker changed the scene and a reload returned it to None.
   const stageBackdrop = state.stageBackdrop;
   const selectStageBackdrop = (id: RelayBackdropId) => store.setStageBackdrop(id);
+  /* Appearance, stored the same way and in the same place as the backdrop. */
+  const chakraTier = state.chakraTier;
+  const selectChakraTier = (tier: ChakraTier | null) => { store.setChakraTier(tier); };
 
   /* -------- live mission driver: begin once + poll authoritative state ----- */
   // The active non-demo mission id for the current workspace route. A stable
@@ -725,6 +752,65 @@ export function RelayPreviewApp() {
    */
   const mcpSettings = useMemo(() => buildRelayMcpSettingsView(), []);
 
+  /**
+   * THE PROJECT BRAIN'S OWN VIEW.
+   *
+   * It reads the SAME state and document the workspace panel already read —
+   * there is one Brain and one source for it, and a second read model here
+   * would be a second answer to "what does Relay know about this project".
+   */
+  const brainProjectId = route.screen === 'brain' ? route.projectId : '';
+  /**
+   * THE BRAIN OF THE PROJECT THAT WAS OPENED, not of a fixture.
+   *
+   * This read `WORKSPACE_FIXTURES[fixtureKey]` regardless of which project the
+   * route named, so clicking the Brain in a real project showed the design
+   * showcase's Brain — sample counts and sample sections, presented as that
+   * project's recorded knowledge. It is the exact failure this product exists
+   * to refuse, arriving through a surface built to display honesty.
+   *
+   * The real project derives from the SAME projection the workspace beneath it
+   * uses, so the Brain view and the workspace can never disagree about what
+   * Relay knows. The labelled showcase project keeps its fixture, because
+   * there the fixture IS the subject.
+   */
+  const brainPresentation = (() => {
+    if (!brainProjectId) return null;
+    const project = store.getProject(brainProjectId);
+    if (!project) {
+      // The design showcase has no stored project and never will; anything
+      // else with no project is genuinely missing.
+      return brainProjectId === 'rly-001' ? WORKSPACE_FIXTURES[fixtureKey] : null;
+    }
+    const settings = store.getSettings(brainProjectId);
+    const mission = project.activeMissionId === null
+      ? null
+      : store.getMission(project.activeMissionId);
+    if (!settings || !mission) return null;
+    return deriveMissionProjection({
+      project,
+      settings,
+      brain: store.getProjectBrain(brainProjectId),
+      mission,
+      events: store.getMissionEvents(mission.id),
+    });
+  })();
+  const projectBrainView = brainPresentation ? (
+    <RelayProjectBrainView
+      state={brainPresentation.projectBrainState}
+      {...(brainPresentation.projectBrainDocument === undefined
+        ? {}
+        : { document: brainPresentation.projectBrainDocument })}
+      onClose={() => navigate(`/relay/project/${brainProjectId}`)}
+    />
+  ) : (
+    <SafeNotFound
+      title="Relay could not load this Project Brain."
+      detail="Open a project first."
+      onHome={() => navigate('/relay')}
+    />
+  );
+
   const projectSettings = settingsProject ? (
     <RelayProjectSettings
       brief={settingsBrief?.draft ?? null}
@@ -747,7 +833,18 @@ export function RelayPreviewApp() {
         navigate(`/relay/project/${settingsProject.id}`);
       }}
       onConnectRepository={() => undefined}
-      onBack={() => navigate('/relay')}
+      /**
+       * BACK RETURNS WHERE THE USER CAME FROM.
+       *
+       * Settings is reachable from the Entry Home AND from inside a workspace,
+       * and Back went to the Home in both cases — so a founder who opened
+       * settings from their project lost the project by pressing Back, which
+       * is the same "sent toward the homepage" complaint from the other end.
+       * `onStartProject` already returns to the workspace; Back now agrees
+       * with it.
+       */
+      onBack={() => navigate(`/relay/project/${settingsProject.id}`)}
+      backLabel="← BACK TO PROJECT"
     />
   ) : (
     <SafeNotFound
@@ -837,6 +934,8 @@ export function RelayPreviewApp() {
         loopSurface={loopSurface}
         stageBackdrop={stageBackdrop ?? undefined}
         onSelectStageBackdrop={selectStageBackdrop}
+        chakraTier={chakraTier}
+        onSelectChakraTier={selectChakraTier}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -886,6 +985,36 @@ export function RelayPreviewApp() {
         onOpenTerminal={() => navigate(`/relay/project/${projectId}/terminal`)}
         onCloseTerminal={() => navigate(`/relay/project/${projectId}`)}
         onOpenProjectSettings={() => navigate(`/relay/project/${projectId}/settings`)}
+        onOpenProjectBrain={() => navigate(`/relay/project/${projectId}/brain`)}
+        /* ROLE SWITCHING WRITES THE PROJECT'S REAL CONFIGURATION.
+           `saveSettings` is the SAME writer the 15-step Project Settings uses,
+           and the strip's names come back through the same projection, so the
+           workspace has no second copy of the stack to disagree with. The next
+           Mission reads this draft; a Mission already running keeps whatever it
+           actually used, because its record is not this draft. */
+        workforceSelection={settings.draft.workforce}
+        deployment={deploymentKind}
+        onSelectRoleOccupant={(role, agentId) => {
+          const field = role === 'prompt_architect'
+            ? 'promptArchitectId'
+            : role === 'coding_agent' ? 'codingAgentId' : 'reviewerId';
+          const next = {
+            ...settings.draft,
+            workforce: { ...settings.draft.workforce, [field]: agentId },
+          };
+          const saved = store.saveSettings(projectId, next);
+          // ANNOUNCE FACTS, NOT INTENTIONS. The confirmation names the role
+          // only after the durable write resolved, and a refusal is reported
+          // rather than swallowed into a surface that looks changed.
+          if (!saved.ok) {
+            setNotice(saved.message);
+            return;
+          }
+          pushWsMessage(
+            'relay',
+            `${ROLE_TITLE_FOR_MESSAGE[role]} set to ${agentNameFor(agentId)}. Missions started from now on use it; this mission keeps what it actually ran.`,
+          );
+        }}
         onOpenManualTask={(id) => pushWsMessage('relay', `Opened Manual Task ${id}.`)}
         onApproveManualTask={(id) => pushWsMessage('relay', `Manual Task ${id} approved.`)}
         onRejectManualTask={(id) => pushWsMessage('relay', `Manual Task ${id} kept blocked.`)}
@@ -917,6 +1046,8 @@ export function RelayPreviewApp() {
         loopSurface={loopSurface}
         stageBackdrop={stageBackdrop ?? undefined}
         onSelectStageBackdrop={selectStageBackdrop}
+        chakraTier={chakraTier}
+        onSelectChakraTier={selectChakraTier}
         projectMessages={[...presentation.projectMessages, ...extraWsMessages]}
         terminalOpen={terminalOpen}
         terminalFullScreen
@@ -933,7 +1064,33 @@ export function RelayPreviewApp() {
         onRejectDecision={(id) => pushWsMessage('relay', `Fixture: decision ${id} rejected.`)}
         onOpenTerminal={() => navigate('/relay/project/rly-001/terminal')}
         onCloseTerminal={() => navigate('/relay/project/rly-001')}
-        onOpenProjectSettings={() => navigate('/relay')}
+        /**
+         * PROJECT SETTINGS OPENS SETTINGS, AND NEVER THE HOMEPAGE.
+         *
+         * This handler navigated to `/relay` — the Relay Entry Home — so
+         * asking for settings from inside the workspace threw the founder out
+         * of the project entirely. That is the reported defect.
+         *
+         * The obvious repair is wrong here: `rly-001` is the SHOWCASE FIXTURE
+         * and deliberately has no store project (see `renderWorkspaceProject`),
+         * so routing it to `/settings` lands on "Relay could not load this
+         * project" — trading a wrong destination for a dead end. A showcase has
+         * no configuration to edit, and saying so is the honest answer.
+         *
+         * When a real project IS active, its settings are what the founder
+         * meant, and that is where this goes.
+         */
+        onOpenProjectSettings={() => {
+          if (activeProjectId !== null && store.getProject(activeProjectId)) {
+            navigate(`/relay/project/${activeProjectId}/settings`);
+            return;
+          }
+          setNotice(
+            'This is the design showcase, which has no project to configure. '
+            + 'Open or create a project from the Relay Entry Home to edit its settings.',
+          );
+        }}
+        onOpenProjectBrain={() => navigate('/relay/project/rly-001/brain')}
         onOpenManualTask={(id) => pushWsMessage('relay', `Fixture: opened Manual Task ${id}.`)}
         onApproveManualTask={(id) => pushWsMessage('relay', `Fixture: Manual Task ${id} approved.`)}
         onRejectManualTask={(id) => pushWsMessage('relay', `Fixture: Manual Task ${id} blocked.`)}
@@ -956,6 +1113,7 @@ export function RelayPreviewApp() {
       route.screen === 'workspace' && route.terminal,
     ) ?? home;
   } else if (route.screen === 'console') screen = <MissionControl />;
+  else if (route.screen === 'brain') screen = projectBrainView;
   else if (route.screen === 'settings') screen = projectSettings;
   else if (route.screen === 'workspace') screen = workspace ?? home;
   else screen = home;

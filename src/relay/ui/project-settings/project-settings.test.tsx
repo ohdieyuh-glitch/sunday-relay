@@ -47,6 +47,10 @@ function shell(overrides: Partial<RelayProjectSettingsProps> = {}) {
       onStartProject: noop,
       onConnectRepository: noop,
       onBack: noop,
+      // The shell assertions are about the FIFTEEN-SECTION flow, which is no
+      // longer the view that opens first — Quick Setup is. Naming it keeps
+      // each assertion meaning what it meant before.
+      initialSetupMode: 'advanced' as const,
       ...overrides,
     }),
   );

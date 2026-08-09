@@ -13,6 +13,11 @@ import { RelayReviewerStatus } from './RelayReviewerStatus';
 import { RelayVerificationSummary } from './RelayVerificationSummary';
 import { RelayResearchStatus } from './RelayResearchStatus';
 import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
+import { RelayProjectBrainOrb } from './RelayProjectBrainOrb';
+import { chakraAccent as chakraAccentFor } from '../../shared/relay-chakra';
+import { RelayChakraTierPicker } from './RelayChakraTierPicker';
+import { RelayRoleSelector } from './RelayRoleSelector';
+import type { WorkforceRole } from '../project-settings';
 import { RelayOperationsPanel } from './RelayOperationsPanel';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
 import {
@@ -222,6 +227,12 @@ export function RelayProjectWorkspace(
     onOpenTerminal,
     onCloseTerminal,
     onOpenProjectSettings,
+    onOpenProjectBrain,
+    onSelectRoleOccupant,
+    workforceSelection,
+    deployment = null,
+    chakraTier = null,
+    onSelectChakraTier,
     onOpenManualTask,
     onApproveManualTask,
     onRejectManualTask,
@@ -276,6 +287,16 @@ export function RelayProjectWorkspace(
    * broken by a `??`.
    */
   const [localBackdrop, setLocalBackdrop] = useState<RelayBackdropId | null>(null);
+  /** Which role's selector is open, if any. Local to the surface: it is a
+   *  disclosure state, not a fact about the project. */
+  const [roleBeingChosen, setRoleBeingChosen] = useState<WorkforceRole | null>(null);
+  /**
+   * A workspace whose host supplies no selection cannot offer to change one:
+   * there would be nothing to write into, and a selector over an invented
+   * default would be the second configuration store this must not become.
+   */
+  const roleSwitchingAvailable =
+    onSelectRoleOccupant !== undefined && workforceSelection !== undefined;
   const selectedBackdrop = onSelectStageBackdrop ? stageBackdrop : (localBackdrop ?? stageBackdrop);
   const handleSelectBackdrop = useCallback((id: RelayBackdropId) => {
     setLocalBackdrop(id);
@@ -335,9 +356,90 @@ export function RelayProjectWorkspace(
           a component only tests ever rendered. Mounting it is what makes the
           strip the single phase surface, which is also why `phase` is
           destructured above. */}
-      <RelayWorkforceStrip workforce={workforce} mode={mode} phase={phase} />
+      {/* The strip and its selector share one positioned zone, so the selector
+          opens UNDER THE CELL IT BELONGS TO. Anchoring it to the page instead
+          would put a floating panel somewhere near the strip, which is how a
+          selector turns into the sidebar this direction forbids. */}
+      <div className="rpw-stripzone">
+        <RelayWorkforceStrip
+          workforce={workforce}
+          mode={mode}
+          phase={phase}
+            {...(roleSwitchingAvailable ? { onSelectRole: setRoleBeingChosen } : {})}
+        />
+        {/* THE SELECTOR, mounted beside the strip it belongs to rather than in a
+            new right-hand sidebar. It is a small dialog over the registry, and
+            it closes on choice. */}
+        {roleBeingChosen !== null && workforceSelection !== undefined && (
+          <RelayRoleSelector
+            role={roleBeingChosen}
+            selection={workforceSelection}
+            deployment={deployment}
+            {...(onSelectRoleOccupant === undefined
+              ? {}
+              : {
+                onSelect: (role: WorkforceRole, agentId: string) => {
+                  onSelectRoleOccupant(role, agentId);
+                  setRoleBeingChosen(null);
+                },
+              })}
+            onDismiss={() => setRoleBeingChosen(null)}
+          />
+        )}
+      </div>
 
-      <main className="rpw-main">
+      <main
+        className="rpw-main"
+        /* ONE ACCENT FOR THE WHOLE COLUMN. The Brain, the threads between the
+           objects and the Dog all read from here, so the three things a
+           founder is looking at are lit by one source rather than decorated
+           separately. Untiered resolves to the shipped colours. */
+        style={{
+          ['--rpb-accent' as string]: chakraAccentFor(chakraTier).accent,
+          ['--rpb-glow' as string]: chakraAccentFor(chakraTier).glow,
+        }}
+      >
+        {/* THE PROJECT BRAIN, ABOVE THE DOG, ABOVE THE MISSION BOX.
+            It lived in the right-hand rail as a definition list — a status
+            panel beside the workspace rather than part of it. The composition
+            the product is trying to communicate is vertical: what the agent
+            KNOWS, the agent ITSELF, and what you ASK it. So the Brain sits
+            here, the stage follows immediately below, and a single faint
+            column of light joins them rather than an arrow or a label.
+            The counts and the document did not move — they are what the Brain
+            view shows when it is opened. */}
+        <div className="rpw-brainstage">
+          {/* A CONTROL ONLY WHERE THERE IS SOMETHING TO OPEN. A host without
+              the Brain view renders the object and no button, rather than a
+              button that looks like it opens something and does not. */}
+          {onOpenProjectBrain === undefined ? (
+            <RelayProjectBrainOrb
+              reducedMotion={reducedMotion}
+              populated={projectBrainState.entries > 0}
+            />
+          ) : (
+            <button
+              type="button"
+              className="rpw-brainstage-open"
+              onClick={onOpenProjectBrain}
+              aria-label="Open the Project Brain"
+            >
+              <RelayProjectBrainOrb
+                reducedMotion={reducedMotion}
+                populated={projectBrainState.entries > 0}
+              />
+            </button>
+          )}
+          <span className="rpw-brainstage-link" aria-hidden="true" />
+          <p className="rpw-brainstage-caption">
+            {/* Announce facts. A Brain with nothing recorded says so rather
+                than showing a zero that reads like a measurement. */}
+            {projectBrainState.entries > 0
+              ? `PROJECT BRAIN · ${String(projectBrainState.entries)} APPROVED`
+              : 'PROJECT BRAIN · NOTHING RECORDED YET'}
+          </p>
+        </div>
+
         {/* THE RELAY STAGE, between the workforce strip and the Relay Console.
             It replaces `.rpw-dogzone` + the motion boundary's full-width band:
             a frameless region with layers and depth, rather than ninety pixels
@@ -358,7 +460,7 @@ export function RelayProjectWorkspace(
               <RelayStageBackdrop backdrop={selectedBackdrop} reducedMotion={reducedMotion} />
             )}
             render={(id) => (id === 'relay-dog'
-              ? <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} />
+              ? <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} tier={chakraTier} />
               : null)}
           />
           {/* WHO IS WORKING AND CANNOT BE DRAWN. Computing this and showing it
@@ -372,6 +474,12 @@ export function RelayProjectWorkspace(
                 .map((r) => ROLE_LABEL[r]).join(', ')}.`}
             </p>
           )}
+          {/* THE SECOND HALF OF THE CONNECTION. Brain → Dog → Mission, joined
+              by the same thread of light rather than by an arrow or a label.
+              Decorative and hidden from assistive technology: the
+              relationship it draws is stated in words by the surfaces
+              themselves, and a screen reader gains nothing from a line. */}
+          <span className="rpw-stagelink" aria-hidden="true" />
         </div>
         {/* The picker is MOUNTED, so "two selectable backdrops" is a fact about
             the shipped website and not only about the catalog. Selection is
@@ -381,6 +489,14 @@ export function RelayProjectWorkspace(
           selected={selectedBackdrop}
           reducedMotion={reducedMotion}
           onSelect={handleSelectBackdrop}
+        />
+        {/* The tier sits beside the backdrop because it is the same kind of
+            setting: how this browser looks, changing nothing Relay reports.
+            A host that cannot store it passes no handler and the control
+            renders read-only rather than silently forgetting a choice. */}
+        <RelayChakraTierPicker
+          selected={chakraTier}
+          {...(onSelectChakraTier === undefined ? {} : { onSelect: onSelectChakraTier })}
         />
         {completion.showVerifiedComplete ? (
           <section className="rpw-completion rpw-completion--verified" aria-label="Mission verdict">

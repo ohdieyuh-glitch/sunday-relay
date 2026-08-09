@@ -124,13 +124,112 @@ both.
 Production today refuses with `role_binding_refused`, **naming the variables to
 set** — where before it said `coding_agent_not_ready`. No capability is lost.
 
+## 4b. The workspace a founder actually opens
+
+Eight changes to the shipped browser application, all on one branch. Every one
+is reachable by clicking; none of it is a mock.
+
+### The Relay Dog
+
+Breathes continuously — chest, head, and each paw settling on its own phase —
+and walks a real four-beat gait: front-near → rear-far → front-near's opposite
+→ rear-near, quarter-cycle apart, with the body shifting as each paw lands. The
+sprite gained a fourth leg to make that possible, and the CLI's copy of the
+sprite gained the same one, because a pixel-parity test holds the two together.
+
+The mission-state model was NOT replaced. It still decides the pose; what
+changed is that the pose is now drawn by six animated parts instead of one
+translated block.
+
+### Progression tiers
+
+Seven chakra tiers, root through crown, as accents on the eyes, the collar and
+the light the figure casts. The body, its shading and the visor never change.
+
+**Relay awards no levels, and the picker says so where a founder reads it.**
+Nothing in this repository counts missions toward a rank; PSP agent evolution
+is captured and not started. The tier is an appearance choice stored beside the
+colorway and the backdrop. No tier is the default and renders the Dog exactly
+as it shipped — root is never assumed, because assuming the first rung asserts
+a level nobody reached.
+
+### The Project Brain
+
+An original drawing — lobes, luminous pathways, nodes on those pathways, a
+receding plane beneath — floating above the Dog, above the mission box. No
+external asset is loaded; the reference images supplied with the direction were
+watermarked stock and nothing is traced from them.
+
+Clicking it opens the Brain's own view, which keeps the object as its
+centrepiece and reports what Relay has actually recorded: durable knowledge,
+self-approved entries, what it is holding now, what it DROPPED, what awaits
+approval, and the newest input. Sections are the Brain document's own; this
+surface invents none. With no document it says *"No Brain document has been
+generated for this project"* rather than drawing an empty chart.
+
+The Brain, the two threads of light, and the Dog share one accent from one
+place, so choosing a tier lights the whole column.
+
+### The agent stack bar
+
+The three roles are now controls. Clicking one opens a compact selector in
+place — not a route into the setup flow, not a new sidebar.
+
+It writes the project's REAL configuration through the same `saveSettings` the
+fifteen-section flow uses. There is no second store, and the strip's names come
+back through the projection that was already there.
+
+What it may claim is deliberately limited. Each option carries the catalog's own
+availability (AVAILABLE / NOT CONFIGURED / COMING LATER …) plus what the
+occupant registry knows: whether Relay registers something that can run this
+choice on this kind of deployment, and whether that occupant reads server
+configuration. **Never which variables** — the browser must not carry the
+server's configuration surface, and a boundary test walks the real import graph
+to hold it.
+
+Invalid combinations fail closed in both directions: a reviewer that is not
+independent from the coding agent cannot be chosen, and neither can a coding
+agent that would make the reviewer already chosen dependent.
+
+Two gaps this surfaced, both real:
+
+- **`reviewer-hermes` did not exist in the catalog.** Relay ships a Hermes
+  Reviewer harness in a local and a remote form, both registered occupants, and
+  the one reviewer a hosted bridge can bind was unselectable. It is a catalog
+  entry now.
+- **`reviewer-codex` is selectable configuration with no registered occupant.**
+  The CLI can run that adapter; the bridge cannot bind it. The selector says so
+  rather than letting a founder save a preference that dies at dispatch.
+
+### Quick Setup
+
+Project Settings opens on QUICK SETUP — agent stack, mode, permissions, compute,
+create — with ADVANCED SETUP one click away and all fifteen sections intact.
+
+Both are views of ONE draft in one component saving through the same callbacks.
+The gate is the same validator; SAVE DRAFT emits a complete draft, not a
+Quick-shaped subset.
+
+### Project Settings navigation
+
+Opening Settings from inside a project returns to that project. The exit button
+follows its destination instead of always saying "RELAY HOME".
+
+### What the browser still cannot do
+
+**Start a mission.** That is unchanged and deliberate: one operator credential,
+a browser session that is read-only, so the CLI drives and the browser observes.
+A role switched in the workspace is stored in the project and is what the next
+mission is configured FROM; on the live bridge, which occupant actually runs is
+still decided by the server's role variables.
+
 ## 5. What is NOT done
 
 | # | Requirement | State |
 |---|---|---|
 | 1 | Production-hosted three-role execution | **Half.** Architect hosted and Coding Agent wired; the hosted **Reviewer** is the remaining gap |
 | 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability, and hosted execution for the Coding Agent. The Reviewer's hosted surface is not dispatchable |
-| 3 | Real workspace path | **Partially present already** — see §6 |
+| 3 | Real workspace path | **Substantially done in the browser** — see §4b and §6. Opening a project, configuring the stack, switching roles and observing role/evidence/verification state all work by clicking; STARTING a mission is still operator-only by design |
 | 4 | Evidence & Retrieval on MCP + Brain | **Not started** |
 | 5 | Skill Ops capabilities | **Not started** |
 | 6 | Adapter plumbing verbs | **Partially present.** `ports.ts` declares `descriptor` + `execute`; the other verbs exist unevenly across connectors, not as one contract |
@@ -156,6 +255,33 @@ credential, `RELAY_BRIDGE_API_TOKEN`; the browser gets in only via a pairing
 grant that redeems to a **read-only** session. Everything that spends money or
 mutates a run is operator-only. So the shape is: **the CLI drives, the browser
 observes.**
+
+### The exact path to test the workspace itself (no credentials, no spend)
+
+Nothing below spends money or needs a bridge.
+
+1. Open https://sunday-relay.vercel.app
+2. Type a request on the Entry Home → **BUILD PROJECT BRIEF** → **SEND TO
+   PROJECT SETTINGS**.
+3. Settings opens on **QUICK SETUP**. Pick the stack, mode, permissions and
+   limits, then **CREATE PROJECT**. Press **ADVANCED SETUP** at any point —
+   the same draft, all fifteen sections.
+4. In the workspace: the Brain floats above the Dog above the mission box, and
+   a thread of light joins them. Watch the Dog for ten seconds without doing
+   anything — it should never be still.
+5. **Click PROMPT ARCHITECT, CODING AGENT and REVIEWER in the strip.** Each
+   opens its own selector. Choose a different Reviewer; the strip's name
+   changes, and it survives a browser refresh because it was written to the
+   project.
+6. **Click the Brain.** It opens its own view. With nothing recorded it says
+   so in words.
+7. **RELAY DOG TIER**, below the stage: choose CROWN, then NO TIER. The Dog's
+   eyes, collar and cast light follow, and so does the Brain above it.
+8. Open **PROJECT SETTINGS** from inside the workspace and press the exit —
+   it returns to the project, not to the homepage.
+9. Turn on your operating system's reduce-motion setting and reload: the Dog
+   stops moving and the Brain stops rotating. The tier's colour stays, because
+   colour is not motion.
 
 ### The exact path to test the real three-role mission (founder machine)
 

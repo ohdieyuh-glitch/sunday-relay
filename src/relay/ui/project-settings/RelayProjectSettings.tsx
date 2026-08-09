@@ -25,6 +25,7 @@ import type {
   ProjectSettingsDraft,
   RelayProjectSettingsProps,
   SettingsSectionId,
+  SetupMode,
 } from './contracts';
 
 /**
@@ -71,10 +72,22 @@ export function RelayProjectSettings({
   onStartProject,
   onConnectRepository,
   onBack,
+  backLabel = '← RELAY HOME',
+  initialSetupMode = 'quick',
 }: RelayProjectSettingsProps) {
+  /**
+   * ONE DRAFT, TWO DOORS.
+   *
+   * Quick Setup and the fifteen-section flow are two views of THIS state and
+   * they save through the same callbacks. That is the whole design: a second
+   * component with its own draft would be the duplicate configuration system
+   * the direction forbids, and the two would drift the first time a field was
+   * added to one of them.
+   */
   const [draft, setDraft] = useState<ProjectSettingsDraft>(
     () => initialDraft ?? createDefaultSettingsDraft(brief),
   );
+  const [setupMode, setSetupMode] = useState<SetupMode>(initialSetupMode);
   const [active, setActive] = useState<SettingsSectionId>('project');
 
   const patch = (p: Partial<ProjectSettingsDraft>) => setDraft((d) => ({ ...d, ...p }));
@@ -136,6 +149,75 @@ export function RelayProjectSettings({
     }
   })();
 
+  /**
+   * QUICK SETUP — the four decisions a project cannot start without, plus the
+   * action that starts it.
+   *
+   * Every group here is the SAME component the long flow uses, patching the
+   * SAME draft. Nothing was re-implemented in a smaller form, so a control
+   * cannot behave differently depending on which door a founder came through.
+   * What Quick leaves out is not hidden: the note names it and the switch to
+   * the full flow is one click away, with the draft carried across untouched.
+   */
+  const quickBody = (
+    <div className="rps-quick">
+      <p className="rps-quick-note">
+        The four decisions a project cannot start without. Everything else keeps its
+        recommended default and stays editable in Advanced Setup — this writes the same
+        configuration, not a simplified copy of it.
+      </p>
+
+      <section className="rps-quick-group" aria-label="Agent stack">
+        <h2 className="rps-quick-heading">01 — AGENT STACK</h2>
+        <SettingsWorkforce
+          agentOptions={agentOptions}
+          selection={draft.workforce}
+          onChange={(workforce) => patch({ workforce })}
+        />
+      </section>
+
+      <section className="rps-quick-group" aria-label="Mode">
+        <h2 className="rps-quick-heading">02 — MODE</h2>
+        <SectionMode draft={draft} patch={patch} />
+      </section>
+
+      <section className="rps-quick-group" aria-label="Permissions">
+        <h2 className="rps-quick-heading">03 — PERMISSIONS</h2>
+        <SectionPermissions draft={draft} patch={patch} />
+      </section>
+
+      <section className="rps-quick-group" aria-label="Compute and limits">
+        <h2 className="rps-quick-heading">04 — COMPUTE AND LIMITS</h2>
+        <SectionLimits draft={draft} patch={patch} />
+      </section>
+
+      <section className="rps-quick-group" aria-label="Create">
+        <h2 className="rps-quick-heading">05 — CREATE</h2>
+        {/* THE SAME GATE. Blockers are the validator's, not a shorter list:
+            a project that Quick Setup would start must be one the long flow
+            would start too. */}
+        {validation.blockers.length > 0 && (
+          <ul className="rps-quick-blockers">
+            {validation.blockers.map((b) => <li key={b.id}>{b.message}</li>)}
+          </ul>
+        )}
+        <div className="rps-quick-actions">
+          <button type="button" className="rps-btn rps-btn--ghost" onClick={() => onSaveDraft(draft)}>
+            SAVE DRAFT
+          </button>
+          <button
+            type="button"
+            className="rps-btn rps-btn--primary"
+            disabled={validation.blockers.length > 0}
+            onClick={() => onStartProject(draft)}
+          >
+            CREATE PROJECT
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+
   return (
     <div className="rps">
       <div className="rps-grid-bg" aria-hidden="true" />
@@ -149,14 +231,43 @@ export function RelayProjectSettings({
           <span className="rps-ref-chip">RLY / CONFIG</span>
         </div>
         <h1 className="rps-title">PROJECT SETTINGS</h1>
+        {/* TWO DOORS INTO ONE CONFIGURATION. Switching carries the draft
+            across untouched — it is the same object — so nothing a founder
+            chose in one view is lost by looking at the other. */}
+        <div className="rps-modeswitch" role="group" aria-label="Setup depth">
+          <button
+            type="button"
+            className={`rps-modeswitch-btn${setupMode === 'quick' ? ' is-active' : ''}`}
+            aria-pressed={setupMode === 'quick'}
+            onClick={() => setSetupMode('quick')}
+          >
+            QUICK SETUP
+          </button>
+          <button
+            type="button"
+            className={`rps-modeswitch-btn${setupMode === 'advanced' ? ' is-active' : ''}`}
+            aria-pressed={setupMode === 'advanced'}
+            onClick={() => setSetupMode('advanced')}
+          >
+            ADVANCED SETUP
+          </button>
+        </div>
         <div className="rps-header-right">
           <span className="rps-plan">PLAN / {entitlement.toUpperCase()}</span>
+          {/* THE EXIT SAYS WHERE IT GOES.
+
+              This was the literal "← RELAY HOME", and it is the only way out
+              of Settings. Opening Settings from inside a project therefore
+              offered exactly one exit, labelled with the homepage — so a
+              founder pressing it lost the project, and the control had told
+              them it would. The label follows the destination now. */}
           <button type="button" className="rps-btn" onClick={onBack}>
-            ← RELAY HOME
+            {backLabel}
           </button>
         </div>
       </header>
 
+      {setupMode === 'quick' ? quickBody : (
       <div className="rps-layout">
         <nav className="rps-rail" aria-label="Settings sections">
           {SECTIONS.map((s) => (
@@ -248,6 +359,7 @@ export function RelayProjectSettings({
           </button>
         </aside>
       </div>
+      )}
     </div>
   );
 }

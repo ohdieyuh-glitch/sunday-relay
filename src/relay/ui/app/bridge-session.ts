@@ -177,6 +177,35 @@ export function configuredBridgeUrl(): string | null {
   return url !== undefined && url !== '' ? url.replace(/\/$/, '') : null;
 }
 
+/**
+ * WHICH MACHINE THIS BROWSER IS TALKING TO.
+ *
+ * `null` when no bridge is configured — the offline product has never seen a
+ * machine, and answering "founder machine" there would be a claim about a
+ * computer that does not exist. A loopback bridge is the founder's own laptop;
+ * anything else this browser was built to reach is a hosted deployment.
+ *
+ * This decides which registered occupants could run a founder's choice, so
+ * guessing it wrong is the difference between "set a variable" and "never, on
+ * this host".
+ */
+export function configuredDeploymentKind(
+  url: string | null = configuredBridgeUrl(),
+): 'hosted' | 'founder_machine' | null {
+  if (url === null || url === '') return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // An unparseable value is not evidence of either kind.
+    return null;
+  }
+  const host = parsed.hostname.toLowerCase();
+  const loopback = host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1'
+    || host.endsWith('.localhost');
+  return loopback ? 'founder_machine' : 'hosted';
+}
+
 export interface PairBrowserResult {
   readonly state: BridgeConnectionState;
   /** Safe to display. Never contains a grant, a secret or a token. */

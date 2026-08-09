@@ -73,7 +73,8 @@
 .rpw > header,
 .rpw > main,
 .rpw > footer,
-.rpw > .rpw-strip {
+.rpw > .rpw-strip,
+.rpw > .rpw-stripzone {
   position: relative;
   z-index: 2;
 }
@@ -272,6 +273,153 @@
 .rpw-strip-square { color: var(--rpw-gold); font-size: 9px; vertical-align: 1px; }
 .rpw-strip-status { font-size: 9px; letter-spacing: 0.16em; color: var(--rpw-gold); }
 .rpw-strip-cell--phase { background: var(--rpw-panel-2); }
+
+/* A ROLE CELL IS A CONTROL.
+   The three permanent roles are the only things in this strip a founder can
+   change; MODE and PHASE are reports. They were visually identical, so the
+   control carries the whole difference: it fills its cell, keeps the exact
+   layout of the text it replaced, and only lifts on hover/focus. No new
+   colour, no badge — the strip has to stay one continuous system bar. */
+.rpw-strip-cell:has(> .rpw-strip-choose) { padding: 0; }
+.rpw-strip-choose {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 18px;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.rpw-strip-choose::after {
+  /* The affordance, at the weight of a hint rather than a button. */
+  content: 'CHANGE';
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  color: var(--rpw-faint);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.rpw-strip-choose:hover,
+.rpw-strip-choose:focus-visible {
+  background: rgba(224, 178, 92, 0.08);
+  border-left-color: var(--rpw-gold);
+  outline: none;
+}
+.rpw-strip-choose:hover::after,
+.rpw-strip-choose:focus-visible::after { opacity: 1; }
+.rpw-strip-choose:focus-visible { box-shadow: inset 0 0 0 1px rgba(224, 178, 92, 0.55); }
+
+/* ------------------------------------------------------- role selector */
+
+/* Anchored under the strip it belongs to — deliberately NOT a right-hand
+   sidebar, and deliberately not a route change into the 15-step flow. */
+.rpw-stripzone { position: relative; }
+.rpw-roleselect {
+  position: absolute;
+  top: 100%;
+  z-index: 45;
+  left: 18px;
+  right: auto;
+  width: min(420px, calc(100% - 36px));
+  margin-top: -1px;
+  padding: 14px 16px 12px;
+  background: var(--rpw-panel-2, #12141c);
+  border: 1px solid var(--rpw-line);
+  border-top: 2px solid var(--rpw-gold);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.55);
+}
+.rpw-roleselect-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.rpw-roleselect-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--rpw-gold);
+}
+.rpw-roleselect-close {
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--rpw-faint);
+  background: transparent;
+  border: 1px solid var(--rpw-line);
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.rpw-roleselect-close:hover { color: var(--rpw-cream); border-color: var(--rpw-gold); }
+.rpw-roleselect-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rpw-roleselect-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--rpw-cream);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--rpw-line);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+.rpw-roleselect-option:hover:not(:disabled) {
+  border-color: var(--rpw-gold);
+  background: rgba(224, 178, 92, 0.07);
+}
+.rpw-roleselect-option:disabled { cursor: not-allowed; opacity: 0.55; }
+.rpw-roleselect-option.is-selected { border-color: var(--rpw-gold); }
+.rpw-roleselect-option.is-selected .rpw-roleselect-name::before {
+  content: '\25A0';
+  color: var(--rpw-gold);
+  font-size: 9px;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.rpw-roleselect-name { font-size: 12px; font-weight: 700; }
+.rpw-roleselect-state {
+  flex: none;
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  white-space: nowrap;
+  color: var(--rpw-faint);
+}
+.rpw-roleselect-state--available { color: var(--rpw-gold); }
+.rpw-roleselect-state--needs_configuration { color: var(--rpw-amber, #e0b25c); }
+.rpw-roleselect-note {
+  margin: 4px 0 0;
+  padding-left: 10px;
+  font-size: 9px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  color: var(--rpw-faint);
+}
+.rpw-roleselect-foot {
+  margin: 10px 0 0;
+  font-size: 9px;
+  line-height: 1.6;
+  color: var(--rpw-faint);
+  border-top: 1px solid var(--rpw-line);
+  padding-top: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rpw-strip-choose,
+  .rpw-strip-choose::after,
+  .rpw-roleselect-option { transition: none; }
+}
 
 /* --------------------------------------------------------------- main */
 
@@ -2161,4 +2309,177 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .rbp-overlay, .rbp-sheet { transition: none; animation: none; }
+}
+
+/* ===========================================================================
+   THE PROJECT BRAIN — a floating object above the stage, not a status panel.
+
+   The Brain sat in the right-hand rail as a definition list. The direction is
+   explicit that it belongs ABOVE the Relay Dog, which is above the Mission
+   box, and that the three should read as one composition: what the agent
+   knows, the agent, and what you ask it.
+
+   Motion is deliberately slow. This sits over a workspace someone is working
+   in, and a fast or bright object there is a distraction rather than a
+   presence.
+   =========================================================================== */
+
+.rpw-main {
+  /* Defaults for the column's shared accent. A tier overrides both inline on
+     this same element, so the Brain, the threads and the Dog move together. */
+  --rpb-accent: #8f7cf0;
+  --rpb-glow: rgba(143, 124, 240, 0.25);
+}
+
+.rpw-brainstage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.25rem 0 0;
+}
+
+/* The button IS the Brain — no chrome, because a framed control beside the
+   object would read as a panel again. */
+.rpw-brainstage-open {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  line-height: 0;
+}
+
+.rpw-brainstage-open:focus-visible {
+  outline: 2px solid var(--rpb-accent);
+  outline-offset: 6px;
+}
+
+.rpb-orb { display: block; overflow: visible; }
+
+/* A Brain with nothing recorded is the SAME object, dimmer — not a different
+   picture. The absence is stated in words elsewhere. */
+.rpb-orb--sparse { opacity: 0.55; }
+
+/* ONE SLOW ROTATION. The body carries the pathways and nodes with it, so the
+   network travels with the surface instead of sliding across it. */
+@keyframes rpb-rotate {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(360deg); }
+}
+
+/* Signals travelling the pathways, and nodes answering them. Both are small:
+   the object should look like it is thinking, not like it is alarming. */
+@keyframes rpb-signal {
+  0%, 100% { stroke-opacity: 0.28; }
+  50%      { stroke-opacity: 0.85; }
+}
+
+@keyframes rpb-node-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+
+@keyframes rpb-halo-breathe {
+  0%, 100% { opacity: 0.75; }
+  50%      { opacity: 1; }
+}
+
+.rpb-orb--live .rpb-body {
+  transform-origin: 50px 50px;
+  transform-box: fill-box;
+  animation: rpb-rotate 26s linear infinite;
+}
+.rpb-orb--live .rpb-path { animation: rpb-signal 4.5s ease-in-out infinite; }
+.rpb-orb--live .rpb-node { animation: rpb-node-pulse 3.2s ease-in-out infinite; }
+.rpb-orb--live .rpb-halo { animation: rpb-halo-breathe 6s ease-in-out infinite; }
+
+/* THE CONNECTION, communicated by proximity and light rather than an arrow.
+   A single faint column of the accent colour descends from the Brain toward
+   the stage below it. */
+/* THE CONNECTION BETWEEN THE BRAIN AND THE DOG.
+   A single thread of the shared accent, falling from the Brain toward the
+   animal below it. Deliberately one pixel wide and short: the direction asks
+   for proximity and light rather than an arrow or a label, and anything
+   heavier here becomes a diagram. */
+.rpw-brainstage-link {
+  width: 1px;
+  height: 18px;
+  background: linear-gradient(
+    to bottom,
+    var(--rpb-accent) 0%,
+    var(--rpb-glow) 60%,
+    transparent 100%
+  );
+  opacity: 0.7;
+}
+
+/* Dog → Mission. Shorter and fainter than the Brain's thread: the Brain is
+   what the Dog draws on, and the mission box is what the founder is typing
+   into, so the light thins as it travels toward the person. */
+.rpw-stagelink {
+  display: block;
+  width: 1px;
+  height: 14px;
+  margin: 2px auto 0;
+  background: linear-gradient(to bottom, var(--rpb-glow) 0%, transparent 100%);
+  opacity: 0.55;
+}
+
+.rpw-brainstage-caption {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  opacity: 0.7;
+  margin: 0.15rem 0 0;
+}
+
+/* REDUCED MOTION STOPS EVERY PART OF IT, rotation included. */
+@media (prefers-reduced-motion: reduce) {
+  .rpb-orb--live .rpb-body,
+  .rpb-orb--live .rpb-path,
+  .rpb-orb--live .rpb-node,
+  .rpb-orb--live .rpb-halo { animation: none; }
+}
+
+/* The Brain's own view. The object stays the centrepiece — the founder
+   clicked a brain, and it should still be there when they arrive. */
+.rpb-view { padding: 1.25rem 1.5rem 2rem; }
+.rpb-view-header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.rpb-view-title { font-size: 0.9rem; letter-spacing: 0.22em; margin: 0; }
+.rpb-view-close { background: none; border: 0; cursor: pointer; font: inherit; letter-spacing: 0.12em; opacity: 0.8; }
+.rpb-view-close:hover { opacity: 1; }
+.rpb-view-stage { display: flex; justify-content: center; padding: 1.5rem 0 0.5rem; --rpb-accent: #8f7cf0; }
+.rpb-view-counts { display: flex; gap: 2rem; justify-content: center; margin: 0.5rem 0 1.25rem; }
+.rpb-view-counts dt { font-size: 0.6rem; letter-spacing: 0.14em; opacity: 0.65; }
+.rpb-view-counts dd { margin: 0.15rem 0 0; font-size: 1.05rem; }
+.rpb-view-empty { text-align: center; opacity: 0.75; max-width: 46ch; margin: 1rem auto; line-height: 1.5; }
+.rpb-view-sections { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.75rem; }
+.rpb-view-section h2 { margin: 0; font-size: inherit; font-weight: inherit; }
+.rpb-view-section-toggle {
+  width: 100%; display: flex; align-items: center; gap: 0.5rem;
+  background: none; border: 0; cursor: pointer; font: inherit;
+  padding: 0.5rem 0.25rem; letter-spacing: 0.1em; text-align: left;
+}
+.rpb-view-section-count { margin-left: auto; opacity: 0.55; font-size: 0.7rem; }
+.rpb-view-memory {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem 1.25rem; margin: 1rem 0 1.25rem;
+}
+.rpb-view-memory dt { font-size: 0.58rem; letter-spacing: 0.14em; opacity: 0.6; }
+.rpb-view-memory dd { margin: 0.1rem 0 0; font-size: 0.95rem; }
+
+/* ------------------------------------------------ Relay Dog tier picker */
+
+/* The tier picker reuses the backdrop picker's presentation — it is the same
+   kind of appearance control — and adds only the colour chip, which is the one
+   thing a tier has that a backdrop name does not. */
+.rctp-list { --rctp-chip: 9px; }
+.rctp-swatch {
+  display: inline-block;
+  width: var(--rctp-chip);
+  height: var(--rctp-chip);
+  margin-right: 7px;
+  border-radius: 2px;
+  vertical-align: 0;
+  box-shadow: 0 0 6px currentColor;
 }

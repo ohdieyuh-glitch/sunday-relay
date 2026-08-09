@@ -50,6 +50,10 @@ async function openProjectSettings(): Promise<void> {
 }
 
 const openMcpSection = () => {
+  // Project Settings now OPENS on Quick Setup; MCP CONNECTIONS is a section of
+  // the fifteen-step flow, so reach it the way a founder does.
+  const advanced = screen.queryByRole('button', { name: 'ADVANCED SETUP' });
+  if (advanced !== null) fireEvent.click(advanced);
   fireEvent.click(screen.getByRole('button', { name: /14\s*MCP\s*CONNECTIONS/ }));
 };
 
@@ -66,6 +70,9 @@ const eyebrow = (): string => document.querySelector('.rps-section-eyebrow')?.te
 describe('the running application reaches MCP Connections', () => {
   it('MCP CONNECTIONS is in the settings rail a real navigation arrives at', async () => {
     await openProjectSettings();
+    // Settings opens on Quick Setup; the rail belongs to Advanced Setup, and
+    // both are reached by clicking, which is the point of the assertion.
+    fireEvent.click(screen.getByRole('button', { name: 'ADVANCED SETUP' }));
     expect(screen.getByRole('button', { name: /14\s*MCP\s*CONNECTIONS/ })).toBeTruthy();
   });
 

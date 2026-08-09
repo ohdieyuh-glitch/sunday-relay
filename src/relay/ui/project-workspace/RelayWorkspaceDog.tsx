@@ -2,6 +2,7 @@ import { RelayPixelDog } from '../pixel-dog';
 import { RelayDogMotionBoundary, projectWorkspaceDogBehavior } from '../relay-dog-motion';
 import { DOG_PRESENTATION } from './projections';
 import type { WorkspaceDogState } from './contracts';
+import type { ChakraTier } from '../../shared/relay-chakra';
 
 /**
  * The Pixel Relay Dog as the living project-state indicator. The state
@@ -17,9 +18,12 @@ import type { WorkspaceDogState } from './contracts';
 export function RelayWorkspaceDog({
   state,
   reducedMotion = false,
+  tier = null,
 }: {
   state: WorkspaceDogState;
   reducedMotion?: boolean;
+  /** Progression accent. `null` renders the Dog as shipped — see relay-chakra. */
+  tier?: ChakraTier | null;
 }) {
   const p = DOG_PRESENTATION[state];
   const behavior = projectWorkspaceDogBehavior(state);
@@ -34,6 +38,7 @@ export function RelayWorkspaceDog({
         reducedMotion={reducedMotion}
         floor
         unit={6}
+        tier={tier}
       />
     </RelayDogMotionBoundary>
   );

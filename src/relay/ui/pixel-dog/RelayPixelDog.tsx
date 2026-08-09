@@ -7,6 +7,8 @@
  * motion. SVG pixel grid, crisp edges, no external assets.
  */
 
+import { chakraAccent, chakraDogPalette, type ChakraTier } from '../../shared/relay-chakra';
+
 export type PixelDogPose =
   | 'standing'
   | 'trotting'
@@ -39,6 +41,13 @@ export interface RelayPixelDogProps {
   /** Draw the glowing perspective grid floor under the dog. */
   floor?: boolean;
   className?: string;
+  /**
+   * Progression tier, as CONTROLLED ACCENTS on the eyes, collar and cast
+   * light. `null` — the default — renders the Dog exactly as shipped, because
+   * Relay awards no levels and a default tier would be this component
+   * asserting one. See `src/relay/shared/relay-chakra.ts`.
+   */
+  tier?: ChakraTier | null;
 }
 
 /* 18×14 pixel grids.
@@ -63,9 +72,14 @@ const POSES: Record<PixelDogPose, string[]> = {
     '..wwwwwwwwwwwww...',
     '..swwwwwwwwwwss...',
     '...wwwwwwwwwww....',
-    '...ww....ww..ww...',
-    '...ww....ww..ww...',
-    '...ss....ss..ss...',
+    // FOUR LEGS, NOT THREE. A side-view quadruped needs a far-side pair to
+    // have four paws that can move independently; the approved sprite drew
+    // three columns, so a four-beat gait was impossible without one of them
+    // doing two jobs. The far legs are shadow grey, which is how this sprite
+    // already renders depth, so the mark stays the mark.
+    '...ww..ss.ww.ww...',
+    '...ww..ss.ww.ww...',
+    '...ss..ss.ss.ss...',
   ],
   trotting: [
     ...HEAD,
@@ -198,7 +212,41 @@ const MARKER_GLYPH: Record<Exclude<PixelDogMarker, 'none'>, string> = {
   scan: '▚',
 };
 
-function PixelGrid({ grid, unit }: { grid: string[]; unit: number }) {
+/**
+ * WHICH PART OF THE ANIMAL EACH PIXEL BELONGS TO.
+ *
+ * The sprite was one flat list of rects, so the only motion available to it
+ * was moving the whole thing — and a sprite translated up and down reads as a
+ * UI icon pulsing, not as an animal breathing. Grouping the pixels lets the
+ * chest rise while the head barely moves and each paw carries its own phase.
+ *
+ * Rows are the anatomy: 0-5 head, 6-10 body, 11-13 legs. Within the legs,
+ * columns separate the four paws — near-front, far-front, near-rear, far-rear
+ * — which is what makes a four-beat gait possible at all.
+ */
+export const PIXEL_DOG_PARTS = [
+  'head', 'body', 'leg-front-near', 'leg-front-far', 'leg-rear-near', 'leg-rear-far',
+] as const;
+export type PixelDogPart = (typeof PIXEL_DOG_PARTS)[number];
+
+export function pixelDogPart(x: number, y: number): PixelDogPart {
+  if (y <= 5) return 'head';
+  if (y <= 10) return 'body';
+  // Leg rows. The column bands follow the standing sprite; a pose without a
+  // paw in a band simply contributes no pixels to that group, which is why
+  // this needs no per-pose table.
+  if (x <= 5) return 'leg-front-near';
+  if (x <= 8) return 'leg-front-far';
+  if (x <= 11) return 'leg-rear-near';
+  return 'leg-rear-far';
+}
+
+function PixelGrid({ grid, unit, palette }: {
+  grid: string[];
+  unit: number;
+  /** Overrides for palette LETTERS. Absent letters keep the shipped colour. */
+  palette?: Readonly<Record<string, string>>;
+}) {
   const w = 18 * unit;
   const h = 14 * unit;
   return (
@@ -211,15 +259,31 @@ function PixelGrid({ grid, unit }: { grid: string[]; unit: number }) {
       aria-hidden="true"
       focusable="false"
     >
-      {grid.flatMap((row, y) =>
-        row.split('').map((ch, x) => {
-          const fill = PIXEL_FILL[ch];
-          if (!fill) return null;
-          return (
-            <rect key={`${x}-${y}`} x={x * unit} y={y * unit} width={unit} height={unit} fill={fill} />
-          );
-        }),
-      )}
+      {PIXEL_DOG_PARTS.map((part) => {
+        const rects = grid.flatMap((row, y) =>
+          row.split('').map((ch, x) => {
+            if (pixelDogPart(x, y) !== part) return null;
+            const fill = palette?.[ch] ?? PIXEL_FILL[ch];
+            if (!fill) return null;
+            return (
+              <rect key={`${x}-${y}`} x={x * unit} y={y * unit} width={unit} height={unit} fill={fill} />
+            );
+          }),
+        ).filter(Boolean);
+        if (rects.length === 0) return null;
+        return (
+          <g
+            key={part}
+            className={`rpd-part rpd-part--${part}`}
+            // The transform origin is the ground under this part, so a leg
+            // swings from the shoulder and the body rises from the paws
+            // rather than every group pivoting about the canvas corner.
+            style={{ transformOrigin: `${9 * unit}px ${14 * unit}px` }}
+          >
+            {rects}
+          </g>
+        );
+      })}
     </svg>
   );
 }
@@ -234,15 +298,31 @@ export function RelayPixelDog({
   reducedMotion = false,
   floor = false,
   className = '',
+  tier = null,
 }: RelayPixelDogProps) {
   const grid = POSES[pose] ?? POSES.standing;
   const animate = moving && !reducedMotion;
+  /**
+   * THE TIER IS AN ACCENT, AND ONLY AN ACCENT.
+   *
+   * Two palette letters — the eyes and the collar — plus the light the figure
+   * casts, which the stylesheet reads from these variables. The body, its
+   * shading and the visor are untouched, so a tier can never turn the animal
+   * into a solid colour. Untiered leaves every value exactly as shipped.
+   */
+  const accent = chakraAccent(tier);
+  const palette = tier === null ? undefined : chakraDogPalette(tier);
 
   return (
     <figure
-      className={`rpd rpd--${pose}${animate ? ' rpd--moving' : ''}${floor ? ' rpd--floored' : ''} ${className}`.trim()}
+      className={`rpd rpd--${pose}${animate ? ' rpd--moving' : ''}${floor ? ' rpd--floored' : ''}${tier === null ? '' : ` rpd--tier rpd--tier-${tier}`} ${className}`.trim()}
       role="img"
       aria-label={`Relay Dog: ${label}`}
+      style={{
+        ['--rpd-accent' as string]: accent.accent,
+        ['--rpd-accent-bright' as string]: accent.bright,
+        ['--rpd-accent-glow' as string]: accent.glow,
+      }}
     >
       <div className="rpd-stage">
         {marker !== 'none' && (
@@ -250,7 +330,7 @@ export function RelayPixelDog({
             {MARKER_GLYPH[marker]}
           </span>
         )}
-        <PixelGrid grid={grid} unit={unit} />
+        <PixelGrid grid={grid} unit={unit} {...(palette === undefined ? {} : { palette })} />
         {floor && <div className="rpd-floor" aria-hidden="true" />}
       </div>
       <figcaption className="rpd-caption">

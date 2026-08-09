@@ -209,6 +209,26 @@ export const AGENT_OPTIONS: AgentOption[] = [
     recommendationReason: 'A real Codex reviewer adapter exists and is independent from Claude Code.',
   },
   {
+    /**
+     * REGISTERED, NOT INVENTED. Relay ships a Hermes Reviewer harness — a
+     * local process adapter and a dedicated remote service — and both are
+     * registered occupants of the reviewer slot. The catalog listed Hermes
+     * only as a coding agent that does not exist yet, so the one reviewer this
+     * deployment can actually bind was unselectable.
+     *
+     * Read-only is STRUCTURAL rather than promised: an isolated profile leaves
+     * the model with no toolset at all.
+     */
+    id: 'reviewer-hermes',
+    name: 'Hermes',
+    provider: 'Nous',
+    role: 'reviewer',
+    availability: 'available',
+    description:
+      'Structurally read-only review through the Hermes harness — a local process, or the dedicated review service a hosted bridge can reach.',
+    strengths: ['Structurally read-only review', 'Findings', 'Approval or required repair'],
+  },
+  {
     id: 'reviewer-claude',
     name: 'Claude',
     provider: 'Anthropic',

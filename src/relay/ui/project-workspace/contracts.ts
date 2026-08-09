@@ -14,6 +14,9 @@ import type { EventTruthClass, TerminalEventCategory } from '../../mission/wire-
 import type { RelayAgentOperatingProjection } from '../../mission';
 import type { RelayBackdropId } from '../relay-stage';
 import type { RelayBrainDocument, RelayOperationsView } from '../../shared/llmops';
+import type { RelayWorkforceSelection, WorkforceRole } from '../project-settings';
+import type { DeploymentKind } from './role-occupant-map';
+import type { ChakraTier } from '../../shared/relay-chakra';
 
 /* ----------------------------------------------------------------- modes */
 
@@ -349,6 +352,48 @@ export interface RelayProjectWorkspaceProps {
   onOpenTerminal: () => void;
   onCloseTerminal: () => void;
   onOpenProjectSettings: () => void;
+  /**
+   * Open the Project Brain's own view.
+   *
+   * OPTIONAL, and its absence is honest rather than inert: a host that does
+   * not implement the view gets a Brain that is present and not clickable,
+   * instead of a control that appears to open something and does nothing.
+   */
+  onOpenProjectBrain?: () => void;
+  /**
+   * The project's workforce selection — the SAME record Project Settings
+   * writes. Present means the strip's three role cells become controls;
+   * absent means this workspace reports the stack and cannot change it, which
+   * is what it did before, and the cells stay text rather than becoming
+   * controls that do nothing.
+   */
+  workforceSelection?: RelayWorkforceSelection;
+  /**
+   * Change who holds a role, through the project's real configuration.
+   * Absent for the same reason as above.
+   */
+  onSelectRoleOccupant?: (role: WorkforceRole, agentId: string) => void;
+  /**
+   * Which machine this workspace is talking to.
+   *
+   * An INPUT. A browser cannot tell a container from a laptop, and an occupant
+   * that can only run on one of them is the difference between "not set up
+   * yet" and "never, on this host" — so this is supplied rather than inferred.
+   * Absent, or `null`, means no bridge is connected and the answer is UNKNOWN
+   * rather than "founder machine".
+   */
+  deployment?: DeploymentKind;
+  /**
+   * The Relay Dog's progression tier, shared with the Project Brain above it
+   * so the two read as one system. `null` — the default — renders both exactly
+   * as shipped, because Relay awards no levels.
+   */
+  chakraTier?: ChakraTier | null;
+  /**
+   * Store a tier choice. Absent means this surface cannot remember one, and
+   * the picker renders read-only rather than accepting a choice it will drop.
+   */
+  onSelectChakraTier?: (tier: ChakraTier | null) => void;
   onOpenManualTask: (taskId: string) => void;
   onApproveManualTask: (taskId: string) => void;
   onRejectManualTask: (taskId: string) => void;
