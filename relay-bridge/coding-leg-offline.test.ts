@@ -159,14 +159,14 @@ describe('the coding attestation separates who was asked for from what ran', () 
   it('takes the requested identity from the bound occupant', async () => {
     const { outcome } = await runOffline({
       requestedOccupant: {
-        displayName: 'Claude Agent SDK (hosted)',
+        actorName: 'Claude Agent SDK',
         adapterId: 'claude-agent-sdk-hosted',
         billingPath: 'api',
       },
     });
     const attestation = outcome.attestation;
     expect(attestation).not.toBeNull();
-    expect(attestation?.requestedActor).toBe('Claude Agent SDK (hosted)');
+    expect(attestation?.requestedActor).toBe('Claude Agent SDK');
     expect(attestation?.requestedRuntime).toBe('claude-agent-sdk-hosted');
     // `api` in the registry's vocabulary is `api_billed` in the attestation's,
     // which is the value `isPaidApiCall` tests for.

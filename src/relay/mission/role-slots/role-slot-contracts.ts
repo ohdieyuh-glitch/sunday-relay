@@ -36,8 +36,10 @@
  * becomes the `actual` half of an attestation. Actual identity comes from the
  * runtime's own response, after the fact, and from nowhere else.
  *
- * PURE DOMAIN. No Node, no network, no clock. The browser, the CLI and the
- * bridge all read the same registry and reach the same conclusions.
+ * PURE DOMAIN. No Node, no network, no clock — so the browser and the CLI can
+ * read it unchanged when they need it. Today the bridge is the only consumer;
+ * this module is not re-exported from the mission barrel, so no UI or CLI
+ * import is even possible through the sanctioned path yet.
  */
 
 /** The three permanent roles. Adding a fourth is a product decision, not a
@@ -105,7 +107,23 @@ export interface RoleOccupant {
    * review.
    */
   readonly independenceGroup: string;
+  /** For a human: a UI label, free to be descriptive. */
   readonly displayName: string;
+  /**
+   * THE NAME THE RUNTIME CALLS ITSELF — and the reason this is not
+   * `displayName`.
+   *
+   * `requestedActor` and `actualActor` are compared by `actorMatches`, the
+   * repo's only expression of "was the role performed by the actor we asked
+   * for?". Building `requestedActor` from the UI label put two VOCABULARIES on
+   * the two halves of one comparison: the registry said "Claude Code
+   * (installed CLI)" while the adapter reported "Claude Code", so
+   * `actorMatches` answered FALSE for every ordinary local mission and a
+   * genuine swap became indistinguishable from the normal case — the exact
+   * defect this registry exists to make impossible, reintroduced by the fix
+   * for it. The comparison needs one vocabulary, and this field is it.
+   */
+  readonly actorName: string;
   readonly kind: OccupantKind;
   readonly environments: readonly ExecutionEnvironment[];
   /** Whether Relay ships a concrete adapter for it AT ALL. A registry entry

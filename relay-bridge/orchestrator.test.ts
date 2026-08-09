@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMissionRegistry, selectArchitectPath } from './mission';
+import { resolveRoleSlots } from './role-slot-config';
 import type { MissionRoleDeps } from './mission';
 import { buildAttestation, decideCompletion, digest } from './attestation';
 import type { ExecutionAttestation } from './attestation';
@@ -308,11 +309,17 @@ function harness(
   return h;
 }
 
-function registry(h: Harness, env: NodeJS.ProcessEnv = LIVE_ENV) {
+function registry(h: Harness, env: NodeJS.ProcessEnv = LIVE_ENV, claudeMode: 'live' | 'fake' = 'fake') {
   return createMissionRegistry({
     fusionBaseUrl: 'http://localhost:3000',
     sundayMode: 'fast',
-    claudeMode: 'fake',
+    /**
+     * `fake` for almost everything: the runtime resolver is injected, so this
+     * only decides which OCCUPANT the mission binds. A test that needs to
+     * exercise a real coding occupant asks for `live`, and still contacts
+     * nothing — the resolver is a stub either way.
+     */
+    claudeMode,
     confirmLive: true,
     architectEnv: env,
     hermesEnv: env,
@@ -332,20 +339,47 @@ async function settle(reg: ReturnType<typeof registry>, missionId: string, tries
   return reg.get(missionId) as LiveMissionUpdate;
 }
 
-async function runMission(h: Harness, env: NodeJS.ProcessEnv = LIVE_ENV, missionId = 'm-orc') {
-  const reg = registry(h, env);
+async function runMission(
+  h: Harness, env: NodeJS.ProcessEnv = LIVE_ENV, missionId = 'm-orc',
+  claudeMode: 'live' | 'fake' = 'fake',
+) {
+  const reg = registry(h, env, claudeMode);
   reg.start({ missionId, objective: 'Create a production-safe project-name normalization utility.' });
   const view = await settle(reg, missionId);
   return { reg, view };
 }
 
+/**
+ * THIS FILE'S MISSIONS RUN ON A FOUNDER MACHINE, AND SAY SO.
+ *
+ * `isProductionDeployment` is one-way and reads the real process environment,
+ * which is correct — a host must not be talkable out of being production. The
+ * cost is that a developer with `NODE_ENV=production` exported would otherwise
+ * see two dozen failures here with no connection to what they changed. The
+ * assumption is stated instead of inherited; the one test that WANTS a
+ * production host sets its marker itself.
+ */
+const HOST_MARKERS = [
+  'NODE_ENV', 'RAILWAY_ENVIRONMENT', 'RAILWAY_ENVIRONMENT_NAME', 'RAILWAY_SERVICE_ID',
+] as const;
+const savedHostMarkers = new Map<string, string | undefined>();
+
 const originalFetch = globalThis.fetch;
 beforeEach(() => {
+  for (const name of HOST_MARKERS) {
+    savedHostMarkers.set(name, process.env[name]);
+    delete process.env[name];
+  }
   globalThis.fetch = vi.fn(async () => {
     throw new Error('no network call may happen in an orchestrator test');
   }) as unknown as typeof fetch;
 });
 afterEach(() => {
+  for (const [name, value] of savedHostMarkers) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+  savedHostMarkers.clear();
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
 });
@@ -1076,6 +1110,10 @@ const HOSTED_ENV: NodeJS.ProcessEnv = {
   RELAY_ROLE_CODING_AGENT: 'claude_agent_sdk_hosted',
   ANTHROPIC_API_KEY: 'sk-ant-FAKETESTNOTREAL-never-served', // relay-boundary:allow-fixture — synthetic
   RELAY_HOSTED_CODING_MODEL: 'claude-test',
+  // SELECTS the occupant; the RELAY_HERMES_* names below CONFIGURE the
+  // transport it needs. Two variables, two jobs — merging them gave one
+  // variable two incompatible readers.
+  RELAY_ROLE_REVIEWER: 'hermes_remote_service',
   RELAY_HERMES_MODE: 'remote',
   RELAY_HERMES_SERVICE_URL: 'https://hermes.internal',
   RELAY_HERMES_SERVICE_TOKEN: 'not-a-real-token',
@@ -1102,6 +1140,7 @@ describe('role slots decide who may hold each role, before anything is dispatche
       h,
       { ...HOSTED_ENV, RELAY_ROLE_CODING_AGENT: 'claude_code_local' },
       'm-role-local-on-host',
+      'live',
     );
     expect(view.error?.code).toBe('role_binding_refused');
     // "Not ready yet" and "never, on this host" are different answers, and
@@ -1118,6 +1157,7 @@ describe('role slots decide who may hold each role, before anything is dispatche
       h,
       { ...HOSTED_ENV, RELAY_ROLE_CODING_AGENT: 'gpt5_codex_turbo' },
       'm-role-unknown',
+      'live',
     );
     expect(view.error?.code).toBe('role_binding_refused');
     expect(view.error?.safeMessage).toContain('gpt5_codex_turbo');
@@ -1138,7 +1178,7 @@ describe('role slots decide who may hold each role, before anything is dispatche
    */
   it('refuses a bound occupant this bridge cannot dispatch, and names it', async () => {
     const h = harness();
-    const { view } = await runMission(h, HOSTED_ENV, 'm-role-hosted-undispatchable');
+    const { view } = await runMission(h, HOSTED_ENV, 'm-role-hosted-undispatchable', 'live');
     expect(view.state).toBe('failed');
     expect(view.error?.code).toBe('occupant_not_dispatchable');
     expect(view.error?.retryable).toBe(false);
@@ -1148,6 +1188,54 @@ describe('role slots decide who may hold each role, before anything is dispatche
     expect(h.calls.architect).toBe(0);
     expect(h.calls.coding).toBe(0);
     expect(h.calls.reviewer).toBe(0);
+  });
+
+  /**
+   * THE KEYLESS OFFLINE PIPELINE STILL RUNS ON A HOSTED DEPLOYMENT.
+   *
+   * `RELAY_BRIDGE_FAKE_CLAUDE=1` is a documented capability — a whole mission
+   * with no credential and no spend. Modelling the fake as a MODE of the
+   * installed-CLI occupant broke it on a container, because that occupant
+   * declares `founder_machine` and the fake needs no CLI at all. It is a
+   * different occupant, and this is the proof that saying so restored it.
+   */
+  it('stops blaming the Coding Agent for the keyless offline pipeline on a host', async () => {
+    const h = harness();
+    const { view } = await runMission(
+      h,
+      // No coding-agent name and no ANTHROPIC_API_KEY, on a hosted host.
+      { ...HOSTED_BASE, RELAY_ROLE_REVIEWER: 'hermes_local' },
+      'm-role-hosted-fake',
+      'fake',
+    );
+    // The fake coding runtime needs no installed CLI, so it binds on a
+    // container — which is the regression this occupant repairs. What remains
+    // unrunnable there is the REVIEWER, and the refusal now says so precisely
+    // instead of blaming the agent that could have run.
+    expect(view.error?.code).toBe('role_binding_refused');
+    expect(view.error?.safeMessage).toContain('hermes_local');
+    expect(view.error?.safeMessage).toContain('founder_machine');
+    expect(view.error?.safeMessage).not.toContain('claude_code_fake');
+    expect(h.calls.architect).toBe(0);
+  });
+
+  it('binds the fake coding occupant on a hosted deployment', () => {
+    // Isolating the half this occupant fixes: on a container, the offline
+    // coding runtime is no longer the thing standing in the way.
+    const resolution = resolveRoleSlots({
+      architectMode: 'fusion',
+      reviewerOccupant: 'hermes_remote_service',
+      codingAgentOccupant: undefined,
+      fakeCodingRuntime: true,
+      hosted: true,
+      configuredNames: new Set([
+        'RELAY_HERMES_MODE', 'RELAY_HERMES_SERVICE_URL',
+        'RELAY_HERMES_SERVICE_TOKEN', 'RELAY_HERMES_TRUSTED_ORIGINS',
+      ]),
+    });
+    expect(resolution.binding.ok).toBe(true);
+    if (!resolution.binding.ok) return;
+    expect(resolution.binding.bindings.coding_agent.occupant.occupantId).toBe('claude_code_fake');
   });
 
   it('lets a bound, dispatchable combination proceed', async () => {
@@ -1172,10 +1260,22 @@ describe('role slots decide who may hold each role, before anything is dispatche
     // attestation is then built from it is asserted against the real
     // `runCodingMission` in `coding-leg-offline.test.ts`.
     expect(h.codingInput?.requestedOccupant).toEqual({
-      displayName: 'Claude Code (installed CLI)',
+      // The RUNTIME-facing name, not the UI label — `actorMatches` compares
+      // this with what the adapter reports, so both halves need one vocabulary.
+      actorName: 'Claude Code',
       adapterId: 'claude-code-local',
-      billingPath: 'subscription',
+      // Nothing was spent: the offline pipeline is `none`, which the coding
+      // leg translates to `simulated` rather than laundering into a payer.
+      billingPath: 'none',
     });
+  });
+
+  it('names the installed CLI when that is genuinely the bound occupant', async () => {
+    const h = harness();
+    const { view } = await runMission(h, LIVE_ENV, 'm-role-named-live', 'live');
+    const preflight = view.events.find((e) => e.headline.startsWith('Preflight passed'));
+    expect(preflight?.meta).toContain('claude_code_local');
+    expect(preflight?.detail).toContain('Claude Code (installed CLI)');
   });
 
   it('names the bound occupants in the preflight event, from the binding itself', async () => {
@@ -1184,9 +1284,13 @@ describe('role slots decide who may hold each role, before anything is dispatche
     const preflight = view.events.find((e) => e.headline.startsWith('Preflight passed'));
     expect(preflight).toBeDefined();
     expect(preflight?.meta).toContain('openai_gpt_architect');
-    expect(preflight?.meta).toContain('claude_code_local');
+    // `claudeMode: 'fake'` is the keyless offline pipeline, and it binds the
+    // occupant that actually runs rather than the installed CLI it is
+    // standing in for. Announcing `claude_code_local` here while a synthetic
+    // executable ran is the untruth the registry exists to prevent.
+    expect(preflight?.meta).toContain('claude_code_fake');
     expect(preflight?.meta).toContain('hermes_local');
-    expect(preflight?.detail).toContain('Claude Code (installed CLI)');
+    expect(preflight?.detail).toContain('Relay fake Claude Code');
   });
 
   /**

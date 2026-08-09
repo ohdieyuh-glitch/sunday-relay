@@ -41,7 +41,7 @@ import { createBetaEnrolmentStore } from '../src/relay/persistence';
 import type { BetaWaveConfig } from '../src/relay/mission/beta';
 import type { BetaEnrolmentStore } from '../src/relay/persistence';
 import { createCronTickService } from './cron-service';
-import { resolveRoleSlotsFromEnv } from './role-slot-config';
+import { missionDispatchProblems, resolveRoleSlotsFromEnv } from './role-slot-config';
 import {
   createCronScheduler, cronSchedulerEnabled, schedulerIntervalSeconds,
 } from './cron-scheduler';
@@ -238,6 +238,15 @@ export function createBridgeServer(
            * preflight event, behind authentication, where it belongs.
            */
           const roles = resolveRoleSlotsFromEnv(process.env);
+          /**
+           * BOUND IS NOT RUNNABLE. Reporting only the binding said a
+           * deployment had staffed its roles while every mission it could
+           * start would refuse — announcing an intention, not a fact. The
+           * dispatch check is folded in, and still as codes.
+           */
+          const undispatchable = roles.binding.ok
+            ? missionDispatchProblems(roles.binding.bindings)
+            : [];
           send(res, 200, {
             ok: true,
             service: 'relay-bridge',
@@ -247,9 +256,9 @@ export function createBridgeServer(
             confirmLive: config.confirmLive,
             promptArchitectReady: architect.ready,
             promptArchitectMissing: architect.missing,
-            roleSlotsBound: roles.binding.ok,
+            roleSlotsBound: roles.binding.ok && undispatchable.length === 0,
             roleSlotRefusals: roles.binding.ok
-              ? []
+              ? undispatchable.map((p) => `${p.role}:occupant_not_dispatchable`)
               : roles.binding.problems.map((p) => `${p.role}:${p.reason}`),
           }, cors);
           return;

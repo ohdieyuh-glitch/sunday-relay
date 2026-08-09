@@ -3,20 +3,20 @@ import {
   type RoleSlot, type RoleSlotBindingResult,
 } from '../src/relay/mission/role-slots';
 import { isProductionDeployment } from './deployment-environment';
-import { HERMES_MODE_ENV } from './reviewer-harness/hermes/hermes-transport';
 
 /**
  * READING WHICH OCCUPANT HOLDS EACH ROLE, FROM THE DEPLOYMENT.
  *
- * ONE SELECTOR PER ROLE, AND TWO OF THE THREE ALREADY EXISTED. The Prompt
+ * ONE SELECTOR PER ROLE, AND ONE OF THE THREE ALREADY EXISTED. The Prompt
  * Architect has been chosen by `RELAY_PROMPT_ARCHITECT_MODE` since it was
- * built, and the Reviewer by `RELAY_HERMES_MODE` since the transport seam
- * landed. Adding `RELAY_ROLE_PROMPT_ARCHITECT` and `RELAY_ROLE_REVIEWER` beside
- * them would create two variables that answer the same question, and the whole
- * failure mode this repository keeps hitting is two things that are supposed to
- * agree and quietly do not. So those two roles are DERIVED, and only the Coding
- * Agent — which never had a local-versus-hosted selector at all — gets a new
- * one.
+ * built, so it is DERIVED — a second variable answering a question that
+ * already has one is how two things that must agree quietly stop agreeing.
+ *
+ * The Reviewer was derived from `RELAY_HERMES_MODE` on the same reasoning, and
+ * that was wrong: `RELAY_HERMES_MODE` belongs to the `/reviewer/*` ROUTES'
+ * transport, which is a different surface from the mission's reviewer leg. One
+ * variable with two incompatible readers had no value that satisfied both. See
+ * `REVIEWER_ROLE_ENV`.
  *
  * WHAT THIS FUNCTION DOES NOT DO. It reads no credential value, only whether a
  * variable is set to something non-empty. A variable set to the empty string
@@ -25,8 +25,24 @@ import { HERMES_MODE_ENV } from './reviewer-harness/hermes/hermes-transport';
  * message about nothing.
  */
 
-/** The one genuinely new selector. Values are registry occupant ids. */
+/** Selectors, by role. Values are registry occupant ids. */
 export const CODING_AGENT_ROLE_ENV = 'RELAY_ROLE_CODING_AGENT';
+/**
+ * THE REVIEWER'S OWN SELECTOR, AND WHY DERIVING IT WAS WRONG.
+ *
+ * The first version derived the mission's Reviewer from `RELAY_HERMES_MODE`,
+ * reasoning that a second variable answering the same question is how two
+ * things that must agree quietly stop agreeing. The reasoning was right and
+ * the premise was false: `RELAY_HERMES_MODE` is read by
+ * `transport-factory.ts`, which serves the `/reviewer/*` ROUTES. The mission's
+ * reviewer leg is `runHermesReview`, which never consults it and always spawns
+ * a local process. Two surfaces, one variable — so a founder machine set up to
+ * exercise the deployed Hermes service through the routes (`remote`) had every
+ * MISSION refused, and there was no value that satisfied both.
+ *
+ * They are different questions and now have different variables.
+ */
+export const REVIEWER_ROLE_ENV = 'RELAY_ROLE_REVIEWER';
 
 /**
  * The architect path, expressed as an occupant.
@@ -42,36 +58,27 @@ export function architectOccupantFor(mode: string | undefined): string | null {
 }
 
 /**
- * The Hermes transport mode, expressed as an occupant — in three states.
+ * The requested Reviewer occupant, in three states.
  *
- * UNSET is deliberately not defaulted here. `selectHermesMode` already decides
- * what unset means — local on a developer machine, a configuration error in
- * production — and duplicating that judgement is how the two would drift.
- * Reporting `unset` lets the binder apply the development default on a laptop
- * and refuse on a hosted deployment, which is the same answer arrived at once.
- *
- * INVALID is separate because collapsing it into `unset` made this module and
- * `selectHermesMode` disagree in both directions at once.
+ * UNSET is deliberately not defaulted here: reporting it lets the binder apply
+ * the development default on a laptop and refuse on a hosted deployment, which
+ * is one decision made in one place.
  */
 export type SelectorResolution =
   | { readonly kind: 'unset' }
   | { readonly kind: 'invalid' }
   | { readonly kind: 'occupant'; readonly occupantId: string };
 
-export function reviewerOccupantFor(mode: string | undefined): SelectorResolution {
-  const raw = (mode ?? '').trim();
+export function reviewerOccupantFor(requested: string | undefined): SelectorResolution {
+  const raw = (requested ?? '').trim();
   if (raw === '') return { kind: 'unset' };
-  if (raw === 'local') return { kind: 'occupant', occupantId: 'hermes_local' };
-  if (raw === 'remote') return { kind: 'occupant', occupantId: 'hermes_remote_service' };
+  if (raw === 'hermes_local') return { kind: 'occupant', occupantId: 'hermes_local' };
+  if (raw === 'hermes_remote_service') return { kind: 'occupant', occupantId: 'hermes_remote_service' };
   /**
-   * SET, AND NOT ONE OF THE CHOICES.
-   *
-   * `selectHermesMode` refuses this outright, so returning `unset` here made
-   * the two disagree in both directions: on a laptop `RELAY_HERMES_MODE=REMOTE`
-   * silently bound the LOCAL reviewer while the transport refused the value,
-   * and on a host `romote` reported "no occupant is configured" for a variable
-   * that is configured, misspelled. The vocabulary still lives in
-   * `selectHermesMode` — this only distinguishes the two failures.
+   * SET, AND NOT ONE OF THE CHOICES. Distinguished from unset because the
+   * remedies are opposite: one says set the variable, the other says the value
+   * you set is misspelled. Collapsing them reported "no occupant is
+   * configured" for a variable that is configured, wrongly.
    */
   return { kind: 'invalid' };
 }
@@ -96,6 +103,7 @@ export const MISSION_DISPATCHABLE_OCCUPANTS: ReadonlySet<string> = new Set([
   'openai_gpt_architect',
   'fusion_architect',
   'claude_code_local',
+  'claude_code_fake',
   'hermes_local',
 ]);
 
@@ -143,8 +151,17 @@ export interface RoleSlotResolution {
  */
 export interface RoleSlotInputs {
   readonly architectMode: string | undefined;
-  readonly hermesMode: string | undefined;
+  readonly reviewerOccupant: string | undefined;
   readonly codingAgentOccupant: string | undefined;
+  /**
+   * Whether this deployment runs the keyless offline coding pipeline.
+   *
+   * A MODE, not a role choice — `RELAY_BRIDGE_FAKE_CLAUDE=1` already decides
+   * it, exactly as `RELAY_PROMPT_ARCHITECT_MODE` decides the architect. It
+   * therefore OVERRIDES any named coding occupant rather than competing with
+   * one: a deployment running fakes is not running whatever it named.
+   */
+  readonly fakeCodingRuntime: boolean;
   readonly hosted: boolean;
   readonly configuredNames: ReadonlySet<string>;
 }
@@ -163,12 +180,16 @@ export function resolveRoleSlots(inputs: RoleSlotInputs): RoleSlotResolution {
   const architect = architectOccupantFor(inputs.architectMode);
   if (architect !== null) requested.prompt_architect = architect;
 
-  const reviewer = reviewerOccupantFor(inputs.hermesMode);
+  const reviewer = reviewerOccupantFor(inputs.reviewerOccupant);
   if (reviewer.kind === 'occupant') requested.reviewer = reviewer.occupantId;
   if (reviewer.kind === 'invalid') invalidSelectors.push('reviewer');
 
-  const coding = (inputs.codingAgentOccupant ?? '').trim();
-  if (coding !== '') requested.coding_agent = coding;
+  if (inputs.fakeCodingRuntime) {
+    requested.coding_agent = 'claude_code_fake';
+  } else {
+    const coding = (inputs.codingAgentOccupant ?? '').trim();
+    if (coding !== '') requested.coding_agent = coding;
+  }
 
   return {
     hosted: inputs.hosted,
@@ -184,7 +205,7 @@ export function resolveRoleSlots(inputs: RoleSlotInputs): RoleSlotResolution {
       selectorNames: {
         prompt_architect: 'RELAY_PROMPT_ARCHITECT_MODE',
         coding_agent: CODING_AGENT_ROLE_ENV,
-        reviewer: HERMES_MODE_ENV,
+        reviewer: REVIEWER_ROLE_ENV,
       },
     }),
   };
@@ -194,17 +215,31 @@ export function resolveRoleSlots(inputs: RoleSlotInputs): RoleSlotResolution {
 export function resolveRoleSlotsFromEnv(env: NodeJS.ProcessEnv): RoleSlotResolution {
   return resolveRoleSlots({
     architectMode: env.RELAY_PROMPT_ARCHITECT_MODE,
-    hermesMode: env[HERMES_MODE_ENV],
+    reviewerOccupant: env[REVIEWER_ROLE_ENV],
     codingAgentOccupant: env[CODING_AGENT_ROLE_ENV],
+    fakeCodingRuntime: env.RELAY_BRIDGE_FAKE_CLAUDE === '1',
     hosted: isProductionDeployment(env),
     configuredNames: configuredNames(env),
   });
 }
 
-/** One safe line naming who holds each role, for the mission event stream. */
+/**
+ * One safe line naming who holds each role, for the mission event stream.
+ *
+ * A REFUSAL LEADS WITH ITS COUNT. `safeError` truncates at 600 characters and
+ * the worst realistic refusal measured 558 — so one more problem, or one
+ * longer variable name, would silently drop the tail and defeat the "EVERY
+ * problem, not the first" guarantee with no failing test. Leading with the
+ * count means truncation can cost detail but never the fact that detail is
+ * missing.
+ */
 export function describeBinding(resolution: RoleSlotResolution): string {
   if (!resolution.binding.ok) {
-    return resolution.binding.problems.map((p) => p.safeMessage).join(' ');
+    const { problems } = resolution.binding;
+    const lead = problems.length === 1
+      ? '1 role problem: '
+      : `${String(problems.length)} role problems: `;
+    return lead + problems.map((p) => p.safeMessage).join(' ');
   }
   const { bindings } = resolution.binding;
   // Composed from `renderBindingLine`, so the occupant name a founder reads is

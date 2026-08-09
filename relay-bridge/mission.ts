@@ -49,10 +49,9 @@ import {
 } from './hermes-reviewer';
 import { buildAttestation, decideCompletion, digest, type ExecutionAttestation } from './attestation';
 import { isProductionDeployment } from './deployment-environment';
-import { HERMES_MODE_ENV } from './reviewer-harness/hermes/hermes-transport';
 import {
-  CODING_AGENT_ROLE_ENV, configuredNames, describeBinding, missionDispatchProblems,
-  resolveRoleSlots,
+  CODING_AGENT_ROLE_ENV, REVIEWER_ROLE_ENV, configuredNames, describeBinding,
+  missionDispatchProblems, resolveRoleSlots,
 } from './role-slot-config';
 import { safeError, safeText } from './redact';
 import type {
@@ -492,8 +491,11 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
        */
       const roles = resolveRoleSlots({
         architectMode: architectEnv.RELAY_PROMPT_ARCHITECT_MODE,
-        hermesMode: hermesEnv[HERMES_MODE_ENV],
+        reviewerOccupant: hermesEnv[REVIEWER_ROLE_ENV] ?? architectEnv[REVIEWER_ROLE_ENV],
         codingAgentOccupant: hermesEnv[CODING_AGENT_ROLE_ENV] ?? architectEnv[CODING_AGENT_ROLE_ENV],
+        // The mode the bridge already resolved, not a second reading of the
+        // variable behind it.
+        fakeCodingRuntime: config.claudeMode === 'fake',
         /**
          * ONE-WAY, LIKE THE FUNCTION ITSELF.
          *
@@ -507,7 +509,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
          * `process.env` — which makes it a latent fail-OPEN, and the only kind
          * worth closing before it is reachable.
          */
-        hosted: isProductionDeployment(process.env) || isProductionDeployment(hermesEnv),
+        hosted: isProductionDeployment(process.env)
+          || isProductionDeployment(architectEnv)
+          || isProductionDeployment(hermesEnv),
         // Both environments count: a deployment sets one process environment,
         // and only the tests hand these two apart.
         configuredNames: new Set([
@@ -581,19 +585,32 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         category: 'relay',
         truth: 'relay_evidence',
         headline: 'Preflight passed — Prompt Architect, Coding Agent, and Reviewer are all available.',
+        /**
+         * WHO HOLDS EACH ROLE, FROM THE BINDING ITSELF.
+         *
+         * `describeBinding` composes this from `renderBindingLine`, so the
+         * occupant names a founder reads here are the ones the binding
+         * produced. The previous version built its own sentence from the same
+         * fields, which made `renderBindingLine` dead code carrying a claim
+         * that three surfaces shared it.
+         */
         detail: live
-          ? `Prompt Architect: ${safeText(boundRoles.prompt_architect.occupant.displayName)} ` +
-            `(${safeText(architectConfig.model ?? 'model configured')}) · ` +
-            `Coding Agent: ${safeText(boundRoles.coding_agent.occupant.displayName)} ` +
-            `(${runtime.runtime.provenance}) · ` +
-            `Reviewer: ${safeText(boundRoles.reviewer.occupant.displayName)} ` +
-            `(${safeText(hermesReady?.provider ?? 'configured provider')}, ` +
-            `${safeText(hermesReady?.model ?? 'configured model')}, read-only).`
+          ? `${describeBinding(roles)} · Architect model ` +
+            `${safeText(architectConfig.model ?? 'configured')} · Reviewer ` +
+            `${safeText(hermesReady?.provider ?? 'configured provider')}/` +
+            `${safeText(hermesReady?.model ?? 'configured model')}, read-only.`
           : 'Development path: Sunday Alcatraz (Fusion) architect · no live Prompt Architect or Reviewer call.',
-        // The slot assignment itself, separate from readiness: what was
-        // REQUESTED for each role. What actually answers is attested per role.
+        /**
+         * The slot assignment, separate from readiness: what was REQUESTED for
+         * each role. What actually answers is attested per role.
+         *
+         * The Coding Agent entry carries its runtime PROVENANCE, because
+         * `RELAY_BRIDGE_FAKE_CLAUDE=1` resolves a synthetic executable while
+         * the occupant is still `claude_code_local` — an unqualified id there
+         * would claim the installed CLI held the role when a fake ran.
+         */
         meta: `ROLES ${boundRoles.prompt_architect.requestedOccupantId} · `
-          + `${boundRoles.coding_agent.requestedOccupantId} · `
+          + `${boundRoles.coding_agent.requestedOccupantId}(${runtime.runtime.provenance}) · `
           + `${boundRoles.reviewer.requestedOccupantId}`,
       });
 
@@ -901,13 +918,12 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           // The REQUESTED identity, from the binding. What actually ran is
           // observed inside the coding leg and never copied from here.
           requestedOccupant: {
-            displayName: boundRoles.coding_agent.occupant.displayName,
+            actorName: boundRoles.coding_agent.occupant.actorName,
             adapterId: boundRoles.coding_agent.occupant.adapterId,
-            // Narrowed at the boundary: a Coding Agent occupant is paid for
-            // by a subscription or by the API, and the registry's other two
-            // values cannot describe one.
-            billingPath: boundRoles.coding_agent.occupant.billingPath === 'api'
-              ? 'api' : 'subscription',
+            // Passed through, not narrowed. The coding leg owns the
+            // translation into the attestation's vocabulary, and a run that
+            // spends nothing must not be laundered into one that does.
+            billingPath: boundRoles.coding_agent.occupant.billingPath,
           },
           requiresIndependentReview: live,
           onState: (s) => {

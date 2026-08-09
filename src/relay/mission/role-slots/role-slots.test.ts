@@ -84,6 +84,44 @@ describe('the role-slot registry', () => {
     expect(localHermes.environments).not.toContain('hosted');
   });
 
+  /**
+   * THE GUARANTEE `coding.ts` CLAIMS. Its `requestedOccupant` narrows
+   * `billingPath` to `subscription | api` and says a `none` or `unknown`
+   * occupant would be "a type error here rather than a billing path invented
+   * at run time". Nothing enforced that: the registry's field is the full
+   * union, and the single call site launders it with a ternary that maps
+   * everything not `api` to `subscription` — attesting a free development
+   * engine as subscription-paid. This is the missing half of that claim.
+   */
+  it('registers no Coding Agent whose billing path the attestation cannot express', () => {
+    for (const entry of occupantsForRole('coding_agent')) {
+      // Every one of these has a distinct attestation value: `subscription`,
+      // `api_billed`, `simulated`. What must never happen is a fourth value
+      // silently becoming one of them.
+      expect(['subscription', 'api', 'none']).toContain(entry.billingPath);
+    }
+  });
+
+  /** A spend-free occupant must never be attested as one that spends. */
+  it('marks the offline coding pipeline as costing nothing', () => {
+    const fake = findOccupant('coding_agent', 'claude_code_fake') as RoleOccupant;
+    expect(fake.billingPath).toBe('none');
+    expect(fake.kind).toBe('development_engine');
+    // It needs no installed CLI, so it runs anywhere — which is the whole
+    // reason it could not be a mode of the installed-CLI occupant.
+    expect(fake.environments).toContain('hosted');
+  });
+
+  /** Every occupant needs the runtime-facing name `actorMatches` compares. */
+  it('gives every occupant an actor name distinct from its UI label', () => {
+    for (const entry of ROLE_OCCUPANTS) {
+      expect(entry.actorName.trim()).not.toBe('');
+      // The UI label may elaborate; the actor name must not carry the
+      // parenthetical, because the adapter never reports one.
+      expect(entry.actorName).not.toContain('(');
+    }
+  });
+
   /** The hosted surface is API-billed. The local one is not. This is the exact
    *  distinction the hard-coded `billingPath: 'subscription'` erased. */
   it('separates the two Coding Agent billing paths', () => {
@@ -336,6 +374,7 @@ describe('reviewer independence at binding time', () => {
     adapterId: 'reviewer-adapter',
     independenceGroup: 'reviewer-group',
     displayName: 'Test occupant',
+    actorName: 'Test occupant',
     kind: 'harness_remote',
     environments: ['hosted'],
     adapterAvailable: true,

@@ -59,10 +59,20 @@ const HERMES_REMOTE_CONFIG = Object.freeze([
   'RELAY_HERMES_SERVICE_TOKEN',
 ]);
 /**
- * Required only where the trusted-origin gate is armed, which is production.
- * Kept separate from `requiredConfig` rather than folded into it, because
- * demanding an allowlist on a laptop pointing at `127.0.0.1` would refuse a
- * setup `checkServiceUrl` deliberately permits.
+ * WHAT `hostedOnlyConfig` HERE ACTUALLY MEANS, corrected.
+ *
+ * The first version said "required only where the trusted-origin gate is
+ * armed, which is production". The gate is armed EVERYWHERE — outside
+ * production it merely ALSO accepts a loopback origin. So a laptop pointing at
+ * a non-loopback Hermes service binds here and is refused by
+ * `checkServiceUrl`, which is the very "refusal one layer too late" this field
+ * was added to prevent, narrowed rather than removed.
+ *
+ * The honest condition is loopback-ness of the service URL, and this module
+ * cannot evaluate it: it sees variable NAMES, never values, deliberately. So
+ * the field stays hosted-scoped — where the answer is unambiguous, because
+ * loopback is never right for a hosted service — and the laptop case is stated
+ * as a known limit rather than claimed as covered.
  */
 const HERMES_REMOTE_PRODUCTION_CONFIG = Object.freeze([
   'RELAY_HERMES_TRUSTED_ORIGINS',
@@ -72,6 +82,7 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
   /* ------------------------------------------------- prompt architect --- */
   {
     occupantId: 'openai_gpt_architect',
+    actorName: 'ChatGPT',
     role: 'prompt_architect',
     agentId: 'openai-prompt-architect',
     adapterId: 'openai-architect',
@@ -89,6 +100,7 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
   },
   {
     occupantId: 'fusion_architect',
+    actorName: 'Sunday Alcatraz',
     role: 'prompt_architect',
     agentId: 'fusion-architect',
     adapterId: 'fusion-architect',
@@ -107,6 +119,7 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
   /* ----------------------------------------------------- coding agent --- */
   {
     occupantId: 'claude_code_local',
+    actorName: 'Claude Code',
     role: 'coding_agent',
     agentId: 'claude-code',
     // Matches `CLAUDE_ADAPTER_ID` / `LOCAL_ADAPTER_ID`, held by a test.
@@ -129,6 +142,7 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
   },
   {
     occupantId: 'claude_agent_sdk_hosted',
+    actorName: 'Claude Agent SDK',
     role: 'coding_agent',
     agentId: 'claude-agent-sdk',
     // Matches `HOSTED_ADAPTER_ID`, held by a test.
@@ -148,9 +162,48 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
     ],
   },
 
+  {
+    /**
+     * THE KEYLESS OFFLINE PIPELINE, AS AN OCCUPANT.
+     *
+     * `RELAY_BRIDGE_FAKE_CLAUDE=1` is a documented capability — a whole
+     * mission with no credential and no spend, driven by the repo's own fake
+     * executable. Modelling it as a MODE of `claude_code_local` broke it on a
+     * hosted deployment: that occupant declares `founder_machine` because it
+     * needs an installed CLI, and the fake needs no CLI at all. A synthetic
+     * runtime that spends nothing and runs anywhere is a different occupant,
+     * and saying so is what this registry is for.
+     *
+     * It drives the same ADAPTER, so `adapterId` matches — `surfaceForAdapter`
+     * is right that the work went through the local Claude Code surface. What
+     * differs is who was asked for, what it costs, and where it can run.
+     */
+    occupantId: 'claude_code_fake',
+    // What the fake executable reports being. `actorMatches` compares this
+    // with the adapter's own label, so it is the adapter's vocabulary.
+    actorName: 'Claude Code',
+    role: 'coding_agent',
+    agentId: 'claude-code-fake',
+    adapterId: 'claude-code-local',
+    independenceGroup: 'anthropic-claude',
+    displayName: 'Relay fake Claude Code (offline, no spend)',
+    kind: 'development_engine',
+    environments: ['founder_machine', 'hosted'],
+    adapterAvailable: true,
+    // Nothing is spent, and the attestation says `simulated` rather than
+    // inventing a payer.
+    billingPath: 'none',
+    requiredConfig: Object.freeze([]),
+    verificationNotes: [
+      'A development path. No provider is contacted and no credential is read; it must never be presented as a real run.',
+      'Selected by RELAY_BRIDGE_FAKE_CLAUDE=1, which is a deployment mode rather than a role choice.',
+    ],
+  },
+
   /* --------------------------------------------------------- reviewer --- */
   {
     occupantId: 'hermes_local',
+    actorName: 'Hermes',
     role: 'reviewer',
     agentId: 'hermes',
     adapterId: 'hermes',
@@ -168,6 +221,7 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
   },
   {
     occupantId: 'hermes_remote_service',
+    actorName: 'Hermes',
     role: 'reviewer',
     agentId: 'hermes',
     adapterId: 'hermes',

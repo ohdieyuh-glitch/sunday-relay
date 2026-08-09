@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { CLAUDE_ADAPTER_ID } from '../src/relay/connectors/claude-code/adapter';
 import {
-  ROLE_OCCUPANTS, findOccupant, type RoleOccupant,
+  ROLE_OCCUPANTS, findOccupant, occupantsForRole, type RoleOccupant,
 } from '../src/relay/mission/role-slots';
 import {
-  HOSTED_ADAPTER_ID, HOSTED_API_KEY_ENV, LOCAL_ADAPTER_ID, surfaceForAdapter,
+  HOSTED_ADAPTER_ID, HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV, LOCAL_ADAPTER_ID, surfaceForAdapter,
 } from './hosted-coding-agent/hosted-readiness';
 import {
-  HERMES_MODES, HERMES_MODE_ENV, HERMES_SERVICE_TOKEN_ENV, HERMES_SERVICE_URL_ENV,
+  HERMES_MODE_ENV, HERMES_SERVICE_TOKEN_ENV, HERMES_SERVICE_URL_ENV,
+  HERMES_TRUSTED_ORIGINS_ENV,
 } from './reviewer-harness/hermes/hermes-transport';
 import { architectPreflight, loadArchitectConfig } from './openai-architect';
-import { resolveRoleSlotsFromEnv } from './role-slot-config';
+import { MISSION_DISPATCHABLE_OCCUPANTS, resolveRoleSlotsFromEnv } from './role-slot-config';
 import { createBridgeServer } from './server';
 import { loadBridgeConfig } from './config';
 
@@ -36,9 +37,17 @@ const occupant = (role: Parameters<typeof findOccupant>[0], id: string): RoleOcc
 };
 
 describe('role-slot registry parity with the bridge', () => {
-  it('asks for the credential variable the hosted Coding Agent actually reads', () => {
-    expect(occupant('coding_agent', 'claude_agent_sdk_hosted').requiredConfig)
-      .toContain(HOSTED_API_KEY_ENV);
+  it('asks for exactly the variables the hosted Coding Agent probe actually reads', () => {
+    // BOTH names, held against the bridge's own constants. Asserting only the
+    // credential let `RELAY_HOSTED_CODING_MODEL` be a hard-coded string in the
+    // registry that no parity check covered — the drift this file exists for.
+    expect([...occupant('coding_agent', 'claude_agent_sdk_hosted').requiredConfig].sort())
+      .toEqual([HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV].sort());
+  });
+
+  it('asks for the trusted-origin allowlist by the name the gate reads', () => {
+    expect(occupant('reviewer', 'hermes_remote_service').hostedOnlyConfig)
+      .toEqual([HERMES_TRUSTED_ORIGINS_ENV]);
   });
 
   it('asks for exactly the variables remote Hermes selection actually requires', () => {
@@ -83,6 +92,19 @@ describe('role-slot registry parity with the bridge', () => {
    * whose adapter id it cannot place would report a run as having happened
    * nowhere.
    */
+  /**
+   * A STALE ENTRY IN THE DISPATCHABLE SET IS INVISIBLE. A typo'd id would be
+   * caught incidentally, because every mission would refuse. An id for an
+   * occupant that no longer exists — or one added here and never registered —
+   * would be caught by nothing at all.
+   */
+  it('names only registered occupants as dispatchable', () => {
+    const registered = new Set(ROLE_OCCUPANTS.map((o) => o.occupantId));
+    for (const id of MISSION_DISPATCHABLE_OCCUPANTS) {
+      expect(registered, `${id} is dispatchable but not registered`).toContain(id);
+    }
+  });
+
   it('maps every registered Coding Agent occupant onto a known execution surface', () => {
     for (const entry of ROLE_OCCUPANTS.filter((o) => o.role === 'coding_agent')) {
       expect(surfaceForAdapter(entry.adapterId)).not.toBe('unavailable');
@@ -138,27 +160,29 @@ describe('role-slot disclosure on the unauthenticated health route', () => {
    * while the transport refused the value, and `romote` reported "no occupant
    * is configured" for a variable that is configured, misspelled.
    */
-  it.each(['REMOTE', 'romote', 'Local', 'remote '])(
-    'refuses %j as an invalid reviewer selector rather than defaulting or calling it unset',
-    (mode) => {
+  it.each(['HERMES_LOCAL', 'hermes_locall', 'remote', 'local', '', '   ', ' hermes_local '])(
+    'answers %j as unset, invalid, or an occupant — never by silently defaulting',
+    (requested) => {
       const resolution = resolveRoleSlotsFromEnv({
         RELAY_PROMPT_ARCHITECT_MODE: 'fusion',
-        RELAY_HERMES_MODE: mode,
+        RELAY_ROLE_REVIEWER: requested,
       });
       const refusals = resolution.binding.ok
         ? []
         : resolution.binding.problems.filter((p) => p.reason === 'invalid_selector');
 
       /**
-       * THE CLAIM IS AGREEMENT ABOUT THE VALUE, AND NOTHING MORE — and the
-       * obvious oracle is wrong. `selectHermesMode` answers `ok: false` both
-       * for a value outside its vocabulary AND for a perfectly valid `remote`
-       * with no service URL, so keying off its boolean tests configuration and
-       * calls it parity. The shared fact is the VOCABULARY, so that is what
-       * both sides are compared against, read from the transport's own list.
+       * The vocabulary is the REGISTRY's occupant ids, read from the registry
+       * rather than restated here. `local` and `remote` are deliberately in
+       * this list: they were the old transport-mode values, and a selector
+       * that still accepted them would mean the two surfaces had been merged
+       * again. Empty and whitespace are unset, not invalid — an unset slot on
+       * a laptop defaults, which is a different answer from a refusal.
        */
-      const valid = (HERMES_MODES as readonly string[]).includes(mode.trim());
-      expect(refusals.map((p) => p.reason)).toEqual(valid ? [] : ['invalid_selector']);
+      const trimmed = requested.trim();
+      const known = occupantsForRole('reviewer').some((o) => o.occupantId === trimmed);
+      const expected = trimmed === '' || known ? [] : ['invalid_selector'];
+      expect(refusals.map((p) => p.reason)).toEqual(expected);
     },
   );
 });
@@ -218,23 +242,51 @@ describe('the real /relay-api/health response', () => {
     });
   }, 30_000);
 
-  it('reports bound slots on a deployment that has staffed its roles', async () => {
+  /**
+   * BOUND IS NOT RUNNABLE, AND THE STATUS SIGNAL MUST NOT CONFLATE THEM.
+   *
+   * This environment binds cleanly: every occupant is registered,
+   * hosted-capable and configured. Not one mission can run, because neither
+   * the hosted runner nor the remote transport is wired into the mission
+   * pipeline. The first version of this test asserted `roleSlotsBound: true`
+   * here — the unauthenticated status route announcing staffed roles for a
+   * deployment that refuses every mission.
+   */
+  it('does not report slots as bound when nothing bound can actually be dispatched', async () => {
     await withServer({
       RAILWAY_ENVIRONMENT: 'production',
       RELAY_PROMPT_ARCHITECT_MODE: 'fusion',
       RELAY_ROLE_CODING_AGENT: 'claude_agent_sdk_hosted',
       ANTHROPIC_API_KEY: 'sk-ant-FAKETESTNOTREAL-never-served', // relay-boundary:allow-fixture — synthetic
       RELAY_HOSTED_CODING_MODEL: 'claude-test',
+      RELAY_ROLE_REVIEWER: 'hermes_remote_service',
+      // SELECTS versus CONFIGURES. `RELAY_ROLE_REVIEWER` names the occupant
+      // the mission binds; `RELAY_HERMES_MODE` and the rest configure the
+      // transport that occupant needs. Two variables, two jobs.
       RELAY_HERMES_MODE: 'remote',
       RELAY_HERMES_SERVICE_URL: 'https://hermes.internal',
       RELAY_HERMES_SERVICE_TOKEN: 'not-a-real-token',
       RELAY_HERMES_TRUSTED_ORIGINS: 'https://hermes.internal',
     }, (body) => {
-      expect(body.roleSlotsBound).toBe(true);
-      expect(body.roleSlotRefusals).toEqual([]);
+      expect(body.roleSlotsBound).toBe(false);
+      expect(body.roleSlotRefusals).toEqual([
+        'coding_agent:occupant_not_dispatchable',
+        'reviewer:occupant_not_dispatchable',
+      ]);
       const serialized = JSON.stringify(body);
       expect(serialized).not.toContain('sk-ant-FAKETESTNOTREAL');
       expect(serialized).not.toContain('not-a-real-token');
+    });
+  }, 30_000);
+
+  it('reports slots bound when every one of them is dispatchable', async () => {
+    await withServer({
+      RELAY_PROMPT_ARCHITECT_MODE: 'fusion',
+      RELAY_ROLE_CODING_AGENT: 'claude_code_local',
+      RELAY_ROLE_REVIEWER: 'hermes_local',
+    }, (body) => {
+      expect(body.roleSlotsBound).toBe(true);
+      expect(body.roleSlotRefusals).toEqual([]);
     });
   }, 30_000);
 });

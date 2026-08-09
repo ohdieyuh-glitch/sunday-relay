@@ -292,18 +292,27 @@ export async function runCodingMission(input: {
    * observed: the adapter it really drove.
    */
   requestedOccupant?: {
-    readonly displayName: string;
+    /** The name the RUNTIME calls itself — `actorMatches` compares this with
+     *  what the adapter reports, so both halves need one vocabulary. Building
+     *  it from the UI label made the comparison answer false on the happy
+     *  path, hiding a genuine swap among the normal ones. */
+    readonly actorName: string;
     readonly adapterId: string;
     /**
      * The REGISTRY's vocabulary, translated below.
      *
      * Two vocabularies exist and neither is wrong: the registry says how an
      * occupant is paid for (`api`), the attestation says what a run consumed
-     * (`api_billed`, which `isPaidApiCall` tests for exactly). Narrowed to the
-     * two a Coding Agent can be, so a `none` or `unknown` occupant is a type
-     * error here rather than a billing path invented at run time.
+     * (`api_billed`, which `isPaidApiCall` tests for exactly).
+     *
+     * `none` is the offline fake pipeline and becomes `simulated`, NOT
+     * `subscription`. An earlier version narrowed this to two values and
+     * claimed the other two would be "a type error rather than a billing path
+     * invented at run time"; nothing enforced that, and the single call site
+     * mapped everything-not-`api` to `subscription` — attesting a run that
+     * spent nothing as subscription-paid. `unknown` stays unknown.
      */
-    readonly billingPath: 'subscription' | 'api';
+    readonly billingPath: 'subscription' | 'api' | 'none' | 'unknown';
   };
 }): Promise<CodingOutcome> {
   const { executablePath, capabilities, now, ids, emit } = input;
@@ -493,7 +502,7 @@ export async function runCodingMission(input: {
      * harnesses unchanged.
      */
     const requestedOccupant = input.requestedOccupant ?? {
-      displayName: 'Claude Code',
+      actorName: 'Claude Code',
       adapterId: CLAUDE_ADAPTER_ID,
       billingPath: 'subscription' as const,
     };
@@ -501,12 +510,16 @@ export async function runCodingMission(input: {
     // previously carried two independent literals that happened to agree.
     const codingBillingPath = requestedOccupant.billingPath === 'api'
       ? 'api_billed' as const
-      : 'subscription' as const;
+      : requestedOccupant.billingPath === 'subscription'
+        ? 'subscription' as const
+        : requestedOccupant.billingPath === 'none'
+          ? 'simulated' as const
+          : 'unknown' as const;
     const codingAttestation = buildAttestation({
       missionId: input.missionId ?? String(taskId),
       missionRevision: input.missionRevision,
       role: 'coding_agent',
-      requestedActor: requestedOccupant.displayName,
+      requestedActor: requestedOccupant.actorName,
       actualActor: 'Claude Code',
       requestedRuntime: requestedOccupant.adapterId,
       actualRuntime: CLAUDE_ADAPTER_ID,
