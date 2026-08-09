@@ -539,3 +539,67 @@
 .rps-mcp-loading,
 .rps-mcp-unavailable { color: var(--rps-dim); }
 .rps-mcp .rmcp { border-color: var(--rps-line); }
+
+/* ------------------------------------------------------- setup depth */
+
+/* TWO DOORS, ONE CONFIGURATION. A segmented pair rather than a dropdown:
+   the choice is between two named things a founder should be able to see at
+   once, and it lives in the header because it governs the whole screen. */
+.rps-modeswitch {
+  display: inline-flex;
+  border: 1px solid var(--rps-gold-dim);
+}
+.rps-modeswitch-btn {
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  padding: 5px 12px;
+  color: var(--rps-dim, #8b8578);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.rps-modeswitch-btn + .rps-modeswitch-btn { border-left: 1px solid var(--rps-gold-dim); }
+.rps-modeswitch-btn.is-active {
+  color: #0b0d12;
+  background: var(--rps-gold);
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------- quick setup */
+
+.rps-quick {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: clamp(14px, 3vw, 28px);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.rps-quick-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--rps-dim, #8b8578);
+  border-left: 2px solid var(--rps-gold-dim);
+  padding-left: 12px;
+}
+.rps-quick-group {
+  border: 1px solid var(--rps-line, #1c2230);
+  padding: 16px 18px;
+}
+.rps-quick-heading {
+  margin: 0 0 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--rps-gold);
+}
+.rps-quick-blockers {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--rps-amber, #e0b25c);
+}
+.rps-quick-actions { display: flex; flex-wrap: wrap; gap: 10px; }

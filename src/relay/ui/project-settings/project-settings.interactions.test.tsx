@@ -31,6 +31,10 @@ function setup(overrides: Partial<RelayProjectSettingsProps> = {}) {
     onStartProject: vi.fn(),
     onConnectRepository: vi.fn(),
     onBack: vi.fn(),
+    // These exercise the FIFTEEN-SECTION flow, which is no longer the view
+    // that opens first — Quick Setup is. Naming it here keeps every assertion
+    // below meaning exactly what it meant before.
+    initialSetupMode: 'advanced',
     ...overrides,
   };
   render(createElement(RelayProjectSettings, props));

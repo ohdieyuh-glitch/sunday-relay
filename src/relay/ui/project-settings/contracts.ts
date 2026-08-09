@@ -39,6 +39,14 @@ export interface AgentOption {
   independentFrom?: string[];
 }
 
+/**
+ * Which door into the project's configuration is open.
+ *
+ * Two VIEWS of one draft, never two drafts. Quick is the default because the
+ * fifteen-section flow is the thorough path, not the everyday one.
+ */
+export type SetupMode = 'quick' | 'advanced';
+
 export type ReviewerPolicy = 'never' | 'substantive' | 'security_sensitive' | 'every_mission';
 
 export interface RelayWorkforceSelection {
@@ -288,4 +296,10 @@ export interface RelayProjectSettingsProps {
    * caller is unchanged.
    */
   backLabel?: string;
+  /**
+   * Which view opens first. Defaults to `quick`: the fifteen-section flow is
+   * the thorough path, not the everyday one. Both write the same draft through
+   * the same callbacks, so this changes what is shown and nothing else.
+   */
+  initialSetupMode?: SetupMode;
 }
