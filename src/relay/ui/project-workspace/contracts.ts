@@ -349,6 +349,14 @@ export interface RelayProjectWorkspaceProps {
   onOpenTerminal: () => void;
   onCloseTerminal: () => void;
   onOpenProjectSettings: () => void;
+  /**
+   * Open the Project Brain's own view.
+   *
+   * OPTIONAL, and its absence is honest rather than inert: a host that does
+   * not implement the view gets a Brain that is present and not clickable,
+   * instead of a control that appears to open something and does nothing.
+   */
+  onOpenProjectBrain?: () => void;
   onOpenManualTask: (taskId: string) => void;
   onApproveManualTask: (taskId: string) => void;
   onRejectManualTask: (taskId: string) => void;

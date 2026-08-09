@@ -33,6 +33,7 @@ import type { ProjectMessage, WorkspaceFixtureKey } from '../project-workspace';
 import { AGENT_OPTIONS, RelayProjectSettings } from '../project-settings';
 import type { ProjectSettingsDraft } from '../project-settings';
 import { buildRelayMcpSettingsView } from '../mcp';
+import { RelayProjectBrainView } from '../project-workspace/RelayProjectBrainView';
 import {
   deriveMissionProjection,
   getRelayAppStore,
@@ -112,7 +113,9 @@ export type PreviewRoute =
   | { screen: 'home' }
   | { screen: 'settings'; projectId: string }
   | { screen: 'console' }
-  | { screen: 'workspace'; projectId: string; terminal: boolean };
+  | { screen: 'workspace'; projectId: string; terminal: boolean }
+  /** The Project Brain's own view, opened from the Brain in the workspace. */
+  | { screen: 'brain'; projectId: string };
 
 export function parsePreviewHash(hash: string): PreviewRoute {
   const clean = hash.replace(/^#/, '');
@@ -123,6 +126,7 @@ export function parsePreviewHash(hash: string): PreviewRoute {
   if (parts[1] === 'project-settings') return { screen: 'settings', projectId: '' };
   if (parts[1] === 'project' && parts[2]) {
     if (parts[3] === 'settings') return { screen: 'settings', projectId: parts[2] };
+    if (parts[3] === 'brain') return { screen: 'brain', projectId: parts[2] };
     return { screen: 'workspace', projectId: parts[2], terminal: parts[3] === 'terminal' };
   }
   return { screen: 'home' };
@@ -725,6 +729,33 @@ export function RelayPreviewApp() {
    */
   const mcpSettings = useMemo(() => buildRelayMcpSettingsView(), []);
 
+  /**
+   * THE PROJECT BRAIN'S OWN VIEW.
+   *
+   * It reads the SAME state and document the workspace panel already read —
+   * there is one Brain and one source for it, and a second read model here
+   * would be a second answer to "what does Relay know about this project".
+   */
+  const brainProjectId = route.screen === 'brain' ? route.projectId : '';
+  const brainWorkspace = brainProjectId
+    ? WORKSPACE_FIXTURES[fixtureKey]
+    : null;
+  const projectBrainView = brainWorkspace ? (
+    <RelayProjectBrainView
+      state={brainWorkspace.projectBrainState}
+      {...(brainWorkspace.projectBrainDocument === undefined
+        ? {}
+        : { document: brainWorkspace.projectBrainDocument })}
+      onClose={() => navigate(`/relay/project/${brainProjectId}`)}
+    />
+  ) : (
+    <SafeNotFound
+      title="Relay could not load this Project Brain."
+      detail="Open a project first."
+      onHome={() => navigate('/relay')}
+    />
+  );
+
   const projectSettings = settingsProject ? (
     <RelayProjectSettings
       brief={settingsBrief?.draft ?? null}
@@ -897,6 +928,7 @@ export function RelayPreviewApp() {
         onOpenTerminal={() => navigate(`/relay/project/${projectId}/terminal`)}
         onCloseTerminal={() => navigate(`/relay/project/${projectId}`)}
         onOpenProjectSettings={() => navigate(`/relay/project/${projectId}/settings`)}
+        onOpenProjectBrain={() => navigate(`/relay/project/${projectId}/brain`)}
         onOpenManualTask={(id) => pushWsMessage('relay', `Opened Manual Task ${id}.`)}
         onApproveManualTask={(id) => pushWsMessage('relay', `Manual Task ${id} approved.`)}
         onRejectManualTask={(id) => pushWsMessage('relay', `Manual Task ${id} kept blocked.`)}
@@ -970,6 +1002,7 @@ export function RelayPreviewApp() {
             + 'Open or create a project from the Relay Entry Home to edit its settings.',
           );
         }}
+        onOpenProjectBrain={() => navigate('/relay/project/rly-001/brain')}
         onOpenManualTask={(id) => pushWsMessage('relay', `Fixture: opened Manual Task ${id}.`)}
         onApproveManualTask={(id) => pushWsMessage('relay', `Fixture: Manual Task ${id} approved.`)}
         onRejectManualTask={(id) => pushWsMessage('relay', `Fixture: Manual Task ${id} blocked.`)}
@@ -992,6 +1025,7 @@ export function RelayPreviewApp() {
       route.screen === 'workspace' && route.terminal,
     ) ?? home;
   } else if (route.screen === 'console') screen = <MissionControl />;
+  else if (route.screen === 'brain') screen = projectBrainView;
   else if (route.screen === 'settings') screen = projectSettings;
   else if (route.screen === 'workspace') screen = workspace ?? home;
   else screen = home;

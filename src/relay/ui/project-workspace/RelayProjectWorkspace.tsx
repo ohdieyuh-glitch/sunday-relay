@@ -13,6 +13,7 @@ import { RelayReviewerStatus } from './RelayReviewerStatus';
 import { RelayVerificationSummary } from './RelayVerificationSummary';
 import { RelayResearchStatus } from './RelayResearchStatus';
 import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
+import { RelayProjectBrainOrb } from './RelayProjectBrainOrb';
 import { RelayOperationsPanel } from './RelayOperationsPanel';
 import { RelayWorkspaceDog } from './RelayWorkspaceDog';
 import {
@@ -222,6 +223,7 @@ export function RelayProjectWorkspace(
     onOpenTerminal,
     onCloseTerminal,
     onOpenProjectSettings,
+    onOpenProjectBrain,
     onOpenManualTask,
     onApproveManualTask,
     onRejectManualTask,
@@ -338,6 +340,47 @@ export function RelayProjectWorkspace(
       <RelayWorkforceStrip workforce={workforce} mode={mode} phase={phase} />
 
       <main className="rpw-main">
+        {/* THE PROJECT BRAIN, ABOVE THE DOG, ABOVE THE MISSION BOX.
+            It lived in the right-hand rail as a definition list — a status
+            panel beside the workspace rather than part of it. The composition
+            the product is trying to communicate is vertical: what the agent
+            KNOWS, the agent ITSELF, and what you ASK it. So the Brain sits
+            here, the stage follows immediately below, and a single faint
+            column of light joins them rather than an arrow or a label.
+            The counts and the document did not move — they are what the Brain
+            view shows when it is opened. */}
+        <div className="rpw-brainstage">
+          {/* A CONTROL ONLY WHERE THERE IS SOMETHING TO OPEN. A host without
+              the Brain view renders the object and no button, rather than a
+              button that looks like it opens something and does not. */}
+          {onOpenProjectBrain === undefined ? (
+            <RelayProjectBrainOrb
+              reducedMotion={reducedMotion}
+              populated={projectBrainState.entries > 0}
+            />
+          ) : (
+            <button
+              type="button"
+              className="rpw-brainstage-open"
+              onClick={onOpenProjectBrain}
+              aria-label="Open the Project Brain"
+            >
+              <RelayProjectBrainOrb
+                reducedMotion={reducedMotion}
+                populated={projectBrainState.entries > 0}
+              />
+            </button>
+          )}
+          <span className="rpw-brainstage-link" aria-hidden="true" />
+          <p className="rpw-brainstage-caption">
+            {/* Announce facts. A Brain with nothing recorded says so rather
+                than showing a zero that reads like a measurement. */}
+            {projectBrainState.entries > 0
+              ? `PROJECT BRAIN · ${String(projectBrainState.entries)} APPROVED`
+              : 'PROJECT BRAIN · NOTHING RECORDED YET'}
+          </p>
+        </div>
+
         {/* THE RELAY STAGE, between the workforce strip and the Relay Console.
             It replaces `.rpw-dogzone` + the motion boundary's full-width band:
             a frameless region with layers and depth, rather than ninety pixels

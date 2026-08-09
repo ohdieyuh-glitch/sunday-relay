@@ -2162,3 +2162,137 @@
 @media (prefers-reduced-motion: reduce) {
   .rbp-overlay, .rbp-sheet { transition: none; animation: none; }
 }
+
+/* ===========================================================================
+   THE PROJECT BRAIN — a floating object above the stage, not a status panel.
+
+   The Brain sat in the right-hand rail as a definition list. The direction is
+   explicit that it belongs ABOVE the Relay Dog, which is above the Mission
+   box, and that the three should read as one composition: what the agent
+   knows, the agent, and what you ask it.
+
+   Motion is deliberately slow. This sits over a workspace someone is working
+   in, and a fast or bright object there is a distraction rather than a
+   presence.
+   =========================================================================== */
+
+.rpw-brainstage {
+  --rpb-accent: #8f7cf0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.25rem 0 0;
+}
+
+/* The button IS the Brain — no chrome, because a framed control beside the
+   object would read as a panel again. */
+.rpw-brainstage-open {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  line-height: 0;
+}
+
+.rpw-brainstage-open:focus-visible {
+  outline: 2px solid var(--rpb-accent);
+  outline-offset: 6px;
+}
+
+.rpb-orb { display: block; overflow: visible; }
+
+/* A Brain with nothing recorded is the SAME object, dimmer — not a different
+   picture. The absence is stated in words elsewhere. */
+.rpb-orb--sparse { opacity: 0.55; }
+
+/* ONE SLOW ROTATION. The body carries the pathways and nodes with it, so the
+   network travels with the surface instead of sliding across it. */
+@keyframes rpb-rotate {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(360deg); }
+}
+
+/* Signals travelling the pathways, and nodes answering them. Both are small:
+   the object should look like it is thinking, not like it is alarming. */
+@keyframes rpb-signal {
+  0%, 100% { stroke-opacity: 0.28; }
+  50%      { stroke-opacity: 0.85; }
+}
+
+@keyframes rpb-node-pulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+
+@keyframes rpb-halo-breathe {
+  0%, 100% { opacity: 0.75; }
+  50%      { opacity: 1; }
+}
+
+.rpb-orb--live .rpb-body {
+  transform-origin: 50px 50px;
+  transform-box: fill-box;
+  animation: rpb-rotate 26s linear infinite;
+}
+.rpb-orb--live .rpb-path { animation: rpb-signal 4.5s ease-in-out infinite; }
+.rpb-orb--live .rpb-node { animation: rpb-node-pulse 3.2s ease-in-out infinite; }
+.rpb-orb--live .rpb-halo { animation: rpb-halo-breathe 6s ease-in-out infinite; }
+
+/* THE CONNECTION, communicated by proximity and light rather than an arrow.
+   A single faint column of the accent colour descends from the Brain toward
+   the stage below it. */
+.rpw-brainstage-link {
+  width: 1px;
+  height: 18px;
+  background: linear-gradient(
+    to bottom,
+    var(--rpb-accent) 0%,
+    rgba(143, 124, 240, 0.25) 60%,
+    transparent 100%
+  );
+  opacity: 0.7;
+}
+
+.rpw-brainstage-caption {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  opacity: 0.7;
+  margin: 0.15rem 0 0;
+}
+
+/* REDUCED MOTION STOPS EVERY PART OF IT, rotation included. */
+@media (prefers-reduced-motion: reduce) {
+  .rpb-orb--live .rpb-body,
+  .rpb-orb--live .rpb-path,
+  .rpb-orb--live .rpb-node,
+  .rpb-orb--live .rpb-halo { animation: none; }
+}
+
+/* The Brain's own view. The object stays the centrepiece — the founder
+   clicked a brain, and it should still be there when they arrive. */
+.rpb-view { padding: 1.25rem 1.5rem 2rem; }
+.rpb-view-header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.rpb-view-title { font-size: 0.9rem; letter-spacing: 0.22em; margin: 0; }
+.rpb-view-close { background: none; border: 0; cursor: pointer; font: inherit; letter-spacing: 0.12em; opacity: 0.8; }
+.rpb-view-close:hover { opacity: 1; }
+.rpb-view-stage { display: flex; justify-content: center; padding: 1.5rem 0 0.5rem; --rpb-accent: #8f7cf0; }
+.rpb-view-counts { display: flex; gap: 2rem; justify-content: center; margin: 0.5rem 0 1.25rem; }
+.rpb-view-counts dt { font-size: 0.6rem; letter-spacing: 0.14em; opacity: 0.65; }
+.rpb-view-counts dd { margin: 0.15rem 0 0; font-size: 1.05rem; }
+.rpb-view-empty { text-align: center; opacity: 0.75; max-width: 46ch; margin: 1rem auto; line-height: 1.5; }
+.rpb-view-sections { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.75rem; }
+.rpb-view-section h2 { margin: 0; font-size: inherit; font-weight: inherit; }
+.rpb-view-section-toggle {
+  width: 100%; display: flex; align-items: center; gap: 0.5rem;
+  background: none; border: 0; cursor: pointer; font: inherit;
+  padding: 0.5rem 0.25rem; letter-spacing: 0.1em; text-align: left;
+}
+.rpb-view-section-count { margin-left: auto; opacity: 0.55; font-size: 0.7rem; }
+.rpb-view-memory {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem 1.25rem; margin: 1rem 0 1.25rem;
+}
+.rpb-view-memory dt { font-size: 0.58rem; letter-spacing: 0.14em; opacity: 0.6; }
+.rpb-view-memory dd { margin: 0.1rem 0 0; font-size: 0.95rem; }
