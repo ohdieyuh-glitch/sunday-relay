@@ -71,6 +71,8 @@ export function createHostedClaudeInvoker(input: {
         outcome: {
           startedAt: at, completedAt: at,
           cancelled: false, timedOut: false, launchFailed: true,
+          // Nothing was loaded, so nothing started.
+          launchObserved: false,
         },
         events: [],
         sessionId: null,
@@ -124,6 +126,8 @@ export function createHostedClaudeInvoker(input: {
           cancelled: result.kind === 'cancelled',
           timedOut: result.kind === 'timed_out',
           launchFailed,
+          // The runtime's own init message, whatever went wrong afterwards.
+          launchObserved: 'observation' in result ? result.observation.initSeen : false,
         },
         events: [],
         sessionId: 'observation' in result ? result.observation.sessionId : null,
@@ -149,6 +153,7 @@ export function createHostedClaudeInvoker(input: {
         cancelled: false,
         timedOut: false,
         launchFailed: false,
+        launchObserved: result.observation.initSeen,
       },
       events: [],
       // The SDK's own session id, read off its init message. An earlier

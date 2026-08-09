@@ -52,6 +52,17 @@ export interface AgentInvocationOutcome {
    * there is no output to distrust and nothing in the workspace to inspect.
    */
   readonly launchFailed: boolean;
+  /**
+   * EVIDENCE THE RUNTIME ACTUALLY STARTED — not the absence of an error.
+   *
+   * `launchVerified` was `!launchFailed`, which is a different claim: a run
+   * cancelled or timed out during startup has no error and never launched, and
+   * was attested as launched and rendered API PAID. The correct rule already
+   * exists in this repository at `live-runner.ts` — `parsed.initSeen && no
+   * spawn error` — and this field carries the same evidence across the seam so
+   * both surfaces can apply it.
+   */
+  readonly launchObserved: boolean;
 }
 
 export interface AgentInvocationResult {
@@ -140,6 +151,9 @@ export function createLocalClaudeInvoker(input: {
         // message is deliberately fixed, so it stops here.
         launchFailed: invocation.outcome.spawnError !== undefined
           && invocation.outcome.spawnError !== '',
+        // The runtime's own init message is the evidence, exactly as
+        // `live-runner.ts` requires it.
+        launchObserved: invocation.outcome.parsed.initSeen,
       },
       events: invocation.events,
       sessionId: invocation.sessionId,

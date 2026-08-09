@@ -30,13 +30,25 @@ import type { ProjectPhase } from './contracts';
  * tampered with in localStorage.
  */
 
-/** The exact sentence the terminal shows while Claude is running and no new
-    verified execution event has arrived. Never paraphrased. */
-export const CODING_TERMINAL_WAITING_MESSAGE =
-  'Claude Code is running. Awaiting the next verified execution event.';
+/**
+ * THE SENTENCES THE TERMINAL SHOWS, NAMING THE RUNTIME THAT IS ACTUALLY THERE.
+ *
+ * These were literals mentioning Claude Code. The header was corrected to read
+ * `view.runtime` and these were not, so on a hosted Agent-SDK run — which
+ * emits no lifecycle events, and therefore shows the waiting line for its whole
+ * duration — the live-progress sentence named a different agent than the one
+ * running, underneath a header naming the right one. Fixing the header alone
+ * was fixing a fourth instance of one defect and calling it the class.
+ */
+export const codingTerminalWaitingMessage = (runtime: string): string =>
+  `${runtime} is running. Awaiting the next verified execution event.`;
 
-export const CODING_TERMINAL_EMPTY_MESSAGE =
-  'No Claude Code execution has run for this project yet.';
+export const codingTerminalEmptyMessage = (runtime: string): string =>
+  `No ${runtime} execution has run for this project yet.`;
+
+/** The neutral runtime name, for a view built before any run exists. A
+ *  deployment that has never run one must not be told which agent it uses. */
+export const CODING_TERMINAL_UNRUN_RUNTIME = 'Coding Agent';
 
 const STATUS_LABEL: Record<CodingTerminalStatus, string> = {
   waiting: 'WAITING',
@@ -105,8 +117,8 @@ export function emptyCodingTerminalView(phase: ProjectPhase = 'plan'): CodingTer
     statusLabel: STATUS_LABEL.waiting,
     executionId: '—',
     externalSessionRedacted: null,
-    runtime: 'Claude Code (local CLI)',
-    billingLabel: 'SUBSCRIPTION',
+    runtime: CODING_TERMINAL_UNRUN_RUNTIME,
+    billingLabel: billingLabelFor(null, 'unknown'),
     projectLabel: '—',
     phaseLabel: PHASE_LABEL[phase],
     permissions: { allowedTools: [], allowedFiles: [], protectedPaths: [], deniedCapabilities: [] },
@@ -231,7 +243,9 @@ export function buildCodingTerminalView(input: {
     endedAt: t.endedAt ?? null,
     lines,
     // Truthful only while the process is genuinely running.
-    waitingMessage: t.status === 'live' ? CODING_TERMINAL_WAITING_MESSAGE : null,
+    waitingMessage: t.status === 'live'
+      ? codingTerminalWaitingMessage(sanitizeTerminalLine(t.runtime, 80) || 'The Coding Agent')
+      : null,
     activeFile: t.activeFile ? sanitizeTerminalLine(t.activeFile, 160) : null,
     changedFiles,
     changedFileCount: changedFiles.length,
@@ -360,7 +374,9 @@ export function buildRoleBilling(input: {
       actor: coding ? sanitizeTerminalLine(coding.actualActor, 60) : 'Not yet run',
       role: 'Coding Agent',
       runtime: coding ? sanitizeTerminalLine(coding.actualRuntime, 60) : '—',
-      billingLabel: billingLabelFor(coding, 'unknown'),
+      // A role that has not run demonstrably was NOT billed; `unknown` would
+      // retreat from a known fact beside a `NOT RUN` status.
+      billingLabel: coding === null ? 'NOT BILLED' : billingLabelFor(coding, 'unknown'),
       statusLabel: codingAttested ? 'EXECUTION ATTESTED' : coding ? 'NOT ATTESTED' : 'NOT RUN',
     },
     {

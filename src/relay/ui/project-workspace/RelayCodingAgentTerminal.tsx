@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatEventTime } from './projections';
-import { CODING_TERMINAL_EMPTY_MESSAGE } from './coding-terminal';
+import { codingTerminalEmptyMessage } from './coding-terminal';
 import type { CodingTerminalView } from './coding-terminal';
 import type { CodingTerminalLine } from '../app/contracts';
 
@@ -141,7 +141,7 @@ export function RelayCodingAgentTerminal({
           <span className="rcat-status rcat-status--waiting">WAITING</span>
         </header>
         <div className="rcat-empty">
-          <p>{CODING_TERMINAL_EMPTY_MESSAGE}</p>
+          <p>{codingTerminalEmptyMessage(view.runtime)}</p>
           <p className="rcat-dim">
             Execution activity appears here when a mission dispatches the Coding Agent.
           </p>
@@ -214,7 +214,7 @@ export function RelayCodingAgentTerminal({
         tabIndex={0}
         role="log"
         aria-live="polite"
-        aria-label="Claude Code execution events"
+        aria-label={`${view.runtime} execution events`}
       >
         {view.lines.length === 0 && !view.waitingMessage && (
           <p className="rcat-dim rcat-feed-empty">No execution event has been recorded yet.</p>

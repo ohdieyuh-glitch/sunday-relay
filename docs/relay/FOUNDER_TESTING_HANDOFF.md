@@ -114,9 +114,10 @@ both.
 
 | Deployment | Result |
 |---|---|
-| Founder machine, nothing configured | runs (development defaults) |
+| Founder machine, nothing configured | **refused** — `architect_not_configured`. An empty `RELAY_PROMPT_ARCHITECT_MODE` means BLOCKED, not offline |
+| Founder machine, `RELAY_PROMPT_ARCHITECT_MODE=fusion` + a reachable Alcatraz | runs, no spend |
 | Founder machine, live architect + Claude Code + Hermes | **runs — the full three-role mission** |
-| Hosted, `RELAY_PROMPT_ARCHITECT_MODE=fusion` + `RELAY_BRIDGE_FAKE_CLAUDE=1` | runs — the keyless offline pipeline, no spend |
+| Hosted, `RELAY_PROMPT_ARCHITECT_MODE=fusion` + `RELAY_BRIDGE_FAKE_CLAUDE=1` | runs — the keyless offline pipeline, no spend — **but only where `FUSION_BASE_URL` reaches a running Sunday Alcatraz.** `fusion` is an HTTP architect with no offline fallback |
 | Hosted, `fusion` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` | a real, API-billed coding run with no Reviewer — **but only where `FUSION_BASE_URL` reaches a running Sunday Alcatraz.** Production still publishes the localhost default, so today this fails at `architect_unavailable` before the Coding Agent is reached |
 | Hosted, live three-role | **cannot run.** The hosted Reviewer is still not dispatchable — the mission's reviewer leg spawns a local Hermes and does not use the remote transport |
 

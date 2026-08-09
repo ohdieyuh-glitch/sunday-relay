@@ -220,6 +220,33 @@ describe('the coding attestation separates who was asked for from what ran', () 
     expect(isPaidApiCall(outcome.attestation ?? undefined)).toBe(false);
   }, 30_000);
 
+  /**
+   * `launchVerified` IS OBSERVED, NOT INFERRED. It was `!launchFailed` — the
+   * absence of an error — so a run that never started was attested as launched
+   * and the website then rendered it API PAID.
+   */
+  it('does not attest a launch the surface never observed', async () => {
+    const { outcome } = await runOffline({
+      invokeAgent: async () => ({
+        outcome: {
+          startedAt: '2026-01-01T00:00:00.000Z', completedAt: '2026-01-01T00:00:01.000Z',
+          cancelled: true, timedOut: false, launchFailed: false, launchObserved: false,
+        },
+        events: [], sessionId: null,
+        structurallyValid: false, structuralReason: 'cancelled during startup',
+        report: { ok: false, error: { code: 'invalid-report', message: 'x' } } as never,
+        actualActor: 'Claude Agent SDK', actualRuntimeId: 'claude-agent-sdk-hosted',
+        actualModel: null,
+      }),
+      requestedOccupant: {
+        actorName: 'Claude Agent SDK', adapterId: 'claude-agent-sdk-hosted', billingPath: 'api',
+      },
+    });
+    expect(outcome.attestation?.launchVerified).toBe(false);
+    // And therefore not a paid call, which is what the browser reads.
+    expect(isPaidApiCall(outcome.attestation ?? undefined)).toBe(false);
+  }, 30_000);
+
   it('falls back to the local identity when no occupant is supplied', async () => {
     // Every caller that predates role slots drove this same adapter, so that
     // is what it was requesting.

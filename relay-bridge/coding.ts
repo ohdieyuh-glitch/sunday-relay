@@ -547,7 +547,10 @@ export async function runCodingMission(input: {
       // The model that ANSWERED, when the surface reported one. Absent stays
       // absent — a requested model is not evidence that it ran.
       ...(invocation.actualModel === null ? {} : { model: invocation.actualModel }),
-      launchVerified: !invocation.outcome.launchFailed,
+      // OBSERVED, not inferred from the absence of an error. A run cancelled
+      // or timed out during startup has no error and never launched — it was
+      // attested as launched, and the website then rendered it API PAID.
+      launchVerified: invocation.outcome.launchObserved && !invocation.outcome.launchFailed,
       completionVerified:
         !invocation.outcome.launchFailed &&
         !invocation.outcome.timedOut &&

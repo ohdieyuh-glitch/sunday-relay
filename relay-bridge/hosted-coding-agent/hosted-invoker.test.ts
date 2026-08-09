@@ -196,6 +196,11 @@ describe('the hosted Coding Agent runs through the one existing pipeline', () =>
    * billed and the workspace really had been edited.
    */
   it('does not call a mid-run crash a failure to start', async () => {
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join: joinPath } = await import('node:path');
+    const scratch = mkdtempSync(joinPath(tmpdir(), 'relay-hosted-crash-'));
+    try {
     const crashAfterInit = async function* crash(params: {
       prompt: string; options: Record<string, unknown>;
     }) {
@@ -220,7 +225,13 @@ describe('the hosted Coding Agent runs through the one existing pipeline', () =>
     const result = await invoker({
       association: { projectId: 'p', runId: 'r', taskId: 't', workspaceId: 'w', adapterId: 'a' } as never,
       pkg: {} as never,
-      workspacePath: '/tmp',
+      // AN ISOLATED DIRECTORY, REMOVED AFTERWARDS. This was `/tmp`, and the
+      // fake writes `src/normalize.js` beneath it — so running the suite
+      // created a real file at a fixed, shared, world-visible path and left it
+      // there, in a repository whose thesis is workspace isolation. On a host
+      // where another user owns it the write throws before the init yield and
+      // the test fails asserting the opposite of its own subject.
+      workspacePath: scratch,
       toolPolicy: {} as never,
       prompt: 'x',
       limits: {} as never,
@@ -235,6 +246,47 @@ describe('the hosted Coding Agent runs through the one existing pipeline', () =>
     // And the model it named survives, so the record does not simultaneously
     // claim a model answered and that nothing ran.
     expect(result.actualModel).toBe('claude-sonnet-5-20260114');
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  /**
+   * A RUN CANCELLED BEFORE THE RUNTIME STARTED WAS ATTESTED AS LAUNCHED.
+   *
+   * `launchVerified` was `!launchFailed` — the ABSENCE of an error, not
+   * evidence of a launch. A Stop during SDK startup produces no error and no
+   * init message, so the run was attested as having launched and the website
+   * rendered it API PAID: a money claim about zero spend.
+   */
+  it('does not report a launch for a run cancelled before the runtime started', async () => {
+    const cancelBeforeInit = async function* never(_params: unknown) {
+      // Never yields an init message; the cancel lands during startup.
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      throw new Error('aborted');
+    };
+    let cancelHandle: { fn: (() => boolean) | null } = { fn: null };
+    const invoker = createHostedClaudeInvoker({
+      apiKey: 'sk-ant-FAKETESTNOTREAL-never-served', // relay-boundary:allow-fixture — synthetic
+      requestedModel: null,
+      queryFn: cancelBeforeInit as never,
+    });
+    const pending = invoker({
+      association: { projectId: 'p', runId: 'r', taskId: 't', workspaceId: 'w', adapterId: 'a' } as never,
+      pkg: {} as never,
+      workspacePath: '/tmp/nowhere',
+      toolPolicy: {} as never,
+      prompt: 'x',
+      limits: {} as never,
+      now: () => '2026-01-01T00:00:00.000Z',
+      ids: { next: () => 'id' } as never,
+      requestedModel: null,
+      registerHandle: (h) => { cancelHandle.fn = () => h.cancel(); },
+    });
+    cancelHandle.fn?.();
+    const result = await pending;
+    // No init message ever arrived, so nothing started — whatever else is true.
+    expect(result.outcome.launchObserved).toBe(false);
   }, 30_000);
 
   it('refuses a run that returns no parseable Relay report', async () => {

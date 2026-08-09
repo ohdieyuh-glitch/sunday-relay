@@ -157,8 +157,13 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
      * was returning `launch_failed`, which the seam documents as "nothing ran,
      * so there is no output to distrust and nothing in the workspace to
      * inspect". Turns had been billed and the workspace really had been edited.
-     * A `refused` result keeps the workspace inspectable and the attestation
-     * honest about having launched.
+     *
+     * A `refused` result makes the ATTESTATION honest about having launched.
+     * It does NOT make the workspace inspectable: the coding leg returns at its
+     * structural gate, before inspection, and removes the fixture root on the
+     * way out. An earlier version of this comment claimed it did. What the
+     * change buys is a record that no longer names the model that answered
+     * while asserting the runtime never started.
      *
      * A provider error can quote the request, which can quote the credential —
      * so only a fixed sentence leaves this function either way.

@@ -9,8 +9,8 @@ import { RelayRoleBilling } from './RelayRoleBilling';
 import {
   buildCodingTerminalView,
   buildRoleBilling,
-  CODING_TERMINAL_EMPTY_MESSAGE,
-  CODING_TERMINAL_WAITING_MESSAGE,
+  codingTerminalEmptyMessage,
+  codingTerminalWaitingMessage,
 } from './coding-terminal';
 import { createRelayAppStore, defaultSettingsForProject } from '../app/store';
 import { createRelayAppStorage } from '../app/persistence';
@@ -184,9 +184,9 @@ describe('2. it does not invent commands, files, or tool activity', () => {
 
   it('with no capture at all it renders the clean pre-mission empty state', () => {
     renderTerminal(undefined);
-    expect(screen.getByText(CODING_TERMINAL_EMPTY_MESSAGE)).toBeTruthy();
+    expect(screen.getByText(codingTerminalEmptyMessage('Coding Agent'))).toBeTruthy();
     expect(screen.queryByRole('log')).toBeNull();
-    expect(document.body.textContent).not.toContain(CODING_TERMINAL_WAITING_MESSAGE);
+    expect(document.body.textContent).not.toContain(codingTerminalWaitingMessage('Claude Code (local CLI)'));
   });
 
   it('the view never reports more files or events than were captured', () => {
@@ -418,7 +418,7 @@ describe('7. auto-scroll can be paused and resumed', () => {
 describe('8. the waiting state is truthful', () => {
   it('shows the exact waiting sentence only while the process is running', () => {
     renderTerminal(terminalState({ status: 'live' }));
-    expect(screen.getByText(new RegExp(CODING_TERMINAL_WAITING_MESSAGE))).toBeTruthy();
+    expect(screen.getByText((content: string) => content.includes(codingTerminalWaitingMessage('Claude Code (local CLI)')))).toBeTruthy();
     expect(screen.getByText('LIVE')).toBeTruthy();
   });
 
@@ -426,13 +426,13 @@ describe('8. the waiting state is truthful', () => {
     for (const status of ['complete', 'failed', 'cancelled', 'waiting'] as const) {
       cleanup();
       renderTerminal(terminalState({ status }));
-      expect(document.body.textContent).not.toContain(CODING_TERMINAL_WAITING_MESSAGE);
+      expect(document.body.textContent).not.toContain(codingTerminalWaitingMessage('Claude Code (local CLI)'));
     }
   });
 
   it('waiting is a message about the process, never a claim of progress', () => {
     const view = buildCodingTerminalView({ terminal: terminalState({ status: 'live' }), phase: 'build' });
-    expect(view.waitingMessage).toBe(CODING_TERMINAL_WAITING_MESSAGE);
+    expect(view.waitingMessage).toBe(codingTerminalWaitingMessage('Claude Code (local CLI)'));
     expect(view.waitingMessage).not.toMatch(/writing|editing|thinking|analyz/i);
   });
 });
@@ -750,7 +750,7 @@ describe('the terminal is mounted in the real workspace surfaces', () => {
     expect(terminal).toBeTruthy();
     expect(terminal.closest('.rpw-col-primary')).not.toBeNull();
     expect(within(terminal).getByText('CLAUDE CODE (LOCAL CLI)')).toBeTruthy();
-    expect(within(terminal).getByText(new RegExp(CODING_TERMINAL_WAITING_MESSAGE))).toBeTruthy();
+    expect(within(terminal).getByText((content: string) => content.includes(codingTerminalWaitingMessage('Claude Code (local CLI)')))).toBeTruthy();
   });
 
   it('is absent for a workspace with no captured execution', () => {
@@ -816,10 +816,25 @@ describe('the terminal names the surface that ran, and only bills what launched'
     ...over,
   });
 
-  it('titles the terminal with the hosted runtime, not a literal', () => {
-    const view = buildCodingTerminalView({ terminal: hostedState(), phase: 'build' });
-    expect(view.runtime).toBe('Claude Agent SDK (hosted)');
-    expect(view.billingLabel).toBe('API PAID');
+  it('titles the terminal with the hosted runtime, and says Claude Code nowhere', () => {
+    // RENDERED, not projected. The first version of this test asserted that
+    // the view echoed the state it was handed, so restoring the literal
+    // `CLAUDE CODE` in the component would have left it green — which is
+    // exactly how four more literals survived the header repair.
+    renderTerminal(hostedState());
+    expect(screen.getByText('CLAUDE AGENT SDK (HOSTED)')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('Claude Code');
+    expect(document.body.textContent).not.toContain('CLAUDE CODE');
+  });
+
+  it('names the hosted runtime in the live-progress line, which is its whole body', () => {
+    // The hosted surface emits no lifecycle events, so this sentence is the
+    // entire live body for the duration of the run. It named a different agent.
+    const view = buildCodingTerminalView({
+      terminal: hostedState({ status: 'live' }), phase: 'build',
+    });
+    expect(view.waitingMessage).toContain('Claude Agent SDK (hosted)');
+    expect(view.waitingMessage).not.toContain('Claude Code');
   });
 
   it('reports NOT BILLED for a run that never launched, whatever the occupant costs', () => {
