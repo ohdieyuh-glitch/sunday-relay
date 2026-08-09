@@ -6,6 +6,7 @@ import { createElement } from 'react';
 import { RelayPreviewApp } from './RelayPreviewApp';
 import { getRelayAppStore } from '../app';
 import { createDefaultSettingsDraft } from '../project-settings/defaults';
+import { WORKSPACE_FIXTURES } from '../project-workspace';
 
 /**
  * SWITCHING A ROLE FROM THE WORKSPACE CHANGES THE PROJECT, NOT A PICTURE.
@@ -176,5 +177,51 @@ describe('what a Mission started afterwards is configured from', () => {
     fireEvent.click(manual);
     expect(store.getSettings(id)?.draft.workforce.reviewerId).not.toBe('reviewer-manual');
     expect(within(dialog).getByText(/Not independent/)).toBeTruthy();
+  });
+});
+
+describe('the Project Brain view shows THIS project', () => {
+  it('reports the real project’s Brain, not the design showcase’s', () => {
+    const id = startedProject('Build a billing API');
+    const store = getRelayAppStore();
+
+    window.location.hash = `#/relay/project/${id}/brain`;
+    render(createElement(RelayPreviewApp));
+
+    // The counts must be the ones the store holds for THIS project. Reading a
+    // fixture here would present sample knowledge as a project's recorded
+    // knowledge, which is the failure this product exists to refuse.
+    const brain = store.getProjectBrain(id);
+    const expected = brain === null
+      ? 0
+      : brain.architectureNotes.length + brain.decisions.length
+        + brain.researchNotes.length + brain.constraints.length;
+    const approved = screen.getByText('APPROVED ENTRIES').closest('div');
+    expect(approved?.textContent).toContain(String(expected));
+
+    // And the showcase's sample sections are absent, because they belong to a
+    // different project.
+    // Not ONE showcase fixture's sections may appear. Checking every fixture
+    // matters: the defect read `WORKSPACE_FIXTURES[fixtureKey]`, and which key
+    // that is depends on a switcher the founder can change.
+    for (const fixture of Object.values(WORKSPACE_FIXTURES)) {
+      for (const section of fixture.projectBrainDocument?.sections ?? []) {
+        expect(document.body.textContent, section.heading).not.toContain(section.heading);
+      }
+    }
+  });
+
+  it('returns to the project it was opened from', () => {
+    const id = startedProject();
+    window.location.hash = `#/relay/project/${id}/brain`;
+    render(createElement(RelayPreviewApp));
+    fireEvent.click(screen.getByRole('button', { name: /BACK TO PROJECT/i }));
+    expect(window.location.hash).toBe(`#/relay/project/${id}`);
+  });
+
+  it('refuses a Brain for a project that does not exist', () => {
+    window.location.hash = '#/relay/project/rly-999/brain';
+    render(createElement(RelayPreviewApp));
+    expect(screen.getByText(/could not load this Project Brain/i)).toBeTruthy();
   });
 });

@@ -760,15 +760,47 @@ export function RelayPreviewApp() {
    * would be a second answer to "what does Relay know about this project".
    */
   const brainProjectId = route.screen === 'brain' ? route.projectId : '';
-  const brainWorkspace = brainProjectId
-    ? WORKSPACE_FIXTURES[fixtureKey]
-    : null;
-  const projectBrainView = brainWorkspace ? (
+  /**
+   * THE BRAIN OF THE PROJECT THAT WAS OPENED, not of a fixture.
+   *
+   * This read `WORKSPACE_FIXTURES[fixtureKey]` regardless of which project the
+   * route named, so clicking the Brain in a real project showed the design
+   * showcase's Brain — sample counts and sample sections, presented as that
+   * project's recorded knowledge. It is the exact failure this product exists
+   * to refuse, arriving through a surface built to display honesty.
+   *
+   * The real project derives from the SAME projection the workspace beneath it
+   * uses, so the Brain view and the workspace can never disagree about what
+   * Relay knows. The labelled showcase project keeps its fixture, because
+   * there the fixture IS the subject.
+   */
+  const brainPresentation = (() => {
+    if (!brainProjectId) return null;
+    const project = store.getProject(brainProjectId);
+    if (!project) {
+      // The design showcase has no stored project and never will; anything
+      // else with no project is genuinely missing.
+      return brainProjectId === 'rly-001' ? WORKSPACE_FIXTURES[fixtureKey] : null;
+    }
+    const settings = store.getSettings(brainProjectId);
+    const mission = project.activeMissionId === null
+      ? null
+      : store.getMission(project.activeMissionId);
+    if (!settings || !mission) return null;
+    return deriveMissionProjection({
+      project,
+      settings,
+      brain: store.getProjectBrain(brainProjectId),
+      mission,
+      events: store.getMissionEvents(mission.id),
+    });
+  })();
+  const projectBrainView = brainPresentation ? (
     <RelayProjectBrainView
-      state={brainWorkspace.projectBrainState}
-      {...(brainWorkspace.projectBrainDocument === undefined
+      state={brainPresentation.projectBrainState}
+      {...(brainPresentation.projectBrainDocument === undefined
         ? {}
-        : { document: brainWorkspace.projectBrainDocument })}
+        : { document: brainPresentation.projectBrainDocument })}
       onClose={() => navigate(`/relay/project/${brainProjectId}`)}
     />
   ) : (
