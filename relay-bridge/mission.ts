@@ -48,6 +48,11 @@ import {
   type HermesPreflightResult,
 } from './hermes-reviewer';
 import { buildAttestation, decideCompletion, digest, type ExecutionAttestation } from './attestation';
+import { isProductionDeployment } from './deployment-environment';
+import { HERMES_MODE_ENV } from './reviewer-harness/hermes/hermes-transport';
+import {
+  CODING_AGENT_ROLE_ENV, configuredNames, describeBinding, resolveRoleSlots,
+} from './role-slot-config';
 import { safeError, safeText } from './redact';
 import type {
   BridgeEventInput,
@@ -464,6 +469,46 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         return;
       }
 
+      /**
+       * WHO HOLDS EACH ROLE — bound before anything is resolved, probed or
+       * spent.
+       *
+       * Binding proves the requested combination is coherent: registered
+       * occupants, in the right slots, able to run on THIS host, configured,
+       * and with a Reviewer that is independent of the implementer. It proves
+       * nothing about readiness, which the probes below still decide. Refusing
+       * here costs nothing; refusing after the architect call costs a paid
+       * request for a mission that could never have finished.
+       *
+       * DELIBERATELY AFTER THE ARCHITECT'S OWN CHECK, AND ONLY THAT ONE. The
+       * architect names its missing variables precisely
+       * (`architect_not_configured`); binding would answer the same situation
+       * with the blunter `role_binding_refused` and an operator would lose the
+       * better message. Every other role has no earlier check to defer to, so
+       * binding is the first thing that speaks for them — which is the point,
+       * since the Coding Agent runtime probe below is what a hosted deployment
+       * must never reach with an occupant that could not run there anyway.
+       */
+      const roles = resolveRoleSlots({
+        architectMode: architectEnv.RELAY_PROMPT_ARCHITECT_MODE,
+        hermesMode: hermesEnv[HERMES_MODE_ENV],
+        codingAgentOccupant: hermesEnv[CODING_AGENT_ROLE_ENV] ?? architectEnv[CODING_AGENT_ROLE_ENV],
+        hosted: isProductionDeployment(hermesEnv),
+        // Both environments count: a deployment sets one process environment,
+        // and only the tests hand these two apart.
+        configuredNames: new Set([
+          ...configuredNames(architectEnv), ...configuredNames(hermesEnv),
+        ]),
+      });
+      if (!roles.binding.ok) {
+        fail(rec, 'preflight_blocked', describeBinding(roles), {
+          code: 'role_binding_refused',
+          retryable: false,
+        });
+        return;
+      }
+      const boundRoles = roles.binding.bindings;
+
       // Coding runtime — resolved (never invoked) before any spend.
       const runtime = resolveRuntime(config.claudeMode, now, config.confirmLive);
       if (!runtime.ok) {
@@ -503,11 +548,19 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         truth: 'relay_evidence',
         headline: 'Preflight passed — Prompt Architect, Coding Agent, and Reviewer are all available.',
         detail: live
-          ? `Prompt Architect: OpenAI (${safeText(architectConfig.model ?? 'model configured')}) · ` +
-            `Coding Agent: Claude Code (${runtime.runtime.provenance}) · ` +
-            `Reviewer: Hermes Agent CLI (${safeText(hermesReady?.provider ?? 'configured provider')}, ` +
+          ? `Prompt Architect: ${safeText(boundRoles.prompt_architect.occupant.displayName)} ` +
+            `(${safeText(architectConfig.model ?? 'model configured')}) · ` +
+            `Coding Agent: ${safeText(boundRoles.coding_agent.occupant.displayName)} ` +
+            `(${runtime.runtime.provenance}) · ` +
+            `Reviewer: ${safeText(boundRoles.reviewer.occupant.displayName)} ` +
+            `(${safeText(hermesReady?.provider ?? 'configured provider')}, ` +
             `${safeText(hermesReady?.model ?? 'configured model')}, read-only).`
           : 'Development path: Sunday Alcatraz (Fusion) architect · no live Prompt Architect or Reviewer call.',
+        // The slot assignment itself, separate from readiness: what was
+        // REQUESTED for each role. What actually answers is attested per role.
+        meta: `ROLES ${boundRoles.prompt_architect.requestedOccupantId} · `
+          + `${boundRoles.coding_agent.requestedOccupantId} · `
+          + `${boundRoles.reviewer.requestedOccupantId}`,
       });
 
       if (rec.cancelRequested) return cancelled(rec);

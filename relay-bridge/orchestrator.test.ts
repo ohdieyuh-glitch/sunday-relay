@@ -1056,3 +1056,96 @@ describe('a reviewer that cannot authenticate says so', () => {
     expect(outcome.safeMessage).toMatch(/no valid structured review/i);
   });
 });
+
+/**
+ * ROLE SLOTS AT THE MISSION BOUNDARY.
+ *
+ * The registry is pure domain and has its own tests. What these prove is that
+ * a top-level caller actually reaches it, that a refusal lands BEFORE any role
+ * is dispatched, and that what the mission tells a founder about who holds each
+ * role comes from the binding rather than from a sentence written once.
+ */
+const HOSTED_BASE: NodeJS.ProcessEnv = {
+  ...LIVE_ENV,
+  // Railway sets this on every service in every environment, so it is the
+  // marker a deploy config cannot forget.
+  RAILWAY_ENVIRONMENT: 'production',
+};
+const HOSTED_ENV: NodeJS.ProcessEnv = {
+  ...HOSTED_BASE,
+  RELAY_ROLE_CODING_AGENT: 'claude_agent_sdk_hosted',
+  ANTHROPIC_API_KEY: 'sk-ant-FAKETESTNOTREAL-never-served', // relay-boundary:allow-fixture — synthetic
+  RELAY_HERMES_MODE: 'remote',
+  RELAY_HERMES_SERVICE_URL: 'https://hermes.internal',
+  RELAY_HERMES_SERVICE_TOKEN: 'not-a-real-token',
+};
+
+describe('role slots decide who may hold each role, before anything is dispatched', () => {
+  it('refuses a hosted deployment that names no Coding Agent, rather than guessing one', async () => {
+    const h = harness();
+    const { view } = await runMission(h, HOSTED_BASE, 'm-role-unnamed');
+    expect(view.state).toBe('failed');
+    expect(view.phase).toBe('preflight_blocked');
+    expect(view.error?.code).toBe('role_binding_refused');
+    expect(view.error?.retryable).toBe(false);
+    // The whole point of binding first: nothing was consumed.
+    expect(h.calls.architect).toBe(0);
+    expect(h.calls.coding).toBe(0);
+    expect(h.calls.reviewer).toBe(0);
+  });
+
+  it('refuses an installed-CLI Coding Agent on a hosted deployment, and says what it does support', async () => {
+    const h = harness();
+    const { view } = await runMission(
+      h,
+      { ...HOSTED_ENV, RELAY_ROLE_CODING_AGENT: 'claude_code_local' },
+      'm-role-local-on-host',
+    );
+    expect(view.error?.code).toBe('role_binding_refused');
+    // "Not ready yet" and "never, on this host" are different answers, and
+    // telling a founder the first is how they were once sent to install
+    // something on a machine that was not the one with the problem.
+    expect(view.error?.safeMessage).toContain('founder_machine');
+    expect(h.calls.architect).toBe(0);
+    expect(h.calls.coding).toBe(0);
+  });
+
+  it('refuses an occupant nobody registered', async () => {
+    const h = harness();
+    const { view } = await runMission(
+      h,
+      { ...HOSTED_ENV, RELAY_ROLE_CODING_AGENT: 'gpt5_codex_turbo' },
+      'm-role-unknown',
+    );
+    expect(view.error?.code).toBe('role_binding_refused');
+    expect(view.error?.safeMessage).toContain('gpt5_codex_turbo');
+    expect(h.calls.architect).toBe(0);
+  });
+
+  it('binds a coherent hosted combination and lets the mission proceed', async () => {
+    const h = harness();
+    const { view } = await runMission(h, HOSTED_ENV, 'm-role-hosted-ok');
+    // Binding is not the blocker here; the mission runs its normal course.
+    expect(view.error?.code).not.toBe('role_binding_refused');
+    expect(h.calls.architect).toBe(1);
+  });
+
+  it('names the bound occupants in the preflight event, from the binding itself', async () => {
+    const h = harness();
+    const { view } = await runMission(h, LIVE_ENV, 'm-role-named');
+    const preflight = view.events.find((e) => e.headline.startsWith('Preflight passed'));
+    expect(preflight).toBeDefined();
+    expect(preflight?.meta).toContain('openai_gpt_architect');
+    expect(preflight?.meta).toContain('claude_code_local');
+    expect(preflight?.meta).toContain('hermes_local');
+    expect(preflight?.detail).toContain('Claude Code (installed CLI)');
+  });
+
+  it('carries no credential value into any mission event', async () => {
+    const h = harness();
+    const { view } = await runMission(h, HOSTED_ENV, 'm-role-secrecy');
+    const serialized = JSON.stringify(view);
+    expect(serialized).not.toContain('sk-ant-FAKETESTNOTREAL');
+    expect(serialized).not.toContain('not-a-real-token');
+  });
+});

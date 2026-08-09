@@ -95,7 +95,13 @@ export const REVIEWER_HARNESS_CATALOG: readonly ReviewerHarnessCatalogEntry[] = 
     // the browser must never guess it, so it stays `unknown` until a Relay
     // Bridge reports what it actually found.
     installState: 'unknown',
-    supportedEnvironments: ['local'],
+    // BOTH, since the remote transport shipped. This said `['local']` for as
+    // long as local was the only way to reach Hermes, and stayed saying it
+    // after a dedicated Reviewer service and an authenticated remote transport
+    // were added — an entry that under-claimed a capability the code had. It
+    // is the same defect as over-claiming one: a description the source does
+    // not support, which the next change then trusts.
+    supportedEnvironments: ['local', 'remote'],
     modelConfiguration: 'configurable',
     // Proven per run by the adapter's zero-toolset enforcement, not asserted.
     readOnlyReviewSupported: 'unknown',

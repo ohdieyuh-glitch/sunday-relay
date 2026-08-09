@@ -41,6 +41,7 @@ import { createBetaEnrolmentStore } from '../src/relay/persistence';
 import type { BetaWaveConfig } from '../src/relay/mission/beta';
 import type { BetaEnrolmentStore } from '../src/relay/persistence';
 import { createCronTickService } from './cron-service';
+import { resolveRoleSlotsFromEnv } from './role-slot-config';
 import {
   createCronScheduler, cronSchedulerEnabled, schedulerIntervalSeconds,
 } from './cron-scheduler';
@@ -225,6 +226,18 @@ export function createBridgeServer(
         if (method === 'GET' && path === '/relay-api/health') {
           // Configuration PRESENCE only — never a value, never a key.
           const architect = architectPreflight(loadArchitectConfig(process.env));
+          /**
+           * WHETHER THIS DEPLOYMENT CAN STAFF ITS THREE ROLES AT ALL.
+           *
+           * REASON CODES, NOT MESSAGES, AND NO OCCUPANT NAMES. This route is
+           * unauthenticated. It already discloses which architect VARIABLES are
+           * unset, so a refusal code like `configuration_missing` discloses
+           * strictly less than what is here today — while a refusal MESSAGE
+           * names occupants and supported environments, which is host layout.
+           * Who actually holds each role is named in the mission's own
+           * preflight event, behind authentication, where it belongs.
+           */
+          const roles = resolveRoleSlotsFromEnv(process.env);
           send(res, 200, {
             ok: true,
             service: 'relay-bridge',
@@ -234,6 +247,10 @@ export function createBridgeServer(
             confirmLive: config.confirmLive,
             promptArchitectReady: architect.ready,
             promptArchitectMissing: architect.missing,
+            roleSlotsBound: roles.binding.ok,
+            roleSlotRefusals: roles.binding.ok
+              ? []
+              : roles.binding.problems.map((p) => `${p.role}:${p.reason}`),
           }, cors);
           return;
         }
