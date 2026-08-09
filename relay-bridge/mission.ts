@@ -53,6 +53,7 @@ import {
   CODING_AGENT_ROLE_ENV, REVIEWER_ROLE_ENV, configuredNames, describeBinding,
   missionDispatchProblems, resolveRoleSlots,
 } from './role-slot-config';
+import type { RoleSlot } from '../src/relay/mission/role-slots';
 import { safeError, safeText } from './redact';
 import type {
   BridgeEventInput,
@@ -496,6 +497,10 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         // The mode the bridge already resolved, not a second reading of the
         // variable behind it.
         fakeCodingRuntime: config.claudeMode === 'fake',
+        // The mission's own decision, the same `live` that drives
+        // `requiresIndependentReview`, the Hermes probe and the review leg —
+        // passed rather than re-derived, so the three cannot disagree.
+        requiresReview: live,
         /**
          * ONE-WAY, LIKE THE FUNCTION ITSELF.
          *
@@ -553,7 +558,13 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
        * the work. Refusing is the only honest answer until the surface is
        * wired.
        */
-      const undispatchable = missionDispatchProblems(boundRoles);
+      // Bounded to the roles this mission will actually dispatch. A reviewer
+      // the development path never calls must not block it for being
+      // undrivable.
+      const dispatchedRoles: RoleSlot[] = live
+        ? ['prompt_architect', 'coding_agent', 'reviewer']
+        : ['prompt_architect', 'coding_agent'];
+      const undispatchable = missionDispatchProblems(boundRoles, dispatchedRoles);
       if (undispatchable.length > 0) {
         fail(rec, 'preflight_blocked', undispatchable.map((p) => p.safeMessage).join(' '), {
           code: 'occupant_not_dispatchable',
@@ -934,17 +945,10 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           requestedOccupant: {
             actorName: boundCoding.occupant.actorName,
             adapterId: boundCoding.occupant.adapterId,
-            /**
-             * Narrowed at the boundary, and the narrowing is REAL: the
-             * registry's own test forbids a Coding Agent occupant from
-             * declaring `unknown`, so this branch documents an invariant
-             * rather than inventing a value. The coding leg owns the
-             * translation into the attestation's vocabulary — a run that
-             * spends nothing must not be laundered into one that does.
-             */
-            billingPath: boundCoding.occupant.billingPath === 'unknown'
-              ? 'none'
-              : boundCoding.occupant.billingPath,
+            // Passed through whole. The coding leg owns the translation into
+            // the attestation's vocabulary, and `unknown` survives as unknown
+            // rather than being converted into a claim.
+            billingPath: boundCoding.occupant.billingPath,
           },
           requiresIndependentReview: live,
           onState: (s) => {

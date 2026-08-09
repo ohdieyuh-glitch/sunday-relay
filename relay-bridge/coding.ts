@@ -312,12 +312,14 @@ export async function runCodingMission(input: {
      * mapped everything-not-`api` to `subscription` — attesting a run that
      * spent nothing as subscription-paid.
      *
-     * `unknown` is deliberately NOT accepted. The registry's own test forbids
-     * a Coding Agent occupant from declaring it, so accepting it here would be
-     * a branch no input could reach — the same dead code an earlier round
-     * removed from the binder.
+     * `unknown` maps to the attestation's own `unknown`, NEVER to a value that
+     * asserts something. An earlier version mapped it to `none`, which becomes
+     * `simulated` — a positive claim that a run spent nothing, made about a
+     * cost nobody knows. "Unknown is not zero" is one of this product's
+     * load-bearing rules; trading an honest dead branch for a dishonest live
+     * one is not dead-code removal.
      */
-    readonly billingPath: 'subscription' | 'api' | 'none';
+    readonly billingPath: 'subscription' | 'api' | 'none' | 'unknown';
   };
 }): Promise<CodingOutcome> {
   const { executablePath, capabilities, now, ids, emit } = input;
@@ -517,7 +519,9 @@ export async function runCodingMission(input: {
       ? 'api_billed' as const
       : requestedOccupant.billingPath === 'none'
         ? 'simulated' as const
-        : 'subscription' as const;
+        : requestedOccupant.billingPath === 'subscription'
+          ? 'subscription' as const
+          : 'unknown' as const;
     const codingAttestation = buildAttestation({
       missionId: input.missionId ?? String(taskId),
       missionRevision: input.missionRevision,

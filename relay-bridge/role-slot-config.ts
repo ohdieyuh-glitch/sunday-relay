@@ -27,6 +27,8 @@ import { isProductionDeployment } from './deployment-environment';
 
 /** Selectors, by role. Values are registry occupant ids. */
 export const CODING_AGENT_ROLE_ENV = 'RELAY_ROLE_CODING_AGENT';
+/** The occupant `RELAY_BRIDGE_FAKE_CLAUDE=1` selects, named once. */
+export const FAKE_CODING_OCCUPANT = 'claude_code_fake';
 /**
  * THE REVIEWER'S OWN SELECTOR, AND WHY DERIVING IT WAS WRONG.
  *
@@ -107,12 +109,21 @@ export const MISSION_DISPATCHABLE_OCCUPANTS: ReadonlySet<string> = new Set([
   'hermes_local',
 ]);
 
-/** Bound, coherent, configured — and undrivable here. Named per role. */
+/**
+ * Bound, coherent, configured — and undrivable here. Named per role.
+ *
+ * `dispatchedRoles` bounds the question to the roles this mission will
+ * actually run. Checking every BOUND role instead killed the one hosted shape
+ * that works, for naming a reviewer it would never have called — the same
+ * defect as demanding one, moved a layer down.
+ */
 export function missionDispatchProblems(
   bindings: Readonly<Partial<Record<RoleSlot, { readonly occupant: { readonly occupantId: string; readonly displayName: string } }>>>,
+  dispatchedRoles: readonly RoleSlot[] = ROLE_SLOTS,
 ): readonly { readonly role: RoleSlot; readonly safeMessage: string }[] {
   const problems: { role: RoleSlot; safeMessage: string }[] = [];
   for (const role of Object.keys(bindings) as RoleSlot[]) {
+    if (!dispatchedRoles.includes(role)) continue;
     // An UNSTAFFED role has nothing to dispatch and nothing to refuse. The
     // mission does not call it; see `RoleSlotBindingResult`.
     const binding = bindings[role];
@@ -155,6 +166,12 @@ export interface RoleSlotResolution {
  */
 export interface RoleSlotInputs {
   readonly architectMode: string | undefined;
+  /**
+   * Whether this caller will dispatch a Reviewer. The caller already knows —
+   * for the mission it is the same `live` that decides
+   * `requiresIndependentReview`, the Hermes probe and the review leg.
+   */
+  readonly requiresReview: boolean;
   readonly reviewerOccupant: string | undefined;
   readonly codingAgentOccupant: string | undefined;
   /**
@@ -200,7 +217,8 @@ export function resolveRoleSlots(inputs: RoleSlotInputs): RoleSlotResolution {
      * the development path nothing reviews the result, so a silently
      * substituted simulated run can reach `verified_complete`.
      */
-    if (namedCoding !== '') {
+    // Both naming the SAME occupant is agreement, not a conflict.
+    if (namedCoding !== '' && namedCoding !== FAKE_CODING_OCCUPANT) {
       conflicts.push({
         role: 'coding_agent',
         reason: 'selector_conflict',
@@ -210,7 +228,28 @@ export function resolveRoleSlots(inputs: RoleSlotInputs): RoleSlotResolution {
           + 'you did not mean.',
       });
     }
-    requested.coding_agent = 'claude_code_fake';
+    requested.coding_agent = FAKE_CODING_OCCUPANT;
+  } else if (namedCoding === FAKE_CODING_OCCUPANT) {
+    /**
+     * THE DANGEROUS HALF OF THE SAME CONFLICT.
+     *
+     * `RELAY_BRIDGE_FAKE_CLAUDE` is what decides `claudeMode`, so naming the
+     * fake occupant WITHOUT it binds the fake while `resolveClaudeRuntime`
+     * resolves the REAL installed Claude Code CLI. The fake deliberately
+     * shares the local occupant's actor name and adapter id, so requested and
+     * actual agree, `actorMatches` is true, nothing objects — and a real,
+     * subscription-billed run is attested `simulated` and reaches
+     * verified_complete. Recording a paid run as spend-free is worse than the
+     * reverse, and it was three lines from the check that catches the reverse.
+     */
+    conflicts.push({
+      role: 'coding_agent',
+      reason: 'selector_conflict',
+      safeMessage:
+        `${CODING_AGENT_ROLE_ENV} names "${FAKE_CODING_OCCUPANT}", which is selected by `
+        + 'RELAY_BRIDGE_FAKE_CLAUDE=1 and never by this variable. Set that instead — otherwise the '
+        + 'real Claude Code CLI runs and would be recorded as having spent nothing.',
+    });
   } else if (namedCoding !== '') {
     requested.coding_agent = namedCoding;
   }
@@ -218,15 +257,14 @@ export function resolveRoleSlots(inputs: RoleSlotInputs): RoleSlotResolution {
   /**
    * THE REVIEWER IS REQUIRED EXACTLY WHEN THE MISSION WILL DISPATCH ONE.
    *
-   * Derived from the architect path rather than configured separately, because
-   * that is the same signal the mission uses: `live` decides
-   * `requiresIndependentReview`, whether the Hermes probe runs, and whether
-   * the review leg executes at all. Demanding a bindable reviewer on the
-   * development path turned a working zero-spend hosted pipeline into a dead
-   * end whose stated remedy — set a reviewer — could not be performed, because
-   * no reviewer occupant runs on a container.
+   * `requiresReview` is PASSED IN, not re-derived here. An earlier version
+   * compared `architectMode === 'live'` a third time, beside the two
+   * comparisons that already existed, and a comment claimed it "cannot drift"
+   * — while being exactly the shape this module's own header warns about. The
+   * drift direction was fail-OPEN: a live mission whose reviewer was never
+   * bound would still run the review leg.
    */
-  const optionalRoles: RoleSlot[] = inputs.architectMode === 'live' ? [] : ['reviewer'];
+  const optionalRoles: RoleSlot[] = inputs.requiresReview ? [] : ['reviewer'];
 
   const binding = bindRoleSlots({
       requested,
@@ -257,6 +295,9 @@ export function resolveRoleSlotsFromEnv(env: NodeJS.ProcessEnv): RoleSlotResolut
     reviewerOccupant: env[REVIEWER_ROLE_ENV],
     codingAgentOccupant: env[CODING_AGENT_ROLE_ENV],
     fakeCodingRuntime: env.RELAY_BRIDGE_FAKE_CLAUDE === '1',
+    // Derived from the one function in this module that knows what the live
+    // architect is, rather than a fresh comparison against the same string.
+    requiresReview: architectOccupantFor(env.RELAY_PROMPT_ARCHITECT_MODE) === 'openai_gpt_architect',
     hosted: isProductionDeployment(env),
     configuredNames: configuredNames(env),
   });

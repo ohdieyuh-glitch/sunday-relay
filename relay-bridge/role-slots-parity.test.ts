@@ -10,8 +10,13 @@ import {
   HERMES_MODE_ENV, HERMES_SERVICE_TOKEN_ENV, HERMES_SERVICE_URL_ENV,
   HERMES_TRUSTED_ORIGINS_ENV,
 } from './reviewer-harness/hermes/hermes-transport';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { architectPreflight, loadArchitectConfig } from './openai-architect';
-import { MISSION_DISPATCHABLE_OCCUPANTS, resolveRoleSlotsFromEnv } from './role-slot-config';
+import { selectArchitectPath } from './mission';
+import {
+  MISSION_DISPATCHABLE_OCCUPANTS, architectOccupantFor, resolveRoleSlotsFromEnv,
+} from './role-slot-config';
 import { createBridgeServer } from './server';
 import { loadBridgeConfig } from './config';
 
@@ -98,6 +103,38 @@ describe('role-slot registry parity with the bridge', () => {
    * occupant that no longer exists — or one added here and never registered —
    * would be caught by nothing at all.
    */
+  /**
+   * `.env.example` teaches an operator which ids are legal. A registry rename
+   * or a fourth occupant leaves that list silently stale, and an operator
+   * setting a documented-but-dead id gets `unknown_occupant` for a value the
+   * documentation told them to use. The contract list holds the variable
+   * NAMES; nothing held the vocabulary until this.
+   */
+  it('documents exactly the occupant ids an operator may select', () => {
+    const env = readFileSync(join(process.cwd(), '.env.example'), 'utf8');
+    for (const role of ['coding_agent', 'reviewer'] as const) {
+      for (const entry of occupantsForRole(role)) {
+        expect(env, `${entry.occupantId} is selectable but undocumented`)
+          .toContain(entry.occupantId);
+      }
+    }
+  });
+
+  /**
+   * TWO FUNCTIONS DECIDE WHAT "live" MEANS, and a comment once claimed they
+   * "cannot drift". They are independent literal comparisons. This is the
+   * coupling that makes the claim true, and the drift it guards is fail-OPEN:
+   * a live mission whose Reviewer was never bound would still run the review
+   * leg.
+   */
+  it('agrees with the mission about which architect mode is live', () => {
+    for (const mode of ['live', 'fusion', '', 'LIVE', undefined]) {
+      const missionSaysLive = selectArchitectPath({ RELAY_PROMPT_ARCHITECT_MODE: mode }) === 'live';
+      const registrySaysLive = architectOccupantFor(mode) === 'openai_gpt_architect';
+      expect(registrySaysLive, `disagreement for ${JSON.stringify(mode)}`).toBe(missionSaysLive);
+    }
+  });
+
   it('names only registered occupants as dispatchable', () => {
     const registered = new Set(ROLE_OCCUPANTS.map((o) => o.occupantId));
     for (const id of MISSION_DISPATCHABLE_OCCUPANTS) {

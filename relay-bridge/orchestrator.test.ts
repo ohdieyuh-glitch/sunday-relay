@@ -1212,7 +1212,11 @@ describe('role slots decide who may hold each role, before anything is dispatche
    * container. Binding now mirrors dispatch.
    */
   it('runs the keyless offline pipeline on a hosted deployment', async () => {
-    const h = harness();
+    // `fusionVerified` makes the coding leg report a verified result, so this
+    // asserts COMPLETION. Without it the mission ended `verification_failed`
+    // and the test still passed, because it only checked which error it was
+    // NOT — a barrier for the branch's headline claim, satisfied by a failure.
+    const h = harness({ fusionVerified: true });
     const { view } = await runMission(
       h,
       // No coding-agent name, no reviewer, no credential — on a hosted host.
@@ -1220,13 +1224,72 @@ describe('role slots decide who may hold each role, before anything is dispatche
       'm-role-hosted-fake',
       'fake',
     );
-    expect(view.error?.code).not.toBe('role_binding_refused');
-    expect(view.error?.code).not.toBe('occupant_not_dispatchable');
-    const preflight = view.events.find((e) => e.headline.startsWith('Preflight'));
-    expect(preflight).toBeDefined();
+    expect(view.state).toBe('verified_complete');
     expect(h.calls.fusion).toBe(1);
-    // The unstaffed role is named as unstaffed, not silently omitted.
+    // Zero spend, and no reviewer was called — that is the whole shape.
+    expect(h.calls.architect).toBe(0);
     expect(h.calls.reviewer).toBe(0);
+  });
+
+  /**
+   * NAMING A REVIEWER MUST NOT KILL THE ONE HOSTED SHAPE THAT WORKS. The
+   * dispatch check ran over every BOUND role rather than every DISPATCHED one,
+   * so an operator following `.env.example` and setting the hosted reviewer
+   * broke the pipeline that had just been repaired.
+   */
+  it('ignores a reviewer this mission will not dispatch', async () => {
+    const h = harness({ fusionVerified: true });
+    const { view } = await runMission(
+      h,
+      {
+        RAILWAY_ENVIRONMENT: 'production',
+        RELAY_PROMPT_ARCHITECT_MODE: 'fusion',
+        RELAY_ROLE_REVIEWER: 'hermes_remote_service',
+        RELAY_HERMES_MODE: 'remote',
+        RELAY_HERMES_SERVICE_URL: 'https://hermes.internal',
+        RELAY_HERMES_SERVICE_TOKEN: 'not-a-real-token',
+        RELAY_HERMES_TRUSTED_ORIGINS: 'https://hermes.internal',
+      },
+      'm-role-hosted-fake-with-reviewer',
+      'fake',
+    );
+    expect(view.state).toBe('verified_complete');
+    expect(h.calls.reviewer).toBe(0);
+  });
+
+  /**
+   * THE DANGEROUS HALF OF THE CONFLICT. Naming the fake occupant WITHOUT
+   * RELAY_BRIDGE_FAKE_CLAUDE binds the fake while the real Claude Code CLI
+   * resolves — and the fake shares the local occupant's actor name and adapter
+   * id, so nothing downstream objects. A real, subscription-billed run would
+   * be attested `simulated` and reach verified_complete.
+   */
+  it('refuses the fake occupant named without the mode that selects it', async () => {
+    const h = harness();
+    const { view } = await runMission(
+      h,
+      { ...LIVE_ENV, RELAY_ROLE_CODING_AGENT: 'claude_code_fake' },
+      'm-role-fake-named-live',
+      'live',
+    );
+    expect(view.state).toBe('failed');
+    expect(view.error?.code).toBe('role_binding_refused');
+    expect(view.error?.safeMessage).toContain('RELAY_BRIDGE_FAKE_CLAUDE=1');
+    expect(view.error?.safeMessage).toContain('spent nothing');
+    expect(h.calls.architect).toBe(0);
+    expect(h.calls.coding).toBe(0);
+  });
+
+  /** Both settings naming the SAME occupant is agreement, not a conflict. */
+  it('accepts fake mode alongside a matching explicit name', async () => {
+    const h = harness({ fusionVerified: true });
+    const { view } = await runMission(
+      h,
+      { RELAY_PROMPT_ARCHITECT_MODE: 'fusion', RELAY_ROLE_CODING_AGENT: 'claude_code_fake' },
+      'm-role-fake-agreement',
+      'fake',
+    );
+    expect(view.error?.code).not.toBe('role_binding_refused');
   });
 
   /**
@@ -1278,6 +1341,7 @@ describe('role slots decide who may hold each role, before anything is dispatche
       reviewerOccupant: 'hermes_remote_service',
       codingAgentOccupant: undefined,
       fakeCodingRuntime: true,
+      requiresReview: false,
       hosted: true,
       configuredNames: new Set([
         'RELAY_HERMES_MODE', 'RELAY_HERMES_SERVICE_URL',

@@ -227,7 +227,10 @@ export function createBridgeServer(
           // Configuration PRESENCE only — never a value, never a key.
           const architect = architectPreflight(loadArchitectConfig(process.env));
           /**
-           * WHETHER THIS DEPLOYMENT CAN STAFF ITS THREE ROLES AT ALL.
+           * WHETHER THIS DEPLOYMENT CAN STAFF THE ROLES IT WILL DISPATCH.
+           *
+           * Not always three: on the development path the Reviewer is never
+           * called, so a deployment with two staffed roles is correctly bound.
            *
            * REASON CODES, NOT MESSAGES, AND NO OCCUPANT NAMES. This route is
            * unauthenticated. It already discloses which architect VARIABLES are
