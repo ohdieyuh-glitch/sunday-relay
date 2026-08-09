@@ -55,7 +55,9 @@ invocation) → Relay's own verification → independent Hermes review (approved
 completion policy satisfied. All attestations `requested === actual`,
 `fallbackOccurred: false`, ≈2 cents.
 
-**Hosted execution is the gap, and this session did not close it.**
+**Hosted execution is half-closed.** The hosted Coding Agent is wired and
+proven; the hosted Reviewer is not, and no hosted shape completes a mission on
+Railway as configured today — see §4.
 
 ## 4. What PR #70 delivered — MERGED and DEPLOYED
 
@@ -115,7 +117,7 @@ both.
 | Founder machine, nothing configured | runs (development defaults) |
 | Founder machine, live architect + Claude Code + Hermes | **runs — the full three-role mission** |
 | Hosted, `RELAY_PROMPT_ARCHITECT_MODE=fusion` + `RELAY_BRIDGE_FAKE_CLAUDE=1` | runs — the keyless offline pipeline, no spend |
-| Hosted, `fusion` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` | a real, API-billed coding run with no Reviewer (the development architect dispatches none) |
+| Hosted, `fusion` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` | a real, API-billed coding run with no Reviewer — **but only where `FUSION_BASE_URL` reaches a running Sunday Alcatraz.** Production still publishes the localhost default, so today this fails at `architect_unavailable` before the Coding Agent is reached |
 | Hosted, live three-role | **cannot run.** The hosted Reviewer is still not dispatchable — the mission's reviewer leg spawns a local Hermes and does not use the remote transport |
 
 Production today refuses with `role_binding_refused`, **naming the variables to
@@ -187,7 +189,7 @@ cd "$(mktemp -d)" && env -i PATH="$PATH" HOME="$HOME" hermes -z 'Reply with the 
 | Id | What | Blocks |
 |---|---|---|
 | DFA-001 | Railway CLI is **Unauthorized**; creating a second Railway service needs browser consent | The dedicated Hermes service |
-| — | `ANTHROPIC_API_KEY` + `RELAY_HOSTED_CODING_MODEL` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` on Railway | Hosted Coding Agent execution — the code is wired; only the credentials are outstanding |
+| — | `ANTHROPIC_API_KEY` + `RELAY_HOSTED_CODING_MODEL` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` on Railway | Hosted Coding Agent execution. The code is wired and proven; the credentials AND a reachable `FUSION_BASE_URL` are both outstanding |
 | DFA-003 | Supabase password rotation | Nothing in this repository |
 
 **This session held no `RELAY_BRIDGE_API_TOKEN`**, so every production check

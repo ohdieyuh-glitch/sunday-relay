@@ -186,6 +186,57 @@ describe('the hosted Coding Agent runs through the one existing pipeline', () =>
     expect(result.structuralReason).toMatch(/could not be loaded/i);
   }, 30_000);
 
+  /**
+   * A CRASH AFTER THE RUNTIME STARTED IS NOT A FAILURE TO START.
+   *
+   * A provider error, rate limit or dropped stream eight turns in is the
+   * ordinary failure mode of a long agent run. It returned `launch_failed`,
+   * which the seam documents as "nothing ran, so there is no output to
+   * distrust and nothing in the workspace to inspect" — while turns had been
+   * billed and the workspace really had been edited.
+   */
+  it('does not call a mid-run crash a failure to start', async () => {
+    const crashAfterInit = async function* crash(params: {
+      prompt: string; options: Record<string, unknown>;
+    }) {
+      const cwd = typeof params.options.cwd === 'string' ? params.options.cwd : '';
+      const { writeFileSync, mkdirSync } = await import('node:fs');
+      const { join, dirname } = await import('node:path');
+      const target = join(cwd, CLAIMED_FILE);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, REFERENCE_IMPLEMENTATION);
+      yield {
+        type: 'system', subtype: 'init', session_id: 'hosted-session-abc123',
+        model: 'claude-sonnet-5-20260114', cwd,
+        tools: ['Read', 'Glob', 'Grep', 'Edit'],
+      };
+      throw new Error('provider stream reset');
+    };
+    const invoker = createHostedClaudeInvoker({
+      apiKey: 'sk-ant-FAKETESTNOTREAL-never-served', // relay-boundary:allow-fixture — synthetic
+      requestedModel: null,
+      queryFn: crashAfterInit as never,
+    });
+    const result = await invoker({
+      association: { projectId: 'p', runId: 'r', taskId: 't', workspaceId: 'w', adapterId: 'a' } as never,
+      pkg: {} as never,
+      workspacePath: '/tmp',
+      toolPolicy: {} as never,
+      prompt: 'x',
+      limits: {} as never,
+      now: () => '2026-01-01T00:00:00.000Z',
+      ids: { next: () => 'id' } as never,
+      requestedModel: null,
+    });
+    // It launched. The runtime's own init message is the evidence.
+    expect(result.outcome.launchFailed).toBe(false);
+    expect(result.structurallyValid).toBe(false);
+    expect(result.structuralReason).toMatch(/part-way/i);
+    // And the model it named survives, so the record does not simultaneously
+    // claim a model answered and that nothing ran.
+    expect(result.actualModel).toBe('claude-sonnet-5-20260114');
+  }, 30_000);
+
   it('refuses a run that returns no parseable Relay report', async () => {
     const { outcome } = await runHosted({ report: 'I finished, looks good to me.' });
     expect(outcome.stopped).toBe(true);

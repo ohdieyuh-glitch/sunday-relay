@@ -132,7 +132,7 @@ describe('1. the terminal renders real normalized events', () => {
 
   it('shows the real header facts: execution id, phase, project, runtime and SUBSCRIPTION', () => {
     renderTerminal(terminalState(), 'verify');
-    expect(screen.getByText('CLAUDE CODE')).toBeTruthy();
+    expect(screen.getByText('CLAUDE CODE (LOCAL CLI)')).toBeTruthy();
     expect(screen.getByText('CODING AGENT')).toBeTruthy();
     expect(screen.getByText('a1b2c3d4')).toBeTruthy();
     expect(screen.getByText('VERIFY')).toBeTruthy();
@@ -263,7 +263,7 @@ describe('3. secrets, control characters and ANSI output are sanitized', () => {
 describe('4. one Claude process powers one terminal stream', () => {
   it('renders exactly one terminal surface with one execution id and one session', () => {
     renderTerminal(terminalState());
-    expect(screen.getAllByLabelText('Claude Code — Coding Agent terminal')).toHaveLength(1);
+    expect(screen.getAllByLabelText('Claude Code (local CLI) — Coding Agent terminal')).toHaveLength(1);
     expect(screen.getAllByText('a1b2c3d4')).toHaveLength(1);
     const sessionLines = (buildCodingTerminalView({ terminal: terminalState(), phase: 'verify' }).lines || []).filter(
       (l) => l.kind === 'session',
@@ -746,16 +746,16 @@ describe('the terminal is mounted in the real workspace surfaces', () => {
 
   it('renders in the workspace primary column when a real execution exists', () => {
     render(createElement(RelayProjectWorkspace, workspaceProps({ codingTerminal: view() })));
-    const terminal = screen.getByLabelText('Claude Code — Coding Agent terminal');
+    const terminal = screen.getByLabelText('Claude Code (local CLI) — Coding Agent terminal');
     expect(terminal).toBeTruthy();
     expect(terminal.closest('.rpw-col-primary')).not.toBeNull();
-    expect(within(terminal).getByText('CLAUDE CODE')).toBeTruthy();
+    expect(within(terminal).getByText('CLAUDE CODE (LOCAL CLI)')).toBeTruthy();
     expect(within(terminal).getByText(new RegExp(CODING_TERMINAL_WAITING_MESSAGE))).toBeTruthy();
   });
 
   it('is absent for a workspace with no captured execution', () => {
     render(createElement(RelayProjectWorkspace, workspaceProps()));
-    expect(screen.queryByLabelText('Claude Code — Coding Agent terminal')).toBeNull();
+    expect(screen.queryByLabelText('Claude Code (local CLI) — Coding Agent terminal')).toBeNull();
   });
 
   it('replaces the summary CODING AGENT panel inside full Terminal Mode', () => {
@@ -767,7 +767,7 @@ describe('the terminal is mounted in the real workspace surfaces', () => {
     );
     const dialog = screen.getByRole('dialog');
     // Exactly one coding surface exists in Terminal Mode: the real terminal.
-    expect(within(dialog).getAllByLabelText('Claude Code — Coding Agent terminal')).toHaveLength(1);
+    expect(within(dialog).getAllByLabelText('Claude Code (local CLI) — Coding Agent terminal')).toHaveLength(1);
     expect(within(dialog).queryByLabelText('CODING AGENT activity')).toBeNull();
     // The architect and system role panels are untouched.
     expect(within(dialog).getByLabelText('PROMPT ARCHITECT activity')).toBeTruthy();
@@ -794,5 +794,47 @@ describe('the terminal is mounted in the real workspace surfaces', () => {
     expect(within(roles).getByText('Hermes')).toBeTruthy();
     expect(within(roles).getByText('READ ONLY')).toBeTruthy();
     expect(roles.textContent).not.toContain('API PAID');
+  });
+});
+
+/**
+ * THE SCREEN MUST NAME WHAT RAN, AND MUST NOT ANNOUNCE SPEND THAT DID NOT
+ * HAPPEN. Both defects were fixed in the role row and the event stream first
+ * and survived here, which is the difference between fixing an instance and
+ * fixing the class.
+ */
+describe('the terminal names the surface that ran, and only bills what launched', () => {
+  const hostedState = (over: Partial<CodingTerminalState> = {}): CodingTerminalState => ({
+    ...terminalState(),
+    runtime: 'Claude Agent SDK (hosted)',
+    billing: 'api_billed',
+    attestation: {
+      attestationId: 'att_h', actualActor: 'Claude Agent SDK',
+      actualRuntime: 'claude-agent-sdk-hosted', launchVerified: true,
+      completionVerified: true, fallbackOccurred: false, billingPath: 'api_billed',
+    },
+    ...over,
+  });
+
+  it('titles the terminal with the hosted runtime, not a literal', () => {
+    const view = buildCodingTerminalView({ terminal: hostedState(), phase: 'build' });
+    expect(view.runtime).toBe('Claude Agent SDK (hosted)');
+    expect(view.billingLabel).toBe('API PAID');
+  });
+
+  it('reports NOT BILLED for a run that never launched, whatever the occupant costs', () => {
+    const view = buildCodingTerminalView({
+      terminal: hostedState({
+        attestation: {
+          attestationId: 'att_h', actualActor: 'Claude Agent SDK',
+          actualRuntime: 'claude-agent-sdk-hosted', launchVerified: false,
+          completionVerified: false, fallbackOccurred: false, billingPath: 'api_billed',
+        },
+      }),
+      phase: 'build',
+    });
+    // `billingPath` is the occupant's cost model and exists before anything
+    // runs; only `launchVerified` says anything was spent.
+    expect(view.billingLabel).toBe('NOT BILLED');
   });
 });

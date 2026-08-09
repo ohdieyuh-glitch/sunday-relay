@@ -578,7 +578,14 @@ export async function runCodingMission(input: {
       return stop('The coding agent was cancelled.');
     }
     if (invocation.outcome.timedOut) return stop('The coding agent timed out.');
-    if (invocation.outcome.launchFailed) return stop('The coding agent could not start.');
+    if (invocation.outcome.launchFailed) {
+      // The surface's own sentence when it has one — "could not start" alone
+      // gave an operator nothing to act on for a permanently missing runtime.
+      const why = invocation.structuralReason?.trim();
+      return stop(why === undefined || why === ''
+        ? 'The coding agent could not start.'
+        : `The coding agent could not start: ${why.replace(/\.$/, '')}.`);
+    }
     if (!invocation.structurallyValid) {
       // The reason is the surface's own sentence, which already says what
       // happened — an unusable stream, an envelope the runtime did not honour,

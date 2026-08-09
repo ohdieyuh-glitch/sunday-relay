@@ -148,8 +148,28 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
     if (timedOut) {
       return { kind: 'timed_out', safeMessage: 'The hosted Coding Agent exceeded its runtime bound.', observation, startedAt, completedAt };
     }
-    // A provider error can quote the request, which can quote the credential —
-    // so only a fixed sentence leaves this function.
+    /**
+     * A THROW AFTER THE RUNTIME STARTED IS NOT A FAILURE TO START.
+     *
+     * `initSeen` is the runtime's own init message, so it is direct evidence
+     * that the agent launched. A provider error, a rate limit or a dropped
+     * stream eight turns in — the ordinary failure mode of a long agent run —
+     * was returning `launch_failed`, which the seam documents as "nothing ran,
+     * so there is no output to distrust and nothing in the workspace to
+     * inspect". Turns had been billed and the workspace really had been edited.
+     * A `refused` result keeps the workspace inspectable and the attestation
+     * honest about having launched.
+     *
+     * A provider error can quote the request, which can quote the credential —
+     * so only a fixed sentence leaves this function either way.
+     */
+    if (observation.initSeen) {
+      return {
+        kind: 'refused',
+        safeMessage: 'The hosted Coding Agent stopped part-way through its run',
+        observation, envelope, startedAt, completedAt,
+      };
+    }
     return {
       kind: 'launch_failed',
       safeMessage: 'The hosted Coding Agent could not complete a run.',

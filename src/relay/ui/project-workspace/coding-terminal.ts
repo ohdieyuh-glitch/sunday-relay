@@ -218,7 +218,11 @@ export function buildCodingTerminalView(input: {
       ? sanitizeTerminalLine(t.externalSessionRedacted, 20)
       : null,
     runtime: sanitizeTerminalLine(t.runtime, 80) || 'Claude Code (local CLI)',
-    billingLabel: BILLING_LABEL[t.attestation?.billingPath ?? t.billing],
+    // GATED ON EXECUTION, not on the occupant's cost model. `billingPath` says
+    // how this occupant is paid for; only `launchVerified` says whether
+    // anything was. Ungated, a run that never started rendered "API PAID" —
+    // the exact mirror of the money defect this field was widened to fix.
+    billingLabel: billingLabelFor(t.attestation, t.billing),
     projectLabel: sanitizeTerminalLine(t.projectLabel, 120) || '—',
     phaseLabel: PHASE_LABEL[input.phase],
     permissions,
@@ -270,6 +274,23 @@ export const BILLING_LABEL: Readonly<Record<CodingTerminalAttestation['billingPa
     simulated: 'SIMULATED — NO SPEND',
     unknown: 'UNKNOWN',
   });
+
+/**
+ * The payer, or the honest absence of one.
+ *
+ * `billingPath` is the OCCUPANT's cost model and exists before anything runs.
+ * `launchVerified` is the only field that says a run happened. A label built
+ * from the first alone announces an intention; this repository's rule is to
+ * announce facts.
+ */
+export function billingLabelFor(
+  attestation: CodingTerminalAttestation | null,
+  fallback: CodingTerminalAttestation['billingPath'],
+): string {
+  if (attestation === null) return BILLING_LABEL[fallback];
+  if (!attestation.launchVerified) return 'NOT BILLED';
+  return BILLING_LABEL[attestation.billingPath];
+}
 
 export interface RoleBillingRow {
   roleKey: 'prompt_architect' | 'coding_agent' | 'reviewer';
@@ -339,7 +360,7 @@ export function buildRoleBilling(input: {
       actor: coding ? sanitizeTerminalLine(coding.actualActor, 60) : 'Not yet run',
       role: 'Coding Agent',
       runtime: coding ? sanitizeTerminalLine(coding.actualRuntime, 60) : '—',
-      billingLabel: coding ? BILLING_LABEL[coding.billingPath] : 'NOT BILLED',
+      billingLabel: billingLabelFor(coding, 'unknown'),
       statusLabel: codingAttested ? 'EXECUTION ATTESTED' : coding ? 'NOT ATTESTED' : 'NOT RUN',
     },
     {

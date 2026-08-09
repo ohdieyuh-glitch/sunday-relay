@@ -5,7 +5,13 @@ import type { CodingTerminalView } from './coding-terminal';
 import type { CodingTerminalLine } from '../app/contracts';
 
 /**
- * CLAUDE CODE — CODING AGENT TERMINAL.
+ * THE CODING AGENT TERMINAL.
+ *
+ * The title is `view.runtime` — the runtime this mission asked for — and was
+ * the literal "CLAUDE CODE" whichever surface ran. A hosted Agent-SDK run was
+ * titled CLAUDE CODE on the main execution surface, which is the defect the
+ * role registry exists to make impossible, surviving in a component after it
+ * had been fixed in the role row and the event stream.
  *
  * A terminal-style execution surface for the ONE real Claude Code invocation
  * that performs the mission. It is an observation window, not a shell: there
@@ -123,13 +129,13 @@ export function RelayCodingAgentTerminal({
 
   if (!view.present) {
     return (
-      <section className="rcat rcat--empty" aria-label="Claude Code — Coding Agent terminal">
+      <section className="rcat rcat--empty" aria-label={`${view.runtime} — Coding Agent terminal`}>
         <header className="rcat-head">
           <span className="rcat-title">
             <span className="rcat-square" aria-hidden="true">
               ■
             </span>{' '}
-            CLAUDE CODE
+            {view.runtime.toUpperCase()}
           </span>
           <span className="rcat-role">CODING AGENT</span>
           <span className="rcat-status rcat-status--waiting">WAITING</span>
@@ -147,14 +153,14 @@ export function RelayCodingAgentTerminal({
   return (
     <section
       className={`rcat${reducedMotion ? ' rcat--static' : ''}`}
-      aria-label="Claude Code — Coding Agent terminal"
+      aria-label={`${view.runtime} — Coding Agent terminal`}
     >
       <header className="rcat-head">
         <span className="rcat-title">
           <span className="rcat-square" aria-hidden="true">
             ■
           </span>{' '}
-          CLAUDE CODE
+          {view.runtime.toUpperCase()}
         </span>
         <span className="rcat-role">CODING AGENT</span>
         <span className={`rcat-status rcat-status--${view.status}`} role="status">
@@ -231,7 +237,8 @@ export function RelayCodingAgentTerminal({
       {view.claim && (
         <section className="rcat-block rcat-block--claim" aria-label="Coding agent claim">
           <h3 className="rcat-block-title">
-            CLAUDE CODE CLAIM <span className="rcat-block-tag">UNVERIFIED UNTIL RELAY CHECKS IT</span>
+            {view.runtime.toUpperCase()} CLAIM{' '}
+            <span className="rcat-block-tag">UNVERIFIED UNTIL RELAY CHECKS IT</span>
           </h3>
           <p className="rcat-claim-summary">{view.claim.summary}</p>
           {view.claim.filesChanged.length > 0 && (

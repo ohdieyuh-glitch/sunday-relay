@@ -243,9 +243,12 @@ const HOSTED_CODING_OCCUPANT = 'claude_agent_sdk_hosted';
  * The capability profile handed to the coding leg on the hosted path.
  *
  * It describes the CLI, and the hosted surface has no CLI — the invoker seam
- * replaces the spawn entirely, so nothing here reaches a process. What it does
- * still feed is the tool-policy compiler, so it declares the restrictions the
- * hosted envelope genuinely enforces rather than a permissive default.
+ * replaces the spawn entirely, so nothing here reaches a process. NOTHING READS
+ * IT on the hosted path either: `compileClaudePermissions` consults one field
+ * behind a disabled branch, so the compiled policy is identical for any
+ * profile. It exists to satisfy the parameter's type, and saying that is more
+ * useful than a claim about enforcement it does not perform. The hosted run's
+ * real restrictions live in `hosted-envelope.ts`.
  */
 const HOSTED_PLACEHOLDER_CAPABILITIES: ClaudeCodeCapabilityProfile = Object.freeze({
   executablePath: null, version: null,
