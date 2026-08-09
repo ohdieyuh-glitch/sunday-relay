@@ -71,6 +71,7 @@ export function RelayProjectSettings({
   onStartProject,
   onConnectRepository,
   onBack,
+  backLabel = '← RELAY HOME',
 }: RelayProjectSettingsProps) {
   const [draft, setDraft] = useState<ProjectSettingsDraft>(
     () => initialDraft ?? createDefaultSettingsDraft(brief),
@@ -151,8 +152,15 @@ export function RelayProjectSettings({
         <h1 className="rps-title">PROJECT SETTINGS</h1>
         <div className="rps-header-right">
           <span className="rps-plan">PLAN / {entitlement.toUpperCase()}</span>
+          {/* THE EXIT SAYS WHERE IT GOES.
+
+              This was the literal "← RELAY HOME", and it is the only way out
+              of Settings. Opening Settings from inside a project therefore
+              offered exactly one exit, labelled with the homepage — so a
+              founder pressing it lost the project, and the control had told
+              them it would. The label follows the destination now. */}
           <button type="button" className="rps-btn" onClick={onBack}>
-            ← RELAY HOME
+            {backLabel}
           </button>
         </div>
       </header>

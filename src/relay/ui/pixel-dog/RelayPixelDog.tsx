@@ -63,9 +63,14 @@ const POSES: Record<PixelDogPose, string[]> = {
     '..wwwwwwwwwwwww...',
     '..swwwwwwwwwwss...',
     '...wwwwwwwwwww....',
-    '...ww....ww..ww...',
-    '...ww....ww..ww...',
-    '...ss....ss..ss...',
+    // FOUR LEGS, NOT THREE. A side-view quadruped needs a far-side pair to
+    // have four paws that can move independently; the approved sprite drew
+    // three columns, so a four-beat gait was impossible without one of them
+    // doing two jobs. The far legs are shadow grey, which is how this sprite
+    // already renders depth, so the mark stays the mark.
+    '...ww..ss.ww.ww...',
+    '...ww..ss.ww.ww...',
+    '...ss..ss.ss.ss...',
   ],
   trotting: [
     ...HEAD,
@@ -198,6 +203,35 @@ const MARKER_GLYPH: Record<Exclude<PixelDogMarker, 'none'>, string> = {
   scan: '▚',
 };
 
+/**
+ * WHICH PART OF THE ANIMAL EACH PIXEL BELONGS TO.
+ *
+ * The sprite was one flat list of rects, so the only motion available to it
+ * was moving the whole thing — and a sprite translated up and down reads as a
+ * UI icon pulsing, not as an animal breathing. Grouping the pixels lets the
+ * chest rise while the head barely moves and each paw carries its own phase.
+ *
+ * Rows are the anatomy: 0-5 head, 6-10 body, 11-13 legs. Within the legs,
+ * columns separate the four paws — near-front, far-front, near-rear, far-rear
+ * — which is what makes a four-beat gait possible at all.
+ */
+export const PIXEL_DOG_PARTS = [
+  'head', 'body', 'leg-front-near', 'leg-front-far', 'leg-rear-near', 'leg-rear-far',
+] as const;
+export type PixelDogPart = (typeof PIXEL_DOG_PARTS)[number];
+
+export function pixelDogPart(x: number, y: number): PixelDogPart {
+  if (y <= 5) return 'head';
+  if (y <= 10) return 'body';
+  // Leg rows. The column bands follow the standing sprite; a pose without a
+  // paw in a band simply contributes no pixels to that group, which is why
+  // this needs no per-pose table.
+  if (x <= 5) return 'leg-front-near';
+  if (x <= 8) return 'leg-front-far';
+  if (x <= 11) return 'leg-rear-near';
+  return 'leg-rear-far';
+}
+
 function PixelGrid({ grid, unit }: { grid: string[]; unit: number }) {
   const w = 18 * unit;
   const h = 14 * unit;
@@ -211,15 +245,31 @@ function PixelGrid({ grid, unit }: { grid: string[]; unit: number }) {
       aria-hidden="true"
       focusable="false"
     >
-      {grid.flatMap((row, y) =>
-        row.split('').map((ch, x) => {
-          const fill = PIXEL_FILL[ch];
-          if (!fill) return null;
-          return (
-            <rect key={`${x}-${y}`} x={x * unit} y={y * unit} width={unit} height={unit} fill={fill} />
-          );
-        }),
-      )}
+      {PIXEL_DOG_PARTS.map((part) => {
+        const rects = grid.flatMap((row, y) =>
+          row.split('').map((ch, x) => {
+            if (pixelDogPart(x, y) !== part) return null;
+            const fill = PIXEL_FILL[ch];
+            if (!fill) return null;
+            return (
+              <rect key={`${x}-${y}`} x={x * unit} y={y * unit} width={unit} height={unit} fill={fill} />
+            );
+          }),
+        ).filter(Boolean);
+        if (rects.length === 0) return null;
+        return (
+          <g
+            key={part}
+            className={`rpd-part rpd-part--${part}`}
+            // The transform origin is the ground under this part, so a leg
+            // swings from the shoulder and the body rises from the paws
+            // rather than every group pivoting about the canvas corner.
+            style={{ transformOrigin: `${9 * unit}px ${14 * unit}px` }}
+          >
+            {rects}
+          </g>
+        );
+      })}
     </svg>
   );
 }

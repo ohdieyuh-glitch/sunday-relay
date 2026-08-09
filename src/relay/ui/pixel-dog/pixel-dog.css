@@ -108,3 +108,114 @@
   vertical-align: middle;
 }
 .rpd-markwrap .rpd-art { image-rendering: pixelated; }
+
+/* ===========================================================================
+   A LIVING ANIMAL, NOT A SPRITE BEING TRANSLATED.
+
+   The dog used to be one flat group, so the only motion it could carry was
+   moving the whole mark up and down — which reads as a UI icon pulsing. Each
+   anatomical group now animates on its own axis:
+
+     breathing   the chest rises and falls; the head answers it a beat later
+                 and much less; the legs take the weight shift.
+     gait        four paws, four phases, in the order a quadruped actually
+                 walks: front-left, opposite rear, front-right, opposite rear.
+                 The body bobs once per pair of footfalls, so weight lands
+                 with a paw instead of the legs swinging under a floating body.
+
+   Every part shares one duration per cycle so the phases stay in relation to
+   each other; changing the tempo means changing one custom property.
+   =========================================================================== */
+
+.rpd {
+  --rpd-breath: 4.4s;
+  --rpd-stride: 1.05s;
+}
+
+/* IDLE — always running, because an animal at rest is not an animal stopped.
+   The amplitudes are deliberately below one pixel unit: visible as life,
+   never as a bouncing logo. */
+@keyframes rpd-breathe-body {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  45%      { transform: translateY(-0.35%) scaleY(1.018); }
+  70%      { transform: translateY(-0.12%) scaleY(1.006); }
+}
+
+@keyframes rpd-breathe-head {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  40%      { transform: translateY(-0.5%) rotate(-0.35deg); }
+  75%      { transform: translateY(0.1%) rotate(0.2deg); }
+}
+
+/* The paws do not lift while breathing; they take the weight. A near pair and
+   a far pair lean fractionally out of phase, which is what stops the stance
+   reading as a single rigid block. */
+@keyframes rpd-settle-near {
+  0%, 100% { transform: translateY(0); }
+  45%      { transform: translateY(0.18%); }
+}
+
+@keyframes rpd-settle-far {
+  0%, 100% { transform: translateY(0.1%); }
+  55%      { transform: translateY(0); }
+}
+
+.rpd-part { will-change: transform; }
+
+.rpd .rpd-part--body { animation: rpd-breathe-body var(--rpd-breath) ease-in-out infinite; }
+.rpd .rpd-part--head {
+  animation: rpd-breathe-head var(--rpd-breath) ease-in-out infinite;
+  /* A quarter cycle behind the chest: the head follows the breath, it does
+     not lead it. */
+  animation-delay: calc(var(--rpd-breath) * 0.25);
+}
+.rpd .rpd-part--leg-front-near,
+.rpd .rpd-part--leg-rear-near { animation: rpd-settle-near var(--rpd-breath) ease-in-out infinite; }
+.rpd .rpd-part--leg-front-far,
+.rpd .rpd-part--leg-rear-far { animation: rpd-settle-far var(--rpd-breath) ease-in-out infinite; }
+
+/* WALKING — a four-beat gait. Each paw lifts, swings forward, plants, then
+   carries weight while the others move. The four delays are the gait order;
+   they are the whole reason this does not look like four legs on one hinge. */
+@keyframes rpd-step {
+  0%   { transform: translateY(0) rotate(0deg); }
+  12%  { transform: translateY(-6%) rotate(-7deg); }   /* lift */
+  28%  { transform: translateY(-7%) rotate(6deg); }    /* swing forward */
+  40%  { transform: translateY(0) rotate(1deg); }      /* plant */
+  100% { transform: translateY(0) rotate(0deg); }      /* bear weight */
+}
+
+/* One body bob per pair of footfalls, landing WITH a paw rather than between
+   steps — the difference between walking and sliding. */
+@keyframes rpd-gait-body {
+  0%, 100% { transform: translateY(0); }
+  25%      { transform: translateY(-0.5%); }
+  50%      { transform: translateY(0); }
+  75%      { transform: translateY(-0.5%); }
+}
+
+.rpd--moving .rpd-part--body {
+  animation: rpd-gait-body var(--rpd-stride) ease-in-out infinite;
+}
+.rpd--moving .rpd-part--head {
+  animation: rpd-breathe-head var(--rpd-breath) ease-in-out infinite;
+}
+.rpd--moving .rpd-part--leg-front-near,
+.rpd--moving .rpd-part--leg-rear-far,
+.rpd--moving .rpd-part--leg-front-far,
+.rpd--moving .rpd-part--leg-rear-near {
+  animation: rpd-step var(--rpd-stride) ease-in-out infinite;
+}
+
+/* THE GAIT ORDER. front-near → opposite rear → front-far → opposite rear.
+   No two adjacent phases are the same pair, so three paws are always down. */
+.rpd--moving .rpd-part--leg-front-near { animation-delay: 0s; }
+.rpd--moving .rpd-part--leg-rear-far   { animation-delay: calc(var(--rpd-stride) * 0.25); }
+.rpd--moving .rpd-part--leg-front-far  { animation-delay: calc(var(--rpd-stride) * 0.5); }
+.rpd--moving .rpd-part--leg-rear-near  { animation-delay: calc(var(--rpd-stride) * 0.75); }
+
+/* REDUCED MOTION STOPS EVERYTHING, including the idle breath. A user who has
+   asked for no motion has not asked for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .rpd .rpd-part { animation: none !important; }
+}

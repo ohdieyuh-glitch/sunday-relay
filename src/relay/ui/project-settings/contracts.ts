@@ -278,4 +278,14 @@ export interface RelayProjectSettingsProps {
   onStartProject: (draft: ProjectSettingsDraft) => void;
   onConnectRepository: () => void;
   onBack: () => void;
+  /**
+   * What the single exit says, so it can tell the truth about where it goes.
+   *
+   * It was the literal "← RELAY HOME" inside the component. Settings is
+   * reachable from the Entry Home AND from inside a project, and with one
+   * hard-coded label the project case offered a founder exactly one exit,
+   * named after the homepage. Defaults to the original text, so every existing
+   * caller is unchanged.
+   */
+  backLabel?: string;
 }

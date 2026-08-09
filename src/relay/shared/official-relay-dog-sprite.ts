@@ -119,9 +119,16 @@ export const OFFICIAL_RELAY_DOG_POSES: Record<OfficialRelayDogPose, readonly str
     '..wwwwwwwwwwwww...',
     '..swwwwwwwwwwss...',
     '...wwwwwwwwwww....',
-    '...ww....ww..ww...',
-    '...ww....ww..ww...',
-    '...ss....ss..ss...',
+    // FOUR LEGS, NOT THREE — and here, in the SHARED sprite, because the
+    // website and the CLI both render this and a test proves they match pixel
+    // for pixel. A side-view quadruped needs a far-side pair to have four paws
+    // that can move independently; with three columns a four-beat gait forces
+    // one column to do two jobs, which is the synchronised-leg look the design
+    // forbids. The far pair is shadow grey, which is how this sprite already
+    // renders depth, so the mark stays the mark.
+    '...ww..ss.ww.ww...',
+    '...ww..ss.ww.ww...',
+    '...ss..ss.ss.ss...',
   ],
   trotting: [
     ...HEAD,

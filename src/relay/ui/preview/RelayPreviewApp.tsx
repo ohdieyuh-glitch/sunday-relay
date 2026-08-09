@@ -747,7 +747,18 @@ export function RelayPreviewApp() {
         navigate(`/relay/project/${settingsProject.id}`);
       }}
       onConnectRepository={() => undefined}
-      onBack={() => navigate('/relay')}
+      /**
+       * BACK RETURNS WHERE THE USER CAME FROM.
+       *
+       * Settings is reachable from the Entry Home AND from inside a workspace,
+       * and Back went to the Home in both cases — so a founder who opened
+       * settings from their project lost the project by pressing Back, which
+       * is the same "sent toward the homepage" complaint from the other end.
+       * `onStartProject` already returns to the workspace; Back now agrees
+       * with it.
+       */
+      onBack={() => navigate(`/relay/project/${settingsProject.id}`)}
+      backLabel="← BACK TO PROJECT"
     />
   ) : (
     <SafeNotFound
@@ -933,7 +944,32 @@ export function RelayPreviewApp() {
         onRejectDecision={(id) => pushWsMessage('relay', `Fixture: decision ${id} rejected.`)}
         onOpenTerminal={() => navigate('/relay/project/rly-001/terminal')}
         onCloseTerminal={() => navigate('/relay/project/rly-001')}
-        onOpenProjectSettings={() => navigate('/relay')}
+        /**
+         * PROJECT SETTINGS OPENS SETTINGS, AND NEVER THE HOMEPAGE.
+         *
+         * This handler navigated to `/relay` — the Relay Entry Home — so
+         * asking for settings from inside the workspace threw the founder out
+         * of the project entirely. That is the reported defect.
+         *
+         * The obvious repair is wrong here: `rly-001` is the SHOWCASE FIXTURE
+         * and deliberately has no store project (see `renderWorkspaceProject`),
+         * so routing it to `/settings` lands on "Relay could not load this
+         * project" — trading a wrong destination for a dead end. A showcase has
+         * no configuration to edit, and saying so is the honest answer.
+         *
+         * When a real project IS active, its settings are what the founder
+         * meant, and that is where this goes.
+         */
+        onOpenProjectSettings={() => {
+          if (activeProjectId !== null && store.getProject(activeProjectId)) {
+            navigate(`/relay/project/${activeProjectId}/settings`);
+            return;
+          }
+          setNotice(
+            'This is the design showcase, which has no project to configure. '
+            + 'Open or create a project from the Relay Entry Home to edit its settings.',
+          );
+        }}
         onOpenManualTask={(id) => pushWsMessage('relay', `Fixture: opened Manual Task ${id}.`)}
         onApproveManualTask={(id) => pushWsMessage('relay', `Fixture: Manual Task ${id} approved.`)}
         onRejectManualTask={(id) => pushWsMessage('relay', `Fixture: Manual Task ${id} blocked.`)}
