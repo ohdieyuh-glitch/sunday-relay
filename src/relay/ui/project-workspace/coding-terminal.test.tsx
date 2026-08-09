@@ -823,8 +823,16 @@ describe('the terminal names the surface that ran, and only bills what launched'
     // exactly how four more literals survived the header repair.
     renderTerminal(hostedState());
     expect(screen.getByText('CLAUDE AGENT SDK (HOSTED)')).toBeTruthy();
-    expect(document.body.textContent).not.toContain('Claude Code');
-    expect(document.body.textContent).not.toContain('CLAUDE CODE');
+    /**
+     * MARKUP, NOT TEXT. `textContent` excludes attributes, so it structurally
+     * cannot catch an `aria-label` — and two of the four literals this repair
+     * removed live in exactly one. A screen-reader user would have been told
+     * "Claude Code execution events" over a hosted run with the whole suite
+     * green. Asserting on `innerHTML` covers the visible strings AND the
+     * accessible ones in a single line.
+     */
+    expect(document.body.innerHTML).not.toContain('Claude Code');
+    expect(document.body.innerHTML).not.toContain('CLAUDE CODE');
   });
 
   it('names the hosted runtime in the live-progress line, which is its whole body', () => {

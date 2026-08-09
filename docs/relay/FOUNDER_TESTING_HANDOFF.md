@@ -115,7 +115,7 @@ both.
 | Deployment | Result |
 |---|---|
 | Founder machine, nothing configured | **refused** — `architect_not_configured`. An empty `RELAY_PROMPT_ARCHITECT_MODE` means BLOCKED, not offline |
-| Founder machine, `RELAY_PROMPT_ARCHITECT_MODE=fusion` + a reachable Alcatraz | runs, no spend |
+| Founder machine, `RELAY_PROMPT_ARCHITECT_MODE=fusion` + a reachable Alcatraz | runs on the installed Claude Code CLI — **subscription-billed**, no API spend |
 | Founder machine, live architect + Claude Code + Hermes | **runs — the full three-role mission** |
 | Hosted, `RELAY_PROMPT_ARCHITECT_MODE=fusion` + `RELAY_BRIDGE_FAKE_CLAUDE=1` | runs — the keyless offline pipeline, no spend — **but only where `FUSION_BASE_URL` reaches a running Sunday Alcatraz.** `fusion` is an HTTP architect with no offline fallback |
 | Hosted, `fusion` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` | a real, API-billed coding run with no Reviewer — **but only where `FUSION_BASE_URL` reaches a running Sunday Alcatraz.** Production still publishes the localhost default, so today this fails at `architect_unavailable` before the Coding Agent is reached |
@@ -128,8 +128,8 @@ set** — where before it said `coding_agent_not_ready`. No capability is lost.
 
 | # | Requirement | State |
 |---|---|---|
-| 1 | Production-hosted three-role execution | **Not done.** Architect hosted; Coding Agent and Reviewer are not |
-| 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability. Hosted EXECUTION of the swapped occupants is not |
+| 1 | Production-hosted three-role execution | **Half.** Architect hosted and Coding Agent wired; the hosted **Reviewer** is the remaining gap |
+| 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability, and hosted execution for the Coding Agent. The Reviewer's hosted surface is not dispatchable |
 | 3 | Real workspace path | **Partially present already** — see §6 |
 | 4 | Evidence & Retrieval on MCP + Brain | **Not started** |
 | 5 | Skill Ops capabilities | **Not started** |

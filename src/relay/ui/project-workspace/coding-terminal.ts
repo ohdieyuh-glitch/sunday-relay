@@ -229,7 +229,10 @@ export function buildCodingTerminalView(input: {
     externalSessionRedacted: t.externalSessionRedacted
       ? sanitizeTerminalLine(t.externalSessionRedacted, 20)
       : null,
-    runtime: sanitizeTerminalLine(t.runtime, 80) || 'Claude Code (local CLI)',
+    // The FIFTH instance of the same class, sitting one line above its own
+    // fix: a blank runtime fell back to a Claude Code literal, so all four
+    // derived strings derived from it. `Unknown is not zero, never a default`.
+    runtime: sanitizeTerminalLine(t.runtime, 80) || CODING_TERMINAL_UNRUN_RUNTIME,
     // GATED ON EXECUTION, not on the occupant's cost model. `billingPath` says
     // how this occupant is paid for; only `launchVerified` says whether
     // anything was. Ungated, a run that never started rendered "API PAID" —

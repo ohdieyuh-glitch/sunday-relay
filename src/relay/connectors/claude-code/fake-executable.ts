@@ -15,6 +15,8 @@ export type FakeScenario =
   | 'success'
   | 'success_resume'
   | 'malformed_line'
+  /** A stream that never announces itself: no init record at all. */
+  | 'no_init'
   | 'missing_init'
   | 'missing_session'
   | 'wrong_session_on_resume'
@@ -106,6 +108,12 @@ switch (SPEC.scenario) {
   case 'missing_session':
     emit({ type: 'system', subtype: 'init', model: 'fake-model', cwd: process.cwd(), tools: ['Edit'] });
     emit({ type: 'result', subtype: 'success', is_error: false, result: 'no session id', num_turns: 1, duration_ms: 5 });
+    break;
+  case 'no_init':
+    // NO INIT RECORD. A process can start and produce output without ever
+    // announcing itself, and launchVerified must not treat the absence of a
+    // spawn error as evidence that it did.
+    emit({ type: 'result', subtype: 'success', is_error: false, session_id: sessionId, result: 'no init was emitted', num_turns: 1, duration_ms: 4 });
     break;
   case 'malformed_line':
     emit({ type: 'system', subtype: 'init', session_id: sessionId, model: 'fake-model', cwd: process.cwd(), tools: ['Edit'] });
