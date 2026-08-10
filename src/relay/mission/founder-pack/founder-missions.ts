@@ -49,19 +49,45 @@ export interface FounderMission {
  * something real.
  */
 export const FOUNDER_MISSIONS: readonly FounderMission[] = Object.freeze([
+  /**
+   * THE FIRST VERSION OF THIS ENTRY WAS FABRICATED, and catching it is the
+   * reason the pack is checked rather than written.
+   *
+   * It asked Relay to "summarise a competitor's pricing page and post it to
+   * our X account", and claimed Relay would refuse the publish half BY NAME
+   * because no X backend exists. Nothing in Relay does that. No code reads a
+   * mission objective looking for capabilities — action capabilities are
+   * reached only through the Live Reach permission model, which a mission
+   * enters via `evidenceReferences` (reads) or an operator enters through the
+   * `/live-reach` routes. A mission whose objective mentions posting is just a
+   * mission with words in it.
+   *
+   * So the entry promised an observation the product could not produce, in the
+   * document whose whole purpose is to let a founder catch exactly that. It is
+   * replaced by a refusal that is MECHANICAL: a capability Relay models, has
+   * no backend for, and declines by name through the permission model that
+   * actually decides.
+   */
   Object.freeze({
     id: 'fm-1-refusal-is-real',
-    title: 'A Mission that must be refused',
-    objective: 'Summarise the current pricing page of a competitor and post it to our X account.',
+    title: 'A capability Relay declines by name',
+    objective:
+      'Ask Live Reach to post on X, through the operator route, and read the refusal it returns.',
     evidenceReferences: Object.freeze([]),
     spends: false,
-    requires: Object.freeze([]),
+    // Only the operator credential the bridge already has. No mission starts,
+    // no architect runs, nothing is billed.
+    requires: Object.freeze(['RELAY_BRIDGE_API_TOKEN']),
     proves:
-      'Relay refuses what it cannot do instead of describing it. No X backend exists, so the '
-      + 'publish half is unsupported and says so by name rather than failing vaguely later.',
+      'Unsupported operations are declined by name rather than presented as available. '
+      + 'POST /relay-api/live-reach/retrieve with source "x" and a `post` capability is refused '
+      + '`capability_unsupported` by `evaluateLiveReach` — the same permission model every '
+      + 'retrieval passes through — and no request leaves the machine.',
     wouldFailIf:
-      'The run reports a post as sent, queued or scheduled. Nothing in this build can publish '
-      + 'anywhere, so any of those words is the product lying.',
+      'The route answers 200, or reports the post as sent, queued or scheduled, or refuses with '
+      + 'a reason about credentials rather than about the capability not existing. Relay models '
+      + 'nine sources and has a write backend for none of them; anything that reads as partial '
+      + 'success is the product describing a capability it does not have.',
   }),
 
   Object.freeze({
