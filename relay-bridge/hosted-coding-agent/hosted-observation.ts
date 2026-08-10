@@ -20,7 +20,6 @@
  *   afterwards, and this module only reports what it saw.
  */
 
-import { safeText } from '../redact';
 
 export interface HostedUsage {
   readonly inputTokens: number | null;
@@ -154,7 +153,29 @@ export function foldHostedMessage(
       ...state,
       resultSubtype: typeof m.subtype === 'string' ? m.subtype : null,
       isError: m.is_error === true,
-      finalText: typeof m.result === 'string' ? safeText(m.result) : null,
+      /**
+       * THE REPORT IS READ BY A PARSER, NOT SHOWN TO ANYONE.
+       *
+       * This was `safeText(m.result)`. `safeText` is the DISPLAY sanitizer for
+       * short event strings: it collapses all whitespace and truncates at 600
+       * characters. Relay's structured execution report is longer than that,
+       * so every hosted run had its report guillotined mid-JSON before the
+       * parser saw it — and the mission died with "Report JSON object is not
+       * closed" or, when the cut landed earlier, "Required report marker is
+       * absent". Both refusals were correct about the text they were given and
+       * wrong about the agent, which had done the work: `result=success`,
+       * `turns=5`, `toolsUsed=3`.
+       *
+       * The local surface has always captured this raw (`stream-parser.ts`
+       * sets `finalResult = record.result`), which is what the invoker seam
+       * exists to guarantee — one report contract, not two. This is the drift
+       * it was built to prevent, arriving in the field it does not cover.
+       *
+       * SAFE BECAUSE NOTHING DISPLAYS IT: the only consumers are
+       * `parseAgentExecutionReport` and a character count. The report's own
+       * fields are redacted downstream when they become events and claims.
+       */
+      finalText: typeof m.result === 'string' ? m.result : null,
       numTurns: num(m.num_turns),
       durationMs: num(m.duration_ms),
       permissionDenials: Array.isArray(m.permission_denials) ? m.permission_denials.length : 0,
