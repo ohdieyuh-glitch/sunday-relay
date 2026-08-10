@@ -65,7 +65,7 @@ import {
 import type { ClaudeCodeCapabilityProfile } from '../src/relay/connectors/claude-code/contracts';
 import {
   CODING_AGENT_ROLE_ENV, REVIEWER_ROLE_ENV, configuredNames, describeBinding,
-  missionDispatchProblems, resolveRoleSlots,
+  explicitlySelectedReviewerOccupant, missionDispatchProblems, resolveRoleSlots, reviewerSlotConflict,
 } from './role-slot-config';
 import type { RoleSlot } from '../src/relay/mission/role-slots';
 import { safeError, safeText } from './redact';
@@ -645,7 +645,24 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
        */
       const roles = resolveRoleSlots({
         architectMode: architectEnv.RELAY_PROMPT_ARCHITECT_MODE,
-        reviewerOccupant: hermesEnv[REVIEWER_ROLE_ENV] ?? architectEnv[REVIEWER_ROLE_ENV],
+        /**
+         * NAMED, OR IMPLIED BY A TRANSPORT THE OPERATOR EXPLICITLY CONFIGURED.
+         *
+         * An operator who sets `RELAY_OPENAI_REVIEWER_MODE=live` and names no
+         * occupant has said which Reviewer they want exactly once. Relay used
+         * to answer that by applying its own development default and then
+         * attesting `hermes_local` while OpenAI reviewed. Following the one
+         * statement they made is both more honest and less hostile than
+         * refusing over a disagreement with a default Relay invented.
+         *
+         * `explicitlySelectedReviewerOccupant` returns nothing for the local
+         * transport on purpose: local is what configuring nothing produces, so
+         * it is not a statement, and treating it as one would bind an
+         * installed Hermes on a container that has none.
+         */
+        reviewerOccupant: (hermesEnv[REVIEWER_ROLE_ENV] ?? architectEnv[REVIEWER_ROLE_ENV] ?? '').trim() !== ''
+          ? (hermesEnv[REVIEWER_ROLE_ENV] ?? architectEnv[REVIEWER_ROLE_ENV])
+          : (explicitlySelectedReviewerOccupant(reviewerTransport) ?? undefined),
         codingAgentOccupant: hermesEnv[CODING_AGENT_ROLE_ENV] ?? architectEnv[CODING_AGENT_ROLE_ENV],
         // The mode the bridge already resolved, not a second reading of the
         // variable behind it.
@@ -724,6 +741,40 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           retryable: false,
         });
         return;
+      }
+
+      /**
+       * AND DO THE TWO REVIEWER DECISIONS NAME THE SAME THING?
+       *
+       * Relay decides the Reviewer twice: `reviewerTransport` above decides
+       * who reviews, and the role slot decides who is BOUND — and the binding
+       * is what gets attested. Nothing reconciled them, which was harmless
+       * while both were Hermes and became reachable the moment a third
+       * transport arrived.
+       *
+       * The configuration that broke it is the one the founder handoff
+       * recommends: `RELAY_OPENAI_REVIEWER_MODE=live` with `RELAY_ROLE_REVIEWER`
+       * unset resolves the provider transport on a founder machine while
+       * binding the development default, so OpenAI performs the review and
+       * `hermes_local` is attested. That is the mission narrating one occupant
+       * while another does the work — the defect the dispatch check above
+       * exists to prevent, arriving from a direction it was not watching.
+       *
+       * Refused rather than resolved, and only when a Reviewer is actually
+       * dispatched: picking a winner would BE the substitution.
+       */
+      if (dispatchedRoles.includes('reviewer')) {
+        const conflict = reviewerSlotConflict({
+          transport: reviewerTransport,
+          boundOccupantId: boundRoles.reviewer?.occupant.occupantId ?? null,
+        });
+        if (conflict !== null) {
+          fail(rec, 'preflight_blocked', conflict.safeMessage, {
+            code: 'role_binding_refused',
+            retryable: false,
+          });
+          return;
+        }
       }
 
       /**

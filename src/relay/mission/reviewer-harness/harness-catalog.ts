@@ -109,7 +109,16 @@ export const REVIEWER_HARNESS_CATALOG: readonly ReviewerHarnessCatalogEntry[] = 
     experimental: true,
     verificationNotes: [
       'Runs behind the Relay Bridge — either as a local one-shot Hermes process or, through the Reviewer routes, as a dedicated Hermes service reached over authenticated HTTP to an allowlisted origin. The browser never reaches either.',
-      "The MISSION's reviewer leg spawns a local process today and does not use the remote transport, so a hosted mission cannot yet be reviewed remotely.",
+      // UNDER-CLAIMED, DIRECTLY BENEATH THE COMMENT ABOUT UNDER-CLAIMING.
+      //
+      // This read "the MISSION's reviewer leg spawns a local process today and
+      // does not use the remote transport, so a hosted mission cannot yet be
+      // reviewed remotely." It stopped being true when `mission.ts` began
+      // resolving a transport and `callReviewer` began dispatching on it, and
+      // it is rendered in the founder's Reviewer panel — so the product was
+      // telling them a limitation it no longer had, three lines under a note
+      // explaining why that is as bad as over-claiming.
+      "The MISSION's reviewer leg dispatches on the resolved transport, so a hosted mission can be reviewed by the dedicated Hermes service. Which Reviewer runs is decided once and attested; Relay refuses a configuration where the transport and the bound occupant disagree.",
       'Read-only is structural: the adapter grants Hermes no toolset, so it holds no file, terminal or network tool.',
       'The provider credential is read only inside the bridge process and is never returned, persisted or logged.',
       'Live execution stays unproven until a founder-authorized run records a real provider response.',
