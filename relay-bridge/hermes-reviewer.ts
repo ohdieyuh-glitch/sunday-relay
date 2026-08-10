@@ -516,3 +516,67 @@ export async function runHermesReview(input: {
     });
   });
 }
+
+/**
+ * WHY A REVIEW COULD NOT BE READ, in facts that cannot leak.
+ *
+ * `validateHermesReview` returns `null` for six different reasons and the
+ * mission reported one sentence for all of them: "The Reviewer service
+ * returned a review Relay could not read." A real Hermes/xAI/Grok review ran
+ * for 45 seconds against a real diff and produced something Relay rejected,
+ * and nothing said whether the model wrote prose instead of JSON, used a
+ * verdict word outside the vocabulary, or omitted the summary.
+ *
+ * Only SHAPE is surfaced — whether a fenced block was present, whether braces
+ * were found, whether JSON parsed, and whether the two required fields were
+ * present and of the right kind. The verdict VALUE is echoed only when it is a
+ * short bare word, because that is the single most likely cause (a model
+ * answering "approve" or "PASS") and a word of that shape cannot carry a
+ * sentence. Review TEXT is never included: it quotes the diff.
+ */
+export function describeUnreadableReview(text: string): string {
+  const parts: string[] = [];
+  parts.push(`chars=${String(text.length)}`);
+  parts.push(`fenced=${String(/```/.test(text))}`);
+
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced ? fenced[1] : text;
+  const start = candidate.indexOf('{');
+  const end = candidate.lastIndexOf('}');
+  if (start === -1 || end === -1 || end <= start) {
+    parts.push('json=absent');
+    return `Review shape: ${parts.join(' ')}.`;
+  }
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(candidate.slice(start, end + 1));
+  } catch {
+    parts.push('json=unparseable');
+    return `Review shape: ${parts.join(' ')}.`;
+  }
+  if (raw === null || typeof raw !== 'object') {
+    parts.push('json=notAnObject');
+    return `Review shape: ${parts.join(' ')}.`;
+  }
+  parts.push('json=parsed');
+
+  const o = raw as Record<string, unknown>;
+  const verdict = o.verdict;
+  if (typeof verdict !== 'string') {
+    parts.push(`verdict=${verdict === undefined ? 'absent' : 'notAString'}`);
+  } else if (/^[A-Za-z_]{1,24}$/.test(verdict)) {
+    // A bare word is safe to echo and is almost always the answer.
+    parts.push(`verdict="${verdict}"`);
+  } else {
+    parts.push('verdict=unrecognisedShape');
+  }
+
+  const summary = o.summary;
+  parts.push(`summary=${
+    typeof summary !== 'string' ? (summary === undefined ? 'absent' : 'notAString')
+      : summary.trim() === '' ? 'empty' : 'present'
+  }`);
+  parts.push(`findings=${Array.isArray(o.findings) ? String(o.findings.length) : 'absent'}`);
+  return `Review shape: ${parts.join(' ')}.`;
+}
