@@ -5,6 +5,48 @@ the source or against production. Anything unverified says so.
 
 ---
 
+## 0. Addendum — 2026-08-10
+
+Nine changes merged since this document was written. Read this first: several
+of them CORRECT things the sections below used to say, and two correct advice
+that would have produced a false record.
+
+| Merged | What it changes for you |
+|---|---|
+| #77 | `/relay-api/health` no longer publishes `fusionBaseUrl: "http://localhost:3000"` from a container that has no loopback service. **Verified live: it now reads `null`.** The Hermes transport instance is also hoisted, so its ceilings are real rather than per-request |
+| #78 | The `/reviewer/*` and `/hosted-coding/*` 503s stopped saying the engine is "not configured". No setting enables them — those routes carry no prompt, workspace or review packet — so they now name the mission path that works. Consequence, recorded rather than hidden: `relay reviewer start` cannot succeed against a hosted bridge |
+| #80 | Retrieval is metered, so a cap over it is a cap. The unit is retrievals and bytes, never money. Observable at `GET /relay-api/live-reach/usage/<missionId>` |
+| #81 | The skill catalogue is enforced at run time instead of being a declaration nothing consulted |
+| #82, #84, #85, #86 | The Founder Mission Pack, and three corrections to it. See §5 row 10 |
+| #83 | **The one that changes your instructions.** See below |
+
+### The Reviewer instruction in §9 was wrong, and it mattered
+
+`RELAY_OPENAI_REVIEWER_MODE=live` with `RELAY_ROLE_REVIEWER` unset used to
+resolve the provider transport while binding the `hermes_local` default. OpenAI
+would have performed the review and **Hermes would have been attested** — the
+mission narrating one occupant while another did the work.
+
+Fixed: an explicitly configured transport now supplies the occupant, so setting
+the mode alone is correct and sufficient. Setting `RELAY_ROLE_REVIEWER` to
+something that contradicts the mode is refused before any spend, naming both
+variables.
+
+Four other places repeated the same stale claim and each cost something: the
+dispatchable set refused a remote Reviewer Relay could genuinely drive, the
+Reviewer panel displayed a limitation the product no longer had, `.env.example`
+promised values the code rejected, and the deployment table below said a hosted
+three-role mission "cannot run". All corrected.
+
+### What has NOT changed
+
+Your three founder-gated items in §9 stand. Nothing here staffs a role, spends
+anything, or deploys the Hermes service. `roleSlotsBound` is still `false` in
+production because production has still named no occupant — which is truthful,
+not broken.
+
+---
+
 ## 1. Where the code is
 
 | | |
@@ -526,7 +568,7 @@ The absences are the useful part:
 | 7 | Research Loops | **Domain done, no production run** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` NOW has a production caller (`composeLoopRuns` in `main()`), so the sentence that used to sit here is out of date — what is still missing is a Loop AGENT: the only one shipped simulates, and production refuses it by design |
 | 8 | GraphRAG / LangChain / LangGraph | **Evaluated and bounded** — see §4d. The subordination boundary exists and is tested; no framework is installed, deliberately. No embedding or vector code exists |
 | 9 | Real wiring rule | **Enforced for what shipped.** Three pre-existing violations recorded in §7 |
-| 10 | Founder Mission test pack | **Both halves now exist.** This document is the handoff; `docs/relay/FOUNDER_MISSION_PACK.md` is the pack — five missions, ordered free-first, generated from `founder-missions.ts` and validated against the real source vocabulary so a mission cannot name something Relay does not have. Every entry carries a `wouldFailIf`, which is what separates a test pack from a demo script |
+| 10 | Founder Mission test pack | **Both halves exist.** This document is the handoff; `docs/relay/FOUNDER_MISSION_PACK.md` is the pack — five entries, free-first, generated from `founder-missions.ts`. Every entry carries a `wouldFailIf`, which is what separates a test pack from a demo script. **Its claims are RUN, not merely validated**, and that distinction was earned: shape-validation passed three entries that were wrong — a refusal no mechanism produces, an invented idempotency key, and prerequisites that omitted two of the three roles. Each was well-formed. The refusal claim is now checked against `evaluateLiveReach`, the idempotency claim against the real registry, and an entry that starts a mission must say what staffs the other roles |
 
 ### A Mission that reads before it plans
 
