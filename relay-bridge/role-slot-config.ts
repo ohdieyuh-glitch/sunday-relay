@@ -3,7 +3,7 @@ import {
   type RoleBindingProblem, type RoleSlot, type RoleSlotBindingResult,
 } from '../src/relay/mission/role-slots';
 import { isProductionDeployment } from './deployment-environment';
-import type { ReviewerTransport } from './reviewer-transport';
+import { resolveReviewerTransport, type ReviewerTransport } from './reviewer-transport';
 import { REMOTE_HERMES_ENV } from './hermes-remote-review';
 import { OPENAI_REVIEWER_ENV } from './openai-reviewer';
 
@@ -413,11 +413,29 @@ export function resolveRoleSlots(inputs: RoleSlotInputs): RoleSlotResolution {
   return { hosted: inputs.hosted, requested, binding: merged };
 }
 
-/** The single-environment convenience, for callers that have exactly one. */
+/**
+ * The single-environment convenience, for callers that have exactly one.
+ *
+ * `/relay-api/health` is the main one, which is why the reviewer occupant is
+ * resolved here the SAME way the mission resolves it. It was not: this read
+ * `RELAY_ROLE_REVIEWER` directly while `mission.ts` also accepted an
+ * explicitly configured transport as naming the occupant.
+ *
+ * The consequence was a health surface that contradicted the product. An
+ * operator who set `RELAY_OPENAI_REVIEWER_MODE=live` and left the role
+ * selector unset — which is what the founder handoff tells them to do — would
+ * read `reviewer:no_occupant_requested` and conclude their configuration had
+ * failed, while a mission would have bound `openai_reviewer` and run. A status
+ * route that reports a deployment as unstaffed while it is staffed is the
+ * exact failure this route exists to prevent, pointing the other way.
+ */
 export function resolveRoleSlotsFromEnv(env: NodeJS.ProcessEnv): RoleSlotResolution {
+  const namedReviewer = (env[REVIEWER_ROLE_ENV] ?? '').trim();
   return resolveRoleSlots({
     architectMode: env.RELAY_PROMPT_ARCHITECT_MODE,
-    reviewerOccupant: env[REVIEWER_ROLE_ENV],
+    reviewerOccupant: namedReviewer !== ''
+      ? env[REVIEWER_ROLE_ENV]
+      : (explicitlySelectedReviewerOccupant(resolveReviewerTransport(env)) ?? undefined),
     codingAgentOccupant: env[CODING_AGENT_ROLE_ENV],
     fakeCodingRuntime: env.RELAY_BRIDGE_FAKE_CLAUDE === '1',
     // Derived from the one function in this module that knows what the live

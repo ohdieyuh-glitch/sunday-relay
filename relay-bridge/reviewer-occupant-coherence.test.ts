@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MISSION_DISPATCHABLE_OCCUPANTS,
   missionDispatchProblems,
+  resolveRoleSlotsFromEnv,
   reviewerOccupantFor,
   explicitlySelectedReviewerOccupant,
   reviewerOccupantForTransport,
@@ -227,5 +228,71 @@ describe('only an explicitly configured transport supplies the occupant', () => 
   it('supplies nothing for a transport that could not be resolved', () => {
     const ambiguous = resolveReviewerTransport({ ...PROVIDER_ENV, ...REMOTE_ENV });
     expect(explicitlySelectedReviewerOccupant(ambiguous)).toBeNull();
+  });
+});
+
+/**
+ * THE STATUS ROUTE MUST AGREE WITH THE PRODUCT IT REPORTS ON.
+ *
+ * `/relay-api/health` resolves role slots through `resolveRoleSlotsFromEnv`,
+ * and it read `RELAY_ROLE_REVIEWER` directly while `mission.ts` ALSO accepted
+ * an explicitly configured transport as naming the occupant.
+ *
+ * The consequence was not a crash. It was worse for a founder mid-deployment:
+ * set `RELAY_HERMES_MODE=remote` (or the provider mode), leave the role
+ * selector unset as the handoff instructs, read `no_occupant_requested`, and
+ * conclude the configuration failed — while a Mission would have bound the
+ * occupant and run. A status route reporting a staffed deployment as unstaffed
+ * is the same defect this route exists to prevent, pointing the other way.
+ */
+describe('health resolves the Reviewer the way a mission does', () => {
+  const HOSTED = { RAILWAY_ENVIRONMENT: 'production', RELAY_PROMPT_ARCHITECT_MODE: 'live' };
+
+  it('binds the REMOTE Hermes occupant from the transport alone', () => {
+    // The canonical Reviewer: Hermes service, xAI, Grok. Configured by the
+    // RELAY_HERMES_* names and NOT by naming the occupant.
+    const resolution = resolveRoleSlotsFromEnv({
+      ...HOSTED,
+      ...REMOTE_ENV,
+      OPENAI_API_KEY: 'k',
+      OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-test',
+      RELAY_ROLE_CODING_AGENT: 'claude_agent_sdk_hosted',
+      ANTHROPIC_API_KEY: 'k',
+      RELAY_HOSTED_CODING_MODEL: 'claude-test',
+    });
+    expect(resolution.requested.reviewer).toBe('hermes_remote_service');
+  });
+
+  it('reports no reviewer refusal once the transport is configured', () => {
+    const resolution = resolveRoleSlotsFromEnv({
+      ...HOSTED,
+      ...REMOTE_ENV,
+      OPENAI_API_KEY: 'k',
+      OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-test',
+      RELAY_ROLE_CODING_AGENT: 'claude_agent_sdk_hosted',
+      ANTHROPIC_API_KEY: 'k',
+      RELAY_HOSTED_CODING_MODEL: 'claude-test',
+    });
+    const reviewerProblems = resolution.binding.ok
+      ? []
+      : resolution.binding.problems.filter((p) => p.role === 'reviewer');
+    expect(reviewerProblems.map((p) => p.reason)).not.toContain('no_occupant_requested');
+  });
+
+  it('still refuses an unstaffed Reviewer when NOTHING is configured', () => {
+    // The honest state production reported all day, and it must survive: a
+    // hosted deployment that configured no transport and named no occupant is
+    // unstaffed, and saying otherwise would be the original defect inverted.
+    const resolution = resolveRoleSlotsFromEnv({ ...HOSTED, OPENAI_API_KEY: 'k', OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-test' });
+    expect(resolution.requested.reviewer).toBeUndefined();
+  });
+
+  it('an explicitly named occupant still wins over the transport', () => {
+    const resolution = resolveRoleSlotsFromEnv({
+      ...HOSTED, ...REMOTE_ENV, RELAY_ROLE_REVIEWER: 'hermes_local',
+    });
+    // Named and contradicting: the mission refuses this, and health must not
+    // quietly report the transport's occupant as though it were chosen.
+    expect(resolution.requested.reviewer).toBe('hermes_local');
   });
 });
