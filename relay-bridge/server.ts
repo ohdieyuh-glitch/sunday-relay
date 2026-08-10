@@ -27,7 +27,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { isLiveReachRoute, respondLiveReach } from './live-reach-route';
 import { composeLoopRuns, loopCompositionCode } from './loop-composition';
-import { createLiveReachService } from './live-reach-service';
+import { createLiveReachService, type LiveReachService } from './live-reach-service';
 import {
   bearerMatches, handleReviewerRoute, isReviewerRoute, type ReviewerRunPort,
 } from './reviewer-routes';
@@ -190,6 +190,14 @@ export function createBridgeServer(
    * default in `main()`.
    */
   betaLimiter: BetaRateLimiter | null = null,
+  /**
+   * The one Live Reach service, shared with the mission registry.
+   *
+   * Absent means the route builds its own per request, which is fine for a
+   * test that only checks routing and wrong for anything that reads usage —
+   * see the note at the Live Reach branch below. `main()` always passes one.
+   */
+  liveReachService: LiveReachService | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -303,7 +311,17 @@ export function createBridgeServer(
             ? req.headers.authorization : undefined;
           const authorized = bearerMatches(auth, process.env.RELAY_BRIDGE_API_TOKEN);
           const body = method === 'POST' ? await readBody(req) : undefined;
-          await respondLiveReach(req, res, { path, authorized, body, cors });
+          /**
+           * THE SAME SERVICE THE MISSIONS USE, and it has to be.
+           *
+           * This route used to pass no service, so `handleLiveReachRoute`
+           * constructed a fresh one PER REQUEST while missions retrieved
+           * through the long-lived one in `main()`. Two services meant two
+           * retrieval meters, so a usage figure would have counted half of
+           * what a mission actually spent and a cap would have been enforced
+           * against a meter that reset on every call.
+           */
+          await respondLiveReach(req, res, { path, authorized, body, cors }, liveReachService === null ? {} : { service: liveReachService });
           return;
         }
 
@@ -900,6 +918,9 @@ export function main(): void {
     betaStore,
     betaWaves,
     betaLimiter,
+    // The SAME service the mission registry retrieves through, so one meter
+    // counts both paths.
+    liveReach,
   );
 
   /**

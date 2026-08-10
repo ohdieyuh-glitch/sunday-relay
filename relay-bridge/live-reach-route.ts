@@ -13,6 +13,8 @@ import {
   type LiveReachSource,
 } from '../src/relay/mission/live-reach';
 import { createLiveReachService, type LiveReachService } from './live-reach-service';
+import { decodeSegment } from './path-segment';
+import type { RetrievalBudget } from '../src/relay/mission/live-reach/live-reach-metering';
 
 /**
  * THE LIVE REACH ROUTES.
@@ -37,7 +39,8 @@ export const LIVE_REACH_ROUTE_PREFIX = '/relay-api/live-reach';
 export function isLiveReachRoute(path: string): boolean {
   return path === `${LIVE_REACH_ROUTE_PREFIX}/catalog`
     || path === `${LIVE_REACH_ROUTE_PREFIX}/probe`
-    || path === `${LIVE_REACH_ROUTE_PREFIX}/retrieve`;
+    || path === `${LIVE_REACH_ROUTE_PREFIX}/retrieve`
+    || path.startsWith(`${LIVE_REACH_ROUTE_PREFIX}/usage/`);
 }
 
 export interface LiveReachRouteDeps {
@@ -134,6 +137,22 @@ export async function handleLiveReachRoute(
     ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
   });
 
+  /**
+   * WHAT THIS MISSION HAS SPENT ON RETRIEVAL.
+   *
+   * Read-only and free — it reports a meter, it does not touch the network.
+   * A mission that has never retrieved gets an empty meter rather than a 404,
+   * because "this mission retrieved nothing" is a real and useful answer and
+   * a not-found would be indistinguishable from a typo.
+   */
+  if (request.method === 'GET' && request.path.startsWith(`${LIVE_REACH_ROUTE_PREFIX}/usage/`)) {
+    const missionId = decodeSegment(request.path.slice(`${LIVE_REACH_ROUTE_PREFIX}/usage/`.length));
+    if (missionId === null || missionId === '') {
+      return { status: 400, payload: { kind: 'invalid_request', error: 'Usage needs a mission id.' } };
+    }
+    return { status: 200, payload: { usage: service.usage(missionId) } };
+  }
+
   if (request.method === 'POST' && request.path === `${LIVE_REACH_ROUTE_PREFIX}/probe`) {
     const source = body.source;
     const url = body.url;
@@ -176,6 +195,16 @@ export async function handleLiveReachRoute(
         ? { settings: body.settings as LiveReachSettings }
         : {}),
       ...(Array.isArray(body.probes) ? { probes: body.probes as BackendProbe[] } : {}),
+      /**
+       * A CAP THE CALLER NAMES, and absent means none.
+       *
+       * Not defaulted here on purpose: a number this layer invented would be
+       * enforced against missions nobody meant to cap, and an operator would
+       * meet a refusal citing a limit they never set.
+       */
+      ...(typeof body.budget === 'object' && body.budget !== null
+        ? { budget: body.budget as RetrievalBudget }
+        : {}),
     });
 
     if (!result.ok) {
