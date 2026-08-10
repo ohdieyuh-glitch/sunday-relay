@@ -521,6 +521,40 @@ The absences are the useful part:
 | 9 | Real wiring rule | **Enforced for what shipped.** Three pre-existing violations recorded in §7 |
 | 10 | Founder Mission test pack | **This document covers what can be tested today** |
 
+### A Mission that reads before it plans
+
+`start` accepts `evidenceReferences` — explicit, empty by default. A Mission
+does not decide on its own that it needs the internet, and Relay does not
+decide for it; the caller that knows the Mission's scope names what may be
+read.
+
+What happens then, in order: each reference is retrieved through the same
+permission evaluation the route uses, the observation becomes an
+EvidenceArtifact, and the fenced block is handed to the Prompt Architect
+**before it plans** — because a plan made from a recollection cannot be fixed
+by evidence arriving after it.
+
+A reference that cannot be retrieved is recorded as a system notice and the
+Mission continues with less. Nothing is fabricated: a test fails a placeholder
+pushed on refusal.
+
+Retrieval is emitted as `research` with truth `relay_evidence` — Relay made
+the request itself and saw the answer, so it is Relay's evidence and not an
+agent's claim. A failure is `system_notice`, because nothing was observed.
+
+**The first request on a fresh bridge will be refused `not_ready`, and that is
+correct.** Readiness is observed, and a process that has just started has
+observed nothing. Probe first:
+
+```
+curl -s -X POST "$BRIDGE/relay-api/live-reach/probe" \
+  -H "authorization: Bearer $RELAY_BRIDGE_API_TOKEN" -H 'content-type: application/json' \
+  -d '{"source":"github","url":"https://api.github.com/"}'
+```
+
+Seeding an optimistic probe at startup would be exactly the "configured
+therefore ready" claim the readiness model exists to refuse.
+
 ### What no code change can close
 
 Three boundaries remain, and none of them is a missing implementation:

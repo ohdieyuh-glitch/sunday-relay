@@ -27,6 +27,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { isLiveReachRoute, respondLiveReach } from './live-reach-route';
 import { composeLoopRuns, loopCompositionCode } from './loop-composition';
+import { createLiveReachService } from './live-reach-service';
 import {
   bearerMatches, handleReviewerRoute, isReviewerRoute, type ReviewerRunPort,
 } from './reviewer-routes';
@@ -702,6 +703,25 @@ export function main(): void {
     return;
   }
 
+  /**
+   * LIVE REACH, CONSTRUCTED FOR THE MISSION.
+   *
+   * Without this the mission's gatherer defaults to refusing everything, and a
+   * Mission naming an evidence reference on the real bridge would always be
+   * told nothing was retrieved — the same unwired-engine shape the Loop routes
+   * had, where the service existed and nothing built it.
+   *
+   * It is built unconditionally because, unlike the Loop engine, it needs
+   * neither a durable volume nor an agent: it makes an HTTP request through
+   * the network policy and returns an observation. What it can actually reach
+   * is still decided per request by the permission model and by readiness, so
+   * constructing it claims nothing.
+   */
+  const liveReach = createLiveReachService({
+    now: () => new Date().toISOString(),
+    nextEvidenceId: () => `ev-${randomUUID()}`,
+  });
+
   const registry = createMissionRegistry({
     fusionBaseUrl: config.fusionBaseUrl,
     sundayMode: config.sundayMode,
@@ -709,6 +729,19 @@ export function main(): void {
     confirmLive: config.confirmLive,
     baseEnv: process.env,
     architectEnv: process.env,
+    deps: {
+      gatherEvidence: liveReach.retrieve,
+      /**
+       * NO PROBES ARE SUPPLIED, and that is deliberate rather than an
+       * oversight. Readiness is OBSERVED, and this process has observed
+       * nothing at startup — so a Mission's first evidence request is refused
+       * `not_ready` until an operator probes through
+       * `/relay-api/live-reach/probe`. Seeding an optimistic probe here would
+       * be exactly the "configured therefore ready" claim the readiness model
+       * exists to refuse.
+       */
+      evidenceProbes: [],
+    },
   });
   /**
    * NO MOUNTED STATE ROOT MEANS NO TICK. The claim marker is what makes a
