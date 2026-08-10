@@ -89,11 +89,17 @@ Every operator route answers `401` unauthenticated — verified one by one on
 
 ## 3. The honest state of the three roles
 
-| Role | Occupant in production | Runs there? |
+**Production has named no occupant for two of the three roles.** `/health`
+reports `roleSlotsBound: false` with `no_occupant_requested` for the Coding
+Agent and the Reviewer, so the column below is what each role COULD hold, not
+what production has chosen. An earlier version of this table named Claude Code
+and Hermes as though production had picked them; it had not.
+
+| Role | What can hold it on a container | Runs there? |
 |---|---|---|
-| Prompt Architect | OpenAI, API-billed | **Yes** |
-| Coding Agent | Claude Code — an **installed CLI** | **No.** A container has no such CLI and never will |
-| Reviewer | Hermes — an **installed binary**, or a dedicated service | **No.** A container has neither |
+| Prompt Architect | OpenAI, API-billed | **Yes** — configured today |
+| Coding Agent | `claude_agent_sdk_hosted`, API-billed | **Yes, wired and proven** — needs `ANTHROPIC_API_KEY` + `RELAY_HOSTED_CODING_MODEL`. The Claude Code CLI cannot run there and never will, which is why the hosted occupant exists |
+| Reviewer | `openai_reviewer` (nothing to deploy) or `hermes_remote_service` (needs the service) | **Yes** — `callReviewer` dispatches on the resolved transport. Local Hermes remains founder-machine only |
 
 The three-role mission HAS completed end to end **on the founder's machine**
 (2026-08-09): Architect (gpt-4o, api-billed) → Coding Agent (Claude Code, one
@@ -101,9 +107,16 @@ invocation) → Relay's own verification → independent Hermes review (approved
 completion policy satisfied. All attestations `requested === actual`,
 `fallbackOccurred: false`, ≈2 cents.
 
-**Hosted execution is half-closed.** The hosted Coding Agent is wired and
-proven; the hosted Reviewer is not, and no hosted shape completes a mission on
-Railway as configured today — see §4.
+~~**Hosted execution is half-closed.**~~ **No longer true, and it was the
+sentence most likely to set your expectations.** It said the hosted Reviewer is
+not wired. It is: `callReviewer` dispatches on the resolved transport, and both
+non-local Reviewers are dispatchable — the dispatchable set had excluded one of
+them on the strength of a comment that had gone stale. See the §0 addendum.
+
+What IS still true is that no hosted shape completes a mission on Railway **as
+configured today**, and the reason is credentials rather than code: production
+has named no Coding Agent and no Reviewer. That is a decision waiting on you,
+not a gap waiting on work.
 
 ## 4. What PR #70 delivered — MERGED and DEPLOYED
 
@@ -164,7 +177,7 @@ both.
 | Founder machine, `RELAY_PROMPT_ARCHITECT_MODE=fusion` + a reachable Alcatraz | runs on the installed Claude Code CLI — **subscription-billed**, no API spend |
 | Founder machine, live architect + Claude Code + Hermes | **runs — the full three-role mission** |
 | Hosted, `RELAY_PROMPT_ARCHITECT_MODE=fusion` + `RELAY_BRIDGE_FAKE_CLAUDE=1` | runs — the keyless offline pipeline, no spend — **but only where `FUSION_BASE_URL` reaches a running Sunday Alcatraz.** `fusion` is an HTTP architect with no offline fallback |
-| Hosted, `fusion` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` | a real, API-billed coding run with no Reviewer — **but only where `FUSION_BASE_URL` reaches a running Sunday Alcatraz.** Production still publishes the localhost default, so today this fails at `architect_unavailable` before the Coding Agent is reached |
+| Hosted, `fusion` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` | a real, API-billed coding run with no Reviewer — **but only where `FUSION_BASE_URL` reaches a running Sunday Alcatraz.** This row used to say production still publishes the localhost default, so this fails at `architect_unavailable`. It no longer publishes it: #77 resolves it to `null` on a production deployment, **verified live**. The consequence is better rather than milder — the mission is refused at the CONFIGURATION, by name, instead of discovering it at an HTTP call to an address nothing answers |
 | Hosted, live three-role | **Can run, given credentials.** This row said "cannot run — the hosted Reviewer is still not dispatchable, the mission's reviewer leg spawns a local Hermes and does not use the remote transport". Both halves were false: `callReviewer` dispatches on the resolved transport, and both non-local Reviewers are dispatchable. Use `openai_reviewer` (nothing to deploy) or `hermes_remote_service` (needs the service). Set the Coding Agent variables too — see §8 |
 
 Production today refuses with `role_binding_refused`, **naming the variables to
@@ -562,12 +575,12 @@ The absences are the useful part:
 | 1 | Production-hosted three-role execution | **Code complete; two variables away.** Architect hosted; Coding Agent wired and proven; Reviewer now has THREE transports — local, remote Hermes, and a provider-API Reviewer needing nothing deployed (§4f, §4h). Set `RELAY_OPENAI_REVIEWER_MODE` and a model and the Reviewer leg runs hosted |
 | 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability, and hosted execution for the Coding Agent. Every registered occupant is now dispatchable, including both non-local Reviewers — and the transport and the bound occupant are reconciled, so Relay can no longer review with one and attest another |
 | 3 | Real workspace path | **Substantially done in the browser** — see §4b and §6. Opening a project, configuring the stack, switching roles and observing role/evidence/verification state all work by clicking; STARTING a mission is still operator-only by design |
-| 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only |
-| 5 | Skill Ops capabilities | **Domain done** — see §4e. Declared skills behind the existing permission model, proven never more permissive than it. No production caller invokes a skill yet |
+| 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only, and now METERED: `relay_live_reach` declares the `usage` verb, so a cap over retrieval is enforceable rather than aspirational. Unit is retrievals and bytes, never money; readable at `GET /relay-api/live-reach/usage/<missionId>` |
+| 5 | Skill Ops capabilities | **Done, and wired.** Declared skills behind the existing permission model, proven never more permissive than it — and the mission's evidence leg now runs `relay.evidence.gather` through `evaluateInternalSkillCall` before anything leaves the machine, so the catalogue is enforced rather than declared. It does NOT go through the MCP permission model, and §9 item 7 explains why that would have been a second judgment system |
 | 6 | Adapter plumbing verbs | **Contract done** — see §4g. Ten verbs as one vocabulary; adapters declare what they implement, Relay refuses the rest, and declarations are reconciled against real handlers in both directions |
 | 7 | Research Loops | **Domain done, no production run** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` NOW has a production caller (`composeLoopRuns` in `main()`), so the sentence that used to sit here is out of date — what is still missing is a Loop AGENT: the only one shipped simulates, and production refuses it by design |
 | 8 | GraphRAG / LangChain / LangGraph | **Evaluated and bounded** — see §4d. The subordination boundary exists and is tested; no framework is installed, deliberately. No embedding or vector code exists |
-| 9 | Real wiring rule | **Enforced for what shipped.** Three pre-existing violations recorded in §7 |
+| 9 | Real wiring rule | **Enforced for what shipped, and it caught this document too.** Of the three "violations" §7 recorded, two were WRONG DIAGNOSES — both engines existed and ran; the standalone ports lacked an input, not an implementation. The third was real. §7 also now carries a fourth, found by applying the rule to the Reviewer: the transport and the bound occupant were never reconciled |
 | 10 | Founder Mission test pack | **Both halves exist.** This document is the handoff; `docs/relay/FOUNDER_MISSION_PACK.md` is the pack — five entries, free-first, generated from `founder-missions.ts`. Every entry carries a `wouldFailIf`, which is what separates a test pack from a demo script. **Its claims are RUN, not merely validated**, and that distinction was earned: shape-validation passed three entries that were wrong — a refusal no mechanism produces, an invented idempotency key, and prerequisites that omitted two of the three roles. Each was well-formed. The refusal claim is now checked against `evaluateLiveReach`, the idempotency claim against the real registry, and an entry that starts a mission must say what staffs the other roles |
 
 ### A Mission that reads before it plans
@@ -854,6 +867,12 @@ they are access decisions, not implementations.
 
 ### Buildable without you, in value order
 
+**All four are now done.** Items 4 through 7 are struck through and kept rather
+than deleted, because three of them had the wrong diagnosis and the correction
+is the useful part — a list that only showed the answers would hide that the
+question was wrong twice.
+
+
 4. ~~**A Reviewer occupant that needs no installed binary.**~~ **DONE** —
    `openai_reviewer`, merged. It turned out the credential was already in
    production and only the occupant was missing, which is why this moved from
@@ -917,12 +936,15 @@ they are access decisions, not implementations.
    Known limit, stated rather than implied: meters live in memory, so a restart
    forgets them and a budget binds within a process rather than across one.
 
-7. **A production caller for skills — and the reason there isn't one is worth
-   reading before anyone builds it.**
+7. ~~**A production caller for skills.**~~ **DONE — and the reason it took a
+   different shape than this entry first proposed is worth reading, because
+   building it the obvious way would have made Relay less honest.**
 
-   The catalogue and the narrowing exist, nothing invokes a skill, and wiring
-   one the obvious way would make Relay less honest rather than more. Three
-   facts, each checkable:
+   The mission's evidence leg now runs `relay.evidence.gather` through
+   `evaluateInternalSkillCall` before anything leaves the machine, so the
+   catalogue is enforced at run time rather than being a declaration nothing
+   consulted. What follows is why it does NOT go through the MCP permission
+   model. Three facts, each checkable:
 
    - The capability names the skills declare — `relay.live_reach.retrieve`,
      `relay.workspace.read`, `relay.workspace.write` — appear **nowhere else in
