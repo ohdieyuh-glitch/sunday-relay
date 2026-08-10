@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   RELAY_SKILLS,
+  evaluateInternalSkillCall,
   evaluateSkillCall,
   findSkill,
+  narrowSkill,
   skillChangesSomething,
   type RelaySkill,
 } from './relay-skills';
@@ -262,5 +264,150 @@ describe('finding a skill', () => {
 
   it('returns null for an unknown id', () => {
     expect(findSkill(catalogue, 'b')).toBeNull();
+  });
+});
+
+/**
+ * A SKILL OVER RELAY'S OWN OPERATIONS.
+ *
+ * The external path asks `evaluatePermission`, which has a server identity, an
+ * approved snapshot and grants to reason about. Relay's own operations have
+ * none of those and do not need them: Live Reach retrieval is already governed
+ * by `evaluateLiveReach`, and a workspace write by the mission's write scope.
+ *
+ * So the governing verdict arrives as a PARAMETER, and the property worth
+ * testing is the same asymmetry the external path has — the skill layer can
+ * only ever take permission away.
+ */
+describe('a skill over an operation Relay governs itself', () => {
+  const gather = findSkill(RELAY_SKILLS, 'relay.evidence.gather', 1);
+  const edit = findSkill(RELAY_SKILLS, 'relay.repository.edit', 1);
+  const ALLOWED = { allowed: true, detail: 'the Live Reach permission model allowed it' };
+  const DENIED = { allowed: false, detail: 'read access to web is disabled for this project' };
+
+  it('permits a declared capability, for a permitted role, that the governor allowed', () => {
+    const decision = evaluateInternalSkillCall({
+      skill: gather,
+      capabilityName: 'relay.live_reach.retrieve',
+      role: 'architect',
+      missionAuthorisesChange: false,
+      governing: ALLOWED,
+    });
+    expect(decision.ok).toBe(true);
+  });
+
+  it('CANNOT return ok when the governing judgement said no', () => {
+    // The property. There is no combination of skill, role and mission
+    // authority that turns a denial into a permission.
+    for (const role of ['architect', 'reviewer', 'security-reviewer']) {
+      for (const authorises of [true, false]) {
+        const decision = evaluateInternalSkillCall({
+          skill: gather,
+          capabilityName: 'relay.live_reach.retrieve',
+          role,
+          missionAuthorisesChange: authorises,
+          governing: DENIED,
+        });
+        expect(decision.ok, `${role}/${String(authorises)}`).toBe(false);
+        if (!decision.ok) {
+          expect(decision.refusal).toBe('permission_denied');
+          // And it repeats the GOVERNOR's own words rather than inventing a
+          // reason of its own.
+          expect(decision.detail).toBe(DENIED.detail);
+        }
+      }
+    }
+  });
+
+  it('refuses a role the skill never permitted, before consulting anything else', () => {
+    const decision = evaluateInternalSkillCall({
+      skill: gather,
+      capabilityName: 'relay.live_reach.retrieve',
+      role: 'coding-agent',
+      missionAuthorisesChange: true,
+      governing: ALLOWED,
+    });
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) expect(decision.refusal).toBe('role_not_permitted_for_skill');
+  });
+
+  it('refuses a capability the skill did not declare, even when it is governed', () => {
+    const decision = evaluateInternalSkillCall({
+      skill: gather,
+      capabilityName: 'relay.workspace.write',
+      role: 'architect',
+      missionAuthorisesChange: true,
+      governing: ALLOWED,
+    });
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) expect(decision.refusal).toBe('capability_not_declared');
+  });
+
+  it('refuses an unknown skill rather than a nearest match', () => {
+    const decision = evaluateInternalSkillCall({
+      skill: null,
+      capabilityName: 'relay.live_reach.retrieve',
+      role: 'architect',
+      missionAuthorisesChange: false,
+      governing: ALLOWED,
+    });
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) expect(decision.refusal).toBe('skill_unknown');
+  });
+
+  it('refuses a CHANGING skill when the Mission asked only to read', () => {
+    // And the reason names the MISSION, not the agent — an operator told
+    // "permission denied" here would widen an entitlement that was never the
+    // problem.
+    const decision = evaluateInternalSkillCall({
+      skill: edit,
+      capabilityName: 'relay.workspace.write',
+      role: 'coding-agent',
+      missionAuthorisesChange: false,
+      governing: ALLOWED,
+    });
+    expect(decision.ok).toBe(false);
+    if (!decision.ok) {
+      expect(decision.refusal).toBe('mission_does_not_authorize_change');
+      expect(decision.detail).toContain('authorised only reading');
+    }
+  });
+
+  it('does not ask a READING skill whether the Mission authorised a change', () => {
+    // Gathering evidence changes nothing, so a read-only Mission runs it.
+    const decision = evaluateInternalSkillCall({
+      skill: gather,
+      capabilityName: 'relay.live_reach.retrieve',
+      role: 'architect',
+      missionAuthorisesChange: false,
+      governing: ALLOWED,
+    });
+    expect(decision.ok).toBe(true);
+  });
+});
+
+describe('the narrowing is one implementation, not two', () => {
+  it('gives the same verdict to both entry points', () => {
+    // The drift this closes: two copies of "which role may run what" that
+    // agree today and diverge the first time one is edited.
+    const cases: [string, string][] = [
+      ['architect', 'relay.live_reach.retrieve'],
+      ['coding-agent', 'relay.live_reach.retrieve'],
+      ['architect', 'relay.workspace.write'],
+    ];
+    for (const [role, capability] of cases) {
+      const narrowed = narrowSkill({
+        skill: findSkill(RELAY_SKILLS, 'relay.evidence.gather', 1), capabilityName: capability, role,
+      });
+      const internal = evaluateInternalSkillCall({
+        skill: findSkill(RELAY_SKILLS, 'relay.evidence.gather', 1),
+        capabilityName: capability,
+        role,
+        missionAuthorisesChange: true,
+        governing: { allowed: true, detail: 'allowed' },
+      });
+      expect(internal.ok, `${role}/${capability}`).toBe(narrowed.ok);
+      if (!narrowed.ok && !internal.ok) expect(internal.refusal).toBe(narrowed.refusal);
+    }
   });
 });

@@ -78,6 +78,13 @@ export const SKILL_REFUSALS = [
   'role_not_permitted_for_skill',
   'capability_not_declared',
   'permission_denied',
+  /**
+   * The skill changes something and the Mission asked only to read. Distinct
+   * from `permission_denied` because the agent may be perfectly entitled — the
+   * MISSION is what did not ask for a change, and an operator told the wrong
+   * one of those two would go and widen the wrong thing.
+   */
+  'mission_does_not_authorize_change',
 ] as const;
 export type SkillRefusal = (typeof SKILL_REFUSALS)[number];
 
@@ -96,28 +103,45 @@ export type SkillDecision =
  * is FINAL — including `requires_approval`, which is passed through unchanged
  * rather than being resolved here.
  */
-export function evaluateSkillCall(input: {
+/**
+ * THE NARROWING, ON ITS OWN — everything the skill layer knows, and nothing
+ * about who governs the operation.
+ *
+ * Split out because Relay has TWO kinds of skill and only one kind of judge
+ * per kind:
+ *
+ *   EXTERNAL capabilities go to `evaluatePermission`, where a server identity,
+ *   an approved snapshot and real grants exist to reason about.
+ *
+ *   RELAY'S OWN operations are already governed — Live Reach retrieval by
+ *   `evaluateLiveReach`, a workspace write by the mission's write scope. Those
+ *   ARE the permissions, and asking the MCP model about them would mean
+ *   inventing a server identity and an approved snapshot for Relay's own
+ *   internals: a second judgement, which is the thing this file exists to
+ *   avoid.
+ *
+ * One implementation, so the two paths cannot drift into disagreeing about
+ * which role may run what.
+ */
+export type SkillNarrowing =
+  | { readonly ok: true; readonly skill: RelaySkill }
+  | { readonly ok: false; readonly refusal: SkillRefusal; readonly detail: string };
+
+export function narrowSkill(input: {
   readonly skill: RelaySkill | null;
   readonly capabilityName: string;
-  readonly permission: McpPermissionEvaluationInput;
-}): SkillDecision {
+  readonly role: string;
+}): SkillNarrowing {
   const { skill } = input;
   if (skill === null) {
-    return {
-      ok: false,
-      refusal: 'skill_unknown',
-      detail: 'No such skill is registered.',
-      decision: null,
-    };
+    return { ok: false, refusal: 'skill_unknown', detail: 'No such skill is registered.' };
   }
 
-  const role = input.permission.role as McpAgentRole;
-  if (!skill.permittedRoles.includes(role)) {
+  if (!skill.permittedRoles.includes(input.role as McpAgentRole)) {
     return {
       ok: false,
       refusal: 'role_not_permitted_for_skill',
-      detail: `${skill.skillId} may not be run by ${input.permission.role}.`,
-      decision: null,
+      detail: `${skill.skillId} may not be run by ${input.role}.`,
     };
   }
 
@@ -128,9 +152,26 @@ export function evaluateSkillCall(input: {
       ok: false,
       refusal: 'capability_not_declared',
       detail: `${skill.skillId} did not declare ${input.capabilityName}.`,
-      decision: null,
     };
   }
+
+  return { ok: true, skill };
+}
+
+export function evaluateSkillCall(input: {
+  readonly skill: RelaySkill | null;
+  readonly capabilityName: string;
+  readonly permission: McpPermissionEvaluationInput;
+}): SkillDecision {
+  const narrowed = narrowSkill({
+    skill: input.skill,
+    capabilityName: input.capabilityName,
+    role: input.permission.role,
+  });
+  if (!narrowed.ok) {
+    return { ok: false, refusal: narrowed.refusal, detail: narrowed.detail, decision: null };
+  }
+  const { skill } = narrowed;
 
   // THE ONE JUDGEMENT. Whatever it says stands, including approval.
   const decision = evaluatePermission(input.permission);
@@ -143,6 +184,74 @@ export function evaluateSkillCall(input: {
     };
   }
   return { ok: true, decision, skill };
+}
+
+/**
+ * A skill over one of RELAY'S OWN operations.
+ *
+ * The governing verdict is a PARAMETER, and that is the design rather than an
+ * inconvenience: this function cannot be called without having already asked
+ * whoever actually governs the operation. There is no branch in here that
+ * decides whether retrieval is allowed — `evaluateLiveReach` decided that
+ * before the call, and this only narrows what the skill layer knows.
+ *
+ * The order is narrowing, then Mission authority, then the governing verdict:
+ *
+ *   NARROWING FIRST because a role that may never run this skill should hear
+ *   that, rather than hear about a capability it was never going to reach.
+ *
+ *   MISSION AUTHORITY next, because a Mission that asked only to read has not
+ *   asked for a change however entitled the agent is — the same line Live
+ *   Reach already draws between availability and a Mission having asked.
+ *
+ *   THE GOVERNING VERDICT LAST AND FINAL. It can only ever remove permission
+ *   here; there is no path through this function that returns `ok` while it
+ *   says no, which is the same asymmetry `evaluateSkillCall` has against
+ *   `evaluatePermission`.
+ */
+export type InternalSkillDecision =
+  | { readonly ok: true; readonly skill: RelaySkill }
+  | { readonly ok: false; readonly refusal: SkillRefusal; readonly detail: string };
+
+export function evaluateInternalSkillCall(input: {
+  readonly skill: RelaySkill | null;
+  readonly capabilityName: string;
+  readonly role: string;
+  /**
+   * Whether THIS Mission asked for a change. Only consulted for a skill that
+   * makes one, and supplied rather than inferred.
+   */
+  readonly missionAuthorisesChange: boolean;
+  /**
+   * The verdict of the judgement that already governs this operation, with its
+   * own words. Relay has exactly one of these per operation and this is where
+   * it arrives — never re-derived here.
+   */
+  readonly governing: { readonly allowed: boolean; readonly detail: string };
+}): InternalSkillDecision {
+  const narrowed = narrowSkill({
+    skill: input.skill,
+    capabilityName: input.capabilityName,
+    role: input.role,
+  });
+  if (!narrowed.ok) return narrowed;
+  const { skill } = narrowed;
+
+  if (skillChangesSomething(skill) && !input.missionAuthorisesChange) {
+    return {
+      ok: false,
+      refusal: 'mission_does_not_authorize_change',
+      detail: `${skill.skillId} ${skill.produces === 'external_change'
+        ? 'changes something outside Relay'
+        : 'changes the workspace'}, and this Mission authorised only reading.`,
+    };
+  }
+
+  if (!input.governing.allowed) {
+    return { ok: false, refusal: 'permission_denied', detail: input.governing.detail };
+  }
+
+  return { ok: true, skill };
 }
 
 /**
