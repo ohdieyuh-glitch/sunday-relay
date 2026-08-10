@@ -403,6 +403,34 @@ cases are tested, so the patterns cannot be tightened into uselessness.
 
 Tools requested but never offered in the brief are surfaced rather than hidden.
 
+## 4e. Relay Skills
+
+Skill Ops-style capabilities as declared bundles behind the permission model
+that already exists. A skill states what it does, which MCP capabilities it
+needs, the highest risk any of its steps reaches, which roles may run it, and
+what it PRODUCES.
+
+**There is no second judgement.** The skill layer narrows and then asks
+`evaluatePermission`, which is the one place that answers — `requires_approval`
+included, passed through rather than resolved. The test that holds this does
+not read the code: it runs both the skill call and the permission model alone
+across every role and every risk class and asserts the skill layer is never
+more permissive.
+
+| Skill | Produces | Roles | Highest risk |
+|---|---|---|---|
+| `relay.evidence.gather` | evidence | architect, reviewer, security-reviewer | read_only |
+| `relay.repository.read` | analysis | all but operations | read_only |
+| `relay.repository.edit` | workspace_change | coding-agent only | workspace_write |
+
+Three, deliberately, and each is something Relay can already do — a catalogue
+naming skills with no implementation is the fabricated-capability failure in
+another costume. No wildcards: a skill that can invoke anything is not a skill.
+
+`skillChangesSomething` separates skills that change something from skills that
+do not, because a Mission's authority and an agent's permission are different
+questions — the same line Live Reach draws.
+
 ## 5. What is NOT done
 
 | # | Requirement | State |
@@ -411,7 +439,7 @@ Tools requested but never offered in the brief are surfaced rather than hidden.
 | 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability, and hosted execution for the Coding Agent. The Reviewer's hosted surface is not dispatchable |
 | 3 | Real workspace path | **Substantially done in the browser** — see §4b and §6. Opening a project, configuring the stack, switching roles and observing role/evidence/verification state all work by clicking; STARTING a mission is still operator-only by design |
 | 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only |
-| 5 | Skill Ops capabilities | **Not started** |
+| 5 | Skill Ops capabilities | **Domain done** — see §4e. Declared skills behind the existing permission model, proven never more permissive than it. No production caller invokes a skill yet |
 | 6 | Adapter plumbing verbs | **Partially present.** `ports.ts` declares `descriptor` + `execute`; the other verbs exist unevenly across connectors, not as one contract |
 | 7 | Research Loops | **Domain done** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` still has no production caller, so no Research Loop RUNS in production yet |
 | 8 | GraphRAG / LangChain / LangGraph | **Evaluated and bounded** — see §4d. The subordination boundary exists and is tested; no framework is installed, deliberately. No embedding or vector code exists |
