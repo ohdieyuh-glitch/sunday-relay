@@ -33,6 +33,22 @@ export const SERVICE_TOKEN_ENV = 'RELAY_HERMES_SERVICE_TOKEN';
  * start work it is about to kill.
  */
 export type LifecycleState = 'starting' | 'ready' | 'shutting_down';
+
+/**
+ * THE ONE LIFECYCLE VALUE THAT MEANS "SERVING", exported so the Relay Bridge
+ * checks against what this service ACTUALLY emits.
+ *
+ * It did not, and the mismatch blocked the first real hosted mission. The
+ * bridge refused any lifecycle that was not `running` — a value this service
+ * has never emitted — and produced the self-contradicting refusal "the
+ * Reviewer service is not ready: service lifecycle is ready".
+ *
+ * Nothing caught it because the bridge's test fixture supplied `running` too:
+ * a test that invents the value it asserts on proves the two halves of one
+ * invention agree. The vocabulary now has a single owner, and the bridge
+ * imports it.
+ */
+export const LIFECYCLE_SERVING: LifecycleState = 'ready';
 let lifecycle: LifecycleState = 'starting';
 
 export function setLifecycleState(state: LifecycleState): void {

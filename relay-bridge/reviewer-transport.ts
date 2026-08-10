@@ -4,6 +4,7 @@ import {
   type OpenAiReviewerConfig,
 } from './openai-reviewer';
 import type { HermesConfig, HermesPreflightResult } from './hermes-reviewer';
+import { LIFECYCLE_SERVING } from '../relay-hermes-service/service';
 
 /**
  * WHICH REVIEWER THIS DEPLOYMENT ACTUALLY HAS, and how to check it is there.
@@ -136,7 +137,14 @@ export async function remoteReviewerPreflight(
 
     const evidence = body.evidence ?? {};
     const missing: string[] = [];
-    if (body.lifecycle !== undefined && body.lifecycle !== 'running') {
+    /**
+     * Compared against the value the SERVICE defines, not a word invented
+     * here. This read `!== 'running'`, which the Hermes service has never
+     * emitted — it reports `starting`, `ready` or `shutting_down` — so a
+     * perfectly healthy Reviewer was refused with "service lifecycle is
+     * ready", and the first real hosted mission died at preflight.
+     */
+    if (body.lifecycle !== undefined && body.lifecycle !== LIFECYCLE_SERVING) {
       missing.push(`service lifecycle is ${body.lifecycle}`);
     }
     if (evidence.installed !== true) missing.push('hermes installed on the service');
