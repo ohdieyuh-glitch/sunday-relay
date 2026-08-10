@@ -1,4 +1,8 @@
-import { resolveRemoteHermes, type RemoteHermesConfig, type RemoteHermesRefusal } from './hermes-remote-review';
+import { REMOTE_HERMES_ENV, resolveRemoteHermes, type RemoteHermesConfig, type RemoteHermesRefusal } from './hermes-remote-review';
+import {
+  OPENAI_REVIEWER_ENV, resolveOpenAiReviewer,
+  type OpenAiReviewerConfig,
+} from './openai-reviewer';
 import type { HermesConfig, HermesPreflightResult } from './hermes-reviewer';
 
 /**
@@ -28,7 +32,13 @@ import type { HermesConfig, HermesPreflightResult } from './hermes-reviewer';
 export type ReviewerTransport =
   | { readonly kind: 'local'; readonly reason: string }
   | { readonly kind: 'remote'; readonly config: RemoteHermesConfig }
-  | { readonly kind: 'unavailable'; readonly refusal: RemoteHermesRefusal; readonly detail: string };
+  /** The provider-API Reviewer: no binary, no service, no new credential. */
+  | { readonly kind: 'provider'; readonly config: OpenAiReviewerConfig }
+  | {
+    readonly kind: 'unavailable';
+    readonly refusal: RemoteHermesRefusal | 'ambiguous_reviewer';
+    readonly detail: string;
+  };
 
 /**
  * Choose the transport from the environment.
@@ -41,12 +51,42 @@ export type ReviewerTransport =
  * preflight failure about an executable nobody intended to use.
  */
 export function resolveReviewerTransport(env: NodeJS.ProcessEnv): ReviewerTransport {
-  const resolution = resolveRemoteHermes(env);
-  if (resolution.ok) return { kind: 'remote', config: resolution.config };
-  if (resolution.refusal === 'not_remote_mode') {
-    return { kind: 'local', reason: 'This bridge is configured to review locally.' };
+  const remote = resolveRemoteHermes(env);
+  const provider = resolveOpenAiReviewer(env);
+
+  /**
+   * TWO REVIEWERS EXPLICITLY ENABLED IS A CONFIGURATION ERROR, NOT A RACE.
+   *
+   * Both are turned on by an operator naming a mode. Picking one silently
+   * would mean the reviewer that actually ran depended on the order of two
+   * lines in this function — and the operator would read a verdict from a
+   * component they did not choose. Refusing says which two are set.
+   */
+  if (remote.ok && provider.ok) {
+    return {
+      kind: 'unavailable',
+      refusal: 'ambiguous_reviewer',
+      detail: `Both ${REMOTE_HERMES_ENV.mode}=remote and ${OPENAI_REVIEWER_ENV.mode}=live are set. Relay will not choose which Reviewer runs; unset one.`,
+    };
   }
-  return { kind: 'unavailable', refusal: resolution.refusal, detail: resolution.detail };
+
+  if (remote.ok) return { kind: 'remote', config: remote.config };
+  if (provider.ok) return { kind: 'provider', config: provider.config };
+
+  /**
+   * A bridge that asked for REMOTE and cannot have it is unavailable, not
+   * local — falling back would turn a configuration mistake into a confusing
+   * failure about a binary nobody intended to use. A bridge that asked for
+   * neither is correctly configured for the local reviewer.
+   */
+  if (remote.refusal !== 'not_remote_mode') {
+    return { kind: 'unavailable', refusal: remote.refusal, detail: remote.detail };
+  }
+  if (provider.refusal !== 'not_enabled') {
+    // Same reasoning: asked for the provider Reviewer, cannot have it.
+    return { kind: 'unavailable', refusal: 'ambiguous_reviewer', detail: provider.detail };
+  }
+  return { kind: 'local', reason: 'This bridge is configured to review locally.' };
 }
 
 export interface RemoteReadinessDeps {
@@ -152,6 +192,27 @@ export async function reviewerPreflight(input: {
       return input.localPreflight(input.localConfig);
     case 'remote':
       return await remoteReviewerPreflight(input.transport.config, input.deps ?? {});
+    case 'provider':
+      /**
+       * READY, AND IT CANNOT BE OTHERWISE — which is why nothing is re-checked
+       * here.
+       *
+       * A `provider` transport only exists when `resolveOpenAiReviewer`
+       * already returned ok; every missing piece produced `unavailable`
+       * instead, one branch up. Calling the preflight again would look like a
+       * check while being incapable of failing, and a probe that cannot fail
+       * is worse than no probe: it reads as evidence.
+       *
+       * What is NOT claimed: that the provider will answer. That costs a paid
+       * call, so it is proven by the first review and the reason says so.
+       */
+      return {
+        ready: true,
+        reason: 'Configured. Whether the provider answers is proven by the first review, because a probe that proved it would itself be a paid call.',
+        missing: [],
+        model: input.transport.config.model,
+        provider: 'openai',
+      } as unknown as HermesPreflightResult;
     default:
       // Configured for remote and unable to have it. Say THAT, rather than
       // probing for a local binary this deployment never intended to use.

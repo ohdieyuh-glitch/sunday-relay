@@ -53,6 +53,17 @@ const HOSTED_CODING_CONFIG = Object.freeze([
   'ANTHROPIC_API_KEY',
   'RELAY_HOSTED_CODING_MODEL',
 ]);
+/**
+ * What the GPT Reviewer reads. The mode is separate from the architect's on
+ * purpose: one credential, two roles, and turning on the second must be its
+ * own decision because it is its own bill.
+ */
+const OPENAI_REVIEWER_CONFIG = Object.freeze([
+  'RELAY_OPENAI_REVIEWER_MODE',
+  'OPENAI_API_KEY',
+  'RELAY_OPENAI_REVIEWER_MODEL',
+]);
+
 const HERMES_REMOTE_CONFIG = Object.freeze([
   'RELAY_HERMES_MODE',
   'RELAY_HERMES_SERVICE_URL',
@@ -202,6 +213,40 @@ export const ROLE_OCCUPANTS: readonly RoleOccupant[] = Object.freeze([
   },
 
   /* --------------------------------------------------------- reviewer --- */
+  {
+    /**
+     * A REVIEWER A HOSTED BRIDGE CAN ACTUALLY HAVE.
+     *
+     * The other two are each blocked on something outside the code: the local
+     * one needs Hermes on the PATH, which a container never has, and the
+     * remote one needs a service that is not deployed. This one needs a
+     * provider credential that production already holds for the Prompt
+     * Architect.
+     *
+     * `openai-gpt` is deliberately THE SAME independence group the OpenAI
+     * architect carries. Independence is measured against the CODING AGENT and
+     * this reviewer is independent of an Anthropic one — but a deployment that
+     * ever ran an OpenAI coding agent must be refused this Reviewer, and
+     * sharing the group is what makes that refusal automatic rather than
+     * remembered.
+     */
+    occupantId: 'openai_reviewer',
+    actorName: 'GPT',
+    role: 'reviewer',
+    agentId: 'openai',
+    adapterId: 'openai',
+    independenceGroup: 'openai-gpt',
+    displayName: 'GPT Reviewer (provider API)',
+    kind: 'provider_api',
+    environments: ['founder_machine', 'hosted'],
+    adapterAvailable: true,
+    billingPath: 'api',
+    requiredConfig: OPENAI_REVIEWER_CONFIG,
+    verificationNotes: [
+      'Enabled explicitly: the credential already exists for the Prompt Architect, and using it for a second PAID role is an operator decision rather than a default.',
+      'Readiness is configuration presence only. Whether the provider answers is proven by the first review, because a probe that proved it would be a paid call.',
+    ],
+  },
   {
     occupantId: 'hermes_local',
     actorName: 'Hermes',

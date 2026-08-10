@@ -184,3 +184,75 @@ describe('the remote readiness probe', () => {
     expect(init.method).toBe('GET');
   });
 });
+
+/**
+ * THE PROVIDER REVIEWER, AND THE AMBIGUITY IT CREATES.
+ *
+ * A third way to have a Reviewer means two can now be enabled at once. Picking
+ * one silently would make the reviewer that ran depend on the order of two
+ * lines in a function, and an operator would read a verdict from a component
+ * they did not choose.
+ */
+describe('the provider Reviewer', () => {
+  const PROVIDER_ENV = {
+    RELAY_OPENAI_REVIEWER_MODE: 'live',
+    OPENAI_API_KEY: 'key',
+    RELAY_OPENAI_REVIEWER_MODEL: 'gpt-test',
+  };
+  const REMOTE = {
+    [REMOTE_HERMES_ENV.mode]: 'remote',
+    [REMOTE_HERMES_ENV.url]: 'https://hermes.example.com',
+    [REMOTE_HERMES_ENV.token]: 'service-token',
+    [REMOTE_HERMES_ENV.trustedOrigins]: 'https://hermes.example.com',
+  };
+
+  it('is chosen when it is the one enabled', () => {
+    const transport = resolveReviewerTransport(PROVIDER_ENV);
+    expect(transport.kind).toBe('provider');
+  });
+
+  it('REFUSES when both it and the remote Hermes are enabled', () => {
+    const transport = resolveReviewerTransport({ ...PROVIDER_ENV, ...REMOTE });
+    expect(transport.kind).toBe('unavailable');
+    if (transport.kind === 'unavailable') {
+      expect(transport.refusal).toBe('ambiguous_reviewer');
+      // It names BOTH, so an operator knows which two to look at.
+      expect(transport.detail).toContain(REMOTE_HERMES_ENV.mode);
+      expect(transport.detail).toContain('RELAY_OPENAI_REVIEWER_MODE');
+    }
+  });
+
+  it('is unavailable, never local, when enabled and missing its model', () => {
+    const transport = resolveReviewerTransport({ ...PROVIDER_ENV, RELAY_OPENAI_REVIEWER_MODEL: '' });
+    expect(transport.kind).toBe('unavailable');
+  });
+
+  it('still leaves an unconfigured bridge on the local reviewer', () => {
+    expect(resolveReviewerTransport({}).kind).toBe('local');
+  });
+
+  it('never reaches the local probe', async () => {
+    const localPreflight = vi.fn();
+    const result = await reviewerPreflight({
+      transport: resolveReviewerTransport(PROVIDER_ENV),
+      localConfig,
+      localPreflight: localPreflight as unknown as (c: HermesConfig) => HermesPreflightResult,
+    });
+    expect(localPreflight).not.toHaveBeenCalled();
+    expect(result.ready).toBe(true);
+    // Configuration presence, and it says so — proving the provider answers
+    // costs a paid call.
+    expect(result.reason).toContain('proven by the first review');
+  });
+
+  it('makes no network call to decide readiness', async () => {
+    const fetchImpl = vi.fn();
+    await reviewerPreflight({
+      transport: resolveReviewerTransport(PROVIDER_ENV),
+      localConfig,
+      localPreflight: (() => ({ ready: false })) as unknown as (c: HermesConfig) => HermesPreflightResult,
+      deps: { fetchImpl: fetchImpl as unknown as typeof fetch },
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});

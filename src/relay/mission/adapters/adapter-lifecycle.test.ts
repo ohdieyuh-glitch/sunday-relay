@@ -11,6 +11,7 @@ import {
   type AdapterCapabilityDeclaration,
 } from './adapter-lifecycle';
 import { RELAY_ADAPTER_DECLARATIONS } from './adapter-declarations';
+import { ROLE_OCCUPANTS } from '../role-slots/role-slot-registry';
 
 /**
  * A DECLARATION IS A CLAIM, SO IT IS CHECKED.
@@ -167,6 +168,42 @@ describe('the shipped declarations', () => {
     const local = findDeclaration(RELAY_ADAPTER_DECLARATIONS, 'hermes_local');
     expect(operatorPromises(local as AdapterCapabilityDeclaration).budgetable).toBe(false);
     expect(local?.absenceNotes.usage).toContain('rather than estimating');
+  });
+
+  it('declares every occupant Relay ships an adapter for', () => {
+    /**
+     * THE DRIFT THIS CLOSES, one layer over from where it already bit.
+     *
+     * A registry occupant with no lifecycle declaration is an adapter no
+     * surface can describe: nothing knows whether it can be cancelled or
+     * budgeted, and `checkVerb` refuses every verb for it because there is no
+     * declaration to check against. That is the same "registered but
+     * invisible" failure the browser-safe facts test catches, and it deserves
+     * its own barrier rather than being noticed the next time someone adds an
+     * occupant.
+     */
+    const declared = new Set(RELAY_ADAPTER_DECLARATIONS.map((entry) => entry.adapterId));
+    for (const occupant of ROLE_OCCUPANTS) {
+      if (!occupant.adapterAvailable) continue;
+      // `claude_code_fake` is the offline engine and is deliberately not a
+      // product adapter — it is named in UNMAPPED_OCCUPANTS for the same
+      // reason and must not gain a lifecycle declaration that would make it
+      // look like one.
+      if (occupant.occupantId === 'claude_code_fake') continue;
+      expect(declared, `${occupant.occupantId} is registered and has no lifecycle declaration`)
+        .toContain(occupant.occupantId);
+    }
+  });
+
+  it('declares no adapter the registry does not have', () => {
+    // The other direction: a declaration for something unregistered describes
+    // a capability nothing can select.
+    const registered = new Set(ROLE_OCCUPANTS.map((o) => o.occupantId));
+    for (const entry of RELAY_ADAPTER_DECLARATIONS) {
+      if (entry.adapterId === 'relay_live_reach') continue; // not a role occupant
+      expect(registered, `${entry.adapterId} is declared and not registered`)
+        .toContain(entry.adapterId);
+    }
   });
 
   it('returns null for an adapter that is not there', () => {

@@ -446,11 +446,14 @@ Coding Agent, so a transport now carries BOTH halves — how to run a review and
 how to check one could run — chosen together, and a test asserts the local
 probe is never called for a remote transport.
 
-| | Local | Remote |
-|---|---|---|
-| Runs | spawned Hermes process | authenticated HTTP to the Reviewer service |
-| Readiness | `hermes --help` / `status` | `GET /v1/readiness` — offline, creates no run |
-| Selected by | default | `RELAY_HERMES_MODE=remote` |
+| | Local | Remote | Provider API |
+|---|---|---|---|
+| Runs | spawned Hermes process | authenticated HTTP to the Reviewer service | the Prompt Architect's provider |
+| Readiness | `hermes --help` / `status` | `GET /v1/readiness` — offline, creates no run | configuration presence, stated as such |
+| Selected by | default | `RELAY_HERMES_MODE=remote` | `RELAY_OPENAI_REVIEWER_MODE=live` |
+| Needs deploying | no | **yes** | no |
+
+See §4h for how Relay picks between them and what it refuses.
 
 Same `HermesOutcome`, same `validateHermesReview`, so no verdict logic exists
 twice and a remote reviewer cannot return a shape the local one could not.
@@ -510,13 +513,13 @@ The absences are the useful part:
 
 | # | Requirement | State |
 |---|---|---|
-| 1 | Production-hosted three-role execution | **Code complete, deployment gated.** Architect hosted; Coding Agent wired and proven; Reviewer has a remote transport, a matching preflight and real mission wiring (§4f). The Hermes service itself is not deployed — DFA-001 |
+| 1 | Production-hosted three-role execution | **Code complete; two variables away.** Architect hosted; Coding Agent wired and proven; Reviewer now has THREE transports — local, remote Hermes, and a provider-API Reviewer needing nothing deployed (§4f, §4h). Set `RELAY_OPENAI_REVIEWER_MODE` and a model and the Reviewer leg runs hosted |
 | 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability, and hosted execution for the Coding Agent. The Reviewer's hosted surface is not dispatchable |
 | 3 | Real workspace path | **Substantially done in the browser** — see §4b and §6. Opening a project, configuring the stack, switching roles and observing role/evidence/verification state all work by clicking; STARTING a mission is still operator-only by design |
 | 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only |
 | 5 | Skill Ops capabilities | **Domain done** — see §4e. Declared skills behind the existing permission model, proven never more permissive than it. No production caller invokes a skill yet |
 | 6 | Adapter plumbing verbs | **Contract done** — see §4g. Ten verbs as one vocabulary; adapters declare what they implement, Relay refuses the rest, and declarations are reconciled against real handlers in both directions |
-| 7 | Research Loops | **Domain done, no production run** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` still has no production caller, so no Research Loop RUNS in production yet |
+| 7 | Research Loops | **Domain done, no production run** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` NOW has a production caller (`composeLoopRuns` in `main()`), so the sentence that used to sit here is out of date — what is still missing is a Loop AGENT: the only one shipped simulates, and production refuses it by design |
 | 8 | GraphRAG / LangChain / LangGraph | **Evaluated and bounded** — see §4d. The subordination boundary exists and is tested; no framework is installed, deliberately. No embedding or vector code exists |
 | 9 | Real wiring rule | **Enforced for what shipped.** Three pre-existing violations recorded in §7 |
 | 10 | Founder Mission test pack | **This document covers what can be tested today** |
@@ -591,6 +594,30 @@ curl -s -X POST "$BRIDGE/relay-api/live-reach/probe" \
    another Mission. The reference is refused, the Mission continues without it,
    and the Brain shows the section with nothing in it — *authorised and
    retrieved none*, which is not the same as never having been authorised.
+
+### 4h. Three Reviewers, and how Relay picks
+
+| Transport | Needs | Selected by |
+|---|---|---|
+| Local Hermes | the binary on the PATH — never true on a container | the default |
+| Remote Hermes | a deployed Reviewer service | `RELAY_HERMES_MODE=remote` |
+| GPT (provider API) | nothing deployed; the architect's existing credential | `RELAY_OPENAI_REVIEWER_MODE=live` |
+
+The transport is resolved ONCE and both the preflight and the call read it, so
+Relay never probes for one Reviewer and invokes another — the defect that broke
+the hosted Coding Agent, refused here in advance by construction.
+
+**Two enabled at once is refused, not resolved.** Both are turned on by an
+operator naming a mode; picking one silently would make the reviewer that ran
+depend on the order of two lines in a resolver.
+
+**Asked-for-and-unavailable never falls back to local**, for either. Falling
+back turns a configuration mistake into a confusing failure about a binary
+nobody intended to use.
+
+All three return the same `HermesOutcome` and are read by the same validator,
+so no Reviewer can return a shape the others could not, and no caller learns
+which one answered from the shape of the answer.
 
 ### What no code change can close
 
@@ -705,28 +732,75 @@ provider call was made by this session**.
 
 ## 9. Recommended next Missions, in order
 
-1. ~~**Hosted Coding Agent execution.**~~ **DONE** — `relay-bridge/agent-invoker.ts`
-   isolates the one step of eight that depends on the surface, and
-   `hosted-coding-agent/hosted-invoker.ts` implements it over
-   `runHostedCodingAgent`. Nothing else was duplicated. Set the two Railway
-   variables above to use it.
+The code items from the previous version of this list are done and merged. What
+is left is ordered by what unblocks the most, and the first three need YOU —
+they are access decisions, not implementations.
 
-   Worth recording: "remove it from the exclusion and that is the whole change"
-   was WRONG, and an independent review proved it by running the real mission
-   registry on a host with no `claude` on PATH. The mission probed for the
-   local CLI unconditionally, so the hosted occupant still died with "Install
-   Claude Code" — the wrong-machine instruction the registry exists to remove,
-   surviving one layer beneath it.
-2. **Hosted Reviewer.** Either DFA-001 (a Hermes service, plus teaching the
-   mission's reviewer leg to use the remote transport — today it always spawns
-   locally), or register a Reviewer occupant that needs no installed binary.
-   The registry makes the second a configuration change rather than a redesign.
-3. **Wire the three run engines** (§7). Note the hazard left in writing at
-   `local-transport.ts:53-60`: the transport's ceilings are per instance and
-   `transport-factory.ts` builds a fresh one per request — harmless only while
-   no route calls `startReview`. Hoist the instance.
-4. Then Evidence & Retrieval, Skill Ops, Research Loops, and the external
-   adapter evaluation.
+### Needs your authorization
+
+1. **Turn on a hosted Reviewer — two variables, nothing to deploy.**
+
+   ```
+   RELAY_OPENAI_REVIEWER_MODE=live
+   RELAY_OPENAI_REVIEWER_MODEL=<a model you are willing to pay for>
+   ```
+
+   `OPENAI_API_KEY` is already set in production for the Prompt Architect, and
+   this uses the same credential. Independence holds: the coding agent is
+   Anthropic and this Reviewer is OpenAI.
+
+   Two things are deliberately NOT defaulted, and both cost money. The mode,
+   because reusing an existing credential for a second paid role should be a
+   decision. And the model, because a model is what a review costs and how good
+   it is — Relay will not pick one for you.
+
+   It shares the `openai-gpt` independence group with the OpenAI architect on
+   purpose: a deployment that ever runs an OpenAI CODING agent is refused this
+   Reviewer automatically.
+
+   **Deploying the Hermes service (DFA-001) is now optional.** It remains the
+   better Reviewer if you want a structurally read-only harness rather than a
+   provider API, and everything on Relay's side for it is merged and proven
+   offline — remote transport, a matching preflight, mission wiring — but it is
+   no longer the only way to have a hosted Reviewer.
+
+   Do not set both `RELAY_HERMES_MODE=remote` and
+   `RELAY_OPENAI_REVIEWER_MODE=live`. Relay refuses rather than choosing, so
+   you never read a verdict from a component you did not pick.
+
+2. **Set the role variables on Railway.** `RELAY_ROLE_CODING_AGENT` and
+   `RELAY_ROLE_REVIEWER` are unset, which is why `/relay-api/health` reports
+   `roleSlotsBound: false` with `no_occupant_requested` for both. That is
+   truthful, not broken: production has named no occupant. Setting them, plus
+   `ANTHROPIC_API_KEY` and `RELAY_HOSTED_CODING_MODEL`, is what makes a hosted
+   three-role mission possible.
+
+3. **Decide whether a real Loop agent is worth building.** `loopEngine` reads
+   `no_agent_named` because the only agent this build ships SIMULATES its
+   iterations, and production refuses it by design. A Loop that runs is a Loop
+   agent away, and that is a product decision rather than a wiring gap.
+
+### Buildable without you, in value order
+
+4. ~~**A Reviewer occupant that needs no installed binary.**~~ **DONE** —
+   `openai_reviewer`, merged. It turned out the credential was already in
+   production and only the occupant was missing, which is why this moved from
+   "buildable" to "done" in one pass. See item 1 above for the two variables.
+
+5. **The remaining two run engines.** `ReviewerRunPort` and
+   `HostedCodingRunPort` are still `null` in `main()` because neither has an
+   implementation to construct — unlike the Loop engine, which did and is now
+   wired. Note the hazard recorded at `local-transport.ts:53-60`: the
+   transport's ceilings are per instance and `transport-factory.ts` builds a
+   fresh one per request, harmless only while no route calls `startReview`.
+   Hoist the instance before wiring.
+
+6. **Evidence metering.** Live Reach spends someone's rate limit rather than
+   money and Relay does not meter it, which is why `relay_live_reach` declares
+   no `usage` verb. A budget over retrieval is currently a hope.
+
+7. **A production caller for skills.** The catalogue and the permission
+   narrowing exist and nothing invokes a skill yet.
 
 ## 10. What this session actually cost, and what it proves
 

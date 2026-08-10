@@ -55,6 +55,8 @@ export const OCCUPANTS_FOR_AGENT_OPTION: Readonly<Record<string, readonly string
     'architect-gpt': Object.freeze(['openai_gpt_architect']),
     'coding-claude-code': Object.freeze(['claude_code_local', 'claude_agent_sdk_hosted']),
     'reviewer-hermes': Object.freeze(['hermes_local', 'hermes_remote_service']),
+    // The catalog already had a GPT reviewer entry waiting for an occupant.
+    'reviewer-gpt': Object.freeze(['openai_reviewer']),
   });
 
 /**
@@ -131,6 +133,16 @@ export const OCCUPANT_FACTS: readonly OccupantFacts[] = Object.freeze([
     environments: Object.freeze(['founder_machine', 'hosted']),
     adapterAvailable: true,
     needsServerConfig: NO_CONFIG,
+  }),
+  Object.freeze({
+    occupantId: 'openai_reviewer',
+    role: 'reviewer',
+    displayName: 'GPT Reviewer (provider API)',
+    environments: Object.freeze(['founder_machine', 'hosted']),
+    adapterAvailable: true,
+    // It reads a mode, a credential and a model — WHICH ones is the server's
+    // business and is not named here, for any provider.
+    needsServerConfig: CONFIG_EITHER_WAY,
   }),
   Object.freeze({
     occupantId: 'hermes_local',
