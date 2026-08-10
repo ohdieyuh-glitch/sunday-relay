@@ -126,10 +126,26 @@ export async function handleHostedCodingRoute(
   }
 
   /* ----------------------------------------------------- run lifecycle --- */
+  /**
+   * No STANDALONE hosted run engine, and that is a decision rather than a gap.
+   *
+   * The hosted Coding Agent is real and reachable: `mission.ts` constructs the
+   * hosted invoker and the coding leg runs it inside a prepared workspace. What
+   * does not exist is a second lifecycle that starts one OUTSIDE a mission,
+   * because a hosted run needs a prompt and a workspace and this route carries
+   * neither — only ids.
+   *
+   * The old message said the engine was "not configured", which describes a
+   * variable an operator could set. There is none, so it says what is true and
+   * where the working path is. Readiness above still answers everywhere.
+   */
   if (runs === null) {
     return err(
       503, 'hosted_coding_not_ready',
-      'This Relay Bridge has no hosted Coding Agent run engine configured, so no hosted run can be started or inspected.',
+      'This Relay Bridge runs the hosted Coding Agent as the coding leg of a mission, not as a '
+      + 'standalone run, so there is nothing here to start, inspect or stop. No configuration '
+      + 'enables this route — a hosted run needs a prompt and a workspace, which a mission '
+      + 'supplies and this request does not. Run the mission instead.',
     );
   }
 

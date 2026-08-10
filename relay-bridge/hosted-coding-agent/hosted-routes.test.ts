@@ -181,6 +181,23 @@ describe('without a run engine the bridge says so', () => {
     expect(r?.status).toBe(503);
     expect(JSON.stringify(r?.body)).toContain('hosted_coding_not_ready');
   });
+
+  /**
+   * AND SAYS WHY TRUTHFULLY. The hosted agent is not missing — `mission.ts`
+   * constructs its invoker and the coding leg runs it. What is missing is a
+   * prompt and a workspace, which this route carries neither of. Saying the
+   * engine is "not configured" would send an operator after a variable that
+   * was never written.
+   */
+  it('does not describe a configuration step that does not exist', async () => {
+    const r = await call('POST', '/hosted-coding/start', {
+      auth: `Bearer ${TOKEN}`, runs: null, body: { missionId: 'm', idempotencyKey: 'k' },
+    });
+    const message = String((r?.body as { error?: unknown }).error ?? '');
+    expect(message).toContain('No configuration enables this route');
+    expect(message).toMatch(/prompt and a workspace/);
+    expect(message).not.toMatch(/not configured/i);
+  });
 });
 
 describe('duplicate execution is prevented at the store', () => {

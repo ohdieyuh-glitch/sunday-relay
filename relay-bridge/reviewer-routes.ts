@@ -187,12 +187,29 @@ export async function handleReviewerRoute(
     });
   }
 
-  // The remaining operations need a run engine. Without one the bridge says so
-  // rather than inventing a run.
+  /**
+   * The remaining operations need a run engine, and this bridge does not have
+   * a STANDALONE one — by design, not by omission.
+   *
+   * The message this used to carry said the engine was "not configured", which
+   * sends an operator looking for a variable that does not exist. Relay reviews
+   * inside the mission leg: the coding leg produces the diff, `mission.ts`
+   * builds the review packet from that evidence, and the configured transport
+   * — local Hermes, a remote Hermes service, or the provider Reviewer — runs
+   * it. A second run engine here would review the same artifact twice under
+   * separate run state, which is the duplicate nobody wants.
+   *
+   * So the refusal names the path that works rather than a setting that would
+   * not help. Readiness and test-connection above are unaffected: they answer
+   * on every bridge, because they describe the transport rather than a run.
+   */
   if (runs === null) {
     return err(
       503, 'reviewer_not_ready',
-      'This Relay Bridge has no Reviewer run engine configured, so no review can be started or inspected.',
+      'This Relay Bridge runs reviews as part of a mission, not as standalone Reviewer runs, '
+      + 'so there is nothing here to start, inspect or stop. No configuration enables this route. '
+      + 'Run the mission instead — its review leg uses the Reviewer transport this bridge already '
+      + 'reports through /reviewer/readiness.',
     );
   }
 
