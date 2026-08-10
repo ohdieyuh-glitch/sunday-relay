@@ -49,6 +49,7 @@ import {
 } from './hermes-reviewer';
 import { resolveReviewerTransport as resolveTransport, reviewerPreflight as runReviewerPreflight } from './reviewer-transport';
 import { runRemoteHermesReview } from './hermes-remote-review';
+import { runOpenAiReview } from './openai-reviewer';
 import type { ReviewerTransport } from './reviewer-transport';
 import type { LiveReachService } from './live-reach-service';
 import type { BackendProbe } from '../src/relay/mission/live-reach';
@@ -283,6 +284,8 @@ export interface MissionRoleDeps {
   runHermesReview?: typeof runHermesReview;
   /** The remote Reviewer, for a bridge that reaches a dedicated service. */
   runRemoteHermesReview?: typeof runRemoteHermesReview;
+  /** The provider-API Reviewer, for a bridge with neither binary nor service. */
+  runOpenAiReview?: typeof runOpenAiReview;
   /**
    * Live Reach retrieval, for a Mission authorised to read something.
    *
@@ -391,6 +394,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   const callCoding = deps.runCodingMission ?? runCodingMission;
   const callLocalReviewer = deps.runHermesReview ?? runHermesReview;
   const callRemoteReviewer = deps.runRemoteHermesReview ?? runRemoteHermesReview;
+  const callProviderReviewer = deps.runOpenAiReview ?? runOpenAiReview;
   /**
    * ONE CALL SITE, TWO TRANSPORTS.
    *
@@ -416,7 +420,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         config: input.transport.config,
         runId: input.runId,
       })
-      : await callLocalReviewer({ packet: input.packet, config: input.config, now: input.now })
+      : input.transport.kind === 'provider'
+        ? await callProviderReviewer({ packet: input.packet, config: input.transport.config })
+        : await callLocalReviewer({ packet: input.packet, config: input.config, now: input.now })
   );
   const resolveRuntime = deps.resolveClaudeRuntime ?? resolveClaudeRuntime;
   const checkHermes = deps.hermesPreflight ?? hermesPreflight;
