@@ -354,6 +354,55 @@ Expect an artifact whose `publishedAt` is the release's own date and whose
   settings screen shows UNKNOWN until an operator probes.
 - **No action capability exists**, on any source.
 
+## 4d. Research Loops and subordinate orchestrators
+
+### Research Loops
+
+Not a second loop engine. The Loop Engine already owns iterations, limits,
+stop conditions, states and decisions, and already had `research` among its
+loop types. What was missing was research-specific: what a question is, what
+counts as an answer, and who may change either.
+
+**The plan is frozen.** Question, criteria, evaluator, permitted sources,
+independence requirement and freshness bar are fingerprinted when the loop
+starts. A round carrying a different fingerprint is REFUSED, not evaluated — a
+loop that can edit its own success criteria will always succeed. The
+fingerprint covers the evaluator (swapping the judge is the same defect as
+moving the bar) and deliberately ignores the plan id and criterion ordering (a
+rename is not a change).
+
+**Inconclusive is a real outcome.** A round that neither confirmed nor refuted
+is not a failure and not a pass. Reverting means the direction was wrong;
+inconclusive means nothing was settled.
+
+**Authority bars are per criterion**, so fifty community observations do not
+satisfy a criterion naming a primary source — and unknown publication age
+cannot satisfy a freshness requirement, however recently the page was fetched.
+
+### Subordinate orchestrators (LangGraph and anything like it)
+
+**Nothing is installed**, and that is the finding rather than a gap. The
+question is what an external orchestrator is ALLOWED to do, and that has to be
+answerable before one runs. Same conclusion as the Agent Reach evaluation: take
+the pattern, refuse the runtime.
+
+The boundary is built and tested:
+
+| Direction | What crosses |
+|---|---|
+| Down | Objective, frozen input VALUES, a step ceiling, and the NAMES of tools Relay would run on its behalf. No credential, no permission, no connection — `FORBIDDEN_BRIEF_KEYS` is enforced, not documented |
+| Up | Proposals. Never a verdict, completion, permission, role assignment or budget change |
+
+A framework asserting authority is **refused, not sanitized** — stripping the
+sentence would hide that a component someone trusts with part of their
+reasoning tried to declare a mission complete. The refusal keeps what was said.
+
+A graph may still DISCUSS what it cannot decide: "the mission will be complete
+when the tests pass" is analysis, "the mission is complete" is a claim. Both
+cases are tested, so the patterns cannot be tightened into uselessness.
+
+Tools requested but never offered in the brief are surfaced rather than hidden.
+
 ## 5. What is NOT done
 
 | # | Requirement | State |
@@ -364,8 +413,8 @@ Expect an artifact whose `publishedAt` is the release's own date and whose
 | 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only |
 | 5 | Skill Ops capabilities | **Not started** |
 | 6 | Adapter plumbing verbs | **Partially present.** `ports.ts` declares `descriptor` + `execute`; the other verbs exist unevenly across connectors, not as one contract |
-| 7 | Research Loops | **Not started.** The Loop Engine exists; `createLoopService` still has no production caller |
-| 8 | GraphRAG / LangChain / LangGraph | **Not started**, and the gap is narrower than it was: retrieval now exists (§4c). No embedding or vector code exists |
+| 7 | Research Loops | **Domain done** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` still has no production caller, so no Research Loop RUNS in production yet |
+| 8 | GraphRAG / LangChain / LangGraph | **Evaluated and bounded** — see §4d. The subordination boundary exists and is tested; no framework is installed, deliberately. No embedding or vector code exists |
 | 9 | Real wiring rule | **Enforced for what shipped.** Three pre-existing violations recorded in §7 |
 | 10 | Founder Mission test pack | **This document covers what can be tested today** |
 
