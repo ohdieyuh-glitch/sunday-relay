@@ -36,23 +36,23 @@ Three things, in this order:
 
 ## The missions
 
-### A Mission that must be refused
+### A capability Relay declines by name
 
 `fm-1-refusal-is-real` — **costs nothing**
 
 ```json
 {
   "missionId": "fm-1-refusal-is-real",
-  "objective": "Summarise the current pricing page of a competitor and post it to our X account.",
+  "objective": "Ask Live Reach to post on X, through the operator route, and read the refusal it returns.",
   "evidenceReferences": []
 }
 ```
 
-**Needs:** nothing beyond what is deployed
+**Needs:** `RELAY_BRIDGE_API_TOKEN`
 
-**Proves:** Relay refuses what it cannot do instead of describing it. No X backend exists, so the publish half is unsupported and says so by name rather than failing vaguely later.
+**Proves:** Unsupported operations are declined by name rather than presented as available. POST /relay-api/live-reach/retrieve with source "x" and a `post` capability is refused `capability_unsupported` by `evaluateLiveReach` — the same permission model every retrieval passes through — and no request leaves the machine.
 
-**You caught a fake if:** The run reports a post as sent, queued or scheduled. Nothing in this build can publish anywhere, so any of those words is the product lying.
+**You caught a fake if:** The route answers 200, or reports the post as sent, queued or scheduled, or refuses with a reason about credentials rather than about the capability not existing. Relay models nine sources and has a write backend for none of them; anything that reads as partial success is the product describing a capability it does not have.
 
 ### A Mission that reads before it plans
 
@@ -136,6 +136,7 @@ Three things, in this order:
 
 **You caught a fake if:** Two runs appear with different ids for one key, or the second reports a fresh provider call. Either means a retry costs money a founder did not authorise.
 
+
 ## What the pack deliberately does not contain
 
 **No mission that proves a Loop runs.** The only Loop agent this build ships
@@ -149,3 +150,12 @@ rather than discover it later.
 **No mission whose expected outcome is "it works".** Each entry names the
 observation that would mean Relay is pretending, because a pack of things that
 succeed proves nothing about honesty.
+
+**No expectation the product cannot actually produce.** The first version of
+`fm-1` asked Relay to post to X and claimed it would refuse the publish half by
+name. Nothing in Relay reads a mission objective looking for capabilities, so
+no mechanism could produce that — a made-up expectation, in the document whose
+whole purpose is to let you catch made-up behaviour. Structural validation
+could not catch it, because the entry was well-formed. The pack's refusal claim
+is now run against `evaluateLiveReach` itself, so an entry that promises a
+refusal the product does not make fails the suite.

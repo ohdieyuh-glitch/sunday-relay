@@ -7,6 +7,7 @@ import {
   type FounderMission,
 } from './founder-missions';
 import { LIVE_REACH_SOURCES } from '../live-reach/live-reach-contracts';
+import { EMPTY_LIVE_REACH_SETTINGS, evaluateLiveReach } from '../live-reach';
 
 /**
  * A TEST PACK THAT CANNOT DRIFT FROM THE PRODUCT.
@@ -112,5 +113,76 @@ describe('the check catches what it is for', () => {
 
   it('accepts a well-formed mission', () => {
     expect(checkFounderMissions([mission()])).toEqual([]);
+  });
+});
+
+/**
+ * THE PACK'S CLAIMS, CHECKED AGAINST THE CODE THEY DESCRIBE.
+ *
+ * The first version of `fm-1` was fabricated: it asked Relay to post to X and
+ * claimed Relay would refuse the publish half by name. Nothing reads a mission
+ * objective looking for capabilities, so no mechanism could produce that
+ * observation — a made-up expectation, in the document whose entire purpose is
+ * to let a founder catch made-up behaviour.
+ *
+ * Structural validation could not have caught it: the entry was well-formed.
+ * Only running the claim against the real decider can, so that is what this
+ * does. A pack that asserts a refusal must assert one the product actually
+ * makes.
+ */
+describe('the refusal mission describes a refusal the product actually makes', () => {
+  const refusalMission = FOUNDER_MISSIONS.find((m) => m.id === 'fm-1-refusal-is-real');
+
+  it('is still the free, first entry', () => {
+    expect(refusalMission).toBeDefined();
+    expect(refusalMission?.spends).toBe(false);
+    expect(FOUNDER_MISSIONS[0]?.id).toBe('fm-1-refusal-is-real');
+  });
+
+  it('REALLY is refused capability_unsupported by the permission model', () => {
+    // The exact call the mission tells the founder to make.
+    const decision = evaluateLiveReach({
+      source: 'x',
+      capability: 'post',
+      settings: EMPTY_LIVE_REACH_SETTINGS,
+      missionAuthorises: true,
+      ready: true,
+    });
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) {
+      // Named in the mission's `proves`. If this refusal code ever changes,
+      // the pack is telling a founder to look for something they will not see.
+      expect(decision.refusal).toBe('capability_unsupported');
+      expect(refusalMission?.proves).toContain('capability_unsupported');
+    }
+  });
+
+  it('is refused even with everything else in its favour', () => {
+    // `ready: true` and `missionAuthorises: true` are the most permissive
+    // inputs there are. An unsupported capability is refused regardless, which
+    // is what makes this a demonstration rather than a configuration accident.
+    for (const authorises of [true, false]) {
+      for (const ready of [true, false]) {
+        const decision = evaluateLiveReach({
+          source: 'x', capability: 'post', settings: EMPTY_LIVE_REACH_SETTINGS,
+          missionAuthorises: authorises, ready,
+        });
+        expect(decision.allowed, `${String(authorises)}/${String(ready)}`).toBe(false);
+      }
+    }
+  });
+
+  it('names no source that has a write backend, because none does', () => {
+    // The claim in `wouldFailIf` — nine sources modelled, zero write backends.
+    // If one ever gains a real action backend, this fails and the pack has to
+    // stop saying "anything that reads as partial success is the product
+    // lying".
+    for (const source of LIVE_REACH_SOURCES) {
+      const decision = evaluateLiveReach({
+        source, capability: 'post', settings: EMPTY_LIVE_REACH_SETTINGS,
+        missionAuthorises: true, ready: true,
+      });
+      expect(decision.allowed, `${source} accepted a post`).toBe(false);
+    }
   });
 });
