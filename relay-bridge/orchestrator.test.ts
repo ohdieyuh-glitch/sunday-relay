@@ -1715,6 +1715,48 @@ describe('a mission gathers evidence and the architect plans with it', () => {
     expect(evidence).toContain('retrieved by: relay_github_public');
   });
 
+  /**
+   * THE SKILL CATALOGUE IS LOAD-BEARING NOW.
+   *
+   * `relay.evidence.gather` used to be a declaration nothing consulted. The
+   * mission's evidence leg now runs it through `evaluateInternalSkillCall`
+   * first, so the catalogue's `permittedRoles`, its capability list and its
+   * version are enforced at run time.
+   *
+   * This test is what makes that claim checkable rather than asserted: it
+   * fails the moment the real registry stops permitting the architect to run
+   * the skill, or the declared capability name stops matching what the leg
+   * invokes. Verified by mutation — removing 'architect' from permittedRoles
+   * turns this into zero retrievals and a recorded refusal.
+   */
+  it('runs the evidence skill against the REAL catalogue before retrieving', async () => {
+    const h = harness();
+    let gathers = 0;
+    h.deps.gatherEvidence = async () => {
+      gathers += 1;
+      return {
+        ok: true as const,
+        artifact: artifactFor('observed'),
+        attempt: artifactFor('x').attempt,
+        events: [],
+      };
+    };
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'msn-skill',
+      objective: 'Check the release notes',
+      evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
+    });
+    await settle(reg, 'msn-skill');
+
+    // The architect IS permitted and the capability IS declared, so the
+    // retrieval happened.
+    expect(gathers).toBe(1);
+    // And no skill refusal was recorded, because there was none.
+    const events = reg.get('msn-skill')?.events ?? [];
+    expect(events.some((e) => (e.detail ?? '').includes('relay.evidence.gather'))).toBe(false);
+  });
+
   it('gathers nothing when the mission authorised nothing', async () => {
     const h = harness();
     let gathers = 0;
