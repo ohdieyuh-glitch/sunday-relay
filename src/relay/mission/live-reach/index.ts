@@ -61,3 +61,19 @@ export type {
   LiveReachSettings,
   LiveReachSourceSettings,
 } from './live-reach-permissions';
+
+export {
+  checkRetrievalBudget,
+  emptyMeter,
+  recordRetrieval,
+  reportUsage,
+} from './live-reach-metering';
+export type {
+  BudgetVerdict,
+  MeteredOutcome,
+  ReportedUsage,
+  RetrievalBudget,
+  RetrievalMeter,
+  RetrievalRecord,
+  SourceUsage,
+} from './live-reach-metering';

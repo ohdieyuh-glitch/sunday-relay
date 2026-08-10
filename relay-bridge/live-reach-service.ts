@@ -17,6 +17,10 @@ import {
   type EvidenceSanitization,
 } from '../src/relay/mission/evidence';
 import { liveFetch, probeReachability, type LiveFetchOutcome } from '../src/relay/connectors/live-reach/live-fetch';
+import {
+  checkRetrievalBudget, emptyMeter, recordRetrieval, reportUsage,
+  type MeteredOutcome, type ReportedUsage, type RetrievalBudget, type RetrievalMeter, type RetrievalRecord,
+} from '../src/relay/mission/live-reach/live-reach-metering';
 import { detectInjectionSignals, redactText } from '../src/relay/mcp/policy/mcp-sanitize';
 
 /**
@@ -111,6 +115,11 @@ export interface LiveReachRetrieveRequest {
   readonly preferredBackendId?: string;
   /** How much weight this source class carries. Defaults per source class. */
   readonly authority?: EvidenceAuthority;
+  /**
+   * A cap on what this mission may retrieve. Absent means no cap — which is
+   * the state Relay shipped in, and it is now a decision rather than a gap.
+   */
+  readonly budget?: RetrievalBudget;
 }
 
 export interface LiveReachServiceDeps {
@@ -158,6 +167,14 @@ export interface LiveReachService {
     capability: LiveReachCapability;
     url: string;
   }): Promise<BackendProbe>;
+  /**
+   * What this mission has spent on retrieval — the `usage` verb, made real.
+   *
+   * A mission that has retrieved nothing reports an empty meter rather than
+   * nothing at all, so a surface can distinguish "no retrievals" from "no such
+   * mission" without guessing.
+   */
+  usage(missionId: string): ReportedUsage;
 }
 
 export function createLiveReachService(deps: LiveReachServiceDeps): LiveReachService {
@@ -166,7 +183,27 @@ export function createLiveReachService(deps: LiveReachServiceDeps): LiveReachSer
     ...(deps.resolver === undefined ? {} : { resolver: deps.resolver }),
   };
 
+  /**
+   * Per-mission meters, held for the process lifetime.
+   *
+   * NOT DURABLE, and the consequence is stated rather than hidden: a bridge
+   * restart forgets what a mission has already retrieved, so a budget is
+   * enforced within a process rather than across one. That is worth having —
+   * the alternative today is no enforcement at all — and it is a smaller claim
+   * than the store would make.
+   */
+  const meters = new Map<string, RetrievalMeter>();
+  const meterFor = (missionId: string): RetrievalMeter =>
+    meters.get(missionId) ?? emptyMeter(missionId);
+  const meter = (missionId: string, record: RetrievalRecord): void => {
+    meters.set(missionId, recordRetrieval(meterFor(missionId), record));
+  };
+
   return {
+    usage(missionId) {
+      return reportUsage(meterFor(missionId));
+    },
+
     async probe(input) {
       const result = await probeReachability({ url: input.url, ...fetchOptions });
       const candidates = backendCandidates(input.source, input.capability);
@@ -220,6 +257,26 @@ export function createLiveReachService(deps: LiveReachServiceDeps): LiveReachSer
         return { ok: false, refusal: decision.refusal, detail: decision.detail, attempt: null, events };
       }
 
+      /**
+       * THE CAP IS CHECKED HERE — after permission, before any socket.
+       *
+       * After permission, because a request this mission was never allowed to
+       * make should be refused for THAT reason: reporting a budget refusal
+       * over a forbidden source would tell an operator to raise a cap when the
+       * real answer is that the capability is off.
+       *
+       * Before the fetch, because a budget enforced afterwards is a report.
+       */
+      if (request.budget !== undefined) {
+        const verdict = checkRetrievalBudget(meterFor(request.missionId), request.budget);
+        if (!verdict.ok) {
+          push('EVIDENCE_REFUSED', null, verdict.detail);
+          // Nothing was attempted, so `attempt` stays null — the same rule the
+          // permission refusal above follows.
+          return { ok: false, refusal: verdict.refusal, detail: verdict.detail, attempt: null, events };
+        }
+      }
+
       const candidates = backendCandidates(
         source,
         request.capability,
@@ -234,6 +291,17 @@ export function createLiveReachService(deps: LiveReachServiceDeps): LiveReachSer
         const outcome = await liveFetch({ url: request.reference, ...fetchOptions });
 
         if (outcome.kind !== 'observed') {
+          // METERED EVEN THOUGH IT FAILED. A 429 or a 401 is the host telling
+          // us it saw the request, and its limit counted it; `refused` never
+          // reaches here because a policy refusal returns above. `unreachable`
+          // is recorded as unconfirmed rather than as spent or free.
+          meter(request.missionId, {
+            source,
+            outcome: outcome.kind as MeteredOutcome,
+            bytes: null,
+            at: deps.now(),
+            ...(outcome.kind === 'throttled' ? { retryAfter: outcome.retryAfter } : {}),
+          });
           lastDetail = outcome.detail;
           push('EVIDENCE_RETRIEVAL_FAILED', backend.backendId, outcome.detail);
           push(
@@ -243,6 +311,10 @@ export function createLiveReachService(deps: LiveReachServiceDeps): LiveReachSer
           );
           continue;
         }
+
+        meter(request.missionId, {
+          source, outcome: 'observed', bytes: outcome.bytes, at: deps.now(),
+        });
 
         const fallbackOccurred = index > 0;
         if (fallbackOccurred) {

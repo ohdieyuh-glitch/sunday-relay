@@ -100,13 +100,20 @@ export const RELAY_ADAPTER_DECLARATIONS: readonly AdapterCapabilityDeclaration[]
   Object.freeze({
     adapterId: 'relay_live_reach',
     displayName: 'Live Reach retrieval',
-    verbs: v('readiness', 'execute', 'result', 'identity', 'capabilities'),
+    /**
+     * `usage` is declared because retrieval is now metered — see
+     * `live-reach-metering.ts`. The unit is retrievals and bytes, never money,
+     * and the meter keeps confirmed and unconfirmed attempts apart rather than
+     * reporting one number it cannot stand behind. Declaring the verb is what
+     * makes `operatorPromises().budgetable` true, so a cap over retrieval is a
+     * cap rather than a hope.
+     */
+    verbs: v('readiness', 'execute', 'result', 'identity', 'capabilities', 'usage'),
     absenceNotes: Object.freeze({
       start: 'A retrieval is one bounded fetch.',
       stream: 'Relay reads a whole document before sanitizing it; a partially sanitized document must never reach an agent.',
       stop: 'The fetch is bounded by bytes and time, so cancellation has nothing to add.',
       resume: 'A re-fetch is a new observation with its own retrieval time, not a continuation of an old one.',
-      usage: 'Retrieval spends someone’s rate limit rather than money, and Relay does not yet meter it.',
     }),
   }),
 ]);

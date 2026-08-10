@@ -301,5 +301,18 @@ export const LIVE_REACH_REFUSALS = [
   'no_account_bound',
   'rate_limited',
   'network_policy_refused',
+  /**
+   * The mission's own retrieval cap, spent. Distinct from `rate_limited`,
+   * which is somebody ELSE's limit reported back to us — one is Relay's
+   * decision and one is a host's, and an operator needs to know which.
+   */
+  'retrieval_budget_exhausted',
+  /**
+   * A byte cap that cannot bind, because at least one read reported no size.
+   * Refusing here rather than passing keeps a cap from looking enforced when
+   * the total it sits over cannot account for everything that was read.
+   */
+  'byte_budget_unenforceable',
+  'byte_budget_exhausted',
 ] as const;
 export type LiveReachRefusal = (typeof LIVE_REACH_REFUSALS)[number];

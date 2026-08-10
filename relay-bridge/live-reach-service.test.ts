@@ -291,3 +291,112 @@ describe('nothing leaves with a credential', () => {
     }
   });
 });
+
+/**
+ * METERING, THROUGH THE REAL SERVICE.
+ *
+ * The domain has its own arithmetic tests. What only this file can prove is
+ * that the service actually FEEDS the meter — and feeds it the right outcome
+ * for each thing the fetch layer can return. A meter wired to nothing would
+ * pass every domain test and report zero forever.
+ */
+describe('what a mission has spent on retrieval', () => {
+  it('reports an empty meter for a mission that never retrieved', async () => {
+    const usage = service(vi.fn()).usage('msn-unknown');
+    expect(usage.retrievals).toBe(0);
+    // Not zero bytes — no bytes were measured, which is a different fact.
+    expect(usage.bytes).toBeNull();
+  });
+
+  it('counts a successful retrieval and its real byte count', async () => {
+    const svc = service(() => Promise.resolve(page('<p>hello</p>')));
+    const result = await svc.retrieve(request());
+    expect(result.ok).toBe(true);
+    const usage = svc.usage('msn-1');
+    expect(usage.retrievals).toBe(1);
+    expect(usage.bytes).toBeGreaterThan(0);
+    expect(usage.bySource.web?.counted).toBe(1);
+  });
+
+  it('counts a THROTTLED attempt, and keeps the host’s Retry-After', async () => {
+    // The host answered, so its limit counted the request. Not metering it
+    // would make being rate limited free.
+    const svc = service(() => Promise.resolve(
+      new Response('slow down', { status: 429, headers: { 'retry-after': '42' } }),
+    ));
+    await svc.retrieve(request());
+    const usage = svc.usage('msn-1');
+    expect(usage.retrievals).toBe(1);
+    expect(usage.bytes).toBeNull();
+    expect(usage.unsizedRetrievals).toBe(1);
+    expect(usage.lastRetryAfter).toBe('42');
+  });
+
+  it('records an unreachable host as UNCONFIRMED rather than as spent', async () => {
+    const svc = service(() => Promise.reject(new Error('offline')));
+    await svc.retrieve(request());
+    const usage = svc.usage('msn-1');
+    expect(usage.retrievals).toBe(0);
+    expect(usage.unconfirmedRetrievals).toBe(1);
+  });
+
+  it('meters NOTHING when Relay refused the request itself', async () => {
+    // No socket opened. A permission refusal that moved the meter would charge
+    // a mission for a call it was never allowed to make.
+    const fetchImpl = vi.fn();
+    const svc = service(fetchImpl);
+    await svc.retrieve(request({
+      settings: setCapability(EMPTY_LIVE_REACH_SETTINGS, 'web', 'read_item', false),
+    }));
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(svc.usage('msn-1').retrievals).toBe(0);
+    expect(svc.usage('msn-1').unconfirmedRetrievals).toBe(0);
+  });
+
+  it('keeps missions apart', async () => {
+    const svc = service(() => Promise.resolve(page('<p>x</p>')));
+    await svc.retrieve(request({ missionId: 'msn-a' }));
+    await svc.retrieve(request({ missionId: 'msn-a' }));
+    await svc.retrieve(request({ missionId: 'msn-b' }));
+    expect(svc.usage('msn-a').retrievals).toBe(2);
+    expect(svc.usage('msn-b').retrievals).toBe(1);
+  });
+});
+
+describe('a retrieval budget is enforced before the fetch', () => {
+  it('refuses the retrieval that would exceed the cap, and dispatches nothing', async () => {
+    const fetchImpl = vi.fn(() => Promise.resolve(page('<p>x</p>')));
+    const svc = service(fetchImpl);
+    await svc.retrieve(request({ budget: { maxRetrievals: 1, maxBytes: null } }));
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    const second = await svc.retrieve(request({ budget: { maxRetrievals: 1, maxBytes: null } }));
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.refusal).toBe('retrieval_budget_exhausted');
+      // A refusal is not a failed attempt, so no attempt is recorded.
+      expect(second.attempt).toBeNull();
+    }
+    // THE POINT: the network was never touched a second time.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses for the PERMISSION reason, not the budget, when both would refuse', async () => {
+    // Otherwise an operator raises a cap to fix a capability that is switched
+    // off, and the cap was never the problem.
+    const svc = service(vi.fn());
+    const result = await svc.retrieve(request({
+      budget: { maxRetrievals: 0, maxBytes: null },
+      settings: setCapability(EMPTY_LIVE_REACH_SETTINGS, 'web', 'read_item', false),
+    }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.refusal).not.toBe('retrieval_budget_exhausted');
+  });
+
+  it('retrieves freely when no budget was named', async () => {
+    const fetchImpl = vi.fn(() => Promise.resolve(page('<p>x</p>')));
+    const svc = service(fetchImpl);
+    for (let i = 0; i < 4; i += 1) await svc.retrieve(request());
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+  });
+});

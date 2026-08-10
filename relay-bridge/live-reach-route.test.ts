@@ -189,3 +189,78 @@ describe('a probe', () => {
     expect(response.status).toBe(400);
   });
 });
+
+/**
+ * THE USAGE SURFACE.
+ *
+ * A meter nobody can read is a meter nobody can act on. This is the route that
+ * makes retrieval spend observable, and the things it must not do are as
+ * important as the number: no network, no authentication bypass, and no 404
+ * for a mission that simply has not retrieved anything.
+ */
+describe('reading what a mission has spent', () => {
+  const usagePath = (missionId: string) => `${LIVE_REACH_ROUTE_PREFIX}/usage/${missionId}`;
+
+  it('is recognised as a Live Reach route', () => {
+    expect(isLiveReachRoute(usagePath('msn-1'))).toBe(true);
+  });
+
+  it('refuses an unauthenticated reader, like every other Live Reach route', async () => {
+    const response = await handleLiveReachRoute({
+      method: 'GET', path: usagePath('msn-1'), authorized: false, body: undefined,
+    });
+    expect(response.status).toBe(401);
+  });
+
+  it('reports an empty meter for a mission that has retrieved nothing', async () => {
+    // Not a 404: "this mission retrieved nothing" is a real answer, and a
+    // not-found would be indistinguishable from a mistyped id.
+    const fetchImpl = vi.fn();
+    const response = await handleLiveReachRoute(
+      { method: 'GET', path: usagePath('msn-quiet'), authorized: true, body: undefined },
+      deps(fetchImpl),
+    );
+    expect(response.status).toBe(200);
+    const { usage } = response.payload as { usage: { retrievals: number; bytes: number | null } };
+    expect(usage.retrievals).toBe(0);
+    // Unknown, not zero.
+    expect(usage.bytes).toBeNull();
+    // And it touched nothing to say so.
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('rejects a request with no mission id rather than reporting somebody’s meter', async () => {
+    const response = await handleLiveReachRoute(
+      { method: 'GET', path: `${LIVE_REACH_ROUTE_PREFIX}/usage/`, authorized: true, body: undefined },
+      deps(vi.fn()),
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it('reports what a retrieval through the SAME service actually spent', async () => {
+    // The service is passed in, which is what makes this meaningful: the
+    // server used to let the route build its own per request, so a retrieval
+    // and a usage read would have landed on two different meters.
+    const { createLiveReachService } = await import('./live-reach-service');
+    const service = createLiveReachService({
+      now: () => '2026-08-10T12:00:00.000Z',
+      nextEvidenceId: () => 'ev-1',
+      fetchImpl: (() => Promise.resolve(page())) as unknown as typeof fetch,
+    });
+
+    await handleLiveReachRoute(retrieve({
+      missionId: 'msn-1', projectId: 'rly-1', source: 'web',
+      reference: 'https://example.com/notes', missionAuthorises: true, probes: READY,
+    }), { service });
+
+    const response = await handleLiveReachRoute(
+      { method: 'GET', path: usagePath('msn-1'), authorized: true, body: undefined },
+      { service },
+    );
+    const { usage } = response.payload as { usage: { retrievals: number; bytes: number | null; unit: string } };
+    expect(usage.retrievals).toBe(1);
+    expect(usage.bytes).toBeGreaterThan(0);
+    // The unit is stated, so nobody reads a retrieval count as a bill.
+    expect(usage.unit).toBe('retrievals_and_bytes');
+  });
+});
