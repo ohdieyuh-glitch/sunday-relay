@@ -133,6 +133,24 @@ describe('read-only routes do nothing expensive', () => {
       expect(r?.body.kind).toBe('reviewer_not_ready');
     }
   });
+
+  /**
+   * THE REFUSAL MUST NOT DESCRIBE A SETTING THAT DOES NOT EXIST.
+   *
+   * It used to read "has no Reviewer run engine configured", which is the same
+   * class of untruth as publishing a `fusionBaseUrl` nobody set: it names a
+   * configuration step, so an operator goes looking for the variable. There is
+   * none — reviews run inside the mission leg — and an hour spent searching for
+   * a flag is the cost of that sentence.
+   */
+  it('does not send an operator hunting for a variable that does not exist', async () => {
+    const r = await call('/reviewer/start', { method: 'POST', runs: null, body: {} });
+    const message = String(r?.body.error ?? '');
+    expect(message).toContain('No configuration enables this route');
+    // And it names the path that DOES work, so the answer is actionable.
+    expect(message).toMatch(/mission/i);
+    expect(message).not.toMatch(/not configured/i);
+  });
 });
 
 describe('mutating routes validate and require authorization', () => {

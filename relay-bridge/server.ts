@@ -128,15 +128,21 @@ export function createBridgeServer(
   config: BridgeConfig,
   registry: MissionRegistry,
   /**
-   * The Reviewer run engine. Absent on a bridge that only reports readiness —
-   * the routes then answer `reviewer_not_ready` rather than inventing a run.
+   * A STANDALONE Reviewer run engine, which `main()` does not pass and which no
+   * setting supplies. Reviews happen inside the mission leg — `mission.ts`
+   * builds the packet from the coding leg's evidence and calls the configured
+   * transport — so this stays null and the routes refuse with a reason that
+   * names that path. Readiness and test-connection answer regardless.
+   *
+   * The parameter remains because a test may inject one, and because a future
+   * standalone lifecycle would arrive here rather than beside it.
    */
   reviewerRuns: ReviewerRunPort | null = null,
   /**
-   * The hosted Coding Agent run engine. Absent on a bridge that only reports
-   * readiness — the lifecycle routes then answer `hosted_coding_not_ready`
-   * rather than inventing a run. Readiness itself always answers, because it
-   * is free and offline.
+   * A STANDALONE hosted Coding Agent run engine, likewise absent by design: the
+   * hosted agent runs as a mission's coding leg, which is what supplies the
+   * prompt and the workspace these routes do not carry. Readiness itself always
+   * answers, because it is free and offline.
    */
   hostedCodingRuns: HostedCodingRunPort | null = null,
   /**

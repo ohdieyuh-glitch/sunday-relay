@@ -791,15 +791,33 @@ they are access decisions, not implementations.
    production and only the occupant was missing, which is why this moved from
    "buildable" to "done" in one pass. See item 1 above for the two variables.
 
-5. **The remaining two run engines.** `ReviewerRunPort` and
-   `HostedCodingRunPort` are still `null` in `main()` because neither has an
-   implementation to construct — unlike the Loop engine, which did and is now
-   wired. Note the hazard recorded at `local-transport.ts:53-60`: the
-   transport's ceilings are per instance and `transport-factory.ts` builds a
-   fresh one per request, harmless only while no route calls `startReview`.
-   ~~Hoist the instance before wiring.~~ **DONE** — the factory now caches one
-   transport per distinct configuration for the process lifetime, so the
-   ceilings are real before a route needs them rather than after.
+5. ~~**The remaining two run engines.**~~ **RESOLVED, and the earlier entry
+   here had the diagnosis wrong.** It said `ReviewerRunPort` and
+   `HostedCodingRunPort` were `null` "because neither has an implementation to
+   construct". Both implementations exist and both already run:
+
+   - The **hosted Coding Agent** is constructed at `mission.ts:436` and runs as
+     a mission's coding leg, inside a prepared workspace, producing the diff.
+   - The **Reviewer** runs at `mission.ts:1387`, over a packet built from that
+     diff, through whichever transport is configured — local Hermes, a remote
+     Hermes service, or the provider Reviewer at `mission.ts:429`.
+
+   What the two ports actually lack is not an engine but an **input**. A hosted
+   run needs a prompt and a workspace; a review needs a packet. Neither route
+   carries one — both accept ids only. So a standalone lifecycle is not a
+   missing wire, it is a second path that would run the same engines over
+   inputs it would have to invent, under separate run state, reviewing the same
+   artifact twice.
+
+   Both routes therefore stay refused, and the refusals were rewritten: they
+   used to say the engine was "not configured", which sends an operator hunting
+   for a variable nobody ever wrote. They now say no configuration enables the
+   route and name the mission path that works. Two tests hold that line.
+
+   One consequence worth knowing: `relay reviewer start` reaches
+   `/reviewer/start` and therefore cannot succeed against a hosted bridge. It
+   now fails with an accurate reason instead of a misleading one. Reviews still
+   happen on every mission automatically.
 
 6. **Evidence metering.** Live Reach spends someone's rate limit rather than
    money and Relay does not meter it, which is why `relay_live_reach` declares
