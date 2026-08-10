@@ -480,6 +480,32 @@ Railway CLI is unauthorized and creating the service needs browser consent.
 Every code path above is proven offline; none of it has spoken to a running
 Hermes service.
 
+## 4g. Adapter lifecycle verbs
+
+Ten verbs — `readiness`, `start`, `execute`, `stream`, `resume`, `stop`,
+`result`, `usage`, `identity`, `capabilities` — as a vocabulary that runs
+nothing. An adapter declares which it implements; Relay refuses the rest.
+
+**Four change what you may promise.** An adapter that cannot `stop` cannot be
+cancelled, and a cancel button over it is a lie. One that reports no `usage`
+cannot be budgeted, and a spend cap over it is a hope. `operatorPromises`
+derives cancellable / budgetable / attributable / probeable from the
+declaration rather than assuming them.
+
+**Declared is not implemented.** `reconcileDeclaration` fails a declared verb
+with no handler *and* a handler nobody declared — the second is reachable by
+accident, never by policy, and invisible to every surface reading the
+declaration.
+
+The absences are the useful part:
+
+| Adapter | Cannot | Why |
+|---|---|---|
+| Claude Agent SDK (hosted) | `stop` | Nothing outlives the call |
+| Hermes Reviewer (local) | `usage` | The one-shot CLI reports none, and Relay will not estimate |
+| Live Reach | `stream` | A partially sanitized document must never reach an agent |
+| All but the remote reviewer | `resume` | No server-side session is held |
+
 ## 5. What is NOT done
 
 | # | Requirement | State |
@@ -489,11 +515,25 @@ Hermes service.
 | 3 | Real workspace path | **Substantially done in the browser** — see §4b and §6. Opening a project, configuring the stack, switching roles and observing role/evidence/verification state all work by clicking; STARTING a mission is still operator-only by design |
 | 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only |
 | 5 | Skill Ops capabilities | **Domain done** — see §4e. Declared skills behind the existing permission model, proven never more permissive than it. No production caller invokes a skill yet |
-| 6 | Adapter plumbing verbs | **Partially present.** `ports.ts` declares `descriptor` + `execute`; the other verbs exist unevenly across connectors, not as one contract |
-| 7 | Research Loops | **Domain done** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` still has no production caller, so no Research Loop RUNS in production yet |
+| 6 | Adapter plumbing verbs | **Contract done** — see §4g. Ten verbs as one vocabulary; adapters declare what they implement, Relay refuses the rest, and declarations are reconciled against real handlers in both directions |
+| 7 | Research Loops | **Domain done, no production run** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` still has no production caller, so no Research Loop RUNS in production yet |
 | 8 | GraphRAG / LangChain / LangGraph | **Evaluated and bounded** — see §4d. The subordination boundary exists and is tested; no framework is installed, deliberately. No embedding or vector code exists |
 | 9 | Real wiring rule | **Enforced for what shipped.** Three pre-existing violations recorded in §7 |
 | 10 | Founder Mission test pack | **This document covers what can be tested today** |
+
+### What no code change can close
+
+Three boundaries remain, and none of them is a missing implementation:
+
+| Boundary | Needs |
+|---|---|
+| The Hermes Reviewer service is not deployed | Railway browser consent — DFA-001 |
+| `RELAY_ROLE_CODING_AGENT` and `RELAY_ROLE_REVIEWER` are unset in production | Someone with Railway access to set them; `/relay-api/health` reports `roleSlotsBound: false` with both refusals `no_occupant_requested`, which is truthful |
+| No Loop agent is named in production | `loopEngine: no_agent_named`. The only agent this build ships simulates its iterations, and production refuses it regardless — so this stays until a real Loop agent exists |
+
+Verified against the live surfaces rather than assumed: the frontend answers
+`200`, the bridge answers `ok`, `promptArchitectReady` is `true`, and the three
+lines above are what it actually reports.
 
 ## 6. The testing path that exists today
 
