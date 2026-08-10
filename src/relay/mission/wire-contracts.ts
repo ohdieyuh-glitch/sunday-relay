@@ -341,6 +341,28 @@ export interface CodingTerminalState {
 /** A normalized mission update from a live backend. The backend is the
     authority for a live mission, so it returns the FULL ordered event list;
     the store mirrors it (id-keyed by sequence). */
+/**
+ * One retrieved observation, as the wire carries it.
+ *
+ * Deliberately not the artifact: no content, no query, no sanitization state.
+ * A surface showing WHAT was read opens a page of untrusted text in a browser;
+ * a surface showing THAT it was read, when, and from where is the useful half
+ * and carries none of that risk.
+ */
+export interface MissionEvidenceReference {
+  evidenceId: string;
+  source: string;
+  reference: string;
+  /** What the source said. Null when it said nothing — never substituted. */
+  publishedAt: string | null;
+  retrievedAt: string;
+  /** Change-detection fingerprint, so a later re-fetch can be compared. */
+  contentFingerprint: string;
+  /** The backend that ACTUALLY served it, and whether it fell back. */
+  actualBackendId: string | null;
+  fallbackOccurred: boolean;
+}
+
 export interface LiveMissionUpdate {
   state: RelayMissionState;
   /** Fine-grained backend orchestration phase (three-role missions). */
@@ -362,6 +384,19 @@ export interface LiveMissionUpdate {
   /** Digest of the exact artifact Relay verified and the reviewer reviewed. */
   artifactDigest?: string;
   architectReceipt?: MissionArchitectReceipt;
+  /**
+   * What this Mission RETRIEVED, as durable references.
+   *
+   * References, never content — enough to find the observation again and to
+   * detect that the source changed underneath it. The Project Brain records
+   * that something was observed and never absorbs what it claimed, so what
+   * crosses the wire is the same thing the Brain would hold.
+   *
+   * Absent means the Mission was authorised to read nothing, which is the
+   * default. An empty array means it was authorised and retrieved none — a
+   * different fact, and worth keeping distinct.
+   */
+  evidence?: MissionEvidenceReference[];
   review?: MissionReview;
   /** One entry per role that has actually executed. */
   attestations?: MissionAttestationSummary[];

@@ -52,7 +52,8 @@ import { runRemoteHermesReview } from './hermes-remote-review';
 import type { ReviewerTransport } from './reviewer-transport';
 import type { LiveReachService } from './live-reach-service';
 import type { BackendProbe } from '../src/relay/mission/live-reach';
-import { renderForPrompt as renderEvidenceForPrompt } from '../src/relay/mission/evidence';
+import type { MissionEvidenceReference } from '../src/relay/mission/wire-contracts';
+import { renderForPrompt as renderEvidenceForPrompt, evidenceReference as evidenceReferenceOf } from '../src/relay/mission/evidence';
 import { buildAttestation, decideCompletion, digest, type ExecutionAttestation } from './attestation';
 import { isProductionDeployment } from './deployment-environment';
 import { createHostedClaudeInvoker } from './hosted-coding-agent/hosted-invoker';
@@ -207,6 +208,8 @@ interface MissionRecord {
   evidenceReferences: readonly { readonly source: string; readonly reference: string }[];
   /** Fenced observation blocks, in retrieval order. Empty until gathered. */
   liveEvidence: string[];
+  /** Durable references to what was retrieved. References, never content. */
+  evidenceRecords: MissionEvidenceReference[];
   missionId: string;
   /** The founder's exact request, preserved verbatim and separately from any
       generated handoff. */
@@ -502,6 +505,11 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     artifactDigest: rec.artifactDigest,
     handoffDigest: rec.handoffDigest,
     architectReceipt: rec.architectReceipt,
+    /**
+     * ABSENT AND EMPTY ARE DIFFERENT FACTS. Absent: the Mission was authorised
+     * to read nothing. Empty: it was authorised and retrieved none.
+     */
+    ...(rec.evidenceReferences.length === 0 ? {} : { evidence: [...rec.evidenceRecords] }),
     review: rec.review,
     attestations: toAttestationSummaries(rec),
   });
@@ -774,6 +782,25 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           });
           if (gathered.ok) {
             rec.liveEvidence.push(renderEvidenceForPrompt(gathered.artifact));
+            /**
+             * The durable reference, for the Project Brain.
+             *
+             * References, never content: the Brain records THAT something was
+             * observed and never absorbs what it claimed, and a browser
+             * showing retrieved text would be opening untrusted content in a
+             * surface built to display honesty.
+             */
+            const ref = evidenceReferenceOf(gathered.artifact);
+            rec.evidenceRecords.push({
+              evidenceId: ref.evidenceId,
+              source: ref.source,
+              reference: ref.reference,
+              publishedAt: ref.publishedAt,
+              retrievedAt: ref.retrievedAt,
+              contentFingerprint: ref.contentFingerprint,
+              actualBackendId: gathered.attempt.actualBackendId,
+              fallbackOccurred: gathered.attempt.fallbackOccurred,
+            });
             /**
              * `research`, and truth `relay_evidence` — Relay made this request
              * itself and saw the answer, so it is Relay's evidence rather than
@@ -1550,6 +1577,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         retryCount: 0,
         evidenceReferences: evidenceReferences ?? [],
         liveEvidence: [],
+        evidenceRecords: [],
       };
       records.set(missionId, rec);
       void runPipeline(rec); // fire-and-forget; browser polls for progress

@@ -1773,3 +1773,96 @@ describe('a mission gathers evidence and the architect plans with it', () => {
     expect(h.order.indexOf('evidence')).toBeLessThan(h.order.indexOf('openai'));
   });
 });
+
+/**
+ * WHAT THE MISSION VIEW CARRIES ABOUT WHAT IT READ.
+ *
+ * References, never content. A surface showing WHAT was read opens a page of
+ * untrusted text in a browser; a surface showing THAT it was read, when, and
+ * from where is the useful half and carries none of that risk — and it is
+ * exactly what the Project Brain records.
+ */
+describe('the mission view carries evidence references', () => {
+  const gatherOk = (h: ReturnType<typeof harness>) => {
+    h.deps.gatherEvidence = async () => {
+      const artifact = normalizeObservation('ev-9', {
+        missionId: 'msn-ref', projectId: 'msn-ref',
+        source: 'github', capability: 'read_item',
+        reference: 'https://github.com/example/repo/releases/tag/v2.0.0',
+        title: null, author: null,
+        publishedAt: '2026-08-10T11:30:00.000Z',
+        retrievedAt: '2026-08-10T12:00:00.000Z',
+        query: null,
+        content: 'SECRET-LOOKING BODY TEXT that must not travel.',
+        sanitization: 'clean', injectionSignals: [], authority: 'primary',
+        attempt: {
+          source: 'github', capability: 'read_item',
+          requestedBackendId: 'relay_github_public',
+          actualBackendId: 'relay_http_fetch',
+          fallbackOccurred: true,
+          startedAt: '2026-08-10T12:00:00.000Z', completedAt: '2026-08-10T12:00:01.000Z',
+        },
+      });
+      return { ok: true as const, artifact, attempt: artifact.attempt, events: [] };
+    };
+  };
+
+  it('reports what was read, when, and which backend served it', async () => {
+    const h = harness();
+    gatherOk(h);
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'msn-ref',
+      objective: 'Normalize project names safely',
+      evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
+    });
+    const view = await settle(reg, 'msn-ref');
+
+    expect(view.evidence).toHaveLength(1);
+    const ref = view.evidence?.[0];
+    expect(ref?.evidenceId).toBe('ev-9');
+    expect(ref?.publishedAt).toBe('2026-08-10T11:30:00.000Z');
+    expect(ref?.contentFingerprint).toMatch(/^fnv1a-/);
+    // Requested versus actual survives all the way to the wire.
+    expect(ref?.actualBackendId).toBe('relay_http_fetch');
+    expect(ref?.fallbackOccurred).toBe(true);
+  });
+
+  it('never puts retrieved CONTENT on the wire', async () => {
+    const h = harness();
+    gatherOk(h);
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'msn-ref',
+      objective: 'Normalize project names safely',
+      evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
+    });
+    const view = await settle(reg, 'msn-ref');
+    // The whole point of a reference. A browser rendering retrieved text would
+    // be opening untrusted content in the surface built to display honesty.
+    expect(JSON.stringify(view.evidence)).not.toContain('SECRET-LOOKING BODY TEXT');
+  });
+
+  it('distinguishes authorised-and-retrieved-none from authorised-nothing', async () => {
+    const refused = harness();
+    refused.deps.gatherEvidence = async () => ({
+      ok: false as const, refusal: 'not_ready' as const, detail: 'x', attempt: null, events: [],
+    });
+    const regA = registry(refused, LIVE_ENV, 'fake');
+    regA.start({
+      missionId: 'msn-empty',
+      objective: 'Normalize project names safely',
+      evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
+    });
+    const withNone = await settle(regA, 'msn-empty');
+    // Authorised, retrieved none — an EMPTY list, not an absent one.
+    expect(withNone.evidence).toEqual([]);
+
+    const none = harness();
+    const regB = registry(none, LIVE_ENV, 'fake');
+    regB.start({ missionId: 'msn-unauth', objective: 'Normalize project names safely' });
+    const unauthorised = await settle(regB, 'msn-unauth');
+    // Authorised nothing — ABSENT. A different fact.
+    expect(unauthorised.evidence).toBeUndefined();
+  });
+});
