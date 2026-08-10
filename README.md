@@ -104,6 +104,17 @@ dispatches to a provider.
 | `DEVELOPMENT_CONTRACTS.md` | what the repository separation carried, and what it deliberately did not |
 | `YC_DEMO_BASELINE.json` | the versioned product baseline the readiness check validates |
 
+**If you are the founder about to test this, start with two documents that were
+not listed here at all:**
+
+| Document | What it is for |
+|---|---|
+| `FOUNDER_TESTING_HANDOFF.md` | what is live, what is honestly not, and what needs your authorization. Read §0 first — it records which of its own earlier advice was wrong |
+| `FOUNDER_MISSION_PACK.md` | five missions to run, free ones first. Generated from `src/relay/mission/founder-pack/founder-missions.ts`, and its claims are checked against the code that decides them |
+
+They existed and the map above did not name them, so the two documents written
+for the founder were the two a founder would not find.
+
 `RELAY_STATUS.md` and `RELAY_INTEGRATION.md` at the repository root are
 **historical records** from the period when Relay was developed inside the
 Alcatraz repository. They are superseded by `docs/relay/` and are kept because
