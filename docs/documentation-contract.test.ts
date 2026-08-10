@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 /**
@@ -607,5 +607,42 @@ describe('the Hermes Reviewer claims only what has actually happened', () => {
       .not.toMatch(/[\w-]+\.(?:up\.)?railway\.app|\.railway\.internal/iu);
     expect(recipe, 'no Railway project or service id belongs in the build recipe')
       .not.toMatch(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/iu);
+  });
+});
+
+/**
+ * THE OMISSION CLASS, WHICH HAS NO SENTENCE TO CHECK.
+ *
+ * Every other check in this file verifies that something the README SAYS is
+ * true. This one verifies that something it does not say ought to be said, and
+ * it exists because the two documents written for the founder — the testing
+ * handoff and the mission pack — were both absent from a map that names
+ * fifteen specifications and tells the reader where to start.
+ *
+ * Nothing was false. There was no claim to hold against source, which is
+ * exactly why reading for stale claims could never have found it: an omission
+ * from a list is invisible.
+ *
+ * So the rule is mechanical. A document named `FOUNDER_*` is written for the
+ * one reader who will not go looking, and the README has to name it.
+ */
+describe('documents written for the founder are discoverable', () => {
+  const founderDocs = readdirSync(join(ROOT, 'docs/relay'))
+    .filter((name) => name.startsWith('FOUNDER_') && name.endsWith('.md'));
+
+  it('finds them, so this cannot pass on an empty list', () => {
+    expect(founderDocs.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('names every FOUNDER_ document in the README', () => {
+    for (const doc of founderDocs) {
+      expect(readme, `${doc} is written for the founder and the README never names it`)
+        .toContain(doc);
+    }
+  });
+
+  it('points at the handoff section that corrects its own earlier advice', () => {
+    // A founder who starts at §1 acts on instructions that §0 retracts.
+    expect(readme).toMatch(/§0/);
   });
 });
