@@ -91,3 +91,50 @@ describe('the documentation does not promise what the code refuses', () => {
     }
   });
 });
+
+/**
+ * A VALUE IN THIS FILE IS COPIED, NOT READ.
+ *
+ * `.env.example` is the file a founder copies to `.env`, so every value in it
+ * ships into a real configuration. An edit once spliced a comment block into
+ * the middle of another one and the assignment swallowed the following comment
+ * line as its VALUE:
+ *
+ *   RELAY_HOSTED_CODING_MODEL=claude_agent_sdk_hosted — a real, hosted,
+ *
+ * Copied verbatim, that configures a model name no provider has, and the
+ * failure surfaces as a provider rejection rather than as a typo. Nothing
+ * caught it: the occupant-id checks above read the file as prose, and prose is
+ * exactly what it had become.
+ *
+ * A value here is a port, a mode, an executable name, a number — never a
+ * sentence. That is what this checks.
+ */
+describe('no variable carries prose as its value', () => {
+  const assignments = ENV_EXAMPLE.split('\n')
+    .map((line, i) => ({ line, number: i + 1 }))
+    .filter((entry) => /^[A-Z][A-Z0-9_]*=/.test(entry.line));
+
+  it('finds the assignments at all, so this cannot pass on an empty match', () => {
+    expect(assignments.length).toBeGreaterThan(20);
+  });
+
+  it('gives every non-empty value a single token', () => {
+    for (const { line, number } of assignments) {
+      const value = line.slice(line.indexOf('=') + 1).trim();
+      if (value === '') continue;
+      // A real example value is one token: 8790, balanced, hermes, 180000.
+      expect(value, `${p_label(line)} at line ${String(number)} carries prose`).not.toMatch(/\s/);
+    }
+  });
+
+  it('lets no value contain an em dash, which only prose uses here', () => {
+    for (const { line, number } of assignments) {
+      expect(line, `line ${String(number)}`).not.toContain('—');
+    }
+  });
+});
+
+function p_label(line: string): string {
+  return line.slice(0, Math.max(0, line.indexOf('=')));
+}
