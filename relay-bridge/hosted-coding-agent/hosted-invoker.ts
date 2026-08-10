@@ -1,4 +1,5 @@
 import { fail, relayError } from '../../src/relay/protocol/errors';
+import type { RelayResult } from '../../src/relay/protocol/errors';
 import { parseAgentExecutionReport } from '../../src/relay/connectors/claude-code/report-parser';
 import type { AgentExecutionReport } from '../../src/relay/connectors/claude-code/report-parser';
 import type { AgentInvoker } from '../agent-invoker';
@@ -165,14 +166,65 @@ export function createHostedClaudeInvoker(input: {
       report: finalText === null
         ? fail<AgentExecutionReport>(relayError(
           'invalid-report',
-          'The hosted Coding Agent produced no final result to parse.',
+          `The hosted Coding Agent produced no final result to parse. ${runShape(result.observation)}`,
         ))
-        : parseAgentExecutionReport(finalText, {
-          taskId: request.association.taskId,
-          runId: request.association.runId,
-        }),
+        : withRunShape(
+          parseAgentExecutionReport(finalText, {
+            taskId: request.association.taskId,
+            runId: request.association.runId,
+          }),
+          result.observation,
+        ),
       ...identity,
       actualModel: result.observation.actualModel,
     };
   };
+}
+
+
+/**
+ * WHAT THE RUN LOOKED LIKE, in facts that cannot leak.
+ *
+ * A hosted run failed with "Required report marker is absent" and nothing
+ * else. That sentence is true and useless: it cannot distinguish an agent that
+ * worked and forgot the marker from one that hit its turn ceiling, from one
+ * the provider errored on before it edited anything. The observation already
+ * held all three answers and none of them reached the operator.
+ *
+ * Only the SHAPE is surfaced — the SDK's own result subtype, whether it
+ * flagged an error, how many turns it took, how many tools it used. The final
+ * TEXT is never included: it is model output, it can quote the workspace, and
+ * the report parser is the only thing that should read it.
+ */
+export function runShape(o: {
+  readonly resultSubtype: string | null;
+  readonly isError: boolean | null;
+  readonly numTurns: number | null;
+  readonly toolsUsed: readonly string[];
+  readonly finalText: string | null;
+}): string {
+  const parts: string[] = [];
+  // An SDK enum: `success`, `error_max_turns`, `error_during_execution`.
+  if (typeof o.resultSubtype === 'string' && /^[a-z][a-z0-9_]{0,39}$/.test(o.resultSubtype)) {
+    parts.push(`result=${o.resultSubtype}`);
+  }
+  if (o.isError !== null) parts.push(`isError=${String(o.isError)}`);
+  if (o.numTurns !== null && Number.isFinite(o.numTurns)) parts.push(`turns=${String(o.numTurns)}`);
+  parts.push(`toolsUsed=${String(o.toolsUsed.length)}`);
+  // LENGTH, never content. It separates "said nothing" from "said the wrong
+  // thing", which is the distinction that matters here.
+  parts.push(`finalTextChars=${String(o.finalText === null ? 0 : o.finalText.length)}`);
+  return `Run shape: ${parts.join(' ')}.`;
+}
+
+/** Attach the run shape to a failed report, and leave a good one untouched. */
+function withRunShape(
+  parsed: RelayResult<AgentExecutionReport>,
+  observation: Parameters<typeof runShape>[0],
+): RelayResult<AgentExecutionReport> {
+  if (parsed.ok) return parsed;
+  return fail<AgentExecutionReport>(relayError(
+    parsed.error.code,
+    `${parsed.error.message} ${runShape(observation)}`,
+  ));
 }
