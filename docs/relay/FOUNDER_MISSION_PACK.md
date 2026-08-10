@@ -132,9 +132,9 @@ Three things, in this order:
 
 **Needs:** `RELAY_PROMPT_ARCHITECT_MODE=live`, `OPENAI_API_KEY`, `OPENAI_PROMPT_ARCHITECT_MODEL`, `RELAY_ROLE_CODING_AGENT`, `RELAY_ROLE_REVIEWER`, `ANTHROPIC_API_KEY`
 
-**Proves:** Idempotency is real. The same idempotency key returns the first run rather than starting a second one, so a retried request does not spend twice.
+**Proves:** Idempotency is real, and it is keyed on the MISSION ID. Starting the same missionId twice returns the first run rather than dispatching a second — `mission.ts` returns the existing record before any pipeline starts — so a retried request does not spend twice.
 
-**You caught a fake if:** Two runs appear with different ids for one key, or the second reports a fresh provider call. Either means a retry costs money a founder did not authorise.
+**You caught a fake if:** The second call reports a fresh provider request, a new revision, or an event log that restarts. Any of those means a retry costs money a founder did not authorise. Note the limit rather than being surprised by it: the record lives in memory, so a bridge restart forgets it and the same id would start again.
 
 
 ## What the pack deliberately does not contain

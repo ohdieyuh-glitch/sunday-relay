@@ -159,12 +159,27 @@ export const FOUNDER_MISSIONS: readonly FounderMission[] = Object.freeze([
       'RELAY_PROMPT_ARCHITECT_MODE=live', 'OPENAI_API_KEY', 'OPENAI_PROMPT_ARCHITECT_MODEL',
       'RELAY_ROLE_CODING_AGENT', 'RELAY_ROLE_REVIEWER', 'ANTHROPIC_API_KEY',
     ]),
+    /**
+     * THE MECHANISM NAMED HERE WAS WRONG, in the same way `fm-1` was.
+     *
+     * It said "the same IDEMPOTENCY KEY returns the first run". Mission start
+     * takes `missionId`, `objective` and `evidenceReferences` — there is no
+     * idempotency key, so a founder following this would hunt for a field the
+     * mission API does not have. Idempotency keys exist, but on the Reviewer
+     * and hosted-coding routes, not here.
+     *
+     * The SUBSTANCE was true and is what the entry is for: a repeat does not
+     * dispatch twice. The real key is the mission id.
+     */
     proves:
-      'Idempotency is real. The same idempotency key returns the first run rather than starting '
-      + 'a second one, so a retried request does not spend twice.',
+      'Idempotency is real, and it is keyed on the MISSION ID. Starting the same missionId twice '
+      + 'returns the first run rather than dispatching a second — `mission.ts` returns the '
+      + 'existing record before any pipeline starts — so a retried request does not spend twice.',
     wouldFailIf:
-      'Two runs appear with different ids for one key, or the second reports a fresh provider '
-      + 'call. Either means a retry costs money a founder did not authorise.',
+      'The second call reports a fresh provider request, a new revision, or an event log that '
+      + 'restarts. Any of those means a retry costs money a founder did not authorise. Note the '
+      + 'limit rather than being surprised by it: the record lives in memory, so a bridge restart '
+      + 'forgets it and the same id would start again.',
   }),
 ]);
 
