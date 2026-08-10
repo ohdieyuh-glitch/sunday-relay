@@ -526,7 +526,7 @@ The absences are the useful part:
 | 7 | Research Loops | **Domain done, no production run** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` NOW has a production caller (`composeLoopRuns` in `main()`), so the sentence that used to sit here is out of date — what is still missing is a Loop AGENT: the only one shipped simulates, and production refuses it by design |
 | 8 | GraphRAG / LangChain / LangGraph | **Evaluated and bounded** — see §4d. The subordination boundary exists and is tested; no framework is installed, deliberately. No embedding or vector code exists |
 | 9 | Real wiring rule | **Enforced for what shipped.** Three pre-existing violations recorded in §7 |
-| 10 | Founder Mission test pack | **This document covers what can be tested today** |
+| 10 | Founder Mission test pack | **Both halves now exist.** This document is the handoff; `docs/relay/FOUNDER_MISSION_PACK.md` is the pack — five missions, ordered free-first, generated from `founder-missions.ts` and validated against the real source vocabulary so a mission cannot name something Relay does not have. Every entry carries a `wouldFailIf`, which is what separates a test pack from a demo script |
 
 ### A Mission that reads before it plans
 
