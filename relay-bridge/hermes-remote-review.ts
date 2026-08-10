@@ -1,4 +1,16 @@
 import { buildReviewPrompt, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
+import { SERVICE_MAX_TURNS } from '../relay-hermes-service/service';
+
+/**
+ * What the bridge ASKS the remote Reviewer for. The service clamps each of
+ * these down to its own ceiling and never up, so these are requests rather
+ * than grants — which is why they live here rather than being read back from
+ * the service and echoed.
+ */
+export const REMOTE_REVIEW_LIMITS = Object.freeze({
+  maxOutputBytes: 1_048_576,
+  maxPromptBytes: 262_144,
+});
 import { isProductionDeployment } from './deployment-environment';
 
 /**
@@ -172,7 +184,32 @@ export async function runRemoteHermesReview(input: {
       runId: input.runId,
       idempotencyKey: input.runId,
       prompt: buildReviewPrompt(input.packet),
-      limits: {},
+      /**
+       * THE LIMITS THE SERVICE REQUIRES, not an empty object.
+       *
+       * This sent `limits: {}`. The service demands four positive safe
+       * integers and refuses anything else with 422 — so every remote review
+       * was rejected before Hermes was ever asked to read a diff, and the
+       * mission reported only "The Reviewer service refused the review (422)".
+       *
+       * That refusal is the service being strict about its own contract, which
+       * is right: a limit it cannot read is not a bound, and accepting an
+       * empty object would have meant running unbounded under the appearance
+       * of a ceiling.
+       *
+       * `maxTurns` is SERVICE_MAX_TURNS because the adapter is genuinely
+       * one-shot — the isolated profile pins `agent.max_turns: 1` and there is
+       * no flag to raise it. Asking for more would be a fake control. The
+       * others are the bridge's own configured bounds; the service clamps them
+       * down to its ceilings and never up, so asking for less is honoured and
+       * asking for more is not.
+       */
+      limits: {
+        timeoutMs: input.config.reviewTimeoutMs,
+        maxOutputBytes: REMOTE_REVIEW_LIMITS.maxOutputBytes,
+        maxTurns: SERVICE_MAX_TURNS,
+        maxPromptBytes: REMOTE_REVIEW_LIMITS.maxPromptBytes,
+      },
     }),
   }, input.config.timeoutMs);
 
