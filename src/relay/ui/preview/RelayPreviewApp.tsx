@@ -807,9 +807,33 @@ export function RelayPreviewApp() {
       events: store.getMissionEvents(mission.id),
     });
   })();
+  /**
+   * The evidence references belonging to the project whose Brain is open.
+   *
+   * Read at render time from the store rather than captured, so a mission that
+   * retrieves while the Brain view is open shows it on the next update.
+   */
+  const brainEvidence = (() => {
+    if (!brainProjectId) return undefined;
+    const project = store.getProject(brainProjectId);
+    const missionId = project?.activeMissionId ?? null;
+    if (missionId === null) return undefined;
+    return store.getMission(missionId)?.evidence;
+  })();
+
   const projectBrainView = brainPresentation ? (
     <RelayProjectBrainView
       state={brainPresentation.projectBrainState}
+      /**
+       * WHAT THE ACTIVE MISSION READ.
+       *
+       * From the STORE's mission record, which mirrors what the backend sent
+       * — not from the projection, which is about mission state rather than
+       * about what was observed. Absent when the project has no mission, or
+       * when the Mission was authorised to read nothing; the view renders
+       * those two differently from "authorised and retrieved none".
+       */
+      {...(brainEvidence === undefined ? {} : { evidence: brainEvidence })}
       {...(brainPresentation.projectBrainDocument === undefined
         ? {}
         : { document: brainPresentation.projectBrainDocument })}

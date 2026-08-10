@@ -6,6 +6,7 @@ import { createElement } from 'react';
 import { RelayPreviewApp, parsePreviewHash } from './RelayPreviewApp';
 import { getRelayAppStore } from '../app';
 import { capabilityState, evaluateLiveReach } from '../../mission/live-reach';
+import { createDefaultSettingsDraft } from '../project-settings/defaults';
 
 /**
  * LIVE REACH SETTINGS ARE REAL SETTINGS.
@@ -145,5 +146,67 @@ describe('a store written before Live Reach existed', () => {
     expect(reloaded.listProjects().length).toBeGreaterThan(0);
     // Absent means DEFAULT, not denied.
     expect(capabilityState('web', 'read_item', reloaded.getState().liveReach).enabled).toBe(true);
+  });
+});
+
+/**
+ * THE REAL WIRING RULE, APPLIED TO THIS CHAIN.
+ *
+ * A capability counts when the source exists, a top-level caller reaches it,
+ * the real product path executes it, and the user can observe the result. The
+ * Brain view accepting an `evidence` prop is the source; a host passing it is
+ * the caller. Without this test the prop could exist and no screen would ever
+ * receive one.
+ */
+describe('the Brain view receives what the mission read', () => {
+  it('shows a reference the store holds for the active mission', () => {
+    const store = getRelayAppStore();
+    const created = store.createDraftFromRequest('Check the release notes');
+    if (!created.ok) throw new Error('setup');
+    const id = created.value.project.id;
+    const brief = store.getBrief(id);
+    if (!brief) throw new Error('setup: no brief');
+    const started = store.startProject(id, createDefaultSettingsDraft(brief.draft));
+    if (!started.ok) throw new Error(`setup: ${started.message}`);
+
+    // What the backend would have sent, mirrored into the mission record.
+    store.ingestLiveUpdate(started.value.mission.id, {
+      state: started.value.mission.state,
+      currentRole: 'relay',
+      events: [],
+      evidence: [{
+        evidenceId: 'ev-1',
+        source: 'github',
+        reference: 'https://github.com/example/repo/releases/tag/v2.0.0',
+        publishedAt: '2026-08-10T11:30:00.000Z',
+        retrievedAt: '2026-08-10T12:00:00.000Z',
+        contentFingerprint: 'fnv1a-00000001',
+        actualBackendId: 'relay_http_fetch',
+        fallbackOccurred: true,
+      }],
+    });
+
+    window.location.hash = `#/relay/project/${id}/brain`;
+    render(createElement(RelayPreviewApp));
+
+    const section = screen.getByLabelText('Retrieved evidence');
+    expect(section.textContent).toContain('github');
+    expect(section.textContent).toContain('relay_http_fetch');
+    expect(section.textContent).toContain('fallback');
+  });
+
+  it('shows no evidence section for a project whose mission read nothing', () => {
+    const store = getRelayAppStore();
+    const created = store.createDraftFromRequest('Nothing to read');
+    if (!created.ok) throw new Error('setup');
+    const id = created.value.project.id;
+    const brief = store.getBrief(id);
+    if (!brief) throw new Error('setup: no brief');
+    store.startProject(id, createDefaultSettingsDraft(brief.draft));
+
+    window.location.hash = `#/relay/project/${id}/brain`;
+    render(createElement(RelayPreviewApp));
+    // Authorised nothing — absent, not an empty list.
+    expect(screen.queryByLabelText('Retrieved evidence')).toBeNull();
   });
 });
