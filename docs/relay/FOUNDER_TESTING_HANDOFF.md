@@ -812,12 +812,16 @@ cd "$(mktemp -d)" && env -i PATH="$PATH" HOME="$HOME" hermes -z 'Reply with the 
 | Id | What | Blocks |
 |---|---|---|
 | DFA-001 | Railway CLI is **Unauthorized**; creating a second Railway service needs browser consent | The dedicated Hermes service |
-| — | `ANTHROPIC_API_KEY` + `RELAY_HOSTED_CODING_MODEL` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` on Railway | Hosted Coding Agent execution. The code is wired and proven; the credentials AND a reachable `FUSION_BASE_URL` are both outstanding |
+| — | `ANTHROPIC_API_KEY` + `RELAY_HOSTED_CODING_MODEL` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` on Railway | Hosted Coding Agent execution. **This row used to add "AND a reachable `FUSION_BASE_URL`", which was wrong and made your remaining work look larger than it is.** `fusionBaseUrl` is read only inside the Fusion architect branch (`mission.ts:1213`); the coding leg never reads it. Production already runs the OpenAI architect (`promptArchitectReady: true`), so Alcatraz is not needed for this at all — the credentials are the whole blocker |
 | DFA-003 | Supabase password rotation | Nothing in this repository |
 
-**This session held no `RELAY_BRIDGE_API_TOKEN`**, so every production check
-here is an unauthenticated probe. No operator route was driven, and **no
-provider call was made by this session**.
+**Neither session held a `RELAY_BRIDGE_API_TOKEN`** — not the one that wrote
+this document on 2026-08-09, nor the one that produced the §0 addendum on
+2026-08-10. Every production check in it is an unauthenticated probe. No
+operator route was driven and **no provider call was made**, by either.
+
+That is why nothing here reports a completed hosted mission: not because one
+failed, but because no session could authorise one.
 
 ## 9. Recommended next Missions, in order
 
