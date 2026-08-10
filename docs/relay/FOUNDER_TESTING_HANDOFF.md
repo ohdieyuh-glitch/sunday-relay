@@ -223,6 +223,137 @@ A role switched in the workspace is stored in the project and is what the next
 mission is configured FROM; on the live bridge, which occupant actually runs is
 still decided by the server's role variables.
 
+## 4c. Live Reach — current external information
+
+Evaluation of Agent Reach: `docs/relay/AGENT_REACH_EVALUATION.md`, with a file
+citation for every claim. The short version, because it changed the plan:
+
+**Agent Reach does not retrieve anything.** Its own `core.py` says it is an
+"installer, doctor, and configuration tool" and that "after installation,
+agents call the upstream tools directly". Its MCP server exposes one tool,
+`get_status`. The actual retrieval path is an agent running third-party CLIs in
+a shell with platform cookies in its environment — the boundary Relay exists to
+prevent. **It also implements no write operation of any kind**, so no Relay
+social action capability can be attributed to it.
+
+| Category | Outcome |
+|---|---|
+| Used directly | Nothing |
+| Wrapped | Nothing |
+| Adapted | Ordered backend candidates with fallback; probe-based readiness that distinguishes missing / broken / timeout / error |
+| Relay-native | Everything else: capability model, provider seam, evidence, permissions, audit, every retrieval |
+| Rejected | The execution model, browser cookie extraction, the host-mutating installer, and any claim of write support |
+
+Relay's existing `mcp-network-policy.ts` is **stronger** than Agent Reach's URL
+guard — it also checks post-DNS resolved addresses and every redirect hop — so
+Live Reach reuses it unchanged rather than adding a second SSRF guard.
+
+### Sources, and what each honestly is
+
+| Source | Backends | State |
+|---|---|---|
+| Web | `relay_http_fetch` | Relay-native, no credential |
+| GitHub | `relay_github_public`, `relay_http_fetch` | Relay-native, no credential, rate limited per address |
+| RSS / Atom | `relay_rss_fetch`, `relay_http_fetch` | Relay-native, publishes its own timestamps |
+| X, Reddit, LinkedIn, Instagram, Facebook, YouTube | none | Modelled, with what each would require. **Cannot become READY.** |
+
+`backends[0]` is preferred and the rest are fallbacks; an operator override can
+reorder but never introduce, so a stale override cannot hide a backend that
+works.
+
+### READY means observed
+
+Probes are side-effect-free GETs. Nothing probed reports **UNKNOWN**, not
+"unavailable" — nothing has been asked. A source that answers 401/403 reports
+**AUTHENTICATION REQUIRED**; 429 reports **RATE LIMITED** and keeps
+`Retry-After`. No amount of configuration produces READY.
+
+### Evidence
+
+A retrieval returns an **EvidenceArtifact**, not text: reference, author,
+publication time (or `null`), retrieval time, freshness measured from
+publication, the backend that ACTUALLY served it, `fallbackOccurred`,
+sanitization state, instruction-shaped phrases found, authority, and everything
+Relay does not know written down.
+
+Retrieved content is **data**. `renderForPrompt` fences it, states that it is an
+observation BEFORE the content appears, and defuses text that tries to close the
+fence.
+
+### Project Brain
+
+A retrieval lands in **short-term** memory and appears under RECENTLY OBSERVED.
+Promotion to what the project KNOWS is a proposal that waits for an approver who
+is not the proposer. The statement must be written by the proposer — the
+citation carries the reference, retrieval time and content fingerprint, so a
+later re-fetch can prove the page changed after approval.
+
+### Permissions
+
+Capabilities arrive **ENABLED**. Read and actions are separable, per-capability
+overrides win over group switches, and absent means default rather than denied.
+A disabled capability is refused by the real path: `fetchImpl` is asserted never
+called for each of the four refusal routes.
+
+**Enabled is not authority.** A Mission must state that it asked for the act.
+The bridge route defaults `missionAuthorises` to false, so no HTTP caller can
+authorise itself.
+
+### The two notices
+
+Global, once, on first entry to Live Reach settings — stating that capabilities
+arrive enabled AND that this is not permission to use them, with KEEP ENABLED /
+MANAGE INDIVIDUALLY / DISABLE ALL. Then per-source, once, on first entry to that
+source. Acknowledged separately and persisted.
+
+### Actions: none exist, and nothing pretends otherwise
+
+No source implements any action capability. The ACTIONS group in settings says
+so where a founder looks for the switches, no action route is mounted, and a
+test asserts across every source that none is claimed.
+
+### The exact path to test it
+
+1. Open `#/relay/live-reach`. The global notice is there on a browser that has
+   never visited.
+2. Expand **GitHub**. Its own notice appears once. Read capabilities are listed
+   and ON; ACTIONS says Relay performs none.
+3. Turn **Search** off, reload — still off, because it was written to the store.
+4. Readiness reads **UNKNOWN** in the browser: nothing has been probed from
+   there, and the browser is not allowed to probe.
+5. Operator-authenticated, against the bridge:
+
+```
+curl -s -X POST "$BRIDGE/relay-api/live-reach/probe" \
+  -H "authorization: Bearer $RELAY_BRIDGE_API_TOKEN" -H 'content-type: application/json' \
+  -d '{"source":"github","url":"https://api.github.com/"}'
+```
+
+6. Then a retrieval, with Mission authority stated:
+
+```
+curl -s -X POST "$BRIDGE/relay-api/live-reach/retrieve" \
+  -H "authorization: Bearer $RELAY_BRIDGE_API_TOKEN" -H 'content-type: application/json' \
+  -d '{"source":"github","reference":"https://api.github.com/repos/nodejs/node/releases/latest",
+       "missionId":"<id>","projectId":"<id>","missionAuthorises":true,
+       "probes":[{"backendId":"relay_github_public","capability":"read_item","result":"observed","probedAt":"<iso>"}]}'
+```
+
+Expect an artifact whose `publishedAt` is the release's own date and whose
+`age.freshness` reflects it. Drop `missionAuthorises` and the same call answers
+`403 mission_does_not_authorize` **without fetching**.
+
+### Known limits, stated
+
+- **No JavaScript is executed.** A page that renders client-side returns what
+  the server sent, which is sometimes nothing.
+- **No credential is ever sent.** Sources needing a session report that they do.
+- **Probes are supplied, not scheduled.** Nothing yet re-probes on a timer, so
+  readiness is as current as the last probe a caller made.
+- **The browser cannot probe or retrieve.** Both are operator-only, so the
+  settings screen shows UNKNOWN until an operator probes.
+- **No action capability exists**, on any source.
+
 ## 5. What is NOT done
 
 | # | Requirement | State |
@@ -230,11 +361,11 @@ still decided by the server's role variables.
 | 1 | Production-hosted three-role execution | **Half.** Architect hosted and Coding Agent wired; the hosted **Reviewer** is the remaining gap |
 | 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability, and hosted execution for the Coding Agent. The Reviewer's hosted surface is not dispatchable |
 | 3 | Real workspace path | **Substantially done in the browser** — see §4b and §6. Opening a project, configuring the stack, switching roles and observing role/evidence/verification state all work by clicking; STARTING a mission is still operator-only by design |
-| 4 | Evidence & Retrieval on MCP + Brain | **Not started** |
+| 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only |
 | 5 | Skill Ops capabilities | **Not started** |
 | 6 | Adapter plumbing verbs | **Partially present.** `ports.ts` declares `descriptor` + `execute`; the other verbs exist unevenly across connectors, not as one contract |
 | 7 | Research Loops | **Not started.** The Loop Engine exists; `createLoopService` still has no production caller |
-| 8 | GraphRAG / LangChain / LangGraph | **Not started.** No retrieval, embedding or vector code exists in the repo |
+| 8 | GraphRAG / LangChain / LangGraph | **Not started**, and the gap is narrower than it was: retrieval now exists (§4c). No embedding or vector code exists |
 | 9 | Real wiring rule | **Enforced for what shipped.** Three pre-existing violations recorded in §7 |
 | 10 | Founder Mission test pack | **This document covers what can be tested today** |
 
