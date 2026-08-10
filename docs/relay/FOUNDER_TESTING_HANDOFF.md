@@ -431,11 +431,60 @@ another costume. No wildcards: a skill that can invoke anything is not a skill.
 do not, because a Mission's authority and an agent's permission are different
 questions — the same line Live Reach draws.
 
+## 4f. The Reviewer can now run somewhere other than your laptop
+
+`runHermesReview` spawns a local Hermes process. Correct on a founder's
+machine, impossible on a container — so a hosted bridge had no Reviewer at
+all, which was the remaining half of production-hosted three-role execution.
+
+**The transport was never the hard part. The preflight was.** `hermesPreflight`
+runs `hermes --help` and fails when the binary is absent, which on a container
+is always. A bridge correctly configured for the remote Reviewer would have
+been refused before the remote path was reached, with an error about an
+executable nobody intended to use. That is exactly what happened to the hosted
+Coding Agent, so a transport now carries BOTH halves — how to run a review and
+how to check one could run — chosen together, and a test asserts the local
+probe is never called for a remote transport.
+
+| | Local | Remote |
+|---|---|---|
+| Runs | spawned Hermes process | authenticated HTTP to the Reviewer service |
+| Readiness | `hermes --help` / `status` | `GET /v1/readiness` — offline, creates no run |
+| Selected by | default | `RELAY_HERMES_MODE=remote` |
+
+Same `HermesOutcome`, same `validateHermesReview`, so no verdict logic exists
+twice and a remote reviewer cannot return a shape the local one could not.
+
+**Refusals that matter:**
+
+- A review that has not returned in time is `review_incomplete` saying whether
+  it finished is **unknown** — the service may still be reviewing, and calling
+  it failed would be a claim about someone else's process.
+- A production bridge will not trust a Reviewer URL absent from
+  `RELAY_HERMES_TRUSTED_ORIGINS`, and will not send its bearer token over
+  plaintext. Checked against the environment, not a flag.
+- A service that cannot enforce read-only is refused however healthy it is —
+  read-only is the Reviewer's whole safety property.
+- Remote-configured-and-broken never falls back to local: it refuses naming the
+  missing variable.
+- The run id IS the idempotency key, so a redelivered request cannot start a
+  second paid review.
+
+### To use it
+
+On the bridge: `RELAY_HERMES_MODE=remote`, `RELAY_HERMES_SERVICE_URL`,
+`RELAY_HERMES_SERVICE_TOKEN`, `RELAY_HERMES_TRUSTED_ORIGINS`.
+
+**What is still founder-gated: the service is not deployed.** DFA-001 — the
+Railway CLI is unauthorized and creating the service needs browser consent.
+Every code path above is proven offline; none of it has spoken to a running
+Hermes service.
+
 ## 5. What is NOT done
 
 | # | Requirement | State |
 |---|---|---|
-| 1 | Production-hosted three-role execution | **Half.** Architect hosted and Coding Agent wired; the hosted **Reviewer** is the remaining gap |
+| 1 | Production-hosted three-role execution | **Code complete, deployment gated.** Architect hosted; Coding Agent wired and proven; Reviewer has a remote transport, a matching preflight and real mission wiring (§4f). The Hermes service itself is not deployed — DFA-001 |
 | 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability, and hosted execution for the Coding Agent. The Reviewer's hosted surface is not dispatchable |
 | 3 | Real workspace path | **Substantially done in the browser** — see §4b and §6. Opening a project, configuring the stack, switching roles and observing role/evidence/verification state all work by clicking; STARTING a mission is still operator-only by design |
 | 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only |
