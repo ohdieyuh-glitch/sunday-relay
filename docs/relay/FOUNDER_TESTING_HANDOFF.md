@@ -99,7 +99,7 @@ Independence is decided by `reviewerIsIndependent` — the rule Relay already ha
 | coding_agent | `claude_code_fake` | anywhere | none → `simulated` | yes |
 | coding_agent | `claude_agent_sdk_hosted` | anywhere | api | **yes** — wired, needs `ANTHROPIC_API_KEY` + `RELAY_HOSTED_CODING_MODEL` |
 | reviewer | `hermes_local` | founder machine | api | yes |
-| reviewer | `hermes_remote_service` | anywhere | api | **no — not wired** |
+| reviewer | `hermes_remote_service` | anywhere | api | **yes** — `callReviewer` dispatches on the resolved transport. It was listed as not wired long after it was, because the justification for the dispatchable set was a stale comment nobody re-read |
 
 ### New configuration
 
@@ -123,7 +123,7 @@ both.
 | Founder machine, live architect + Claude Code + Hermes | **runs — the full three-role mission** |
 | Hosted, `RELAY_PROMPT_ARCHITECT_MODE=fusion` + `RELAY_BRIDGE_FAKE_CLAUDE=1` | runs — the keyless offline pipeline, no spend — **but only where `FUSION_BASE_URL` reaches a running Sunday Alcatraz.** `fusion` is an HTTP architect with no offline fallback |
 | Hosted, `fusion` + `RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted` | a real, API-billed coding run with no Reviewer — **but only where `FUSION_BASE_URL` reaches a running Sunday Alcatraz.** Production still publishes the localhost default, so today this fails at `architect_unavailable` before the Coding Agent is reached |
-| Hosted, live three-role | **cannot run.** The hosted Reviewer is still not dispatchable — the mission's reviewer leg spawns a local Hermes and does not use the remote transport |
+| Hosted, live three-role | **Can run, given credentials.** This row said "cannot run — the hosted Reviewer is still not dispatchable, the mission's reviewer leg spawns a local Hermes and does not use the remote transport". Both halves were false: `callReviewer` dispatches on the resolved transport, and both non-local Reviewers are dispatchable. Use `openai_reviewer` (nothing to deploy) or `hermes_remote_service` (needs the service). Set the Coding Agent variables too — see §8 |
 
 Production today refuses with `role_binding_refused`, **naming the variables to
 set** — where before it said `coding_agent_not_ready`. No capability is lost.
@@ -518,7 +518,7 @@ The absences are the useful part:
 | # | Requirement | State |
 |---|---|---|
 | 1 | Production-hosted three-role execution | **Code complete; two variables away.** Architect hosted; Coding Agent wired and proven; Reviewer now has THREE transports — local, remote Hermes, and a provider-API Reviewer needing nothing deployed (§4f, §4h). Set `RELAY_OPENAI_REVIEWER_MODE` and a model and the Reviewer leg runs hosted |
-| 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability, and hosted execution for the Coding Agent. The Reviewer's hosted surface is not dispatchable |
+| 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability, and hosted execution for the Coding Agent. Every registered occupant is now dispatchable, including both non-local Reviewers — and the transport and the bound occupant are reconciled, so Relay can no longer review with one and attest another |
 | 3 | Real workspace path | **Substantially done in the browser** — see §4b and §6. Opening a project, configuring the stack, switching roles and observing role/evidence/verification state all work by clicking; STARTING a mission is still operator-only by design |
 | 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only |
 | 5 | Skill Ops capabilities | **Domain done** — see §4e. Declared skills behind the existing permission model, proven never more permissive than it. No production caller invokes a skill yet |
@@ -703,11 +703,12 @@ cd "$(mktemp -d)" && env -i PATH="$PATH" HOME="$HOME" hermes -z 'Reply with the 
 
 ## 7. Real-wiring violations still open
 
-1. **`relay-bridge/server.ts`** passed `null, null, null` for `reviewerRuns`,
-   `hostedCodingRuns` and `loopRuns`. **The Loop engine is now constructed** —
-   see below. The Reviewer and hosted-coding run engines are still `null`,
-   because neither `ReviewerRunPort` nor `HostedCodingRunPort` has an
-   implementation to construct.
+1. ~~**`relay-bridge/server.ts`** passed `null, null, null`.~~ **NOT A
+   VIOLATION — the diagnosis was wrong, and §9 item 5 carries the correction.**
+   The Loop engine is constructed. The other two stay `null` by design: both
+   ENGINES exist and both run inside the mission leg, and what the standalone
+   ports lack is an INPUT their routes do not carry — a prompt and a workspace,
+   or a review packet. Their refusals now say so and name the mission path.
 2. ~~**`createLoopService` is imported only by its own test.**~~ **CLOSED.**
    `composeLoopRuns` builds it in `main()` when a durable state root is
    mounted and an operator names an agent, and refuses the simulator on a
@@ -719,8 +720,20 @@ cd "$(mktemp -d)" && env -i PATH="$PATH" HOME="$HOME" hermes -z 'Reply with the 
    **On the live bridge today this reads `no_agent_named`**, which is correct:
    the only agent this build ships simulates its iterations, and production
    would refuse it anyway.
-3. **`ReviewerRunPort` and `HostedCodingRunPort` have no implementation** —
-   only the interfaces and the routes that would call one.
+3. ~~**`ReviewerRunPort` and `HostedCodingRunPort` have no implementation.**~~
+   **FALSE, and this entry is kept as the record of a wrong diagnosis that
+   nearly caused the wrong build.** `mission.ts:436` constructs the hosted
+   invoker and `mission.ts:1387` runs the Reviewer over a real packet. See
+   §9 item 5.
+
+4. **Two Reviewer decisions were never reconciled** — FIXED, and it was live.
+   `resolveReviewerTransport` decides who reviews; the role slot decides who is
+   attested. With `RELAY_OPENAI_REVIEWER_MODE=live` and `RELAY_ROLE_REVIEWER`
+   unset — the exact configuration this document recommends — a founder machine
+   resolved the provider transport and bound the `hermes_local` default, so
+   OpenAI reviewed and Hermes was attested. An explicitly configured transport
+   now supplies the occupant when none is named, and an explicit disagreement
+   is refused before any spend, naming both settings.
 
 ## 8. Founder-gated items
 
@@ -771,6 +784,19 @@ they are access decisions, not implementations.
    Do not set both `RELAY_HERMES_MODE=remote` and
    `RELAY_OPENAI_REVIEWER_MODE=live`. Relay refuses rather than choosing, so
    you never read a verdict from a component you did not pick.
+
+   **`RELAY_ROLE_REVIEWER` may be left unset here, and that is now correct
+   rather than merely tolerated.** Setting the mode is you naming the Reviewer
+   once; Relay follows that statement instead of applying its own development
+   default. What it will NOT do is let the two disagree — setting
+   `RELAY_ROLE_REVIEWER=hermes_local` while the provider mode is live is
+   refused before any spend, naming both variables.
+
+   This is a correction to what this document told you earlier. The two
+   settings were never reconciled, so the configuration recommended above used
+   to run the review on OpenAI and attest `hermes_local` — the mission
+   narrating one occupant while another did the work. Fixed, with the failing
+   case held by a mission-level test.
 
 2. **Set the role variables on Railway.** `RELAY_ROLE_CODING_AGENT` and
    `RELAY_ROLE_REVIEWER` are unset, which is why `/relay-api/health` reports

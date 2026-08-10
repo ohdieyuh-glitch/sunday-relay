@@ -1183,20 +1183,26 @@ describe('role slots decide who may hold each role, before anything is dispatche
    * then ran the local CLI, which attested itself — one occupant narrated,
    * another doing the work.
    */
-  it('refuses a bound occupant this bridge cannot dispatch, and names it', async () => {
+  /**
+   * THIS TEST USED TO ASSERT THE OPPOSITE, AND THE ASSERTION HAD GONE STALE.
+   *
+   * It required the fully-hosted shape to be refused `occupant_not_dispatchable`
+   * naming `hermes_remote_service`, on the grounds that the mission spawned a
+   * local Hermes and consulted no transport. That stopped being true when
+   * `callReviewer` began dispatching on the resolved transport — `remote`
+   * calls the Hermes service and returns the same `HermesOutcome` — but the
+   * dispatchable set still excluded it, so a deployment that had configured
+   * the remote Reviewer correctly was told this bridge could not drive it.
+   *
+   * The refusal mechanism is unchanged and still covered, by a unit test over
+   * `missionDispatchProblems` with a synthetic occupant — which is where it
+   * belongs, since asserting it here required a real occupant to stay broken.
+   */
+  it('no longer refuses the fully-hosted shape as undrivable', async () => {
     const h = harness();
-    const { view } = await runMission(h, HOSTED_ENV, 'm-role-hosted-undispatchable', 'live');
-    expect(view.state).toBe('failed');
-    expect(view.error?.code).toBe('occupant_not_dispatchable');
-    expect(view.error?.retryable).toBe(false);
-    // The hosted CODING surface is wired; the hosted Reviewer is not, and the
-    // refusal names the one that is actually missing rather than both.
-    expect(view.error?.safeMessage).toContain('hermes_remote_service');
-    expect(view.error?.safeMessage).not.toContain('claude_agent_sdk_hosted');
-    // Refused before anything ran, so nothing was spent under the wrong name.
-    expect(h.calls.architect).toBe(0);
-    expect(h.calls.coding).toBe(0);
-    expect(h.calls.reviewer).toBe(0);
+    const { view } = await runMission(h, HOSTED_ENV, 'm-role-hosted-dispatchable', 'live');
+    expect(view.error?.code).not.toBe('occupant_not_dispatchable');
+    expect(JSON.stringify(view)).not.toContain('cannot yet dispatch it');
   });
 
   /**
@@ -1906,5 +1912,85 @@ describe('the mission view carries evidence references', () => {
     const unauthorised = await settle(regB, 'msn-unauth');
     // Authorised nothing — ABSENT. A different fact.
     expect(unauthorised.evidence).toBeUndefined();
+  });
+});
+
+/**
+ * THE TWO REVIEWER DECISIONS MUST NAME THE SAME OCCUPANT.
+ *
+ * `resolveReviewerTransport` decides who reviews; the role slot decides who is
+ * BOUND, and the binding is what the mission attests. Nothing reconciled them
+ * — harmless while both were Hermes, reachable the moment a provider Reviewer
+ * existed.
+ *
+ * The configuration below is the one the founder handoff recommends, which is
+ * what makes this worth a mission-level test rather than a unit one: it is the
+ * path a founder actually takes.
+ */
+describe('the Reviewer that reviews is the Reviewer that is attested', () => {
+  const PROVIDER_REVIEWER_ENV: NodeJS.ProcessEnv = {
+    ...LIVE_ENV,
+    RELAY_OPENAI_REVIEWER_MODE: 'live',
+    RELAY_OPENAI_REVIEWER_MODEL: 'gpt-test',
+  };
+
+  it('REFUSES before any spend when an operator EXPLICITLY names the other one', async () => {
+    // Two statements that disagree. Relay refuses rather than picking, because
+    // picking is the substitution: it would review with OpenAI and attest
+    // `hermes_local`, which is the defect the dispatch check exists to stop.
+    const h = harness();
+    const { view } = await runMission(
+      h,
+      { ...PROVIDER_REVIEWER_ENV, RELAY_ROLE_REVIEWER: 'hermes_local' },
+      'm-reviewer-conflict',
+      'live',
+    );
+
+    expect(view.state).toBe('failed');
+    const text = JSON.stringify(view);
+    // It names BOTH settings, so an operator knows which two disagree.
+    expect(text).toContain('RELAY_ROLE_REVIEWER');
+    expect(text).toContain('RELAY_OPENAI_REVIEWER_MODE');
+    // Refused at the PREFLIGHT, so the architect was never paid for a mission
+    // that could not have been honestly reviewed.
+    expect(h.architectContract).toBeNull();
+  });
+
+  it('follows the ONE statement an operator made, rather than refusing over its own default', async () => {
+    // `RELAY_OPENAI_REVIEWER_MODE=live` with no named occupant is a founder
+    // saying which Reviewer they want, exactly once. Relay used to apply its
+    // development default and attest `hermes_local` while OpenAI reviewed;
+    // refusing instead would have been honest but hostile, since the only
+    // thing disagreeing was a default Relay invented.
+    const h = harness();
+    const { view } = await runMission(h, PROVIDER_REVIEWER_ENV, 'm-reviewer-implied', 'live');
+    const text = JSON.stringify(view);
+    expect(text).not.toContain('Relay refuses rather than reviewing with one');
+    // And the mission is not refused as undrivable either: the provider
+    // Reviewer is a branch `callReviewer` actually has.
+    expect(text).not.toContain('cannot yet dispatch it');
+  });
+
+  it('runs when the two are set to agree', async () => {
+    const h = harness();
+    const { view } = await runMission(
+      h,
+      { ...PROVIDER_REVIEWER_ENV, RELAY_ROLE_REVIEWER: 'openai_reviewer' },
+      'm-reviewer-agrees',
+      'live',
+    );
+    // It gets past the reviewer coherence check — whatever happens later is
+    // some other leg's business, and this test asserts only that this refusal
+    // is not the one that stopped it.
+    expect(JSON.stringify(view)).not.toContain('would run "openai_reviewer"');
+  });
+
+  it('leaves the ordinary local configuration alone', async () => {
+    // No reviewer transport configuration selects local Hermes, which is what
+    // the laptop default binds. Nothing to disagree about, and a founder who
+    // changed nothing must not meet a new refusal.
+    const h = harness();
+    const { view } = await runMission(h, LIVE_ENV, 'm-reviewer-local', 'live');
+    expect(JSON.stringify(view)).not.toContain('Relay refuses rather than reviewing with one');
   });
 });

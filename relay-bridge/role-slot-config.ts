@@ -3,6 +3,9 @@ import {
   type RoleBindingProblem, type RoleSlot, type RoleSlotBindingResult,
 } from '../src/relay/mission/role-slots';
 import { isProductionDeployment } from './deployment-environment';
+import type { ReviewerTransport } from './reviewer-transport';
+import { REMOTE_HERMES_ENV } from './hermes-remote-review';
+import { OPENAI_REVIEWER_ENV } from './openai-reviewer';
 
 /**
  * READING WHICH OCCUPANT HOLDS EACH ROLE, FROM THE DEPLOYMENT.
@@ -36,13 +39,24 @@ export const FAKE_CODING_OCCUPANT = 'claude_code_fake';
  * reasoning that a second variable answering the same question is how two
  * things that must agree quietly stop agreeing. The reasoning was right and
  * the premise was false: `RELAY_HERMES_MODE` is read by
- * `transport-factory.ts`, which serves the `/reviewer/*` ROUTES. The mission's
- * reviewer leg is `runHermesReview`, which never consults it and always spawns
- * a local process. Two surfaces, one variable — so a founder machine set up to
- * exercise the deployed Hermes service through the routes (`remote`) had every
- * MISSION refused, and there was no value that satisfied both.
+ * `transport-factory.ts`, which serves the `/reviewer/*` ROUTES. At the time,
+ * the mission's reviewer leg always spawned a local process. Two surfaces, one
+ * variable — so a founder machine set up to exercise the deployed Hermes
+ * service through the routes (`remote`) had every MISSION refused, and there
+ * was no value that satisfied both.
  *
- * They are different questions and now have different variables.
+ * They are different questions and have different variables.
+ *
+ * THE SECOND HALF OF THAT PARAGRAPH IS NO LONGER TRUE, and leaving it standing
+ * cost something: the mission leg now resolves a transport and `callReviewer`
+ * dispatches on it, so "never consults it and always spawns a local process"
+ * described a Relay that had not existed for some time. It was the stated
+ * reason `hermes_remote_service` sat outside the dispatchable set, which
+ * refused a remote Reviewer this bridge could genuinely drive.
+ *
+ * The variables still answer different questions — one CONFIGURES a transport,
+ * one SELECTS an occupant — and `reviewerSlotConflict` is what now keeps the
+ * two answers from disagreeing.
  */
 export const REVIEWER_ROLE_ENV = 'RELAY_ROLE_REVIEWER';
 
@@ -77,6 +91,14 @@ export function reviewerOccupantFor(requested: string | undefined): SelectorReso
   if (raw === 'hermes_local') return { kind: 'occupant', occupantId: 'hermes_local' };
   if (raw === 'hermes_remote_service') return { kind: 'occupant', occupantId: 'hermes_remote_service' };
   /**
+   * The provider Reviewer. Absent from this list until now, which meant a
+   * founder setting the value the handoff recommends was told it was not one
+   * of the choices — a correct value refused. `reviewer-occupant-coherence`
+   * holds the general rule: a Reviewer the mission can drive must be one the
+   * selector can name.
+   */
+  if (raw === 'openai_reviewer') return { kind: 'occupant', occupantId: 'openai_reviewer' };
+  /**
    * SET, AND NOT ONE OF THE CHOICES. Distinguished from unset because the
    * remedies are opposite: one says set the variable, the other says the value
    * you set is misspelled. Collapsing them reported "no occupant is
@@ -89,14 +111,20 @@ export function reviewerOccupantFor(requested: string | undefined): SelectorReso
  * THE OCCUPANTS THIS MISSION PIPELINE CAN ACTUALLY DRIVE.
  *
  * Registration says Relay ships an adapter. Dispatchability says THIS caller
- * can drive it, and only this caller knows. The bridge's mission runs the
- * Coding Agent through `runCodingMission` (the Claude Code CLI) and the
- * Reviewer through `runHermesReview` (a spawned local Hermes); neither
- * consults the hosted runner or the remote transport. Binding an occupant the
- * pipeline cannot drive produced a mission that ANNOUNCED "Claude Agent SDK
- * (hosted)" in its preflight while the local CLI ran and attested itself —
- * one occupant narrated, another doing the work, which is the precise defect
- * the registry exists to make impossible.
+ * can drive it, and only this caller knows. Binding an occupant the pipeline
+ * cannot drive produced a mission that ANNOUNCED "Claude Agent SDK (hosted)"
+ * in its preflight while the local CLI ran and attested itself — one occupant
+ * narrated, another doing the work, which is the precise defect the registry
+ * exists to make impossible.
+ *
+ * WHAT THIS PARAGRAPH USED TO SAY, and why it is worth recording: it claimed
+ * the mission "runs the Reviewer through `runHermesReview` (a spawned local
+ * Hermes)" and consults "neither the hosted runner nor the remote transport".
+ * Both halves stopped being true — `mission.ts` resolves a transport and
+ * `callReviewer` dispatches on it — and the stale sentence was load-bearing,
+ * because it is the justification for which entries are in this set. A remote
+ * Reviewer that Relay could genuinely drive was refused as undrivable for as
+ * long as nobody re-read it.
  *
  * Entries are removed from this set as each surface is wired, and the removal
  * is the whole change: nothing else has to know.
@@ -111,7 +139,100 @@ export const MISSION_DISPATCHABLE_OCCUPANTS: ReadonlySet<string> = new Set([
   // which is the point of keeping dispatchability separate from registration.
   'claude_agent_sdk_hosted',
   'hermes_local',
+  /**
+   * BOTH REVIEWERS THAT ARE NOT THE LOCAL BINARY, and each is a fact about a
+   * branch that exists rather than a promise. `callReviewer` in `mission.ts`
+   * dispatches on the transport: `remote` calls the Hermes service, `provider`
+   * calls the OpenAI Reviewer, and both return the same `HermesOutcome`, so
+   * the review leg is unchanged either way.
+   *
+   * `hermes_remote_service` was absent here long after the remote transport
+   * was wired, so a deployment that correctly configured the remote Reviewer
+   * was refused as undrivable — the comment above says entries are removed as
+   * each surface is wired, and this one was not.
+   */
+  'hermes_remote_service',
+  'openai_reviewer',
 ]);
+
+/**
+ * WHICH OCCUPANT A TRANSPORT WOULD ACTUALLY RUN.
+ *
+ * Relay decides the Reviewer twice — `resolveReviewerTransport` decides who
+ * reviews, the role slot decides who is BOUND, and the binding is what the
+ * mission attests. Nothing reconciled them, and adding a third transport made
+ * that gap reachable: on a founder machine `RELAY_OPENAI_REVIEWER_MODE=live`
+ * with `RELAY_ROLE_REVIEWER` unset resolved the provider transport while
+ * binding the laptop default, so OpenAI reviewed and `hermes_local` was
+ * attested.
+ *
+ * This is the translation that lets the two be compared at all.
+ */
+export function reviewerOccupantForTransport(transport: ReviewerTransport): string | null {
+  switch (transport.kind) {
+    case 'provider': return 'openai_reviewer';
+    case 'remote': return 'hermes_remote_service';
+    case 'local': return 'hermes_local';
+    // An unavailable transport is already refused with a better reason of its
+    // own — ambiguous configuration, a missing token. A conflict stacked on
+    // top would bury the message that actually helps.
+    case 'unavailable': return null;
+  }
+}
+
+/**
+ * The occupant an EXPLICITLY CONFIGURED transport selects, if any.
+ *
+ * `local` is excluded deliberately, and the distinction is the whole point:
+ * remote and provider each require an operator to set variables, so they are a
+ * STATEMENT about who should review. Local is what you get by configuring
+ * nothing, so treating it as a statement would bind an installed Hermes on a
+ * container that has none — reintroducing the wrong-machine binding the role
+ * registry exists to remove, and turning a hosted deployment's honest
+ * `no_occupant_requested` into a silent guess.
+ *
+ * So an operator who configured a transport and named no occupant gets the
+ * occupant they clearly meant, and one who configured nothing still has to say.
+ */
+export function explicitlySelectedReviewerOccupant(transport: ReviewerTransport): string | null {
+  if (transport.kind === 'remote' || transport.kind === 'provider') {
+    return reviewerOccupantForTransport(transport);
+  }
+  return null;
+}
+
+/**
+ * Do the transport and the bound occupant name the same Reviewer?
+ *
+ * `null` means no disagreement — including the two cases where the question
+ * does not arise: nothing bound, and no usable transport.
+ *
+ * A disagreement is refused rather than resolved, and the message names BOTH
+ * settings. Picking one would be substituting an occupant under another's
+ * name, which is the single thing this module exists to prevent.
+ */
+export function reviewerSlotConflict(input: {
+  readonly transport: ReviewerTransport;
+  readonly boundOccupantId: string | null;
+}): { readonly role: RoleSlot; readonly safeMessage: string } | null {
+  if (input.boundOccupantId === null) return null;
+  const wouldRun = reviewerOccupantForTransport(input.transport);
+  if (wouldRun === null || wouldRun === input.boundOccupantId) return null;
+
+  const setting = input.transport.kind === 'provider'
+    ? `${OPENAI_REVIEWER_ENV.mode}=live`
+    : input.transport.kind === 'remote'
+      ? `${REMOTE_HERMES_ENV.mode}=remote`
+      : 'no Reviewer transport configuration, which selects the local Hermes';
+
+  return {
+    role: 'reviewer',
+    safeMessage:
+      `${setting} would run "${wouldRun}", and ${REVIEWER_ROLE_ENV} binds "${input.boundOccupantId}". `
+      + 'Relay refuses rather than reviewing with one and attesting the other — set them to agree, or '
+      + `unset ${REVIEWER_ROLE_ENV} on a founder machine only if the default matches the transport.`,
+  };
+}
 
 /**
  * Bound, coherent, configured — and undrivable here. Named per role.
