@@ -24,6 +24,7 @@ import { createMissionRegistry, type MissionRegistry } from './mission';
 import {
   architectPreflight, loadArchitectConfig, verifyArchitectConnection,
 } from './openai-architect';
+import { isLiveReachRoute, respondLiveReach } from './live-reach-route';
 import {
   bearerMatches, handleReviewerRoute, isReviewerRoute, type ReviewerRunPort,
 } from './reviewer-routes';
@@ -264,6 +265,21 @@ export function createBridgeServer(
               ? undispatchable.map((p) => `${p.role}:occupant_not_dispatchable`)
               : roles.binding.problems.map((p) => `${p.role}:${p.reason}`),
           }, cors);
+          return;
+        }
+
+        /**
+         * LIVE REACH. Operator-authenticated, because a retrieval leaves this
+         * machine and spends somebody's rate limit — the same bar every other
+         * outward-facing route sits behind, and unreachable from a browser
+         * session by construction.
+         */
+        if (isLiveReachRoute(path)) {
+          const auth = typeof req.headers.authorization === 'string'
+            ? req.headers.authorization : undefined;
+          const authorized = bearerMatches(auth, process.env.RELAY_BRIDGE_API_TOKEN);
+          const body = method === 'POST' ? await readBody(req) : undefined;
+          await respondLiveReach(req, res, { path, authorized, body, cors });
           return;
         }
 
