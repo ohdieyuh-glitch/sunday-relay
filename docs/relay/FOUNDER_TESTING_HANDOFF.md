@@ -412,6 +412,12 @@ Expect an artifact whose `publishedAt` is the release's own date and whose
 - **The browser cannot probe or retrieve.** Both are operator-only, so the
   settings screen shows UNKNOWN until an operator probes.
 - **No action capability exists**, on any source.
+- **Metering is per process.** Retrieval IS metered now — `relay_live_reach`
+  declares the `usage` verb and `GET /relay-api/live-reach/usage/<missionId>`
+  reports it — but the meters live in memory, so a bridge restart forgets what
+  a mission has already spent and a cap binds within a process rather than
+  across one. Stated because a budget that silently resets is worse than a
+  budget you know the shape of.
 
 ## 4d. Research Loops and subordinate orchestrators
 
@@ -665,6 +671,17 @@ curl -s -X POST "$BRIDGE/relay-api/live-reach/probe" \
 The transport is resolved ONCE and both the preflight and the call read it, so
 Relay never probes for one Reviewer and invokes another — the defect that broke
 the hosted Coding Agent, refused here in advance by construction.
+
+**That sentence was true and incomplete, and the gap was live.** Resolving the
+transport once settles who PROBES and who RUNS. It says nothing about who is
+ATTESTED, which the role slot decides — a third decision, and until #83 nothing
+reconciled it with the other two. Setting `RELAY_OPENAI_REVIEWER_MODE=live`
+with no named occupant resolved the provider transport while binding the
+`hermes_local` default, so OpenAI would have reviewed and Hermes would have
+been recorded. Now: an explicitly configured transport supplies the occupant,
+and an explicit contradiction is refused before any spend, naming both
+variables. Coherence "by construction" is a strong claim, and it is worth
+noticing that this section made it about two of the three decisions.
 
 **Two enabled at once is refused, not resolved.** Both are turned on by an
 operator naming a mode; picking one silently would make the reviewer that ran
