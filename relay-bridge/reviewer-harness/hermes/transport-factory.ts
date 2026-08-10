@@ -24,6 +24,22 @@ import { createRemoteHermesTransport } from './remote-transport';
  * a misconfigured bridge answers every Reviewer route with a categorised
  * reason rather than a stack trace — and, critically, never silently degrades
  * to probing its own container.
+ *
+ * THE LOCAL TRANSPORT IS BUILT ONCE PER PROCESS, and that is not an
+ * optimisation.
+ *
+ * `local-transport.ts` enforces its ceilings in closure-local counters, so N
+ * instances enforce N × the ceiling. This factory used to build a fresh one
+ * per request, which its own comment called "harmless today because no bridge
+ * route calls `startReview`, and a live hazard the moment one does" — leaving
+ * the correctness of a concurrency bound resting on nobody adding a route.
+ *
+ * That is a landmine, not a design. The instance is cached on the resolved
+ * CONFIGURATION, so a process holds one transport per distinct configuration
+ * and the ceilings mean what they say no matter who wires a route later.
+ *
+ * Remote transports are NOT cached: they hold no counters, and caching them
+ * would make a rotated service token survive in memory after it changed.
  */
 
 export type TransportResult =
@@ -56,15 +72,49 @@ export async function buildHermesTransport(input: {
   }
   const credential = input.env[provider.config.credentialEnvName] ?? null;
 
+  const executable = selection.executableOverride ?? 'hermes';
+  const apiKey = credential !== null && credential.trim() !== '' ? credential : null;
+
+  /**
+   * Keyed on everything that changes what the transport IS — never on the
+   * credential VALUE, which must not become a map key anywhere. A rotated
+   * credential reuses the instance, which is correct: the counters belong to
+   * the process, and rotating a key does not reset a concurrency ceiling.
+   */
+  const key = [
+    executable,
+    provider.config.provider,
+    // The MODEL is part of what the transport is: two models are two different
+    // reviewers, and sharing one instance between them would attribute a run
+    // to the wrong one.
+    provider.config.requestedModel,
+    String(apiKey !== null),
+  ].join('\u0000');
+  const cached = localTransports.get(key);
+  if (cached !== undefined) return { ok: true, transport: cached };
+
   // Lazy: never evaluated in remote mode. Bundled, but not reached.
   const { createLocalHermesTransport } = await import('./local-transport');
-  return {
-    ok: true,
-    transport: createLocalHermesTransport({
-      executable: selection.executableOverride ?? 'hermes',
-      provider: provider.config,
-      env: input.env,
-      apiKey: credential !== null && credential.trim() !== '' ? credential : null,
-    }),
-  };
+  const transport = createLocalHermesTransport({
+    executable,
+    provider: provider.config,
+    env: input.env,
+    apiKey,
+  });
+  localTransports.set(key, transport);
+  return { ok: true, transport };
+}
+
+/**
+ * One local transport per distinct configuration, for the process lifetime.
+ *
+ * Module-level on purpose: `relay-hermes-service/main.ts` achieves the same
+ * bound by holding a single instance itself, and the bridge has no equivalent
+ * place to hold one — every route builds through this factory.
+ */
+const localTransports = new Map<string, HermesReviewerTransport>();
+
+/** Test seam. Nothing in production drops a transport mid-process. */
+export function resetHermesTransportCacheForTests(): void {
+  localTransports.clear();
 }

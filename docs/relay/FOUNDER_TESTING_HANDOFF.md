@@ -797,7 +797,9 @@ they are access decisions, not implementations.
    wired. Note the hazard recorded at `local-transport.ts:53-60`: the
    transport's ceilings are per instance and `transport-factory.ts` builds a
    fresh one per request, harmless only while no route calls `startReview`.
-   Hoist the instance before wiring.
+   ~~Hoist the instance before wiring.~~ **DONE** — the factory now caches one
+   transport per distinct configuration for the process lifetime, so the
+   ceilings are real before a route needs them rather than after.
 
 6. **Evidence metering.** Live Reach spends someone's rate limit rather than
    money and Relay does not meter it, which is why `relay_live_reach` declares

@@ -54,10 +54,13 @@ import {
  * CALLER. The counters are closure-local, so N instances enforce N × the
  * ceiling. `relay-hermes-service/main.ts` creates exactly one and holds it for
  * the process lifetime, which is what makes the bound real. The bridge's
- * `transport-factory.ts` builds a fresh transport per request — harmless
- * today because no bridge route calls `startReview`, and a live hazard the
- * moment one does. Whoever adds that route must hoist the instance, not
- * discover this comment afterwards.
+ * `transport-factory.ts` NOW CACHES one per distinct configuration for the
+ * process lifetime, so the same bound holds there.
+ *
+ * It did not, and this comment used to say the hazard was harmless "because no
+ * bridge route calls `startReview`", leaving the correctness of a concurrency
+ * bound resting on nobody adding a route. That is a landmine, not a design, so
+ * the instance was hoisted before anyone needed it rather than after.
  *
  * Note also that ceilings are per PROCESS. N replicas of this service enforce
  * N × the ceiling between them; nothing here coordinates across containers and
