@@ -559,12 +559,27 @@ export const HELP_TEXT = [
   '  relay mission prompt-architect status <mission-id>   GPT planning state',
   '  relay mission prompt-architect inspect <mission-id>  state plus server configuration',
   '  relay mission prompt-architect stop <mission-id>     record a cancellation request',
-  '  relay mission reviewer status <mission-id>   Reviewer harness state',
-  '  relay mission reviewer inspect <mission-id>  state plus independence reasoning',
-  '  relay mission reviewer stop <mission-id>     record a cancellation request',
+  '  relay mission reviewer readiness              is a Reviewer configured here',
   '  relay mission reviewer test-connection <id>  verify the bridge Reviewer (no run)',
-  '  relay mission reviewer start <mission-id>    start an authorized Reviewer run',
-  '  relay mission reviewer retry <mission-id>    retry a failed run as a NEW run',
+  /**
+   * THE FIVE BELOW REACH A ROUTE NO BRIDGE ANSWERS, and the help said nothing.
+   *
+   * Reviews run inside a mission: `mission.ts` builds the packet from the
+   * coding leg's diff and calls the configured transport. There is no
+   * STANDALONE Reviewer run engine, and no setting supplies one — the route
+   * carries ids and no review packet, so it could not construct one. Every one
+   * of these answers 503 on every bridge.
+   *
+   * The two lines above are different and stay unannotated: they describe the
+   * transport rather than a run, and they answer everywhere.
+   *
+   * The annotation follows the convention already in this block — the Cron
+   * Loop line has said "(runtime not enabled)" for as long as that was true.
+   * These five simply never adopted it, so a founder read six commands, tried
+   * one, and met a refusal the help had not prepared them for.
+   */
+  '  relay mission reviewer status|inspect|stop|start|retry <mission-id>',
+  '                                 (no standalone run engine — reviews run inside a mission)',
   '  relay loop <objective>         draft a Loop for your active compound agent',
   '  relay loop all|team <objective>        every eligible agent',
   '  relay loop architect|coding|reviewer <objective>   one role',
