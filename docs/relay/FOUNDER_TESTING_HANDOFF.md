@@ -33,9 +33,13 @@ proven directly — its bundle embeds `VITE_VERCEL_GIT_COMMIT_SHA`.
 `~/DEFERRED_FOUNDER_ACTIONS.md` still says "no provider credential exists
 anywhere"; that document has been stale since 2026-08-04.
 
-It also publishes `fusionBaseUrl: "http://localhost:3000"` from a hosted
-service. Nothing on the live path depends on it; it should be removed or made
-honest.
+~~It also publishes `fusionBaseUrl: "http://localhost:3000"` from a hosted
+service.~~ **FIXED.** A production deployment with nothing configured now
+resolves it to `null`: loopback there is the default nobody changed, presented
+as a decision somebody made. The consequence is worth having — a mission that
+selects the development architect on such a deployment is refused at the
+CONFIGURATION rather than discovering it at an HTTP call to an address nothing
+answers.
 
 Every operator route answers `401` unauthenticated — verified one by one on
 `/reviewer/readiness`, `/hosted-coding/readiness`, `/loop/capability`,

@@ -315,7 +315,13 @@ export interface MissionRoleDeps {
 }
 
 export interface MissionRegistryConfig {
-  fusionBaseUrl: string;
+  /**
+   * Where the development architect lives, or null where it cannot live
+   * anywhere — a production container has no loopback Fusion. A mission that
+   * would select the fusion path with null here is refused rather than sent to
+   * an address nothing answers.
+   */
+  fusionBaseUrl: string | null;
   sundayMode: SundayMode;
   claudeMode: 'live' | 'fake';
   confirmLive: boolean;
@@ -1096,6 +1102,22 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           // ---- Preserved development path: Sunday Alcatraz (Fusion engine).
           // It never claims to be ChatGPT and never earns the live attestation.
           const startedAt = now();
+          if (config.fusionBaseUrl === null) {
+            /**
+             * REFUSED AT THE CONFIGURATION, not at the request.
+             *
+             * The development architect is a loopback service. On a container
+             * there is nothing at loopback, so selecting it there was always
+             * going to fail — and failing at the HTTP call would have reported
+             * an unreachable endpoint rather than the fact that this
+             * deployment has no development architect at all.
+             */
+            fail(rec, 'preflight_blocked', 'This deployment has no development architect: FUSION_BASE_URL is unset and a hosted bridge has no loopback service to fall back to.', {
+              code: 'architect_not_configured',
+              retryable: false,
+            });
+            return;
+          }
           const fusion = await callFusionArchitect({
             objective: rec.objective,
             fusionBaseUrl: config.fusionBaseUrl,

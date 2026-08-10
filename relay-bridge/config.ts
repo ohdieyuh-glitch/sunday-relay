@@ -33,7 +33,8 @@ export interface BridgeConfig {
   /** Bind address. A managed host needs every interface, not loopback. */
   host: string;
   /** Base URL of the real Sunday Alcatraz (Fusion) backend. */
-  fusionBaseUrl: string;
+  /** Null on a production deployment with nothing configured — see the resolver. */
+  fusionBaseUrl: string | null;
   sundayMode: SundayMode;
   /** 'fake' = keyless offline pipeline (no model call); 'live' = real Claude. */
   claudeMode: 'live' | 'fake';
@@ -84,6 +85,20 @@ export function parseAllowedOrigins(raw: string | undefined): string[] {
     .filter((o) => o !== '');
 }
 
+/**
+ * The Fusion base URL, or null where it cannot be one.
+ *
+ * Loopback on a production deployment is not a configuration — it is the
+ * default nobody changed. Null says so, and `Unknown is not zero` applies to
+ * endpoints as much as to counts.
+ */
+export function resolveFusionBaseUrl(env: NodeJS.ProcessEnv): string | null {
+  const raw = (env.FUSION_BASE_URL ?? '').trim().replace(/\/$/, '');
+  if (raw !== '') return raw;
+  // Unset. A founder machine gets the local default; a container gets null.
+  return isProductionDeployment(env) ? null : 'http://localhost:3000';
+}
+
 export function loadBridgeConfig(env: NodeJS.ProcessEnv = process.env): BridgeConfig {
   // `RELAY_DATA_DIR` is the hosted-volume variable; `RELAY_STATE_HOME` is the
   // existing local one and still works.
@@ -93,7 +108,21 @@ export function loadBridgeConfig(env: NodeJS.ProcessEnv = process.env): BridgeCo
     // local runs, and the historical default remains the fallback.
     port: Number(env.RELAY_BRIDGE_PORT ?? env.PORT ?? 8790),
     host: env.RELAY_BRIDGE_HOST?.trim() || '0.0.0.0',
-    fusionBaseUrl: (env.FUSION_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, ''),
+    /**
+     * WHERE THE DEVELOPMENT ARCHITECT LIVES, and why production reports null.
+     *
+     * The default is a loopback URL because that is where a founder runs
+     * Fusion. On a container it is where nothing runs — and a hosted bridge
+     * has been publishing `http://localhost:3000` in its unauthenticated
+     * health output, which reads as a configured endpoint and is a description
+     * of a machine that does not exist.
+     *
+     * A production deployment resolves it to null rather than to a loopback
+     * guess. That makes the fusion architect path unavailable there, which is
+     * correct: it was never reachable, and a mission that selected it would
+     * have failed at the request rather than at the configuration.
+     */
+    fusionBaseUrl: resolveFusionBaseUrl(env),
     sundayMode: pickMode(env.RELAY_BRIDGE_SUNDAY_MODE),
     claudeMode: env.RELAY_BRIDGE_FAKE_CLAUDE === '1' ? 'fake' : 'live',
     // `ALLOWED_FRONTEND_ORIGIN` is the historical single-origin spelling and
