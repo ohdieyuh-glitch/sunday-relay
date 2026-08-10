@@ -510,7 +510,7 @@ The absences are the useful part:
 
 | # | Requirement | State |
 |---|---|---|
-| 1 | Production-hosted three-role execution | **Code complete, deployment gated.** Architect hosted; Coding Agent wired and proven; Reviewer has a remote transport, a matching preflight and real mission wiring (§4f). The Hermes service itself is not deployed — DFA-001 |
+| 1 | Production-hosted three-role execution | **Code complete; two variables away.** Architect hosted; Coding Agent wired and proven; Reviewer now has THREE transports — local, remote Hermes, and a provider-API Reviewer needing nothing deployed (§4f, §4h). Set `RELAY_OPENAI_REVIEWER_MODE` and a model and the Reviewer leg runs hosted |
 | 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability, and hosted execution for the Coding Agent. The Reviewer's hosted surface is not dispatchable |
 | 3 | Real workspace path | **Substantially done in the browser** — see §4b and §6. Opening a project, configuring the stack, switching roles and observing role/evidence/verification state all work by clicking; STARTING a mission is still operator-only by design |
 | 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only |
@@ -591,6 +591,30 @@ curl -s -X POST "$BRIDGE/relay-api/live-reach/probe" \
    another Mission. The reference is refused, the Mission continues without it,
    and the Brain shows the section with nothing in it — *authorised and
    retrieved none*, which is not the same as never having been authorised.
+
+### 4h. Three Reviewers, and how Relay picks
+
+| Transport | Needs | Selected by |
+|---|---|---|
+| Local Hermes | the binary on the PATH — never true on a container | the default |
+| Remote Hermes | a deployed Reviewer service | `RELAY_HERMES_MODE=remote` |
+| GPT (provider API) | nothing deployed; the architect's existing credential | `RELAY_OPENAI_REVIEWER_MODE=live` |
+
+The transport is resolved ONCE and both the preflight and the call read it, so
+Relay never probes for one Reviewer and invokes another — the defect that broke
+the hosted Coding Agent, refused here in advance by construction.
+
+**Two enabled at once is refused, not resolved.** Both are turned on by an
+operator naming a mode; picking one silently would make the reviewer that ran
+depend on the order of two lines in a resolver.
+
+**Asked-for-and-unavailable never falls back to local**, for either. Falling
+back turns a configuration mistake into a confusing failure about a binary
+nobody intended to use.
+
+All three return the same `HermesOutcome` and are read by the same validator,
+so no Reviewer can return a shape the others could not, and no caller learns
+which one answered from the shape of the answer.
 
 ### What no code change can close
 
@@ -711,11 +735,35 @@ they are access decisions, not implementations.
 
 ### Needs your authorization
 
-1. **Deploy the Hermes Reviewer service.** DFA-001: the Railway CLI is
-   unauthorized and creating a service needs browser consent. Everything on
-   Relay's side is merged and proven offline — remote transport, a preflight
-   that matches the transport, and mission wiring — and none of it has spoken
-   to a running service. Until it exists, a hosted bridge has no Reviewer.
+1. **Turn on a hosted Reviewer — two variables, nothing to deploy.**
+
+   ```
+   RELAY_OPENAI_REVIEWER_MODE=live
+   RELAY_OPENAI_REVIEWER_MODEL=<a model you are willing to pay for>
+   ```
+
+   `OPENAI_API_KEY` is already set in production for the Prompt Architect, and
+   this uses the same credential. Independence holds: the coding agent is
+   Anthropic and this Reviewer is OpenAI.
+
+   Two things are deliberately NOT defaulted, and both cost money. The mode,
+   because reusing an existing credential for a second paid role should be a
+   decision. And the model, because a model is what a review costs and how good
+   it is — Relay will not pick one for you.
+
+   It shares the `openai-gpt` independence group with the OpenAI architect on
+   purpose: a deployment that ever runs an OpenAI CODING agent is refused this
+   Reviewer automatically.
+
+   **Deploying the Hermes service (DFA-001) is now optional.** It remains the
+   better Reviewer if you want a structurally read-only harness rather than a
+   provider API, and everything on Relay's side for it is merged and proven
+   offline — remote transport, a matching preflight, mission wiring — but it is
+   no longer the only way to have a hosted Reviewer.
+
+   Do not set both `RELAY_HERMES_MODE=remote` and
+   `RELAY_OPENAI_REVIEWER_MODE=live`. Relay refuses rather than choosing, so
+   you never read a verdict from a component you did not pick.
 
 2. **Set the role variables on Railway.** `RELAY_ROLE_CODING_AGENT` and
    `RELAY_ROLE_REVIEWER` are unset, which is why `/relay-api/health` reports
@@ -731,9 +779,10 @@ they are access decisions, not implementations.
 
 ### Buildable without you, in value order
 
-4. **A Reviewer occupant that needs no installed binary.** The registry makes
-   this configuration rather than redesign, and it would give a hosted bridge a
-   Reviewer without waiting on DFA-001.
+4. ~~**A Reviewer occupant that needs no installed binary.**~~ **DONE** —
+   `openai_reviewer`, merged. It turned out the credential was already in
+   production and only the occupant was missing, which is why this moved from
+   "buildable" to "done" in one pass. See item 1 above for the two variables.
 
 5. **The remaining two run engines.** `ReviewerRunPort` and
    `HostedCodingRunPort` are still `null` in `main()` because neither has an
