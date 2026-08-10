@@ -67,6 +67,37 @@ export const RELAY_ADAPTER_DECLARATIONS: readonly AdapterCapabilityDeclaration[]
     }),
   }),
   Object.freeze({
+    /**
+     * Found by the coverage test above, not by me: the development architect
+     * has been registered since role slots shipped and had no lifecycle
+     * declaration, so nothing could describe it. That is the whole reason the
+     * coverage test is worth having — it finds the ones already there, not
+     * only the one being added.
+     */
+    adapterId: 'fusion_architect',
+    displayName: 'Sunday Alcatraz (Fusion) development architect',
+    verbs: v('readiness', 'execute', 'result', 'identity', 'capabilities'),
+    absenceNotes: Object.freeze({
+      start: 'One request, one plan.',
+      stream: 'Relay reads the completed plan; a partial architecture is not useful to a mission.',
+      stop: 'The call is short and holds nothing to cancel.',
+      resume: 'No session is held.',
+      usage: 'The development architect is unmetered — it is the no-spend path, and reporting a usage record for it would imply a cost that does not exist.',
+    }),
+  }),
+  Object.freeze({
+    adapterId: 'openai_reviewer',
+    displayName: 'GPT Reviewer (provider API)',
+    verbs: v('readiness', 'execute', 'result', 'identity', 'capabilities'),
+    absenceNotes: Object.freeze({
+      start: 'One request, one verdict.',
+      stream: 'A partial review is not a review.',
+      stop: 'The call is short and cancelling it mid-flight would leave the spend unaccounted.',
+      resume: 'No session is held.',
+      usage: 'Relay does not yet read the provider’s token counts back into a usage record, so it reports none rather than estimating one.',
+    }),
+  }),
+  Object.freeze({
     adapterId: 'relay_live_reach',
     displayName: 'Live Reach retrieval',
     verbs: v('readiness', 'execute', 'result', 'identity', 'capabilities'),
