@@ -2483,3 +2483,26 @@
   vertical-align: 0;
   box-shadow: 0 0 6px currentColor;
 }
+
+/* ------------------------------------------- retrieved evidence, in the Brain */
+
+/* References, never content. The list is deliberately plain: a retrieved page
+   is untrusted, and the only safe things to render are where it came from and
+   when — which is also all the Brain records. */
+.rpb-view-evidence { margin: 0 0 1.25rem; }
+.rpb-view-evidence-heading {
+  margin: 0 0 0.5rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+  color: var(--rpb-accent, #8f7cf0);
+}
+.rpb-view-evidence-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.rpb-view-evidence-list li {
+  border-left: 1px solid var(--rpw-line, #1c2230);
+  padding-left: 0.6rem;
+  font-size: 0.7rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.rpb-view-evidence-list a { color: var(--rpw-cream, #ece7dd); text-decoration: underline; }
+.rpb-view-evidence-meta { display: block; font-size: 0.6rem; color: var(--rpw-faint, #5d584e); }

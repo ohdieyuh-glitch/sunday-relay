@@ -143,3 +143,59 @@ describe('the Project Brain view shows what Relay recorded', () => {
     expect(closed).toBe(true);
   });
 });
+
+/**
+ * WHAT THE MISSION READ, SHOWN IN THE BRAIN.
+ *
+ * The Brain records THAT something was observed and never what it claimed. So
+ * this surface shows where it came from and when — and a test asserts the
+ * content never appears, because rendering a retrieved page would put
+ * untrusted text inside the product built to display honesty.
+ */
+describe('retrieved evidence in the Brain view', () => {
+  const state: ProjectBrainState = { entries: 0, lastUpdate: null, pendingApprovals: 0 };
+  const item = {
+    evidenceId: 'ev-1',
+    source: 'github',
+    reference: 'https://github.com/example/repo/releases/tag/v2.0.0',
+    publishedAt: '2026-08-10T11:30:00.000Z',
+    retrievedAt: '2026-08-10T12:00:00.000Z',
+    actualBackendId: 'relay_http_fetch',
+    fallbackOccurred: true,
+  };
+
+  it('shows where it came from, when, and which backend served it', () => {
+    render(<RelayProjectBrainView state={state} evidence={[item]} onClose={() => undefined} />);
+    const section = screen.getByLabelText('Retrieved evidence');
+    expect(section.textContent).toContain('github');
+    expect(section.textContent).toContain('published 2026-08-10T11:30:00.000Z');
+    expect(section.textContent).toContain('retrieved 2026-08-10T12:00:00.000Z');
+    // Requested versus actual survives to the surface a founder reads.
+    expect(section.textContent).toContain('relay_http_fetch');
+    expect(section.textContent).toContain('fallback');
+  });
+
+  it('says UNKNOWN when the source did not date itself', () => {
+    render(
+      <RelayProjectBrainView
+        state={state}
+        evidence={[{ ...item, publishedAt: null }]}
+        onClose={() => undefined}
+      />,
+    );
+    expect(screen.getByLabelText('Retrieved evidence').textContent).toContain('published UNKNOWN');
+  });
+
+  it('distinguishes retrieved-none from authorised-nothing', () => {
+    const { unmount } = render(
+      <RelayProjectBrainView state={state} evidence={[]} onClose={() => undefined} />,
+    );
+    expect(screen.getByLabelText('Retrieved evidence').textContent).toContain('retrieved nothing');
+    unmount();
+
+    // Absent: the Mission was authorised to read nothing, so the section is
+    // not shown at all rather than shown empty.
+    render(<RelayProjectBrainView state={state} onClose={() => undefined} />);
+    expect(screen.queryByLabelText('Retrieved evidence')).toBeNull();
+  });
+});

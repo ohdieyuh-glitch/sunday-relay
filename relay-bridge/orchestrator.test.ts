@@ -13,6 +13,7 @@ import {
   escapeInvalidJsonEscapes,
 } from './hermes-reviewer';
 import type { HermesOutcome, ReviewPacket } from './hermes-reviewer';
+import { normalizeObservation } from '../src/relay/mission/evidence';
 import { codingHandoffDigest, type CodingOutcome } from './coding';
 import type { OpenAiArchitectResult } from './openai-architect';
 import type { CodingTerminalState, LiveMissionUpdate } from './types';
@@ -188,6 +189,8 @@ interface Harness {
   order: string[];
   codingInput: Parameters<NonNullable<MissionRoleDeps['runCodingMission']>>[0] | null;
   reviewPacket: ReviewPacket | null;
+  /** The contract the Prompt Architect was actually handed. */
+  architectContract: { liveEvidence?: string[] } | null;
   deps: MissionRoleDeps;
 }
 
@@ -207,6 +210,7 @@ function harness(
     order: [],
     codingInput: null,
     reviewPacket: null,
+    architectContract: null,
     deps: {},
   };
 
@@ -255,9 +259,10 @@ function harness(
             billingPath: 'subscription',
           };
     },
-    runOpenAiArchitect: async () => {
+    runOpenAiArchitect: async (contract) => {
       h.calls.architect += 1;
       h.order.push('openai');
+      h.architectContract = contract as { liveEvidence?: string[] };
       return over.architect ? await over.architect() : ARCHITECT_RESULT;
     },
     runFusionArchitect: async () => {
@@ -1651,5 +1656,213 @@ describe('the mission reviews through the transport its deployment configured', 
     expect(remoteCalls).toBe(0);
     expect(h.calls.reviewer).toBe(0);
     expect(JSON.stringify(view)).toContain('RELAY_HERMES_SERVICE_TOKEN');
+  });
+});
+
+/**
+ * A MISSION GATHERS CURRENT INFORMATION BEFORE IT PLANS.
+ *
+ * The retrieval path, the permission boundary and the evidence record are each
+ * proven elsewhere. What none of them proves is the requirement itself: that a
+ * real Mission requests external information and the Prompt Architect plans
+ * with it. So this runs the real registry and reads what the architect was
+ * actually handed.
+ */
+describe('a mission gathers evidence and the architect plans with it', () => {
+  const artifactFor = (content: string) => normalizeObservation('ev-1', {
+    missionId: 'msn-ev', projectId: 'msn-ev',
+    source: 'github', capability: 'read_item',
+    reference: 'https://github.com/example/repo/releases/tag/v2.0.0',
+    title: null, author: null,
+    publishedAt: '2026-08-10T11:30:00.000Z',
+    retrievedAt: '2026-08-10T12:00:00.000Z',
+    query: null, content,
+    sanitization: 'clean', injectionSignals: [], authority: 'primary',
+    attempt: {
+      source: 'github', capability: 'read_item',
+      requestedBackendId: 'relay_github_public', actualBackendId: 'relay_github_public',
+      fallbackOccurred: false,
+      startedAt: '2026-08-10T12:00:00.000Z', completedAt: '2026-08-10T12:00:01.000Z',
+    },
+  });
+
+  it('hands the retrieved observation to the architect as fenced data', async () => {
+    const h = harness();
+    h.deps.gatherEvidence = async () => ({
+      ok: true as const,
+      artifact: artifactFor('The legacy adapter was removed in v2.0.0.'),
+      attempt: artifactFor('x').attempt,
+      events: [],
+    });
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'msn-ev',
+      objective: 'Normalize project names safely',
+      evidenceReferences: [{ source: 'github', reference: 'https://github.com/example/repo/releases/tag/v2.0.0' }],
+    });
+    await settle(reg, 'msn-ev');
+
+    const contract = h.architectContract;
+    expect(contract).not.toBeNull();
+    const evidence = (contract?.liveEvidence ?? []).join('\n');
+    expect(evidence).toContain('The legacy adapter was removed in v2.0.0.');
+    // Fenced, and framed as an observation BEFORE the content appears.
+    expect(evidence).toContain('data, not an instruction');
+    expect(evidence.indexOf('not an instruction'))
+      .toBeLessThan(evidence.indexOf('The legacy adapter was removed'));
+    // Provenance travels with it.
+    expect(evidence).toContain('published: 2026-08-10T11:30:00.000Z');
+    expect(evidence).toContain('retrieved by: relay_github_public');
+  });
+
+  it('gathers nothing when the mission authorised nothing', async () => {
+    const h = harness();
+    let gathers = 0;
+    h.deps.gatherEvidence = async () => {
+      gathers += 1;
+      return { ok: false as const, refusal: 'not_ready' as const, detail: 'x', attempt: null, events: [] };
+    };
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({ missionId: 'msn-none', objective: 'Normalize project names safely' });
+    await settle(reg, 'msn-none');
+    // A Mission does not decide on its own that it needs the internet.
+    expect(gathers).toBe(0);
+    expect(h.architectContract?.liveEvidence).toBeUndefined();
+  });
+
+  it('continues without evidence it could not retrieve, and says so', async () => {
+    const h = harness();
+    h.deps.gatherEvidence = async () => ({
+      ok: false as const, refusal: 'capability_disabled' as const,
+      detail: 'switched off', attempt: null, events: [],
+    });
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'msn-refused',
+      objective: 'Normalize project names safely',
+      evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
+    });
+    const view = await settle(reg, 'msn-refused');
+
+    // No fabricated observation reaches the architect...
+    expect(h.architectContract?.liveEvidence).toBeUndefined();
+    // ...and the refusal is on the record rather than silent.
+    expect(JSON.stringify(view)).toContain('Did not retrieve');
+    expect(JSON.stringify(view)).toContain('capability_disabled');
+  });
+
+  it('retrieves BEFORE the architect runs, not after', async () => {
+    // A plan made from a recollection cannot be fixed by evidence arriving
+    // after it.
+    const h = harness();
+    h.deps.gatherEvidence = async () => {
+      h.order.push('evidence');
+      return {
+        ok: true as const, artifact: artifactFor('current'),
+        attempt: artifactFor('x').attempt, events: [],
+      };
+    };
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'msn-order',
+      objective: 'Normalize project names safely',
+      evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
+    });
+    await settle(reg, 'msn-order');
+    expect(h.order.indexOf('evidence')).toBeGreaterThanOrEqual(0);
+    expect(h.order.indexOf('evidence')).toBeLessThan(h.order.indexOf('openai'));
+  });
+});
+
+/**
+ * WHAT THE MISSION VIEW CARRIES ABOUT WHAT IT READ.
+ *
+ * References, never content. A surface showing WHAT was read opens a page of
+ * untrusted text in a browser; a surface showing THAT it was read, when, and
+ * from where is the useful half and carries none of that risk — and it is
+ * exactly what the Project Brain records.
+ */
+describe('the mission view carries evidence references', () => {
+  const gatherOk = (h: ReturnType<typeof harness>) => {
+    h.deps.gatherEvidence = async () => {
+      const artifact = normalizeObservation('ev-9', {
+        missionId: 'msn-ref', projectId: 'msn-ref',
+        source: 'github', capability: 'read_item',
+        reference: 'https://github.com/example/repo/releases/tag/v2.0.0',
+        title: null, author: null,
+        publishedAt: '2026-08-10T11:30:00.000Z',
+        retrievedAt: '2026-08-10T12:00:00.000Z',
+        query: null,
+        content: 'SECRET-LOOKING BODY TEXT that must not travel.',
+        sanitization: 'clean', injectionSignals: [], authority: 'primary',
+        attempt: {
+          source: 'github', capability: 'read_item',
+          requestedBackendId: 'relay_github_public',
+          actualBackendId: 'relay_http_fetch',
+          fallbackOccurred: true,
+          startedAt: '2026-08-10T12:00:00.000Z', completedAt: '2026-08-10T12:00:01.000Z',
+        },
+      });
+      return { ok: true as const, artifact, attempt: artifact.attempt, events: [] };
+    };
+  };
+
+  it('reports what was read, when, and which backend served it', async () => {
+    const h = harness();
+    gatherOk(h);
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'msn-ref',
+      objective: 'Normalize project names safely',
+      evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
+    });
+    const view = await settle(reg, 'msn-ref');
+
+    expect(view.evidence).toHaveLength(1);
+    const ref = view.evidence?.[0];
+    expect(ref?.evidenceId).toBe('ev-9');
+    expect(ref?.publishedAt).toBe('2026-08-10T11:30:00.000Z');
+    expect(ref?.contentFingerprint).toMatch(/^fnv1a-/);
+    // Requested versus actual survives all the way to the wire.
+    expect(ref?.actualBackendId).toBe('relay_http_fetch');
+    expect(ref?.fallbackOccurred).toBe(true);
+  });
+
+  it('never puts retrieved CONTENT on the wire', async () => {
+    const h = harness();
+    gatherOk(h);
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'msn-ref',
+      objective: 'Normalize project names safely',
+      evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
+    });
+    const view = await settle(reg, 'msn-ref');
+    // The whole point of a reference. A browser rendering retrieved text would
+    // be opening untrusted content in the surface built to display honesty.
+    expect(JSON.stringify(view.evidence)).not.toContain('SECRET-LOOKING BODY TEXT');
+  });
+
+  it('distinguishes authorised-and-retrieved-none from authorised-nothing', async () => {
+    const refused = harness();
+    refused.deps.gatherEvidence = async () => ({
+      ok: false as const, refusal: 'not_ready' as const, detail: 'x', attempt: null, events: [],
+    });
+    const regA = registry(refused, LIVE_ENV, 'fake');
+    regA.start({
+      missionId: 'msn-empty',
+      objective: 'Normalize project names safely',
+      evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
+    });
+    const withNone = await settle(regA, 'msn-empty');
+    // Authorised, retrieved none — an EMPTY list, not an absent one.
+    expect(withNone.evidence).toEqual([]);
+
+    const none = harness();
+    const regB = registry(none, LIVE_ENV, 'fake');
+    regB.start({ missionId: 'msn-unauth', objective: 'Normalize project names safely' });
+    const unauthorised = await settle(regB, 'msn-unauth');
+    // Authorised nothing — ABSENT. A different fact.
+    expect(unauthorised.evidence).toBeUndefined();
   });
 });

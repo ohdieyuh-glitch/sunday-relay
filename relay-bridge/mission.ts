@@ -50,6 +50,10 @@ import {
 import { resolveReviewerTransport as resolveTransport, reviewerPreflight as runReviewerPreflight } from './reviewer-transport';
 import { runRemoteHermesReview } from './hermes-remote-review';
 import type { ReviewerTransport } from './reviewer-transport';
+import type { LiveReachService } from './live-reach-service';
+import type { BackendProbe } from '../src/relay/mission/live-reach';
+import type { MissionEvidenceReference } from '../src/relay/mission/wire-contracts';
+import { renderForPrompt as renderEvidenceForPrompt, evidenceReference as evidenceReferenceOf } from '../src/relay/mission/evidence';
 import { buildAttestation, decideCompletion, digest, type ExecutionAttestation } from './attestation';
 import { isProductionDeployment } from './deployment-environment';
 import { createHostedClaudeInvoker } from './hosted-coding-agent/hosted-invoker';
@@ -200,6 +204,12 @@ const completionKey = (missionId: string, artifactDigest: string, reviewDigest: 
 type StoredEvent = Omit<import('../src/relay/mission/wire-contracts').RelayEvent, 'id' | 'missionId' | 'demo'>;
 
 interface MissionRecord {
+  /** What this Mission is authorised to retrieve. Empty by default. */
+  evidenceReferences: readonly { readonly source: string; readonly reference: string }[];
+  /** Fenced observation blocks, in retrieval order. Empty until gathered. */
+  liveEvidence: string[];
+  /** Durable references to what was retrieved. References, never content. */
+  evidenceRecords: MissionEvidenceReference[];
   missionId: string;
   /** The founder's exact request, preserved verbatim and separately from any
       generated handoff. */
@@ -274,6 +284,15 @@ export interface MissionRoleDeps {
   /** The remote Reviewer, for a bridge that reaches a dedicated service. */
   runRemoteHermesReview?: typeof runRemoteHermesReview;
   /**
+   * Live Reach retrieval, for a Mission authorised to read something.
+   *
+   * Injected so the gathering path is testable without a network, and so a
+   * deployment that wires no retrieval simply gathers nothing.
+   */
+  gatherEvidence?: LiveReachService['retrieve'];
+  /** Probes the readiness model reads. Empty means nothing was observed. */
+  evidenceProbes?: readonly BackendProbe[];
+  /**
    * The transport used to PROBE the remote Reviewer's readiness.
    *
    * Injected for the same reason every other outward call in this file is: a
@@ -308,7 +327,20 @@ export interface MissionRegistryConfig {
 }
 
 export interface MissionRegistry {
-  start(input: { missionId: string; objective: string }): LiveMissionUpdate;
+  start(input: {
+    missionId: string;
+    objective: string;
+    /**
+     * References the Mission is AUTHORISED to retrieve before planning.
+     *
+     * Explicit and empty by default. A Mission does not decide on its own that
+     * it needs the internet, and Relay does not decide for it — the caller
+     * that knows the Mission's scope names what may be read, which is the same
+     * separation Live Reach draws between a capability being available and a
+     * Mission having asked for it.
+     */
+    evidenceReferences?: readonly { readonly source: string; readonly reference: string }[];
+  }): LiveMissionUpdate;
   get(missionId: string): LiveMissionUpdate | null;
   cancel(missionId: string): LiveMissionUpdate | null;
   retry(missionId: string): LiveMissionUpdate | null;
@@ -390,6 +422,21 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   const checkHermes = deps.hermesPreflight ?? hermesPreflight;
   const checkRelay = deps.relayPreflight ?? defaultRelayPreflight;
   const makeHostedInvoker = deps.createHostedInvoker ?? createHostedClaudeInvoker;
+  /**
+   * The default gatherer refuses everything, and that is correct.
+   *
+   * A bridge that wired no Live Reach service has no way to retrieve, and a
+   * Mission naming a reference on such a deployment must be told it was not
+   * retrieved — never handed a fabricated observation.
+   */
+  const gatherEvidence = deps.gatherEvidence ?? (async () => ({
+    ok: false as const,
+    refusal: 'not_ready' as const,
+    detail: 'This bridge has no Live Reach service wired, so nothing was retrieved.',
+    attempt: null,
+    events: [],
+  }));
+  const evidenceProbes = deps.evidenceProbes ?? [];
 
   const append = (rec: MissionRecord, e: BridgeEventInput): void => {
     rec.events.push({
@@ -458,6 +505,11 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     artifactDigest: rec.artifactDigest,
     handoffDigest: rec.handoffDigest,
     architectReceipt: rec.architectReceipt,
+    /**
+     * ABSENT AND EMPTY ARE DIFFERENT FACTS. Absent: the Mission was authorised
+     * to read nothing. Empty: it was authorised and retrieved none.
+     */
+    ...(rec.evidenceReferences.length === 0 ? {} : { evidence: [...rec.evidenceRecords] }),
     review: rec.review,
     attestations: toAttestationSummaries(rec),
   });
@@ -705,6 +757,77 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           surface reports its own provenance rather than borrowing the CLI's. */
       const codingProvenance = runtime === null ? 'hosted' : runtime.runtime.provenance;
 
+      /**
+       * GATHER WHAT THIS MISSION WAS AUTHORISED TO READ.
+       *
+       * Before the architect, because a plan made from a recollection cannot
+       * be fixed by evidence arriving after it. Only the references the caller
+       * named, only through `evaluateLiveReach`, and a refusal is recorded
+       * rather than retried — a Mission that may not read a source proceeds
+       * without it and says so, instead of failing.
+       *
+       * `gatherEvidence` is injected for the same reason every outward call in
+       * this file is: the hosted path has to be testable without a network.
+       */
+      if (rec.evidenceReferences.length > 0) {
+        for (const request of rec.evidenceReferences) {
+          const gathered = await gatherEvidence({
+            missionId: rec.missionId,
+            projectId: rec.missionId,
+            source: request.source,
+            capability: 'read_item',
+            reference: request.reference,
+            missionAuthorises: true,
+            probes: evidenceProbes,
+          });
+          if (gathered.ok) {
+            rec.liveEvidence.push(renderEvidenceForPrompt(gathered.artifact));
+            /**
+             * The durable reference, for the Project Brain.
+             *
+             * References, never content: the Brain records THAT something was
+             * observed and never absorbs what it claimed, and a browser
+             * showing retrieved text would be opening untrusted content in a
+             * surface built to display honesty.
+             */
+            const ref = evidenceReferenceOf(gathered.artifact);
+            rec.evidenceRecords.push({
+              evidenceId: ref.evidenceId,
+              source: ref.source,
+              reference: ref.reference,
+              publishedAt: ref.publishedAt,
+              retrievedAt: ref.retrievedAt,
+              contentFingerprint: ref.contentFingerprint,
+              actualBackendId: gathered.attempt.actualBackendId,
+              fallbackOccurred: gathered.attempt.fallbackOccurred,
+            });
+            /**
+             * `research`, and truth `relay_evidence` — Relay made this request
+             * itself and saw the answer, so it is Relay's evidence rather than
+             * an agent's claim. The distinction is the point of the field.
+             */
+            append(rec, {
+              role: 'relay',
+              category: 'research',
+              truth: 'relay_evidence',
+              headline: `Retrieved ${request.reference}`,
+              detail: `Source ${request.source}. Recorded as evidence and handed to the Prompt Architect as data.`,
+            });
+          } else {
+            // Recorded, not retried, and never invented. The mission continues
+            // with less rather than pretending it read something.
+            // A system notice, not evidence: nothing was observed.
+            append(rec, {
+              role: 'relay',
+              category: 'research',
+              truth: 'system_notice',
+              headline: `Did not retrieve ${request.reference}`,
+              detail: `${gathered.refusal}. The mission continues without it rather than pretending it read something.`,
+            });
+          }
+        }
+      }
+
       // Reviewer — proven available from local read-only probes only. This is
       // deliberately BEFORE the OpenAI request: an unavailable reviewer must
       // never be discovered after a paid call has already been consumed.
@@ -821,6 +944,16 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           try {
             architectResult = await callArchitect({
               originalRequest: rec.originalRequest,
+              /**
+               * WHAT RELAY OBSERVED, handed over as fenced data.
+               *
+               * Gathered above, before the architect was called, so a plan is
+               * made with current information rather than a recollection. Each
+               * block states that it is an observation BEFORE its contents
+               * appear. Empty when the Mission authorised nothing, which is
+               * the default.
+               */
+              ...(rec.liveEvidence.length === 0 ? {} : { liveEvidence: rec.liveEvidence }),
               missionId: rec.missionId,
               missionRevision: rec.missionRevision,
               objective: rec.objective,
@@ -1422,7 +1555,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   }
 
   return {
-    start({ missionId, objective }) {
+    start({ missionId, objective, evidenceReferences }) {
       const existing = records.get(missionId);
       if (existing) return toView(existing); // idempotent — one dispatch per mission id
       const request = safeText(objective) || 'Implement the controlled demo task.';
@@ -1442,6 +1575,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         cancelRequested: false,
         cancelHandle: null,
         retryCount: 0,
+        evidenceReferences: evidenceReferences ?? [],
+        liveEvidence: [],
+        evidenceRecords: [],
       };
       records.set(missionId, rec);
       void runPipeline(rec); // fire-and-forget; browser polls for progress
