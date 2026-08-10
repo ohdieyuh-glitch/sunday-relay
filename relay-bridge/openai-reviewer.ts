@@ -1,4 +1,4 @@
-import { buildReviewPrompt, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
+import { buildReviewPrompt, describeUnreadableReview, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
 
 /**
  * A REVIEWER THAT NEEDS NO INSTALLED BINARY AND NO NEW SERVICE.
@@ -164,7 +164,7 @@ export async function runOpenAiReview(input: {
     if (result === null) {
       return {
         kind: 'review_incomplete',
-        safeMessage: 'The reviewer returned a review Relay could not read.',
+        safeMessage: `The reviewer returned a review Relay could not read. ${describeUnreadableReview(text)}`,
         startedAt,
         completedAt: now(),
       };

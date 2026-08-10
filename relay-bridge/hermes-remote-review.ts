@@ -1,4 +1,4 @@
-import { buildReviewPrompt, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
+import { buildReviewPrompt, describeUnreadableReview, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
 import { SERVICE_MAX_TURNS } from '../relay-hermes-service/service';
 
 /**
@@ -268,7 +268,7 @@ export async function runRemoteHermesReview(input: {
     if (result === null) {
       return {
         kind: 'review_incomplete',
-        safeMessage: 'The Reviewer service returned a review Relay could not read.',
+        safeMessage: `The Reviewer service returned a review Relay could not read. ${describeUnreadableReview(state.reviewText)}`,
         startedAt,
         completedAt: now(),
       };
