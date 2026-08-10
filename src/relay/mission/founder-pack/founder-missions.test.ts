@@ -7,7 +7,7 @@ import {
   type FounderMission,
 } from './founder-missions';
 import { LIVE_REACH_SOURCES } from '../live-reach/live-reach-contracts';
-import { EMPTY_LIVE_REACH_SETTINGS, evaluateLiveReach } from '../live-reach';
+import { EMPTY_LIVE_REACH_SETTINGS, evaluateLiveReach, resolveReadiness } from '../live-reach';
 
 /**
  * A TEST PACK THAT CANNOT DRIFT FROM THE PRODUCT.
@@ -236,5 +236,70 @@ describe('an entry that starts a mission says so about the other roles', () => {
       expect(entry.requires.join(' '), entry.id)
         .toMatch(/RELAY_ROLE_CODING_AGENT|RELAY_ROLE_REVIEWER|founder machine/i);
     }
+  });
+});
+
+/**
+ * THE REMAINING CLAIMS, RUN RATHER THAN READ.
+ *
+ * Two of the five entries turned out to be fabricated — a refusal no mechanism
+ * produces, and an idempotency key that does not exist — and both had been
+ * "checked" by reading them against the code. Reading is what passed them.
+ *
+ * `fm-3` is the one a founder meets first on a real deployment, because it is
+ * the refusal every un-probed source gives. It says a deployment that has
+ * probed nothing refuses the retrieval as `not_ready` and the Mission
+ * continues with less rather than failing. That is two claims about two
+ * different functions, so both are run.
+ */
+describe('the un-probed source mission describes what really happens', () => {
+  const mission = FOUNDER_MISSIONS.find((m) => m.id === 'fm-3-unready-source-refuses');
+
+  it('is still in the pack and still names not_ready', () => {
+    expect(mission).toBeDefined();
+    expect(mission?.proves).toContain('not_ready');
+  });
+
+  it('REALLY reports unknown readiness when nothing has been probed', () => {
+    // Not `backend_unavailable`, and not a cheerful `ready`: a deployment that
+    // has observed nothing knows nothing, and Unknown is not zero.
+    const readiness = resolveReadiness({ source: 'web', capability: 'read_item', probes: [] });
+    expect(readiness).toBe('unknown');
+  });
+
+  it('REALLY refuses that retrieval as not_ready', () => {
+    // The refusal the entry tells a founder to look for. If this code ever
+    // changes, the pack is sending them after something they will not see.
+    const decision = evaluateLiveReach({
+      source: 'web',
+      capability: 'read_item',
+      settings: EMPTY_LIVE_REACH_SETTINGS,
+      missionAuthorises: true,
+      ready: false,
+    });
+    expect(decision.allowed).toBe(false);
+    if (!decision.allowed) expect(decision.refusal).toBe('not_ready');
+  });
+
+  it('refuses for readiness even when the Mission authorised the read', () => {
+    // Otherwise the entry would be demonstrating mission authority rather than
+    // observed readiness, and a founder could not tell which it proved.
+    for (const authorises of [true, false]) {
+      const decision = evaluateLiveReach({
+        source: 'web', capability: 'read_item', settings: EMPTY_LIVE_REACH_SETTINGS,
+        missionAuthorises: authorises, ready: false,
+      });
+      expect(decision.allowed, String(authorises)).toBe(false);
+    }
+  });
+
+  it('names a source that IS supported, so the refusal is about readiness', () => {
+    // `web` must not be refused `capability_unsupported` — that would prove
+    // something else entirely, which is exactly how fm-1 went wrong.
+    const supported = evaluateLiveReach({
+      source: 'web', capability: 'read_item', settings: EMPTY_LIVE_REACH_SETTINGS,
+      missionAuthorises: true, ready: true,
+    });
+    expect(supported.allowed).toBe(true);
   });
 });
