@@ -446,11 +446,14 @@ Coding Agent, so a transport now carries BOTH halves — how to run a review and
 how to check one could run — chosen together, and a test asserts the local
 probe is never called for a remote transport.
 
-| | Local | Remote |
-|---|---|---|
-| Runs | spawned Hermes process | authenticated HTTP to the Reviewer service |
-| Readiness | `hermes --help` / `status` | `GET /v1/readiness` — offline, creates no run |
-| Selected by | default | `RELAY_HERMES_MODE=remote` |
+| | Local | Remote | Provider API |
+|---|---|---|---|
+| Runs | spawned Hermes process | authenticated HTTP to the Reviewer service | the Prompt Architect's provider |
+| Readiness | `hermes --help` / `status` | `GET /v1/readiness` — offline, creates no run | configuration presence, stated as such |
+| Selected by | default | `RELAY_HERMES_MODE=remote` | `RELAY_OPENAI_REVIEWER_MODE=live` |
+| Needs deploying | no | **yes** | no |
+
+See §4h for how Relay picks between them and what it refuses.
 
 Same `HermesOutcome`, same `validateHermesReview`, so no verdict logic exists
 twice and a remote reviewer cannot return a shape the local one could not.
@@ -516,7 +519,7 @@ The absences are the useful part:
 | 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only |
 | 5 | Skill Ops capabilities | **Domain done** — see §4e. Declared skills behind the existing permission model, proven never more permissive than it. No production caller invokes a skill yet |
 | 6 | Adapter plumbing verbs | **Contract done** — see §4g. Ten verbs as one vocabulary; adapters declare what they implement, Relay refuses the rest, and declarations are reconciled against real handlers in both directions |
-| 7 | Research Loops | **Domain done, no production run** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` still has no production caller, so no Research Loop RUNS in production yet |
+| 7 | Research Loops | **Domain done, no production run** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` NOW has a production caller (`composeLoopRuns` in `main()`), so the sentence that used to sit here is out of date — what is still missing is a Loop AGENT: the only one shipped simulates, and production refuses it by design |
 | 8 | GraphRAG / LangChain / LangGraph | **Evaluated and bounded** — see §4d. The subordination boundary exists and is tested; no framework is installed, deliberately. No embedding or vector code exists |
 | 9 | Real wiring rule | **Enforced for what shipped.** Three pre-existing violations recorded in §7 |
 | 10 | Founder Mission test pack | **This document covers what can be tested today** |
