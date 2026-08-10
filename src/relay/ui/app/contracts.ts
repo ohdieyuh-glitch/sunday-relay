@@ -1,5 +1,6 @@
 import type { RelayBackdropId } from '../../shared/relay-stage-backdrop';
 import type { ChakraTier } from '../../shared/relay-chakra';
+import type { LiveReachSettings } from '../../mission/live-reach';
 import type { ProjectBriefDraft } from '../entry-home/contracts';
 import type { ProjectSettingsDraft } from '../project-settings/contracts';
 import type {
@@ -188,6 +189,16 @@ export interface RelayAppData {
    */
   chakraTier: ChakraTier | null;
   /**
+   * Live Reach settings — which sources and capabilities this browser has
+   * changed, plus which first-entry notices have been acknowledged.
+   *
+   * OVERRIDES ONLY. An absent source is a source nobody has expressed a
+   * preference about, which resolves to the default (enabled) rather than to
+   * denial. That is why an empty object is the right empty value and `null`
+   * would be wrong.
+   */
+  liveReach: LiveReachSettings;
+  /**
    * The chosen stage scenery, or `null` for no scene.
    *
    * SCENERY ONLY. It gates nothing, is never part of a mission record, and
@@ -223,6 +234,7 @@ export function emptyRelayAppData(): RelayAppData {
     colorway: 'obsidian',
     stageBackdrop: null,
     chakraTier: null,
+    liveReach: {},
     updatedAt: new Date(0).toISOString(),
   };
 }

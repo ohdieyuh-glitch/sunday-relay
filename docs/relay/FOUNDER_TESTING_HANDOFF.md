@@ -223,18 +223,275 @@ A role switched in the workspace is stored in the project and is what the next
 mission is configured FROM; on the live bridge, which occupant actually runs is
 still decided by the server's role variables.
 
+## 4c. Live Reach — current external information
+
+Evaluation of Agent Reach: `docs/relay/AGENT_REACH_EVALUATION.md`, with a file
+citation for every claim. The short version, because it changed the plan:
+
+**Agent Reach does not retrieve anything.** Its own `core.py` says it is an
+"installer, doctor, and configuration tool" and that "after installation,
+agents call the upstream tools directly". Its MCP server exposes one tool,
+`get_status`. The actual retrieval path is an agent running third-party CLIs in
+a shell with platform cookies in its environment — the boundary Relay exists to
+prevent. **It also implements no write operation of any kind**, so no Relay
+social action capability can be attributed to it.
+
+| Category | Outcome |
+|---|---|
+| Used directly | Nothing |
+| Wrapped | Nothing |
+| Adapted | Ordered backend candidates with fallback; probe-based readiness that distinguishes missing / broken / timeout / error |
+| Relay-native | Everything else: capability model, provider seam, evidence, permissions, audit, every retrieval |
+| Rejected | The execution model, browser cookie extraction, the host-mutating installer, and any claim of write support |
+
+Relay's existing `mcp-network-policy.ts` is **stronger** than Agent Reach's URL
+guard — it also checks post-DNS resolved addresses and every redirect hop — so
+Live Reach reuses it unchanged rather than adding a second SSRF guard.
+
+### Sources, and what each honestly is
+
+| Source | Backends | State |
+|---|---|---|
+| Web | `relay_http_fetch` | Relay-native, no credential |
+| GitHub | `relay_github_public`, `relay_http_fetch` | Relay-native, no credential, rate limited per address |
+| RSS / Atom | `relay_rss_fetch`, `relay_http_fetch` | Relay-native, publishes its own timestamps |
+| X, Reddit, LinkedIn, Instagram, Facebook, YouTube | none | Modelled, with what each would require. **Cannot become READY.** |
+
+`backends[0]` is preferred and the rest are fallbacks; an operator override can
+reorder but never introduce, so a stale override cannot hide a backend that
+works.
+
+### READY means observed
+
+Probes are side-effect-free GETs. Nothing probed reports **UNKNOWN**, not
+"unavailable" — nothing has been asked. A source that answers 401/403 reports
+**AUTHENTICATION REQUIRED**; 429 reports **RATE LIMITED** and keeps
+`Retry-After`. No amount of configuration produces READY.
+
+### Evidence
+
+A retrieval returns an **EvidenceArtifact**, not text: reference, author,
+publication time (or `null`), retrieval time, freshness measured from
+publication, the backend that ACTUALLY served it, `fallbackOccurred`,
+sanitization state, instruction-shaped phrases found, authority, and everything
+Relay does not know written down.
+
+Retrieved content is **data**. `renderForPrompt` fences it, states that it is an
+observation BEFORE the content appears, and defuses text that tries to close the
+fence.
+
+### Project Brain
+
+A retrieval lands in **short-term** memory and appears under RECENTLY OBSERVED.
+Promotion to what the project KNOWS is a proposal that waits for an approver who
+is not the proposer. The statement must be written by the proposer — the
+citation carries the reference, retrieval time and content fingerprint, so a
+later re-fetch can prove the page changed after approval.
+
+### Permissions
+
+Capabilities arrive **ENABLED**. Read and actions are separable, per-capability
+overrides win over group switches, and absent means default rather than denied.
+A disabled capability is refused by the real path: `fetchImpl` is asserted never
+called for each of the four refusal routes.
+
+**Enabled is not authority.** A Mission must state that it asked for the act.
+The bridge route defaults `missionAuthorises` to false, so no HTTP caller can
+authorise itself.
+
+### The two notices
+
+Global, once, on first entry to Live Reach settings — stating that capabilities
+arrive enabled AND that this is not permission to use them, with KEEP ENABLED /
+MANAGE INDIVIDUALLY / DISABLE ALL. Then per-source, once, on first entry to that
+source. Acknowledged separately and persisted.
+
+### Actions: none exist, and nothing pretends otherwise
+
+No source implements any action capability. The ACTIONS group in settings says
+so where a founder looks for the switches, no action route is mounted, and a
+test asserts across every source that none is claimed.
+
+### The exact path to test it
+
+1. Open `#/relay/live-reach`. The global notice is there on a browser that has
+   never visited.
+2. Expand **GitHub**. Its own notice appears once. Read capabilities are listed
+   and ON; ACTIONS says Relay performs none.
+3. Turn **Search** off, reload — still off, because it was written to the store.
+4. Readiness reads **UNKNOWN** in the browser: nothing has been probed from
+   there, and the browser is not allowed to probe.
+5. Operator-authenticated, against the bridge:
+
+```
+curl -s -X POST "$BRIDGE/relay-api/live-reach/probe" \
+  -H "authorization: Bearer $RELAY_BRIDGE_API_TOKEN" -H 'content-type: application/json' \
+  -d '{"source":"github","url":"https://api.github.com/"}'
+```
+
+6. Then a retrieval, with Mission authority stated:
+
+```
+curl -s -X POST "$BRIDGE/relay-api/live-reach/retrieve" \
+  -H "authorization: Bearer $RELAY_BRIDGE_API_TOKEN" -H 'content-type: application/json' \
+  -d '{"source":"github","reference":"https://api.github.com/repos/nodejs/node/releases/latest",
+       "missionId":"<id>","projectId":"<id>","missionAuthorises":true,
+       "probes":[{"backendId":"relay_github_public","capability":"read_item","result":"observed","probedAt":"<iso>"}]}'
+```
+
+Expect an artifact whose `publishedAt` is the release's own date and whose
+`age.freshness` reflects it. Drop `missionAuthorises` and the same call answers
+`403 mission_does_not_authorize` **without fetching**.
+
+### Known limits, stated
+
+- **No JavaScript is executed.** A page that renders client-side returns what
+  the server sent, which is sometimes nothing.
+- **No credential is ever sent.** Sources needing a session report that they do.
+- **Probes are supplied, not scheduled.** Nothing yet re-probes on a timer, so
+  readiness is as current as the last probe a caller made.
+- **The browser cannot probe or retrieve.** Both are operator-only, so the
+  settings screen shows UNKNOWN until an operator probes.
+- **No action capability exists**, on any source.
+
+## 4d. Research Loops and subordinate orchestrators
+
+### Research Loops
+
+Not a second loop engine. The Loop Engine already owns iterations, limits,
+stop conditions, states and decisions, and already had `research` among its
+loop types. What was missing was research-specific: what a question is, what
+counts as an answer, and who may change either.
+
+**The plan is frozen.** Question, criteria, evaluator, permitted sources,
+independence requirement and freshness bar are fingerprinted when the loop
+starts. A round carrying a different fingerprint is REFUSED, not evaluated — a
+loop that can edit its own success criteria will always succeed. The
+fingerprint covers the evaluator (swapping the judge is the same defect as
+moving the bar) and deliberately ignores the plan id and criterion ordering (a
+rename is not a change).
+
+**Inconclusive is a real outcome.** A round that neither confirmed nor refuted
+is not a failure and not a pass. Reverting means the direction was wrong;
+inconclusive means nothing was settled.
+
+**Authority bars are per criterion**, so fifty community observations do not
+satisfy a criterion naming a primary source — and unknown publication age
+cannot satisfy a freshness requirement, however recently the page was fetched.
+
+### Subordinate orchestrators (LangGraph and anything like it)
+
+**Nothing is installed**, and that is the finding rather than a gap. The
+question is what an external orchestrator is ALLOWED to do, and that has to be
+answerable before one runs. Same conclusion as the Agent Reach evaluation: take
+the pattern, refuse the runtime.
+
+The boundary is built and tested:
+
+| Direction | What crosses |
+|---|---|
+| Down | Objective, frozen input VALUES, a step ceiling, and the NAMES of tools Relay would run on its behalf. No credential, no permission, no connection — `FORBIDDEN_BRIEF_KEYS` is enforced, not documented |
+| Up | Proposals. Never a verdict, completion, permission, role assignment or budget change |
+
+A framework asserting authority is **refused, not sanitized** — stripping the
+sentence would hide that a component someone trusts with part of their
+reasoning tried to declare a mission complete. The refusal keeps what was said.
+
+A graph may still DISCUSS what it cannot decide: "the mission will be complete
+when the tests pass" is analysis, "the mission is complete" is a claim. Both
+cases are tested, so the patterns cannot be tightened into uselessness.
+
+Tools requested but never offered in the brief are surfaced rather than hidden.
+
+## 4e. Relay Skills
+
+Skill Ops-style capabilities as declared bundles behind the permission model
+that already exists. A skill states what it does, which MCP capabilities it
+needs, the highest risk any of its steps reaches, which roles may run it, and
+what it PRODUCES.
+
+**There is no second judgement.** The skill layer narrows and then asks
+`evaluatePermission`, which is the one place that answers — `requires_approval`
+included, passed through rather than resolved. The test that holds this does
+not read the code: it runs both the skill call and the permission model alone
+across every role and every risk class and asserts the skill layer is never
+more permissive.
+
+| Skill | Produces | Roles | Highest risk |
+|---|---|---|---|
+| `relay.evidence.gather` | evidence | architect, reviewer, security-reviewer | read_only |
+| `relay.repository.read` | analysis | all but operations | read_only |
+| `relay.repository.edit` | workspace_change | coding-agent only | workspace_write |
+
+Three, deliberately, and each is something Relay can already do — a catalogue
+naming skills with no implementation is the fabricated-capability failure in
+another costume. No wildcards: a skill that can invoke anything is not a skill.
+
+`skillChangesSomething` separates skills that change something from skills that
+do not, because a Mission's authority and an agent's permission are different
+questions — the same line Live Reach draws.
+
+## 4f. The Reviewer can now run somewhere other than your laptop
+
+`runHermesReview` spawns a local Hermes process. Correct on a founder's
+machine, impossible on a container — so a hosted bridge had no Reviewer at
+all, which was the remaining half of production-hosted three-role execution.
+
+**The transport was never the hard part. The preflight was.** `hermesPreflight`
+runs `hermes --help` and fails when the binary is absent, which on a container
+is always. A bridge correctly configured for the remote Reviewer would have
+been refused before the remote path was reached, with an error about an
+executable nobody intended to use. That is exactly what happened to the hosted
+Coding Agent, so a transport now carries BOTH halves — how to run a review and
+how to check one could run — chosen together, and a test asserts the local
+probe is never called for a remote transport.
+
+| | Local | Remote |
+|---|---|---|
+| Runs | spawned Hermes process | authenticated HTTP to the Reviewer service |
+| Readiness | `hermes --help` / `status` | `GET /v1/readiness` — offline, creates no run |
+| Selected by | default | `RELAY_HERMES_MODE=remote` |
+
+Same `HermesOutcome`, same `validateHermesReview`, so no verdict logic exists
+twice and a remote reviewer cannot return a shape the local one could not.
+
+**Refusals that matter:**
+
+- A review that has not returned in time is `review_incomplete` saying whether
+  it finished is **unknown** — the service may still be reviewing, and calling
+  it failed would be a claim about someone else's process.
+- A production bridge will not trust a Reviewer URL absent from
+  `RELAY_HERMES_TRUSTED_ORIGINS`, and will not send its bearer token over
+  plaintext. Checked against the environment, not a flag.
+- A service that cannot enforce read-only is refused however healthy it is —
+  read-only is the Reviewer's whole safety property.
+- Remote-configured-and-broken never falls back to local: it refuses naming the
+  missing variable.
+- The run id IS the idempotency key, so a redelivered request cannot start a
+  second paid review.
+
+### To use it
+
+On the bridge: `RELAY_HERMES_MODE=remote`, `RELAY_HERMES_SERVICE_URL`,
+`RELAY_HERMES_SERVICE_TOKEN`, `RELAY_HERMES_TRUSTED_ORIGINS`.
+
+**What is still founder-gated: the service is not deployed.** DFA-001 — the
+Railway CLI is unauthorized and creating the service needs browser consent.
+Every code path above is proven offline; none of it has spoken to a running
+Hermes service.
+
 ## 5. What is NOT done
 
 | # | Requirement | State |
 |---|---|---|
-| 1 | Production-hosted three-role execution | **Half.** Architect hosted and Coding Agent wired; the hosted **Reviewer** is the remaining gap |
+| 1 | Production-hosted three-role execution | **Code complete, deployment gated.** Architect hosted; Coding Agent wired and proven; Reviewer has a remote transport, a matching preflight and real mission wiring (§4f). The Hermes service itself is not deployed — DFA-001 |
 | 2 | Swappable role slots | **Substantially done.** Registry, fail-closed binding, requested-vs-actual identity, dispatchability, and hosted execution for the Coding Agent. The Reviewer's hosted surface is not dispatchable |
 | 3 | Real workspace path | **Substantially done in the browser** — see §4b and §6. Opening a project, configuring the stack, switching roles and observing role/evidence/verification state all work by clicking; STARTING a mission is still operator-only by design |
-| 4 | Evidence & Retrieval on MCP + Brain | **Not started** |
-| 5 | Skill Ops capabilities | **Not started** |
+| 4 | Evidence & Retrieval on MCP + Brain | **Substantially done** — see §4c. Live Reach retrieves through the permission boundary into EvidenceArtifacts, and the Brain references them without absorbing them. Retrieval is operator-only |
+| 5 | Skill Ops capabilities | **Domain done** — see §4e. Declared skills behind the existing permission model, proven never more permissive than it. No production caller invokes a skill yet |
 | 6 | Adapter plumbing verbs | **Partially present.** `ports.ts` declares `descriptor` + `execute`; the other verbs exist unevenly across connectors, not as one contract |
-| 7 | Research Loops | **Not started.** The Loop Engine exists; `createLoopService` still has no production caller |
-| 8 | GraphRAG / LangChain / LangGraph | **Not started.** No retrieval, embedding or vector code exists in the repo |
+| 7 | Research Loops | **Domain done** — see §4d. Frozen plan, per-criterion authority bars, inconclusive as a real outcome. `createLoopService` still has no production caller, so no Research Loop RUNS in production yet |
+| 8 | GraphRAG / LangChain / LangGraph | **Evaluated and bounded** — see §4d. The subordination boundary exists and is tested; no framework is installed, deliberately. No embedding or vector code exists |
 | 9 | Real wiring rule | **Enforced for what shipped.** Three pre-existing violations recorded in §7 |
 | 10 | Founder Mission test pack | **This document covers what can be tested today** |
 
@@ -304,10 +561,22 @@ cd "$(mktemp -d)" && env -i PATH="$PATH" HOME="$HOME" hermes -z 'Reply with the 
 
 ## 7. Real-wiring violations still open
 
-1. **`relay-bridge/server.ts`** passes `null, null, null` for `reviewerRuns`,
-   `hostedCodingRuns` and `loopRuns`, so those route families answer
-   `*_not_ready` in production.
-2. **`createLoopService` is imported only by its own test.**
+1. **`relay-bridge/server.ts`** passed `null, null, null` for `reviewerRuns`,
+   `hostedCodingRuns` and `loopRuns`. **The Loop engine is now constructed** —
+   see below. The Reviewer and hosted-coding run engines are still `null`,
+   because neither `ReviewerRunPort` nor `HostedCodingRunPort` has an
+   implementation to construct.
+2. ~~**`createLoopService` is imported only by its own test.**~~ **CLOSED.**
+   `composeLoopRuns` builds it in `main()` when a durable state root is
+   mounted and an operator names an agent, and refuses the simulator on a
+   production deployment — checked against the environment, not a flag, so no
+   configuration can turn it back on. `/relay-api/health` reports
+   `loopEngine` as a code: `wired`, `wired_simulated`, `no_state_root`,
+   `no_agent_named`, `unknown_agent` or `simulated_agent_in_production`.
+
+   **On the live bridge today this reads `no_agent_named`**, which is correct:
+   the only agent this build ships simulates its iterations, and production
+   would refuse it anyway.
 3. **`ReviewerRunPort` and `HostedCodingRunPort` have no implementation** —
    only the interfaces and the routes that would call one.
 

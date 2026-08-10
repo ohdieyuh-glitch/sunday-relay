@@ -62,6 +62,15 @@ import type { RelayBackdropId } from '../../shared/relay-stage-backdrop';
 import type { ChakraTier } from '../../shared/relay-chakra';
 import { siblingProductTarget } from './environment';
 import { configuredDeploymentKind } from '../app/bridge-session';
+import { RelayLiveReachSettings } from '../live-reach';
+import {
+  LIVE_REACH_SOURCES,
+  acknowledgeGlobalNotice as acknowledgeLiveReachGlobal,
+  acknowledgeSourceNotice as acknowledgeLiveReachSource,
+  disableAllSources as disableAllLiveReachSources,
+  setCapability as setLiveReachCapability,
+  setGroup as setLiveReachGroup,
+} from '../../mission/live-reach';
 import {
   EMPTY_USAGE_LATCH,
   demoUsageSnapshot,
@@ -118,7 +127,9 @@ export type PreviewRoute =
   | { screen: 'console' }
   | { screen: 'workspace'; projectId: string; terminal: boolean }
   /** The Project Brain's own view, opened from the Brain in the workspace. */
-  | { screen: 'brain'; projectId: string };
+  | { screen: 'brain'; projectId: string }
+  /** Live Reach settings — integrations, not a project's configuration. */
+  | { screen: 'live-reach' };
 
 export function parsePreviewHash(hash: string): PreviewRoute {
   const clean = hash.replace(/^#/, '');
@@ -126,6 +137,7 @@ export function parsePreviewHash(hash: string): PreviewRoute {
   if (parts[0] !== 'relay') return { screen: 'home' };
   if (parts[1] === 'console') return { screen: 'console' };
   // Back-compat: bare settings route resolves to the active project later.
+  if (parts[1] === 'live-reach') return { screen: 'live-reach' };
   if (parts[1] === 'project-settings') return { screen: 'settings', projectId: '' };
   if (parts[1] === 'project' && parts[2]) {
     if (parts[3] === 'settings') return { screen: 'settings', projectId: parts[2] };
@@ -811,6 +823,42 @@ export function RelayPreviewApp() {
     />
   );
 
+  /**
+   * LIVE REACH SETTINGS, on the real store.
+   *
+   * Every change goes through the DOMAIN's own transitions and is written
+   * whole, so the precedence rules exist in exactly one place and this screen
+   * cannot drift from the permission model that refuses a request.
+   *
+   * EACH HANDLER READS THE STORE, NOT THE RENDER SNAPSHOT. DISABLE ALL fires
+   * two transitions in a row — disable every source, then acknowledge the
+   * notice — and both derived from `state.liveReach` meant the second was
+   * computed from the value before the first, so acknowledging silently undid
+   * the disabling. Reading current state at call time fixes the class rather
+   * than that one pair.
+   */
+  const currentLiveReach = () => store.getState().liveReach;
+  const liveReachSettings = (
+    <RelayLiveReachSettings
+      settings={state.liveReach}
+      onSetCapability={(source, capability, enabled) => {
+        store.setLiveReach(setLiveReachCapability(currentLiveReach(), source, capability, enabled));
+      }}
+      onSetGroup={(source, group, enabled) => {
+        store.setLiveReach(setLiveReachGroup(currentLiveReach(), source, group, enabled));
+      }}
+      onDisableAll={() => {
+        store.setLiveReach(disableAllLiveReachSources(currentLiveReach(), [...LIVE_REACH_SOURCES]));
+      }}
+      onAcknowledgeGlobal={() => {
+        store.setLiveReach(acknowledgeLiveReachGlobal(currentLiveReach(), new Date().toISOString()));
+      }}
+      onAcknowledgeSource={(source) => {
+        store.setLiveReach(acknowledgeLiveReachSource(currentLiveReach(), source, new Date().toISOString()));
+      }}
+    />
+  );
+
   const projectSettings = settingsProject ? (
     <RelayProjectSettings
       brief={settingsBrief?.draft ?? null}
@@ -1114,6 +1162,7 @@ export function RelayPreviewApp() {
     ) ?? home;
   } else if (route.screen === 'console') screen = <MissionControl />;
   else if (route.screen === 'brain') screen = projectBrainView;
+  else if (route.screen === 'live-reach') screen = liveReachSettings;
   else if (route.screen === 'settings') screen = projectSettings;
   else if (route.screen === 'workspace') screen = workspace ?? home;
   else screen = home;

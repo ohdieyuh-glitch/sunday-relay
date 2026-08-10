@@ -1548,3 +1548,108 @@ describe('a hosted Coding Agent reaches its own surface, with no CLI on the host
     expect(h.calls.coding).toBe(0);
   });
 });
+
+/**
+ * THE REVIEWER TRANSPORT, ON A REAL MISSION.
+ *
+ * The remote reviewer and its preflight are each proven in their own file.
+ * What those cannot prove is that the MISSION uses them — and that is the step
+ * that has gone wrong before in this repository: the hosted Coding Agent's
+ * transport worked while the mission probed unconditionally for the local CLI,
+ * so the hosted path died on a container that was never going to have one.
+ *
+ * So this runs the real mission registry and asserts which reviewer it
+ * actually reached.
+ */
+describe('the mission reviews through the transport its deployment configured', () => {
+  const REMOTE_ENV: NodeJS.ProcessEnv = {
+    ...LIVE_ENV,
+    RELAY_HERMES_MODE: 'remote',
+    RELAY_HERMES_SERVICE_URL: 'https://hermes.example.com',
+    RELAY_HERMES_SERVICE_TOKEN: 'service-token',
+    RELAY_HERMES_TRUSTED_ORIGINS: 'https://hermes.example.com',
+  };
+
+  it('calls the REMOTE reviewer and never the local one', async () => {
+    const h = harness();
+    let remoteCalls = 0;
+    let localPreflights = 0;
+    h.deps.runRemoteHermesReview = async () => {
+      remoteCalls += 1;
+      return approvedReview();
+    };
+    // If the mission ever probed for a local binary here, this would fire —
+    // and on a container it would fail the mission before the remote reviewer
+    // was reached at all.
+    /**
+     * A COMPLETE result, not a cast.
+     *
+     * The first version cast a two-field object, which the bridge typecheck
+     * refused — correctly. A cast here would have hidden the same class of
+     * mistake that broke the remote-review fixture earlier in this branch.
+     */
+    h.deps.hermesPreflight = () => {
+      localPreflights += 1;
+      return {
+        ready: true,
+        missing: [],
+        executable: 'hermes',
+        oneShotSupported: true,
+        readOnlySupported: true,
+        model: 'hermes-3',
+        provider: 'test-provider',
+        authenticatedProviders: [],
+        livenessVerified: true,
+        billingPath: 'subscription',
+      };
+    };
+    // The remote readiness probe, answered without a network.
+    h.deps.remoteReviewerFetch = (() => Promise.resolve(new Response(JSON.stringify({
+      lifecycle: 'running',
+      evidence: {
+        installed: true, compatible: true, credentialPresent: true,
+        readOnlyEnforceable: true, verifiedModelId: 'hermes-3', failureReason: null,
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))) as unknown as typeof fetch;
+    const reg = registry(h, REMOTE_ENV, 'fake');
+    reg.start({ missionId: 'msn-remote-1', objective: 'Normalize project names safely' });
+    await settle(reg, 'msn-remote-1');
+
+    expect(remoteCalls).toBe(1);
+    expect(localPreflights).toBe(0);
+    expect(h.calls.reviewer).toBe(0);
+  });
+
+  it('calls the LOCAL reviewer when the deployment did not configure remote', async () => {
+    const h = harness();
+    let remoteCalls = 0;
+    h.deps.runRemoteHermesReview = async () => {
+      remoteCalls += 1;
+      return approvedReview();
+    };
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({ missionId: 'msn-local-1', objective: 'Normalize project names safely' });
+    await settle(reg, 'msn-local-1');
+
+    expect(h.calls.reviewer).toBe(1);
+    expect(remoteCalls).toBe(0);
+  });
+
+  it('refuses the mission when remote was configured and cannot be had', async () => {
+    const h = harness();
+    let remoteCalls = 0;
+    h.deps.runRemoteHermesReview = async () => {
+      remoteCalls += 1;
+      return approvedReview();
+    };
+    const reg = registry(h, { ...REMOTE_ENV, RELAY_HERMES_SERVICE_TOKEN: '' }, 'fake');
+    reg.start({ missionId: 'msn-remote-broken', objective: 'Normalize project names safely' });
+    const view = await settle(reg, 'msn-remote-broken');
+
+    // No reviewer ran, of either kind, and the mission says why rather than
+    // complaining about a binary nobody intended to use.
+    expect(remoteCalls).toBe(0);
+    expect(h.calls.reviewer).toBe(0);
+    expect(JSON.stringify(view)).toContain('RELAY_HERMES_SERVICE_TOKEN');
+  });
+});

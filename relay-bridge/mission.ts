@@ -47,6 +47,9 @@ import {
   type HermesOutcome,
   type HermesPreflightResult,
 } from './hermes-reviewer';
+import { resolveReviewerTransport as resolveTransport, reviewerPreflight as runReviewerPreflight } from './reviewer-transport';
+import { runRemoteHermesReview } from './hermes-remote-review';
+import type { ReviewerTransport } from './reviewer-transport';
 import { buildAttestation, decideCompletion, digest, type ExecutionAttestation } from './attestation';
 import { isProductionDeployment } from './deployment-environment';
 import { createHostedClaudeInvoker } from './hosted-coding-agent/hosted-invoker';
@@ -268,6 +271,18 @@ export interface MissionRoleDeps {
   runFusionArchitect?: typeof runArchitect;
   runCodingMission?: typeof runCodingMission;
   runHermesReview?: typeof runHermesReview;
+  /** The remote Reviewer, for a bridge that reaches a dedicated service. */
+  runRemoteHermesReview?: typeof runRemoteHermesReview;
+  /**
+   * The transport used to PROBE the remote Reviewer's readiness.
+   *
+   * Injected for the same reason every other outward call in this file is: a
+   * test must be able to exercise the hosted path without a network, and a
+   * readiness probe that could not be stubbed would make the remote mission
+   * path untestable — which is how the hosted Coding Agent's equivalent defect
+   * survived until an independent review ran it on a real host.
+   */
+  remoteReviewerFetch?: typeof fetch;
   resolveClaudeRuntime?: typeof resolveClaudeRuntime;
   hermesPreflight?: typeof hermesPreflight;
   /** Relay-side preflight override (persistence / write-scope probes). */
@@ -342,7 +357,35 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   const callArchitect = deps.runOpenAiArchitect ?? runOpenAiArchitect;
   const callFusionArchitect = deps.runFusionArchitect ?? runArchitect;
   const callCoding = deps.runCodingMission ?? runCodingMission;
-  const callReviewer = deps.runHermesReview ?? runHermesReview;
+  const callLocalReviewer = deps.runHermesReview ?? runHermesReview;
+  const callRemoteReviewer = deps.runRemoteHermesReview ?? runRemoteHermesReview;
+  /**
+   * ONE CALL SITE, TWO TRANSPORTS.
+   *
+   * The mission leg asks for a review and gets a `HermesOutcome`. Which host
+   * produced it is this function's business and nothing else's — which is why
+   * the attestation, the verdict and the findings below are untouched by the
+   * remote path existing.
+   *
+   * A transport that resolved UNAVAILABLE never reaches here: the preflight
+   * refuses first, so this cannot be asked to review with a reviewer the
+   * deployment does not have.
+   */
+  const callReviewer = async (input: {
+    packet: Parameters<typeof runHermesReview>[0]['packet'];
+    config: Parameters<typeof runHermesReview>[0]['config'];
+    now: () => string;
+    transport: ReviewerTransport;
+    runId: string;
+  }) => (
+    input.transport.kind === 'remote'
+      ? await callRemoteReviewer({
+        packet: input.packet,
+        config: input.transport.config,
+        runId: input.runId,
+      })
+      : await callLocalReviewer({ packet: input.packet, config: input.config, now: input.now })
+  );
   const resolveRuntime = deps.resolveClaudeRuntime ?? resolveClaudeRuntime;
   const checkHermes = deps.hermesPreflight ?? hermesPreflight;
   const checkRelay = deps.relayPreflight ?? defaultRelayPreflight;
@@ -497,6 +540,15 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       const live = path === 'live';
       let hermesReady: HermesPreflightResult | null = null;
       const hermesConfig = loadHermesConfig(hermesEnv);
+      /**
+       * WHICH REVIEWER THIS DEPLOYMENT HAS.
+       *
+       * Resolved once, and both the preflight and the call read it — so there
+       * is no arrangement in which Relay probes for one reviewer and invokes
+       * another. That was the hosted Coding Agent's defect: it probed for the
+       * local CLI on a container that would never have one.
+       */
+      const reviewerTransport = resolveTransport(hermesEnv);
 
       if (live && !architectReady.ready) {
         fail(rec, 'preflight_blocked', architectReady.reason as string, {
@@ -657,7 +709,14 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       // deliberately BEFORE the OpenAI request: an unavailable reviewer must
       // never be discovered after a paid call has already been consumed.
       if (live) {
-        hermesReady = checkHermes(hermesConfig);
+        hermesReady = await runReviewerPreflight({
+          transport: reviewerTransport,
+          localConfig: hermesConfig,
+          localPreflight: checkHermes,
+          ...(deps.remoteReviewerFetch === undefined
+            ? {}
+            : { deps: { fetchImpl: deps.remoteReviewerFetch } }),
+        });
         if (!hermesReady.ready) {
           fail(rec, 'preflight_blocked', hermesReady.reason as string, {
             code: 'reviewer_not_available',
@@ -1184,6 +1243,13 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           },
           config: hermesConfig,
           now,
+          /**
+           * The transport decides where this runs. A remote reviewer returns
+           * the SAME `HermesOutcome`, so everything below this line — the
+           * attestation, the verdict, the findings — is unchanged.
+           */
+          transport: reviewerTransport,
+          runId: `${rec.missionId}-review-${String(rec.missionRevision ?? 1)}`,
         });
 
         const reviewerStartedAt =

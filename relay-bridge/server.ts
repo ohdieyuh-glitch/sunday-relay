@@ -24,6 +24,9 @@ import { createMissionRegistry, type MissionRegistry } from './mission';
 import {
   architectPreflight, loadArchitectConfig, verifyArchitectConnection,
 } from './openai-architect';
+import { randomUUID } from 'node:crypto';
+import { isLiveReachRoute, respondLiveReach } from './live-reach-route';
+import { composeLoopRuns, loopCompositionCode } from './loop-composition';
 import {
   bearerMatches, handleReviewerRoute, isReviewerRoute, type ReviewerRunPort,
 } from './reviewer-routes';
@@ -259,11 +262,41 @@ export function createBridgeServer(
             confirmLive: config.confirmLive,
             promptArchitectReady: architect.ready,
             promptArchitectMissing: architect.missing,
+            /**
+             * WHETHER THE LOOP ENGINE IS WIRED, as a code.
+             *
+             * Recomputed per request from the same function `main()` uses, so
+             * this cannot drift from what was actually constructed. A code and
+             * never a path: this route is unauthenticated, and "no_state_root"
+             * discloses that something is unset while a path discloses the
+             * host's layout.
+             */
+            loopEngine: loopCompositionCode(composeLoopRuns({
+              stateRoot: config.stateRoot,
+              env: process.env,
+              now: () => new Date().toISOString(),
+              newId: (kind: string) => kind,
+            })),
             roleSlotsBound: roles.binding.ok && undispatchable.length === 0,
             roleSlotRefusals: roles.binding.ok
               ? undispatchable.map((p) => `${p.role}:occupant_not_dispatchable`)
               : roles.binding.problems.map((p) => `${p.role}:${p.reason}`),
           }, cors);
+          return;
+        }
+
+        /**
+         * LIVE REACH. Operator-authenticated, because a retrieval leaves this
+         * machine and spends somebody's rate limit — the same bar every other
+         * outward-facing route sits behind, and unreachable from a browser
+         * session by construction.
+         */
+        if (isLiveReachRoute(path)) {
+          const auth = typeof req.headers.authorization === 'string'
+            ? req.headers.authorization : undefined;
+          const authorized = bearerMatches(auth, process.env.RELAY_BRIDGE_API_TOKEN);
+          const body = method === 'POST' ? await readBody(req) : undefined;
+          await respondLiveReach(req, res, { path, authorized, body, cors });
           return;
         }
 
@@ -790,8 +823,37 @@ export function main(): void {
     Object.freeze({ wave: 'wave_0' as const, state: betaWaveZeroState(process.env), seats: 100 }),
   ]);
 
+  /**
+   * THE LOOP RUN ENGINE, actually constructed.
+   *
+   * This argument was a literal `null`, so every Loop route answered
+   * `loop_engine_not_ready` while the service sat unbuilt. It is built now
+   * when — and only when — a durable state root is mounted and an operator has
+   * named an agent, and never with the simulator on a production deployment.
+   * `loopComposition` carries the reason when it is not built, and the health
+   * surface reports that reason as a code.
+   */
+  const loopComposition = composeLoopRuns({
+    stateRoot: config.stateRoot,
+    env: process.env,
+    now: () => new Date().toISOString(),
+    newId: (kind: string) => `${kind}-${randomUUID()}`,
+  });
+  if (!loopComposition.wired) {
+    // eslint-disable-next-line no-console
+    console.log(`Relay bridge Loop engine: not wired (${loopComposition.refusal}).`);
+  } else {
+    // eslint-disable-next-line no-console
+    console.log(
+      `Relay bridge Loop engine: wired with the ${loopComposition.agentName} agent`
+      + `${loopComposition.simulated ? ' — ITERATIONS ARE SIMULATED' : ''}.`,
+    );
+  }
+
   const server = createBridgeServer(
-    config, registry, null, null, null, cronTicks,
+    config, registry, null, null,
+    loopComposition.wired ? loopComposition.service : null,
+    cronTicks,
     // Not "was one constructed" — "will it still fire". Shutdown stops the
     // timer and then drains for up to ten seconds, and for that whole window
     // the old getter reported a scheduler that would never run again.
