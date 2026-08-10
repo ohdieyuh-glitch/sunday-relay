@@ -819,12 +819,71 @@ they are access decisions, not implementations.
    now fails with an accurate reason instead of a misleading one. Reviews still
    happen on every mission automatically.
 
-6. **Evidence metering.** Live Reach spends someone's rate limit rather than
-   money and Relay does not meter it, which is why `relay_live_reach` declares
-   no `usage` verb. A budget over retrieval is currently a hope.
+6. ~~**Evidence metering.**~~ **DONE.** `relay_live_reach` now declares the
+   `usage` verb, so `operatorPromises().budgetable` is true and a cap over
+   retrieval is a cap rather than a hope.
 
-7. **A production caller for skills.** The catalogue and the permission
-   narrowing exist and nothing invokes a skill yet.
+   The unit is retrievals and bytes, never money — there is no cost field
+   anywhere in `live-reach-metering.ts`, and a test keeps one from arriving.
+   What took the work was what Relay cannot know:
+
+   - a host that ANSWERED — including a 429 or a 401 — counted the request, so
+     Relay counts it too. Being rate limited is not free.
+   - a host that never answered is recorded as **unconfirmed**, never as spent
+     and never as free. The budget charges it anyway, because the other
+     direction makes an unreachable host a way to retry without limit.
+   - a refusal Relay made itself leaves the meter completely untouched,
+     timestamps included.
+   - bytes are `null` until something is measured, and a byte cap over a total
+     that cannot account for every read is reported **unenforceable** rather
+     than quietly allowed.
+
+   Observable at `GET /relay-api/live-reach/usage/<missionId>` (operator auth,
+   free, touches no network). A budget is named per request; absent means none.
+
+   One defect fell out of building it: the server passed no service to the Live
+   Reach route, so the route built a fresh one per request while missions used
+   the long-lived one — two meters, and a cap that reset on every call. Both
+   now share the single service constructed in `main()`.
+
+   Known limit, stated rather than implied: meters live in memory, so a restart
+   forgets them and a budget binds within a process rather than across one.
+
+7. **A production caller for skills — and the reason there isn't one is worth
+   reading before anyone builds it.**
+
+   The catalogue and the narrowing exist, nothing invokes a skill, and wiring
+   one the obvious way would make Relay less honest rather than more. Three
+   facts, each checkable:
+
+   - The capability names the skills declare — `relay.live_reach.retrieve`,
+     `relay.workspace.read`, `relay.workspace.write` — appear **nowhere else in
+     the repository**. No MCP server offers them, no snapshot contains them, no
+     grant references them.
+   - `evaluateSkillCall` ends at `evaluatePermission`, and the only production
+     caller of that is `mcp-gateway.ts:249`, which evaluates a real connection
+     to an EXTERNAL MCP server. The only registry entries that exist are
+     `MCP_REGISTRY_FIXTURES`, which are simulations and say so.
+   - Relay's own internals are not MCP capabilities. Live Reach retrieval is
+     judged by `evaluateLiveReach`; a workspace write is judged by the mission's
+     write scope. Those are the permissions that actually decide.
+
+   So calling a skill through the MCP permission model would mean registering
+   an MCP server for Relay's own internals, with an approved snapshot nobody
+   approved, to satisfy a gate whose real answer is already given elsewhere.
+   That is the "second judgment system" the direction explicitly rules out —
+   and it would report `capabilityExistsInSnapshot: false`, so it would deny
+   every skill anyway until somebody made the snapshot up.
+
+   **The correct build**, when it is done: a skill over a Relay-internal
+   operation consults the judgment that already governs it, and the skill layer
+   contributes only what it uniquely knows — the role narrowing, the declared
+   capability list, and `skillChangesSomething`. Skills over EXTERNAL MCP
+   capabilities keep going through `evaluatePermission`, because there the
+   snapshot and the grants are real.
+
+   Until then the catalogue is a declaration, and this entry is what keeps it
+   from being read as a working gate.
 
 ## 10. What this session actually cost, and what it proves
 
