@@ -54,3 +54,27 @@ export function safeError(input: unknown, fallback = 'The mission stopped.'): st
 export function safeLines(lines: readonly unknown[]): string[] {
   return lines.map((l) => safeText(l)).filter((l) => l.length > 0);
 }
+
+/**
+ * REDACTION WITHOUT THE DISPLAY BOUND, for payloads a MACHINE reads.
+ *
+ * `safeText` exists for short strings a human sees: it collapses whitespace and
+ * truncates at 600 characters. Applied to a structured payload it is
+ * destructive, and it has been twice — the hosted Coding Agent's execution
+ * report and the Hermes Reviewer's verdict were both guillotined mid-JSON
+ * before their parsers saw them, and Relay then blamed the agent for producing
+ * something unreadable.
+ *
+ * This keeps the part that is about safety — provider secrets and absolute host
+ * paths never survive — and drops the part that is about screen space. The
+ * bound that belongs on a payload is the byte ceiling its transport already
+ * enforces, not a sentence length.
+ *
+ * Fields extracted from the payload are still `safeText`-ed when they become
+ * events or claims, so nothing reaches a human unbounded.
+ */
+export function redactPayload(input: unknown): string {
+  let text = typeof input === 'string' ? input : String(input ?? '');
+  for (const re of SECRET_PATTERNS) text = text.replace(re, '[redacted]');
+  return stripAbsolutePaths(text);
+}
