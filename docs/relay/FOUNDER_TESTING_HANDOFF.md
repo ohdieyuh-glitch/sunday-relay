@@ -877,9 +877,32 @@ they are access decisions, not implementations.
 2. **Set the role variables on Railway.** `RELAY_ROLE_CODING_AGENT` and
    `RELAY_ROLE_REVIEWER` are unset, which is why `/relay-api/health` reports
    `roleSlotsBound: false` with `no_occupant_requested` for both. That is
-   truthful, not broken: production has named no occupant. Setting them, plus
-   `ANTHROPIC_API_KEY` and `RELAY_HOSTED_CODING_MODEL`, is what makes a hosted
-   three-role mission possible.
+   truthful, not broken: production has named no occupant.
+
+   This item used to end "setting them, plus `ANTHROPIC_API_KEY` and
+   `RELAY_HOSTED_CODING_MODEL`, is what makes a hosted three-role mission
+   possible". That list was incomplete: naming a Reviewer does not configure
+   one. `openai_reviewer` requires `RELAY_OPENAI_REVIEWER_MODE`,
+   `OPENAI_API_KEY` and `RELAY_OPENAI_REVIEWER_MODEL`, and
+   `hermes_remote_service` requires a deployed service. You would have met a
+   refusal naming the missing variable — actionable, and still an errand this
+   document sent you on.
+
+   **The complete minimum, given what production already has:**
+
+   ```
+   RELAY_ROLE_CODING_AGENT=claude_agent_sdk_hosted
+   ANTHROPIC_API_KEY=<yours>
+   RELAY_HOSTED_CODING_MODEL=<a model you are willing to pay for>
+   RELAY_OPENAI_REVIEWER_MODE=live
+   RELAY_OPENAI_REVIEWER_MODEL=<a model you are willing to pay for>
+   ```
+
+   The architect is already configured. **`RELAY_ROLE_REVIEWER` is deliberately
+   absent from that list** — setting the mode is you naming the Reviewer once,
+   and Relay follows it rather than applying its own default. Set it only if
+   you want it to agree with the mode; a contradiction is refused before any
+   spend, naming both variables.
 
 3. **Decide whether a real Loop agent is worth building.** `loopEngine` reads
    `no_agent_named` because the only agent this build ships SIMULATES its
