@@ -25,6 +25,7 @@ const mission = (over: Partial<FounderMission> = {}): FounderMission => ({
   evidenceReferences: [],
   spends: false,
   requires: [],
+  startsAMission: false,
   proves: 'something',
   wouldFailIf: 'something else',
   ...over,
@@ -183,6 +184,57 @@ describe('the refusal mission describes a refusal the product actually makes', (
         missionAuthorises: true, ready: true,
       });
       expect(decision.allowed, `${source} accepted a post`).toBe(false);
+    }
+  });
+});
+
+/**
+ * A MISSION THAT DOES NOT SAY WHAT IT NEEDS COSTS AN EVENING.
+ *
+ * The pack listed the architect variables and stopped, so `fm-2` and `fm-3`
+ * read as though the architect were the only prerequisite. The pipeline runs
+ * architect → coding agent → reviewer, and on a founder machine the defaults
+ * name INSTALLED software rather than variables — a fact no `requires` entry
+ * expressed. The rule below fired on the real pack when it was added, which is
+ * how the gap was proven rather than argued.
+ */
+describe('an entry that starts a mission says so about the other roles', () => {
+  it('rejects a mission that names only the architect', () => {
+    const faults = checkFounderMissions([mission({
+      startsAMission: true,
+      spends: true,
+      requires: ['RELAY_PROMPT_ARCHITECT_MODE=live', 'OPENAI_API_KEY'],
+    })]);
+    expect(faults.map((f) => f.problem)).toContain('mission_omits_the_roles_it_needs');
+  });
+
+  it('accepts one that names the role selectors', () => {
+    expect(checkFounderMissions([mission({
+      startsAMission: true, spends: true,
+      requires: ['OPENAI_API_KEY', 'RELAY_ROLE_CODING_AGENT', 'RELAY_ROLE_REVIEWER'],
+    })])).toEqual([]);
+  });
+
+  it('accepts one that says it runs on a founder machine', () => {
+    // The defaults staff the other two roles there, so naming the machine is
+    // as honest as naming the variables — and more useful, because what those
+    // defaults need is installed software rather than configuration.
+    expect(checkFounderMissions([mission({
+      startsAMission: true, spends: true,
+      requires: ['OPENAI_API_KEY', 'a founder machine with Claude Code and Hermes installed'],
+    })])).toEqual([]);
+  });
+
+  it('does not ask an entry that starts no mission for any of that', () => {
+    // `fm-1` goes through an operator route and starts nothing.
+    expect(checkFounderMissions([mission({ startsAMission: false, requires: [] })])).toEqual([]);
+  });
+
+  it('holds for the shipped pack', () => {
+    for (const entry of FOUNDER_MISSIONS) {
+      if (!entry.startsAMission) continue;
+      expect(entry.requires.join(' '), entry.id)
+        .toMatch(/RELAY_ROLE_CODING_AGENT|RELAY_ROLE_REVIEWER|founder machine/i);
     }
   });
 });
