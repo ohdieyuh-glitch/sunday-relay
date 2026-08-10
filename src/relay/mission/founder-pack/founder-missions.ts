@@ -39,6 +39,23 @@ export interface FounderMission {
   readonly spends: boolean;
   /** Environment this mission needs beyond what is already deployed. */
   readonly requires: readonly string[];
+  /**
+   * Whether this entry STARTS A MISSION, and therefore needs a bridge that can
+   * complete one — all three roles staffed and drivable.
+   *
+   * Recorded because the pack under-specified it. `requires` listed the
+   * architect variables and stopped, so an entry read as though the architect
+   * were the only prerequisite. It is not: the pipeline runs architect →
+   * coding agent → reviewer, so a mission also needs a Coding Agent and a
+   * Reviewer that can actually run HERE. On a founder machine the development
+   * defaults supply `claude_code_local` and `hermes_local` — both of which
+   * need software INSTALLED, which is a machine fact no variable expresses —
+   * and a hosted deployment has no defaults at all and must be told.
+   *
+   * `false` marks the entries that need none of that: they exercise one
+   * capability through an operator route and start nothing.
+   */
+  readonly startsAMission: boolean;
   readonly proves: string;
   readonly wouldFailIf: string;
 }
@@ -78,6 +95,7 @@ export const FOUNDER_MISSIONS: readonly FounderMission[] = Object.freeze([
     // Only the operator credential the bridge already has. No mission starts,
     // no architect runs, nothing is billed.
     requires: Object.freeze(['RELAY_BRIDGE_API_TOKEN']),
+    startsAMission: false,
     proves:
       'Unsupported operations are declined by name rather than presented as available. '
       + 'POST /relay-api/live-reach/retrieve with source "x" and a `post` capability is refused '
@@ -100,7 +118,15 @@ export const FOUNDER_MISSIONS: readonly FounderMission[] = Object.freeze([
       Object.freeze({ source: 'github' as LiveReachSource, reference: 'https://github.com/vitest-dev/vitest/releases' }),
     ]),
     spends: true,
-    requires: Object.freeze(['RELAY_PROMPT_ARCHITECT_MODE=live', 'OPENAI_API_KEY', 'OPENAI_PROMPT_ARCHITECT_MODEL']),
+    requires: Object.freeze([
+      'RELAY_PROMPT_ARCHITECT_MODE=live', 'OPENAI_API_KEY', 'OPENAI_PROMPT_ARCHITECT_MODEL',
+      // AND A BRIDGE THAT CAN COMPLETE A MISSION. On a founder machine the
+      // development defaults staff the other two roles, but they name INSTALLED
+      // software: Claude Code for the Coding Agent, Hermes for the Reviewer.
+      // A hosted deployment has no defaults and must be told both.
+      'a founder machine with Claude Code and Hermes installed (or the hosted equivalents named)',
+    ]),
+    startsAMission: true,
     proves:
       'Retrieval happens BEFORE the architect plans, the observation reaches it fenced as data, '
       + 'and the Project Brain records that something was read without absorbing what it claimed.',
@@ -118,7 +144,15 @@ export const FOUNDER_MISSIONS: readonly FounderMission[] = Object.freeze([
       Object.freeze({ source: 'web' as LiveReachSource, reference: 'https://example.com/' }),
     ]),
     spends: true,
-    requires: Object.freeze(['RELAY_PROMPT_ARCHITECT_MODE=live', 'OPENAI_API_KEY', 'OPENAI_PROMPT_ARCHITECT_MODEL']),
+    requires: Object.freeze([
+      'RELAY_PROMPT_ARCHITECT_MODE=live', 'OPENAI_API_KEY', 'OPENAI_PROMPT_ARCHITECT_MODEL',
+      // AND A BRIDGE THAT CAN COMPLETE A MISSION. On a founder machine the
+      // development defaults staff the other two roles, but they name INSTALLED
+      // software: Claude Code for the Coding Agent, Hermes for the Reviewer.
+      // A hosted deployment has no defaults and must be told both.
+      'a founder machine with Claude Code and Hermes installed (or the hosted equivalents named)',
+    ]),
+    startsAMission: true,
     proves:
       'READY is observed, never assumed. A deployment that has probed nothing refuses the '
       + 'retrieval as not_ready and the Mission continues with less rather than failing.',
@@ -138,6 +172,7 @@ export const FOUNDER_MISSIONS: readonly FounderMission[] = Object.freeze([
       'RELAY_PROMPT_ARCHITECT_MODE=live', 'OPENAI_API_KEY', 'OPENAI_PROMPT_ARCHITECT_MODEL',
       'RELAY_ROLE_CODING_AGENT', 'RELAY_ROLE_REVIEWER', 'ANTHROPIC_API_KEY',
     ]),
+    startsAMission: true,
     proves:
       'Three roles, three attestations, and a reviewer that did not write the change. The '
       + 'requested and actual model are separate fields and the actual one comes from the '
@@ -159,6 +194,7 @@ export const FOUNDER_MISSIONS: readonly FounderMission[] = Object.freeze([
       'RELAY_PROMPT_ARCHITECT_MODE=live', 'OPENAI_API_KEY', 'OPENAI_PROMPT_ARCHITECT_MODEL',
       'RELAY_ROLE_CODING_AGENT', 'RELAY_ROLE_REVIEWER', 'ANTHROPIC_API_KEY',
     ]),
+    startsAMission: true,
     /**
      * THE MECHANISM NAMED HERE WAS WRONG, in the same way `fm-1` was.
      *
@@ -189,7 +225,8 @@ export type FounderMissionProblem =
   | 'empty_objective'
   | 'reference_not_absolute'
   | 'spending_mission_requires_nothing'
-  | 'no_failure_condition';
+  | 'no_failure_condition'
+  | 'mission_omits_the_roles_it_needs';
 
 export interface FounderMissionFault {
   readonly missionId: string;
@@ -244,6 +281,35 @@ export function checkFounderMissions(
         problem: 'spending_mission_requires_nothing',
         detail: 'A mission that spends money must say what it needs, or a founder runs it expecting it to be free.',
       });
+    }
+
+    /**
+     * A MISSION NEEDS A BRIDGE THAT CAN COMPLETE ONE.
+     *
+     * The pack listed the architect variables and stopped, so an entry read as
+     * though the architect were the only prerequisite. The pipeline runs
+     * architect → coding agent → reviewer: on a founder machine the defaults
+     * supply `claude_code_local` and `hermes_local`, both of which need
+     * software INSTALLED — a machine fact no variable expresses — and a hosted
+     * deployment has no defaults and must be told every occupant.
+     *
+     * So an entry that starts a mission has to say so about the roles it does
+     * not staff itself, rather than leaving a founder to discover it at a
+     * refusal. Naming the architect alone is what this catches.
+     */
+    if (mission.startsAMission) {
+      const text = mission.requires.join(' ');
+      const namesTheOtherRoles = /RELAY_ROLE_CODING_AGENT|RELAY_ROLE_REVIEWER|founder machine/i.test(text);
+      if (!namesTheOtherRoles) {
+        faults.push({
+          missionId: mission.id,
+          problem: 'mission_omits_the_roles_it_needs',
+          detail:
+            'This entry starts a mission, so it needs a Coding Agent and a Reviewer that can run '
+            + 'here — not only an architect. Name them, or say it runs on a founder machine where '
+            + 'the development defaults apply.',
+        });
+      }
     }
 
     if (mission.wouldFailIf.trim() === '') {

@@ -38,7 +38,7 @@ Three things, in this order:
 
 ### A capability Relay declines by name
 
-`fm-1-refusal-is-real` — **costs nothing**
+`fm-1-refusal-is-real` — **costs nothing** · starts no mission
 
 ```json
 {
@@ -56,7 +56,7 @@ Three things, in this order:
 
 ### A Mission that reads before it plans
 
-`fm-2-evidence-before-planning` — **spends money**
+`fm-2-evidence-before-planning` — **spends money** · starts a mission
 
 ```json
 {
@@ -71,7 +71,7 @@ Three things, in this order:
 }
 ```
 
-**Needs:** `RELAY_PROMPT_ARCHITECT_MODE=live`, `OPENAI_API_KEY`, `OPENAI_PROMPT_ARCHITECT_MODEL`
+**Needs:** `RELAY_PROMPT_ARCHITECT_MODE=live`, `OPENAI_API_KEY`, `OPENAI_PROMPT_ARCHITECT_MODEL`, `a founder machine with Claude Code and Hermes installed (or the hosted equivalents named)`
 
 **Proves:** Retrieval happens BEFORE the architect plans, the observation reaches it fenced as data, and the Project Brain records that something was read without absorbing what it claimed.
 
@@ -79,7 +79,7 @@ Three things, in this order:
 
 ### A Mission that asks for a source nobody probed
 
-`fm-3-unready-source-refuses` — **spends money**
+`fm-3-unready-source-refuses` — **spends money** · starts a mission
 
 ```json
 {
@@ -94,7 +94,7 @@ Three things, in this order:
 }
 ```
 
-**Needs:** `RELAY_PROMPT_ARCHITECT_MODE=live`, `OPENAI_API_KEY`, `OPENAI_PROMPT_ARCHITECT_MODEL`
+**Needs:** `RELAY_PROMPT_ARCHITECT_MODE=live`, `OPENAI_API_KEY`, `OPENAI_PROMPT_ARCHITECT_MODEL`, `a founder machine with Claude Code and Hermes installed (or the hosted equivalents named)`
 
 **Proves:** READY is observed, never assumed. A deployment that has probed nothing refuses the retrieval as not_ready and the Mission continues with less rather than failing.
 
@@ -102,7 +102,7 @@ Three things, in this order:
 
 ### A Mission that writes code and is reviewed by something else
 
-`fm-4-three-roles-one-change` — **spends money**
+`fm-4-three-roles-one-change` — **spends money** · starts a mission
 
 ```json
 {
@@ -120,7 +120,7 @@ Three things, in this order:
 
 ### The same Mission, run twice
 
-`fm-5-the-same-mission-twice` — **spends money**
+`fm-5-the-same-mission-twice` — **spends money** · starts a mission
 
 ```json
 {
