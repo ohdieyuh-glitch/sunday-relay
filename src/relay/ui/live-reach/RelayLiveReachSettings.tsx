@@ -81,10 +81,10 @@ export function RelayLiveReachSettings({
   };
 
   return (
-    <section className="rlr" aria-labelledby="rlr-heading">
-      <header className="rlr-head">
-        <h2 id="rlr-heading" className="rlr-title">LIVE REACH</h2>
-        <p className="rlr-sub">
+    <section className="rlv" aria-labelledby="rlv-heading">
+      <header className="rlv-head">
+        <h2 id="rlv-heading" className="rlv-title">LIVE REACH</h2>
+        <p className="rlv-sub">
           Current information from outside Relay, retrieved through Relay&apos;s own
           network policy and recorded as evidence.
         </p>
@@ -92,23 +92,23 @@ export function RelayLiveReachSettings({
 
       {/* THE ONCE-ONLY GLOBAL NOTICE. Non-blocking, and it does not return. */}
       {shouldShowGlobalNotice(settings) && (
-        <div className="rlr-notice" role="status" data-notice="global">
-          <p className="rlr-notice-body">
+        <div className="rlv-notice" role="status" data-notice="global">
+          <p className="rlv-notice-body">
             Relay&apos;s connected capabilities are <strong>enabled by default</strong>. Your
             Compound Agent may use them for live information, and for supported account
             actions, when a Mission requires it. Relay does not act on its own: a
             capability being available is not permission to use it.
           </p>
-          <div className="rlr-notice-actions">
-            <button type="button" className="rlr-btn rlr-btn--primary" onClick={onAcknowledgeGlobal}>
+          <div className="rlv-notice-actions">
+            <button type="button" className="rlv-btn rlv-btn--primary" onClick={onAcknowledgeGlobal}>
               KEEP ENABLED
             </button>
-            <button type="button" className="rlr-btn" onClick={onAcknowledgeGlobal}>
+            <button type="button" className="rlv-btn" onClick={onAcknowledgeGlobal}>
               MANAGE INDIVIDUALLY
             </button>
             <button
               type="button"
-              className="rlr-btn rlr-btn--quiet"
+              className="rlv-btn rlv-btn--quiet"
               onClick={() => { onDisableAll?.(); onAcknowledgeGlobal?.(); }}
             >
               DISABLE ALL
@@ -117,7 +117,7 @@ export function RelayLiveReachSettings({
         </div>
       )}
 
-      <ul className="rlr-list">
+      <ul className="rlv-list">
         {sources.map((definition) => {
           const source = definition.source;
           const readiness = readinessFor(source);
@@ -127,10 +127,10 @@ export function RelayLiveReachSettings({
           const expanded = open === source;
 
           return (
-            <li key={source} className="rlr-item">
+            <li key={source} className="rlv-item">
               <button
                 type="button"
-                className="rlr-row"
+                className="rlv-row"
                 /* Selecting a row by its source id rather than by its label:
                    the status dot is aria-hidden and the readiness word is part
                    of the accessible name, so matching on text is brittle in a
@@ -139,34 +139,34 @@ export function RelayLiveReachSettings({
                 aria-expanded={expanded}
                 onClick={() => { setOpen(expanded ? null : source); }}
               >
-                <span className={`rlr-dot rlr-dot--${readiness}`} aria-hidden="true">●</span>
-                <span className="rlr-name">{definition.displayName}</span>
-                <span className={`rlr-state rlr-state--${readiness}`}>
+                <span className={`rlv-dot rlv-dot--${readiness}`} aria-hidden="true">●</span>
+                <span className="rlv-name">{definition.displayName}</span>
+                <span className={`rlv-state rlv-state--${readiness}`}>
                   {LIVE_REACH_READINESS_LABEL[readiness]}
                 </span>
               </button>
 
               {expanded && (
-                <div className="rlr-panel">
+                <div className="rlv-panel">
                   {/* THE PER-SOURCE NOTICE, once, on first entry to THIS source. */}
                   {shouldShowSourceNotice(source, settings) && capabilities.length > 0 && (
-                    <div className="rlr-notice rlr-notice--source" role="status" data-notice={source}>
-                      <p className="rlr-notice-body">
+                    <div className="rlv-notice rlv-notice--source" role="status" data-notice={source}>
+                      <p className="rlv-notice-body">
                         {definition.displayName} access is currently enabled. Relay may use this
                         connection for supported live information when a Mission requires it.
                         You can disable this integration, its read access, or individual
                         capabilities below.
                       </p>
-                      <button type="button" className="rlr-btn" onClick={() => { onAcknowledgeSource?.(source); }}>
+                      <button type="button" className="rlv-btn" onClick={() => { onAcknowledgeSource?.(source); }}>
                         GOT IT
                       </button>
                     </div>
                   )}
 
-                  <p className="rlr-note">{definition.accessNote}</p>
+                  <p className="rlv-note">{definition.accessNote}</p>
 
                   {capabilities.length === 0 ? (
-                    <p className="rlr-note rlr-note--absent">
+                    <p className="rlv-note rlv-note--absent">
                       Relay has no backend for this source, so there is nothing to switch on.
                       It is listed because knowing what Relay cannot reach is worth as much as
                       knowing what it can.
@@ -179,7 +179,7 @@ export function RelayLiveReachSettings({
                         interactive={interactive}
                         onChange={(next) => { onSetGroup?.(source, 'integration', next); }}
                       />
-                      <fieldset className="rlr-group">
+                      <fieldset className="rlv-group">
                         <legend>EYES · READ ACCESS</legend>
                         {reads.map((capability) => (
                           <Toggle
@@ -192,10 +192,10 @@ export function RelayLiveReachSettings({
                         ))}
                       </fieldset>
 
-                      <fieldset className="rlr-group">
+                      <fieldset className="rlv-group">
                         <legend>ACTIONS · PUBLISH ACCESS</legend>
                         {actions.length === 0 ? (
-                          <p className="rlr-note rlr-note--absent">
+                          <p className="rlv-note rlv-note--absent">
                             Relay performs no actions on this source. No backend implements one,
                             so no switch is shown — a control here would be a claim that Relay
                             can do something it cannot.
@@ -226,7 +226,7 @@ function Group({ label, enabled, interactive, onChange }: {
   label: string; enabled: boolean; interactive: boolean; onChange: (next: boolean) => void;
 }) {
   return (
-    <div className="rlr-master">
+    <div className="rlv-master">
       <Toggle label={label} enabled={enabled} interactive={interactive} onChange={onChange} />
     </div>
   );
@@ -238,21 +238,21 @@ function Toggle({ label, enabled, interactive, onChange }: {
   // A read-only host gets the STATE, never an input that silently does nothing.
   if (!interactive) {
     return (
-      <p className="rlr-toggle rlr-toggle--readonly">
-        <span className="rlr-toggle-label">{label}</span>
-        <span className="rlr-toggle-state">{enabled ? 'ON' : 'OFF'}</span>
+      <p className="rlv-toggle rlv-toggle--readonly">
+        <span className="rlv-toggle-label">{label}</span>
+        <span className="rlv-toggle-state">{enabled ? 'ON' : 'OFF'}</span>
       </p>
     );
   }
   return (
-    <label className="rlr-toggle">
+    <label className="rlv-toggle">
       <input
         type="checkbox"
         checked={enabled}
         onChange={(event) => { onChange(event.target.checked); }}
       />
-      <span className="rlr-toggle-label">{label}</span>
-      <span className="rlr-toggle-state">{enabled ? 'ON' : 'OFF'}</span>
+      <span className="rlv-toggle-label">{label}</span>
+      <span className="rlv-toggle-state">{enabled ? 'ON' : 'OFF'}</span>
     </label>
   );
 }

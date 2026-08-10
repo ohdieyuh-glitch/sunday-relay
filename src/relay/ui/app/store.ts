@@ -113,6 +113,14 @@ export interface RelayAppStore {
    * become one.
    */
   setChakraTier(tier: RelayAppData['chakraTier']): void;
+  /**
+   * Store Live Reach settings.
+   *
+   * Takes the WHOLE next value, produced by the domain's own transitions
+   * (`setCapability`, `setGroup`, `acknowledgeGlobalNotice`, …). The store does
+   * not reimplement the precedence rules; there is one place those live.
+   */
+  setLiveReach(settings: RelayAppData['liveReach']): void;
 
   // demo reset — wipes browser-demo state only
   resetAll(): void;
@@ -562,6 +570,10 @@ export function createRelayAppStore(
     setChakraTier(chakraTier) {
       if (data.chakraTier === chakraTier) return;
       commit({ ...data, chakraTier });
+    },
+
+    setLiveReach(liveReach) {
+      commit({ ...data, liveReach });
     },
 
     setStageBackdrop(stageBackdrop) {

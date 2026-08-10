@@ -1,6 +1,7 @@
 import { isKnownBackdrop, type RelayBackdropId } from '../../shared/relay-stage-backdrop';
 import { RELAY_APP_SCHEMA_VERSION, emptyRelayAppData } from './contracts';
 import { isChakraTier, type ChakraTier } from '../../shared/relay-chakra';
+import type { LiveReachSettings } from '../../mission/live-reach';
 import type { RelayAppData } from './contracts';
 
 /**
@@ -64,6 +65,19 @@ function normalizeStageBackdrop(value: unknown): RelayBackdropId | null {
   return isKnownBackdrop(value) ? value : null;
 }
 
+/**
+ * Live Reach settings from storage.
+ *
+ * An object is taken as-is: every field is optional and an unknown source key
+ * is inert, so a forked build's extra entry costs nothing. Anything that is
+ * not an object expresses no preference.
+ */
+function normalizeLiveReach(value: unknown): LiveReachSettings {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as LiveReachSettings)
+    : {};
+}
+
 export function createRelayAppStorage(backing?: Storage): RelayAppStorage {
   const store: Storage | null =
     backing ?? (typeof window !== 'undefined' && window.localStorage ? window.localStorage : null);
@@ -92,6 +106,12 @@ export function createRelayAppStorage(backing?: Storage): RelayAppStorage {
             chakraTier: isChakraTier((parsed as unknown as Record<string, unknown>).chakraTier)
               ? ((parsed as unknown as Record<string, unknown>).chakraTier as ChakraTier)
               : null,
+            // Same rule again: a store written before Live Reach existed keeps
+            // its projects and expresses no preference, which resolves to the
+            // defaults rather than to everything denied.
+            liveReach: normalizeLiveReach(
+              (parsed as unknown as Record<string, unknown>).liveReach,
+            ),
           };
         }
         // Future schema versions migrate here; unknown shapes recover clean.
