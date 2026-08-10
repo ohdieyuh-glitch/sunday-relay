@@ -705,28 +705,50 @@ provider call was made by this session**.
 
 ## 9. Recommended next Missions, in order
 
-1. ~~**Hosted Coding Agent execution.**~~ **DONE** — `relay-bridge/agent-invoker.ts`
-   isolates the one step of eight that depends on the surface, and
-   `hosted-coding-agent/hosted-invoker.ts` implements it over
-   `runHostedCodingAgent`. Nothing else was duplicated. Set the two Railway
-   variables above to use it.
+The code items from the previous version of this list are done and merged. What
+is left is ordered by what unblocks the most, and the first three need YOU —
+they are access decisions, not implementations.
 
-   Worth recording: "remove it from the exclusion and that is the whole change"
-   was WRONG, and an independent review proved it by running the real mission
-   registry on a host with no `claude` on PATH. The mission probed for the
-   local CLI unconditionally, so the hosted occupant still died with "Install
-   Claude Code" — the wrong-machine instruction the registry exists to remove,
-   surviving one layer beneath it.
-2. **Hosted Reviewer.** Either DFA-001 (a Hermes service, plus teaching the
-   mission's reviewer leg to use the remote transport — today it always spawns
-   locally), or register a Reviewer occupant that needs no installed binary.
-   The registry makes the second a configuration change rather than a redesign.
-3. **Wire the three run engines** (§7). Note the hazard left in writing at
-   `local-transport.ts:53-60`: the transport's ceilings are per instance and
-   `transport-factory.ts` builds a fresh one per request — harmless only while
-   no route calls `startReview`. Hoist the instance.
-4. Then Evidence & Retrieval, Skill Ops, Research Loops, and the external
-   adapter evaluation.
+### Needs your authorization
+
+1. **Deploy the Hermes Reviewer service.** DFA-001: the Railway CLI is
+   unauthorized and creating a service needs browser consent. Everything on
+   Relay's side is merged and proven offline — remote transport, a preflight
+   that matches the transport, and mission wiring — and none of it has spoken
+   to a running service. Until it exists, a hosted bridge has no Reviewer.
+
+2. **Set the role variables on Railway.** `RELAY_ROLE_CODING_AGENT` and
+   `RELAY_ROLE_REVIEWER` are unset, which is why `/relay-api/health` reports
+   `roleSlotsBound: false` with `no_occupant_requested` for both. That is
+   truthful, not broken: production has named no occupant. Setting them, plus
+   `ANTHROPIC_API_KEY` and `RELAY_HOSTED_CODING_MODEL`, is what makes a hosted
+   three-role mission possible.
+
+3. **Decide whether a real Loop agent is worth building.** `loopEngine` reads
+   `no_agent_named` because the only agent this build ships SIMULATES its
+   iterations, and production refuses it by design. A Loop that runs is a Loop
+   agent away, and that is a product decision rather than a wiring gap.
+
+### Buildable without you, in value order
+
+4. **A Reviewer occupant that needs no installed binary.** The registry makes
+   this configuration rather than redesign, and it would give a hosted bridge a
+   Reviewer without waiting on DFA-001.
+
+5. **The remaining two run engines.** `ReviewerRunPort` and
+   `HostedCodingRunPort` are still `null` in `main()` because neither has an
+   implementation to construct — unlike the Loop engine, which did and is now
+   wired. Note the hazard recorded at `local-transport.ts:53-60`: the
+   transport's ceilings are per instance and `transport-factory.ts` builds a
+   fresh one per request, harmless only while no route calls `startReview`.
+   Hoist the instance before wiring.
+
+6. **Evidence metering.** Live Reach spends someone's rate limit rather than
+   money and Relay does not meter it, which is why `relay_live_reach` declares
+   no `usage` verb. A budget over retrieval is currently a hope.
+
+7. **A production caller for skills.** The catalogue and the permission
+   narrowing exist and nothing invokes a skill yet.
 
 ## 10. What this session actually cost, and what it proves
 
