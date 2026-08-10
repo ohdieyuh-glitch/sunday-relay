@@ -18,7 +18,7 @@
 
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { safeText } from '../../redact';
+import { redactPayload, safeText } from '../../redact';
 import { createIsolatedProfile, isolatedChildEnv, type IsolatedProfile } from './isolated-profile';
 import type { HermesProviderId } from './hermes-provider';
 
@@ -286,8 +286,23 @@ export async function runHermesReviewer(input: HermesRunInput): Promise<HermesRu
       }
       finish({
         kind: 'completed',
-        // Redacted before it can reach a log, a record or a user.
-        stdout: truncated ? `${safeText(out)}\n[output truncated at limit]` : safeText(out),
+        /**
+         * REDACTED, NOT TRUNCATED. This was `safeText(out)`, which is the
+         * DISPLAY sanitizer: it collapses whitespace and cuts at 600
+         * characters. The Reviewer's verdict is a JSON object read by
+         * `validateHermesReview`, and every real one is longer than that — so
+         * every remote review arrived with its JSON cut off and Relay reported
+         * "returned a review Relay could not read", blaming the model for a
+         * wound this line inflicted.
+         *
+         * `redactPayload` keeps what that call was for — no provider secret,
+         * no absolute host path — and drops the screen-space bound. The real
+         * ceiling is `maxOutputBytes`, already enforced above, which is what
+         * `truncated` reports.
+         */
+        stdout: truncated
+          ? `${redactPayload(out)}\n[output truncated at limit]`
+          : redactPayload(out),
         usage, startedAt, completedAt, exitCode: code,
       });
     });
