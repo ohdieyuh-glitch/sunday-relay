@@ -1581,9 +1581,27 @@ describe('the mission reviews through the transport its deployment configured', 
     // If the mission ever probed for a local binary here, this would fire —
     // and on a container it would fail the mission before the remote reviewer
     // was reached at all.
+    /**
+     * A COMPLETE result, not a cast.
+     *
+     * The first version cast a two-field object, which the bridge typecheck
+     * refused — correctly. A cast here would have hidden the same class of
+     * mistake that broke the remote-review fixture earlier in this branch.
+     */
     h.deps.hermesPreflight = () => {
       localPreflights += 1;
-      return { ready: true, missing: [] } as ReturnType<NonNullable<MissionRoleDeps['hermesPreflight']>>;
+      return {
+        ready: true,
+        missing: [],
+        executable: 'hermes',
+        oneShotSupported: true,
+        readOnlySupported: true,
+        model: 'hermes-3',
+        provider: 'test-provider',
+        authenticatedProviders: [],
+        livenessVerified: true,
+        billingPath: 'subscription',
+      };
     };
     // The remote readiness probe, answered without a network.
     h.deps.remoteReviewerFetch = (() => Promise.resolve(new Response(JSON.stringify({
