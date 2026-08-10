@@ -209,6 +209,15 @@ export function createRelayAppStore(
       handoffDigest: update.handoffDigest ?? mission.handoffDigest,
       artifactDigest: update.artifactDigest ?? mission.artifactDigest,
       architectReceipt: update.architectReceipt ?? mission.architectReceipt,
+      /**
+       * MIRRORED, NEVER MERGED. The backend is the authority for what a
+       * Mission read; keeping a previously-seen list when the latest update
+       * omits it would let a browser report an observation the backend no
+       * longer claims. `??` is right here for the same reason it is wrong for
+       * a list that only grows: an absent field means "unchanged", and an
+       * EMPTY array is a real value that must replace a fuller one.
+       */
+      evidence: update.evidence ?? mission.evidence,
       review: update.review ?? mission.review,
       attestations:
         update.attestations && update.attestations.length ? update.attestations : mission.attestations,

@@ -25,6 +25,26 @@ import type { RelayBrainDocument } from '../../shared/llmops';
 
 export interface RelayProjectBrainViewProps {
   state: ProjectBrainState;
+  /**
+   * What the current Mission RETRIEVED, as references.
+   *
+   * References, never content — the Brain records that something was observed
+   * and never absorbs what it claimed, and rendering retrieved text here would
+   * put untrusted content inside the surface built to display honesty.
+   *
+   * Absent means the Mission was authorised to read nothing. An empty array
+   * means it was authorised and retrieved none, and the two are shown
+   * differently because they are different facts.
+   */
+  evidence?: readonly {
+    readonly evidenceId: string;
+    readonly source: string;
+    readonly reference: string;
+    readonly publishedAt: string | null;
+    readonly retrievedAt: string;
+    readonly actualBackendId: string | null;
+    readonly fallbackOccurred: boolean;
+  }[];
   document?: RelayBrainDocument;
   reducedMotion?: boolean;
   /** Return to the workspace the Brain was opened from. */
@@ -33,6 +53,7 @@ export interface RelayProjectBrainViewProps {
 
 export function RelayProjectBrainView({
   state,
+  evidence,
   document: brainDocument,
   reducedMotion = false,
   onClose,
@@ -76,6 +97,35 @@ export function RelayProjectBrainView({
           </dd>
         </div>
       </dl>
+
+      {/* WHAT THIS MISSION READ. Above the document, because it is the newest
+          thing the Brain knows and the thing a founder checking freshness came
+          for. Absent and empty are rendered differently. */}
+      {evidence !== undefined && (
+        <section className="rpb-view-evidence" aria-label="Retrieved evidence">
+          <h2 className="rpb-view-evidence-heading">RETRIEVED FOR THIS MISSION</h2>
+          {evidence.length === 0 ? (
+            <p className="rpb-view-empty">
+              This Mission was authorised to read something and retrieved nothing.
+            </p>
+          ) : (
+            <ul className="rpb-view-evidence-list">
+              {evidence.map((item) => (
+                <li key={item.evidenceId}>
+                  <a href={item.reference} rel="noreferrer noopener" target="_blank">
+                    {item.reference}
+                  </a>
+                  <span className="rpb-view-evidence-meta">
+                    {`${item.source} · published ${item.publishedAt ?? 'UNKNOWN'} · retrieved ${item.retrievedAt}`}
+                    {` · via ${item.actualBackendId ?? 'UNKNOWN'}`}
+                    {item.fallbackOccurred ? ' (fallback)' : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       {brainDocument === undefined ? (
         <p className="rpb-view-empty">

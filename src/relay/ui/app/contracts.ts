@@ -10,6 +10,7 @@ import type {
   MissionAttestationSummary,
   MissionClaim,
   MissionError,
+  MissionEvidenceReference,
   MissionHandoff,
   MissionPhase,
   MissionReview,
@@ -57,6 +58,7 @@ export type {
   MissionAttestationSummary,
   MissionClaim,
   MissionError,
+  MissionEvidenceReference,
   MissionHandoff,
   MissionPhase,
   MissionReview,
@@ -158,6 +160,15 @@ export interface RelayMission {
   handoffDigest?: string;
   artifactDigest?: string;
   architectReceipt?: MissionArchitectReceipt;
+  /**
+   * What this Mission RETRIEVED, as references the backend sent.
+   *
+   * Mirrored, never derived — the backend is the authority for what was read,
+   * and a browser that invented an entry would be inventing an observation.
+   * Absent means the Mission was authorised to read nothing; empty means it
+   * was authorised and retrieved none.
+   */
+  evidence?: MissionEvidenceReference[];
   review?: MissionReview;
   attestations?: MissionAttestationSummary[];
 }
