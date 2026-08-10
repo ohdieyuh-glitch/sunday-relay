@@ -1679,7 +1679,23 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       if (err instanceof ArchitectUnavailableError) {
         fail(rec, 'prompt_architect_failed', err.message, { code: err.code, retryable: err.retryable });
       } else {
-        fail(rec, 'verification_failed', 'The mission stopped unexpectedly.', {
+        /**
+         * NAME WHAT FAILED, WITHOUT LEAKING WHAT FAILED WITH.
+         *
+         * This discarded `err` entirely and reported "The mission stopped
+         * unexpectedly." for every unexpected throw. The first real hosted
+         * three-role mission died here, and neither the founder nor Relay
+         * could tell whether a required executable was missing, the workspace
+         * root was unwritable, or a provider had misbehaved. A refusal that
+         * names nothing cannot be acted on, and this product's whole rule is
+         * that a refusal says what is missing.
+         *
+         * What is safe to surface is narrow and deliberate: the error's CLASS
+         * and, for a spawn failure, the COMMAND that was not found. A message
+         * body is not surfaced — it can carry paths, arguments and anything a
+         * provider echoed back.
+         */
+        fail(rec, 'verification_failed', describeUnexpected(err), {
           code: 'internal',
           retryable: true,
         });
@@ -1772,4 +1788,41 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     approval. Mirrors `hasBlockingFinding` for the persisted read-model. */
 function hasBlockingFindingRecord(review: MissionReview): boolean {
   return review.findings.some((f) => f.severity === 'blocking');
+}
+
+/**
+ * A SAFE, ACTIONABLE description of an unexpected throw.
+ *
+ * Node's system errors carry a short uppercase `code` (`ENOENT`, `EACCES`,
+ * `ETIMEDOUT`) and, for a failed spawn, the executable in `path`. Those two
+ * facts identify almost every real deployment failure — a missing binary, an
+ * unwritable volume, a timeout — and neither can carry a credential.
+ *
+ * The MESSAGE is deliberately not included. It can contain absolute paths,
+ * full argument lists, and text a provider echoed back, which is exactly the
+ * material this bridge redacts everywhere else.
+ */
+export function describeUnexpected(err: unknown): string {
+  const base = 'The mission stopped unexpectedly';
+  if (typeof err !== 'object' || err === null) return `${base}.`;
+
+  const code = (err as { code?: unknown }).code;
+  const path = (err as { path?: unknown }).path;
+  const name = (err as { name?: unknown }).name;
+
+  // A bare command name from a failed spawn is the single most useful fact a
+  // hosted deployment can be told: it names the thing to install.
+  const executable = typeof path === 'string' && path !== '' && !path.includes('/')
+    ? path
+    : null;
+
+  const safeCode = typeof code === 'string' && /^[A-Z][A-Z0-9_]{2,31}$/.test(code) ? code : null;
+
+  if (safeCode === 'ENOENT' && executable !== null) {
+    return `${base}: ${executable} was not found on this host (ENOENT). `
+      + 'A hosted deployment must provide it in the image.';
+  }
+  if (safeCode !== null) return `${base}: ${safeCode}.`;
+  if (typeof name === 'string' && /^[A-Za-z]{3,40}$/.test(name)) return `${base}: ${name}.`;
+  return `${base}.`;
 }
