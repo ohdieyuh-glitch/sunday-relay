@@ -512,10 +512,22 @@ cd "$(mktemp -d)" && env -i PATH="$PATH" HOME="$HOME" hermes -z 'Reply with the 
 
 ## 7. Real-wiring violations still open
 
-1. **`relay-bridge/server.ts`** passes `null, null, null` for `reviewerRuns`,
-   `hostedCodingRuns` and `loopRuns`, so those route families answer
-   `*_not_ready` in production.
-2. **`createLoopService` is imported only by its own test.**
+1. **`relay-bridge/server.ts`** passed `null, null, null` for `reviewerRuns`,
+   `hostedCodingRuns` and `loopRuns`. **The Loop engine is now constructed** —
+   see below. The Reviewer and hosted-coding run engines are still `null`,
+   because neither `ReviewerRunPort` nor `HostedCodingRunPort` has an
+   implementation to construct.
+2. ~~**`createLoopService` is imported only by its own test.**~~ **CLOSED.**
+   `composeLoopRuns` builds it in `main()` when a durable state root is
+   mounted and an operator names an agent, and refuses the simulator on a
+   production deployment — checked against the environment, not a flag, so no
+   configuration can turn it back on. `/relay-api/health` reports
+   `loopEngine` as a code: `wired`, `wired_simulated`, `no_state_root`,
+   `no_agent_named`, `unknown_agent` or `simulated_agent_in_production`.
+
+   **On the live bridge today this reads `no_agent_named`**, which is correct:
+   the only agent this build ships simulates its iterations, and production
+   would refuse it anyway.
 3. **`ReviewerRunPort` and `HostedCodingRunPort` have no implementation** —
    only the interfaces and the routes that would call one.
 
