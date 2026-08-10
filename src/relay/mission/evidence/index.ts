@@ -30,3 +30,12 @@ export {
   renderForPrompt,
 } from './evidence-normalizer';
 export type { EvidenceReference, RawObservation } from './evidence-normalizer';
+export {
+  EVIDENCE_MEMORY_SOURCE,
+  EVIDENCE_OBSERVATION_KIND,
+  describeObservation,
+  evidenceCitation,
+  evidenceObservation,
+  proposeEvidence,
+} from './evidence-brain-link';
+export type { EvidencePromotionDraft } from './evidence-brain-link';
