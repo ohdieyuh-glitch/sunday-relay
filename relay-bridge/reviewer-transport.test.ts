@@ -6,6 +6,7 @@ import {
   reviewerPreflight,
 } from './reviewer-transport';
 import { REMOTE_HERMES_ENV, type RemoteHermesConfig } from './hermes-remote-review';
+import { LIFECYCLE_SERVING, lifecycleState, setLifecycleState } from '../relay-hermes-service/service';
 import type { HermesConfig, HermesPreflightResult } from './hermes-reviewer';
 
 /**
@@ -45,7 +46,7 @@ const localConfig: HermesConfig = {
 
 const readiness = (over: Record<string, unknown> = {}, status = 200): Response =>
   new Response(JSON.stringify({
-    lifecycle: 'running',
+    lifecycle: LIFECYCLE_SERVING,
     evidence: {
       installed: true, compatible: true, credentialPresent: true,
       readOnlyEnforceable: true, verifiedModelId: 'hermes-3',
@@ -254,5 +255,65 @@ describe('the provider Reviewer', () => {
       deps: { fetchImpl: fetchImpl as unknown as typeof fetch },
     });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * THE VOCABULARY MUST HAVE ONE OWNER.
+ *
+ * The bridge refused any lifecycle that was not `running`. The Hermes service
+ * has never emitted that word — it reports `starting`, `ready` or
+ * `shutting_down` — so a healthy Reviewer was refused with the
+ * self-contradicting "service lifecycle is ready", and the first real hosted
+ * three-role mission died at preflight against a service that was working.
+ *
+ * NOTHING CAUGHT IT BECAUSE THE FIXTURES INVENTED THE SAME WORD. Two test
+ * files supplied `lifecycle: 'running'` and asserted the bridge accepted it —
+ * proving only that both halves of one invention agreed. A fixture that makes
+ * up the value under test cannot fail when the real value differs.
+ */
+describe('the bridge accepts the lifecycle the service actually emits', () => {
+  it('accepts the service’s own serving value', async () => {
+    const result = await remoteReviewerPreflight(remoteConfig, {
+      fetchImpl: (() => Promise.resolve(readiness())) as unknown as typeof fetch,
+    });
+    expect(result.ready).toBe(true);
+  });
+
+  it('is the value a booted service reports — read from the service itself', () => {
+    // Not a second copy of the string: the service sets its own state on boot,
+    // and this asserts the bridge's constant is what that produces.
+    setLifecycleState(LIFECYCLE_SERVING);
+    expect(lifecycleState()).toBe(LIFECYCLE_SERVING);
+  });
+
+  it('REFUSES the word the bridge used to demand', async () => {
+    // `running` is fictional. Accepting it "for compatibility" would preserve
+    // the drift this fixes and let a future service emit it unnoticed.
+    const body = new Response(JSON.stringify({
+      lifecycle: 'running',
+      evidence: {
+        installed: true, compatible: true, credentialPresent: true,
+        readOnlyEnforceable: true, verifiedModelId: 'grok', failureReason: null,
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+    const result = await remoteReviewerPreflight(remoteConfig, {
+      fetchImpl: (() => Promise.resolve(body)) as unknown as typeof fetch,
+    });
+    expect(result.ready).toBe(false);
+  });
+
+  it('still refuses a draining service', async () => {
+    const body = new Response(JSON.stringify({
+      lifecycle: 'shutting_down',
+      evidence: {
+        installed: true, compatible: true, credentialPresent: true,
+        readOnlyEnforceable: true, failureReason: null,
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+    const result = await remoteReviewerPreflight(remoteConfig, {
+      fetchImpl: (() => Promise.resolve(body)) as unknown as typeof fetch,
+    });
+    expect(result.ready).toBe(false);
   });
 });

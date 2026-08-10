@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMissionRegistry, selectArchitectPath } from './mission';
 import { resolveRoleSlots } from './role-slot-config';
+import { LIFECYCLE_SERVING } from '../relay-hermes-service/service';
 import type { MissionRoleDeps } from './mission';
 import { buildAttestation, decideCompletion, digest } from './attestation';
 import type { ExecutionAttestation } from './attestation';
@@ -1616,7 +1617,7 @@ describe('the mission reviews through the transport its deployment configured', 
     };
     // The remote readiness probe, answered without a network.
     h.deps.remoteReviewerFetch = (() => Promise.resolve(new Response(JSON.stringify({
-      lifecycle: 'running',
+      lifecycle: LIFECYCLE_SERVING,
       evidence: {
         installed: true, compatible: true, credentialPresent: true,
         readOnlyEnforceable: true, verifiedModelId: 'hermes-3', failureReason: null,
