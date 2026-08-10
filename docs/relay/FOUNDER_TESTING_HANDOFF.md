@@ -555,6 +555,43 @@ curl -s -X POST "$BRIDGE/relay-api/live-reach/probe" \
 Seeding an optimistic probe at startup would be exactly the "configured
 therefore ready" claim the readiness model exists to refuse.
 
+### The whole evidence chain, and where to see each hop
+
+Every hop has a barrier, and the two that read "different facts" are the ones
+most likely to be quietly collapsed by a later change.
+
+| Hop | What it does | Refuses |
+|---|---|---|
+| Mission authorises | `evidenceReferences` on `start`, empty by default | A Mission cannot decide it needs the internet |
+| Live Reach retrieves | Permission evaluation, then a bounded fetch | Disabled capability, unauthorised Mission, unobserved source — none of which dispatch |
+| EvidenceArtifact | Publication ≠ retrieval, backend that served it | Undated stays UNKNOWN |
+| Architect | A fenced block, before it plans | Content cannot escape the fence |
+| The wire | References, never content | Absent ≠ empty |
+| The store | Mirrored, never merged | An empty list replaces a fuller one |
+| The host | Passes the active mission's references | Absent stays absent |
+| The Brain view | Source, published, retrieved, backend, fallback | Retrieved text never rendered |
+
+**To see it end to end** (operator credential required for the bridge half):
+
+1. Probe once — readiness is observed, and a fresh process has observed
+   nothing:
+
+```
+curl -s -X POST "$BRIDGE/relay-api/live-reach/probe" \
+  -H "authorization: Bearer $RELAY_BRIDGE_API_TOKEN" -H 'content-type: application/json' \
+  -d '{"source":"github","url":"https://api.github.com/"}'
+```
+
+2. Start a Mission naming what it may read, then open
+   `#/relay/project/<id>/brain`. **RETRIEVED FOR THIS MISSION** lists where it
+   came from, when the source said it was published, when Relay fetched it, and
+   which backend actually served it — with a fallback named when one happened.
+
+3. Turn `read_item` off for that source at `#/relay/live-reach` and start
+   another Mission. The reference is refused, the Mission continues without it,
+   and the Brain shows the section with nothing in it — *authorised and
+   retrieved none*, which is not the same as never having been authorised.
+
 ### What no code change can close
 
 Three boundaries remain, and none of them is a missing implementation:
