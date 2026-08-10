@@ -875,15 +875,27 @@ they are access decisions, not implementations.
    and it would report `capabilityExistsInSnapshot: false`, so it would deny
    every skill anyway until somebody made the snapshot up.
 
-   **The correct build**, when it is done: a skill over a Relay-internal
-   operation consults the judgment that already governs it, and the skill layer
-   contributes only what it uniquely knows — the role narrowing, the declared
-   capability list, and `skillChangesSomething`. Skills over EXTERNAL MCP
-   capabilities keep going through `evaluatePermission`, because there the
-   snapshot and the grants are real.
+   **BUILT, the correct way.** `evaluateInternalSkillCall` takes the governing
+   verdict as a PARAMETER, so it cannot be called without having already asked
+   whoever actually governs the operation. It contributes only what the skill
+   layer uniquely knows — the role narrowing, the declared capability list, and
+   `skillChangesSomething` — and there is no path through it that returns `ok`
+   while the governor says no. Skills over EXTERNAL MCP capabilities still go
+   through `evaluatePermission`, because there the snapshot and the grants are
+   real. One narrowing implementation serves both, so the two cannot drift.
 
-   Until then the catalogue is a declaration, and this entry is what keeps it
-   from being read as a working gate.
+   The mission's evidence leg now runs `relay.evidence.gather` through it
+   before anything leaves the machine, which is what turned the catalogue from
+   a document into something enforced.
+
+   **What this does NOT buy, stated so nobody reads more into it:** the role at
+   that call site is constant — the architect is the only thing that gathers
+   evidence — and the architect is permitted, so the role axis cannot refuse
+   there today. What it does buy is proven by mutation: removing `architect`
+   from `permittedRoles` in the real catalogue drops the mission to zero
+   retrievals and records the refusal. Renaming the capability or bumping the
+   version does the same. A second caller with a different role will arrive at
+   a gate that already exists.
 
 ## 10. What this session actually cost, and what it proves
 

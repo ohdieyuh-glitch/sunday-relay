@@ -58,6 +58,7 @@ import { renderForPrompt as renderEvidenceForPrompt, evidenceReference as eviden
 import { buildAttestation, decideCompletion, digest, type ExecutionAttestation } from './attestation';
 import { isProductionDeployment } from './deployment-environment';
 import { createHostedClaudeInvoker } from './hosted-coding-agent/hosted-invoker';
+import { RELAY_SKILLS, evaluateInternalSkillCall, findSkill } from '../src/relay/mission/skills';
 import {
   HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV, probeHostedReadiness,
 } from './hosted-coding-agent/hosted-readiness';
@@ -782,7 +783,63 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
        * this file is: the hosted path has to be testable without a network.
        */
       if (rec.evidenceReferences.length > 0) {
-        for (const request of rec.evidenceReferences) {
+        /**
+         * THE SKILL LAYER, ON THE REAL PATH.
+         *
+         * `relay.evidence.gather` declares who may run it and exactly which
+         * capability it invokes, and this is where that declaration starts
+         * mattering: an architect gathering evidence passes through the
+         * narrowing before anything leaves the machine.
+         *
+         * It is a NARROWING and nothing more. Whether this Mission may read a
+         * given source is `evaluateLiveReach`'s answer, taken inside
+         * `gatherEvidence` exactly as before — this cannot make a retrieval
+         * possible that the permission model refuses, and there is no branch
+         * here that could. What it adds is the one thing the permission model
+         * has no opinion about: whether the ROLE doing the gathering is one
+         * this skill was written for.
+         *
+         * Evidence is gathered on the architect's behalf, before it plans.
+         *
+         * WHAT THIS DOES AND DOES NOT BUY, said plainly so nobody reads more
+         * into it. The role here is constant — the architect is the only thing
+         * that gathers evidence today — and the architect IS permitted, so on
+         * this call site the narrowing cannot currently refuse on the role
+         * axis. What it does buy is that the catalogue stopped being a
+         * document: removing `architect` from `permittedRoles`, renaming the
+         * capability, or bumping the version now stops evidence gathering on
+         * the real path and says why, instead of leaving a declaration nothing
+         * consults. A second caller with a different role is where the axis
+         * starts biting, and it will arrive at a gate that already exists.
+         */
+        const evidenceSkill = evaluateInternalSkillCall({
+          skill: findSkill(RELAY_SKILLS, 'relay.evidence.gather', 1),
+          capabilityName: 'relay.live_reach.retrieve',
+          role: 'architect',
+          // Gathering evidence changes nothing outside Relay, so a read-only
+          // Mission runs it — `skillChangesSomething` is what decides that,
+          // and it says no for this skill.
+          missionAuthorisesChange: false,
+          // The governing judgement runs per reference inside `gatherEvidence`,
+          // which is the only thing that can answer "may this Mission read
+          // THIS source". Nothing is asserted about it here.
+          governing: { allowed: true, detail: 'decided per reference by the Live Reach permission model' },
+        });
+
+        if (!evidenceSkill.ok) {
+          // A skill refusal is recorded and the Mission proceeds without the
+          // evidence — the same shape a Live Reach refusal already takes. A
+          // Mission that cannot gather is not a Mission that failed.
+          append(rec, {
+            role: 'relay',
+            category: 'research',
+            truth: 'system_notice',
+            headline: 'Evidence gathering was not run.',
+            detail: `relay.evidence.gather — ${evidenceSkill.refusal}: ${evidenceSkill.detail}`,
+          });
+        }
+
+        for (const request of evidenceSkill.ok ? rec.evidenceReferences : []) {
           const gathered = await gatherEvidence({
             missionId: rec.missionId,
             projectId: rec.missionId,
