@@ -1,0 +1,81 @@
+import type { AdapterCapabilityDeclaration, AdapterVerb } from './adapter-lifecycle';
+
+/**
+ * WHAT RELAY'S OWN ADAPTERS ACTUALLY DO.
+ *
+ * Each entry describes an adapter that exists in this repository, and the
+ * absences are the useful part. `resume` is missing almost everywhere because
+ * almost nothing here holds a server-side session, and saying so stops an
+ * operator looking for a flag that was never written.
+ *
+ * These are DECLARATIONS, checked against the real handlers by
+ * `adapter-lifecycle.test.ts`. A declaration is a claim, and this file is
+ * where a claim would be easiest to make carelessly.
+ */
+
+const v = (...verbs: AdapterVerb[]): readonly AdapterVerb[] => Object.freeze(verbs);
+
+export const RELAY_ADAPTER_DECLARATIONS: readonly AdapterCapabilityDeclaration[] = Object.freeze([
+  Object.freeze({
+    adapterId: 'claude_code_local',
+    displayName: 'Claude Code (installed CLI)',
+    verbs: v('readiness', 'start', 'execute', 'stream', 'stop', 'result', 'usage', 'identity', 'capabilities'),
+    absenceNotes: Object.freeze({
+      resume: 'The CLI adapter resumes a SESSION, not an interrupted call: an unconfirmable in-flight run becomes disconnected and is never replayed, which is Relay’s rule rather than a limitation of the tool.',
+    }),
+  }),
+  Object.freeze({
+    adapterId: 'claude_agent_sdk_hosted',
+    displayName: 'Claude Agent SDK (hosted)',
+    verbs: v('readiness', 'execute', 'stream', 'result', 'usage', 'identity', 'capabilities'),
+    absenceNotes: Object.freeze({
+      start: 'The hosted invoker runs one bounded call and returns; there is no handle to hold.',
+      stop: 'Nothing outlives the call, so there is nothing to cancel. A surface offering a cancel button over this would be lying.',
+      resume: 'No server-side session is held.',
+    }),
+  }),
+  Object.freeze({
+    adapterId: 'openai_gpt_architect',
+    displayName: 'ChatGPT (OpenAI) Prompt Architect',
+    verbs: v('readiness', 'execute', 'result', 'usage', 'identity', 'capabilities'),
+    absenceNotes: Object.freeze({
+      start: 'One request, one answer.',
+      stream: 'Relay reads the completed response; partial architecture is not useful to a mission.',
+      stop: 'The call is short and unbounded cancellation would leave spend unaccounted.',
+      resume: 'No session exists to resume.',
+    }),
+  }),
+  Object.freeze({
+    adapterId: 'hermes_local',
+    displayName: 'Hermes Reviewer (local process)',
+    verbs: v('readiness', 'execute', 'stop', 'result', 'identity', 'capabilities'),
+    absenceNotes: Object.freeze({
+      start: 'The reviewer runs one shot and returns a verdict.',
+      stream: 'A partial review is not a review.',
+      resume: 'No session is held.',
+      usage: 'The one-shot CLI reports no usage Relay can attribute, so Relay reports none rather than estimating one.',
+    }),
+  }),
+  Object.freeze({
+    adapterId: 'hermes_remote_service',
+    displayName: 'Hermes Reviewer (dedicated service)',
+    verbs: v('readiness', 'start', 'stop', 'result', 'usage', 'identity', 'capabilities'),
+    absenceNotes: Object.freeze({
+      execute: 'The service starts a run and is polled; it has no single blocking call.',
+      stream: 'The service returns a completed review, not tokens.',
+      resume: 'A run is identified and polled rather than resumed — the run id IS the continuation.',
+    }),
+  }),
+  Object.freeze({
+    adapterId: 'relay_live_reach',
+    displayName: 'Live Reach retrieval',
+    verbs: v('readiness', 'execute', 'result', 'identity', 'capabilities'),
+    absenceNotes: Object.freeze({
+      start: 'A retrieval is one bounded fetch.',
+      stream: 'Relay reads a whole document before sanitizing it; a partially sanitized document must never reach an agent.',
+      stop: 'The fetch is bounded by bytes and time, so cancellation has nothing to add.',
+      resume: 'A re-fetch is a new observation with its own retrieval time, not a continuation of an old one.',
+      usage: 'Retrieval spends someone’s rate limit rather than money, and Relay does not yet meter it.',
+    }),
+  }),
+]);
