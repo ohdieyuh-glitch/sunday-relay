@@ -4,6 +4,15 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { CODING_AGENT_ROLE_ENV, REVIEWER_ROLE_ENV, reviewerOccupantFor } from './role-slot-config';
+import { REMOTE_HERMES_ENV } from './hermes-remote-review';
+import { OPENAI_REVIEWER_ENV } from './openai-reviewer';
+import { LOOP_AGENT_ENV } from './loop-composition';
+import { BRIDGE_TOKEN_ENV } from './reviewer-routes';
+import { HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV } from './hosted-coding-agent/hosted-readiness';
+import {
+  BRIDGE_TOKEN_ENV as CLI_BRIDGE_TOKEN_ENV,
+  BRIDGE_URL_ENV as CLI_BRIDGE_URL_ENV,
+} from '../src/relay/reviewer-bridge-client/bridge-target';
 import { ROLE_OCCUPANTS } from '../src/relay/mission/role-slots';
 
 /**
@@ -138,3 +147,54 @@ describe('no variable carries prose as its value', () => {
 function p_label(line: string): string {
   return line.slice(0, Math.max(0, line.indexOf('=')));
 }
+
+/**
+ * A VARIABLE THE CODE READS AND THE FILE NEVER MENTIONS IS UNDISCOVERABLE.
+ *
+ * Every finding in this file so far was a claim that had gone wrong. This one
+ * guards the class that has no claim at all: a new environment variable ships,
+ * nothing documents it, and the only way a founder learns it exists is a
+ * refusal that names it — if they are lucky enough to reach one.
+ *
+ * The names are imported from the modules that READ them rather than retyped,
+ * so a rename cannot pass by leaving both copies consistent with each other and
+ * wrong about the code.
+ *
+ * Nothing was missing when this was written. It is a barrier, not a repair,
+ * and it says so rather than implying it found something.
+ */
+describe('every variable the code reads is documented', () => {
+  const required: readonly string[] = [
+    BRIDGE_TOKEN_ENV,
+    CODING_AGENT_ROLE_ENV,
+    REVIEWER_ROLE_ENV,
+    LOOP_AGENT_ENV,
+    HOSTED_API_KEY_ENV,
+    HOSTED_MODEL_ENV,
+    REMOTE_HERMES_ENV.mode,
+    REMOTE_HERMES_ENV.url,
+    REMOTE_HERMES_ENV.token,
+    REMOTE_HERMES_ENV.trustedOrigins,
+    OPENAI_REVIEWER_ENV.mode,
+    OPENAI_REVIEWER_ENV.model,
+    OPENAI_REVIEWER_ENV.key,
+    // The CLI's names for the bridge it drives. `RELAY_BRIDGE_URL` was
+    // documented and `RELAY_BRIDGE_TOKEN` was not, so the file carried half of
+    // what the terminal needs — and the two are read by the same module.
+    CLI_BRIDGE_URL_ENV,
+    CLI_BRIDGE_TOKEN_ENV,
+  ];
+
+  it('collects names from the modules that read them', () => {
+    // Guards the vacuous case: an empty or malformed list would make the
+    // assertion below pass while checking nothing.
+    expect(required.length).toBeGreaterThanOrEqual(15);
+    for (const name of required) expect(name).toMatch(/^[A-Z][A-Z0-9_]+$/);
+  });
+
+  it('names each of them in .env.example', () => {
+    for (const name of required) {
+      expect(ENV_EXAMPLE, `${name} is read by the bridge and never documented`).toContain(name);
+    }
+  });
+});
