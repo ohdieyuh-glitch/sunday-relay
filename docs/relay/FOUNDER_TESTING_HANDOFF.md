@@ -154,6 +154,7 @@ Independence is decided by `reviewerIsIndependent` — the rule Relay already ha
 | coding_agent | `claude_code_fake` | anywhere | none → `simulated` | yes |
 | coding_agent | `claude_agent_sdk_hosted` | anywhere | api | **yes** — wired, needs `ANTHROPIC_API_KEY` + `RELAY_HOSTED_CODING_MODEL` |
 | reviewer | `hermes_local` | founder machine | api | yes |
+| reviewer | `openai_reviewer` | anywhere | api | **yes** — the Reviewer that needs nothing deployed. It was MISSING from this table entirely: registered, dispatchable, and absent from the list a founder reads to choose one. Enable with `RELAY_OPENAI_REVIEWER_MODE=live` + `RELAY_OPENAI_REVIEWER_MODEL` |
 | reviewer | `hermes_remote_service` | anywhere | api | **yes** — `callReviewer` dispatches on the resolved transport. It was listed as not wired long after it was, because the justification for the dispatchable set was a stale comment nobody re-read |
 
 ### New configuration
