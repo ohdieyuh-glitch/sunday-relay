@@ -2123,3 +2123,48 @@ describe('the coding agent gets one bounded repair when the reviewer rejects', (
     expect(JSON.stringify(view)).not.toContain('Repair attempt started');
   });
 });
+
+/**
+ * A REPAIR THAT PRODUCES NOTHING MUST SAY SO.
+ *
+ * The first production run of the repair leg fired correctly and then went
+ * silent: "Repair attempt started — 3 blocking finding(s)" followed by the
+ * completion decision, with nothing in between. The mission was refused for
+ * the right reason — the original rejection stood — and the record could not
+ * say whether the repair ran and failed, stopped at a precondition, or never
+ * started at all.
+ *
+ * I wrote that blindness, in the same session that removed five instances of
+ * it from elsewhere. This is the test that keeps it removed.
+ */
+describe('a repair that yields nothing explains itself', () => {
+  it('records why, and still refuses the mission', async () => {
+    const h = harness({ reviewer: async () => rejectedReview() });
+    // The repair attempt produces no evidence, exactly as production did.
+    const inner = h.deps.runCodingMission as NonNullable<MissionRoleDeps['runCodingMission']>;
+    let call = 0;
+    h.deps.runCodingMission = async (input) => {
+      call += 1;
+      const real = await inner(input);
+      if (call === 1) return real;
+      /**
+       * Derived from a REAL outcome rather than cast from a literal. A cast
+       * here would compile against a shape I imagined, and the repair leg
+       * reads fields this test would then never have supplied — the same
+       * failure mode as the `as never` I removed from the coding leg earlier.
+       */
+      return { ...real, ok: false, stopped: true, stopReason: 'Workspace preparation failed.', evidence: null };
+    };
+
+    const { view } = await runMission(h, LIVE_ENV, 'm-repair-empty', 'live');
+    const text = JSON.stringify(view);
+
+    expect(text).toContain('Repair attempt started');
+    // The point: the silence is gone.
+    expect(text).toContain('Repair produced no verifiable result');
+    expect(text).toContain('Workspace preparation failed');
+    // And the refusal is unchanged — a failed repair never becomes a pass.
+    expect(view.state).toBe('failed');
+    expect(view.error?.code).toBe('review_blocked');
+  });
+});
