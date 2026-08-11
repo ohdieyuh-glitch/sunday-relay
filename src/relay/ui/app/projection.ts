@@ -276,7 +276,10 @@ function deriveLiveCompletion(
   const architect = attested('prompt_architect');
   if (architect) {
     evidence.push(
-      `Prompt Architect execution attested (${architect.actualActor}${architect.model ? ` · ${architect.model}` : ''}).`,
+      // The model that ANSWERED, from the provider's own response — never the
+      // one configuration asked for. An unreported served model names no
+      // model at all rather than borrowing the requested one.
+      `Prompt Architect execution attested (${architect.actualActor}${architect.actualModel ? ` · ${architect.actualModel}` : ''}).`,
     );
   }
   const coder = attested('coding_agent');
@@ -458,7 +461,15 @@ export function deriveMissionProjection(
         architectCoordinationLabel: mission.architectReceipt?.coordinationLabel,
         codingAttestation: mission.terminal?.attestation ?? null,
         reviewerProvider: mission.review?.provider ?? null,
-        reviewerModel: mission.review?.model ?? null,
+        // The SERVED model — what actually reviewed. When the provider reported
+        // none this stays null and the reviewer row renders `served model
+        // Unknown`; the requested model never stands in for it here.
+        //
+        // This said "renders as not reported" while the row DROPPED the segment
+        // entirely. Round 2 changed the row and left this sentence, so the
+        // divergence the finding was about survived its own repair — and the
+        // evidence document recorded it as fixed. Two greps found it.
+        reviewerModel: mission.review?.servedModel ?? null,
         // The mission's own value, never a browser-side assumption about it.
         reviewerBilling: mission.review?.billing ?? null,
         reviewerRan: Boolean(reviewerAttestation?.launchVerified && mission.review),

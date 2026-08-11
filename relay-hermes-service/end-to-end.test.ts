@@ -284,6 +284,69 @@ describe('a non-zero exit cannot approve', () => {
 });
 
 /**
+ * THE PRODUCER HALF OF THE SERVED-MODEL CHAIN, over real HTTP.
+ *
+ * Defect 3 was the served reviewer model being dropped at four layers. Three of
+ * them are covered by unit tests; the fourth — `local-transport.getReview`
+ * projecting the runner's usage block into the service's response — was covered
+ * by nothing. An independent review reverted `model: usage?.model ?? null` there
+ * and watched all 212 tests across `relay-hermes-service/` and the reviewer
+ * harness pass — that is the exact layer whose omission caused the
+ * original defect.
+ *
+ * The whole chain runs here: fake Hermes writes a usage file → the runner parses
+ * it → the local transport projects it → the service serialises it → real HTTP →
+ * the remote transport decodes it. And the fake reports a RESOLVED model — the
+ * requested id plus a snapshot — so the value crossing the wire is one the
+ * service never asked for. With `clean`, which echoes the requested model back,
+ * this test would pass while proving nothing.
+ */
+describe('the served model survives the whole hosted chain', () => {
+  let resolvedDir: string;
+  let resolvedServer: ReturnType<typeof createHermesService>;
+  let resolvedUrl: string;
+
+  beforeAll(async () => {
+    resolvedDir = mkdtempSync(join(tmpdir(), 'relay-hermes-e2e-served-'));
+    const executable = writeFakeHermes(join(resolvedDir, 'hermes-resolved'), 'clean_resolved_model');
+    resolvedServer = createHermesService(createLocalHermesTransport({
+      executable, provider: providerConfig(), apiKey: 'sk-ant-FAKE-NEVER-USED',
+    }));
+    resolvedUrl = await listenOn(resolvedServer);
+    setLifecycleState('ready');
+  });
+
+  afterAll(() => {
+    resolvedServer?.close();
+    rmSync(resolvedDir, { recursive: true, force: true });
+  });
+
+  it('carries the served model the fake Hermes reported, not the model configured', async () => {
+    const client = createRemoteHermesTransport({
+      serviceUrl: resolvedUrl, serviceToken: TOKEN, timeoutMs: 15_000,
+    });
+    const started = await client.startReview({
+      runId: 'served-1', idempotencyKey: 'served-key-1', prompt: 'review this diff',
+      limits: { timeoutMs: 20_000, maxOutputBytes: 8192, maxTurns: 1, maxPromptBytes: 8192 },
+    });
+    expect(started.accepted).toBe(true);
+
+    let state = await client.getReview(started.runId);
+    for (let i = 0; i < 60 && state.status === 'running'; i += 1) {
+      await new Promise((r) => { setTimeout(r, 100); });
+      state = await client.getReview(started.runId);
+    }
+    expect(state.status).toBe('completed');
+
+    // The service is CONFIGURED with `claude-sonnet-5`; the provider answered
+    // with a snapshot of it. Both facts, and they are not the same string.
+    expect(state.usage.model).toBe('claude-sonnet-5-0709');
+    expect(state.usage.model).not.toBe('claude-sonnet-5');
+    expect(state.usage.source).toBe('harness_reported');
+  }, 60_000);
+});
+
+/**
  * THE SHUTDOWN PATH, PROVEN RATHER THAN ASSUMED.
  *
  * `main.ts` answers SIGTERM by refusing new reviews and then calling

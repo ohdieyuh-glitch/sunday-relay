@@ -404,7 +404,30 @@ export function buildRoleBilling(input: {
          * where the answer belongs is worse than the absence it replaces.
          */
         `${sanitizeTerminalLine(input.reviewerProvider ?? 'Unknown', 40)} provider`,
-        input.reviewerModel ? sanitizeTerminalLine(input.reviewerModel, 60) : null,
+        /**
+         * UNKNOWN RENDERS, IT DOES NOT VANISH.
+         *
+         * This was `input.reviewerModel ? … : null`, and the `.filter` below
+         * then dropped the segment entirely — so the row a founder reads to
+         * learn which model reviewed went SILENT in exactly the case the
+         * served-model work exists to make legible, while a comment in
+         * `projection.ts` claimed it rendered as not reported. The provider one
+         * line up already spells its absence `'Unknown'`; the model now agrees
+         * with its own neighbour, and with the repository rule that a missing
+         * value renders Unknown rather than disappearing.
+         */
+        /**
+         * AND "UNKNOWN" ONLY WHEN THE REVIEWER ACTUALLY RAN.
+         *
+         * `served model Unknown` beside a reviewer that never launched reads as
+         * "it ran and the provider said nothing", which is a different and
+         * larger claim than "it has not run". The coding row two above already
+         * makes that distinction; this one did not, and rendered Unknown
+         * unconditionally.
+         */
+        input.reviewerModel
+          ? `served model ${sanitizeTerminalLine(input.reviewerModel, 60)}`
+          : input.reviewerRan === true ? 'served model Unknown' : null,
       ]
         .filter((part): part is string => Boolean(part))
         .join(' · '),

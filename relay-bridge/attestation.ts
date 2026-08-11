@@ -25,7 +25,16 @@ export interface ExecutionAttestation {
   requestedRuntime: string;
   actualRuntime: string;
   provider?: string;
-  model?: string;
+  /** The model Relay asked for. Configuration, stated as configuration. */
+  requestedModel?: string;
+  /**
+   * The model the provider/runtime itself reported answered. Evidence, never
+   * inferred: it is absent when the runtime reported none, and it is NEVER
+   * defaulted from `requestedModel` — a single `model` field used to carry
+   * both facts, which is how a requested model came to be attested as the
+   * one that actually reviewed (defect 3, HOSTED_MISSION_EVIDENCE.md).
+   */
+  actualModel?: string;
   billingPath: BillingPath;
   launchVerified: boolean;
   completionVerified: boolean;

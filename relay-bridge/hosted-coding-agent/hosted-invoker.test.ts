@@ -145,8 +145,11 @@ describe('the hosted Coding Agent runs through the one existing pipeline', () =>
     const { outcome } = await runHosted();
     // Requested `claude-sonnet-5`; the runtime named a dated variant, which is
     // why the two are separate and the actual one is read back.
-    expect(outcome.attestation?.model).toBe('claude-sonnet-5-20260114');
-    expect(outcome.attestation?.model).not.toBe('claude-sonnet-5');
+    expect(outcome.attestation?.actualModel).toBe('claude-sonnet-5-20260114');
+    expect(outcome.attestation?.actualModel).not.toBe('claude-sonnet-5');
+    // And the requested model is not smuggled into the served axis by a
+    // field name TypeScript could not check through a spread.
+    expect(outcome.attestation?.requestedModel).toBeUndefined();
   }, 60_000);
 
   it('refuses a run whose granted tools exceed the compiled envelope', async () => {

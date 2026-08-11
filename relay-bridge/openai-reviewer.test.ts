@@ -156,7 +156,9 @@ describe('running a review', () => {
     if (outcome.kind !== 'reviewed') throw new Error(JSON.stringify(outcome));
     expect(outcome.result.findings).toHaveLength(1);
     // The model the provider ACTUALLY ran, never the one requested.
-    expect(outcome.model).toBe('gpt-test-0613');
+    expect(outcome.servedModel).toBe('gpt-test-0613');
+    // Requested and served are separate, and they really do differ here.
+    expect(outcome.requestedModel).toBe('gpt-test');
     expect(outcome.provider).toBe('openai');
   });
 

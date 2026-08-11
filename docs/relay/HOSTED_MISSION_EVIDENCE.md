@@ -43,9 +43,16 @@ none of them — including through a rejection and repair.
 `grok-build-0.1`. That string entered the repository in PR #107 as a test
 fixture written during the repair-leg work and appears nowhere else; the live
 readiness surface reports `requestedModel: null` and the remote review path
-returns `model: null, provider: null`. A fixture value had been recorded as a
-live fact, in the same document whose defect list says the served model is
+returned `model: null, provider: null`. A fixture value had been recorded as a
+live fact, in the same document whose defect list said the served model was
 unproven.
+
+**Both halves of that are now fixed** — see defect 3 below. `requestedModel` was
+null because the loader read a variable no deployment sets, and the remote path
+no longer hardcodes a null model. What has NOT changed is that this table
+records readiness as it was observed on 2026-08-11, before those fixes; a
+re-probe against the deployed bridge is required before any newer value is
+written here.
 
 ## Missions run
 
@@ -184,10 +191,13 @@ repaired artifact the same digest as the original. The proof a test bites has
 to be run against the failure it names — that fixture now reproduces the
 production refusal verbatim when the fix is removed.
 
-## Defects found and NOT fixed
+## Defects found by running, and carried out of the goal
 
-Recorded rather than repaired, because fixing them would widen a goal that was
-scoped deliberately.
+Recorded rather than repaired at the time, because fixing them would have
+widened a goal that was scoped deliberately. **Defect 3 was mandated as a
+carry-over and is now closed** — its entry below keeps the original diagnosis,
+says where that diagnosis was wrong, and states exactly what is and is not
+proven. Defects 1, 2 and 4 remain open.
 
 **1 · An in-flight mission vanishes when the bridge restarts.** The mission
 registry is an in-memory `Map`. A Railway redeploy mid-mission leaves
@@ -203,13 +213,184 @@ mission whose tests fail ends at `verification_failed` with no second attempt �
 arguably the most repairable failure there is. Outside the goal's wording, so
 left alone.
 
-**3 · The reviewer's served model is not proven.** The live readiness surface
-reports `requestedModel: null`; the remote review path returns
-`model: null, provider: null`; the mission's reviewer attestation carries no
-model. The bridge's model check reads `RELAY_REVIEWER_MODEL` (unset on the
-bridge) while the service reads `RELAY_HERMES_MODEL` — two names for one fact.
-The review demonstrably happens and is billed; which xAI model produced it is
-not attested anywhere a founder can read.
+**3 · The reviewer's served model is not proven. — CLOSED 2026-08-11.**
+
+As recorded: the live readiness surface reported `requestedModel: null`; the
+remote review path returned `model: null, provider: null`; the mission's
+reviewer attestation carried no model; and the bridge's model check read
+`RELAY_REVIEWER_MODEL` (unset on the bridge) while the service reads
+`RELAY_HERMES_MODEL` — two names for one fact. The review demonstrably happened
+and was billed; which xAI model produced it was not attested anywhere a founder
+could read.
+
+**What the diagnosis missed.** The attestation did not "carry no model" — it
+carried the WRONG one. One `model` field held two different facts, and the
+reviewer leg resolved it as
+
+```
+resolvedModel = reviewOutcome.model ?? hermesReady.model
+```
+
+where both operands were configuration. Because the remote path hardcoded
+`model: null`, every hosted review fell through to the preflight's configured
+value, which was then written into the attestation AND rendered on the review
+card as the model that reviewed. The defect was not an absence. It was a
+requested model wearing the served model's clothes.
+
+**How it is closed.** Requested and served are now separate fields at every
+layer, and the served axis has no fallback anywhere:
+
+| Layer | Before | Now |
+|---|---|---|
+| `ExecutionAttestation`, `MissionAttestationSummary` | one `model?` | `requestedModel?` + `actualModel?` |
+| `MissionReview`, `MissionArchitectReceipt` | one `model` | `requestedModel` + `servedModel` |
+| `HermesOutcome` (all three reviewer paths) | one `model`, three meanings | `requestedModel` + `servedModel` |
+| `runHermesReview` (local spawn) | never passed `--usage-file`; reported `cfg.model` | asks Hermes for its usage report and reads the model out of it |
+| `runRemoteHermesReview` (hosted) | hardcoded `model: null`, never read `usage` | reads the service's own `usage.model` |
+| both harness transports | copied token counts, dropped the model | carry `usage.model`; a report naming only a model is still a report |
+| `loadXaiConfig` | read `RELAY_REVIEWER_MODEL` | reads `RELAY_HERMES_MODEL`, with the old name still honoured |
+
+**THE FIRST FIX INTRODUCED A WORSE DEFECT, and an independent review found it
+by running the code.** The rule was written as `requested !== served`, which
+calls `gpt-4o` answered by `gpt-4o-2024-08-06` a substitution. That is the same
+model named exactly, it is what every provider does, and the test file that
+shipped with the fix calls it *"the ordinary case"* in a comment. On
+`openai_reviewer` — the reviewer configuration `FOUNDER_TESTING_HANDOFF.md` and
+`.env.example` both recommend for a hosted run — a mission then died at the
+review step with `retryable: false`, after the review had been paid for, and the
+founder was told their provider had swapped the reviewer. Removing the refusal
+alone would not have fixed it: `fallbackOccurred` blocked the mission a second
+time, through `attestsRealExecution`, with a message that said the reviewer
+returned no valid review.
+
+`relay-bridge/model-identity.ts` is now the ONE rule, and both review legs and
+the architect leg call it — the architect leg was attesting
+`fallbackOccurred: false` for the identical relationship four hundred lines
+earlier in the same file. A `resolution` (requested family + a version-shaped
+snapshot suffix) is truthful on both axes and is not a fallback. A `substitution`
+is refused. `gpt-4o` → `gpt-4o-mini` is a SUBSTITUTION, not a resolution: a
+"prefix plus separator" rule accepted it, and `-mini`, `-turbo`, `-preview` and
+`-latest` are all different, weaker, or unnamed models. `modelMatchesVerified`
+in the xAI harness had its own exact-match copy of this rule with no production
+caller; it delegates here now, because two legs deciding one fact by different
+means is how they came to disagree.
+
+Three rules now hold, each with tests that fail against the previous code:
+
+1. **Unknown stays Unknown.** A provider that names no model yields
+   `servedModel: null`, an attestation with no `actualModel`, and the words
+   *"served model not reported by the provider"* in the record. It is never
+   promoted to a match with the requested model.
+2. **A SUBSTITUTION is refused — and not every difference is one.** The rule is
+   `classifyModelIdentity`, whose relations are the vocabulary: `exact` and
+   `resolution` are accepted; `unknown` and `alias_unverifiable` are neither
+   accepted nor refused and say so in the record; only `substitution` is
+   refused. "Both facts known and disagreeing" is NOT the rule — that phrasing
+   IS the regression the paragraph above describes, and it stood here for
+   twenty-nine lines after that paragraph was written. A re-review caught it. `fallbackOccurred` becomes true, the
+   mission fails `review_incomplete` with both model names in the message, and
+   an `approved` verdict from a substituted model never completes a mission.
+   The same rule applies to a re-review: the original rejection stands.
+3. **The requested axis may fall back; the served axis may not.** The requested
+   model may come from the preflight (also a statement of what was asked for);
+   the served model comes only from the provider.
+
+**Also fixed in the same class, one role over.** The architect's Live Terminal
+label read `receipt.model` — the deprecated spelling, which carries the
+REQUESTED model — so `gpt-4o` served by `gpt-4o-2024-11-20` was displayed as
+`gpt-4o`. The label now names the served model, and says *"(requested; the
+provider named no model)"* when there is none. And `coding.ts` spelled its
+attestation field inside an object SPREAD, where TypeScript performs no
+excess-property check: the rename compiled clean while silently dropping the
+coding agent's served model into a field nobody reads.
+
+**What the independent review also found, and what it cost.** Nine findings, one
+High and four Medium, all repaired in the same change:
+
+| # | Finding | Repair |
+|---|---|---|
+| 1 | the version-resolution regression above | one shared rule, both legs, and the architect |
+| 2 | an adopted re-review overwrote the review CARD's model facts and not the ATTESTATION, so the two described different reviews for one mission | the attestation is rebuilt from the second outcome |
+| 3 | the PRODUCER half of the hosted chain (`local-transport` → `service.ts`) had no test — 212 passed with it reverted | a real fake-Hermes → real service → real HTTP test, using a new fake scenario that reports a RESOLVED model so `clean`'s echo cannot pass it by accident |
+| 4 | the two founder-facing surfaces had no test at all — both could be reverted to the requested axis silently | `H-1.8` in `review-verification-truth.test.ts` |
+| 5 | a comment claimed the served model "renders as not reported"; the row DROPPED the segment, going silent in exactly the case this work exists to make legible | renders `served model Unknown`, matching the provider one field over. **The comment the finding actually cited was missed in round 2 and corrected in round 3** — the repair changed the row and left the sentence, so the divergence survived its own repair and this table recorded it as fixed. Two greps found it. |
+| 6 | "the one funnel every outcome passes through … six `finish` call sites" — the spawn throw bypasses it, and there are four | corrected |
+| 7 | the liveness probe's argv no longer mirrored the mission's after `--usage-file` was added, which is exactly what its comment existed to prevent | the probe passes it too |
+| 8 | "the first of three layers" said twice, of two different layers, against a table that says four | named by position instead |
+| 9 | the rule was implemented twice | one means |
+
+**ROUND 3 — the re-review found that the repair had defects of its own.** The
+pattern this repository keeps producing held for the third time: *every review
+round finds something the previous round's author asserted rather than checked.*
+One High and six Medium, all repaired:
+
+| # | Finding | Repair |
+|---|---|---|
+| H-1 | the architect's newly-derived `fallbackOccurred` reached `attestsRealExecution` → `decideCompletion`, so a substituted architect model killed the mission **at the very end** — after the Coding Agent and the Reviewer had both run and been paid — under the message "The Prompt Architect did not produce an attested execution", with no event naming a model anywhere | refused at the architect step, `prompt_architect_failed`, both model names in the message, an event that explains it, and the Coding Agent never dispatched |
+| M-1 | `.` was in `RESOLUTION_SEPARATORS`, undocumented, and made `gpt-4` → `gpt-4.1` a "resolution" — a version BUMP is a different model. The comment enumerated four separators while the array held five, and the undocumented fifth was the unsound one | `.` removed; the separator list and its sentence are now asserted against each other; a three-digit floor added, because `gpt-4o` → `gpt-4o-2` and `claude-3` → `claude-3-5` also matched |
+| M-2 | the "three rules now hold" list still stated `requested !== served` as the current rule, twenty-nine lines below the paragraph describing it as the regression | rewritten in `classifyModelIdentity`'s vocabulary |
+| M-3 | `MissionReview.servedModel`'s own doc said a review served by "a model other than the requested one" never reaches the record — the rule the repair exists to remove | corrected to name substitution |
+| M-4 | the comment the round-2 finding actually cited was never changed; only the row was, so the divergence survived its own repair and this table recorded it as fixed | comment corrected; the table row above now says so |
+| M-5 | the rebuilt reviewer attestation gets a new id (derived from `missionId:role:startedAt`), so an earlier event's `attestationRef` pointed at an attestation the record no longer held — and it was the event a founder reads first | a notice naming BOTH ids; the reference is explained rather than erased, because the first attestation really did exist and really was superseded |
+| M-6 | the same over-refusal class as H-1 from round 1, for provider ALIAS ids: `claude-3-5-sonnet-latest` → `claude-3-5-sonnet-20241022` was refused, discarding a paid review | a fifth relation, `alias_unverifiable` — Relay holds no alias table and must not invent one, so the record says the check could not be made rather than pretending either way. Bounded: an alias answered by another provider's family is still a substitution |
+
+Seven Low findings were repaired too, including a probe cleanup that was not in a
+`finally`, and a `--help` gate that did not check the `--usage-file` flag the
+probe had just started passing — so a hermes build without it failed as "the
+one-shot probe produced no output", a message naming the wrong cause.
+
+**The meta-finding, which is the one worth keeping.** H-1 shipped because the
+test written for it asserted `fallbackOccurred === true` and never looked at
+`view.state`. A test that checks a flag and not the outcome agrees with the code
+about a field and knows nothing about the behaviour. That test now asserts the
+mission state, the error code, both model names in the message, and that the
+Coding Agent was never called.
+
+**REAL EVIDENCE, from the actual Hermes binary — and what it does NOT prove.**
+Probed directly (Hermes Agent v0.18.2, isolated `HERMES_HOME`, no credential, so
+no provider call could succeed and nothing was spent):
+
+```
+$ hermes -z "…" --safe-mode --usage-file <path> -m grok-4 --provider xai
+hermes -z: agent failed: No usable credentials found for provider 'xai'. Set XAI_API_KEY.
+
+$ cat <path>
+{ "estimated_cost_usd": null, "input_tokens": null, "output_tokens": null,
+  "total_tokens": null, "api_calls": null, "model": null, "provider": null,
+  "session_id": null, "completed": null, "failed": true,
+  "failure": "No usable credentials found for provider 'xai'. Set XAI_API_KEY." }
+```
+
+**What this proves:** the real binary accepts `--usage-file`, writes the file even
+on failure, and its schema contains a `model` key AND a `provider` key. Relay's
+parser reads the right field name from the right file. The plumbing is aimed at
+something that exists.
+
+**What it does not prove:** that xAI populates `model` on a SUCCESSFUL review.
+The value is `null` here because the run failed at the credential, before any
+provider was contacted. Settling it needs one real paid xAI review — a founder
+authorization boundary — and the single command that would settle it is the probe
+above with `XAI_API_KEY` set.
+
+**A misattribution avoided, recorded because it nearly became evidence.** Eight
+`/tmp/relay-hermes-review-*/relay-hermes-usage.json` files on the dev box contain
+`{"input_tokens":1200,"output_tokens":300,"model":"grok-4-0709"}`, and an
+independent review flagged them as possible real xAI output. They are **test
+fixtures**: `1200`/`300` are the literals `reviewer-served-model.test.ts` writes
+(Hermes' own fake writes `340`/`1540`), and their timestamps match that file's
+run. Reporting them as served-model evidence would have been fabrication by
+misattribution — the exact thing this defect is about. They also proved the
+scratch-directory leak was real: after the cleanup fix, a full run of that file
+leaves **zero** directories behind.
+
+**Not claimed.** No paid xAI review has been run against this code. The chain is
+proven end-to-end against a fake `hermes` process that writes a real usage file
+and a fake service that returns a real usage block — which proves the plumbing
+and the refusals, not that xAI reports a model in production. The first hosted
+review will either populate `servedModel` or leave it `null`, and both outcomes
+are now truthful and legible. Tests: `relay-bridge/reviewer-served-model.test.ts`,
+the `defect 3` block in `relay-bridge/orchestrator.test.ts`, and the served-model
+cases in `relay-bridge/reviewer-harness/hermes/remote-transport.test.ts`.
 
 **4 · The bridge does not report its deployed commit.** `/relay-api/health`
 carries no build identity, so proving "the fix is live" requires observing

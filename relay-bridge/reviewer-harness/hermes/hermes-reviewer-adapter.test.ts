@@ -685,7 +685,10 @@ describe('every flag the runner passes is required before ready', () => {
   it('does not mistake a flag NAMED INSIDE another flag for support', () => {
     // `-m` appears inside `--safe-mode`, and `-t` inside `--worktree`. A
     // substring check reported both as supported by a build exposing neither.
-    const help = 'usage: hermes -z PROMPT --safe-mode --worktree --ignore-rules';
+    // `--usage-file` included: the real 0.18.2 binary lists it, and the
+    // preflight now requires it so a build that cannot report its served model
+    // is refused by name rather than as a silent probe failure.
+    const help = 'usage: hermes -z PROMPT --safe-mode --worktree --ignore-rules --usage-file PATH';
     expect(helpAdvertisesFlag(help, '-m')).toBe(false);
     expect(helpAdvertisesFlag(help, '-t')).toBe(false);
     expect(helpAdvertisesFlag(help, '-z')).toBe(true);

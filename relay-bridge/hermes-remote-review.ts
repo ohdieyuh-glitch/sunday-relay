@@ -12,6 +12,7 @@ export const REMOTE_REVIEW_LIMITS = Object.freeze({
   maxPromptBytes: 262_144,
 });
 import { isProductionDeployment } from './deployment-environment';
+import { safeText } from './redact';
 
 /**
  * THE REVIEWER, REACHED OVER HTTP.
@@ -250,6 +251,7 @@ export async function runRemoteHermesReview(input: {
 
     const state = poll.body as {
       status?: string; reviewText?: string | null; failureKind?: string | null; safeMessage?: string | null;
+      usage?: { inputTokens?: number | null; outputTokens?: number | null; model?: string | null } | null;
     };
     if (state.status === 'running' || state.status === 'queued' || state.status === undefined) continue;
 
@@ -273,7 +275,38 @@ export async function runRemoteHermesReview(input: {
         completedAt: now(),
       };
     }
-    return { kind: 'reviewed', result, startedAt, completedAt: now(), model: null, provider: null };
+    /**
+     * THE SERVED MODEL, FROM THE SERVICE'S OWN USAGE REPORT.
+     *
+     * This return used to hardcode `model: null, provider: null` — and the
+     * poll above did not even read `usage` — so every hosted review reached
+     * the mission with no observed model, and the mission then "resolved" one
+     * from preflight configuration. That is the laundering documented as
+     * defect 3 in HOSTED_MISSION_EVIDENCE.md: the requested model wearing the
+     * served model's clothes.
+     *
+     * The service forwards what Hermes itself wrote to its usage file. Absent
+     * stays absent — a review whose provider named no model is attested with
+     * no model, never with the configured one.
+     */
+    const usage = state.usage;
+    const servedModel =
+      usage !== null && usage !== undefined && typeof usage.model === 'string' && usage.model.trim() !== ''
+        ? safeText(usage.model)
+        : null;
+    return {
+      kind: 'reviewed',
+      result,
+      startedAt,
+      completedAt: now(),
+      // The bridge asks the remote service for a review, not for a specific
+      // model — the service's own configuration decides. What the bridge
+      // requested is therefore nothing, and the mission layer reports the
+      // preflight-known requested model on its own requested axis.
+      requestedModel: null,
+      servedModel,
+      provider: null,
+    };
   }
 }
 
