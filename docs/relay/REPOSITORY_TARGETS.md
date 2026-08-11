@@ -462,13 +462,47 @@ reads as unfinished.
    nothing in the bridge's mission entry read a
    `MissionRepositoryTarget` yet. The controlled-fixture path is unchanged and
    remains the default and the test path, which the design document requires.
-4. **No durable store.** Registrations are built and read as values; nothing
+4. **The deployment provider EXISTS and really deploys — to a directory.**
+   `relay-bridge/local-directory-deployment-provider.ts` is the first real
+   implementation of `DeploymentProvider`, which until now had exactly one
+   implementation and it was a fake inside a test. So `DEPLOY → LIVE VERIFY →
+   SHIPPED` was a lifecycle Relay could reason about and had never performed.
+
+   It is real in the way that matters: the artifact is genuinely copied, and
+   `verifyLive` reads the RUNNING system over HTTP — not the disk `deploy` just
+   wrote, because a probe that re-reads the deploy's own evidence proves the
+   copy happened twice rather than that anything is serving it. The tests stand
+   up an actual HTTP server and cover the failure this stage exists for: a
+   deploy that succeeded while the system serves a different revision, which
+   comes back `ok: true` from the deploy and `shipped: false` from
+   `decideShipped`. `simulated` is FALSE and that is honest — nothing here
+   pretends the deployment is somewhere it is not.
+
+   **Staging only, in the type.** `environments` is `['staging']`, so
+   `providerSupportsEnvironment` refuses production before the module is
+   called — and the module refuses again itself, because a provider that is
+   safe only when its caller remembers to ask is not safe. This is not a
+   placeholder for a flag: a provider serving a directory on one machine has no
+   business shipping to customers, and "never infer production authorization
+   from build this" is a founder rule. A production provider is a separate
+   implementation, separately authorized.
+
+   **What has not happened:** the mission engine does not call it. Exactly like
+   the remote provider, the lifecycle authorizes `deploying`/`deployed` and
+   nothing invokes this at those stages. Five of six mutations against it fail a
+   named test; the sixth — echoing `deployedRevision` from the request instead
+   of reading the marker back — is NOT distinguishable by any test here, because
+   a write and a read inside one call cannot disagree on a working filesystem.
+   That limit is recorded in the test file rather than left for someone to
+   discover. The same mutation at `verifyLive`, where it IS observable, fails
+   three tests.
+5. **No durable store.** Registrations are built and read as values; nothing
    persists them across a restart yet. The store belongs beside the other
    durable stores in `src/relay/persistence`, on the same key/value backing.
-5. **No dry-run mode.** The design document requires one — produce the branch
+6. **No dry-run mode.** The design document requires one — produce the branch
    and the PR body, push nothing — and it does not exist because there is
    nothing to push with.
-6. **The Project Brain feed is BUILT but has no producer.**
+7. **The Project Brain feed is BUILT but has no producer.**
    `repository-brain-feed.ts` projects repository work into the **existing**
    Brain — `rememberShortTerm` and `proposePromotion` in
    `src/relay/shared/llmops/brain-memory.ts`, following the
@@ -476,10 +510,10 @@ reads as unfinished.
    is missing is a caller: nothing in the bridge invokes it yet, for the same
    reason as (3) — the mission engine does not read a repository target.
    See "The Project Brain feed" below.
-7. **`gitlab` and `bitbucket`** are nameable in the domain and refused at
+8. **`gitlab` and `bitbucket`** are nameable in the domain and refused at
    selection by `repositoryProviderSupported`. Registered is not drivable, and
    the refusal happens at configuration rather than at the push step.
-8. **Review-packet fidelity at real repository size is unproven.** The design
+9. **Review-packet fidelity at real repository size is unproven.** The design
    document flags this as the highest-risk remaining item: three separate
    defects in the goal that produced it were display sanitizers truncating
    machine-read payloads, and a larger repository makes that class of bug far
