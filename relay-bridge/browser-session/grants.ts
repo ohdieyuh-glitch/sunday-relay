@@ -24,11 +24,16 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
  * and session, which is the fail-closed direction, and means no browser
  * credential is ever written to the mounted volume.
  *
- * WHAT A BROWSER SESSION MAY DO. Read. It may observe reviewer readiness and
- * run state; it may not test a connection (which contacts a paid provider),
- * start, retry or stop a run, and it may not mint another grant or session.
- * A stolen session is therefore an information leak to the approved origin's
- * user, not a spending capability.
+ * WHAT A BROWSER SESSION MAY DO depends on its SCOPE, decided at mint by the
+ * operator and never widenable afterwards. A read-only session observes:
+ * reviewer readiness and run state, one mission. A CONTROL session may also
+ * start, cancel and retry a mission — the founder's decision that the website
+ * is a real control surface — acting as the participant bound into it at
+ * mint. Neither scope may test a connection, reach any other spending route,
+ * or mint another grant or session. A stolen read-only session is an
+ * information leak to the approved origin's user; a stolen control session is
+ * bounded by the mission family, the beta seat it was bound to, its origin,
+ * its TTL and revocation — never by trust in the browser.
  */
 
 /** Short by design: a grant is carried by hand, immediately. */
@@ -43,12 +48,29 @@ export type GrantFailure =
   | 'origin_mismatch'
   | 'invalid_secret';
 
+/**
+ * WHAT A SESSION MAY BE.
+ *
+ * `browser_read_only` is the original scope and the DEFAULT: observation only.
+ *
+ * `browser_control` exists because the founder decided the website must be a
+ * real control surface — able to start a Mission — without the operator
+ * credential ever entering a browser. A control session is still minted only
+ * by the operator's own CLI, still origin-bound, still short-lived, still
+ * revocable, still stored as a hash; what changes is the allowlist below and
+ * one more fact bound AT MINT TIME: who the browser acts as. The participant
+ * travels in the session, never in the browser's request body, so a browser
+ * cannot claim to be anyone the operator did not name.
+ */
+export type BrowserSessionScope = 'browser_read_only' | 'browser_control';
+
 export interface PairingGrantIssue {
   readonly grantId: string;
   /** Returned EXACTLY once, at creation. Never stored, never re-derivable. */
   readonly secret: string;
   readonly origin: string;
   readonly expiresAt: number;
+  readonly scope: BrowserSessionScope;
 }
 
 export interface BrowserSessionIssue {
@@ -57,7 +79,9 @@ export interface BrowserSessionIssue {
   readonly token: string;
   readonly origin: string;
   readonly expiresAt: number;
-  readonly scope: 'browser_read_only';
+  readonly scope: BrowserSessionScope;
+  /** Who a CONTROL session acts as, bound at mint. Null for read-only. */
+  readonly participantId: string | null;
 }
 
 interface StoredGrant {
@@ -65,6 +89,8 @@ interface StoredGrant {
   readonly secretHash: Buffer;
   readonly origin: string;
   readonly expiresAt: number;
+  readonly scope: BrowserSessionScope;
+  readonly participantId: string | null;
   consumedAt: number | null;
 }
 
@@ -73,6 +99,8 @@ interface StoredSession {
   readonly tokenHash: Buffer;
   readonly origin: string;
   readonly expiresAt: number;
+  readonly scope: BrowserSessionScope;
+  readonly participantId: string | null;
   revokedAt: number | null;
 }
 
@@ -89,14 +117,23 @@ function randomSecret(): string {
 }
 
 export interface BrowserSessionStore {
-  createGrant(input: { origin: string; now: number }): PairingGrantIssue;
+  /**
+   * Scope and participant default to read-only and nobody: a caller that says
+   * nothing gets the least. A control grant REQUIRES a participant — a control
+   * session with no identity would have to fall back to the request body,
+   * which is the thing this design removes.
+   */
+  createGrant(input: {
+    origin: string; now: number; scope?: BrowserSessionScope; participantId?: string | null;
+  }): PairingGrantIssue;
   /** Single-use: a second call with the same grant always fails. */
   consumeGrant(input: {
     grantId: string; secret: string; origin: string; now: number;
   }): { ok: true; session: BrowserSessionIssue } | { ok: false; reason: GrantFailure };
   verifySession(input: {
     token: string; origin: string | undefined; now: number;
-  }): { ok: true; sessionId: string } | { ok: false; reason: GrantFailure };
+  }): { ok: true; sessionId: string; scope: BrowserSessionScope; participantId: string | null }
+    | { ok: false; reason: GrantFailure };
   revokeSession(input: { token: string; now: number }): boolean;
   /**
    * Drops expired records. Called on the WRITE path only — a read must never
@@ -117,15 +154,24 @@ export function createBrowserSessionStore(): BrowserSessionStore {
   };
 
   return {
-    createGrant({ origin, now }) {
+    createGrant({ origin, now, scope = 'browser_read_only', participantId = null }) {
       sweep(now);
+      // Enforced here as well as at the route, because the store is the last
+      // thing standing between "forgot to validate" and a control session
+      // that acts as nobody.
+      if (scope === 'browser_control' && (participantId === null || participantId.trim() === '')) {
+        throw new Error('A control grant requires the participant it acts as.');
+      }
       const grantId = randomBytes(9).toString('base64url');
       const secret = randomSecret();
       const expiresAt = now + GRANT_TTL_MS;
       grants.set(grantId, {
-        grantId, secretHash: sha256(secret), origin, expiresAt, consumedAt: null,
+        grantId, secretHash: sha256(secret), origin, expiresAt,
+        scope,
+        participantId: scope === 'browser_control' ? participantId : null,
+        consumedAt: null,
       });
-      return { grantId, secret, origin, expiresAt };
+      return { grantId, secret, origin, expiresAt, scope };
     },
 
     consumeGrant({ grantId, secret, origin, now }) {
@@ -148,11 +194,19 @@ export function createBrowserSessionStore(): BrowserSessionStore {
       const token = randomSecret();
       const expiresAt = now + SESSION_TTL_MS;
       sessions.set(sessionId, {
-        sessionId, tokenHash: sha256(token), origin, expiresAt, revokedAt: null,
+        sessionId, tokenHash: sha256(token), origin, expiresAt,
+        // The session inherits the grant's scope and identity EXACTLY. The
+        // exchange can never widen what the operator minted.
+        scope: grant.scope,
+        participantId: grant.participantId,
+        revokedAt: null,
       });
       return {
         ok: true,
-        session: { sessionId, token, origin, expiresAt, scope: 'browser_read_only' },
+        session: {
+          sessionId, token, origin, expiresAt,
+          scope: grant.scope, participantId: grant.participantId,
+        },
       };
     },
 
@@ -166,7 +220,12 @@ export function createBrowserSessionStore(): BrowserSessionStore {
         if (origin !== undefined && session.origin !== origin) {
           return { ok: false, reason: 'origin_mismatch' };
         }
-        return { ok: true, sessionId: session.sessionId };
+        return {
+          ok: true,
+          sessionId: session.sessionId,
+          scope: session.scope,
+          participantId: session.participantId,
+        };
       }
       return { ok: false, reason: 'not_found' };
     },
@@ -211,7 +270,28 @@ const BROWSER_READABLE = [
   /^\/hosted-coding\/inspect\/[^/]+$/,
 ] as const;
 
-export function browserSessionMayCall(method: string, path: string): boolean {
-  if (method !== 'GET') return false;
-  return BROWSER_READABLE.some((pattern) => pattern.test(path));
+/**
+ * The routes a CONTROL session may additionally reach — the mission family's
+ * spending verbs, and ONLY those. Deliberately absent: reviewer verify (a paid
+ * probe outside any mission), hosted-coding start/stop (reachable only inside
+ * a mission's own pipeline), cron, beta administration, and minting grants or
+ * sessions — a session that could mint sessions would be a key that copies
+ * itself.
+ */
+const BROWSER_CONTROL_WRITABLE = [
+  /^\/mission\/start$/,
+  /^\/mission\/[^/]+\/cancel$/,
+  /^\/mission\/[^/]+\/retry$/,
+] as const;
+
+export function browserSessionMayCall(
+  method: string,
+  path: string,
+  scope: BrowserSessionScope = 'browser_read_only',
+): boolean {
+  if (method === 'GET') return BROWSER_READABLE.some((pattern) => pattern.test(path));
+  if (method === 'POST' && scope === 'browser_control') {
+    return BROWSER_CONTROL_WRITABLE.some((pattern) => pattern.test(path));
+  }
+  return false;
 }

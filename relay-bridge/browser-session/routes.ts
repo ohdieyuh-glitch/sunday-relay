@@ -1,6 +1,6 @@
 import { bearerMatches, BRIDGE_TOKEN_ENV, type ReviewerRouteResult } from '../reviewer-routes';
 import {
-  browserSessionMayCall, type BrowserSessionStore,
+  browserSessionMayCall, type BrowserSessionScope, type BrowserSessionStore,
 } from './grants';
 
 /**
@@ -79,12 +79,40 @@ export function handleBrowserSessionRoute(
     if (!request.allowedOrigins.includes(requested)) {
       return err(422, 'validation_failed', 'That origin is not allowed by this bridge.');
     }
-    const grant = store.createGrant({ origin: requested, now });
+    /**
+     * SCOPE IS OPT-IN AND EXPLICIT. Absent means read-only — the least. A
+     * misspelled scope is refused rather than quietly downgraded, because an
+     * operator who typed 'control' with a typo would otherwise mint a
+     * read-only grant and discover it as a 403 in the founder's browser.
+     */
+    const scopeField = stringField(request.body, 'scope');
+    if (scopeField !== null && scopeField !== 'control') {
+      return err(422, 'validation_failed', "scope, when present, must be exactly 'control'.");
+    }
+    const control = scopeField === 'control';
+    const participantId = stringField(request.body, 'participantId');
+    if (control) {
+      // Bound HERE, by the operator, never claimed later by the browser.
+      if (participantId === null || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(participantId)) {
+        return err(422, 'validation_failed',
+          'A control grant requires participantId matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ — who the browser acts as.');
+      }
+    } else if (participantId !== null) {
+      // A participant on a read-only grant would be stored and never used —
+      // a dormant claim. Refused so the record cannot say more than the truth.
+      return err(422, 'validation_failed', 'participantId is only meaningful with scope control.');
+    }
+    const grant = store.createGrant({
+      origin: requested, now,
+      scope: control ? 'browser_control' : 'browser_read_only',
+      participantId: control ? participantId : null,
+    });
     return ok({
       grantId: grant.grantId,
       // Returned once, and never recoverable afterwards.
       grantSecret: grant.secret,
       origin: grant.origin,
+      scope: grant.scope,
       expiresAt: new Date(grant.expiresAt).toISOString(),
       expiresInSeconds: Math.round((grant.expiresAt - now) / 1000),
     });
@@ -113,6 +141,9 @@ export function handleBrowserSessionRoute(
     return ok({
       sessionToken: result.session.token,
       scope: result.session.scope,
+      // Shown so the pairing panel can say WHO this browser acts as — the
+      // participant is not a secret, it is an accountability fact.
+      participantId: result.session.participantId,
       origin: result.session.origin,
       expiresAt: new Date(result.session.expiresAt).toISOString(),
       expiresInSeconds: Math.round((result.session.expiresAt - now) / 1000),
@@ -142,7 +173,13 @@ export function handleBrowserSessionRoute(
  */
 export type CallerDecision =
   | { readonly kind: 'operator' }
-  | { readonly kind: 'browser'; readonly sessionId: string }
+  | {
+      readonly kind: 'browser';
+      readonly sessionId: string;
+      readonly scope: BrowserSessionScope;
+      /** Bound at mint. The mission route uses THIS, never the request body. */
+      readonly participantId: string | null;
+    }
   | { readonly kind: 'rejected'; readonly status: number; readonly message: string };
 
 export function authorizeReviewerCall(input: {
@@ -168,14 +205,21 @@ export function authorizeReviewerCall(input: {
     // An expired, revoked, unknown or wrong-origin session are one answer.
     return { kind: 'rejected', status: 401, message: 'This browser session is no longer valid.' };
   }
-  if (!browserSessionMayCall(input.method, input.path)) {
+  if (!browserSessionMayCall(input.method, input.path, verified.scope)) {
     // Authenticated, but not permitted — and the reply says which, because a
     // browser legitimately needs to know it must ask an operator.
     return {
       kind: 'rejected',
       status: 403,
-      message: 'A browser session may only read Reviewer state. This action requires an operator.',
+      message: verified.scope === 'browser_control'
+        ? 'This control session does not extend to that action. It requires an operator.'
+        : 'A read-only browser session cannot do that. Pair a control session, or ask an operator.',
     };
   }
-  return { kind: 'browser', sessionId: verified.sessionId };
+  return {
+    kind: 'browser',
+    sessionId: verified.sessionId,
+    scope: verified.scope,
+    participantId: verified.participantId,
+  };
 }

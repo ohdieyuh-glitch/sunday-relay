@@ -577,6 +577,15 @@ export function createBridgeServer(
          * paired browser session may only READ one mission, and everything
          * else is refused before the registry is touched.
          */
+        /**
+         * WHO IS CALLING THE MISSION FAMILY. An operator may do anything; a
+         * read-only browser session may read one mission; a CONTROL session
+         * may also start, cancel and retry — acting as the participant bound
+         * into it at mint. The decision is KEPT, not just checked: the start
+         * and retry routes below use the session's identity instead of the
+         * request body's, because a browser never gets to claim who it is.
+         */
+        let missionCaller: ReturnType<typeof authorizeReviewerCall> | null = null;
         if (path.startsWith('/relay-api/mission')) {
           const decision = authorizeReviewerCall({
             method,
@@ -595,6 +604,7 @@ export function createBridgeServer(
             }, cors);
             return;
           }
+          missionCaller = decision;
         }
 
         if (method === 'POST' && path === '/relay-api/mission/start') {
@@ -613,7 +623,16 @@ export function createBridgeServer(
            */
           const refusal = guardBetaAdmission({
             env: process.env,
-            participantId: participantFromBody(body),
+            /**
+             * FOR A BROWSER, THE SESSION IS THE IDENTITY. The participant was
+             * bound at mint by the operator; whatever the page put in the body
+             * is ignored, so a compromised or curious frontend cannot act as a
+             * participant nobody paired it for. Operators keep the body field —
+             * they hold the credential that could mint any session anyway.
+             */
+            participantId: missionCaller?.kind === 'browser'
+              ? missionCaller.participantId
+              : participantFromBody(body),
             store: betaStore,
             waves: betaWaves,
           });
@@ -655,7 +674,11 @@ export function createBridgeServer(
              */
             const retryRefusal = guardBetaAdmission({
               env: process.env,
-              participantId: participantFromBody(await readBody(req)),
+              // The same identity rule as start: a browser is who its session
+              // says, never who its request body says.
+              participantId: missionCaller?.kind === 'browser'
+                ? missionCaller.participantId
+                : participantFromBody(await readBody(req)),
               store: betaStore,
               waves: betaWaves,
             });

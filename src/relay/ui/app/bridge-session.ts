@@ -2,8 +2,12 @@
  * THE BROWSER'S BRIDGE SESSION.
  *
  * The browser never holds an operator credential. It holds, at most, a
- * short-lived, origin-bound, read-only session token that it obtained by
- * redeeming a one-time pairing grant the founder carried across by hand.
+ * short-lived, origin-bound session token it obtained by redeeming a one-time
+ * pairing grant the founder carried across by hand. The session's SCOPE was
+ * decided at mint by the operator: read-only observation, or — since the
+ * founder made the website a real control surface — control, which may start
+ * a mission acting as the participant bound into it. The browser can display
+ * its scope; it can never widen it.
  *
  * WHERE THE TOKEN LIVES. In memory for the life of the tab, mirrored into
  * `sessionStorage` so a reload does not force re-pairing. Never
@@ -61,7 +65,14 @@ export interface StoredBridgeSession {
   readonly origin: string;
   /** ISO. Advisory only — the bridge is the authority on expiry. */
   readonly expiresAt: string;
-  readonly scope: 'browser_read_only';
+  /**
+   * What the bridge SAID it minted, kept for display. The bridge re-decides
+   * scope on every request from its own record, so a tampered stored value
+   * gains nothing — it only makes the panel lie to its own user.
+   */
+  readonly scope: 'browser_read_only' | 'browser_control';
+  /** Who a control session acts as, for display. Null for read-only. */
+  readonly participantId: string | null;
 }
 
 interface SessionStorageLike {
@@ -105,7 +116,11 @@ export function loadBridgeSession(): StoredBridgeSession | null {
       token: o.token,
       origin: o.origin,
       expiresAt: typeof o.expiresAt === 'string' ? o.expiresAt : '',
-      scope: 'browser_read_only',
+      // An unrecognized stored scope restores as read-only — the least. The
+      // bridge would enforce that anyway; this keeps the display from
+      // claiming more than a tampered record could deliver.
+      scope: o.scope === 'browser_control' ? 'browser_control' : 'browser_read_only',
+      participantId: typeof o.participantId === 'string' ? o.participantId : null,
     };
     return inMemory;
   } catch {
@@ -235,6 +250,8 @@ export async function pairBrowser(input: {
   let status: number | null = null;
   let token: string | null = null;
   let expiresAt = '';
+  let scope: 'browser_read_only' | 'browser_control' = 'browser_read_only';
+  let participantId: string | null = null;
   try {
     const res = await doFetch(`${base}/relay-api/browser/session`, {
       method: 'POST',
@@ -247,11 +264,15 @@ export async function pairBrowser(input: {
     });
     status = res.status;
     if (res.ok) {
-      const payload = await res.json() as { data?: { sessionToken?: unknown; expiresAt?: unknown } };
+      const payload = await res.json() as {
+        data?: { sessionToken?: unknown; expiresAt?: unknown; scope?: unknown; participantId?: unknown };
+      };
       const t = payload.data?.sessionToken;
       if (typeof t === 'string' && t !== '') {
         token = t;
         expiresAt = typeof payload.data?.expiresAt === 'string' ? payload.data.expiresAt : '';
+        scope = payload.data?.scope === 'browser_control' ? 'browser_control' : 'browser_read_only';
+        participantId = typeof payload.data?.participantId === 'string' ? payload.data.participantId : null;
       }
     }
   } catch {
@@ -274,7 +295,9 @@ export async function pairBrowser(input: {
     token,
     origin: typeof window !== 'undefined' ? window.location.origin : '',
     expiresAt,
-    scope: 'browser_read_only',
+    // What the bridge SAID it minted — never assumed, never widened locally.
+    scope,
+    participantId,
   });
   return { state: 'connected', message: null };
 }

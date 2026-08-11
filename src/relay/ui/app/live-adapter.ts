@@ -1,4 +1,5 @@
 import { buildProjectBriefDraft } from '../entry-home/project-brief';
+import { bridgeSessionHeader, loadBridgeSession } from './bridge-session';
 import type { ProjectBriefDraft } from '../entry-home/contracts';
 import type { ProjectSettingsDraft } from '../project-settings/contracts';
 import type {
@@ -36,6 +37,17 @@ class BridgeUnreachableError extends Error {
   }
 }
 
+/**
+ * THE SESSION IS READ PER CALL, not captured at construction: the founder
+ * pairs AFTER the app loads, and an adapter that snapshotted "no session" at
+ * startup would stay unauthenticated until a reload — which reads as a broken
+ * product exactly when they just did the right thing.
+ */
+function sessionAuthHeaders(): Record<string, string> {
+  const session = loadBridgeSession();
+  return session === null ? {} : bridgeSessionHeader(session);
+}
+
 export function createLiveRelayApplicationAdapter(config: {
   bridgeBaseUrl?: string;
   fetchImpl?: typeof fetch;
@@ -58,11 +70,35 @@ export function createLiveRelayApplicationAdapter(config: {
   async function call(path: string, init: RequestInit): Promise<LiveMissionUpdate> {
     let res: Response;
     try {
-      res = await doFetch(`${base}${path}`, init);
+      res = await doFetch(`${base}${path}`, {
+        ...init,
+        // The paired session rides on EVERY mission call. Without one the
+        // header set is empty and the bridge answers 401, which is reported
+        // as exactly that below — never as an unreachable backend.
+        headers: { ...(init.headers as Record<string, string> | undefined), ...sessionAuthHeaders() },
+      });
     } catch {
       throw new BridgeUnreachableError();
     }
     if (!res.ok) {
+      /**
+       * EACH REFUSAL IS ITS OWN FACT. This threw "not reachable" for every
+       * non-OK status, so an unpaired browser was told the backend was down —
+       * a false statement about a healthy server, hiding the one action
+       * (pairing) that would have fixed it.
+       */
+      if (res.status === 401) {
+        throw new BridgeUnreachableError(
+          loadBridgeSession() === null
+            ? 'This browser is not paired with the Relay Bridge. Pair it from the Reviewer panel to run live missions.'
+            : 'The bridge no longer accepts this browser\u2019s session — it may have expired. Pair again.',
+        );
+      }
+      if (res.status === 403) {
+        throw new BridgeUnreachableError(
+          'This browser\u2019s session is read-only. Starting a mission needs a CONTROL pairing from the operator CLI.',
+        );
+      }
       throw new BridgeUnreachableError(
         res.status === 404 ? 'The backend is no longer tracking this mission.' : 'The Relay backend returned an error.',
       );

@@ -19,7 +19,7 @@ import {
 
 const session = (over: Partial<Parameters<typeof saveBridgeSession>[0]> = {}) => ({
   token: 'opaque-session-token', origin: window.location.origin,
-  expiresAt: '2026-08-01T21:00:00.000Z', scope: 'browser_read_only' as const, ...over,
+  expiresAt: '2026-08-01T21:00:00.000Z', scope: 'browser_read_only' as const, participantId: null, ...over,
 });
 
 beforeEach(() => {
