@@ -44,6 +44,7 @@ src/relay/mission/repository-target/     PURE DOMAIN — decides what is ALLOWED
   repository-observation.ts     ceilings, and judging an OBSERVED diff
   repository-lifecycle.ts       COMMIT → PUSH → PR → MERGE → DEPLOY → LIVE → SHIPPED
   deployment-provider.ts        the DeploymentProvider port
+  remote-provider.ts            the RemoteRepositoryProvider port
   repository-brain-feed.ts      events → short-term memory, knowledge → a proposal
   repository-dry-run.ts         the plan and the PR body, performing nothing
 
@@ -52,6 +53,7 @@ src/relay/workspace/                     NODE — performs and OBSERVES
 
 relay-bridge/                            THE BRIDGE
   repository-source.ts          the one branch: fixture or registered target
+  github-remote-provider.ts     the first remote provider, injected fetch
 ```
 
 The domain has no Node, no network and no clock — time is an injected ISO
@@ -412,12 +414,27 @@ approval queue full of model opinions is an approval queue nobody reads.
 Stated plainly, because a document that reads as finished is worse than one that
 reads as unfinished.
 
-1. **No remote provider exists.** `push_feature_branch`, `create_pr` and
-   `merge_pr` are *authorized* by this code and *performed* by nothing. There is
-   no GitHub client here. The write surface's allow-list has no `push`, and that
-   is deliberate: the remote operations belong to a provider that holds a
-   credential, and it is a separate, separately-audited surface that has not
-   been written.
+1. **The remote provider EXISTS and has never touched GitHub.**
+   `relay-bridge/github-remote-provider.ts` implements the port with an injected
+   fetch and is proven offline: the credential goes into a header and appears in
+   no return value, no error and no record; the provider's body is never
+   surfaced, because it echoes the request, which carries the token; owner, repo,
+   branch and PR reference are validated before they reach a URL; a merge is
+   confirmed by READING IT BACK rather than by the merge call's own answer; and
+   the observed branch tip is never defaulted from the expected one.
+
+   The dangerous operations are **unreachable rather than refused**: the port has
+   no `force` field, no method deletes a ref, and nothing can create a
+   repository — which is the strongest form of "never silently create a public
+   repository", since code that cannot create one cannot create a public one.
+   `push` is a ref READ-BACK, not a git push, so the module that talks to GitHub
+   cannot push and the module that can push holds no credential.
+
+   **What has not happened:** a single real request. No credential exists in the
+   development environment (verified, not assumed), so every behaviour is proven
+   against a fake fetch. It is also NOT yet called by the mission engine — the
+   lifecycle authorizes `pushed`/`pull_request_open`/`merged` and nothing invokes
+   the provider at those stages.
 2. **The paid three-role pipeline has not run against a real repository.**
    Everything proven above is the machinery the Architect, Coding Agent and
    Reviewer would hand their work to. Running them against a real repository

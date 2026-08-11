@@ -106,9 +106,14 @@ Worth stating precisely, because "offline" is not the same as "simulated":
 
 `REPOSITORY_TARGETS.md` carries the full list. The load-bearing ones:
 
-1. **No remote provider.** `push_feature_branch`, `create_pr` and `merge_pr` are
-   *authorized* by this code and *performed* by nothing. The git write surface's
-   allow-list has no `push`, deliberately.
+1. **The remote provider exists and has never made a request.**
+   `github-remote-provider.ts` implements the port with an injected fetch and is
+   proven offline — credential never surfaced, provider body never surfaced,
+   segments validated before they reach a URL, merge confirmed by reading it
+   back. The dangerous operations are unreachable rather than refused: no
+   `force` field, no ref deletion, no repository creation. But no credential
+   exists here, so not one real call has been made, and the mission engine does
+   not invoke it at the `pushed`/`pull_request_open`/`merged` stages yet.
 2. **No durable store** for registrations.
 3. **Review-packet fidelity at real repository size is unproven** — the design
    document flags this as the highest-risk remaining item, and three defects in a

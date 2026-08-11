@@ -1050,12 +1050,22 @@ describe('the documented surface matches the code', () => {
     }
   });
 
-  it('does not claim a remote provider exists', () => {
-    // The most consequential thing this doc could get wrong is reading as
-    // finished. `push_feature_branch` is authorized by this code and performed
-    // by nothing, and the doc has to keep saying so.
+  it('keeps saying what has not actually happened yet', () => {
+    /**
+     * The most consequential thing this doc could get wrong is reading as
+     * finished.
+     *
+     * This asserted the literal sentence "No remote provider exists" — and then a
+     * provider was built, so the assertion was pinning a fact rather than a
+     * property and it failed for the right reason. What has to stay true is not
+     * that the provider is absent, but that the doc keeps naming the gap between
+     * BUILT and PROVEN: the provider has never made a real request, and nothing
+     * calls it.
+     */
     const text = doc();
-    expect(text).toContain('No remote provider exists');
     expect(text).toContain('What is NOT built');
+    expect(text).toContain('has never touched GitHub');
+    expect(text).toContain('a single real request');
+    expect(text).toContain('NOT yet called by the mission engine');
   });
 });

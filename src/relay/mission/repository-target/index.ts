@@ -139,3 +139,12 @@ export type { RepositoryKnowledgeKind, RepositoryKnowledgeRefusal } from './repo
 
 export { planDryRun, renderPullRequestBody, renderPullRequestTitle } from './repository-dry-run';
 export type { DryRunPlan, PlannedOperation, PullRequestEvidence } from './repository-dry-run';
+
+export { pushLanded, refusePushTarget } from './remote-provider';
+export type {
+  PullRequestObservation,
+  PushObservation,
+  PushRequest,
+  RemoteProviderDescriptor,
+  RemoteRepositoryProvider,
+} from './remote-provider';
