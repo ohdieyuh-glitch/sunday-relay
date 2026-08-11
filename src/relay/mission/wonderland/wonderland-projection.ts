@@ -297,6 +297,30 @@ export function projectWonderlandAgent(
     ? 'loop_meditation_hover'
     : 'none';
 
+  /**
+   * THE PROPORTIONS ARE RE-STAMPED HERE, and the guarantee was representable
+   * without it.
+   *
+   * `wonderland-contracts.ts` claimed "the type has nowhere to put a different
+   * width", and `WonderlandDogSkin` necessarily HAS `gridWidth`, `gridHeight` and
+   * `uniformScaleOnly` because they mirror to C++. `resolveWonderlandDogSkin` is
+   * safe — it ignores extra keys and stamps 18x14 — but this function takes an
+   * already-built `WonderlandDogSkin` and is exported from the barrel, and it
+   * carried whatever it was handed. An independent review passed a 999x3
+   * magenta-bodied skin with `uniformScaleOnly: false` straight into the document.
+   *
+   * The founder's directive is that skins TRANSFORM the Dog and never replace it,
+   * and identity is not something a caller supplies. The palette and the grid come
+   * from the shared module; only `bodyColor`/`shadowColor`/`visorColor` a skin is
+   * ALLOWED to change stay as given.
+   */
+  const identitySkin: WonderlandDogSkin = {
+    ...skin,
+    gridWidth: OFFICIAL_RELAY_DOG_WIDTH,
+    gridHeight: OFFICIAL_RELAY_DOG_HEIGHT,
+    uniformScaleOnly: true,
+  };
+
   return {
     agentId: observation.agentId,
     observed: known,
@@ -309,7 +333,7 @@ export function projectWonderlandAgent(
     travelling: view === null ? null : view.travelling,
     attentionRequired: view === null ? null : view.attentionRequired,
     activityLabel: view?.label ?? null,
-    skin,
+    skin: identitySkin,
   };
 }
 

@@ -1016,6 +1016,13 @@ export const WONDERLAND_TERMINAL_PROVENANCES = Object.keys(
  */
 export const WONDERLAND_NULLABLE_FIELDS: Readonly<Record<string, readonly string[]>> =
   Object.freeze({
+  /**
+   * The breath has no nullable field — it is three numbers that always exist.
+   * An EMPTY entry, not an absent one: the parity test requires every struct in
+   * the table to have a key, because `?? []` on a missing key silently turned the
+   * absence-carrier check off for that whole struct.
+   */
+  FWonderlandBreath: nullableKeys<WonderlandBreath>()([] as const),
     FWonderlandFigure: nullableKeys<WonderlandFigure>()(['value', 'reason'] as const),
     FWonderlandAttestation: nullableKeys<WonderlandAttestation>()([
       'requestedModel',

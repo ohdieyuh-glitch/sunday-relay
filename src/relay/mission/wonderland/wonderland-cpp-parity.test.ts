@@ -123,45 +123,242 @@ interface ParsedField {
 interface ParsedStruct {
   readonly name: string;
   readonly fields: readonly ParsedField[];
+  /** Declarations inside the struct with no `UPROPERTY`. Unreal cannot see
+   *  them and neither could this parser. */
+  readonly unreflected: readonly string[];
+  /** The struct's raw body, so the self-check can count `UPROPERTY(` inside
+   *  THIS struct rather than across a file that also holds UCLASS members. */
+  readonly body: string;
 }
 
-const USTRUCT_PATTERN = /USTRUCT\s*\([^)]*\)\s*struct\s+(\w+)\s*(?::[^{]*)?\{([^{}]*)\}\s*;/g;
-const UPROPERTY_PATTERN =
-  /UPROPERTY\s*\([^)]*\)\s*([\w:]+(?:\s*<[^;>]*>)?)\s+(\w+)\s*(=[^;]*)?;/g;
+/**
+ * A BALANCED SCANNER, NOT A REGEX — and the regex had six blind spots.
+ *
+ * The previous parser was `/UPROPERTY\s*\([^)]*\)\s*…/`. `[^)]*` cannot cross a
+ * `)`, so an idiomatic `meta = (DisplayName = "…")` specifier ended the macro
+ * match early and the declaration was never parsed at all. An independent review
+ * added, invisibly:
+ *
+ *   UPROPERTY(BlueprintReadOnly, meta = (DisplayName = "Wonderland approved this"))
+ *   bool bWonderlandApproved = true;
+ *
+ * and the whole suite passed. Five more drifts were invisible: a nested template
+ * (`TMap<FString, TArray<int32>>`), a plain member with no `UPROPERTY`, a
+ * macro-generated field, a backslash line continuation, and an entire new
+ * brace-bodied `USTRUCT` (the struct pattern's `[^{}]*` body cannot contain a
+ * braced initializer). Because such a field never entered `fields`, the
+ * "every scalar is explicitly initialized" check could not see it either — so an
+ * uninitialized POD behind a `meta` specifier passed too.
+ *
+ * A parity test with a parser that misses fields certifies an agreement it never
+ * checked. This scanner counts depth instead of matching characters, and
+ * `THE SELF-CHECK` below makes the parser prove its own coverage.
+ */
+
+/** From `openIndex` (which must be an opener), the index of its match. */
+function matchingIndex(text: string, openIndex: number, open: string, close: string): number {
+  let depth = 0;
+  for (let i = openIndex; i < text.length; i += 1) {
+    if (text[i] === open) depth += 1;
+    else if (text[i] === close) {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** The next index of `token` at or after `from`, or -1. */
+const nextIndexOf = (text: string, token: string, from: number): number => text.indexOf(token, from);
+
+/**
+ * Split a declaration into type, name and initializer.
+ *
+ * `=` is found at DEPTH ZERO, so `TMap<FString, TArray<int32>> Field = {}` is not
+ * split inside its own template arguments — the case the old regex's `[^;>]*`
+ * could not express.
+ */
+function parseDeclaration(declaration: string): ParsedField | null {
+  let depth = 0;
+  let eq = -1;
+  for (let i = 0; i < declaration.length; i += 1) {
+    const ch = declaration[i];
+    if (ch === '<' || ch === '(' || ch === '{' || ch === '[') depth += 1;
+    else if (ch === '>' || ch === ')' || ch === '}' || ch === ']') depth -= 1;
+    else if (ch === '=' && depth === 0) { eq = i; break; }
+  }
+  const head = (eq === -1 ? declaration : declaration.slice(0, eq)).trim();
+  const nameMatch = /([A-Za-z_]\w*)\s*$/.exec(head);
+  if (nameMatch === null) return null;
+  const cppName = nameMatch[1];
+  const cppType = head.slice(0, head.length - nameMatch[0].length).trim().replace(/\s+/g, '');
+  if (cppType === '') return null;
+  return { cppType, cppName, hasInitializer: eq !== -1 };
+}
+
+/** Every `UPROPERTY(...) <decl>;` inside one struct body. */
+function parseUProperties(body: string): ParsedField[] {
+  const fields: ParsedField[] = [];
+  let cursor = 0;
+  for (;;) {
+    const macro = nextIndexOf(body, 'UPROPERTY', cursor);
+    if (macro === -1) break;
+    const open = nextIndexOf(body, '(', macro);
+    if (open === -1) break;
+    const close = matchingIndex(body, open, '(', ')');
+    if (close === -1) break;
+    const semi = nextIndexOf(body, ';', close);
+    if (semi === -1) break;
+    const parsed = parseDeclaration(body.slice(close + 1, semi));
+    if (parsed !== null) fields.push(parsed);
+    cursor = semi + 1;
+  }
+  return fields;
+}
+
+/**
+ * Members declared inside a `USTRUCT` WITHOUT a `UPROPERTY`.
+ *
+ * A plain C++ member is invisible to Unreal's reflection and was invisible here
+ * too, so it could carry a field the TypeScript side has never heard of. Anything
+ * left after the macros and `GENERATED_BODY()` are removed, that still looks like
+ * a declaration, is reported.
+ */
+function parseUnreflectedMembers(body: string): string[] {
+  let stripped = '';
+  let cursor = 0;
+  for (;;) {
+    const macro = nextIndexOf(body, 'UPROPERTY', cursor);
+    if (macro === -1) { stripped += body.slice(cursor); break; }
+    const open = nextIndexOf(body, '(', macro);
+    const close = open === -1 ? -1 : matchingIndex(body, open, '(', ')');
+    const semi = close === -1 ? -1 : nextIndexOf(body, ';', close);
+    if (semi === -1) { stripped += body.slice(cursor); break; }
+    // `;`-separated, so a declaration in one chunk cannot merge with the next.
+    stripped += `${body.slice(cursor, macro)};`;
+    cursor = semi + 1;
+  }
+  /**
+   * `GENERATED_BODY()` IS REMOVED BEFORE SPLITTING, and the first version of this
+   * function was defeated by that ordering.
+   *
+   * It filtered entries that `startsWith('GENERATED_BODY')` AFTER splitting on
+   * `;` — and `GENERATED_BODY()` carries no semicolon, so every inter-declaration
+   * chunk concatenated into ONE entry beginning with it, and that single filter
+   * discarded the whole struct's unreflected text. A plain `bool bGhost = true;`
+   * injected into a real struct passed. The guard hid what it was written to
+   * find, which is the failure mode this whole file exists to prevent, committed
+   * inside the fix for it.
+   */
+  return stripped
+    .split(/GENERATED_BODY\s*\(\s*\)/)
+    .join(';')
+    .split(';')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== '')
+    // A declaration needs a type and a name. `public:` and stray tokens do not.
+    .filter((entry) => /^[\w:<>,\s*&]+\s+[A-Za-z_]\w*(\s*=[\s\S]*)?$/.test(entry));
+}
 
 function parseStructs(source: string): ParsedStruct[] {
   const clean = stripComments(source);
   const structs: ParsedStruct[] = [];
-  for (const match of clean.matchAll(USTRUCT_PATTERN)) {
-    const [, name, body] = match;
-    const fields: ParsedField[] = [];
-    for (const field of body.matchAll(UPROPERTY_PATTERN)) {
-      fields.push({
-        cppType: field[1].replace(/\s+/g, ''),
-        cppName: field[2],
-        hasInitializer: field[3] !== undefined,
+  let cursor = 0;
+  for (;;) {
+    const macro = nextIndexOf(clean, 'USTRUCT', cursor);
+    if (macro === -1) break;
+    const open = nextIndexOf(clean, '(', macro);
+    if (open === -1) break;
+    const close = matchingIndex(clean, open, '(', ')');
+    if (close === -1) break;
+    const keyword = clean.indexOf('struct', close);
+    if (keyword === -1) break;
+    const brace = nextIndexOf(clean, '{', keyword);
+    if (brace === -1) break;
+    // Balanced, so a braced initializer inside the body does not end the struct.
+    const end = matchingIndex(clean, brace, '{', '}');
+    if (end === -1) break;
+    const header = clean.slice(keyword + 'struct'.length, brace);
+    const nameMatch = /([A-Za-z_]\w*)/.exec(header);
+    const body = clean.slice(brace + 1, end);
+    if (nameMatch !== null) {
+      structs.push({
+        name: nameMatch[1],
+        fields: parseUProperties(body),
+        unreflected: parseUnreflectedMembers(body),
+        body,
       });
     }
-    structs.push({ name, fields });
+    cursor = end + 1;
   }
   return structs;
 }
 
-const UENUM_PATTERN = /UENUM\s*\([^)]*\)\s*enum\s+class\s+(\w+)\s*:\s*\w+\s*\{([^{}]*)\}\s*;/g;
+/**
+ * ENUM MEMBERS WITH THEIR REAL ORDINALS.
+ *
+ * The previous parser did `entry.trim().split(/[\s=]/)[0]` — it threw away
+ * everything after `=` — and the ordinal-0 check then read `members[0]`, the
+ * FIRST DECLARED NAME. A review gave an enum explicit values:
+ *
+ *   enum class EWonderlandHealth : uint8 { Unknown = 1, Healthy = 0, … };
+ *
+ * Ordinal 0 is `Healthy`, and the test named "ordinal 0 is the value that means
+ * Relay has not said" passed. That is the invariant the whole zero-fill design
+ * rests on, and it was checked by declaration position — a check that reads a
+ * token's NAME rather than its VALUE, which is this repository's named precedent.
+ */
+interface ParsedEnumMember {
+  readonly name: string;
+  readonly ordinal: number;
+  readonly explicit: boolean;
+}
 
-function parseEnums(source: string): Map<string, string[]> {
+function parseEnumMembers(body: string): ParsedEnumMember[] {
+  const members: ParsedEnumMember[] = [];
+  let next = 0;
+  for (const raw of body.split(',')) {
+    const entry = raw.trim();
+    if (entry === '') continue;
+    const assigned = /^([A-Za-z_]\w*)\s*=\s*(-?\d+)/.exec(entry);
+    if (assigned !== null) {
+      const ordinal = Number(assigned[2]);
+      members.push({ name: assigned[1], ordinal, explicit: true });
+      next = ordinal + 1;
+      continue;
+    }
+    const bare = /^([A-Za-z_]\w*)/.exec(entry);
+    if (bare === null) continue;
+    members.push({ name: bare[1], ordinal: next, explicit: false });
+    next += 1;
+  }
+  return members;
+}
+
+function parseEnums(source: string): Map<string, ParsedEnumMember[]> {
   const clean = stripComments(source);
-  const enums = new Map<string, string[]>();
-  for (const match of clean.matchAll(UENUM_PATTERN)) {
-    const [, name, body] = match;
-    const members = body
-      .split(',')
-      .map((entry) => entry.trim().split(/[\s=]/)[0])
-      .filter((entry) => entry.length > 0);
-    enums.set(name, members);
+  const enums = new Map<string, ParsedEnumMember[]>();
+  let cursor = 0;
+  for (;;) {
+    const macro = nextIndexOf(clean, 'UENUM', cursor);
+    if (macro === -1) break;
+    const open = nextIndexOf(clean, '(', macro);
+    if (open === -1) break;
+    const close = matchingIndex(clean, open, '(', ')');
+    if (close === -1) break;
+    const brace = nextIndexOf(clean, '{', close);
+    if (brace === -1) break;
+    const end = matchingIndex(clean, brace, '{', '}');
+    if (end === -1) break;
+    const nameMatch = /enum\s+class\s+([A-Za-z_]\w*)/.exec(clean.slice(close, brace));
+    if (nameMatch !== null) enums.set(nameMatch[1], parseEnumMembers(clean.slice(brace + 1, end)));
+    cursor = end + 1;
   }
   return enums;
 }
+
+/** Member NAMES only, for the checks that do not care about ordinals. */
+const enumNames = (members: readonly ParsedEnumMember[]): string[] => members.map((m) => m.name);
 
 /* ------------------------------------------------------------ normalizers */
 
@@ -356,6 +553,68 @@ describe('every document struct matches its TypeScript interface', () => {
 /* ----------------------------------------------------------- enum parity */
 
 describe('every enum matches its Relay vocabulary', () => {
+  it('THE SELF-CHECK: the parser sees every UPROPERTY in the header', () => {
+    /**
+     * THE ASSERTION THAT MAKES A PARITY TEST TRUSTWORTHY.
+     *
+     * Everything else here compares what the parser FOUND against TypeScript. If
+     * the parser silently misses a field, every one of those comparisons agrees
+     * about a smaller set and reports agreement. An independent review added a
+     * field behind a `meta = (...)` specifier and the whole suite passed.
+     *
+     * So the parser is made to prove its own coverage: count the raw `UPROPERTY(`
+     * occurrences in the header text and require that number to equal the fields
+     * parsed. It is free today — the two are equal — and it would have failed on
+     * every one of the six blind spots.
+     */
+    /**
+     * PER STRUCT, not per file. The headers also declare `UPROPERTY` members
+     * inside UCLASS bodies (the pawn's mesh and camera boom), which are not parity
+     * surface — a whole-file count is off by those and says nothing useful.
+     * Counting inside each parsed struct's own body is the tight assertion.
+     */
+    const offenders: string[] = [];
+    let parsedTotal = 0;
+    for (const struct of structByName.values()) {
+      const declared = (struct.body.match(/UPROPERTY\s*\(/g) ?? []).length;
+      parsedTotal += struct.fields.length;
+      if (struct.fields.length !== declared) {
+        offenders.push(
+          `${struct.name} declares ${String(declared)} UPROPERTY fields and the parser found ${String(struct.fields.length)}`,
+        );
+      }
+    }
+    expect(offenders, 'the parser is not seeing every declared field').toEqual([]);
+    // And it found something at all, so a parser that returns nothing cannot
+    // pass by agreeing with itself.
+    expect(parsedTotal).toBeGreaterThan(100);
+  });
+
+  it('THE SELF-CHECK: the parser sees every USTRUCT and UENUM in the header', () => {
+    const rawStructs = (stripComments(headerSource).match(/USTRUCT\s*\(/g) ?? []).length;
+    const rawEnums = (stripComments(headerSource).match(/UENUM\s*\(/g) ?? []).length;
+    // A whole new brace-bodied struct was invisible to the old `[^{}]*` body
+    // pattern, which is how an entire struct could carry an authority field.
+    expect(structByName.size).toBe(rawStructs);
+    expect(parsedEnums.size).toBe(rawEnums);
+  });
+
+  it('no USTRUCT carries a member Unreal cannot see', () => {
+    /**
+     * A plain C++ member with no `UPROPERTY` is invisible to Unreal's reflection
+     * AND was invisible to this parser, so it could carry a field the TypeScript
+     * side has never heard of — including an authority field. Reported by name
+     * rather than ignored.
+     */
+    const offenders: string[] = [];
+    for (const struct of structByName.values()) {
+      for (const member of struct.unreflected) {
+        offenders.push(`${struct.name}: ${member.replace(/\s+/g, ' ')}`);
+      }
+    }
+    expect(offenders, 'these members are invisible to Unreal reflection and to this parser').toEqual([]);
+  });
+
   it('members agree in both directions', () => {
     const offenders: string[] = [];
     for (const entry of WONDERLAND_CPP_ENUM_PARITY) {
@@ -363,7 +622,7 @@ describe('every enum matches its Relay vocabulary', () => {
       if (!members) continue;
       const expected = new Set(entry.members.map(canonicalEnumToken));
       if (entry.nullable) expected.add(canonicalEnumToken(WONDERLAND_CPP_UNOBSERVED_MEMBER));
-      const actual = new Set(members.map(canonicalEnumToken));
+      const actual = new Set(enumNames(members).map(canonicalEnumToken));
       for (const token of expected) {
         if (!actual.has(token)) offenders.push(`${entry.cppEnum} is missing ${token} (${entry.source})`);
       }
@@ -387,22 +646,51 @@ describe('every enum matches its Relay vocabulary', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('ordinal 0 is the value that means "Relay has not said"', () => {
-    // Unreal cannot hold a null enum and a default-constructed USTRUCT
-    // zero-fills, so whatever sits first is what a renderer sees before
-    // anything is assigned. Getting this wrong defeats "unknown is never a
-    // default" through initialization semantics rather than through a decision.
+  it('the member whose VALUE is 0 is the one that means "Relay has not said"', () => {
+    /**
+     * Unreal cannot hold a null enum and a default-constructed USTRUCT
+     * zero-fills, so whatever sits at ordinal 0 is what a renderer sees before
+     * anything is assigned. Getting this wrong defeats "unknown is never a
+     * default" through initialization semantics rather than through a decision.
+     *
+     * THIS READ `members[0]` — THE FIRST DECLARED NAME. An independent review
+     * gave an enum explicit values (`Unknown = 1, Healthy = 0, …`) and the test
+     * passed while ordinal 0 was `Healthy`. A check that reads a token's NAME
+     * rather than its VALUE is this repository's named precedent for a guard that
+     * certifies what it never inspected.
+     */
     const offenders: string[] = [];
     for (const entry of WONDERLAND_CPP_ENUM_PARITY) {
       const members = parsedEnums.get(entry.cppEnum);
       if (!members || members.length === 0) continue;
       const wanted = canonicalEnumToken(entry.zeroMember);
-      const found = canonicalEnumToken(members[0]);
+      const atZero = members.find((m) => m.ordinal === 0);
+      if (atZero === undefined) {
+        offenders.push(`${entry.cppEnum} has no member at ordinal 0`);
+        continue;
+      }
+      const found = canonicalEnumToken(atZero.name);
       if (found !== wanted) {
-        offenders.push(`${entry.cppEnum} starts at ${found}, must start at ${wanted}`);
+        offenders.push(`${entry.cppEnum} has ${found} at ordinal 0, must have ${wanted}`);
       }
     }
     expect(offenders, 'a zero-filled struct would read as an observed fact').toEqual([]);
+  });
+
+  it('no parity enum assigns explicit ordinals at all', () => {
+    /**
+     * The cheaper half of the same rule, and it is its own checkable statement:
+     * these enums are positional by design, so an explicit `= N` anywhere is a
+     * maintainer reaching for a mechanism the design does not use — and it is the
+     * mechanism that hid `Healthy` at ordinal 0.
+     */
+    const offenders: string[] = [];
+    for (const entry of WONDERLAND_CPP_ENUM_PARITY) {
+      for (const member of parsedEnums.get(entry.cppEnum) ?? []) {
+        if (member.explicit) offenders.push(`${entry.cppEnum}.${member.name} = ${String(member.ordinal)}`);
+      }
+    }
+    expect(offenders, 'these assign ordinals explicitly; the design is positional').toEqual([]);
   });
 
   it('every nullable vocabulary carries the Unobserved sentinel', () => {
@@ -410,7 +698,7 @@ describe('every enum matches its Relay vocabulary', () => {
     for (const entry of WONDERLAND_CPP_ENUM_PARITY) {
       const members = parsedEnums.get(entry.cppEnum);
       if (!members) continue;
-      const has = members.includes(WONDERLAND_CPP_UNOBSERVED_MEMBER);
+      const has = enumNames(members).includes(WONDERLAND_CPP_UNOBSERVED_MEMBER);
       if (entry.nullable && !has) offenders.push(`${entry.cppEnum} mirrors a nullable field without ${WONDERLAND_CPP_UNOBSERVED_MEMBER}`);
       if (!entry.nullable && has) offenders.push(`${entry.cppEnum} carries ${WONDERLAND_CPP_UNOBSERVED_MEMBER} but its TypeScript field is never null`);
     }
@@ -440,6 +728,86 @@ describe('every enum matches its Relay vocabulary', () => {
 
 /* ----------------------------------------------------- absence carriers */
 
+/**
+ * H4 — THE AUTHORITY BOUNDARY, SWEPT OVER BOTH SIDES.
+ *
+ * `WONDERLAND.md` claimed: "There is no field in any struct on either side of the
+ * seam that could express 'Wonderland approved this.'" The check was
+ * `Object.keys(request)` for ONE struct — top level, TypeScript only, and nothing
+ * inspected C++ field names at all. An independent review added
+ * `wonderlandApproved: boolean` to `WonderlandGve` and `bool bWonderlandApproved
+ * = true;` to its C++ mirror and all 98 tests passed.
+ *
+ * The claim is now made true instead of narrowed: every field name in every parity
+ * manifest AND every parsed C++ field is swept, with an allowlist naming the
+ * fields where Relay's OWN approval legitimately travels. `verdict` is the reason
+ * an allowlist is needed rather than a wider vocabulary — a Reviewer verdict IS an
+ * approval, and it is Relay's to state.
+ */
+const AUTHORITY_WORDS = /approv|authoriz|decision|granted|allow|permit|consent|clearance|accept|confirm|endors|ratif|bless|verdict|signed/i;
+
+/** Fields where an approval word is Relay's own truth crossing the seam. */
+const RELAY_OWNED_AUTHORITY_FIELDS: readonly { readonly field: string; readonly reason: string }[] = [
+  { field: 'verdict', reason: "the Reviewer's verdict, which Relay owns and Wonderland only displays" },
+  { field: 'authority', reason: 'the constant `relay_decides` — it says who decides, which is the opposite of claiming to' },
+];
+
+describe('nothing on either side of the seam can express "Wonderland approved this"', () => {
+  const allowed = (name: string): string | undefined =>
+    RELAY_OWNED_AUTHORITY_FIELDS.find((entry) => entry.field === name)?.reason;
+
+  it('sweeps every TypeScript field name in every parity manifest', () => {
+    const offenders: string[] = [];
+    for (const entry of WONDERLAND_CPP_STRUCT_PARITY) {
+      for (const field of entry.fields) {
+        if (AUTHORITY_WORDS.test(field) && allowed(field) === undefined) {
+          offenders.push(`${entry.tsInterface}.${field}`);
+        }
+      }
+    }
+    expect(offenders, 'these could express an authority Wonderland does not have').toEqual([]);
+  });
+
+  it('sweeps every C++ field name the parser found, not just the mirrored ones', () => {
+    // A C++-only authority field needs no TypeScript counterpart at all, which is
+    // how it would have arrived unnoticed.
+    const offenders: string[] = [];
+    for (const struct of structByName.values()) {
+      for (const field of struct.fields) {
+        const ts = cppFieldToTsName(field.cppName);
+        if (AUTHORITY_WORDS.test(ts) && allowed(ts) === undefined) {
+          offenders.push(`${struct.name}.${field.cppName}`);
+        }
+      }
+    }
+    expect(offenders, 'these could express an authority Wonderland does not have').toEqual([]);
+  });
+
+  it('sweeps every C++ enum member name too', () => {
+    // `EWonderlandSomething::WonderlandApproved` is the same claim in a
+    // vocabulary rather than a field.
+    const offenders: string[] = [];
+    for (const [name, members] of parsedEnums.entries()) {
+      for (const member of enumNames(members)) {
+        if (/wonderlandapprov|selfapprov/i.test(member)) offenders.push(`${name}::${member}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('names a reason for every allowlisted authority field, and uses them all', () => {
+    // An allowlist that only grows is a record of intentions. Every entry must be
+    // reachable, and every reason must be a sentence somebody wrote.
+    const everyField = new Set<string>();
+    for (const entry of WONDERLAND_CPP_STRUCT_PARITY) for (const f of entry.fields) everyField.add(f);
+    for (const struct of structByName.values()) for (const f of struct.fields) everyField.add(cppFieldToTsName(f.cppName));
+    for (const entry of RELAY_OWNED_AUTHORITY_FIELDS) {
+      expect(entry.reason.length, `${entry.field} has no reason`).toBeGreaterThan(20);
+      expect(everyField.has(entry.field), `${entry.field} is allowlisted but exists nowhere`).toBe(true);
+    }
+  });
+});
+
 describe('absence survives the crossing into C++', () => {
   const exemptFor = (cppStruct: string, field: string): string | undefined =>
     NULL_CARRIER_EXEMPTIONS.find(
@@ -448,9 +816,33 @@ describe('absence survives the crossing into C++', () => {
 
   const enumsWithSentinel = new Set(
     [...parsedEnums.entries()]
-      .filter(([, members]) => members.includes(WONDERLAND_CPP_UNOBSERVED_MEMBER))
+      .filter(([, members]) => enumNames(members).includes(WONDERLAND_CPP_UNOBSERVED_MEMBER))
       .map(([name]) => name),
   );
+
+  it('the nullable manifest names exactly the structs the parity table names', () => {
+    /**
+     * H3: THE MANIFEST IS KEYED BY AN UNVALIDATED STRING.
+     *
+     * `WONDERLAND_NULLABLE_FIELDS[entry.cppStruct] ?? []` — so a TYPO in a key
+     * silently turns the absence-carrier check off for that entire struct, and a
+     * nullable Relay value then crosses as a bare `FString` where Unreal hands the
+     * renderer an empty string and the world presents it as a fact. An
+     * independent review misspelled one key, made the C++ change, and both `tsc`
+     * and the whole suite passed. Deleting a struct's entry outright did too.
+     *
+     * The doc claims a carrier is required for EVERY nullable field. It was
+     * required only for fields whose struct had an entry under the exactly-right
+     * key. Both directions are checked here, matching the pattern the two
+     * allowlists already use.
+     */
+    const tableStructs = WONDERLAND_CPP_STRUCT_PARITY.map((entry) => entry.cppStruct);
+    const manifestKeys = Object.keys(WONDERLAND_NULLABLE_FIELDS);
+    const missing = tableStructs.filter((name) => !manifestKeys.includes(name));
+    const extra = manifestKeys.filter((name) => !tableStructs.includes(name));
+    expect(missing, 'these parity structs have no nullable manifest, so their carrier check is OFF').toEqual([]);
+    expect(extra, 'these manifest keys name no struct in the parity table — likely a typo').toEqual([]);
+  });
 
   it('every nullable TypeScript field is carried by a type that can say "absent"', () => {
     const offenders: string[] = [];

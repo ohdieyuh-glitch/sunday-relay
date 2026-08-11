@@ -35,8 +35,13 @@ The boundary is enforced by shape, not by convention:
   mutates its input, appends an event, touches evidence, or reaches a provider.
 - The only outbound type is `WonderlandMissionRequest`, whose `authority` field
   is stamped to the constant `relay_decides`. **There is no field in any struct
-  on either side of the seam that could express "Wonderland approved this."** A
-  test asserts no key of a request matches `/approv|authoriz|decision|granted/i`.
+  on either side of the seam that could express "Wonderland approved this."**
+  Every field name in every parity manifest, every parsed C++ field and every C++
+  enum member is swept for authority words, with a named allowlist for the two
+  fields where RELAY's own approval legitimately travels (`verdict`, `authority`).
+  An earlier version of this claim was enforced on one struct's top-level
+  TypeScript keys only, and a review added `wonderlandApproved: true` to BOTH
+  sides and watched all 98 tests pass.
 - `AWonderlandDogPawn::ApplyWorldState` takes a `const FWonderlandWorld&` and
   returns `void`. The pawn has no method that starts a mission, advances a loop,
   records evidence, or changes a verdict.
@@ -142,7 +147,13 @@ with a capital `B`, and the digit boundary that makes `Game3dShooter` and
   without checking the flag.
 - On the C++ side, **ordinal 0 is load-bearing.** Unreal cannot hold a null enum
   and a default-constructed USTRUCT zero-fills, so whatever sits first is what a
-  renderer sees before anything is assigned. Every enum's ordinal 0 is the value
+  renderer sees before anything is assigned. Every enum that HAS an unknown
+  member puts it at ordinal 0 — and three deliberately have none (`gveClass`,
+  `gveId`, `engineerClass`), because inventing an "unknown GVE class" would be a
+  member Relay never emits. `wonderland-contracts.ts` carries that qualification;
+  an earlier version of this line asserted the universal, and a review parsed all
+  25 enums and found the three. C++-only enums are not ordinal-0 checked at all.
+  The value
   that means "Relay has not said": `Unobserved` for a nullable vocabulary,
   `Unknown` for health, `Dormant` for animation, `FoggedUnknown` for entity form,
   `Unavailable` for GVE phase, `Simulated` for provenance. The parity test asserts
@@ -150,7 +161,10 @@ with a capital `B`, and the digit boundary that makes `Game3dShooter` and
 - Nullable strings cross as `FWonderlandText` (a `bKnown` flag beside a value)
   and not as `FString`, because an empty string is a string. Nullable numbers use
   `FWonderlandNumber`, nullable booleans `FWonderlandFlag`. The parity test
-  requires an approved carrier for every nullable field, with two documented
+  requires an approved carrier for every nullable field — and the manifest and
+  the parity table must now name exactly the same structs in both directions,
+  because a TYPO in a manifest key silently turned the check off for a whole
+  struct and neither `tsc` nor the suite noticed. With two documented
   exemptions whose mechanism is named and whose continued necessity is checked.
 - Every scalar `UPROPERTY` in the world structs must carry an explicit `=`
   initializer; the test enumerates them.
@@ -573,3 +587,26 @@ and that the agreement check fails when either side is mutated (17 header
 mutations), that the field manifests cannot drift from their interfaces (5 `tsc`
 mutations), and that the behavioural rules fail when the code enforcing them is
 changed (19 source mutations) — 41 in all. The full list is in the commit message.
+
+---
+
+## Corrections after independent review
+
+A read-only review executed 26 mutations against this milestone and found five
+High defects. All are repaired; each was **a check that existed rather than a
+check that held**, which is the distinction this document's value rests on.
+
+| # | What was claimed | What was true | Repair |
+|---|---|---|---|
+| H1 | the parity test "fails when they drift in either direction" | the `UPROPERTY` regex used `[^)]*`, so an idiomatic `meta = (...)` specifier ended the match early and the declaration was never parsed. Six drifts were invisible, including a field named `bWonderlandApproved = true` and an uninitialized scalar behind the same specifier | a paren/brace-balanced scanner, plus **a self-check**: every parsed struct's field count must equal the raw `UPROPERTY(` count in its own body. The self-check found 13 unparsed fields the moment it was written |
+| H2 | "ordinal 0 is the value that means Relay has not said" | the check read `members[0]` — the first declared NAME. With explicit ordinals (`Unknown = 1, Healthy = 0`) the test passed while ordinal 0 was `Healthy` | ordinals are computed from assigned values, the member whose VALUE is 0 is checked, and a second rule refuses explicit ordinals in a parity enum at all |
+| H3 | "a carrier is required for every nullable field" | `WONDERLAND_NULLABLE_FIELDS[key] ?? []` — a TYPO in a key silently turned the check off for a whole struct, and neither `tsc` nor the suite noticed | the manifest and the parity table must name exactly the same structs, both directions |
+| H4 | "no field in any struct on either side of the seam" | one struct's top-level TypeScript keys | swept over every manifest, every parsed C++ field and every enum member, with a reasoned allowlist |
+| H5 | "the type has nowhere to put a different width" | `WonderlandDogSkin` necessarily has `gridWidth`/`gridHeight`, and `projectWonderlandAgent` carried whatever it was handed — a 999x3 magenta Dog reached the document | the projection re-stamps the identity; only the colours a skin may change survive |
+
+Two defects were introduced by the repairs themselves and caught before landing:
+the unreflected-member detector filtered on `startsWith('GENERATED_BODY')` AFTER
+splitting on `;`, and `GENERATED_BODY()` has no semicolon — so every chunk merged
+into one entry beginning with it and the guard discarded exactly what it was
+written to find. And the H4 allowlist named a field (`verdictLabel`) that exists
+nowhere, which its own "every allowlisted field must exist" assertion caught.

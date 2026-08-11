@@ -17,6 +17,7 @@ import {
   WONDERLAND_WORLD_VISIBLE_SECTIONS,
   wonderlandAnimationFor,
 } from './wonderland-contracts';
+import type { WonderlandDogSkin } from './wonderland-contracts';
 import {
   WONDERLAND_TERMINAL_MAX_LINES,
   projectWonderlandAgent,
@@ -516,5 +517,41 @@ describe('the world document', () => {
     expect(() => projectWonderlandWorld(input, AT)).not.toThrow();
     expect(input.agent.workspaceState).toBe('reviewing');
     expect(input.loops[0].state).toBe('running');
+  });
+});
+
+describe('the Dog\'s proportions are not something a caller can supply', () => {
+  it('re-stamps a forged skin passed straight into projectWonderlandAgent', () => {
+    /**
+     * `wonderland-contracts.ts` claimed "the type has nowhere to put a different
+     * width" — and `WonderlandDogSkin` necessarily has `gridWidth`,
+     * `gridHeight` and `uniformScaleOnly`, because they mirror to C++.
+     * `resolveWonderlandDogSkin` is safe; THIS function is exported from the
+     * barrel, takes an already-built skin, and carried whatever it was handed. An
+     * independent review put a 999x3 magenta-bodied Dog into the document.
+     *
+     * The founder's directive is that skins TRANSFORM the Dog and never replace
+     * it. Identity is not a caller's to supply.
+     */
+    const forged = {
+      gridWidth: 999,
+      gridHeight: 3,
+      uniformScaleOnly: false,
+      bodyColor: '#ff00ff',
+      shadowColor: '#123456',
+      visorColor: '#00ff00',
+    } as WonderlandDogSkin;
+
+    const agent = projectWonderlandAgent(
+      { workspaceState: null, missions: [], simulated: false } as never,
+      [],
+      forged,
+    );
+    expect(agent.skin.gridWidth).toBe(OFFICIAL_RELAY_DOG_WIDTH);
+    expect(agent.skin.gridHeight).toBe(OFFICIAL_RELAY_DOG_HEIGHT);
+    expect(agent.skin.uniformScaleOnly).toBe(true);
+    // And what a skin IS allowed to change still crosses.
+    expect(agent.skin.bodyColor).toBe('#ff00ff');
+    expect(agent.skin.visorColor).toBe('#00ff00');
   });
 });
