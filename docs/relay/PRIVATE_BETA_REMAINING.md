@@ -5,15 +5,27 @@ purpose is to be exact about the boundary between *built and proven* and *built
 and unproven*, so nobody has to reconstruct it later.
 
 Four PRs. Every one has been through at least one independent read-only review;
-three have been through a review-and-repair cycle, and **every review found real
-defects, including defects introduced by the previous round's repair.**
+all four have been through a review-and-repair cycle, and **every review found
+real defects, including defects introduced by the previous round's repair.**
+
+A second pattern is worth naming, because it recurred across every PR and cost
+more time than the defects did: **the check that exists rather than the check
+that holds.** Repeatedly, a guard was written, shipped, and only later probed —
+and the probe showed it had never been able to fail. The parity parser filtered
+for a token that its own split had already discarded; the CSS scanner read a
+comment as a selector and so examined half its subjects; a gradient scanner
+stopped at the first `)`, which belonged to the colour, and never reached the
+value it was checking. Each read as working. The discipline that catches this
+is not more review — it is reverting the fix and requiring the named test to
+fall. Where that is done, the guards are real; where it is skipped, roughly one
+guard in five proves inert.
 
 | PR | What | Reviews | Suite |
 |---|---|---|---|
 | #118 | Defect 3 — the served reviewer model | 2 rounds, 24 mutation proofs | 6930/6930 |
 | #119 | Configurable Repository Targets | 1 round: 1 Critical, 2 High, 14 more — all repaired | 1173/1173 on the affected files |
 | #120 | Wonderland | 1 round: 5 High — all repaired | 123/123 |
-| #121 | Frontend polish | in review | 15/15 + 663 |
+| #121 | Frontend polish | 2 rounds: 3 High, 4 Medium, 3 Low — all repaired but one, deliberately left open | see below |
 
 ---
 
