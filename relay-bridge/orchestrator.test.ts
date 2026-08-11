@@ -76,6 +76,8 @@ const ARCHITECT_RESULT: OpenAiArchitectResult = {
 };
 
 const ARTIFACT_DIGEST = digest('artifact-v1');
+/** What a repaired implementation hashes to: different bytes, different digest. */
+const REPAIRED_ARTIFACT_DIGEST = digest('artifact-v2-repaired');
 
 function terminalState(): CodingTerminalState {
   return {
@@ -134,7 +136,24 @@ function codingAttestation(missionRevision: string): ExecutionAttestation {
   });
 }
 
-function goodCodingOutcome(handoffDigest: string, missionRevision: string, passed = true): CodingOutcome {
+/**
+ * `artifactDigest` FOLLOWS THE ARTIFACT, because in production it must.
+ *
+ * Every run of this harness returned the single constant `ARTIFACT_DIGEST`, so
+ * a repaired implementation was indistinguishable from the one it replaced —
+ * and the completion engine's staleness check (reviewed digest vs current
+ * digest) was satisfied by an accident of the fixture. The repair-completes
+ * test passed for years of runs against code that refused every real repair
+ * with "The artifact changed after review; the review is stale".
+ *
+ * A repair is a different artifact. The fixture now says so.
+ */
+function goodCodingOutcome(
+  handoffDigest: string,
+  missionRevision: string,
+  passed = true,
+  artifactDigest: string = ARTIFACT_DIGEST,
+): CodingOutcome {
   return {
     verifiedComplete: false, // the reviewed policy is never satisfied by the coding leg alone
     verificationPassed: passed,
@@ -165,7 +184,7 @@ function goodCodingOutcome(handoffDigest: string, missionRevision: string, passe
       unifiedDiff: '--- a/src/normalize.js\n+++ b/src/normalize.js',
       claimedFileContent: 'export function normalizeProjectName() {}',
     changedFileContents: 'function normalizeProjectName(){}',
-      artifactDigest: ARTIFACT_DIGEST,
+      artifactDigest,
       relayEvidence: ['Relay inspection assessment: allowed'],
     },
   };
@@ -298,6 +317,10 @@ function harness(
         codingHandoffDigest(input.handoff),
         input.missionRevision ?? '',
         over.codingPassed !== false,
+        // A REPAIR CHANGES THE BYTES, so it changes the digest. Keyed on the
+        // revision input rather than a call counter, because it is the repair
+        // that makes it different, not the fact that it is the second run.
+        input.revision === undefined ? ARTIFACT_DIGEST : REPAIRED_ARTIFACT_DIGEST,
       );
     },
     runHermesReview: async (input) => {
@@ -2233,6 +2256,48 @@ describe('the coding agent gets one bounded repair when the reviewer rejects', (
     const text = JSON.stringify(view);
     expect(text).toContain('Repair attempt started');
     expect(text).toContain('Re-review complete');
+
+    /**
+     * THE PART THAT WAS MISSING, and the reason this test passed while
+     * production refused every repair.
+     *
+     * The repaired artifact must become the mission's artifact. Only
+     * `rec.review` moved, so completion compared the repaired review's digest
+     * against the FIRST attempt's evidence and answered "The artifact changed
+     * after review; the review is stale" — true, and Relay describing its own
+     * omission. The fixture returned one constant digest for every run, so the
+     * comparison could not fail here.
+     */
+    expect(view.artifactDigest).toBe(REPAIRED_ARTIFACT_DIGEST);
+    expect(view.review?.reviewedArtifactDigest).toBe(REPAIRED_ARTIFACT_DIGEST);
+    // Same artifact on both sides — which is the whole invariant.
+    expect(view.review?.reviewedArtifactDigest).toBe(view.artifactDigest);
+  });
+
+  it('judges the repair on the REPAIR’s verification, not the first attempt’s', async () => {
+    /**
+     * The direction that matters more than the refusal. Every other completion
+     * input reads from the same `evidence` — `scopePreserved`,
+     * `deterministicTestsPassed`, `protectedPathsUntouched` — so leaving it
+     * behind meant a repair that broke scope would have been assessed against
+     * an inspection taken before it ran.
+     *
+     * Here the repair comes back UNAUTHORIZED. An approving re-review must not
+     * rescue it.
+     */
+    let call = 0;
+    const h = harness({
+      reviewer: rejectThenApprove(),
+      coding: async (hh) => goodCodingOutcome(
+        codingHandoffDigest(hh.codingInput?.handoff ?? { objective: '', instructions: [], constraints: [], acceptanceCriteria: [] }),
+        hh.codingInput?.missionRevision ?? '',
+        // First run clean; the REPAIR is the one that goes out of scope.
+        ++call === 1,
+        call === 1 ? ARTIFACT_DIGEST : REPAIRED_ARTIFACT_DIGEST,
+      ),
+    });
+    const { view } = await runMission(h, LIVE_ENV, 'm-repair-scope', 'live');
+    expect(view.state).not.toBe('verified_complete');
   });
 
   it('REFUSES completion when the repair is rejected too', async () => {
