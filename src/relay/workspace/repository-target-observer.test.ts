@@ -5,6 +5,7 @@ import { basename, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  REPOSITORY_GIT_ALLOWLIST,
   commitObservedWork,
   observeRepositoryWorktree,
   parseNumstat,
@@ -14,6 +15,8 @@ import {
 import { runGit } from './repository-inspector';
 import { createWorktree, resolveWorkspaceRoot } from './worktree-manager';
 import {
+  ALWAYS_PROTECTED_PATHS,
+  DEFAULT_PROTECTED_PATHS,
   advanceShipStage,
   baseMovedUnderMission,
   createRepositoryRegistration,
@@ -757,4 +760,79 @@ describe('BUILD → VERIFY → COMMIT → DEPLOY → LIVE VERIFY → SHIPPED, fo
     expect(support.ok).toBe(false);
     if (!support.ok) expect(support.reason).toContain('was asked for production');
   }, 30_000);
+});
+
+/* ============================================ the prose is enforced */
+
+/**
+ * DOCUMENTED COUNTS ARE ASSERTED, NOT REMEMBERED.
+ *
+ * `docs/relay/REPOSITORY_TARGETS.md` states how many git subcommands the write
+ * surface permits and which paths are protected by default. An earlier draft
+ * said "the six common lockfiles" while the array held eight — a number in prose
+ * the code did not support, which is the single most frequent defect class in
+ * this repository. The fix for one wrong number is not a right number; it is a
+ * test that fails when the two drift.
+ *
+ * Read from the repo root, like `.env.example` in `orchestrator.test.ts`.
+ */
+describe('the documented surface matches the code', () => {
+  const doc = () => readFileSync('docs/relay/REPOSITORY_TARGETS.md', 'utf8');
+
+  it('names every git subcommand the write surface permits, and the right number of them', () => {
+    expect(REPOSITORY_GIT_ALLOWLIST).toHaveLength(10);
+    expect(doc()).toContain('permits exactly ten subcommands');
+    for (const subcommand of REPOSITORY_GIT_ALLOWLIST) {
+      expect(doc(), `the doc does not name \`${subcommand}\``).toContain(`\`${subcommand}\``);
+    }
+  });
+
+  it('names every subcommand it claims is ABSENT, and each really is', () => {
+    // The absence IS the enforcement, so a name that drifted out of this
+    // sentence would leave a capability nobody re-checked.
+    for (const forbidden of ['push', 'fetch', 'remote', 'merge', 'rebase', 'reset', 'clean', 'gc', 'tag', 'config']) {
+      expect(doc(), `the doc stops claiming \`${forbidden}\` is absent`).toContain(`\`${forbidden}\``);
+      expect(REPOSITORY_GIT_ALLOWLIST, `${forbidden} is in the allow-list`).not.toContain(forbidden);
+    }
+  });
+
+  it('names every default-protected path, and its stated counts are the real ones', () => {
+    const text = doc();
+    expect(DEFAULT_PROTECTED_PATHS).toHaveLength(15);
+    expect(text).toContain('fifteen entries');
+
+    /**
+     * ENUMERATED, NOT MATCHED BY SUBSTRING. The first version of this filtered
+     * on `includes('lock')` and reported seven, because `npm-shrinkwrap.json`
+     * is a lockfile whose name contains neither "lock" nor "sum". A count
+     * derived from a guess about names is the same defect as a count written
+     * from memory, one layer down.
+     */
+    const MANIFESTS = [
+      'package-lock.json', 'pnpm-lock.yaml', 'yarn.lock', 'npm-shrinkwrap.json',
+      'Cargo.lock', 'poetry.lock', 'Gemfile.lock', 'go.sum',
+    ] as const;
+    expect(MANIFESTS).toHaveLength(8);
+    expect(text).toContain('eight dependency manifests and lockfiles');
+    for (const manifest of MANIFESTS) {
+      expect(DEFAULT_PROTECTED_PATHS, `${manifest} is not protected by default`).toContain(manifest);
+    }
+
+    for (const path of DEFAULT_PROTECTED_PATHS) {
+      expect(text, `the doc does not name the protected path \`${path}\``).toContain(`\`${path}\``);
+    }
+    // And the unconditional one, which no configuration reaches.
+    for (const path of ALWAYS_PROTECTED_PATHS) {
+      expect(text).toContain(`\`${path}\``);
+    }
+  });
+
+  it('does not claim a remote provider exists', () => {
+    // The most consequential thing this doc could get wrong is reading as
+    // finished. `push_feature_branch` is authorized by this code and performed
+    // by nothing, and the doc has to keep saying so.
+    const text = doc();
+    expect(text).toContain('No remote provider exists');
+    expect(text).toContain('What is NOT built');
+  });
 });

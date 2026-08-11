@@ -132,9 +132,15 @@ Rules:
   protected rule is protected.
 - `.git` is protected unconditionally and an attempt to unprotect it is refused
   **by name** rather than silently filtered.
-- Protected by default, each overridable only by naming it: `.github`,
-  `.gitlab-ci.yml`, `.circleci`, `azure-pipelines.yml`, `Jenkinsfile`, the six
-  common lockfiles, `.env`, `.relay`.
+- Protected by default, each overridable only by naming it — fifteen entries:
+  `.github`, `.gitlab-ci.yml`, `.circleci`, `azure-pipelines.yml`, `Jenkinsfile`,
+  eight dependency manifests and lockfiles (`package-lock.json`,
+  `pnpm-lock.yaml`, `yarn.lock`, `npm-shrinkwrap.json`, `Cargo.lock`,
+  `poetry.lock`, `Gemfile.lock`, `go.sum`), `.env` and `.relay`. The count is
+  asserted by a test rather than written here from memory: an earlier draft of
+  this line said "the six common lockfiles" when the array held eight, which is
+  exactly the class of claim — a number in prose the code does not support —
+  that has produced more defects in this repository than any other.
 
 ---
 
@@ -190,8 +196,8 @@ existed in the contracts with nothing reading them.
 
 ## 4. The write surface: an allow-list
 
-`runRepositoryGit` permits exactly: `rev-parse`, `status`, `diff`, `add`,
-`commit`, `branch`, `show`, `log`, `ls-files`, `cat-file`.
+`runRepositoryGit` permits exactly ten subcommands: `rev-parse`, `status`,
+`diff`, `add`, `commit`, `branch`, `show`, `log`, `ls-files`, `cat-file`.
 
 `push`, `fetch`, `remote`, `merge`, `rebase`, `reset`, `clean`, `gc`, `tag` and
 `config` are **absent, and their absence is the enforcement**. The design
