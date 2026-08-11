@@ -11,7 +11,7 @@
  * inspection + test run are the EVIDENCE and always win.
  */
 
-import { readFileSync, rmSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, normalize, sep } from 'node:path';
 import { RELAY_PROTOCOL_VERSION } from '../src/relay/protocol/version';
 import type {
@@ -49,13 +49,14 @@ import {
   type ClaudeLiveLimits,
 } from '../src/relay/connectors/claude-code/contracts';
 import { buildSafeEditFixture, RELAY_TEST_ARGS, TEST_FILE } from '../src/relay/connectors/claude-code/fixture';
+import { compileRevisionPrompt } from '../src/relay/connectors/claude-code/prompt-compiler';
 import { runGit } from '../src/relay/workspace/repository-inspector';
 import { buildAttestation, digest, type ExecutionAttestation } from './attestation';
 import {
   createLocalClaudeInvoker, type AgentInvoker, type CancelHandle,
 } from './agent-invoker';
 import { createTerminalCapture, type TerminalCapture } from './coding-terminal';
-import { safeText } from './redact';
+import { redactPayload, safeText } from './redact';
 import type { BridgeEventInput, RelayMissionState } from './types';
 import type { CodingTerminalState } from '../src/relay/mission/wire-contracts';
 
@@ -107,6 +108,8 @@ export interface DeterministicEvidence {
   unifiedDiff: string;
   /** Resulting content of the changed files, bounded. */
   changedFileContents: string;
+  /** The claimed file's exact bytes after the run, for a bounded repair pass. */
+  claimedFileContent: string | null;
   /** Digest over (changed files + diff + resulting content). The reviewer's
       verdict is bound to this exact value. */
   artifactDigest: string;
@@ -253,6 +256,24 @@ function buildHandoff(input: {
 
 export async function runCodingMission(input: {
   handoff: CodingHandoff;
+  /**
+   * A SECOND PASS OVER WORK A REVIEWER REJECTED.
+   *
+   * Absent means a first attempt, which is every existing caller. Present
+   * means the Reviewer returned blocking findings and Relay is giving the
+   * Coding Agent one bounded chance to address them.
+   *
+   * `priorContents` is the reviewed result, written into the fresh workspace
+   * before the agent runs. The workspace is disposable and rebuilt per call,
+   * so without this the agent would repair a file it had never written. Using
+   * the CONTENT Relay recorded — rather than replaying a diff — means the
+   * agent resumes from exactly the bytes the Reviewer read and the artifact
+   * digest describes.
+   */
+  revision?: {
+    readonly findingSummaries: readonly string[];
+    readonly priorContents: Readonly<Record<string, string>>;
+  };
   executablePath: string;
   capabilities: ClaudeCodeCapabilityProfile;
   now: () => string;
@@ -423,16 +444,41 @@ export async function runCodingMission(input: {
       handoff: input.handoff,
     });
     const toolPolicy = claudeToolPolicyFor(pkg, capabilities);
-    const prompt = claudePromptFor({
-      pkg,
-      runId,
-      taskId,
-      workspaceRelativeRoot: '.',
-      readOnlyFiles: fixture.protectedPaths.readOnly,
-      protectedFiles: [...fixture.protectedPaths.forbidden, '.git'],
-      relayVerificationCommands: [`node ${RELAY_TEST_ARGS.join(' ')}`],
-      limits,
-    });
+
+    /**
+     * A REPAIR RESUMES FROM THE REVIEWED BYTES, not from the stub.
+     *
+     * Only files the first attempt was allowed to claim are restored — a
+     * repair that could seed an unclaimed path would widen scope through the
+     * back door, which is the thing `repairExpandsFileClaims` exists to
+     * refuse one layer up.
+     */
+    if (input.revision !== undefined) {
+      for (const [relative, content] of Object.entries(input.revision.priorContents)) {
+        if (relative !== fixture.claimedFile) continue;
+        const target = normalize(join(ws.workspacePath, relative));
+        if (!target.startsWith(ws.workspacePath + sep)) continue;
+        writeFileSync(target, content, 'utf8');
+      }
+    }
+
+    const prompt = input.revision === undefined
+      ? claudePromptFor({
+        pkg,
+        runId,
+        taskId,
+        workspaceRelativeRoot: '.',
+        readOnlyFiles: fixture.protectedPaths.readOnly,
+        protectedFiles: [...fixture.protectedPaths.forbidden, '.git'],
+        relayVerificationCommands: [`node ${RELAY_TEST_ARGS.join(' ')}`],
+        limits,
+      })
+      : compileRevisionPrompt({
+        runId,
+        taskId,
+        findingSummaries: [...input.revision.findingSummaries],
+        relayVerificationCommands: [`node ${RELAY_TEST_ARGS.join(' ')}`],
+      });
 
     // Delivery proof: the handoff Relay was given is the handoff compiled into
     // the prompt this one invocation receives. A prompt that does not carry the
@@ -725,9 +771,41 @@ export async function runCodingMission(input: {
 
     // ---- The reviewed artifact. Captured by Relay from the isolated
     // workspace after the agent exited, BEFORE the workspace is cleaned up,
-    // and digested so a reviewer verdict can be bound to this exact result.
-    const unifiedDiff = diffResult.ok ? safeText(diffResult.value) : '';
-    const changedFileContents = safeText(readChangedFileContents(ws.workspacePath, outcome.filesChanged));
+    /**
+     * THE REVIEWER READS THESE. THEY ARE NOT DISPLAY STRINGS.
+     *
+     * Both were `safeText`, which truncates at 600 characters — so Hermes has
+     * been reviewing a 600-character fragment of the diff and a 600-character
+     * fragment of the resulting file, then being asked whether the
+     * implementation satisfies the objective. It answered well anyway on a
+     * fixture small enough to fit; on anything larger it would have been
+     * judging a stump.
+     *
+     * This is the third place a display sanitizer reached a machine-read
+     * payload, after the hosted execution report and the Reviewer's own
+     * verdict. `redactPayload` keeps the part that is about safety — no
+     * provider secret, no absolute host path — and drops the screen-space
+     * bound. The real ceiling is `MAX_ARTIFACT_FILE_BYTES`, applied per file
+     * where the content is read.
+     */
+    const unifiedDiff = diffResult.ok ? redactPayload(diffResult.value) : '';
+    const changedFileContents = redactPayload(readChangedFileContents(ws.workspacePath, outcome.filesChanged));
+
+    /**
+     * THE CLAIMED FILE'S EXACT BYTES, for a repair that must resume from what
+     * the Reviewer read rather than from the stub. Kept separate from
+     * `changedFileContents` because that one is a formatted, multi-file digest
+     * meant for a reader, and parsing it back would be guessing.
+     */
+    const claimedFileContent = ((): string | null => {
+      const target = normalize(join(ws.workspacePath, fixture.claimedFile));
+      if (!target.startsWith(ws.workspacePath + sep)) return null;
+      try {
+        return readFileSync(target, 'utf8').slice(0, MAX_ARTIFACT_FILE_BYTES);
+      } catch {
+        return null;
+      }
+    })();
     const testOutput = safeText(
       [verifyResult.stdout, verifyResult.stderr].filter((s) => s.trim().length > 0).join('\n'),
     );
@@ -756,6 +834,7 @@ export async function runCodingMission(input: {
       testOutput,
       unifiedDiff,
       changedFileContents,
+      claimedFileContent,
       artifactDigest: digest(
         JSON.stringify({
           baseRevision: fixture.baselineRevision,
