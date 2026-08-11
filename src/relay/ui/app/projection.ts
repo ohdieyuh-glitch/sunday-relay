@@ -461,9 +461,14 @@ export function deriveMissionProjection(
         architectCoordinationLabel: mission.architectReceipt?.coordinationLabel,
         codingAttestation: mission.terminal?.attestation ?? null,
         reviewerProvider: mission.review?.provider ?? null,
-        // The SERVED model — what actually reviewed. When the provider
-        // reported none this stays null and renders as not reported; the
-        // requested model never stands in for it here.
+        // The SERVED model — what actually reviewed. When the provider reported
+        // none this stays null and the reviewer row renders `served model
+        // Unknown`; the requested model never stands in for it here.
+        //
+        // This said "renders as not reported" while the row DROPPED the segment
+        // entirely. Round 2 changed the row and left this sentence, so the
+        // divergence the finding was about survived its own repair — and the
+        // evidence document recorded it as fixed. Two greps found it.
         reviewerModel: mission.review?.servedModel ?? null,
         // The mission's own value, never a browser-side assumption about it.
         reviewerBilling: mission.review?.billing ?? null,

@@ -18,6 +18,7 @@
  * field downstream a lie.
  */
 
+import { classifyModelIdentity } from '../../model-identity';
 import { safeText } from '../../redact';
 
 export const XAI_DEFAULT_BASE_URL = 'https://api.x.ai/v1';
@@ -211,8 +212,19 @@ export async function verifyXaiModel(input: {
 }
 
 /**
- * The run-time guard. A response whose model differs from the verified one
+ * The run-time guard. A response whose model is not the verified one
  * invalidates the run rather than being accepted as an interesting fact.
+ *
+ * ONE MEANS. This used to decide requested-versus-served by string equality,
+ * which made `gpt-4o` answered by `gpt-4o-2024-08-06` an invalidation — and it
+ * had no production caller, so the mission leg wrote a second inline copy of
+ * the same rule and got the same thing wrong. Both now delegate to
+ * `classifyModelIdentity`, so a version resolution is accepted here and there
+ * or refused here and there, and the two can no longer drift.
+ *
+ * The one behaviour this keeps of its own: a NULL verified id is a failure
+ * here, because this function's whole purpose is comparing against a model
+ * Relay verified, and having none to compare against is not agreement.
  */
 export function modelMatchesVerified(
   verifiedModelId: string | null,
@@ -221,12 +233,7 @@ export function modelMatchesVerified(
   if (verifiedModelId === null) {
     return { ok: false, reason: 'Relay has no verified model to compare the response against.' };
   }
-  if (reportedModel === null) return { ok: true, reason: null }; // Unknown stays Unknown.
-  if (reportedModel === verifiedModelId) return { ok: true, reason: null };
-  return {
-    ok: false,
-    reason:
-      `The response reported model ${safeText(reportedModel)}, not the verified `
-      + `${safeText(verifiedModelId)}. Relay invalidated the run.`,
-  };
+  const verdict = classifyModelIdentity({ requested: verifiedModelId, served: reportedModel });
+  if (!verdict.substituted) return { ok: true, reason: null };
+  return { ok: false, reason: `${verdict.reason} Relay invalidated the run.` };
 }

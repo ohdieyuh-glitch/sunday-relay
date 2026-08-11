@@ -14,6 +14,15 @@ import { chmodSync, writeFileSync } from 'node:fs';
 
 export type FakeHermesScenario =
   | 'clean'            // valid JSON review, zero findings
+  /**
+   * Valid JSON review, and the usage report names a RESOLVED model — the
+   * requested id plus a snapshot suffix, which is what every real provider
+   * does. `clean` echoes the requested model back, so it cannot tell a served
+   * model apart from a requested one; this scenario can, which is what proves
+   * the producer half of the hosted chain carries a model the service never
+   * asked for.
+   */
+  | 'clean_resolved_model'
   | 'with_findings'    // valid JSON review with a blocking finding
   | 'malformed'        // parseable process, unparseable review
   | 'hang'             // never exits — proves the timeout and tree kill
@@ -51,19 +60,25 @@ function modelArg() {
   const i = argv.indexOf('-m');
   return i === -1 ? null : argv[i + 1];
 }
+/** What the PROVIDER says answered. A snapshot of the requested family. */
+function servedModel() {
+  const requested = modelArg();
+  if (requested === null) return null;
+  return scenario === 'clean_resolved_model' ? requested + '-0709' : requested;
+}
 
 if (scenario === 'echo_argv') { process.stdout.write(JSON.stringify(argv)); process.exit(0); }
 if (scenario === 'echo_env') { process.stdout.write(JSON.stringify(process.env)); process.exit(0); }
 if (scenario === 'hang') { setInterval(() => {}, 1000); return; }
-if (scenario === 'crash') { writeUsage(modelArg()); process.stderr.write('boom'); process.exit(3); }
+if (scenario === 'crash') { writeUsage(servedModel()); process.stderr.write('boom'); process.exit(3); }
 if (scenario === 'flood') {
-  writeUsage(modelArg());
+  writeUsage(servedModel());
   const chunk = 'x'.repeat(4096);
   for (let i = 0; i < 512; i += 1) process.stdout.write(chunk);
   process.exit(0);
 }
 if (scenario === 'malformed') {
-  writeUsage(modelArg());
+  writeUsage(servedModel());
   process.stdout.write('I reviewed it and it looks fine to me.');
   process.exit(0);
 }
@@ -76,7 +91,7 @@ const findings = scenario === 'with_findings' ? [{
   recommendedAction: 'Invert the condition and add a regression test.',
 }] : [];
 
-writeUsage(modelArg());
+writeUsage(servedModel());
 process.stdout.write(JSON.stringify({
   verdict: scenario === 'with_findings' ? 'changes_required' : 'approved',
   summary: scenario === 'with_findings'

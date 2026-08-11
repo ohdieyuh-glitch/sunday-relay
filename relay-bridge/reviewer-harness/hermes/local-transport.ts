@@ -429,8 +429,8 @@ export function createLocalHermesTransport(
           outputTokens: usage?.outputTokens ?? null,
           // The served model the runner parsed from Hermes' own usage report.
           // This projection used to copy the token counts and drop the model —
-          // the first of three layers that each lost the one field proving
-          // which model actually reviewed.
+          // the PRODUCER half of the hosted chain, and one of the four layers
+          // that each lost the one field proving which model actually reviewed.
           model: usage?.model ?? null,
           source: usage !== null && usage.source === 'harness_reported' ? 'harness_reported' : 'unavailable',
         },

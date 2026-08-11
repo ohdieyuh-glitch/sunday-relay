@@ -251,8 +251,16 @@ export interface MissionReview {
   /**
    * The model the provider itself reported answered — the SERVED model.
    * Null when the provider reported none; never defaulted from
-   * `requestedModel`. A review served by a model other than the requested
-   * one is refused upstream and never reaches this record.
+   * `requestedModel`.
+   *
+   * It routinely DIFFERS from `requestedModel` and that is normal: `gpt-4o`
+   * answered by `gpt-4o-2024-08-06` is the same model named exactly. What is
+   * refused upstream is a SUBSTITUTION — a served model that is not a version
+   * resolution of the requested one — as decided by
+   * `relay-bridge/model-identity.ts`. An earlier version of this comment said a
+   * review served by "a model other than the requested one" never reaches this
+   * record, which described the rule that had already been removed for failing
+   * every mission on the ordinary provider response.
    */
   servedModel: string | null;
   billing: 'subscription' | 'api_billed' | 'portal' | 'local' | 'simulated' | 'unknown';

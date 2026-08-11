@@ -1029,7 +1029,18 @@ describe('27-30. console events, secrecy, terminal regression, and reviewer bill
 
 /* -------------------------------------------------- reviewer preflight */
 
-const PREFLIGHT_HELP = 'usage: hermes [-h] [-z PROMPT] [--safe-mode] [--provider PROVIDER]';
+/**
+ * The REAL binary's flags, including `--usage-file`.
+ *
+ * This fixture predated the reviewer asking Hermes what model actually answered.
+ * `hermesPreflight` now requires `--usage-file` in the help text — a build
+ * without it cannot attest a served model, and discovering that as "the probe
+ * produced no output" sends an operator to look at the model, the credential and
+ * the prompt, none of which is the problem. Verified against
+ * `hermes --help` on Hermes Agent 0.18.2, which lists `[--usage-file PATH]`.
+ */
+const PREFLIGHT_HELP =
+  'usage: hermes [-h] [-z PROMPT] [--safe-mode] [--provider PROVIDER] [--usage-file PATH]';
 const PREFLIGHT_STATUS = [
   '◆ Environment',
   '  Model:        claude-opus-4-8',
@@ -1049,6 +1060,31 @@ const probeWithLiveness = (livenessText: string, seen?: { args: string[][] }) =>
   };
 
 describe('the reviewer preflight proves the reviewer can actually answer', () => {
+  it('refuses a hermes that cannot report its served model, and names the flag', () => {
+    /**
+     * The mission and the probe both pass `--usage-file`. A build without it
+     * cannot attest which model reviewed — the whole point of defect 3 — and
+     * without this gate it failed the probe as "produced no output", which sends
+     * an operator to look at the model, the credential and the prompt, none of
+     * which is the problem. A re-review found the missing gate.
+     */
+    const oldHelp = 'usage: hermes [-h] [-z PROMPT] [--safe-mode] [--provider PROVIDER]';
+    const result = hermesPreflight(
+      { executable: 'hermes', timeoutMs: 1000, maxOutputBytes: 4096, model: 'grok-4', provider: 'xai' },
+      {
+        probe: (_exe: string, args: string[]) => {
+          if (args[0] === '--help') return { ok: true, text: oldHelp };
+          if (args[0] === 'status') return { ok: true, text: PREFLIGHT_STATUS };
+          return { ok: true, text: 'APPROVED' };
+        },
+      },
+    );
+    expect(result.ready).toBe(false);
+    expect(result.missing.join(' ')).toContain('--usage-file');
+    // And NOT the misleading message the absence used to produce.
+    expect(result.missing.join(' ')).not.toContain('produced no output');
+  });
+
   it('reads the real execution configuration and confirms liveness', () => {
     const seen = { args: [] as string[][] };
     const result = hermesPreflight(
@@ -2462,6 +2498,103 @@ describe('defect 3 — requested and served reviewer models are separate facts',
     expect(JSON.stringify(view)).toContain('served model claude-opus-4-8');
   });
 
+  it('COMPLETES when the provider resolves the requested model to a snapshot', async () => {
+    /**
+     * THE REGRESSION THE FIRST VERSION OF THIS BLOCK SHIPPED.
+     *
+     * `requested !== served` called `gpt-4o` answered by `gpt-4o-2024-08-06` a
+     * substitution — the pair `reviewer-served-model.test.ts` calls "the
+     * ordinary case", and the pair `runOpenAiReview` really produces. On the
+     * `openai_reviewer` configuration this repository's own docs recommend for a
+     * hosted run, EVERY mission then failed at the review step with
+     * `retryable: false`, after the review had been paid for, and the founder was
+     * told their provider had swapped the reviewer. An independent review found
+     * it by probing the real registry.
+     *
+     * A snapshot of the requested family is the same model named exactly.
+     */
+    const h = harness({
+      reviewer: async () => ({
+        ...reviewed(approvedReview()),
+        requestedModel: 'claude-opus-4-8',
+        servedModel: 'claude-opus-4-8-20260114',
+      }),
+    });
+    const { view } = await runMission(h, LIVE_ENV, 'm-served-resolution');
+
+    expect(view.state).toBe('verified_complete');
+    // BOTH facts on the record, and they are different strings.
+    expect(view.review?.requestedModel).toBe('claude-opus-4-8');
+    expect(view.review?.servedModel).toBe('claude-opus-4-8-20260114');
+
+    const reviewer = view.attestations?.find((a) => a.role === 'reviewer');
+    expect(reviewer?.actualModel).toBe('claude-opus-4-8-20260114');
+    // A resolution is NOT a fallback. Removing only the refusal would still
+    // have failed the mission through this field → `attestsRealExecution`.
+    expect(reviewer?.fallbackOccurred).toBe(false);
+    expect(reviewer?.completionVerified).toBe(true);
+  });
+
+  it('rules the SAME relationship the same way for the architect', async () => {
+    /**
+     * The architect fixture's provider answers `gpt-test` with
+     * `gpt-test-2026-01-01`. One file was calling that a substitution on the
+     * reviewer leg and `fallbackOccurred: false` on the architect leg, four
+     * hundred lines apart. Both now ask `classifyModelIdentity`.
+     */
+    const { view } = await runMission(harness(), LIVE_ENV, 'm-architect-resolution');
+    const architect = view.attestations?.find((a) => a.role === 'prompt_architect');
+    expect(architect?.requestedModel).toBe('gpt-test');
+    expect(architect?.actualModel).toBe('gpt-test-2026-01-01');
+    expect(architect?.fallbackOccurred).toBe(false);
+    expect(view.state).toBe('verified_complete');
+  });
+
+  it('marks the architect\'s attestation as a fallback when its model IS substituted', async () => {
+    /**
+     * Without this case the architect assertion above passes against a literal
+     * `false` — a resolution and a hardcoded false are the same value. A
+     * genuine substitution is what distinguishes the rule from the constant it
+     * replaced.
+     */
+    const h = harness({
+      architect: async () => ({
+        ...ARCHITECT_RESULT,
+        receipt: { ...ARCHITECT_RESULT.receipt, requestedModel: 'gpt-test', actualModel: 'gpt-test-mini' },
+      }),
+    });
+    const { view } = await runMission(h, LIVE_ENV, 'm-architect-substituted');
+    const architect = view.attestations?.find((a) => a.role === 'prompt_architect');
+    expect(architect?.actualModel).toBe('gpt-test-mini');
+    // A variant is not a snapshot, so this is a substitution for the architect
+    // exactly as it would be for the reviewer.
+    expect(architect?.fallbackOccurred).toBe(true);
+
+    /**
+     * AND THE MISSION OUTCOME, WHICH IS WHY THE PREVIOUS VERSION OF THIS TEST
+     * LET A HIGH-SEVERITY DEFECT SHIP.
+     *
+     * It asserted only the flag. `fallbackOccurred: true` reaches
+     * `attestsRealExecution` → `decideCompletion`, so the mission died at the
+     * very END — after the Coding Agent and the Reviewer had both run and been
+     * paid — with the message "The Prompt Architect did not produce an attested
+     * execution" and no event naming a model anywhere. An independent review
+     * found it by running the real registry. A test that checks a flag and not
+     * the outcome is a test that agrees with the code about a field and knows
+     * nothing about the behaviour.
+     */
+    expect(view.state).toBe('failed');
+    expect(view.error?.code).toBe('prompt_architect_failed');
+    expect(view.error?.safeMessage).toContain('gpt-test-mini');
+    expect(view.error?.safeMessage).toContain('gpt-test');
+    // Refused where the fact was discovered: the Coding Agent never ran.
+    expect(h.calls.coding).toBe(0);
+    expect(h.calls.reviewer).toBe(0);
+    // And the record explains itself rather than leaving four green architect
+    // events followed by a terminal failure with an unrelated reason.
+    expect(JSON.stringify(view)).toContain('the provider substituted the model');
+  });
+
   it('a provider that substitutes the reviewer model has its review refused', async () => {
     // Requested one model, answered with another. Relay performs no fallback
     // and does not accept one performed on the far side of the API either.
@@ -2510,14 +2643,62 @@ describe('defect 3 — requested and served reviewer models are separate facts',
     expect(view.error?.code).toBe('review_blocked');
   });
 
+  it('never leaves an attestationRef pointing at an attestation the record does not hold', async () => {
+    /**
+     * `buildAttestation` derives its id from `missionId:role:startedAt`, so
+     * rebuilding the reviewer attestation from the SECOND review produces a new
+     * id — while the "Hermes response received" event appended during the FIRST
+     * review still carries the old one. Every repaired mission's record
+     * therefore contained an event referencing a reviewer attestation the record
+     * no longer held, and it was the event a founder reads first. A re-review
+     * found it by diffing the refs against the ids.
+     *
+     * The invariant, asserted rather than the symptom: every `attestationRef` in
+     * the events either resolves to a current attestation, or is NAMED in a
+     * notice that explains what happened to it. Erasing the reference would
+     * erase the fact that the first attestation existed and was superseded.
+     */
+    let call = 0;
+    const h = harness({
+      reviewer: async () => {
+        call += 1;
+        if (call === 1) return { ...reviewed(rejectedReview()), requestedModel: 'grok-build-0.1', servedModel: null };
+        return { ...reviewed(repairedReview()), requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1' };
+      },
+    });
+    const { view } = await runMission(h, LIVE_ENV, 'm-rereview-refs', 'live');
+    expect(view.review?.verdict).toBe('approved');
+
+    const ids = new Set((view.attestations ?? []).map((a) => a.attestationId));
+    const text = JSON.stringify(view);
+    const refs = (view.events ?? [])
+      .map((e) => e.attestationRef)
+      .filter((r): r is string => typeof r === 'string' && r !== '');
+    expect(refs.length).toBeGreaterThan(0);
+    for (const ref of refs) {
+      const resolved = ids.has(ref);
+      // A ref the record no longer holds must be explained by the record.
+      const explained = !resolved && text.includes(ref) && text.includes('superseded');
+      expect(resolved || explained, `attestationRef ${ref} is neither held nor explained`).toBe(true);
+    }
+    // And the notice names BOTH ids, so an auditor can follow the substitution.
+    expect(text).toContain('superseded by the re-review');
+  });
+
   it('an accepted re-review replaces the first attempt\'s model facts, not just its verdict', async () => {
     let call = 0;
     const h = harness({
       reviewer: async () => {
         call += 1;
-        if (call === 1) return rejectedReview();
-        // The same requested model, and this time the provider names a served
-        // one where the first attempt named none.
+        /**
+         * THE FIRST LOOK REPORTS NO SERVED MODEL; THE SECOND REPORTS ONE.
+         *
+         * Both attempts naming the same model made the assertions below pass by
+         * coincidence — the first review's attestation already held the right
+         * value, so removing the rebuild changed nothing a test could see. This
+         * is the divergence an independent review actually probed.
+         */
+        if (call === 1) return { ...reviewed(rejectedReview()), requestedModel: 'grok-build-0.1', servedModel: null };
         return { ...reviewed(repairedReview()), requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1' };
       },
     });
@@ -2529,5 +2710,18 @@ describe('defect 3 — requested and served reviewer models are separate facts',
     // the mission no longer relies on.
     expect(view.review?.requestedModel).toBe('grok-build-0.1');
     expect(view.review?.servedModel).toBe('grok-build-0.1');
+    /**
+     * AND THE ATTESTATION DESCRIBES THE SAME REVIEW.
+     *
+     * Overwriting only `rec.review` left the machine-read attestation
+     * describing the FIRST review, so a mission whose first look reported no
+     * served model and whose second reported one showed the model on the
+     * founder's card and `actualModel: undefined` in the record — for the same
+     * mission. An independent review found that by probing the real registry.
+     */
+    const reviewer = view.attestations?.find((a) => a.role === 'reviewer');
+    expect(reviewer?.actualModel).toBe(view.review?.servedModel ?? undefined);
+    expect(reviewer?.requestedModel).toBe('grok-build-0.1');
+    expect(reviewer?.completionVerified).toBe(true);
   });
 });

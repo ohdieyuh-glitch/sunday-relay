@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { runHermesReview } from './hermes-reviewer';
 import type { ReviewPacket } from './hermes-reviewer';
 import { runRemoteHermesReview, type RemoteHermesConfig } from './hermes-remote-review';
-import { loadXaiConfig } from './reviewer-harness/hermes/xai-models';
+import { loadXaiConfig, modelMatchesVerified } from './reviewer-harness/hermes/xai-models';
+import { MODEL_IDENTITY_RELATIONS, classifyModelIdentity } from './model-identity';
 
 /**
  * DEFECT 3 — WHICH MODEL ACTUALLY REVIEWED.
@@ -26,9 +27,13 @@ import { loadXaiConfig } from './reviewer-harness/hermes/xai-models';
  *      — the reviewer model is configured as `RELAY_HERMES_MODEL` — so the
  *      requested model was null everywhere it mattered.
  *
- * This file holds each of those four seams open independently. The mission-level
- * consequences — Unknown staying Unknown, and a substituted model having its
- * review refused — are in `orchestrator.test.ts`, where the pipeline harness is.
+ * This file holds seams 1, 2 and 4 open independently, plus the rule that
+ * decides what a requested/served difference MEANS. Seam 3 — the transports —
+ * is proven in two places: the decoder half in
+ * `reviewer-harness/hermes/remote-transport.test.ts`, and the PRODUCER half
+ * over real HTTP through the real service in `relay-hermes-service/end-to-end.test.ts`
+ * ("carries the served model the fake Hermes reported"). The mission-level
+ * consequences are in `orchestrator.test.ts`, where the pipeline harness is.
  *
  * Nothing here opens a socket. The local path's process is a fake spawn and the
  * remote path's service is a fake fetch.
@@ -285,5 +290,185 @@ describe('the recorded defect and its documentation agree', () => {
     expect(doc).toContain("The reviewer's served model is not proven. — CLOSED");
     // And the section no longer calls its whole contents unfixed.
     expect(doc).not.toContain('## Defects found and NOT fixed');
+  });
+});
+
+/* ------------------------- the rule that decides what a difference MEANS */
+
+describe('a version resolution is not a substitution', () => {
+  /**
+   * THE REGRESSION THIS FILE'S FIRST VERSION SHIPPED.
+   *
+   * Splitting requested from served produced a second question, and the first
+   * answer was `requested !== served`. That refused `gpt-4o` answered by
+   * `gpt-4o-2024-08-06` — the pair the test above calls "the ordinary case" —
+   * so on the `openai_reviewer` configuration this repository's own docs
+   * recommend for a hosted run, EVERY mission failed at the review step with
+   * `retryable: false`, after the review had been paid for, and the founder was
+   * told their provider had swapped the reviewer. An independent review found it
+   * by running the real registry.
+   *
+   * These cases are the rule, and the mission-level consequence is in
+   * `orchestrator.test.ts`.
+   */
+  const relation = (requested: string | null, served: string | null) =>
+    classifyModelIdentity({ requested, served }).relation;
+
+  it('calls every real provider version resolution a resolution', () => {
+    for (const [requested, served] of [
+      ['gpt-4o', 'gpt-4o-2024-08-06'],
+      ['claude-sonnet-5', 'claude-sonnet-5-20260114'],
+      ['grok-4', 'grok-4-0709'],
+      ['gpt-test', 'gpt-test-2026-01-01'],
+      ['model', 'model@2026-01'],
+      ['model', 'model:v2'],
+      ['model', 'model/2026-01'],
+      ['gpt-test', 'gpt-test-0613'],
+    ] as const) {
+      const verdict = classifyModelIdentity({ requested, served });
+      expect(verdict.relation, `${requested} → ${served}`).toBe('resolution');
+      expect(verdict.substituted, `${requested} → ${served}`).toBe(false);
+    }
+  });
+
+  it('still calls a genuinely different model a substitution', () => {
+    for (const [requested, served] of [
+      ['grok-4', 'grok-3-mini'],
+      // A VARIANT, not a snapshot. `gpt-4o-mini` satisfies "prefix plus
+      // separator" and is a different, weaker, cheaper model — the
+      // counterexample that made the first version of this rule unsound.
+      ['gpt-4o', 'gpt-4o-mini'],
+      ['gpt-4o', 'gpt-4o-turbo'],
+      ['gpt-4o', 'gpt-4o-preview'],
+      // `latest` does not even name what ran.
+      ['gpt-4o', 'gpt-4o-latest'],
+      ['claude-sonnet-5', 'claude-haiku-4-5'],
+      // The REVERSE direction: a request that pinned a snapshot and got the
+      // family back did not have its pin honoured, and a pin nobody honours is
+      // not a pin.
+      ['gpt-4o-2024-08-06', 'gpt-4o'],
+      // A shared prefix with no separator is a different model, not a snapshot.
+      ['grok-4', 'grok-40'],
+    ] as const) {
+      const verdict = classifyModelIdentity({ requested, served });
+      expect(verdict.relation, `${requested} → ${served}`).toBe('substitution');
+      expect(verdict.substituted, `${requested} → ${served}`).toBe(true);
+      // Both names travel, so a refusal names what it refused and why.
+      expect(verdict.reason).toContain(served);
+      expect(verdict.reason).toContain(requested);
+    }
+  });
+
+  it('refuses a version BUMP, which a `.` separator used to accept as a snapshot', () => {
+    /**
+     * `.` was in `RESOLUTION_SEPARATORS` and undocumented, and it made
+     * `gpt-4` → `gpt-4.1` a "resolution". `gpt-4.1` is a different model with
+     * different weights and a different price. An independent review found this
+     * by running the classifier over 46 real provider id pairs.
+     */
+    for (const [requested, served] of [
+      ['gpt-4', 'gpt-4.1'],
+      ['grok-4', 'grok-4.1'],
+      ['llama-3', 'llama-3.1'],
+      // And the digit floor: one or two digits is a version bump, not a
+      // snapshot. Every real snapshot is a date or a zero-padded build number.
+      ['gpt-4o', 'gpt-4o-2'],
+      ['claude-3', 'claude-3-5'],
+    ] as const) {
+      expect(relation(requested, served), `${requested} → ${served}`).toBe('substitution');
+    }
+  });
+
+  it('accepts a three-digit or longer snapshot, which is what providers actually emit', () => {
+    for (const [requested, served] of [
+      ['gemini-1.5-pro', 'gemini-1.5-pro-002'],
+      ['claude-3-5-sonnet', 'claude-3-5-sonnet-20241022'],
+      ['grok-2', 'grok-2-1212'],
+      ['mistral-large', 'mistral-large-2411'],
+    ] as const) {
+      expect(relation(requested, served), `${requested} → ${served}`).toBe('resolution');
+    }
+  });
+
+  it('does not silently carry a separator the comment above it fails to mention', () => {
+    /**
+     * The sentence enumerating the separators listed four while the array held
+     * five, and the undocumented fifth was the unsound one. Asserted against the
+     * source so the two cannot drift again.
+     */
+    const source = readFileSync('relay-bridge/model-identity.ts', 'utf8');
+    const declared = /const RESOLUTION_SEPARATORS = \[(.*?)\] as const;/.exec(source)?.[1] ?? '';
+    expect(declared).toContain("'-'");
+    // `.` must stay out, and the comment must say it is out.
+    expect(declared).not.toContain("'.'");
+    expect(source).toContain('`.` IS DELIBERATELY ABSENT');
+  });
+
+  it('cannot verify an ALIAS, and says so rather than refusing a paid review', () => {
+    /**
+     * The same over-refusal class as the original regression, for provider alias
+     * forms. `claude-3-5-sonnet-latest` answered by `claude-3-5-sonnet-20241022`
+     * is the provider doing exactly what the alias asked for — refusing it threw
+     * away a paid review with `retryable: false`.
+     *
+     * Relay holds no alias table and must not invent one, so the honest answer
+     * is neither "match" nor "substitution".
+     */
+    for (const [requested, served] of [
+      ['claude-3-5-sonnet-latest', 'claude-3-5-sonnet-20241022'],
+      ['mistral-large-latest', 'mistral-large-2411'],
+      ['gpt-4-turbo-preview', 'gpt-4-0125-preview'],
+      ['claude-sonnet-4-0', 'claude-sonnet-4-20250514'],
+    ] as const) {
+      const verdict = classifyModelIdentity({ requested, served });
+      expect(verdict.relation, `${requested} → ${served}`).toBe('alias_unverifiable');
+      // Not a substitution, so the mission is not failed over it.
+      expect(verdict.substituted, `${requested} → ${served}`).toBe(false);
+      // And the record says the check could not be made rather than implying it
+      // passed.
+      expect(verdict.reason).toContain('unverified');
+      expect(verdict.reason).toContain(served);
+      expect(verdict.reason).toContain(requested);
+    }
+  });
+
+  it('still refuses an alias answered by a DIFFERENT provider\'s family', () => {
+    // However loose an alias is, it does not cross providers.
+    expect(relation('claude-3-5-sonnet-latest', 'grok-3-mini')).toBe('substitution');
+    expect(relation('mistral-large-latest', 'gpt-4o-2024-08-06')).toBe('substitution');
+  });
+
+  it('treats a case-only difference as the same model', () => {
+    // Failing a paid review over capitalization is the over-refusal this rule
+    // exists to avoid.
+    expect(relation('Grok-4', 'grok-4')).toBe('exact');
+    expect(relation('grok-4', 'GROK-4-0709')).toBe('resolution');
+  });
+
+  it('keeps Unknown as Unknown and an unrequested model as unrequested', () => {
+    // Neither is a substitution, and neither is promoted to a match.
+    expect(relation('grok-4', null)).toBe('unknown');
+    expect(relation('grok-4', '   ')).toBe('unknown');
+    expect(relation(null, 'grok-4')).toBe('unrequested');
+    expect(relation(null, null)).toBe('unknown');
+    for (const r of ['unknown', 'unrequested'] as const) {
+      expect(MODEL_IDENTITY_RELATIONS).toContain(r);
+    }
+  });
+
+  it('is the same rule the xAI harness guard uses', () => {
+    /**
+     * ONE MEANS. `modelMatchesVerified` had its own exact-match copy of this
+     * rule with no production caller, and the mission leg then wrote a second
+     * inline copy and got the same thing wrong. Both delegate here now, so a
+     * resolution is accepted in both or refused in both.
+     */
+    expect(modelMatchesVerified('gpt-4o', 'gpt-4o-2024-08-06').ok).toBe(true);
+    expect(modelMatchesVerified('grok-4', 'grok-3-mini').ok).toBe(false);
+    // Unknown stays Unknown here too.
+    expect(modelMatchesVerified('grok-4', null).ok).toBe(true);
+    // And a missing VERIFIED id is still a failure: this function exists to
+    // compare against a verified model, and having none is not agreement.
+    expect(modelMatchesVerified(null, 'grok-4').ok).toBe(false);
   });
 });

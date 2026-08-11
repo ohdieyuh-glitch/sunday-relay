@@ -15,7 +15,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { safeText } from './redact';
 import { parseUsageFile } from './reviewer-harness/hermes/runner';
 
@@ -239,6 +239,19 @@ export function hermesPreflight(
   else {
     if (!oneShotSupported) missing.push('hermes one-shot mode (-z)');
     if (!readOnlySupported) missing.push('hermes read-only mode (--safe-mode)');
+    /**
+     * THE FLAG THE PROBE AND THE MISSION BOTH PASS, checked beside the other
+     * two rather than discovered by a probe that produces no output.
+     *
+     * Without this, a hermes build lacking `--usage-file` fails the liveness
+     * probe as "hermes reviewer response (the one-shot probe produced no
+     * output)" — a message that sends an operator to look at the model, the
+     * credential and the prompt, none of which is the problem. Naming the
+     * missing flag is the difference between a two-minute fix and an afternoon.
+     */
+    if (!help.text.includes('--usage-file')) {
+      missing.push('hermes usage reporting (--usage-file), which the reviewer needs to attest its served model');
+    }
   }
 
   const status = probe(cfg.executable, ['status']);
@@ -256,25 +269,43 @@ export function hermesPreflight(
    * Asking a reviewer to answer when the executable is missing or the model is
    * unresolved wastes a spawn and a timeout to learn what is already known.
    * The arguments mirror `runHermesReview` exactly, so this proves the path the
-   * mission will actually take rather than a neighbouring one.
+   * mission will actually take rather than a neighbouring one — which is why
+   * `--usage-file` is here too. When the mission leg gained that flag this
+   * probe did not, and the comment above became a claim the code no longer
+   * supported: a flag the real call passes and the probe does not is exactly
+   * what this mirroring exists to prevent. The path is a throwaway; the probe
+   * does not read the file, it proves the binary accepts the argument.
    */
   let livenessVerified = false;
   if (missing.length === 0) {
-    const args = ['-z', LIVENESS_PROMPT, '--safe-mode'];
-    if (cfg.model) args.push('-m', cfg.model);
-    if (cfg.provider) args.push('--provider', cfg.provider);
-    const live = probe(cfg.executable, args, Math.min(cfg.timeoutMs, LIVENESS_TIMEOUT_MS));
-    const failure = classifyHermesUpstreamFailure(live.text);
-    if (failure !== null) {
-      missing.push(
-        failure.kind === 'authentication'
-          ? 'hermes provider authentication (the configured provider rejected the reviewer credential)'
-          : `hermes provider availability (the configured provider returned HTTP ${String(failure.status ?? 0)})`,
-      );
-    } else if (!live.text.trim()) {
-      missing.push('hermes reviewer response (the one-shot probe produced no output)');
-    } else {
-      livenessVerified = true;
+    const probeUsagePath = join(mkdtempSync(join(tmpdir(), 'relay-hermes-probe-')), 'usage.json');
+    const args = ['-z', LIVENESS_PROMPT, '--safe-mode', '--usage-file', probeUsagePath];
+    /**
+     * `try/finally`, not a call after the branch.
+     *
+     * `defaultProbe` catches everything and cannot throw, so production leaked
+     * nothing — but `deps.probe` is injectable, and cleanup that depends on the
+     * injected function not throwing is cleanup that works by luck. The
+     * directory goes with the probe on every path, including a throw.
+     */
+    try {
+      if (cfg.model) args.push('-m', cfg.model);
+      if (cfg.provider) args.push('--provider', cfg.provider);
+      const live = probe(cfg.executable, args, Math.min(cfg.timeoutMs, LIVENESS_TIMEOUT_MS));
+      const failure = classifyHermesUpstreamFailure(live.text);
+      if (failure !== null) {
+        missing.push(
+          failure.kind === 'authentication'
+            ? 'hermes provider authentication (the configured provider rejected the reviewer credential)'
+            : `hermes provider availability (the configured provider returned HTTP ${String(failure.status ?? 0)})`,
+        );
+      } else if (!live.text.trim()) {
+        missing.push('hermes reviewer response (the one-shot probe produced no output)');
+      } else {
+        livenessVerified = true;
+      }
+    } finally {
+      try { rmSync(dirname(probeUsagePath), { recursive: true, force: true }); } catch { /* best effort */ }
     }
   }
 
@@ -525,10 +556,18 @@ export async function runHermesReview(input: {
       settled = true;
       clearTimeout(timer);
       /**
-       * The one funnel every outcome passes through, which is why cleanup
-       * lives here rather than in each of the six `finish` call sites. The
-       * usage file is read while building the argument to this call, so it is
-       * still on disk at that point and gone immediately after.
+       * The funnel every outcome EXCEPT the spawn throw passes through, which
+       * is why cleanup lives here rather than in each of the four `finish` call
+       * sites. The spawn-throw path resolves directly, a few lines above, and
+       * calls `discardScratch()` itself — the reason that duplicate exists.
+       *
+       * The first version of this comment said "every outcome" and "six call
+       * sites"; both were false, and the next reader who trusts "every outcome"
+       * while adding a fifth exit leaks the scratch directory again, which is
+       * the defect this hunk fixes.
+       *
+       * The usage file is read while building the argument to this call, so it
+       * is still on disk at that point and gone immediately after.
        */
       discardScratch();
       resolve(o);

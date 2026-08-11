@@ -242,8 +242,9 @@ describe('reviews', () => {
    *
    * The harness has parsed the served model out of Hermes' own usage report
    * since the usage file existed, and this decoder copied the token counts and
-   * silently discarded the model — the first of three layers that each lost
-   * the one field proving which model actually reviewed (defect 3).
+   * silently discarded the model — the DECODER half of the hosted chain — one of
+   * the four layers that each lost the one field proving which model actually
+   * reviewed (defect 3).
    */
   it('decodes the served model the service reported', async () => {
     const r = await transport(() => reply(200, {

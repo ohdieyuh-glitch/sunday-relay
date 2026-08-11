@@ -498,3 +498,104 @@ describe('H-1 — the labeled demo path is unchanged', () => {
     expect(p.verificationSummary.checks.some((c) => c.status === 'passed')).toBe(true);
   });
 });
+
+/* ------------------------------------------------------------------ 8 */
+
+/**
+ * H-1.8 — THE TWO FOUNDER-FACING SURFACES OF THE SERVED MODEL.
+ *
+ * Defect 3 was that Relay attested a reviewer model it had only requested. The
+ * fix split requested from served at every layer — and shipped with no test on
+ * the two places the defect was VISIBLE: the review card's model and the
+ * completion-evidence line. An independent review reverted both back to the
+ * requested axis and watched all 177 tests across `src/relay/ui/app/` and
+ * `coding-terminal.test.tsx` pass. A count with no scope is a number no command
+ * reproduces, so the scope is named.
+ *
+ * These are those tests. Each fixture makes the two axes genuinely different
+ * strings, so reading the wrong one is detectable rather than a coin flip.
+ */
+describe('H-1.8 — the projection reads the SERVED model, never the requested one', () => {
+  it('projects the reviewer model from servedModel', () => {
+    const p = project({
+      ...COMPLETE_WITHOUT_EVIDENCE,
+      attestations: [attestation('reviewer')],
+      review: review({ requestedModel: 'grok-4', servedModel: 'grok-4-0709', provider: 'xai' }),
+    });
+    // The founder-visible string, which is where the defect was visible.
+    const row = p.roleBilling?.find((r) => r.roleKey === 'reviewer');
+    expect(row?.runtime).toContain('served model grok-4-0709');
+    // `grok-4` is a PREFIX of the served id, so a bare `toContain('grok-4')`
+    // would pass either way. The assertion is on the whole segment.
+    expect(row?.runtime).not.toContain('served model grok-4 ');
+    expect(row?.runtime).not.toMatch(/served model grok-4$/);
+  });
+
+  it('leaves the reviewer model Unknown when the provider named none', () => {
+    const p = project({
+      ...COMPLETE_WITHOUT_EVIDENCE,
+      attestations: [attestation('reviewer')],
+      review: review({ requestedModel: 'grok-4', servedModel: null, provider: 'xai' }),
+    });
+    /**
+     * THE DEFECT IN ONE ASSERTION, and its sequel.
+     *
+     * This position used to be filled from CONFIGURATION, so a founder shown
+     * `grok-4` had been shown a model nobody confirmed reviewed anything. The
+     * first fix made it null — and the row then dropped the segment entirely,
+     * so it went SILENT in exactly the case the work exists to make legible.
+     * Unknown renders, matching the provider one field over.
+     */
+    const row = p.roleBilling?.find((r) => r.roleKey === 'reviewer');
+    expect(row?.runtime).toContain('served model Unknown');
+    expect(row?.runtime).not.toContain('grok-4');
+  });
+
+  it('says nothing about a served model when the reviewer never ran', () => {
+    /**
+     * `served model Unknown` beside a reviewer that never launched reads as "it
+     * ran and the provider said nothing", which is a larger claim than "it has
+     * not run" — and the status label two fields over already says `NOT RUN`.
+     * The first repair rendered Unknown unconditionally; a re-review caught it.
+     */
+    const p = project(COMPLETE_WITHOUT_EVIDENCE);
+    const row = p.roleBilling?.find((r) => r.roleKey === 'reviewer');
+    expect(row?.statusLabel).toBe('NOT RUN');
+    expect(row?.runtime).not.toContain('served model');
+  });
+
+  it('names the ARCHITECT\'s served model in the completion evidence, not the requested one', () => {
+    const p = project({
+      ...COMPLETE_WITHOUT_EVIDENCE,
+      attestations: [attestation('prompt_architect', {
+        actualActor: 'ChatGPT',
+        requestedModel: 'gpt-4o',
+        actualModel: 'gpt-4o-2024-08-06',
+        launchVerified: true,
+        completionVerified: true,
+      })],
+    });
+    const evidence = p.completionState.evidence.join(' | ');
+    expect(evidence).toContain('gpt-4o-2024-08-06');
+    // `gpt-4o` is a prefix of the served id, so a bare `toContain` would pass
+    // either way. The assertion is on the exact rendered sentence.
+    expect(evidence).toContain('Prompt Architect execution attested (ChatGPT · gpt-4o-2024-08-06).');
+    expect(evidence).not.toContain('(ChatGPT · gpt-4o).');
+  });
+
+  it('names no architect model at all when the provider named none', () => {
+    const p = project({
+      ...COMPLETE_WITHOUT_EVIDENCE,
+      attestations: [attestation('prompt_architect', {
+        actualActor: 'ChatGPT',
+        requestedModel: 'gpt-4o',
+        launchVerified: true,
+        completionVerified: true,
+      })],
+    });
+    const evidence = p.completionState.evidence.join(' | ');
+    expect(evidence).toContain('Prompt Architect execution attested (ChatGPT).');
+    // The requested model never stands in for the one that answered.
+    expect(evidence).not.toContain('gpt-4o');
+  });
+});

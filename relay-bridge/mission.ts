@@ -49,6 +49,7 @@ import {
 } from './hermes-reviewer';
 import { resolveReviewerTransport as resolveTransport, reviewerPreflight as runReviewerPreflight } from './reviewer-transport';
 import { runRemoteHermesReview } from './hermes-remote-review';
+import { classifyModelIdentity } from './model-identity';
 import { runOpenAiReview } from './openai-reviewer';
 import type { ReviewerTransport } from './reviewer-transport';
 import type { LiveReachService } from './live-reach-service';
@@ -1200,6 +1201,27 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
             inputDigest: architectResult.receipt.inputDigest,
             outputDigest: architectResult.receipt.outputDigest,
           };
+          /**
+           * THE ARCHITECT'S MODEL IDENTITY, CLASSIFIED ONCE AND ACTED ON HERE.
+           *
+           * Computed before the attestation because the mission has to be able
+           * to STOP here. The previous version only fed the classification into
+           * `fallbackOccurred` and carried on — and `fallbackOccurred: true`
+           * reaches `attestsRealExecution` → `decideCompletion`, so a
+           * substituted architect model killed the mission at the very END,
+           * after the Coding Agent and the Reviewer had both run and been paid,
+           * with the message "The Prompt Architect did not produce an attested
+           * execution" and no event anywhere naming a model. An independent
+           * review found that by running it.
+           *
+           * A refusal belongs where the fact is discovered. The reviewer leg
+           * does exactly this — see `reviewerModelSubstituted` — and now both
+           * legs fail fast with both model names in the record.
+           */
+          const architectIdentity = classifyModelIdentity({
+            requested: architectResult.receipt.requestedModel,
+            served: architectResult.receipt.actualModel,
+          });
           rec.attestations.prompt_architect = buildAttestation({
             missionId: rec.missionId,
             missionRevision: rec.missionRevision,
@@ -1217,13 +1239,60 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
             billingPath: 'api_billed',
             launchVerified: true,
             completionVerified: true,
-            fallbackOccurred: false,
+            /**
+             * THE SAME RULE THE REVIEWER USES, so two roles cannot rule
+             * opposite ways on one fact.
+             *
+             * This was the literal `false`, and the reviewer leg 400 lines down
+             * was calling the identical `gpt-test` → `gpt-test-2026-01-01`
+             * relationship a substitution. One file, one fact, two answers.
+             * Now both ask `classifyModelIdentity`: a version resolution is not
+             * a fallback for either role, and a genuine substitution is one for
+             * both — and the mission stops immediately below rather than at the
+             * end.
+             */
+            fallbackOccurred: architectIdentity.substituted,
             externalExecutionIdRedacted: architectResult.receipt.requestIdRedacted ?? undefined,
             inputDigest: architectResult.receipt.inputDigest,
             outputDigest: architectResult.receipt.outputDigest,
             startedAt: architectResult.receipt.startedAt,
             completedAt: architectResult.receipt.completedAt,
           });
+          /**
+           * REFUSED HERE, WITH BOTH NAMES, BEFORE THE CODING AGENT COSTS
+           * ANYTHING.
+           *
+           * The event is appended first so the record explains the failure even
+           * though `fail` is what ends the mission: the previous version's
+           * refusal was invisible, and a founder reading four successful
+           * architect events followed by a terminal `verification_failed` could
+           * not learn why.
+           */
+          if (architectIdentity.substituted) {
+            append(rec, {
+              role: 'prompt_architect',
+              category: 'prompt_architect',
+              truth: 'system_notice',
+              headline: 'Prompt Architect refused — the provider substituted the model.',
+              detail: `${architectIdentity.reason} Relay does not accept a handoff from a substituted model.`,
+            });
+            rec.ledger.set(archKey, 'failed');
+            fail(
+              rec,
+              /**
+               * `prompt_architect_failed`, not a new phase member. The architect
+               * leg did not produce an acceptable handoff, which is exactly what
+               * that phase means, and a new member would have to be added to
+               * every exhaustive switch over `MissionPhase` and to the
+               * surface-parity contract. WHICH failure it was travels in the
+               * message, with both model names in it.
+               */
+              'prompt_architect_failed',
+              `${architectIdentity.reason} Relay does not accept a handoff from a substituted model.`,
+              { retryable: false },
+            );
+            return;
+          }
           rec.ledger.set(archKey, 'complete');
 
           append(rec, {
@@ -1600,14 +1669,27 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           (reviewOutcome.kind === 'reviewed' ? reviewOutcome.requestedModel : null) ?? hermesReady?.model ?? null;
         const servedReviewerModel = reviewOutcome.kind === 'reviewed' ? reviewOutcome.servedModel : null;
         /**
-         * A substitution is both facts known and disagreeing. An unreported
-         * served model is NOT a substitution — Unknown stays Unknown — but it
-         * is also never promoted to a match.
+         * NOT EVERY DIFFERENCE IS A SUBSTITUTION, and this used to say it was.
+         *
+         * `requested !== served` refused `gpt-4o` answered by
+         * `gpt-4o-2024-08-06` — the same model named exactly, which is what
+         * every provider does and the reason these two axes exist. On the
+         * reviewer configuration this repository's own docs recommend for a
+         * hosted run, that failed EVERY mission at the review step with
+         * `retryable: false`, after the review had been paid for, and told the
+         * founder their provider had swapped the reviewer. An independent
+         * review found it by running it.
+         *
+         * `classifyModelIdentity` is the one rule; see `model-identity.ts`.
+         * Unknown stays Unknown, a version resolution is truthful on both axes
+         * and is not a fallback, and only a genuinely different model is
+         * refused.
          */
-        const reviewerModelSubstituted =
-          requestedReviewerModel !== null
-          && servedReviewerModel !== null
-          && requestedReviewerModel !== servedReviewerModel;
+        const reviewerModelIdentity = classifyModelIdentity({
+          requested: requestedReviewerModel,
+          served: servedReviewerModel,
+        });
+        const reviewerModelSubstituted = reviewerModelIdentity.substituted;
 
         rec.attestations.reviewer = buildAttestation({
           missionId: rec.missionId,
@@ -1677,9 +1759,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           fail(
             rec,
             'review_incomplete',
-            `The reviewer's provider answered with model ${safeText(servedReviewerModel ?? '')}, `
-              + `not the requested ${safeText(requestedReviewerModel ?? '')}. `
-              + 'Relay does not accept a review from a substituted model.',
+            `${reviewerModelIdentity.reason} Relay does not accept a review from a substituted model.`,
             { retryable: false },
           );
           return;
@@ -1889,21 +1969,22 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
             : null;
           const secondServedModel = secondOutcome.kind === 'reviewed' ? secondOutcome.servedModel : null;
           /**
-           * THE SAME NO-SUBSTITUTION RULE AS THE FIRST REVIEW. A re-review
-           * answered by a different model than the requested one is not
-           * adopted; the first review — the rejection — stands, and the
-           * record says why.
+           * THE SAME NO-SUBSTITUTION RULE AS THE FIRST REVIEW, through the same
+           * function — so a version resolution is accepted here exactly as it is
+           * there, and the two legs cannot drift apart.
            */
-          const secondSubstituted =
-            secondRequestedModel !== null && secondServedModel !== null && secondRequestedModel !== secondServedModel;
+          const secondIdentity = classifyModelIdentity({
+            requested: secondRequestedModel,
+            served: secondServedModel,
+          });
+          const secondSubstituted = secondIdentity.substituted;
           if (secondOutcome.kind === 'reviewed' && secondSubstituted) {
             append(rec, {
               role: 'reviewer',
               category: 'reviewer',
               truth: 'system_notice',
               headline: 'Re-review refused — the provider substituted the reviewer model.',
-              detail: `The re-review was answered by ${safeText(secondServedModel ?? '')}, not the requested `
-                + `${safeText(secondRequestedModel ?? '')}. The first review stands.`,
+              detail: `${secondIdentity.reason} The first review stands.`,
             });
           }
           if (secondOutcome.kind === 'reviewed' && !secondSubstituted) {
@@ -1928,6 +2009,93 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
               servedModel: secondServedModel,
             };
             review = rec.review;
+            /**
+             * AND THE ATTESTATION IS REBUILT FROM THE SAME OUTCOME.
+             *
+             * Overwriting only `rec.review` left the reviewer ATTESTATION
+             * describing the FIRST review — so a mission whose first look
+             * reported no served model and whose second reported one showed
+             * `servedModel: "grok-build-0.1"` on the founder's card and
+             * `actualModel: undefined` in the machine-read record, for the same
+             * mission. An independent review found that by probing the real
+             * registry. The comment two hundred lines up promises these two
+             * cannot disagree about the review; this is what makes that true.
+             */
+            const secondReviewerAttestation = rec.attestations.reviewer;
+            if (secondReviewerAttestation !== undefined) {
+              /**
+               * WHICH FIELDS COME FROM WHERE, because the previous version of
+               * the comment above said "rebuilt from the same outcome" and six
+               * of these are copied from the FIRST attestation.
+               *
+               *   from `secondOutcome`  the model facts, the digests, the times
+               *   from the FIRST        the actors and runtimes, which describe
+               *                         the same occupant driving the same
+               *                         transport — a re-review is the SAME
+               *                         reviewer looking again, and inventing a
+               *                         new actor for it would be a claim
+               *                         nothing observed
+               *   from `rec`            nothing; see below
+               *
+               * `provider` comes from the outcome when it reported one, because
+               * it is an observation and the first attempt's is not evidence
+               * about this one.
+               */
+              const secondProvider = secondOutcome.provider ?? secondReviewerAttestation.provider;
+              rec.attestations.reviewer = buildAttestation({
+                // ONE fact from ONE place. This took `missionId` from the stale
+                // attestation and `missionRevision` from `rec`; they agree
+                // today, and sourcing two facts that must agree from two places
+                // is how they stop agreeing.
+                missionId: rec.missionId,
+                missionRevision: rec.missionRevision,
+                role: 'reviewer',
+                requestedActor: secondReviewerAttestation.requestedActor,
+                actualActor: secondReviewerAttestation.actualActor,
+                requestedRuntime: secondReviewerAttestation.requestedRuntime,
+                actualRuntime: secondReviewerAttestation.actualRuntime,
+                provider: secondProvider,
+                requestedModel: secondRequestedModel ?? undefined,
+                actualModel: secondServedModel ?? undefined,
+                billingPath: secondReviewerAttestation.billingPath,
+                launchVerified: true,
+                completionVerified: true,
+                // The re-review was adopted, so by construction it was not a
+                // substitution — the branch above refuses those.
+                fallbackOccurred: false,
+                // Bound to the REPAIRED artifact, which is what this review read.
+                inputDigest: repaired.artifactDigest,
+                outputDigest: digest(JSON.stringify(secondOutcome.result)),
+                startedAt: secondOutcome.startedAt,
+                completedAt: secondOutcome.completedAt,
+              });
+              /**
+               * AND THE SUPERSEDED ID IS RECORDED, because an earlier event
+               * still points at it.
+               *
+               * `buildAttestation` derives its id from
+               * `missionId:role:startedAt`, so a rebuild with the second
+               * review's timestamps produces a NEW id — while the "Hermes
+               * response received" event appended during the first review still
+               * carries the old one. That left every repaired mission's record
+               * containing an event referencing a reviewer attestation the
+               * record no longer held, and it was the event a founder reads
+               * first. A re-review found it by diffing the refs against the ids.
+               *
+               * Both ids travel in one notice rather than the ref being
+               * rewritten: the first attestation really did exist and really was
+               * superseded, and erasing the reference would erase that.
+               */
+              append(rec, {
+                role: 'reviewer',
+                category: 'reviewer',
+                truth: 'system_notice',
+                headline: 'The first reviewer attestation was superseded by the re-review.',
+                detail: `Attestation ${secondReviewerAttestation.attestationId} describes the review that was `
+                  + `rejected; ${rec.attestations.reviewer.attestationId} describes the one that stands. `
+                  + 'An earlier event in this record still references the first.',
+              });
+            }
             /**
              * THE REPAIRED ARTIFACT BECOMES THE MISSION'S ARTIFACT, WITH ITS
              * REVIEW, IN ONE STEP.
