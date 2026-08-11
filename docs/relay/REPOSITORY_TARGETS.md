@@ -49,6 +49,9 @@ src/relay/mission/repository-target/     PURE DOMAIN — decides what is ALLOWED
 
 src/relay/workspace/                     NODE — performs and OBSERVES
   repository-target-observer.ts  real git observation + the write surface
+
+relay-bridge/                            THE BRIDGE
+  repository-source.ts          the one branch: fixture or registered target
 ```
 
 The domain has no Node, no network and no clock — time is an injected ISO
@@ -399,9 +402,15 @@ reads as unfinished.
    Everything proven above is the machinery the Architect, Coding Agent and
    Reviewer would hand their work to. Running them against a real repository
    needs provider credentials and founder authorization.
-3. **Not wired into the Mission engine.** `relay-bridge/coding.ts` still calls
-   `buildSafeEditFixture()` — an earlier draft of this line named `mission.ts`,
-   which never mentions it. Nothing in the bridge reads a
+3. **The CODING LEG is wired; the mission engine is not.** `relay-bridge/coding.ts`
+   now takes an optional `repositoryTarget` and resolves its source through
+   `repository-source.ts`, so the coding leg edits a real registered repository
+   in an isolated worktree — proven end to end in `coding-leg-offline.test.ts`
+   against a real `git init`, with the source repository byte-for-byte unchanged
+   and `git status` clean afterwards. What is still missing is the layer ABOVE:
+   `mission.ts` does not accept a target, so no Mission Contract can select one
+   and the three-role pipeline still runs against the fixture. Nothing in the
+   bridge's mission entry reads a
    `MissionRepositoryTarget` yet. The controlled-fixture path is unchanged and
    remains the default and the test path, which the design document requires.
 4. **No durable store.** Registrations are built and read as values; nothing
