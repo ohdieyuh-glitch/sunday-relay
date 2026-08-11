@@ -195,7 +195,8 @@ const approvedReview = (): HermesOutcome => ({
   startedAt: AT,
   completedAt: AT,
   provider: 'Anthropic',
-  model: 'claude-opus-4-8',
+  requestedModel: 'claude-opus-4-8',
+  servedModel: 'claude-opus-4-8',
   result: {
     verdict: 'approved',
     summary: 'The implementation satisfies every acceptance criterion.',
@@ -479,7 +480,17 @@ describe('5-8. an unavailable role blocks before spend; the persisted handoff is
     expect(view.handoff?.instructions).toEqual(GOOD_HANDOFF.implementationInstructions);
     expect(view.handoff?.architectProvenance).toBe('live');
     expect(view.handoffDigest).toBeTruthy();
-    expect(view.architectReceipt?.model).toBe('gpt-test');
+    /**
+     * REQUESTED AND SERVED, BOTH ON THE WIRE. The fixture's provider answers
+     * with a dated variant, so these two strings genuinely differ — which is
+     * how this asserts the receipt carries what ANSWERED and not merely what
+     * was configured. The single `model` field this replaced held `gpt-test`.
+     */
+    expect(view.architectReceipt?.requestedModel).toBe('gpt-test');
+    expect(view.architectReceipt?.servedModel).toBe('gpt-test-2026-01-01');
+    // And the label the founder reads in the Live Terminal names the model
+    // that answered. It used to name `gpt-test`.
+    expect(view.handoff?.architectLabel).toBe('ChatGPT · gpt-test-2026-01-01');
     expect(view.architectReceipt?.billingPath).toBe('api_billed');
     expect(view.architectReceipt?.networkPath).toBe('relay-bridge-direct-openai');
   });
@@ -733,7 +744,8 @@ describe('14-20. only a genuine, current, approving review can complete the miss
         startedAt: AT,
         completedAt: AT,
         provider: 'Anthropic',
-        model: 'claude-opus-4-8',
+        requestedModel: 'claude-opus-4-8',
+        servedModel: 'claude-opus-4-8',
         result: {
           verdict: 'approved',
           summary: 'Approved with a blocking caveat.',
@@ -1009,7 +1021,8 @@ describe('27-30. console events, secrecy, terminal regression, and reviewer bill
     expect(reviewer?.billingPath).toBe('api_billed');
     expect(view.review?.billing).toBe('api_billed');
     expect(view.review?.provider).toBe('Anthropic');
-    expect(view.review?.model).toBe('claude-opus-4-8');
+    expect(view.review?.servedModel).toBe('claude-opus-4-8');
+    expect(view.review?.requestedModel).toBe('claude-opus-4-8');
     expect(view.error).toBeUndefined();
   });
 });
@@ -2180,7 +2193,8 @@ const rejectedReview = (): HermesOutcome => ({
   startedAt: AT,
   completedAt: AT,
   provider: 'xAI',
-  model: 'grok-build-0.1',
+  requestedModel: 'grok-build-0.1',
+  servedModel: 'grok-build-0.1',
   result: {
     verdict: 'changes_required',
     summary: 'The guard is missing.',
@@ -2202,7 +2216,8 @@ const repairedReview = (): HermesOutcome => ({
   startedAt: AT,
   completedAt: AT,
   provider: 'xAI',
-  model: 'grok-build-0.1',
+  requestedModel: 'grok-build-0.1',
+  servedModel: 'grok-build-0.1',
   result: {
     verdict: 'approved',
     summary: 'The guard is present now.',
@@ -2218,7 +2233,8 @@ const advisoryReview = (): HermesOutcome => ({
   startedAt: AT,
   completedAt: AT,
   provider: 'xAI',
-  model: 'grok-build-0.1',
+  requestedModel: 'grok-build-0.1',
+  servedModel: 'grok-build-0.1',
   result: {
     verdict: 'approved',
     summary: 'Fine, with a note.',
@@ -2371,5 +2387,147 @@ describe('a repair that yields nothing explains itself', () => {
     // And the refusal is unchanged — a failed repair never becomes a pass.
     expect(view.state).toBe('failed');
     expect(view.error?.code).toBe('review_blocked');
+  });
+});
+
+/**
+ * DEFECT 3 — THE REVIEWER'S SERVED MODEL.
+ *
+ * `HOSTED_MISSION_EVIDENCE.md` carried this as the one open defect of the
+ * hosted pipeline: the mission attested a reviewer model it had never been
+ * told, because ONE `model` field carried two different facts. The reviewer
+ * leg computed
+ *
+ *     resolvedModel = outcome.model ?? hermesReady.model
+ *
+ * and both operands were CONFIGURATION — the remote path hardcoded
+ * `model: null` into its outcome, so every hosted review fell through to the
+ * preflight's configured value, which was then written into the attestation
+ * and rendered on the founder's review card as the model that reviewed.
+ *
+ * These tests hold the two axes apart. Each one fails against the code it
+ * describes: the first three all produced `'claude-opus-4-8'` on the served
+ * axis before the split, and the last two did not exist as behaviour at all.
+ */
+describe('defect 3 — requested and served reviewer models are separate facts', () => {
+  /**
+   * Narrows a fixture to its `reviewed` variant before spreading it.
+   *
+   * `HermesOutcome` is a union, and spreading the union into an object literal
+   * makes TypeScript check the result against EVERY member — including
+   * `launch_failed`, which has no model fields. Narrowing here keeps the model
+   * overrides type-checked against the variant that actually has them.
+   */
+  const reviewed = (o: HermesOutcome): Extract<HermesOutcome, { kind: 'reviewed' }> => {
+    if (o.kind !== 'reviewed') throw new Error(`fixture is ${o.kind}, not a reviewed outcome`);
+    return o;
+  };
+
+  /** The remote transport's real shape: it asks for a review, not for a model. */
+  const remoteStyleOutcome = (servedModel: string | null): HermesOutcome => ({
+    ...reviewed(approvedReview()),
+    requestedModel: null,
+    servedModel,
+  });
+
+  it('an unreported served model stays Unknown and is never filled from the preflight', async () => {
+    const h = harness({ reviewer: async () => remoteStyleOutcome(null) });
+    const { view } = await runMission(h, LIVE_ENV, 'm-served-unknown');
+
+    expect(view.state).toBe('verified_complete');
+    // The REQUESTED axis may fall back to the preflight — both name what was
+    // asked for, and the preflight's value is verified configuration.
+    expect(view.review?.requestedModel).toBe('claude-opus-4-8');
+    // The SERVED axis has no fallback anywhere. This is the whole defect: it
+    // used to read 'claude-opus-4-8' here, having been told nothing.
+    expect(view.review?.servedModel).toBeNull();
+
+    const reviewer = view.attestations?.find((a) => a.role === 'reviewer');
+    expect(reviewer?.requestedModel).toBe('claude-opus-4-8');
+    expect(reviewer?.actualModel).toBeUndefined();
+    // Unknown is not a substitution, so the review still counts.
+    expect(reviewer?.fallbackOccurred).toBe(false);
+    expect(reviewer?.completionVerified).toBe(true);
+    // And the record says so in words, rather than showing a model.
+    expect(JSON.stringify(view)).toContain('served model not reported by the provider');
+  });
+
+  it('a reported served model is attested as the model that reviewed', async () => {
+    const h = harness({ reviewer: async () => remoteStyleOutcome('claude-opus-4-8') });
+    const { view } = await runMission(h, LIVE_ENV, 'm-served-known');
+
+    expect(view.state).toBe('verified_complete');
+    expect(view.review?.servedModel).toBe('claude-opus-4-8');
+    expect(view.attestations?.find((a) => a.role === 'reviewer')?.actualModel).toBe('claude-opus-4-8');
+    expect(JSON.stringify(view)).toContain('served model claude-opus-4-8');
+  });
+
+  it('a provider that substitutes the reviewer model has its review refused', async () => {
+    // Requested one model, answered with another. Relay performs no fallback
+    // and does not accept one performed on the far side of the API either.
+    const h = harness({
+      reviewer: async () => ({ ...reviewed(approvedReview()), requestedModel: 'grok-4', servedModel: 'grok-3-mini' }),
+    });
+    const { view } = await runMission(h, LIVE_ENV, 'm-served-substituted');
+
+    expect(view.state).toBe('failed');
+    expect(view.error?.code).toBe('review_incomplete');
+    // BOTH names are in the record. A refusal that hid one of them would be
+    // the same crime in a different direction.
+    expect(view.error?.safeMessage).toContain('grok-3-mini');
+    expect(view.error?.safeMessage).toContain('grok-4');
+
+    const reviewer = view.attestations?.find((a) => a.role === 'reviewer');
+    // A substitution IS a fallback — performed by somebody else.
+    expect(reviewer?.fallbackOccurred).toBe(true);
+    expect(reviewer?.requestedModel).toBe('grok-4');
+    expect(reviewer?.actualModel).toBe('grok-3-mini');
+    // An approved verdict from a substituted model never completes a mission.
+    expect(view.state).not.toBe('verified_complete');
+  });
+
+  it('a substituted RE-review is refused and the original rejection stands', async () => {
+    let call = 0;
+    const h = harness({
+      reviewer: async () => {
+        call += 1;
+        // First look rejects. The repair is then re-reviewed — by a different
+        // model than the one requested, which must not be adopted.
+        if (call === 1) return rejectedReview();
+        return { ...reviewed(repairedReview()), requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.2' };
+      },
+    });
+    const { view } = await runMission(h, LIVE_ENV, 'm-rereview-substituted', 'live');
+    const text = JSON.stringify(view);
+
+    expect(call).toBe(2);
+    expect(text).toContain('Re-review refused');
+    expect(text).toContain('grok-build-0.2');
+    // The approval carried by the substituted re-review is not adopted: the
+    // first verdict is still the one on the record.
+    expect(view.review?.verdict).toBe('changes_required');
+    expect(view.state).toBe('failed');
+    expect(view.error?.code).toBe('review_blocked');
+  });
+
+  it('an accepted re-review replaces the first attempt\'s model facts, not just its verdict', async () => {
+    let call = 0;
+    const h = harness({
+      reviewer: async () => {
+        call += 1;
+        if (call === 1) return rejectedReview();
+        // The same requested model, and this time the provider names a served
+        // one where the first attempt named none.
+        return { ...reviewed(repairedReview()), requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1' };
+      },
+    });
+    const { view } = await runMission(h, LIVE_ENV, 'm-rereview-model', 'live');
+
+    expect(view.review?.verdict).toBe('approved');
+    // The card describes the review that STANDS, so its model facts are the
+    // second look's. Carrying the first attempt's here would describe a review
+    // the mission no longer relies on.
+    expect(view.review?.requestedModel).toBe('grok-build-0.1');
+    expect(view.review?.servedModel).toBe('grok-build-0.1');
   });
 });

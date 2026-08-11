@@ -405,7 +405,7 @@ export function createLocalHermesTransport(
         // fields.
         return {
           runId, status: 'unknown', protocol: HERMES_SERVICE_PROTOCOL, reviewText: null,
-          usage: { inputTokens: null, outputTokens: null, source: 'unavailable' },
+          usage: { inputTokens: null, outputTokens: null, model: null, source: 'unavailable' },
           failureKind: null,
           safeMessage:
             'There is no in-memory record of that review here: it was never created, it was lost to a restart, '
@@ -427,6 +427,11 @@ export function createLocalHermesTransport(
         usage: {
           inputTokens: usage?.inputTokens ?? null,
           outputTokens: usage?.outputTokens ?? null,
+          // The served model the runner parsed from Hermes' own usage report.
+          // This projection used to copy the token counts and drop the model —
+          // the first of three layers that each lost the one field proving
+          // which model actually reviewed.
+          model: usage?.model ?? null,
           source: usage !== null && usage.source === 'harness_reported' ? 'harness_reported' : 'unavailable',
         },
         failureKind: run.status === 'timed_out' ? 'timed_out' : null,

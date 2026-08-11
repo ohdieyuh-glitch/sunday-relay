@@ -169,7 +169,14 @@ export interface MissionAttestationSummary {
   actualActor: string;
   actualRuntime: string;
   provider?: string;
-  model?: string;
+  /** The model Relay asked for. Configuration, stated as configuration. */
+  requestedModel?: string;
+  /**
+   * The model the provider/runtime itself reported answered. Evidence, never
+   * inferred from configuration and never defaulted from `requestedModel`;
+   * absent when the runtime reported none.
+   */
+  actualModel?: string;
   billingPath: 'api_billed' | 'subscription' | 'portal' | 'local' | 'simulated' | 'unknown';
   launchVerified: boolean;
   completionVerified: boolean;
@@ -184,7 +191,15 @@ export interface MissionAttestationSummary {
     not happen. */
 export interface MissionArchitectReceipt {
   provider: 'openai';
-  model: string;
+  /** The model Relay asked the architect provider for. Configuration. */
+  requestedModel: string;
+  /**
+   * The model the provider itself said answered. Null when it named none;
+   * never defaulted from `requestedModel`. This receipt used to carry one
+   * `model` field holding the REQUESTED value, which the Live Terminal then
+   * displayed as the architect that ran — the same conflation as defect 3.
+   */
+  servedModel: string | null;
   /** e.g. "Coordinated by Sunday Alcatraz · direct OpenAI request…" */
   coordinationLabel: string;
   networkPath: string;
@@ -231,7 +246,15 @@ export interface MissionReview {
   reviewer: 'Hermes';
   runtime: string;
   provider: string | null;
-  model: string | null;
+  /** The model the deployment asked its reviewer to use. Configuration. */
+  requestedModel: string | null;
+  /**
+   * The model the provider itself reported answered — the SERVED model.
+   * Null when the provider reported none; never defaulted from
+   * `requestedModel`. A review served by a model other than the requested
+   * one is refused upstream and never reaches this record.
+   */
+  servedModel: string | null;
   billing: 'subscription' | 'api_billed' | 'portal' | 'local' | 'simulated' | 'unknown';
   verdict: 'approved' | 'changes_required' | 'unable_to_review';
   summary: string;

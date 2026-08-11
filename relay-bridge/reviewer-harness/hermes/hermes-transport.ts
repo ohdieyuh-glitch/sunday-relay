@@ -187,6 +187,15 @@ export interface RemoteHermesReviewState {
   readonly usage: {
     readonly inputTokens: number | null;
     readonly outputTokens: number | null;
+    /**
+     * The model the harness itself reported answered — the SERVED model,
+     * never the configured one. The engine has parsed this out of Hermes'
+     * usage report since the usage file existed, and this wire shape silently
+     * dropped it, which is how "the reviewer's served model is not proven"
+     * became a documented defect. `null` means the harness reported none;
+     * it is never defaulted from configuration.
+     */
+    readonly model: string | null;
     /** 'unavailable' keeps Unknown as Unknown; it never becomes zero. */
     readonly source: 'harness_reported' | 'unavailable';
   };

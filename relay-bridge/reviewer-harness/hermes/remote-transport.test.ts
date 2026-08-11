@@ -233,6 +233,47 @@ describe('reviews', () => {
     const r = await transport(() => reply(200, { protocol: HERMES_SERVICE_PROTOCOL, status: 'completed' })).getReview('r1');
     expect(r.usage.source).toBe('unavailable');
     expect(r.usage.inputTokens).toBeNull();
+    // And no model, which is the field this decoder used to drop entirely.
+    expect(r.usage.model).toBeNull();
+  });
+
+  /**
+   * THE SERVED MODEL CROSSES THE WIRE.
+   *
+   * The harness has parsed the served model out of Hermes' own usage report
+   * since the usage file existed, and this decoder copied the token counts and
+   * silently discarded the model — the first of three layers that each lost
+   * the one field proving which model actually reviewed (defect 3).
+   */
+  it('decodes the served model the service reported', async () => {
+    const r = await transport(() => reply(200, {
+      protocol: HERMES_SERVICE_PROTOCOL, status: 'completed', reviewText: 'APPROVED',
+      usage: { inputTokens: 120, outputTokens: 45, model: 'grok-4-0709' },
+    })).getReview('r1');
+    expect(r.usage.model).toBe('grok-4-0709');
+    expect(r.usage.source).toBe('harness_reported');
+  });
+
+  it('treats a usage report that names only a model as a report', async () => {
+    // Hermes can name the model without token counts. Calling that
+    // 'unavailable' would discard the served model as collateral.
+    const r = await transport(() => reply(200, {
+      protocol: HERMES_SERVICE_PROTOCOL, status: 'completed', reviewText: 'APPROVED',
+      usage: { model: 'grok-4-0709' },
+    })).getReview('r1');
+    expect(r.usage.source).toBe('harness_reported');
+    expect(r.usage.model).toBe('grok-4-0709');
+    // Unknown tokens are still Unknown — naming a model does not invent them.
+    expect(r.usage.inputTokens).toBeNull();
+    expect(r.usage.outputTokens).toBeNull();
+  });
+
+  it('refuses a non-string served model instead of coercing one', async () => {
+    const r = await transport(() => reply(200, {
+      protocol: HERMES_SERVICE_PROTOCOL, status: 'completed', reviewText: 'APPROVED',
+      usage: { inputTokens: 1, outputTokens: 2, model: { name: 'grok-4' } },
+    })).getReview('r1');
+    expect(r.usage.model).toBeNull();
   });
 
   it('does not report a cancellation request as a confirmed termination', async () => {

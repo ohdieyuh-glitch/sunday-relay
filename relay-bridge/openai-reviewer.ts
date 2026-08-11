@@ -174,7 +174,8 @@ export async function runOpenAiReview(input: {
       result,
       startedAt,
       completedAt: now(),
-      model: actualModel,
+      requestedModel: input.config.model,
+      servedModel: actualModel,
       provider: 'openai',
     };
   } catch {

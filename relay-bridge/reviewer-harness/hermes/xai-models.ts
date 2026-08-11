@@ -77,7 +77,15 @@ export function loadXaiConfig(env: NodeJS.ProcessEnv = process.env): XaiConfig {
   return {
     apiKey: key,
     baseUrl: typeof base === 'string' && base.trim() !== '' ? base.trim() : XAI_DEFAULT_BASE_URL,
-    requestedModel: env.RELAY_REVIEWER_MODEL?.trim() || null,
+    /**
+     * ONE NAME FOR ONE FACT. This read `RELAY_REVIEWER_MODEL` while every
+     * deployment — and the Hermes engine itself — configures the reviewer
+     * model as `RELAY_HERMES_MODEL`, so `requestedModel` was null on every
+     * real deployment and model verification was permanently unreachable
+     * (defect 3, HOSTED_MISSION_EVIDENCE.md). The old name is still honoured
+     * second, so an operator who set it is not silently ignored.
+     */
+    requestedModel: env.RELAY_HERMES_MODEL?.trim() || env.RELAY_REVIEWER_MODEL?.trim() || null,
     timeoutMs: Number(env.RELAY_REVIEWER_MODEL_TIMEOUT_MS ?? 20_000),
   };
 }

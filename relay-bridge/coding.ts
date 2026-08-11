@@ -611,7 +611,13 @@ export async function runCodingMission(input: {
       billingPath: codingBillingPath,
       // The model that ANSWERED, when the surface reported one. Absent stays
       // absent — a requested model is not evidence that it ran.
-      ...(invocation.actualModel === null ? {} : { model: invocation.actualModel }),
+      //
+      // This spelled the field `model`, and TypeScript cannot excess-property
+      // check a SPREAD, so the rename that split the attestation's one `model`
+      // field into `requestedModel`/`actualModel` compiled clean here while
+      // silently dropping the coding agent's served model into a field nobody
+      // reads. Only a test that asserts the value catches that.
+      ...(invocation.actualModel === null ? {} : { actualModel: invocation.actualModel }),
       // OBSERVED, not inferred from the absence of an error. A run cancelled
       // or timed out during startup has no error and never launched — it was
       // attested as launched, and the website then rendered it API PAID.

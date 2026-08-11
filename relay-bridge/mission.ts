@@ -493,7 +493,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         actualActor: a.actualActor,
         actualRuntime: a.actualRuntime,
         provider: a.provider,
-        model: a.model,
+        requestedModel: a.requestedModel,
+        actualModel: a.actualModel,
         billingPath: a.billingPath,
         launchVerified: a.launchVerified,
         completionVerified: a.completionVerified,
@@ -1107,7 +1108,10 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
               requestedRuntime: 'openai-chat-completions',
               actualRuntime: 'openai-chat-completions',
               provider: 'openai',
-              model: architectConfig.model,
+              // The call FAILED, so nothing was served. Only the requested
+              // axis can be filled here, and `actualModel` stays absent
+              // rather than being borrowed from configuration.
+              requestedModel: architectConfig.model,
               billingPath: 'api_billed',
               launchVerified: blocked ? blocked.code !== 'architect_unreachable' : false,
               completionVerified: false,
@@ -1151,7 +1155,22 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
             instructions: architectResult.handoff.implementationInstructions,
             constraints: FIXED_CONSTRAINTS,
             acceptanceCriteria: FIXED_ACCEPTANCE,
-            architectLabel: `ChatGPT · ${safeText(architectResult.receipt.model)}`,
+            /**
+             * THE MODEL THAT ANSWERED NAMES THE ARCHITECT, not the one asked
+             * for. This label reaches the founder's Live Terminal as the
+             * architect's runtime line, and it read `receipt.model` — the
+             * DEPRECATED spelling, which carries the REQUESTED model. So a
+             * request for `gpt-4o` served by `gpt-4o-2024-11-20` was displayed
+             * as `gpt-4o`: the same laundering as defect 3, one role over.
+             *
+             * When the provider named no model the requested one is still
+             * shown, because a blank is less useful than a labelled
+             * configuration — but it is labelled, so nobody reads it as
+             * evidence.
+             */
+            architectLabel: architectResult.receipt.actualModel !== null
+              ? `ChatGPT · ${safeText(architectResult.receipt.actualModel)}`
+              : `ChatGPT · ${safeText(architectResult.receipt.requestedModel)} (requested; the provider named no model)`,
             architectProvenance: 'live',
           };
           rec.handoffDigest = codingHandoffDigest({
@@ -1162,7 +1181,13 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           });
           rec.architectReceipt = {
             provider: architectResult.receipt.provider,
-            model: safeText(architectResult.receipt.model),
+            // Two facts, two fields, on the wire as well as in the
+            // attestation. `servedModel` is null when the provider named
+            // none and is never defaulted from `requestedModel`.
+            requestedModel: safeText(architectResult.receipt.requestedModel),
+            servedModel: architectResult.receipt.actualModel === null
+              ? null
+              : safeText(architectResult.receipt.actualModel),
             coordinationLabel: architectResult.receipt.coordinationLabel,
             networkPath: architectResult.receipt.networkPath,
             billingPath: architectResult.receipt.billingPath,
@@ -1184,7 +1209,11 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
             requestedRuntime: 'openai-chat-completions',
             actualRuntime: 'openai-chat-completions',
             provider: 'openai',
-            model: architectResult.receipt.model,
+            // The receipt already keeps these as separate facts; the
+            // attestation now can too, instead of flattening them into one
+            // `model` field that silently meant "requested".
+            requestedModel: architectResult.receipt.requestedModel,
+            actualModel: architectResult.receipt.actualModel ?? undefined,
             billingPath: 'api_billed',
             launchVerified: true,
             completionVerified: true,
@@ -1552,7 +1581,33 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         const reviewerCompletedAt =
           reviewOutcome.kind === 'launch_failed' ? now() : reviewOutcome.completedAt;
         const resolvedProvider = (reviewOutcome.kind === 'reviewed' ? reviewOutcome.provider : null) ?? hermesReady?.provider ?? null;
-        const resolvedModel = (reviewOutcome.kind === 'reviewed' ? reviewOutcome.model : null) ?? hermesReady?.model ?? null;
+        /**
+         * REQUESTED AND SERVED, RESOLVED ON SEPARATE AXES — NEVER ACROSS THEM.
+         *
+         * This used to be one `resolvedModel`: the outcome's model, else the
+         * preflight's. Both sources were configuration, and the single field
+         * fed both the attestation and the founder-facing review card — so
+         * the requested model was attested as the one that reviewed, which is
+         * defect 3 in HOSTED_MISSION_EVIDENCE.md.
+         *
+         * The requested axis may fall back from the outcome to the preflight:
+         * both name what was ASKED FOR, and the preflight's value is the
+         * remote service's own verified configuration. The served axis has no
+         * fallback anywhere: it is what the provider itself said answered, or
+         * it is null.
+         */
+        const requestedReviewerModel =
+          (reviewOutcome.kind === 'reviewed' ? reviewOutcome.requestedModel : null) ?? hermesReady?.model ?? null;
+        const servedReviewerModel = reviewOutcome.kind === 'reviewed' ? reviewOutcome.servedModel : null;
+        /**
+         * A substitution is both facts known and disagreeing. An unreported
+         * served model is NOT a substitution — Unknown stays Unknown — but it
+         * is also never promoted to a match.
+         */
+        const reviewerModelSubstituted =
+          requestedReviewerModel !== null
+          && servedReviewerModel !== null
+          && requestedReviewerModel !== servedReviewerModel;
 
         rec.attestations.reviewer = buildAttestation({
           missionId: rec.missionId,
@@ -1563,7 +1618,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           requestedRuntime: 'hermes-agent-cli',
           actualRuntime: 'hermes-agent-cli',
           provider: resolvedProvider ?? undefined,
-          model: resolvedModel ?? undefined,
+          requestedModel: requestedReviewerModel ?? undefined,
+          actualModel: servedReviewerModel ?? undefined,
           /**
            * THE OCCUPANT THAT RAN DECIDES THIS, not a literal.
            *
@@ -1585,7 +1641,13 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           billingPath: reviewerBilling,
           launchVerified: reviewOutcome.kind !== 'launch_failed',
           completionVerified: reviewOutcome.kind === 'reviewed',
-          fallbackOccurred: false,
+          /**
+           * A provider that answers with a different model than the one
+           * requested has substituted the reviewer — which is exactly what a
+           * fallback is, performed by somebody else. `attestsRealExecution`
+           * is false for such a run, and the guard below refuses the review.
+           */
+          fallbackOccurred: reviewerModelSubstituted,
           inputDigest: evidence.artifactDigest,
           outputDigest: reviewOutcome.kind === 'reviewed' ? digest(JSON.stringify(reviewOutcome.result)) : undefined,
           startedAt: reviewerStartedAt,
@@ -1603,6 +1665,25 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           fail(rec, 'review_incomplete', reviewOutcome.safeMessage, { retryable: false });
           return;
         }
+        /**
+         * NO FALLBACK — INCLUDING ONE THE PROVIDER PERFORMS. Relay never
+         * substitutes a neighbouring model, and it does not accept a
+         * substitution made on the other side of the API either. A review
+         * answered by a model other than the requested one is refused, with
+         * both names in the record.
+         */
+        if (reviewerModelSubstituted) {
+          rec.ledger.set(revKey, 'failed');
+          fail(
+            rec,
+            'review_incomplete',
+            `The reviewer's provider answered with model ${safeText(servedReviewerModel ?? '')}, `
+              + `not the requested ${safeText(requestedReviewerModel ?? '')}. `
+              + 'Relay does not accept a review from a substituted model.',
+            { retryable: false },
+          );
+          return;
+        }
 
         append(rec, {
           role: 'reviewer',
@@ -1617,7 +1698,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           category: 'reviewer',
           truth: 'relay_evidence',
           headline: 'Review validated — structured verdict accepted.',
-          detail: `Verdict ${reviewOutcome.result.verdict} · ${reviewOutcome.result.findings.length} finding(s) · ${reviewOutcome.result.requirementsChecked.length} requirement(s) checked.`,
+          detail: `Verdict ${reviewOutcome.result.verdict} · ${reviewOutcome.result.findings.length} finding(s) · ${reviewOutcome.result.requirementsChecked.length} requirement(s) checked · `
+            + `served model ${safeText(servedReviewerModel ?? 'not reported by the provider')}.`,
           artifactRef: evidence.artifactDigest,
         });
 
@@ -1625,7 +1707,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           reviewer: 'Hermes',
           runtime: 'Hermes Agent CLI (read-only)',
           provider: resolvedProvider,
-          model: resolvedModel,
+          requestedModel: requestedReviewerModel,
+          servedModel: servedReviewerModel,
           // The same translation the attestation uses, so the founder-facing
           // review card and the machine-read attestation cannot disagree about
           // what the review cost.
@@ -1801,13 +1884,36 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
             runId: `${rec.missionId}-review-${String(rec.missionRevision ?? 1)}-repair`,
           });
 
-          if (secondOutcome.kind === 'reviewed') {
+          const secondRequestedModel = secondOutcome.kind === 'reviewed'
+            ? (secondOutcome.requestedModel ?? hermesReady?.model ?? null)
+            : null;
+          const secondServedModel = secondOutcome.kind === 'reviewed' ? secondOutcome.servedModel : null;
+          /**
+           * THE SAME NO-SUBSTITUTION RULE AS THE FIRST REVIEW. A re-review
+           * answered by a different model than the requested one is not
+           * adopted; the first review — the rejection — stands, and the
+           * record says why.
+           */
+          const secondSubstituted =
+            secondRequestedModel !== null && secondServedModel !== null && secondRequestedModel !== secondServedModel;
+          if (secondOutcome.kind === 'reviewed' && secondSubstituted) {
+            append(rec, {
+              role: 'reviewer',
+              category: 'reviewer',
+              truth: 'system_notice',
+              headline: 'Re-review refused — the provider substituted the reviewer model.',
+              detail: `The re-review was answered by ${safeText(secondServedModel ?? '')}, not the requested `
+                + `${safeText(secondRequestedModel ?? '')}. The first review stands.`,
+            });
+          }
+          if (secondOutcome.kind === 'reviewed' && !secondSubstituted) {
             append(rec, {
               role: 'reviewer',
               category: 'reviewer',
               truth: 'relay_evidence',
               headline: `Re-review complete — verdict ${secondOutcome.result.verdict}.`,
-              detail: 'The repair was judged independently, bound to its own artifact digest.',
+              detail: 'The repair was judged independently, bound to its own artifact digest. '
+                + `Served model ${safeText(secondServedModel ?? 'not reported by the provider')}.`,
             });
             rec.review = {
               ...review,
@@ -1816,6 +1922,10 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
               findings: secondOutcome.result.findings.map((f) => ({ ...f })),
               requirementsChecked: secondOutcome.result.requirementsChecked.map((r) => ({ ...r })),
               reviewedArtifactDigest: repaired.artifactDigest,
+              // The re-review's own model facts replace the first attempt's —
+              // this card now describes the review that actually stands.
+              requestedModel: secondRequestedModel,
+              servedModel: secondServedModel,
             };
             review = rec.review;
             /**

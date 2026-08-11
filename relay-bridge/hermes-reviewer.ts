@@ -13,10 +13,11 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { safeText } from './redact';
+import { parseUsageFile } from './reviewer-harness/hermes/runner';
 
 export type HermesVerdict = 'approved' | 'changes_required' | 'unable_to_review';
 
@@ -44,7 +45,21 @@ export interface HermesReviewResult {
 }
 
 export type HermesOutcome =
-  | { kind: 'reviewed'; result: HermesReviewResult; startedAt: string; completedAt: string; model: string | null; provider: string | null }
+  /**
+   * REQUESTED AND SERVED ARE SEPARATE FIELDS, here at the source.
+   *
+   * One `model` field used to carry three different facts depending on the
+   * path: the local runner stamped its CONFIGURATION into it, the remote path
+   * hardcoded null into it, and the provider path put the response's actual
+   * model into it. A single field with three meanings is how the requested
+   * model came to be attested as the one that reviewed (defect 3,
+   * HOSTED_MISSION_EVIDENCE.md).
+   *
+   * `requestedModel` is what this path asked its engine for — configuration,
+   * stated as such. `servedModel` is what the engine itself reported answered
+   * — evidence, never inferred, never defaulted from `requestedModel`.
+   */
+  | { kind: 'reviewed'; result: HermesReviewResult; startedAt: string; completedAt: string; requestedModel: string | null; servedModel: string | null; provider: string | null }
   | { kind: 'launch_failed'; safeMessage: string }
   | { kind: 'review_incomplete'; safeMessage: string; startedAt: string; completedAt: string };
 
@@ -453,12 +468,37 @@ export async function runHermesReview(input: {
   const doSpawn = input.spawnImpl ?? spawn;
   const prompt = buildReviewPrompt(input.packet);
 
-  const args = ['-z', prompt, '--safe-mode'];
+  // Empty scratch cwd — the reviewer has no path into the controlled project.
+  const cwd = mkdtempSync(join(tmpdir(), 'relay-hermes-review-'));
+  /**
+   * Hermes writes what actually ran — including the SERVED model — to its
+   * usage file. The harness runner has always asked for this file; this
+   * direct path did not, so the local reviewer's model was reported from
+   * configuration.
+   */
+  const usageFilePath = join(cwd, 'relay-hermes-usage.json');
+
+  /**
+   * AND THE SCRATCH DIRECTORY IS ACTUALLY REMOVED.
+   *
+   * It never was. That was invisible while the directory stayed empty — an
+   * empty tmpdir entry per review is untidy and nothing more — but this
+   * function now writes a file into it, so every review would leave a usage
+   * report on the host indefinitely. The first version of this comment said
+   * the file "vanishes with the scratch cwd", which was a claim about code
+   * that did not exist; a test that asserted it is what found that out.
+   *
+   * Removal is best-effort by construction: failing to clean up a temporary
+   * directory must never turn a completed review into a failed one.
+   */
+  const discardScratch = () => {
+    try { rmSync(cwd, { recursive: true, force: true }); } catch { /* best effort */ }
+  };
+
+  const args = ['-z', prompt, '--safe-mode', '--usage-file', usageFilePath];
   if (cfg.model) args.push('-m', cfg.model);
   if (cfg.provider) args.push('--provider', cfg.provider);
 
-  // Empty scratch cwd — the reviewer has no path into the controlled project.
-  const cwd = mkdtempSync(join(tmpdir(), 'relay-hermes-review-'));
   const startedAt = now();
 
   return await new Promise<HermesOutcome>((resolve) => {
@@ -471,6 +511,8 @@ export async function runHermesReview(input: {
         env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
       });
     } catch {
+      // Nothing ran, so there is nothing to read out of the scratch directory.
+      discardScratch();
       resolve({ kind: 'launch_failed', safeMessage: 'The Hermes reviewer could not be started.' });
       return;
     }
@@ -482,6 +524,13 @@ export async function runHermesReview(input: {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      /**
+       * The one funnel every outcome passes through, which is why cleanup
+       * lives here rather than in each of the six `finish` call sites. The
+       * usage file is read while building the argument to this call, so it is
+       * still on disk at that point and gone immediately after.
+       */
+      discardScratch();
       resolve(o);
     };
     const timer = setTimeout(() => {
@@ -526,7 +575,10 @@ export async function runHermesReview(input: {
         result: parsed,
         startedAt,
         completedAt,
-        model: cfg.model ?? null,
+        requestedModel: cfg.model ?? null,
+        // What Hermes itself reported answered. Absent or malformed usage
+        // stays null — the configured model never stands in for it.
+        servedModel: parseUsageFile(usageFilePath).model,
         provider: cfg.provider ?? null,
       });
     });

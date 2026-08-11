@@ -43,9 +43,16 @@ none of them — including through a rejection and repair.
 `grok-build-0.1`. That string entered the repository in PR #107 as a test
 fixture written during the repair-leg work and appears nowhere else; the live
 readiness surface reports `requestedModel: null` and the remote review path
-returns `model: null, provider: null`. A fixture value had been recorded as a
-live fact, in the same document whose defect list says the served model is
+returned `model: null, provider: null`. A fixture value had been recorded as a
+live fact, in the same document whose defect list said the served model was
 unproven.
+
+**Both halves of that are now fixed** — see defect 3 below. `requestedModel` was
+null because the loader read a variable no deployment sets, and the remote path
+no longer hardcodes a null model. What has NOT changed is that this table
+records readiness as it was observed on 2026-08-11, before those fixes; a
+re-probe against the deployed bridge is required before any newer value is
+written here.
 
 ## Missions run
 
@@ -184,10 +191,13 @@ repaired artifact the same digest as the original. The proof a test bites has
 to be run against the failure it names — that fixture now reproduces the
 production refusal verbatim when the fix is removed.
 
-## Defects found and NOT fixed
+## Defects found by running, and carried out of the goal
 
-Recorded rather than repaired, because fixing them would widen a goal that was
-scoped deliberately.
+Recorded rather than repaired at the time, because fixing them would have
+widened a goal that was scoped deliberately. **Defect 3 was mandated as a
+carry-over and is now closed** — its entry below keeps the original diagnosis,
+says where that diagnosis was wrong, and states exactly what is and is not
+proven. Defects 1, 2 and 4 remain open.
 
 **1 · An in-flight mission vanishes when the bridge restarts.** The mission
 registry is an in-memory `Map`. A Railway redeploy mid-mission leaves
@@ -203,13 +213,75 @@ mission whose tests fail ends at `verification_failed` with no second attempt �
 arguably the most repairable failure there is. Outside the goal's wording, so
 left alone.
 
-**3 · The reviewer's served model is not proven.** The live readiness surface
-reports `requestedModel: null`; the remote review path returns
-`model: null, provider: null`; the mission's reviewer attestation carries no
-model. The bridge's model check reads `RELAY_REVIEWER_MODEL` (unset on the
-bridge) while the service reads `RELAY_HERMES_MODEL` — two names for one fact.
-The review demonstrably happens and is billed; which xAI model produced it is
-not attested anywhere a founder can read.
+**3 · The reviewer's served model is not proven. — CLOSED 2026-08-11.**
+
+As recorded: the live readiness surface reported `requestedModel: null`; the
+remote review path returned `model: null, provider: null`; the mission's
+reviewer attestation carried no model; and the bridge's model check read
+`RELAY_REVIEWER_MODEL` (unset on the bridge) while the service reads
+`RELAY_HERMES_MODEL` — two names for one fact. The review demonstrably happened
+and was billed; which xAI model produced it was not attested anywhere a founder
+could read.
+
+**What the diagnosis missed.** The attestation did not "carry no model" — it
+carried the WRONG one. One `model` field held two different facts, and the
+reviewer leg resolved it as
+
+```
+resolvedModel = reviewOutcome.model ?? hermesReady.model
+```
+
+where both operands were configuration. Because the remote path hardcoded
+`model: null`, every hosted review fell through to the preflight's configured
+value, which was then written into the attestation AND rendered on the review
+card as the model that reviewed. The defect was not an absence. It was a
+requested model wearing the served model's clothes.
+
+**How it is closed.** Requested and served are now separate fields at every
+layer, and the served axis has no fallback anywhere:
+
+| Layer | Before | Now |
+|---|---|---|
+| `ExecutionAttestation`, `MissionAttestationSummary` | one `model?` | `requestedModel?` + `actualModel?` |
+| `MissionReview`, `MissionArchitectReceipt` | one `model` | `requestedModel` + `servedModel` |
+| `HermesOutcome` (all three reviewer paths) | one `model`, three meanings | `requestedModel` + `servedModel` |
+| `runHermesReview` (local spawn) | never passed `--usage-file`; reported `cfg.model` | asks Hermes for its usage report and reads the model out of it |
+| `runRemoteHermesReview` (hosted) | hardcoded `model: null`, never read `usage` | reads the service's own `usage.model` |
+| both harness transports | copied token counts, dropped the model | carry `usage.model`; a report naming only a model is still a report |
+| `loadXaiConfig` | read `RELAY_REVIEWER_MODEL` | reads `RELAY_HERMES_MODEL`, with the old name still honoured |
+
+Three rules now hold, each with tests that fail against the previous code:
+
+1. **Unknown stays Unknown.** A provider that names no model yields
+   `servedModel: null`, an attestation with no `actualModel`, and the words
+   *"served model not reported by the provider"* in the record. It is never
+   promoted to a match with the requested model.
+2. **A substitution is refused.** Both facts known and disagreeing means the
+   provider substituted the reviewer. `fallbackOccurred` becomes true, the
+   mission fails `review_incomplete` with both model names in the message, and
+   an `approved` verdict from a substituted model never completes a mission.
+   The same rule applies to a re-review: the original rejection stands.
+3. **The requested axis may fall back; the served axis may not.** The requested
+   model may come from the preflight (also a statement of what was asked for);
+   the served model comes only from the provider.
+
+**Also fixed in the same class, one role over.** The architect's Live Terminal
+label read `receipt.model` — the deprecated spelling, which carries the
+REQUESTED model — so `gpt-4o` served by `gpt-4o-2024-11-20` was displayed as
+`gpt-4o`. The label now names the served model, and says *"(requested; the
+provider named no model)"* when there is none. And `coding.ts` spelled its
+attestation field inside an object SPREAD, where TypeScript performs no
+excess-property check: the rename compiled clean while silently dropping the
+coding agent's served model into a field nobody reads.
+
+**Not claimed.** No paid xAI review has been run against this code. The chain is
+proven end-to-end against a fake `hermes` process that writes a real usage file
+and a fake service that returns a real usage block — which proves the plumbing
+and the refusals, not that xAI reports a model in production. The first hosted
+review will either populate `servedModel` or leave it `null`, and both outcomes
+are now truthful and legible. Tests: `relay-bridge/reviewer-served-model.test.ts`,
+the `defect 3` block in `relay-bridge/orchestrator.test.ts`, and the served-model
+cases in `relay-bridge/reviewer-harness/hermes/remote-transport.test.ts`.
 
 **4 · The bridge does not report its deployed commit.** `/relay-api/health`
 carries no build identity, so proving "the fix is live" requires observing

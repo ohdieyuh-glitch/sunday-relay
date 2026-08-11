@@ -483,7 +483,7 @@ export function createRemoteHermesTransport(
       if (!r.ok) {
         return {
           runId, status: 'failed', protocol: null, reviewText: null,
-          usage: { inputTokens: null, outputTokens: null, source: 'unavailable' },
+          usage: { inputTokens: null, outputTokens: null, model: null, source: 'unavailable' },
           failureKind: r.kind, safeMessage: r.safeMessage,
         };
       }
@@ -496,7 +496,7 @@ export function createRemoteHermesTransport(
       if (status === null || !known.includes(status)) {
         return {
           runId, status: 'failed', protocol: HERMES_SERVICE_PROTOCOL, reviewText: null,
-          usage: { inputTokens: null, outputTokens: null, source: 'unavailable' },
+          usage: { inputTokens: null, outputTokens: null, model: null, source: 'unavailable' },
           failureKind: 'malformed_response',
           safeMessage: 'The Hermes Reviewer service reported a run state Relay does not accept.',
         };
@@ -504,6 +504,10 @@ export function createRemoteHermesTransport(
       const u = isRecord(r.body.usage) ? r.body.usage : {};
       const inputTokens = numOrNull(u.inputTokens);
       const outputTokens = numOrNull(u.outputTokens);
+      // The served model, decoded with the same discipline as the tokens:
+      // absent stays absent. It is never defaulted from any requested or
+      // configured model — this decoder has no access to one on purpose.
+      const servedModel = strOrNull(u.model);
       return {
         runId,
         status: status as RemoteHermesReviewState['status'],
@@ -514,8 +518,12 @@ export function createRemoteHermesTransport(
         usage: {
           inputTokens,
           outputTokens,
-          // Unreported usage stays Unknown. It never becomes zero.
-          source: inputTokens === null && outputTokens === null ? 'unavailable' : 'harness_reported',
+          model: servedModel,
+          // Unreported usage stays Unknown. It never becomes zero. A report
+          // that names only the model is still a report.
+          source: inputTokens === null && outputTokens === null && servedModel === null
+            ? 'unavailable'
+            : 'harness_reported',
         },
         failureKind: status === 'timed_out' ? 'timed_out' : null,
         safeMessage: strOrNull(r.body.safeMessage),
