@@ -123,3 +123,16 @@ export type {
   DeploymentProvider,
   DeploymentProviderDescriptor,
 } from './deployment-provider';
+
+export {
+  REPOSITORY_KNOWLEDGE_KINDS,
+  REPOSITORY_MEMORY_SOURCE,
+  REPOSITORY_OBSERVED_BY,
+  observeDeployment,
+  observeJudgedDiff,
+  observeRepair,
+  observeShipHistory,
+  observeShipVerdict,
+  proposeRepositoryKnowledge,
+} from './repository-brain-feed';
+export type { RepositoryKnowledgeKind, RepositoryKnowledgeRefusal } from './repository-brain-feed';

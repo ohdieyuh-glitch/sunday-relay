@@ -334,6 +334,51 @@ its baseline instead of reading HEAD.
 
 ---
 
+## The Project Brain feed
+
+Repository work teaches the Brain two different kinds of thing, and the split is
+the whole design:
+
+| | Goes to | Approved by |
+|---|---|---|
+| Deployment history, refusals, failures, verified repairs — **events** | short-term memory | nobody |
+| Architecture, stack, commands, branch policy, deploy target — **knowledge** | a promotion **proposal** | a human |
+
+"This repository's verification command is `npm test`" is a durable claim that
+will steer every future mission. Relay must not write it into approved memory on
+its own authority — if an agent could promote its own observation, *"the Brain
+says so"* would mean *"an agent wrote it down twice"*, and the approval gate that
+makes long-term memory worth trusting would be decorative. There is deliberately
+no function in this module that produces a `RelayLongTermEntry`.
+
+Four rules, each with a mutation proof:
+
+1. **Only what Relay established itself may even be PROPOSED.**
+   `proposeRepositoryKnowledge` refuses `verifiedByRelay: false` by name and says
+   to record a short-term observation instead. A stack inferred by a model from a
+   filename is a claim that would send every later mission down the same wrong
+   path, and a proposal is halfway to approved.
+2. **A deploy observation may never read as a ship.** Its summary carries
+   *"Whether it is live is a separate observation"* and a test asserts the words
+   "shipped" and "live" do not appear as claims. A short-term entry saying
+   "deployed to production" beside a mission that never shipped is how a Brain
+   comes to believe something the pipeline explicitly refused to conclude.
+3. **A refusal records the refusal NAMES, not a count.** "2 problems" teaches a
+   future mission nothing; `protected_path_unprotect_refused` teaches it what not
+   to do again.
+4. **`ShipVerdict.reason` is carried verbatim.** Every rewording is a chance to
+   turn "the running system reports a different revision" into "deploy failed",
+   and which of the four ship conditions failed is the whole value.
+
+No new observation kind and no new memory source were added:
+`run_outcome`/`error`/`repair` and `repository_observed` already existed — the
+Brain's vocabulary had already assumed a repository could teach it something and
+that it would need approving. And no knowledge kind carries an opinion: there is
+no `code_quality`, no `technical_debt`, no `recommended_refactor`, because an
+approval queue full of model opinions is an approval queue nobody reads.
+
+---
+
 ## What is NOT built
 
 Stated plainly, because a document that reads as finished is worse than one that
@@ -359,9 +404,14 @@ reads as unfinished.
 5. **No dry-run mode.** The design document requires one — produce the branch
    and the PR body, push nothing — and it does not exist because there is
    nothing to push with.
-6. **No Project Brain feed.** Repository architecture, stack, commands,
-   deployment history, failures and verified repairs are not yet fed into
-   `PROJECT_BRAIN_LLMOPS`.
+6. **The Project Brain feed is BUILT but has no producer.**
+   `repository-brain-feed.ts` projects repository work into the **existing**
+   Brain — `rememberShortTerm` and `proposePromotion` in
+   `src/relay/shared/llmops/brain-memory.ts`, following the
+   `evidence/evidence-brain-link.ts` precedent. It is not a second store. What
+   is missing is a caller: nothing in the bridge invokes it yet, for the same
+   reason as (3) — the mission engine does not read a repository target.
+   See "The Project Brain feed" below.
 7. **`gitlab` and `bitbucket`** are nameable in the domain and refused at
    selection by `repositoryProviderSupported`. Registered is not drivable, and
    the refusal happens at configuration rather than at the push step.
