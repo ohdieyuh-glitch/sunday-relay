@@ -1693,7 +1693,34 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           },
         });
 
+        /**
+         * A REPAIR THAT PRODUCES NOTHING MUST SAY SO.
+         *
+         * The first production run of this leg fired correctly — "Repair
+         * attempt started — 3 blocking finding(s)" — and then emitted NOTHING
+         * before the completion decision, because this check skipped in
+         * silence when the second run returned no evidence. The mission was
+         * refused for the right reason (the original rejection stood) and the
+         * record could not say whether the repair had run and failed, been
+         * stopped at a precondition, or never started.
+         *
+         * That is the same blindness this session fixed five times in other
+         * people's code, written into new code by me. The stop reason the
+         * coding leg already produces is surfaced here instead.
+         */
         const repaired = repair.evidence;
+        if (repaired === null || repaired === undefined) {
+          append(rec, {
+            role: 'coding_agent',
+            category: 'repair',
+            truth: 'system_notice',
+            headline: 'Repair produced no verifiable result — the original review stands.',
+            detail: repair.stopReason !== undefined && repair.stopReason !== ''
+              ? `The repair run stopped: ${repair.stopReason}`
+              : 'The repair run returned no evidence and no reason. The mission is refused on the '
+                + 'first review, which is unchanged.',
+          });
+        }
         if (repaired !== null && repaired !== undefined) {
           append(rec, {
             role: 'relay',
