@@ -83,9 +83,26 @@ so a chamfered panel (`.rpw-console`, `.reh-starter`, `.reh-guide-chat`,
 `.reh-brief`) cannot carry an outer shadow at all. Light that lives *inside* the
 clip can. It is stacked in the same `background` shorthand as the panel colour,
 never as a later separate rule, because a colorway override written as a
-shorthand would silently reset `background-image` to `none`. Two such overrides
-(`[data-relay-colorway='midnight'] .rpw-tmpanel` and the manual equivalent) were
-updated to re-state it.
+shorthand would silently reset `background-image` to `none`. **ONE** such override was updated —
+`[data-relay-colorway='midnight'] .rpw-tmpanel` — and an earlier version of this
+paragraph claimed two, naming "the manual equivalent" as the second. That one was
+never touched, and there are not two overrides of this shape but at least seven:
+manual `.rpw-console`, `.rpw-conversation`, `.rpw-status`, `.rpw-tmpanel`,
+`.reh-starter`/`.reh-brief`, `.reh-guide` and `.rpw-strip`. An independent review
+found it by grepping every colorway `background:` shorthand against the rules
+this pass sheened.
+
+**They are deliberately left as they are, and the decision is recorded rather
+than the material silently restored.** The sheen is white light at 2% — on the
+manual colorway's cream surfaces it is invisible, and on its black console it
+would be a warm haze over a surface whose whole identity is flat ink. The manual
+colorway is a founder-provided reference, and adding material to it is a design
+change, not a polish. Obsidian and midnight keep the sheen.
+
+One consequence follows and is stated rather than left implied: manual
+`.rpw-console` also outranks the `@supports` glass rule (0,2,0 beats 0,1,0), so
+the console is NOT frosted in the manual colorway and its `backdrop-filter` there
+can do nothing.
 
 ## 3. Per surface
 
@@ -115,7 +132,7 @@ updated to re-state it.
 
 - Same grid lighting, same retina pass, same control language as the entry home
   — deliberately identical tokens so the two surfaces read as one product.
-- **The console is the most-glass surface in Relay**, because it is the one
+- **The console is the most-glass surface in Relay — in obsidian and midnight; the manual colorway keeps it flat, see above —**, because it is the one
   dominant plate and it was already translucent over the grid: it now blurs to
   frosted at 0.58 with the sheen over it. The conversation dock, which shares
   its frame, matches.
@@ -283,3 +300,46 @@ real display before release:
 - whether the lifted muted tiers read as "crisper" or as "lighter" in the
   founder's judgement — the numbers are right, the taste is theirs;
 - the RELAY MANUAL ivory change against the founder's reference photograph.
+
+---
+
+## Corrections after independent review
+
+A read-only review executed 14 mutations and found three High defects. Two of the
+three were **user-visible regressions this pass introduced**, and the third was a
+false statement in this document.
+
+| # | What went wrong | Repair |
+|---|---|---|
+| 1 | the base grid rules grew from two image layers to four with a four-value `background-size`, and five colorway overrides still declared two layers. `background-size` is positional and CSS truncates the list to the layer count, so the two grid lines took `100% 100%` — on a `position: fixed; inset: 0` element, a 48px grid became one line at the top and one at the left. **The technical grid was gone on five of six colorway × surface combinations**, and obsidian, the default, was unaffected — so nobody testing the default would have seen it | the size is re-stated in each of the five overrides, and a test now requires every grid rule's layer count to match the size list in effect |
+| 2 | `--sheen` was painted over the very panel tokens the contrast ladder measures against, so the tightest pairs landed at 4.04–4.45 while this document claimed every tier cleared 4.5. The arithmetic in the §1 table was right; the GROUND was wrong | the peak alpha drops from 0.038 to 0.020, which clears every measured pair without lifting a tier again and re-running the ladder |
+| 3 | this document said two overrides were updated to re-state the sheen, naming "the manual equivalent" as the second. One was updated, the named one was never touched, and there are at least seven overrides of that shape | corrected, with the decision recorded: the manual colorway keeps no sheen, and the consequence for its console is stated |
+
+Two of the fifteen mutations the pass shipped with **did not bite**, and both are
+now closed:
+
+- the scrollbar test measured a hand-listed token and separately checked that the
+  string `scrollbar-color` appeared. Nothing tied them, so swapping the declared
+  value to an unmeasured `#232323` (1.42:1) passed. The declared value's first
+  `var()` is now resolved and required to be a token the list measured.
+- the sprite guard protected four class names, and `RelayPixelDog` renders the
+  sprite **inside** `.rpd-stage` — so `filter: blur()` there blurred the whole
+  Dog and passed. Widening it flagged four legitimate rules (a tier pedestal, a
+  sleep mat, a dig hole, a dig mound), so the guard now has two subject classes:
+  the sprite takes none of the four properties, and its containers take no
+  `filter` but may be round or lifted.
+
+**What the review confirmed true, recorded so a later repair does not undo it:**
+all twenty numbers in the §1 contrast table re-derived to ±0.01; the bundle's
+14 `@supports` blocks and zero unguarded `backdrop-filter`; the `clip-path`
+claim and the code obeying it; both stale claims real and fixed; the Stage
+untouched and the vignette structurally safe; the Relay Dog untouched; no new
+keyframe, animation, transform, `overflow` or `position: fixed`; the collision
+allow-list byte-identical with all six reasons still true.
+
+Four Medium and three Low findings remain open and are recorded in the review
+rather than repaired here: the `@supports`-below-flat ordering in
+`relay-preview.css`, the retina pass being outranked by colorway overrides, the
+`--surface` palette token crossing into `.rsbp`, the tertiary-row surface list in
+§1, the "hues did not change" wording (midnight gained ~65% relative saturation),
+aged gold on cream at 4.37 (pre-existing), and an unused `.rpb-specular` hook.

@@ -336,13 +336,27 @@ describe('contrast is measured, on every colorway and every ground', () => {
       const ratio = contrast(resolve(palette, thumb), resolve(palette, track));
       expect(ratio, `${palette.label}: ${thumb} thumb on ${track}`).toBeGreaterThanOrEqual(3);
     }
-    // And the declarations exist, so the numbers above describe the product.
+    /**
+     * AND THE DECLARED THUMB IS THE ONE THAT WAS MEASURED.
+     *
+     * This checked that the STRING `scrollbar-color` appeared, and nothing tied
+     * it to the tokens above — a mutation that swapped the value to an unmeasured
+     * `#232323` (1.42:1) passed all 15 tests. That is a guarantee about a token
+     * nobody proved the thumb uses. The declared value's first `var()` is now
+     * resolved and required to be a token this list actually measured.
+     */
+    const measuredThumbs = new Set(thumbs.map(([, thumb]) => thumb));
     for (const [sheet, selector] of [
       [ENTRY, '.reh'], [WORKSPACE, '.rpw'], [SETTINGS, '.rps'],
       [read('relay.css'), '.relay-app'], [MISSION_CONTROL, '.relay-mc'],
     ] as const) {
       const rule = rules(sheet).find((r) => r.selectors === selector);
       expect(rule?.body, `${selector} declares no themed scrollbar`).toContain('scrollbar-color');
+      const declared = /scrollbar-color:\s*([^;]+);/.exec(rule?.body ?? '');
+      expect(declared, `${selector} scrollbar-color is unreadable`).not.toBeNull();
+      const token = /var\(\s*(--[\w-]+)/.exec((declared as RegExpExecArray)[1])?.[1];
+      expect(token, `${selector} declares a literal scrollbar thumb instead of a measured token`).toBeDefined();
+      expect(measuredThumbs, `${selector} thumb ${String(token)} is not in the measured set`).toContain(token);
     }
   });
 });
@@ -443,7 +457,24 @@ describe('glass is guarded, and never lands on the Relay Dog', () => {
     // The Dog is a hard-edged 18x14 sprite rendered with `crispEdges`. Any of
     // these would soften or reshape the identity, and a "premium glass pass" is
     // exactly the change that would do it by accident.
-    const protectedSubjects = /^\.(rpd-art|rpd-part|rpd-markwrap|rst-actor)\b/;
+    /**
+     * TWO CLASSES OF SUBJECT, because they need different rules.
+     *
+     * The SPRITE itself takes none of the four properties. The CONTAINERS take
+     * no `filter` — a mutation putting `filter: blur(1.5px)` on `.rpd-stage`
+     * passed every test, because `RelayPixelDog` renders the sprite INSIDE that
+     * element, so a filter there blurs the whole voxel Dog while touching none of
+     * the four names the guard knew about.
+     *
+     * But containers may carry `border-radius` and `box-shadow`, and widening the
+     * guard without that distinction flagged four legitimate rules: a tier
+     * pedestal, a sleep mat, a dig hole and a dig mound. Those are round objects
+     * the Dog stands on and digs — rounding them is the design, and a guard that
+     * forbade it would have been widened away the first time somebody drew a
+     * circle.
+     */
+    const spriteSubjects = /^\.(rpd-art|rpd-part|rpd-markwrap|rst-actor)\b/;
+    const containerSubjects = /^\.(rpd-stage|rdm|rdo|rst-layer--actors)\b/;
     const offenders: string[] = [];
     for (const sheet of SHEETS) {
       for (const rule of rules(sheet.css)) {
@@ -451,8 +482,14 @@ describe('glass is guarded, and never lands on the Relay Dog', () => {
           // The SUBJECT is the last compound; `.rpd--tier .rpd-stage::before`
           // styles the stage, not the art.
           const subject = selector.split(/[\s>+~]+/).pop() ?? '';
-          if (!protectedSubjects.test(subject)) continue;
-          for (const property of ['backdrop-filter', 'filter', 'border-radius', 'box-shadow']) {
+          const isSprite = spriteSubjects.test(subject);
+          const isContainer = containerSubjects.test(subject);
+          if (!isSprite && !isContainer) continue;
+          // A container may be round or lifted; it may never blur what is inside it.
+          const properties = isSprite
+            ? ['backdrop-filter', 'filter', 'border-radius', 'box-shadow']
+            : ['backdrop-filter', 'filter'];
+          for (const property of properties) {
             if (new RegExp(`(^|;|\\s)${property}\\s*:`).test(rule.body)) {
               offenders.push(`${sheet.name}: ${selector} declares ${property}`);
             }
@@ -596,5 +633,121 @@ describe('the Relay Dog’s proportions survive the polish', () => {
         Array.from(g.querySelectorAll('rect')).map((r) => Number(r.getAttribute('y')))),
     );
     expect([...legRows].sort((a, b) => a - b)).toEqual([11, 12, 13]);
+  });
+});
+
+/* ============ what an independent review found in the polish pass ============ */
+
+describe('a grid override cannot silently lose its repeat', () => {
+  /**
+   * `background-size` is POSITIONAL, and CSS truncates the size list to the
+   * image-layer count. The base grid rules grew from two layers to four with a
+   * four-value size; five colorway overrides still declared two layers, so the
+   * two grid lines took `100% 100%, 100% 100%` — on a `position: fixed; inset: 0`
+   * element that is one line at the top, one at the left, and no grid at all.
+   * The technical grid is a named identity element of every Relay surface, and
+   * it was gone on five of the six colorway × surface combinations. Obsidian,
+   * the default, was unaffected — so nobody testing the default would see it.
+   *
+   * The rule this closes: any `*-grid-bg` rule that declares `background-image`
+   * must declare a `background-size` with the SAME number of values, so no rule
+   * depends on a size list written for a different layer count.
+   */
+  const GRID_SHEETS = [
+    'src/relay/ui/entry-home/relay-entry-home.css',
+    'src/relay/ui/project-workspace/relay-project-workspace.css',
+    'src/relay/ui/project-settings/relay-project-settings.css',
+    'src/relay/ui/relay-manual-theme.css',
+  ];
+
+  /** Top-level comma count — commas inside `rgba(...)`/`linear-gradient(...)` do
+   *  not separate layers, and counting them would make every rule look wrong. */
+  const topLevelParts = (value: string): number => {
+    let depth = 0;
+    let parts = 1;
+    for (const ch of value) {
+      if (ch === '(') depth += 1;
+      else if (ch === ')') depth -= 1;
+      else if (ch === ',' && depth === 0) parts += 1;
+    }
+    return parts;
+  };
+
+  it('no grid rule declares a layer count the size list in effect does not cover', () => {
+    /**
+     * NOT "every rule must restate the size" — the retina blocks legitimately
+     * inherit it, because they declare the SAME layer count as the base and only
+     * halve the stops. The first version of this test demanded a restatement
+     * everywhere and flagged three innocent rules, which is a guard that would
+     * have been widened away the first time it fired.
+     *
+     * The real rule: a rule may inherit the base's size list only when its layer
+     * count MATCHES the base's. Otherwise it must declare its own.
+     */
+    type Rule = { readonly selector: string; readonly layers: number; readonly sizes: number | null };
+    const byClass = new Map<string, Rule[]>();
+    for (const sheet of GRID_SHEETS) {
+      const css = readFileSync(sheet, 'utf8');
+      for (const match of css.matchAll(/([^{}]*?)\{([^{}]*)\}/g)) {
+        const [, rawSelector, body] = match;
+        const selector = rawSelector.trim().replace(/\s+/g, ' ');
+        const cls = /\.((?:reh|rpw|rps)-grid-bg)\b/.exec(selector)?.[1];
+        if (cls === undefined) continue;
+        const image = /background-image:\s*([^;]+);/.exec(body);
+        if (image === null) continue;
+        const size = /background-size:\s*([^;]+);/.exec(body);
+        const list = byClass.get(cls) ?? [];
+        list.push({
+          selector: `${sheet} ${selector}`,
+          layers: topLevelParts(image[1]),
+          sizes: size === null ? null : topLevelParts(size[1]),
+        });
+        byClass.set(cls, list);
+      }
+    }
+    expect(byClass.size, 'no grid rules were parsed at all').toBeGreaterThan(0);
+
+    const offenders: string[] = [];
+    for (const [cls, rules] of byClass) {
+      // The base is the one that declares a size and has the plainest selector.
+      const base = rules.find((r) => r.sizes !== null && !r.selector.includes('['));
+      if (base === undefined || base.sizes === null) {
+        offenders.push(`${cls} has no base rule declaring a background-size`);
+        continue;
+      }
+      for (const rule of rules) {
+        const effective = rule.sizes ?? base.sizes;
+        if (rule.layers !== effective) {
+          offenders.push(`${rule.selector}: ${String(rule.layers)} layers against ${String(effective)} sizes`);
+        }
+      }
+    }
+    expect(offenders, 'a size list written for a different layer count silently kills the grid').toEqual([]);
+  });
+});
+
+describe('the sheen does not eat the contrast the ladder guarantees', () => {
+  /**
+   * The pass added `--sheen` on top of the very panel tokens the contrast table
+   * measures against. The arithmetic in that table was correct and the GROUND
+   * was wrong: composited, the tightest pairs landed at 4.04–4.45.
+   *
+   * Asserted on the token's PEAK alpha rather than by re-deriving every pair,
+   * because the peak is the single number that decides the worst case and a
+   * future change to it is the way this comes back.
+   */
+  it('keeps the peak alpha low enough that no measured pair drops below AA', () => {
+    const tokens = readFileSync('src/relay/relay-tokens.css', 'utf8');
+    const sheen = /--sheen:\s*linear-gradient\(([\s\S]*?)\);/.exec(tokens);
+    expect(sheen, '--sheen is not declared as a linear-gradient').not.toBeNull();
+    const alphas = [...(sheen as RegExpExecArray)[1].matchAll(/rgba\(\s*255,\s*255,\s*255,\s*([0-9.]+)\s*\)/g)]
+      .map((m) => Number(m[1]));
+    expect(alphas.length).toBeGreaterThan(0);
+    /**
+     * 0.020 is the measured ceiling: above it the obsidian and midnight faint
+     * tiers on `panel-2` fall under 4.5:1. Raising it means re-deriving the
+     * ladder, not editing this number.
+     */
+    expect(Math.max(...alphas)).toBeLessThanOrEqual(0.02);
   });
 });

@@ -99,10 +99,19 @@
      survives inside a clip-path. Stacked above the panel colour in the same
      `background` shorthand — never as a separate later rule, which a colorway
      override using the shorthand would silently reset to `none`. */
+  /* THE PEAK ALPHA IS 0.020, AND IT WAS 0.038.
+     The sheen sits ON TOP of the very panel tokens the contrast ladder is
+     measured against, so it lightens the ground under the top third of every
+     sheened panel — and the tightest text pairs landed at 4.04–4.45, under AA,
+     while the record claimed every tier cleared 4.5. An independent review
+     found it by compositing the gradient over the panel and re-deriving the
+     ratios; the arithmetic in the table was right and the GROUND was wrong.
+     At 0.020 every measured pair clears 4.5 with the ladder untouched, which is
+     the fix that does not require lifting a tier again. */
   --sheen: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.038) 0%,
-    rgba(255, 255, 255, 0.014) 32%,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(255, 255, 255, 0.008) 32%,
     rgba(255, 255, 255, 0) 68%
   );
 

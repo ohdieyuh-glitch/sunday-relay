@@ -78,6 +78,14 @@
   background-image:
     linear-gradient(rgba(27, 28, 23, 0.55) 1px, transparent 1px),
     linear-gradient(90deg, rgba(27, 28, 23, 0.55) 1px, transparent 1px);
+  /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
+     `background-size` is positional: the base rule declares four image layers
+     and four sizes, this override declares two, and CSS truncates the size list
+     to the layer count — so these two grid lines took `100% 100%, 100% 100%`
+     and a 48px repeating grid became ONE line at the top and one at the left.
+     On a `position: fixed; inset: 0` element that is the grid disappearing.
+     An independent review found it in the built bundle. */
+  background-size: 48px 48px, 48px 48px;
 }
 [data-relay-colorway='manual'] .reh-header {
   background: var(--relay-manual-black);
@@ -157,6 +165,14 @@
   background-image:
     linear-gradient(rgba(214, 211, 196, 0.6) 1px, transparent 1px),
     linear-gradient(90deg, rgba(214, 211, 196, 0.6) 1px, transparent 1px);
+  /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
+     `background-size` is positional: the base rule declares four image layers
+     and four sizes, this override declares two, and CSS truncates the size list
+     to the layer count — so these two grid lines took `100% 100%, 100% 100%`
+     and a 48px repeating grid became ONE line at the top and one at the left.
+     On a `position: fixed; inset: 0` element that is the grid disappearing.
+     An independent review found it in the built bundle. */
+  background-size: 48px 48px, 48px 48px;
 }
 [data-relay-colorway='manual'] .rps-header {
   background: var(--relay-manual-black);
@@ -200,6 +216,14 @@
   background-image:
     linear-gradient(rgba(27, 28, 23, 0.55) 1px, transparent 1px),
     linear-gradient(90deg, rgba(27, 28, 23, 0.55) 1px, transparent 1px);
+  /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
+     `background-size` is positional: the base rule declares four image layers
+     and four sizes, this override declares two, and CSS truncates the size list
+     to the layer count — so these two grid lines took `100% 100%, 100% 100%`
+     and a 48px repeating grid became ONE line at the top and one at the left.
+     On a `position: fixed; inset: 0` element that is the grid disappearing.
+     An independent review found it in the built bundle. */
+  background-size: 48px 48px, 48px 48px;
 }
 [data-relay-colorway='manual'] .rpw-header {
   background: var(--relay-manual-black);

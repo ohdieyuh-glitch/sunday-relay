@@ -1428,6 +1428,14 @@
   background-image:
     linear-gradient(rgba(158, 180, 232, 0.07) 1px, transparent 1px),
     linear-gradient(90deg, rgba(158, 180, 232, 0.07) 1px, transparent 1px);
+  /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
+     `background-size` is positional: the base rule declares four image layers
+     and four sizes, this override declares two, and CSS truncates the size list
+     to the layer count — so these two grid lines took `100% 100%, 100% 100%`
+     and a 48px repeating grid became ONE line at the top and one at the left.
+     On a `position: fixed; inset: 0` element that is the grid disappearing.
+     An independent review found it in the built bundle. */
+  background-size: 48px 48px, 48px 48px;
 }
 /* The sheen is re-stated here on purpose: this is a `background` SHORTHAND, and
    a shorthand that omits the image resets it to `none` — so a colorway override
