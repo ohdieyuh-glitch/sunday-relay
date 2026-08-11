@@ -118,6 +118,25 @@ export function declaredBillingPath(
   }
 }
 
+/**
+ * ONE PHRASE PER BILLING PATH, for the event line a founder actually reads.
+ *
+ * The reviewer launch event ended "· subscription-backed." regardless of what
+ * was true, beside two placeholders ("configured provider · configured model")
+ * that name nothing. A sentence with no information in it still asserted the
+ * one thing it should not have.
+ */
+export function billingPhrase(path: BillingPath): string {
+  switch (path) {
+    case 'api_billed': return 'api-billed';
+    case 'subscription': return 'subscription-backed';
+    case 'portal': return 'portal-billed';
+    case 'local': return 'not billed';
+    case 'simulated': return 'simulated — no spend';
+    default: return 'billing not established';
+  }
+}
+
 /** Was the role performed by the actor we asked for? */
 export function actorMatches(a: ExecutionAttestation | undefined): boolean {
   return Boolean(a && a.requestedActor === a.actualActor && a.requestedRuntime === a.actualRuntime);

@@ -41,6 +41,75 @@ const pkg = (): AgentHandoffPackage => ({
   idempotencyKey: 'idk' as never,
 });
 
+/**
+ * A REPAIR PROMPT MUST BE USABLE BY AN AGENT THAT HAS SEEN NOTHING ELSE.
+ *
+ * `compileRevisionPrompt` told the agent to end with the marker "followed by
+ * the same JSON object shape, with attempt: 2" — a back-reference to the first
+ * attempt's prompt. The hosted repair is a fresh session in a fresh workspace,
+ * so that shape had never been shown to it.
+ *
+ * Production, `pack-11-four-constraints-1786424002`: a genuine rejection, a
+ * repair that really ran (nine turns, four tools, 1285 characters of final
+ * text) and then `Report failed validation`. The one thing the agent could not
+ * guess was the schema nobody sent it, and its work was discarded.
+ *
+ * These read the revision prompt ALONE, which is the only way to see it.
+ */
+describe('the revision prompt stands on its own', () => {
+  const ctxForReport = () => ({
+    pkg: pkg(), runId: 'run_x', taskId: 'tsk_x', workspaceRelativeRoot: '.',
+    readOnlyFiles: ['test'], protectedFiles: ['package.json', '.git'],
+    relayVerificationCommands: ['node --test test/normalize.test.js'],
+    limits: { maxTurns: null, maxRuntimeMs: 360000, maxStdoutBytes: 1, maxStderrBytes: 1, maxNormalizedEvents: 1, maxAutomaticRepairs: 1 as const, maxLiveCallsPerRun: 2 },
+  });
+  const revision = () => compileRevisionPrompt({
+    runId: 'run_x', taskId: 'tsk_x',
+    findingSummaries: ['F-1: the implementation uses a regular expression.'],
+    relayVerificationCommands: ['node --test test/normalize.test.js'],
+  });
+
+  it('states every field of the report contract, not a reference to one', () => {
+    const prompt = revision();
+    for (const field of [
+      '"taskId"', '"runId"', '"attempt"', '"status"', '"summary"',
+      '"filesRead"', '"filesChanged"', '"commandsClaimed"', '"testsClaimed"',
+      '"remainingIssues"', '"manualActionRequest"',
+    ]) {
+      expect(prompt).toContain(field);
+    }
+    expect(prompt).toContain(REPORT_MARKER);
+    // The back-reference itself must not come back.
+    expect(prompt).not.toMatch(/same JSON object shape/i);
+  });
+
+  it('asks for attempt 2, where the first attempt asks for 1', () => {
+    expect(revision()).toContain('"attempt": 2');
+    expect(compileClaudePrompt(ctxForReport())).toContain('"attempt": 1');
+  });
+
+  it('names every field the first attempt names, and no others', () => {
+    /**
+     * The mechanical check, because the failure mode is an OMISSION and no
+     * reading finds those: both prompts are parsed and their field sets
+     * compared. A field added to one contract and not the other fails here
+     * rather than in production, six paid roles into a mission.
+     */
+    const fields = (p: string) => new Set((p.match(/"[a-zA-Z]+":/g) ?? []));
+    const first = fields(compileClaudePrompt(ctxForReport()));
+    const repair = fields(revision());
+    expect(first.size).toBeGreaterThan(5);
+    expect([...repair].sort()).toEqual([...first].sort());
+  });
+
+  it('does not claim to be resuming a session it is not in', () => {
+    // The seeded workspace is the proof it is a new process: a resumed session
+    // would not need its own files restored.
+    expect(revision()).not.toMatch(/resuming this exact session/i);
+    expect(revision()).toContain('restored into this workspace');
+  });
+});
+
 describe('environment filtering', () => {
   it('strips provider credentials and third-party secrets, keeps base vars', () => {
     const base = {

@@ -55,7 +55,7 @@ import type { LiveReachService } from './live-reach-service';
 import type { BackendProbe } from '../src/relay/mission/live-reach';
 import type { MissionEvidenceReference } from '../src/relay/mission/wire-contracts';
 import { renderForPrompt as renderEvidenceForPrompt, evidenceReference as evidenceReferenceOf } from '../src/relay/mission/evidence';
-import { buildAttestation, decideCompletion, declaredBillingPath, digest, occupantBillingPath, type ExecutionAttestation } from './attestation';
+import { billingPhrase, buildAttestation, decideCompletion, declaredBillingPath, digest, occupantBillingPath, type ExecutionAttestation } from './attestation';
 import { isProductionDeployment } from './deployment-environment';
 import { createHostedClaudeInvoker } from './hosted-coding-agent/hosted-invoker';
 import { RELAY_SKILLS, evaluateInternalSkillCall, findSkill } from '../src/relay/mission/skills';
@@ -1479,6 +1479,18 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           meta: `ARTIFACT ${evidence.artifactDigest}`,
           artifactRef: evidence.artifactDigest,
         });
+        /**
+         * WHAT THE REVIEW COST — the operator's declaration if they made one,
+         * otherwise the registered occupant that actually ran, and never a
+         * literal. Computed ONCE, before the launch line that announces it, and
+         * used by that line, the attestation and the founder-facing review card
+         * alike — three places that previously carried independent
+         * `'subscription'` claims agreeing with each other and with nothing
+         * else.
+         */
+        const reviewerBilling = declaredBillingPath(hermesEnv.RELAY_HERMES_BILLING_MODE)
+          ?? occupantBillingPath(boundRoles.reviewer?.occupant.billingPath);
+
         rec.ledger.set(revKey, 'in_flight');
         setPhase(rec, 'reviewer_starting');
         append(rec, {
@@ -1486,9 +1498,15 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           category: 'reviewer',
           truth: 'system_notice',
           headline: 'Hermes launched — one read-only review, no retries.',
-          detail: `Hermes Agent CLI · ${safeText(hermesReady?.provider ?? 'configured provider')} · ${safeText(
-            hermesReady?.model ?? 'configured model',
-          )} · subscription-backed.`,
+          /**
+           * `provider not reported` rather than `configured provider`: the
+           * placeholder read as though Relay knew which one and was being
+           * terse. On the run that exposed this, every field in this line was
+           * a placeholder and the line still ended "subscription-backed".
+           */
+          detail: `Hermes Agent CLI · ${safeText(hermesReady?.provider ?? 'provider not reported')} · ${safeText(
+            hermesReady?.model ?? 'model not reported',
+          )} · ${billingPhrase(reviewerBilling)}.`,
         });
         setPhase(rec, 'reviewer_working');
 
@@ -1527,16 +1545,6 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           reviewOutcome.kind === 'launch_failed' ? now() : reviewOutcome.completedAt;
         const resolvedProvider = (reviewOutcome.kind === 'reviewed' ? reviewOutcome.provider : null) ?? hermesReady?.provider ?? null;
         const resolvedModel = (reviewOutcome.kind === 'reviewed' ? reviewOutcome.model : null) ?? hermesReady?.model ?? null;
-        /**
-         * WHAT THE REVIEW COST — the operator's declaration if they made one,
-         * otherwise the registered occupant that actually ran, and never a
-         * literal. Computed ONCE and used by both the attestation and the
-         * founder-facing review card, which previously carried two independent
-         * `'subscription'` literals that happened to agree with each other and
-         * with nothing else.
-         */
-        const reviewerBilling = declaredBillingPath(hermesEnv.RELAY_HERMES_BILLING_MODE)
-          ?? occupantBillingPath(boundRoles.reviewer?.occupant.billingPath);
 
         rec.attestations.reviewer = buildAttestation({
           missionId: rec.missionId,
