@@ -117,6 +117,10 @@ export interface ParsedCli {
   reviewerMode?: 'status' | 'inspect' | 'stop' | 'test-connection' | 'start' | 'retry';
   reviewerAction?: 'harnesses' | 'pair-browser';
   pairOrigin?: string;
+  /** `--control`: mint a grant whose session may START missions. */
+  pairControl?: boolean;
+  /** `--participant <id>`: who a control session acts as. Bound at mint. */
+  pairParticipant?: string;
   authorize?: boolean;
   harness?: string;
   model?: string;
@@ -215,6 +219,11 @@ export function parseCli(argv: string[]): ParsedCli {
         generation: { type: 'string' },
         'idempotency-key': { type: 'string' },
         'prior-run': { type: 'string' },
+        // Browser pairing scope. `--control` mints a grant whose session may
+        // START missions; `--participant` names who it acts as, bound at mint
+        // — an identity, not a credential, so argv is an acceptable place.
+        control: { type: 'boolean', default: false },
+        participant: { type: 'string' },
       },
     });
     const pace = values.pace !== undefined ? Number(values.pace) : undefined;
@@ -382,6 +391,10 @@ export function parseCli(argv: string[]): ParsedCli {
         command: 'reviewer', ...base,
         reviewerAction: second as 'harnesses' | 'pair-browser',
         pairOrigin: positionals[2],
+        // `--control` upgrades the grant; `--participant` names who it acts
+        // as. Both validated in the handler so the usage message can explain.
+        pairControl: values.control === true,
+        pairParticipant: values.participant,
       };
     }
 
@@ -1823,7 +1836,23 @@ async function runBrowserPairingCli(parsed: ParsedCli, io: CliIo): Promise<numbe
     io.out(`  Detail:       ${built.error.message}`);
     return EXIT.blocked;
   }
-  const result = await built.value.createBrowserPairing(origin.trim());
+  /**
+   * CONTROL REQUIRES A PARTICIPANT, stated at the CLI so the operator learns
+   * it before a request is made. The reverse — a participant without
+   * --control — is refused too, because it would be recorded nowhere and an
+   * operator who typed it believed it did something.
+   */
+  if (parsed.pairControl === true && (parsed.pairParticipant === undefined || parsed.pairParticipant.trim() === '')) {
+    io.out('pair-browser --control requires --participant <id> — who the browser will act as.');
+    return EXIT.usage;
+  }
+  if (parsed.pairControl !== true && parsed.pairParticipant !== undefined) {
+    io.out('--participant only means something with --control.');
+    return EXIT.usage;
+  }
+  const result = await built.value.createBrowserPairing(origin.trim(), parsed.pairControl === true
+    ? { control: true, participantId: parsed.pairParticipant?.trim() }
+    : undefined);
   if (!result.ok) {
     io.out('BROWSER PAIRING');
     io.out(`  Blocked:      ${result.error.kind.replace(/_/g, ' ')}`);
@@ -1833,6 +1862,11 @@ async function runBrowserPairingCli(parsed: ParsedCli, io: CliIo): Promise<numbe
   const grant = result.value;
   io.out('BROWSER PAIRING GRANT');
   io.out(`  Origin:       ${grant.origin}`);
+  // The scope is printed from the RESPONSE, not from the flag — what the
+  // bridge minted is the fact; what was asked for is only the request.
+  io.out(`  Scope:        ${grant.scope === 'browser_control'
+    ? `control — the paired browser may START missions${parsed.pairParticipant === undefined ? '' : ` as ${parsed.pairParticipant.trim()}`}`
+    : 'read-only'}`);
   io.out(`  Grant id:     ${grant.grantId}`);
   io.out(`  Grant secret: ${grant.grantSecret}`);
   io.out(`  Expires:      ${grant.expiresAt} (${grant.expiresInSeconds}s)`);

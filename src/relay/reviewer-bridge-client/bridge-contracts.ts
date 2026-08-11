@@ -208,13 +208,25 @@ export interface PairingGrantResponse {
   /** Shown once. Never stored by Relay and never recoverable. */
   readonly grantSecret: string;
   readonly origin: string;
+  /** What was minted: read-only, or a control grant that may start missions. */
+  readonly scope: 'browser_read_only' | 'browser_control';
   readonly expiresAt: string;
   readonly expiresInSeconds: number;
 }
 
+/**
+ * Options for a CONTROL pairing. Absent means read-only — the least. The
+ * participant is bound into the grant here, by the operator, and is the ONLY
+ * identity the resulting session can ever act as.
+ */
+export interface BrowserPairingOptions {
+  readonly control?: boolean;
+  readonly participantId?: string;
+}
+
 /** The operations. Nothing else reaches the bridge from a CLI. */
 export interface ReviewerBridgeClient {
-  createBrowserPairing(origin: string): Promise<BridgeResult<PairingGrantResponse>>;
+  createBrowserPairing(origin: string, options?: BrowserPairingOptions): Promise<BridgeResult<PairingGrantResponse>>;
   getReviewerReadiness(): Promise<BridgeResult<ReviewerReadinessResponse>>;
   testReviewerConnection(): Promise<BridgeResult<ReviewerConnectionTestResponse>>;
   startReviewerRun(request: StartReviewerRequest): Promise<BridgeResult<StartReviewerResponse>>;

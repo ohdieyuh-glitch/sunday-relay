@@ -143,9 +143,17 @@ export function RelayBridgePairingPanel({
 
         {connected ? (
           <div className="rbp-connected">
+            {/* FROM THE SESSION, NOT A LITERAL. This said "read-only" as a
+                fixed sentence, which becomes a lie the moment an operator
+                mints a control grant — the exact stale-sentence class that
+                mis-stated the Reviewer's billing on five surfaces. */}
             <p className="rbp-note">
-              This browser holds a read-only session. Starting, retrying or stopping a review
-              stays an operator action.
+              {loadBridgeSession()?.scope === 'browser_control'
+                ? `This browser holds a CONTROL session${(() => {
+                    const who = loadBridgeSession()?.participantId;
+                    return who ? ` acting as ${who}` : '';
+                  })()}. It may start, cancel and retry missions until it expires or is revoked. Everything else stays an operator action.`
+                : 'This browser holds a read-only session. Starting, retrying or stopping a review stays an operator action.'}
             </p>
             <button type="button" className="rbp-btn" onClick={() => { void disconnect(); }} disabled={busy}>
               Disconnect

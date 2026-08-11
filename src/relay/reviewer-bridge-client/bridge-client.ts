@@ -1,5 +1,5 @@
 import type {
-  BridgeError, BridgeResult, PairingGrantResponse, RetryReviewerRequest, RetryReviewerResponse,
+  BridgeError, BridgeResult, BrowserPairingOptions, PairingGrantResponse, RetryReviewerRequest, RetryReviewerResponse,
   ReviewerBridgeClient, ReviewerConnectionTestResponse, ReviewerInspectResponse,
   ReviewerReadinessResponse, ReviewerStatusResponse, StartReviewerRequest,
   StartReviewerResponse, StopReviewerResponse,
@@ -220,8 +220,15 @@ function buildClient(
   }
 
   return {
-    createBrowserPairing: (origin: string) =>
-      call<PairingGrantResponse>('POST', '/browser/pair', { origin }),
+    createBrowserPairing: (origin: string, options?: BrowserPairingOptions) =>
+      call<PairingGrantResponse>('POST', '/browser/pair', {
+        origin,
+        // Sent only when a control grant was explicitly asked for — the wire
+        // stays identical to before for the read-only default.
+        ...(options?.control === true
+          ? { scope: 'control', participantId: options.participantId }
+          : {}),
+      }),
     getReviewerReadiness: () =>
       call<ReviewerReadinessResponse>('GET', '/reviewer/readiness'),
     testReviewerConnection: () =>
