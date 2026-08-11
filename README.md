@@ -103,6 +103,7 @@ dispatches to a provider.
 | `TEST_STRATEGY.md`, `DECISIONS.md` | how it is proven, and why |
 | `DEVELOPMENT_CONTRACTS.md` | what the repository separation carried, and what it deliberately did not |
 | `YC_DEMO_BASELINE.json` | the versioned product baseline the readiness check validates |
+| `FUTURE_GOAL_CONFIGURABLE_REPOSITORY_TARGETS.md` | what must be designed before Relay may write to a real repository — authorization, scope, protected paths, branch/PR policy, credential boundaries, destructive-action controls. NOT STARTED |
 
 **If you are the founder about to test this, start with two documents that were
 not listed here at all:**
