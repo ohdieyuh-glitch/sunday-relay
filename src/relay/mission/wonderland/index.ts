@@ -29,6 +29,7 @@ export {
   WONDERLAND_CPP_UNOBSERVED_MEMBER,
   WONDERLAND_DOG_ANIMATIONS,
   WONDERLAND_DOG_MOTIONS,
+  WONDERLAND_BREATH,
   WONDERLAND_DOG_OVERLAYS,
   WONDERLAND_DOG_SKIN_FIELDS,
   WONDERLAND_ENGINEER_CLASSES,
@@ -59,9 +60,11 @@ export {
   exactKeys,
   nullableKeys,
   wonderlandAnimationFor,
+  wonderlandBreathAt,
   wonderlandFigure,
 } from './wonderland-contracts';
 export type {
+  WonderlandBreath,
   WonderlandAgent,
   WonderlandAttestation,
   WonderlandBadge,

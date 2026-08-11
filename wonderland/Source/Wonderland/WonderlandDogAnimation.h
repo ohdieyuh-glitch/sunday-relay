@@ -3,11 +3,16 @@
 // THE ANIMATION STATE IS DRIVEN BY RELAY, NOT BY A TIMER.
 //
 // `WonderlandAnimationForMotion` is a pure function of the motion Relay
-// observed, and it is the ONLY way this module chooses a clip. There is no
-// elapsed-time input, no random source, no token-rate input and no "looks busy"
-// heuristic, because the identity documents are explicit that speed is never
-// tied to a token stream and that the animation receives the state and never
-// decides it.
+// observed, and it is the ONLY way this module chooses a clip. CLIP SELECTION
+// has no elapsed-time input, no random source, no token-rate input and no
+// "looks busy" heuristic, because the identity documents are explicit that speed
+// is never tied to a token stream and that the animation receives the state and
+// never decides it.
+//
+// `WonderlandBreathAt` below IS time-driven, and that is not an exception to the
+// rule above — it is a different layer. It selects no clip, reads no state, and
+// carries no information. See its own comment; the distinction is the whole
+// reason it is safe.
 //
 // Its case table is compared against the TypeScript table
 // `WONDERLAND_MOTION_ANIMATION` by wonderland-cpp-parity.test.ts — not just for
@@ -73,6 +78,61 @@ struct FWonderlandDogProportions
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
 	float UniformScale = 1.0f;
 };
+
+// THE BREATH — a third layer, and deliberately information-free.
+//
+// The founder asked for the Relay Dogs to move "like it's breathing in and out".
+// Three layers, and only the first two say anything:
+//
+//   1. the CLIP     chosen by Relay state, never by a timer
+//   2. the OVERLAY  additive, e.g. a meditation hover while a Loop executes
+//   3. the BREATH   ambient, continuous, and carrying NOTHING
+//
+// A breath that quickened while a mission was busy would be a second status
+// channel, and an untruthful one: a viewer could not tell whether a fast breath
+// meant "Relay is working" or "the animation is simply fast". So the period and
+// amplitude are constants and `WonderlandBreathAt` takes ELAPSED SECONDS AND
+// NOTHING ELSE. There is no state parameter and there must never be one — that
+// absence is the guarantee, where a comment promising it would not be.
+//
+// It swells UNIFORMLY and only uniformly. FWonderlandDogProportions prohibits
+// independent width/height scaling because it distorts the body into a humanoid;
+// scaling the height alone to fake a chest would break the identity the founder's
+// reference image confirms. A vertical rise was drafted and removed: the pawn
+// does not know its own grid-unit-to-world size, and inventing a constant to
+// convert one would have been a fabricated number in an identity contract.
+//
+// The initializers below are compared against the TypeScript WONDERLAND_BREATH
+// by wonderland-cpp-parity.test.ts, so the 3D Dog and the 2D sprite cannot
+// breathe at different rates.
+USTRUCT(BlueprintType)
+struct FWonderlandBreath
+{
+	GENERATED_BODY()
+
+	// Multiply the Dog's uniform scale by this. Never below 1: the exhale
+	// returns to rest and never shrinks the Dog below its own size, which would
+	// read as deflating.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Dog")
+	float UniformScale = 1.0f;
+
+	// 0 at rest, 1 at full inhale. Exposed so a renderer can drive a highlight
+	// from the same curve rather than computing a second one.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Dog")
+	float Phase = 0.0f;
+};
+
+// One full inhale and exhale, in seconds. A calm resting rate, not an exerted
+// one — the Dog is alive, not running.
+WONDERLAND_API constexpr float WonderlandBreathPeriodSeconds = 4.0f;
+
+// Peak uniform swell. 1.5% reads as alive; more reads as a pulse effect.
+WONDERLAND_API constexpr float WonderlandBreathScaleAmplitude = 0.015f;
+
+// The breath at an instant. A negative, infinite or NaN elapsed time is not a
+// time and resolves to REST rather than asserting: a renderer handed a bad clock
+// should show a still Dog, not take the world down.
+WONDERLAND_API FWonderlandBreath WonderlandBreathAt(float ElapsedSeconds);
 
 WONDERLAND_API EWonderlandDogAnimation WonderlandAnimationForMotion(EWonderlandDogMotion Motion);
 

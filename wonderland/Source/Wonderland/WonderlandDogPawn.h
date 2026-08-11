@@ -102,8 +102,36 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Relay")
 	bool HasObservedActivity() const;
 
+	/**
+	 * THE BREATH, AND IT IS NOT UNDER "Wonderland|Relay".
+	 *
+	 * Deliberately categorised `Wonderland|Life`, because it is the one thing on
+	 * this pawn that Relay does not drive. It is a function of the pawn's own
+	 * elapsed time and NOTHING else: no snapshot, no activity, no loop. A
+	 * designer wiring this in Blueprint should see at a glance that it is
+	 * ambient, or the first thing they will do is try to make it faster when the
+	 * Agent is busy — which would turn it into a status channel nobody can read
+	 * correctly.
+	 *
+	 * It runs before a snapshot arrives, too. An unobserved Agent is still alive;
+	 * only its ACTIVITY is unknown, and a Dog that stood perfectly still until
+	 * Relay spoke would read as broken rather than as waiting.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Life")
+	FWonderlandBreath CurrentBreath() const;
+
+	/**
+	 * Seconds this pawn has been alive. Advanced by Tick and by nothing else.
+	 *
+	 * Exposed read-only so a test can prove the breath depends on it and on
+	 * nothing on this pawn that Relay wrote.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Life")
+	float BreathElapsedSeconds() const;
+
 protected:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	virtual void Tick(float DeltaSeconds) override;
 
 private:
 	/** The last agent section Relay sent. Default-constructed = unobserved. */
@@ -116,4 +144,14 @@ private:
 
 	/** True only after ApplyWorldState has run at least once. */
 	bool bSnapshotApplied = false;
+
+	/**
+	 * The breath clock. NOT a UPROPERTY and not replicated: every client
+	 * breathes on its own time, because a breath is presentation and sending it
+	 * over the wire would spend bandwidth to synchronise something that carries
+	 * no information. It is also why the breath must stay information-free — the
+	 * moment it meant anything, this field would have to be authoritative, and
+	 * Relay is the only authority in this system.
+	 */
+	float LifeSeconds = 0.0f;
 };

@@ -68,3 +68,28 @@ EWonderlandDogOverlay WonderlandOverlayForLoops(const TArray<FWonderlandLoopSign
 	}
 	return EWonderlandDogOverlay::None;
 }
+
+FWonderlandBreath WonderlandBreathAt(float ElapsedSeconds)
+{
+	FWonderlandBreath Breath;
+
+	// A negative, infinite or NaN elapsed time is not a time. Rest, do not
+	// assert: a renderer handed a bad clock should show a still Dog rather than
+	// take the world down. `FMath::IsFinite` catches both infinity and NaN.
+	const float Usable = (FMath::IsFinite(ElapsedSeconds) && ElapsedSeconds > 0.0f) ? ElapsedSeconds : 0.0f;
+
+	const float Cycles = Usable / WonderlandBreathPeriodSeconds;
+	// `Fmod` rather than a subtraction, so a long-running session does not lose
+	// precision and drift out of phase after a few hours.
+	const float WithinCycle = FMath::Fmod(Cycles, 1.0f);
+
+	// (1 - cos)/2, not a raw sine: the curve runs rest -> inhale -> rest, so the
+	// exhale returns the Dog to its own size instead of taking it below. A sine
+	// would make it smaller than itself for half of every cycle, which reads as
+	// deflating rather than breathing.
+	const float Eased = (1.0f - FMath::Cos(2.0f * PI * WithinCycle)) * 0.5f;
+
+	Breath.UniformScale = 1.0f + WonderlandBreathScaleAmplitude * Eased;
+	Breath.Phase = Eased;
+	return Breath;
+}

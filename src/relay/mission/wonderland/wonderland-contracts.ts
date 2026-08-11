@@ -147,6 +147,16 @@ export interface WonderlandFigure {
   readonly reason: RelayUnknownReason | null;
 }
 
+/**
+ * The breath's fields. `exactKeys` fails `tsc` if this array and
+ * `WonderlandBreath` disagree, which is how the drafted-and-removed
+ * `riseGridUnits` cannot come back on one side only.
+ */
+export const WONDERLAND_BREATH_FIELDS = exactKeys<WonderlandBreath>()([
+  'uniformScale',
+  'phase',
+] as const);
+
 export const WONDERLAND_FIGURE_FIELDS = exactKeys<WonderlandFigure>()([
   'known',
   'value',
@@ -341,6 +351,83 @@ export function wonderlandAnimationFor(
  */
 export const WONDERLAND_DOG_OVERLAYS = ['none', 'loop_meditation_hover'] as const;
 export type WonderlandDogOverlay = (typeof WONDERLAND_DOG_OVERLAYS)[number];
+
+/* ------------------------------------------------------------- the breath */
+
+/**
+ * THE DOG BREATHES. A THIRD LAYER, AND IT CARRIES NO INFORMATION.
+ *
+ * The founder asked for the Relay Dogs to "move around like it's breathing in
+ * and out", and that sits against a rule this module already enforces: the
+ * animation CLIP is a pure function of the motion Relay observed, with no
+ * elapsed-time input, no random source and no "looks busy" heuristic. Breathing
+ * is time-driven. Both are right, because they are different layers:
+ *
+ *   1. the CLIP — chosen by Relay state, never by a timer
+ *   2. the OVERLAY — additive, e.g. a meditation hover while a Loop executes
+ *   3. the BREATH — ambient, continuous, and deliberately INFORMATION-FREE
+ *
+ * **The breath must never encode anything.** A breath that quickened while a
+ * mission was busy would be a second status channel, and an untruthful one: a
+ * viewer could not tell whether a fast breath meant "Relay is working" or "the
+ * animation is simply fast", and Relay's whole thesis is that a surface never
+ * implies a fact it cannot support. So the period and the amplitude are
+ * constants, and `wonderlandBreathAt` takes **elapsed seconds and nothing
+ * else** — there is no state parameter, and there must never be one. That
+ * absence is the guarantee; a comment promising it would not be.
+ *
+ * IT SCALES UNIFORMLY, AND ONLY UNIFORMLY. `FWonderlandDogProportions`
+ * prohibits independent width and height scaling because it distorts the body
+ * into a humanoid, so the swell is one factor on every axis. Scaling the height
+ * alone to fake a chest would break the identity the founder's reference image
+ * confirms.
+ */
+export const WONDERLAND_BREATH = Object.freeze({
+  /** One full inhale and exhale. A calm resting rate, not an exerted one. */
+  periodSeconds: 4,
+  /** Peak uniform swell. 1.5% reads as alive; more reads as a pulse effect. */
+  scaleAmplitude: 0.015,
+});
+
+/**
+ * THERE IS NO VERTICAL RISE, and there was one for an hour.
+ *
+ * A `riseGridUnits` field was drafted here, and nothing could apply it: the pawn
+ * does not know its own grid-unit-to-world size, and inventing a constant to
+ * convert it would have been a fabricated number in the identity contract. The
+ * choice was a dead field carrying a comment that described behaviour nothing
+ * performed — this repository's most frequent defect — or one honest swell. A
+ * 1.5% uniform swell on a voxel figure reads as breathing on its own.
+ */
+
+export interface WonderlandBreath {
+  /** Multiply the Dog's uniform scale by this. Never below 1. */
+  readonly uniformScale: number;
+  /** 0 at rest, 1 at full inhale. Exposed so a renderer can drive a highlight. */
+  readonly phase: number;
+}
+
+/**
+ * The breath at an instant.
+ *
+ * `(1 - cos)/2` rather than a raw sine, so the curve runs rest → inhale → rest
+ * and the Dog never shrinks below its own size on the exhale. A sine would make
+ * it smaller than itself for half of every cycle, which reads as deflating
+ * rather than breathing.
+ *
+ * A negative, infinite or NaN elapsed time is not a time. It resolves to rest
+ * rather than throwing: a renderer handed a bad clock should show a still Dog,
+ * not crash the world.
+ */
+export function wonderlandBreathAt(elapsedSeconds: number): WonderlandBreath {
+  const usable = Number.isFinite(elapsedSeconds) && elapsedSeconds > 0 ? elapsedSeconds : 0;
+  const cycles = usable / WONDERLAND_BREATH.periodSeconds;
+  const eased = (1 - Math.cos(2 * Math.PI * (cycles % 1))) / 2;
+  return {
+    uniformScale: 1 + WONDERLAND_BREATH.scaleAmplitude * eased,
+    phase: eased,
+  };
+}
 
 /**
  * A skin TRANSFORMS the Relay Dog. It never replaces it.
@@ -1005,6 +1092,7 @@ export const WONDERLAND_CPP_STRUCT_PARITY: readonly {
   readonly fields: readonly string[];
 }[] = [
   { cppStruct: 'FWonderlandFigure', tsInterface: 'WonderlandFigure', fields: WONDERLAND_FIGURE_FIELDS },
+  { cppStruct: 'FWonderlandBreath', tsInterface: 'WonderlandBreath', fields: WONDERLAND_BREATH_FIELDS },
   { cppStruct: 'FWonderlandAttestation', tsInterface: 'WonderlandAttestation', fields: WONDERLAND_ATTESTATION_FIELDS },
   { cppStruct: 'FWonderlandMission', tsInterface: 'WonderlandMission', fields: WONDERLAND_MISSION_FIELDS },
   { cppStruct: 'FWonderlandLoopSignal', tsInterface: 'WonderlandLoopSignal', fields: WONDERLAND_LOOP_SIGNAL_FIELDS },
