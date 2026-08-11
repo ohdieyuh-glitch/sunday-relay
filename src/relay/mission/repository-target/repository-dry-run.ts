@@ -130,7 +130,9 @@ export function planDryRun(input: {
   if (environment !== null) {
     operations.push(
       step(
-        'deployed',
+        // The REQUEST is where authorization is checked, so that is the step a
+        // plan must show as needing the permission.
+        'deploying',
         `Deploy to ${environment}.`,
         // The environment decides the permission, never the stage table. A
         // single stage with two possible permissions is exactly the shape that

@@ -880,7 +880,7 @@ describe('BUILD → VERIFY → COMMIT → DEPLOY → LIVE VERIFY → SHIPPED, fo
 
     // DEPLOY: authorized for the environment it actually names.
     const authorized = advanceShipStage({
-      currentStage: 'committed', to: 'deployed', environment: 'staging', permissions: target.permissions,
+      currentStage: 'committed', to: 'deploying', environment: 'staging', permissions: target.permissions,
     });
     expect(authorized.ok).toBe(true);
     expect(providerSupportsEnvironment({ descriptor: provider.descriptor, environment: 'staging' }).ok).toBe(true);
@@ -975,7 +975,7 @@ describe('BUILD → VERIFY → COMMIT → DEPLOY → LIVE VERIFY → SHIPPED, fo
     // Two independent refusals, and both must hold: the Mission's permissions,
     // and the provider's own configuration. "Build this" reaches neither.
     const authorization = advanceShipStage({
-      currentStage: 'committed', to: 'deployed', environment: 'production', permissions: target.permissions,
+      currentStage: 'committed', to: 'deploying', environment: 'production', permissions: target.permissions,
     });
     expect(authorization.ok).toBe(false);
 

@@ -42,13 +42,39 @@ import type { RepositoryPermission, RepositoryProblem } from './repository-contr
  */
 export const SHIP_STAGES = [
   'verified_complete',
+  /**
+   * VERIFIED, AND AUTHORIZED TO GO. Distinct from `verified_complete` because
+   * they answer different questions: one is "did the artifact pass Relay", the
+   * other is "may this Mission act on that". A Mission can be verified forever
+   * and never be allowed to commit.
+   */
+  'ready_to_ship',
   'committed',
   'pushed',
   'pull_request_open',
   'merged',
+  /**
+   * IN FLIGHT. A deploy that never returns used to leave the record saying
+   * `merged` — indistinguishable from a deploy that was never started, which is
+   * exactly the "a disconnection is never a completion" rule one system over. A
+   * record that cannot say "this is happening right now" cannot be read during
+   * the only minutes anyone needs to read it.
+   */
+  'deploying',
   'deployed',
   'live_verified',
   'shipped',
+  /**
+   * TERMINAL FAILURES, and they are NOT "not shipped".
+   *
+   * `decideShipped` returning false covers a deploy that succeeded against a
+   * stale build as well as one that never happened, and those need different
+   * actions. `deployment_failed` says the provider reported failure;
+   * `rolled_back` says a deployment was undone, which is a fact about the
+   * running system that survives after the failure is repaired.
+   */
+  'deployment_failed',
+  'rolled_back',
 ] as const;
 export type ShipStage = (typeof SHIP_STAGES)[number];
 
@@ -69,7 +95,10 @@ export const SHIP_STAGE_REQUIREMENTS: Readonly<Record<ShipStage, {
   readonly from: readonly ShipStage[];
 }>> = Object.freeze({
   verified_complete: { permission: null, from: [] },
-  committed: { permission: 'commit', from: ['verified_complete'] },
+  /** No permission: being ALLOWED to act is what the later stages check. This
+   *  records that the Mission reached the line, not that it may cross it. */
+  ready_to_ship: { permission: null, from: ['verified_complete'] },
+  committed: { permission: 'commit', from: ['verified_complete', 'ready_to_ship'] },
   pushed: { permission: 'push_feature_branch', from: ['committed'] },
   pull_request_open: { permission: 'create_pr', from: ['pushed'] },
   /**
@@ -87,9 +116,20 @@ export const SHIP_STAGE_REQUIREMENTS: Readonly<Record<ShipStage, {
    * with two possible permissions is exactly the shape that would let the
    * staging grant authorize a production deploy.
    */
-  deployed: { permission: null, from: ['merged', 'pushed', 'committed'] },
+  /**
+   * `deploying` carries the SAME environment-decided permission as `deployed`,
+   * because it is the moment the deploy is actually requested — checking only at
+   * `deployed` would authorize after the fact.
+   */
+  deploying: { permission: null, from: ['merged', 'pushed', 'committed'] },
+  deployed: { permission: null, from: ['deploying'] },
   live_verified: { permission: null, from: ['deployed'] },
   shipped: { permission: null, from: ['live_verified'] },
+  /** Reachable from the two stages where a deploy can be in progress or done. */
+  deployment_failed: { permission: null, from: ['deploying', 'deployed'] },
+  /** Only from a state where something was actually deployed. Rolling back
+   *  something that never deployed is not a rollback. */
+  rolled_back: { permission: null, from: ['deployed', 'live_verified', 'shipped'] },
 });
 
 /**
@@ -236,7 +276,13 @@ export function advanceShipStage(request: ShipTransitionRequest): ShipTransition
    * where it was deploying got a deploy anyway; defaulting to `production`
    * needs no explanation. There is no safe default for this question.
    */
-  if (to === 'deployed') {
+  /**
+   * ONLY THE REQUEST IS AUTHORIZED. `deployed` is an OBSERVATION that the deploy
+   * completed, and re-demanding the permission there would mean a Mission whose
+   * grant expired mid-deploy could not record what had already happened — the
+   * record would go quiet at the worst possible moment.
+   */
+  if (to === 'deploying') {
     const environment = request.environment ?? null;
     if (environment === null) {
       return deny('identity_invalid', 'A deploy must name its environment. There is no default.');
@@ -366,8 +412,18 @@ export function deriveShipStage(input: {
   const reached = new Set(input.evidence.map((e) => e.stage));
   // Walked backwards from the most advanced stage, so a record with a gap
   // reports the furthest step it actually has evidence for.
+  /**
+   * A TERMINAL FAILURE OUTRANKS EVERYTHING IT FOLLOWS.
+   *
+   * Checked first and by name, because the backwards walk over `SHIP_STAGES`
+   * would otherwise report `live_verified` for a record that has since rolled
+   * back — the later fact is the true one, and array order is not a ranking.
+   */
+  for (const terminal of ['rolled_back', 'deployment_failed'] as const) {
+    if (reached.has(terminal)) return terminal;
+  }
   for (const stage of [...SHIP_STAGES].reverse()) {
-    if (stage === 'shipped') continue;
+    if (stage === 'shipped' || stage === 'rolled_back' || stage === 'deployment_failed') continue;
     if (reached.has(stage)) return stage;
   }
   return 'verified_complete';

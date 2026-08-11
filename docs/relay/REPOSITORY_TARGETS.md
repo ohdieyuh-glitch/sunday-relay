@@ -255,6 +255,26 @@ BUILD → VERIFY → REVIEW → REPAIR → VERIFIED COMPLETE
       → COMMIT → PUSH/PR → MERGE (if authorized) → DEPLOY → LIVE VERIFY → SHIPPED
 ```
 
+**Four states exist because they answer different questions.** The founder's
+lifecycle names them and an earlier version of this module had none of them:
+
+| State | The question it answers |
+|---|---|
+| `ready_to_ship` | verified is not the same as ALLOWED to act. A Mission can be verified forever and never be permitted to commit |
+| `deploying` | a deploy that never returns used to leave the record saying `merged` — indistinguishable from one never started. A record that cannot say "this is happening right now" cannot be read during the only minutes anyone needs it |
+| `deployment_failed` | `decideShipped` returning false covers a stale build AND a deploy that never happened. Those need different actions |
+| `rolled_back` | a fact about the running system that survives after the failure is repaired |
+
+The deploy is authorized at the **request** (`deploying`), not at `deployed`.
+`deployed` is an observation that it completed, and re-demanding the permission
+there would mean a Mission whose grant expired mid-deploy could not record what
+had already happened — the record would go quiet at the worst possible moment.
+
+A terminal failure **outranks** the success it followed: a record that reached
+`live_verified` and then rolled back is rolled back. `deriveShipStage` checks the
+two failure states by name first, because the backwards walk over `SHIP_STAGES`
+would otherwise report the earlier success — array order is not a ranking.
+
 `verified_complete` is the **join** with the existing proven pipeline, not a new
 invention. Three words that never merge:
 

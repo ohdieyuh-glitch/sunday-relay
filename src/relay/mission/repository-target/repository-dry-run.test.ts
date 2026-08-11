@@ -108,10 +108,10 @@ describe('the plan describes what would happen and performs none of it', () => {
   });
 
   it('includes the deploy steps only when an environment is named', () => {
-    expect(plan().operations.map((o) => o.stage)).not.toContain('deployed');
+    expect(plan().operations.map((o) => o.stage)).not.toContain('deploying');
     const staged = plan({ permissions: [...LADDER, 'deploy_staging'], deploy: 'staging' });
     expect(staged.operations.map((o) => o.stage)).toEqual([
-      'committed', 'pushed', 'pull_request_open', 'merged', 'deployed', 'live_verified',
+      'committed', 'pushed', 'pull_request_open', 'merged', 'deploying', 'live_verified',
     ]);
   });
 
@@ -121,7 +121,7 @@ describe('the plan describes what would happen and performs none of it', () => {
       target: target(), permissions: [...LADDER, 'deploy_staging'],
       deployEnvironment: 'production', judgement, evidence: evidence(),
     });
-    const deploy = production.operations.find((o) => o.stage === 'deployed');
+    const deploy = production.operations.find((o) => o.stage === 'deploying');
     expect(deploy?.permission).toBe('deploy_production');
     expect(deploy?.authorized).toBe(false);
   });
@@ -148,7 +148,7 @@ describe('the plan describes what would happen and performs none of it', () => {
       judgement,
       evidence: evidence(),
     });
-    expect(gapped.operations.find((o) => o.stage === 'deployed')?.authorized).toBe(true);
+    expect(gapped.operations.find((o) => o.stage === 'deploying')?.authorized).toBe(true);
     expect(gapped.furthestAuthorizedStage).toBe('committed');
   });
 

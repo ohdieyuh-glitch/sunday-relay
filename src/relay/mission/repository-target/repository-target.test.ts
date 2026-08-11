@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ALWAYS_PROTECTED_PATHS,
+  SHIP_STAGES,
   pathInScope,
   providerSupportsEnvironment,
   DEFAULT_CHANGE_CEILINGS,
@@ -742,14 +743,14 @@ describe('the shipping lifecycle keeps verified, shipped and live apart', () => 
 
   it('never infers production authorization from a staging grant', () => {
     const staging = advanceShipStage({
-      currentStage: 'merged', to: 'deployed', environment: 'staging',
+      currentStage: 'merged', to: 'deploying', environment: 'staging',
       permissions: ['read', 'deploy_staging'],
     });
     expect(staging.ok).toBe(true);
     if (staging.ok) expect(staging.permissionUsed).toBe('deploy_staging');
 
     const production = advanceShipStage({
-      currentStage: 'merged', to: 'deployed', environment: 'production',
+      currentStage: 'merged', to: 'deploying', environment: 'production',
       permissions: ['read', 'deploy_staging'],
     });
     // "Build this" must never reach production. This is that rule, mechanically.
@@ -761,7 +762,7 @@ describe('the shipping lifecycle keeps verified, shipped and live apart', () => 
   });
 
   it('refuses a deploy that does not name its environment', () => {
-    const decision = advanceShipStage({ currentStage: 'merged', to: 'deployed', permissions: full });
+    const decision = advanceShipStage({ currentStage: 'merged', to: 'deploying', permissions: full });
     // Defaulting to staging would deploy for a caller that forgot to say where;
     // defaulting to production needs no explanation. There is no safe default.
     expect(decision.ok).toBe(false);
@@ -770,7 +771,7 @@ describe('the shipping lifecycle keeps verified, shipped and live apart', () => 
 
   it('allows a staging deploy of an unmerged branch', () => {
     const decision = advanceShipStage({
-      currentStage: 'pushed', to: 'deployed', environment: 'staging',
+      currentStage: 'pushed', to: 'deploying', environment: 'staging',
       permissions: ['read', 'deploy_staging'],
     });
     // Refusing this would push founders to merge in order to test.
@@ -1104,5 +1105,80 @@ describe('scope spellings that used to pass and then refuse everything', () => {
     }
     // A real default is still unprotectable.
     expect(resolveProtectedPaths({ additional: [], unprotect: ['package-lock.json'] }).ok).toBe(true);
+  });
+});
+
+describe('the lifecycle can say what is happening, not only what happened', () => {
+  const full: readonly RepositoryPermission[] = [
+    'read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr', 'merge_pr',
+    'deploy_staging', 'deploy_production',
+  ];
+
+  it('has the in-flight and terminal-failure states the truthful vocabulary needs', () => {
+    for (const stage of ['ready_to_ship', 'deploying', 'deployment_failed', 'rolled_back'] as const) {
+      expect(SHIP_STAGES).toContain(stage);
+    }
+  });
+
+  it('authorizes the deploy at the REQUEST, not after the fact', () => {
+    /**
+     * `deploying` carries the environment-decided permission and `deployed`
+     * follows only from it. Checking only at `deployed` would authorize a deploy
+     * that had already been performed.
+     */
+    const requested = advanceShipStage({
+      currentStage: 'merged', to: 'deploying', environment: 'production',
+      permissions: ['read', 'deploy_staging'],
+    });
+    expect(requested.ok).toBe(false);
+    // And `deployed` cannot be reached by skipping the request.
+    const skipped = advanceShipStage({ currentStage: 'merged', to: 'deployed', permissions: full });
+    expect(skipped.ok).toBe(false);
+  });
+
+  it('reaches deployed only from deploying', () => {
+    expect(advanceShipStage({ currentStage: 'deploying', to: 'deployed', permissions: full }).ok).toBe(true);
+  });
+
+  it('lets a deploy fail from either in-flight or done, and roll back only from done', () => {
+    for (const from of ['deploying', 'deployed'] as const) {
+      expect(advanceShipStage({ currentStage: from, to: 'deployment_failed', permissions: full }).ok, from).toBe(true);
+    }
+    for (const from of ['deployed', 'live_verified', 'shipped'] as const) {
+      expect(advanceShipStage({ currentStage: from, to: 'rolled_back', permissions: full }).ok, from).toBe(true);
+    }
+    // Rolling back something that never deployed is not a rollback.
+    expect(advanceShipStage({ currentStage: 'committed', to: 'rolled_back', permissions: full }).ok).toBe(false);
+    expect(advanceShipStage({ currentStage: 'deploying', to: 'rolled_back', permissions: full }).ok).toBe(false);
+  });
+
+  it('reports a TERMINAL FAILURE over the success it followed', () => {
+    /**
+     * A record that reached `live_verified` and then rolled back is rolled back.
+     * The backwards walk over `SHIP_STAGES` would report `live_verified`, because
+     * array order is not a ranking and the later fact is the true one.
+     */
+    const at = (stage: (typeof SHIP_STAGES)[number]): ShipStageEvidence => ({
+      stage, observedAt: NOW, commitSha: 'a'.repeat(40), branch: 'relay/x',
+      remoteRef: null, pullRequestRef: null, environment: null,
+      deployedRevision: null, liveProbe: null, detail: null,
+    });
+    const unshipped = { shipped: false, reason: 'rolled back', liveRevision: null };
+    expect(deriveShipStage({
+      evidence: [at('committed'), at('deployed'), at('live_verified'), at('rolled_back')],
+      verdict: unshipped,
+    })).toBe('rolled_back');
+    expect(deriveShipStage({
+      evidence: [at('committed'), at('deploying'), at('deployment_failed')],
+      verdict: unshipped,
+    })).toBe('deployment_failed');
+    // And a healthy record is unaffected.
+    expect(deriveShipStage({ evidence: [at('committed'), at('pushed')], verdict: unshipped })).toBe('pushed');
+  });
+
+  it('separates "verified" from "allowed to act"', () => {
+    // A Mission can be verified forever and never be allowed to commit.
+    expect(advanceShipStage({ currentStage: 'verified_complete', to: 'ready_to_ship', permissions: ['read'] }).ok).toBe(true);
+    expect(advanceShipStage({ currentStage: 'ready_to_ship', to: 'committed', permissions: ['read'] }).ok).toBe(false);
   });
 });
