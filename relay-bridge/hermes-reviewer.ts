@@ -88,14 +88,19 @@ export function loadHermesConfig(env: NodeJS.ProcessEnv = process.env): HermesCo
  * preflight exists to make.
  *
  * Relay never holds this credential — it lives in the operator's own Hermes
- * configuration and is billed by subscription — so there is no authenticated
- * zero-inference endpoint Relay could ask instead. One tiny generation is the
- * cheapest honest question available.
+ * configuration — so there is no authenticated zero-inference endpoint Relay
+ * could ask instead. One tiny generation is the cheapest honest question
+ * available.
  *
- * It spends no MONEY (subscription-billed) but it is not free: it consumes one
- * request and a few seconds. That is the deliberate trade. A reviewer that
+ * THIS PARAGRAPH USED TO SAY THE PROBE "spends no MONEY (subscription-billed)".
+ * That was true of a local Hermes under the operator's own login and false of
+ * the Reviewer Relay actually dispatches, which runs against an xAI API key;
+ * the same stale sentence justified a hard-coded `subscription` in the
+ * attestation, the review card and the founder's billing row. The probe is one
+ * request and a few seconds, and on an api-billed Reviewer it costs what one
+ * tiny request costs. That is still the deliberate trade — a reviewer that
  * cannot answer must fail HERE, not after the mission has already paid for
- * everything upstream of it.
+ * everything upstream of it — but it is a trade with a price, not a free one.
  */
 export interface HermesProbeResult {
   ok: boolean;
@@ -149,7 +154,17 @@ export interface HermesPreflightResult {
   authenticatedProviders: string[];
   /** The configured provider answered a minimal request. */
   livenessVerified: boolean;
-  billingPath: 'subscription';
+  /**
+   * WHAT THE PROBE CAN ACTUALLY TELL. Hermes authenticated by API key prints
+   * no "logged in" line at all, so this file cannot distinguish a subscription
+   * from a key — which is why it must not answer as though it could. It said
+   * `'subscription'`, as a type with one inhabitant.
+   *
+   * The decision belongs to the operator's declaration or the registered
+   * occupant, both of which the mission reads directly; `unknown` is what an
+   * honest probe reports.
+   */
+  billingPath: 'subscription' | 'unknown';
 }
 
 const defaultProbe = (
@@ -259,7 +274,8 @@ export function hermesPreflight(
     provider,
     authenticatedProviders: parsed.authenticatedProviders,
     livenessVerified,
-    billingPath: 'subscription',
+    // Not knowable from a Hermes probe. See the field's own note.
+    billingPath: 'unknown',
   };
 }
 

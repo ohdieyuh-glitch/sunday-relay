@@ -51,7 +51,7 @@ import {
 import { buildSafeEditFixture, RELAY_TEST_ARGS, TEST_FILE } from '../src/relay/connectors/claude-code/fixture';
 import { compileRevisionPrompt } from '../src/relay/connectors/claude-code/prompt-compiler';
 import { runGit } from '../src/relay/workspace/repository-inspector';
-import { buildAttestation, digest, type ExecutionAttestation } from './attestation';
+import { buildAttestation, digest, occupantBillingPath, type ExecutionAttestation } from './attestation';
 import {
   createLocalClaudeInvoker, type AgentInvoker, type CancelHandle,
 } from './agent-invoker';
@@ -595,13 +595,7 @@ export async function runCodingMission(input: {
     };
     // Computed once and used by both the attestation and the terminal, which
     // previously carried two independent literals that happened to agree.
-    const codingBillingPath = requestedOccupant.billingPath === 'api'
-      ? 'api_billed' as const
-      : requestedOccupant.billingPath === 'none'
-        ? 'simulated' as const
-        : requestedOccupant.billingPath === 'subscription'
-          ? 'subscription' as const
-          : 'unknown' as const;
+    const codingBillingPath = occupantBillingPath(requestedOccupant.billingPath);
     const codingAttestation = buildAttestation({
       missionId: input.missionId ?? String(taskId),
       missionRevision: input.missionRevision,

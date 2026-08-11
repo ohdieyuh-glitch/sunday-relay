@@ -55,7 +55,7 @@ import type { LiveReachService } from './live-reach-service';
 import type { BackendProbe } from '../src/relay/mission/live-reach';
 import type { MissionEvidenceReference } from '../src/relay/mission/wire-contracts';
 import { renderForPrompt as renderEvidenceForPrompt, evidenceReference as evidenceReferenceOf } from '../src/relay/mission/evidence';
-import { buildAttestation, decideCompletion, digest, type ExecutionAttestation } from './attestation';
+import { buildAttestation, decideCompletion, declaredBillingPath, digest, occupantBillingPath, type ExecutionAttestation } from './attestation';
 import { isProductionDeployment } from './deployment-environment';
 import { createHostedClaudeInvoker } from './hosted-coding-agent/hosted-invoker';
 import { RELAY_SKILLS, evaluateInternalSkillCall, findSkill } from '../src/relay/mission/skills';
@@ -1527,6 +1527,16 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           reviewOutcome.kind === 'launch_failed' ? now() : reviewOutcome.completedAt;
         const resolvedProvider = (reviewOutcome.kind === 'reviewed' ? reviewOutcome.provider : null) ?? hermesReady?.provider ?? null;
         const resolvedModel = (reviewOutcome.kind === 'reviewed' ? reviewOutcome.model : null) ?? hermesReady?.model ?? null;
+        /**
+         * WHAT THE REVIEW COST — the operator's declaration if they made one,
+         * otherwise the registered occupant that actually ran, and never a
+         * literal. Computed ONCE and used by both the attestation and the
+         * founder-facing review card, which previously carried two independent
+         * `'subscription'` literals that happened to agree with each other and
+         * with nothing else.
+         */
+        const reviewerBilling = declaredBillingPath(hermesEnv.RELAY_HERMES_BILLING_MODE)
+          ?? occupantBillingPath(boundRoles.reviewer?.occupant.billingPath);
 
         rec.attestations.reviewer = buildAttestation({
           missionId: rec.missionId,
@@ -1538,7 +1548,25 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           actualRuntime: 'hermes-agent-cli',
           provider: resolvedProvider ?? undefined,
           model: resolvedModel ?? undefined,
-          billingPath: 'subscription',
+          /**
+           * THE OCCUPANT THAT RAN DECIDES THIS, not a literal.
+           *
+           * Every hosted review has attested `subscription` while the bound
+           * occupant — `hermes_remote_service`, and `hermes_local` beside it —
+           * is registered `billingPath: 'api'`, reviewing on an xAI API key.
+           * The attestation contradicted the registry entry for the very
+           * occupant it names, and it did so in the direction that hides cost:
+           * a founder reading it saw a review their subscription had already
+           * paid for.
+           *
+           * `isPaidApiCall` tests `api_billed`, so every real review has also
+           * been invisible to Relay's own accounting of what a mission spent.
+           *
+           * Derived exactly as the coding leg derives its own — same registry
+           * field, same translation — because two legs deciding the same fact
+           * by different means is how they came to disagree.
+           */
+          billingPath: reviewerBilling,
           launchVerified: reviewOutcome.kind !== 'launch_failed',
           completionVerified: reviewOutcome.kind === 'reviewed',
           fallbackOccurred: false,
@@ -1582,7 +1610,10 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           runtime: 'Hermes Agent CLI (read-only)',
           provider: resolvedProvider,
           model: resolvedModel,
-          billing: 'subscription',
+          // The same translation the attestation uses, so the founder-facing
+          // review card and the machine-read attestation cannot disagree about
+          // what the review cost.
+          billing: reviewerBilling,
           verdict: reviewOutcome.result.verdict,
           summary: safeText(reviewOutcome.result.summary),
           findings: reviewOutcome.result.findings.map((f) => ({

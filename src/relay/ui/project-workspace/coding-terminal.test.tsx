@@ -536,38 +536,63 @@ describe('11. hidden reasoning is never rendered', () => {
 
 /* ------------------------------------------------------------ 12 + 13 */
 
+/**
+ * THIS BLOCK WAS NAMED AFTER THE DEFECT: "Hermes ... on a subscription ...
+ * never API PAID". The reviewer row was a literal, so the tests could only
+ * ever agree with it, and the founder's billing row told them a paid xAI
+ * review was covered by a subscription. The block's real subject — billing is
+ * truthful and never a blocker — is unchanged; what it means by truthful now
+ * comes from the occupant that ran.
+ */
 describe('12 + 13. Hermes billing is truthful and never a blocker', () => {
-  const rows = () =>
+  const rows = (over: Parameters<typeof buildRoleBilling>[0] = {}) =>
     buildRoleBilling({
       architectLabel: 'Sunday Alcatraz (live)',
       architectProvenance: 'live',
       architectApiBilled: false,
       codingAttestation: terminalState().attestation,
-      reviewerModel: 'claude-opus-4-8',
+      reviewerProvider: 'xai',
+      reviewerBilling: 'api_billed',
       reviewerRan: true,
       reviewerApproved: true,
+      ...over,
     });
 
-  it('shows Hermes as a runtime on a subscription, read-only — never API PAID, never a model', () => {
+  it('shows Hermes as a read-only runtime, billed as the occupant that ran', () => {
     const reviewer = rows().find((r) => r.roleKey === 'reviewer');
     expect(reviewer?.actor).toBe('Hermes');
     expect(reviewer?.role).toBe('Reviewer');
     expect(reviewer?.runtime).toContain('Hermes Agent runtime');
-    expect(reviewer?.runtime).toContain('Anthropic provider');
-    expect(reviewer?.billingLabel).toBe('SUBSCRIPTION');
-    expect(reviewer?.billingLabel).not.toBe('API PAID');
+    expect(reviewer?.runtime).toContain('xai provider');
+    expect(reviewer?.billingLabel).toBe('API PAID');
     expect(reviewer?.accessLabel).toBe('READ ONLY');
     // Hermes is a runtime, not a model: the row never calls it one.
     expect(`${reviewer?.actor} ${reviewer?.role}`).not.toMatch(/model/i);
   });
 
-  it('a subscription-billed Hermes still reports its approval verdict', () => {
+  it('says UNKNOWN when the mission has not said what the review cost', () => {
+    const reviewer = rows({ reviewerBilling: null, reviewerProvider: null })
+      .find((r) => r.roleKey === 'reviewer');
+    expect(reviewer?.billingLabel).toBe('UNKNOWN');
+    // And no invented provider in the same row.
+    expect(reviewer?.runtime).toContain('Unknown provider');
+  });
+
+  it('still reports the approval verdict, whatever the review cost', () => {
     render(createElement(RelayRoleBilling, { rows: rows() }));
     const text = document.body.textContent ?? '';
-    expect(text).toContain('SUBSCRIPTION');
+    /**
+     * ASSERTED ON THE REVIEWER ROW, NOT THE WHOLE DOCUMENT. This checked that
+     * the page contained 'SUBSCRIPTION', which stayed true after the reviewer
+     * row changed because the CODING row says it — a passing assertion about
+     * a row it was no longer describing.
+     */
+    const reviewer = rows().find((r) => r.roleKey === 'reviewer');
+    expect(reviewer?.billingLabel).toBe('API PAID');
+    expect(reviewer?.statusLabel).toBe('APPROVED');
     expect(text).toContain('READ ONLY');
     expect(text).toContain('APPROVED');
-    // Subscription billing is not an error, a warning, or a blocker.
+    // Billing is not an error, a warning, or a blocker.
     expect(text).not.toMatch(/blocked|unavailable|cannot complete/i);
   });
 
@@ -684,11 +709,50 @@ describe('the terminal is wired only to real missions', () => {
     expect(projection.codingTerminal?.present).toBe(true);
     expect(projection.codingTerminal?.executionId).toBe('a1b2c3d4');
     expect(projection.codingTerminal?.eventCount).toBe(7);
+    /**
+     * THE REVIEWER ROW SAYS UNKNOWN HERE, AND USED TO SAY SUBSCRIPTION.
+     *
+     * This mission fixture carries no review at all. The row asserted a
+     * billing path for a review that never ran — the literal it was built
+     * from could not say anything else. Unknown is not zero, and it is
+     * certainly not "somebody else already paid".
+     */
     expect(projection.roleBilling?.map((r) => r.billingLabel)).toEqual([
       'NOT BILLED',
       'SUBSCRIPTION',
-      'SUBSCRIPTION',
+      'UNKNOWN',
     ]);
+  });
+
+  it('a review that really ran shows what it really cost', () => {
+    // The other direction: when the mission does report a review, the row is
+    // its value and not this file's expectation of one.
+    const withReview = {
+      ...mission(false, terminalState()),
+      review: {
+        reviewer: 'Hermes' as const,
+        runtime: 'Hermes Agent CLI (read-only)',
+        provider: 'xai',
+        model: null,
+        billing: 'api_billed' as const,
+        verdict: 'approved' as const,
+        summary: 'Fine.',
+        findings: [],
+        requirementsChecked: [],
+        reviewedArtifactDigest: 'sha256:abc',
+        startedAt: '2026-07-23T10:00:00.000Z',
+        completedAt: '2026-07-23T10:00:30.000Z',
+      },
+    };
+    const projection = deriveMissionProjection({
+      project: project(false), settings: settings(), brain: null,
+      mission: withReview, events: [],
+    });
+    const reviewer = projection.roleBilling?.find((r) => r.roleKey === 'reviewer');
+    expect(reviewer?.billingLabel).toBe('API PAID');
+    // And the provider is the one that answered — never a default.
+    expect(reviewer?.runtime).toContain('xai provider');
+    expect(reviewer?.runtime).not.toContain('Anthropic');
   });
 
   it('a real mission with no capture projects the honest empty terminal', () => {

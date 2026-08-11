@@ -459,6 +459,8 @@ export function deriveMissionProjection(
         codingAttestation: mission.terminal?.attestation ?? null,
         reviewerProvider: mission.review?.provider ?? null,
         reviewerModel: mission.review?.model ?? null,
+        // The mission's own value, never a browser-side assumption about it.
+        reviewerBilling: mission.review?.billing ?? null,
         reviewerRan: Boolean(reviewerAttestation?.launchVerified && mission.review),
         reviewerApproved: mission.review?.verdict === 'approved',
       });

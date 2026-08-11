@@ -210,15 +210,29 @@ export interface MissionReviewFinding {
   recommendedAction?: string;
 }
 
-/** The independent reviewer's validated verdict, bound to the exact artifact
-    digest Relay verified. Hermes is an agent RUNTIME, not a model, and runs
-    read-only on a subscription — never an API bill, never a blocker. */
+/**
+ * The independent reviewer's validated verdict, bound to the exact artifact
+ * digest Relay verified. Hermes is an agent RUNTIME, not a model, and runs
+ * read-only — never a blocker.
+ *
+ * IT IS NOT FREE, AND THIS TYPE USED TO SAY IT WAS. The sentence here read
+ * "runs read-only on a subscription — never an API bill", which was true while
+ * the only Hermes was a local process under the founder's own login. It
+ * stopped being true when the dedicated Reviewer service was configured
+ * against an xAI API key; the registry was updated to `billingPath: 'api'` and
+ * this sentence was not, so the field below stayed typed as the single literal
+ * `'subscription'` — which made the true value unrepresentable and the false
+ * one automatic, in the direction that hides cost.
+ *
+ * `billing` now carries whatever the occupant that actually ran is registered
+ * as, translated once by `occupantBillingPath`.
+ */
 export interface MissionReview {
   reviewer: 'Hermes';
   runtime: string;
   provider: string | null;
   model: string | null;
-  billing: 'subscription';
+  billing: 'subscription' | 'api_billed' | 'portal' | 'local' | 'simulated' | 'unknown';
   verdict: 'approved' | 'changes_required' | 'unable_to_review';
   summary: string;
   findings: MissionReviewFinding[];
@@ -299,7 +313,12 @@ export interface CodingTerminalAttestation {
   launchVerified: boolean;
   completionVerified: boolean;
   fallbackOccurred: boolean;
-  billingPath: 'subscription' | 'api_billed' | 'local' | 'simulated' | 'unknown';
+  /**
+   * `portal` joined this union when the reviewer's billing stopped being a
+   * literal: `.env.example` has always offered `portal` as a declarable mode,
+   * and a value an operator can set must be a value a row can render.
+   */
+  billingPath: 'subscription' | 'api_billed' | 'portal' | 'local' | 'simulated' | 'unknown';
 }
 
 export interface CodingTerminalState {

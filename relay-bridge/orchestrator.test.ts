@@ -3,7 +3,9 @@ import { createMissionRegistry, selectArchitectPath } from './mission';
 import { resolveRoleSlots } from './role-slot-config';
 import { LIFECYCLE_SERVING } from '../relay-hermes-service/service';
 import type { MissionRoleDeps } from './mission';
-import { buildAttestation, decideCompletion, digest } from './attestation';
+import { buildAttestation, decideCompletion, declaredBillingPath, digest, isPaidApiCall, occupantBillingPath } from './attestation';
+import { readFileSync } from 'node:fs';
+import { ROLE_OCCUPANTS } from '../src/relay/mission/role-slots';
 import type { ExecutionAttestation } from './attestation';
 import {
   runHermesReview,
@@ -581,6 +583,126 @@ describe('14-20. only a genuine, current, approving review can complete the miss
     expect(reviewer?.completionVerified).toBe(false);
   });
 
+  /**
+   * WHAT THE REVIEW COST, ACCORDING TO THE OCCUPANT THAT RAN.
+   *
+   * Every hosted review has attested `subscription` — a literal written into
+   * the reviewer leg — while the occupant Relay actually binds is registered
+   * `billingPath: 'api'` and reviews on an xAI API key. The attestation
+   * contradicted the registry entry for the very occupant it names, in the
+   * direction that hides cost, and `isPaidApiCall` tests `api_billed`, so
+   * every real review was also invisible to Relay's own accounting.
+   *
+   * The coding leg had always derived this from its occupant. The reviewer leg
+   * asserted it. Both now use one translation, which is why these assert the
+   * two legs AGREE rather than checking one of them.
+   */
+  it('attests the review against the bound occupant, not a literal', async () => {
+    const h = harness();
+    const { view } = await runMission(h, LIVE_ENV, 'm-review-billing');
+    const reviewer = view.attestations?.find((a) => a.role === 'reviewer');
+    expect(reviewer).toBeDefined();
+    // The bound occupant is registered `api`, so the attestation must say so.
+    expect(reviewer?.billingPath).toBe('api_billed');
+    // The founder-facing review card must not disagree with the attestation
+    // beside it, which is how one of them stayed wrong for so long.
+    expect(view.review?.billing).toBe('api_billed');
+    /**
+     * And the accounting must now count it. `isPaidApiCall` keys on exactly
+     * this value, so while the reviewer attested `subscription` every real
+     * review was invisible to Relay's own record of what a mission spent.
+     */
+    expect(isPaidApiCall(buildAttestation({
+      missionId: 'm-review-billing',
+      role: 'reviewer',
+      requestedActor: 'Hermes',
+      actualActor: 'Hermes',
+      requestedRuntime: 'hermes-agent-cli',
+      actualRuntime: 'hermes-agent-cli',
+      billingPath: reviewer!.billingPath,
+      launchVerified: true,
+      completionVerified: true,
+      fallbackOccurred: false,
+      inputDigest: 'sha256:probe',
+      startedAt: AT,
+      completedAt: AT,
+    }))).toBe(true);
+  });
+
+  it('no registered Reviewer is subscription-billed, so the old literal could not have been right for any of them', () => {
+    /**
+     * The reason this was a defect rather than a mismatched default: there is
+     * no Reviewer occupant the discarded literal described. Asserted against
+     * the registry so that adding a genuinely subscription-billed Reviewer one
+     * day fails here and gets read, rather than silently making a removed bug
+     * look like it had been correct.
+     */
+    const reviewers = ROLE_OCCUPANTS.filter((o) => o.role === 'reviewer');
+    expect(reviewers.length).toBeGreaterThan(0);
+    for (const o of reviewers) {
+      expect(occupantBillingPath(o.billingPath)).not.toBe('subscription');
+    }
+  });
+
+  it('an unresolvable occupant bills as unknown, never as the cheaper answer', () => {
+    // Unknown is not zero, and it is not "free" either.
+    expect(occupantBillingPath(undefined)).toBe('unknown');
+  });
+
+  describe('RELAY_HERMES_BILLING_MODE, which was documented and then ignored', () => {
+    /**
+     * `.env.example` has always offered this variable under "the reviewer's
+     * provider, model and billing mode are separate facts and must each be
+     * reported truthfully. Do not infer billing" — and nothing read it. An
+     * operator who set it correctly still got the literal.
+     */
+    it('is unset by default, so the registry decides', () => {
+      expect(declaredBillingPath(undefined)).toBeNull();
+      expect(declaredBillingPath('')).toBeNull();
+      expect(declaredBillingPath('   ')).toBeNull();
+    });
+
+    it('carries every mode the documentation offers', () => {
+      // Read from the file that makes the promise, so a mode documented and
+      // not implemented fails here instead of silently reading as unknown.
+      const documented = readFileSync('.env.example', 'utf8')
+        .split('\n')
+        .find((l) => l.includes('api_billed | subscription'));
+      expect(documented).toBeDefined();
+      const modes = (documented ?? '').replace('#', '').split('|').map((m) => m.trim()).filter(Boolean);
+      expect(modes.length).toBeGreaterThan(3);
+      for (const mode of modes) {
+        // `unknown` is the one that is also the fallback; every other
+        // documented mode must survive the round trip as itself.
+        expect(declaredBillingPath(mode)).toBe(mode);
+      }
+    });
+
+    it('reads a misspelling as unknown rather than ignoring it', () => {
+      /**
+       * A typo must not silently fall through to the registry and read as
+       * agreement. The operator said something Relay could not understand,
+       * and that is a different fact from them having said nothing.
+       */
+      expect(declaredBillingPath('subscribtion')).toBe('unknown');
+      expect(declaredBillingPath('free')).toBe('unknown');
+    });
+
+    it('outranks the registry, because the operator knows their own account', async () => {
+      const h = harness();
+      const { view } = await runMission(
+        h,
+        { ...LIVE_ENV, RELAY_HERMES_BILLING_MODE: 'subscription' },
+        'm-billing-declared',
+      );
+      const reviewer = view.attestations?.find((a) => a.role === 'reviewer');
+      // The occupant is registered `api`; the operator says they pay by
+      // subscription. Relay reports what they said, not what it assumed.
+      expect(reviewer?.billingPath).toBe('subscription');
+      expect(view.review?.billing).toBe('subscription');
+    });
+  });
+
   it('15. a blocking finding produces review_blocked and never returns the task to Claude', async () => {
     const h = harness({
       reviewer: async () => ({
@@ -845,13 +967,24 @@ describe('27-30. console events, secrecy, terminal regression, and reviewer bill
     expect(rendered.lines.map((l) => l.sequence)).toEqual(rendered.lines.map((_, i) => i));
   });
 
-  it('30. Hermes subscription billing is reported and never blocks completion', async () => {
+  it('30. Hermes billing is reported from the occupant and never blocks completion', async () => {
+    /**
+     * THIS TEST USED TO PIN THE DEFECT. It asserted `subscription` on both the
+     * attestation and the review card, and it passed for as long as the code
+     * hard-coded that literal — so the suite agreed with a claim the registry
+     * had already contradicted, and the disagreement could only be found by
+     * reading the two files side by side.
+     *
+     * Its real subject is the second half, which is unchanged: whatever the
+     * review cost, it never blocks a completion. The billing values now come
+     * from the bound occupant instead of from this file's expectations.
+     */
     const h = harness();
     const { view } = await runMission(h, LIVE_ENV, 'm-billing');
     expect(view.state).toBe('verified_complete');
     const reviewer = view.attestations?.find((a) => a.role === 'reviewer');
-    expect(reviewer?.billingPath).toBe('subscription');
-    expect(view.review?.billing).toBe('subscription');
+    expect(reviewer?.billingPath).toBe('api_billed');
+    expect(view.review?.billing).toBe('api_billed');
     expect(view.review?.provider).toBe('Anthropic');
     expect(view.review?.model).toBe('claude-opus-4-8');
     expect(view.error).toBeUndefined();
@@ -891,7 +1024,14 @@ describe('the reviewer preflight proves the reviewer can actually answer', () =>
     expect(result.readOnlySupported).toBe(true);
     expect(result.model).toBe('claude-opus-4-8');
     expect(result.provider).toBe('Anthropic');
-    expect(result.billingPath).toBe('subscription');
+    /**
+     * `unknown`, and this asserted `subscription`. A Hermes authenticated by
+     * API key prints no "logged in" line at all, so the probe cannot tell the
+     * two apart — it was answering a question it has no way to observe, and
+     * this assertion made that look verified. Provider and model above are
+     * genuinely read from the configuration; billing is not.
+     */
+    expect(result.billingPath).toBe('unknown');
     expect(result.livenessVerified).toBe(true);
     expect(parseHermesStatus(PREFLIGHT_STATUS).authenticatedProviders).toContain('Nous Portal');
 
