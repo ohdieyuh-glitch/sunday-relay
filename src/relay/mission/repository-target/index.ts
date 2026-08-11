@@ -136,3 +136,6 @@ export {
   proposeRepositoryKnowledge,
 } from './repository-brain-feed';
 export type { RepositoryKnowledgeKind, RepositoryKnowledgeRefusal } from './repository-brain-feed';
+
+export { planDryRun, renderPullRequestBody, renderPullRequestTitle } from './repository-dry-run';
+export type { DryRunPlan, PlannedOperation, PullRequestEvidence } from './repository-dry-run';
