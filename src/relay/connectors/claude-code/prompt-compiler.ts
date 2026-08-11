@@ -91,12 +91,38 @@ export function compileClaudePrompt(ctx: PromptContext): string {
     'HARD RULES',
     bullet(BOUNDARY_RULES),
     '',
+    ...reportContract({ taskId: ctx.taskId, runId: ctx.runId, attempt: 1 }),
+  ].join('\n');
+}
+
+/**
+ * THE REPORT CONTRACT, STATED IN FULL, TO EVERY PROMPT THAT NEEDS ONE.
+ *
+ * A repair used to be told to end with the marker "followed by the same JSON
+ * object shape, with attempt: 2" — a back-reference to the first attempt's
+ * prompt. That reads correctly and is unusable: the hosted repair runs in a
+ * FRESH session and a FRESH workspace (Relay has to seed the reviewed bytes
+ * back in, which is the proof it is not the same process), so the agent being
+ * asked for "the same shape" had never been shown a shape at all.
+ *
+ * Observed in production on `pack-11-four-constraints-1786424002`: a genuine
+ * rejection, a repair that really ran — nine turns, four tools, 1285 characters
+ * of final text — and then `Report failed validation`, because the one thing
+ * the agent could not guess was the schema nobody sent it. The work was done
+ * and thrown away.
+ *
+ * So the contract is written out once and emitted by both prompts. A schema
+ * that exists in two places is a schema that will disagree with itself; a
+ * schema referred to indirectly is one the reader may not have.
+ */
+function reportContract(ctx: { taskId: string; runId: string; attempt: 1 | 2 }): string[] {
+  return [
     'REQUIRED FINAL REPORT',
     `End your final message with the marker ${REPORT_MARKER} on its own line, immediately followed by a single JSON object with EXACTLY these fields:`,
     '{',
     `  "taskId": "${ctx.taskId}",`,
     `  "runId": "${ctx.runId}",`,
-    '  "attempt": 1,',
+    `  "attempt": ${String(ctx.attempt)},`,
     '  "status": "completed" | "blocked" | "failed",',
     '  "summary": "one or two plain sentences",',
     '  "filesRead": ["repo-relative paths"],',
@@ -107,7 +133,7 @@ export function compileClaudePrompt(ctx: PromptContext): string {
     '  "manualActionRequest": null',
     '}',
     'Do not put secrets, hidden reasoning, or file contents in the report.',
-  ].join('\n');
+  ];
 }
 
 export interface RevisionPromptContext {
@@ -135,7 +161,15 @@ export interface RevisionPromptContext {
  * report requirement. */
 export function compileRevisionPrompt(ctx: RevisionPromptContext): string {
   return [
-    'Relay is resuming this exact session for ONE focused repair.',
+    /**
+     * NOT "resuming this exact session". The hosted repair is a new process in
+     * a new workspace seeded with the reviewed bytes, so a prompt that told the
+     * agent otherwise was inviting it to rely on context it does not have —
+     * which is exactly how the report contract came to be a back-reference.
+     */
+    'Relay is continuing this task for ONE focused repair.',
+    'The findings below are from an independent review of your previous result,',
+    'which has been restored into this workspace for you.',
     'Do not restart or broaden the task. Keep every prior constraint.',
     '',
     `Relay run: ${ctx.runId}`,
@@ -152,7 +186,6 @@ export function compileRevisionPrompt(ctx: RevisionPromptContext): string {
     'REQUIRED EVIDENCE (Relay will run these)',
     bullet(ctx.relayVerificationCommands),
     '',
-    'REQUIRED FINAL REPORT',
-    `End with the marker ${REPORT_MARKER} followed by the same JSON object shape, with "attempt": 2.`,
+    ...reportContract({ taskId: ctx.taskId, runId: ctx.runId, attempt: 2 }),
   ].join('\n');
 }
