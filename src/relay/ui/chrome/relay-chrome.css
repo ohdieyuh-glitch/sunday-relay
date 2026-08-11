@@ -9,7 +9,7 @@
   --rmc-panel: #0b0d12;
   --rmc-line: #1c2230;
   --rmc-text: #ece7dd;
-  --rmc-dim: #8b8578;
+  --rmc-dim: #a09a8c;
   --rmc-gold: #d9a441;
   --rmc-menu-bg: #d9a441;
   --rmc-menu-ink: #07080b;
@@ -20,7 +20,7 @@
   --rmc-panel: #212845;
   --rmc-line: #39426b;
   --rmc-text: #f0ecdf;
-  --rmc-dim: #a0a4bd;
+  --rmc-dim: #b0b6d4;
   --rmc-gold: #e0ab48;
   --rmc-menu-bg: #e0ab48;
   --rmc-menu-ink: #1b2138;
@@ -120,10 +120,17 @@
   letter-spacing: 0.1em;
   min-height: 48px;
   padding: 12px 14px;
-  background: var(--rmc-panel);
+  background: var(--sheen), var(--rmc-panel);
   color: var(--rmc-text);
   border: 1px solid var(--rmc-line);
   cursor: pointer;
+  box-shadow: var(--elev-1);
+  transition:
+    border-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    color var(--dur-fast, 120ms) var(--ease-emphasis, ease);
+}
+.rmc-item:hover:not(:disabled):not(.rmc-item--static) {
+  border-color: var(--rmc-gold);
 }
 .rmc-item--static { cursor: default; color: var(--rmc-dim); }
 .rmc-item:disabled { opacity: 0.5; cursor: not-allowed; }

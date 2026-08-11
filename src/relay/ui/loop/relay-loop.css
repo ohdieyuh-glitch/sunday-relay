@@ -12,7 +12,7 @@
 
 .rlc,
 .rlo {
-  background: var(--surface-solid);
+  background: var(--sheen), var(--surface-solid);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   box-shadow: var(--elev-1);
@@ -461,7 +461,7 @@
  * ====================================================================== */
 
 .rlr {
-  background: var(--surface-solid);
+  background: var(--sheen), var(--surface-solid);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   box-shadow: var(--elev-1);

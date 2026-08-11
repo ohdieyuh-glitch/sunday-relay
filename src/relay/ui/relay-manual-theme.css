@@ -29,6 +29,19 @@
   /* Graphite */
   --relay-manual-graphite: #5d5c58;
   --relay-manual-soft-gray: #a2a19e;
+  /* GRAPHITE, ONE STEP DEEPER — added for the ivory surfaces only.
+     A cream page needs a legible secondary AND tertiary tier. Measured against
+     `--relay-manual-cream`: ink is 15.92:1, graphite is 5.44:1, and
+     `--relay-manual-cream-text-muted` — which every cream surface was using as
+     its tertiary tier — is 2.06:1. That is unreadable 9px metadata, not a
+     restrained one. There is no room for a tier LIGHTER than graphite that
+     still clears the 4.5:1 WCAG AA floor on cream, so the ladder moves the
+     other way: this darker graphite takes the secondary tier and graphite
+     itself becomes the tertiary — 7.82 / 5.44 on `--relay-manual-cream` and
+     8.64 / 6.01 on `--relay-manual-cream-panel`. Same hue family, and the
+     black system surfaces are untouched — they already measured 7.79:1.
+     `premium-polish.test.tsx` measures every pair. */
+  --relay-manual-graphite-deep: #46453f;
   /* Aged gold */
   --relay-manual-gold: #846622;
   --relay-manual-gold-dark: #795c1c;
@@ -87,8 +100,8 @@
   --reh-panel-2: var(--relay-manual-cream-panel);
   --reh-line: var(--relay-manual-cream-muted);
   --reh-cream: var(--relay-manual-ink);
-  --reh-dim: var(--relay-manual-graphite);
-  --reh-faint: var(--relay-manual-cream-text-muted);
+  --reh-dim: var(--relay-manual-graphite-deep);
+  --reh-faint: var(--relay-manual-graphite);
   --reh-gold: var(--relay-manual-gold);
   --reh-gold-dim: rgba(132, 102, 34, 0.5);
   background: var(--relay-manual-cream);
@@ -100,8 +113,8 @@
   --reh-panel-2: var(--relay-manual-cream);
   --reh-line: var(--relay-manual-cream-text-muted);
   --reh-cream: var(--relay-manual-ink);
-  --reh-dim: var(--relay-manual-graphite);
-  --reh-faint: var(--relay-manual-cream-text-muted);
+  --reh-dim: var(--relay-manual-graphite-deep);
+  --reh-faint: var(--relay-manual-graphite);
   --reh-gold: var(--relay-manual-gold);
   --reh-gold-dim: rgba(132, 102, 34, 0.5);
   background: var(--relay-manual-cream-panel);
@@ -137,8 +150,8 @@
   --rps-gold: var(--relay-manual-gold);
   --rps-gold-dim: rgba(132, 102, 34, 0.5);
   --rps-cream: var(--relay-manual-ink);
-  --rps-dim: var(--relay-manual-graphite);
-  --rps-faint: var(--relay-manual-cream-text-muted);
+  --rps-dim: var(--relay-manual-graphite-deep);
+  --rps-faint: var(--relay-manual-graphite);
 }
 [data-relay-colorway='manual'] .rps-grid-bg {
   background-image:
@@ -214,8 +227,8 @@
   --rpw-panel-2: var(--relay-manual-cream);
   --rpw-line: var(--relay-manual-cream-text-muted);
   --rpw-cream: var(--relay-manual-ink);
-  --rpw-dim: var(--relay-manual-graphite);
-  --rpw-faint: var(--relay-manual-cream-text-muted);
+  --rpw-dim: var(--relay-manual-graphite-deep);
+  --rpw-faint: var(--relay-manual-graphite);
   --rpw-gold: var(--relay-manual-gold);
   --rpw-gold-dim: rgba(132, 102, 34, 0.5);
   background: var(--relay-manual-cream-panel);
@@ -238,8 +251,8 @@
   --rpw-panel-2: var(--relay-manual-cream-panel);
   --rpw-line: var(--relay-manual-cream-muted);
   --rpw-cream: var(--relay-manual-ink);
-  --rpw-dim: var(--relay-manual-graphite);
-  --rpw-faint: var(--relay-manual-cream-text-muted);
+  --rpw-dim: var(--relay-manual-graphite-deep);
+  --rpw-faint: var(--relay-manual-graphite);
   --rpw-gold: var(--relay-manual-gold);
   --rpw-gold-dim: rgba(132, 102, 34, 0.5);
   background: var(--relay-manual-cream);

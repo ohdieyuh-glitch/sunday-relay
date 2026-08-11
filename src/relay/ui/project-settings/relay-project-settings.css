@@ -12,8 +12,8 @@
   --rps-gold: #d9a441;
   --rps-gold-dim: rgba(217, 164, 65, 0.4);
   --rps-cream: #ece7dd;
-  --rps-dim: #8b8578;
-  --rps-faint: #5d584e;
+  --rps-dim: #a09a8c;
+  --rps-faint: #837c6e;
   --rps-green: #6fbf73;
   --rps-amber: #e0b25c;
   --rps-red: #d66a5a;
@@ -29,15 +29,21 @@
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
+  /* Thin, themed scrollbars for every scroller inside settings. The thumb
+     measures 4.84:1 against the field; a UI component needs 3:1. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--rps-faint) transparent;
 }
 .rps-grid-bg {
   position: fixed;
   inset: 0;
   pointer-events: none;
   background-image:
+    radial-gradient(120% 58% at 50% -10%, rgba(217, 164, 65, 0.05), transparent 62%),
+    radial-gradient(150% 90% at 50% 120%, rgba(0, 0, 0, 0.5), transparent 58%),
     linear-gradient(rgba(217, 164, 65, 0.04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(217, 164, 65, 0.04) 1px, transparent 1px);
-  background-size: 48px 48px;
+  background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
   z-index: 0;
 }
 .rps > header,
@@ -62,7 +68,7 @@
   cursor: pointer;
 }
 .rps-btn--primary {
-  background: var(--rps-gold);
+  background: var(--sheen), var(--rps-gold);
   color: var(--rps-bg);
   border-color: var(--rps-gold);
   font-weight: 700;
@@ -74,6 +80,26 @@
   cursor: not-allowed;
 }
 .rps-btn--ghost { color: var(--rps-dim); }
+.rps-btn,
+.rps-mini-btn {
+  transition:
+    color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    border-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    background-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    filter var(--dur-fast, 120ms) var(--ease-emphasis, ease);
+}
+.rps-btn:hover:not(:disabled),
+.rps-mini-btn:hover:not(:disabled) {
+  border-color: var(--rps-gold-dim);
+  background-color: rgba(255, 255, 255, 0.035);
+}
+.rps-btn:active:not(:disabled) { background-color: rgba(0, 0, 0, 0.28); }
+.rps-btn--primary:hover:not(:disabled) {
+  background: var(--sheen), var(--rps-gold);
+  border-color: var(--rps-gold);
+  filter: brightness(1.07);
+}
+.rps-btn--primary:active:not(:disabled) { filter: brightness(0.94); }
 .rps-mini-btn {
   font-family: var(--rps-mono);
   font-size: 10px;
@@ -223,7 +249,7 @@
   flex-direction: column;
   gap: 4px;
   border: 1px solid var(--rps-line);
-  background: var(--rps-panel);
+  background: var(--sheen), var(--rps-panel);
   padding: 10px 12px;
   min-height: 44px;
   cursor: pointer;
@@ -373,7 +399,7 @@
 .rps-custom-input input:focus-visible { outline: 2px solid var(--rps-gold); outline-offset: 1px; }
 
 /* Brief summary + recommend note */
-.rps-brief-summary { border: 1px solid var(--rps-line); background: var(--rps-panel); padding: 12px 14px; }
+.rps-brief-summary { border: 1px solid var(--rps-line); background: var(--sheen), var(--rps-panel); padding: 12px 14px; }
 .rps-brief-line { font-size: 13px; margin: 6px 0 4px; }
 .rps-brief-meta { font-size: 9px; letter-spacing: 0.12em; color: var(--rps-faint); margin: 0; }
 .rps-recommend-note { font-size: 11px; color: var(--rps-gold); margin: 0; }
@@ -386,7 +412,7 @@
   flex-direction: column;
   gap: 4px;
   border: 1px solid var(--rps-line);
-  background: var(--rps-panel);
+  background: var(--sheen), var(--rps-panel);
   padding: 12px 14px;
   cursor: pointer;
 }
@@ -445,7 +471,7 @@
 
 /* Review */
 .rps-review { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-.rps-review-group { border: 1px solid var(--rps-line); background: var(--rps-panel); padding: 12px 14px; }
+.rps-review-group { border: 1px solid var(--rps-line); background: var(--sheen), var(--rps-panel); padding: 12px 14px; }
 .rps-review-title { font-size: 10px; font-weight: 700; letter-spacing: 0.2em; margin: 0 0 8px; }
 .rps-review-title::before { content: '■ '; color: var(--rps-gold); font-size: 7px; vertical-align: 2px; }
 .rps-review-rows { display: flex; flex-direction: column; gap: 5px; margin: 0; }
@@ -510,8 +536,8 @@
   --rps-gold: #e0ab48;
   --rps-gold-dim: rgba(224, 171, 72, 0.4);
   --rps-cream: #f0ecdf;
-  --rps-dim: #a0a4bd;
-  --rps-faint: #737898;
+  --rps-dim: #b0b6d4;
+  --rps-faint: #8e95bc;
 }
 [data-relay-colorway='midnight'] .rps-grid-bg {
   background-image:
@@ -554,7 +580,7 @@
   font-size: 10px;
   letter-spacing: 0.16em;
   padding: 5px 12px;
-  color: var(--rps-dim, #8b8578);
+  color: var(--rps-dim, #a09a8c);
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -580,7 +606,7 @@
   margin: 0;
   font-size: 11px;
   line-height: 1.65;
-  color: var(--rps-dim, #8b8578);
+  color: var(--rps-dim, #a09a8c);
   border-left: 2px solid var(--rps-gold-dim);
   padding-left: 12px;
 }

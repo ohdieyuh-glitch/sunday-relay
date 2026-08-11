@@ -1,0 +1,600 @@
+/** @vitest-environment jsdom */
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, render } from '@testing-library/react';
+
+import { RelayPixelDog } from './pixel-dog';
+
+/**
+ * THE PREMIUM POLISH PASS, HELD MECHANICALLY.
+ *
+ * The polish itself is a judgement and no test can hold it. Four things about
+ * it are not judgements, and every one of them is the kind of claim this
+ * repository has shipped untrue before:
+ *
+ *   1. ONE TOKEN SYSTEM. `relay-tokens.css` is Relay's only token sheet. A
+ *      token nobody consumes is a second vocabulary starting, and a token
+ *      redefined in a surface sheet is that sheet forking the system.
+ *   2. CONTRAST IS MEASURED, NOT ASSUMED. A glossier surface that drops small
+ *      text under WCAG AA is a regression. The values are read out of the real
+ *      stylesheets and the ratios are computed here, so a future "just a shade
+ *      dimmer" fails at the shade rather than in someone's eyes. This pass
+ *      LIFTED three colorways' secondary and tertiary text tiers because they
+ *      measured 2.06:1 to 3.08:1 while carrying 8-11px metadata.
+ *   3. GLASS IS GUARDED AND NEVER TOUCHES THE DOG. `backdrop-filter` lives
+ *      inside `@supports`, so a browser without it keeps the flat surface
+ *      instead of a transparent one — and no blur, radius or shadow may land on
+ *      the Relay Dog's artwork, which is a hard voxel sprite whose sharpness is
+ *      part of the identity.
+ *   4. EVERY TRANSITION CAN BE SWITCHED OFF. A hover transition is one line and
+ *      nothing about writing it reminds you that someone reading the page asked
+ *      the operating system to stop things moving.
+ *
+ * WHAT THIS DOES NOT CLAIM. No frame has been measured and no browser has
+ * rendered any of this — there is none in this environment. Animation gating is
+ * held by `workspace-motion-quality.test.tsx`; this file holds transitions.
+ */
+
+const UI = __dirname;
+const RELAY = join(UI, '..');
+
+function stylesheetPaths(dir: string, found: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) stylesheetPaths(full, found);
+    else if (entry.endsWith('.css')) found.push(full);
+  }
+  return found;
+}
+
+const SHEETS: readonly { path: string; name: string; css: string }[] = stylesheetPaths(RELAY)
+  .map((path) => ({ path, name: path.slice(RELAY.length + 1), css: readFileSync(path, 'utf8') }));
+
+const read = (name: string): string => {
+  const sheet = SHEETS.find((s) => s.name === name);
+  if (sheet === undefined) throw new Error(`no stylesheet ${name}`);
+  return sheet.css;
+};
+
+/* ------------------------------------------------------------------ parsing */
+
+interface Rule {
+  /** The selector list, comments stripped and whitespace collapsed. */
+  selectors: string;
+  /** Declarations of this rule only — nested blocks excluded. */
+  body: string;
+  /** Enclosing at-rule preludes, outermost first. */
+  atRules: string[];
+}
+
+/**
+ * Brace-aware rule walk. Descends at-rules (an at-rule does not scope a
+ * declaration) and skips `@keyframes`, whose children are keyframe selectors
+ * rather than element selectors.
+ */
+function rules(css: string): Rule[] {
+  const source = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const out: Rule[] = [];
+  const stack: { kind: 'at' | 'rule' | 'keyframes'; head: string }[] = [];
+  let buffer = '';
+
+  const inKeyframes = () => stack.some((f) => f.kind === 'keyframes');
+
+  for (let i = 0; i < source.length; i += 1) {
+    const char = source[i];
+    if (char === '{') {
+      const head = buffer.trim().replace(/\s+/g, ' ');
+      buffer = '';
+      if (head.startsWith('@')) {
+        stack.push({
+          kind: /^@(?:-[\w]+-)?keyframes\b/i.test(head) ? 'keyframes' : 'at',
+          head,
+        });
+        continue;
+      }
+      stack.push({ kind: 'rule', head });
+      continue;
+    }
+    if (char === '}') {
+      const frame = stack.pop();
+      if (frame !== undefined && frame.kind === 'rule' && !inKeyframes()) {
+        out.push({
+          selectors: frame.head,
+          body: buffer,
+          atRules: stack.filter((f) => f.kind === 'at').map((f) => f.head),
+        });
+      }
+      buffer = '';
+      continue;
+    }
+    buffer += char;
+  }
+  return out;
+}
+
+/** Custom properties declared by the FIRST rule whose selector list matches. */
+function tokensOf(css: string, selector: string): Record<string, string> {
+  const rule = rules(css).find((r) => r.selectors === selector);
+  if (rule === undefined) throw new Error(`no rule for selector ${selector}`);
+  const declared: Record<string, string> = {};
+  for (const match of rule.body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+    declared[match[1]] = match[2].trim();
+  }
+  return declared;
+}
+
+/* ----------------------------------------------------------------- contrast */
+
+function channel(value: number): number {
+  const v = value / 255;
+  return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+}
+
+function luminance(hex: string): number {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  if (!/^[0-9a-f]{6}$/i.test(full)) throw new Error(`not an opaque hex colour: ${hex}`);
+  return (
+    0.2126 * channel(parseInt(full.slice(0, 2), 16))
+    + 0.7152 * channel(parseInt(full.slice(2, 4), 16))
+    + 0.0722 * channel(parseInt(full.slice(4, 6), 16))
+  );
+}
+
+/** WCAG 2.1 relative-luminance contrast ratio. */
+function contrast(foreground: string, background: string): number {
+  const a = luminance(foreground);
+  const b = luminance(background);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+/**
+ * A colour tier: which stylesheet block declares it, and under which name.
+ * Resolved through ONE level of `var(--other)`, which is how the manual
+ * colorway maps its semantic tokens onto each surface.
+ */
+interface Palette { readonly label: string; readonly tokens: Record<string, string> }
+
+function resolve(palette: Palette, token: string, through?: Palette): string {
+  const raw = palette.tokens[token];
+  if (raw === undefined) throw new Error(`${palette.label} declares no ${token}`);
+  const via = /^var\((--[\w-]+)\)$/.exec(raw);
+  if (via === null) return raw;
+  const source = through ?? palette;
+  const target = source.tokens[via[1]];
+  if (target === undefined) throw new Error(`${palette.label}: ${token} -> ${via[1]} unresolved`);
+  return target;
+}
+
+const ENTRY = read('ui/entry-home/relay-entry-home.css');
+const WORKSPACE = read('ui/project-workspace/relay-project-workspace.css');
+const SETTINGS = read('ui/project-settings/relay-project-settings.css');
+const CHROME = read('ui/chrome/relay-chrome.css');
+const MANUAL = read('ui/relay-manual-theme.css');
+const TOKENS = read('relay-tokens.css');
+const MISSION_CONTROL = read('ui/mission-control.css');
+
+const palettes = {
+  entryObsidian: { label: 'entry home / obsidian', tokens: tokensOf(ENTRY, '.reh') },
+  entryMidnight: {
+    label: 'entry home / midnight',
+    tokens: tokensOf(ENTRY, "[data-relay-colorway='midnight'] .reh"),
+  },
+  workspaceObsidian: { label: 'workspace / obsidian', tokens: tokensOf(WORKSPACE, '.rpw') },
+  workspaceMidnight: {
+    label: 'workspace / midnight',
+    tokens: tokensOf(WORKSPACE, "[data-relay-colorway='midnight'] .rpw"),
+  },
+  settingsObsidian: { label: 'settings / obsidian', tokens: tokensOf(SETTINGS, '.rps') },
+  settingsMidnight: {
+    label: 'settings / midnight',
+    tokens: tokensOf(SETTINGS, "[data-relay-colorway='midnight'] .rps"),
+  },
+  chromeObsidian: { label: 'mobile chrome / obsidian', tokens: tokensOf(CHROME, ':root') },
+  chromeMidnight: {
+    label: 'mobile chrome / midnight',
+    tokens: tokensOf(CHROME, "[data-relay-colorway='midnight']"),
+  },
+  missionControl: { label: 'mission control', tokens: tokensOf(MISSION_CONTROL, '.relay-mc') },
+  root: { label: 'relay tokens', tokens: tokensOf(TOKENS, ':root') },
+  manual: { label: 'RELAY MANUAL', tokens: tokensOf(MANUAL, "[data-relay-colorway='manual']") },
+} as const;
+
+/**
+ * Every text tier against every ground it is actually painted on.
+ *
+ * 4.5:1 is the WCAG AA floor for normal text, and this is normal text: the
+ * tertiary tier carries 8-11px metadata — timestamps, operating keys, phase
+ * labels, verification notes. It is deliberately NOT the 3:1 large-text floor.
+ *
+ * BORDERS ARE OUT OF SCOPE and not silently included: a panel divider is not a
+ * UI component boundary a reader must find. The controls that DO need 3:1
+ * (inputs) already carry a graphite border in every colorway.
+ */
+const TEXT_ON_GROUND: readonly {
+  palette: Palette; text: string; grounds: readonly string[];
+}[] = [
+  { palette: palettes.entryObsidian, text: '--reh-cream', grounds: ['--reh-bg', '--reh-panel', '--reh-panel-2'] },
+  { palette: palettes.entryObsidian, text: '--reh-dim', grounds: ['--reh-bg', '--reh-panel', '--reh-panel-2'] },
+  { palette: palettes.entryObsidian, text: '--reh-faint', grounds: ['--reh-bg', '--reh-panel', '--reh-panel-2'] },
+  { palette: palettes.entryMidnight, text: '--reh-cream', grounds: ['--reh-bg', '--reh-panel', '--reh-panel-2'] },
+  { palette: palettes.entryMidnight, text: '--reh-dim', grounds: ['--reh-bg', '--reh-panel', '--reh-panel-2'] },
+  { palette: palettes.entryMidnight, text: '--reh-faint', grounds: ['--reh-bg', '--reh-panel', '--reh-panel-2'] },
+  { palette: palettes.workspaceObsidian, text: '--rpw-cream', grounds: ['--rpw-bg', '--rpw-panel', '--rpw-panel-2'] },
+  { palette: palettes.workspaceObsidian, text: '--rpw-dim', grounds: ['--rpw-bg', '--rpw-panel', '--rpw-panel-2'] },
+  { palette: palettes.workspaceObsidian, text: '--rpw-faint', grounds: ['--rpw-bg', '--rpw-panel', '--rpw-panel-2'] },
+  { palette: palettes.workspaceMidnight, text: '--rpw-cream', grounds: ['--rpw-bg', '--rpw-panel', '--rpw-panel-2'] },
+  { palette: palettes.workspaceMidnight, text: '--rpw-dim', grounds: ['--rpw-bg', '--rpw-panel', '--rpw-panel-2'] },
+  { palette: palettes.workspaceMidnight, text: '--rpw-faint', grounds: ['--rpw-bg', '--rpw-panel', '--rpw-panel-2'] },
+  { palette: palettes.settingsObsidian, text: '--rps-dim', grounds: ['--rps-bg', '--rps-panel'] },
+  { palette: palettes.settingsObsidian, text: '--rps-faint', grounds: ['--rps-bg', '--rps-panel'] },
+  { palette: palettes.settingsMidnight, text: '--rps-dim', grounds: ['--rps-bg', '--rps-panel'] },
+  { palette: palettes.settingsMidnight, text: '--rps-faint', grounds: ['--rps-bg', '--rps-panel'] },
+  { palette: palettes.chromeObsidian, text: '--rmc-dim', grounds: ['--rmc-bg', '--rmc-panel'] },
+  { palette: palettes.chromeMidnight, text: '--rmc-dim', grounds: ['--rmc-bg', '--rmc-panel'] },
+  { palette: palettes.missionControl, text: '--mc-dim', grounds: ['--mc-bg', '--mc-panel'] },
+  { palette: palettes.root, text: '--text', grounds: ['--bg', '--surface-solid'] },
+  { palette: palettes.root, text: '--text-dim', grounds: ['--bg', '--surface-solid'] },
+  { palette: palettes.root, text: '--text-faint', grounds: ['--bg', '--surface-solid'] },
+  // RELAY MANUAL. Its black system areas and its ivory technical-manual areas
+  // are two different grounds with two different ladders, so both are named.
+  { palette: palettes.manual, text: '--relay-manual-cream', grounds: ['--relay-manual-black', '--relay-manual-stage', '--relay-manual-raised-black'] },
+  { palette: palettes.manual, text: '--relay-manual-soft-gray', grounds: ['--relay-manual-black', '--relay-manual-stage', '--relay-manual-raised-black'] },
+  { palette: palettes.manual, text: '--relay-manual-cream-text-muted', grounds: ['--relay-manual-black', '--relay-manual-stage', '--relay-manual-raised-black'] },
+  { palette: palettes.manual, text: '--relay-manual-gold-muted', grounds: ['--relay-manual-black', '--relay-manual-stage', '--relay-manual-raised-black'] },
+  { palette: palettes.manual, text: '--relay-manual-ink', grounds: ['--relay-manual-cream', '--relay-manual-cream-panel'] },
+  { palette: palettes.manual, text: '--relay-manual-graphite-deep', grounds: ['--relay-manual-cream', '--relay-manual-cream-panel'] },
+  { palette: palettes.manual, text: '--relay-manual-graphite', grounds: ['--relay-manual-cream', '--relay-manual-cream-panel'] },
+];
+
+describe('contrast is measured, on every colorway and every ground', () => {
+  it('every text tier clears the 4.5:1 WCAG AA floor for normal text', () => {
+    const failures: string[] = [];
+    let measured = 0;
+    for (const { palette, text, grounds } of TEXT_ON_GROUND) {
+      const foreground = resolve(palette, text);
+      for (const ground of grounds) {
+        const ratio = contrast(foreground, resolve(palette, ground));
+        measured += 1;
+        if (ratio < 4.5) {
+          failures.push(
+            `${palette.label}: ${text} (${foreground}) on ${ground} `
+            + `(${resolve(palette, ground)}) = ${ratio.toFixed(2)}:1`,
+          );
+        }
+      }
+    }
+    // Not vacuous: an empty table, or a resolver returning nothing, would
+    // otherwise pass this silently.
+    expect(measured, 'the contrast table measured almost nothing').toBeGreaterThan(60);
+    expect(failures, 'these pairs are below the WCAG AA floor for normal text').toEqual([]);
+  });
+
+  it('keeps a readable LADDER, not three tiers at the same weight', () => {
+    // Lifting the tertiary tier to clear AA can collapse it into the secondary,
+    // which trades an accessibility failure for a hierarchy failure. Each step
+    // must be a real step: at least 1.2x the ratio of the one below it.
+    const ladders: readonly [Palette, string, string, string, string][] = [
+      [palettes.entryObsidian, '--reh-bg', '--reh-faint', '--reh-dim', '--reh-cream'],
+      [palettes.entryMidnight, '--reh-bg', '--reh-faint', '--reh-dim', '--reh-cream'],
+      [palettes.workspaceObsidian, '--rpw-bg', '--rpw-faint', '--rpw-dim', '--rpw-cream'],
+      [palettes.workspaceMidnight, '--rpw-bg', '--rpw-faint', '--rpw-dim', '--rpw-cream'],
+      [palettes.root, '--bg', '--text-faint', '--text-dim', '--text'],
+    ];
+    for (const [palette, ground, faint, dim, primary] of ladders) {
+      const bg = resolve(palette, ground);
+      const steps = [faint, dim, primary].map((t) => contrast(resolve(palette, t), bg));
+      expect(steps[1] / steps[0], `${palette.label}: secondary is not a step above tertiary`)
+        .toBeGreaterThan(1.2);
+      expect(steps[2] / steps[1], `${palette.label}: primary is not a step above secondary`)
+        .toBeGreaterThan(1.2);
+    }
+  });
+
+  it('the manual colorway’s ivory surfaces actually USE the ladder measured above', () => {
+    // Measuring a token no surface assigns proves nothing. These are the five
+    // cream re-scoping blocks; each must map its secondary tier to the deeper
+    // graphite and its tertiary tier to graphite itself.
+    // The tier tokens are NAMED rather than matched by suffix: `--rps-gold-dim`
+    // also ends in `-dim`, and a suffix match found that instead — which would
+    // have made this assertion about a border colour.
+    const creamBlocks: readonly [string, string][] = [
+      [
+        "[data-relay-colorway='manual'] .reh-starter, [data-relay-colorway='manual'] .reh-routes, [data-relay-colorway='manual'] .reh-brief, [data-relay-colorway='manual'] .reh-recent, [data-relay-colorway='manual'] .reh-footer",
+        '--reh',
+      ],
+      ["[data-relay-colorway='manual'] .reh-guide", '--reh'],
+      ["[data-relay-colorway='manual'] .rps", '--rps'],
+      ["[data-relay-colorway='manual'] .rpw-conversation", '--rpw'],
+      ["[data-relay-colorway='manual'] .rpw-status", '--rpw'],
+    ];
+    for (const [selector, prefix] of creamBlocks) {
+      const declared = tokensOf(MANUAL, selector);
+      expect(declared[`${prefix}-dim`], `${selector} secondary tier`)
+        .toBe('var(--relay-manual-graphite-deep)');
+      expect(declared[`${prefix}-faint`], `${selector} tertiary tier`)
+        .toBe('var(--relay-manual-graphite)');
+    }
+  });
+
+  it('every themed scrollbar thumb clears the 3:1 floor for a UI component', () => {
+    // `scrollbar-color: <thumb> <track>` is set once per surface root and
+    // inherits into every scroller. A thumb nobody can see is a scrollbar
+    // nobody can grab.
+    const thumbs: readonly [Palette, string, string][] = [
+      [palettes.entryObsidian, '--reh-faint', '--reh-bg'],
+      [palettes.entryMidnight, '--reh-faint', '--reh-bg'],
+      [palettes.workspaceObsidian, '--rpw-faint', '--rpw-bg'],
+      [palettes.workspaceMidnight, '--rpw-faint', '--rpw-bg'],
+      [palettes.settingsObsidian, '--rps-faint', '--rps-bg'],
+      [palettes.root, '--text-faint', '--bg'],
+      [palettes.chromeObsidian, '--rmc-dim', '--rmc-bg'],
+      [palettes.missionControl, '--mc-dim', '--mc-bg'],
+    ];
+    for (const [palette, thumb, track] of thumbs) {
+      const ratio = contrast(resolve(palette, thumb), resolve(palette, track));
+      expect(ratio, `${palette.label}: ${thumb} thumb on ${track}`).toBeGreaterThanOrEqual(3);
+    }
+    // And the declarations exist, so the numbers above describe the product.
+    for (const [sheet, selector] of [
+      [ENTRY, '.reh'], [WORKSPACE, '.rpw'], [SETTINGS, '.rps'],
+      [read('relay.css'), '.relay-app'], [MISSION_CONTROL, '.relay-mc'],
+    ] as const) {
+      const rule = rules(sheet).find((r) => r.selectors === selector);
+      expect(rule?.body, `${selector} declares no themed scrollbar`).toContain('scrollbar-color');
+    }
+  });
+});
+
+/* -------------------------------------------------------------- token system */
+
+describe('relay-tokens.css is the ONE token system', () => {
+  const declared = Object.keys(palettes.root.tokens);
+  const allCss = SHEETS.map((s) => s.css).join('\n');
+
+  it('declares the material and motion vocabulary the surfaces consume', () => {
+    for (const token of [
+      '--edge-light', '--edge-light-strong', '--elev-1', '--elev-2', '--elev-3',
+      '--sheen', '--glass-blur', '--glass-blur-strong', '--glass-saturate',
+      '--ease-emphasis', '--dur-fast', '--dur-base',
+    ]) {
+      expect(declared, `relay-tokens.css declares no ${token}`).toContain(token);
+    }
+    // Each elevation is built the same way: an inset edge light plus at least
+    // one cast shadow. A "depth" token with no inset is a drop shadow, and the
+    // step from 1 to 3 would stop being one system.
+    for (const step of ['--elev-1', '--elev-2', '--elev-3'] as const) {
+      const value = palettes.root.tokens[step];
+      expect(value, `${step} has no inset edge light`).toContain('inset');
+      expect(value, `${step} casts no shadow`).toMatch(/rgba\(0, 0, 0/);
+    }
+    // The sheen is LIGHT, not a colour: white at low alpha, so it works on
+    // every colorway's panel without carrying a hue of its own.
+    expect(palettes.root.tokens['--sheen']).toContain('linear-gradient');
+    expect(palettes.root.tokens['--sheen']).toMatch(/rgba\(255, 255, 255/);
+    expect(palettes.root.tokens['--ease-emphasis']).toMatch(/^cubic-bezier\(/);
+  });
+
+  it('has no dead token: every one is consumed by a Relay stylesheet', () => {
+    // The header of relay-tokens.css claims exactly this. A token nobody reads
+    // is a second vocabulary starting beside the live one, and the previous
+    // version of that header carried a count that would have gone stale the
+    // first time anyone added a line.
+    const unused = declared.filter((token) => {
+      const uses = allCss.match(new RegExp(`var\\(${token}\\b`, 'g')) ?? [];
+      return uses.length === 0;
+    });
+    expect(unused, 'these tokens are declared and never consumed').toEqual([]);
+  });
+
+  it('no surface stylesheet redefines a material or motion token', () => {
+    // A surface may define its OWN palette (`--rpw-*`, `--reh-*`) — that is the
+    // established shape. What it may not do is redeclare the shared material,
+    // because then two sheets disagree about what `--elev-2` means.
+    const shared = [
+      '--elev-1', '--elev-2', '--elev-3', '--sheen', '--edge-light',
+      '--edge-light-strong', '--glass-blur', '--glass-blur-strong',
+      '--glass-saturate', '--ease-emphasis', '--dur-fast', '--dur-base',
+    ];
+    const forks: string[] = [];
+    for (const sheet of SHEETS) {
+      if (sheet.name === 'relay-tokens.css') continue;
+      for (const token of shared) {
+        if (new RegExp(`${token}\\s*:`).test(sheet.css.replace(/\/\*[\s\S]*?\*\//g, ''))) {
+          forks.push(`${sheet.name} redeclares ${token}`);
+        }
+      }
+    }
+    expect(forks).toEqual([]);
+  });
+
+  it('fetches no asset: not one stylesheet contains a url()', () => {
+    // Every mark, scene and texture in Relay is drawn from primitives. A
+    // request that can 404 is a surface that is sometimes not there.
+    const offenders = SHEETS.filter((s) => s.css.includes('url(')).map((s) => s.name);
+    expect(offenders).toEqual([]);
+    expect(SHEETS.length, 'found no stylesheets to check').toBeGreaterThan(15);
+  });
+});
+
+/* --------------------------------------------------------------------- glass */
+
+describe('glass is guarded, and never lands on the Relay Dog', () => {
+  const glassRules = SHEETS.flatMap((sheet) =>
+    rules(sheet.css)
+      .filter((rule) => /backdrop-filter\s*:/.test(rule.body))
+      .map((rule) => ({ sheet: sheet.name, rule })),
+  );
+
+  it('every backdrop-filter sits inside an @supports test for it', () => {
+    expect(glassRules.length, 'no glass was found at all').toBeGreaterThan(5);
+    const unguarded = glassRules
+      .filter(({ rule }) => !rule.atRules.some((at) => /^@supports\s*\(\s*backdrop-filter/.test(at)))
+      .map(({ sheet, rule }) => `${sheet}: ${rule.selectors}`);
+    expect(
+      unguarded,
+      'a browser without backdrop-filter would get the lowered opacity with no blur, '
+      + 'which is a transparent panel rather than a frosted one',
+    ).toEqual([]);
+  });
+
+  it('no glass, blur, radius or shadow reaches the voxel sprite', () => {
+    // The Dog is a hard-edged 18x14 sprite rendered with `crispEdges`. Any of
+    // these would soften or reshape the identity, and a "premium glass pass" is
+    // exactly the change that would do it by accident.
+    const protectedSubjects = /^\.(rpd-art|rpd-part|rpd-markwrap|rst-actor)\b/;
+    const offenders: string[] = [];
+    for (const sheet of SHEETS) {
+      for (const rule of rules(sheet.css)) {
+        for (const selector of rule.selectors.split(',').map((s) => s.trim())) {
+          // The SUBJECT is the last compound; `.rpd--tier .rpd-stage::before`
+          // styles the stage, not the art.
+          const subject = selector.split(/[\s>+~]+/).pop() ?? '';
+          if (!protectedSubjects.test(subject)) continue;
+          for (const property of ['backdrop-filter', 'filter', 'border-radius', 'box-shadow']) {
+            if (new RegExp(`(^|;|\\s)${property}\\s*:`).test(rule.body)) {
+              offenders.push(`${sheet.name}: ${selector} declares ${property}`);
+            }
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+    // The sprite keeps its pixel rendering, which is the other half of sharp.
+    expect(read('ui/pixel-dog/pixel-dog.css')).toMatch(/\.rpd-art\s*\{[^}]*image-rendering: pixelated/);
+  });
+
+  it('the stage vignette cannot darken an actor', () => {
+    // It is painted on the BACKDROP element. The backdrop layer is z-index 0
+    // and the actors layer is z-index 3, so the ordering — not a promise —
+    // keeps the Dog out of it.
+    const backdrop = read('ui/relay-stage/relay-stage-backdrop.css');
+    expect(backdrop).toMatch(/\.rsb::after\s*\{[\s\S]*?pointer-events: none/);
+    const stage = read('ui/relay-stage/relay-stage.css');
+    expect(stage).toMatch(/\.rst-layer--backdrop \{ z-index: 0; \}/);
+    expect(stage).toMatch(/\.rst-layer--actors \{ z-index: 3; \}/);
+    // And the stage is still FRAMELESS: the vignette must not have become a box.
+    const root = rules(stage).find((r) => r.selectors === '.rst');
+    expect(root?.body).not.toMatch(/border\s*:|background\s*:|box-shadow\s*:|border-radius\s*:/);
+  });
+});
+
+/* ----------------------------------------------------------- reduced motion */
+
+describe('every transition Relay declares can be switched off', () => {
+  /** The first class name in a selector, which is what a blanket rule reaches. */
+  const firstClass = (selector: string): string | null => {
+    const match = /\.([\w-]+)/.exec(selector);
+    return match === null ? null : match[1];
+  };
+
+  const analysis = SHEETS.map((sheet) => {
+    const parsed = rules(sheet.css);
+    const reduced = parsed.filter((r) =>
+      r.atRules.some((at) => /prefers-reduced-motion\s*:\s*reduce/.test(at)));
+    const named = new Set<string>();
+    const blankets: string[] = [];
+    for (const rule of reduced) {
+      for (const selector of rule.selectors.split(',').map((s) => s.trim())) {
+        const blanket = /^\.([\w-]+) \*$/.exec(selector);
+        if (blanket !== null) blankets.push(blanket[1]);
+        const name = firstClass(selector);
+        if (name !== null) named.add(name);
+      }
+    }
+    const moving = parsed.filter((rule) => {
+      if (rule.atRules.some((at) => /prefers-reduced-motion/.test(at))) return false;
+      const declaration = /(^|;|\s)transition(-property)?\s*:\s*([^;]+)/.exec(rule.body);
+      return declaration !== null && !/^none\b/.test(declaration[3].trim());
+    });
+    return { sheet: sheet.name, moving, named, blankets };
+  });
+
+  it('names or blankets every transitioned selector in its own stylesheet', () => {
+    const total = analysis.reduce((sum, a) => sum + a.moving.length, 0);
+    // Not vacuous: if the parser stopped finding transitions this whole suite
+    // would pass while covering nothing.
+    expect(total, 'found almost no transitions to hold').toBeGreaterThan(14);
+
+    const uncovered: string[] = [];
+    for (const { sheet, moving, named, blankets } of analysis) {
+      for (const rule of moving) {
+        for (const selector of rule.selectors.split(',').map((s) => s.trim())) {
+          const name = firstClass(selector);
+          if (name === null) continue;
+          const covered = named.has(name)
+            || blankets.some((root) => name === root || name.startsWith(`${root}-`));
+          if (!covered) uncovered.push(`${sheet}: ${selector}`);
+        }
+      }
+    }
+    expect(
+      uncovered,
+      'each of these transitions keeps running for a reader who asked the '
+      + 'operating system to stop things moving. Name the selector in a '
+      + 'prefers-reduced-motion block in the same stylesheet.',
+    ).toEqual([]);
+  });
+
+  it('gives press feedback without moving anything', () => {
+    // A press that nudges the control is motion under a finger, and it is the
+    // one feedback that cannot survive reduced motion. Relay deepens the plate
+    // instead, so nothing here may transform on :active.
+    const offenders: string[] = [];
+    for (const sheet of SHEETS) {
+      for (const rule of rules(sheet.css)) {
+        if (!rule.selectors.includes(':active')) continue;
+        if (/(^|;|\s)transform\s*:/.test(rule.body)) {
+          offenders.push(`${sheet.name}: ${rule.selectors}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+/* -------------------------------------------------- the Dog's proportions */
+
+afterEach(cleanup);
+
+describe('the Relay Dog’s proportions survive the polish', () => {
+  it('is 18x14 at one uniform scale, at every size the surfaces use', () => {
+    // The identity specification is explicit that ONE scale factor drives both
+    // axes — independent width and height distort the body. Every unit the
+    // Relay surfaces pass is checked, not just the default.
+    for (const unit of [1, 2, 3, 4, 6, 8, 12]) {
+      const { container } = render(<RelayPixelDog pose="standing" label="TEST" unit={unit} />);
+      const svg = container.querySelector('svg.rpd-art');
+      expect(svg, `unit ${String(unit)} drew no art`).not.toBeNull();
+      expect(Number(svg!.getAttribute('width'))).toBe(18 * unit);
+      expect(Number(svg!.getAttribute('height'))).toBe(14 * unit);
+      // Square pixels: the sprite cannot shear even if the box is right.
+      for (const rect of Array.from(svg!.querySelectorAll('rect'))) {
+        expect(rect.getAttribute('width')).toBe(rect.getAttribute('height'));
+      }
+      expect(svg!.getAttribute('shape-rendering')).toBe('crispEdges');
+      cleanup();
+    }
+  });
+
+  it('keeps short legs and a compact body: the anatomy rows are unchanged', () => {
+    // The specification calls the proportions load-bearing. Rows 0-5 are the
+    // head, 6-10 the body, 11-13 the legs — three leg rows out of fourteen is
+    // what "short block-shaped legs" means numerically, and a polish pass that
+    // restyled the sprite would move that boundary.
+    const { container } = render(<RelayPixelDog pose="standing" label="TEST" unit={1} />);
+    const svg = container.querySelector('svg.rpd-art')!;
+    const rowsWithPixels = new Set(
+      Array.from(svg.querySelectorAll('rect')).map((r) => Number(r.getAttribute('y'))),
+    );
+    expect(Math.max(...rowsWithPixels)).toBe(13);
+    const legGroup = svg.querySelectorAll('.rpd-part--leg-front-near, .rpd-part--leg-front-far, .rpd-part--leg-rear-near, .rpd-part--leg-rear-far');
+    expect(legGroup.length, 'four independently animatable paws').toBe(4);
+    const legRows = new Set(
+      Array.from(legGroup).flatMap((g) =>
+        Array.from(g.querySelectorAll('rect')).map((r) => Number(r.getAttribute('y')))),
+    );
+    expect([...legRows].sort((a, b) => a - b)).toEqual([11, 12, 13]);
+  });
+});

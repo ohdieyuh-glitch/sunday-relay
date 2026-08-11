@@ -37,12 +37,17 @@
   width: 100%;
 }
 
+/* A toast floats over the whole product, so it is the one element here that
+   should read as lifted off it. The background stays OPAQUE on purpose: a
+   translucent toast would take its contrast from whatever happens to be under
+   it, and this stack carries warnings. */
 .rnt-toast {
-  background: var(--rmc-panel);
+  background: var(--sheen), var(--rmc-panel);
   border: 1px solid var(--rmc-line);
   border-left: 2px solid var(--rmc-gold);
   color: var(--rmc-text);
   padding: 10px 12px;
+  box-shadow: var(--elev-2);
   animation: rnt-in 220ms ease-out backwards;
 }
 .rnt-toast--warning { border-left-color: var(--rnt-amber); }

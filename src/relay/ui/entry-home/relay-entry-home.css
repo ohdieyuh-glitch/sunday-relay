@@ -14,8 +14,16 @@
   --reh-gold: #d9a441;
   --reh-gold-dim: rgba(217, 164, 65, 0.35);
   --reh-cream: #ece7dd;
-  --reh-dim: #8b8578;
-  --reh-faint: #5d584e;
+  /* SECONDARY AND TERTIARY TEXT, MEASURED.
+     These were `#8b8578` and `#5d584e`. The tertiary tier scored 2.83:1 on
+     `--reh-bg` and 2.67:1 on `--reh-panel-2` while carrying real 9-10px
+     metadata — below the 4.5:1 WCAG AA floor for normal text and below even
+     the 3:1 large-text floor. Lifting it alone would have collapsed it into
+     the secondary tier, so both moved: the ladder is now 4.84 / 7.15 / 16.25
+     against `--reh-bg`. Same hues, higher values.
+     `premium-polish.test.tsx` measures every pair. */
+  --reh-dim: #a09a8c;
+  --reh-faint: #837c6e;
   --reh-green: #6fbf73;
   --reh-amber: #e0b25c;
   --reh-red: #d66a5a;
@@ -42,17 +50,30 @@
      genuinely visible. Same reasoning, and the same fix, as
      `.rpw-stage-bounds`. */
   overflow-x: clip;
+
+  /* Thin, themed scrollbars for every scroller inside this surface — the
+     property inherits, so one declaration covers the guide transcript and
+     anything added later. The thumb is the tertiary tier, which measures
+     4.84:1 against the field; a scrollbar is a UI component and needs 3:1. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--reh-faint) transparent;
 }
 
-/* Technical grid + restrained scanlines. Decorative, never interactive. */
+/* Technical grid + restrained scanlines. Decorative, never interactive.
+   The grid also carries the LIGHT: a warm wash above the fold and a floor
+   shadow below it, so the field reads as a lit space rather than a flat tile.
+   Both layers sit on the same fixed element, so they composite once and never
+   repaint as the page scrolls. */
 .reh-grid-bg {
   position: fixed;
   inset: 0;
   pointer-events: none;
   background-image:
+    radial-gradient(120% 62% at 50% -8%, rgba(217, 164, 65, 0.06), transparent 62%),
+    radial-gradient(150% 88% at 50% 118%, rgba(0, 0, 0, 0.5), transparent 58%),
     linear-gradient(rgba(217, 164, 65, 0.045) 1px, transparent 1px),
     linear-gradient(90deg, rgba(217, 164, 65, 0.045) 1px, transparent 1px);
-  background-size: 44px 44px;
+  background-size: 100% 100%, 100% 100%, 44px 44px, 44px 44px;
   z-index: 0;
 }
 .reh-scanlines {
@@ -69,6 +90,29 @@
   opacity: 0.25;
   z-index: 1;
 }
+
+/* HD / RETINA SHARPNESS. A 1px gradient stop is TWO device pixels at 2dppx, so
+   the grid and the grain both coarsen on exactly the displays that should show
+   them finest. Halving the stops puts each line back on one device pixel. */
+@media (min-resolution: 2dppx) {
+  .reh-grid-bg {
+    background-image:
+      radial-gradient(120% 62% at 50% -8%, rgba(217, 164, 65, 0.06), transparent 62%),
+      radial-gradient(150% 88% at 50% 118%, rgba(0, 0, 0, 0.5), transparent 58%),
+      linear-gradient(rgba(217, 164, 65, 0.05) 0.5px, transparent 0.5px),
+      linear-gradient(90deg, rgba(217, 164, 65, 0.05) 0.5px, transparent 0.5px);
+  }
+  .reh-scanlines {
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.16) 0px,
+      rgba(0, 0, 0, 0.16) 0.5px,
+      transparent 0.5px,
+      transparent 2px
+    );
+  }
+}
+
 .reh > header,
 .reh > main,
 .reh > footer {
@@ -99,6 +143,19 @@
   padding: 10px clamp(14px, 3vw, 28px);
   border-bottom: 1px solid var(--reh-gold-dim);
   background: rgba(7, 8, 11, 0.9);
+  /* A hairline of light along the bottom edge, under the gold rule: the header
+     reads as a plate sitting on the field instead of a colour change. */
+  box-shadow: 0 1px 0 var(--edge-light, rgba(255, 255, 255, 0.06));
+}
+
+/* The header is already translucent over the technical grid, so blurring what
+   is behind it is the difference between a tint and glass. Guarded: a browser
+   without `backdrop-filter` keeps exactly the flat plate above. */
+@supports (backdrop-filter: blur(1px)) {
+  .reh-header {
+    background: rgba(7, 8, 11, 0.72);
+    backdrop-filter: blur(var(--glass-blur, 18px)) saturate(var(--glass-saturate, 1.3));
+  }
 }
 .reh-header-left {
   display: flex;
@@ -148,6 +205,10 @@
   font-size: 11px;
   letter-spacing: 0.1em;
   color: var(--reh-cream);
+  /* Figures in a status readout sit in a column and must not shuffle when a
+     digit changes. Fira Code is already monospaced; this also pins the
+     proportional figures a fallback family would bring. */
+  font-variant-numeric: tabular-nums;
 }
 .reh-status-val::before {
   content: '■ ';
@@ -200,6 +261,31 @@
   cursor: pointer;
 }
 
+/* The header controls share the entry-home hover language. */
+.reh-switch-btn,
+.reh-term-btn,
+.reh-head-btn,
+.reh-icon-btn,
+.reh-suggested-q {
+  transition:
+    color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    border-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    background-color var(--dur-fast, 120ms) var(--ease-emphasis, ease);
+}
+.reh-head-btn:hover,
+.reh-icon-btn:hover {
+  color: var(--reh-cream);
+  border-color: var(--reh-gold-dim);
+  background-color: rgba(255, 255, 255, 0.035);
+}
+/* The terminal control is gold by direction — hover BRIGHTENS it rather than
+   turning it into another cream button. */
+.reh-term-btn:hover {
+  border-color: var(--reh-gold);
+  background-color: rgba(255, 255, 255, 0.035);
+}
+.reh-switch-btn:hover:not(.is-active) { color: var(--reh-cream); }
+
 /* --------------------------------------------------------------- main */
 
 .reh-main {
@@ -220,19 +306,26 @@
 }
 .reh-syslabel::before { content: '// '; color: var(--reh-faint); }
 
+/* DISPLAY TYPE. Optical tracking: at 30-54px the same letter-spacing that
+   suits 14px body copy reads loose, so the display line tightens and the
+   line-height comes in with it. `balance` stops the last line orphaning a
+   single word — the one typographic flaw a large heading cannot hide. Both
+   properties degrade to no-ops where unsupported. */
 .reh-h1 {
   font-family: var(--reh-sans);
   font-size: clamp(30px, 5vw, 54px);
   font-weight: 700;
-  letter-spacing: -0.01em;
-  line-height: 1.05;
+  letter-spacing: -0.022em;
+  line-height: 1.03;
   margin: 0 0 10px;
   color: var(--reh-cream);
+  text-wrap: balance;
 }
 .reh-support {
   color: var(--reh-dim);
   margin: 0 0 22px;
   max-width: 52ch;
+  text-wrap: pretty;
 }
 
 .reh-section-title {
@@ -269,8 +362,13 @@
   padding-left: 12px;
 }
 
+/* THE STARTER IS THE PRIMARY PLATE ON THIS PAGE, so it takes the material
+   treatment: the panel colour with `--sheen` stacked over it in one shorthand.
+   No box-shadow — `clip-path` clips the element's painted output, so an outer
+   shadow on a chamfered panel is cut away entirely. The light has to be
+   inside the clip to survive it. */
 .reh-starter {
-  background: var(--reh-panel);
+  background: var(--sheen), var(--reh-panel);
   border: 1px solid var(--reh-line);
   clip-path: var(--reh-chamfer);
   padding: clamp(18px, 3vw, 30px);
@@ -312,6 +410,11 @@
   margin-top: 18px;
 }
 
+/* CONTROLS. Every control on this page now answers the pointer within
+   `--dur-fast` and answers a press without moving: the pressed state deepens
+   the plate instead of nudging it, so nothing shifts under a finger and no
+   feedback is lost when the reader has asked for reduced motion. The blanket
+   reduced-motion rule at the foot of this file removes the transitions. */
 .reh-btn {
   font-family: var(--reh-mono);
   font-size: 11px;
@@ -323,13 +426,29 @@
   color: var(--reh-cream);
   border: 1px solid var(--reh-line);
   cursor: pointer;
+  transition:
+    color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    border-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    background-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    filter var(--dur-fast, 120ms) var(--ease-emphasis, ease);
 }
+.reh-btn:hover:not(:disabled) {
+  border-color: var(--reh-gold-dim);
+  background-color: rgba(255, 255, 255, 0.035);
+}
+.reh-btn:active:not(:disabled) { background-color: rgba(0, 0, 0, 0.28); }
 .reh-btn--primary {
-  background: var(--reh-gold);
+  background: var(--sheen), var(--reh-gold);
   color: var(--reh-bg);
   border-color: var(--reh-gold);
   font-weight: 700;
 }
+.reh-btn--primary:hover:not(:disabled) {
+  background: var(--sheen), var(--reh-gold);
+  border-color: var(--reh-gold);
+  filter: brightness(1.07);
+}
+.reh-btn--primary:active:not(:disabled) { filter: brightness(0.94); }
 .reh-btn--primary:disabled {
   background: transparent;
   color: var(--reh-faint);
@@ -337,6 +456,7 @@
   cursor: not-allowed;
 }
 .reh-btn--ghost { color: var(--reh-dim); }
+.reh-btn--ghost:hover:not(:disabled) { color: var(--reh-cream); }
 .reh-btn:focus-visible,
 .reh-switch-btn:focus-visible,
 .reh-term-btn:focus-visible,
@@ -365,12 +485,15 @@
 
 /* ------------------------------------------------------ right column */
 
+/* Square panels are not chamfered, so they CAN carry an outer shadow — this is
+   the depth `.reh-starter` has to do without. */
 .reh-workforce,
 .reh-research,
 .reh-nextstep {
-  background: var(--reh-panel);
+  background: var(--sheen), var(--reh-panel);
   border: 1px solid var(--reh-line);
   padding: 16px;
+  box-shadow: var(--elev-1);
 }
 .reh-workforce-note {
   font-size: 10px;
@@ -499,16 +622,30 @@
   gap: 14px;
   text-align: left;
   font-family: var(--reh-mono);
-  background: var(--reh-panel);
+  background: var(--sheen), var(--reh-panel);
   color: var(--reh-cream);
   border: 1px solid var(--reh-line);
   padding: 14px;
   cursor: pointer;
   min-height: 44px;
+  box-shadow: var(--elev-1);
+  transition:
+    border-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    background-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    /* Elevation takes the longer band: a shadow that arrives as fast as a
+       border colour reads as a flicker rather than as the plate lifting. */
+    box-shadow var(--dur-base, 180ms) var(--ease-emphasis, ease);
+}
+/* Hover lifts the route by LIGHT, not by position: a list of routes that
+   jump under the pointer is harder to aim at, not more premium. */
+.reh-route:hover {
+  border-color: var(--reh-gold-dim);
+  background-color: var(--reh-panel-2);
+  box-shadow: var(--elev-2);
 }
 .reh-route.is-active {
   border-color: var(--reh-gold);
-  background: var(--reh-panel-2);
+  background: var(--sheen), var(--reh-panel-2);
 }
 .reh-route-number {
   font-size: 20px;
@@ -558,7 +695,7 @@
   }
 }
 .reh-guide-chat {
-  background: var(--reh-panel);
+  background: var(--sheen), var(--reh-panel);
   border: 1px solid var(--reh-line);
   clip-path: var(--reh-chamfer);
   padding: 16px;
@@ -621,7 +758,7 @@
   padding: 1px 5px;
 }
 .reh-msg-text { margin: 6px 0 4px; color: var(--reh-cream); }
-.reh-msg-at { font-size: 9px; color: var(--reh-faint); }
+.reh-msg-at { font-size: 9px; color: var(--reh-faint); font-variant-numeric: tabular-nums; }
 
 .reh-guide-suggested {
   display: flex;
@@ -663,7 +800,7 @@
 /* --------------------------------------------------------- brief draft */
 
 .reh-brief {
-  background: var(--reh-panel);
+  background: var(--sheen), var(--reh-panel);
   border: 1px solid var(--reh-gold-dim);
   clip-path: var(--reh-chamfer);
   padding: 16px;
@@ -754,8 +891,9 @@
   gap: 16px;
   flex-wrap: wrap;
   border: 1px solid var(--reh-line);
-  background: var(--reh-panel);
+  background: var(--sheen), var(--reh-panel);
   padding: 12px 14px;
+  box-shadow: var(--elev-1);
 }
 .reh-recent-main {
   display: flex;
@@ -787,6 +925,9 @@
   letter-spacing: 0.08em;
   color: var(--reh-faint);
   flex-basis: 100%;
+  /* Timestamps and counts stacked down a list: same-width figures keep the
+     column straight. */
+  font-variant-numeric: tabular-nums;
 }
 
 /* -------------------------------------------------------------- footer */
@@ -870,11 +1011,19 @@
   --reh-gold: #e0ab48;
   --reh-gold-dim: rgba(224, 171, 72, 0.4);
   --reh-cream: #f0ecdf;
-  --reh-dim: #a0a4bd;
-  --reh-faint: #737898;
+  /* Lifted with the obsidian tiers, and for the same measured reason: at
+     `#a0a4bd` / `#737898` the tertiary tier scored 3.08:1 on `--reh-panel-2`.
+     The ladder is now 4.53 / 6.62 on that ground. */
+  --reh-dim: #b0b6d4;
+  --reh-faint: #8e95bc;
 }
 [data-relay-colorway='midnight'] .reh-grid-bg {
   background-image:
+    radial-gradient(120% 62% at 50% -8%, rgba(158, 180, 232, 0.08), transparent 62%),
+    radial-gradient(150% 88% at 50% 118%, rgba(6, 8, 18, 0.5), transparent 58%),
     linear-gradient(rgba(158, 180, 232, 0.07) 1px, transparent 1px),
     linear-gradient(90deg, rgba(158, 180, 232, 0.07) 1px, transparent 1px);
+}
+@supports (backdrop-filter: blur(1px)) {
+  [data-relay-colorway='midnight'] .reh-header { background: rgba(27, 33, 56, 0.72); }
 }

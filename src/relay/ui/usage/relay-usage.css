@@ -23,6 +23,11 @@
   border: 1px solid var(--rmc-line);
   cursor: pointer;
 }
+.rus-bar {
+  transition:
+    color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    border-color var(--dur-fast, 120ms) var(--ease-emphasis, ease);
+}
 .rus-bar:hover { border-color: var(--rmc-gold); color: var(--rmc-gold); }
 .rus-bar:focus-visible {
   outline: 2px solid var(--rmc-gold);
@@ -53,6 +58,15 @@
   display: flex;
   justify-content: flex-end;
 }
+/* Same scrim treatment as every other Relay drawer: defocus rather than only
+   darken, so one product opens one way. Guarded — without `backdrop-filter`
+   the flat scrim above stands. */
+@supports (backdrop-filter: blur(1px)) {
+  .rus-overlay {
+    background: rgba(0, 0, 0, 0.46);
+    backdrop-filter: blur(var(--glass-blur-strong, 30px)) saturate(0.9);
+  }
+}
 
 .rus-panel {
   background: var(--rmc-bg);
@@ -64,6 +78,11 @@
   overflow-x: hidden;
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px));
   font-family: var(--rmc-mono);
+  box-shadow: var(--elev-3);
+  scrollbar-width: thin;
+  scrollbar-color: var(--rmc-dim) transparent;
+  /* Costs, tokens and counts down one column: same-width figures. */
+  font-variant-numeric: tabular-nums;
 }
 
 .rus-panel-head {

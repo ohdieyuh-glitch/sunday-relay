@@ -13,7 +13,8 @@
   gap: 1rem;
   padding: 1rem;
   border: 1px solid rgba(217, 164, 65, 0.22);
-  background: rgba(12, 13, 16, 0.72);
+  background: var(--sheen), rgba(12, 13, 16, 0.72);
+  box-shadow: var(--elev-1);
   color: #ece9e2;
   font-family: var(--rpw-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }

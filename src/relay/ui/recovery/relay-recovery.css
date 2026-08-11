@@ -7,7 +7,8 @@
 .rrc {
   border: 1px solid var(--rmc-line);
   border-left: 2px solid var(--rmc-gold);
-  background: var(--rmc-panel);
+  background: var(--sheen), var(--rmc-panel);
+  box-shadow: var(--elev-1);
   color: var(--rmc-text);
   font-family: var(--rmc-mono);
   padding: 12px 14px;
