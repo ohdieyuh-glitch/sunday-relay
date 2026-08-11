@@ -1615,7 +1615,139 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         }
       }
 
-      const review = rec.review as MissionReview;
+      let review = rec.review as MissionReview;
+
+      /* --------------------- STEP 4b — ONE BOUNDED REPAIR, IF REJECTED --- */
+      /**
+       * A REJECTED IMPLEMENTATION GETS EXACTLY ONE CHANCE.
+       *
+       * Relay used to stop here: `review_blocked` mapped straight to `failed`,
+       * the repair vocabulary in `review-repair.ts` had no caller at all, and
+       * a mission a Reviewer could have unblocked in one pass died with three
+       * paid legs behind it.
+       *
+       * THE BOUND IS ONE ATTEMPT AND IT IS NOT A TUNING KNOB. The revision
+       * prompt tells the agent "attempt 2 of at most 2", and an unbounded loop
+       * against a Reviewer that keeps objecting is a way to spend a founder's
+       * money in a circle.
+       *
+       * WHAT MAKES IT A REPAIR RATHER THAN A RETRY: the agent resumes from the
+       * exact bytes the Reviewer read, receives only the blocking findings,
+       * and may still touch only the claimed file. A SECOND review then judges
+       * the result on its own artifact digest — the repair is never assumed to
+       * have worked, which is the same rule that governs the first attempt.
+       */
+      /**
+       * Filtered on the MISSION's finding type rather than through
+       * `openBlockingFindings`, which types `RelayFinding` — a different shape
+       * that carries fields this one does not. Reaching for the domain helper
+       * would have meant a cast, and a cast here would hide exactly the kind of
+       * field mismatch that makes a repair address the wrong thing.
+       */
+      const blocking = review.findings.filter((f) => f.severity === 'blocking');
+      /**
+       * Captured rather than asserted. `canRepair` already proves this is a
+       * string; a non-null assertion below would have made the compiler agree
+       * without the code proving anything, which is how a null reaches a file
+       * write.
+       */
+      const reviewedContent = evidence.claimedFileContent;
+      const canRepair = review.verdict !== 'approved'
+        && blocking.length > 0
+        && reviewedContent !== null;
+
+      if (canRepair && reviewedContent !== null) {
+        append(rec, {
+          role: 'coding_agent',
+          category: 'repair',
+          truth: 'system_notice',
+          headline: `Repair attempt started — ${String(blocking.length)} blocking finding(s).`,
+          detail: 'The Coding Agent resumes from the reviewed result and may address only these '
+            + 'findings, inside the same claimed file. One attempt; a second review decides.',
+        });
+        setPhase(rec, 'coding', 'coding_agent');
+
+        const repair = await callCoding({
+          handoff: codingHandoff,
+          executablePath: runtime?.runtime.executablePath ?? '',
+          capabilities: runtime?.runtime.capabilities ?? HOSTED_PLACEHOLDER_CAPABILITIES,
+          now,
+          ids,
+          baseEnv: config.baseEnv,
+          emit: (e) => append(rec, e),
+          publishTerminal: (t) => { rec.terminal = t; },
+          projectLabel: 'Relay controlled fixture (throwaway repository)',
+          missionId: rec.missionId,
+          missionRevision: rec.missionRevision,
+          ...(hostedCoding
+            ? {
+              invokeAgent: makeHostedInvoker({
+                apiKey: hermesEnv[HOSTED_API_KEY_ENV] ?? architectEnv[HOSTED_API_KEY_ENV] ?? '',
+                requestedModel: hermesEnv[HOSTED_MODEL_ENV] ?? architectEnv[HOSTED_MODEL_ENV] ?? null,
+              }),
+            }
+            : {}),
+          revision: {
+            findingSummaries: blocking.map((f) => `${f.findingId}: ${f.explanation}`),
+            priorContents: { [evidence.changedFiles[0] ?? '']: reviewedContent },
+          },
+        });
+
+        const repaired = repair.evidence;
+        if (repaired !== null && repaired !== undefined) {
+          append(rec, {
+            role: 'relay',
+            category: 'verification',
+            truth: 'relay_evidence',
+            headline: 'Repair verified — Relay re-ran the required tests itself.',
+            detail: `Changed files (Relay-observed): ${repaired.changedFiles.join(', ') || '(none)'}`,
+          });
+
+          const secondOutcome = await callReviewer({
+            packet: {
+              missionId: rec.missionId,
+              missionRevision: rec.missionRevision,
+              originalRequest: rec.originalRequest,
+              handoffJson: JSON.stringify(rec.architectHandoff ?? codingHandoff),
+              acceptanceCriteria: handoff.acceptanceCriteria,
+              allowedFiles: repaired.allowedFiles,
+              prohibitedFiles: repaired.prohibitedFiles,
+              baseRevision: repaired.baseRevision,
+              artifactDigest: repaired.artifactDigest,
+              changedFiles: repaired.changedFiles,
+              unifiedDiff: repaired.unifiedDiff,
+              changedFileContents: repaired.changedFileContents,
+              testCommand: repaired.testCommand,
+              testOutput: repaired.testOutput,
+              relayEvidence: repaired.relayEvidence,
+            },
+            config: hermesConfig,
+            now,
+            transport: reviewerTransport,
+            runId: `${rec.missionId}-review-${String(rec.missionRevision ?? 1)}-repair`,
+          });
+
+          if (secondOutcome.kind === 'reviewed') {
+            append(rec, {
+              role: 'reviewer',
+              category: 'reviewer',
+              truth: 'relay_evidence',
+              headline: `Re-review complete — verdict ${secondOutcome.result.verdict}.`,
+              detail: 'The repair was judged independently, bound to its own artifact digest.',
+            });
+            rec.review = {
+              ...review,
+              verdict: secondOutcome.result.verdict,
+              summary: secondOutcome.result.summary,
+              findings: secondOutcome.result.findings.map((f) => ({ ...f })),
+              requirementsChecked: secondOutcome.result.requirementsChecked.map((r) => ({ ...r })),
+              reviewedArtifactDigest: repaired.artifactDigest,
+            };
+            review = rec.review;
+          }
+        }
+      }
+
       setPhase(rec, 'review_received');
 
       /* ------------------------- STEP 5 — PRODUCTION COMPLETION AUTHORITY */

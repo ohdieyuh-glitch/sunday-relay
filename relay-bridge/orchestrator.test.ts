@@ -1996,3 +1996,130 @@ describe('the Reviewer that reviews is the Reviewer that is attested', () => {
     expect(JSON.stringify(view)).not.toContain('Relay refuses rather than reviewing with one');
   });
 });
+
+/**
+ * A REJECTED IMPLEMENTATION GETS EXACTLY ONE REPAIR.
+ *
+ * Relay used to stop dead at `review_blocked`. The repair vocabulary existed in
+ * `review-repair.ts` with no caller, so a mission a Reviewer could have
+ * unblocked in one pass died with three paid legs behind it — the Architect's
+ * request, the Coding Agent's run, and the Reviewer's own.
+ *
+ * The rules that make this a repair rather than an unbounded retry are the
+ * ones worth testing: it happens only for BLOCKING findings, the agent resumes
+ * from the bytes the Reviewer read, a SECOND review judges the result, and a
+ * repair that still fails is still refused.
+ */
+
+/** A rejection with one BLOCKING finding — the only kind that triggers a repair. */
+const rejectedReview = (): HermesOutcome => ({
+  kind: 'reviewed',
+  startedAt: AT,
+  completedAt: AT,
+  provider: 'xAI',
+  model: 'grok-build-0.1',
+  result: {
+    verdict: 'changes_required',
+    summary: 'The guard is missing.',
+    findings: [{
+      findingId: 'F-1',
+      severity: 'blocking',
+      requirement: 'Refuse unknown schema versions.',
+      explanation: 'No guard exists.',
+      evidence: 'src/normalize.js line 4',
+    }],
+    requirementsChecked: [{ requirement: 'Refuse unknown schema versions', status: 'failed', evidence: 'No guard.' }],
+    parseRepaired: false,
+  },
+});
+
+/** The SAME reviewer, satisfied on the second look. */
+const repairedReview = (): HermesOutcome => ({
+  kind: 'reviewed',
+  startedAt: AT,
+  completedAt: AT,
+  provider: 'xAI',
+  model: 'grok-build-0.1',
+  result: {
+    verdict: 'approved',
+    summary: 'The guard is present now.',
+    findings: [],
+    requirementsChecked: [{ requirement: 'Refuse unknown schema versions', status: 'passed', evidence: 'Guard added.' }],
+    parseRepaired: false,
+  },
+});
+
+/** An APPROVAL carrying an advisory note. Must not trigger a repair. */
+const advisoryReview = (): HermesOutcome => ({
+  kind: 'reviewed',
+  startedAt: AT,
+  completedAt: AT,
+  provider: 'xAI',
+  model: 'grok-build-0.1',
+  result: {
+    verdict: 'approved',
+    summary: 'Fine, with a note.',
+    findings: [{
+      findingId: 'F-1',
+      severity: 'minor',
+      requirement: 'Style.',
+      explanation: 'Could be tidier.',
+      evidence: 'src/normalize.js line 9',
+    }],
+    requirementsChecked: [{ requirement: 'Existing tests pass', status: 'passed', evidence: 'Relay ran the tests.' }],
+    parseRepaired: false,
+  },
+});
+
+describe('the coding agent gets one bounded repair when the reviewer rejects', () => {
+  const rejectThenApprove = () => {
+    let call = 0;
+    return async () => {
+      call += 1;
+      return call === 1
+        ? rejectedReview()
+        : repairedReview();
+    };
+  };
+
+  it('repairs, re-reviews, and COMPLETES when the second review approves', async () => {
+    const h = harness({ reviewer: rejectThenApprove() });
+    const { view } = await runMission(h, LIVE_ENV, 'm-repair-ok', 'live');
+
+    // Two coding runs and two reviews: the repair is real work, judged again.
+    expect(h.calls.coding).toBe(2);
+    expect(h.calls.reviewer).toBe(2);
+    expect(view.state).toBe('verified_complete');
+    const text = JSON.stringify(view);
+    expect(text).toContain('Repair attempt started');
+    expect(text).toContain('Re-review complete');
+  });
+
+  it('REFUSES completion when the repair is rejected too', async () => {
+    // The bound, and the honesty: one attempt, and a second rejection ends it.
+    // A loop that kept going would spend a founder's money in a circle.
+    const h = harness({
+      reviewer: async () => rejectedReview(),
+    });
+    const { view } = await runMission(h, LIVE_ENV, 'm-repair-fail', 'live');
+
+    expect(h.calls.coding).toBe(2);
+    expect(h.calls.reviewer).toBe(2);
+    expect(view.state).toBe('failed');
+    expect(view.error?.code).toBe('review_blocked');
+  });
+
+  it('does NOT repair when the findings are not blocking', async () => {
+    // An approved review with advisory findings is a completion, not a repair.
+    // Repairing here would spend money to address something nobody blocked on.
+    const h = harness({
+      reviewer: async () => advisoryReview(),
+    });
+    const { view } = await runMission(h, LIVE_ENV, 'm-repair-none', 'live');
+
+    expect(h.calls.coding).toBe(1);
+    expect(h.calls.reviewer).toBe(1);
+    expect(view.state).toBe('verified_complete');
+    expect(JSON.stringify(view)).not.toContain('Repair attempt started');
+  });
+});
