@@ -484,8 +484,33 @@ export async function runCodingMission(input: {
     // the prompt this one invocation receives. A prompt that does not carry the
     // architect's objective is a wiring defect, not something to paper over.
     outcome.deliveredHandoffDigest = codingHandoffDigest(input.handoff);
-    if (input.handoff.objective.trim() && !prompt.includes(input.handoff.objective.trim())) {
-      return stop('The compiled prompt did not carry the Prompt Architect handoff.');
+
+    /**
+     * DELIVERY PROOF, AGAINST WHAT EACH PROMPT IS SUPPOSED TO CARRY.
+     *
+     * A first attempt must carry the architect's objective; a prompt that does
+     * not is a wiring defect rather than something to paper over.
+     *
+     * A REPAIR PROMPT MUST NOT. `compileRevisionPrompt` is deliberately narrow
+     * — "do not restart or broaden the task", findings only — so it never
+     * restates the objective. Applying the first-attempt check to it stopped
+     * every repair in production with "The compiled prompt did not carry the
+     * Prompt Architect handoff", which was true and was not a defect: the
+     * check was asking the wrong question of the right prompt.
+     *
+     * The equivalent proof for a repair is that it carries the findings it
+     * exists to address. A repair prompt missing them would send the agent
+     * back to work with nothing to fix.
+     */
+    if (input.revision === undefined) {
+      if (input.handoff.objective.trim() && !prompt.includes(input.handoff.objective.trim())) {
+        return stop('The compiled prompt did not carry the Prompt Architect handoff.');
+      }
+    } else {
+      const undelivered = input.revision.findingSummaries.filter((f) => !prompt.includes(f));
+      if (undelivered.length > 0) {
+        return stop('The repair prompt did not carry the reviewer findings it must address.');
+      }
     }
 
     emit({
