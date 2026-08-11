@@ -88,6 +88,45 @@ describe('the paired session rides on every mission call', () => {
   });
 });
 
+describe('the bridge URL means the bridge, everywhere', () => {
+  /**
+   * THE DEFECT THAT COST THE FOUNDER A DAY. `VITE_RELAY_BRIDGE_URL` is the
+   * bridge HOST; the pairing flow appends `/relay-api` itself and worked. This
+   * adapter used the same value as the full API base, so the deployed site
+   * POSTed `/mission/start` to the host root — 404 on every mission call ever
+   * made from production, behind a valid control session, on a healthy
+   * bridge. These pin the one meaning.
+   */
+  const urlSeen = async (bridgeBaseUrl?: string): Promise<string> => {
+    let url = '';
+    const adapter = createLiveRelayApplicationAdapter({
+      bridgeBaseUrl,
+      fetchImpl: (async (u: RequestInfo | URL) => { url = String(u); return okView(); }) as typeof fetch,
+    });
+    await adapter.startMission?.({ mission: mission(), project, settings });
+    return url;
+  };
+
+  it('a bare host — the value production actually ships — reaches the API', async () => {
+    expect(await urlSeen('https://bridge.example.railway.app'))
+      .toBe('https://bridge.example.railway.app/relay-api/mission/start');
+  });
+
+  it('a base already carrying /relay-api is not doubled', async () => {
+    expect(await urlSeen('https://bridge.example.railway.app/relay-api'))
+      .toBe('https://bridge.example.railway.app/relay-api/mission/start');
+  });
+
+  it('the same-origin dev default is unchanged', async () => {
+    expect(await urlSeen(undefined)).toBe('/relay-api/mission/start');
+  });
+
+  it('a trailing slash on the host does not break the path', async () => {
+    expect(await urlSeen('https://bridge.example.railway.app/'))
+      .toBe('https://bridge.example.railway.app/relay-api/mission/start');
+  });
+});
+
 describe('each refusal is its own fact', () => {
   const adapterAnswering = (status: number) =>
     createLiveRelayApplicationAdapter({
