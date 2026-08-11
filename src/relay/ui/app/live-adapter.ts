@@ -63,7 +63,19 @@ export function createLiveRelayApplicationAdapter(config: {
    */
   participantId?: string;
 } = {}): RelayApplicationAdapter {
-  const base = (config.bridgeBaseUrl ?? RELAY_BRIDGE_API_BASE).replace(/\/$/, '');
+  const configured = (config.bridgeBaseUrl ?? RELAY_BRIDGE_API_BASE).replace(/\/$/, '');
+  /**
+   * ONE MEANING FOR THE ONE VARIABLE. `VITE_RELAY_BRIDGE_URL` names the
+   * bridge — a host — and the pairing flow appends `/relay-api` itself. This
+   * module treated the same variable as the full API base, so the deployed
+   * website POSTed `/mission/start` to the HOST ROOT: 404 for every mission
+   * call ever made from production, while pairing on the same page worked.
+   * A founder held a valid control session and a healthy bridge and could not
+   * start a mission, because two modules read one variable two ways — the
+   * same cross-component-contract defect class as #99, #103 and #112, in the
+   * browser this time.
+   */
+  const base = configured.endsWith('/relay-api') ? configured : `${configured}/relay-api`;
   const doFetch: typeof fetch =
     config.fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
 
