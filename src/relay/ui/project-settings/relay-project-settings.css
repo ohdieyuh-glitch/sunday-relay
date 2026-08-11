@@ -41,8 +41,8 @@
   background-image:
     radial-gradient(120% 58% at 50% -10%, rgba(217, 164, 65, 0.05), transparent 62%),
     radial-gradient(150% 90% at 50% 120%, rgba(0, 0, 0, 0.5), transparent 58%),
-    linear-gradient(rgba(217, 164, 65, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(217, 164, 65, 0.04) 1px, transparent 1px);
+    linear-gradient(rgba(217, 164, 65, 0.04) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(217, 164, 65, 0.04) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
   background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
   z-index: 0;
 }
@@ -541,8 +541,8 @@
 }
 [data-relay-colorway='midnight'] .rps-grid-bg {
   background-image:
-    linear-gradient(rgba(158, 180, 232, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(158, 180, 232, 0.07) 1px, transparent 1px);
+    linear-gradient(rgba(158, 180, 232, 0.07) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(158, 180, 232, 0.07) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
   /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
      `background-size` is positional: the base rule declares four image layers
      and four sizes, this override declares two, and CSS truncates the size list

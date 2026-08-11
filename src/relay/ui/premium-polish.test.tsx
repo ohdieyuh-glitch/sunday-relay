@@ -751,3 +751,244 @@ describe('the sheen does not eat the contrast the ladder guarantees', () => {
     expect(Math.max(...alphas)).toBeLessThanOrEqual(0.02);
   });
 });
+
+/**
+ * `@supports` ADDS NO SPECIFICITY, AND THAT IS A TRAP WITH A HISTORY.
+ *
+ * `@supports` is a CONDITIONAL GROUP RULE — a container, not a compound
+ * selector — so `@supports (...) { .x { background: A } }` and a plain
+ * `.x { background: B }` are BOTH specificity (0,1,0). Source order decides,
+ * and the flat rule usually comes later because the enhancement gets written
+ * first and the base rule grows afterwards.
+ *
+ * The failure is quiet in the worst way: `background` is overridden and
+ * `backdrop-filter` is NOT, because the flat rule never mentions it. The
+ * element keeps a blur compositing layer and loses the translucency the blur
+ * existed to pair with — it pays the whole cost of glass and renders none of
+ * it. Nothing errors, nothing looks obviously broken, and it survived review
+ * once here already: `.rpv-devchip` and `.rpv-notice` in `relay-preview.css`
+ * were both dead this way while `.rpv-switcher`, declared above the block,
+ * worked — so a spot-check of "does the glass work" could pass on the one
+ * subject that happened to be ordered correctly.
+ *
+ * Scanned across EVERY Relay stylesheet rather than asserted on the three
+ * selectors that were wrong, because the mistake is a property of how
+ * `@supports` is specified and will recur wherever the next one is written.
+ */
+describe('an @supports enhancement cannot be silently outranked by a later flat rule', () => {
+  /** Declarations inside a block, as [property, value]. Shorthand-blind on
+   *  purpose: an exact property match is the sound, no-false-positive check. */
+  const declarationsIn = (body: string): string[] =>
+    [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]);
+
+  /** Selectors of a rule head, split and trimmed. */
+  const selectorsIn = (head: string): string[] =>
+    head.split(',').map((s) => s.trim()).filter((s) => s !== '');
+
+  it('declares every @supports property below the flat rules for the same selector', () => {
+    const losses: string[] = [];
+
+    for (const sheet of SHEETS) {
+      /**
+       * COMMENTS ARE STRIPPED FIRST, and this is not cosmetic. A selector head
+       * is matched as "the run of text before `{`", so a comment sitting above
+       * a rule becomes part of the captured selector and the exact-string
+       * comparison below stops matching. The first version of this scanner did
+       * not strip, and caught `.rpv-notice` while missing `.rpv-devchip` —
+       * which is preceded by a comment — in a mutation where BOTH were broken.
+       * A scanner that finds half its subjects reads exactly like one that
+       * works.
+       */
+      const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
+      // Find each @supports block and its balanced extent.
+      for (const opener of [...css.matchAll(/@supports[^{]*\{/g)]) {
+        const bodyStart = (opener.index as number) + opener[0].length;
+        let depth = 1;
+        let i = bodyStart;
+        while (i < css.length && depth > 0) {
+          if (css[i] === '{') depth += 1;
+          else if (css[i] === '}') depth -= 1;
+          i += 1;
+        }
+        const body = css.slice(bodyStart, i - 1);
+        const after = css.slice(i);
+
+        // What the enhancement claims, per selector.
+        const claims = new Map<string, Set<string>>();
+        for (const rule of body.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+          for (const selector of selectorsIn(rule[1])) {
+            const set = claims.get(selector) ?? new Set<string>();
+            for (const property of declarationsIn(rule[2])) set.add(property);
+            claims.set(selector, set);
+          }
+        }
+
+        // Anything AFTER the block, at the top level, re-declaring the same
+        // property for the SAME selector string. Same string ⇒ same
+        // specificity, so later wins outright — no specificity maths needed,
+        // and no false positive from a more-specific selector legitimately
+        // overriding.
+        for (const rule of after.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
+          for (const selector of selectorsIn(rule[1])) {
+            const claimed = claims.get(selector);
+            if (claimed === undefined) continue;
+            for (const property of declarationsIn(rule[2])) {
+              if (claimed.has(property)) {
+                losses.push(`${sheet.name}: "${selector}" re-declares "${property}" after the @supports that sets it`);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    expect(losses, losses.join('\n')).toEqual([]);
+  });
+});
+
+/**
+ * A RETINA PASS THAT A COLOURWAY OUTRANKS IS A RETINA PASS THAT DOES NOTHING.
+ *
+ * `@media` adds no specificity — the same property `@supports` has, and the
+ * same trap. A retina block written as `.reh-grid-bg` is (0,1,0); Relay's
+ * colourway overrides are `[data-relay-colorway='x'] .reh-grid-bg`, which is
+ * (0,2,0). The override wins at every resolution, so the sharpening was dead
+ * on midnight and manual — while working on obsidian, the default, which is
+ * where it would be checked.
+ *
+ * The fix was to stop competing: `--grid-stop` resolves on `:root` and every
+ * grid rule inherits it, colourway overrides included. This guard holds that
+ * shape — hairline widths come from the token, and no rule re-litigates them
+ * inside a resolution query where specificity decides the winner.
+ */
+describe('HD sharpening cannot be outranked by a colourway', () => {
+  const GRID = /\.(reh|rpw|rps)-grid-bg\b/;
+
+  /** Every `name(...)` span, parenthesis-balanced so nested `rgba(...)` and
+   *  `var(...)` do not truncate it. */
+  const balancedCalls = (text: string, name: string): string[] => {
+    const out: string[] = [];
+    let from = 0;
+    for (;;) {
+      const start = text.indexOf(`${name}(`, from);
+      if (start === -1) return out;
+      let depth = 0;
+      let i = start + name.length;
+      for (; i < text.length; i += 1) {
+        if (text[i] === '(') depth += 1;
+        else if (text[i] === ')') { depth -= 1; if (depth === 0) { i += 1; break; } }
+      }
+      out.push(text.slice(start, i));
+      from = i;
+    }
+  };
+
+  it('declares every grid hairline through the --grid-stop token', () => {
+    const raw: string[] = [];
+    for (const sheet of SHEETS) {
+      const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const rule of css.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
+        if (!GRID.test(rule[1])) continue;
+        /**
+         * A bare `1px` stop inside a linear-gradient is the un-tokenised form.
+         * Extracted with a BALANCED scan, not `linear-gradient\([^;]*?\)` —
+         * that stops at the first `)`, which belongs to the `rgba(...)` colour,
+         * so the span it returns ends BEFORE the stop width it is looking for.
+         * Written that way this test passed against a hard-coded hairline.
+         */
+        for (const gradient of balancedCalls(rule[2], 'linear-gradient')) {
+          if (/\b1px\b/.test(gradient) && !gradient.includes('--grid-stop')) {
+            raw.push(`${sheet.name}: "${rule[1].trim()}" hard-codes a 1px hairline`);
+          }
+        }
+      }
+    }
+    expect(raw, raw.join('\n')).toEqual([]);
+  });
+
+  it('resolves --grid-stop at :root, where no colourway selector can outrank it', () => {
+    const tokens = read('relay-tokens.css');
+    expect(tokens).toMatch(/--grid-stop:\s*1px/);
+    const retina = /@media \(min-resolution: 2dppx\) \{\s*:root \{\s*--grid-stop:\s*0\.5px/;
+    expect(tokens, '--grid-stop must be re-resolved on :root at 2dppx').toMatch(retina);
+  });
+
+  it('leaves no resolution query redeclaring a grid background', () => {
+    /**
+     * The regression this closes: reintroducing a per-rule retina block would
+     * pass the two tests above (the token would still exist) and still lose to
+     * a colourway override for whatever it redeclared.
+     */
+    const offenders: string[] = [];
+    for (const sheet of SHEETS) {
+      const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const opener of css.matchAll(/@media[^{]*min-resolution[^{]*\{/g)) {
+        const start = (opener.index as number) + opener[0].length;
+        let depth = 1;
+        let i = start;
+        while (i < css.length && depth > 0) {
+          if (css[i] === '{') depth += 1;
+          else if (css[i] === '}') depth -= 1;
+          i += 1;
+        }
+        const body = css.slice(start, i - 1);
+        for (const rule of body.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+          if (GRID.test(rule[1])) {
+            offenders.push(`${sheet.name}: "${rule[1].trim()}" is restyled inside a resolution query`);
+          }
+        }
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
+  });
+});
+
+/**
+ * A PANEL BACKGROUND MUST NOT FALL BACK TO NOTHING.
+ *
+ * `background: var(--sheen), var(--surface, transparent)` fails INVISIBLY: if
+ * the token is renamed or dropped, the rule still parses, the sheen still
+ * paints, and the panel becomes a faint gradient over whatever is behind it —
+ * with its text still styled for an opaque ground. `.rsbp` shipped that way as
+ * the only consumer of `--surface`.
+ *
+ * A missing background token should be conspicuous, not quietly survivable.
+ */
+describe('a background token never falls back to transparent', () => {
+  /** Split a CSS value on commas that are NOT inside parentheses. */
+  const topLevelLayers = (value: string): string[] => {
+    const out: string[] = [];
+    let depth = 0;
+    let current = '';
+    for (const ch of value) {
+      if (ch === '(') depth += 1;
+      else if (ch === ')') depth -= 1;
+      if (ch === ',' && depth === 0) { out.push(current); current = ''; continue; }
+      current += ch;
+    }
+    out.push(current);
+    return out;
+  };
+
+  it('has no background declaration whose var() fallback is transparent', () => {
+    const bad: string[] = [];
+    for (const sheet of SHEETS) {
+      const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const declaration of css.matchAll(/background(?:-color|-image)?\s*:\s*([^;}]+)/g)) {
+        /**
+         * Only TOP-LEVEL layers. `radial-gradient(circle, var(--glow,
+         * transparent), transparent 70%)` is correct — a missing glow SHOULD
+         * resolve to no glow. The defect is a whole background layer that can
+         * vanish, leaving text styled for a ground that is not painted, so the
+         * value is split on top-level commas and each layer checked alone.
+         */
+        for (const layer of topLevelLayers(declaration[1])) {
+          if (/^var\(\s*--[\w-]+\s*,\s*transparent\s*\)$/.test(layer.trim())) {
+            bad.push(`${sheet.name}: ${declaration[0].trim().slice(0, 90)}`);
+          }
+        }
+      }
+    }
+    expect(bad, bad.join('\n')).toEqual([]);
+  });
+});

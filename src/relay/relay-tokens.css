@@ -133,6 +133,29 @@
   --ease-emphasis: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur-fast: 120ms;
   --dur-base: 180ms;
+
+  /* ---- HD / retina hairlines ----
+     The width of ONE technical grid line. A 1px gradient stop is TWO device
+     pixels at 2dppx, so the grid coarsens on exactly the displays that should
+     render it finest.
+
+     THIS IS A TOKEN RATHER THAN A MEDIA QUERY PER RULE, and the reason is
+     specificity. `@media` adds NONE — it is a conditional group rule, the same
+     as `@supports` — so a retina block written as `.reh-grid-bg` (0,1,0) is
+     outranked by `[data-relay-colorway='midnight'] .reh-grid-bg` (0,2,0)
+     whatever the display. Two of Relay's colourways override the grid that
+     way, so per-rule retina passes silently did nothing on them, and Project
+     Settings had no retina pass at all. Resolving a token on `:root` sidesteps
+     the contest completely: every grid rule inherits it, colourway overrides
+     included, and a new colourway gets it for free. */
+  --grid-stop: 1px;
+}
+
+/* Set ONCE, for every surface and every colourway. */
+@media (min-resolution: 2dppx) {
+  :root {
+    --grid-stop: 0.5px;
+  }
 }
 
 /* ==========================================================================

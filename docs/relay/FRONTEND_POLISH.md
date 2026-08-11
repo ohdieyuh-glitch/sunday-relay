@@ -20,7 +20,7 @@ colours. Three colorways were carrying **text below the WCAG AA floor**:
 
 | Colorway / surface | Tier | Was | Measured | Now | Measured |
 |---|---|---|---|---|---|
-| obsidian (`.reh`, `.rpw`, `.rps`, chrome, Mission Control) | tertiary | `#5d584e` | **2.83:1** on the field, **2.67:1** on `panel-2` | `#837c6e` | 4.84 / 4.56 |
+| obsidian (`.reh`, `.rps`, `.rpw`, live-reach, dev preview) | tertiary | `#5d584e` | **2.83:1** on the field, **2.67:1** on `panel-2` | `#837c6e` | 4.84 / 4.56 |
 | obsidian | secondary | `#8b8578` | 5.46 | `#a09a8c` | 7.15 |
 | midnight | tertiary | `#737898` | **3.08:1** on `panel-2` | `#8e95bc` | 4.53 |
 | midnight | secondary | `#a0a4bd` | 5.39 | `#b0b6d4` | 6.62 |
@@ -38,8 +38,16 @@ Notes on the judgement calls:
   accessibility failure for a legibility one. `premium-polish.test.tsx` now
   enforces both: AA on every ground, *and* each step at least 1.2× the ratio of
   the step below.
-- **The hues did not change.** Only the values were lifted, so the warm-gray
-  obsidian ladder and the slate-indigo midnight ladder are the same colours.
+- **The HUES did not change; two of the saturations did.** Every hue angle is
+  identical before and after — the ladder is still warm-gray on obsidian and
+  slate-indigo on midnight. But lifting a value in HSL while holding the hex
+  channel spread moves saturation too, and on midnight it moved a long way:
+  `#737898` → `#8e95bc` is roughly a 65% relative saturation increase
+  (≈13% → ≈22% HSL), and obsidian's `#5d584e` → `#837c6e` a smaller one. The
+  earlier wording here said "the same colours", which was wrong in a way worth
+  correcting rather than softening: midnight's tertiary tier reads
+  perceptibly more violet than it did, and that was a consequence of the
+  contrast work rather than a decision anyone made.
 - **RELAY MANUAL's black system areas were already fine** (7.79:1) and are
   untouched. Only the ivory technical-manual areas moved, and they moved
   *downward* in lightness rather than up, because on a cream ground there is no
@@ -337,9 +345,55 @@ untouched and the vignette structurally safe; the Relay Dog untouched; no new
 keyframe, animation, transform, `overflow` or `position: fixed`; the collision
 allow-list byte-identical with all six reasons still true.
 
-Four Medium and three Low findings remain open and are recorded in the review
-rather than repaired here: the `@supports`-below-flat ordering in
-`relay-preview.css`, the retina pass being outranked by colorway overrides, the
-`--surface` palette token crossing into `.rsbp`, the tertiary-row surface list in
-§1, the "hues did not change" wording (midnight gained ~65% relative saturation),
-aged gold on cream at 4.37 (pre-existing), and an unused `.rpb-specular` hook.
+## Review round 2 — the remaining findings, all closed
+
+The independent review returned 3 High, 4 Medium and 3 Low and marked the
+change NOT MERGEABLE. The Highs were repaired first; this section records the
+rest, which are now closed too.
+
+**Three of them were the same bug wearing different clothes**, and that is the
+most useful thing to carry forward: `@supports`, `@media` and a colourway
+attribute selector all interact through specificity, and **conditional group
+rules contribute none**. `@supports (...) { .x { … } }` is exactly as specific
+as `.x`, so source order decides; `@media (min-resolution: 2dppx) { .x { … } }`
+is exactly as specific as `.x`, so `[data-relay-colorway='midnight'] .x` beats
+it at every resolution. Both failures are silent, and both were invisible on
+obsidian — the default, and therefore the one a spot-check looks at.
+
+| # | Finding | Repair |
+|---|---|---|
+| M1 | `@supports` glass block sat ABOVE the flat rules; `.rpv-devchip` and `.rpv-notice` kept `backdrop-filter` and their 0.95 fill — a blur layer behind an opaque background | Block moved below every flat rule. Guard scans **all** stylesheets for any selector re-declaring a property after the `@supports` that sets it |
+| M2 | Retina grid pass at (0,1,0) outranked by colourway overrides at (0,2,0) on midnight and manual; `.rps-grid-bg` had no retina pass at all | Hairline width hoisted to a `--grid-stop` token resolved on `:root`, so every grid rule inherits it and no override can outrank it. Three guards |
+| M3 | `.rsbp` was the sole consumer of `--surface`, with a `transparent` fallback — a renamed token would render a sheen over nothing, text still styled for an opaque ground | Uses `--surface-solid` like every other Relay panel. Guard rejects any **top-level** background layer whose `var()` falls back to `transparent` |
+| M4 | Doc overstated which surfaces the tertiary row covers | Corrected in §1 |
+| L1 | "The hues did not change" — midnight gained ~65% relative saturation | Corrected above, with the measurement |
+| L2 | Aged gold on cream at 4.37:1 | **Pre-existing, NOT introduced here, and deliberately not repaired** — see below |
+| L3 | `.rpb-specular` className styled by nothing and used by no test | Removed. The gradient `id` of the same stem is real and stays |
+
+**L2 is left open on purpose.** Aged gold on cream measures 4.37:1, below the
+4.5 floor. It predates this change, the polish pass did not touch either
+colour, and fixing it means moving a brand colour — a decision about Relay's
+identity, which this pass was explicitly scoped not to redesign. It is recorded
+here rather than quietly repaired or quietly dropped.
+
+### What the mutation proofs caught in my own checks
+
+Three of the new guards did not work the first time, and each failed the same
+way — a scanner that appeared to pass because it could not see its subject:
+
+- The `@supports` scanner treated the text before `{` as the selector, so a
+  rule preceded by a comment never matched. It reported `.rpv-notice` and
+  missed `.rpv-devchip` in a mutation where **both** were broken. Comments are
+  now stripped first.
+- The hairline scanner used `linear-gradient\([^;]*?\)`, which stops at the
+  first `)` — the one closing `rgba(…)` — so the span it examined ended before
+  the stop width it was looking for. It passed against a hard-coded hairline.
+  Now a balanced-parenthesis scan.
+- The transparent-fallback guard flagged
+  `radial-gradient(circle, var(--glow, transparent), …)`, where transparent is
+  the *correct* fallback. Now split on top-level commas so only whole layers
+  are judged.
+
+Restoring those mutations with `git checkout <file>` also reverted legitimate
+edits in the same file, which is how a real un-tokenised hairline briefly
+survived. Mutations are reverted from a saved copy, not from the index.

@@ -71,8 +71,8 @@
   background-image:
     radial-gradient(120% 62% at 50% -8%, rgba(217, 164, 65, 0.06), transparent 62%),
     radial-gradient(150% 88% at 50% 118%, rgba(0, 0, 0, 0.5), transparent 58%),
-    linear-gradient(rgba(217, 164, 65, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(217, 164, 65, 0.045) 1px, transparent 1px);
+    linear-gradient(rgba(217, 164, 65, 0.045) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(217, 164, 65, 0.045) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
   background-size: 100% 100%, 100% 100%, 44px 44px, 44px 44px;
   z-index: 0;
 }
@@ -91,17 +91,11 @@
   z-index: 1;
 }
 
-/* HD / RETINA SHARPNESS. A 1px gradient stop is TWO device pixels at 2dppx, so
-   the grid and the grain both coarsen on exactly the displays that should show
-   them finest. Halving the stops puts each line back on one device pixel. */
+/* HD / RETINA — SCANLINES ONLY. The technical grid is handled by the
+   `--grid-stop` token on `:root`, which no colourway override can outrank;
+   see relay-tokens.css. The scanline overlay is not colourway-overridden,
+   so it stays a direct rule. */
 @media (min-resolution: 2dppx) {
-  .reh-grid-bg {
-    background-image:
-      radial-gradient(120% 62% at 50% -8%, rgba(217, 164, 65, 0.06), transparent 62%),
-      radial-gradient(150% 88% at 50% 118%, rgba(0, 0, 0, 0.5), transparent 58%),
-      linear-gradient(rgba(217, 164, 65, 0.05) 0.5px, transparent 0.5px),
-      linear-gradient(90deg, rgba(217, 164, 65, 0.05) 0.5px, transparent 0.5px);
-  }
   .reh-scanlines {
     background: repeating-linear-gradient(
       0deg,
@@ -112,7 +106,6 @@
     );
   }
 }
-
 .reh > header,
 .reh > main,
 .reh > footer {
@@ -1021,8 +1014,8 @@
   background-image:
     radial-gradient(120% 62% at 50% -8%, rgba(158, 180, 232, 0.08), transparent 62%),
     radial-gradient(150% 88% at 50% 118%, rgba(6, 8, 18, 0.5), transparent 58%),
-    linear-gradient(rgba(158, 180, 232, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(158, 180, 232, 0.07) 1px, transparent 1px);
+    linear-gradient(rgba(158, 180, 232, 0.07) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(158, 180, 232, 0.07) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
 }
 @supports (backdrop-filter: blur(1px)) {
   [data-relay-colorway='midnight'] .reh-header { background: rgba(27, 33, 56, 0.72); }

@@ -240,7 +240,11 @@
   border-radius: var(--radius-md, 4px);
   margin: 0;
   padding: 12px 14px 14px;
-  background: var(--sheen), var(--surface, transparent);
+  /* `--surface-solid`, the token every other Relay panel uses. This rule was
+     the ONE consumer of `--surface` — a translucent, obsidian-tuned value — and
+     the fallback was `transparent`, so if the token were ever renamed the panel
+     would render as a sheen over nothing rather than fail visibly. */
+  background: var(--sheen), var(--surface-solid);
   box-shadow: var(--elev-1);
 }
 

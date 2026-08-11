@@ -76,8 +76,8 @@
 }
 [data-relay-colorway='manual'] .reh-grid-bg {
   background-image:
-    linear-gradient(rgba(27, 28, 23, 0.55) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(27, 28, 23, 0.55) 1px, transparent 1px);
+    linear-gradient(rgba(27, 28, 23, 0.55) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(27, 28, 23, 0.55) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
   /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
      `background-size` is positional: the base rule declares four image layers
      and four sizes, this override declares two, and CSS truncates the size list
@@ -163,8 +163,8 @@
 }
 [data-relay-colorway='manual'] .rps-grid-bg {
   background-image:
-    linear-gradient(rgba(214, 211, 196, 0.6) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(214, 211, 196, 0.6) 1px, transparent 1px);
+    linear-gradient(rgba(214, 211, 196, 0.6) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(214, 211, 196, 0.6) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
   /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
      `background-size` is positional: the base rule declares four image layers
      and four sizes, this override declares two, and CSS truncates the size list
@@ -214,8 +214,8 @@
 }
 [data-relay-colorway='manual'] .rpw-grid-bg {
   background-image:
-    linear-gradient(rgba(27, 28, 23, 0.55) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(27, 28, 23, 0.55) 1px, transparent 1px);
+    linear-gradient(rgba(27, 28, 23, 0.55) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(27, 28, 23, 0.55) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
   /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
      `background-size` is positional: the base rule declares four image layers
      and four sizes, this override declares two, and CSS truncates the size list

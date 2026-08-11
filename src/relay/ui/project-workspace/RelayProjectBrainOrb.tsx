@@ -135,8 +135,8 @@ export function RelayProjectBrainOrb({
           <path d="M47 63 L47 74 Q50 78 53 74 L53 62 Z" fill={`url(#${surface})`} />
           {/* The specular pass, over the fills and under the edge light, so the
               masses are lit before they are outlined. */}
-          <ellipse cx="43" cy="46" rx="21" ry="19" fill={`url(#${specular})`} className="rpb-specular" />
-          <ellipse cx="60" cy="47" rx="17" ry="17" fill={`url(#${specular})`} className="rpb-specular" />
+          <ellipse cx="43" cy="46" rx="21" ry="19" fill={`url(#${specular})`} />
+          <ellipse cx="60" cy="47" rx="17" ry="17" fill={`url(#${specular})`} />
           {/* Edge light: the accent reads as the object's own energy rather
               than a stroke drawn around it. */}
           <ellipse cx="43" cy="46" rx="21" ry="19" fill="none"
