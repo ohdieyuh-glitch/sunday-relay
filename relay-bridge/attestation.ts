@@ -58,6 +58,66 @@ export function isPaidApiCall(a: ExecutionAttestation | undefined): boolean {
   return Boolean(a && attestsRealExecution(a) && a.billingPath === 'api_billed');
 }
 
+/**
+ * THE REGISTRY'S BILLING WORD, TRANSLATED INTO THE ATTESTATION'S.
+ *
+ * Two unions describe the same fact with different vocabularies: an occupant
+ * is registered `api`, and the attestation that names it says `api_billed`,
+ * which is the value `isPaidApiCall` tests for. Translated, never aliased.
+ *
+ * This lives here because it was previously an inline ternary in the coding
+ * leg and a hard-coded literal in the reviewer leg, and the literal was wrong:
+ * every hosted review attested `subscription` while the occupant that ran was
+ * registered `api`. Two legs deciding one fact by different means is how they
+ * came to disagree, so now there is one means.
+ *
+ * An occupant Relay could not resolve yields `unknown` — never a default, and
+ * never the cheaper-sounding of the two.
+ */
+export function occupantBillingPath(
+  registered: 'subscription' | 'api' | 'none' | 'unknown' | undefined,
+): Extract<BillingPath, 'api_billed' | 'subscription' | 'simulated' | 'unknown'> {
+  switch (registered) {
+    case 'api': return 'api_billed';
+    case 'none': return 'simulated';
+    case 'subscription': return 'subscription';
+    default: return 'unknown';
+  }
+}
+
+/**
+ * THE OPERATOR'S OWN DECLARATION, WHICH WAS DOCUMENTED AND THEN IGNORED.
+ *
+ * `.env.example` offers `RELAY_HERMES_BILLING_MODE` under the heading "the
+ * reviewer's provider, model and billing mode are separate facts and must each
+ * be reported truthfully. Do not infer billing" — and nothing has ever read it.
+ * A documented control that does nothing is its own false claim: an operator
+ * who set it correctly still got the literal.
+ *
+ * It outranks the registry because the registry describes a product and the
+ * operator knows their own account; an occupant registered `api` really can be
+ * run against a subscription. What Relay may never do is INVENT the answer,
+ * which is exactly what it was doing.
+ *
+ * An unset variable returns null so the caller falls back to the registry, and
+ * an unrecognized value returns `'unknown'` rather than being ignored — a
+ * misspelling must not silently read as agreement with whatever the fallback
+ * would have said.
+ */
+export function declaredBillingPath(
+  declared: string | undefined,
+): Extract<BillingPath, 'api_billed' | 'subscription' | 'portal' | 'local' | 'unknown'> | null {
+  const value = (declared ?? '').trim().toLowerCase();
+  if (value === '') return null;
+  switch (value) {
+    case 'api_billed': return 'api_billed';
+    case 'subscription': return 'subscription';
+    case 'portal': return 'portal';
+    case 'local': return 'local';
+    default: return 'unknown';
+  }
+}
+
 /** Was the role performed by the actor we asked for? */
 export function actorMatches(a: ExecutionAttestation | undefined): boolean {
   return Boolean(a && a.requestedActor === a.actualActor && a.requestedRuntime === a.actualRuntime);

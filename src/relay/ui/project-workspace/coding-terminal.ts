@@ -287,6 +287,7 @@ export const BILLING_LABEL: Readonly<Record<CodingTerminalAttestation['billingPa
   Object.freeze({
     subscription: 'SUBSCRIPTION',
     api_billed: 'API PAID',
+    portal: 'PORTAL',
     local: 'NOT BILLED',
     simulated: 'SIMULATED — NO SPEND',
     unknown: 'UNKNOWN',
@@ -339,6 +340,12 @@ export function buildRoleBilling(input: {
   codingAttestation?: CodingTerminalAttestation | null;
   reviewerProvider?: string | null;
   reviewerModel?: string | null;
+  /**
+   * What the review cost, from the occupant that ran. Absent means the mission
+   * has not said, which renders UNKNOWN — this row used to assert SUBSCRIPTION
+   * whatever happened.
+   */
+  reviewerBilling?: CodingTerminalAttestation['billingPath'] | null;
   reviewerRan?: boolean;
   reviewerApproved?: boolean;
 }): RoleBillingRow[] {
@@ -390,13 +397,28 @@ export function buildRoleBilling(input: {
       // to — never a guess, and Hermes itself is never called a model.
       runtime: [
         'Hermes Agent runtime',
-        `${sanitizeTerminalLine(input.reviewerProvider ?? 'Anthropic', 40)} provider`,
+        /**
+         * NO DEFAULT PROVIDER. This read `?? 'Anthropic'`, so a review whose
+         * provider Relay did not know was shown to the founder as Anthropic —
+         * while the configured Reviewer runs on xAI. A guess in the position
+         * where the answer belongs is worse than the absence it replaces.
+         */
+        `${sanitizeTerminalLine(input.reviewerProvider ?? 'Unknown', 40)} provider`,
         input.reviewerModel ? sanitizeTerminalLine(input.reviewerModel, 60) : null,
       ]
         .filter((part): part is string => Boolean(part))
         .join(' · '),
-      // Subscription-backed by design — never API PAID, and never a blocker.
-      billingLabel: 'SUBSCRIPTION',
+      /**
+       * FROM THE OCCUPANT THAT RAN, like every other row here.
+       *
+       * This was the literal `'SUBSCRIPTION'`, three lines below the note
+       * explaining that the coding row's literals "were true while one surface
+       * could ever run". The same thing had already happened here: the bound
+       * Reviewer is registered `billingPath: 'api'` and reviews on an xAI API
+       * key, so the founder's own billing row told them a paid review was
+       * covered by a subscription.
+       */
+      billingLabel: BILLING_LABEL[input.reviewerBilling ?? 'unknown'],
       statusLabel: input.reviewerRan ? (input.reviewerApproved ? 'APPROVED' : 'FINDINGS RETURNED') : 'NOT RUN',
       accessLabel: 'READ ONLY',
     },
