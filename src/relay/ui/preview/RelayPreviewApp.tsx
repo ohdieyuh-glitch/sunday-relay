@@ -296,7 +296,11 @@ export function RelayPreviewApp() {
     // Begin exactly once — never re-dispatch on refresh or route remount.
     if (mission.state === 'configured' && store.getMissionEvents(liveMissionId).length === 0) {
       void store.beginLiveMission(liveMissionId).then((r) => {
-        if (!r.ok && !stopped) setNotice(r.message);
+        if (!r.ok && !stopped) {
+          setNotice(r.message);
+          setStartRefusal({ missionId: liveMissionId, reason: r.message });
+        }
+        if (r.ok && !stopped) setStartRefusal((cur) => (cur?.missionId === liveMissionId ? null : cur));
       });
     }
     if (isTerminalMissionState(mission.state)) return;
@@ -499,6 +503,16 @@ export function RelayPreviewApp() {
   const [guideMessages, setGuideMessages] = useState<GuideMessage[]>(FIXTURE_GUIDE_MESSAGES);
   const [recentPopulated, setRecentPopulated] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * The live mission start's last refusal, kept where the CONSOLE can render
+   * it. `setNotice` alone put the reason in a dismissible line at the bottom
+   * of the page while the console's empty state showed boilerplate — a
+   * founder stared at "activity will appear here" for an afternoon while the
+   * actual reason sat below the fold. Keyed by mission so a stale refusal
+   * never describes a different mission.
+   */
+  const [startRefusal, setStartRefusal] = useState<{ missionId: string; reason: string } | null>(null);
+  const [startInFlight, setStartInFlight] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   /* ---------------- workspace fixture-showcase state ------------------ */
@@ -981,6 +995,32 @@ export function RelayPreviewApp() {
       ? projectDemoSimulationIntoWorkspace(demoSimulation.state, projection)
       : projection;
 
+    /**
+     * THE CONSOLE'S TRUTHFUL EMPTY STATE, and the manual dispatch.
+     *
+     * `canStart` mirrors the auto-start's own precondition. The button exists
+     * because every silent path found while a founder could not start a
+     * mission ended the same way: the page knew the state and offered no
+     * action. A click dispatches exactly what the auto-start dispatches and
+     * shows the outcome HERE.
+     */
+    const consoleIdle = mission.demo ? undefined : {
+      reason: startRefusal?.missionId === mission.id ? startRefusal.reason : null,
+      canStart: mission.state === 'configured' && events.length === 0,
+      starting: startInFlight === mission.id,
+      onStart: () => {
+        setStartInFlight(mission.id);
+        void store.beginLiveMission(mission.id).then((r) => {
+          setStartInFlight((cur) => (cur === mission.id ? null : cur));
+          if (!r.ok) {
+            setStartRefusal({ missionId: mission.id, reason: r.message });
+            return;
+          }
+          setStartRefusal((cur) => (cur?.missionId === mission.id ? null : cur));
+        });
+      },
+    };
+
     const advance = () => {
       setBusy(true);
       const r = store.advanceMission(mission.id);
@@ -1003,6 +1043,7 @@ export function RelayPreviewApp() {
         architectRuntime={architectRuntimeView}
         reviewerHarness={reviewerHarnessView}
         onHarnessUnavailable={onHarnessUnavailable}
+        consoleIdle={consoleIdle}
         loopSurface={loopSurface}
         stageBackdrop={stageBackdrop ?? undefined}
         onSelectStageBackdrop={selectStageBackdrop}

@@ -193,6 +193,8 @@ export function RelayProjectWorkspace(
      * unavailable harness inline and publishes nothing.
      */
     onHarnessUnavailable?: (harnessName: string) => void;
+    /** The console's truthful empty state — reason and retry. Optional. */
+    consoleIdle?: import('./RelayConsole').RelayConsoleIdleState;
   },
 ) {
   const {
@@ -546,6 +548,7 @@ export function RelayProjectWorkspace(
                 events={terminalEvents}
                 handoffNetworkState={handoffNetworkState}
                 onOpenTerminal={onOpenTerminal}
+                idle={props.consoleIdle}
               />
             ))}
             {focusable('conversation', (

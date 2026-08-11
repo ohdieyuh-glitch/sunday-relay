@@ -382,7 +382,19 @@ export function createRelayAppStore(
       }
       const now = new Date().toISOString();
       const brief = data.briefs[projectId];
-      const missionId = `${projectId}-msn-1`;
+      /**
+       * COLLISION-PROOF, BECAUSE THE BRIDGE IS IDEMPOTENT ON THIS VALUE.
+       *
+       * Mission ids were `${projectId}-msn-1`, and project ids are sequential
+       * per browser — so two browsers each mint `rly-002-msn-1`, and the
+       * bridge, correctly idempotent on mission id, hands the second caller
+       * the FIRST caller's mission. Observed in production: a founder's
+       * browser and a diagnostic session collided on exactly that id, and the
+       * founder would have been shown a completed mission they never ran. The
+       * suffix makes the id unique per creation while keeping the readable
+       * prefix.
+       */
+      const missionId = `${projectId}-msn-1-${Math.random().toString(36).slice(2, 8)}`;
       const mission: RelayMission = {
         id: missionId,
         projectId,
