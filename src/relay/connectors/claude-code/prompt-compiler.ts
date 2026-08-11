@@ -111,7 +111,19 @@ export function compileClaudePrompt(ctx: PromptContext): string {
 }
 
 export interface RevisionPromptContext {
-  revision: RevisionContract;
+  /**
+   * OPTIONAL BECAUSE THIS FUNCTION DOES NOT READ IT.
+   *
+   * It was required, and `compileRevisionPrompt` never touched it — so the
+   * first real caller had to fabricate a `RevisionContract` to satisfy a field
+   * the prompt ignores. Demanding data nobody reads is how a cast gets written,
+   * and a cast is how a missing field ships.
+   *
+   * It stays in the type because a repair prompt that one day carries the
+   * contract's narrow-scope terms should take them from here rather than
+   * inventing a second channel.
+   */
+  revision?: RevisionContract;
   runId: string;
   taskId: string;
   findingSummaries: string[];
