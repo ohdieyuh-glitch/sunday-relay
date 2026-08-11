@@ -402,15 +402,27 @@ reads as unfinished.
    Everything proven above is the machinery the Architect, Coding Agent and
    Reviewer would hand their work to. Running them against a real repository
    needs provider credentials and founder authorization.
-3. **The CODING LEG is wired; the mission engine is not.** `relay-bridge/coding.ts`
-   now takes an optional `repositoryTarget` and resolves its source through
-   `repository-source.ts`, so the coding leg edits a real registered repository
-   in an isolated worktree — proven end to end in `coding-leg-offline.test.ts`
-   against a real `git init`, with the source repository byte-for-byte unchanged
-   and `git status` clean afterwards. What is still missing is the layer ABOVE:
-   `mission.ts` does not accept a target, so no Mission Contract can select one
-   and the three-role pipeline still runs against the fixture. Nothing in the
-   bridge's mission entry reads a
+3. **WIRED. A Mission can target a real repository.** `reg.start()` takes a
+   resolved `repositoryTarget` and the files the Mission declares it will write;
+   `mission.ts` carries both to the coding leg, which resolves its source through
+   `repository-source.ts`. Proven end to end in `orchestrator.test.ts` — the whole
+   pipeline against a real `git init`, with the real coding leg (not the harness
+   stub) creating a real isolated worktree — and in `coding-leg-offline.test.ts`.
+   In both, the source repository is byte-for-byte unchanged and `git status` is
+   clean afterwards, on the failure path as well as the success one.
+
+   **What is NOT proven:** that the PAID roles have run this. The architect and
+   the reviewer stay injected in those tests, because OpenAI and xAI calls are a
+   founder authorization boundary. The pipeline carries the target and refuses
+   when it should; whether Grok reviews a real repository's diff well is a
+   different question and an unspent one.
+
+   The Live Terminal's project label now follows the source — calling a founder's
+   repository "the controlled fixture (throwaway repository)" would be a false
+   claim about blast radius on the line they read to know what Relay is touching.
+
+   Superseded text, kept because this document's corrections stay visible:
+   nothing in the bridge's mission entry read a
    `MissionRepositoryTarget` yet. The controlled-fixture path is unchanged and
    remains the default and the test path, which the design document requires.
 4. **No durable store.** Registrations are built and read as values; nothing
