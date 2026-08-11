@@ -29,7 +29,7 @@
  * and that provider is a separate, separately-audited surface.
  */
 
-import { readFileSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fail, ok, relayError, type RelayResult } from '../protocol/errors';
 import type {
@@ -68,18 +68,49 @@ export const REPOSITORY_GIT_ALLOWLIST: readonly string[] = [
 ];
 
 /**
- * FLAGS REFUSED WHATEVER THE SUBCOMMAND.
+ * THE OPTIONS EACH SUBCOMMAND MAY CARRY. An allow-list again, and it replaced a
+ * deny-list that five real invocations walked straight past.
  *
- * `git add --force` writes an ignored file — and `.gitignore` in a real
- * repository is where credentials live. `--hard`, `--amend` and the force
- * spellings rewrite what Relay is supposed to only add to. These are refused
- * even on an allow-listed subcommand, because `commit --amend` is inside
- * `commit`.
+ * The deny-list held ten exact strings — `--force`, `-f`, `--amend` and so on —
+ * and an independent review executed these against real git:
+ *
+ *   git add -fv -- secrets.env   ALLOWED, staged a .gitignore'd file holding a token
+ *   git commit -n                ALLOWED, skipped a pre-commit hook that exits 1
+ *   git branch -D doomed         ALLOWED, "Deleted branch doomed"
+ *   git branch -m main renamed   ALLOWED, renamed the current branch
+ *   git diff --output=/tmp/x     ALLOWED, wrote a file outside the repository
+ *   git commit -F /etc/hostname  ALLOWED, took its subject from that file
+ *
+ * `-fv` is `-f` and `-v` in one cluster, which exact-string matching cannot see;
+ * `-n` is the short spelling of `--no-verify`; `-D` and `-m` rewrite refs, which
+ * "Relay adds commits; it never rewrites them" forbids. Every one of those is a
+ * string somebody forgot, and a deny-list is a list somebody has to remember to
+ * finish.
+ *
+ * So the rule inverts: **any argument beginning with `-` must appear in its own
+ * subcommand's set, or it is refused.** A short cluster is expanded to its
+ * letters first. A form nobody thought about is refused rather than permitted,
+ * which is the direction that fails loudly.
  */
-const REFUSED_GIT_FLAGS: readonly string[] = [
-  '--force', '-f', '--hard', '--amend', '--force-with-lease', '--no-verify',
-  '--allow-empty', '--reset-author', '--date', '--author',
-];
+const GIT_SUBCOMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  'rev-parse': ['--verify', '--quiet', '--short'],
+  status: ['--porcelain=v1', '-z', '--no-renames'],
+  diff: ['--numstat', '--name-only', '--no-renames', '-z'],
+  // Paths only, after the `--` terminator. `-f`/`--force` would write an ignored
+  // file, and `.gitignore` in a real repository is where credentials live.
+  add: [],
+  commit: ['-m'],
+  // READS ONLY. `-D`, `-d`, `-m` and `-M` all rewrite refs.
+  branch: ['--show-current'],
+  show: ['--name-only'],
+  log: ['--oneline', '-1'],
+  'ls-files': ['--others', '--exclude-standard', '-z'],
+  'cat-file': ['-t', '-p'],
+});
+
+/** Options that consume the following argument, so its value is never read as
+ *  an option itself — a commit message may legitimately begin with a dash. */
+const GIT_VALUE_OPTIONS: readonly string[] = ['-m'];
 
 /**
  * Run one git command inside the repository write surface.
@@ -109,11 +140,39 @@ export function runRepositoryGit(
       }),
     );
   }
-  const refused = args.find((a) => REFUSED_GIT_FLAGS.includes(a));
-  if (refused !== undefined) {
-    return fail(
-      relayError('permission-denied', `git flag "${refused}" is refused: Relay adds commits and never rewrites them.`),
-    );
+  const permitted = GIT_SUBCOMMAND_OPTIONS[subcommand] ?? [];
+  for (let i = 1; i < args.length; i += 1) {
+    const arg = args[i] as string;
+    // Everything after `--` is a pathspec. git will not read it as an option,
+    // and a path that begins with a dash is exactly why the terminator exists.
+    if (arg === '--') break;
+    if (!arg.startsWith('-')) continue;
+
+    /**
+     * NO CLUSTER EXPANSION, AND THE REASON IS WHY THE ALLOW-LIST IS THE FIX.
+     *
+     * The first version of this loop expanded a short cluster to its letters —
+     * `-fv` to `-f` and `-v` — because that is how `-fv` walked past the old
+     * DENY-list containing `-f`. Against an ALLOW-list the expansion is dead
+     * code: `-fv` is not a permitted string, so it is refused whole. A mutation
+     * probe that removed the expansion changed no outcome, which is how it was
+     * found — and code that does nothing while a comment calls it load-bearing is
+     * the defect class this repository repairs most often.
+     *
+     * The clustering problem was never about matching letters. It was about a
+     * deny-list needing to be complete.
+     */
+    if (!permitted.includes(arg)) {
+      return fail(
+        relayError(
+          'permission-denied',
+          `git option "${arg}" is not permitted for "${subcommand}". `
+            + 'Relay adds commits and never rewrites them.',
+          { details: [...permitted] },
+        ),
+      );
+    }
+    if (GIT_VALUE_OPTIONS.includes(arg)) i += 1;
   }
   return runGit([...args], cwd, { ...identityEnv });
 }
@@ -142,6 +201,56 @@ function countUntrackedLines(worktreePath: string, relativePath: string): number
   }
 }
 
+/**
+ * IS THIS PATH, OR ANYTHING ABOVE IT, A SYMLINK?
+ *
+ * A symlink inside the write scope defeated the whole observation. Executed by an
+ * independent review: an agent created `src/outside -> /tmp/probe-XXXX`, wrote
+ * through it, and Relay observed one untracked change at `src/outside`, judged it
+ * `accepted`, and committed a mode-120000 entry pointing at an absolute path
+ * outside the repository — while the file it overwrote out there was never seen at
+ * all.
+ *
+ * Both halves matter. "Read what the worktree ACTUALLY contains" does not bound
+ * the blast radius if a write can leave the worktree, and a symlink's target is
+ * outside anything `scopeMatches` can reason about — so it cannot be classified,
+ * only refused.
+ *
+ * Every ancestor is checked, not just the leaf: `src/link/app.ts` where `src/link`
+ * is the symlink is the same escape one directory up.
+ */
+function pathCrossesSymlink(worktreePath: string, relativePath: string): boolean {
+  const segments = relativePath.split('/').filter((segment) => segment !== '');
+  let current = worktreePath;
+  for (const segment of segments) {
+    current = join(current, segment);
+    try {
+      // `lstat`, never `stat`: `stat` follows the link and reports the target,
+      // which is precisely the thing being hidden.
+      if (lstatSync(current).isSymbolicLink()) return true;
+    } catch (error) {
+      /**
+       * A MISSING SEGMENT IS NOT A SYMLINK, and treating it as one refused
+       * deletions for a reason that was not true.
+       *
+       * The first version returned `true` for any lstat failure. A DELETED path
+       * cannot be lstat'd — that is what deleted means — so `git mv` of a
+       * protected file reported its source as `symlinked` instead of `deleted`.
+       * The refusal still happened, which hid it, but it happened for the wrong
+       * reason and the deletion ceiling never saw a deletion.
+       *
+       * `ENOENT` means the rest of this path does not exist, so nothing further
+       * along it can be a symlink: stop and report none. Any OTHER error is a
+       * path Relay cannot inspect, and that stays fail-closed.
+       */
+      const code = (error as { code?: unknown } | null)?.code;
+      if (code === 'ENOENT' || code === 'ENOTDIR') return false;
+      return true;
+    }
+  }
+  return false;
+}
+
 /** git status codes → the observation's vocabulary. */
 function classifyStatusCode(code: string): ObservedFileChange['kind'] {
   if (code === '??') return 'untracked';
@@ -164,12 +273,21 @@ export function parseNumstat(raw: string): Map<string, { added: number | null; r
   for (const line of raw.split('\n')) {
     if (line.trim() === '') continue;
     const parts = line.split('\t');
-    if (parts.length < 3) continue;
-    const [addedRaw, removedRaw] = parts as [string, string, ...string[]];
-    // A rename prints `old => new` or three tab-separated path fields. The
-    // LAST field is the current path, which is the one the scope and protection
-    // rules must be applied to.
-    const path = (parts[parts.length - 1] as string).trim();
+    /**
+     * EXACTLY THREE FIELDS. `observeRepositoryWorktree` passes `--no-renames`, so
+     * numstat emits `added<TAB>removed<TAB>path` and nothing else.
+     *
+     * This used to take the LAST field and say in a comment that "a rename
+     * prints `old => new` or three tab-separated path fields". Real
+     * `git diff --numstat` prints neither without `-z`: it prints the COMBINED
+     * path `{.github/workflows => src}/ci.yml` as a single field, which matched
+     * no key and silently gave the file an unknown line count. The unit test
+     * fed a hand-made four-field line real git never produces. Anything other
+     * than three fields is now skipped rather than guessed at.
+     */
+    if (parts.length !== 3) continue;
+    const [addedRaw, removedRaw] = parts as [string, string, string];
+    const path = (parts[2] as string).trim();
     if (path === '') continue;
     const num = (v: string): number | null => {
       const n = Number.parseInt(v, 10);
@@ -199,15 +317,49 @@ export function observeRepositoryWorktree(input: {
   const state = inspectRepositoryState(worktreePath);
   if (!state.ok) return state;
 
-  const statusRaw = runRepositoryGit(['status', '--porcelain=v1', '-z'], worktreePath);
+  /**
+   * `--no-renames`, ON BOTH READS, AND THIS WAS A CRITICAL DEFECT.
+   *
+   * With rename detection on, `git mv .github/workflows/ci.yml src/notes.yml`
+   * reports as ONE entry — `R  src/notes.yml\0.github/workflows/ci.yml` — and
+   * `parseStatusZ` skips the second path by design. So the deletion of a path
+   * Relay protects UNCONDITIONALLY BY DEFAULT was invisible: the observation
+   * carried one `renamed` change inside the write scope, `judgeObservedDiff`
+   * returned `accepted: true`, and `commitObservedWork` committed the CI file's
+   * removal. An independent review executed it end to end in a real repository.
+   *
+   * Under DEFAULT config the same `git mv` happened to be refused — but by the
+   * wrong guard, and by an accident: non-`-z` numstat prints the combined path
+   * `{.github/workflows => src}/ci.yml`, which matched no key, so the ceiling
+   * check refused it for an unknown removal count. The only thing between an
+   * agent and deleting CI was the text format of a diff summary.
+   *
+   * `--no-renames` makes rename detection irrelevant to the safety decision.
+   * git then reports what actually happened to the filesystem — `D` for the
+   * source and `A` for the destination, with real line counts for both — and
+   * every existing rule applies to each path on its own. It also removes the
+   * dependence on whoever's `.gitconfig` is in force, and `runGit` passes `HOME`.
+   */
+  const statusRaw = runRepositoryGit(['status', '--porcelain=v1', '-z', '--no-renames'], worktreePath);
   if (!statusRaw.ok) return statusRaw;
   const entries = parseStatusZ(statusRaw.value);
 
-  const numstatRaw = runRepositoryGit(['diff', '--numstat', 'HEAD'], worktreePath);
+  const numstatRaw = runRepositoryGit(['diff', '--numstat', '--no-renames', 'HEAD'], worktreePath);
   if (!numstatRaw.ok) return numstatRaw;
   const numstat = parseNumstat(numstatRaw.value);
 
   const changes: ObservedFileChange[] = entries.map((entry) => {
+    /**
+     * A SYMLINKED PATH IS REFUSED, NOT CLASSIFIED.
+     *
+     * `symlinked` is reported as its own kind so `judgeObservedDiff` can refuse
+     * it by name. Classifying it as `modified` and letting scope decide would
+     * accept it — the path `src/outside` is inside a `src/**` write scope, and
+     * the target it points at is not something any path rule can see.
+     */
+    if (pathCrossesSymlink(worktreePath, entry.path)) {
+      return { path: entry.path, kind: 'symlinked', linesAdded: null, linesRemoved: null };
+    }
     const kind = classifyStatusCode(entry.code);
     const counted = numstat.get(entry.path);
     if (counted !== undefined) {

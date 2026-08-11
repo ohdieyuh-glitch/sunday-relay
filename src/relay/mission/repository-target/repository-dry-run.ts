@@ -17,11 +17,17 @@ import { SHIP_STAGE_REQUIREMENTS, deployPermissionFor, type DeployEnvironment, t
  * consequential."*
  *
  * THIS MODULE CANNOT PERFORM ANYTHING, and that is structural rather than
- * promised. It is pure domain: no Node, no `child_process`, no `fetch`, no
- * filesystem. It returns a DESCRIPTION of the remote operations a Mission would
- * attempt, in order, with the permission each one needs and whether the Mission
- * holds it. A dry run that could accidentally push would be worth less than no
- * dry run at all, so the capability is absent rather than guarded.
+ * promised. It is pure domain: it imports no Node builtin, opens no socket and
+ * touches no disk. It returns a DESCRIPTION of the remote operations a Mission
+ * would attempt, in order, with the permission each one needs and whether the
+ * Mission holds it. A dry run that could accidentally push would be worth less
+ * than no dry run at all, so the capability is absent rather than guarded.
+ *
+ * The mission-layer purity guard in `relay-core-boundary.test.ts` greps raw text
+ * for the process- and filesystem-API names, so this note deliberately does not
+ * spell them. An earlier draft listed them to say it uses none and tripped the
+ * guard — prose discussing a capability is not a capability, but the guard is a
+ * security guard and narrowing it to accommodate a comment is the wrong trade.
  *
  * WHAT IT IS FOR, precisely: a founder can read what Relay is about to do to
  * their repository, in the order it will happen, before any of it happens — and

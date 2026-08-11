@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -12,7 +12,7 @@ import {
   resolveBaselineSha,
   runRepositoryGit,
 } from './repository-target-observer';
-import { runGit } from './repository-inspector';
+import { inspectRepositoryState, runGit } from './repository-inspector';
 import { createWorktree, resolveWorkspaceRoot } from './worktree-manager';
 import {
   ALWAYS_PROTECTED_PATHS,
@@ -201,11 +201,224 @@ describe('numstat parsing', () => {
     expect(parsed.get('src/logo.png')).toEqual({ added: null, removed: null });
   });
 
-  it('takes the CURRENT path from a rename entry', () => {
-    const parsed = parseNumstat('1\t1\tsrc/old.ts\tsrc/new.ts\n');
-    // Scope and protection must be applied to where the file IS.
-    expect(parsed.has('src/new.ts')).toBe(true);
-    expect(parsed.has('src/old.ts')).toBe(false);
+  it('skips anything that is not exactly three fields, rather than guessing', () => {
+    /**
+     * THIS TEST USED TO ASSERT A LINE REAL GIT NEVER PRODUCES.
+     *
+     * It fed `1\t1\tsrc/old.ts\tsrc/new.ts` — four tab-separated fields — and
+     * asserted the last was taken as "the current path". Real
+     * `git diff --numstat` does not print that without `-z`: for a rename it
+     * prints the COMBINED path as a single field,
+     * `0\t0\t{.github/workflows => src}/ci.yml`, which matched no key and gave
+     * the file an unknown line count. The test agreed with a comment rather than
+     * with git, and an independent review found the real output by running it.
+     *
+     * `observeRepositoryWorktree` now passes `--no-renames`, so numstat emits
+     * exactly three fields and a rename arrives as a separate `D` and `A`.
+     * Anything else is skipped rather than interpreted.
+     */
+    const combined = parseNumstat('0\t0\t{.github/workflows => src}/ci.yml\n');
+    expect(combined.size).toBe(1);
+    // Whatever that single field is, it is NOT treated as two paths.
+    expect(combined.has('src/ci.yml')).toBe(false);
+    expect(combined.has('.github/workflows/ci.yml')).toBe(false);
+
+    // A four-field line is not git's output and is not parsed as if it were.
+    expect(parseNumstat('1\t1\tsrc/old.ts\tsrc/new.ts\n').size).toBe(0);
+  });
+
+  it('parses what --no-renames actually emits for a git mv', () => {
+    // The real output, captured from git: the source is a deletion and the
+    // destination is an addition, each with its own real counts.
+    const parsed = parseNumstat('0\t3\t.github/workflows/ci.yml\n3\t0\tsrc/notes.yml\n');
+    expect(parsed.get('.github/workflows/ci.yml')).toEqual({ added: 0, removed: 3 });
+    expect(parsed.get('src/notes.yml')).toEqual({ added: 3, removed: 0 });
+  });
+});
+
+/* ============================== the escapes an independent review executed */
+
+describe('a rename cannot hide the deletion of a protected path', () => {
+  it('reports a git mv of a protected file as a DELETION and refuses it', () => {
+    /**
+     * THE CRITICAL DEFECT, reproduced and then held closed.
+     *
+     * With rename detection on, `git mv .github/workflows/ci.yml src/notes.yml`
+     * reports as ONE entry — `R  src/notes.yml\0.github/workflows/ci.yml` — and
+     * `parseStatusZ` skips the second path by design. So the deletion of a path
+     * Relay protects unconditionally-by-default was invisible: one `renamed`
+     * change inside the write scope, `accepted: true`, and the CI file's removal
+     * committed. An independent review executed exactly this in a real repo.
+     */
+    const { root } = realRepository();
+    const target = targetFor(root, { scope: { read: ['**'], write: ['**'] } });
+    const worktree = isolatedWorktree(root, target);
+    const baseline = resolveBaselineSha({ worktreePath: worktree, ref: 'HEAD' });
+    if (!baseline.ok) throw new Error(baseline.error.message);
+
+    // A `**` write scope, so ONLY protection can refuse this.
+    const moved = runGit(['mv', '.github/workflows/ci.yml', 'src/notes.yml'], worktree, {
+      GIT_AUTHOR_NAME: 'A', GIT_AUTHOR_EMAIL: 'a@x', GIT_COMMITTER_NAME: 'A', GIT_COMMITTER_EMAIL: 'a@x',
+    });
+    expect(moved.ok, 'the fixture git mv should succeed').toBe(true);
+
+    const observed = observeRepositoryWorktree({ worktreePath: worktree, baselineSha: baseline.value, now: NOW });
+    if (!observed.ok) throw new Error(observed.error.message);
+
+    // BOTH paths are observed, because `--no-renames` makes git report what
+    // actually happened to the filesystem.
+    const paths = observed.value.changes.map((c) => c.path).sort();
+    expect(paths).toEqual(['.github/workflows/ci.yml', 'src/notes.yml']);
+    const source = observed.value.changes.find((c) => c.path === '.github/workflows/ci.yml');
+    expect(source?.kind).toBe('deleted');
+
+    const judgement = judgeObservedDiff({ diff: observed.value, target });
+    expect(judgement.accepted).toBe(false);
+    expect(judgement.scope.protectedHits).toContain('.github/workflows/ci.yml');
+    expect(judgement.committablePaths).toEqual([]);
+    // And the deletion ceiling sees it too, which it could not when the entry
+    // was a `renamed`.
+    expect(judgement.ceilings.deletedPaths).toContain('.github/workflows/ci.yml');
+
+    // Nothing is committed.
+    const committed = commitObservedWork({
+      target, worktreePath: worktree, judgement, message: 'should not happen', ...AUTHOR,
+    });
+    expect(committed.ok).toBe(false);
+  });
+
+  it('counts a `renamed` entry as a deletion even from a fixture observation', () => {
+    // `ObservedDiff` is also the `relay_fixture_inspection` shape and the
+    // intended persisted record, so a `renamed` entry can still arrive. Counting
+    // it as "not a deletion" is how a protected file left the repository while
+    // `allowDeletions: false` reported nothing.
+    const { root } = realRepository();
+    const target = targetFor(root);
+    const verdict = judgeObservedDiff({
+      diff: {
+        observedBy: 'relay_fixture_inspection', observedAt: NOW, conflicted: false,
+        baselineSha: 'a'.repeat(40),
+        changes: [{ path: 'src/moved.ts', kind: 'renamed', linesAdded: 1, linesRemoved: 1 }],
+      },
+      target,
+    });
+    expect(verdict.accepted).toBe(false);
+    expect(verdict.ceilings.deletedPaths).toEqual(['src/moved.ts']);
+  });
+});
+
+describe('a symlink cannot make a write invisible', () => {
+  it('refuses a symlink inside the write scope, and never commits it', () => {
+    /**
+     * Executed by an independent review against the previous code: an agent
+     * created `src/outside -> /tmp/probe-XXXX`, wrote through it, and Relay
+     * observed one untracked change at `src/outside`, judged it ACCEPTED, and
+     * committed a mode-120000 entry pointing outside the repository — while the
+     * file it overwrote out there was never seen at all.
+     *
+     * A symlink's target is outside anything `scopeMatches` can reason about, so
+     * it cannot be classified, only refused.
+     */
+    const { root } = realRepository();
+    const target = targetFor(root);
+    const worktree = isolatedWorktree(root, target);
+    const baseline = resolveBaselineSha({ worktreePath: worktree, ref: 'HEAD' });
+    if (!baseline.ok) throw new Error(baseline.error.message);
+
+    const outside = mkdtempSync(join(tmpdir(), 'relay-outside-'));
+    temporaries.push(outside);
+    const outsideFile = join(outside, 'secret.txt');
+    writeFileSync(outsideFile, 'ORIGINAL\n');
+    symlinkSync(outsideFile, join(worktree, 'src', 'outside'));
+
+    const observed = observeRepositoryWorktree({ worktreePath: worktree, baselineSha: baseline.value, now: NOW });
+    if (!observed.ok) throw new Error(observed.error.message);
+    const link = observed.value.changes.find((c) => c.path === 'src/outside');
+    expect(link?.kind).toBe('symlinked');
+
+    const judgement = judgeObservedDiff({ diff: observed.value, target });
+    expect(judgement.accepted).toBe(false);
+    expect(judgement.problems.map((p) => p.message).join(' ')).toContain('Symlinked paths');
+    expect(judgement.committablePaths).toEqual([]);
+    // It is never counted as an allowed path either.
+    expect(judgement.scope.allowed).not.toContain('src/outside');
+  });
+
+  it('refuses a path whose ANCESTOR is a symlink, not just the leaf', () => {
+    // `src/link/app.ts` where `src/link` is the symlink is the same escape one
+    // directory up.
+    const { root } = realRepository();
+    const target = targetFor(root);
+    const worktree = isolatedWorktree(root, target);
+    const baseline = resolveBaselineSha({ worktreePath: worktree, ref: 'HEAD' });
+    if (!baseline.ok) throw new Error(baseline.error.message);
+
+    const outside = mkdtempSync(join(tmpdir(), 'relay-outside-dir-'));
+    temporaries.push(outside);
+    writeFileSync(join(outside, 'app.ts'), 'export const x = 1;\n');
+    symlinkSync(outside, join(worktree, 'src', 'link'));
+
+    const observed = observeRepositoryWorktree({ worktreePath: worktree, baselineSha: baseline.value, now: NOW });
+    if (!observed.ok) throw new Error(observed.error.message);
+    expect(observed.value.changes.every((c) => c.kind === 'symlinked')).toBe(true);
+    expect(judgeObservedDiff({ diff: observed.value, target }).accepted).toBe(false);
+  });
+});
+
+describe('the git option allow-list is per subcommand, not a list of strings', () => {
+  it('refuses every bypass an independent review executed', () => {
+    const { root } = realRepository();
+    /**
+     * All five of these ran successfully against the previous deny-list:
+     * `add -fv` force-added a gitignored credential file, `commit -n` skipped a
+     * failing pre-commit hook, `branch -D`/`-m` rewrote refs, `diff --output=`
+     * wrote outside the repository, and `commit -F` took its subject from
+     * `/etc/hostname`. `-fv` is `-f` and `-v` in one cluster, which exact-string
+     * matching cannot see.
+     */
+    for (const args of [
+      ['add', '-fv', '--', 'secrets.env'],
+      ['add', '-vf', '--', 'secrets.env'],
+      ['add', '-f', '--', 'secrets.env'],
+      ['add', '--renormalize', '--', '.'],
+      ['commit', '-n', '-m', 'x'],
+      ['commit', '-F', '/etc/hostname'],
+      ['commit', '--allow-empty-message'],
+      ['branch', '-D', 'doomed'],
+      ['branch', '-m', 'main', 'renamed'],
+      ['branch', '-M', 'main', 'renamed'],
+      ['diff', '--output=/tmp/leaked.txt'],
+      ['log', '-n', '5'],
+    ]) {
+      const result = runRepositoryGit(args, root);
+      expect(result.ok, args.join(' ')).toBe(false);
+      if (!result.ok) expect(result.error.code, args.join(' ')).toBe('permission-denied');
+    }
+  });
+
+  it('still permits exactly what the observer and the commit need', () => {
+    const { root } = realRepository();
+    for (const args of [
+      ['status', '--porcelain=v1', '-z', '--no-renames'],
+      ['diff', '--numstat', '--no-renames', 'HEAD'],
+      ['rev-parse', 'HEAD'],
+      ['branch', '--show-current'],
+    ]) {
+      expect(runRepositoryGit(args, root).ok, args.join(' ')).toBe(true);
+    }
+  });
+
+  it('does not read a commit message that begins with a dash as an option', () => {
+    // `-m`'s VALUE is skipped, because a legitimate message may start with a
+    // dash and refusing it would be an over-refusal.
+    const { root } = realRepository();
+    writeFileSync(join(root, 'src', 'app.ts'), 'export const version = 2;\n');
+    const staged = runRepositoryGit(['add', '--', 'src/app.ts'], root);
+    expect(staged.ok).toBe(true);
+    const committed = runRepositoryGit(['commit', '-m', '--not-an-option'], root, {
+      GIT_AUTHOR_NAME: 'A', GIT_AUTHOR_EMAIL: 'a@x', GIT_COMMITTER_NAME: 'A', GIT_COMMITTER_EMAIL: 'a@x',
+    });
+    expect(committed.ok).toBe(true);
   });
 });
 
@@ -353,6 +566,16 @@ describe('Relay observes real git changes, not an agent\'s account of them', () 
     expect(readFileSync(join(root, 'src', 'app.ts'), 'utf8')).toBe('export const version = 1;\n');
     const after = resolveBaselineSha({ worktreePath: root, ref: 'HEAD' });
     expect(after.ok && after.value).toBe(before);
+    /**
+     * AND THE SOURCE IS CLEAN, not just that one file.
+     *
+     * One file's content plus HEAD is what this used to assert, and a review
+     * showed both pass while a NEW file sits staged in the source: neither
+     * assertion looks anywhere else. `REPOSITORY_TARGETS.md` claims the source is
+     * "byte-for-byte unchanged", and this is the assertion that means it.
+     */
+    const sourceState = inspectRepositoryState(root);
+    expect(sourceState.ok && sourceState.value.dirty, 'the source repository is dirty').toBe(false);
   });
 });
 

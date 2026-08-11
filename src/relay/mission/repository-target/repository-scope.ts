@@ -123,9 +123,25 @@ function normalizeScopeSide(patterns: readonly string[], label: string): RelayRe
     if (!normalized.ok) {
       return fail(relayError('validation-failed', `${label} scope pattern "${raw}": ${normalized.error.message}`));
     }
-    // Collapse duplicate and trailing separators in the real pattern too, so
-    // `src//**` and `src/**/` cannot describe the same rule two ways.
-    const cleaned = raw.replace(/\\/g, '/').replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+    // Collapse duplicate and trailing separators in the real pattern, so a
+    // doubled slash and a trailing slash cannot describe the same rule two ways
+    // — AND strip a leading dot-slash, which used to survive.
+    //
+    // A pattern written `./src` followed by a globstar passed validation, passed
+    // the "authorized to write with nowhere to write" check (its length is 1,
+    // not 0), and then refused every single change, because the matcher never
+    // sees a leading dot-slash on an observed path. A founder got a Mission that
+    // looked correctly configured and could touch nothing. Repeated dot-slash is
+    // stripped too.
+    //
+    // LINE COMMENTS, not a block comment: the first version of this note quoted
+    // a trailing-globstar pattern, whose closing characters terminate a block
+    // comment early. A comment about glob syntax can end itself.
+    const cleaned = raw
+      .replace(/\\/g, '/')
+      .replace(/\/{2,}/g, '/')
+      .replace(/^(?:\.\/)+/, '')
+      .replace(/\/+$/, '');
     if (cleaned === '') {
       return fail(relayError('validation-failed', `${label} scope pattern "${raw}" resolves to nothing.`));
     }
@@ -255,6 +271,32 @@ export function resolveProtectedPaths(config: ProtectedPathConfig): RelayResult<
     return n.ok ? n.value : raw;
   };
   const unprotectSet = new Set(unprotect.map(normalize));
+  /**
+   * AN UNPROTECT ENTRY MUST NAME SOMETHING THAT IS ACTUALLY PROTECTED.
+   *
+   * `.git`, `.git/`, `./.git` and `x/../.git` were all refused by name — good —
+   * but `.GIT` and `.git/config` were ACCEPTED and silently did nothing. A
+   * founder who writes `.git/config` in `unprotect` believes something untrue and
+   * was not told, which is the exact reason the `.git` refusal is by name in the
+   * first place.
+   */
+  const protectable = new Set<string>([...ALWAYS_PROTECTED_PATHS, ...DEFAULT_PROTECTED_PATHS]);
+  for (const raw of unprotect) {
+    const normalized = normalize(raw);
+    if (protectable.has(normalized)) continue;
+    const alwaysLower = ALWAYS_PROTECTED_PATHS.map((p) => p.toLowerCase());
+    if (alwaysLower.includes(normalized.toLowerCase())) {
+      return fail(relayError(
+        'permission-denied',
+        `"${raw}" names an unconditionally protected path in a different case and cannot be unprotected.`,
+      ));
+    }
+    return fail(relayError(
+      'validation-failed',
+      `"${raw}" is not a default-protected path, so unprotecting it would do nothing. `
+        + `Unprotect names an exact default: ${[...protectable].sort().join(', ')}.`,
+    ));
+  }
   for (const always of ALWAYS_PROTECTED_PATHS) {
     if (unprotectSet.has(always)) {
       return fail(relayError('permission-denied', `"${always}" is protected unconditionally and cannot be unprotected.`));

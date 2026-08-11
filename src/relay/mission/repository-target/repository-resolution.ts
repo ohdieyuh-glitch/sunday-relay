@@ -250,23 +250,46 @@ export function resolveRepositoryTarget(input: {
     selectionMode: 'explicit_registered_key',
   };
 
+  /**
+   * DEEP-FROZEN, because `Object.freeze` is SHALLOW and the header called
+   * freezing the mechanism.
+   *
+   * An independent review executed the widening: `isFrozen(target)` was true
+   * while `permissions`, `scope`, `scope.write`, `protectedPaths`, `identity`
+   * and `protectedBranches` were all mutable — and pushing `deploy_production`
+   * and `merge_pr` onto `target.permissions` flipped a refused judgement to
+   * accepted. Those are the two grants `HIGH_CONSEQUENCE_PERMISSIONS` says may
+   * never be inferred.
+   *
+   * `readonly` is a compile-time claim and casts exist. This is the runtime one.
+   */
+  const frozenScope = Object.freeze({
+    read: Object.freeze([...scope.value.read]),
+    write: Object.freeze([...scope.value.write]),
+  });
   return {
     ok: true,
     target: Object.freeze({
       repositoryKey: registration.key,
-      identity: registration.identity,
-      location: registration.location,
+      // Frozen COPIES: the registration's own objects are the caller's draft,
+      // and mutating `draft.identity.defaultBranch` after registration changed
+      // both the registration and an already-resolved target.
+      identity: Object.freeze({ ...registration.identity }),
+      location: Object.freeze({ ...registration.location }),
       baseBranch,
       workingBranch,
       // Unknown until a provider reads it. Never defaulted to the branch name,
       // to an empty string, or to a zero SHA.
       baselineSha: null,
-      scope: scope.value,
-      protectedPaths: protectedPaths.value,
-      ceilings: registration.ceilings,
-      permissions: permissions.permissions,
-      credential: registration.credential,
-      protectedBranches,
+      scope: frozenScope,
+      protectedPaths: Object.freeze([...protectedPaths.value]),
+      ceilings: Object.freeze({ ...registration.ceilings }),
+      permissions: Object.freeze([...permissions.permissions]),
+      credential: Object.freeze({
+        ...registration.credential,
+        permittedUses: Object.freeze([...registration.credential.permittedUses]),
+      }),
+      protectedBranches: Object.freeze([...protectedBranches]),
       provenance,
     }),
   };

@@ -44,6 +44,8 @@ src/relay/mission/repository-target/     PURE DOMAIN — decides what is ALLOWED
   repository-observation.ts     ceilings, and judging an OBSERVED diff
   repository-lifecycle.ts       COMMIT → PUSH → PR → MERGE → DEPLOY → LIVE → SHIPPED
   deployment-provider.ts        the DeploymentProvider port
+  repository-brain-feed.ts      events → short-term memory, knowledge → a proposal
+  repository-dry-run.ts         the plan and the PR body, performing nothing
 
 src/relay/workspace/                     NODE — performs and OBSERVES
   repository-target-observer.ts  real git observation + the write surface
@@ -325,7 +327,10 @@ and a **real** `fetch` over a real socket:
 - A production deploy refused twice over — by the Mission's permissions and by
   the provider's configuration.
 
-**Mutation discipline.** 33 probes, each reverting one guard and naming the test
+**Mutation discipline.** Every guard here has a probe that reverts it and a named
+test that falls — the count lives in the commit messages, deliberately not here,
+because a number in prose that no code derives drifts on the next commit and did:
+this line said 33 while two later commits raised it. The tests are the record
 that fell. Four probes initially did **not** bite and the tests were
 strengthened until they did — including one where the assertion was satisfied by
 `'a'.repeat(40)`, one where git's own "nothing to commit" was doing the work the
@@ -394,8 +399,9 @@ reads as unfinished.
    Everything proven above is the machinery the Architect, Coding Agent and
    Reviewer would hand their work to. Running them against a real repository
    needs provider credentials and founder authorization.
-3. **Not wired into the Mission engine.** `relay-bridge/mission.ts` still calls
-   `buildSafeEditFixture()`. Nothing in the bridge reads a
+3. **Not wired into the Mission engine.** `relay-bridge/coding.ts` still calls
+   `buildSafeEditFixture()` — an earlier draft of this line named `mission.ts`,
+   which never mentions it. Nothing in the bridge reads a
    `MissionRepositoryTarget` yet. The controlled-fixture path is unchanged and
    remains the default and the test path, which the design document requires.
 4. **No durable store.** Registrations are built and read as values; nothing

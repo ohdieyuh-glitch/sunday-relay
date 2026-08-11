@@ -125,9 +125,19 @@ export const PERMISSION_PREREQUISITES: Readonly<Record<RepositoryPermission, rea
 
 /**
  * The two grants that may never arrive by inference, by default, or by
- * inheritance from a previous Mission — they must be named, by a human, for
- * this repository, and they are the only two that carry a mandatory
- * `authorizedBy` re-confirmation at Mission scope.
+ * inheritance from a previous Mission. They must be NAMED: the safe floor
+ * excludes them, and `narrowPermissions` refuses a Mission that did not ask.
+ *
+ * WHAT THIS DOES NOT DO, corrected from a claim that was not true. An earlier
+ * version of this comment said these two "carry a mandatory `authorizedBy`
+ * re-confirmation at Mission scope". There is no such re-confirmation:
+ * `hasHighConsequencePermission` has no caller outside its own test, and an
+ * independent review executed a production deploy authorized entirely by a
+ * standing grant dated months earlier, for a request whose `selectedBy` was a
+ * system component. The exposure is bounded — it is still a grant a human made
+ * and named — but the control the comment described did not exist, and a stated
+ * human-in-the-loop that is absent is worse than an admitted absence.
+ * `REPOSITORY_TARGETS.md` records it under what is not built.
  */
 export const HIGH_CONSEQUENCE_PERMISSIONS: readonly RepositoryPermission[] = ['merge_pr', 'deploy_production'];
 

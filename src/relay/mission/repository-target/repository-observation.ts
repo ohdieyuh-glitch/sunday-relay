@@ -36,7 +36,14 @@ import { classifyObservedChanges, type ScopeVerdict } from './repository-scope';
  */
 export interface ObservedFileChange {
   readonly path: string;
-  readonly kind: 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked';
+  /**
+   * `symlinked` is a REFUSAL kind, not a change kind. The observer emits it for
+   * any path whose own name or any ancestor is a symlink, because a symlink's
+   * target is outside anything a path rule can reason about — a write through
+   * `src/outside -> /tmp/x` leaves the worktree entirely and is invisible to an
+   * observation of the worktree. It is refused by name in `judgeObservedDiff`.
+   */
+  readonly kind: 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked' | 'symlinked';
   readonly linesAdded: number | null;
   readonly linesRemoved: number | null;
 }
@@ -98,12 +105,39 @@ export function enforceChangeCeilings(input: {
   const { diff, ceilings } = input;
   const problems: RepositoryProblem[] = [];
   const filesChanged = diff.changes.length;
-  const deletedPaths = diff.changes.filter((c) => c.kind === 'deleted').map((c) => c.path);
+  /**
+   * A RENAME IS A DELETION OF ITS SOURCE, and `allowDeletions` has to see it.
+   *
+   * The live observer passes `--no-renames`, so git reports a `git mv` as a
+   * separate `D` and `A` and this list catches the `D` on its own. But
+   * `ObservedDiff` is also the `relay_fixture_inspection` shape and the intended
+   * persisted record, so a `renamed` entry can still arrive here — and counting
+   * it as "not a deletion" is how a protected file left the repository while
+   * `allowDeletions: false` reported nothing.
+   */
+  const deletedPaths = diff.changes
+    .filter((c) => c.kind === 'deleted' || c.kind === 'renamed')
+    .map((c) => c.path);
 
-  const unknownRemoval = diff.changes.some((c) => c.linesRemoved === null);
+  /**
+   * A COUNT THAT IS NOT A NON-NEGATIVE SAFE INTEGER IS UNKNOWN, NOT A NUMBER.
+   *
+   * This trusted its input. Executed by an independent review:
+   * `[-500, +500]` summed to `0` and reported `within: true` — a negative
+   * cancelling a real removal — and `NaN` reported `within: true` while
+   * serialising to `null` after any JSON hop. A check that passed because it
+   * could not run, which is the failure mode this module's own header names.
+   *
+   * `parseNumstat` guards `n >= 0`, so the live observer cannot produce these —
+   * but `ObservedDiff` is also the `relay_fixture_inspection` shape and the
+   * intended persisted record.
+   */
+  const usableRemoval = (value: number | null): number | null =>
+    value !== null && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  const unknownRemoval = diff.changes.some((c) => usableRemoval(c.linesRemoved) === null);
   const linesRemoved = unknownRemoval
     ? null
-    : diff.changes.reduce((total, c) => total + (c.linesRemoved ?? 0), 0);
+    : diff.changes.reduce((total, c) => total + (usableRemoval(c.linesRemoved) ?? 0), 0);
 
   if (filesChanged > ceilings.maxFilesChanged) {
     problems.push({
@@ -198,14 +232,52 @@ export function judgeObservedDiff(input: {
     };
   }
 
+  /**
+   * SYMLINKS FIRST, and they never reach the scope rules.
+   *
+   * A symlinked path inside the write scope would be ACCEPTED by
+   * `classifyObservedChanges` — the path is in scope; it is the target that is
+   * not, and no path rule can see a target. Refused before classification.
+   */
+  const symlinked = diff.changes.filter((c) => c.kind === 'symlinked').map((c) => c.path);
+
   const scope = classifyObservedChanges({
-    changedPaths: diff.changes.map((c) => c.path),
+    changedPaths: diff.changes.filter((c) => c.kind !== 'symlinked').map((c) => c.path),
     writeScope: target.scope.write,
     protectedPaths: target.protectedPaths,
   });
   const ceilings = enforceChangeCeilings({ diff, ceilings: target.ceilings });
 
   const problems: RepositoryProblem[] = [];
+  /**
+   * A MISSION THAT MAY NOT WRITE MAY NOT HAVE ITS CHANGES ACCEPTED.
+   *
+   * `write_worktree` was enforced nowhere. An independent review resolved a
+   * Mission with `permissions: ['read']` — and one with `[]` — and both produced
+   * `accepted: true, committablePaths: ['src/app.ts']`. Only `commitObservedWork`
+   * refused, on the separate `commit` grant.
+   *
+   * `DiffJudgement` is the record the Reviewer and the UI read. For a read-only
+   * Mission it was saying Relay is prepared to commit paths the Mission was
+   * never authorized to write, which is a claim about authority that the
+   * authority layer disagreed with.
+   */
+  if (diff.changes.length > 0 && !target.permissions.includes('write_worktree')) {
+    problems.push({
+      refusal: 'permission_not_granted',
+      message:
+        `${String(diff.changes.length)} path(s) changed, and this Mission does not hold "write_worktree". `
+        + 'A read-only Mission that produced a diff produced it outside its authority.',
+    });
+  }
+  if (symlinked.length > 0) {
+    problems.push({
+      refusal: 'identity_invalid',
+      message:
+        `Symlinked paths were changed and Relay will not vouch for where they point: ${symlinked.join(', ')}. `
+        + 'A write through a symlink can leave the worktree entirely, which an observation of the worktree cannot see.',
+    });
+  }
   if (scope.protectedHits.length > 0) {
     problems.push({
       refusal: 'protected_path_unprotect_refused',

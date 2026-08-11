@@ -1,3 +1,4 @@
+import { proposePromotion } from '../../shared/llmops/brain-memory';
 import type {
   RelayMemorySource,
   RelayObservationKind,
@@ -236,7 +237,8 @@ export type RepositoryKnowledgeRefusal =
   | 'not_verified'
   | 'no_citation'
   | 'empty_statement'
-  | 'unknown_kind';
+  | 'unknown_kind'
+  | 'no_proposer';
 
 /**
  * Propose a durable repository fact, or refuse to.
@@ -283,7 +285,34 @@ export function proposeRepositoryKnowledge(input: {
       reason: 'A durable fact needs somewhere anyone can go and check it.',
     };
   }
-  if (!input.verifiedByRelay) {
+  /**
+   * A PROPOSAL MUST NAME ITS PROPOSER, and this is not cosmetic.
+   *
+   * `isSelfApproved` in `brain-memory.ts` is
+   * `proposer !== '' && proposer === approver` — so an entry whose proposer
+   * normalises to the empty string is reported as NOT self-approved whoever
+   * approves it. An empty `proposedBy` is therefore a proposal that, once
+   * approved by anybody including the agent that wrote it, evades the one guard
+   * that makes long-term memory worth trusting. An independent review found it
+   * by proposing with `proposedBy: ''`.
+   */
+  if (typeof input.proposedBy !== 'string' || input.proposedBy.trim() === '') {
+    return {
+      ok: false,
+      refusal: 'no_proposer',
+      reason:
+        'A proposal must name who proposed it. An empty proposer defeats `isSelfApproved`, '
+        + 'which is the only thing standing between an agent and approving its own claim.',
+    };
+  }
+  /**
+   * `!== true`, NOT falsy. `verifiedByRelay` is a required parameter, which makes
+   * it un-defaultable — and a required parameter is still just a value. A review
+   * executed `"false"`, `1`, `{}` and `[]` through it and every one PROPOSED,
+   * because a truthy non-boolean passes a falsy check. A JSON-sourced `"false"`
+   * is the realistic one.
+   */
+  if (input.verifiedByRelay !== true) {
     return {
       ok: false,
       refusal: 'not_verified',
@@ -292,19 +321,26 @@ export function proposeRepositoryKnowledge(input: {
         + 'It can be recorded as a short-term observation instead.',
     };
   }
-  const basis = [input.basis, ...(input.supporting ?? [])].map((e) => e.entryId);
+  /**
+   * `proposePromotion` DOES THE BUILDING, and this used to re-implement its body.
+   *
+   * `REPOSITORY_TARGETS.md` already claimed the feed reaches the Brain's own
+   * functions rather than restating them, and it reached its SHAPES while copying
+   * the basis-deduplication logic by hand. One means: if the Brain ever adds a
+   * field to a proposal, this gets it.
+   */
   return {
     ok: true,
-    proposal: {
-      entryId: input.basis.entryId,
+    proposal: proposePromotion({
+      entry: input.basis,
       // Prefixed with the kind so a human approving a queue can see WHAT kind
       // of claim they are approving without reading the whole sentence.
       statement: `[${input.kind}] ${input.statement.trim()}`,
       source: REPOSITORY_MEMORY_SOURCE,
       citation: input.citation.trim(),
-      proposedBy: input.proposedBy,
-      basis: [...new Set(basis)],
+      proposedBy: input.proposedBy.trim(),
       proposedAt: input.proposedAt,
-    },
+      supporting: input.supporting,
+    }),
   };
 }

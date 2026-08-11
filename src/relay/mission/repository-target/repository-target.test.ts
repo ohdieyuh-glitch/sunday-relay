@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ALWAYS_PROTECTED_PATHS,
+  pathInScope,
+  providerSupportsEnvironment,
   DEFAULT_CHANGE_CEILINGS,
   HIGH_CONSEQUENCE_PERMISSIONS,
   REPOSITORY_PERMISSIONS,
@@ -914,5 +916,193 @@ describe('shipped is a conclusion computed from evidence', () => {
       evidence,
       verdict: { shipped: true, reason: 'ok', liveRevision: SHA },
     })).toBe('shipped');
+  });
+});
+
+/* ================== what an independent review proved was unproven */
+
+describe('the guards the document headlines, now with coverage', () => {
+  it('refuses a SIMULATED provider for production', () => {
+    /**
+     * A review removed this guard and 123/123 passed: no test ever constructed
+     * `simulated: true`, and both existing calls used a staging-only descriptor
+     * so the FIRST refusal fired and the simulated branch was never reached.
+     *
+     * The reason it matters is not damage — a simulated provider would do
+     * nothing — it is that it would produce a PRODUCTION deployment record for a
+     * deploy that never happened, and that record is what a founder reads to
+     * decide the software is live.
+     */
+    const simulated = {
+      providerId: 'sim', displayName: 'Simulated', environments: ['staging', 'production'] as const,
+      canReportDeployedRevision: true, canVerifyLive: true, simulated: true,
+      credentialEnvVarName: null,
+    };
+    const production = providerSupportsEnvironment({ descriptor: simulated, environment: 'production' });
+    expect(production.ok).toBe(false);
+    if (!production.ok) expect(production.reason).toContain('simulated');
+    // And staging is still fine — the refusal is about production, not about
+    // simulation being useless.
+    expect(providerSupportsEnvironment({ descriptor: simulated, environment: 'staging' }).ok).toBe(true);
+  });
+
+  it('refuses a SHORT-SHA prefix as the deployed revision', () => {
+    /**
+     * Ship condition 3 is "that revision EQUALS the committed one", and a review
+     * relaxed it to `startsWith` and watched every test pass. Real providers
+     * report 7-character SHAs, so a prefix tolerance is the most likely future
+     * change — and it would make `deployedRevision: 'a'` match any commit
+     * beginning with `a`.
+     */
+    const full = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
+    const short = full.slice(0, 7);
+    const deployment: ShipStageEvidence = {
+      stage: 'deployed', observedAt: NOW, commitSha: full, branch: 'relay/x',
+      remoteRef: null, pullRequestRef: null, environment: 'staging',
+      deployedRevision: short, liveProbe: null, detail: null,
+    };
+    const probe: LiveProbeResult = {
+      reachable: true, healthy: true, reportedRevision: full,
+      method: 'GET /health', observedAt: NOW, detail: null,
+    };
+    const verdict = decideShipped({ committedSha: full, deployment, liveProbe: probe });
+    expect(verdict.shipped).toBe(false);
+    expect(verdict.reason).toContain('is not the revision Relay committed');
+  });
+
+  it('refuses a SHORT-SHA prefix from the running system too', () => {
+    const full = 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678';
+    const deployment: ShipStageEvidence = {
+      stage: 'deployed', observedAt: NOW, commitSha: full, branch: 'relay/x',
+      remoteRef: null, pullRequestRef: null, environment: 'staging',
+      deployedRevision: full, liveProbe: null, detail: null,
+    };
+    const verdict = decideShipped({
+      committedSha: full,
+      deployment,
+      liveProbe: {
+        reachable: true, healthy: true, reportedRevision: full.slice(0, 7),
+        method: 'GET /health', observedAt: NOW, detail: null,
+      },
+    });
+    expect(verdict.shipped).toBe(false);
+    expect(verdict.reason).toContain('reports serving');
+  });
+});
+
+describe('the resolved target cannot be widened at runtime', () => {
+  it('deep-freezes every array and object a consumer could push onto', () => {
+    /**
+     * `Object.freeze` is SHALLOW, and the header called freezing the mechanism. A
+     * review pushed `deploy_production` and `merge_pr` onto `target.permissions`
+     * and flipped a refused judgement to accepted — the two grants
+     * `HIGH_CONSEQUENCE_PERMISSIONS` says may never be inferred.
+     */
+    const result = resolve(register({
+      grants: [...LADDER.map((p) => grant(p)), grant('deploy_staging')],
+      credential: { envVarName: 'RELAY_GITHUB_TOKEN' },
+    }), { permissions: ['read', 'write_worktree'] });
+    if (!result.ok) throw new Error(result.error.message);
+    const t = result.target;
+    for (const [label, value] of [
+      ['target', t], ['permissions', t.permissions], ['scope', t.scope],
+      ['scope.read', t.scope.read], ['scope.write', t.scope.write],
+      ['protectedPaths', t.protectedPaths], ['protectedBranches', t.protectedBranches],
+      ['identity', t.identity], ['location', t.location], ['ceilings', t.ceilings],
+      ['credential', t.credential], ['credential.permittedUses', t.credential.permittedUses],
+    ] as const) {
+      expect(Object.isFrozen(value), `${label} is not frozen`).toBe(true);
+    }
+    // And the push actually throws rather than silently succeeding.
+    expect(() => (t.permissions as RepositoryPermission[]).push('deploy_production')).toThrow();
+  });
+
+  it('does not share the caller\'s draft objects with the registration', () => {
+    // Mutating `draft.identity.defaultBranch` after registration changed both the
+    // registration and an already-resolved target.
+    const built = draft();
+    const registration = createRepositoryRegistration({ draft: built, now: NOW });
+    if (!registration.ok) throw new Error(registration.error.message);
+    const resolved = resolveRepositoryTarget({
+      registration: registration.value, request: request({ permissions: ['read'] }), now: NOW,
+    });
+    if (!resolved.ok) throw new Error(resolved.error.message);
+    (built.identity as { defaultBranch: string }).defaultBranch = 'hijacked';
+    expect(resolved.target.identity.defaultBranch).toBe('main');
+  });
+});
+
+describe('the authorization layer reads one grant list one way', () => {
+  it('honours a RENEWED grant sitting beside an expired one', () => {
+    /**
+     * `livePermissions` was any-grant-is-live and `authorizeRepositoryAction` was
+     * first-match-only, so the two disagreed about the same registration — and
+     * appending a renewed grant beside an expired one is the obvious way a founder
+     * extends an expiry.
+     */
+    const registration = register({
+      grants: [
+        grant('read', { expiresAt: EARLIER }),
+        grant('read'),
+        grant('write_worktree', { expiresAt: EARLIER }),
+        grant('write_worktree'),
+      ],
+    });
+    expect(livePermissions(registration, NOW)).toEqual(['read', 'write_worktree']);
+    const decision = authorizeRepositoryAction({ registration, permission: 'read', now: NOW });
+    expect(decision.granted).toBe(true);
+    const narrowed = narrowPermissions({ registration, requested: ['read', 'write_worktree'], now: NOW });
+    expect(narrowed.ok).toBe(true);
+  });
+
+  it('still reports an EXPIRED grant as expired, not as never granted', () => {
+    // The founder did grant it. "You never had this" would be the wrong sentence.
+    const registration = register({ grants: [grant('read'), grant('write_worktree', { expiresAt: EARLIER })] });
+    const decision = authorizeRepositoryAction({ registration, permission: 'write_worktree', now: NOW });
+    expect(decision.granted).toBe(false);
+    expect(decision.problem?.refusal).toBe('permission_grant_expired');
+  });
+
+  it('honours a renewed PREREQUISITE beside an expired one', () => {
+    const registration = register({
+      grants: [
+        grant('read'), grant('write_worktree'), grant('commit'),
+        grant('push_feature_branch', { expiresAt: EARLIER }),
+        grant('push_feature_branch'),
+        grant('create_pr'),
+      ],
+      credential: { envVarName: 'RELAY_GITHUB_TOKEN' },
+    });
+    expect(authorizeRepositoryAction({ registration, permission: 'create_pr', now: NOW }).granted).toBe(true);
+  });
+});
+
+describe('scope spellings that used to pass and then refuse everything', () => {
+  it('normalizes a leading dot-slash instead of accepting a dead pattern', () => {
+    /**
+     * `./src` plus a globstar passed validation, passed the "authorized to write
+     * with nowhere to write" check (length 1, not 0), and then refused every
+     * change. A founder got a Mission that looked configured and could touch
+     * nothing.
+     */
+    const validated = validateRepositoryScope({ read: ['**'], write: ['./src/' + '**'] });
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    expect(validated.value.write).toEqual(['src/' + '**']);
+    // And it now actually matches.
+    expect(pathInScope(validated.value.write, 'src/app.ts')).toBe(true);
+    // Repeated dot-slash too.
+    const repeated = validateRepositoryScope({ read: ['**'], write: ['././src/' + '**'] });
+    expect(repeated.ok && repeated.value.write).toEqual(['src/' + '**']);
+  });
+
+  it('refuses an unprotect entry that names nothing protected, instead of silently doing nothing', () => {
+    // A founder who writes `.git/config` believes something untrue.
+    for (const entry of ['.git/config', '.GIT', 'src/whatever']) {
+      const result = resolveProtectedPaths({ additional: [], unprotect: [entry] });
+      expect(result.ok, entry).toBe(false);
+    }
+    // A real default is still unprotectable.
+    expect(resolveProtectedPaths({ additional: [], unprotect: ['package-lock.json'] }).ok).toBe(true);
   });
 });

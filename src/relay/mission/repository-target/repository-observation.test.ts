@@ -309,3 +309,57 @@ describe('the base is verified unchanged, and absence is never agreement', () =>
     expect(moved.reason).toContain('moved from');
   });
 });
+
+describe('what the judgement refuses that only the authorizer used to', () => {
+  it('refuses a diff from a Mission that does not hold write_worktree', () => {
+    /**
+     * `write_worktree` was enforced NOWHERE. A review resolved a Mission with
+     * `permissions: ['read']` — and one with `[]` — and both produced
+     * `accepted: true, committablePaths: ['src/app.ts']`. Only
+     * `commitObservedWork` refused, on the separate `commit` grant.
+     *
+     * `DiffJudgement` is the record the Reviewer and the UI read. For a read-only
+     * Mission it was saying Relay is prepared to commit paths the Mission was
+     * never authorized to write.
+     */
+    for (const permissions of [['read'] as const, [] as const]) {
+      const readOnly = { ...target(), permissions } as MissionRepositoryTarget;
+      const verdict = judgeObservedDiff({ diff: diff([change('src/a.ts')]), target: readOnly });
+      expect(verdict.accepted, JSON.stringify(permissions)).toBe(false);
+      expect(verdict.committablePaths).toEqual([]);
+      expect(verdict.problems.map((p) => p.refusal)).toContain('permission_not_granted');
+    }
+  });
+
+  it('says nothing about write_worktree when there are no changes', () => {
+    // A read-only Mission that changed nothing did nothing wrong.
+    const readOnly = { ...target(), permissions: ['read'] } as MissionRepositoryTarget;
+    const verdict = judgeObservedDiff({ diff: diff([]), target: readOnly });
+    expect(verdict.accepted).toBe(true);
+  });
+
+  it('treats a removed-line count that is not a non-negative integer as UNKNOWN', () => {
+    /**
+     * `enforceChangeCeilings` trusted its numbers. Executed by a review:
+     * `[-500, +500]` summed to 0 and reported `within: true` — a negative
+     * cancelling a real removal — and `NaN` reported `within: true` while
+     * serialising to `null` after any JSON hop. A check that passed because it
+     * could not run.
+     */
+    for (const bad of [Number.NaN, -500, 1.5, Number.POSITIVE_INFINITY]) {
+      const verdict = enforceChangeCeilings({
+        diff: diff([change('src/a.ts', { linesRemoved: bad })]),
+        ceilings: CEILINGS,
+      });
+      expect(verdict.within, String(bad)).toBe(false);
+      expect(verdict.linesRemoved, String(bad)).toBeNull();
+    }
+    // And a negative can no longer cancel a real removal.
+    const cancelled = enforceChangeCeilings({
+      diff: diff([change('a.ts', { linesRemoved: -500 }), change('b.ts', { linesRemoved: 500 })]),
+      ceilings: CEILINGS,
+    });
+    expect(cancelled.within).toBe(false);
+    expect(cancelled.linesRemoved).toBeNull();
+  });
+});

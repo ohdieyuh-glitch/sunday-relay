@@ -145,7 +145,28 @@ export function authorizeRepositoryAction(input: {
       message: `Repository "${registration.key}" was revoked and may not be used.`,
     });
   }
-  const grant = registration.grants.find((g) => g.permission === permission) ?? null;
+  /**
+   * THE MOST PERMISSIVE LIVE GRANT, not the first one declared.
+   *
+   * This was `find(g => g.permission === permission)` — first match only — while
+   * `livePermissions` is any-grant-is-live. An independent review executed the
+   * disagreement on grants `[read(expired 2020), read(live), …]`:
+   *
+   *   livePermissions           => ['read', 'write_worktree', 'commit']
+   *   authorizeRepositoryAction => granted:false, 'permission_grant_expired'
+   *
+   * A resolved target and `revalidateRepositoryTarget` both build on
+   * `livePermissions`, so they could hold a permission the act-time authorizer
+   * refuses — and appending a renewed grant beside an expired one is the obvious
+   * way a founder extends an expiry. Two authorities on one fact is how they came
+   * to disagree; now there is one reading.
+   *
+   * `withPermission` is kept so an EXPIRED grant still produces
+   * `permission_grant_expired` rather than `permission_not_granted`: the founder
+   * did grant it, and "you never had this" would be the wrong sentence.
+   */
+  const withPermission = registration.grants.filter((g) => g.permission === permission);
+  const grant = withPermission.find((g) => !expired(g.expiresAt, now)) ?? withPermission[0] ?? null;
   if (grant === null) {
     return refuse({
       refusal: 'permission_not_granted',
@@ -163,8 +184,10 @@ export function authorizeRepositoryAction(input: {
   // an expired `create_pr` is exactly the shape that would let a Mission merge
   // work it was no longer allowed to propose.
   for (const prerequisite of PERMISSION_PREREQUISITES[permission]) {
-    const upstream = registration.grants.find((g) => g.permission === prerequisite) ?? null;
-    if (upstream === null || expired(upstream.expiresAt, now)) {
+    // Same reading as above: a renewed prerequisite beside an expired one is
+    // live, and first-match-only would have called it expired.
+    const upstream = registration.grants.find((g) => g.permission === prerequisite && !expired(g.expiresAt, now)) ?? null;
+    if (upstream === null) {
       return refuse({
         refusal: 'permission_prerequisite_missing',
         message: `"${permission}" on "${registration.key}" requires a live "${prerequisite}" grant.`,
@@ -248,8 +271,20 @@ export function narrowPermissions(input: {
   const granted: RepositoryPermission[] = [];
   for (const permission of requested) {
     const decision = authorizeRepositoryAction({ registration, permission, now });
-    if (!decision.granted && decision.problem !== null) problems.push(decision.problem);
-    else granted.push(permission);
+    /**
+     * GRANTED is the branch that must be positive. This read
+     * `if (!granted && problem !== null) refuse; else grant`, so a decision with
+     * `granted: false, problem: null` would have been GRANTED. Unreachable today
+     * — every refusal goes through `refuse()`, which always sets a problem — and
+     * still the wrong default for a fail-closed module.
+     */
+    if (decision.granted) granted.push(permission);
+    else {
+      problems.push(decision.problem ?? {
+        refusal: 'permission_not_granted',
+        message: `"${permission}" was refused without a stated reason.`,
+      });
+    }
   }
   // A Mission asking for `merge_pr` must also be asking for the ladder beneath
   // it. Refused rather than completed, for the registration-time reason: a

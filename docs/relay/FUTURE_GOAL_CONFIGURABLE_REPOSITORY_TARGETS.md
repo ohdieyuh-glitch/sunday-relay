@@ -1,7 +1,7 @@
 # Configurable Repository Mission Targets — the design questions
 
 **Status: PARTLY BUILT as of 2026-08-11.** This document is the reasoning and
-the bar. What actually exists, and the seven things that do not, are in
+the bar. What actually exists, and the things that do not, are in
 `REPOSITORY_TARGETS.md` — read that for state and this for *why*.
 
 Originally recorded 2026-08-11 with the status **NOT STARTED**, when the hosted
@@ -17,9 +17,14 @@ destructive-action controls, plus the observation layer and the shipping
 lifecycle the founder's later goal added. **Not built:** §4 branch and
 pull-request policy is *authorized* and performed by nothing — no remote
 provider exists — and §5's credential handling is designed but has no client to
-hold a credential. Neither of the four preconditions at the end of this document
-is fully met; see the "What is NOT built" section of `REPOSITORY_TARGETS.md`,
-which lists them against real code.
+hold a credential.
+
+**Three of the four preconditions** at the end of this document are not met. The
+first — *the controlled-fixture path keeps working, unchanged* — **is** met: this
+work touches no bridge file, and `REPOSITORY_TARGETS.md` says so itself. An
+earlier draft of this paragraph said "neither of the four", which was wrong about
+the first precondition and the wrong word for four items. See the "What is NOT
+built" section of `REPOSITORY_TARGETS.md`, which lists them against real code.
 
 ### One place this document was overruled, deliberately
 

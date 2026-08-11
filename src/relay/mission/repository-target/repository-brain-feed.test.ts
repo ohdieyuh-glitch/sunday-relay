@@ -221,6 +221,45 @@ describe('repository KNOWLEDGE is only ever proposed, and only when Relay establ
     }
   });
 
+  it('refuses a TRUTHY NON-BOOLEAN, not merely a falsy one', () => {
+    /**
+     * `verifiedByRelay` is a required parameter, which makes it un-defaultable —
+     * and a required parameter is still just a value. A review executed
+     * `"false"`, `1`, `{}` and `[]` through the falsy check and every one
+     * PROPOSED. A JSON-sourced `"false"` is the realistic one.
+     */
+    for (const bad of ['false', 'true', 1, {}, [], 'yes'] as const) {
+      const result = propose({ verifiedByRelay: bad });
+      expect(result.ok, JSON.stringify(bad)).toBe(false);
+      if (!result.ok) expect(result.refusal).toBe('not_verified');
+    }
+    // And a real `true` still proposes.
+    expect(propose({ verifiedByRelay: true }).ok).toBe(true);
+  });
+
+  it('refuses a proposal that does not name its proposer', () => {
+    /**
+     * `isSelfApproved` is `proposer !== '' && proposer === approver`, so an entry
+     * whose proposer normalises to the empty string is reported as NOT
+     * self-approved whoever approves it. An empty `proposedBy` is a proposal
+     * that, once approved by anybody including the agent that wrote it, evades
+     * the one guard that makes long-term memory worth trusting.
+     */
+    for (const bad of ['', '   ', undefined, null] as const) {
+      const result = propose({ proposedBy: bad });
+      expect(result.ok, JSON.stringify(bad)).toBe(false);
+      if (!result.ok) expect(result.refusal).toBe('no_proposer');
+    }
+  });
+
+  it('builds the proposal through the Brain\'s own proposePromotion', () => {
+    // It reached the Brain's SHAPES while copying its basis-deduplication logic
+    // by hand. One means: a field added to a proposal arrives here for free.
+    const result = propose({ supporting: [{ ...basis, entryId: 'st-2' }] });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.proposal.basis).toEqual(['st-1', 'st-2']);
+  });
+
   it('refuses a proposal with no citation, no statement, or an unknown kind', () => {
     for (const [over, refusal] of [
       [{ citation: '   ' }, 'no_citation'],
