@@ -1393,7 +1393,15 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       }
 
       /* ---------------------- STEP 3 — DETERMINISTIC RELAY VERIFICATION */
-      const evidence = coding.evidence;
+      /**
+       * REASSIGNABLE BECAUSE A REPAIR REPLACES IT.
+       *
+       * A repaired implementation is a different artifact: different bytes,
+       * different digest, its own Relay inspection and its own test run. When
+       * the re-review accepts it, THAT is what the mission has, and the
+       * completion decision must be taken against it. See the repair leg.
+       */
+      let evidence = coding.evidence;
       if (!evidence) {
         fail(rec, 'verification_failed', 'Relay produced no deterministic evidence for this run.');
         return;
@@ -1810,6 +1818,40 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
               reviewedArtifactDigest: repaired.artifactDigest,
             };
             review = rec.review;
+            /**
+             * THE REPAIRED ARTIFACT BECOMES THE MISSION'S ARTIFACT, WITH ITS
+             * REVIEW, IN ONE STEP.
+             *
+             * Only `rec.review` moved here. The completion decision then
+             * compared the repaired review's digest against the FIRST
+             * attempt's evidence and refused every repair with "The artifact
+             * changed after review; the review is stale" — which was true, and
+             * was Relay describing its own omission.
+             *
+             * Observed on `pack-12-repair-cycle-1786427080`: rejection,
+             * repair, Relay's own re-verification, "Re-review complete —
+             * verdict approved", and then a refusal. Every role did its job
+             * and the mission was lost between two variables.
+             *
+             * The other completion inputs read from `evidence` too —
+             * `scopePreserved`, `deterministicTestsPassed`,
+             * `protectedPathsUntouched` — so leaving it behind also meant
+             * judging the repair's scope by the first attempt's inspection.
+             * That direction is worse than the refusal: a repair that broke
+             * scope would have been assessed on evidence that predates it.
+             *
+             * Assigned TOGETHER with the review, and only when the re-review
+             * was actually read, so the pair always describes one artifact.
+             */
+            evidence = repaired;
+            /**
+             * AND THE RECORD THE FOUNDER READS. `rec.artifactDigest` is set
+             * once, from the first attempt, and feeds the mission view. A
+             * completed repair would have shown the digest of the artifact it
+             * replaced — the record disagreeing with its own review about
+             * which bytes were judged.
+             */
+            rec.artifactDigest = repaired.artifactDigest;
           }
         }
       }
