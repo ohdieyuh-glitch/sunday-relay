@@ -33,16 +33,49 @@ guard in five proves inert.
 
 Both are **verified** boundaries, not assumptions. Each names the exact action.
 
-### 1. The paid three-role run against a real repository
+### 1. The paid three-role run — DONE for build/verify/review; the SHIP half is a wiring gap
 
-**Status: the pipeline carries a real repository target end to end and refuses
-correctly. No PAID role has ever run against one.**
+**Status (2026-08-12): the real paid three-role pipeline ran in production and
+reached `verified_complete`.** `mission-live-proof-1786524602`,
+`grok-build-0.1` served and attested — see `HOSTED_MISSION_EVIDENCE.md`. Defect
+3 is closed against a real run, not a probe.
 
-Measured in this environment: `XAI_API_KEY`, `OPENAI_API_KEY`,
-`ANTHROPIC_API_KEY` and `RELAY_BRIDGE_API_TOKEN` are all **absent**.
-`~/.hermes/auth.json` exists but is the founder's own Hermes credential, and
-`CLAUDE.md` forbids touching it — using it would be spending the founder's money
-without being asked.
+What that run proved: `BUILD → VERIFY → REVIEW → VERIFIED COMPLETE`. What it did
+NOT: the ship half, `COMMIT → PUSH → PR → MERGE → DEPLOY → LIVE VERIFY`.
+
+**THE SHIP HALF IS BUILT AND NOT WIRED.** After PR #122 merged (e3366bf),
+`ship-runner.ts` — the whole COMMIT→…→LIVE VERIFY chain, with the two named
+invariants — is on `main`. But nothing calls it from a hosted mission:
+
+- `relay-bridge/server.ts` `/relay-api/mission/start` reads only
+  `{ missionId, objective }` from the body. There is no way to hand a hosted
+  mission a `repositoryTarget`.
+- `relay-bridge/mission.ts`'s coding leg calls neither `repositoryTargetSource`
+  nor `runShipLifecycle`; every hosted mission still edits the controlled
+  fixture.
+
+So shipping in production needs, as its own reviewed unit of work:
+
+1. Extend `/mission/start` to accept an optional `repositoryTarget` +
+   `intendedWritePaths`, behind the SAME auth the money-spending routes use
+   (operator, or a control session bound to a participant — a browser read
+   session must not start a repository ship).
+2. Thread the target through `registry.start` into the coding leg's source
+   resolution (`repositoryTargetSource`), then into `runShipLifecycle` for the
+   COMMIT→…→SHIPPED tail, with the remote leg's credential boundary honoured.
+3. A real registered GitHub repository, a real push credential, and one live
+   run captured against it.
+
+This is threading a value across the operator/session auth boundary and into
+the money-spending path — it earns a design pass, its own tests, and an
+independent review, not an edge-of-context patch. It is the single highest-value
+remaining unit for Priority 1.
+
+The older credential note, kept because it was true until 2026-08-12: the keys
+were absent, and `~/.hermes/auth.json` is the founder's own credential that
+`CLAUDE.md` forbids. Both are resolved — the founder provided the Railway token
+and `XAI_API_KEY` lives on the Hermes service, reached through it rather than
+locally.
 
 So the architect and the reviewer are injected in every end-to-end test. That is
 stated in the tests themselves rather than glossed.
