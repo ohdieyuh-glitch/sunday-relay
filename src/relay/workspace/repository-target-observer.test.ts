@@ -1163,15 +1163,47 @@ describe('the remote subcommand cannot mutate where the repository points', () =
  * one, rather than fixing only the case that was reported.
  */
 describe('git branch cannot create, rename or delete a ref', () => {
-  it('refuses a positional branch name', () => {
-    const result = runRepositoryGit(['branch', 'relay-sneaky'], process.cwd());
+  /**
+   * A THROWAWAY REPOSITORY, NOT `process.cwd()` — the same rule the `remote`
+   * block one screen up spells out in fourteen lines, and these three tests were
+   * written directly beneath it still using the suite's own checkout.
+   *
+   * Two reasons it matters. `branch <name>` CREATES a ref, so if the guard
+   * regresses these tests mutate the developer's repository — and the worktrees
+   * here share one `.git`, so it would reach all of them. And the read test
+   * asserts a real git invocation SUCCEEDS against whatever cwd happens to be,
+   * so the suite fails in a `git archive` export or any build context copied
+   * without `.git`. A reviewer hit exactly that.
+   */
+  function branchProbeRepo(): string {
+    const root = mkdtempSync(join(tmpdir(), 'relay-branch-probe-'));
+    temporaries.push(root);
+    const env = { PATH: process.env.PATH ?? '', HOME: root };
+    execFileSync('git', ['init', '--quiet', '--initial-branch=main'], { cwd: root, env });
+    writeFileSync(join(root, 'f.txt'), 'x\n');
+    execFileSync('git', ['add', '--', '.'], { cwd: root, env });
+    execFileSync('git', ['commit', '-m', 'initial'], {
+      cwd: root,
+      env: { ...env, GIT_AUTHOR_NAME: 'F', GIT_AUTHOR_EMAIL: 'f@x', GIT_COMMITTER_NAME: 'F', GIT_COMMITTER_EMAIL: 'f@x' },
+    });
+    return root;
+  }
+
+  it('refuses a positional branch name, and creates no ref', () => {
+    const root = branchProbeRepo();
+    const env = { PATH: process.env.PATH ?? '', HOME: root };
+    const result = runRepositoryGit(['branch', 'relay-sneaky'], root);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.message).toContain('outside Relay');
+    // Checked by OBSERVING the repository, not by trusting the return value.
+    const branches = execFileSync('git', ['branch', '--list'], { cwd: root, encoding: 'utf8', env });
+    expect(branches).not.toContain('relay-sneaky');
   });
 
   it('refuses the mutating flags', () => {
+    const root = branchProbeRepo();
     for (const flag of ['-m', '-M', '-d', '-D', '-c']) {
-      expect(runRepositoryGit(['branch', flag, 'a', 'b'], process.cwd()).ok, flag).toBe(false);
+      expect(runRepositoryGit(['branch', flag, 'a', 'b'], root).ok, flag).toBe(false);
     }
   });
 
@@ -1182,6 +1214,9 @@ describe('git branch cannot create, rename or delete a ref', () => {
      * vets — so a verb rule that ignored flags would have broken the only
      * legitimate use of the subcommand.
      */
-    expect(runRepositoryGit(['branch', '--show-current'], process.cwd()).ok).toBe(true);
+    const root = branchProbeRepo();
+    const result = runRepositoryGit(['branch', '--show-current'], root);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.trim()).toBe('main');
   });
 });

@@ -318,6 +318,22 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
      * Both are checked before any network call, and both refuse by name.
      */
     const authorizedEnvVar = target.credential.envVarName;
+    /**
+     * FAIL CLOSED WHEN THE TARGET AUTHORIZES NO CREDENTIAL.
+     *
+     * The check used to be skipped entirely when `envVarName` was null, so a
+     * provider reading `GITHUB_TOKEN` was driven for a repository that
+     * authorized no credential at all. Not reachable through
+     * `createRepositoryRegistration` today — it refuses a registration whose
+     * grants need a credential when none is named — so this is defence in depth
+     * rather than a live hole, and it is written that way deliberately: the
+     * module that would perform the operation should refuse for itself rather
+     * than rely on a registry check upstream.
+     */
+    if (authorizedEnvVar === null && remote.descriptor.credentialEnvVarName !== null) {
+      return `This repository authorizes no credential, and the provider reads `
+        + `${remote.descriptor.credentialEnvVarName}. Relay will not act on a credential it was not given.`;
+    }
     if (authorizedEnvVar !== null && remote.descriptor.credentialEnvVarName !== authorizedEnvVar) {
       // FATAL. A credential boundary crossed is not an optional stage failing.
       return `This repository authorizes the credential in ${authorizedEnvVar}, and the provider reads `
