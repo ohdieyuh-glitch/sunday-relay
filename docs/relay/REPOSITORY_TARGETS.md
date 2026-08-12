@@ -1,9 +1,16 @@
 # Configurable Repository Targets
 
-**Status: the authorization spine, the observation layer and the shipping
-lifecycle are BUILT and TESTED. The remote provider and the paid three-role run
-against a real repository are NOT.** Read "What is not built" before believing
-anything else here.
+**Status: the authorization spine, the observation layer, the shipping
+lifecycle and its runner are BUILT and TESTED. `COMMIT -> DEPLOY -> LIVE VERIFY
+-> SHIPPED` is PERFORMED, against a real repository, a real artifact and a real
+HTTP probe. What has NOT happened is a paid three-role run against a real
+repository, and any remote operation at all: the GitHub provider is written and
+proven offline and has never made a request, because no credential exists here.**
+
+Read "What is not built" before believing anything else here — and note that
+that list is itself checked against the code, not maintained from memory. An
+earlier version of it claimed the dry-run mode did not exist while
+`planDryRun` was built, exported and covered by 19 tests.
 
 Design questions and their reasoning:
 `FUTURE_GOAL_CONFIGURABLE_REPOSITORY_TARGETS.md`. That document is the *why*;
@@ -51,9 +58,13 @@ src/relay/mission/repository-target/     PURE DOMAIN — decides what is ALLOWED
 src/relay/workspace/                     NODE — performs and OBSERVES
   repository-target-observer.ts  real git observation + the write surface
 
-relay-bridge/                            THE BRIDGE
+relay-bridge/                            THE BRIDGE — performs
   repository-source.ts          the one branch: fixture or registered target
   github-remote-provider.ts     the first remote provider, injected fetch
+  local-directory-deployment-provider.ts
+                                the first REAL DeploymentProvider: staging only
+  ship-runner.ts                walks COMMIT → DEPLOY → LIVE VERIFY → SHIPPED
+  ship-brain-feed.ts            a ship run → the existing Project Brain
 ```
 
 The domain has no Node, no network and no clock — time is an injected ISO
@@ -505,9 +516,25 @@ reads as unfinished.
 5. **No durable store.** Registrations are built and read as values; nothing
    persists them across a restart yet. The store belongs beside the other
    durable stores in `src/relay/persistence`, on the same key/value backing.
-6. **No dry-run mode.** The design document requires one — produce the branch
-   and the PR body, push nothing — and it does not exist because there is
-   nothing to push with.
+6. **CORRECTION — the dry-run mode IS built.** This entry read "it does not
+   exist because there is nothing to push with", and that was false when it was
+   written or shortly after: `repository-dry-run.ts` exports `planDryRun` and
+   `renderPullRequestBody`, both are in the barrel, and 19 tests cover them.
+   `planDryRun` produces exactly what the design document asks for — the
+   planned operations, each marked with the permission it would need and
+   whether the Mission HOLDS it, plus the PR body — and performs nothing.
+
+   The correction is left visible rather than quietly swapped, because the
+   defect class matters more than the entry. This document's own header says
+   "Read 'What is not built' before believing anything else here", so a stale
+   line here is worse than a stale line anywhere else in the repository: it is
+   the sentence a founder reads to decide what Relay can do, and it understated
+   the product. Every other entry in this list was re-checked against the code
+   at the same time — 1, 5 and 8 verified still true, 4 and 7 updated in the
+   same pass.
+
+   What is still missing is a CALLER: no bridge route or CLI action runs a dry
+   run, so the capability exists and nothing offers it.
 7. **The Project Brain feed is BUILT but has no producer.**
    `repository-brain-feed.ts` projects repository work into the **existing**
    Brain — `rememberShortTerm` and `proposePromotion` in
