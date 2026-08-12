@@ -121,7 +121,20 @@ export const SHIP_STAGE_REQUIREMENTS: Readonly<Record<ShipStage, {
    * because it is the moment the deploy is actually requested — checking only at
    * `deployed` would authorize after the fact.
    */
-  deploying: { permission: null, from: ['merged', 'pushed', 'committed'] },
+  /**
+   * `pull_request_open` IS A DEPLOYABLE STATE, and leaving it out made holding
+   * FEWER permissions deny a deploy the Mission was explicitly granted.
+   *
+   * Before the runner walked the remote leg, a Mission could never BE at
+   * `pull_request_open`, so the omission was invisible. Once it could, a
+   * Mission holding `push_feature_branch`, `create_pr` and `deploy_staging` but
+   * NOT `merge_pr` parked at `pull_request_open` and could not advance — the
+   * "merge is never implied" rule silently cancelling an authorized staging
+   * deploy. That is exactly backwards, and it contradicted the comment above
+   * this table: deploying an unmerged branch to staging is the normal preview
+   * flow. An independent review found it by driving the ordinary case.
+   */
+  deploying: { permission: null, from: ['merged', 'pull_request_open', 'pushed', 'committed'] },
   deployed: { permission: null, from: ['deploying'] },
   live_verified: { permission: null, from: ['deployed'] },
   shipped: { permission: null, from: ['live_verified'] },

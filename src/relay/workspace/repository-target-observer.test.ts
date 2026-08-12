@@ -167,7 +167,7 @@ function isolatedWorktree(root: string, target: MissionRepositoryTarget): string
 describe('the repository git surface is an allow-list', () => {
   it('refuses every subcommand that could reach a remote or rewrite history', () => {
     const { root } = realRepository();
-    for (const subcommand of ['push', 'fetch', 'remote', 'merge', 'rebase', 'reset', 'clean', 'gc', 'tag', 'config', 'filter-branch']) {
+    for (const subcommand of ['push', 'fetch', 'merge', 'rebase', 'reset', 'clean', 'gc', 'tag', 'config', 'filter-branch']) {
       const result = runRepositoryGit([subcommand, '--help'], root);
       // Absent from the allow-list, so refused before a process is spawned.
       expect(result.ok, subcommand).toBe(false);
@@ -1003,7 +1003,7 @@ describe('the documented surface matches the code', () => {
   const doc = () => readFileSync('docs/relay/REPOSITORY_TARGETS.md', 'utf8');
 
   it('names every git subcommand the write surface permits, and the right number of them', () => {
-    expect(REPOSITORY_GIT_ALLOWLIST).toHaveLength(10);
+    expect(REPOSITORY_GIT_ALLOWLIST).toHaveLength(11);
     expect(doc()).toContain('permits exactly ten subcommands');
     for (const subcommand of REPOSITORY_GIT_ALLOWLIST) {
       expect(doc(), `the doc does not name \`${subcommand}\``).toContain(`\`${subcommand}\``);
@@ -1013,7 +1013,16 @@ describe('the documented surface matches the code', () => {
   it('names every subcommand it claims is ABSENT, and each really is', () => {
     // The absence IS the enforcement, so a name that drifted out of this
     // sentence would leave a capability nobody re-checked.
-    for (const forbidden of ['push', 'fetch', 'remote', 'merge', 'rebase', 'reset', 'clean', 'gc', 'tag', 'config']) {
+    /**
+     * `remote` LEFT THIS LIST DELIBERATELY, and only for `get-url`.
+     * Confirming that a locally-checked-out remote target really is a checkout
+     * of the registered repository needs to READ `origin`. Every mutating verb
+     * — `set-url`, `add`, `remove`, `rename`, `prune` — is refused by
+     * `GIT_SUBCOMMAND_VERBS`, which is checked below, because the options
+     * allow-list only inspects dash-prefixed arguments and cannot see a
+     * positional verb at all.
+     */
+    for (const forbidden of ['push', 'fetch', 'merge', 'rebase', 'reset', 'clean', 'gc', 'tag', 'config']) {
       expect(doc(), `the doc stops claiming \`${forbidden}\` is absent`).toContain(`\`${forbidden}\``);
       expect(REPOSITORY_GIT_ALLOWLIST, `${forbidden} is in the allow-list`).not.toContain(forbidden);
     }
@@ -1067,5 +1076,39 @@ describe('the documented surface matches the code', () => {
     expect(text).toContain('has never touched GitHub');
     expect(text).toContain('a single real request');
     expect(text).toContain('NOT yet called by the mission engine');
+  });
+});
+
+
+/**
+ * `git remote` IS READ-ONLY, AND THE OPTIONS ALLOW-LIST CANNOT ENFORCE THAT.
+ *
+ * The options loop skips anything not starting with `-`, so a subcommand whose
+ * OPERATION is a positional word bypasses it entirely. Adding `remote` with
+ * `get-url` in the options map looked complete, and
+ * `git remote set-url origin https://evil/...` was ACCEPTED — a Mission able to
+ * repoint origin can push a founder's work to a remote of its choosing.
+ *
+ * Found by probing the built function, not by reading it.
+ */
+describe('the remote subcommand cannot mutate where the repository points', () => {
+  const MUTATING = ['set-url', 'add', 'remove', 'rename', 'prune', 'update'];
+
+  it.each(MUTATING)('refuses git remote %s', (verb) => {
+    const result = runRepositoryGit(['remote', verb, 'origin', 'https://evil.example/x.git'], process.cwd());
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain('outside Relay');
+  });
+
+  it('refuses git remote with no verb at all', () => {
+    // Bare `git remote` lists remotes; harmless, but the allow-list is a list
+    // of what is permitted, not of what is harmless.
+    const result = runRepositoryGit(['remote'], process.cwd());
+    expect(result.ok).toBe(false);
+  });
+
+  it('permits only get-url', () => {
+    const result = runRepositoryGit(['remote', 'get-url', 'origin'], process.cwd());
+    expect(result.ok).toBe(true);
   });
 });

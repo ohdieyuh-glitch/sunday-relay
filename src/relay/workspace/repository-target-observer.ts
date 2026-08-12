@@ -65,6 +65,14 @@ export const REPOSITORY_GIT_ALLOWLIST: readonly string[] = [
   'log',
   'ls-files',
   'cat-file',
+  /**
+   * READ-ONLY, and only `get-url` (see `GIT_SUBCOMMAND_OPTIONS`). Needed to
+   * confirm that a locally-checked-out remote target really is a checkout of
+   * the registered repository. Two lists guard this surface and BOTH must name
+   * a subcommand — adding it to the options map alone left the call refused,
+   * which is how this comment came to exist.
+   */
+  'remote',
 ];
 
 /**
@@ -92,6 +100,17 @@ export const REPOSITORY_GIT_ALLOWLIST: readonly string[] = [
  * letters first. A form nobody thought about is refused rather than permitted,
  * which is the direction that fails loudly.
  */
+/**
+ * SUBCOMMANDS WHOSE OPERATION IS A POSITIONAL WORD, and the only words allowed.
+ * Absent from this map means the subcommand has no positional verb to police.
+ */
+const GIT_SUBCOMMAND_VERBS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  // READ ONLY. `set-url`, `add`, `remove`, `rename` and `prune` all mutate
+  // where this repository points — the one thing a Mission must never change
+  // about its own target.
+  remote: ['get-url'],
+});
+
 const GIT_SUBCOMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = Object.freeze({
   'rev-parse': ['--verify', '--quiet', '--short'],
   status: ['--porcelain=v1', '-z', '--no-renames'],
@@ -105,6 +124,12 @@ const GIT_SUBCOMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = Obje
   show: ['--name-only'],
   log: ['--oneline', '-1'],
   'ls-files': ['--others', '--exclude-standard', '-z'],
+  /**
+   * READS a configured remote URL. `get-url` only. `set-url`, `add`, `remove`
+   * and `rename` all MUTATE where this repository points, which is the one
+   * thing a Mission must never be able to change about its own target.
+   */
+  remote: ['get-url'],
   'cat-file': ['-t', '-p'],
 });
 
@@ -139,6 +164,30 @@ export function runRepositoryGit(
         details: [...REPOSITORY_GIT_ALLOWLIST],
       }),
     );
+  }
+  /**
+   * THE FIRST POSITIONAL IS ALSO AN OPERATION, AND THE OPTION LIST CANNOT SEE IT.
+   *
+   * The options loop below skips anything not starting with `-`, so for a
+   * subcommand whose VERB is positional the entire allow-list is bypassed.
+   * `git remote get-url` is a read; `git remote set-url origin <url>` REPOINTS
+   * the repository, and a Mission that can repoint origin can push a founder's
+   * work to a remote of its choosing.
+   *
+   * Found by probing, not by reading: adding `remote` with `get-url` in the
+   * OPTIONS map looked complete and `remote set-url origin https://evil/...`
+   * was accepted. Any subcommand added here must declare its permitted verbs.
+   */
+  const verbs = GIT_SUBCOMMAND_VERBS[subcommand];
+  if (verbs !== undefined) {
+    const verb = args[1];
+    if (typeof verb !== 'string' || !verbs.includes(verb)) {
+      return fail(
+        relayError('permission-denied', `git ${subcommand} "${String(verb)}" is outside Relay's repository write surface.`, {
+          details: [...verbs],
+        }),
+      );
+    }
   }
   const permitted = GIT_SUBCOMMAND_OPTIONS[subcommand] ?? [];
   for (let i = 1; i < args.length; i += 1) {
@@ -503,4 +552,56 @@ export function commitObservedWork(input: {
   if (!head.ok) return head;
 
   return ok({ commitSha: head.value, branch, committedPaths: judgement.committablePaths });
+}
+
+/**
+ * DOES THIS CHECKOUT ACTUALLY BELONG TO THE REGISTERED REPOSITORY?
+ *
+ * A remote-hosted target may now name a LOCAL checkout, which is the ordinary
+ * case: a GitHub repository already cloned on the machine, edited in an
+ * isolated worktree, pushed to its own remote. The domain accepts the shape and
+ * cannot check the substance — it has no filesystem.
+ *
+ * This is the substance. Without it, a registration could name
+ * `github.com/acme/production` as its identity and `/home/me/scratch` as its
+ * path, and Relay would commit scratch work and push it to production. The old
+ * rule prevented that by forbidding local paths for remote providers entirely,
+ * which also forbade every correct one; this replaces a blanket refusal with an
+ * actual comparison.
+ *
+ * Compared on OWNER/NAME, not on the URL string: `https://github.com/o/r.git`,
+ * `https://github.com/o/r` and `git@github.com:o/r.git` are the same repository
+ * written three ways, and refusing two of them would teach people to edit the
+ * check rather than fix the target.
+ */
+export function checkoutMatchesIdentity(input: {
+  readonly worktreePath: string;
+  readonly host: string | null;
+  readonly owner: string | null;
+  readonly name: string;
+}): RelayResult<{ readonly remoteUrl: string }> {
+  const read = runRepositoryGit(['remote', 'get-url', 'origin'], input.worktreePath);
+  if (!read.ok) {
+    return fail(relayError(
+      'validation-failed',
+      'This target names a remote repository and its checkout has no "origin" remote to compare against.',
+    ));
+  }
+  const url = read.value.trim();
+  // `https://host/owner/name(.git)` or `git@host:owner/name(.git)`.
+  const match = /^(?:https:\/\/|git@)([^/:]+)[/:]([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
+  if (match === null) {
+    return fail(relayError('validation-failed', 'The checkout\'s "origin" remote is not a shape Relay can compare.'));
+  }
+  const [, host, owner, name] = match;
+  const same = (a: string | null, b: string | null): boolean =>
+    (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
+  if (!same(host, input.host) || !same(owner, input.owner) || !same(name, input.name)) {
+    return fail(relayError(
+      'validation-failed',
+      `This checkout's "origin" is ${host}/${owner}/${name}, and the registered repository is `
+      + `${input.host ?? '?'}/${input.owner ?? '?'}/${input.name}. Relay will not act on a checkout of a different repository.`,
+    ));
+  }
+  return ok({ remoteUrl: url });
 }

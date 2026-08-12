@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { buildSafeEditFixture } from '../src/relay/connectors/claude-code/fixture';
 import {
+  checkoutMatchesIdentity,
   resolveBaselineSha,
 } from '../src/relay/workspace/repository-target-observer';
 import { validateSourceRepository } from '../src/relay/workspace/repository-inspector';
@@ -105,7 +106,29 @@ export function repositoryTargetSource(
   /** The files this Mission declares it will write, narrowed from the scope. */
   intendedWritePaths: readonly string[],
 ): RepositorySourceResult {
-  if (target.location.kind !== 'local_path') {
+  if (target.location.kind === 'local_path' && target.identity.provider !== 'local') {
+    /**
+     * A REMOTE-HOSTED REPOSITORY, CHECKED OUT LOCALLY. Now supported, because
+     * refusing it made the whole PUSH/PR/MERGE leg unreachable: a `github`
+     * identity was forced to be `remote_clone`, and this function refuses
+     * `remote_clone` because nothing clones.
+     *
+     * The substance is checked below rather than assumed from the shape — the
+     * checkout's own `origin` must name this exact repository, or Relay would
+     * happily commit a scratch directory and push it to production.
+     */
+    const validatedCheckout = validateSourceRepository(target.location.path);
+    if (!validatedCheckout.ok) {
+      return { ok: false, reason: `Repository path refused: ${validatedCheckout.error.message}` };
+    }
+    const agrees = checkoutMatchesIdentity({
+      worktreePath: validatedCheckout.value.root,
+      host: target.identity.host,
+      owner: target.identity.owner,
+      name: target.identity.name,
+    });
+    if (!agrees.ok) return { ok: false, reason: agrees.error.message };
+  } else if (target.location.kind !== 'local_path') {
     return {
       ok: false,
       reason:

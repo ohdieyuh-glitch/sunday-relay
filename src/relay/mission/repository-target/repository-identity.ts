@@ -142,8 +142,39 @@ export function validateRepositoryLocation(
     // shapes that are wrong regardless of where they point.
     return ok(location);
   }
+  /**
+   * A REMOTE-HOSTED REPOSITORY MAY BE CHECKED OUT LOCALLY, and refusing that
+   * made the whole remote leg unreachable.
+   *
+   * The rule used to be "provider !== local implies remote_clone". But the
+   * ordinary case — the one a founder actually has — is a GitHub repository
+   * already cloned on the machine: Relay edits an isolated worktree of it and
+   * pushes to its remote. Under the old rule that registration was refused, so
+   * a target that could be SOURCED for the coding leg could never carry the
+   * owner/name the remote provider needs, and one that carried them could never
+   * be sourced (`repository-source.ts` refuses `remote_clone`, because nothing
+   * clones). PUSH/PR/MERGE were wired and unreachable.
+   *
+   * THE SAFETY THIS REPLACES IT WITH IS STRONGER, not weaker. A path is now
+   * accepted only in shape here; `repository-source.ts` then READS the
+   * checkout's own `origin` remote and refuses unless it names this exact
+   * identity. That is a check the old rule never made — it prevented a
+   * mismatched local path by forbidding local paths entirely, which also
+   * forbade the correct ones. Identity/checkout agreement is a filesystem
+   * question and belongs where git can be run, the same split the containment
+   * comment above already draws.
+   */
+  if (location.kind === 'local_path') {
+    if (typeof location.path !== 'string' || location.path.trim() === '') {
+      return fail(relayError('validation-failed', 'Local checkout path is empty.'));
+    }
+    if (location.path.includes('\0')) {
+      return fail(relayError('validation-failed', 'Local checkout path contains a null byte.'));
+    }
+    return ok(location);
+  }
   if (location.kind !== 'remote_clone') {
-    return fail(relayError('validation-failed', 'A remote repository must carry a clone URL.'));
+    return fail(relayError('validation-failed', 'A remote repository must carry a clone URL or a local checkout path.'));
   }
   let parsed: URL;
   try {
