@@ -478,6 +478,13 @@ export async function runCodingMission(input: {
       taskId,
       sourceRepositoryPath: source.sourceRepositoryPath,
       /**
+       * A REAL TARGET'S WORKTREE IS CREATED ON THE MISSION'S WORKING BRANCH, so
+       * the ship — which commits and pushes `target.workingBranch` and refuses a
+       * worktree on any other branch — finds it where it expects. A fixture keeps
+       * the default `relay/run/<runId>` branch; it never ships.
+       */
+      branchName: input.repositoryTarget?.workingBranch,
+      /**
        * A REAL TARGET'S WORKTREE IS RETAINED so it can be shipped; a fixture's
        * is removed on success. `manual_cleanup` survives a successful run, and
        * the ship (or teardown) removes it.
