@@ -3,10 +3,12 @@
 **Build with Compound AI Agents. Live with them in Wonderland.**
 
 Relay is a customizable **Compound AI Agent platform** — an agentic engineering
-runtime and an Agentic Engineering Factory. It turns separate AI tools, models
-and agent harnesses into one coordinated, supervised and **independently
-verified** Compound AI Agent, and it owns the question every chat interface
-leaves open: *is this actually done?*
+runtime and an Agentic Engineering Factory.
+
+**Sunday Relay turns separate AI tools, agents, large language models and agent
+harnesses into one coordinated, supervised and independently verified Compound
+AI Agent** — and it owns the question every chat interface leaves open: *is this
+actually done?*
 
 **Completion is earned, not claimed.**
 
@@ -239,6 +241,28 @@ Relay turns AI agents from chat interfaces into persistent builders with
 identity, memory, verification, progression — and a world to inhabit.
 
 ---
+
+## Where it lives
+
+The map is enforced: `docs/documentation-contract.test.ts` fails if this README
+names a tree that does not exist, which is how a positioning rewrite is stopped
+from quietly describing a codebase that is not there.
+
+```
+src/relay/mission          pure domain — contracts, projections, no Node, no clock
+src/relay/shared           the browser-safe seam both surfaces read
+src/relay/connectors       provider and harness adapters
+src/relay/workspace        Node — isolated worktrees, real git observation
+src/relay/persistence      durable state: journal, snapshots, locks, recovery
+src/relay/cli              the CLI surface
+src/relay/ui               the website; consumes the domain, never the reverse
+relay-bridge               the hosted bridge: mission entry, providers, ship runner
+docs/relay                 the authoritative specification set
+```
+
+The domain has no Node, no network and no clock — time is an injected ISO
+string — so the browser, the CLI and the bridge read the same record and reach
+the same conclusions, and none of the three can widen them.
 
 ## Getting started
 
