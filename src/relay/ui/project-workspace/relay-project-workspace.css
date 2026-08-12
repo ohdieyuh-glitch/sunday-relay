@@ -17,8 +17,16 @@
   --rpw-gold-bright: #f2c14e;
   --rpw-gold-dim: rgba(217, 164, 65, 0.4);
   --rpw-cream: #ece7dd;
-  --rpw-dim: #8b8578;
-  --rpw-faint: #5d584e;
+  /* SECONDARY AND TERTIARY TEXT, MEASURED.
+     Was `#8b8578` / `#5d584e`. The tertiary tier scored 2.83:1 on `--rpw-bg`
+     and 2.67:1 on `--rpw-panel-2` while carrying the timestamps, the operating
+     keys, the phase rail and the verification notes at 8-11px — under the
+     4.5:1 WCAG AA floor for normal text, and under the 3:1 floor as well.
+     Lifting the tertiary tier alone would have collapsed it into the
+     secondary, so both moved: 4.84 / 7.15 / 16.25 against `--rpw-bg`. Hues
+     unchanged. `premium-polish.test.tsx` measures every pair. */
+  --rpw-dim: #a09a8c;
+  --rpw-faint: #837c6e;
   --rpw-green: #6fbf73;
   --rpw-amber: #e0b25c;
   --rpw-red: #d66a5a;
@@ -44,16 +52,29 @@
      would re-impose the clip one level OUTSIDE `.rpw-stage-bounds`, defeating
      the stage's whole purpose from its own ancestor. */
   overflow-x: clip;
+
+  /* Thin, themed scrollbars for every scroller in the workspace — the console
+     feed, the terminal, the captured output, the sheets. `scrollbar-color`
+     inherits, so this one declaration reaches all of them without naming any.
+     The thumb measures 4.84:1 against the field; 3:1 is the floor for a UI
+     component. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--rpw-faint) transparent;
 }
 
+/* The technical grid also carries the LIGHT for this surface: a warm wash from
+   above and a floor shadow below, so the workspace sits in a lit room instead
+   of on a flat tile. One fixed element, composited once. */
 .rpw-grid-bg {
   position: fixed;
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(217, 164, 65, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(217, 164, 65, 0.04) 1px, transparent 1px);
-  background-size: 48px 48px;
+    radial-gradient(120% 58% at 50% -10%, rgba(217, 164, 65, 0.055), transparent 62%),
+    radial-gradient(150% 90% at 50% 120%, rgba(0, 0, 0, 0.5), transparent 58%),
+    linear-gradient(rgba(217, 164, 65, 0.04) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(217, 164, 65, 0.04) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
+  background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
   z-index: 0;
 }
 .rpw-scanlines {
@@ -69,6 +90,26 @@
   );
   opacity: 0.22;
   z-index: 1;
+}
+
+/* HD / RETINA — SCANLINES ONLY. The technical grid is handled by the
+   `--grid-stop` token on `:root`, which no colourway override can outrank;
+   see relay-tokens.css. The scanline overlay is not colourway-overridden,
+   so it stays a direct rule. */
+@media (min-resolution: 2dppx) {
+  .rpw-scanlines {
+    background: repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.14) 0px,
+      rgba(0, 0, 0, 0.14) 0.5px,
+      transparent 0.5px,
+      /* PERIOD STAYS 3px. Halving the LINE puts it on one device pixel; halving
+         the period too would raise scanline density by 50% and drop coverage
+         from 33% to 25% — a visibly different grain on HD, not the same grain
+         rendered finer. The retina pass is for sharpness, not for a new look. */
+      transparent 3px
+    );
+  }
 }
 .rpw > header,
 .rpw > main,
@@ -112,6 +153,11 @@
   margin-left: 6px;
 }
 
+/* CONTROLS. The same hover/press language as the entry home, on the same
+   duration and easing tokens, so a founder moving between the two surfaces
+   meets one product rather than two. A press deepens the plate instead of
+   moving it: nothing shifts under a finger, and the feedback survives reduced
+   motion, which removes the transitions via the blanket rule below. */
 .rpw-btn {
   font-family: var(--rpw-mono);
   font-size: 11px;
@@ -123,14 +169,56 @@
   color: var(--rpw-cream);
   border: 1px solid var(--rpw-line);
   cursor: pointer;
+  transition:
+    color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    border-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    background-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    filter var(--dur-fast, 120ms) var(--ease-emphasis, ease);
 }
+.rpw-btn:hover:not(:disabled) {
+  border-color: var(--rpw-gold-dim);
+  background-color: rgba(255, 255, 255, 0.035);
+}
+.rpw-btn:active:not(:disabled) { background-color: rgba(0, 0, 0, 0.28); }
 .rpw-btn--primary {
-  background: var(--rpw-gold);
+  background: var(--sheen), var(--rpw-gold);
   color: var(--rpw-bg);
   border-color: var(--rpw-gold);
   font-weight: 700;
 }
+.rpw-btn--primary:hover:not(:disabled) {
+  background: var(--sheen), var(--rpw-gold);
+  border-color: var(--rpw-gold);
+  filter: brightness(1.07);
+}
+.rpw-btn--primary:active:not(:disabled) { filter: brightness(0.94); }
 .rpw-btn--ghost { color: var(--rpw-dim); }
+.rpw-btn--ghost:hover:not(:disabled) { color: var(--rpw-cream); }
+
+.rpw-switch-btn,
+.rpw-term-btn,
+.rpw-head-btn,
+.rpw-icon-btn,
+.rpw-quick {
+  transition:
+    color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    border-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    background-color var(--dur-fast, 120ms) var(--ease-emphasis, ease);
+}
+.rpw-switch-btn:hover,
+.rpw-head-btn:hover,
+.rpw-icon-btn:hover {
+  color: var(--rpw-cream);
+  border-color: var(--rpw-gold-dim);
+  background-color: rgba(255, 255, 255, 0.035);
+}
+/* The terminal control is gold by direction — hover BRIGHTENS it rather than
+   turning it into another cream button. */
+.rpw-term-btn:hover {
+  color: var(--rpw-gold-bright);
+  border-color: var(--rpw-gold);
+  background-color: rgba(255, 255, 255, 0.035);
+}
 .rpw-btn:focus-visible,
 .rpw-switch-btn:focus-visible,
 .rpw-term-btn:focus-visible,
@@ -152,6 +240,17 @@
   padding: 12px clamp(14px, 3vw, 28px);
   border-bottom: 1px solid var(--rpw-gold-dim);
   background: rgba(7, 8, 11, 0.92);
+  box-shadow: 0 1px 0 var(--edge-light, rgba(255, 255, 255, 0.06));
+}
+
+/* The header is already translucent over the grid, so blurring what is behind
+   it is the difference between a tint and glass. Guarded: without
+   `backdrop-filter` a browser keeps the flat plate above. */
+@supports (backdrop-filter: blur(1px)) {
+  .rpw-header {
+    background: rgba(7, 8, 11, 0.74);
+    backdrop-filter: blur(var(--glass-blur, 18px)) saturate(var(--glass-saturate, 1.3));
+  }
 }
 .rpw-header-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .rpw-wordmark {
@@ -254,6 +353,15 @@
   border-bottom: 1px solid var(--rpw-line);
   background: rgba(11, 13, 18, 0.85);
 }
+/* AFTER the rule it refines, not before it: an `@supports` block adds no
+   specificity, so a glass background declared above `.rpw-strip` would be
+   overridden by the flat one below it and only the blur would survive. */
+@supports (backdrop-filter: blur(1px)) {
+  .rpw-strip {
+    background: rgba(11, 13, 18, 0.66);
+    backdrop-filter: blur(var(--glass-blur, 18px)) saturate(var(--glass-saturate, 1.3));
+  }
+}
 .rpw-strip-cell {
   flex: 1 1 0;
   min-width: 140px;
@@ -331,10 +439,17 @@
   width: min(420px, calc(100% - 36px));
   margin-top: -1px;
   padding: 14px 16px 12px;
+  /* NO SHEEN. This ground carries tertiary-tier text, which clears 4.5:1 by
+     0.02-0.06 flat, so ANY white overlay breaks it. At the token's peak alpha
+     the pair lands at 4.27-4.38. Measured, not assumed: an earlier round
+     asserted 0.020 cleared every pair in three places and was wrong by ~8x. */
   background: var(--rpw-panel-2, #12141c);
   border: 1px solid var(--rpw-line);
   border-top: 2px solid var(--rpw-gold);
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.55);
+  /* Was a one-off `0 22px 48px rgba(0,0,0,0.55)`. It is a popover above the
+     page, which is what `--elev-3` is for, so it now shares the drawer's
+     depth instead of carrying its own number. */
+  box-shadow: var(--elev-3);
 }
 .rpw-roleselect-head {
   display: flex;
@@ -515,11 +630,26 @@
 
 /* -------------------------------------------------------- relay console */
 
+/* THE ONE DOMINANT SURFACE, so it gets the most material.
+   It is already translucent over the technical grid, which makes it the best
+   candidate for real glass in the product: the grid reads as frosted behind
+   the console instead of showing through it as a tint.
+
+   No box-shadow. `clip-path` clips the element's painted output, and an outer
+   box-shadow is part of that output, so a shadow here would be cut away
+   entirely — the depth comes from `--sheen` inside the clip and from the gold
+   hairline. Same for `.rpw-conversation`, which shares the frame. */
 .rpw-console {
-  background: rgba(11, 13, 18, 0.72);
+  background: var(--sheen), rgba(11, 13, 18, 0.72);
   border: 1px solid var(--rpw-gold-dim);
   clip-path: var(--rpw-chamfer);
   padding: 18px clamp(16px, 2.5vw, 26px);
+}
+@supports (backdrop-filter: blur(1px)) {
+  .rpw-console {
+    background: var(--sheen), rgba(11, 13, 18, 0.58);
+    backdrop-filter: blur(var(--glass-blur, 18px)) saturate(var(--glass-saturate, 1.3));
+  }
 }
 .rpw-console-head {
   display: flex;
@@ -604,7 +734,14 @@
 .rpw-tev:last-child::before { display: none; }
 .rpw-tev-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .rpw-tev-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.rpw-tev-time { color: var(--rpw-faint); font-size: 11px; letter-spacing: 0.08em; }
+/* A timeline of timestamps is a COLUMN of figures — tabular digits keep it
+   straight instead of letting `1` narrow the row it lands in. */
+.rpw-tev-time {
+  color: var(--rpw-faint);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-variant-numeric: tabular-nums;
+}
 .rpw-tev-cat {
   font-size: 11px;
   font-weight: 700;
@@ -640,11 +777,17 @@
 .rpw-conversation {
   border: 1px solid var(--rpw-gold-dim);
   border-top: 0;
-  background: rgba(11, 13, 18, 0.72);
+  background: var(--sheen), rgba(11, 13, 18, 0.72);
   padding: 14px clamp(16px, 2.5vw, 26px) 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+@supports (backdrop-filter: blur(1px)) {
+  .rpw-conversation {
+    background: var(--sheen), rgba(11, 13, 18, 0.58);
+    backdrop-filter: blur(var(--glass-blur, 18px)) saturate(var(--glass-saturate, 1.3));
+  }
 }
 .rpw-conv-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .rpw-conv-title { font-size: 10px; font-weight: 700; letter-spacing: 0.22em; color: var(--rpw-dim); margin: 0; }
@@ -698,15 +841,33 @@
   border: 1px solid var(--rpw-line);
   cursor: pointer;
 }
-.rpw-quick:hover { color: var(--rpw-gold); border-color: var(--rpw-gold-dim); }
+.rpw-quick:hover {
+  color: var(--rpw-gold);
+  border-color: var(--rpw-gold-dim);
+  background-color: rgba(255, 255, 255, 0.035);
+}
 
 /* ----------------------------------------------------------- status rail */
 
 .rpw-status {
   border: 1px solid var(--rpw-line);
-  background: rgba(11, 13, 18, 0.6);
+  background: var(--sheen), rgba(11, 13, 18, 0.6);
   min-width: 0;
+  /* Square, so unlike the chamfered console it CAN carry an outer shadow. */
+  box-shadow: var(--elev-1);
 }
+/* NO `backdrop-filter` ON `.rpw-status`, DELIBERATELY, AND IT MUST NOT COME BACK.
+   A computed `backdrop-filter` other than `none` makes an element a CONTAINING
+   BLOCK for its `position: fixed` descendants (CSS Filter Effects L2). Two
+   full-viewport drawers render inside this rail — the Reviewer Harness catalog
+   (`.rhc-overlay`) and the Relay Bridge pairing dialog (`.rbp-overlay`), both
+   `position: fixed; inset: 0` — reached via
+   `.rpw-status > .rpw-status-block > .rpw-reviewer`. Neither is portalled.
+   Blurring here confines both to the ~27% status column instead of the
+   viewport, and `.rhc-sheet { height: 100dvh }` then overflows it. The pairing
+   dialog is the founder's only route to a browser Bridge session.
+   The plate is already translucent; the blur is the part that cannot be had
+   here. Guarded by `premium-polish.test.tsx`. */
 .rpw-status-block { padding: 12px 14px; border-bottom: 1px solid var(--rpw-line); }
 .rpw-status-block:last-child { border-bottom: 0; }
 /* Inner components lose their own panel chrome inside the rail. */
@@ -882,6 +1043,16 @@
   display: flex;
   justify-content: flex-end;
 }
+/* A SCRIM THAT DEFOCUSES INSTEAD OF ONLY DARKENING. The workspace behind a
+   drawer should read as out of focus, which is what tells a reader it is still
+   there and still theirs. With the blur the scrim can also be lighter, so less
+   of the page is thrown away. Without support, the flat 0.6 scrim stands. */
+@supports (backdrop-filter: blur(1px)) {
+  .rpw-terminal-overlay {
+    background: rgba(0, 0, 0, 0.46);
+    backdrop-filter: blur(var(--glass-blur-strong, 30px)) saturate(0.9);
+  }
+}
 .rpw-terminal {
   background: var(--rpw-bg);
   color: var(--rpw-cream);
@@ -893,6 +1064,9 @@
   padding: 14px 16px;
   font-family: var(--rpw-mono);
   font-size: 13px;
+  /* A docked drawer is the highest thing on the page, so it gets the deepest
+     elevation — the one cue that says it is above the workspace, not in it. */
+  box-shadow: var(--elev-3);
 }
 .rpw-terminal--full { width: 100%; border-left: none; }
 .rpw-terminal-head {
@@ -926,9 +1100,13 @@
   flex-direction: column;
   border: 1px solid var(--rpw-line);
   border-radius: 14px;
-  background: var(--rpw-panel);
+  background: var(--sheen), var(--rpw-panel);
   padding: 0 22px 14px;
   overflow: hidden;
+  /* The founder's framed terminal window. A rounded frame is the one place in
+     Relay where real elevation belongs — it is drawn as a window, so it should
+     sit above the surface like one. */
+  box-shadow: var(--elev-2);
 }
 .rpw-terminal--full .rpw-tm-window { width: 100%; }
 
@@ -942,7 +1120,19 @@
   padding: 14px 0 12px;
 }
 .rpw-tm-lights { display: inline-flex; align-items: center; gap: 8px; }
-.rpw-tm-light { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+/* Each light gets one specular highlight and one seat shadow, so a 12px disc
+   reads as a lens rather than a flat dot. Static — no animation, nothing to
+   stop under reduced motion. */
+.rpw-tm-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.45);
+}
 .rpw-tm-light--r { background: #d9564a; }
 .rpw-tm-light--y { background: #e0b25c; }
 .rpw-tm-light--g { background: #58b862; }
@@ -1035,7 +1225,8 @@
 .rpw-tmpanel {
   border: 1px solid var(--rpw-gold-dim);
   border-radius: 8px;
-  background: rgba(11, 13, 18, 0.6);
+  background: var(--sheen), rgba(11, 13, 18, 0.6);
+  box-shadow: var(--elev-1);
 }
 .rpw-tmpanel-head {
   display: flex;
@@ -1095,7 +1286,12 @@
   background: rgba(217, 164, 65, 0.16);
 }
 .rpw-tmrow:last-child::before { display: none; }
-.rpw-tmrow-time { color: var(--rpw-faint); font-size: 11px; min-width: 62px; }
+.rpw-tmrow-time {
+  color: var(--rpw-faint);
+  font-size: 11px;
+  min-width: 62px;
+  font-variant-numeric: tabular-nums;
+}
 .rpw-tmrow-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .rpw-tmrow-headline { margin: 0; font-size: 13px; color: var(--rpw-cream); overflow-wrap: anywhere; }
 .rpw-tmrow-role { color: var(--rpw-gold); }
@@ -1230,15 +1426,29 @@
   --rpw-gold-bright: #f5c65b;
   --rpw-gold-dim: rgba(224, 171, 72, 0.45);
   --rpw-cream: #f0ecdf;
-  --rpw-dim: #a0a4bd;
-  --rpw-faint: #737898;
+  /* Lifted with the obsidian tiers, for the same measured reason: at `#a0a4bd`
+     / `#737898` the tertiary tier scored 3.08:1 against `--rpw-panel-2`. The
+     ladder is now 4.53 / 6.62 on that ground. */
+  --rpw-dim: #b0b6d4;
+  --rpw-faint: #8e95bc;
 }
 [data-relay-colorway='midnight'] .rpw-grid-bg {
   background-image:
-    linear-gradient(rgba(158, 180, 232, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(158, 180, 232, 0.07) 1px, transparent 1px);
+    linear-gradient(rgba(158, 180, 232, 0.07) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(158, 180, 232, 0.07) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
+  /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
+     `background-size` is positional: the base rule declares four image layers
+     and four sizes, this override declares two, and CSS truncates the size list
+     to the layer count — so these two grid lines took `100% 100%, 100% 100%`
+     and a 48px repeating grid became ONE line at the top and one at the left.
+     On a `position: fixed; inset: 0` element that is the grid disappearing.
+     An independent review found it in the built bundle. */
+  background-size: 48px 48px, 48px 48px;
 }
-[data-relay-colorway='midnight'] .rpw-tmpanel { background: rgba(33, 40, 69, 0.65); }
+/* The sheen is re-stated here on purpose: this is a `background` SHORTHAND, and
+   a shorthand that omits the image resets it to `none` — so a colorway override
+   silently strips the material off the panel it is only recolouring. */
+[data-relay-colorway='midnight'] .rpw-tmpanel { background: var(--sheen), rgba(33, 40, 69, 0.65); }
 
 /* ==========================================================================
    CLAUDE CODE — CODING AGENT TERMINAL
@@ -1247,12 +1457,13 @@
    ========================================================================== */
 .rcat {
   border: 1px solid var(--rpw-line);
-  background: var(--rpw-panel);
+  background: var(--sheen), var(--rpw-panel);
   font-family: var(--rpw-mono);
   color: var(--rpw-cream);
   display: flex;
   flex-direction: column;
   min-width: 0;
+  box-shadow: var(--elev-1);
 }
 .rcat-head {
   display: flex;
@@ -1346,7 +1557,7 @@
   font-size: 0.68rem;
   line-height: 1.5;
 }
-.rcat-line-time { color: var(--rpw-faint); font-size: 0.62rem; }
+.rcat-line-time { color: var(--rpw-faint); font-size: 0.62rem; font-variant-numeric: tabular-nums; }
 .rcat-line-kind {
   color: var(--rpw-gold);
   font-size: 0.58rem;
@@ -1426,7 +1637,17 @@
   cursor: pointer;
   min-height: 32px;
 }
-.rcat-toggle:hover { border-color: var(--rpw-gold-dim); color: var(--rpw-gold-bright); }
+.rcat-toggle {
+  transition:
+    color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    border-color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    background-color var(--dur-fast, 120ms) var(--ease-emphasis, ease);
+}
+.rcat-toggle:hover {
+  border-color: var(--rpw-gold-dim);
+  color: var(--rpw-gold-bright);
+  background-color: rgba(255, 255, 255, 0.035);
+}
 .rcat-toggle--scroll { margin-left: auto; }
 .rcat-foot {
   display: flex;
@@ -1508,6 +1729,11 @@
   .rcat-cursor,
   .rcat-status-dot { animation: none; }
 }
+/* Named separately from the `.rpw *` blanket because the coding-agent terminal
+   is also rendered on its own, outside the workspace root. */
+@media (prefers-reduced-motion: reduce) {
+  .rcat-toggle { transition: none; }
+}
 .rcat--static .rcat-cursor,
 .rcat--static .rcat-status-dot { animation: none; }
 
@@ -1549,7 +1775,7 @@
   margin: 6px 0 12px;
   color: #d9a441;
 }
-.rpw-economics-status--ok { color: #8b8578; }
+.rpw-economics-status--ok { color: #a09a8c; }
 .rpw-economics-status--warning { color: #e0b25c; }
 .rpw-economics-status--approval { color: #e0b25c; }
 .rpw-economics-status--hard-limit { color: #d98f8f; }
@@ -1570,7 +1796,7 @@
 .rpw-economics-term {
   font-size: 11px;
   letter-spacing: 0.06em;
-  color: #8b8578;
+  color: #a09a8c;
 }
 .rpw-economics-value {
   margin: 0;
@@ -1579,12 +1805,15 @@
   color: #ece9e2;
   text-align: right;
   word-break: break-word;
+  /* Money and counts in a right-aligned column: the decimal points have to
+     line up, or the panel reads as an estimate. */
+  font-variant-numeric: tabular-nums;
 }
 
 .rpw-economics-subtitle {
   font-size: 10px;
   letter-spacing: 0.16em;
-  color: #8b8578;
+  color: #a09a8c;
   margin: 0 0 6px;
 }
 .rpw-economics-categories {
@@ -1601,11 +1830,12 @@
   align-items: baseline;
   font-size: 11px;
 }
-.rpw-economics-category-label { color: #8b8578; }
+.rpw-economics-category-label { color: #a09a8c; }
 .rpw-economics-category-actual {
   font-family: 'Fira Code', ui-monospace, monospace;
   color: #ece9e2;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .rpw-economics-category-status {
   grid-column: 1 / -1;
@@ -1801,6 +2031,16 @@
   z-index: 60;
   background: rgba(4, 5, 8, 0.92);
 }
+/* At 0.92 there is almost nothing left to blur, so the blur comes WITH a
+   lighter scrim: the workspace behind a focused panel reads as defocused
+   rather than deleted. The focused panel itself is opaque and fills the
+   viewport, so nothing behind it becomes readable or clickable either way. */
+@supports (backdrop-filter: blur(1px)) {
+  .rpw-focus-backdrop {
+    background: rgba(4, 5, 8, 0.7);
+    backdrop-filter: blur(var(--glass-blur-strong, 30px)) saturate(0.9);
+  }
+}
 
 /* THE STACKING CONTEXT THAT WOULD OTHERWISE BURY THE PANEL.
    `.rpw > main` is `position: relative; z-index: 2`, which makes it a stacking
@@ -1940,11 +2180,18 @@
   display: flex;
   justify-content: flex-end;
 }
+@supports (backdrop-filter: blur(1px)) {
+  .rhc-overlay {
+    background: rgba(4, 5, 8, 0.62);
+    backdrop-filter: blur(var(--glass-blur-strong, 30px)) saturate(0.9);
+  }
+}
 
 .rhc-sheet {
   background: var(--rpw-bg);
   color: var(--rpw-cream);
   border-left: 1px solid var(--rpw-gold-dim);
+  box-shadow: var(--elev-3);
   width: min(420px, 100%);
   height: 100dvh;
   overflow-y: auto;
@@ -2201,10 +2448,17 @@
   display: flex;
   justify-content: flex-end;
 }
+@supports (backdrop-filter: blur(1px)) {
+  .rbp-overlay {
+    background: rgba(4, 5, 8, 0.62);
+    backdrop-filter: blur(var(--glass-blur-strong, 30px)) saturate(0.9);
+  }
+}
 .rbp-sheet {
   background: var(--rpw-bg);
   color: var(--rpw-cream);
   border-left: 1px solid var(--rpw-gold-dim);
+  box-shadow: var(--elev-3);
   width: min(420px, 100%);
   height: 100dvh;
   overflow-y: auto;
@@ -2505,4 +2759,4 @@
   overflow-wrap: anywhere;
 }
 .rpb-view-evidence-list a { color: var(--rpw-cream, #ece7dd); text-decoration: underline; }
-.rpb-view-evidence-meta { display: block; font-size: 0.6rem; color: var(--rpw-faint, #5d584e); }
+.rpb-view-evidence-meta { display: block; font-size: 0.6rem; color: var(--rpw-faint, #837c6e); }

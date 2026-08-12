@@ -1,6 +1,7 @@
 .rdms {
   border: 1px solid #282a2f;
-  background: #0b0d12;
+  background: var(--sheen), #0b0d12;
+  box-shadow: var(--elev-1);
   color: #ece7dd;
   font-family: 'Fira Code', ui-monospace, monospace;
 }
@@ -16,7 +17,7 @@
 .rdms--collapsed .rdms-head { border-bottom: 0; }
 .rdms-title { display: grid; gap: 4px; min-width: 0; }
 .rdms-title strong { color: #d9a441; font-size: 10px; letter-spacing: .1em; overflow-wrap: anywhere; }
-.rdms-title span { color: #8b8578; font-size: 8px; letter-spacing: .11em; overflow-wrap: anywhere; }
+.rdms-title span { color: #a09a8c; font-size: 8px; letter-spacing: .11em; overflow-wrap: anywhere; }
 .rdms-toggle {
   flex: 0 0 44px;
   width: 44px;
@@ -36,7 +37,7 @@
 .rdms-body { display: grid; gap: 12px; padding: 14px; font-size: 10px; }
 .rdms-body p { margin: 5px 0 0; color: #b7b0a2; line-height: 1.6; overflow-wrap: anywhere; }
 .rdms-body code { color: #d9a441; }
-.rdms-body ul { margin: 0; padding-left: 18px; color: #8b8578; line-height: 1.7; }
+.rdms-body ul { margin: 0; padding-left: 18px; color: #a09a8c; line-height: 1.7; }
 .rdms-key { color: #d9a441; font-size: 8px; letter-spacing: .12em; }
 .rdms-finding { padding: 9px; border-left: 2px solid #c96f5b; }
 .rdms-complete { padding: 9px; border-left: 2px solid #708d6a; color: #91ad88 !important; }

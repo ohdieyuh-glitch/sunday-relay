@@ -78,7 +78,7 @@
   font-family: var(--font, ui-monospace, monospace);
   font-size: 0.75rem;
   letter-spacing: 0.04em;
-  color: var(--text-dim, #8b8578);
+  color: var(--text-dim, #a09a8c);
 }
 
 .rst-empty,
@@ -93,7 +93,7 @@
   font-family: var(--font, ui-monospace, monospace);
   font-size: 0.8rem;
   letter-spacing: 0.04em;
-  color: var(--text-dim, #8b8578);
+  color: var(--text-dim, #a09a8c);
   z-index: 6;
 }
 

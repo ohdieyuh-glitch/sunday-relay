@@ -19,6 +19,11 @@ import { useId } from 'react';
  *               decorative swirls.
  *   nodes       small points of light ON the pathways, not scattered over the
  *               shape, so the network looks connected instead of speckled.
+ *   specular    one soft highlight per mass, from the same direction as the
+ *               surface gradient. Without it the lobes are flat discs with a
+ *               vertical fade; with it they are round. It is white light at
+ *               very low opacity, never the accent — a tier must not be able
+ *               to change where the light comes from.
  *   signals     a few travelling pulses. Restrained on purpose: this sits
  *               above a workspace someone is trying to work in.
  *
@@ -74,6 +79,7 @@ export function RelayProjectBrainOrb({
   const glow = `rpb-glow-${uid}`;
   const surface = `rpb-surface-${uid}`;
   const plane = `rpb-plane-${uid}`;
+  const specular = `rpb-specular-${uid}`;
 
   return (
     <svg
@@ -99,6 +105,14 @@ export function RelayProjectBrainOrb({
           <stop offset="50%" stopColor="var(--rpb-accent, #8f7cf0)" stopOpacity="0.5" />
           <stop offset="100%" stopColor="var(--rpb-accent, #8f7cf0)" stopOpacity="0" />
         </linearGradient>
+        {/* Off-centre, upper-left: the same light the surface gradient already
+            implies. Deliberately weak — a bright highlight here would read as
+            plastic, and this object sits over someone's work. */}
+        <radialGradient id={specular} cx="32%" cy="22%" r="64%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.15" />
+          <stop offset="52%" stopColor="#ffffff" stopOpacity="0.04" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+        </radialGradient>
       </defs>
 
       {/* The light the object casts, drawn first so everything sits inside it. */}
@@ -119,6 +133,10 @@ export function RelayProjectBrainOrb({
           <ellipse cx="43" cy="46" rx="21" ry="19" fill={`url(#${surface})`} />
           <ellipse cx="60" cy="47" rx="17" ry="17" fill={`url(#${surface})`} />
           <path d="M47 63 L47 74 Q50 78 53 74 L53 62 Z" fill={`url(#${surface})`} />
+          {/* The specular pass, over the fills and under the edge light, so the
+              masses are lit before they are outlined. */}
+          <ellipse cx="43" cy="46" rx="21" ry="19" fill={`url(#${specular})`} />
+          <ellipse cx="60" cy="47" rx="17" ry="17" fill={`url(#${specular})`} />
           {/* Edge light: the accent reads as the object's own energy rather
               than a stroke drawn around it. */}
           <ellipse cx="43" cy="46" rx="21" ry="19" fill="none"

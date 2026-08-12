@@ -29,7 +29,7 @@
 }
 
 .rop-health-reason {
-  color: var(--text-dim, #8b8578);
+  color: var(--text-dim, #a09a8c);
   font-size: 0.8rem;
 }
 
@@ -37,13 +37,13 @@
 .rop-health--healthy .rop-health-state { color: var(--ok, #6fae6f); }
 .rop-health--degraded .rop-health-state { color: var(--warn, #d9a441); }
 .rop-health--failing .rop-health-state { color: var(--bad, #c96a5c); }
-.rop-health--unknown .rop-health-state { color: var(--text-dim, #8b8578); }
+.rop-health--unknown .rop-health-state { color: var(--text-dim, #a09a8c); }
 
 /* --------------------------------------------------------- waiting */
 
 .rop-waiting {
-  border-left: 2px solid var(--text-dim, #8b8578);
-  color: var(--text-dim, #8b8578);
+  border-left: 2px solid var(--text-dim, #a09a8c);
+  color: var(--text-dim, #a09a8c);
   font-size: 0.82rem;
   margin: 0;
   padding-left: 10px;
@@ -65,7 +65,7 @@
 }
 
 .rop-figures dt {
-  color: var(--text-dim, #8b8578);
+  color: var(--text-dim, #a09a8c);
   font-family: var(--font-brand, ui-monospace, monospace);
   font-size: 0.68rem;
   letter-spacing: 0.09em;
@@ -76,10 +76,10 @@
 }
 
 .rop-bad { color: var(--bad, #c96a5c); }
-.rop-caveat { color: var(--text-dim, #8b8578); }
+.rop-caveat { color: var(--text-dim, #a09a8c); }
 
 /* An unknown reads as an absence, and says why it is absent. */
-.rop-unknown { color: var(--text-dim, #8b8578); }
+.rop-unknown { color: var(--text-dim, #a09a8c); }
 
 .rop-unknown-why {
   font-size: 0.72rem;
@@ -89,7 +89,7 @@
 /* --------------------------------------------------------- latency */
 
 .rop-subheading {
-  color: var(--text-dim, #8b8578);
+  color: var(--text-dim, #a09a8c);
   font-family: var(--font-brand, ui-monospace, monospace);
   font-size: 0.68rem;
   letter-spacing: 0.09em;
@@ -109,7 +109,7 @@
 }
 
 .rop-latency thead th {
-  color: var(--text-dim, #8b8578);
+  color: var(--text-dim, #a09a8c);
   font-size: 0.68rem;
   font-weight: normal;
   letter-spacing: 0.08em;
@@ -122,7 +122,7 @@
 .rop-empty,
 .rop-missing,
 .rop-asof {
-  color: var(--text-dim, #8b8578);
+  color: var(--text-dim, #a09a8c);
   font-size: 0.75rem;
   margin: 0;
 }
@@ -146,4 +146,4 @@
 
 .rop-wait-reason { text-transform: lowercase; }
 
-.rop-wait-time { color: var(--text-dim, #8b8578); }
+.rop-wait-time { color: var(--text-dim, #a09a8c); }

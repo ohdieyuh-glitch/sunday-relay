@@ -29,6 +29,19 @@
   /* Graphite */
   --relay-manual-graphite: #5d5c58;
   --relay-manual-soft-gray: #a2a19e;
+  /* GRAPHITE, ONE STEP DEEPER — added for the ivory surfaces only.
+     A cream page needs a legible secondary AND tertiary tier. Measured against
+     `--relay-manual-cream`: ink is 15.92:1, graphite is 5.44:1, and
+     `--relay-manual-cream-text-muted` — which every cream surface was using as
+     its tertiary tier — is 2.06:1. That is unreadable 9px metadata, not a
+     restrained one. There is no room for a tier LIGHTER than graphite that
+     still clears the 4.5:1 WCAG AA floor on cream, so the ladder moves the
+     other way: this darker graphite takes the secondary tier and graphite
+     itself becomes the tertiary — 7.82 / 5.44 on `--relay-manual-cream` and
+     8.64 / 6.01 on `--relay-manual-cream-panel`. Same hue family, and the
+     black system surfaces are untouched — they already measured 7.79:1.
+     `premium-polish.test.tsx` measures every pair. */
+  --relay-manual-graphite-deep: #46453f;
   /* Aged gold */
   --relay-manual-gold: #846622;
   --relay-manual-gold-dark: #795c1c;
@@ -63,10 +76,30 @@
 }
 [data-relay-colorway='manual'] .reh-grid-bg {
   background-image:
-    linear-gradient(rgba(27, 28, 23, 0.55) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(27, 28, 23, 0.55) 1px, transparent 1px);
+    linear-gradient(rgba(27, 28, 23, 0.55) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(27, 28, 23, 0.55) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
+  /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
+     `background-size` is positional: the base rule declares four image layers
+     and four sizes, this override declares two, and CSS truncates the size list
+     to the layer count — so these two grid lines took `100% 100%, 100% 100%`
+     and a 48px repeating grid became ONE line at the top and one at the left.
+     On a `position: fixed; inset: 0` element that is the grid disappearing.
+     An independent review found it in the built bundle. */
+  background-size: 44px 44px, 44px 44px;
 }
+/* `backdrop-filter: none` ON THE MANUAL OVERRIDES, DELIBERATELY.
+   These overrides are `[data-relay-colorway='manual'] .x` — specificity (0,2,0)
+   — and the glass rules are `@supports { .x }` at (0,1,0). `@supports` adds no
+   specificity, so the manual background always wins while the `backdrop-filter`
+   from the guarded block SURVIVES: a blur compositing layer behind a fully
+   opaque ink or cream plate, paying for glass and rendering none. That is
+   verbatim the defect this pass fixed in `relay-preview.css`, reached by
+   specificity instead of by source order — an independent review found the
+   source-order form and this one separately.
+   The manual colorway is a founder-provided reference and is deliberately flat,
+   so the resolution is to switch the blur OFF here rather than restate it. */
 [data-relay-colorway='manual'] .reh-header {
+  backdrop-filter: none;
   background: var(--relay-manual-black);
   border-bottom-color: rgba(93, 92, 88, 0.5);
 }
@@ -87,8 +120,8 @@
   --reh-panel-2: var(--relay-manual-cream-panel);
   --reh-line: var(--relay-manual-cream-muted);
   --reh-cream: var(--relay-manual-ink);
-  --reh-dim: var(--relay-manual-graphite);
-  --reh-faint: var(--relay-manual-cream-text-muted);
+  --reh-dim: var(--relay-manual-graphite-deep);
+  --reh-faint: var(--relay-manual-graphite);
   --reh-gold: var(--relay-manual-gold);
   --reh-gold-dim: rgba(132, 102, 34, 0.5);
   background: var(--relay-manual-cream);
@@ -100,8 +133,8 @@
   --reh-panel-2: var(--relay-manual-cream);
   --reh-line: var(--relay-manual-cream-text-muted);
   --reh-cream: var(--relay-manual-ink);
-  --reh-dim: var(--relay-manual-graphite);
-  --reh-faint: var(--relay-manual-cream-text-muted);
+  --reh-dim: var(--relay-manual-graphite-deep);
+  --reh-faint: var(--relay-manual-graphite);
   --reh-gold: var(--relay-manual-gold);
   --reh-gold-dim: rgba(132, 102, 34, 0.5);
   background: var(--relay-manual-cream-panel);
@@ -137,13 +170,21 @@
   --rps-gold: var(--relay-manual-gold);
   --rps-gold-dim: rgba(132, 102, 34, 0.5);
   --rps-cream: var(--relay-manual-ink);
-  --rps-dim: var(--relay-manual-graphite);
-  --rps-faint: var(--relay-manual-cream-text-muted);
+  --rps-dim: var(--relay-manual-graphite-deep);
+  --rps-faint: var(--relay-manual-graphite);
 }
 [data-relay-colorway='manual'] .rps-grid-bg {
   background-image:
-    linear-gradient(rgba(214, 211, 196, 0.6) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(214, 211, 196, 0.6) 1px, transparent 1px);
+    linear-gradient(rgba(214, 211, 196, 0.6) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(214, 211, 196, 0.6) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
+  /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
+     `background-size` is positional: the base rule declares four image layers
+     and four sizes, this override declares two, and CSS truncates the size list
+     to the layer count — so these two grid lines took `100% 100%, 100% 100%`
+     and a 48px repeating grid became ONE line at the top and one at the left.
+     On a `position: fixed; inset: 0` element that is the grid disappearing.
+     An independent review found it in the built bundle. */
+  background-size: 48px 48px, 48px 48px;
 }
 [data-relay-colorway='manual'] .rps-header {
   background: var(--relay-manual-black);
@@ -185,10 +226,19 @@
 }
 [data-relay-colorway='manual'] .rpw-grid-bg {
   background-image:
-    linear-gradient(rgba(27, 28, 23, 0.55) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(27, 28, 23, 0.55) 1px, transparent 1px);
+    linear-gradient(rgba(27, 28, 23, 0.55) var(--grid-stop, 1px), transparent var(--grid-stop, 1px)),
+    linear-gradient(90deg, rgba(27, 28, 23, 0.55) var(--grid-stop, 1px), transparent var(--grid-stop, 1px));
+  /* THE SIZE IS RE-STATED BECAUSE THE LAYER COUNT DIFFERS FROM THE BASE.
+     `background-size` is positional: the base rule declares four image layers
+     and four sizes, this override declares two, and CSS truncates the size list
+     to the layer count — so these two grid lines took `100% 100%, 100% 100%`
+     and a 48px repeating grid became ONE line at the top and one at the left.
+     On a `position: fixed; inset: 0` element that is the grid disappearing.
+     An independent review found it in the built bundle. */
+  background-size: 48px 48px, 48px 48px;
 }
 [data-relay-colorway='manual'] .rpw-header {
+  backdrop-filter: none;
   background: var(--relay-manual-black);
   border-bottom-color: rgba(93, 92, 88, 0.5);
 }
@@ -196,6 +246,7 @@
 [data-relay-colorway='manual'] .rpw-wordmark-relay { color: var(--relay-manual-signal-soft); }
 /* Agent platforms: ivory cells with ink identity, aged-gold squares. */
 [data-relay-colorway='manual'] .rpw-strip {
+  backdrop-filter: none;
   background: var(--relay-manual-cream);
   border-bottom-color: var(--relay-manual-cream-muted);
 }
@@ -210,12 +261,13 @@
 [data-relay-colorway='manual'] .rpw-strip-cell--phase { background: var(--relay-manual-cream-panel); }
 /* The dialogue dock: focused ivory panel with ink border (founder ref). */
 [data-relay-colorway='manual'] .rpw-conversation {
+  backdrop-filter: none;
   --rpw-panel: var(--relay-manual-cream-panel);
   --rpw-panel-2: var(--relay-manual-cream);
   --rpw-line: var(--relay-manual-cream-text-muted);
   --rpw-cream: var(--relay-manual-ink);
-  --rpw-dim: var(--relay-manual-graphite);
-  --rpw-faint: var(--relay-manual-cream-text-muted);
+  --rpw-dim: var(--relay-manual-graphite-deep);
+  --rpw-faint: var(--relay-manual-graphite);
   --rpw-gold: var(--relay-manual-gold);
   --rpw-gold-dim: rgba(132, 102, 34, 0.5);
   background: var(--relay-manual-cream-panel);
@@ -234,12 +286,13 @@
 }
 /* Status rail: ivory technical panels. */
 [data-relay-colorway='manual'] .rpw-status {
+  backdrop-filter: none;
   --rpw-panel: var(--relay-manual-cream);
   --rpw-panel-2: var(--relay-manual-cream-panel);
   --rpw-line: var(--relay-manual-cream-muted);
   --rpw-cream: var(--relay-manual-ink);
-  --rpw-dim: var(--relay-manual-graphite);
-  --rpw-faint: var(--relay-manual-cream-text-muted);
+  --rpw-dim: var(--relay-manual-graphite-deep);
+  --rpw-faint: var(--relay-manual-graphite);
   --rpw-gold: var(--relay-manual-gold);
   --rpw-gold-dim: rgba(132, 102, 34, 0.5);
   background: var(--relay-manual-cream);
@@ -262,7 +315,7 @@
 [data-relay-colorway='manual'] .rpw-footer-gold { color: var(--relay-manual-gold); }
 [data-relay-colorway='manual'] .rpw-footer-net { color: var(--relay-manual-ink); }
 /* Deep console + terminal stay black system surfaces. */
-[data-relay-colorway='manual'] .rpw-console { background: var(--relay-manual-stage); }
+[data-relay-colorway='manual'] .rpw-console { background: var(--relay-manual-stage); backdrop-filter: none; }
 [data-relay-colorway='manual'] .rpw-terminal { background: var(--relay-manual-black); }
 [data-relay-colorway='manual'] .rpw-tm-window {
   background: var(--relay-manual-stage);
