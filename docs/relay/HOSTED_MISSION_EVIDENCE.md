@@ -75,6 +75,40 @@ written here.
 Eight completions across materially different objectives, four failures — one
 correct refusal and three that exposed real defects, each fixed and re-run.
 
+## The run that closed defect 3 against a real Grok — 2026-08-12
+
+Every mission above was run before xAI credentials existed; the reviewer leg was
+Hermes reaching a service that had no key, so `servedModel` was truthfully null.
+On 2026-08-12 the founder provided the Railway API token, `XAI_API_KEY` was
+present on the Hermes service, and one real paid three-role mission ran end to
+end in production.
+
+`mission-live-proof-1786524602`, revision `rev_9702996dab4e0ac1`, participant
+`founder-live-proof` (wave_0), **verified_complete** at 08:51:40Z.
+
+| role | requested | SERVED (attested) | verified | fallback |
+|---|---|---|---|---|
+| prompt_architect | `gpt-4o` | `gpt-4o-2024-08-06` | true | false |
+| coding_agent | (none) | `claude-sonnet-5` | true | false |
+| reviewer | (none) | `grok-build-0.1` | true | false |
+
+Review: **approved**, `servedModel: grok-build-0.1`, 0 findings.
+
+**This is defect 3 closed against a real run, not a probe.** The reviewer's
+served model is the value xAI actually answered with, read from Hermes' usage
+report and attested — the field that used to mirror the *request*. And the
+model-identity classifier held on a live snapshot: `gpt-4o` requested,
+`gpt-4o-2024-08-06` served, classified as a resolution (verified, no fallback)
+rather than a substitution that would have failed the mission after paying.
+
+**What this run does NOT prove: the ship half.** BUILD → VERIFY → REVIEW →
+VERIFIED COMPLETE is proven; COMMIT → PUSH → PR → MERGE → DEPLOY → LIVE VERIFY is
+not, and cannot be through the deployed bridge today — `main`'s `/mission/start`
+accepts only `{missionId, objective}` and its coding leg never calls the ship
+runner. That path lives on PR #122, unmerged. Shipping in production needs #122
+merged AND the start route extended to accept a repository target. A wiring gap,
+not a credential gap, and stated so it is not mistaken for done.
+
 ## The full repair cycle, observed live
 
 `pack-13-full-cycle-1786430326`, in production, verbatim headlines:
