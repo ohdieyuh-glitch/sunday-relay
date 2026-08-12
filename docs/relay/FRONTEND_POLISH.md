@@ -1,7 +1,7 @@
 # Relay frontend — premium polish pass
 
 Status: implemented on `relay/frontend-premium-polish`.
-Tests: `src/relay/ui/premium-polish.test.tsx` (15 assertions, 15 mutations proven).
+Tests: `src/relay/ui/premium-polish.test.tsx` (25 assertions).
 
 This was a **polish pass, not a redesign**. Every layout concept, every surface
 structure, the Relay Dog, the Relay Stage, the Project Brain, the Mission
@@ -320,7 +320,7 @@ false statement in this document.
 | # | What went wrong | Repair |
 |---|---|---|
 | 1 | the base grid rules grew from two image layers to four with a four-value `background-size`, and five colorway overrides still declared two layers. `background-size` is positional and CSS truncates the list to the layer count, so the two grid lines took `100% 100%` — on a `position: fixed; inset: 0` element, a 48px grid became one line at the top and one at the left. **The technical grid was gone on five of six colorway × surface combinations**, and obsidian, the default, was unaffected — so nobody testing the default would have seen it | the size is re-stated in each of the five overrides, and a test now requires every grid rule's layer count to match the size list in effect |
-| 2 | `--sheen` was painted over the very panel tokens the contrast ladder measures against, so the tightest pairs landed at 4.04–4.45 while this document claimed every tier cleared 4.5. The arithmetic in the §1 table was right; the GROUND was wrong | the peak alpha drops from 0.038 to 0.020, which clears every measured pair without lifting a tier again and re-running the ladder |
+| 2 | `--sheen` was painted over the very panel tokens the contrast ladder measures against, so the tightest pairs landed at 4.04–4.45 while this document claimed every tier cleared 4.5. The arithmetic in the §1 table was right; the GROUND was wrong | **First repair was WRONG and is superseded.** Dropping the peak alpha 0.038 → 0.020 was claimed here to clear every pair; a second review re-derived it and found 4.27–4.38 still under AA. The clearing alpha is ~0.0024, which is not a sheen: the flat tertiary ratios are 4.52–4.56, so any white overlay breaks them. The sheen is now simply NOT painted on the three grounds that carry tertiary text, and the guard computes the composite instead of pinning an alpha |
 | 3 | this document said two overrides were updated to re-state the sheen, naming "the manual equivalent" as the second. One was updated, the named one was never touched, and there are at least seven overrides of that shape | corrected, with the decision recorded: the manual colorway keeps no sheen, and the consequence for its console is stated |
 
 Two of the fifteen mutations the pass shipped with **did not bite**, and both are

@@ -638,7 +638,13 @@
 }
 .reh-route.is-active {
   border-color: var(--reh-gold);
-  background: var(--sheen), var(--reh-panel-2);
+  /* NO SHEEN. This ground carries tertiary-tier text, and the tertiary tier
+     clears 4.5:1 by 0.02-0.06 flat — so ANY white overlay breaks it. At the
+     token's peak alpha the pairs land at 4.27-4.38, and the alpha that would
+     actually clear them is ~0.0024, which is not a sheen. Measured, not
+     assumed: an earlier round asserted 0.020 cleared every pair in three
+     places and was wrong by about 8x. */
+  background: var(--reh-panel-2);
 }
 .reh-route-number {
   font-size: 20px;

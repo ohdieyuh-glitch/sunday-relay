@@ -85,7 +85,7 @@
      and a 48px repeating grid became ONE line at the top and one at the left.
      On a `position: fixed; inset: 0` element that is the grid disappearing.
      An independent review found it in the built bundle. */
-  background-size: 48px 48px, 48px 48px;
+  background-size: 44px 44px, 44px 44px;
 }
 [data-relay-colorway='manual'] .reh-header {
   background: var(--relay-manual-black);

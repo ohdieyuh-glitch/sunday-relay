@@ -639,6 +639,41 @@ describe('the Relay Dog’s proportions survive the polish', () => {
 /* ============ what an independent review found in the polish pass ============ */
 
 describe('a grid override cannot silently lose its repeat', () => {
+  it('restates the BASE pitch, not a different one', () => {
+    /**
+     * The count check has a blind spot the review found by mutation: replacing
+     * a restated size with `999px 7px, 3px 3px` passed, because the layer count
+     * still matched. The repair round pasted `48px 48px` into all five
+     * overrides while the entry-home base grid is 44px, so the RELAY MANUAL
+     * entry home drew a 48px pitch and obsidian drew 44px — a silent visual
+     * change to a founder-provided reference, in a pass scoped to move no
+     * spacing.
+     */
+    const BASE_PITCH: Record<string, string> = {
+      'reh-grid-bg': '44px 44px, 44px 44px',
+      'rps-grid-bg': '48px 48px, 48px 48px',
+      'rpw-grid-bg': '48px 48px, 48px 48px',
+    };
+    const wrong: string[] = [];
+    for (const sheet of SHEETS) {
+      const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const rule of css.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
+        const subject = Object.keys(BASE_PITCH).find((k) => rule[1].includes(k));
+        if (subject === undefined) continue;
+        const size = /background-size\s*:\s*([^;}]+)/.exec(rule[2]);
+        if (size === null) continue;
+        const value = size[1].trim().replace(/\s+/g, ' ');
+        // A 4-value list is the base itself; a 2-value list is an override's
+        // grid tail and must equal the base's tail.
+        const tail = value.split(',').length === 2 ? value : null;
+        if (tail !== null && tail !== BASE_PITCH[subject]) {
+          wrong.push(`${sheet.name}: "${rule[1].trim()}" restates ${tail}, base tail is ${BASE_PITCH[subject]}`);
+        }
+      }
+    }
+    expect(wrong, wrong.join('\n')).toEqual([]);
+  });
+
   /**
    * `background-size` is POSITIONAL, and CSS truncates the size list to the
    * image-layer count. The base grid rules grew from two layers to four with a
@@ -736,19 +771,87 @@ describe('the sheen does not eat the contrast the ladder guarantees', () => {
    * because the peak is the single number that decides the worst case and a
    * future change to it is the way this comes back.
    */
-  it('keeps the peak alpha low enough that no measured pair drops below AA', () => {
-    const tokens = readFileSync('src/relay/relay-tokens.css', 'utf8');
-    const sheen = /--sheen:\s*linear-gradient\(([\s\S]*?)\);/.exec(tokens);
-    expect(sheen, '--sheen is not declared as a linear-gradient').not.toBeNull();
-    const alphas = [...(sheen as RegExpExecArray)[1].matchAll(/rgba\(\s*255,\s*255,\s*255,\s*([0-9.]+)\s*\)/g)]
-      .map((m) => Number(m[1]));
-    expect(alphas.length).toBeGreaterThan(0);
+  it('paints no sheen over a ground whose tertiary text has no headroom', () => {
     /**
-     * 0.020 is the measured ceiling: above it the obsidian and midnight faint
-     * tiers on `panel-2` fall under 4.5:1. Raising it means re-deriving the
-     * ladder, not editing this number.
+     * THE PREVIOUS VERSION OF THIS TEST ASSERTED A MAGIC NUMBER AND ITS STATED
+     * JUSTIFICATION WAS FALSE BY ABOUT 8x.
+     *
+     * It checked `Math.max(alphas) <= 0.02` and the comment claimed 0.020 was
+     * "the measured ceiling". Composited properly, the three tightest pairs
+     * land at 4.27-4.38 at that alpha; the alpha that actually clears them is
+     * ~0.0024, which is not a sheen at all. The token comment, this comment and
+     * the doc all asserted the same wrong measurement.
+     *
+     * The flat tertiary ratios are 4.52-4.56 — they clear AA by 0.02-0.06, so
+     * ANY white overlay breaks them. The fix is therefore not a smaller alpha
+     * but no sheen on those grounds, and this measures THAT rather than pinning
+     * a number: a ground that carries tertiary text must not be sheened.
      */
-    expect(Math.max(...alphas)).toBeLessThanOrEqual(0.02);
+    const TERTIARY_GROUNDS = [
+      { sheet: 'ui/entry-home/relay-entry-home.css', token: '--reh-panel-2' },
+      { sheet: 'ui/project-workspace/relay-project-workspace.css', token: '--rpw-panel-2' },
+      { sheet: 'ui/loop/relay-loop.css', token: '--surface-solid' },
+    ];
+    const sheened: string[] = [];
+    for (const { sheet, token } of TERTIARY_GROUNDS) {
+      const css = read(sheet).replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const declaration of css.matchAll(/background\s*:\s*([^;}]+)/g)) {
+        const value = declaration[1];
+        if (value.includes('--sheen') && value.includes(token)) {
+          sheened.push(`${sheet}: --sheen painted over ${token}`);
+        }
+      }
+    }
+    expect(sheened, sheened.join('\n')).toEqual([]);
+  });
+
+  it('measures the composite rather than trusting the flat ratio', () => {
+    /**
+     * The arithmetic the previous version skipped. Compositing white at the
+     * gradient's PEAK alpha over each tertiary ground must still clear AA — so
+     * if a future change reintroduces a sheen there, or lowers a tertiary tier,
+     * this fails with the real number instead of a token comparison.
+     */
+    const tokens = read('relay-tokens.css');
+    const sheen = /--sheen:\s*linear-gradient\(([\s\S]*?)\);/.exec(tokens);
+    expect(sheen).not.toBeNull();
+    const peak = Math.max(
+      ...[...(sheen as RegExpExecArray)[1].matchAll(/rgba\(\s*255,\s*255,\s*255,\s*([0-9.]+)\s*\)/g)]
+        .map((m) => Number(m[1])),
+    );
+
+    const hex = (value: string): [number, number, number] => {
+      const n = parseInt(value.replace('#', ''), 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    };
+    const lum = (rgb: readonly number[]): number => {
+      const [r, g, b] = rgb.map((c) => {
+        const s = c / 255;
+        return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a: number, b: number): number =>
+      (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    const over = (bg: readonly number[], alpha: number): number[] =>
+      bg.map((c) => c * (1 - alpha) + 255 * alpha);
+
+    // The three pairs the review re-derived, by hex so this does not depend on
+    // token lookup order.
+    const PAIRS: readonly { fg: string; bg: string; label: string }[] = [
+      { fg: '#837c6e', bg: '#0e1118', label: 'obsidian faint on panel-2' },
+      { fg: '#8e95bc', bg: '#262e4e', label: 'midnight faint on panel-2' },
+      { fg: '#847d68', bg: '#111319', label: 'root text-faint on surface-solid' },
+    ];
+    for (const { fg, bg, label } of PAIRS) {
+      // Flat: must clear AA.
+      expect(ratio(lum(hex(fg)), lum(hex(bg))), `${label} flat`).toBeGreaterThanOrEqual(4.5);
+      // And with the sheen these would NOT clear — which is why the grounds
+      // above must stay unsheened. Asserted so the reason stays measured.
+      const composited = ratio(lum(hex(fg)), lum(over(hex(bg), peak)));
+      expect(composited, `${label} would clear even sheened — re-check the guard above`)
+        .toBeLessThan(4.5);
+    }
   });
 });
 
@@ -990,5 +1093,51 @@ describe('a background token never falls back to transparent', () => {
       }
     }
     expect(bad, bad.join('\n')).toEqual([]);
+  });
+});
+
+
+/**
+ * A BLUR ON AN ANCESTOR OF A FIXED DRAWER IS A FUNCTIONAL REGRESSION.
+ *
+ * `backdrop-filter` other than `none` makes an element a CONTAINING BLOCK for
+ * its `position: fixed` descendants. The polish pass put one on `.rpw-status`,
+ * which contains the Reviewer Harness catalog and the Relay Bridge pairing
+ * dialog — both `position: fixed; inset: 0`, neither portalled. Both stopped
+ * covering the viewport and were laid out inside a ~27% rail. The pairing
+ * dialog is the founder's only route to a browser Bridge session.
+ *
+ * An independent review found it by RENDERING the component and walking the
+ * ancestor chain; no test here could see it, and reintroducing the blur passed
+ * the whole suite. This is that missing guard.
+ */
+describe('no glass on an element that hosts a fixed-position drawer', () => {
+  /**
+   * Subjects that are known to contain `position: fixed` descendants. Kept as
+   * an explicit list rather than inferred: the containment is a fact about the
+   * DOM the components build, and a CSS file cannot be asked about it.
+   */
+  const HOSTS_FIXED_DESCENDANTS = ['.rpw-status'] as const;
+
+  it('never gives one a backdrop-filter', () => {
+    const offenders: string[] = [];
+    for (const sheet of SHEETS) {
+      const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
+      for (const rule of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const selectors = rule[1].split(',').map((x) => x.trim());
+        for (const host of HOSTS_FIXED_DESCENDANTS) {
+          // The rule's SUBJECT is the host itself (not a descendant of it).
+          const isSubject = selectors.some(
+            (sel) => sel === host || sel.endsWith(` ${host}`) || sel.endsWith(`>${host}`),
+          );
+          if (!isSubject) continue;
+          const declared = /backdrop-filter\s*:\s*([^;}]+)/.exec(rule[2]);
+          if (declared !== null && declared[1].trim() !== 'none') {
+            offenders.push(`${sheet.name}: "${rule[1].trim()}" sets backdrop-filter: ${declared[1].trim()}`);
+          }
+        }
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
   });
 });

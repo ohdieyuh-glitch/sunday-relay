@@ -435,7 +435,11 @@
   width: min(420px, calc(100% - 36px));
   margin-top: -1px;
   padding: 14px 16px 12px;
-  background: var(--sheen), var(--rpw-panel-2, #12141c);
+  /* NO SHEEN. This ground carries tertiary-tier text, which clears 4.5:1 by
+     0.02-0.06 flat, so ANY white overlay breaks it. At the token's peak alpha
+     the pair lands at 4.27-4.38. Measured, not assumed: an earlier round
+     asserted 0.020 cleared every pair in three places and was wrong by ~8x. */
+  background: var(--rpw-panel-2, #12141c);
   border: 1px solid var(--rpw-line);
   border-top: 2px solid var(--rpw-gold);
   /* Was a one-off `0 22px 48px rgba(0,0,0,0.55)`. It is a popover above the
@@ -848,11 +852,18 @@
   /* Square, so unlike the chamfered console it CAN carry an outer shadow. */
   box-shadow: var(--elev-1);
 }
-@supports (backdrop-filter: blur(1px)) {
-  .rpw-status {
-    backdrop-filter: blur(var(--glass-blur, 18px)) saturate(var(--glass-saturate, 1.3));
-  }
-}
+/* NO `backdrop-filter` ON `.rpw-status`, DELIBERATELY, AND IT MUST NOT COME BACK.
+   A computed `backdrop-filter` other than `none` makes an element a CONTAINING
+   BLOCK for its `position: fixed` descendants (CSS Filter Effects L2). Two
+   full-viewport drawers render inside this rail — the Reviewer Harness catalog
+   (`.rhc-overlay`) and the Relay Bridge pairing dialog (`.rbp-overlay`), both
+   `position: fixed; inset: 0` — reached via
+   `.rpw-status > .rpw-status-block > .rpw-reviewer`. Neither is portalled.
+   Blurring here confines both to the ~27% status column instead of the
+   viewport, and `.rhc-sheet { height: 100dvh }` then overflows it. The pairing
+   dialog is the founder's only route to a browser Bridge session.
+   The plate is already translucent; the blur is the part that cannot be had
+   here. Guarded by `premium-polish.test.tsx`. */
 .rpw-status-block { padding: 12px 14px; border-bottom: 1px solid var(--rpw-line); }
 .rpw-status-block:last-child { border-bottom: 0; }
 /* Inner components lose their own panel chrome inside the rail. */

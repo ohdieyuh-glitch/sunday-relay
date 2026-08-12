@@ -106,8 +106,21 @@
      while the record claimed every tier cleared 4.5. An independent review
      found it by compositing the gradient over the panel and re-deriving the
      ratios; the arithmetic in the table was right and the GROUND was wrong.
-     At 0.020 every measured pair clears 4.5 with the ladder untouched, which is
-     the fix that does not require lifting a tier again. */
+     LOWERING THE ALPHA WAS NOT THE FIX, AND THIS COMMENT SAID IT WAS.
+     A second review re-derived the composite and found 0.020 still leaves the
+     three tightest pairs at 4.27-4.38. The alpha that would clear them is
+     ~0.0024 — not a sheen. The flat tertiary ratios are 4.52-4.56, clearing AA
+     by 0.02-0.06, so ANY white overlay breaks them: no alpha exists that is
+     both visible and safe on those grounds.
+
+     So the sheen is simply NOT PAINTED on grounds that carry tertiary text —
+     `--reh-panel-2`, `--rpw-panel-2` and `--surface-solid`. 0.020 is kept
+     because it is right for the grounds that do have headroom, not because it
+     rescues the ones that do not.
+
+     This comment asserted a measurement three times in three places (here, the
+     test, and the doc) that was wrong by about eightfold. The guard now
+     COMPUTES the composite instead of pinning this number. */
   --sheen: linear-gradient(
     180deg,
     rgba(255, 255, 255, 0.02) 0%,
