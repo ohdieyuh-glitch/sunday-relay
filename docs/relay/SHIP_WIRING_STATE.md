@@ -45,9 +45,28 @@ Shipping a verified mission therefore requires, as its own careful unit:
    reads the retained worktree, the judgement, and the target, and calls
    `shipVerifiedMission`.
 
-This is deliberately NOT built in the same pass as the wiring above: it changes
-a resource lifecycle in the money/mission path, and getting it wrong leaks
-worktrees. It is the clearly-scoped next unit.
+### Design verified; positive-path proof needs a harness that does not exist
+
+The retention change was written and TRACED: make the coding leg's cleanup
+policy `manual_cleanup` when a `repositoryTarget` is present, retain
+`ws.workspacePath` on a run that passed deterministic verification, expose it on
+`CodingOutcome.retainedWorktreePath`. Its SAFE-ON-FAILURE behaviour was
+verified directly — a real-target run that does NOT pass verification retains
+NOTHING, so a failed run leaks no worktree.
+
+What is NOT yet proven is retention ON SUCCESS, and the reason is precise: it
+needs a real-target offline scenario that PASSES deterministic verification
+(scope preserved AND the project's tests pass under Relay's run), and the
+existing offline harness has no such scenario — its one real-target test uses a
+project whose tests do not pass, so `verificationPassed` is false and retention
+correctly does not fire. Building that scenario means configuring the
+verification test-run for a real target, which is harness work of its own.
+
+So the retention change was REVERTED rather than committed half-proven:
+resource-lifecycle code in the money path that leaks worktrees if wrong must not
+ship without a positive-path test. It is part of the same reviewable ship-tail
+unit as the ship route, and that unit's first task is the passing-verification
+real-target harness, then retention (proven both ways), then the route.
 
 ## The founder boundary, unchanged
 
