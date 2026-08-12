@@ -33,45 +33,39 @@ guard in five proves inert.
 
 Both are **verified** boundaries, not assumptions. Each names the exact action.
 
-### 1. The paid three-role run against a real repository
+### 1. The paid run is DONE; the SHIP path is built; the LIVE GitHub ship is the founder boundary
 
-**Status: the pipeline carries a real repository target end to end and refuses
-correctly. No PAID role has ever run against one.**
+**Build → verify → review → VERIFIED COMPLETE is proven live.** On 2026-08-12 a
+real paid three-role mission ran in production and reached `verified_complete`
+(`mission-live-proof-1786524602`). The reviewer served `grok-build-0.1`,
+attested from Hermes' actual usage — DEFECT 3 CLOSED AGAINST A REAL RUN — and the
+architect's `gpt-4o` → `gpt-4o-2024-08-06` was classified a resolution, not a
+substitution. See `HOSTED_MISSION_EVIDENCE.md`. The founder provided the Railway
+token; `XAI_API_KEY` lives on the Hermes service, `OPENAI`/`ANTHROPIC` on the
+bridge. The old "all credentials absent" note is superseded.
 
-Measured in this environment: `XAI_API_KEY`, `OPENAI_API_KEY`,
-`ANTHROPIC_API_KEY` and `RELAY_BRIDGE_API_TOKEN` are all **absent**.
-`~/.hermes/auth.json` exists but is the founder's own Hermes credential, and
-`CLAUDE.md` forbids touching it — using it would be spending the founder's money
-without being asked.
+**The SHIP path is built and tested on the ship-wiring branch (not yet on main).** register a
+repository (operator route) → durable store → `/mission/start` resolves the key
+into a target (operator-only) → the coding leg builds/verifies against it and
+RETAINS the verified worktree → `POST /mission/:id/ship` re-observes and
+re-judges that worktree and runs COMMIT → DEPLOY → LIVE VERIFY → SHIPPED. Every
+seam has real-git / real-deploy / real-HTTP tests and mutation proofs. This
+lives on the ship-wiring branch and touches the money-spending auth handler, so
+it is independently reviewed before it merges.
 
-So the architect and the reviewer are injected in every end-to-end test. That is
-stated in the tests themselves rather than glossed.
+**What is NOT done, and is a genuine founder boundary:** the LIVE GitHub ship —
+the actual PUSH / PR / MERGE against a real GitHub repository. It needs, and only
+the founder can provide:
 
-**What would close it.** With a registered local repository and credentials set:
+1. the ship-wiring branch reviewed, merged, and deployed;
+2. a real GitHub repository Relay is authorized to write to;
+3. a push credential (`GITHUB_TOKEN`) — verified absent on Railway, so it must
+   be set;
+4. explicit ship authorization for that repository.
 
-```
-XAI_API_KEY=…  RELAY_HERMES_MODEL=grok-4  RELAY_HERMES_PROVIDER=xai \
-OPENAI_API_KEY=…  OPENAI_PROMPT_ARCHITECT_MODEL=gpt-4o  RELAY_PROMPT_ARCHITECT_MODE=live \
-  node dist-relay-bridge/server.cjs
-```
-
-then start a Mission with a `repositoryTarget` and `intendedWritePaths`. Two
-things to watch, because they are the unproven halves:
-
-- **Does xAI populate `model` in Hermes' usage report?** Probed directly here
-  (Hermes v0.18.2, isolated `HERMES_HOME`, no credential, nothing spent): the
-  binary accepts `--usage-file`, writes the file even on failure, and its schema
-  carries `model` AND `provider` keys — so Relay reads the right field from the
-  right file. The value was `null` because the run failed at the credential.
-  **One real review settles it**, and both outcomes are already truthful:
-  populated → attested; absent → `servedModel: null` and the words "served model
-  not reported by the provider".
-- **Does Grok review a real repository's diff well?** Unknown and unspent.
-  `HOSTED_MISSION_EVIDENCE.md` already records that reviewer behaviour on larger
-  diffs is untested, and a real repository makes the review packet much larger.
-
-**Operator invariant, unchanged:** never deploy the bridge while a Mission is in
-flight. The registry is an in-memory `Map` and a redeploy destroys a paid run.
+Relay must never infer the target repository or the production authorization —
+`POST /mission/:id/ship` is operator-only and separately authorized precisely so
+neither is implied by "build this."
 
 ### 2. Wonderland compiled and playable
 
