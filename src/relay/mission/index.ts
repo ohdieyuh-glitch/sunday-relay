@@ -7,6 +7,12 @@
 
 export * from './contracts';
 export {
+  validateMissionConfig, defaultMissionConfig,
+  RELAY_EXECUTION_MODES, RELAY_REVIEW_REQUIREMENTS, RELAY_COMPLETION_RULES,
+  type RelayMissionConfig, type RelayMissionLimits, type RelayRoleSelection,
+  type RelayExecutionMode, type RelayReviewRequirement, type RelayCompletionRule,
+} from './mission-config';
+export {
   buildMissionContract, validateMissionSpec, stableDigest, bindingFields,
   isBindingChange, handoffIsStale,
 } from './mission';

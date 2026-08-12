@@ -41,6 +41,7 @@ import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
 import { handleRepositoryRoute, isRepositoryRoute, type RepositoryCaller } from './repository-routes';
 import { handleShipRoute, isShipRoute } from './ship-route';
 import { resolveRepositoryTarget, registrationOwnerAdmits } from '../src/relay/mission/repository-target';
+import { validateMissionConfig } from '../src/relay/mission/mission-config';
 import type { MissionRepositoryTarget, RepositoryPermission } from '../src/relay/mission/repository-target';
 import { guardBetaAdmission, participantFromBody } from './beta-guard';
 import { claimedClientKey, createBetaRateLimiter } from './beta-rate-limit';
@@ -901,7 +902,20 @@ export function createBridgeServer(
             repositoryTarget = resolved.target;
           }
 
-          const view = registry.start({ missionId, objective, repositoryTarget, intendedWritePaths });
+          /**
+           * THE MISSION'S CONFIGURATION (PSP / Project Settings), validated at
+           * the boundary. A malformed limit is refused here — never coerced —
+           * so a Mission can never run under a spend or compute ceiling that is
+           * not a real number. Absent config runs under the conservative default.
+           */
+          const configResult = validateMissionConfig((body as { config?: unknown })?.config ?? {});
+          if (!configResult.ok) {
+            send(res, 422, { error: { kind: 'config_invalid', message: configResult.error.message } }, cors);
+            return;
+          }
+          const view = registry.start({
+            missionId, objective, repositoryTarget, intendedWritePaths, config: configResult.value,
+          });
           send(res, 200, { missionId, view }, cors);
           return;
         }

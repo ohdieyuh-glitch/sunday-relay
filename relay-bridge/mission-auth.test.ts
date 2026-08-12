@@ -204,6 +204,25 @@ describe('naming a repository target is operator-only, even for a control sessio
     const res = await startAs(base, token, {});
     expect(res.status).toBe(200);
   }, 30_000);
+
+  it('refuses a malformed spend/compute limit in the config, at the boundary', async () => {
+    // A limit that is not a real number is refused before the mission starts, so
+    // a Mission can never run under a ceiling that is not enforceable.
+    const base = await boot();
+    const token = await pairControl(base, 'beta-participant-1');
+    const res = await startAs(base, token, { config: { limits: { spendUsd: -5 } } });
+    expect(res.status).toBe(422);
+    expect((await res.json()).error).toMatchObject({ kind: 'config_invalid' });
+  }, 30_000);
+
+  it('admits a well-formed config', async () => {
+    const base = await boot();
+    const token = await pairControl(base, 'beta-participant-1');
+    const res = await startAs(base, token, {
+      config: { mode: 'autonomous', review: 'independent', limits: { spendUsd: 1, agentCalls: 8 } },
+    });
+    expect(res.status).toBe(200);
+  }, 30_000);
 });
 
 describe('a browser session may read a mission, never run one', () => {

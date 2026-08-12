@@ -32,6 +32,7 @@ import { runArchitect, ArchitectUnavailableError, type SundayMode } from './arch
 import { runCodingMission, codingHandoffDigest, type CancelHandle, type CodingOutcome } from './coding';
 import { disposeRetainedWorktree } from './ship-mission';
 import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
+import { defaultMissionConfig, type RelayMissionConfig } from '../src/relay/mission/mission-config';
 import { resolveClaudeRuntime } from './claude-runtime';
 import {
   ARCHITECT_COORDINATION_LABEL,
@@ -235,6 +236,11 @@ interface MissionRecord {
   repositoryTarget: MissionRepositoryTarget | null;
   /** The files it declared it would write. Empty for the fixture. */
   intendedWritePaths: readonly string[];
+  /** The validated execution config (PSP / Project Settings projection) this
+   *  Mission was started with — role selections, mode, review policy, requested
+   *  permissions and spend/compute limits. Never the fixture's business: a
+   *  Mission started with no config carries the conservative default. */
+  config: RelayMissionConfig;
   handoffDigest?: string;
   deliveredHandoffDigest?: string;
   claim?: MissionClaim;
@@ -383,6 +389,13 @@ export interface MissionRegistry {
      * would let the architect widen its own envelope.
      */
     intendedWritePaths?: readonly string[];
+    /**
+     * THE PSP / PROJECT SETTINGS THIS MISSION RUNS UNDER, validated at the API
+     * boundary. Absent means the conservative default. Carried onto the record
+     * and into the view so the mission states which configuration drove it —
+     * role selections, mode, review policy, requested permissions and limits.
+     */
+    config?: RelayMissionConfig;
   }): LiveMissionUpdate;
   get(missionId: string): LiveMissionUpdate | null;
   /**
@@ -594,6 +607,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     ...(rec.evidenceReferences.length === 0 ? {} : { evidence: [...rec.evidenceRecords] }),
     review: rec.review,
     attestations: toAttestationSummaries(rec),
+    // The configuration this Mission runs under — so the user sees what drove it.
+    config: rec.config,
   });
 
   /** Terminal failure. `phase` is the exact supported failure state; the code
@@ -2337,7 +2352,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   }
 
   return {
-    start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths }) {
+    start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths, config }) {
       const existing = records.get(missionId);
       if (existing) return toView(existing); // idempotent — one dispatch per mission id
       const request = safeText(objective) || 'Implement the controlled demo task.';
@@ -2348,6 +2363,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         missionRevision: `rev_${digest(`${missionId}:${request}`)}`,
         repositoryTarget: repositoryTarget ?? null,
         intendedWritePaths: intendedWritePaths ?? [],
+        // The configuration this Mission was started with — a PSP projection, or
+        // the conservative default when the caller named none.
+        config: config ?? defaultMissionConfig(),
         phase: 'ready',
         state: 'ready',
         currentRole: 'relay',
