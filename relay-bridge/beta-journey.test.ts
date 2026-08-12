@@ -3,11 +3,20 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+
 import { createBridgeServer } from './server';
 import { loadBridgeConfig } from './config';
 import { createMissionRegistry } from './mission';
 import { journeyRoleDeps } from './mission-journey-harness';
-import { createRepositoryRegistrationStore } from '../src/relay/persistence';
+import {
+  createRepositoryRegistrationStore, createBrainMemoryStore, type BrainMemoryStore,
+} from '../src/relay/persistence';
+import {
+  createRepositoryRegistration, resolveRepositoryTarget,
+  type MissionRepositoryTarget, type RepositoryRegistration,
+} from '../src/relay/mission/repository-target';
 
 /**
  * THE PRIVATE-BETA JOURNEY, driven by a FRESH PARTICIPANT over the real HTTP
@@ -363,4 +372,123 @@ describe('a fresh participant creates and selects a PSP (criterion 4)', () => {
     });
     expect(anon.status).toBe(401);
   }, 30_000);
+});
+
+/* ------------------------------------------------- ship leg (criterion 9) --- */
+
+const NOW = '2026-08-12T10:00:00.000Z';
+const SHIP_LADDER = ['read', 'write_worktree', 'commit', 'deploy_staging'] as const;
+const GIT_ENV = (home: string) => ({
+  PATH: process.env.PATH ?? '', HOME: home,
+  GIT_AUTHOR_NAME: 'F', GIT_AUTHOR_EMAIL: 'f@x', GIT_COMMITTER_NAME: 'F', GIT_COMMITTER_EMAIL: 'f@x',
+});
+
+/** A real local git repo + a retained worktree with an in-scope edit, plus a
+    registration OWNED BY a participant — the state a verified real-target mission
+    leaves for that participant to ship. */
+function participantVerifiedMission(owner: string): {
+  target: MissionRepositoryTarget; reg: RepositoryRegistration; worktreePath: string;
+} {
+  const repoRoot = mkdtempSync(join(tmpdir(), 'relay-jship-src-'));
+  roots.push(repoRoot);
+  const git = (a: string[], cwd = repoRoot) => execFileSync('git', a, { cwd, env: GIT_ENV(repoRoot) });
+  git(['init', '--quiet', '--initial-branch=main']);
+  mkdirSync(join(repoRoot, 'src'), { recursive: true });
+  writeFileSync(join(repoRoot, 'src', 'app.js'), 'export const v = 1;\n');
+  git(['add', '--', '.']); git(['commit', '-m', 'initial']);
+  const worktreePath = mkdtempSync(join(tmpdir(), 'relay-jship-wt-'));
+  roots.push(worktreePath);
+  rmSync(worktreePath, { recursive: true, force: true });
+  git(['worktree', 'add', '-b', 'relay/mission-1', worktreePath, 'main']);
+  writeFileSync(join(worktreePath, 'src', 'app.js'), 'export const v = 2;\n');
+
+  const built = createRepositoryRegistration({
+    draft: {
+      identity: { provider: 'local', host: null, owner: null, name: 'demo', defaultBranch: 'main' },
+      location: { kind: 'local_path', path: repoRoot },
+      scope: { read: ['**'], write: ['src/**'] },
+      grants: SHIP_LADDER.map((permission) => ({ permission, authorizedBy: owner, authorizedAt: NOW, expiresAt: null, note: null })),
+      ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+      registeredBy: owner,
+      ownerParticipant: owner, // OWNED BY THE PARTICIPANT — the ship ownership gate reads this.
+    },
+    now: NOW,
+  });
+  if (!built.ok) throw new Error(built.error.message);
+  const resolved = resolveRepositoryTarget({
+    registration: built.value,
+    request: { repositoryKey: built.value.key, selectedBy: owner, selectedAt: NOW, workingBranch: 'relay/mission-1', permissions: [...SHIP_LADDER] },
+    now: NOW,
+  });
+  if (!resolved.ok) throw new Error(resolved.error.message);
+  return { target: resolved.target, reg: built.value, worktreePath };
+}
+
+async function bootShip(m: { target: MissionRepositoryTarget; reg: RepositoryRegistration; worktreePath: string }):
+  Promise<{ base: string; brain: BrainMemoryStore }> {
+  const root = mkdtempSync(join(tmpdir(), 'relay-jship-')); roots.push(root);
+  vi.stubEnv('RELAY_BRIDGE_API_TOKEN', OPERATOR);
+  vi.stubEnv('RELAY_ALLOWED_ORIGINS', ORIGIN);
+  vi.stubEnv('RELAY_DATA_DIR', root);
+  vi.stubEnv('RELAY_GITHUB_APP_CLIENT_ID', 'Iv1.public_client_id');
+  vi.stubEnv('RELAY_GITHUB_APP_CLIENT_SECRET', 'fixture-secret-never-surfaces');
+  vi.stubEnv('RELAY_GITHUB_APP_CALLBACK_URL', CALLBACK);
+  vi.stubEnv('RELAY_GITHUB_APP_INSTALL_URL', INSTALL_URL);
+  const config = loadBridgeConfig(process.env);
+  const repoStore = createRepositoryRegistrationStore({ root });
+  repoStore.save(m.reg);
+  const brain = createBrainMemoryStore({ root });
+  const registry = {
+    start: () => ({ state: 'ready' }) as never,
+    get: () => ({ state: 'verified_complete', missionId: 'm-ship' }) as never,
+    cancel: () => undefined, retry: () => undefined,
+    shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }),
+    recordShipOutcome: () => {}, beginShip: () => true, endShip: () => {},
+  };
+  const server = createBridgeServer(
+    config, registry as never,
+    null, null, null, null, () => false, null, [], null, null,
+    repoStore, brain,
+  );
+  servers.push(server as never);
+  await new Promise<void>((r) => (server as never as { listen: (p: number, h: string, cb: () => void) => void }).listen(0, '127.0.0.1', r));
+  const address = (server as never as { address: () => { port: number } | null }).address();
+  return { base: `http://127.0.0.1:${address === null ? 0 : address.port}`, brain };
+}
+
+const ship = (base: string, token: string, missionId: string) =>
+  realFetch(`${base}/relay-api/mission/${missionId}/ship`, {
+    method: 'POST', headers: { 'content-type': 'application/json', ...asUser(token) }, body: JSON.stringify({}),
+  });
+
+describe('a fresh participant SHIPS their own verified mission over HTTP (criterion 9)', () => {
+  it('commits the retained worktree and writes a Project Brain episode', async () => {
+    const m = participantVerifiedMission('ghu-4242');
+    const { base, brain } = await bootShip(m);
+    const token = await signIn(base, { login: 'beta-alice', id: 4242 });
+
+    const res = await getJson(await ship(base, token, 'm-ship'));
+    expect(res.status).toBe(200);
+    expect((res.body.data as { stage: string }).stage).toBe('committed');
+    // The commit really landed on the working branch.
+    const log = execFileSync('git', ['log', '--oneline', 'relay/mission-1'], {
+      cwd: (m.target.location as { path: string }).path, encoding: 'utf8', env: GIT_ENV((m.target.location as { path: string }).path),
+    });
+    expect(log).toContain('Relay mission');
+    // The retained worktree was disposed by the ship.
+    expect(existsSync(m.worktreePath)).toBe(false);
+    // The Project Brain recorded the ship as a verified episode (WP-6).
+    expect(brain.load(m.reg.key).entries.length).toBeGreaterThan(0);
+  }, 45_000);
+
+  it('REFUSES a different participant shipping a mission they do not own', async () => {
+    const m = participantVerifiedMission('ghu-4242');
+    const { base } = await bootShip(m);
+    const mallory = await signIn(base, { login: 'mallory', id: 9999 });
+    const res = await getJson(await ship(base, mallory, 'm-ship'));
+    expect(res.status).toBe(403);
+    expect((res.body.error as { kind: string }).kind).toBe('repository_not_yours');
+    // The worktree is untouched — a refused ship ships nothing.
+    expect(existsSync(m.worktreePath)).toBe(true);
+  }, 45_000);
 });
