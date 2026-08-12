@@ -104,6 +104,17 @@ interface StoredSession {
   revokedAt: number | null;
 }
 
+/**
+ * WHO A CONTROL SESSION MAY ACT AS. One definition, shared by the operator
+ * pairing route and the identity sign-in path, so the two can never drift into
+ * accepting different participant shapes. A GitHub identity is encoded into this
+ * shape upstream (e.g. `ghu-<numericId>`), never a raw `login` that can change.
+ */
+export const PARTICIPANT_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+export function isValidParticipantId(value: unknown): value is string {
+  return typeof value === 'string' && PARTICIPANT_ID_PATTERN.test(value);
+}
+
 const sha256 = (value: string): Buffer => createHash('sha256').update(value, 'utf8').digest();
 
 /** Equal-length digests, so this is genuinely constant time. */
@@ -130,6 +141,21 @@ export interface BrowserSessionStore {
   consumeGrant(input: {
     grantId: string; secret: string; origin: string; now: number;
   }): { ok: true; session: BrowserSessionIssue } | { ok: false; reason: GrantFailure };
+  /**
+   * Mint a session directly from an ALREADY-VERIFIED identity — the "Sign in
+   * with GitHub" path. This is the ONE place a control session comes into being
+   * without the operator token, and it is safe for exactly one reason: the
+   * caller has proven WHO this is out of band (a GitHub OAuth code exchanged for
+   * an identity), so the participant is a fact GitHub attested, not a claim the
+   * browser made. It must therefore be called ONLY after that exchange succeeds
+   * — never from a request body. Everything else about the session is identical
+   * to a paired one: hashed at rest, origin-bound, short-lived, revocable, and
+   * scope-gated. A control session minted here still spends nothing until the
+   * beta gate admits its participant and an installation it owns backs the repo.
+   */
+  mintIdentitySession(input: {
+    origin: string; now: number; participantId: string; scope?: BrowserSessionScope;
+  }): { ok: true; session: BrowserSessionIssue } | { ok: false; reason: 'invalid_participant' };
   verifySession(input: {
     token: string; origin: string | undefined; now: number;
   }): { ok: true; sessionId: string; scope: BrowserSessionScope; participantId: string | null }
@@ -206,6 +232,33 @@ export function createBrowserSessionStore(): BrowserSessionStore {
         session: {
           sessionId, token, origin, expiresAt,
           scope: grant.scope, participantId: grant.participantId,
+        },
+      };
+    },
+
+    mintIdentitySession({ origin, now, participantId, scope = 'browser_control' }) {
+      sweep(now);
+      // The store is the last thing standing between "forgot to validate" and a
+      // session that acts as nobody or as an unbounded string. A control
+      // session with no verified participant is exactly what this path exists
+      // to prevent, so it is refused here as well as at the route.
+      if (scope === 'browser_control' && !isValidParticipantId(participantId)) {
+        return { ok: false, reason: 'invalid_participant' };
+      }
+      const sessionId = randomBytes(9).toString('base64url');
+      const token = randomSecret();
+      const expiresAt = now + SESSION_TTL_MS;
+      sessions.set(sessionId, {
+        sessionId, tokenHash: sha256(token), origin, expiresAt,
+        scope,
+        participantId: scope === 'browser_control' ? participantId : null,
+        revokedAt: null,
+      });
+      return {
+        ok: true,
+        session: {
+          sessionId, token, origin, expiresAt,
+          scope, participantId: scope === 'browser_control' ? participantId : null,
         },
       };
     },
