@@ -380,6 +380,19 @@ export interface MissionRegistry {
     intendedWritePaths?: readonly string[];
   }): LiveMissionUpdate;
   get(missionId: string): LiveMissionUpdate | null;
+  /**
+   * WHAT THE SHIP NEEDS FROM A COMPLETED MISSION, or null.
+   *
+   * A pure read: it returns a target, its retained worktree, and its key ONLY
+   * for a mission that is `verified_complete`, carried a real repository target,
+   * and retained a worktree. Any other mission — fixture, unfinished, or one
+   * whose worktree was not retained — returns null, so a ship can never be
+   * attempted against a mission that has nothing to ship.
+   */
+  shipContext(missionId: string): {
+    readonly target: MissionRepositoryTarget;
+    readonly worktreePath: string;
+  } | null;
   cancel(missionId: string): LiveMissionUpdate | null;
   retry(missionId: string): LiveMissionUpdate | null;
 }
@@ -2306,6 +2319,17 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     get(missionId) {
       const rec = records.get(missionId);
       return rec ? toView(rec) : null;
+    },
+
+    shipContext(missionId) {
+      const rec = records.get(missionId);
+      if (rec === undefined) return null;
+      // Only a VERIFIED mission with a real target and a retained worktree.
+      if (rec.state !== 'verified_complete') return null;
+      if (rec.repositoryTarget === null) return null;
+      const worktreePath = rec.codingOutcome?.retainedWorktreePath ?? null;
+      if (worktreePath === null) return null;
+      return { target: rec.repositoryTarget, worktreePath };
     },
 
     cancel(missionId) {

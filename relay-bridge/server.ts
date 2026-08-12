@@ -39,6 +39,7 @@ import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
 import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
 import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
 import { handleRepositoryRoute, isRepositoryRoute } from './repository-routes';
+import { handleShipRoute, isShipRoute } from './ship-route';
 import { resolveRepositoryTarget } from '../src/relay/mission/repository-target';
 import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
 import { guardBetaAdmission, participantFromBody } from './beta-guard';
@@ -521,6 +522,29 @@ export function createBridgeServer(
           }, repositoryStore);
           if (repoResult !== null) {
             send(res, repoResult.status, repoResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * SHIP A VERIFIED MISSION. Operator-only, separately authorized, and
+         * only a mission that verified against a real repository with a retained
+         * worktree — see `ship-route.ts`. Dispatched before the generic mission
+         * routes because `/mission/:id/ship` would otherwise match the
+         * cancel/retry pattern's sibling.
+         */
+        if (isShipRoute(path.replace('/relay-api', ''))) {
+          const shipResult = await handleShipRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string'
+              ? req.headers.authorization : undefined,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            env: process.env,
+            now: () => new Date().toISOString(),
+          }, { shipContext: (id) => registry.shipContext(id), store: repositoryStore });
+          if (shipResult !== null) {
+            send(res, shipResult.status, shipResult.body, cors);
             return;
           }
         }

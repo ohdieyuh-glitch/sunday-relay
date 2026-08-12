@@ -67,6 +67,7 @@ relay-bridge/                            THE BRIDGE — performs
   ship-brain-feed.ts            a ship run → the existing Project Brain
   ship-mission.ts               the seam: a verified mission → runShipLifecycle
   repository-routes.ts          operator registration surface (register, list)
+  ship-route.ts                 POST /mission/:id/ship — operator ships a verified mission
   ship-dry-run.ts               the plan, from the LIVE permissions
 ```
 
