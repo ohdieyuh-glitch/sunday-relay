@@ -513,8 +513,15 @@ reads as unfinished.
    Brain — `rememberShortTerm` and `proposePromotion` in
    `src/relay/shared/llmops/brain-memory.ts`, following the
    `evidence/evidence-brain-link.ts` precedent. It is not a second store. What
-   is missing is a caller: nothing in the bridge invokes it yet, for the same
-   reason as (3) — the mission engine does not read a repository target.
+   **It now HAS a producer.** `relay-bridge/ship-brain-feed.ts` folds a
+   `ShipRunResult` into short-term memory: every stage in the order it happened,
+   the deploy observation kept SEPARATE from the stage line (so a run whose
+   history reads `deployed` while the provider reported a different revision
+   still records the disagreement), and the verdict — filed under `error` when
+   it is not shipped, because a Brain fed only the runs that worked learns that
+   everything works. It promotes NOTHING to long-term memory: a ship run is an
+   episode, not a durable fact about a repository, and promotion goes through
+   `proposeRepositoryKnowledge` and a human.
    See "The Project Brain feed" below.
 8. **`gitlab` and `bitbucket`** are nameable in the domain and refused at
    selection by `repositoryProviderSupported`. Registered is not drivable, and
