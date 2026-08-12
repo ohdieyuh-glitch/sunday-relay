@@ -39,6 +39,8 @@ import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
 import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
 import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
 import { handleRepositoryRoute, isRepositoryRoute } from './repository-routes';
+import { resolveRepositoryTarget } from '../src/relay/mission/repository-target';
+import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
 import { guardBetaAdmission, participantFromBody } from './beta-guard';
 import { claimedClientKey, createBetaRateLimiter } from './beta-rate-limit';
 import type { BetaRateLimiter } from './beta-rate-limit';
@@ -671,7 +673,69 @@ export function createBridgeServer(
             return;
           }
 
-          const view = registry.start({ missionId, objective });
+          /**
+           * AN OPTIONAL REPOSITORY TARGET, RESOLVED FROM A REGISTERED KEY.
+           *
+           * A mission may name a `repositoryKey` a registered repository holds;
+           * the target is RESOLVED here from the store, never accepted pre-built
+           * from the body — "an objective cannot introduce a repository" is a
+           * property of the type, and letting the body carry a target would
+           * hand it a repository nobody registered.
+           *
+           * OPERATOR ONLY. Naming a real repository to build and (later) ship is
+           * a higher-consequence act than starting a fixture mission; a browser
+           * session — even a control session — may not do it. The credential
+           * that gates registration gates targeting.
+           */
+          let repositoryTarget: MissionRepositoryTarget | undefined;
+          let intendedWritePaths: readonly string[] | undefined;
+          const repositoryKey = typeof (body as { repositoryKey?: unknown })?.repositoryKey === 'string'
+            ? (body as { repositoryKey: string }).repositoryKey : null;
+          if (repositoryKey !== null) {
+            if (missionCaller?.kind !== 'operator') {
+              send(res, 403, { error: { kind: 'operator_required', message: 'Naming a repository target is operator-only.' } }, cors);
+              return;
+            }
+            if (repositoryStore === null) {
+              send(res, 503, { error: { kind: 'repository_store_unavailable', message: 'No durable state root is mounted, so no repository can be resolved.' } }, cors);
+              return;
+            }
+            const registration = repositoryStore.get(repositoryKey);
+            if (registration === null) {
+              send(res, 404, { error: { kind: 'repository_not_registered', message: `No registered repository named "${repositoryKey}".` } }, cors);
+              return;
+            }
+            const workingBranch = typeof (body as { workingBranch?: unknown })?.workingBranch === 'string'
+              ? (body as { workingBranch: string }).workingBranch : '';
+            if (workingBranch === '') {
+              send(res, 422, { error: { kind: 'validation_failed', message: 'A workingBranch is required to target a repository.' } }, cors);
+              return;
+            }
+            const declared = (body as { intendedWritePaths?: unknown })?.intendedWritePaths;
+            intendedWritePaths = Array.isArray(declared) && declared.every((x) => typeof x === 'string')
+              ? declared as string[] : [];
+            const resolved = resolveRepositoryTarget({
+              registration,
+              request: {
+                repositoryKey,
+                // The OPERATOR selected it; the server stamps when.
+                selectedBy: 'operator',
+                selectedAt: new Date().toISOString(),
+                workingBranch,
+                // No widening from the body: a mission may only narrow the
+                // registration's grants, and the resolver enforces it.
+                permissions: null,
+              },
+              now: new Date().toISOString(),
+            });
+            if (!resolved.ok) {
+              send(res, 422, { error: { kind: 'repository_resolution_refused', message: resolved.error.message } }, cors);
+              return;
+            }
+            repositoryTarget = resolved.target;
+          }
+
+          const view = registry.start({ missionId, objective, repositoryTarget, intendedWritePaths });
           send(res, 200, { missionId, view }, cors);
           return;
         }
