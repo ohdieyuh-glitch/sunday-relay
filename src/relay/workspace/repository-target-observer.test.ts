@@ -1005,7 +1005,15 @@ describe('the documented surface matches the code', () => {
 
   it('names every git subcommand the write surface permits, and the right number of them', () => {
     expect(REPOSITORY_GIT_ALLOWLIST).toHaveLength(11);
-    expect(doc()).toContain('permits exactly ten subcommands');
+    /**
+     * NOT A SPELLED-OUT COUNT. This asserted "permits exactly ten subcommands"
+     * while the allow-list held eleven, and it passed — the length assertion
+     * above was updated and the prose was not, which is the drift this whole
+     * describe block exists to catch. A number in prose is the thing that goes
+     * stale; the VERB is the thing that matters.
+     */
+    expect(doc()).toMatch(/permits eleven subcommands/);
+    expect(doc(), 'the doc must name the one permitted `remote` verb').toContain('`get-url`');
     for (const subcommand of REPOSITORY_GIT_ALLOWLIST) {
       expect(doc(), `the doc does not name \`${subcommand}\``).toContain(`\`${subcommand}\``);
     }
