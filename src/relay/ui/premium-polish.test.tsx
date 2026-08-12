@@ -410,6 +410,14 @@ describe('relay-tokens.css is the ONE token system', () => {
       '--elev-1', '--elev-2', '--elev-3', '--sheen', '--edge-light',
       '--edge-light-strong', '--glass-blur', '--glass-blur-strong',
       '--glass-saturate', '--ease-emphasis', '--dur-fast', '--dur-base',
+      /**
+       * `--grid-stop` is shared BECAUSE of what it is for. It was hoisted to
+       * `:root` specifically to end a specificity contest — a per-rule retina
+       * block at (0,1,0) losing to a colourway override at (0,2,0). A surface
+       * sheet redeclaring it would reopen exactly that contest, so the no-fork
+       * rule has to cover it.
+       */
+      '--grid-stop',
     ];
     const forks: string[] = [];
     for (const sheet of SHEETS) {
@@ -444,7 +452,25 @@ describe('glass is guarded, and never lands on the Relay Dog', () => {
   it('every backdrop-filter sits inside an @supports test for it', () => {
     expect(glassRules.length, 'no glass was found at all').toBeGreaterThan(5);
     const unguarded = glassRules
-      .filter(({ rule }) => !rule.atRules.some((at) => /^@supports\s*\(\s*backdrop-filter/.test(at)))
+      .filter(({ rule }) => {
+        /**
+         * `backdrop-filter: none` is EXEMPT, and the guard's own rationale is
+         * why. The danger this catches is a lowered opacity paired with a blur
+         * that a browser might not apply, leaving a transparent panel instead
+         * of a frosted one. `none` is the opposite: it TURNS GLASS OFF, and a
+         * browser without support ignores it and gets the same result either
+         * way. Wrapping it in `@supports` would be ceremony with no subject.
+         *
+         * This matters because switching the blur off is how the manual
+         * colorway's dead-glass defect is fixed — six overrides at (0,2,0) kept
+         * a blur behind fully opaque plates — and the fix must not be blocked
+         * by a rule aimed at the opposite mistake.
+         */
+        const values = [...rule.body.matchAll(/backdrop-filter\s*:\s*([^;}]+)/g)]
+          .map((m) => m[1].trim());
+        if (values.every((v) => v === 'none')) return false;
+        return !rule.atRules.some((at) => /^@supports\s*\(\s*backdrop-filter/.test(at));
+      })
       .map(({ sheet, rule }) => `${sheet}: ${rule.selectors}`);
     expect(
       unguarded,
@@ -1000,7 +1026,13 @@ describe('HD sharpening cannot be outranked by a colourway', () => {
          * Written that way this test passed against a hard-coded hairline.
          */
         for (const gradient of balancedCalls(rule[2], 'linear-gradient')) {
-          if (/\b1px\b/.test(gradient) && !gradient.includes('--grid-stop')) {
+          /**
+           * ANY bare length, not just `1px`. The first version matched the
+           * literal only, so a probe that changed a stop to `2px` passed — the
+           * guard would have allowed the retina repair to regress to a
+           * different hard-coded width without firing.
+           */
+          if (/\b\d*\.?\d+(px|rem|em)\b/.test(gradient) && !gradient.includes('--grid-stop')) {
             raw.push(`${sheet.name}: "${rule[1].trim()}" hard-codes a 1px hairline`);
           }
         }
@@ -1134,6 +1166,83 @@ describe('no glass on an element that hosts a fixed-position drawer', () => {
           const declared = /backdrop-filter\s*:\s*([^;}]+)/.exec(rule[2]);
           if (declared !== null && declared[1].trim() !== 'none') {
             offenders.push(`${sheet.name}: "${rule[1].trim()}" sets backdrop-filter: ${declared[1].trim()}`);
+          }
+        }
+      }
+    }
+    expect(offenders, offenders.join('\n')).toEqual([]);
+  });
+});
+
+/**
+ * DEAD GLASS REACHED BY SPECIFICITY, NOT BY SOURCE ORDER.
+ *
+ * The `@supports`-below-flat scanner catches an IDENTICAL selector re-declaring
+ * a property later. The live defect in this branch took the other form: the
+ * glass rules are `@supports { .x }` at (0,1,0) and the colourway overrides are
+ * `[data-relay-colorway='manual'] .x` at (0,2,0), so the override's opaque
+ * background wins at ANY position while the `backdrop-filter` survives — six
+ * elements paying for a blur compositing layer behind fully opaque ink and
+ * cream. Same defect, different mechanism, and the first scanner was blind to
+ * it because it compared selector strings.
+ */
+describe('a colourway override cannot leave a blur behind an opaque plate', () => {
+  it('turns the blur off wherever it replaces a glass background', () => {
+    const offenders: string[] = [];
+
+    for (const sheet of SHEETS) {
+      const css = sheet.css.replace(/\/\*[\s\S]*?\*\//g, '');
+      // Subjects whose background is declared inside an @supports backdrop block.
+      const glassed = new Set<string>();
+      for (const opener of css.matchAll(/@supports[^{]*backdrop-filter[^{]*\{/g)) {
+        const start = (opener.index as number) + opener[0].length;
+        let depth = 1;
+        let i = start;
+        while (i < css.length && depth > 0) {
+          if (css[i] === '{') depth += 1;
+          else if (css[i] === '}') depth -= 1;
+          i += 1;
+        }
+        for (const rule of css.slice(start, i - 1).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+          if (!/backdrop-filter\s*:/.test(rule[2])) continue;
+          for (const sel of rule[1].split(',')) {
+            const cls = /\.([A-Za-z0-9_-]+)\s*$/.exec(sel.trim());
+            if (cls !== null) glassed.add(cls[1]);
+          }
+        }
+      }
+      if (glassed.size === 0) continue;
+
+      // Any MORE-SPECIFIC rule that replaces the background for the same
+      // subject must also switch the blur off.
+      for (const sheetB of SHEETS) {
+        const cssB = sheetB.css.replace(/\/\*[\s\S]*?\*\//g, '');
+        for (const rule of cssB.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
+          const body = rule[2];
+          if (!/background\s*:/.test(body)) continue;
+          for (const sel of rule[1].split(',')) {
+            const trimmed = sel.trim();
+            // More specific than a bare `.x`: an attribute or extra compound.
+            if (!/\[[^\]]+\]/.test(trimmed)) continue;
+            const cls = /\.([A-Za-z0-9_-]+)\s*$/.exec(trimmed);
+            if (cls === null || !glassed.has(cls[1])) continue;
+            /**
+             * ONLY AN OPAQUE REPLACEMENT KILLS THE BLUR. A translucent one —
+             * midnight's `.reh-header` is `rgba(27,33,56,0.72)` — still has a
+             * backdrop to filter, so the glass is real and must not be flagged.
+             * The first version of this check ignored that and reported
+             * midnight as a seventh offender, which would have had me switch
+             * off glass that works.
+             */
+            const background = /background\s*:\s*([^;}]+)/.exec(body);
+            const value = background === null ? '' : background[1].trim();
+            const translucent = /rgba?\([^)]*,\s*0?\.\d+\s*\)/.test(value)
+              || value.includes('transparent');
+            if (translucent) continue;
+            const off = /backdrop-filter\s*:\s*none/.test(body);
+            if (!off) {
+              offenders.push(`${sheetB.name}: "${trimmed}" replaces a glass background with an opaque one and leaves the blur on`);
+            }
           }
         }
       }

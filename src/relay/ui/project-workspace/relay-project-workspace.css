@@ -103,7 +103,11 @@
       rgba(0, 0, 0, 0.14) 0px,
       rgba(0, 0, 0, 0.14) 0.5px,
       transparent 0.5px,
-      transparent 2px
+      /* PERIOD STAYS 3px. Halving the LINE puts it on one device pixel; halving
+         the period too would raise scanline density by 50% and drop coverage
+         from 33% to 25% — a visibly different grain on HD, not the same grain
+         rendered finer. The retina pass is for sharpness, not for a new look. */
+      transparent 3px
     );
   }
 }

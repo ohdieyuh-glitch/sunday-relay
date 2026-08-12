@@ -1,7 +1,7 @@
 # Relay frontend — premium polish pass
 
 Status: implemented on `relay/frontend-premium-polish`.
-Tests: `src/relay/ui/premium-polish.test.tsx` (25 assertions).
+Tests: `src/relay/ui/premium-polish.test.tsx` (26 assertions).
 
 This was a **polish pass, not a redesign**. Every layout concept, every surface
 structure, the Relay Dog, the Relay Stage, the Project Brain, the Mission
@@ -397,3 +397,28 @@ way — a scanner that appeared to pass because it could not see its subject:
 Restoring those mutations with `git checkout <file>` also reverted legitimate
 edits in the same file, which is how a real un-tokenised hairline briefly
 survived. Mutations are reverted from a saved copy, not from the index.
+
+
+## Review round 3 — the last three findings, closed
+
+| # | Finding | Repair |
+|---|---|---|
+| M | Six manual-colorway overrides at (0,2,0) beat the `@supports` glass at (0,1,0), so their opaque ink/cream background won while the `backdrop-filter` SURVIVED — a blur layer behind a fully opaque plate. Same defect as the `relay-preview.css` one this pass fixed, reached by specificity instead of source order | `backdrop-filter: none` on all six. The manual colorway is a founder reference and is deliberately flat, so switching the blur off is the right resolution rather than restating the glass |
+| L | The hairline guard matched only the literal `1px`, so a stop changed to `2px` passed | Matches any bare length |
+| L | `--grid-stop` was absent from the shared-token no-fork list — a surface sheet could redeclare it and reopen the exact specificity contest it was hoisted to end | Added, with that reason |
+| L | The retina scanline halved the PERIOD as well as the line (3px → 2px), raising density 50% and dropping coverage 33% → 25% — a different grain, not a finer one | Period stays 3px |
+
+**Two things the repairs taught, both worth keeping.**
+
+The existing "every `backdrop-filter` sits inside `@supports`" guard blocked the
+fix. Its stated rationale is that a browser without support would get *lowered
+opacity and no blur* — a danger that belongs to a blur VALUE. `none` is the
+opposite: it turns glass off, and an unsupporting browser ignoring it reaches
+the same result. So `none` is now exempt, narrowly, and an unguarded blur still
+fails.
+
+The new specificity guard found a SEVENTH override the review had not listed —
+`[data-relay-colorway='midnight'] .reh-header`. It was a false positive: that
+background is `rgba(27,33,56,0.72)`, translucent, so the blur is real. Acting on
+it would have switched off glass that works. The guard now flags only OPAQUE
+replacements, which is the actual rule.

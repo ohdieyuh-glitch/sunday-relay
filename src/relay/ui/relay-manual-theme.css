@@ -87,7 +87,19 @@
      An independent review found it in the built bundle. */
   background-size: 44px 44px, 44px 44px;
 }
+/* `backdrop-filter: none` ON THE MANUAL OVERRIDES, DELIBERATELY.
+   These overrides are `[data-relay-colorway='manual'] .x` — specificity (0,2,0)
+   — and the glass rules are `@supports { .x }` at (0,1,0). `@supports` adds no
+   specificity, so the manual background always wins while the `backdrop-filter`
+   from the guarded block SURVIVES: a blur compositing layer behind a fully
+   opaque ink or cream plate, paying for glass and rendering none. That is
+   verbatim the defect this pass fixed in `relay-preview.css`, reached by
+   specificity instead of by source order — an independent review found the
+   source-order form and this one separately.
+   The manual colorway is a founder-provided reference and is deliberately flat,
+   so the resolution is to switch the blur OFF here rather than restate it. */
 [data-relay-colorway='manual'] .reh-header {
+  backdrop-filter: none;
   background: var(--relay-manual-black);
   border-bottom-color: rgba(93, 92, 88, 0.5);
 }
@@ -226,6 +238,7 @@
   background-size: 48px 48px, 48px 48px;
 }
 [data-relay-colorway='manual'] .rpw-header {
+  backdrop-filter: none;
   background: var(--relay-manual-black);
   border-bottom-color: rgba(93, 92, 88, 0.5);
 }
@@ -233,6 +246,7 @@
 [data-relay-colorway='manual'] .rpw-wordmark-relay { color: var(--relay-manual-signal-soft); }
 /* Agent platforms: ivory cells with ink identity, aged-gold squares. */
 [data-relay-colorway='manual'] .rpw-strip {
+  backdrop-filter: none;
   background: var(--relay-manual-cream);
   border-bottom-color: var(--relay-manual-cream-muted);
 }
@@ -247,6 +261,7 @@
 [data-relay-colorway='manual'] .rpw-strip-cell--phase { background: var(--relay-manual-cream-panel); }
 /* The dialogue dock: focused ivory panel with ink border (founder ref). */
 [data-relay-colorway='manual'] .rpw-conversation {
+  backdrop-filter: none;
   --rpw-panel: var(--relay-manual-cream-panel);
   --rpw-panel-2: var(--relay-manual-cream);
   --rpw-line: var(--relay-manual-cream-text-muted);
@@ -271,6 +286,7 @@
 }
 /* Status rail: ivory technical panels. */
 [data-relay-colorway='manual'] .rpw-status {
+  backdrop-filter: none;
   --rpw-panel: var(--relay-manual-cream);
   --rpw-panel-2: var(--relay-manual-cream-panel);
   --rpw-line: var(--relay-manual-cream-muted);
@@ -299,7 +315,7 @@
 [data-relay-colorway='manual'] .rpw-footer-gold { color: var(--relay-manual-gold); }
 [data-relay-colorway='manual'] .rpw-footer-net { color: var(--relay-manual-ink); }
 /* Deep console + terminal stay black system surfaces. */
-[data-relay-colorway='manual'] .rpw-console { background: var(--relay-manual-stage); }
+[data-relay-colorway='manual'] .rpw-console { background: var(--relay-manual-stage); backdrop-filter: none; }
 [data-relay-colorway='manual'] .rpw-terminal { background: var(--relay-manual-black); }
 [data-relay-colorway='manual'] .rpw-tm-window {
   background: var(--relay-manual-stage);
