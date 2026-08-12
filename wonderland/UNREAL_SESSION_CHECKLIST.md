@@ -24,6 +24,24 @@ Machine bar: UE 5.4, ~32 GB RAM, dedicated GPU, ~200 GB free disk.
 | 11 | GVE interaction | the representative GVE reads real Relay execution/verification | video of the interaction + the Relay-side record it reflects |
 | 12 | Evidence captured | collect 1–11 into `docs/relay/WONDERLAND_SLICE_EVIDENCE.md` | the document, with hashes of the media files |
 
+## A GAP FOUND BY CHECKING THE SEAM, not yet closed
+
+**No Bridge route serves the Wonderland world snapshot.** `RelayWorldState.h`
+mirrors `wonderland-contracts.ts` field for field and says it reads through
+"the Bridge's explicit read contract" — and `grep -rn wonderland
+relay-bridge/*.ts` returns NOTHING outside tests. The domain has the
+projections (`projectWonderlandMission`, `projectWonderlandLoopSignal`,
+`projectWonderlandAttestation`); no route composes and serves them.
+
+Without it, step 10 strands on the paid machine for lack of a SERVER endpoint —
+a thing that can be built and tested on the Chromebook. It is the highest-value
+remaining local preparation, and it is deliberately NOT built in the same
+change as this checklist: a Bridge route carries the auth model (operator
+Bearer vs browser Relay-Session, and an Unreal client is neither), and that
+design deserves a full session, its own tests, and an independent review — not
+an edge-of-context patch. Recorded here so the next session starts at the
+decision, not at the discovery.
+
 ## What cannot be prepared here, and why
 
 - **`.umap` / `.uasset` binaries** — editor-authored formats; writing them by
