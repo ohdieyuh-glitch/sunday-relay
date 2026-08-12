@@ -24,6 +24,7 @@ import {
 } from './hermes-reviewer';
 import type { HermesOutcome, ReviewPacket } from './hermes-reviewer';
 import { normalizeObservation } from '../src/relay/mission/evidence';
+import { defaultMissionConfig, type RelayMissionConfig } from '../src/relay/mission/mission-config';
 import { codingHandoffDigest, type CodingOutcome } from './coding';
 import type { OpenAiArchitectResult } from './openai-architect';
 import type { CodingTerminalState, LiveMissionUpdate } from './types';
@@ -2997,4 +2998,74 @@ describe('a Mission can target a real repository end to end', () => {
     // hijack the mission state machine); it simply stops being shippable.
     expect(reg.get('m-ship-ready')?.state).toBe('verified_complete');
   });
+});
+
+/**
+ * WP-4 — THE SPEND/COMPUTE CAP. The authorized agent-call ceiling from the
+ * Mission's config is checked BEFORE every paid role dispatch. These are the
+ * mutation proofs the architect required: at each cap the very next role NEVER
+ * runs (its call counter stays put), and the Mission halts to `budget_exhausted`
+ * — an authorized limit is never silently exceeded. If a gate were removed, the
+ * corresponding "never dispatched" assertion would fail.
+ */
+describe('WP-4 the authorized agent-call cap halts before the next paid dispatch', () => {
+  const withAgentCalls = (agentCalls: number | null): RelayMissionConfig => ({
+    ...defaultMissionConfig(),
+    limits: { ...defaultMissionConfig().limits, agentCalls },
+  });
+
+  it('cap 0 blocks the architect — zero paid dispatches, budget_exhausted', async () => {
+    const h = harness();
+    const reg = registry(h);
+    reg.start({ missionId: 'm-cap0', objective: 'x', config: withAgentCalls(0) });
+    const view = await settle(reg, 'm-cap0');
+    expect(h.calls.architect + h.calls.fusion).toBe(0);
+    expect(h.calls.coding).toBe(0);
+    expect(h.calls.reviewer).toBe(0);
+    expect(view.state).toBe('failed');
+    expect(view.phase).toBe('budget_exhausted');
+  }, 20_000);
+
+  it('cap 1 allows only the architect — coding and reviewer never dispatch', async () => {
+    const h = harness();
+    const reg = registry(h);
+    reg.start({ missionId: 'm-cap1', objective: 'x', config: withAgentCalls(1) });
+    const view = await settle(reg, 'm-cap1');
+    expect(h.calls.architect + h.calls.fusion).toBe(1);
+    expect(h.calls.coding).toBe(0);
+    expect(h.calls.reviewer).toBe(0);
+    expect(view.phase).toBe('budget_exhausted');
+  }, 20_000);
+
+  it('cap 2 allows architect + coding, blocks the reviewer', async () => {
+    const h = harness();
+    const reg = registry(h);
+    reg.start({ missionId: 'm-cap2', objective: 'x', config: withAgentCalls(2) });
+    const view = await settle(reg, 'm-cap2');
+    expect(h.calls.architect + h.calls.fusion).toBe(1);
+    expect(h.calls.coding).toBe(1);
+    expect(h.calls.reviewer).toBe(0);
+    expect(view.phase).toBe('budget_exhausted');
+  }, 20_000);
+
+  it('a budget-halted mission is NOT retryable (the cap cannot be bypassed by retry)', async () => {
+    const h = harness();
+    const reg = registry(h);
+    reg.start({ missionId: 'm-cap-retry', objective: 'x', config: withAgentCalls(1) });
+    await settle(reg, 'm-cap-retry');
+    const before = h.calls.coding;
+    reg.retry('m-cap-retry');
+    const view = await settle(reg, 'm-cap-retry');
+    expect(view.phase).toBe('budget_exhausted');
+    expect(h.calls.coding).toBe(before); // retry dispatched nothing new
+  }, 20_000);
+
+  it('an unset (null) cap does not interfere — the mission completes normally', async () => {
+    const h = harness();
+    const reg = registry(h);
+    reg.start({ missionId: 'm-cap-none', objective: 'x', config: withAgentCalls(null) });
+    const view = await settle(reg, 'm-cap-none');
+    expect(view.state).toBe('verified_complete');
+    expect(h.calls.reviewer).toBe(1);
+  }, 20_000);
 });

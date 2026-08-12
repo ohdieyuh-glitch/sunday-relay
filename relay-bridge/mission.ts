@@ -163,6 +163,7 @@ const PHASE_STATE: Record<MissionPhase, RelayMissionState> = {
   review_blocked: 'failed',
   cancelled: 'cancelled',
   timed_out: 'failed',
+  budget_exhausted: 'failed',
 };
 
 const PHASE_ROLE: Partial<Record<MissionPhase, MissionRole>> = {
@@ -190,6 +191,7 @@ const TERMINAL_FAILURE: ReadonlySet<MissionPhase> = new Set<MissionPhase>([
   'review_incomplete',
   'review_blocked',
   'timed_out',
+  'budget_exhausted',
 ]);
 
 /* ------------------------------------------------------- role ledger */
@@ -260,6 +262,13 @@ interface MissionRecord {
   cancelRequested: boolean;
   cancelHandle: CancelHandle | null;
   retryCount: number;
+  /** How many paid role dispatches this Mission has made. The authorized
+   *  agent-call ceiling (config.limits.agentCalls) is checked against this
+   *  BEFORE each dispatch, so a cap halts the run with zero further spend. */
+  dispatchCount: number;
+  /** Epoch ms the Mission began, for the runtime ceiling. `NaN` disables the
+   *  runtime check (a clock that does not parse must not fabricate an elapsed). */
+  startedAtMs: number;
 }
 
 /* --------------------------------------------------------- public API */
@@ -676,6 +685,39 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     disposeIfRetained(rec);
     setPhase(rec, 'cancelled', 'relay');
     rec.completedAt = now();
+  };
+
+  /**
+   * THE SPEND/COMPUTE GATE — checked BEFORE every paid role dispatch.
+   *
+   * If the Mission has reached the authorized agent-call ceiling or runtime
+   * ceiling from its config, it halts to `budget_exhausted` and the caller
+   * returns WITHOUT dispatching — an authorized limit is never silently
+   * exceeded (criterion 15). Returns true when it BLOCKED (the caller must stop
+   * the pipeline), false when the dispatch may proceed — and in that case it
+   * records the dispatch, so the count reflects real paid work. A `null` limit
+   * is not a ceiling and never blocks; the runtime check is skipped when the
+   * clock did not parse rather than fabricating an elapsed time.
+   */
+  const budgetBlocked = (rec: MissionRecord, role: MissionRole): boolean => {
+    const limits = rec.config.limits;
+    if (limits.agentCalls !== null && rec.dispatchCount >= limits.agentCalls) {
+      fail(rec, 'budget_exhausted',
+        `The authorized agent-call limit (${limits.agentCalls}) was reached before the ${role} dispatch. No further provider was contacted.`,
+        { code: 'budget_exhausted', retryable: false });
+      return true;
+    }
+    if (limits.runtimeMinutes !== null && Number.isFinite(rec.startedAtMs)) {
+      const elapsedMs = Date.parse(now()) - rec.startedAtMs;
+      if (Number.isFinite(elapsedMs) && elapsedMs >= limits.runtimeMinutes * 60_000) {
+        fail(rec, 'budget_exhausted',
+          `The authorized runtime limit (${limits.runtimeMinutes} min) was reached before the ${role} dispatch. No further provider was contacted.`,
+          { code: 'budget_exhausted', retryable: false });
+        return true;
+      }
+    }
+    rec.dispatchCount += 1;
+    return false;
   };
 
   /* ------------------------------------------------------- the pipeline */
@@ -1142,6 +1184,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       }
 
       if (archStatus !== 'complete') {
+        // Spend/compute gate BEFORE the architect dispatch — covers both the
+        // live and Fusion paths, because both run under this block.
+        if (budgetBlocked(rec, 'prompt_architect')) return;
         setPhase(rec, 'prompt_architect_queued');
         append(rec, {
           role: 'prompt_architect',
@@ -1514,6 +1559,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           meta: `IDEMPOTENCY ${codeKey}`,
         });
       } else {
+        // Spend/compute gate BEFORE the Coding Agent dispatch.
+        if (budgetBlocked(rec, 'coding_agent')) return;
         setPhase(rec, 'coding_agent_assigned');
         append(rec, {
           role: 'coding_agent',
@@ -1689,6 +1736,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           meta: `IDEMPOTENCY ${revKey}`,
         });
       } else {
+        // Spend/compute gate BEFORE the independent Reviewer dispatch.
+        if (budgetBlocked(rec, 'reviewer')) return;
         setPhase(rec, 'reviewer_assigned');
         append(rec, {
           role: 'reviewer',
@@ -1984,6 +2033,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         && reviewedContent !== null;
 
       if (canRepair && reviewedContent !== null) {
+        // Spend/compute gate BEFORE the repair dispatch. A Mission that cannot
+        // afford the repair halts here rather than spending past its ceiling.
+        if (budgetBlocked(rec, 'coding_agent')) return;
         append(rec, {
           role: 'coding_agent',
           category: 'repair',
@@ -2067,6 +2119,10 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
             detail: `Changed files (Relay-observed): ${repaired.changedFiles.join(', ') || '(none)'}`,
           });
 
+          // Spend/compute gate BEFORE the independent re-review dispatch. The
+          // repair was re-verified locally (free); the paid re-review is gated,
+          // so a budget halt here never claims completion — it is budget_exhausted.
+          if (budgetBlocked(rec, 'reviewer')) return;
           const secondOutcome = await callReviewer({
             packet: {
               missionId: rec.missionId,
@@ -2377,6 +2433,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         cancelRequested: false,
         cancelHandle: null,
         retryCount: 0,
+        dispatchCount: 0,
+        startedAtMs: Date.parse(now()),
         evidenceReferences: evidenceReferences ?? [],
         liveEvidence: [],
         evidenceRecords: [],

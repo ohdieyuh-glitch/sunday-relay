@@ -119,7 +119,11 @@ export type MissionPhase =
   | 'review_incomplete'
   | 'review_blocked'
   | 'cancelled'
-  | 'timed_out';
+  | 'timed_out'
+  /** Stopped because the Mission reached an authorized spend/compute ceiling
+   *  (agent-call count or runtime). No completion is claimed; the halt names
+   *  the cause so a user understands it without terminal logs. */
+  | 'budget_exhausted';
 
 export type MissionRole = 'relay' | 'prompt_architect' | 'coding_agent' | 'reviewer';
 
