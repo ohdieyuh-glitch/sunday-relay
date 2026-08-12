@@ -1,6 +1,6 @@
 import { bearerMatches, BRIDGE_TOKEN_ENV, type ReviewerRouteResult } from './reviewer-routes';
 import { shipVerifiedMission, disposeRetainedWorktree, type ShipAuthorization } from './ship-mission';
-import { observeRepositoryWorktree } from '../src/relay/workspace/repository-target-observer';
+import { observeRepositoryWorktree, resolveBaselineSha } from '../src/relay/workspace/repository-target-observer';
 import { judgeObservedDiff } from '../src/relay/mission/repository-target';
 import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
 import type { RepositoryRegistrationStore } from '../src/relay/persistence';
@@ -96,9 +96,20 @@ export async function handleShipRoute(
    * what is on disk NOW, against the target's baseline. A worktree that no
    * longer matches what was verified is re-judged and refused by the runner.
    */
+  /**
+   * A REAL SHA IN THE SHA-TYPED FIELD. A review found the base BRANCH NAME
+   * (e.g. "main") flowing into `baselineSha`. `resolveBaselineSha` turns the
+   * base branch into the actual revision, which is what the field is for and
+   * what a reader who trusts the type will get.
+   */
+  const baseline = resolveBaselineSha({ worktreePath: context.worktreePath, ref: context.target.baseBranch });
+  if (!baseline.ok) {
+    return err(422, 'baseline_unresolved',
+      `The target's base branch could not be resolved to a revision: ${baseline.error.message}`);
+  }
   const observed = observeRepositoryWorktree({
     worktreePath: context.worktreePath,
-    baselineSha: context.target.baseBranch,
+    baselineSha: baseline.value,
     now: request.now(),
   });
   if (!observed.ok) {

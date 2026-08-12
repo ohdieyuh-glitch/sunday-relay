@@ -2905,4 +2905,69 @@ describe('a Mission can target a real repository end to end', () => {
     });
     expect(status.trim()).toBe('');
   }, 120_000);
+
+  /* ------------------------------------------------------ shipContext */
+  /**
+   * `shipContext` is the gate the ship route trusts to decide a mission has
+   * something to ship. A review found it wired but never tested directly. It
+   * returns non-null ONLY for a mission that is verified_complete AND has a real
+   * repository target AND retained a worktree — three conditions the ship route
+   * would otherwise have to re-derive. Each of these drives the real registry to
+   * a state and asserts the gate's answer, so a regression in any one condition
+   * — a mission shippable when it is not — fails here.
+   */
+
+  it('shipContext is null for an unknown mission', () => {
+    const reg = registry(harness(), LIVE_ENV, 'fake');
+    expect(reg.shipContext('no-such-mission')).toBeNull();
+  });
+
+  it('shipContext is null for a verified mission with NO repository target', async () => {
+    // The ordinary throwaway-fixture path reaches verified_complete, but there
+    // is no real target — nothing to ship — and the gate says so.
+    const { reg } = await runMission(harness(), LIVE_ENV, 'm-ship-no-target');
+    expect(reg.get('m-ship-no-target')?.state).toBe('verified_complete');
+    expect(reg.shipContext('m-ship-no-target')).toBeNull();
+  });
+
+  it('shipContext is null for a verified real-target mission that retained NO worktree', async () => {
+    // A real target, but the coding leg kept no worktree (the default outcome's
+    // retainedWorktreePath is null): there is nothing on disk to re-judge.
+    const target = targetFor(realProject());
+    const reg = registry(harness(), LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'm-ship-no-wt',
+      objective: 'Bump the version constant.',
+      repositoryTarget: target,
+      intendedWritePaths: ['src/normalize.js'],
+    });
+    expect((await settle(reg, 'm-ship-no-wt')).state).toBe('verified_complete');
+    expect(reg.shipContext('m-ship-no-wt')).toBeNull();
+  });
+
+  it('shipContext returns the target and retained worktree for a verified real-target mission', async () => {
+    const target = targetFor(realProject());
+    const RETAINED = '/tmp/relay-retained-worktree-fixture';
+    const h = harness({
+      coding: async (hh) => ({
+        ...goodCodingOutcome(
+          codingHandoffDigest(hh.codingInput!.handoff),
+          hh.codingInput!.missionRevision ?? '',
+        ),
+        retainedWorktreePath: RETAINED,
+      }),
+    });
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'm-ship-ready',
+      objective: 'Bump the version constant.',
+      repositoryTarget: target,
+      intendedWritePaths: ['src/normalize.js'],
+    });
+    expect((await settle(reg, 'm-ship-ready')).state).toBe('verified_complete');
+    const ctx = reg.shipContext('m-ship-ready');
+    expect(ctx).not.toBeNull();
+    expect(ctx?.target.repositoryKey).toBe('local:proj');
+    expect(ctx?.worktreePath).toBe(RETAINED);
+  });
 });
