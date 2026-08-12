@@ -76,8 +76,35 @@ function repository(): string {
   return root;
 }
 
-/** How far along the lifecycle a stage is. Higher is further. */
-const rank = (stage: ShipStage): number => SHIP_STAGES.indexOf(stage);
+/**
+ * HOW FAR ALONG THE LIFECYCLE A STAGE IS — over a curated PROGRESSION, never
+ * over `SHIP_STAGES.indexOf`.
+ *
+ * The first version ranked by array position, and `deployment_failed` sits at
+ * index 10 while `deployed` sits at 7 — so the invariant "a refusal at
+ * push/PR/merge still reaches deployed" was SATISFIED BY THE DEPLOY FAILING.
+ * A fifth review proved it: a mutation that poisons the deploy whenever the
+ * remote leg skipped passed 1135/1135 tests including both named invariants.
+ * The domain's own comment warned about exactly this: "the later fact is the
+ * true one, and array order is not a ranking."
+ *
+ * Terminal failures are not positions on the road; asking for their rank is a
+ * category error and throws, so a future stage added to SHIP_STAGES cannot
+ * silently join the ordering either.
+ */
+const PROGRESSION: readonly ShipStage[] = [
+  'verified_complete', 'ready_to_ship', 'committed', 'pushed',
+  'pull_request_open', 'merged', 'deploying', 'deployed', 'live_verified', 'shipped',
+];
+const rank = (stage: ShipStage): number => {
+  const index = PROGRESSION.indexOf(stage);
+  if (index < 0) throw new Error(`"${stage}" is a terminal failure, not a position on the progression`);
+  return index;
+};
+// The curated list must stay a strict subset of the real one.
+for (const stage of PROGRESSION) {
+  if (!SHIP_STAGES.includes(stage)) throw new Error(`progression names unknown stage "${stage}"`);
+}
 
 function artifactDir(): string {
   const root = mkdtempSync(join(tmpdir(), 'relay-inv-art-'));

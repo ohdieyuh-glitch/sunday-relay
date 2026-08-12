@@ -1241,3 +1241,123 @@ describe('the runner reaches shipped by itself', () => {
     expect(result.evidence.map((e) => e.stage)).toContain('live_verified');
   });
 });
+
+/**
+ * THE ENVIRONMENT GATE IS CALLED ON THE ACTING PATH.
+ *
+ * `providerSupportsEnvironment` existed since the port did, states its own
+ * reason, and was called by NOTHING that acts — a fifth review drove a
+ * simulated staging-only provider to a `shipped` PRODUCTION record with
+ * `stoppedBy: null` to prove it. The record a founder reads to decide the
+ * software is live would have described a deploy that never happened.
+ */
+describe('a provider is asked only for environments it supports', () => {
+  function simulatedStagingProvider() {
+    const calls: string[] = [];
+    return {
+      calls,
+      provider: {
+        descriptor: {
+          providerId: 'sim', displayName: 'Simulated', environments: ['staging'] as const,
+          canReportDeployedRevision: true, canVerifyLive: true, simulated: true,
+          credentialEnvVarName: null,
+        },
+        deploy: async (r: { revision: string; environment: string }) => {
+          calls.push(`deploy:${r.environment}`);
+          return {
+            ok: true, providerId: 'sim', environment: r.environment as 'staging',
+            deployedRevision: r.revision, deploymentRef: 'sim:1', url: null,
+            observedAt: NOW, detail: null,
+          };
+        },
+        verifyLive: async (i: { expectedRevision: string }) => ({
+          reachable: true, healthy: true, reportedRevision: i.expectedRevision,
+          method: 'sim', observedAt: NOW, detail: null,
+        }),
+      },
+    };
+  }
+
+  /** A registration that genuinely GRANTS production, so the environment gate
+   *  is the deciding guard rather than the permission ladder refusing first. */
+  function productionRegistration(root: string): RepositoryRegistration {
+    const grants: readonly RepositoryPermission[] = [...LADDER, 'deploy_production'];
+    const result = createRepositoryRegistration({
+      draft: {
+        identity: { provider: 'local', host: null, owner: null, name: 'demo', defaultBranch: 'main' },
+        location: { kind: 'local_path', path: root },
+        scope: { read: ['**'], write: ['src/**'] },
+        grants: grants.map((permission) => ({
+          permission, authorizedBy: 'founder', authorizedAt: NOW, expiresAt: null, note: null,
+        })),
+        ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+        registeredBy: 'founder',
+      },
+      now: NOW,
+    });
+    if (!result.ok) throw new Error(result.error.message);
+    return result.value;
+  }
+
+  it('REFUSES production for a simulated provider, before any call', async () => {
+    /**
+     * THE FIRST VERSION OF THIS TEST PASSED FOR THE WRONG REASON. It
+     * hand-added `deploy_production` to the TARGET while the REGISTRATION
+     * never granted it, so `stillPermitted` refused on permission before the
+     * environment gate was consulted — removing the gate left the test green.
+     * The registration now genuinely grants production, so the only thing
+     * standing between a simulated provider and a production record is the
+     * gate under test.
+     */
+    const root = repository();
+    const reg = productionRegistration(root);
+    const resolved = resolveRepositoryTarget({
+      registration: reg,
+      request: {
+        repositoryKey: reg.key, selectedBy: 'founder', selectedAt: NOW,
+        workingBranch: 'relay/mission-1',
+        permissions: [...LADDER, 'deploy_production'],
+      },
+      now: NOW,
+    });
+    if (!resolved.ok) throw new Error(resolved.error.message);
+    const target = resolved.target;
+    const sim = simulatedStagingProvider();
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      deployment: {
+        provider: sim.provider, environment: 'production',
+        artifactPath: artifact(), liveUrl: 'http://sim.invalid/app',
+      },
+      now: () => NOW,
+    });
+    // Nothing was deployed, and the refusal names the reason.
+    expect(sim.calls).toEqual([]);
+    expect(result.stage).toBe('committed');
+    expect(result.evidence.find((e) => e.stage === 'deployed')).toBeUndefined();
+    expect(result.stoppedBy).not.toBeNull();
+  });
+
+  it('discloses a simulated provider ON the staging record it produces', async () => {
+    const root = repository();
+    const reg = registrationFor(root);
+    const target = targetFor(reg);
+    const sim = simulatedStagingProvider();
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      deployment: {
+        provider: sim.provider, environment: 'staging',
+        artifactPath: artifact(), liveUrl: 'http://sim.invalid/app',
+      },
+      now: () => NOW,
+    });
+    // Staging with a simulated provider is legitimate — and disclosed on the
+    // record itself, not only on a descriptor a reader may never see.
+    const deployed = result.evidence.find((e) => e.stage === 'deployed');
+    expect(deployed?.detail).toContain('SIMULATED');
+  });
+});

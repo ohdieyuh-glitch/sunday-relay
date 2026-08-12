@@ -1,6 +1,7 @@
 import {
   advanceShipStage,
   decideShipped,
+  providerSupportsEnvironment,
   pushLanded,
   refusePushTarget,
   renderPullRequestBody,
@@ -509,6 +510,27 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
 
   const { provider, environment, artifactPath, liveUrl } = request.deployment;
 
+  /**
+   * MAY THIS PROVIDER BE ASKED FOR THIS ENVIRONMENT? The domain guard has
+   * existed since the port did, states its own reason — "a simulated provider
+   * may never touch production … it would produce a production deployment
+   * record for a deploy that never happened, and that record is what a founder
+   * reads to decide the software is live" — and was called by NOTHING on the
+   * acting path. A fifth review drove a simulated staging-only provider to a
+   * `shipped` PRODUCTION record to prove it.
+   *
+   * BEFORE the `deploying` transition, deliberately: this is a CONFIGURATION
+   * refusal, and a record that says `deploying` for a deploy that was never
+   * requested from any provider would claim an act that did not happen.
+   */
+  const environmentSupport = providerSupportsEnvironment({
+    descriptor: provider.descriptor,
+    environment,
+  });
+  if (!environmentSupport.ok) {
+    return { stage, evidence, commitSha, verdict: null, stoppedBy: environmentSupport.reason };
+  }
+
   const deployGate = stillPermitted(request, 'deploying', stage, environment);
   if (!deployGate.ok) {
     return { stage, evidence, commitSha, verdict: null, stoppedBy: deployGate.reason };
@@ -594,7 +616,16 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
     // deploy of a stale build detectable at all.
     deployedRevision: observation.deployedRevision,
     liveProbe,
-    detail: observation.detail,
+    /**
+     * SIMULATED DATA SAYS SO — on the record itself, not only on the
+     * descriptor a reader may never see. A simulated provider is already
+     * refused for production above; a simulated STAGING record is legitimate
+     * and must still never render as a real deployment.
+     */
+    detail: provider.descriptor.simulated
+      ? [observation.detail, 'Deployed by a SIMULATED provider; this record is not a real deployment.']
+          .filter((part) => part !== null).join(' ')
+      : observation.detail,
   };
   evidence.push(deployEvidence);
 
