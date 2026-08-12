@@ -141,6 +141,7 @@ export async function shipVerifiedMission(request: ShipMissionRequest): Promise<
     target: request.target,
     readRegistration: request.readRegistration,
     worktreePath: request.worktreePath,
+    env: request.env,
     judgement: request.judgement,
     commitMessage: request.commitMessage,
     authorName: request.authorName,

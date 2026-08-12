@@ -160,11 +160,15 @@ describe('a registered repository satisfies the same seam', () => {
     if (!result.ok) expect(result.reason).toContain('protected');
   });
 
-  it('REFUSES a remote target rather than silently cloning one', () => {
+  it('ACCEPTS a remote target and runs the cheap config checks BEFORE any clone', () => {
     /**
-     * The credential boundary says Relay performs remote operations itself,
-     * after the agent exits, and no such provider exists. Refusing by name is
-     * the honest state; fetching would be a capability nobody built.
+     * `remote_clone` is no longer refused by design — Relay now clones it over
+     * authenticated HTTPS (see repository-remote-transport.test.ts for the clone
+     * and push guards, and the live proof for a real clone). What this holds is
+     * the ORDERING: a misconfigured remote Mission is refused for its config,
+     * with NO network clone attempted. A remote target with no declared write
+     * paths is refused for the narrowing reason — proving it got past the old
+     * design-refusal to the config checks, and that no clone ran.
      */
     const remote = createRepositoryRegistration({
       draft: {
@@ -189,9 +193,13 @@ describe('a registered repository satisfies the same seam', () => {
       now: NOW,
     });
     if (!resolved.ok) throw new Error(resolved.error.message);
-    const result = repositoryTargetSource(resolved.target, ['src/app.ts']);
+    // No intended write paths — refused for the narrowing reason, before a clone.
+    const result = repositoryTargetSource(resolved.target, [], {} as NodeJS.ProcessEnv);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toContain('no remote provider');
+    if (!result.ok) {
+      expect(result.reason).toContain('name the files it intends to write');
+      expect(result.reason).not.toContain('no remote provider');
+    }
   });
 
   it('REFUSES a Mission that does not hold write_worktree', () => {
