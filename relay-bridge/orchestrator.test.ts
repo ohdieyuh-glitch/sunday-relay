@@ -176,6 +176,7 @@ function goodCodingOutcome(
     claim: { summary: 'Implemented the normalizer.', filesChanged: ['src/normalize.js'], checksRun: ['Reported completing the task'] },
     attestation: codingAttestation(missionRevision),
     deliveredHandoffDigest: handoffDigest,
+    retainedWorktreePath: null,
     evidence: {
       baseRevision: 'rev1',
       allowedFiles: ['src/normalize.js'],
@@ -800,6 +801,7 @@ describe('14-20. only a genuine, current, approving review can complete the miss
     handoffDeliveredAutomatically: true,
     persistedHandoffDigest: 'h1',
     deliveredHandoffDigest: 'h1',
+    retainedWorktreePath: null,
     scopePreserved: true,
     deterministicTestsPassed: true,
     protectedPathsUntouched: true,
@@ -2903,4 +2905,96 @@ describe('a Mission can target a real repository end to end', () => {
     });
     expect(status.trim()).toBe('');
   }, 120_000);
+
+  /* ------------------------------------------------------ shipContext */
+  /**
+   * `shipContext` is the gate the ship route trusts to decide a mission has
+   * something to ship. A review found it wired but never tested directly. It
+   * returns non-null ONLY for a mission that is verified_complete AND has a real
+   * repository target AND retained a worktree — three conditions the ship route
+   * would otherwise have to re-derive. Each of these drives the real registry to
+   * a state and asserts the gate's answer, so a regression in any one condition
+   * — a mission shippable when it is not — fails here.
+   */
+
+  it('shipContext is null for an unknown mission', () => {
+    const reg = registry(harness(), LIVE_ENV, 'fake');
+    expect(reg.shipContext('no-such-mission')).toBeNull();
+  });
+
+  it('beginShip is a mutual-exclusion claim: a second in-flight ship is refused', () => {
+    // The concurrent-ship guard, at the registry. A ship route claims a mission
+    // before its await; a second concurrent request must see the claim.
+    const reg = registry(harness(), LIVE_ENV, 'fake');
+    expect(reg.beginShip('m-lock')).toBe(true);
+    expect(reg.beginShip('m-lock')).toBe(false); // already in flight
+    expect(reg.beginShip('m-other')).toBe(true); // a different mission is free
+    reg.endShip('m-lock');
+    expect(reg.beginShip('m-lock')).toBe(true); // released, claimable again
+  });
+
+  it('shipContext is null for a verified mission with NO repository target', async () => {
+    // The ordinary throwaway-fixture path reaches verified_complete, but there
+    // is no real target — nothing to ship — and the gate says so.
+    // NOTE (defense in depth, not a gap): a no-target mission has BOTH a null
+    // repositoryTarget AND a null retainedWorktreePath — the coding leg retains a
+    // worktree only for a real target — so conditions 3 and 4 co-fire here.
+    // Isolating condition 3 alone would need a null-target-with-worktree record,
+    // a state the real pipeline never produces; the target-carrying gate is
+    // mutation-proven separately by the no-worktree/ready pair below.
+    const { reg } = await runMission(harness(), LIVE_ENV, 'm-ship-no-target');
+    expect(reg.get('m-ship-no-target')?.state).toBe('verified_complete');
+    expect(reg.shipContext('m-ship-no-target')).toBeNull();
+  });
+
+  it('shipContext is null for a verified real-target mission that retained NO worktree', async () => {
+    // A real target, but the coding leg kept no worktree (the default outcome's
+    // retainedWorktreePath is null): there is nothing on disk to re-judge.
+    const target = targetFor(realProject());
+    const reg = registry(harness(), LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'm-ship-no-wt',
+      objective: 'Bump the version constant.',
+      repositoryTarget: target,
+      intendedWritePaths: ['src/normalize.js'],
+    });
+    expect((await settle(reg, 'm-ship-no-wt')).state).toBe('verified_complete');
+    expect(reg.shipContext('m-ship-no-wt')).toBeNull();
+  });
+
+  it('shipContext returns the target and retained worktree for a verified real-target mission', async () => {
+    const target = targetFor(realProject());
+    const RETAINED = '/tmp/relay-retained-worktree-fixture';
+    const h = harness({
+      coding: async (hh) => ({
+        ...goodCodingOutcome(
+          codingHandoffDigest(hh.codingInput!.handoff),
+          hh.codingInput!.missionRevision ?? '',
+        ),
+        retainedWorktreePath: RETAINED,
+      }),
+    });
+    const reg = registry(h, LIVE_ENV, 'fake');
+    reg.start({
+      missionId: 'm-ship-ready',
+      objective: 'Bump the version constant.',
+      repositoryTarget: target,
+      intendedWritePaths: ['src/normalize.js'],
+    });
+    expect((await settle(reg, 'm-ship-ready')).state).toBe('verified_complete');
+    const ctx = reg.shipContext('m-ship-ready');
+    expect(ctx).not.toBeNull();
+    expect(ctx?.target.repositoryKey).toBe('local:proj');
+    expect(ctx?.worktreePath).toBe(RETAINED);
+
+    // ...and once a ship is RECORDED, the same mission is no longer shippable:
+    // the ship route disposes the worktree and calls recordShipOutcome, which a
+    // review (Medium) found was missing — without it a shipped mission still
+    // read verified_complete and still offered itself for another ship.
+    reg.recordShipOutcome('m-ship-ready', { shipped: true });
+    expect(reg.shipContext('m-ship-ready')).toBeNull();
+    // The mission itself is still verified_complete (recordShipOutcome does not
+    // hijack the mission state machine); it simply stops being shippable.
+    expect(reg.get('m-ship-ready')?.state).toBe('verified_complete');
+  });
 });

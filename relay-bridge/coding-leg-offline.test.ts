@@ -3,11 +3,11 @@ import { runCodingMission } from './coding';
 import { resolveClaudeRuntime } from './claude-runtime';
 import { createRandomIdFactory } from '../src/relay/protocol/ids';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFakeClaude } from '../src/relay/connectors/claude-code/fake-executable';
-import { CLAIMED_FILE, REFERENCE_IMPLEMENTATION } from '../src/relay/connectors/claude-code/fixture';
+import { CLAIMED_FILE, REFERENCE_IMPLEMENTATION, TEST_FILE } from '../src/relay/connectors/claude-code/fixture';
 import type { BridgeEventInput, CodingTerminalState } from './types';
 import { actorMatches, isPaidApiCall } from './attestation';
 import { findOccupant, type RoleOccupant } from '../src/relay/mission/role-slots';
@@ -367,6 +367,68 @@ describe('the coding leg can target a real registered repository', () => {
     return root;
   }
 
+  /**
+   * A real repository whose VERIFICATION TEST lives where Relay runs it —
+   * `test/normalize.test.js`, the path `RELAY_TEST_ARGS` hardcodes. The stub
+   * fails; the fake agent edits `src/normalize.js` to the reference and the run
+   * PASSES verification. `realProject()` above uses a different test path, so it
+   * never passes and never exercises retention. Without this project the
+   * retention-on-success path has no test.
+   */
+  const NORMALIZE_TEST = [
+    "const test = require('node:test');",
+    "const assert = require('node:assert');",
+    "const { normalizeProjectName } = require('../src/normalize.js');",
+    "test('lowercases with hyphens', () => {",
+    "  assert.strictEqual(normalizeProjectName('  My Project  '), 'my-project');",
+    "});",
+    '',
+  ].join('\n');
+
+  function verifiableProject(): string {
+    const root = mkdtempSync(join(tmpdir(), 'relay-verifiable-'));
+    temporaries.push(root);
+    const git = (args: string[]) => execFileSync('git', args, {
+      cwd: root,
+      env: { PATH: process.env.PATH ?? '', HOME: root, GIT_AUTHOR_NAME: 'F', GIT_AUTHOR_EMAIL: 'f@x', GIT_COMMITTER_NAME: 'F', GIT_COMMITTER_EMAIL: 'f@x' },
+    });
+    git(['init', '--quiet', '--initial-branch=main']);
+    mkdirSync(join(root, 'src'), { recursive: true });
+    mkdirSync(join(root, 'test'), { recursive: true });
+    // The stub that FAILS the test — the agent must fix it.
+    writeFileSync(join(root, 'src', 'normalize.js'), 'module.exports = { normalizeProjectName: () => "" };\n');
+    writeFileSync(join(root, TEST_FILE), NORMALIZE_TEST);
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'verifiable', version: '1.0.0' }));
+    git(['add', '--', '.']);
+    git(['commit', '-m', 'failing baseline']);
+    return root;
+  }
+
+  function verifiableTarget(root: string) {
+    const grants = (['read', 'write_worktree', 'commit'] as const).map((permission) => ({
+      permission, authorizedBy: 'founder', authorizedAt: AT, expiresAt: null, note: null,
+    }));
+    const registration = createRepositoryRegistration({
+      draft: {
+        identity: { provider: 'local', host: null, owner: null, name: 'verifiable', defaultBranch: 'main' },
+        location: { kind: 'local_path', path: root },
+        scope: { read: ['**'], write: ['src/**'] },
+        grants,
+        ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+        registeredBy: 'founder',
+      },
+      now: AT,
+    });
+    if (!registration.ok) throw new Error(registration.error.message);
+    const resolved = resolveRepositoryTarget({
+      registration: registration.value,
+      request: { repositoryKey: 'local:verifiable', selectedBy: 'founder', selectedAt: AT, workingBranch: 'relay/mission-real', permissions: grants.map((g) => g.permission) },
+      now: AT,
+    });
+    if (!resolved.ok) throw new Error(resolved.error.message);
+    return resolved.target;
+  }
+
   function registeredTarget(root: string) {
     const grants = (['read', 'write_worktree', 'commit'] as const).map((permission) => ({
       permission, authorizedBy: 'founder', authorizedAt: AT, expiresAt: null, note: null,
@@ -431,6 +493,15 @@ describe('the coding leg can target a real registered repository', () => {
       cwd: root, encoding: 'utf8', env: { PATH: process.env.PATH ?? '', HOME: root },
     });
     expect(status.trim(), 'the founder\'s repository is dirty').toBe('');
+
+    /**
+     * NO LEAK ON FAILURE. This project's verification test lives at a different
+     * path than the one Relay runs, so the run does NOT pass verification — and
+     * a real-target run that did not verify must retain NOTHING, or every failed
+     * mission would leave a worktree behind forever.
+     */
+    expect(outcome.verificationPassed).toBe(false);
+    expect(outcome.retainedWorktreePath).toBeNull();
   }, 120_000);
 
   it('refuses before starting an agent when the declared file is out of scope', async () => {
@@ -454,5 +525,43 @@ describe('the coding leg can target a real registered repository', () => {
     } as never);
     expect(outcome.stopped).toBe(true);
     expect(outcome.stopReason ?? '').toContain('must name the files it intends to write');
+  }, 60_000);
+
+  it('RETAINS the verified worktree of a real-target mission, ready to ship', async () => {
+    /**
+     * The ship prerequisite. A real-target mission that PASSES verification
+     * keeps its worktree — `shipVerifiedMission` commits from it, and removing
+     * it here would leave the ship committing a deleted directory. The retained
+     * path exists, is not the source, and holds the edited-and-verified diff.
+     */
+    const root = verifiableProject();
+    const { outcome } = await runOffline({
+      repositoryTarget: verifiableTarget(root),
+      intendedWritePaths: [CLAIMED_FILE],
+      executablePath: writeFakeClaude(mkdtempSync(join(tmpdir(), 'relay-fake-claude-')), {
+        scenario: 'success', sessionId: 'verif-session', taskId: 'tsk', runId: 'run',
+        editPath: CLAIMED_FILE, editContent: REFERENCE_IMPLEMENTATION,
+      }),
+    } as never);
+
+    expect(outcome.verificationPassed, 'the verifiable project must pass').toBe(true);
+    expect(outcome.retainedWorktreePath).not.toBeNull();
+    const wt = outcome.retainedWorktreePath as string;
+    expect(existsSync(wt)).toBe(true);
+    expect(wt).not.toBe(root);
+    // The verified edit is in the retained worktree, uncommitted, ready to ship.
+    expect(readFileSync(join(wt, 'src', 'normalize.js'), 'utf8')).toContain('normalizeProjectName');
+    // And the founder's source is still clean.
+    const status = execFileSync('git', ['status', '--porcelain=v1'], {
+      cwd: root, encoding: 'utf8', env: { PATH: process.env.PATH ?? '', HOME: root },
+    });
+    expect(status.trim()).toBe('');
+    // A retained worktree is disposed by the ship or teardown; clean it here.
+    rmSync(wt, { recursive: true, force: true });
+  }, 120_000);
+
+  it('does NOT retain a worktree for a fixture mission', async () => {
+    const { outcome } = await runOffline({});
+    expect(outcome.retainedWorktreePath).toBeNull();
   }, 60_000);
 });

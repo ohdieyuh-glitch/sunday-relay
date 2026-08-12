@@ -30,6 +30,7 @@ import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { runArchitect, ArchitectUnavailableError, type SundayMode } from './architect';
 import { runCodingMission, codingHandoffDigest, type CancelHandle, type CodingOutcome } from './coding';
+import { disposeRetainedWorktree } from './ship-mission';
 import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
 import { resolveClaudeRuntime } from './claude-runtime';
 import {
@@ -243,6 +244,10 @@ interface MissionRecord {
   review?: MissionReview;
   attestations: Partial<Record<'prompt_architect' | 'coding_agent' | 'reviewer', ExecutionAttestation>>;
   codingOutcome?: CodingOutcome;
+  /** Recorded once a ship has been ATTEMPTED against this mission (success or a
+      refusal that consumed the retained worktree). Its presence means the
+      mission is no longer shippable — the worktree it would ship is gone. */
+  shipOutcome?: { readonly shipped: boolean; readonly at: string };
   ledger: Map<string, LedgerStatus>;
   completedAt: string | null;
   running: boolean;
@@ -380,6 +385,39 @@ export interface MissionRegistry {
     intendedWritePaths?: readonly string[];
   }): LiveMissionUpdate;
   get(missionId: string): LiveMissionUpdate | null;
+  /**
+   * WHAT THE SHIP NEEDS FROM A COMPLETED MISSION, or null.
+   *
+   * A pure read: it returns a target, its retained worktree, and its key ONLY
+   * for a mission that is `verified_complete`, carried a real repository target,
+   * and retained a worktree. Any other mission — fixture, unfinished, or one
+   * whose worktree was not retained — returns null, so a ship can never be
+   * attempted against a mission that has nothing to ship.
+   */
+  shipContext(missionId: string): {
+    readonly target: MissionRepositoryTarget;
+    readonly worktreePath: string;
+  } | null;
+  /**
+   * RECORD THAT A SHIP WAS ATTEMPTED, so the mission stops presenting as
+   * shippable. The ship route disposes the retained worktree itself; this keeps
+   * the mission RECORD consistent with that disposal — it clears the retained
+   * path and stamps a ship marker, after which `shipContext` returns null. A
+   * re-ship is then refused on explicit state, not on a git side-effect.
+   * (Durability across a process restart is out of scope: the whole registry is
+   * in-memory, so a restart forgets the mission itself.)
+   */
+  recordShipOutcome(missionId: string, outcome: { readonly shipped: boolean }): void;
+  /**
+   * CLAIM A MISSION FOR SHIPPING, so two concurrent ship requests cannot both
+   * act. Returns false if a ship is already in flight for this mission. The
+   * claim is taken SYNCHRONOUSLY before the ship's `await`, and JS is
+   * single-threaded, so the second request sees the claim and is refused. The
+   * ship route MUST call `endShip` in its `finally`. This closes only the
+   * concurrent window; permanent non-shippability comes from `recordShipOutcome`.
+   */
+  beginShip(missionId: string): boolean;
+  endShip(missionId: string): void;
   cancel(missionId: string): LiveMissionUpdate | null;
   retry(missionId: string): LiveMissionUpdate | null;
 }
@@ -423,6 +461,8 @@ function defaultRelayPreflight(): { ready: boolean; missing: string[] } {
 export function createMissionRegistry(config: MissionRegistryConfig): MissionRegistry {
   const now = config.now ?? (() => new Date().toISOString());
   const records = new Map<string, MissionRecord>();
+  /** Missions with a ship in flight, so a concurrent second ship is refused. */
+  const inFlightShips = new Set<string>();
   const deps = config.deps ?? {};
   const callArchitect = deps.runOpenAiArchitect ?? runOpenAiArchitect;
   const callFusionArchitect = deps.runFusionArchitect ?? runArchitect;
@@ -558,6 +598,29 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
 
   /** Terminal failure. `phase` is the exact supported failure state; the code
       is the same string so the browser and the report agree. */
+  /**
+   * A TERMINAL FAILURE MUST NOT LEAK THE RETAINED WORKTREE. Retention happens
+   * on deterministic verification, which is BEFORE the independent reviewer; a
+   * rejection then ends the mission at `fail()`. Without this, that ordinary
+   * outcome left a worktree, its admin entry, and a branch inside the founder's
+   * repository every time. A completed SHIP disposes its own worktree; every
+   * other terminal state disposes here.
+   */
+  const disposeIfRetained = (rec: MissionRecord): void => {
+    const worktreePath = rec.codingOutcome?.retainedWorktreePath ?? null;
+    if (worktreePath === null || rec.repositoryTarget === null) return;
+    disposeRetainedWorktree({
+      worktreePath,
+      sourceRepositoryPath: rec.repositoryTarget.location.kind === 'local_path'
+        ? rec.repositoryTarget.location.path
+        : worktreePath,
+      workingBranch: rec.repositoryTarget.workingBranch,
+    });
+    if (rec.codingOutcome !== undefined) {
+      rec.codingOutcome = { ...rec.codingOutcome, retainedWorktreePath: null };
+    }
+  };
+
   const fail = (
     rec: MissionRecord,
     requestedPhase: MissionPhase,
@@ -580,6 +643,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       meta: `STATE ${phase}`,
       done: true,
     });
+    disposeIfRetained(rec);
     setPhase(rec, phase, 'relay');
     rec.completedAt = now();
   };
@@ -594,6 +658,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       detail: 'The run was stopped. Completed roles and their evidence are preserved. No completion is claimed.',
       done: true,
     });
+    disposeIfRetained(rec);
     setPhase(rec, 'cancelled', 'relay');
     rec.completedAt = now();
   };
@@ -2306,6 +2371,42 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     get(missionId) {
       const rec = records.get(missionId);
       return rec ? toView(rec) : null;
+    },
+
+    shipContext(missionId) {
+      const rec = records.get(missionId);
+      if (rec === undefined) return null;
+      // A ship already attempted consumed the worktree — never shippable again.
+      if (rec.shipOutcome !== undefined) return null;
+      // Only a VERIFIED mission with a real target and a retained worktree.
+      if (rec.state !== 'verified_complete') return null;
+      if (rec.repositoryTarget === null) return null;
+      const worktreePath = rec.codingOutcome?.retainedWorktreePath ?? null;
+      if (worktreePath === null) return null;
+      return { target: rec.repositoryTarget, worktreePath };
+    },
+
+    recordShipOutcome(missionId, outcome) {
+      const rec = records.get(missionId);
+      if (rec === undefined) return;
+      // The worktree the ship consumed is gone (the ship route disposed it);
+      // keep the record consistent so `shipContext` stops offering it.
+      if (rec.codingOutcome !== undefined) {
+        rec.codingOutcome = { ...rec.codingOutcome, retainedWorktreePath: null };
+      }
+      rec.shipOutcome = { shipped: outcome.shipped, at: now() };
+    },
+
+    beginShip(missionId) {
+      // Synchronous check-and-set: no `await` between the two, so two concurrent
+      // ship requests cannot both pass. The second sees the claim and is refused.
+      if (inFlightShips.has(missionId)) return false;
+      inFlightShips.add(missionId);
+      return true;
+    },
+
+    endShip(missionId) {
+      inFlightShips.delete(missionId);
     },
 
     cancel(missionId) {

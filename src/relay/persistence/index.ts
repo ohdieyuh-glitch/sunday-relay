@@ -43,3 +43,7 @@ export {
   createBetaEnrolmentStore, isUsableParticipantId,
   type BetaEnrolmentStore, type EnrolResult,
 } from './beta-enrollment-node';
+export {
+  createRepositoryRegistrationStore,
+  type RepositoryRegistrationStore,
+} from './repository-registration-node';

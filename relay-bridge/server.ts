@@ -38,10 +38,15 @@ import { decodeSegment } from './path-segment';
 import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
 import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
 import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
+import { handleRepositoryRoute, isRepositoryRoute } from './repository-routes';
+import { handleShipRoute, isShipRoute } from './ship-route';
+import { resolveRepositoryTarget } from '../src/relay/mission/repository-target';
+import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
 import { guardBetaAdmission, participantFromBody } from './beta-guard';
 import { claimedClientKey, createBetaRateLimiter } from './beta-rate-limit';
 import type { BetaRateLimiter } from './beta-rate-limit';
-import { createBetaEnrolmentStore } from '../src/relay/persistence';
+import { createBetaEnrolmentStore, createRepositoryRegistrationStore } from '../src/relay/persistence';
+import type { RepositoryRegistrationStore } from '../src/relay/persistence';
 import type { BetaWaveConfig } from '../src/relay/mission/beta';
 import type { BetaEnrolmentStore } from '../src/relay/persistence';
 import { createCronTickService } from './cron-service';
@@ -198,6 +203,12 @@ export function createBridgeServer(
    * see the note at the Live Reach branch below. `main()` always passes one.
    */
   liveReachService: LiveReachService | null = null,
+  /**
+   * The durable repository registration store. Absent on a bridge with no
+   * mounted state root — the registration surface then answers
+   * `repository_store_unavailable`, the same shape as the beta store.
+   */
+  repositoryStore: RepositoryRegistrationStore | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -493,6 +504,57 @@ export function createBridgeServer(
          * rather than a request, so no caller can name the wave they join or
          * the seats it holds — see WAVE_0.md.
          */
+        /**
+         * THE REPOSITORY REGISTRATION SURFACE. Operator-only, spends nothing,
+         * and validates through the domain — see `repository-routes.ts`. It is
+         * dispatched before the mission routes because it is a prerequisite of
+         * them: a mission may only name a repository this registered.
+         */
+        if (isRepositoryRoute(path.replace('/relay-api', ''))) {
+          const repoResult = handleRepositoryRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string'
+              ? req.headers.authorization : undefined,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            env: process.env,
+            now: new Date().toISOString(),
+          }, repositoryStore);
+          if (repoResult !== null) {
+            send(res, repoResult.status, repoResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * SHIP A VERIFIED MISSION. Operator-only, separately authorized, and
+         * only a mission that verified against a real repository with a retained
+         * worktree — see `ship-route.ts`. Dispatched before the generic mission
+         * routes because `/mission/:id/ship` would otherwise match the
+         * cancel/retry pattern's sibling.
+         */
+        if (isShipRoute(path.replace('/relay-api', ''))) {
+          const shipResult = await handleShipRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string'
+              ? req.headers.authorization : undefined,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            env: process.env,
+            now: () => new Date().toISOString(),
+          }, {
+            shipContext: (id) => registry.shipContext(id),
+            recordShipOutcome: (id, o) => registry.recordShipOutcome(id, o),
+            beginShip: (id) => registry.beginShip(id),
+            endShip: (id) => registry.endShip(id),
+            store: repositoryStore,
+          });
+          if (shipResult !== null) {
+            send(res, shipResult.status, shipResult.body, cors);
+            return;
+          }
+        }
+
         if (isBetaRoute(path.replace('/relay-api', ''))) {
           const betaResult = await handleBetaRoute({
             method,
@@ -641,7 +703,69 @@ export function createBridgeServer(
             return;
           }
 
-          const view = registry.start({ missionId, objective });
+          /**
+           * AN OPTIONAL REPOSITORY TARGET, RESOLVED FROM A REGISTERED KEY.
+           *
+           * A mission may name a `repositoryKey` a registered repository holds;
+           * the target is RESOLVED here from the store, never accepted pre-built
+           * from the body — "an objective cannot introduce a repository" is a
+           * property of the type, and letting the body carry a target would
+           * hand it a repository nobody registered.
+           *
+           * OPERATOR ONLY. Naming a real repository to build and (later) ship is
+           * a higher-consequence act than starting a fixture mission; a browser
+           * session — even a control session — may not do it. The credential
+           * that gates registration gates targeting.
+           */
+          let repositoryTarget: MissionRepositoryTarget | undefined;
+          let intendedWritePaths: readonly string[] | undefined;
+          const repositoryKey = typeof (body as { repositoryKey?: unknown })?.repositoryKey === 'string'
+            ? (body as { repositoryKey: string }).repositoryKey : null;
+          if (repositoryKey !== null) {
+            if (missionCaller?.kind !== 'operator') {
+              send(res, 403, { error: { kind: 'operator_required', message: 'Naming a repository target is operator-only.' } }, cors);
+              return;
+            }
+            if (repositoryStore === null) {
+              send(res, 503, { error: { kind: 'repository_store_unavailable', message: 'No durable state root is mounted, so no repository can be resolved.' } }, cors);
+              return;
+            }
+            const registration = repositoryStore.get(repositoryKey);
+            if (registration === null) {
+              send(res, 404, { error: { kind: 'repository_not_registered', message: `No registered repository named "${repositoryKey}".` } }, cors);
+              return;
+            }
+            const workingBranch = typeof (body as { workingBranch?: unknown })?.workingBranch === 'string'
+              ? (body as { workingBranch: string }).workingBranch : '';
+            if (workingBranch === '') {
+              send(res, 422, { error: { kind: 'validation_failed', message: 'A workingBranch is required to target a repository.' } }, cors);
+              return;
+            }
+            const declared = (body as { intendedWritePaths?: unknown })?.intendedWritePaths;
+            intendedWritePaths = Array.isArray(declared) && declared.every((x) => typeof x === 'string')
+              ? declared as string[] : [];
+            const resolved = resolveRepositoryTarget({
+              registration,
+              request: {
+                repositoryKey,
+                // The OPERATOR selected it; the server stamps when.
+                selectedBy: 'operator',
+                selectedAt: new Date().toISOString(),
+                workingBranch,
+                // No widening from the body: a mission may only narrow the
+                // registration's grants, and the resolver enforces it.
+                permissions: null,
+              },
+              now: new Date().toISOString(),
+            });
+            if (!resolved.ok) {
+              send(res, 422, { error: { kind: 'repository_resolution_refused', message: resolved.error.message } }, cors);
+              return;
+            }
+            repositoryTarget = resolved.target;
+          }
+
+          const view = registry.start({ missionId, objective, repositoryTarget, intendedWritePaths });
           send(res, 200, { missionId, view }, cors);
           return;
         }
@@ -897,6 +1021,13 @@ export function main(): void {
   const betaStore = config.stateRoot === null
     ? null
     : createBetaEnrolmentStore({ root: config.stateRoot });
+  /**
+   * THE REPOSITORY REGISTRATION STORE. Built only when a durable root is
+   * mounted — a registration that does not survive a restart is not one.
+   */
+  const repositoryStore = config.stateRoot === null
+    ? null
+    : createRepositoryRegistrationStore({ root: config.stateRoot });
   // One limiter for the process, so its windows are shared across requests.
   const betaLimiter = createBetaRateLimiter();
   const betaWaves: readonly BetaWaveConfig[] = Object.freeze([
@@ -944,6 +1075,7 @@ export function main(): void {
     // The SAME service the mission registry retrieves through, so one meter
     // counts both paths.
     liveReach,
+    repositoryStore,
   );
 
   /**
