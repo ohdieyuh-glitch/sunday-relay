@@ -1,3 +1,6 @@
+import { execFileSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
+
 import { createLocalDirectoryDeploymentProvider } from './local-directory-deployment-provider';
 import { createGitHubRemoteProvider } from './github-remote-provider';
 import { runShipLifecycle } from './ship-runner';
@@ -148,4 +151,53 @@ export async function shipVerifiedMission(request: ShipMissionRequest): Promise<
   });
 
   return { ok: true, result };
+}
+
+
+/**
+ * DISPOSE A RETAINED WORKTREE — the resource the coding leg kept for shipping.
+ *
+ * A retained worktree outlives the coding leg only so a ship can commit from
+ * it. Whatever ends the mission — a ship (success or refusal), a reviewer
+ * rejection, a cancellation, a teardown — must remove it, or it leaks: the
+ * directory on disk, its `.git/worktrees` admin entry, and the
+ * `relay/mission-*` branch inside the founder's real repository.
+ *
+ * A review found that `fail()` and `cancelled()` did not dispose it, so an
+ * ordinary reviewer rejection leaked one every time. This is the one disposer
+ * they share.
+ *
+ * `sourceRepositoryPath` is the registered repository — the worktree's parent —
+ * so `git worktree remove` and the branch delete run there. Best-effort and
+ * total: the directory goes even if git cannot prune the admin entry, and a
+ * disposal failure never propagates (a mission is not failed by a cleanup it
+ * could not finish).
+ */
+export function disposeRetainedWorktree(input: {
+  readonly worktreePath: string;
+  readonly sourceRepositoryPath: string;
+  /** Kept for the audit trail and future branch policy; the worktree, not the
+   *  branch, is what this disposes. */
+  readonly workingBranch: string;
+}): void {
+  void input.workingBranch;
+  const git = (args: readonly string[]): void => {
+    try {
+      execFileSync('git', args, {
+        cwd: input.sourceRepositoryPath,
+        stdio: 'ignore',
+        env: { PATH: process.env.PATH ?? '', HOME: input.sourceRepositoryPath },
+      });
+    } catch { /* best effort */ }
+  };
+  // Ask git first so the admin entry goes with the directory...
+  git(['worktree', 'remove', '--force', input.worktreePath]);
+  // ...then make sure the directory is gone even if git could not.
+  try { rmSync(input.worktreePath, { recursive: true, force: true }); } catch { /* best effort */ }
+  // Prune any stale admin entry the forced remove left. The working BRANCH is
+  // NOT deleted: it holds the mission's commit, and for a local-only ship the
+  // branch IS the deliverable. Deleting it would discard the commit the ship
+  // just made. A stray branch from a rejected mission is cheap and auditable;
+  // an orphaned worktree directory is the disk leak this removes.
+  git(['worktree', 'prune']);
 }

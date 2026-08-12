@@ -1,7 +1,5 @@
-import { rmSync } from 'node:fs';
-
 import { bearerMatches, BRIDGE_TOKEN_ENV, type ReviewerRouteResult } from './reviewer-routes';
-import { shipVerifiedMission, type ShipAuthorization } from './ship-mission';
+import { shipVerifiedMission, disposeRetainedWorktree, type ShipAuthorization } from './ship-mission';
 import { observeRepositoryWorktree } from '../src/relay/workspace/repository-target-observer';
 import { judgeObservedDiff } from '../src/relay/mission/repository-target';
 import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
@@ -111,26 +109,35 @@ export async function handleShipRoute(
 
   const authorization = (request.body ?? {}) as ShipAuthorization;
 
-  const outcome = await shipVerifiedMission({
-    target: context.target,
-    readRegistration: () => deps.store!.get(context.target.repositoryKey),
-    worktreePath: context.worktreePath,
-    judgement,
-    commitMessage: `Relay mission ${missionId}: verified change`,
-    authorName: 'Relay',
-    authorEmail: 'relay@aquala',
-    authorization,
-    now: request.now,
-    env: request.env,
-  });
-
   /**
-   * THE RETAINED WORKTREE IS DISPOSED AFTER THE SHIP, success or not. It exists
-   * only to be committed from; once the ship has run (or refused), it is a
-   * resource to release. A best-effort removal — a failure to clean up must not
-   * turn a completed ship into a reported failure.
+   * THE RETAINED WORKTREE IS DISPOSED IN A `finally`, so it goes whether the
+   * ship returns a refusal OR THROWS. A review found the disposal was only on
+   * the return path, so a thrown git error would leak the worktree — the same
+   * resource class the ship exists to release.
    */
-  try { rmSync(context.worktreePath, { recursive: true, force: true }); } catch { /* best effort */ }
+  let outcome: Awaited<ReturnType<typeof shipVerifiedMission>>;
+  try {
+    outcome = await shipVerifiedMission({
+      target: context.target,
+      readRegistration: () => deps.store!.get(context.target.repositoryKey),
+      worktreePath: context.worktreePath,
+      judgement,
+      commitMessage: `Relay mission ${missionId}: verified change`,
+      authorName: 'Relay',
+      authorEmail: 'relay@aquala',
+      authorization,
+      now: request.now,
+      env: request.env,
+    });
+  } finally {
+    disposeRetainedWorktree({
+      worktreePath: context.worktreePath,
+      sourceRepositoryPath: context.target.location.kind === 'local_path'
+        ? context.target.location.path
+        : context.worktreePath,
+      workingBranch: context.target.workingBranch,
+    });
+  }
 
   if (!outcome.ok) {
     return err(422, 'ship_refused', outcome.reason);

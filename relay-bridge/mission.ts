@@ -30,6 +30,7 @@ import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { runArchitect, ArchitectUnavailableError, type SundayMode } from './architect';
 import { runCodingMission, codingHandoffDigest, type CancelHandle, type CodingOutcome } from './coding';
+import { disposeRetainedWorktree } from './ship-mission';
 import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
 import { resolveClaudeRuntime } from './claude-runtime';
 import {
@@ -571,6 +572,29 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
 
   /** Terminal failure. `phase` is the exact supported failure state; the code
       is the same string so the browser and the report agree. */
+  /**
+   * A TERMINAL FAILURE MUST NOT LEAK THE RETAINED WORKTREE. Retention happens
+   * on deterministic verification, which is BEFORE the independent reviewer; a
+   * rejection then ends the mission at `fail()`. Without this, that ordinary
+   * outcome left a worktree, its admin entry, and a branch inside the founder's
+   * repository every time. A completed SHIP disposes its own worktree; every
+   * other terminal state disposes here.
+   */
+  const disposeIfRetained = (rec: MissionRecord): void => {
+    const worktreePath = rec.codingOutcome?.retainedWorktreePath ?? null;
+    if (worktreePath === null || rec.repositoryTarget === null) return;
+    disposeRetainedWorktree({
+      worktreePath,
+      sourceRepositoryPath: rec.repositoryTarget.location.kind === 'local_path'
+        ? rec.repositoryTarget.location.path
+        : worktreePath,
+      workingBranch: rec.repositoryTarget.workingBranch,
+    });
+    if (rec.codingOutcome !== undefined) {
+      rec.codingOutcome = { ...rec.codingOutcome, retainedWorktreePath: null };
+    }
+  };
+
   const fail = (
     rec: MissionRecord,
     requestedPhase: MissionPhase,
@@ -593,6 +617,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       meta: `STATE ${phase}`,
       done: true,
     });
+    disposeIfRetained(rec);
     setPhase(rec, phase, 'relay');
     rec.completedAt = now();
   };
@@ -607,6 +632,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       detail: 'The run was stopped. Completed roles and their evidence are preserved. No completion is claimed.',
       done: true,
     });
+    disposeIfRetained(rec);
     setPhase(rec, 'cancelled', 'relay');
     rec.completedAt = now();
   };
