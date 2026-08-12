@@ -63,6 +63,10 @@ export interface ShipRouteDeps {
    *  shippable. Called AFTER the worktree is disposed — success, refusal, or
    *  throw — so the registry record matches the now-gone worktree on disk. */
   readonly recordShipOutcome: (missionId: string, outcome: { readonly shipped: boolean }) => void;
+  /** Claims the mission for shipping (false if one is already in flight) so two
+   *  concurrent ship requests cannot both act; `endShip` releases it. */
+  readonly beginShip: (missionId: string) => boolean;
+  readonly endShip: (missionId: string) => void;
   readonly store: RepositoryRegistrationStore | null;
 }
 
@@ -139,6 +143,18 @@ export async function handleShipRoute(
   const authorization = (request.body ?? {}) as ShipAuthorization;
 
   /**
+   * CLAIM THE MISSION FOR SHIPPING BEFORE THE `await`. Two ship requests for the
+   * same mission could otherwise interleave across the ship's await — both see a
+   * non-null `shipContext` (the record is not updated until the finally) and
+   * both dispose and push. The claim is taken synchronously here, so the second
+   * request is refused. Taken AFTER every pre-flight refusal above, so a refusal
+   * never leaves a mission falsely claimed; released in the `finally` below.
+   */
+  if (!deps.beginShip(missionId)) {
+    return err(409, 'ship_in_progress', 'A ship is already in flight for this mission.');
+  }
+
+  /**
    * THE RETAINED WORKTREE IS DISPOSED IN A `finally`, so it goes whether the
    * ship returns a refusal OR THROWS. A review found the disposal was only on
    * the return path, so a thrown git error would leak the worktree — the same
@@ -178,6 +194,9 @@ export async function handleShipRoute(
      * `verified_complete` and still presented as shippable.
      */
     deps.recordShipOutcome(missionId, { shipped });
+    // Release the concurrent-ship claim taken before the await. Permanent
+    // non-shippability now rests on the shipOutcome recorded just above.
+    deps.endShip(missionId);
   }
 
   if (!outcome.ok) {

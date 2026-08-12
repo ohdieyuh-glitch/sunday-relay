@@ -545,6 +545,8 @@ export function createBridgeServer(
           }, {
             shipContext: (id) => registry.shipContext(id),
             recordShipOutcome: (id, o) => registry.recordShipOutcome(id, o),
+            beginShip: (id) => registry.beginShip(id),
+            endShip: (id) => registry.endShip(id),
             store: repositoryStore,
           });
           if (shipResult !== null) {

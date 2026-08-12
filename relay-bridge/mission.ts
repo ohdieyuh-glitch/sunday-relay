@@ -408,6 +408,16 @@ export interface MissionRegistry {
    * in-memory, so a restart forgets the mission itself.)
    */
   recordShipOutcome(missionId: string, outcome: { readonly shipped: boolean }): void;
+  /**
+   * CLAIM A MISSION FOR SHIPPING, so two concurrent ship requests cannot both
+   * act. Returns false if a ship is already in flight for this mission. The
+   * claim is taken SYNCHRONOUSLY before the ship's `await`, and JS is
+   * single-threaded, so the second request sees the claim and is refused. The
+   * ship route MUST call `endShip` in its `finally`. This closes only the
+   * concurrent window; permanent non-shippability comes from `recordShipOutcome`.
+   */
+  beginShip(missionId: string): boolean;
+  endShip(missionId: string): void;
   cancel(missionId: string): LiveMissionUpdate | null;
   retry(missionId: string): LiveMissionUpdate | null;
 }
@@ -451,6 +461,8 @@ function defaultRelayPreflight(): { ready: boolean; missing: string[] } {
 export function createMissionRegistry(config: MissionRegistryConfig): MissionRegistry {
   const now = config.now ?? (() => new Date().toISOString());
   const records = new Map<string, MissionRecord>();
+  /** Missions with a ship in flight, so a concurrent second ship is refused. */
+  const inFlightShips = new Set<string>();
   const deps = config.deps ?? {};
   const callArchitect = deps.runOpenAiArchitect ?? runOpenAiArchitect;
   const callFusionArchitect = deps.runFusionArchitect ?? runArchitect;
@@ -2383,6 +2395,18 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         rec.codingOutcome = { ...rec.codingOutcome, retainedWorktreePath: null };
       }
       rec.shipOutcome = { shipped: outcome.shipped, at: now() };
+    },
+
+    beginShip(missionId) {
+      // Synchronous check-and-set: no `await` between the two, so two concurrent
+      // ship requests cannot both pass. The second sees the claim and is refused.
+      if (inFlightShips.has(missionId)) return false;
+      inFlightShips.add(missionId);
+      return true;
+    },
+
+    endShip(missionId) {
+      inFlightShips.delete(missionId);
     },
 
     cancel(missionId) {

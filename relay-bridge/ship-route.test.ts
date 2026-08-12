@@ -113,7 +113,7 @@ describe('POST /mission/:id/ship', () => {
     const m = verifiedMission();
     const r = await handleShipRoute(
       { method: 'POST', path: '/mission/m1/ship', authorization: undefined, body: {}, env, now: () => NOW },
-      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, store: storeWith(m.reg) },
+      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, beginShip: () => true, endShip: () => {}, store: storeWith(m.reg) },
     );
     expect(r?.status).toBe(401);
   });
@@ -122,7 +122,7 @@ describe('POST /mission/:id/ship', () => {
     const m = verifiedMission();
     const r = await handleShipRoute(
       { method: 'POST', path: '/mission/m1/ship', authorization: opAuth, body: {}, env, now: () => NOW },
-      { shipContext: () => null, recordShipOutcome: () => {}, store: storeWith(m.reg) },
+      { shipContext: () => null, recordShipOutcome: () => {}, beginShip: () => true, endShip: () => {}, store: storeWith(m.reg) },
     );
     expect(r?.status).toBe(409);
     expect((r?.body as { error: { kind: string } }).error.kind).toBe('mission_not_shippable');
@@ -132,7 +132,7 @@ describe('POST /mission/:id/ship', () => {
     const m = verifiedMission();
     const r = await handleShipRoute(
       { method: 'POST', path: '/mission/m1/ship', authorization: opAuth, body: {}, env, now: () => NOW },
-      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, store: storeWith(m.reg) },
+      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, beginShip: () => true, endShip: () => {}, store: storeWith(m.reg) },
     );
     expect(r?.status).toBe(200);
     const data = (r?.body as { data: { stage: string } }).data;
@@ -150,7 +150,7 @@ describe('POST /mission/:id/ship', () => {
         body: { deploy: { environment: 'staging', deployRoot, baseUrl: null } },
         env, now: () => NOW,
       },
-      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, store: storeWith(m.reg) },
+      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, beginShip: () => true, endShip: () => {}, store: storeWith(m.reg) },
     );
     expect(r?.status).toBe(200);
     const data = (r?.body as { data: { stage: string; shipped: boolean } }).data;
@@ -179,6 +179,8 @@ describe('POST /mission/:id/ship', () => {
       {
         shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }),
         recordShipOutcome: (id, o) => recorded.push({ id, shipped: o.shipped }),
+        beginShip: () => true,
+        endShip: () => {},
         store: storeWith(m.reg),
       },
     );
@@ -194,7 +196,7 @@ describe('POST /mission/:id/ship', () => {
     const emptyStore = createRepositoryRegistrationStore({ root: temp('relay-shiproute-empty-') });
     const r = await handleShipRoute(
       { method: 'POST', path: '/mission/m1/ship', authorization: opAuth, body: {}, env, now: () => NOW },
-      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, store: emptyStore },
+      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, beginShip: () => true, endShip: () => {}, store: emptyStore },
     );
     expect(r?.status).toBe(404);
     expect((r?.body as { error: { kind: string } }).error.kind).toBe('repository_not_registered');
@@ -208,13 +210,35 @@ describe('POST /mission/:id/ship', () => {
     const brokenTarget = { ...m.target, baseBranch: 'refs/heads/nonexistent-base' };
     const r = await handleShipRoute(
       { method: 'POST', path: '/mission/m1/ship', authorization: opAuth, body: {}, env, now: () => NOW },
-      { shipContext: () => ({ target: brokenTarget, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, store: storeWith(m.reg) },
+      { shipContext: () => ({ target: brokenTarget, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, beginShip: () => true, endShip: () => {}, store: storeWith(m.reg) },
     );
     expect(r?.status).toBe(422);
     expect((r?.body as { error: { kind: string } }).error.kind).toBe('baseline_unresolved');
     // A pre-flight refusal is RETRYABLE, so the retained worktree is deliberately
     // KEPT — the operator can fix the base branch and ship again.
     expect(existsSync(m.worktreePath)).toBe(true);
+  });
+
+  it('refuses a second ship while one is in flight, without disposing or recording', async () => {
+    const m = verifiedMission();
+    const recorded: string[] = [];
+    // beginShip returns false: a ship is already in flight for this mission.
+    const r = await handleShipRoute(
+      { method: 'POST', path: '/mission/m1/ship', authorization: opAuth, body: {}, env, now: () => NOW },
+      {
+        shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }),
+        recordShipOutcome: (id) => recorded.push(id),
+        beginShip: () => false,
+        endShip: () => {},
+        store: storeWith(m.reg),
+      },
+    );
+    expect(r?.status).toBe(409);
+    expect((r?.body as { error: { kind: string } }).error.kind).toBe('ship_in_progress');
+    // The in-flight ship owns the worktree; this refusal must not touch it or
+    // record an outcome the other ship is responsible for.
+    expect(existsSync(m.worktreePath)).toBe(true);
+    expect(recorded).toEqual([]);
   });
 
   it('records a successful ship (keyed by mission id) so it stops being shippable', async () => {
@@ -225,6 +249,8 @@ describe('POST /mission/:id/ship', () => {
       {
         shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }),
         recordShipOutcome: (id, o) => recorded.push({ id, shipped: o.shipped }),
+        beginShip: () => true,
+        endShip: () => {},
         store: storeWith(m.reg),
       },
     );

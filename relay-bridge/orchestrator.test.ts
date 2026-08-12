@@ -2922,6 +2922,17 @@ describe('a Mission can target a real repository end to end', () => {
     expect(reg.shipContext('no-such-mission')).toBeNull();
   });
 
+  it('beginShip is a mutual-exclusion claim: a second in-flight ship is refused', () => {
+    // The concurrent-ship guard, at the registry. A ship route claims a mission
+    // before its await; a second concurrent request must see the claim.
+    const reg = registry(harness(), LIVE_ENV, 'fake');
+    expect(reg.beginShip('m-lock')).toBe(true);
+    expect(reg.beginShip('m-lock')).toBe(false); // already in flight
+    expect(reg.beginShip('m-other')).toBe(true); // a different mission is free
+    reg.endShip('m-lock');
+    expect(reg.beginShip('m-lock')).toBe(true); // released, claimable again
+  });
+
   it('shipContext is null for a verified mission with NO repository target', async () => {
     // The ordinary throwaway-fixture path reaches verified_complete, but there
     // is no real target — nothing to ship — and the gate says so.
