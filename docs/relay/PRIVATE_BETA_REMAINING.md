@@ -20,12 +20,12 @@ is not more review — it is reverting the fix and requiring the named test to
 fall. Where that is done, the guards are real; where it is skipped, roughly one
 guard in five proves inert.
 
-| PR | What | Reviews | Suite |
-|---|---|---|---|
-| #118 | Defect 3 — the served reviewer model | 2 rounds, 24 mutation proofs | 6930/6930 |
-| #119 | Configurable Repository Targets | 1 round: 1 Critical, 2 High, 14 more — all repaired | 1173/1173 on the affected files |
-| #120 | Wonderland | 1 round: 5 High — all repaired | 123/123 |
-| #121 | Frontend polish | 2 rounds: 3 High, 4 Medium, 3 Low — all repaired but one, deliberately left open | see below |
+| PR | What | Reviews | Suite | State |
+|---|---|---|---|---|
+| #118 | Defect 3 — the served reviewer model | 2 rounds, 24 mutation proofs | 6930/6930 | **MERGED 55c03b4** |
+| #119 | Configurable Repository Targets + the shipping runner | 1 round: 1 Critical, 2 High, 14 more — all repaired | 225/225 on the affected files | open, CI running |
+| #120 | Wonderland | 1 round: 5 High — all repaired | 123/123 | **MERGED c6a0d2b** |
+| #121 | Frontend polish | 2 rounds: 3 High, 4 Medium, 3 Low — all repaired but one, deliberately left open | 6917/6917, full gate green | open, re-review running |
 
 ---
 
@@ -113,6 +113,21 @@ Worth stating precisely, because "offline" is not the same as "simulated":
   out-of-scope path, a protected path, a missing `write_worktree`.
 - Defect 3's chain proven against a fake `hermes` writing a real usage file and a
   fake service returning a real usage block.
+- **The lifecycle is WALKED, not merely decided.** `grep shipStage relay-bridge`
+  used to return nothing: `repository-lifecycle.ts` could decide every step of
+  `COMMIT → PUSH → PR → MERGE → DEPLOY → LIVE VERIFY → SHIPPED` and nothing ever
+  asked it. `ship-runner.ts` now walks the credential-free part end to end and
+  stops at the first refusal, reporting the stage it REACHED. PUSH/PR/MERGE stay
+  out deliberately — they need a remote credential, and a runner that skipped
+  them and still said `shipped` is the failure it exists to prevent.
+- **A revoked grant lands mid-run**, because the registration is re-READ at each
+  step rather than captured once. This was a value field whose comment claimed
+  it was re-read; mutation testing showed deleting the revalidation entirely
+  changed no test, because nothing could change between steps.
+- **A ship run reaches Project Brain.** `repository-brain-feed.ts` was built and
+  had no caller. A not-shipped verdict is recorded under `error`, because a
+  Brain fed only the runs that worked learns that everything works. Nothing is
+  promoted to long-term memory: a run is an episode, not a durable fact.
 
 ## What is NOT built, and is not pretended to be
 
@@ -126,7 +141,12 @@ Worth stating precisely, because "offline" is not the same as "simulated":
    `force` field, no ref deletion, no repository creation. But no credential
    exists here, so not one real call has been made, and the mission engine does
    not invoke it at the `pushed`/`pull_request_open`/`merged` stages yet.
-2. **No durable store** for registrations.
+2. **No durable store** for registrations. They are built and read as values, so
+   a bridge restart loses every one — and registration is the authorization
+   spine, so after a restart no Mission can target a repository until a human
+   re-registers it. The store belongs in `src/relay/persistence` on the same
+   key/value backing as the others; `beta-enrollment-node.ts` is the precedent.
+   This is the largest remaining credential-free gap and it is NOT started.
 3. **Review-packet fidelity at real repository size is unproven** — the design
    document flags this as the highest-risk remaining item, and three defects in a
    previous goal were display sanitizers truncating machine-read payloads.
