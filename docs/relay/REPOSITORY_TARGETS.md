@@ -578,9 +578,9 @@ reads as unfinished.
    That limit is recorded in the test file rather than left for someone to
    discover. The same mutation at `verifyLive`, where it IS observable, fails
    three tests.
-5. **No durable store.** Registrations are built and read as values; nothing
-   persists them across a restart yet. The store belongs beside the other
-   durable stores in `src/relay/persistence`, on the same key/value backing.
+5. **The durable registration store IS built.** `src/relay/persistence/repository-registration-node.ts` persists a registration across a restart, keyed by its canonical key, atomic write, modelled on `beta-enrollment-node.ts`. `list()` returns `null` (not `[]`) for a directory it cannot read, because admitting a Mission against "unknown = none" is the failure that distinction prevents. READ-BACK IS VALIDATED: the key is re-derived from the identity and a file whose stored key does not match is refused — a capability read from an unverified file is not a capability. What is still missing is the CALLER: no bridge route registers a repository or resolves a key through it yet.
+
+
 6. **CORRECTION — the dry-run mode IS built.** This entry read "it does not
    exist because there is nothing to push with", and that was false when it was
    written or shortly after: `repository-dry-run.ts` exports `planDryRun` and
