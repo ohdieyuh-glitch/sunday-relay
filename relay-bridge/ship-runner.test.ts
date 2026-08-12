@@ -727,7 +727,19 @@ describe('the remote leg records what happened, not what was asked', () => {
     expect(refusing.calls).toContain('merge');
     expect(result.stage).toBe('pull_request_open');
     expect(result.evidence.find((e) => e.stage === 'merged')).toBeUndefined();
-    expect(result.stoppedBy).toContain('405');
+    /**
+     * The refusal is RECORDED, and it does not stop the run.
+     *
+     * This asserted `stoppedBy` until a review pointed out that abandoning here
+     * cancels an authorized staging deploy which does not depend on the merge —
+     * leaving a Mission that HOLDS `merge_pr` worse off than one without it,
+     * which stops cleanly at `pull_request_open` and deploys. The refusal
+     * belongs on the row that is true: the pull request IS open, and it was not
+     * merged.
+     */
+    const open = result.evidence.find((e) => e.stage === 'pull_request_open');
+    expect(open?.detail).toContain('405');
+    expect(result.stoppedBy).toBeNull();
   });
 
   it('a REFUSED pull request stops the run and leaves no open-PR row', async () => {
@@ -1062,5 +1074,49 @@ describe('the runner will not act on a checkout of a different repository', () =
       cwd: scratch, encoding: 'utf8', env: GIT_ENV(scratch),
     });
     expect(log.trim().split('\n')).toHaveLength(1);
+  });
+});
+
+/**
+ * A REFUSED MERGE MUST NOT CANCEL AN AUTHORIZED DEPLOY.
+ *
+ * The staging deploy ships `commitSha` from the WORKING branch — it does not
+ * depend on the merge at all, and the lifecycle calls deploying an unmerged
+ * branch to staging "the normal preview flow". Abandoning on a transient merge
+ * failure left a Mission holding `merge_pr` worse off than one without it.
+ */
+describe('a transient merge failure does not cost the deploy', () => {
+  it('still deploys when the merge is refused', async () => {
+    const root = repository();
+    const withAll: readonly RepositoryPermission[] =
+      ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr', 'merge_pr', 'deploy_staging'];
+    const reg = remoteRegistration(withAll);
+    const target = remoteTarget(reg, withAll, root);
+    const refusing = fakeRemote();
+    refusing.provider.mergePullRequest = async () => {
+      refusing.calls.push('merge');
+      return {
+        ok: false, providerId: 'fake', reference: '7', url: null,
+        state: null, observedAt: NOW, detail: 'GitHub answered HTTP 500.',
+      };
+    };
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: refusing.provider, evidence: PR_EVIDENCE },
+      deployment: {
+        provider: createLocalDirectoryDeploymentProvider({
+          deployRoot: temp('relay-deployroot-'), baseUrl: null, now: () => NOW,
+        }),
+        environment: 'staging', artifactPath: artifact(), liveUrl: null,
+      },
+      now: () => NOW,
+    });
+    expect(refusing.calls).toContain('merge');
+    // The merge failed and the deploy STILL happened.
+    expect(result.stage).toBe('deployed');
+    expect(result.evidence.find((e) => e.stage === 'merged')).toBeUndefined();
+    expect(result.evidence.find((e) => e.stage === 'deployed')).toBeDefined();
   });
 });

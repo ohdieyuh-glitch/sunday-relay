@@ -401,17 +401,38 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
          * found it by driving a refusing provider.
          */
         if (!merged.ok) {
-          return {
-            stage, evidence, commitSha, verdict: null,
-            stoppedBy: merged.detail ?? 'The pull request was not merged.',
-          };
+          /**
+           * A REFUSED MERGE DOES NOT CANCEL AN AUTHORIZED DEPLOY.
+           *
+           * Returning here made a transient merge failure — GitHub answering
+           * 500, a branch-protection rule, a race — abandon a staging deploy
+           * that does not depend on the merge at all: the deploy ships
+           * `commitSha` from the working branch, which is exactly the preview
+           * flow the lifecycle says it wants to support. It also reproduced the
+           * defect just repaired one stage up: a Mission holding `merge_pr` was
+           * left WORSE OFF than one without it, which stops cleanly at
+           * `pull_request_open` and deploys.
+           *
+           * The refusal is recorded on the row that is true — the pull request
+           * IS open — and the run continues. `stoppedBy` is reserved for what
+           * actually stops it.
+           */
+          const openRow = evidence[evidence.length - 1];
+          if (openRow !== undefined && openRow.stage === 'pull_request_open') {
+            evidence[evidence.length - 1] = {
+              ...openRow,
+              detail: merged.detail ?? 'The pull request was not merged.',
+            };
+          }
+          // Stage stays `pull_request_open`: that is what is true.
+        } else {
+          evidence.push({
+            stage: 'merged', observedAt: merged.observedAt, commitSha,
+            branch: target.baseBranch, remoteRef: null, pullRequestRef: merged.reference,
+            environment: null, deployedRevision: null, liveProbe: null, detail: merged.detail,
+          });
+          stage = 'merged';
         }
-        evidence.push({
-          stage: 'merged', observedAt: merged.observedAt, commitSha,
-          branch: target.baseBranch, remoteRef: null, pullRequestRef: merged.reference,
-          environment: null, deployedRevision: null, liveProbe: null, detail: merged.detail,
-        });
-        stage = 'merged';
       }
     }
   }
