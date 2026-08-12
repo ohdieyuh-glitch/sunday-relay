@@ -306,3 +306,61 @@ describe('a fresh participant runs a real three-role mission end to end over HTT
     expect((reconnect.body.view as { missionRevision?: string }).missionRevision).toBe((settled as { missionRevision?: string }).missionRevision);
   }, 45_000);
 });
+
+const savePsp = (base: string, token: string, body: unknown) =>
+  realFetch(`${base}/relay-api/psp`, {
+    method: 'POST', headers: { 'content-type': 'application/json', ...asUser(token) }, body: JSON.stringify(body),
+  });
+
+describe('a fresh participant creates and selects a PSP (criterion 4)', () => {
+  it('saves a PSP, lists it, loads it, and starts a mission under it', async () => {
+    const base = await boot();
+    const token = await signIn(base, { login: 'beta-alice', id: 4242 });
+
+    // CREATE a PSP — a named configuration bundle.
+    const save = await getJson(await savePsp(base, token, {
+      pspId: 'strict-autonomous', name: 'Strict Autonomous',
+      config: { mode: 'autonomous', review: 'independent', limits: { agentCalls: 6, spendUsd: 2 } },
+    }));
+    expect(save.status).toBe(200);
+
+    // SELECT: it appears in the participant's own list.
+    const list = await getJson(await realFetch(`${base}/relay-api/psp`, { headers: asUser(token) }));
+    expect((list.body.data as { psps: { pspId: string }[] }).psps.map((p) => p.pspId)).toContain('strict-autonomous');
+
+    // LOAD the full config back.
+    const loaded = await getJson(await realFetch(`${base}/relay-api/psp/strict-autonomous`, { headers: asUser(token) }));
+    const config = (loaded.body.data as { config: { mode: string; limits: { spendUsd: number } } }).config;
+    expect(config.mode).toBe('autonomous');
+    expect(config.limits.spendUsd).toBe(2);
+
+    // START a mission UNDER the loaded PSP — the config reaches the engine.
+    const started = await getJson(await startMission(base, token, { missionId: 'm-psp', objective: 'Do the thing', config }));
+    expect(started.status).toBe(200);
+    expect((lastStart?.config as { mode: string }).mode).toBe('autonomous');
+  }, 30_000);
+
+  it('one participant cannot load another participant’s PSP', async () => {
+    const base = await boot();
+    const alice = await signIn(base, { login: 'alice', id: 4242 });
+    await savePsp(base, alice, { pspId: 'private', name: 'Alice private', config: { mode: 'guided' } });
+
+    const mallory = await signIn(base, { login: 'mallory', id: 9999 });
+    const load = await realFetch(`${base}/relay-api/psp/private`, { headers: asUser(mallory) });
+    expect(load.status).toBe(404); // Mallory sees nothing of Alice's
+    const list = await getJson(await realFetch(`${base}/relay-api/psp`, { headers: asUser(mallory) }));
+    expect((list.body.data as { psps: unknown[] }).psps).toHaveLength(0);
+  }, 30_000);
+
+  it('refuses a PSP with a malformed spend limit, and an anonymous save', async () => {
+    const base = await boot();
+    const token = await signIn(base, { login: 'beta-alice', id: 4242 });
+    const bad = await savePsp(base, token, { pspId: 'bad', name: 'Bad', config: { limits: { spendUsd: -1 } } });
+    expect(bad.status).toBe(422);
+    const anon = await realFetch(`${base}/relay-api/psp`, {
+      method: 'POST', headers: { 'content-type': 'application/json', Origin: ORIGIN },
+      body: JSON.stringify({ pspId: 'x', name: 'x', config: {} }),
+    });
+    expect(anon.status).toBe(401);
+  }, 30_000);
+});

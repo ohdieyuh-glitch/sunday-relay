@@ -39,6 +39,7 @@ import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
 import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
 import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
 import { handleRepositoryRoute, isRepositoryRoute, type RepositoryCaller } from './repository-routes';
+import { handlePspRoute, isPspRoute } from './psp-routes';
 import { handleShipRoute, isShipRoute } from './ship-route';
 import { resolveRepositoryTarget, registrationOwnerAdmits } from '../src/relay/mission/repository-target';
 import { validateMissionConfig } from '../src/relay/mission/mission-config';
@@ -46,7 +47,7 @@ import type { MissionRepositoryTarget, RepositoryPermission } from '../src/relay
 import { guardBetaAdmission, participantFromBody } from './beta-guard';
 import { claimedClientKey, createBetaRateLimiter } from './beta-rate-limit';
 import type { BetaRateLimiter } from './beta-rate-limit';
-import { createBetaEnrolmentStore, createRepositoryRegistrationStore, createBrainMemoryStore } from '../src/relay/persistence';
+import { createBetaEnrolmentStore, createRepositoryRegistrationStore, createBrainMemoryStore, createPspConfigStore } from '../src/relay/persistence';
 import { rememberShipRun } from './ship-brain-feed';
 import type { RepositoryRegistrationStore, BrainMemoryStore } from '../src/relay/persistence';
 import type { BetaWaveConfig } from '../src/relay/mission/beta';
@@ -248,6 +249,9 @@ export function createBridgeServer(
   const installGrants = createInstallationGrants();
   const githubInstallUrl = typeof process.env.RELAY_GITHUB_APP_INSTALL_URL === 'string'
     ? process.env.RELAY_GITHUB_APP_INSTALL_URL.trim() : '';
+  /** Saved PSP profiles, participant-owned. Absent without a mounted state root —
+   *  the PSP surface then answers `psp_store_unavailable`, like the repo store. */
+  const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
   return createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
     const cors = corsHeaders(config, origin);
@@ -604,6 +608,37 @@ export function createBridgeServer(
           }, repositoryStore, installGrants);
           if (repoResult !== null) {
             send(res, repoResult.status, repoResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * SAVED PSP PROFILES — a signed-in participant saves/lists/loads their
+         * own configuration. Same caller resolution as the repository surface;
+         * PSPs belong to the participant, never the operator or the request body.
+         */
+        if (isPspRoute(path.replace('/relay-api', ''))) {
+          const pspAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const pspCaller: RepositoryCaller = ((): RepositoryCaller => {
+            if (bearerMatches(pspAuthz, process.env.RELAY_BRIDGE_API_TOKEN)) return { kind: 'operator' };
+            const token = sessionTokenFrom(pspAuthz);
+            if (token !== null) {
+              const v = browserSessions.verifySession({ token, origin, now: Date.now() });
+              if (v.ok && v.scope === 'browser_control' && v.participantId !== null) {
+                return { kind: 'participant', participantId: v.participantId };
+              }
+            }
+            return { kind: 'anonymous' };
+          })();
+          const pspResult = handlePspRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            body: method === 'POST' ? await readBody(req) : undefined,
+            now: new Date().toISOString(),
+            caller: pspCaller,
+          }, pspStore);
+          if (pspResult !== null) {
+            send(res, pspResult.status, pspResult.body, cors);
             return;
           }
         }

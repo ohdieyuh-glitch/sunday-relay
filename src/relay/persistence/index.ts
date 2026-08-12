@@ -51,3 +51,9 @@ export {
   createBrainMemoryStore,
   type BrainMemoryStore,
 } from './brain-memory-node';
+
+export {
+  createPspConfigStore,
+  type PspConfigStore,
+  type SavedPsp,
+} from './psp-config-node';
