@@ -109,6 +109,18 @@ const GIT_SUBCOMMAND_VERBS: Readonly<Record<string, readonly string[]>> = Object
   // where this repository points — the one thing a Mission must never change
   // about its own target.
   remote: ['get-url'],
+  /**
+   * NO POSITIONAL AT ALL. `git branch --show-current` reads; `git branch <name>`
+   * CREATES a branch, and the name is positional so the options allow-list —
+   * which only inspects dash-prefixed arguments — cannot see it. An empty list
+   * means every non-flag argument is refused.
+   *
+   * Second instance of the same class as `remote set-url`, found by sweeping
+   * the whole allow-list after the first one rather than fixing only the case
+   * that was reported.
+   */
+  branch: [],
+
 });
 
 const GIT_SUBCOMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = Object.freeze({
@@ -180,10 +192,24 @@ export function runRepositoryGit(
    */
   const verbs = GIT_SUBCOMMAND_VERBS[subcommand];
   if (verbs !== undefined) {
-    const verb = args[1];
-    if (typeof verb !== 'string' || !verbs.includes(verb)) {
+    /**
+     * The first NON-FLAG argument, not simply `args[1]`. Checking the slot
+     * refused `git branch --show-current`, because its only argument is a flag
+     * the options list already vets — so the verb rule has to look past flags
+     * to the positional it exists to police. An empty `verbs` list means no
+     * positional is permitted for this subcommand at all.
+     */
+    const positional = args.slice(1).find((a) => !a.startsWith('-'));
+    if (positional !== undefined && !verbs.includes(positional)) {
       return fail(
-        relayError('permission-denied', `git ${subcommand} "${String(verb)}" is outside Relay's repository write surface.`, {
+        relayError('permission-denied', `git ${subcommand} "${positional}" is outside Relay's repository write surface.`, {
+          details: verbs.length === 0 ? ['(no positional argument is permitted)'] : [...verbs],
+        }),
+      );
+    }
+    if (positional === undefined && verbs.length > 0) {
+      return fail(
+        relayError('permission-denied', `git ${subcommand} needs one of its permitted operations.`, {
           details: [...verbs],
         }),
       );
@@ -587,16 +613,68 @@ export function checkoutMatchesIdentity(input: {
       'This target names a remote repository and its checkout has no "origin" remote to compare against.',
     ));
   }
-  const url = read.value.trim();
-  // `https://host/owner/name(.git)` or `git@host:owner/name(.git)`.
-  const match = /^(?:https:\/\/|git@)([^/:]+)[/:]([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
+  /**
+   * USERINFO IS STRIPPED BEFORE THIS URL IS USED FOR ANYTHING, including the
+   * refusal message and the success return.
+   *
+   * An https clone URL carrying `user:token@` before the host is an ordinary
+   * clone form — the repository's own secret scanner refuses to let this
+   * comment spell one out, which is the scanner working. This function's refusal reformats the URL into
+   * `${host}/${owner}/${name}`, and that reformatting DESTROYED the one
+   * redaction pattern (`token:`) that was catching the secret — so the credential
+   * travelled verbatim into a persisted, user-visible mission failure reason.
+   * `validateRepositoryLocation` refuses embedded credentials for a
+   * `remote_clone`; the local-checkout path re-admitted them and then printed
+   * them.
+   */
+  const url = read.value.trim().replace(/\/\/[^/@]*@/, '//');
+  /**
+   * THE FOUR SPELLINGS OF ONE REPOSITORY, all accepted:
+   *
+   *   https://host/owner/name(.git)
+   *   ssh://[user@]host[:port]/owner/name(.git)
+   *   git@host:owner/name(.git)          (scp-like)
+   *   git://host/owner/name(.git)
+   *
+   * The first version handled only https and the scp-like form, while the
+   * commit message and REPOSITORY_TARGETS.md both promised "the https,
+   * no-suffix and ssh spellings are all accepted rather than teaching people to
+   * edit the check". An `ssh://` origin — an ordinary thing to have — hit an
+   * unexplained "not a shape Relay can compare", which is exactly the
+   * edit-the-check behaviour the promise was meant to avoid. A refusal in the
+   * safe direction is still a refusal a founder has to work around.
+   *
+   * A port is stripped: `ssh://git@github.com:22/o/r` is the same repository as
+   * `ssh://git@github.com/o/r`.
+   */
+  const match =
+    /^(?:https?:\/\/|ssh:\/\/|git:\/\/)(?:[^@/]*@)?([^/:]+)(?::\d+)?\/([^/]+)\/(.+?)(?:\.git)?$/.exec(url)
+    ?? /^git@([^/:]+):([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
   if (match === null) {
     return fail(relayError('validation-failed', 'The checkout\'s "origin" remote is not a shape Relay can compare.'));
   }
   const [, host, owner, name] = match;
-  const same = (a: string | null, b: string | null): boolean =>
-    (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
-  if (!same(host, input.host) || !same(owner, input.owner) || !same(name, input.name)) {
+  /**
+   * HOST IS CASE-INSENSITIVE; OWNER AND NAME ARE NOT.
+   *
+   * `repository-identity.ts` states the rule for these two fields and gives the
+   * reason: "Owner and repository name are NOT lowercased … Lowercasing them
+   * here would merge two genuinely different targets on a case-sensitive host,
+   * WHICH IS A WRONG ANSWER IN THE DIRECTION OF MORE ACCESS."
+   *
+   * This function lowercased all three, so `github.com/O/R` was accepted for a
+   * registration of `github.com/o/r`. Harmless on github.com, which is
+   * case-insensitive — and the day `gitlab` or `bitbucket` become drivable
+   * (both are already registerable) the checkout comparison would err toward
+   * MORE access while `repositoryKey` treats the two as different targets with
+   * different grants. An identity check that disagrees with the identity module
+   * about what counts as the same repository is worse than no check.
+   *
+   * Hostnames are case-insensitive by DNS, so that one stays folded.
+   */
+  const sameHost = (host ?? '').toLowerCase() === (input.host ?? '').toLowerCase();
+  const sameSegment = (a: string | null, b: string | null): boolean => (a ?? '') === (b ?? '');
+  if (!sameHost || !sameSegment(owner, input.owner) || !sameSegment(name, input.name)) {
     return fail(relayError(
       'validation-failed',
       `This checkout's "origin" is ${host}/${owner}/${name}, and the registered repository is `

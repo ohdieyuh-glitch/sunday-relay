@@ -1,13 +1,17 @@
 import {
   advanceShipStage,
   decideShipped,
+  providerSupportsEnvironment,
   pushLanded,
   refusePushTarget,
+  renderPullRequestBody,
+  renderPullRequestTitle,
   revalidateRepositoryTarget,
 } from '../src/relay/mission/repository-target';
-import { commitObservedWork } from '../src/relay/workspace/repository-target-observer';
+import { checkoutMatchesIdentity, commitObservedWork } from '../src/relay/workspace/repository-target-observer';
 import type {
   DeploymentProvider,
+  PullRequestEvidence,
   RemoteRepositoryProvider,
   DiffJudgement,
   LiveProbeResult,
@@ -80,8 +84,19 @@ export interface ShipRunRequest {
    */
   readonly remote?: {
     readonly provider: RemoteRepositoryProvider;
-    readonly title: string;
-    readonly body: string;
+    /**
+     * EVIDENCE, NOT PROSE. The runner used to take a free-text `title` and
+     * `body` and post them verbatim, which made the founder-facing surface of a
+     * Mission able to carry an unverified narrative — "a claim is never
+     * presented as evidence" is the contract it broke.
+     *
+     * The domain already owns the renderer, and `planDryRun` already used it:
+     * `renderPullRequestBody` states an absent fact as absent, keeps requested
+     * and served separate, and emits a WARNING line when the Reviewer read a
+     * different artifact than the one being merged. The thing that actually
+     * opens pull requests was the one component bypassing it.
+     */
+    readonly evidence: PullRequestEvidence;
   };
   /**
    * Deploy only if this is given AND the Mission holds the grant. Absent means
@@ -159,6 +174,33 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
 
   /* ------------------------------------------------------------- COMMIT */
 
+  /**
+   * THE CHECKOUT MUST BE THE REGISTERED REPOSITORY, CHECKED HERE TOO.
+   *
+   * Relaxing the domain rule to allow a remote-hosted target to name a LOCAL
+   * checkout rests entirely on comparing the checkout's `origin` with the
+   * registered identity. That comparison lived only in `repository-source.ts`,
+   * the CODING leg — and this is the module that commits, pushes, opens the
+   * pull request and merges. A review proved the gap by handing the runner a
+   * scratch checkout under an `acme/production` identity: it committed the
+   * scratch work and pushed it to production, which is verbatim the scenario
+   * the relaxation's own comment says is prevented.
+   *
+   * `worktreePath` is an independent parameter, so the check is against what
+   * this runner will actually write to, not against what the target says.
+   */
+  if (request.target.identity.provider !== 'local') {
+    const agrees = checkoutMatchesIdentity({
+      worktreePath: request.worktreePath,
+      host: request.target.identity.host,
+      owner: request.target.identity.owner,
+      name: request.target.identity.name,
+    });
+    if (!agrees.ok) {
+      return { stage, evidence: [], commitSha: null, verdict: null, stoppedBy: agrees.error.message };
+    }
+  }
+
   const commitGate = stillPermitted(request, 'committed', stage, null);
   if (!commitGate.ok) {
     return { stage, evidence, commitSha: null, verdict: null, stoppedBy: commitGate.reason };
@@ -193,12 +235,39 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
 
   /* --------------------------------------------------- PUSH / PR / MERGE */
 
+  /**
+   * INDEPENDENT STAGE PROGRESSION.
+   *
+   * The remote leg is OPTIONAL and the staging deploy does not depend on it: a
+   * deploy ships the COMMIT from the working branch, which is why the lifecycle
+   * calls deploying an unmerged branch "the normal preview flow". So every
+   * refusal in here exits THE LEG and not the run — the IIFE exists for exactly
+   * that, because a bare `return` used to abandon the whole Mission.
+   *
+   * Three separate defects came from getting this wrong, each one repaired
+   * individually and the next arriving one stage later: a missing
+   * `deploying.from` entry, a provider-refused merge, and a provider that
+   * cannot push. All three took an authorized staging deploy away from a
+   * Mission that had been granted it.
+   *
+   * PERMISSION MONOTONICITY follows from the same rule: a Mission handed MORE
+   * capability must never finish behind the otherwise-identical Mission handed
+   * less. `ship-lifecycle-invariants.test.ts` holds both properties over real
+   * runs rather than over this comment.
+   *
+   * ONE EXCEPTION, and it is a boundary rather than a stage: a provider whose
+   * credential is not the one the registration authorized is FATAL. Acting on a
+   * credential Relay was not given is not an optional step that failed.
+   */
+  let remoteSkipped: string | null = null;
   if (request.remote !== undefined) {
-    const { provider: remote, title, body } = request.remote;
+    const { provider: remote, evidence: prEvidence } = request.remote;
 
+    const fatal = await (async (): Promise<string | null> => {
     const pushGate = stillPermitted(request, 'pushed', stage, null);
     if (!pushGate.ok) {
-      return { stage, evidence, commitSha, verdict: null, stoppedBy: pushGate.reason };
+      remoteSkipped = pushGate.reason;
+      return null;
     }
     const target = pushGate.target;
     /**
@@ -213,7 +282,8 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
       protectedBranches: target.protectedBranches,
     });
     if (wrongTarget !== null) {
-      return { stage, evidence, commitSha, verdict: null, stoppedBy: wrongTarget.message };
+      remoteSkipped = wrongTarget.message;
+      return null;
     }
 
     /**
@@ -224,12 +294,58 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
      * string makes the provider the guard instead of Relay.
      */
     if (target.identity.owner === null || target.identity.owner.trim() === '') {
-      return {
-        stage, evidence, commitSha, verdict: null,
-        stoppedBy: 'This repository has no remote owner recorded, so Relay will not perform a remote operation for it.',
-      };
+      remoteSkipped = 'This repository has no remote owner recorded, so Relay performed no remote operation for it.';
+      return null;
     }
     const owner = target.identity.owner;
+
+    /**
+     * REGISTERED IS NOT THE SAME AS DRIVABLE, and the descriptor is what says so.
+     *
+     * The runner used to ignore `remote.descriptor` entirely. Two things follow
+     * from that, and a review found both:
+     *
+     *   - `descriptor.supports` is the provider's own statement of what this
+     *     implementation can actually DO. Calling `mergePullRequest` on a
+     *     provider that does not list `merge_pr` is asking for an operation
+     *     nobody built, and — before the Critical fix — a refusal from it was
+     *     recorded as a merge.
+     *   - `descriptor.credentialEnvVarName` is the env var the provider reads.
+     *     The registration NAMES the credential the founder authorized for this
+     *     repository. A provider holding a DIFFERENT credential would have been
+     *     driven without complaint, which is a credential boundary crossed
+     *     silently — the one failure the boundary exists to make impossible.
+     *
+     * Both are checked before any network call, and both refuse by name.
+     */
+    const authorizedEnvVar = target.credential.envVarName;
+    /**
+     * FAIL CLOSED WHEN THE TARGET AUTHORIZES NO CREDENTIAL.
+     *
+     * The check used to be skipped entirely when `envVarName` was null, so a
+     * provider reading `GITHUB_TOKEN` was driven for a repository that
+     * authorized no credential at all. Not reachable through
+     * `createRepositoryRegistration` today — it refuses a registration whose
+     * grants need a credential when none is named — so this is defence in depth
+     * rather than a live hole, and it is written that way deliberately: the
+     * module that would perform the operation should refuse for itself rather
+     * than rely on a registry check upstream.
+     */
+    if (authorizedEnvVar === null && remote.descriptor.credentialEnvVarName !== null) {
+      return `This repository authorizes no credential, and the provider reads `
+        + `${remote.descriptor.credentialEnvVarName}. Relay will not act on a credential it was not given.`;
+    }
+    if (authorizedEnvVar !== null && remote.descriptor.credentialEnvVarName !== authorizedEnvVar) {
+      // FATAL. A credential boundary crossed is not an optional stage failing.
+      return `This repository authorizes the credential in ${authorizedEnvVar}, and the provider reads `
+        + `${remote.descriptor.credentialEnvVarName}. Relay will not act on a credential it was not given.`;
+    }
+    const unsupported = (permission: 'push_feature_branch' | 'create_pr' | 'merge_pr'): boolean =>
+      !remote.descriptor.supports.includes(permission);
+    if (unsupported('push_feature_branch')) {
+      remoteSkipped = `Provider "${remote.descriptor.providerId}" does not support pushing a feature branch.`;
+      return null;
+    }
 
     const pushed = await remote.push({
       repositoryKey: target.repositoryKey,
@@ -254,7 +370,8 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
      * `deployment_failed` stage; this leg did not.
      */
     if (!landed.landed) {
-      return { stage, evidence, commitSha, verdict: null, stoppedBy: landed.reason };
+      remoteSkipped = landed.reason;
+      return null;
     }
     evidence.push({
       stage: 'pushed', observedAt: pushed.observedAt, commitSha,
@@ -272,17 +389,24 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
     stage = 'pushed';
 
     const prGate = stillPermitted(request, 'pull_request_open', stage, null);
-    if (prGate.ok) {
+    if (prGate.ok && !unsupported('create_pr')) {
       const opened = await remote.openPullRequest({
         owner, repo: target.identity.name,
-        head: target.workingBranch, base: target.baseBranch, title, body,
+        head: target.workingBranch, base: target.baseBranch,
+        title: renderPullRequestTitle(prEvidence),
+        // Rendered from the SAME live permissions the run is acting under.
+        body: renderPullRequestBody({
+          target: prGate.target,
+          permissions: prGate.target.permissions,
+          evidence: prEvidence,
+          judgement: request.judgement,
+        }),
       });
       if (!opened.ok) {
-        // No row. A pull request that was refused is not an open one.
-        return {
-          stage, evidence, commitSha, verdict: null,
-          stoppedBy: opened.detail ?? 'The pull request was not opened.',
-        };
+        // No row: a pull request that was refused is not an open one. The MERGE
+        // depends on it and is skipped; the deploy does not and continues.
+        remoteSkipped = opened.detail ?? 'The pull request was not opened.';
+        return null;
       }
       evidence.push({
         stage: 'pull_request_open', observedAt: opened.observedAt, commitSha,
@@ -298,7 +422,7 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
        * and complete outcome, not a failure.
        */
       const mergeGate = stillPermitted(request, 'merged', stage, null);
-      if (mergeGate.ok && opened.reference !== null) {
+      if (mergeGate.ok && !unsupported('merge_pr') && opened.reference !== null) {
         const merged = await remote.mergePullRequest({
           owner, repo: target.identity.name,
           reference: opened.reference,
@@ -315,17 +439,63 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
          * found it by driving a refusing provider.
          */
         if (!merged.ok) {
-          return {
-            stage, evidence, commitSha, verdict: null,
-            stoppedBy: merged.detail ?? 'The pull request was not merged.',
-          };
+          /**
+           * A REFUSED MERGE DOES NOT CANCEL AN AUTHORIZED DEPLOY.
+           *
+           * Returning here made a transient merge failure — GitHub answering
+           * 500, a branch-protection rule, a race — abandon a staging deploy
+           * that does not depend on the merge at all: the deploy ships
+           * `commitSha` from the working branch, which is exactly the preview
+           * flow the lifecycle says it wants to support. It also reproduced the
+           * defect just repaired one stage up: a Mission holding `merge_pr` was
+           * left WORSE OFF than one without it, which stops cleanly at
+           * `pull_request_open` and deploys.
+           *
+           * The refusal is recorded on the row that is true — the pull request
+           * IS open — and the run continues. `stoppedBy` is reserved for what
+           * actually stops it.
+           */
+          const openRow = evidence[evidence.length - 1];
+          if (openRow !== undefined && openRow.stage === 'pull_request_open') {
+            evidence[evidence.length - 1] = {
+              ...openRow,
+              detail: merged.detail ?? 'The pull request was not merged.',
+            };
+          }
+          // Stage stays `pull_request_open`: that is what is true.
+        } else {
+          evidence.push({
+            stage: 'merged', observedAt: merged.observedAt, commitSha,
+            branch: target.baseBranch, remoteRef: null, pullRequestRef: merged.reference,
+            environment: null, deployedRevision: null, liveProbe: null, detail: merged.detail,
+          });
+          stage = 'merged';
         }
-        evidence.push({
-          stage: 'merged', observedAt: merged.observedAt, commitSha,
-          branch: target.baseBranch, remoteRef: null, pullRequestRef: merged.reference,
-          environment: null, deployedRevision: null, liveProbe: null, detail: merged.detail,
-        });
-        stage = 'merged';
+      }
+    }
+    return null;
+    })();
+
+    /**
+     * A CREDENTIAL BOUNDARY STOPS THE RUN. Anything else the remote leg could
+     * not do is RECORDED and the Mission continues to the stages that do not
+     * depend on it.
+     */
+    if (fatal !== null) {
+      return { stage, evidence, commitSha, verdict: null, stoppedBy: fatal };
+    }
+    if (remoteSkipped !== null) {
+      /**
+       * Written onto the furthest row that is TRUE, so the reason the remote leg
+       * stopped is in the record without claiming a stage that did not happen.
+       * `stoppedBy` stays null: the run did not stop.
+       */
+      const last = evidence[evidence.length - 1];
+      if (last !== undefined) {
+        evidence[evidence.length - 1] = {
+          ...last,
+          detail: last.detail === null ? remoteSkipped : `${last.detail} ${remoteSkipped}`,
+        };
       }
     }
   }
@@ -339,6 +509,27 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
   /* ------------------------------------------------------------- DEPLOY */
 
   const { provider, environment, artifactPath, liveUrl } = request.deployment;
+
+  /**
+   * MAY THIS PROVIDER BE ASKED FOR THIS ENVIRONMENT? The domain guard has
+   * existed since the port did, states its own reason — "a simulated provider
+   * may never touch production … it would produce a production deployment
+   * record for a deploy that never happened, and that record is what a founder
+   * reads to decide the software is live" — and was called by NOTHING on the
+   * acting path. A fifth review drove a simulated staging-only provider to a
+   * `shipped` PRODUCTION record to prove it.
+   *
+   * BEFORE the `deploying` transition, deliberately: this is a CONFIGURATION
+   * refusal, and a record that says `deploying` for a deploy that was never
+   * requested from any provider would claim an act that did not happen.
+   */
+  const environmentSupport = providerSupportsEnvironment({
+    descriptor: provider.descriptor,
+    environment,
+  });
+  if (!environmentSupport.ok) {
+    return { stage, evidence, commitSha, verdict: null, stoppedBy: environmentSupport.reason };
+  }
 
   const deployGate = stillPermitted(request, 'deploying', stage, environment);
   if (!deployGate.ok) {
@@ -425,7 +616,16 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
     // deploy of a stale build detectable at all.
     deployedRevision: observation.deployedRevision,
     liveProbe,
-    detail: observation.detail,
+    /**
+     * SIMULATED DATA SAYS SO — on the record itself, not only on the
+     * descriptor a reader may never see. A simulated provider is already
+     * refused for production above; a simulated STAGING record is legitimate
+     * and must still never render as a real deployment.
+     */
+    detail: provider.descriptor.simulated
+      ? [observation.detail, 'Deployed by a SIMULATED provider; this record is not a real deployment.']
+          .filter((part) => part !== null).join(' ')
+      : observation.detail,
   };
   evidence.push(deployEvidence);
 
@@ -438,16 +638,83 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
     return { stage, evidence, commitSha, verdict, stoppedBy: verdict.reason };
   }
 
-  const shippedGate = stillPermitted(request, 'shipped', stage, environment);
-  if (!shippedGate.ok) {
-    return { stage, evidence, commitSha, verdict, stoppedBy: shippedGate.reason };
+  /**
+   * `live_verified` IS A STAGE, AND THE RUNNER WAS SKIPPING IT.
+   *
+   * The table is `deployed → live_verified → shipped`. This went from
+   * `deployed` straight to `shipped`, which `advanceShipStage` ALWAYS denies —
+   * so a genuinely shipped run returned `stage: 'deployed'` with an internal
+   * refusal string in `stoppedBy`, while `deriveShipStage` read the evidence
+   * and said SHIPPED. Two authorities disagreeing on the SUCCESS path, and any
+   * caller treating `stoppedBy !== null` as failure recorded a failed Mission
+   * for a successful ship. The lines after the gate were dead code.
+   *
+   * The runner already PERFORMS the live verification; it simply never wrote
+   * the stage down. Recording it is both the fix and the more truthful record —
+   * "the running system was observed" is a fact worth having in the evidence,
+   * separate from the conclusion drawn from it.
+   */
+  /**
+   * `live_verified` IS NOT REVALIDATED, for the same reason `deployed` is not.
+   *
+   * I gated this with `stillPermitted`, which re-reads the registration — so a
+   * registration revoked while the deploy was in flight SUPPRESSED THE RECORD
+   * of a ship that really happened: `stage: 'deployed'`, a non-null
+   * `stoppedBy`, and `verdict.shipped === true` with `deriveShipStage` saying
+   * `shipped`. That is the defect this round was opened to fix, moved one stage
+   * later, and a review found it by revoking mid-flight.
+   *
+   * Three of this repository's own rules already said not to:
+   * `live_verified` carries `permission: null` because "observing a deployed
+   * system is not a privilege Relay grants itself"; the `deployed` transition
+   * documents that "refusing to write down a real event is not a safety
+   * property"; and the founder-facing doc says the same. The `verifyLive` call
+   * has ALREADY happened by this point — the gate never prevented the
+   * observation, only the record of it.
+   */
+  const liveTransition = advanceShipStage({
+    to: 'live_verified',
+    currentStage: stage,
+    permissions: deployGate.target.permissions,
+    environment,
+  });
+  if (!liveTransition.ok) {
+    return { stage, evidence, commitSha, verdict, stoppedBy: liveTransition.problem.message };
   }
+  const liveGate = { target: deployGate.target };
+  stage = 'live_verified';
+  evidence.push({
+    stage: 'live_verified',
+    observedAt: liveProbe?.observedAt ?? request.now(),
+    commitSha,
+    branch: liveGate.target.workingBranch,
+    remoteRef: null,
+    pullRequestRef: null,
+    environment: observation.environment,
+    deployedRevision: observation.deployedRevision,
+    liveProbe,
+    detail: liveProbe?.detail ?? null,
+  });
+
+  /**
+   * `shipped` IS NOT GATED, AND MUST NOT BE. The lifecycle is explicit that it
+   * "is a conclusion, not an act — nothing may transition into it", so
+   * `advanceShipStage({ to: 'shipped' })` ALWAYS denies. Asking it here turned
+   * every successful ship into a stopped run carrying an internal refusal
+   * string, while `deriveShipStage` read the evidence and said SHIPPED.
+   *
+   * `decideShipped` is the authority, and it has already answered above: it
+   * required a commit, a deployment, a deployed revision matching that commit,
+   * a reachable and healthy system, and a reported revision that matches. A
+   * second gate could only ever disagree with a verdict already computed from
+   * the evidence.
+   */
   stage = 'shipped';
   evidence.push({
     stage: 'shipped',
     observedAt: request.now(),
     commitSha,
-    branch: shippedGate.target.workingBranch,
+    branch: liveGate.target.workingBranch,
     remoteRef: null,
     pullRequestRef: null,
     environment: observation.environment,

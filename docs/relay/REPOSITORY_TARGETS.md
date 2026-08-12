@@ -215,11 +215,30 @@ existed in the contracts with nothing reading them.
 
 ## 4. The write surface: an allow-list
 
-`runRepositoryGit` permits exactly ten subcommands: `rev-parse`, `status`,
-`diff`, `add`, `commit`, `branch`, `show`, `log`, `ls-files`, `cat-file`.
+`runRepositoryGit` permits eleven subcommands: `rev-parse`, `status`, `diff`,
+`add`, `commit`, `branch`, `show`, `log`, `ls-files`, `cat-file` and `remote`.
 
-`push`, `fetch`, `remote`, `merge`, `rebase`, `reset`, `clean`, `gc`, `tag` and
-`config` are **absent, and their absence is the enforcement**. The design
+`push`, `fetch`, `merge`, `rebase`, `reset`, `clean`, `gc`, `tag` and `config`
+are **absent, and their absence is the enforcement**.
+
+**`remote` is the exception, and it is narrowed twice.** It was added to READ
+the checkout's `origin`, which is what proves a locally-checked-out remote
+target really is the registered repository. Only `get-url` is permitted;
+`set-url`, `add`, `remove`, `rename` and `prune` are refused by name.
+
+That second gate exists because the first one could not see them. **The options
+allow-list only inspects DASH-PREFIXED arguments**, so a subcommand whose
+operation is a positional word bypasses it entirely — with `remote` permitted
+and `get-url` listed as its only "option",
+`git remote set-url origin <somewhere else>` was ACCEPTED. Found by probing the
+built function, not by reading it. `GIT_SUBCOMMAND_VERBS` now polices the first
+non-flag argument, and `branch` carries an empty list because
+`git branch <name>` creates a ref the same way.
+
+This paragraph said "exactly ten" while the code had eleven, and the guard meant
+to catch that drift passed — it checked that each allow-listed subcommand's name
+appeared SOMEWHERE in the document, and `remote` appeared in the sentence listing
+it as absent. The design
 document's rule — *Relay adds commits; it never rewrites them* — is that array.
 A deny-list would be a list somebody has to keep complete, and git has more ways
 to destroy history than anyone remembers.

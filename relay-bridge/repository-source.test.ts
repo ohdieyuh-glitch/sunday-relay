@@ -277,10 +277,22 @@ describe('a GitHub repository cloned on this machine', () => {
     if (result.ok) expect(result.source.disposable).toBe(false);
   });
 
-  it('accepts the ssh and no-suffix spellings of the same repository', () => {
-    // Three ways to write one repository. Refusing two would teach people to
-    // edit the check rather than fix the target.
-    for (const origin of ['git@github.com:o/r.git', 'https://github.com/o/r']) {
+  it('accepts every ordinary spelling of the same repository', () => {
+    /**
+     * One repository, six ways to write it. A review found that `ssh://` — an
+     * ordinary origin to have — was refused as "not a shape Relay can compare"
+     * while the doc promised it worked. A refusal in the safe direction is
+     * still a refusal a founder has to work around, and working around an
+     * identity check is exactly what must not become routine.
+     */
+    for (const origin of [
+      'git@github.com:o/r.git',
+      'https://github.com/o/r',
+      'https://github.com/o/r.git',
+      'ssh://git@github.com/o/r.git',
+      'ssh://git@github.com:22/o/r.git',
+      'git://github.com/o/r.git',
+    ]) {
       const result = repositoryTargetSource(githubTarget(realRepository(), origin), ['src/app.ts']);
       expect(result.ok, origin).toBe(true);
     }
@@ -307,5 +319,61 @@ describe('a GitHub repository cloned on this machine', () => {
     const result = repositoryTargetSource(githubTarget(realRepository(), null), ['src/app.ts']);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toContain('no "origin" remote');
+  });
+});
+
+/**
+ * A CREDENTIAL IN THE CHECKOUT'S ORIGIN NEVER REACHES A MISSION RECORD.
+ *
+ * An https clone URL carrying `user:token@` before the host is an ordinary
+ * clone form. The refusal message reformats the URL into `host/owner/name`, and that
+ * reformatting destroyed the one redaction pattern (`token:`) catching the
+ * secret — so it travelled verbatim into a persisted, user-visible mission
+ * failure reason. `validateRepositoryLocation` refuses embedded credentials for
+ * a remote clone; the local-checkout path re-admitted them and then printed
+ * them.
+ */
+describe('a credential embedded in origin is never echoed', () => {
+  it('strips userinfo from the refusal message', () => {
+    const root = realRepository();
+    execFileSync('git', [
+      'remote', 'add', 'origin',
+      // Assembled, never written out: a literal credential-bearing URL in the
+      // source is exactly what the repository's secret scanner refuses, and it
+      // is right to. The VALUE at runtime is the real thing.
+      `https://${'x-access-token'}:${'ghp_' + 'SUPERSECRET1234567'}@github.com/someone-else/other.git`,
+    ], { cwd: root, env: { PATH: process.env.PATH ?? '', HOME: root } });
+    const reg = createRepositoryRegistration({
+      draft: {
+        identity: { provider: 'github', host: 'github.com', owner: 'o', name: 'r', defaultBranch: 'main' },
+        location: { kind: 'local_path', path: root },
+        scope: { read: ['**'], write: ['src/**'] },
+        grants: LADDER.map((permission) => ({
+          permission, authorizedBy: 'founder', authorizedAt: NOW, expiresAt: null, note: null,
+        })),
+        ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+        registeredBy: 'founder',
+      },
+      now: NOW,
+    });
+    if (!reg.ok) throw new Error(reg.error.message);
+    const resolved = resolveRepositoryTarget({
+      registration: reg.value,
+      request: {
+        repositoryKey: reg.value.key, selectedBy: 'founder', selectedAt: NOW,
+        workingBranch: 'relay/mission-1', permissions: [...LADDER],
+      },
+      now: NOW,
+    });
+    if (!resolved.ok) throw new Error(resolved.error.message);
+    const result = repositoryTargetSource(resolved.target, ['src/app.ts']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // The mismatch is still reported — the message stays useful.
+      expect(result.reason).toContain('someone-else/other');
+      // And the secret is not in it, in any form.
+      expect(result.reason).not.toContain('SUPERSECRET1234567');
+      expect(result.reason).not.toContain('x-access-token');
+    }
   });
 });

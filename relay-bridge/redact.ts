@@ -17,6 +17,17 @@ const MAX_LEN = 600;
 const SECRET_PATTERNS: RegExp[] = [
   /sk-[A-Za-z0-9_-]{16,}/g, // OpenAI / Anthropic style keys
   /\b(?:xox[baprs]|ghp|gho|ghu|ghs|ghr)-[A-Za-z0-9-]{10,}/g, // slack/github tokens
+  /**
+   * UNDERSCORE forms. Every GitHub token minted since 2021 is `ghp_...`, not
+   * `ghp-...`, and `github_pat_` is the fine-grained form. The hyphen-only
+   * pattern above missed all of them — found when a credential embedded in a
+   * checkout's `origin` URL survived redaction on its way into a persisted,
+   * user-visible mission failure reason.
+   */
+  /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}/g,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}/g,
+  /** Credentials embedded in a URL: `https://user:token@host/...`. */
+  /\/\/[^/\s@]+@/g,
   /\bBearer\s+[A-Za-z0-9._-]{12,}/gi,
   /\b(?:api[_-]?key|secret|token|password|authorization)\b\s*[:=]\s*\S+/gi,
   /eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{6,}/g, // JWTs

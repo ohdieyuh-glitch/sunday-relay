@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -1004,7 +1005,15 @@ describe('the documented surface matches the code', () => {
 
   it('names every git subcommand the write surface permits, and the right number of them', () => {
     expect(REPOSITORY_GIT_ALLOWLIST).toHaveLength(11);
-    expect(doc()).toContain('permits exactly ten subcommands');
+    /**
+     * NOT A SPELLED-OUT COUNT. This asserted "permits exactly ten subcommands"
+     * while the allow-list held eleven, and it passed — the length assertion
+     * above was updated and the prose was not, which is the drift this whole
+     * describe block exists to catch. A number in prose is the thing that goes
+     * stale; the VERB is the thing that matters.
+     */
+    expect(doc()).toMatch(/permits eleven subcommands/);
+    expect(doc(), 'the doc must name the one permitted `remote` verb').toContain('`get-url`');
     for (const subcommand of REPOSITORY_GIT_ALLOWLIST) {
       expect(doc(), `the doc does not name \`${subcommand}\``).toContain(`\`${subcommand}\``);
     }
@@ -1092,23 +1101,122 @@ describe('the documented surface matches the code', () => {
  * Found by probing the built function, not by reading it.
  */
 describe('the remote subcommand cannot mutate where the repository points', () => {
+  /**
+   * EVERY PROBE RUNS IN A THROWAWAY REPOSITORY, NOT `process.cwd()`.
+   *
+   * The first version passed `process.cwd()` — the checkout the suite runs in,
+   * a linked worktree whose `remote.origin.url` lives in the SHARED
+   * `.git/config`. So the moment the guard regressed, the test whose entire
+   * purpose is "a Mission must never repoint origin" repointed origin for the
+   * main clone and every sibling worktree. A review proved it by deleting the
+   * gate: seven tests failed and `git remote get-url origin` afterwards read
+   * `https://evil.example/x.git`. In a repository whose practice is to delete
+   * guards to check that tests bite, that is a when and not an if.
+   *
+   * `permits only get-url` was non-hermetic too: it asserted success against
+   * whatever origin happened to exist, and failed in a checkout with none.
+   */
   const MUTATING = ['set-url', 'add', 'remove', 'rename', 'prune', 'update'];
+  const gitEnv = (root: string) => ({ PATH: process.env.PATH ?? '', HOME: root });
 
-  it.each(MUTATING)('refuses git remote %s', (verb) => {
-    const result = runRepositoryGit(['remote', verb, 'origin', 'https://evil.example/x.git'], process.cwd());
+  function throwawayRepo(): string {
+    const root = mkdtempSync(join(tmpdir(), 'relay-remote-probe-'));
+    temporaries.push(root);
+    execFileSync('git', ['init', '--quiet', '--initial-branch=main'], { cwd: root, env: gitEnv(root) });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/o/r.git'], { cwd: root, env: gitEnv(root) });
+    return root;
+  }
+
+  it.each(MUTATING)('refuses git remote %s and leaves origin alone', (verb) => {
+    const root = throwawayRepo();
+    const result = runRepositoryGit(['remote', verb, 'origin', 'https://evil.example/x.git'], root);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.message).toContain('outside Relay');
+    // Checked by OBSERVING the repository, not by trusting the return value —
+    // the same rule the product applies to providers.
+    const after = execFileSync('git', ['remote', 'get-url', 'origin'], {
+      cwd: root, encoding: 'utf8', env: gitEnv(root),
+    }).trim();
+    expect(after).toBe('https://github.com/o/r.git');
   });
 
   it('refuses git remote with no verb at all', () => {
-    // Bare `git remote` lists remotes; harmless, but the allow-list is a list
-    // of what is permitted, not of what is harmless.
-    const result = runRepositoryGit(['remote'], process.cwd());
-    expect(result.ok).toBe(false);
+    expect(runRepositoryGit(['remote'], throwawayRepo()).ok).toBe(false);
   });
 
   it('permits only get-url', () => {
-    const result = runRepositoryGit(['remote', 'get-url', 'origin'], process.cwd());
+    const root = throwawayRepo();
+    const result = runRepositoryGit(['remote', 'get-url', 'origin'], root);
     expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.trim()).toBe('https://github.com/o/r.git');
+  });
+});
+
+
+/**
+ * `git branch <name>` CREATES A BRANCH, and the options allow-list cannot see it.
+ *
+ * The second instance of the class that produced `git remote set-url`: the
+ * options loop skips anything not starting with `-`, so for `branch` — allowed
+ * only for `--show-current` — a bare positional name walked straight through
+ * and created a ref. Found by sweeping the whole allow-list after the first
+ * one, rather than fixing only the case that was reported.
+ */
+describe('git branch cannot create, rename or delete a ref', () => {
+  /**
+   * A THROWAWAY REPOSITORY, NOT `process.cwd()` — the same rule the `remote`
+   * block one screen up spells out in fourteen lines, and these three tests were
+   * written directly beneath it still using the suite's own checkout.
+   *
+   * Two reasons it matters. `branch <name>` CREATES a ref, so if the guard
+   * regresses these tests mutate the developer's repository — and the worktrees
+   * here share one `.git`, so it would reach all of them. And the read test
+   * asserts a real git invocation SUCCEEDS against whatever cwd happens to be,
+   * so the suite fails in a `git archive` export or any build context copied
+   * without `.git`. A reviewer hit exactly that.
+   */
+  function branchProbeRepo(): string {
+    const root = mkdtempSync(join(tmpdir(), 'relay-branch-probe-'));
+    temporaries.push(root);
+    const env = { PATH: process.env.PATH ?? '', HOME: root };
+    execFileSync('git', ['init', '--quiet', '--initial-branch=main'], { cwd: root, env });
+    writeFileSync(join(root, 'f.txt'), 'x\n');
+    execFileSync('git', ['add', '--', '.'], { cwd: root, env });
+    execFileSync('git', ['commit', '-m', 'initial'], {
+      cwd: root,
+      env: { ...env, GIT_AUTHOR_NAME: 'F', GIT_AUTHOR_EMAIL: 'f@x', GIT_COMMITTER_NAME: 'F', GIT_COMMITTER_EMAIL: 'f@x' },
+    });
+    return root;
+  }
+
+  it('refuses a positional branch name, and creates no ref', () => {
+    const root = branchProbeRepo();
+    const env = { PATH: process.env.PATH ?? '', HOME: root };
+    const result = runRepositoryGit(['branch', 'relay-sneaky'], root);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain('outside Relay');
+    // Checked by OBSERVING the repository, not by trusting the return value.
+    const branches = execFileSync('git', ['branch', '--list'], { cwd: root, encoding: 'utf8', env });
+    expect(branches).not.toContain('relay-sneaky');
+  });
+
+  it('refuses the mutating flags', () => {
+    const root = branchProbeRepo();
+    for (const flag of ['-m', '-M', '-d', '-D', '-c']) {
+      expect(runRepositoryGit(['branch', flag, 'a', 'b'], root).ok, flag).toBe(false);
+    }
+  });
+
+  it('still permits the read it exists for', () => {
+    /**
+     * The guard checks the first NON-FLAG argument, not `args[1]`. Checking the
+     * slot refused this — `--show-current` is a flag the options list already
+     * vets — so a verb rule that ignored flags would have broken the only
+     * legitimate use of the subcommand.
+     */
+    const root = branchProbeRepo();
+    const result = runRepositoryGit(['branch', '--show-current'], root);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.trim()).toBe('main');
   });
 });

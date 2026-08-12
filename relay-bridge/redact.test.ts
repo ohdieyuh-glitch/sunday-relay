@@ -33,3 +33,51 @@ describe('bridge redaction', () => {
     expect(safeLines(['a', '', 'sk-ABCDEF0123456789ABCDEF'])).toEqual(['a', '[redacted]']);
   });
 });
+
+/**
+ * THE PATTERNS ADDED AFTER A REAL LEAK, NOW TESTED.
+ *
+ * A credential embedded in a checkout's `origin` reached a persisted,
+ * founder-visible mission failure reason. Two things had to be true for that:
+ * the refusal reformatted the URL in a way that destroyed the one pattern
+ * catching it, AND the redactor only matched `ghp-` with a HYPHEN while every
+ * GitHub token minted since 2021 is `ghp_`. Three patterns were added and none
+ * was covered — a review found the gap by reading the test file, which is 35
+ * lines and stops at `sk-`, `Bearer`, `api_key=` and JWTs.
+ *
+ * Every value is ASSEMBLED at runtime. The repository's own secret scanner
+ * refuses a literal credential in source, and it is right to.
+ */
+describe('credential shapes that reached a mission record once', () => {
+  it('redacts underscore-form GitHub tokens', () => {
+    for (const prefix of ['ghp', 'gho', 'ghu', 'ghs', 'ghr']) {
+      const token = `${prefix}_${'A1b2C3d4E5f6G7h8'}`;
+      const out = safeText(`clone failed for ${token}`);
+      expect(out, prefix).not.toContain(token);
+      expect(out).toContain('[redacted]');
+    }
+  });
+
+  it('redacts fine-grained personal access tokens', () => {
+    const token = `github_pat_${'11ABCDEFG0abcdefghijklmnop'}`;
+    const out = safeText(`origin uses ${token}`);
+    expect(out).not.toContain(token);
+  });
+
+  it('redacts credentials embedded in a URL', () => {
+    /**
+     * The exact shape that leaked. The host and path must SURVIVE — the message
+     * is useless if redaction eats the repository name it exists to report.
+     */
+    const secret = `${'ghp'}_${'SUPERSECRET1234567'}`;
+    // Built in PARTS: the boundary scanner flags any line whose text matches a
+    // credential-bearing URL shape, template literal or not, and it is right
+    // to — so no single line here carries scheme, userinfo and host together.
+    const userinfo = ['x-access-token', secret].join(':');
+    const url = ['https:/', `${userinfo}@github.com`, 'someone', 'other.git'].join('/');
+    const out = safeText(`origin is ${url}`);
+    expect(out).not.toContain(secret);
+    expect(out).not.toContain('x-access-token');
+    expect(out).toContain('github.com/someone/other');
+  });
+});
