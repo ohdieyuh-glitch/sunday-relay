@@ -107,10 +107,22 @@ describe('a configured bridge signs a fresh user in without the operator token',
     expect(authorizeUrl).toContain('client_id=Iv1.public_client_id');
 
     // 2) GitHub redirects back with a code + our state (a top-level navigation:
-    //    no Origin header, which the bridge admits).
-    const cbRes = await realFetch(`${base}/relay-api/auth/github/callback?code=real-code&state=${state}`);
-    expect(cbRes.status).toBe(200);
-    const cbBody = await cbRes.json();
+    //    no Origin header, which the bridge admits). The bridge REDIRECTS the
+    //    browser back to the frontend with a one-time claim — the token is never
+    //    in the URL.
+    const cbRes = await realFetch(`${base}/relay-api/auth/github/callback?code=real-code&state=${state}`, { redirect: 'manual' });
+    expect(cbRes.status).toBe(302);
+    const location = cbRes.headers.get('location') ?? '';
+    expect(location).toContain(`${ORIGIN}/#relay_claim=`);
+    expect(location).not.toContain('Relay-Session');
+    const claim = decodeURIComponent(new URL(location).hash.replace('#relay_claim=', ''));
+
+    // 3) The frontend exchanges the claim for the session over POST (token in body).
+    const claimRes = await realFetch(`${base}/relay-api/auth/github/claim`, {
+      method: 'POST', headers: { 'content-type': 'application/json', Origin: ORIGIN }, body: JSON.stringify({ claim }),
+    });
+    expect(claimRes.status).toBe(200);
+    const cbBody = await claimRes.json();
     expect(cbBody.data.scope).toBe('browser_control');
     expect(cbBody.data.participantId).toBe('ghu-987654');
     expect(cbBody.data.login).toBe('fresh-beta-user');

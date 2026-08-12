@@ -137,6 +137,62 @@ export function createInstallationGrants(): InstallationGrants {
   };
 }
 
+/* ------------------------------------------------------- sign-in claims --- */
+
+/** How long a browser has to redeem its one-time claim after the redirect. */
+export const SIGN_IN_CLAIM_TTL_MS = 2 * 60_000;
+
+/**
+ * THE ONE-TIME SIGN-IN CLAIM. The callback cannot hand the session token to a
+ * browser in a URL — a token in a URL reaches history, referrers and logs. So it
+ * mints a claim: a single-use, short-lived CODE that stands in for the token in
+ * the redirect, and is exchanged for the token over a POST whose body carries it.
+ * The token itself never appears in any URL.
+ */
+/** What a redeemed claim yields — the session token plus the public identity a
+    frontend needs to show who it acts as. The token travels only in this POST body. */
+export interface SignInPayload {
+  readonly sessionToken: string;
+  readonly scope: string;
+  readonly participantId: string | null;
+  readonly login: string;
+  readonly origin: string;
+  readonly expiresAt: string;
+}
+
+export interface SignInClaimStore {
+  /** Mint a claim standing in for a fresh sign-in payload. Returns the claim code. */
+  issue(payload: SignInPayload, now: number): string;
+  /** Exchange a claim for its payload exactly once; null if unknown/expired/used. */
+  redeem(claim: string, now: number): SignInPayload | null;
+  readonly size: number;
+}
+
+export function createSignInClaimStore(): SignInClaimStore {
+  // Keyed by the claim's hash → the payload it stands for. The token is at rest
+  // here only for the ~2 minutes between the redirect and its redemption.
+  const claims = new Map<string, { readonly payload: SignInPayload; readonly expiresAt: number }>();
+  const sweep = (now: number): void => { for (const [k, v] of claims) if (v.expiresAt <= now) claims.delete(k); };
+  return {
+    issue(payload, now) {
+      sweep(now);
+      const claim = randomBytes(32).toString('base64url');
+      claims.set(sha256(claim).toString('base64url'), { payload, expiresAt: now + SIGN_IN_CLAIM_TTL_MS });
+      return claim;
+    },
+    redeem(claim, now) {
+      if (typeof claim !== 'string' || claim === '') return null;
+      const key = sha256(claim).toString('base64url');
+      const stored = claims.get(key);
+      if (stored === undefined) return null;
+      claims.delete(key); // single-use: burn before the expiry check
+      if (stored.expiresAt <= now) return null;
+      return stored.payload;
+    },
+    get size() { return claims.size; },
+  };
+}
+
 /* ---------------------------------------------------------------- routing --- */
 
 export function isGithubAuthRoute(path: string): boolean {
@@ -167,11 +223,18 @@ export interface GithubAuthDeps {
   /** The GitHub App installation URL base (…/apps/<slug>/installations/new).
    *  Null => the install flow answers 503. */
   readonly installBaseUrl: string | null;
+  /** One-time claims: the callback mints one and redirects the browser with it;
+   *  the frontend exchanges it for the session token over POST /auth/github/claim. */
+  readonly claimStore: SignInClaimStore;
   /** Test seam. Defaults to the real GitHub exchange. */
   readonly exchange?: (input: {
     config: GitHubOAuthConfig; code: string; redirectUri: string;
   }) => Promise<import('./github-oauth').GitHubUserIdentity | { readonly __error: string }>;
 }
+
+/** A route result that may redirect. The github-auth callback redirects the
+ *  browser back to the frontend with a one-time claim rather than JSON. */
+export type GithubAuthResult = ReviewerRouteResult & { readonly redirect?: string };
 
 function queryOf(url: string): URLSearchParams {
   const q = url.indexOf('?');
@@ -195,7 +258,7 @@ export async function handleGithubAuthRoute(
     readonly body?: unknown;
   },
   deps: GithubAuthDeps,
-): Promise<ReviewerRouteResult | null> {
+): Promise<GithubAuthResult | null> {
   const { method, path } = request;
   if (!isGithubAuthRoute(path)) return null;
 
@@ -255,18 +318,40 @@ export async function handleGithubAuthRoute(
       // the encoding, not a user error — refuse rather than mint a nameless one.
       return errResult(500, 'session_mint_failed', 'The verified identity could not be turned into a session.');
     }
-    return okResult({
-      // The Relay-Session token the browser presents on later calls. Returned
-      // once; the store keeps only its hash.
+    // The token must NOT ride in the redirect URL. Mint a one-time claim, and
+    // send the browser back to the frontend with only that claim in the fragment
+    // (a fragment never reaches a server or a log); the frontend exchanges it for
+    // the token over POST /auth/github/claim.
+    const claim = deps.claimStore.issue({
       sessionToken: minted.session.token,
       scope: minted.session.scope,
-      // WHO this browser now acts as — a public accountability fact, the GitHub
-      // login, never a secret. The session's binding uses the stable numeric id.
       participantId: minted.session.participantId,
       login: identity.login,
       origin: minted.session.origin,
       expiresAt: new Date(minted.session.expiresAt).toISOString(),
-    });
+    }, deps.now);
+    return {
+      status: 302,
+      redirect: `${sessionOrigin}/#relay_claim=${encodeURIComponent(claim)}`,
+      body: { data: { redirected: true } },
+    };
+  }
+
+  /* ------------------------------------ exchange a claim for the session --- */
+  if (method === 'POST' && path === '/auth/github/claim') {
+    // The exchange is a same-origin POST from the frontend; a claim redeemed from
+    // anywhere else is refused, so a leaked claim in history cannot be spent by
+    // another site.
+    if (request.origin !== undefined && request.origin !== sessionOrigin) {
+      return errResult(403, 'origin_not_allowed', 'A sign-in claim may only be redeemed from the approved origin.');
+    }
+    const claim = typeof (request.body as { claim?: unknown })?.claim === 'string'
+      ? (request.body as { claim: string }).claim : '';
+    const payload = deps.claimStore.redeem(claim, deps.now);
+    if (payload === null) {
+      return errResult(401, 'github_claim_invalid', 'That sign-in claim is expired or was already used.');
+    }
+    return okResult(payload);
   }
 
   /* ------------------------------------------- begin an app installation --- */

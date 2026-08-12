@@ -101,13 +101,19 @@ async function boot(): Promise<string> {
 const asUser = (token: string) => ({ Authorization: `Relay-Session ${token}`, Origin: ORIGIN });
 const getJson = async (res: Response) => ({ status: res.status, body: await res.json() as Record<string, unknown> });
 
-/** Sign a fresh participant in and return their session token — no operator. */
+/** Sign a fresh participant in and return their session token — no operator. The
+    callback redirects the browser back with a one-time CLAIM (never the token in
+    a URL); the frontend redeems it over POST for the session token. */
 async function signIn(base: string, identity: { login: string; id: number }): Promise<string> {
   stubGitHub(identity);
   const start = await getJson(await realFetch(`${base}/relay-api/auth/github/start`, { headers: { Origin: ORIGIN } }));
   const state = (start.body.data as { state: string }).state;
-  const cb = await getJson(await realFetch(`${base}/relay-api/auth/github/callback?code=c&state=${state}`));
-  return (cb.body.data as { sessionToken: string }).sessionToken;
+  const cb = await realFetch(`${base}/relay-api/auth/github/callback?code=c&state=${state}`, { redirect: 'manual' });
+  const claim = decodeURIComponent(new URL(cb.headers.get('location') ?? '').hash.replace('#relay_claim=', ''));
+  const claimed = await realFetch(`${base}/relay-api/auth/github/claim`, {
+    method: 'POST', headers: { 'content-type': 'application/json', Origin: ORIGIN }, body: JSON.stringify({ claim }),
+  });
+  return ((await claimed.json()) as { data: { sessionToken: string } }).data.sessionToken;
 }
 
 /** Prove control of an installation the way GitHub's post-install redirect does. */

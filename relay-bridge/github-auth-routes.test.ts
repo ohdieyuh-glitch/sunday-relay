@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createInstallationGrants,
   createOAuthStateStore,
+  createSignInClaimStore,
   handleGithubAuthRoute,
   isGithubAuthRoute,
   participantIdForIdentity,
@@ -39,6 +40,7 @@ function deps(over: Partial<GithubAuthDeps> = {}): GithubAuthDeps {
     installStateStore: createOAuthStateStore(),
     installGrants: createInstallationGrants(),
     installBaseUrl: INSTALL_BASE,
+    claimStore: createSignInClaimStore(),
     exchange: async () => ({ login: 'beta-user', id: 4242, type: 'User' }),
     ...over,
   };
@@ -48,6 +50,14 @@ const start = (d: GithubAuthDeps) =>
   handleGithubAuthRoute({ method: 'GET', path: '/auth/github/start', url: '/relay-api/auth/github/start' }, d);
 const callback = (d: GithubAuthDeps, qs: string) =>
   handleGithubAuthRoute({ method: 'GET', path: '/auth/github/callback', url: `/relay-api/auth/github/callback?${qs}` }, d);
+/** The callback now redirects with a one-time claim; pull it out of the fragment. */
+const claimFromRedirect = (redirect: string | undefined): string =>
+  decodeURIComponent(new URL(redirect ?? '').hash.replace('#relay_claim=', ''));
+const redeemClaim = (d: GithubAuthDeps, claim: string) =>
+  handleGithubAuthRoute({
+    method: 'POST', path: '/auth/github/claim', url: '/relay-api/auth/github/claim',
+    origin: ORIGIN, body: { claim },
+  }, d);
 
 describe('routing + participant encoding', () => {
   it('claims only the /auth/github/ prefix', () => {
@@ -82,14 +92,23 @@ describe('GET /auth/github/start issues a single-use state and the authorize URL
 });
 
 describe('GET /auth/github/callback mints a session from the verified identity', () => {
-  it('exchanges the code and mints a control session whose participant IS the identity', async () => {
+  it('redirects with a one-time claim (never the token), redeemable for the session', async () => {
     const d = deps();
     const s = await start(d);
     const state = (s?.body as { data: { state: string } }).data.state;
 
+    // The callback redirects the browser back to the frontend — the token is NOT
+    // in the URL, only a one-time claim in the fragment.
     const r = await callback(d, `code=abc&state=${state}`);
-    expect(r?.status).toBe(200);
-    const data = (r?.body as { data: { sessionToken: string; participantId: string; login: string; scope: string } }).data;
+    expect(r?.status).toBe(302);
+    expect(r?.redirect).toContain(`${ORIGIN}/#relay_claim=`);
+    const claim = claimFromRedirect(r?.redirect);
+    expect(JSON.stringify(r)).not.toContain('Relay-Session');
+
+    // Exchange the claim for the session over POST (the token rides only here).
+    const c = await redeemClaim(d, claim);
+    expect(c?.status).toBe(200);
+    const data = (c?.body as { data: { sessionToken: string; participantId: string; login: string; scope: string } }).data;
     expect(data.scope).toBe('browser_control');
     expect(data.participantId).toBe('ghu-4242');
     expect(data.login).toBe('beta-user');
@@ -97,10 +116,9 @@ describe('GET /auth/github/callback mints a session from the verified identity',
     // The token really works: it verifies as a control session for that participant.
     const verified = d.sessions.verifySession({ token: data.sessionToken, origin: ORIGIN, now: NOW + 1 });
     expect(verified.ok).toBe(true);
-    if (verified.ok) {
-      expect(verified.scope).toBe('browser_control');
-      expect(verified.participantId).toBe('ghu-4242');
-    }
+    if (verified.ok) expect(verified.participantId).toBe('ghu-4242');
+    // The claim is single-use: a second redemption fails.
+    expect((await redeemClaim(d, claim))?.status).toBe(401);
     // The state was single-use: it is gone.
     expect(d.stateStore.size).toBe(0);
   });
@@ -119,7 +137,7 @@ describe('GET /auth/github/callback mints a session from the verified identity',
     const s = await start(d);
     const state = (s?.body as { data: { state: string } }).data.state;
     const first = await callback(d, `code=abc&state=${state}`);
-    expect(first?.status).toBe(200);
+    expect(first?.status).toBe(302);
     const second = await callback(d, `code=def&state=${state}`);
     expect(second?.status).toBe(401);
   });

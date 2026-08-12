@@ -350,3 +350,89 @@ export async function disconnectBrowser(input: {
       : 'Cleared from this browser. The Relay Bridge did not confirm revocation — the session expires on its own.',
   };
 }
+
+/* ---------------------------------------------------- sign in with GitHub */
+
+/**
+ * BEGIN SIGN IN WITH GITHUB. Asks the bridge for the authorize URL and sends the
+ * browser there. No operator token, no grant carried by hand — a beta user signs
+ * in as themselves. The bridge holds the client secret; this only ever sees a
+ * public authorize URL.
+ */
+export async function beginGitHubSignIn(input: {
+  bridgeUrl?: string | null;
+  fetchImpl?: typeof fetch;
+  navigate?: (url: string) => void;
+} = {}): Promise<{ readonly ok: boolean; readonly message: string | null }> {
+  const base = input.bridgeUrl ?? configuredBridgeUrl();
+  if (base === null) return { ok: false, message: 'No Relay Bridge is configured for this build.' };
+  const doFetch = input.fetchImpl ?? ((u: RequestInfo | URL, i?: RequestInit) => fetch(u, i));
+  try {
+    const res = await doFetch(`${base}/relay-api/auth/github/start`, { credentials: 'omit', cache: 'no-store' });
+    if (!res.ok) return { ok: false, message: 'GitHub sign-in is not available on this bridge.' };
+    const payload = await res.json() as { data?: { authorizeUrl?: unknown } };
+    const url = payload.data?.authorizeUrl;
+    if (typeof url !== 'string' || url === '') return { ok: false, message: 'The bridge returned no authorize URL.' };
+    (input.navigate ?? ((u: string) => { if (typeof window !== 'undefined') window.location.href = u; }))(url);
+    return { ok: true, message: null };
+  } catch {
+    return { ok: false, message: 'The Relay Bridge could not be reached.' };
+  }
+}
+
+/**
+ * COMPLETE SIGN IN from the redirect. GitHub sent the browser back to the bridge,
+ * which redirected here with a ONE-TIME CLAIM in the URL fragment — never the
+ * token. This reads that claim, exchanges it for the session over a POST (so the
+ * token only ever travels in a body), saves the session, and strips the claim
+ * from the URL so it does not linger in history. Returns `signedIn: false` with
+ * a null message when the URL carries no claim — i.e. this was an ordinary load,
+ * not a sign-in return.
+ */
+export async function completeGitHubSignIn(input: {
+  locationHash?: string;
+  bridgeUrl?: string | null;
+  fetchImpl?: typeof fetch;
+  clearClaim?: () => void;
+} = {}): Promise<{ readonly signedIn: boolean; readonly message: string | null }> {
+  const hash = input.locationHash ?? (typeof window !== 'undefined' ? window.location.hash : '');
+  const match = /[#&]relay_claim=([^&]+)/.exec(hash);
+  if (match === null) return { signedIn: false, message: null }; // an ordinary load, not a sign-in return
+  const claim = decodeURIComponent(match[1]);
+  const base = input.bridgeUrl ?? configuredBridgeUrl();
+  if (base === null) return { signedIn: false, message: 'No Relay Bridge is configured for this build.' };
+  const doFetch = input.fetchImpl ?? ((u: RequestInfo | URL, i?: RequestInit) => fetch(u, i));
+  try {
+    const res = await doFetch(`${base}/relay-api/auth/github/claim`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ claim }),
+      credentials: 'omit',
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      return { signedIn: false, message: 'That sign-in link is expired or was already used. Please sign in again.' };
+    }
+    const payload = await res.json() as {
+      data?: { sessionToken?: unknown; scope?: unknown; participantId?: unknown; expiresAt?: unknown };
+    };
+    const token = payload.data?.sessionToken;
+    if (typeof token !== 'string' || token === '') return { signedIn: false, message: 'The bridge returned no session.' };
+    saveBridgeSession({
+      token,
+      origin: typeof window !== 'undefined' ? window.location.origin : '',
+      expiresAt: typeof payload.data?.expiresAt === 'string' ? payload.data.expiresAt : '',
+      scope: payload.data?.scope === 'browser_control' ? 'browser_control' : 'browser_read_only',
+      participantId: typeof payload.data?.participantId === 'string' ? payload.data.participantId : null,
+    });
+    // Strip the claim from the URL so it never lingers in history or a share.
+    (input.clearClaim ?? (() => {
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    }))();
+    return { signedIn: true, message: null };
+  } catch {
+    return { signedIn: false, message: 'The Relay Bridge could not be reached.' };
+  }
+}

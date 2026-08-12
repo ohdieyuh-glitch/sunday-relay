@@ -59,7 +59,8 @@ import {
 } from './cron-scheduler';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
-  createInstallationGrants, createOAuthStateStore, handleGithubAuthRoute, isGithubAuthRoute,
+  createInstallationGrants, createOAuthStateStore, createSignInClaimStore,
+  handleGithubAuthRoute, isGithubAuthRoute,
 } from './github-auth-routes';
 import { githubOAuthConfigFromEnv } from './github-oauth';
 import {
@@ -247,6 +248,7 @@ export function createBridgeServer(
    */
   const installStateStore = createOAuthStateStore();
   const installGrants = createInstallationGrants();
+  const signInClaimStore = createSignInClaimStore();
   const githubInstallUrl = typeof process.env.RELAY_GITHUB_APP_INSTALL_URL === 'string'
     ? process.env.RELAY_GITHUB_APP_INSTALL_URL.trim() : '';
   /** Saved PSP profiles, participant-owned. Absent without a mounted state root —
@@ -455,8 +457,16 @@ export function createBridgeServer(
             installStateStore,
             installGrants,
             installBaseUrl: githubInstallUrl === '' ? null : githubInstallUrl,
+            claimStore: signInClaimStore,
           });
           if (githubAuthResult !== null) {
+            // The sign-in callback redirects the browser back to the frontend
+            // with a one-time claim — never the token — in the URL fragment.
+            if (githubAuthResult.redirect !== undefined) {
+              res.writeHead(302, { ...cors, Location: githubAuthResult.redirect });
+              res.end();
+              return;
+            }
             send(res, githubAuthResult.status, githubAuthResult.body, cors);
             return;
           }
