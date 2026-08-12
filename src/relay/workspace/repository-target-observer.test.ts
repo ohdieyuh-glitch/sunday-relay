@@ -1112,3 +1112,37 @@ describe('the remote subcommand cannot mutate where the repository points', () =
     expect(result.ok).toBe(true);
   });
 });
+
+
+/**
+ * `git branch <name>` CREATES A BRANCH, and the options allow-list cannot see it.
+ *
+ * The second instance of the class that produced `git remote set-url`: the
+ * options loop skips anything not starting with `-`, so for `branch` — allowed
+ * only for `--show-current` — a bare positional name walked straight through
+ * and created a ref. Found by sweeping the whole allow-list after the first
+ * one, rather than fixing only the case that was reported.
+ */
+describe('git branch cannot create, rename or delete a ref', () => {
+  it('refuses a positional branch name', () => {
+    const result = runRepositoryGit(['branch', 'relay-sneaky'], process.cwd());
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.message).toContain('outside Relay');
+  });
+
+  it('refuses the mutating flags', () => {
+    for (const flag of ['-m', '-M', '-d', '-D', '-c']) {
+      expect(runRepositoryGit(['branch', flag, 'a', 'b'], process.cwd()).ok, flag).toBe(false);
+    }
+  });
+
+  it('still permits the read it exists for', () => {
+    /**
+     * The guard checks the first NON-FLAG argument, not `args[1]`. Checking the
+     * slot refused this — `--show-current` is a flag the options list already
+     * vets — so a verb rule that ignored flags would have broken the only
+     * legitimate use of the subcommand.
+     */
+    expect(runRepositoryGit(['branch', '--show-current'], process.cwd()).ok).toBe(true);
+  });
+});

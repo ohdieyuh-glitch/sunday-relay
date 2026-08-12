@@ -109,6 +109,18 @@ const GIT_SUBCOMMAND_VERBS: Readonly<Record<string, readonly string[]>> = Object
   // where this repository points — the one thing a Mission must never change
   // about its own target.
   remote: ['get-url'],
+  /**
+   * NO POSITIONAL AT ALL. `git branch --show-current` reads; `git branch <name>`
+   * CREATES a branch, and the name is positional so the options allow-list —
+   * which only inspects dash-prefixed arguments — cannot see it. An empty list
+   * means every non-flag argument is refused.
+   *
+   * Second instance of the same class as `remote set-url`, found by sweeping
+   * the whole allow-list after the first one rather than fixing only the case
+   * that was reported.
+   */
+  branch: [],
+
 });
 
 const GIT_SUBCOMMAND_OPTIONS: Readonly<Record<string, readonly string[]>> = Object.freeze({
@@ -180,10 +192,24 @@ export function runRepositoryGit(
    */
   const verbs = GIT_SUBCOMMAND_VERBS[subcommand];
   if (verbs !== undefined) {
-    const verb = args[1];
-    if (typeof verb !== 'string' || !verbs.includes(verb)) {
+    /**
+     * The first NON-FLAG argument, not simply `args[1]`. Checking the slot
+     * refused `git branch --show-current`, because its only argument is a flag
+     * the options list already vets — so the verb rule has to look past flags
+     * to the positional it exists to police. An empty `verbs` list means no
+     * positional is permitted for this subcommand at all.
+     */
+    const positional = args.slice(1).find((a) => !a.startsWith('-'));
+    if (positional !== undefined && !verbs.includes(positional)) {
       return fail(
-        relayError('permission-denied', `git ${subcommand} "${String(verb)}" is outside Relay's repository write surface.`, {
+        relayError('permission-denied', `git ${subcommand} "${positional}" is outside Relay's repository write surface.`, {
+          details: verbs.length === 0 ? ['(no positional argument is permitted)'] : [...verbs],
+        }),
+      );
+    }
+    if (positional === undefined && verbs.length > 0) {
+      return fail(
+        relayError('permission-denied', `git ${subcommand} needs one of its permitted operations.`, {
           details: [...verbs],
         }),
       );
