@@ -234,12 +234,39 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
 
   /* --------------------------------------------------- PUSH / PR / MERGE */
 
+  /**
+   * INDEPENDENT STAGE PROGRESSION.
+   *
+   * The remote leg is OPTIONAL and the staging deploy does not depend on it: a
+   * deploy ships the COMMIT from the working branch, which is why the lifecycle
+   * calls deploying an unmerged branch "the normal preview flow". So every
+   * refusal in here exits THE LEG and not the run — the IIFE exists for exactly
+   * that, because a bare `return` used to abandon the whole Mission.
+   *
+   * Three separate defects came from getting this wrong, each one repaired
+   * individually and the next arriving one stage later: a missing
+   * `deploying.from` entry, a provider-refused merge, and a provider that
+   * cannot push. All three took an authorized staging deploy away from a
+   * Mission that had been granted it.
+   *
+   * PERMISSION MONOTONICITY follows from the same rule: a Mission handed MORE
+   * capability must never finish behind the otherwise-identical Mission handed
+   * less. `ship-lifecycle-invariants.test.ts` holds both properties over real
+   * runs rather than over this comment.
+   *
+   * ONE EXCEPTION, and it is a boundary rather than a stage: a provider whose
+   * credential is not the one the registration authorized is FATAL. Acting on a
+   * credential Relay was not given is not an optional step that failed.
+   */
+  let remoteSkipped: string | null = null;
   if (request.remote !== undefined) {
     const { provider: remote, evidence: prEvidence } = request.remote;
 
+    const fatal = await (async (): Promise<string | null> => {
     const pushGate = stillPermitted(request, 'pushed', stage, null);
     if (!pushGate.ok) {
-      return { stage, evidence, commitSha, verdict: null, stoppedBy: pushGate.reason };
+      remoteSkipped = pushGate.reason;
+      return null;
     }
     const target = pushGate.target;
     /**
@@ -254,7 +281,8 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
       protectedBranches: target.protectedBranches,
     });
     if (wrongTarget !== null) {
-      return { stage, evidence, commitSha, verdict: null, stoppedBy: wrongTarget.message };
+      remoteSkipped = wrongTarget.message;
+      return null;
     }
 
     /**
@@ -265,10 +293,8 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
      * string makes the provider the guard instead of Relay.
      */
     if (target.identity.owner === null || target.identity.owner.trim() === '') {
-      return {
-        stage, evidence, commitSha, verdict: null,
-        stoppedBy: 'This repository has no remote owner recorded, so Relay will not perform a remote operation for it.',
-      };
+      remoteSkipped = 'This repository has no remote owner recorded, so Relay performed no remote operation for it.';
+      return null;
     }
     const owner = target.identity.owner;
 
@@ -293,20 +319,15 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
      */
     const authorizedEnvVar = target.credential.envVarName;
     if (authorizedEnvVar !== null && remote.descriptor.credentialEnvVarName !== authorizedEnvVar) {
-      return {
-        stage, evidence, commitSha, verdict: null,
-        stoppedBy:
-          `This repository authorizes the credential in ${authorizedEnvVar}, and the provider reads `
-          + `${remote.descriptor.credentialEnvVarName ?? 'none'}. Relay will not act on a credential it was not given.`,
-      };
+      // FATAL. A credential boundary crossed is not an optional stage failing.
+      return `This repository authorizes the credential in ${authorizedEnvVar}, and the provider reads `
+        + `${remote.descriptor.credentialEnvVarName}. Relay will not act on a credential it was not given.`;
     }
     const unsupported = (permission: 'push_feature_branch' | 'create_pr' | 'merge_pr'): boolean =>
       !remote.descriptor.supports.includes(permission);
     if (unsupported('push_feature_branch')) {
-      return {
-        stage, evidence, commitSha, verdict: null,
-        stoppedBy: `Provider "${remote.descriptor.providerId}" does not support pushing a feature branch.`,
-      };
+      remoteSkipped = `Provider "${remote.descriptor.providerId}" does not support pushing a feature branch.`;
+      return null;
     }
 
     const pushed = await remote.push({
@@ -332,7 +353,8 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
      * `deployment_failed` stage; this leg did not.
      */
     if (!landed.landed) {
-      return { stage, evidence, commitSha, verdict: null, stoppedBy: landed.reason };
+      remoteSkipped = landed.reason;
+      return null;
     }
     evidence.push({
       stage: 'pushed', observedAt: pushed.observedAt, commitSha,
@@ -364,11 +386,10 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
         }),
       });
       if (!opened.ok) {
-        // No row. A pull request that was refused is not an open one.
-        return {
-          stage, evidence, commitSha, verdict: null,
-          stoppedBy: opened.detail ?? 'The pull request was not opened.',
-        };
+        // No row: a pull request that was refused is not an open one. The MERGE
+        // depends on it and is skipped; the deploy does not and continues.
+        remoteSkipped = opened.detail ?? 'The pull request was not opened.';
+        return null;
       }
       evidence.push({
         stage: 'pull_request_open', observedAt: opened.observedAt, commitSha,
@@ -433,6 +454,31 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
           });
           stage = 'merged';
         }
+      }
+    }
+    return null;
+    })();
+
+    /**
+     * A CREDENTIAL BOUNDARY STOPS THE RUN. Anything else the remote leg could
+     * not do is RECORDED and the Mission continues to the stages that do not
+     * depend on it.
+     */
+    if (fatal !== null) {
+      return { stage, evidence, commitSha, verdict: null, stoppedBy: fatal };
+    }
+    if (remoteSkipped !== null) {
+      /**
+       * Written onto the furthest row that is TRUE, so the reason the remote leg
+       * stopped is in the record without claiming a stage that did not happen.
+       * `stoppedBy` stays null: the run did not stop.
+       */
+      const last = evidence[evidence.length - 1];
+      if (last !== undefined) {
+        evidence[evidence.length - 1] = {
+          ...last,
+          detail: last.detail === null ? remoteSkipped : `${last.detail} ${remoteSkipped}`,
+        };
       }
     }
   }

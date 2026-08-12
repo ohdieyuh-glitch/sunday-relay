@@ -657,10 +657,19 @@ describe('the remote leg records what happened, not what was asked', () => {
       remote: { provider: fake.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
-    // Stopped, and NO `pushed` row: a push that did not land is not a push.
+    /**
+     * NO `pushed` row — a push that did not land is not a push — and the run
+     * CONTINUES, because nothing downstream of the deploy depends on the push.
+     * This asserted `stoppedBy` until the Independent Stage Progression
+     * invariant showed that abandoning here takes an authorized deploy away
+     * from a Mission that was granted it. The reason is recorded on the
+     * furthest TRUE row instead.
+     */
     expect(result.stage).toBe('committed');
     expect(result.evidence.find((e) => e.stage === 'pushed')).toBeUndefined();
-    expect(result.stoppedBy).toContain(OTHER);
+    expect(result.stoppedBy).toBeNull();
+    const committed = result.evidence.find((e) => e.stage === 'committed');
+    expect(committed?.detail).toContain(OTHER);
   });
 
   it('records the pull-request reference the provider returned', async () => {
@@ -742,7 +751,7 @@ describe('the remote leg records what happened, not what was asked', () => {
     expect(result.stoppedBy).toBeNull();
   });
 
-  it('a REFUSED pull request stops the run and leaves no open-PR row', async () => {
+  it('a REFUSED pull request leaves no open-PR row, and does not stop the run', async () => {
     const root = repository();
     const reg = remoteRegistration(LADDER_NO_MERGE);
     const target = remoteTarget(reg, LADDER_NO_MERGE, root);
@@ -761,9 +770,16 @@ describe('the remote leg records what happened, not what was asked', () => {
       remote: { provider: refusing.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
+    /**
+     * The MERGE depends on the pull request and is skipped. The deploy does not
+     * depend on it, so had one been configured the run would have continued to
+     * it — Independent Stage Progression. The refusal is recorded, not fatal.
+     */
     expect(result.stage).toBe('pushed');
     expect(result.evidence.find((e) => e.stage === 'pull_request_open')).toBeUndefined();
-    expect(result.stoppedBy).toContain('422');
+    expect(result.stoppedBy).toBeNull();
+    const pushedRow = result.evidence.find((e) => e.stage === 'pushed');
+    expect(pushedRow?.detail).toContain('422');
   });
 
   it('honours a push grant revoked between COMMIT and PUSH', async () => {
@@ -1118,5 +1134,110 @@ describe('a transient merge failure does not cost the deploy', () => {
     expect(result.stage).toBe('deployed');
     expect(result.evidence.find((e) => e.stage === 'merged')).toBeUndefined();
     expect(result.evidence.find((e) => e.stage === 'deployed')).toBeDefined();
+  });
+});
+
+/**
+ * THE RUNNER'S OWN PATH TO `shipped`, DRIVEN END TO END.
+ *
+ * This was the gap that let the same defect recur three times. Each round moved
+ * the failure one stage later — `shipped` gated, then `live_verified` gated —
+ * and each round shipped with no test that reached the end, so reverting the
+ * repair left the suite green. A review proved it: it restored the broken gate
+ * and 32/32 still passed.
+ *
+ * The stub provider is FAITHFUL rather than agreeable: it remembers what it
+ * deployed and reports THAT back, so a runner that carried the wrong revision
+ * would still be caught. What is stubbed is the provider, because the subject
+ * here is the runner's orchestration — the real provider has its own suite.
+ */
+describe('the runner reaches shipped by itself', () => {
+  /** Remembers what it deployed; reports what it remembers, not what it is asked. */
+  function honestProvider() {
+    let deployed: string | null = null;
+    return {
+      get deployedRevision() { return deployed; },
+      provider: {
+        descriptor: {
+          providerId: 'stub', displayName: 'Stub', environments: ['staging'] as const,
+          canReportDeployedRevision: true, canVerifyLive: true, simulated: true,
+          credentialEnvVarName: null,
+        },
+        deploy: async (r: { revision: string }) => {
+          deployed = r.revision;
+          return {
+            ok: true, providerId: 'stub', environment: 'staging' as const,
+            deployedRevision: deployed, deploymentRef: 'stub:1',
+            url: 'http://stub.invalid/app', observedAt: NOW, detail: null,
+          };
+        },
+        verifyLive: async (i: { expectedRevision: string }) => ({
+          reachable: true,
+          // What it HAS, compared by the caller. Never `expectedRevision`.
+          healthy: deployed !== null && deployed === i.expectedRevision,
+          reportedRevision: deployed,
+          method: 'stub', observedAt: NOW, detail: null,
+        }),
+      },
+    };
+  }
+
+  it('walks committed → deployed → live_verified → shipped with stoppedBy null', async () => {
+    const root = repository();
+    const registration = registrationFor(root);
+    const target = targetFor(registration);
+    const stub = honestProvider();
+
+    const result = await runShipLifecycle({
+      target, readRegistration: () => registration, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump version', authorName: 'Relay', authorEmail: 'relay@x',
+      deployment: {
+        provider: stub.provider, environment: 'staging',
+        artifactPath: artifact(), liveUrl: 'http://stub.invalid/app',
+      },
+      now: () => NOW,
+    });
+
+    expect(result.stage).toBe('shipped');
+    expect(result.stoppedBy).toBeNull();
+    expect(result.verdict?.shipped).toBe(true);
+    expect(result.evidence.map((e) => e.stage))
+      .toEqual(['committed', 'deployed', 'live_verified', 'shipped']);
+    // The revision carried all the way through is the one git produced.
+    expect(stub.deployedRevision).toBe(result.commitSha);
+    expect(result.verdict?.liveRevision).toBe(result.commitSha);
+  });
+
+  it('STILL records the ship when the repository is revoked mid-flight', async () => {
+    /**
+     * The Finding-1 case. The deploy and the live observation have already
+     * happened; a revocation arriving now cannot un-happen them, and refusing to
+     * write down a real event is not a safety property. The record must reach
+     * `shipped` anyway.
+     */
+    const root = repository();
+    const full = registrationFor(root);
+    const target = targetFor(full);
+    const revoked: RepositoryRegistration = { ...full, revokedAt: NOW } as RepositoryRegistration;
+    const stub = honestProvider();
+    let reads = 0;
+
+    const result = await runShipLifecycle({
+      target,
+      // Full through commit and the deploy request; revoked from then on.
+      readRegistration: () => { reads += 1; return reads <= 2 ? full : revoked; },
+      worktreePath: root, judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump version', authorName: 'Relay', authorEmail: 'relay@x',
+      deployment: {
+        provider: stub.provider, environment: 'staging',
+        artifactPath: artifact(), liveUrl: 'http://stub.invalid/app',
+      },
+      now: () => NOW,
+    });
+
+    expect(result.stage).toBe('shipped');
+    expect(result.stoppedBy).toBeNull();
+    expect(result.evidence.map((e) => e.stage)).toContain('live_verified');
   });
 });
