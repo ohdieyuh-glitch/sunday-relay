@@ -30,6 +30,7 @@ import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { runArchitect, ArchitectUnavailableError, type SundayMode } from './architect';
 import { runCodingMission, codingHandoffDigest, type CancelHandle, type CodingOutcome } from './coding';
+import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
 import { resolveClaudeRuntime } from './claude-runtime';
 import {
   ARCHITECT_COORDINATION_LABEL,
@@ -229,6 +230,10 @@ interface MissionRecord {
   /** The validated Prompt Architect handoff, exactly as returned. */
   architectHandoff?: PromptArchitectHandoff;
   architectReceipt?: MissionArchitectReceipt;
+  /** The repository this Mission targets, or null for the controlled fixture. */
+  repositoryTarget: MissionRepositoryTarget | null;
+  /** The files it declared it would write. Empty for the fixture. */
+  intendedWritePaths: readonly string[];
   handoffDigest?: string;
   deliveredHandoffDigest?: string;
   claim?: MissionClaim;
@@ -351,6 +356,28 @@ export interface MissionRegistry {
      * Mission having asked for it.
      */
     evidenceReferences?: readonly { readonly source: string; readonly reference: string }[];
+    /**
+     * THE REPOSITORY THIS MISSION TARGETS, when the caller selected one.
+     *
+     * Absent means the controlled fixture — every existing caller, and the
+     * default the design document requires to keep working unchanged.
+     *
+     * Present means a resolved, AUTHORIZED `MissionRepositoryTarget`. The Mission
+     * engine does not resolve it: resolution reads a registration, and a
+     * registration is a founder action. The caller that registered it passes the
+     * resolved target, which is the same separation the evidence references above
+     * draw between a capability existing and a Mission having asked for it.
+     */
+    repositoryTarget?: MissionRepositoryTarget;
+    /**
+     * The files this Mission declares it will write, narrowed from the target's
+     * write scope. Required whenever `repositoryTarget` is present.
+     *
+     * Deliberately NOT derived from the architect's handoff: the handoff is a
+     * model's plan and this is an authorization decision, so taking it from there
+     * would let the architect widen its own envelope.
+     */
+    intendedWritePaths?: readonly string[];
   }): LiveMissionUpdate;
   get(missionId: string): LiveMissionUpdate | null;
   cancel(missionId: string): LiveMissionUpdate | null;
@@ -1434,7 +1461,17 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           publishTerminal: (t) => {
             rec.terminal = t;
           },
-          projectLabel: 'Relay controlled fixture (throwaway repository)',
+          /**
+           * THE LABEL FOLLOWS THE SOURCE. Calling a founder's repository "the
+           * controlled fixture (throwaway repository)" in the Live Terminal
+           * would be a claim about blast radius that is false, and it is the
+           * line a founder reads to know what Relay is touching.
+           */
+          projectLabel: rec.repositoryTarget === null
+            ? 'Relay controlled fixture (throwaway repository)'
+            : `${rec.repositoryTarget.repositoryKey} (isolated worktree on ${rec.repositoryTarget.workingBranch})`,
+          repositoryTarget: rec.repositoryTarget ?? undefined,
+          intendedWritePaths: rec.intendedWritePaths,
           missionId: rec.missionId,
           missionRevision: rec.missionRevision,
           /**
@@ -1886,7 +1923,17 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           baseEnv: config.baseEnv,
           emit: (e) => append(rec, e),
           publishTerminal: (t) => { rec.terminal = t; },
-          projectLabel: 'Relay controlled fixture (throwaway repository)',
+          /**
+           * THE LABEL FOLLOWS THE SOURCE. Calling a founder's repository "the
+           * controlled fixture (throwaway repository)" in the Live Terminal
+           * would be a claim about blast radius that is false, and it is the
+           * line a founder reads to know what Relay is touching.
+           */
+          projectLabel: rec.repositoryTarget === null
+            ? 'Relay controlled fixture (throwaway repository)'
+            : `${rec.repositoryTarget.repositoryKey} (isolated worktree on ${rec.repositoryTarget.workingBranch})`,
+          repositoryTarget: rec.repositoryTarget ?? undefined,
+          intendedWritePaths: rec.intendedWritePaths,
           missionId: rec.missionId,
           missionRevision: rec.missionRevision,
           ...(hostedCoding
@@ -2225,7 +2272,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   }
 
   return {
-    start({ missionId, objective, evidenceReferences }) {
+    start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths }) {
       const existing = records.get(missionId);
       if (existing) return toView(existing); // idempotent — one dispatch per mission id
       const request = safeText(objective) || 'Implement the controlled demo task.';
@@ -2234,6 +2281,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         originalRequest: request,
         objective: request,
         missionRevision: `rev_${digest(`${missionId}:${request}`)}`,
+        repositoryTarget: repositoryTarget ?? null,
+        intendedWritePaths: intendedWritePaths ?? [],
         phase: 'ready',
         state: 'ready',
         currentRole: 'relay',

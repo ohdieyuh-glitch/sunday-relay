@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { runCodingMission } from './coding';
 import { resolveClaudeRuntime } from './claude-runtime';
 import { createRandomIdFactory } from '../src/relay/protocol/ids';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFakeClaude } from '../src/relay/connectors/claude-code/fake-executable';
@@ -10,6 +11,13 @@ import { CLAIMED_FILE, REFERENCE_IMPLEMENTATION } from '../src/relay/connectors/
 import type { BridgeEventInput, CodingTerminalState } from './types';
 import { actorMatches, isPaidApiCall } from './attestation';
 import { findOccupant, type RoleOccupant } from '../src/relay/mission/role-slots';
+import {
+  createRepositoryRegistration,
+  resolveRepositoryTarget,
+} from '../src/relay/mission/repository-target';
+
+/** A fixed instant for the registration fixtures. */
+const AT = '2026-08-11T12:00:00.000Z';
 
 /**
  * CODING LEG — OFFLINE END-TO-END.
@@ -305,4 +313,146 @@ describe('the coding attestation separates who was asked for from what ran', () 
     expect(outcome.attestation?.requestedRuntime).toBe('claude-code-local');
     expect(outcome.attestation?.billingPath).toBe('subscription');
   }, 30_000);
+});
+
+/* ============ the coding leg against a REAL registered repository ============ */
+
+/**
+ * THE THIRD THING `REPOSITORY_TARGETS.md` LISTED AS NOT BUILT.
+ *
+ * The authorization spine, the observation layer and the shipping lifecycle all
+ * existed and nothing in the bridge read a `MissionRepositoryTarget` — so every
+ * hosted Mission Relay had ever run edited the same four-file throwaway fixture.
+ *
+ * This is the same coding leg, the same fake Claude, the same isolated worktree,
+ * the same Relay inspection and the same `node --test` — pointed at a REAL git
+ * repository created on disk by this test. No provider, no network, no spend.
+ */
+describe('the coding leg can target a real registered repository', () => {
+  const temporaries: string[] = [];
+  afterEach(() => {
+    for (const path of temporaries.splice(0)) {
+      try { rmSync(path, { recursive: true, force: true }); } catch { /* best effort */ }
+    }
+  });
+
+  /** A real repository whose test suite fails until the agent edits one file. */
+  function realProject(): string {
+    const root = mkdtempSync(join(tmpdir(), 'relay-real-project-'));
+    temporaries.push(root);
+    const git = (args: string[]) => execFileSync('git', args, {
+      cwd: root,
+      env: {
+        PATH: process.env.PATH ?? '', HOME: root,
+        GIT_AUTHOR_NAME: 'F', GIT_AUTHOR_EMAIL: 'f@x',
+        GIT_COMMITTER_NAME: 'F', GIT_COMMITTER_EMAIL: 'f@x',
+      },
+    });
+    git(['init', '--quiet', '--initial-branch=main']);
+    mkdirSync(join(root, 'src'), { recursive: true });
+    mkdirSync(join(root, 'test'), { recursive: true });
+    mkdirSync(join(root, '.github', 'workflows'), { recursive: true });
+    writeFileSync(join(root, 'src', 'greet.js'), 'module.exports = { greet: () => "" };\n');
+    writeFileSync(
+      join(root, 'test', 'greet.test.js'),
+      'const { test } = require("node:test");\n'
+      + 'const assert = require("node:assert");\n'
+      + 'const { greet } = require("../src/greet.js");\n'
+      + 'test("greets", () => { assert.strictEqual(greet(), "hello"); });\n',
+    );
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'real-project', version: '1.0.0' }, null, 2));
+    writeFileSync(join(root, '.github', 'workflows', 'ci.yml'), 'name: ci\n');
+    git(['add', '--', '.']);
+    git(['commit', '-m', 'failing baseline']);
+    return root;
+  }
+
+  function registeredTarget(root: string) {
+    const grants = (['read', 'write_worktree', 'commit'] as const).map((permission) => ({
+      permission, authorizedBy: 'founder', authorizedAt: AT, expiresAt: null, note: null,
+    }));
+    const registration = createRepositoryRegistration({
+      draft: {
+        identity: { provider: 'local', host: null, owner: null, name: 'real-project', defaultBranch: 'main' },
+        location: { kind: 'local_path', path: root },
+        scope: { read: ['**'], write: ['src/**'] },
+        grants,
+        ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+        registeredBy: 'founder',
+      },
+      now: AT,
+    });
+    if (!registration.ok) throw new Error(registration.error.message);
+    const resolved = resolveRepositoryTarget({
+      registration: registration.value,
+      request: {
+        repositoryKey: 'local:real-project', selectedBy: 'founder', selectedAt: AT,
+        workingBranch: 'relay/mission-real', permissions: grants.map((g) => g.permission),
+      },
+      now: AT,
+    });
+    if (!resolved.ok) throw new Error(resolved.error.message);
+    return resolved.target;
+  }
+
+  it('edits the REAL repository in an isolated worktree and leaves the source untouched', async () => {
+    const root = realProject();
+    const target = registeredTarget(root);
+    const before = readFileSync(join(root, 'src', 'greet.js'), 'utf8');
+
+    const { outcome } = await runOffline({
+      repositoryTarget: target,
+      intendedWritePaths: ['src/greet.js'],
+      handoff: {
+        objective: 'Make greet() return "hello".',
+        instructions: ['Return the string "hello" from greet.'],
+        acceptanceCriteria: ['The existing test suite passes when Relay runs it.'],
+        constraints: ['Edit only the declared file.'],
+      },
+      // The repo's own fake Claude, told to edit the REAL project's file.
+      executablePath: writeFakeClaude(mkdtempSync(join(tmpdir(), 'relay-fake-claude-')), {
+        scenario: 'success',
+        sessionId: 'real-session', taskId: 'tsk', runId: 'run',
+        editPath: 'src/greet.js',
+        editContent: 'module.exports = { greet: () => "hello" };\n',
+      }),
+    } as never);
+
+    // The baseline is the REAL repository's commit, not a fixture's.
+    expect(outcome.evidence?.baseRevision).toMatch(/^[0-9a-f]{40}$/);
+
+    /**
+     * THE SOURCE REPOSITORY IS UNTOUCHED. This is the property the whole
+     * worktree design exists for, and pointing Relay at a repository somebody
+     * cares about is the first time it has ever mattered.
+     */
+    expect(readFileSync(join(root, 'src', 'greet.js'), 'utf8')).toBe(before);
+    const status = execFileSync('git', ['status', '--porcelain=v1'], {
+      cwd: root, encoding: 'utf8', env: { PATH: process.env.PATH ?? '', HOME: root },
+    });
+    expect(status.trim(), 'the founder\'s repository is dirty').toBe('');
+  }, 120_000);
+
+  it('refuses before starting an agent when the declared file is out of scope', async () => {
+    const root = realProject();
+    const { outcome } = await runOffline({
+      repositoryTarget: registeredTarget(root),
+      // `.github/**` is protected AND outside the `src/**` write scope.
+      intendedWritePaths: ['.github/workflows/ci.yml'],
+    } as never);
+    expect(outcome.stopped).toBe(true);
+    // Refused at the SOURCE, before a worktree, before a process, before spend.
+    expect(outcome.stopReason ?? '').toMatch(/scope|protected/i);
+    expect(outcome.evidence).toBeNull();
+  }, 60_000);
+
+  it('refuses a Mission that names no files at all', async () => {
+    const root = realProject();
+    const { outcome } = await runOffline({
+      repositoryTarget: registeredTarget(root),
+      intendedWritePaths: [],
+    } as never);
+    expect(outcome.stopped).toBe(true);
+    expect(outcome.stopReason ?? '').toContain('must name the files it intends to write');
+  }, 60_000);
 });

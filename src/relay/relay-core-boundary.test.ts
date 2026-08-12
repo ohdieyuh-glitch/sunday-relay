@@ -732,7 +732,28 @@ describe('Mission projection boundaries (Prompt 8.1)', () => {
   it('the mission layer does not import Relay Core internals, adapters, or the CLI', () => {
     for (const file of missionFiles) {
       const content = read(file);
-      expect(/from\s+['"]\.\.\/(core|connectors|cli|workspace|ledger|coordination|handoff|recovery|storage)\//.test(content), `${file} imports Relay internals — mission must stay a leaf projection`).toBe(false);
+      /**
+       * `(\.\.\/)+`, NOT a single `..`. This matched only ONE level up, so a
+       * mission subdirectory importing `'../../coordination/claims'` — two levels
+       * — walked straight past it. An independent review found exactly one such
+       * import in the whole tree and proved the guard was blind by widening the
+       * regex and watching the test fail.
+       *
+       * The guard was blind for all 22 mission subdirectories, so every future one
+       * could reach `core/`, `cli/` or `workspace/` unnoticed.
+       *
+       * `coordination/claims` is the one recorded exception: `normalizeRepoPath`
+       * is a pure path normaliser with no Node, no network and no clock, and the
+       * repository-target scope rules must normalise paths the SAME way the claim
+       * enforcer does or the two disagree about what a path is. Named here so the
+       * exception is a decision rather than an accident.
+       */
+      const MISSION_LEAF_EXCEPTIONS = ['../../coordination/claims'];
+      const withoutExceptions = MISSION_LEAF_EXCEPTIONS.reduce(
+        (text, allowed) => text.split(`'${allowed}'`).join("'<allowed>'"),
+        content,
+      );
+      expect(/from\s+['"](\.\.\/)+(core|connectors|cli|workspace|ledger|coordination|handoff|recovery|storage)\//.test(withoutExceptions), `${file} imports Relay internals — mission must stay a leaf projection`).toBe(false);
       expect(/fusion-engine|from\s+['"]react|@supabase/.test(content), `${file} imports app/UI/backend`).toBe(false);
     }
   });

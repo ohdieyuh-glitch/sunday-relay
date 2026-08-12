@@ -11,7 +11,7 @@
  * inspection + test run are the EVIDENCE and always win.
  */
 
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join, normalize, sep } from 'node:path';
 import { RELAY_PROTOCOL_VERSION } from '../src/relay/protocol/version';
 import type {
@@ -48,7 +48,9 @@ import {
   type ClaudeCodeCapabilityProfile,
   type ClaudeLiveLimits,
 } from '../src/relay/connectors/claude-code/contracts';
-import { buildSafeEditFixture, RELAY_TEST_ARGS, TEST_FILE } from '../src/relay/connectors/claude-code/fixture';
+import { RELAY_TEST_ARGS, TEST_FILE } from '../src/relay/connectors/claude-code/fixture';
+import { fixtureSource, repositoryTargetSource, type RepositorySourceResult } from './repository-source';
+import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
 import { compileRevisionPrompt } from '../src/relay/connectors/claude-code/prompt-compiler';
 import { runGit } from '../src/relay/workspace/repository-inspector';
 import { buildAttestation, digest, occupantBillingPath, type ExecutionAttestation } from './attestation';
@@ -284,6 +286,33 @@ export async function runCodingMission(input: {
   emit: (e: BridgeEventInput) => void;
   /** Report a coding-internal state transition so the mission phase advances. */
   onState?: (s: RelayMissionState) => void;
+  /**
+   * THE REPOSITORY THIS MISSION TARGETS, when one was selected.
+   *
+   * Absent means the controlled fixture, which is every existing caller and
+   * stays the default — the design document's first precondition is that the
+   * fixture path keeps working unchanged, because it is the only configuration
+   * where Relay's safety holds by construction.
+   *
+   * Present means a resolved, authorized `MissionRepositoryTarget`. It changes
+   * exactly ONE thing: where the isolated worktree is created from. Every step
+   * after that — inspection, the file-claim policy, the protected-path policy,
+   * the verification command, the artifact digest, the source-unchanged proof —
+   * is the same code doing the same job on a different repository.
+   */
+  repositoryTarget?: MissionRepositoryTarget;
+  /**
+   * THE FILES THIS MISSION DECLARES IT WILL WRITE, narrowed from the target's
+   * write scope. Required whenever `repositoryTarget` is present, and refused
+   * when empty.
+   *
+   * `CodingHandoff` deliberately does not carry this. The handoff is what the
+   * Prompt Architect produced — a model's plan — and the set of files an agent
+   * is ALLOWED to touch is an authorization decision, not a plan. Taking it from
+   * the handoff would let the architect widen its own envelope, which is the
+   * shape every refusal in this feature exists to prevent.
+   */
+  intendedWritePaths?: readonly string[];
   /** Receives the cancel handle as soon as the process starts. */
   registerHandle?: (h: CancelHandle) => void;
   /** True if a cancellation was requested before/while running. */
@@ -377,16 +406,28 @@ export async function runCodingMission(input: {
     deliveredHandoffDigest: null,
   };
 
-  const fixture = buildSafeEditFixture();
+  /**
+   * ONE BRANCH, AT THE SOURCE. See `repository-source.ts`.
+   *
+   * The fixture's contract was exactly four facts — a source path, a baseline
+   * revision, a claimed file and a protected set — so a registered target
+   * satisfies the same seam and this function never learns what a repository
+   * target is.
+   */
+  const sourceResult: RepositorySourceResult = input.repositoryTarget === undefined
+    ? { ok: true, source: fixtureSource() }
+    : repositoryTargetSource(input.repositoryTarget, input.intendedWritePaths ?? []);
+  if (!sourceResult.ok) {
+    outcome.stopped = true;
+    outcome.stopReason = safeText(sourceResult.reason);
+    return outcome;
+  }
+  const source = sourceResult.source;
   const projectId = ids.next('prj') as ProjectId;
   const runId = ids.next('run') as RunId;
   const taskId = ids.next('tsk') as TaskId;
   const cleanup = () => {
-    try {
-      rmSync(fixture.fixtureRoot, { recursive: true, force: true });
-    } catch {
-      /* best effort */
-    }
+    source.dispose();
   };
   // The terminal capture is created as soon as the permission envelope is
   // known; until then there is nothing truthful to show.
@@ -426,7 +467,7 @@ export async function runCodingMission(input: {
       projectId,
       runId,
       taskId,
-      sourceRepositoryPath: fixture.sourceRepo,
+      sourceRepositoryPath: source.sourceRepositoryPath,
       cleanupPolicy: 'remove_on_success',
     });
     if (!prepared.ok) return stop(`Workspace preparation failed: ${prepared.error.message}`);
@@ -438,9 +479,9 @@ export async function runCodingMission(input: {
       projectId,
       runId,
       taskId,
-      baseRevision: fixture.baselineRevision,
-      claimedFile: fixture.claimedFile,
-      protectedPaths: fixture.protectedPaths,
+      baseRevision: source.baselineRevision,
+      claimedFile: source.allowedWritePaths[0] as string,
+      protectedPaths: source.protectedPaths,
       handoff: input.handoff,
     });
     const toolPolicy = claudeToolPolicyFor(pkg, capabilities);
@@ -455,7 +496,7 @@ export async function runCodingMission(input: {
      */
     if (input.revision !== undefined) {
       for (const [relative, content] of Object.entries(input.revision.priorContents)) {
-        if (relative !== fixture.claimedFile) continue;
+        if (!source.allowedWritePaths.includes(relative)) continue;
         const target = normalize(join(ws.workspacePath, relative));
         if (!target.startsWith(ws.workspacePath + sep)) continue;
         writeFileSync(target, content, 'utf8');
@@ -468,8 +509,8 @@ export async function runCodingMission(input: {
         runId,
         taskId,
         workspaceRelativeRoot: '.',
-        readOnlyFiles: fixture.protectedPaths.readOnly,
-        protectedFiles: [...fixture.protectedPaths.forbidden, '.git'],
+        readOnlyFiles: source.protectedPaths.readOnly,
+        protectedFiles: [...source.protectedPaths.forbidden, '.git'],
         relayVerificationCommands: [`node ${RELAY_TEST_ARGS.join(' ')}`],
         limits,
       })
@@ -535,8 +576,8 @@ export async function runCodingMission(input: {
       runtime: input.runtimeLabel ?? 'Claude Code (local CLI)',
       permissions: {
         allowedTools: toolPolicy.allowedTools.length ? toolPolicy.allowedTools : toolPolicy.availableTools,
-        allowedFiles: [fixture.claimedFile],
-        protectedPaths: [...fixture.protectedPaths.forbidden, ...fixture.protectedPaths.readOnly, '.git'],
+        allowedFiles: [...source.allowedWritePaths],
+        protectedPaths: [...source.protectedPaths.forbidden, ...source.protectedPaths.readOnly, '.git'],
         deniedCapabilities: ['Bash', 'network egress', 'git push', 'deploy'],
       },
       now,
@@ -707,8 +748,8 @@ export async function runCodingMission(input: {
 
     // Relay independently inspects — the report cannot override this.
     const policyInput: WorkspacePolicyInput = {
-      protectedPaths: fixture.protectedPaths,
-      claimedWritePaths: [fixture.claimedFile],
+      protectedPaths: source.protectedPaths,
+      claimedWritePaths: [...source.allowedWritePaths],
     };
     const inspection = workspace.inspectWorkspace(ws.workspaceId, policyInput);
     if (!inspection.ok) return stop(`Workspace inspection failed: ${inspection.error.message}`);
@@ -823,7 +864,7 @@ export async function runCodingMission(input: {
      * meant for a reader, and parsing it back would be guessing.
      */
     const claimedFileContent = ((): string | null => {
-      const target = normalize(join(ws.workspacePath, fixture.claimedFile));
+      const target = normalize(join(ws.workspacePath, source.allowedWritePaths[0] as string));
       if (!target.startsWith(ws.workspacePath + sep)) return null;
       try {
         return readFileSync(target, 'utf8').slice(0, MAX_ARTIFACT_FILE_BYTES);
@@ -846,9 +887,9 @@ export async function runCodingMission(input: {
     outcome.deterministicPassed =
       outcome.verificationPassed && insp.assessment === 'allowed' && outcome.protectedChanges.length === 0 && outcome.sourceUnchanged;
     outcome.evidence = {
-      baseRevision: fixture.baselineRevision,
-      allowedFiles: [fixture.claimedFile],
-      prohibitedFiles: [...fixture.protectedPaths.forbidden, ...fixture.protectedPaths.readOnly, '.git'],
+      baseRevision: source.baselineRevision,
+      allowedFiles: [...source.allowedWritePaths],
+      prohibitedFiles: [...source.protectedPaths.forbidden, ...source.protectedPaths.readOnly, '.git'],
       changedFiles: [...outcome.filesChanged],
       protectedChanges: [...outcome.protectedChanges],
       sourceUnchanged: outcome.sourceUnchanged,
@@ -862,7 +903,7 @@ export async function runCodingMission(input: {
       claimedFileContent,
       artifactDigest: digest(
         JSON.stringify({
-          baseRevision: fixture.baselineRevision,
+          baseRevision: source.baselineRevision,
           changedFiles: outcome.filesChanged,
           unifiedDiff,
           changedFileContents,
@@ -882,12 +923,12 @@ export async function runCodingMission(input: {
       status: 'working',
       ownerAssignmentId: null,
       dependencies: [],
-      claimedFiles: [fixture.claimedFile],
+      claimedFiles: [...source.allowedWritePaths],
       claimedResources: [],
       acceptanceCriteria: pkg.acceptanceCriteria,
       completionPolicyId: buildCompletionPolicy(requiresIndependentReview).policyId,
       contextVersion: 0 as ContextVersion,
-      baseRevision: fixture.baselineRevision,
+      baseRevision: source.baselineRevision,
       createdAt: now(),
       updatedAt: now(),
       priority: 1,
@@ -896,7 +937,7 @@ export async function runCodingMission(input: {
       policy: buildCompletionPolicy(requiresIndependentReview),
       task,
       evidence,
-      currentRepositoryRevision: fixture.baselineRevision,
+      currentRepositoryRevision: source.baselineRevision,
       currentTime: now(),
       enforcementCapabilities: { 'worktree-isolation': 'enforced' },
     });

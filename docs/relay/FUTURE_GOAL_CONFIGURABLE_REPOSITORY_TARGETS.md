@@ -1,10 +1,41 @@
-# Future capability — Configurable Repository Mission Targets
+# Configurable Repository Mission Targets — the design questions
 
-**Status: NOT STARTED. Not part of the goal that produced this document.**
+**Status: PARTLY BUILT as of 2026-08-11.** This document is the reasoning and
+the bar. What actually exists, and the things that do not, are in
+`REPOSITORY_TARGETS.md` — read that for state and this for *why*.
 
-Recorded 2026-08-11, when the hosted three-role Mission was proven end to end
-against Relay's controlled fixture. The founder explicitly scoped that goal to
-objective variety and ruled this out of it.
+Originally recorded 2026-08-11 with the status **NOT STARTED**, when the hosted
+three-role Mission was proven end to end against Relay's controlled fixture and
+the founder scoped that goal to objective variety, ruling this out of it. A
+later goal authorized it. The header is corrected rather than left standing,
+because a document whose status line is a year out of date is exactly the class
+of defect this repository has repaired most often: a claim the code no longer
+supports.
+
+**Built:** §1 authorization, §2 read/write scope, §3 protected paths, §6
+destructive-action controls, plus the observation layer and the shipping
+lifecycle the founder's later goal added. **Not built:** §4 branch and
+pull-request policy is *authorized* and performed by nothing — no remote
+provider exists — and §5's credential handling is designed but has no client to
+hold a credential.
+
+**Three of the four preconditions** at the end of this document are not met. The
+first — *the controlled-fixture path keeps working, unchanged* — **is** met: this
+work touches no bridge file, and `REPOSITORY_TARGETS.md` says so itself. An
+earlier draft of this paragraph said "neither of the four", which was wrong about
+the first precondition and the wrong word for four items. See the "What is NOT
+built" section of `REPOSITORY_TARGETS.md`, which lists them against real code.
+
+### One place this document was overruled, deliberately
+
+§4 says Relay may open a pull request and may **never** merge one, and that no
+configuration flag should be able to grant it. The founder's later goal names
+`MERGE PR` as one of eight explicit permissions. The resolution is recorded in
+the open, in `repository-contracts.ts` and in `REPOSITORY_TARGETS.md`:
+`merge_pr` exists because the founder asked for it, is never implied by
+anything, is not reachable by escalation from `create_pr`, may only follow an
+actually-open pull request, and is one of the two grants marked as never
+inferable. **This document's reasoning survives as the bar, not as a veto.**
 
 ---
 
