@@ -65,6 +65,7 @@ relay-bridge/                            THE BRIDGE — performs
                                 the first REAL DeploymentProvider: staging only
   ship-runner.ts                walks COMMIT → DEPLOY → LIVE VERIFY → SHIPPED
   ship-brain-feed.ts            a ship run → the existing Project Brain
+  ship-mission.ts               the seam: a verified mission → runShipLifecycle
   ship-dry-run.ts               the plan, from the LIVE permissions
 ```
 
