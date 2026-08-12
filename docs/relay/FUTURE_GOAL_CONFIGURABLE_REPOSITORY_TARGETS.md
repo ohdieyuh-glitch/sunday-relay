@@ -1,7 +1,10 @@
 # Configurable Repository Mission Targets — the design questions
 
-**Status: PARTLY BUILT as of 2026-08-11.** This document is the reasoning and
-the bar. What actually exists, and the things that do not, are in
+**Status: BUILT, MERGED and DEPLOYED as of 2026-08-12** — offline-complete and
+live in the production bridge (the ship route `#127`, deploy verified,
+money-path routes fail-closed), but never exercised against a live GitHub remote
+because no repository credential is configured. This document is the reasoning
+and the bar. What actually exists, and the things that do not, are in
 `REPOSITORY_TARGETS.md` — read that for state and this for *why*.
 
 Originally recorded 2026-08-11 with the status **NOT STARTED**, when the hosted
@@ -13,11 +16,20 @@ of defect this repository has repaired most often: a claim the code no longer
 supports.
 
 **Built:** §1 authorization, §2 read/write scope, §3 protected paths, §6
-destructive-action controls, plus the observation layer and the shipping
-lifecycle the founder's later goal added. **Not built:** §4 branch and
-pull-request policy is *authorized* and performed by nothing — no remote
-provider exists — and §5's credential handling is designed but has no client to
-hold a credential.
+destructive-action controls, the observation layer, the shipping lifecycle, §4
+branch and pull-request policy — `github-remote-provider.ts`, the first remote
+provider, written and proven offline (real `POST /pulls`, `PUT …/merge`, and
+`push` against `api.github.com`) — and §5's credential handling, whose client is
+now the ship route: `ship-runner.ts` reads the credential from the env var the
+authorization NAMES, server-side, and refuses a name it was not given. **Not
+exercised live:** the GitHub provider has never made a request and no repository
+credential is configured. So the honest distinction here is no longer
+built-vs-unbuilt but offline-vs-live — exactly what `REPOSITORY_TARGETS.md` says
+(§header: "the GitHub provider is written and proven offline and has never made a
+request"). This paragraph previously read "no remote provider exists," which
+became false when `#119` added the provider and stayed stale after the ship route
+(`#127`) gave it a caller — the very class of defect this document's own header
+warns about.
 
 **Three of the four preconditions** at the end of this document are not met. The
 first — *the controlled-fixture path keeps working, unchanged* — **is** met: this
