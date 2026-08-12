@@ -216,9 +216,24 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
       return { stage, evidence, commitSha, verdict: null, stoppedBy: wrongTarget.message };
     }
 
+    /**
+     * AN UNKNOWN OWNER IS REFUSED, NOT DEFAULTED. `owner ?? ''` sent an empty
+     * segment to the provider and reported a complete `pull_request_open`
+     * outcome for a repository with no remote owner. "Unknown is not zero.
+     * Never a default" is the rule, and relying on GitHub to reject the empty
+     * string makes the provider the guard instead of Relay.
+     */
+    if (target.identity.owner === null || target.identity.owner.trim() === '') {
+      return {
+        stage, evidence, commitSha, verdict: null,
+        stoppedBy: 'This repository has no remote owner recorded, so Relay will not perform a remote operation for it.',
+      };
+    }
+    const owner = target.identity.owner;
+
     const pushed = await remote.push({
       repositoryKey: target.repositoryKey,
-      owner: target.identity.owner ?? '',
+      owner,
       repo: target.identity.name,
       branch: target.workingBranch,
       expectedHeadSha: commitSha,
@@ -229,33 +244,51 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
      * unreported tip is unknown rather than agreement.
      */
     const landed = pushLanded({ expectedHeadSha: commitSha, observation: pushed });
-    evidence.push({
-      stage: 'pushed', observedAt: pushed.observedAt, commitSha,
-      branch: pushed.branch, remoteRef: pushed.observedHeadSha, pullRequestRef: null,
-      environment: null, deployedRevision: null, liveProbe: null, detail: landed.reason,
-    });
+    /**
+     * THE ROW IS WRITTEN AFTER THE OUTCOME IS KNOWN, NEVER BEFORE.
+     *
+     * Written first, a refused push leaves a `pushed` row in the evidence while
+     * the run's own `stage` says `committed` — and `deriveShipStage` reads the
+     * EVIDENCE, so the two authorities disagree and the more optimistic one
+     * wins. The deploy path already got this right with a distinct
+     * `deployment_failed` stage; this leg did not.
+     */
     if (!landed.landed) {
       return { stage, evidence, commitSha, verdict: null, stoppedBy: landed.reason };
     }
+    evidence.push({
+      stage: 'pushed', observedAt: pushed.observedAt, commitSha,
+      /**
+       * The provider's OBSERVED tip. No test distinguishes this from
+       * `commitSha`, and none can: `pushLanded` only lets the run continue when
+       * the two are equal, so on every reachable success path they are the same
+       * string. Recorded rather than left for the next mutation run to find —
+       * the same structural limit `deployedRevision` has, and the reason the
+       * enforcement lives in `pushLanded` rather than here.
+       */
+      branch: pushed.branch, remoteRef: pushed.observedHeadSha, pullRequestRef: null,
+      environment: null, deployedRevision: null, liveProbe: null, detail: landed.reason,
+    });
     stage = 'pushed';
 
     const prGate = stillPermitted(request, 'pull_request_open', stage, null);
     if (prGate.ok) {
       const opened = await remote.openPullRequest({
-        owner: target.identity.owner ?? '', repo: target.identity.name,
+        owner, repo: target.identity.name,
         head: target.workingBranch, base: target.baseBranch, title, body,
       });
-      evidence.push({
-        stage: 'pull_request_open', observedAt: opened.observedAt, commitSha,
-        branch: target.workingBranch, remoteRef: null, pullRequestRef: opened.reference,
-        environment: null, deployedRevision: null, liveProbe: null, detail: opened.detail,
-      });
       if (!opened.ok) {
+        // No row. A pull request that was refused is not an open one.
         return {
           stage, evidence, commitSha, verdict: null,
           stoppedBy: opened.detail ?? 'The pull request was not opened.',
         };
       }
+      evidence.push({
+        stage: 'pull_request_open', observedAt: opened.observedAt, commitSha,
+        branch: target.workingBranch, remoteRef: null, pullRequestRef: opened.reference,
+        environment: null, deployedRevision: null, liveProbe: null, detail: opened.detail,
+      });
       stage = 'pull_request_open';
 
       /**
@@ -267,15 +300,32 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
       const mergeGate = stillPermitted(request, 'merged', stage, null);
       if (mergeGate.ok && opened.reference !== null) {
         const merged = await remote.mergePullRequest({
-          owner: target.identity.owner ?? '', repo: target.identity.name,
+          owner, repo: target.identity.name,
           reference: opened.reference,
         });
+        /**
+         * A MERGE THE PROVIDER REFUSED IS NOT A MERGE.
+         *
+         * This row used to be pushed unconditionally with only `stage` guarded,
+         * so a provider answering `ok: false` produced a `merged` evidence row
+         * with `detail: null`, `deriveShipStage` returning `merged`, and Project
+         * Brain recording "reached merged" — on a run that returned
+         * `stoppedBy: null`. Relay claiming a merge that did not happen is the
+         * most serious thing this module could do, and an independent review
+         * found it by driving a refusing provider.
+         */
+        if (!merged.ok) {
+          return {
+            stage, evidence, commitSha, verdict: null,
+            stoppedBy: merged.detail ?? 'The pull request was not merged.',
+          };
+        }
         evidence.push({
           stage: 'merged', observedAt: merged.observedAt, commitSha,
           branch: target.baseBranch, remoteRef: null, pullRequestRef: merged.reference,
           environment: null, deployedRevision: null, liveProbe: null, detail: merged.detail,
         });
-        if (merged.ok) stage = 'merged';
+        stage = 'merged';
       }
     }
   }

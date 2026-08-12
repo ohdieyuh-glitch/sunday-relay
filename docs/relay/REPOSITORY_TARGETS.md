@@ -476,7 +476,9 @@ reads as unfinished.
    now polices the first positional, and every mutating verb is refused by name.
 
    Superseded text, kept because this document's corrections stay visible: no
-   single valid registration could reach this leg end to end. A `github` identity
+   single valid registration could reach this leg end to end. That was true
+   until the local-checkout work landed in the same branch; a review flagged
+   that the paragraph and two test comments would go stale the moment it did. A `github` identity
    MUST be `remote_clone` (the domain refuses otherwise), and
    `repository-source.ts` REFUSES `remote_clone` because nothing clones — so a
    target that can be sourced for the coding leg cannot carry the owner/name the
