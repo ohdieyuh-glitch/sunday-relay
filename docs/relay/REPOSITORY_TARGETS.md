@@ -442,6 +442,23 @@ reads as unfinished.
    `push` is a ref READ-BACK, not a git push, so the module that talks to GitHub
    cannot push and the module that can push holds no credential.
 
+   **NOW INVOKED.** `ship-runner.ts` walks `pushed → pull_request_open → merged`
+   when a provider is supplied and the Mission holds the grants. `merge_pr` is
+   never implied: a Mission with `create_pr` and without it stops with its pull
+   request OPEN, which is the complete outcome rather than a failure. A push is
+   refused before the provider is called when the working branch is the base or
+   a protected branch, and `pushLanded` compares the OBSERVED tip with what
+   Relay committed — an unreported tip is unknown, not agreement.
+
+   **A GAP THE WIRING EXPOSED, recorded because it is not obvious.** No single
+   valid registration can reach this leg end to end today. A `github` identity
+   MUST be `remote_clone` (the domain refuses otherwise), and
+   `repository-source.ts` REFUSES `remote_clone` because nothing clones — so a
+   target that can be sourced for the coding leg cannot carry the owner/name the
+   remote provider needs, and one that can carry them cannot be sourced. The
+   orchestration is proven against a fake provider; closing the gap needs a
+   clone capability, which needs the credential that does not exist here.
+
    **What has not happened:** a single real request. No credential exists in the
    development environment (verified, not assumed), so every behaviour is proven
    against a fake fetch. It is also NOT yet called by the mission engine — the

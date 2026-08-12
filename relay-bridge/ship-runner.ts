@@ -1,11 +1,14 @@
 import {
   advanceShipStage,
   decideShipped,
+  pushLanded,
+  refusePushTarget,
   revalidateRepositoryTarget,
 } from '../src/relay/mission/repository-target';
 import { commitObservedWork } from '../src/relay/workspace/repository-target-observer';
 import type {
   DeploymentProvider,
+  RemoteRepositoryProvider,
   DiffJudgement,
   LiveProbeResult,
   MissionRepositoryTarget,
@@ -67,6 +70,19 @@ export interface ShipRunRequest {
   readonly commitMessage: string;
   readonly authorName: string;
   readonly authorEmail: string;
+  /**
+   * REMOTE OPERATIONS, only if this is given AND the Mission holds the grants.
+   *
+   * Absent means the run goes from COMMIT straight to DEPLOY and the record
+   * says `committed`, never `pushed`. This closes the last "nothing invokes the
+   * provider at those stages" gap: the invocation EXISTS now, and what is
+   * missing in this environment is a credential rather than code.
+   */
+  readonly remote?: {
+    readonly provider: RemoteRepositoryProvider;
+    readonly title: string;
+    readonly body: string;
+  };
   /**
    * Deploy only if this is given AND the Mission holds the grant. Absent means
    * the run stops after COMMIT, which is a complete and honest outcome.
@@ -174,6 +190,95 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
     liveProbe: null,
     detail: null,
   });
+
+  /* --------------------------------------------------- PUSH / PR / MERGE */
+
+  if (request.remote !== undefined) {
+    const { provider: remote, title, body } = request.remote;
+
+    const pushGate = stillPermitted(request, 'pushed', stage, null);
+    if (!pushGate.ok) {
+      return { stage, evidence, commitSha, verdict: null, stoppedBy: pushGate.reason };
+    }
+    const target = pushGate.target;
+    /**
+     * WHERE, not just WHETHER. The ladder decides if a Mission may push; this
+     * decides where, and they are different questions — a Mission can hold
+     * `push_feature_branch` legitimately and still have no business pushing the
+     * base branch.
+     */
+    const wrongTarget = refusePushTarget({
+      branch: target.workingBranch,
+      baseBranch: target.baseBranch,
+      protectedBranches: target.protectedBranches,
+    });
+    if (wrongTarget !== null) {
+      return { stage, evidence, commitSha, verdict: null, stoppedBy: wrongTarget.message };
+    }
+
+    const pushed = await remote.push({
+      repositoryKey: target.repositoryKey,
+      owner: target.identity.owner ?? '',
+      repo: target.identity.name,
+      branch: target.workingBranch,
+      expectedHeadSha: commitSha,
+    });
+    /**
+     * A provider reporting success is the provider's account of itself.
+     * `pushLanded` compares the OBSERVED tip with what Relay committed, and an
+     * unreported tip is unknown rather than agreement.
+     */
+    const landed = pushLanded({ expectedHeadSha: commitSha, observation: pushed });
+    evidence.push({
+      stage: 'pushed', observedAt: pushed.observedAt, commitSha,
+      branch: pushed.branch, remoteRef: pushed.observedHeadSha, pullRequestRef: null,
+      environment: null, deployedRevision: null, liveProbe: null, detail: landed.reason,
+    });
+    if (!landed.landed) {
+      return { stage, evidence, commitSha, verdict: null, stoppedBy: landed.reason };
+    }
+    stage = 'pushed';
+
+    const prGate = stillPermitted(request, 'pull_request_open', stage, null);
+    if (prGate.ok) {
+      const opened = await remote.openPullRequest({
+        owner: target.identity.owner ?? '', repo: target.identity.name,
+        head: target.workingBranch, base: target.baseBranch, title, body,
+      });
+      evidence.push({
+        stage: 'pull_request_open', observedAt: opened.observedAt, commitSha,
+        branch: target.workingBranch, remoteRef: null, pullRequestRef: opened.reference,
+        environment: null, deployedRevision: null, liveProbe: null, detail: opened.detail,
+      });
+      if (!opened.ok) {
+        return {
+          stage, evidence, commitSha, verdict: null,
+          stoppedBy: opened.detail ?? 'The pull request was not opened.',
+        };
+      }
+      stage = 'pull_request_open';
+
+      /**
+       * MERGE IS NEVER IMPLIED. `merge_pr` is one of the two high-consequence
+       * grants that may not be inferred, defaulted or carried over, so a
+       * Mission without it stops here with its pull request open — the correct
+       * and complete outcome, not a failure.
+       */
+      const mergeGate = stillPermitted(request, 'merged', stage, null);
+      if (mergeGate.ok && opened.reference !== null) {
+        const merged = await remote.mergePullRequest({
+          owner: target.identity.owner ?? '', repo: target.identity.name,
+          reference: opened.reference,
+        });
+        evidence.push({
+          stage: 'merged', observedAt: merged.observedAt, commitSha,
+          branch: target.baseBranch, remoteRef: null, pullRequestRef: merged.reference,
+          environment: null, deployedRevision: null, liveProbe: null, detail: merged.detail,
+        });
+        if (merged.ok) stage = 'merged';
+      }
+    }
+  }
 
   if (request.deployment === undefined) {
     // Committed and not deployed. A complete outcome, and the result says so

@@ -403,3 +403,175 @@ describe('revalidation narrows what is USED, not only what is checked', () => {
     expect(result.verdict?.shipped).toBe(false);
   });
 });
+
+/**
+ * THE REMOTE LEG IS INVOKED, AND REFUSES CORRECTLY.
+ *
+ * `REPOSITORY_TARGETS.md` carried "nothing invokes the provider at those
+ * stages" as an open gap since the provider was written. These hold that the
+ * invocation exists and that every refusal on the way is real — with a fake
+ * provider, because no credential exists here and the point is the ORCHESTRATION,
+ * not GitHub's behaviour, which `github-remote-provider.test.ts` covers.
+ */
+describe('PUSH / PR / MERGE are invoked, and never implied', () => {
+  const REMOTE_LADDER: readonly RepositoryPermission[] =
+    ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr'];
+
+  function remoteRegistration(permissions: readonly RepositoryPermission[]): RepositoryRegistration {
+    const result = createRepositoryRegistration({
+      draft: {
+        identity: { provider: 'github', host: 'github.com', owner: 'o', name: 'r', defaultBranch: 'main' },
+        // A github identity MUST carry a clone URL; the domain refuses otherwise.
+        location: { kind: 'remote_clone', cloneUrl: 'https://github.com/o/r.git' },
+        scope: { read: ['**'], write: ['src/**'] },
+        grants: permissions.map((permission) => ({
+          permission, authorizedBy: 'founder', authorizedAt: NOW, expiresAt: null, note: null,
+        })),
+        ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+        credential: { envVarName: 'GITHUB_TOKEN', handedToAgent: false, permittedUses: ['push_feature_branch', 'create_pr', 'merge_pr'] },
+        registeredBy: 'founder',
+      },
+      now: NOW,
+    });
+    if (!result.ok) throw new Error(result.error.message);
+    return result.value;
+  }
+
+  function remoteTarget(reg: RepositoryRegistration, permissions: readonly RepositoryPermission[], root: string): MissionRepositoryTarget {
+    const resolved = resolveRepositoryTarget({
+      registration: reg,
+      request: {
+        repositoryKey: reg.key, selectedBy: 'founder', selectedAt: NOW,
+        workingBranch: 'relay/mission-1', permissions: [...permissions],
+      },
+      now: NOW,
+    });
+    if (!resolved.ok) throw new Error(resolved.error.message);
+    /**
+     * THE LOCATION IS OVERRIDDEN TO THE LOCAL CHECKOUT, AND THAT OVERRIDE IS
+     * ITSELF A FINDING.
+     *
+     * A `github` identity must be `remote_clone`, and `repository-source.ts`
+     * REFUSES `remote_clone` because nothing clones. So today no single valid
+     * registration can both be sourced for the coding leg AND carry the
+     * owner/name the remote provider needs — the remote leg is wired and
+     * unreachable end to end until a clone capability exists. Recorded in
+     * REPOSITORY_TARGETS.md rather than left for someone to discover.
+     *
+     * These tests hold the ORCHESTRATION: the order of the calls, which are
+     * skipped, and which refusals fire. GitHub's own behaviour is covered by
+     * `github-remote-provider.test.ts`.
+     */
+    return { ...resolved.target, location: { kind: 'local_path', path: root } } as MissionRepositoryTarget;
+  }
+
+  /** Records what it was asked to do, so "was it invoked" is checkable. */
+  function fakeRemote(over: { pushSha?: string | null; prRef?: string | null } = {}) {
+    const calls: string[] = [];
+    return {
+      calls,
+      provider: {
+        descriptor: {
+          providerId: 'fake', displayName: 'Fake', credentialEnvVarName: 'GITHUB_TOKEN',
+          supports: ['push_feature_branch', 'create_pr', 'merge_pr'] as const,
+        },
+        push: async (r: { expectedHeadSha: string; branch: string }) => {
+          calls.push(`push:${r.branch}`);
+          return {
+            ok: true, providerId: 'fake', branch: r.branch,
+            observedHeadSha: over.pushSha === undefined ? r.expectedHeadSha : over.pushSha,
+            observedAt: NOW, detail: null,
+          };
+        },
+        openPullRequest: async () => {
+          calls.push('pr');
+          return {
+            ok: true, providerId: 'fake',
+            reference: over.prRef === undefined ? '7' : over.prRef,
+            url: null, state: 'open' as const, observedAt: NOW, detail: null,
+          };
+        },
+        mergePullRequest: async () => {
+          calls.push('merge');
+          return {
+            ok: true, providerId: 'fake', reference: '7', url: null,
+            state: 'merged' as const, observedAt: NOW, detail: null,
+          };
+        },
+      },
+    };
+  }
+
+  it('pushes and opens a pull request, and does NOT merge without merge_pr', async () => {
+    const root = repository();
+    const reg = remoteRegistration(REMOTE_LADDER);
+    const target = remoteTarget(reg, REMOTE_LADDER, root);
+    const fake = fakeRemote();
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: fake.provider, title: 't', body: 'b' },
+      now: () => NOW,
+    });
+    expect(fake.calls).toEqual(['push', 'pr'].map((c) => c === 'push' ? 'push:relay/mission-1' : c));
+    // Stops with the pull request open. That is the complete outcome, not a
+    // failure: merge_pr may not be inferred from create_pr.
+    expect(result.stage).toBe('pull_request_open');
+    expect(fake.calls).not.toContain('merge');
+  });
+
+  it('merges only when merge_pr is actually held', async () => {
+    const root = repository();
+    const withMerge: readonly RepositoryPermission[] = [...REMOTE_LADDER, 'merge_pr'];
+    const reg = remoteRegistration(withMerge);
+    const target = remoteTarget(reg, withMerge, root);
+    const fake = fakeRemote();
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: fake.provider, title: 't', body: 'b' },
+      now: () => NOW,
+    });
+    expect(fake.calls).toContain('merge');
+    expect(result.stage).toBe('merged');
+  });
+
+  it('STOPS when the remote does not report the committed tip', async () => {
+    /**
+     * The provider said ok. `pushLanded` compares the OBSERVED tip with what
+     * Relay committed, and an unreported one is unknown rather than agreement.
+     */
+    const root = repository();
+    const reg = remoteRegistration(REMOTE_LADDER);
+    const target = remoteTarget(reg, REMOTE_LADDER, root);
+    const fake = fakeRemote({ pushSha: null });
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: fake.provider, title: 't', body: 'b' },
+      now: () => NOW,
+    });
+    expect(result.stage).toBe('committed');
+    expect(fake.calls).not.toContain('pr');
+  });
+
+  it('never pushes when the working branch IS the base branch', async () => {
+    const root = repository();
+    const reg = remoteRegistration(REMOTE_LADDER);
+    const target = { ...remoteTarget(reg, REMOTE_LADDER, root), workingBranch: 'main' } as MissionRepositoryTarget;
+    const fake = fakeRemote();
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, remoteTarget(reg, REMOTE_LADDER, root)),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: fake.provider, title: 't', body: 'b' },
+      now: () => NOW,
+    });
+    // Refused before the provider was called at all.
+    expect(fake.calls).toEqual([]);
+    expect(result.stoppedBy).not.toBeNull();
+  });
+});
