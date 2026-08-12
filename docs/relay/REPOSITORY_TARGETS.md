@@ -487,9 +487,15 @@ reads as unfinished.
    from build this" is a founder rule. A production provider is a separate
    implementation, separately authorized.
 
-   **What has not happened:** the mission engine does not call it. Exactly like
-   the remote provider, the lifecycle authorizes `deploying`/`deployed` and
-   nothing invokes this at those stages. Five of six mutations against it fail a
+   **Now driven by `relay-bridge/ship-runner.ts`.** `grep shipStage relay-bridge`
+   used to return nothing: the lifecycle could DECIDE every step and nothing
+   ever asked it, so it was a set of rules with no subject. `runShipLifecycle`
+   walks COMMIT -> DEPLOY -> LIVE VERIFY -> SHIPPED with real components — a real
+   `git init`, a commit read back from git, a real artifact copy, a real HTTP
+   probe — and stops at the first refusal, reporting the stage it REACHED.
+   PUSH/PR/MERGE are deliberately absent: they need a remote credential, and a
+   runner that skipped them and still said `shipped` is the failure it exists to
+   prevent. Five of six mutations against it fail a
    named test; the sixth — echoing `deployedRevision` from the request instead
    of reading the marker back — is NOT distinguishable by any test here, because
    a write and a read inside one call cannot disagree on a working filesystem.
