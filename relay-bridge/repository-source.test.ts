@@ -277,10 +277,22 @@ describe('a GitHub repository cloned on this machine', () => {
     if (result.ok) expect(result.source.disposable).toBe(false);
   });
 
-  it('accepts the ssh and no-suffix spellings of the same repository', () => {
-    // Three ways to write one repository. Refusing two would teach people to
-    // edit the check rather than fix the target.
-    for (const origin of ['git@github.com:o/r.git', 'https://github.com/o/r']) {
+  it('accepts every ordinary spelling of the same repository', () => {
+    /**
+     * One repository, six ways to write it. A review found that `ssh://` — an
+     * ordinary origin to have — was refused as "not a shape Relay can compare"
+     * while the doc promised it worked. A refusal in the safe direction is
+     * still a refusal a founder has to work around, and working around an
+     * identity check is exactly what must not become routine.
+     */
+    for (const origin of [
+      'git@github.com:o/r.git',
+      'https://github.com/o/r',
+      'https://github.com/o/r.git',
+      'ssh://git@github.com/o/r.git',
+      'ssh://git@github.com:22/o/r.git',
+      'git://github.com/o/r.git',
+    ]) {
       const result = repositoryTargetSource(githubTarget(realRepository(), origin), ['src/app.ts']);
       expect(result.ok, origin).toBe(true);
     }

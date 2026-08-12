@@ -561,10 +561,34 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
    * "the running system was observed" is a fact worth having in the evidence,
    * separate from the conclusion drawn from it.
    */
-  const liveGate = stillPermitted(request, 'live_verified', stage, environment);
-  if (!liveGate.ok) {
-    return { stage, evidence, commitSha, verdict, stoppedBy: liveGate.reason };
+  /**
+   * `live_verified` IS NOT REVALIDATED, for the same reason `deployed` is not.
+   *
+   * I gated this with `stillPermitted`, which re-reads the registration — so a
+   * registration revoked while the deploy was in flight SUPPRESSED THE RECORD
+   * of a ship that really happened: `stage: 'deployed'`, a non-null
+   * `stoppedBy`, and `verdict.shipped === true` with `deriveShipStage` saying
+   * `shipped`. That is the defect this round was opened to fix, moved one stage
+   * later, and a review found it by revoking mid-flight.
+   *
+   * Three of this repository's own rules already said not to:
+   * `live_verified` carries `permission: null` because "observing a deployed
+   * system is not a privilege Relay grants itself"; the `deployed` transition
+   * documents that "refusing to write down a real event is not a safety
+   * property"; and the founder-facing doc says the same. The `verifyLive` call
+   * has ALREADY happened by this point — the gate never prevented the
+   * observation, only the record of it.
+   */
+  const liveTransition = advanceShipStage({
+    to: 'live_verified',
+    currentStage: stage,
+    permissions: deployGate.target.permissions,
+    environment,
+  });
+  if (!liveTransition.ok) {
+    return { stage, evidence, commitSha, verdict, stoppedBy: liveTransition.problem.message };
   }
+  const liveGate = { target: deployGate.target };
   stage = 'live_verified';
   evidence.push({
     stage: 'live_verified',

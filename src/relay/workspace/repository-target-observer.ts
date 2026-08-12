@@ -628,8 +628,28 @@ export function checkoutMatchesIdentity(input: {
    * them.
    */
   const url = read.value.trim().replace(/\/\/[^/@]*@/, '//');
-  // `https://host/owner/name(.git)` or `git@host:owner/name(.git)`.
-  const match = /^(?:https:\/\/|git@)([^/:]+)[/:]([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
+  /**
+   * THE FOUR SPELLINGS OF ONE REPOSITORY, all accepted:
+   *
+   *   https://host/owner/name(.git)
+   *   ssh://[user@]host[:port]/owner/name(.git)
+   *   git@host:owner/name(.git)          (scp-like)
+   *   git://host/owner/name(.git)
+   *
+   * The first version handled only https and the scp-like form, while the
+   * commit message and REPOSITORY_TARGETS.md both promised "the https,
+   * no-suffix and ssh spellings are all accepted rather than teaching people to
+   * edit the check". An `ssh://` origin — an ordinary thing to have — hit an
+   * unexplained "not a shape Relay can compare", which is exactly the
+   * edit-the-check behaviour the promise was meant to avoid. A refusal in the
+   * safe direction is still a refusal a founder has to work around.
+   *
+   * A port is stripped: `ssh://git@github.com:22/o/r` is the same repository as
+   * `ssh://git@github.com/o/r`.
+   */
+  const match =
+    /^(?:https?:\/\/|ssh:\/\/|git:\/\/)(?:[^@/]*@)?([^/:]+)(?::\d+)?\/([^/]+)\/(.+?)(?:\.git)?$/.exec(url)
+    ?? /^git@([^/:]+):([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
   if (match === null) {
     return fail(relayError('validation-failed', 'The checkout\'s "origin" remote is not a shape Relay can compare.'));
   }
