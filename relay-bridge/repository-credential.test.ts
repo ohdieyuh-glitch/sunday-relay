@@ -1,12 +1,15 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import {
   buildEphemeralGitAuth,
   envVarCredentialProvider,
+  githubAppConfigFromEnv,
+  resolveRepositoryCredential,
   sanitizeRemoteUrl,
 } from './repository-credential';
-import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
+import type { MissionRepositoryTarget, RepositoryPermission } from '../src/relay/mission/repository-target';
 
 /**
  * THE CREDENTIAL SEAM, ATTACKED.
@@ -105,7 +108,73 @@ describe('sanitizeRemoteUrl strips userinfo before a URL is logged or persisted'
     expect(sanitizeRemoteUrl('https://github.com/o/r.git')).toContain('github.com/o/r');
   });
   it('strips userinfo embedded mid-string (a git error line), not only at the start', () => {
-    const msg = `Command failed: git clone ${credUrl('github.com/o/r.git')} dest`;
+    const msg = ['Command failed: git clone https://', 'x-access-token:', TOKEN, '@', 'github.com/o/r.git dest'].join('');
     expect(sanitizeRemoteUrl(msg)).not.toContain(TOKEN);
+  });
+});
+
+const APP_PEM = generateKeyPairSync('rsa', { modulusLength: 2048 })
+  .privateKey.export({ type: 'pkcs1', format: 'pem' }).toString();
+
+function targetForCredential(over: {
+  envVarName?: string | null; installationId?: string | null;
+  name?: string; permissions?: RepositoryPermission[];
+}): MissionRepositoryTarget {
+  return {
+    identity: { name: over.name ?? 'relay-ship-proof' },
+    permissions: over.permissions ?? ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr', 'merge_pr'],
+    credential: { envVarName: over.envVarName ?? null, installationId: over.installationId ?? null },
+  } as unknown as MissionRepositoryTarget;
+}
+
+describe('resolveRepositoryCredential — env var OR a minted GitHub App token', () => {
+  it('resolves the env-var credential when the target names one', async () => {
+    const r = await resolveRepositoryCredential({
+      target: targetForCredential({ envVarName: 'GITHUB_TOKEN' }),
+      env: { GITHUB_TOKEN: TOKEN } as NodeJS.ProcessEnv,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) { expect(r.value?.source).toBe('env_var'); expect(r.value?.token).toBe(TOKEN); }
+  });
+
+  it('mints a GitHub App installation token scoped to the repo + least permissions', async () => {
+    const cap: { body?: { repositories: string[]; permissions: Record<string, string> } } = {};
+    const fetchImpl = (async (_url: string, init?: { body?: string }) => {
+      cap.body = init?.body ? JSON.parse(init.body) : undefined;
+      return { ok: true, status: 201, json: async () => ({
+        token: 'ghs_minted_by_resolver', expires_at: '2026-08-12T20:00:00Z',
+        permissions: { contents: 'write', pull_requests: 'write' }, repository_selection: 'selected',
+      }), text: async () => '' };
+    }) as never;
+    const r = await resolveRepositoryCredential({
+      target: targetForCredential({ installationId: '556677', name: 'relay-ship-proof', permissions: ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr', 'merge_pr'] }),
+      env: { RELAY_GITHUB_APP_ID: '42', RELAY_GITHUB_APP_PRIVATE_KEY: APP_PEM } as NodeJS.ProcessEnv,
+      fetchImpl, nowSeconds: 1_760_000_000,
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value?.source).toBe('github_app_installation');
+      expect(r.value?.token).toBe('ghs_minted_by_resolver');
+      expect(r.value?.installationId).toBe('556677');    // provenance, never a token
+      expect(r.value?.envVarName).toBeNull();
+    }
+    // Scoped DOWN to the one repo and the least permissions.
+    expect(cap.body?.repositories).toEqual(['relay-ship-proof']);
+    expect(cap.body?.permissions).toEqual({ contents: 'write', pull_requests: 'write' });
+  });
+
+  it('fails closed when the target authorizes an App installation but the bridge has no App configured', async () => {
+    const r = await resolveRepositoryCredential({
+      target: targetForCredential({ installationId: '556677' }),
+      env: {} as NodeJS.ProcessEnv,   // no RELAY_GITHUB_APP_*
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.message).toContain('no GitHub App configured');
+  });
+
+  it('githubAppConfigFromEnv unescapes \\n newlines and returns null when unset', () => {
+    expect(githubAppConfigFromEnv({} as NodeJS.ProcessEnv)).toBeNull();
+    const cfg = githubAppConfigFromEnv({ RELAY_GITHUB_APP_ID: '9', RELAY_GITHUB_APP_PRIVATE_KEY: 'a\\nb' } as NodeJS.ProcessEnv);
+    expect(cfg?.privateKeyPem).toBe('a\nb');
   });
 });

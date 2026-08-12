@@ -133,6 +133,10 @@ export function createRepositoryRegistration(input: {
       typeof draft?.credential?.envVarName === 'string' && draft.credential.envVarName.trim() !== ''
         ? draft.credential.envVarName.trim()
         : null,
+    installationId:
+      typeof draft?.credential?.installationId === 'string' && draft.credential.installationId.trim() !== ''
+        ? draft.credential.installationId.trim()
+        : null,
     handedToAgent: false,
     permittedUses: Object.freeze(grantedPermissions.filter((p) => requiresCredential(p))),
   });
@@ -140,13 +144,14 @@ export function createRepositoryRegistration(input: {
   // A grant that needs a credential with no credential configured is refused
   // AT REGISTRATION as well as at authorization. Both, deliberately: catching
   // it here means the founder learns immediately, and catching it there means a
-  // credential removed later cannot leave a live grant behind it.
-  if (credential.permittedUses.length > 0 && credential.envVarName === null) {
+  // credential removed later cannot leave a live grant behind it. EITHER source
+  // satisfies it — an env var (founder PAT) OR a GitHub App installation.
+  if (credential.permittedUses.length > 0 && credential.envVarName === null && credential.installationId === null) {
     problems.push({
       refusal: 'credential_missing',
       message:
         `Grants ${credential.permittedUses.join(', ')} reach a remote and need a server-side credential, ` +
-        'but no environment variable name is configured.',
+        'but neither an environment variable name nor a GitHub App installation is configured.',
     });
   }
 

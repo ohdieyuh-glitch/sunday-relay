@@ -9,7 +9,7 @@ import {
   revalidateRepositoryTarget,
 } from '../src/relay/mission/repository-target';
 import { checkoutMatchesIdentity, commitObservedWork } from '../src/relay/workspace/repository-target-observer';
-import { envVarCredentialProvider, buildEphemeralGitAuth } from './repository-credential';
+import { resolveRepositoryCredential, buildEphemeralGitAuth } from './repository-credential';
 import { pushAuthorizedBranch } from './repository-remote-transport';
 import type {
   DeploymentProvider,
@@ -369,7 +369,16 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
      * already enforced by `refusePushTarget` above; this is the mechanics.
      */
     const doPush = pushBranch ?? pushAuthorizedBranch;
-    const gitAuth = buildEphemeralGitAuth(envVarCredentialProvider(request.env ?? {}).resolve(target));
+    // Resolve the credential FRESH — an env-var PAT or a short-lived GitHub App
+    // installation token minted now, scoped to this repo and the push's least
+    // permissions. A resolution failure (e.g. the App is not configured) skips
+    // the remote leg truthfully rather than pushing unauthenticated.
+    const credResult = await resolveRepositoryCredential({ target, env: request.env ?? {} });
+    if (!credResult.ok) {
+      remoteSkipped = credResult.error.message;
+      return null;
+    }
+    const gitAuth = buildEphemeralGitAuth(credResult.value);
     let transfer: ReturnType<typeof pushAuthorizedBranch>;
     try {
       transfer = doPush({

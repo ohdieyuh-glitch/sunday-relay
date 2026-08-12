@@ -91,7 +91,7 @@ function target(root: string, over: Partial<RepositoryRegistrationDraft> = {}): 
 }
 
 describe('the controlled fixture still satisfies the seam, unchanged', () => {
-  it('provides the same four facts it always did', () => {
+  it('provides the same four facts it always did', async () => {
     const source = fixtureSource();
     try {
       expect(source.sourceRepositoryPath).toContain('relay-claude-fixture-');
@@ -107,7 +107,7 @@ describe('the controlled fixture still satisfies the seam, unchanged', () => {
 });
 
 describe('a registered repository satisfies the same seam', () => {
-  it('reads the baseline from the BASE BRANCH, not from HEAD', () => {
+  it('reads the baseline from the BASE BRANCH, not from HEAD', async () => {
     /**
      * `MissionRepositoryTarget.baselineSha` is null by construction — the pure
      * domain cannot read a repository. HEAD is whatever the founder last checked
@@ -115,7 +115,7 @@ describe('a registered repository satisfies the same seam', () => {
      * accident.
      */
     const root = realRepository();
-    const result = repositoryTargetSource(target(root), ['src/app.ts']);
+    const result = await repositoryTargetSource(target(root), ['src/app.ts']);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.source.baselineRevision).toMatch(/^[0-9a-f]{40}$/);
@@ -125,9 +125,9 @@ describe('a registered repository satisfies the same seam', () => {
     expect(() => result.source.dispose()).not.toThrow();
   });
 
-  it('carries the target\'s resolved protected set into the policy the workspace already runs', () => {
+  it('carries the target\'s resolved protected set into the policy the workspace already runs', async () => {
     const root = realRepository();
-    const result = repositoryTargetSource(target(root), ['src/app.ts']);
+    const result = await repositoryTargetSource(target(root), ['src/app.ts']);
     if (!result.ok) throw new Error(result.reason);
     // `.git` and `.github` arrive without the workspace policy knowing where the
     // list came from.
@@ -135,32 +135,32 @@ describe('a registered repository satisfies the same seam', () => {
     expect(result.source.protectedPaths.forbidden).toContain('.github');
   });
 
-  it('REFUSES a Mission that names no files it intends to write', () => {
+  it('REFUSES a Mission that names no files it intends to write', async () => {
     // An agent turned loose on a whole write scope has no claim to check
     // against, which is the mechanism the file-claim policy is built on.
     const root = realRepository();
-    const result = repositoryTargetSource(target(root), []);
+    const result = await repositoryTargetSource(target(root), []);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toContain('must name the files it intends to write');
   });
 
-  it('REFUSES a declared path outside the write scope, before a worktree exists', () => {
+  it('REFUSES a declared path outside the write scope, before a worktree exists', async () => {
     const root = realRepository();
-    const result = repositoryTargetSource(target(root), ['src/app.ts', 'infra/main.tf']);
+    const result = await repositoryTargetSource(target(root), ['src/app.ts', 'infra/main.tf']);
     expect(result.ok).toBe(false);
     // Discovering this from the diff would mean the money is already spent.
     if (!result.ok) expect(result.reason).toContain('infra/main.tf');
   });
 
-  it('REFUSES a declared path that is protected, even inside the scope', () => {
+  it('REFUSES a declared path that is protected, even inside the scope', async () => {
     const root = realRepository();
     const wide = target(root, { scope: { read: ['**'], write: ['**'] } });
-    const result = repositoryTargetSource(wide, ['.github/workflows/ci.yml']);
+    const result = await repositoryTargetSource(wide, ['.github/workflows/ci.yml']);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toContain('protected');
   });
 
-  it('ACCEPTS a remote target and runs the cheap config checks BEFORE any clone', () => {
+  it('ACCEPTS a remote target and runs the cheap config checks BEFORE any clone', async () => {
     /**
      * `remote_clone` is no longer refused by design — Relay now clones it over
      * authenticated HTTPS (see repository-remote-transport.test.ts for the clone
@@ -194,7 +194,7 @@ describe('a registered repository satisfies the same seam', () => {
     });
     if (!resolved.ok) throw new Error(resolved.error.message);
     // No intended write paths — refused for the narrowing reason, before a clone.
-    const result = repositoryTargetSource(resolved.target, [], {} as NodeJS.ProcessEnv);
+    const result = await repositoryTargetSource(resolved.target, [], {} as NodeJS.ProcessEnv);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toContain('name the files it intends to write');
@@ -202,34 +202,34 @@ describe('a registered repository satisfies the same seam', () => {
     }
   });
 
-  it('REFUSES a Mission that does not hold write_worktree', () => {
+  it('REFUSES a Mission that does not hold write_worktree', async () => {
     const root = realRepository();
     const readOnly = {
       ...target(root),
       permissions: ['read'] as readonly RepositoryPermission[],
     } as MissionRepositoryTarget;
-    const result = repositoryTargetSource(readOnly, ['src/app.ts']);
+    const result = await repositoryTargetSource(readOnly, ['src/app.ts']);
     expect(result.ok).toBe(false);
     // The coding leg exists to produce a diff. A Mission that may not write
     // should never have an agent started for it at all.
     if (!result.ok) expect(result.reason).toContain('write_worktree');
   });
 
-  it('REFUSES a path that is not a git repository', () => {
+  it('REFUSES a path that is not a git repository', async () => {
     const empty = mkdtempSync(join(tmpdir(), 'relay-not-git-'));
     temporaries.push(empty);
     const notGit = { ...target(realRepository()) } as MissionRepositoryTarget;
-    const result = repositoryTargetSource(
+    const result = await repositoryTargetSource(
       { ...notGit, location: { kind: 'local_path', path: empty } } as MissionRepositoryTarget,
       ['src/app.ts'],
     );
     expect(result.ok).toBe(false);
   });
 
-  it('REFUSES a base branch that does not exist, naming it', () => {
+  it('REFUSES a base branch that does not exist, naming it', async () => {
     const root = realRepository();
     const wrongBase = { ...target(root), baseBranch: 'no-such-branch' } as MissionRepositoryTarget;
-    const result = repositoryTargetSource(wrongBase, ['src/app.ts']);
+    const result = await repositoryTargetSource(wrongBase, ['src/app.ts']);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toContain('no-such-branch');
   });
@@ -278,14 +278,14 @@ describe('a GitHub repository cloned on this machine', () => {
     return resolved.target;
   }
 
-  it('is ACCEPTED when the checkout\'s origin is that repository', () => {
+  it('is ACCEPTED when the checkout\'s origin is that repository', async () => {
     const root = realRepository();
-    const result = repositoryTargetSource(githubTarget(root, 'https://github.com/o/r.git'), ['src/app.ts']);
+    const result = await repositoryTargetSource(githubTarget(root, 'https://github.com/o/r.git'), ['src/app.ts']);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.source.disposable).toBe(false);
   });
 
-  it('accepts every ordinary spelling of the same repository', () => {
+  it('accepts every ordinary spelling of the same repository', async () => {
     /**
      * One repository, six ways to write it. A review found that `ssh://` — an
      * ordinary origin to have — was refused as "not a shape Relay can compare"
@@ -301,18 +301,18 @@ describe('a GitHub repository cloned on this machine', () => {
       'ssh://git@github.com:22/o/r.git',
       'git://github.com/o/r.git',
     ]) {
-      const result = repositoryTargetSource(githubTarget(realRepository(), origin), ['src/app.ts']);
+      const result = await repositoryTargetSource(githubTarget(realRepository(), origin), ['src/app.ts']);
       expect(result.ok, origin).toBe(true);
     }
   });
 
-  it('REFUSES a checkout of a DIFFERENT repository, naming both', () => {
+  it('REFUSES a checkout of a DIFFERENT repository, naming both', async () => {
     /**
      * The failure the old blanket rule was really aimed at: identity says
      * production, path says scratch. Relay would commit scratch work and push
      * it to production.
      */
-    const result = repositoryTargetSource(
+    const result = await repositoryTargetSource(
       githubTarget(realRepository(), 'https://github.com/someone-else/other.git'),
       ['src/app.ts'],
     );
@@ -323,8 +323,8 @@ describe('a GitHub repository cloned on this machine', () => {
     }
   });
 
-  it('REFUSES a checkout with no origin at all', () => {
-    const result = repositoryTargetSource(githubTarget(realRepository(), null), ['src/app.ts']);
+  it('REFUSES a checkout with no origin at all', async () => {
+    const result = await repositoryTargetSource(githubTarget(realRepository(), null), ['src/app.ts']);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toContain('no "origin" remote');
   });
@@ -342,7 +342,7 @@ describe('a GitHub repository cloned on this machine', () => {
  * them.
  */
 describe('a credential embedded in origin is never echoed', () => {
-  it('strips userinfo from the refusal message', () => {
+  it('strips userinfo from the refusal message', async () => {
     const root = realRepository();
     execFileSync('git', [
       'remote', 'add', 'origin',
@@ -374,7 +374,7 @@ describe('a credential embedded in origin is never echoed', () => {
       now: NOW,
     });
     if (!resolved.ok) throw new Error(resolved.error.message);
-    const result = repositoryTargetSource(resolved.target, ['src/app.ts']);
+    const result = await repositoryTargetSource(resolved.target, ['src/app.ts']);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       // The mismatch is still reported — the message stays useful.
