@@ -1,9 +1,16 @@
 /* ==========================================================================
    Sunday Relay — scoped styles (.relay-* only).
-   Consumes Sunday's obsidian tokens from src/styles/global.css read-only:
+
+   Consumes Relay's own token sheet, `src/relay/relay-tokens.css`, read-only —
+   exactly these, and nothing else:
    --bg --surface --surface-solid --border --border-strong --text --text-dim
-   --text-faint --gold-400 --gold-glow --ok --danger --warn --radius-*
-   --font --font-brand --hairline --elev-1.
+   --text-faint --gold-100 --gold-400 --gold-600 --gold-glow --ok --danger
+   --warn --radius-md --radius-sm --font --font-brand --hairline --elev-1
+   --elev-2 --sheen.
+
+   (The old header said these tokens came from `src/styles/global.css`, an
+   Alcatraz path. Relay separated repositories and now owns
+   `relay-tokens.css`; that sentence had outlived the file it named.)
    ========================================================================== */
 
 .relay-app {
@@ -13,6 +20,10 @@
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
+  /* Thin, themed scrollbars for every scroller in this surface. `--text-faint`
+     measures 4.88:1 against `--bg`; a scrollbar needs 3:1. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-faint) transparent;
 }
 
 /* ----- header ----- */
@@ -262,7 +273,7 @@
 /* ----- cards ----- */
 
 .relay-card {
-  background: var(--surface);
+  background: var(--sheen), var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 18px;
@@ -329,6 +340,18 @@
 
 .relay-btn:hover:not(:disabled) {
   border-color: var(--gold-400);
+  background-color: color-mix(in srgb, var(--surface-solid) 93%, var(--text));
+}
+
+/* A press deepens the plate rather than moving it: no layout shift under a
+   finger, and the feedback survives reduced motion, which removes the
+   transition below. */
+.relay-btn:active:not(:disabled) {
+  background-color: color-mix(in srgb, var(--surface-solid) 80%, var(--bg));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .relay-btn { transition: none; }
 }
 
 .relay-btn.primary {
@@ -340,6 +363,10 @@
 
 .relay-btn.primary:hover:not(:disabled) {
   filter: brightness(1.08);
+}
+
+.relay-btn.primary:active:not(:disabled) {
+  filter: brightness(0.94);
 }
 
 .relay-btn.ghost {
@@ -621,12 +648,15 @@
 /* ----- ledger ----- */
 
 .relay-ledger {
-  background: var(--surface);
+  background: var(--sheen), var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 16px;
   position: sticky;
   top: 20px;
+  /* Sticky, so it travels over the cards beside it and needs to read as being
+     above them. Square-cornered and unclipped, so an outer shadow works here. */
+  box-shadow: var(--elev-2);
 }
 
 .relay-ledger h2 {
@@ -667,4 +697,6 @@
 .relay-ledger time {
   font-size: 10px;
   color: var(--text-faint);
+  /* A stacked column of timestamps: same-width figures keep it straight. */
+  font-variant-numeric: tabular-nums;
 }

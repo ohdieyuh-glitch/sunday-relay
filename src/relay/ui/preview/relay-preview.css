@@ -45,6 +45,7 @@ body {
   background: rgba(11, 13, 18, 0.95);
   border: 1px solid #1c2230;
   font-family: 'Fira Code', ui-monospace, monospace;
+  box-shadow: var(--elev-3);
 }
 .rpv-switcher--open { display: flex; }
 .rpv-appearance,
@@ -67,16 +68,17 @@ body {
   font-size: 10px;
   letter-spacing: 0.14em;
   background: rgba(11, 13, 18, 0.95);
-  color: #8b8578;
+  color: #a09a8c;
   border: 1px solid #1c2230;
   cursor: pointer;
 }
+.rpv-devchip { box-shadow: var(--elev-2); }
 .rpv-devchip span { margin-left: 6px; }
 .rpv-devchip:focus-visible { outline: 2px solid #d9a441; outline-offset: 2px; }
 .rpv-switcher-tag {
   font-size: 8px;
   letter-spacing: 0.16em;
-  color: #5d584e;
+  color: #837c6e;
 }
 .rpv-switcher button {
   font-family: inherit;
@@ -85,7 +87,7 @@ body {
   padding: 5px 8px;
   min-height: 28px;
   background: transparent;
-  color: #8b8578;
+  color: #a09a8c;
   border: 1px solid #1c2230;
   cursor: pointer;
 }
@@ -111,7 +113,8 @@ body {
   max-width: 100%;
   height: 80vh;
   border: 1px solid #1c2230;
-  box-shadow: 0 0 0 6px #0b0d12;
+  /* The bezel ring stays; the ambient shadow seats the device on the page. */
+  box-shadow: 0 0 0 6px #0b0d12, var(--elev-3);
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -134,9 +137,28 @@ body {
   font-size: 9px;
   background: transparent;
   border: 0;
-  color: #8b8578;
+  color: #a09a8c;
   cursor: pointer;
   text-decoration: underline;
+}
+
+/* The DEV panel, its handle and the notice float over whatever screen is being
+   previewed, so they are the clearest case for glass in this shell: with the
+   blur they can be less opaque and still read, which means less of the surface
+   under review is hidden by the tool reviewing it.
+   MUST STAY BELOW every flat rule that sets these backgrounds. `@supports` adds
+   NO specificity — it is a container, not a compound selector — so this block
+   and `.rpv-devchip { background: ... }` are both (0,1,0) and the later one
+   wins. Placed above, it lost to `.rpv-devchip` and `.rpv-notice`, which kept
+   the `backdrop-filter` and their 0.95 fill: a blur compositing layer behind an
+   almost-opaque background, paying for glass and rendering none. */
+@supports (backdrop-filter: blur(1px)) {
+  .rpv-switcher,
+  .rpv-devchip,
+  .rpv-notice {
+    background: rgba(11, 13, 18, 0.78);
+    backdrop-filter: blur(var(--glass-blur, 18px)) saturate(var(--glass-saturate, 1.3));
+  }
 }
 
 .rpv-settings {
@@ -159,7 +181,7 @@ body {
 }
 .rpv-settings-copy {
   max-width: 68ch;
-  color: #8b8578;
+  color: #a09a8c;
   font-size: 13px;
 }
 .rpv-settings-copy code { color: #d9a441; }
@@ -173,7 +195,7 @@ body {
   margin: 16px 0;
 }
 .rpv-settings-empty {
-  color: #5d584e;
+  color: #837c6e;
   font-size: 12px;
   border: 1px dashed #1c2230;
   padding: 18px;
@@ -221,7 +243,7 @@ body {
   font-family: 'Fira Code', ui-monospace, monospace;
 }
 .rpv-notfound-title { font-size: 18px; font-weight: 700; letter-spacing: 0.02em; margin: 0; }
-.rpv-notfound-detail { font-size: 13px; color: #8b8578; margin: 0; max-width: 46ch; }
+.rpv-notfound-detail { font-size: 13px; color: #a09a8c; margin: 0; max-width: 46ch; }
 .rpv-notfound-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; }
 .rpv-notfound-btn {
   font-family: inherit;
@@ -235,5 +257,17 @@ body {
   cursor: pointer;
 }
 .rpv-notfound-btn--primary { background: #d9a441; color: #07080b; border-color: #d9a441; font-weight: 700; }
+.rpv-notfound-btn {
+  transition:
+    color var(--dur-fast, 120ms) var(--ease-emphasis, ease),
+    border-color var(--dur-fast, 120ms) var(--ease-emphasis, ease);
+}
+.rpv-notfound-btn:hover { border-color: #d9a441; }
 .rpv-notfound-btn:focus-visible { outline: 2px solid #d9a441; outline-offset: 2px; }
+
+/* The dev shell owns these classes alone, so they are named rather than
+   blanketed — a `*` rule here would reach into the previewed screen. */
+@media (prefers-reduced-motion: reduce) {
+  .rpv-notfound-btn { transition: none; }
+}
 [data-relay-colorway='manual'] .rpv-notfound { background: #070705; }

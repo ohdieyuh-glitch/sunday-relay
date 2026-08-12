@@ -19,6 +19,28 @@
   overflow: hidden;
 }
 
+/* ONE LENS VIGNETTE, shared by every scene.
+ * A backdrop drawn edge to edge in flat gradients has no falloff, so the frame
+ * corners are as bright as the subject and the eye has nothing to settle on.
+ * This darkens the corners only — it is the cheapest depth cue there is and it
+ * changes no scene, no layout and no element of either backdrop's structure.
+ *
+ * It is on the BACKDROP element, which lives in `.rst-layer--backdrop` at
+ * z-index 0. Actors are at z-index 3, so no vignette can ever darken the Relay
+ * Dog. Static, decorative, and inside the one layer that clips. */
+.rsb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    124% 96% at 50% 34%,
+    transparent 38%,
+    rgba(0, 0, 0, 0.16) 72%,
+    rgba(0, 0, 0, 0.42) 100%
+  );
+}
+
 /* ===================================================================== *
  * JUNGLE
  * ===================================================================== */
@@ -218,6 +240,12 @@
   border-radius: var(--radius-md, 4px);
   margin: 0;
   padding: 12px 14px 14px;
+  /* `--surface-solid`, the token every other Relay panel uses. This rule was
+     the ONE consumer of `--surface` — a translucent, obsidian-tuned value — and
+     the fallback was `transparent`, so if the token were ever renamed the panel
+     would render as a sheen over nothing rather than fail visibly. */
+  background: var(--sheen), var(--surface-solid);
+  box-shadow: var(--elev-1);
 }
 
 .rsbp-legend {
@@ -230,7 +258,7 @@
 .rsbp-note,
 .rsbp-description,
 .rsbp-motion {
-  color: var(--text-dim, #8b8578);
+  color: var(--text-dim, #a09a8c);
   font-size: 0.8rem;
   margin: 2px 0 0;
 }

@@ -12,10 +12,21 @@
    the Alcatraz application stylesheet, and nothing here describes Alcatraz
    product behaviour.
 
-   Exactly the 21 tokens that Relay's own stylesheets consume are defined
-   here (plus `--edge-light`, which `--elev-1` composes). Relay's scoped
-   styles define everything else themselves — see `relay.css` and
-   `src/relay/ui/**`.
+   This is Relay's SHARED foundation. Each surface still owns its own palette
+   (`--reh-*`, `--rpw-*`, `--rps-*`, `--rmc-*`) — that is the established shape
+   and it is what lets a colorway re-scope one surface at a time. What lives
+   here is what must NOT differ between surfaces: the brand channel, the
+   geometry, the type stack, and the material and motion groups below.
+
+   Two rules hold that, both in `premium-polish.test.tsx`: every token declared
+   here is consumed by a Relay stylesheet (so this file cannot accumulate a
+   dead vocabulary beside the live one), and no surface sheet may redeclare a
+   material or motion token (so two sheets cannot disagree about `--elev-2`).
+
+   Three groups: the palette and geometry Relay has always carried; the
+   MATERIAL group (edge light, elevation, sheen, glass) that gives a flat
+   panel a surface; and the MOTION group (durations, easing) so a hover on
+   the entry home and a hover in the workspace take the same time.
    ========================================================================== */
 
 :root {
@@ -32,10 +43,15 @@
   --border: rgba(173, 155, 235, 0.15);
   --border-strong: rgba(173, 155, 235, 0.34);
 
-  /* ---- text ---- */
+  /* ---- text ----
+     The tertiary tier is `#847d68`, not the `#7a7360` it was: the old value
+     measures 3.93:1 against `--surface-solid`, and it carries real 9-11px
+     metadata, which WCAG AA scores as normal text at 4.5:1. The hue is
+     unchanged — only the value is lifted, to 4.52:1. Measured in
+     `premium-polish.test.tsx`. */
   --text: #f4efe3;
   --text-dim: #b3ab97;
-  --text-faint: #7a7360;
+  --text-faint: #847d68;
 
   /* ---- status ---- */
   --ok: #79c48e;
@@ -57,7 +73,102 @@
   /* ---- structure + depth ---- */
   --hairline: rgba(255, 255, 255, 0.07);
   --edge-light: rgba(255, 255, 255, 0.06);
+  --edge-light-strong: rgba(255, 255, 255, 0.11);
+
+  /* MATERIAL. Three elevations built the same way: an inset top edge where the
+     light lands, a tight contact shadow that seats the panel on the page, and a
+     wide ambient shadow that gives it air. One extra layer per step, so a
+     drawer at `--elev-3` cannot be mistaken for a card at `--elev-1`.
+
+     A CHAMFERED PANEL CANNOT USE THESE FOR ITS OUTER SHADOW. `clip-path` clips
+     the element's painted output, and an outer box-shadow is part of that
+     output — so `.rpw-console` and `.reh-starter` take their depth from
+     `--sheen` and their border instead. That is a property of clip-path, not a
+     preference. */
   --elev-1: 0 1px 0 var(--edge-light) inset, 0 8px 24px rgba(0, 0, 0, 0.34);
+  --elev-2:
+    0 1px 0 var(--edge-light) inset,
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    0 14px 34px rgba(0, 0, 0, 0.38);
+  --elev-3:
+    0 1px 0 var(--edge-light-strong) inset,
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 28px 68px rgba(0, 0, 0, 0.55);
+
+  /* The light on a surface, as a background LAYER rather than a shadow, so it
+     survives inside a clip-path. Stacked above the panel colour in the same
+     `background` shorthand — never as a separate later rule, which a colorway
+     override using the shorthand would silently reset to `none`. */
+  /* THE PEAK ALPHA IS 0.020, AND IT WAS 0.038.
+     The sheen sits ON TOP of the very panel tokens the contrast ladder is
+     measured against, so it lightens the ground under the top third of every
+     sheened panel — and the tightest text pairs landed at 4.04–4.45, under AA,
+     while the record claimed every tier cleared 4.5. An independent review
+     found it by compositing the gradient over the panel and re-deriving the
+     ratios; the arithmetic in the table was right and the GROUND was wrong.
+     LOWERING THE ALPHA WAS NOT THE FIX, AND THIS COMMENT SAID IT WAS.
+     A second review re-derived the composite and found 0.020 still leaves the
+     three tightest pairs at 4.27-4.38. The alpha that would clear them is
+     ~0.0024 — not a sheen. The flat tertiary ratios are 4.52-4.56, clearing AA
+     by 0.02-0.06, so ANY white overlay breaks them: no alpha exists that is
+     both visible and safe on those grounds.
+
+     So the sheen is simply NOT PAINTED on grounds that carry tertiary text —
+     `--reh-panel-2`, `--rpw-panel-2` and `--surface-solid`. 0.020 is kept
+     because it is right for the grounds that do have headroom, not because it
+     rescues the ones that do not.
+
+     This comment asserted a measurement three times in three places (here, the
+     test, and the doc) that was wrong by about eightfold. The guard now
+     COMPUTES the composite instead of pinning this number. */
+  --sheen: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(255, 255, 255, 0.008) 32%,
+    rgba(255, 255, 255, 0) 68%
+  );
+
+  /* GLASS. Only for a surface that has something behind it worth blurring —
+     a scrim over the page, or a translucent panel over the technical grid.
+     Every use is inside `@supports (backdrop-filter: blur(1px))`, so a browser
+     without it keeps the flat surface it has today rather than a transparent
+     one. */
+  --glass-blur: 18px;
+  --glass-blur-strong: 30px;
+  --glass-saturate: 1.3;
+
+  /* ---- motion ----
+     One easing and two durations for the whole product. `--dur-fast` is the
+     hover/press band — colour, border, background. `--dur-base` is the longer
+     band, for a change of DEPTH: a shadow that arrives as fast as a border
+     colour reads as a flicker rather than as a plate lifting. Reduced motion
+     removes every transition that uses either. */
+  --ease-emphasis: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+
+  /* ---- HD / retina hairlines ----
+     The width of ONE technical grid line. A 1px gradient stop is TWO device
+     pixels at 2dppx, so the grid coarsens on exactly the displays that should
+     render it finest.
+
+     THIS IS A TOKEN RATHER THAN A MEDIA QUERY PER RULE, and the reason is
+     specificity. `@media` adds NONE — it is a conditional group rule, the same
+     as `@supports` — so a retina block written as `.reh-grid-bg` (0,1,0) is
+     outranked by `[data-relay-colorway='midnight'] .reh-grid-bg` (0,2,0)
+     whatever the display. Two of Relay's colourways override the grid that
+     way, so per-rule retina passes silently did nothing on them, and Project
+     Settings had no retina pass at all. Resolving a token on `:root` sidesteps
+     the contest completely: every grid rule inherits it, colourway overrides
+     included, and a new colourway gets it for free. */
+  --grid-stop: 1px;
+}
+
+/* Set ONCE, for every surface and every colourway. */
+@media (min-resolution: 2dppx) {
+  :root {
+    --grid-stop: 0.5px;
+  }
 }
 
 /* ==========================================================================
