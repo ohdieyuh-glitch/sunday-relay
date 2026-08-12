@@ -176,6 +176,7 @@ function goodCodingOutcome(
     claim: { summary: 'Implemented the normalizer.', filesChanged: ['src/normalize.js'], checksRun: ['Reported completing the task'] },
     attestation: codingAttestation(missionRevision),
     deliveredHandoffDigest: handoffDigest,
+    retainedWorktreePath: null,
     evidence: {
       baseRevision: 'rev1',
       allowedFiles: ['src/normalize.js'],
@@ -800,6 +801,7 @@ describe('14-20. only a genuine, current, approving review can complete the miss
     handoffDeliveredAutomatically: true,
     persistedHandoffDigest: 'h1',
     deliveredHandoffDigest: 'h1',
+    retainedWorktreePath: null,
     scopePreserved: true,
     deterministicTestsPassed: true,
     protectedPathsUntouched: true,

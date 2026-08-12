@@ -144,6 +144,14 @@ export interface CodingOutcome {
   /** Digest of the handoff package actually compiled for this invocation —
       proof that the persisted handoff is the delivered handoff. */
   deliveredHandoffDigest: string | null;
+  /**
+   * THE RETAINED WORKTREE, present ONLY for a real repository target that
+   * verified. A fixture mission, and any run that stopped or failed
+   * verification, leaves this null and its worktree is removed on the spot. A
+   * retained worktree holds the verified diff the ship commits, and it is a
+   * resource the ship (or teardown) must dispose. See SHIP_WIRING_STATE.md.
+   */
+  retainedWorktreePath: string | null;
 }
 
 /** Cancellation handle exposed to the mission so a browser Stop can abort a
@@ -404,6 +412,7 @@ export async function runCodingMission(input: {
     attestation: null,
     evidence: null,
     deliveredHandoffDigest: null,
+    retainedWorktreePath: null,
   };
 
   /**
@@ -468,7 +477,12 @@ export async function runCodingMission(input: {
       runId,
       taskId,
       sourceRepositoryPath: source.sourceRepositoryPath,
-      cleanupPolicy: 'remove_on_success',
+      /**
+       * A REAL TARGET'S WORKTREE IS RETAINED so it can be shipped; a fixture's
+       * is removed on success. `manual_cleanup` survives a successful run, and
+       * the ship (or teardown) removes it.
+       */
+      cleanupPolicy: input.repositoryTarget === undefined ? 'remove_on_success' : 'manual_cleanup',
     });
     if (!prepared.ok) return stop(`Workspace preparation failed: ${prepared.error.message}`);
     const ws = prepared.value.value.workspace;
@@ -973,7 +987,17 @@ export async function runCodingMission(input: {
 
     // Void the audit id so ids stay monotonic in parity with the CLI proof.
     void (ids.next('aud') as AuditId);
-    workspace.cleanupWorkspace(ws.workspaceId, { authorizeRemoval: true });
+    /**
+     * RETAIN THE WORKTREE OF A VERIFIED REAL-TARGET MISSION. It holds the diff
+     * the ship commits; removing it here would leave `shipVerifiedMission`
+     * committing a deleted directory. Only a run that passed verification is
+     * retained — a failed one is removed, so nothing leaks on failure.
+     */
+    if (input.repositoryTarget !== undefined && outcome.verificationPassed) {
+      outcome.retainedWorktreePath = ws.workspacePath;
+    } else {
+      workspace.cleanupWorkspace(ws.workspaceId, { authorizeRemoval: true });
+    }
     return outcome;
   } finally {
     cleanup();
