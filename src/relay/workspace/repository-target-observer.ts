@@ -634,9 +634,27 @@ export function checkoutMatchesIdentity(input: {
     return fail(relayError('validation-failed', 'The checkout\'s "origin" remote is not a shape Relay can compare.'));
   }
   const [, host, owner, name] = match;
-  const same = (a: string | null, b: string | null): boolean =>
-    (a ?? '').toLowerCase() === (b ?? '').toLowerCase();
-  if (!same(host, input.host) || !same(owner, input.owner) || !same(name, input.name)) {
+  /**
+   * HOST IS CASE-INSENSITIVE; OWNER AND NAME ARE NOT.
+   *
+   * `repository-identity.ts` states the rule for these two fields and gives the
+   * reason: "Owner and repository name are NOT lowercased … Lowercasing them
+   * here would merge two genuinely different targets on a case-sensitive host,
+   * WHICH IS A WRONG ANSWER IN THE DIRECTION OF MORE ACCESS."
+   *
+   * This function lowercased all three, so `github.com/O/R` was accepted for a
+   * registration of `github.com/o/r`. Harmless on github.com, which is
+   * case-insensitive — and the day `gitlab` or `bitbucket` become drivable
+   * (both are already registerable) the checkout comparison would err toward
+   * MORE access while `repositoryKey` treats the two as different targets with
+   * different grants. An identity check that disagrees with the identity module
+   * about what counts as the same repository is worse than no check.
+   *
+   * Hostnames are case-insensitive by DNS, so that one stays folded.
+   */
+  const sameHost = (host ?? '').toLowerCase() === (input.host ?? '').toLowerCase();
+  const sameSegment = (a: string | null, b: string | null): boolean => (a ?? '') === (b ?? '');
+  if (!sameHost || !sameSegment(owner, input.owner) || !sameSegment(name, input.name)) {
     return fail(relayError(
       'validation-failed',
       `This checkout's "origin" is ${host}/${owner}/${name}, and the registered repository is `
