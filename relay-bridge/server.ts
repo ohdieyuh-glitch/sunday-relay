@@ -57,6 +57,10 @@ import {
 } from './cron-scheduler';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
+  createOAuthStateStore, handleGithubAuthRoute, isGithubAuthRoute,
+} from './github-auth-routes';
+import { githubOAuthConfigFromEnv } from './github-oauth';
+import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute,
 } from './browser-session/routes';
 
@@ -220,6 +224,19 @@ export function createBridgeServer(
    * browser credential is ever written to the mounted volume.
    */
   const browserSessions = createBrowserSessionStore();
+  /**
+   * SIGN IN WITH GITHUB. The CSRF state store lives in memory beside the
+   * sessions — a restart forgets an in-flight sign-in, which is fail-closed. The
+   * GitHub App config, the registered callback URL, and the origin a minted
+   * session is bound to are read from the environment and the CORS policy; when
+   * ANY is absent the routes answer 503, so an unconfigured bridge says "no
+   * sign-in" rather than fabricating a session.
+   */
+  const oauthStateStore = createOAuthStateStore();
+  const githubOAuthConfig = githubOAuthConfigFromEnv(process.env);
+  const githubCallbackUrl = typeof process.env.RELAY_GITHUB_APP_CALLBACK_URL === 'string'
+    ? process.env.RELAY_GITHUB_APP_CALLBACK_URL.trim() : '';
+  const githubSessionOrigin = config.allowedOrigins.find((o) => o !== '*') ?? null;
   return createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
     const cors = corsHeaders(config, origin);
@@ -394,6 +411,32 @@ export function createBridgeServer(
           }, browserSessions);
           if (browserResult !== null) {
             send(res, browserResult.status, browserResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * SIGN IN WITH GITHUB — the one session-minting path that does NOT cost
+         * the operator token, because the user proves who they are to GitHub.
+         * `req.url` is passed WHOLE (query included): the callback reads `code`
+         * and `state` from it. A no-Origin top-level navigation from GitHub is
+         * admitted by `originAllowed`, so the callback reaches here.
+         */
+        if (isGithubAuthRoute(path.replace('/relay-api', ''))) {
+          const githubAuthResult = await handleGithubAuthRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            url: req.url ?? '/',
+          }, {
+            oauthConfig: githubOAuthConfig,
+            sessions: browserSessions,
+            stateStore: oauthStateStore,
+            redirectUri: githubCallbackUrl,
+            sessionOrigin: githubSessionOrigin,
+            now: Date.now(),
+          });
+          if (githubAuthResult !== null) {
+            send(res, githubAuthResult.status, githubAuthResult.body, cors);
             return;
           }
         }
