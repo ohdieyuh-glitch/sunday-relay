@@ -533,8 +533,21 @@ reads as unfinished.
    at the same time — 1, 5 and 8 verified still true, 4 and 7 updated in the
    same pass.
 
-   What is still missing is a CALLER: no bridge route or CLI action runs a dry
-   run, so the capability exists and nothing offers it.
+   **The caller now exists too.** `relay-bridge/ship-dry-run.ts` re-READS the
+   registration and renders the plan from the LIVE permission set, exactly as
+   `ship-runner.ts` does before every step. That is not ceremony: a plan is read
+   by a founder deciding whether to authorize the Mission, and one rendered from
+   the permissions captured at resolution can promise a pull request the Mission
+   had `create_pr` revoked for an hour ago. A dry run is the one place where
+   being wrong is cheap and therefore tempting — nothing is performed, so an
+   over-generous plan does no immediate damage. It does the damage later.
+
+   A deregistered repository gets a REFUSAL rather than an empty plan, because
+   an empty plan reads as "this Mission would do nothing" — a much less alarming
+   sentence than "this repository is no longer registered".
+
+   Still missing: a bridge ROUTE or CLI action. The capability and its caller
+   exist; no surface offers them to a human yet.
 7. **The Project Brain feed is BUILT but has no producer.**
    `repository-brain-feed.ts` projects repository work into the **existing**
    Brain — `rememberShortTerm` and `proposePromotion` in
