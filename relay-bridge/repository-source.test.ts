@@ -226,3 +226,86 @@ describe('a registered repository satisfies the same seam', () => {
     if (!result.ok) expect(result.reason).toContain('no-such-branch');
   });
 });
+
+/**
+ * A REMOTE-HOSTED REPOSITORY, CHECKED OUT LOCALLY.
+ *
+ * This registration used to be REFUSED — a `github` identity was forced to be
+ * `remote_clone`, and `remote_clone` is refused here because nothing clones. So
+ * the PUSH/PR/MERGE leg was wired and unreachable by any valid registration.
+ *
+ * The blanket refusal is replaced by an actual comparison: the checkout's own
+ * `origin` must name the registered repository. That is a check the old rule
+ * never made — it prevented a mismatched path by forbidding all local paths,
+ * which also forbade every correct one.
+ */
+describe('a GitHub repository cloned on this machine', () => {
+  function githubTarget(root: string, origin: string | null): MissionRepositoryTarget {
+    if (origin !== null) {
+      execFileSync('git', ['remote', 'add', 'origin', origin], { cwd: root, env: { PATH: process.env.PATH ?? '', HOME: root } });
+    }
+    const reg = createRepositoryRegistration({
+      draft: {
+        identity: { provider: 'github', host: 'github.com', owner: 'o', name: 'r', defaultBranch: 'main' },
+        location: { kind: 'local_path', path: root },
+        scope: { read: ['**'], write: ['src/**'] },
+        grants: LADDER.map((permission) => ({
+          permission, authorizedBy: 'founder', authorizedAt: NOW, expiresAt: null, note: null,
+        })),
+        ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+        registeredBy: 'founder',
+      },
+      now: NOW,
+    });
+    if (!reg.ok) throw new Error(reg.error.message);
+    const resolved = resolveRepositoryTarget({
+      registration: reg.value,
+      request: {
+        repositoryKey: reg.value.key, selectedBy: 'founder', selectedAt: NOW,
+        workingBranch: 'relay/mission-1', permissions: [...LADDER],
+      },
+      now: NOW,
+    });
+    if (!resolved.ok) throw new Error(resolved.error.message);
+    return resolved.target;
+  }
+
+  it('is ACCEPTED when the checkout\'s origin is that repository', () => {
+    const root = realRepository();
+    const result = repositoryTargetSource(githubTarget(root, 'https://github.com/o/r.git'), ['src/app.ts']);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.source.disposable).toBe(false);
+  });
+
+  it('accepts the ssh and no-suffix spellings of the same repository', () => {
+    // Three ways to write one repository. Refusing two would teach people to
+    // edit the check rather than fix the target.
+    for (const origin of ['git@github.com:o/r.git', 'https://github.com/o/r']) {
+      const result = repositoryTargetSource(githubTarget(realRepository(), origin), ['src/app.ts']);
+      expect(result.ok, origin).toBe(true);
+    }
+  });
+
+  it('REFUSES a checkout of a DIFFERENT repository, naming both', () => {
+    /**
+     * The failure the old blanket rule was really aimed at: identity says
+     * production, path says scratch. Relay would commit scratch work and push
+     * it to production.
+     */
+    const result = repositoryTargetSource(
+      githubTarget(realRepository(), 'https://github.com/someone-else/other.git'),
+      ['src/app.ts'],
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain('someone-else/other');
+      expect(result.reason).toContain('github.com/o/r');
+    }
+  });
+
+  it('REFUSES a checkout with no origin at all', () => {
+    const result = repositoryTargetSource(githubTarget(realRepository(), null), ['src/app.ts']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain('no "origin" remote');
+  });
+});

