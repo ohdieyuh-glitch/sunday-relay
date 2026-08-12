@@ -93,7 +93,13 @@ function readRegistrationFile(path: string): RepositoryRegistration | null {
     return null;
   }
   if (derived !== record.key) return null;
-  return record as RepositoryRegistration;
+  // A registration written before ownership existed has no `ownerParticipant`.
+  // Absent normalizes to null = operator-owned — the safe legacy default, and
+  // the honest one: a repo the operator registered stays the operator's.
+  return {
+    ...(record as RepositoryRegistration),
+    ownerParticipant: record.ownerParticipant ?? null,
+  };
 }
 
 export function createRepositoryRegistrationStore(options: { readonly root: string }): RepositoryRegistrationStore {

@@ -320,3 +320,32 @@ export function renderPermissionLine(permissions: readonly RepositoryPermission[
   const ordered = REPOSITORY_PERMISSIONS.filter((p) => permissions.includes(p));
   return ordered.join(', ');
 }
+
+/**
+ * WHO MAY TARGET OR SHIP A REGISTERED REPOSITORY.
+ *
+ * The operator owns everything: they hold the credential that gates registration
+ * itself. Beyond the operator, exactly one principal may act on a registration —
+ * the participant it is OWNED BY — and only when the owner is set. This is the
+ * rule that lets a beta user connect and ship THEIR OWN repository without the
+ * operator, while guaranteeing a user can never reach a repository someone else
+ * registered:
+ *
+ *   - operator            -> always allowed.
+ *   - ownerParticipant null (operator-owned / legacy) -> only the operator.
+ *   - ownerParticipant set -> the operator, or a caller whose participant EQUALS
+ *     it. A null caller participant never equals a set owner, so "signed in as
+ *     nobody in particular" is refused, not coincidentally admitted.
+ *
+ * The caller identity comes from the verified session, never a request body.
+ */
+export function registrationOwnerAdmits(input: {
+  readonly ownerParticipant: string | null;
+  readonly caller:
+    | { readonly kind: 'operator' }
+    | { readonly kind: 'participant'; readonly participantId: string | null };
+}): boolean {
+  if (input.caller.kind === 'operator') return true;
+  if (input.ownerParticipant === null) return false;
+  return input.caller.participantId !== null && input.caller.participantId === input.ownerParticipant;
+}

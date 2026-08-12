@@ -355,6 +355,16 @@ export interface RepositoryRegistration {
    *  branch. The default branch is always one of these; see `protectedBranches`. */
   readonly protectedBranches: readonly string[];
   readonly registeredBy: string;
+  /**
+   * THE PRINCIPAL WHO OWNS THIS REGISTRATION, for authorization — distinct from
+   * `registeredBy` (a descriptive audit string). `null` means operator-owned:
+   * the legacy shape, targetable and shippable only by the operator. A non-null
+   * value is a signed-in user's participant (e.g. `ghu-<github-id>`); that user
+   * — and the operator — may target and ship it, and no one else. This is what
+   * lets a beta user connect and ship THEIR OWN repository without the operator,
+   * while a user can never reach a repository another user registered.
+   */
+  readonly ownerParticipant: string | null;
   readonly registeredAt: string;
   /** Set when revoked. A revoked registration is retained, never deleted, so
    *  the audit trail survives the revocation. */

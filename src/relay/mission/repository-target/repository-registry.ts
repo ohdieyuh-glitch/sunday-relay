@@ -56,7 +56,19 @@ export interface RepositoryRegistrationDraft {
   readonly credential?: Partial<CredentialBoundary>;
   readonly protectedBranches?: readonly string[];
   readonly registeredBy: string;
+  /**
+   * The participant who OWNS this registration, for authorization. Absent or
+   * null means operator-owned (the legacy shape). A non-null value binds the
+   * registration to one signed-in user, so a later mission may target or ship it
+   * only as that user (or the operator). See `RepositoryRegistration.ownerParticipant`.
+   */
+  readonly ownerParticipant?: string | null;
 }
+
+/** The owner-principal shape, mirroring the session participant id. A registration
+    owned by "  " or by a string with whitespace could never be matched against a
+    real caller, so it is refused rather than stored as an unreachable owner. */
+const OWNER_PARTICIPANT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 const EMPTY_PROTECTED: ProtectedPathConfig = Object.freeze({ additional: [], unprotect: [] });
 
@@ -78,6 +90,20 @@ export function createRepositoryRegistration(input: {
     problems.push({
       refusal: 'identity_invalid',
       message: 'A registration must record who authorized it. `registeredBy` is empty.',
+    });
+  }
+
+  // Owner is optional (null => operator-owned), but a non-null owner must be a
+  // matchable principal. An owner the authorization check could never equal is
+  // an owner that silently locks the registration to nobody.
+  const ownerParticipant: string | null =
+    draft?.ownerParticipant === undefined || draft.ownerParticipant === null
+      ? null
+      : draft.ownerParticipant;
+  if (ownerParticipant !== null && (typeof ownerParticipant !== 'string' || !OWNER_PARTICIPANT_PATTERN.test(ownerParticipant))) {
+    problems.push({
+      refusal: 'identity_invalid',
+      message: '`ownerParticipant`, when present, must be a valid participant id (the shape a session binds).',
     });
   }
 
@@ -187,6 +213,7 @@ export function createRepositoryRegistration(input: {
       credential,
       protectedBranches: Object.freeze([...new Set([draft.identity.defaultBranch, ...protectedBranches])]),
       registeredBy: draft.registeredBy.trim(),
+      ownerParticipant,
       registeredAt: now,
       revokedAt: null,
       revokedBy: null,
