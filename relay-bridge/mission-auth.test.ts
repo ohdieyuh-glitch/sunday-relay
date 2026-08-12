@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBridgeServer } from './server';
 import { loadBridgeConfig } from './config';
 import { browserSessionMayCall } from './browser-session/grants';
+import { createRepositoryRegistration } from '../src/relay/mission/repository-target';
+import type { RepositoryRegistration } from '../src/relay/mission/repository-target';
+import type { RepositoryRegistrationStore } from '../src/relay/persistence';
 
 /**
  * THE MISSION ROUTES ARE AUTHENTICATED.
@@ -39,6 +42,43 @@ async function boot(): Promise<string> {
     cancel: () => undefined,
     retry: () => undefined,
   } as never);
+  servers.push(server);
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const address = server.address();
+  const port = typeof address === 'object' && address !== null ? address.port : 0;
+  return `http://127.0.0.1:${port}`;
+}
+
+/** A local repository the OPERATOR registers — ownerParticipant defaults to null,
+    so it is operator-owned and no browser participant may target it. */
+function operatorOwnedLocalDraft() {
+  return {
+    identity: { provider: 'local', host: null, owner: null, name: 'proj', defaultBranch: 'main' },
+    location: { kind: 'local_path', path: '/tmp/proj' },
+    scope: { read: ['**'], write: ['src/**'] },
+    grants: ['read', 'write_worktree'].map((permission) => ({
+      permission, authorizedBy: 'founder', authorizedAt: '2026-08-12T00:00:00.000Z', expiresAt: null, note: null,
+    })),
+    ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+    registeredBy: 'founder',
+  } as never;
+}
+
+/** Boots the bridge with a repository store pre-seeded with one registration,
+    so the ownership gate has something real to read. */
+async function bootWithRepo(reg: RepositoryRegistration): Promise<string> {
+  vi.stubEnv('RELAY_BRIDGE_API_TOKEN', OPERATOR);
+  vi.stubEnv('RELAY_ALLOWED_ORIGINS', ORIGIN);
+  const store: RepositoryRegistrationStore = {
+    save: () => undefined,
+    get: (key: string) => (key === reg.key ? reg : null),
+    list: () => [reg],
+  };
+  const server = createBridgeServer(
+    loadBridgeConfig(process.env),
+    { start: () => ({}) as never, get: () => undefined, cancel: () => undefined, retry: () => undefined } as never,
+    null, null, null, null, () => false, null, [], null, null, store,
+  );
   servers.push(server);
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const address = server.address();
@@ -138,19 +178,21 @@ describe('the operator keeps full access', () => {
 
 describe('naming a repository target is operator-only, even for a control session', () => {
   /**
-   * A control session may START a mission — but naming a real repository to
-   * build and later ship is a higher-consequence act reserved for the operator
-   * credential. A review found this gate wired in the server but never tested;
-   * these prove it fires for a genuine control session (not merely an anonymous
-   * caller, which is refused far earlier) and that it is SPECIFICALLY the
-   * repositoryKey that trips it.
+   * A control session may START a mission — and may target a repository it OWNS
+   * (that is criterion 2 of the private beta). What it may NOT do is target a
+   * repository it does not own: an operator-owned (legacy) registration is the
+   * operator's, and the check reads the registration's owner, never the request.
+   * This proves the ownership gate fires for a genuine control session whose
+   * participant does not own the operator-registered repository.
    */
-  it('refuses a control session that names a repositoryKey with 403 operator_required', async () => {
-    const base = await boot();
+  it('refuses a control session that targets a repository it does not own', async () => {
+    const built = createRepositoryRegistration({ draft: operatorOwnedLocalDraft(), now: '2026-08-12T00:00:00.000Z' });
+    if (!built.ok) throw new Error(`fixture refused: ${built.error.message}`);
+    const base = await bootWithRepo(built.value);
     const token = await pairControl(base, 'beta-participant-1');
-    const res = await startAs(base, token, { repositoryKey: 'local:proj', workingBranch: 'relay/x' });
+    const res = await startAs(base, token, { repositoryKey: built.value.key, workingBranch: 'relay/x' });
     expect(res.status).toBe(403);
-    expect((await res.json()).error).toMatchObject({ kind: 'operator_required' });
+    expect((await res.json()).error).toMatchObject({ kind: 'repository_not_yours' });
   }, 30_000);
 
   it('but the SAME control session may start a mission when it names no repository', async () => {

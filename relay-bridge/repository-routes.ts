@@ -35,6 +35,23 @@ export function isRepositoryRoute(path: string): boolean {
   return path === '/repository/register' || path === '/repository/list';
 }
 
+/**
+ * WHO IS REGISTERING. Resolved by the server from the operator token or a
+ * verified browser session — never from the request body. Absent on the request
+ * means "derive the operator decision from the token", which keeps every caller
+ * that predates user registration behaving exactly as before.
+ */
+export type RepositoryCaller =
+  | { readonly kind: 'operator' }
+  | { readonly kind: 'participant'; readonly participantId: string }
+  | { readonly kind: 'anonymous' };
+
+/** Just enough of the installation-grant registry to check ownership — a
+    structural type, so this module need not depend on the auth-routes module. */
+export interface InstallationGrantCheck {
+  granted(participant: string, installationId: string): boolean;
+}
+
 export interface RepositoryRouteRequest {
   readonly method: string;
   /** Path with `/relay-api` already stripped. */
@@ -44,17 +61,24 @@ export interface RepositoryRouteRequest {
   readonly env: NodeJS.ProcessEnv;
   /** The server's clock, never a caller's — it stamps `registeredAt`. */
   readonly now: string;
+  /** The resolved caller. Absent => derive operator-or-anonymous from the token. */
+  readonly caller?: RepositoryCaller;
 }
 
 export function handleRepositoryRoute(
   request: RepositoryRouteRequest,
   store: RepositoryRegistrationStore | null,
+  installGrants: InstallationGrantCheck | null = null,
 ): ReviewerRouteResult | null {
   if (!isRepositoryRoute(request.path)) return null;
 
-  const operator = bearerMatches(request.authorization, request.env[BRIDGE_TOKEN_ENV]);
-  if (!operator) {
-    return err(401, 'authentication_failed', 'Repository registration is operator-only.');
+  const caller: RepositoryCaller = request.caller
+    ?? (bearerMatches(request.authorization, request.env[BRIDGE_TOKEN_ENV])
+      ? { kind: 'operator' }
+      : { kind: 'anonymous' });
+
+  if (caller.kind === 'anonymous') {
+    return err(401, 'authentication_failed', 'Repository registration requires authentication.');
   }
   if (store === null) {
     // A registration that does not survive a restart is not a registration.
@@ -70,11 +94,46 @@ export function handleRepositoryRoute(
      * THE BODY IS A DRAFT, VALIDATED BY THE DOMAIN. Whatever shape arrives, the
      * only path to a stored registration is through `createRepositoryRegistration`,
      * which refuses a draft that names no authorizer, a glob in a protected
-     * path, a remote provider with no credential env var, and the rest. A
-     * refusal returns the domain's own message, unaltered.
+     * path, a remote provider with no credential, and the rest. A refusal
+     * returns the domain's own message, unaltered.
      */
     const draft = request.body as RepositoryRegistrationDraft;
-    const built = createRepositoryRegistration({ draft, now: request.now });
+
+    if (caller.kind === 'participant') {
+      /**
+       * A USER REGISTERS ONLY THEIR OWN REPOSITORY. Ownership and the authorizer
+       * come from the VERIFIED SESSION, never the body, so a browser cannot bind
+       * a repository to anyone but itself. The credential is a GitHub App
+       * installation the user PROVED they control (never a founder env var), so a
+       * user can never reach a repository through the operator's credentials.
+       */
+      const installationId = typeof draft.credential?.installationId === 'string'
+        ? draft.credential.installationId.trim() : '';
+      if (installationId === '') {
+        return err(422, 'registration_refused',
+          'A user registration must name the GitHub App installation that authorizes it.');
+      }
+      if (installGrants === null || !installGrants.granted(caller.participantId, installationId)) {
+        return err(403, 'installation_not_authorized',
+          'You have not authorized that GitHub App installation. Install the app on the repository first.');
+      }
+      const userDraft: RepositoryRegistrationDraft = {
+        ...draft,
+        ownerParticipant: caller.participantId,
+        registeredBy: caller.participantId,
+        // Only the installation, and only the installation — never an env var name.
+        credential: { installationId },
+      };
+      const built = createRepositoryRegistration({ draft: userDraft, now: request.now });
+      if (!built.ok) return err(422, 'registration_refused', built.error.message);
+      store.save(built.value);
+      return ok({ registered: true, key: built.value.key, ownerParticipant: built.value.ownerParticipant });
+    }
+
+    // OPERATOR path — the registration is operator-owned. `ownerParticipant` is
+    // forced null here so a body field can never make it look user-owned.
+    const operatorDraft: RepositoryRegistrationDraft = { ...draft, ownerParticipant: null };
+    const built = createRepositoryRegistration({ draft: operatorDraft, now: request.now });
     if (!built.ok) {
       return err(422, 'registration_refused', built.error.message);
     }
@@ -89,6 +148,9 @@ export function handleRepositoryRoute(
   }
 
   if (request.method === 'GET' && request.path === '/repository/list') {
+    if (caller.kind !== 'operator') {
+      return err(403, 'operator_required', 'Listing every registration is operator-only.');
+    }
     const listed = store.list();
     if (listed === null) {
       // The store could not read its directory. Unknown, and unknown is not an

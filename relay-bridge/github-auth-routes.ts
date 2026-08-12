@@ -8,6 +8,7 @@ import {
   type GitHubUserIdentity,
 } from './github-oauth';
 import type { BrowserSessionStore } from './browser-session/grants';
+import { sessionTokenFrom } from './browser-session/routes';
 
 /**
  * "SIGN IN WITH GITHUB" — the product-boundary routes.
@@ -41,50 +42,98 @@ const errResult = (status: number, kind: string, message: string): ReviewerRoute
 
 /* ------------------------------------------------------------ state store --- */
 
+export type StateConsumption =
+  | { readonly found: true; readonly participant: string | null }
+  | { readonly found: false };
+
 export interface OAuthStateStore {
-  /** Mint a single-use CSRF state. Returned once; only its hash is retained. */
-  issue(now: number): string;
-  /** True exactly once for a live, unexpired state; every later call is false. */
-  consume(state: string, now: number): boolean;
+  /** Mint a single-use CSRF state, optionally BOUND to a participant. The bound
+   *  participant is recovered at consume — it is how the install callback, a
+   *  no-session top-level navigation from GitHub, learns whose installation it
+   *  is recording. Returned once; only the state's hash is retained. */
+  issue(now: number, participant?: string | null): string;
+  /** Recovers the bound participant (may be null) exactly once for a live,
+   *  unexpired state; every later or unknown call is `{ found: false }`. */
+  consume(state: string, now: number): StateConsumption;
   readonly size: number;
 }
 
 const sha256 = (value: string): Buffer => createHash('sha256').update(value, 'utf8').digest();
 
+interface StoredState { readonly expiresAt: number; readonly participant: string | null; }
+
 /**
- * The CSRF states for the sign-in redirect, in memory only. A state is a
- * single-use nonce: minted at `start`, burned at `callback`. Stored as a hash so
- * a memory dump cannot replay one, and swept on the write path so an expired
- * nonce is never mistaken for a live one.
+ * The CSRF states for the sign-in and install redirects, in memory only. A state
+ * is a single-use nonce: minted at `start`, burned at `callback`. Stored as a
+ * hash so a memory dump cannot replay one, and swept on the write path so an
+ * expired nonce is never mistaken for a live one. A state may CARRY a participant
+ * — the install flow binds one so its callback knows whose installation it is.
  */
 export function createOAuthStateStore(): OAuthStateStore {
-  const states = new Map<string, number>();
+  const states = new Map<string, StoredState>();
 
   const sweep = (now: number): void => {
-    for (const [hash, expiresAt] of states) if (expiresAt <= now) states.delete(hash);
+    for (const [hash, s] of states) if (s.expiresAt <= now) states.delete(hash);
   };
 
   return {
-    issue(now) {
+    issue(now, participant = null) {
       sweep(now);
       const state = randomBytes(32).toString('base64url');
-      states.set(sha256(state).toString('base64url'), now + OAUTH_STATE_TTL_MS);
+      states.set(sha256(state).toString('base64url'), { expiresAt: now + OAUTH_STATE_TTL_MS, participant });
       return state;
     },
     consume(state, now) {
-      if (typeof state !== 'string' || state === '') return false;
+      if (typeof state !== 'string' || state === '') return { found: false };
       // The map is keyed by the state's hash, so a hit IS the match: a 256-bit
       // random nonce that hashes to a stored key is that nonce (collision
       // resistance), and no separate secret comparison is needed.
       const key = sha256(state).toString('base64url');
-      const expiresAt = states.get(key);
-      if (expiresAt === undefined) return false;
+      const stored = states.get(key);
+      if (stored === undefined) return { found: false };
       // Burn FIRST: a single-use nonce must not survive a concurrent replay,
       // even one arriving in the same millisecond.
       states.delete(key);
-      return expiresAt > now;
+      if (stored.expiresAt <= now) return { found: false };
+      return { found: true, participant: stored.participant };
     },
     get size() { return states.size; },
+  };
+}
+
+/* ----------------------------------------------------- installation grants --- */
+
+/** GitHub installation ids are small positive integers. */
+const INSTALLATION_ID = /^[0-9]{1,20}$/;
+
+export interface InstallationGrants {
+  /** Record that `participant` proved control of `installationId` (via GitHub's
+   *  post-install redirect). Idempotent. */
+  record(participant: string, installationId: string): void;
+  /** Whether this participant proved control of this installation in this
+   *  process. In memory only: a restart forgets grants, which is fail-closed —
+   *  a durable registration already carries the installation it was built with,
+   *  so this is consulted only at REGISTER time, never at ship time. */
+  granted(participant: string, installationId: string): boolean;
+  readonly size: number;
+}
+
+export function createInstallationGrants(): InstallationGrants {
+  const byParticipant = new Map<string, Set<string>>();
+  return {
+    record(participant, installationId) {
+      const set = byParticipant.get(participant) ?? new Set<string>();
+      set.add(installationId);
+      byParticipant.set(participant, set);
+    },
+    granted(participant, installationId) {
+      return byParticipant.get(participant)?.has(installationId) ?? false;
+    },
+    get size() {
+      let n = 0;
+      for (const set of byParticipant.values()) n += set.size;
+      return n;
+    },
   };
 }
 
@@ -110,6 +159,14 @@ export interface GithubAuthDeps {
   /** The frontend origin the minted session is bound to. Null => not usable. */
   readonly sessionOrigin: string | null;
   readonly now: number;
+  /** Separate single-use state store for the INSTALL flow, so an install state
+   *  and a sign-in state can never be redeemed for one another. */
+  readonly installStateStore: OAuthStateStore;
+  /** Where a proven (participant, installationId) pair is recorded. */
+  readonly installGrants: InstallationGrants;
+  /** The GitHub App installation URL base (…/apps/<slug>/installations/new).
+   *  Null => the install flow answers 503. */
+  readonly installBaseUrl: string | null;
   /** Test seam. Defaults to the real GitHub exchange. */
   readonly exchange?: (input: {
     config: GitHubOAuthConfig; code: string; redirectUri: string;
@@ -131,6 +188,11 @@ export async function handleGithubAuthRoute(
     readonly method: string;
     readonly path: string;
     readonly url: string;
+    /** Present for the session-authed install/start; absent for the redirects. */
+    readonly authorization?: string | undefined;
+    readonly origin?: string | undefined;
+    /** Body of a POST (install/start), already parsed. */
+    readonly body?: unknown;
   },
   deps: GithubAuthDeps,
 ): Promise<ReviewerRouteResult | null> {
@@ -164,7 +226,7 @@ export async function handleGithubAuthRoute(
     }
     // CSRF: the state must be one THIS bridge issued and never yet redeemed.
     // Checked before the code is exchanged, so a forged callback spends nothing.
-    if (!deps.stateStore.consume(state, deps.now)) {
+    if (!deps.stateStore.consume(state, deps.now).found) {
       return errResult(401, 'github_state_invalid', 'That sign-in request is expired or was already used.');
     }
 
@@ -205,6 +267,49 @@ export async function handleGithubAuthRoute(
       origin: minted.session.origin,
       expiresAt: new Date(minted.session.expiresAt).toISOString(),
     });
+  }
+
+  /* ------------------------------------------- begin an app installation --- */
+  if (method === 'POST' && path === '/auth/github/install/start') {
+    if (deps.installBaseUrl === null || deps.installBaseUrl === '') {
+      return errResult(503, 'github_install_unconfigured',
+        'GitHub App installation is not configured on this bridge.');
+    }
+    // WHO is installing must be a signed-in control session — the participant
+    // comes from the VERIFIED session, never the body, so a browser cannot bind
+    // an installation to anyone but itself.
+    const token = sessionTokenFrom(request.authorization);
+    if (token === null) {
+      return errResult(401, 'authentication_required', 'Installing an app requires a signed-in session.');
+    }
+    const verified = deps.sessions.verifySession({ token, origin: request.origin, now: deps.now });
+    if (!verified.ok || verified.scope !== 'browser_control' || verified.participantId === null) {
+      return errResult(401, 'authentication_failed', 'This session cannot authorize an installation.');
+    }
+    // A state BOUND to the participant, so the no-session callback below knows
+    // whose installation it is recording.
+    const state = deps.installStateStore.issue(deps.now, verified.participantId);
+    const sep = deps.installBaseUrl.includes('?') ? '&' : '?';
+    return okResult({ installUrl: `${deps.installBaseUrl}${sep}state=${encodeURIComponent(state)}`, state });
+  }
+
+  /* --------------------------------- record a proven installation (redirect) --- */
+  if (method === 'GET' && path === '/auth/github/install/callback') {
+    const query = queryOf(request.url);
+    const installationId = query.get('installation_id') ?? '';
+    const state = query.get('state') ?? '';
+    if (!INSTALLATION_ID.test(installationId) || state === '') {
+      return errResult(400, 'github_install_invalid', 'The installation callback is missing a valid installation_id or state.');
+    }
+    // The state proves this redirect follows an install THIS user began. Its
+    // bound participant is who now controls the installation — recorded so, and
+    // only so, may that user register a repository under it.
+    const consumed = deps.installStateStore.consume(state, deps.now);
+    if (!consumed.found || consumed.participant === null) {
+      return errResult(401, 'github_install_state_invalid', 'That installation request is expired or was already used.');
+    }
+    deps.installGrants.record(consumed.participant, installationId);
+    return okResult({ installed: true, participantId: consumed.participant, installationId });
   }
 
   return errResult(404, 'github_auth_unknown', 'Unknown GitHub auth operation.');

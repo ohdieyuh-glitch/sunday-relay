@@ -1,4 +1,6 @@
 import { bearerMatches, BRIDGE_TOKEN_ENV, type ReviewerRouteResult } from './reviewer-routes';
+import type { RepositoryCaller } from './repository-routes';
+import { registrationOwnerAdmits } from '../src/relay/mission/repository-target';
 import { shipVerifiedMission, disposeRetainedWorktree, type ShipAuthorization } from './ship-mission';
 import type { ShipRunResult } from './ship-runner';
 import { observeRepositoryWorktree, resolveBaselineSha } from '../src/relay/workspace/repository-target-observer';
@@ -51,6 +53,10 @@ export interface ShipRouteRequest {
   readonly body: unknown;
   readonly env: NodeJS.ProcessEnv;
   readonly now: () => string;
+  /** WHO is shipping, resolved by the server from the operator token or a
+   *  verified session — never the body. Absent => derive operator-or-anonymous
+   *  from the token, so a caller that predates user shipping behaves as before. */
+  readonly caller?: RepositoryCaller;
 }
 
 export interface ShipRouteDeps {
@@ -85,8 +91,12 @@ export async function handleShipRoute(
 ): Promise<ReviewerRouteResult | null> {
   if (request.method !== 'POST' || !isShipRoute(request.path)) return null;
 
-  if (!bearerMatches(request.authorization, request.env[BRIDGE_TOKEN_ENV])) {
-    return err(401, 'authentication_failed', 'Shipping a mission is operator-only.');
+  const caller: RepositoryCaller = request.caller
+    ?? (bearerMatches(request.authorization, request.env[BRIDGE_TOKEN_ENV])
+      ? { kind: 'operator' }
+      : { kind: 'anonymous' });
+  if (caller.kind === 'anonymous') {
+    return err(401, 'authentication_failed', 'Shipping a mission requires authentication.');
   }
   if (deps.store === null) {
     return err(503, 'repository_store_unavailable',
@@ -110,6 +120,16 @@ export async function handleShipRoute(
   if (registration === null) {
     return err(404, 'repository_not_registered',
       `The repository "${context.target.repositoryKey}" this mission targeted is no longer registered.`);
+  }
+  /**
+   * OWNERSHIP, NOT MERE OPERATOR-HOOD. The operator may ship any mission; a
+   * signed-in user may ship ONLY a mission whose repository they own — the same
+   * gate that let them target it. The owner is read from the registration, never
+   * the request, so a user can never ship into a repository someone else
+   * registered even if they learn its key.
+   */
+  if (!registrationOwnerAdmits({ ownerParticipant: registration.ownerParticipant, caller })) {
+    return err(403, 'repository_not_yours', 'This mission\'s repository is not yours to ship.');
   }
 
   /**

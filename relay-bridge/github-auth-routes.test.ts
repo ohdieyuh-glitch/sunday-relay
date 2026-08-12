@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  createInstallationGrants,
   createOAuthStateStore,
   handleGithubAuthRoute,
   isGithubAuthRoute,
@@ -25,6 +26,8 @@ const ORIGIN = 'https://sunday-relay.vercel.app';
 const REDIRECT = 'https://bridge.example/relay-api/auth/github/callback';
 const NOW = 5_000_000;
 
+const INSTALL_BASE = 'https://github.com/apps/relay/installations/new';
+
 function deps(over: Partial<GithubAuthDeps> = {}): GithubAuthDeps {
   return {
     oauthConfig: CONFIG,
@@ -33,6 +36,9 @@ function deps(over: Partial<GithubAuthDeps> = {}): GithubAuthDeps {
     redirectUri: REDIRECT,
     sessionOrigin: ORIGIN,
     now: NOW,
+    installStateStore: createOAuthStateStore(),
+    installGrants: createInstallationGrants(),
+    installBaseUrl: INSTALL_BASE,
     exchange: async () => ({ login: 'beta-user', id: 4242, type: 'User' }),
     ...over,
   };
@@ -135,19 +141,91 @@ describe('GET /auth/github/callback mints a session from the verified identity',
   });
 });
 
-describe('the OAuth state store is single-use and expiring', () => {
+describe('the OAuth state store is single-use, expiring, and may carry a participant', () => {
   it('consumes a state exactly once', () => {
     const store = createOAuthStateStore();
     const state = store.issue(NOW);
-    expect(store.consume(state, NOW + 1)).toBe(true);
-    expect(store.consume(state, NOW + 2)).toBe(false);
+    expect(store.consume(state, NOW + 1).found).toBe(true);
+    expect(store.consume(state, NOW + 2).found).toBe(false);
+  });
+  it('recovers a bound participant exactly once', () => {
+    const store = createOAuthStateStore();
+    const state = store.issue(NOW, 'ghu-77');
+    const c = store.consume(state, NOW + 1);
+    expect(c.found).toBe(true);
+    if (c.found) expect(c.participant).toBe('ghu-77');
+    expect(store.consume(state, NOW + 2).found).toBe(false);
   });
   it('refuses an expired state', () => {
     const store = createOAuthStateStore();
-    const state = store.issue(NOW);
-    expect(store.consume(state, NOW + OAUTH_STATE_TTL_MS + 1)).toBe(false);
+    const state = store.issue(NOW, 'ghu-1');
+    expect(store.consume(state, NOW + OAUTH_STATE_TTL_MS + 1).found).toBe(false);
   });
   it('refuses a state it never issued', () => {
-    expect(createOAuthStateStore().consume('never-issued', NOW)).toBe(false);
+    expect(createOAuthStateStore().consume('never-issued', NOW).found).toBe(false);
+  });
+});
+
+describe('the app-installation flow proves who controls an installation', () => {
+  const installStart = (d: GithubAuthDeps, headers: { authorization?: string; origin?: string } = {}) =>
+    handleGithubAuthRoute({
+      method: 'POST', path: '/auth/github/install/start', url: '/relay-api/auth/github/install/start',
+      authorization: headers.authorization, origin: headers.origin,
+    }, d);
+  const installCallback = (d: GithubAuthDeps, qs: string) =>
+    handleGithubAuthRoute({ method: 'GET', path: '/auth/github/install/callback', url: `/relay-api/auth/github/install/callback?${qs}` }, d);
+
+  function signedInSession(d: GithubAuthDeps): string {
+    const minted = d.sessions.mintIdentitySession({ origin: ORIGIN, now: NOW, participantId: 'ghu-4242' });
+    if (!minted.ok) throw new Error('mint failed');
+    return minted.session.token;
+  }
+
+  it('install/start requires a signed-in control session', async () => {
+    const d = deps();
+    expect((await installStart(d))?.status).toBe(401);
+    const token = signedInSession(d);
+    const r = await installStart(d, { authorization: `Relay-Session ${token}`, origin: ORIGIN });
+    expect(r?.status).toBe(200);
+    const data = (r?.body as { data: { installUrl: string; state: string } }).data;
+    expect(data.installUrl).toContain(INSTALL_BASE);
+    expect(data.installUrl).toContain(`state=${data.state}`);
+  });
+
+  it('install/start answers 503 when installation is unconfigured', async () => {
+    const d = deps({ installBaseUrl: null });
+    const token = signedInSession(d);
+    const r = await installStart(d, { authorization: `Relay-Session ${token}`, origin: ORIGIN });
+    expect(r?.status).toBe(503);
+  });
+
+  it('a proven install records the (participant, installationId) grant', async () => {
+    const d = deps();
+    const token = signedInSession(d);
+    const started = await installStart(d, { authorization: `Relay-Session ${token}`, origin: ORIGIN });
+    const state = (started?.body as { data: { state: string } }).data.state;
+
+    expect(d.installGrants.granted('ghu-4242', '55550001')).toBe(false);
+    const cb = await installCallback(d, `installation_id=55550001&state=${state}`);
+    expect(cb?.status).toBe(200);
+    expect(d.installGrants.granted('ghu-4242', '55550001')).toBe(true);
+    // Bound to the participant who STARTED it, not to whoever hit the callback.
+    expect((cb?.body as { data: { participantId: string } }).data.participantId).toBe('ghu-4242');
+  });
+
+  it('a forged install state records nothing', async () => {
+    const d = deps();
+    const cb = await installCallback(d, 'installation_id=55550001&state=forged');
+    expect(cb?.status).toBe(401);
+    expect(d.installGrants.size).toBe(0);
+  });
+
+  it('a non-numeric installation_id is refused', async () => {
+    const d = deps();
+    const token = signedInSession(d);
+    const started = await installStart(d, { authorization: `Relay-Session ${token}`, origin: ORIGIN });
+    const state = (started?.body as { data: { state: string } }).data.state;
+    const cb = await installCallback(d, `installation_id=not-a-number&state=${state}`);
+    expect(cb?.status).toBe(400);
   });
 });
