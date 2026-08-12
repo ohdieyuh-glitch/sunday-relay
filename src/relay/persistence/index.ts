@@ -47,3 +47,7 @@ export {
   createRepositoryRegistrationStore,
   type RepositoryRegistrationStore,
 } from './repository-registration-node';
+export {
+  createBrainMemoryStore,
+  type BrainMemoryStore,
+} from './brain-memory-node';

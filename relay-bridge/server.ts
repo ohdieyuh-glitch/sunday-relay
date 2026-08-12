@@ -45,8 +45,9 @@ import type { MissionRepositoryTarget, RepositoryPermission } from '../src/relay
 import { guardBetaAdmission, participantFromBody } from './beta-guard';
 import { claimedClientKey, createBetaRateLimiter } from './beta-rate-limit';
 import type { BetaRateLimiter } from './beta-rate-limit';
-import { createBetaEnrolmentStore, createRepositoryRegistrationStore } from '../src/relay/persistence';
-import type { RepositoryRegistrationStore } from '../src/relay/persistence';
+import { createBetaEnrolmentStore, createRepositoryRegistrationStore, createBrainMemoryStore } from '../src/relay/persistence';
+import { rememberShipRun } from './ship-brain-feed';
+import type { RepositoryRegistrationStore, BrainMemoryStore } from '../src/relay/persistence';
 import type { BetaWaveConfig } from '../src/relay/mission/beta';
 import type { BetaEnrolmentStore } from '../src/relay/persistence';
 import { createCronTickService } from './cron-service';
@@ -209,6 +210,9 @@ export function createBridgeServer(
    * `repository_store_unavailable`, the same shape as the beta store.
    */
   repositoryStore: RepositoryRegistrationStore | null = null,
+  /** The durable Project Brain store. Absent on a bridge with no mounted state
+   *  root — a verified/shipped run's episode is then not written durably. */
+  brainStore: BrainMemoryStore | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -547,6 +551,18 @@ export function createBridgeServer(
             recordShipOutcome: (id, o) => registry.recordShipOutcome(id, o),
             beginShip: (id) => registry.beginShip(id),
             endShip: (id) => registry.endShip(id),
+            rememberShip: brainStore === null ? undefined : (input) => {
+              // Load the project's memory, fold this run's episodes in, save it.
+              const memory = brainStore.load(input.repositoryKey);
+              const next = rememberShipRun(memory, {
+                result: input.result,
+                repositoryKey: input.repositoryKey,
+                missionId: input.missionId,
+                entryIdFor: (slug) => `${input.missionId}:${slug}`,
+                observedAt: input.observedAt,
+              });
+              brainStore.save(input.repositoryKey, next);
+            },
             store: repositoryStore,
           });
           if (shipResult !== null) {
@@ -1043,6 +1059,15 @@ export function main(): void {
   const repositoryStore = config.stateRoot === null
     ? null
     : createRepositoryRegistrationStore({ root: config.stateRoot });
+  /**
+   * THE DURABLE PROJECT BRAIN STORE. A verified/shipped run folds an episode
+   * into short-term memory that survives a restart; without a state root there
+   * is nowhere durable to write, and the fold is skipped rather than lost to a
+   * process that will forget it anyway.
+   */
+  const brainStore = config.stateRoot === null
+    ? null
+    : createBrainMemoryStore({ root: config.stateRoot });
   // One limiter for the process, so its windows are shared across requests.
   const betaLimiter = createBetaRateLimiter();
   const betaWaves: readonly BetaWaveConfig[] = Object.freeze([
@@ -1091,6 +1116,7 @@ export function main(): void {
     // counts both paths.
     liveReach,
     repositoryStore,
+    brainStore,
   );
 
   /**

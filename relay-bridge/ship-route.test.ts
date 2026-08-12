@@ -241,6 +241,49 @@ describe('POST /mission/:id/ship', () => {
     expect(recorded).toEqual([]);
   });
 
+  it('folds the completed ship run into the durable Project Brain', async () => {
+    const m = verifiedMission();
+    const remembered: Array<{ repositoryKey: string; missionId: string; stages: string[] }> = [];
+    const r = await handleShipRoute(
+      { method: 'POST', path: '/mission/m1/ship', authorization: opAuth, body: {}, env, now: () => NOW },
+      {
+        shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }),
+        recordShipOutcome: () => {}, beginShip: () => true, endShip: () => {},
+        rememberShip: (input) => remembered.push({
+          repositoryKey: input.repositoryKey, missionId: input.missionId,
+          stages: input.result.evidence.map((e) => e.stage),
+        }),
+        store: storeWith(m.reg),
+      },
+    );
+    expect(r?.status).toBe(200);
+    // The run's real stage history reached the Brain, keyed to the mission + repo.
+    expect(remembered).toHaveLength(1);
+    expect(remembered[0]?.missionId).toBe('m1');
+    expect(remembered[0]?.repositoryKey).toBe(m.target.repositoryKey);
+    expect(remembered[0]?.stages).toContain('committed');
+  });
+
+  it('does NOT fold a refused ship into the Brain (no run happened)', async () => {
+    const m = verifiedMission();
+    const remembered: unknown[] = [];
+    const r = await handleShipRoute(
+      {
+        method: 'POST', path: '/mission/m1/ship', authorization: opAuth,
+        body: { remote: { provider: 'github', credentialEnvVarName: '  ', pullRequestTitle: 't', pullRequestBody: { missionId: 'm', objective: 'o', artifactDigest: null, reviewedArtifactDigest: null, reviewerVerdict: null, reviewerFindings: [], relayVerification: [], attestations: [], baselineSha: null } } },
+        env, now: () => NOW,
+      },
+      {
+        shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }),
+        recordShipOutcome: () => {}, beginShip: () => true, endShip: () => {},
+        rememberShip: () => remembered.push(1),
+        store: storeWith(m.reg),
+      },
+    );
+    expect(r?.status).toBe(422);
+    expect(remembered).toEqual([]);   // a refused ship produced no ShipRunResult to fold
+  });
+
   it('records a successful ship (keyed by mission id) so it stops being shippable', async () => {
     const m = verifiedMission();
     const recorded: Array<{ id: string; shipped: boolean }> = [];
