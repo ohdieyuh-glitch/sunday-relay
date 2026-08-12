@@ -542,7 +542,11 @@ export function createBridgeServer(
             body: method === 'POST' ? await readBody(req) : undefined,
             env: process.env,
             now: () => new Date().toISOString(),
-          }, { shipContext: (id) => registry.shipContext(id), store: repositoryStore });
+          }, {
+            shipContext: (id) => registry.shipContext(id),
+            recordShipOutcome: (id, o) => registry.recordShipOutcome(id, o),
+            store: repositoryStore,
+          });
           if (shipResult !== null) {
             send(res, shipResult.status, shipResult.body, cors);
             return;

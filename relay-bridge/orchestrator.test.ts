@@ -2925,6 +2925,12 @@ describe('a Mission can target a real repository end to end', () => {
   it('shipContext is null for a verified mission with NO repository target', async () => {
     // The ordinary throwaway-fixture path reaches verified_complete, but there
     // is no real target — nothing to ship — and the gate says so.
+    // NOTE (defense in depth, not a gap): a no-target mission has BOTH a null
+    // repositoryTarget AND a null retainedWorktreePath — the coding leg retains a
+    // worktree only for a real target — so conditions 3 and 4 co-fire here.
+    // Isolating condition 3 alone would need a null-target-with-worktree record,
+    // a state the real pipeline never produces; the target-carrying gate is
+    // mutation-proven separately by the no-worktree/ready pair below.
     const { reg } = await runMission(harness(), LIVE_ENV, 'm-ship-no-target');
     expect(reg.get('m-ship-no-target')?.state).toBe('verified_complete');
     expect(reg.shipContext('m-ship-no-target')).toBeNull();
@@ -2969,5 +2975,15 @@ describe('a Mission can target a real repository end to end', () => {
     expect(ctx).not.toBeNull();
     expect(ctx?.target.repositoryKey).toBe('local:proj');
     expect(ctx?.worktreePath).toBe(RETAINED);
+
+    // ...and once a ship is RECORDED, the same mission is no longer shippable:
+    // the ship route disposes the worktree and calls recordShipOutcome, which a
+    // review (Medium) found was missing — without it a shipped mission still
+    // read verified_complete and still offered itself for another ship.
+    reg.recordShipOutcome('m-ship-ready', { shipped: true });
+    expect(reg.shipContext('m-ship-ready')).toBeNull();
+    // The mission itself is still verified_complete (recordShipOutcome does not
+    // hijack the mission state machine); it simply stops being shippable.
+    expect(reg.get('m-ship-ready')?.state).toBe('verified_complete');
   });
 });

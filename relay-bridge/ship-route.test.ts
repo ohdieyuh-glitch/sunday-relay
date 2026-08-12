@@ -113,7 +113,7 @@ describe('POST /mission/:id/ship', () => {
     const m = verifiedMission();
     const r = await handleShipRoute(
       { method: 'POST', path: '/mission/m1/ship', authorization: undefined, body: {}, env, now: () => NOW },
-      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), store: storeWith(m.reg) },
+      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, store: storeWith(m.reg) },
     );
     expect(r?.status).toBe(401);
   });
@@ -122,7 +122,7 @@ describe('POST /mission/:id/ship', () => {
     const m = verifiedMission();
     const r = await handleShipRoute(
       { method: 'POST', path: '/mission/m1/ship', authorization: opAuth, body: {}, env, now: () => NOW },
-      { shipContext: () => null, store: storeWith(m.reg) },
+      { shipContext: () => null, recordShipOutcome: () => {}, store: storeWith(m.reg) },
     );
     expect(r?.status).toBe(409);
     expect((r?.body as { error: { kind: string } }).error.kind).toBe('mission_not_shippable');
@@ -132,7 +132,7 @@ describe('POST /mission/:id/ship', () => {
     const m = verifiedMission();
     const r = await handleShipRoute(
       { method: 'POST', path: '/mission/m1/ship', authorization: opAuth, body: {}, env, now: () => NOW },
-      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), store: storeWith(m.reg) },
+      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, store: storeWith(m.reg) },
     );
     expect(r?.status).toBe(200);
     const data = (r?.body as { data: { stage: string } }).data;
@@ -150,7 +150,7 @@ describe('POST /mission/:id/ship', () => {
         body: { deploy: { environment: 'staging', deployRoot, baseUrl: null } },
         env, now: () => NOW,
       },
-      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), store: storeWith(m.reg) },
+      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, store: storeWith(m.reg) },
     );
     expect(r?.status).toBe(200);
     const data = (r?.body as { data: { stage: string; shipped: boolean } }).data;
@@ -166,8 +166,9 @@ describe('POST /mission/:id/ship', () => {
     expect(existsSync(m.worktreePath)).toBe(false);
   });
 
-  it('does not leave the worktree behind even when the ship refuses', async () => {
+  it('does not leave the worktree behind even when the ship refuses, and records the attempt', async () => {
     const m = verifiedMission();
+    const recorded: Array<{ id: string; shipped: boolean }> = [];
     const r = await handleShipRoute(
       {
         method: 'POST', path: '/mission/m1/ship', authorization: opAuth,
@@ -175,10 +176,17 @@ describe('POST /mission/:id/ship', () => {
         body: { remote: { provider: 'github', credentialEnvVarName: '  ', pullRequestTitle: 't', pullRequestBody: { missionId: 'm', objective: 'o', artifactDigest: null, reviewedArtifactDigest: null, reviewerVerdict: null, reviewerFindings: [], relayVerification: [], attestations: [], baselineSha: null } } },
         env, now: () => NOW,
       },
-      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), store: storeWith(m.reg) },
+      {
+        shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }),
+        recordShipOutcome: (id, o) => recorded.push({ id, shipped: o.shipped }),
+        store: storeWith(m.reg),
+      },
     );
     expect(r?.status).toBe(422);
     expect(existsSync(m.worktreePath)).toBe(false);
+    // The finally records the attempt even on a refusal — the worktree it would
+    // re-ship is gone, so the mission must stop presenting as shippable.
+    expect(recorded).toEqual([{ id: 'm1', shipped: false }]);
   });
 
   it('refuses when the targeted repository is no longer registered', async () => {
@@ -186,9 +194,43 @@ describe('POST /mission/:id/ship', () => {
     const emptyStore = createRepositoryRegistrationStore({ root: temp('relay-shiproute-empty-') });
     const r = await handleShipRoute(
       { method: 'POST', path: '/mission/m1/ship', authorization: opAuth, body: {}, env, now: () => NOW },
-      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), store: emptyStore },
+      { shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, store: emptyStore },
     );
     expect(r?.status).toBe(404);
     expect((r?.body as { error: { kind: string } }).error.kind).toBe('repository_not_registered');
+  });
+
+  it('refuses with 422 baseline_unresolved when the target base branch does not resolve', async () => {
+    const m = verifiedMission();
+    // The target names a base branch absent from the retained worktree, so
+    // `git rev-parse` cannot resolve it — the only failure path of the ship
+    // route's `resolveBaselineSha` gate.
+    const brokenTarget = { ...m.target, baseBranch: 'refs/heads/nonexistent-base' };
+    const r = await handleShipRoute(
+      { method: 'POST', path: '/mission/m1/ship', authorization: opAuth, body: {}, env, now: () => NOW },
+      { shipContext: () => ({ target: brokenTarget, worktreePath: m.worktreePath }), recordShipOutcome: () => {}, store: storeWith(m.reg) },
+    );
+    expect(r?.status).toBe(422);
+    expect((r?.body as { error: { kind: string } }).error.kind).toBe('baseline_unresolved');
+    // A pre-flight refusal is RETRYABLE, so the retained worktree is deliberately
+    // KEPT — the operator can fix the base branch and ship again.
+    expect(existsSync(m.worktreePath)).toBe(true);
+  });
+
+  it('records a successful ship (keyed by mission id) so it stops being shippable', async () => {
+    const m = verifiedMission();
+    const recorded: Array<{ id: string; shipped: boolean }> = [];
+    const r = await handleShipRoute(
+      { method: 'POST', path: '/mission/m1/ship', authorization: opAuth, body: {}, env, now: () => NOW },
+      {
+        shipContext: () => ({ target: m.target, worktreePath: m.worktreePath }),
+        recordShipOutcome: (id, o) => recorded.push({ id, shipped: o.shipped }),
+        store: storeWith(m.reg),
+      },
+    );
+    expect(r?.status).toBe(200);
+    // A commit-only ship is `committed`, not live-verified, so shipped:false —
+    // but the attempt IS recorded, which is what makes shipContext null out.
+    expect(recorded).toEqual([{ id: 'm1', shipped: false }]);
   });
 });

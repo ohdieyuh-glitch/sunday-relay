@@ -22,9 +22,13 @@ import type { RepositoryRegistrationStore } from '../src/relay/persistence';
  *     environment, remote credential env var — and the ship does only what it
  *     names. "MERGE if authorized, DEPLOY when authorized" is the goal's rule.
  *   - RE-JUDGED AT SHIP TIME. The commit is decided from the worktree's ACTUAL
- *     state now, not a judgement stored at coding time. A worktree that changed
- *     between verification and ship would be re-judged and refused, which is the
- *     honest behaviour.
+ *     state now, not a judgement stored at coding time — it is re-observed and
+ *     re-judged against the target's scope, protected paths and change ceilings.
+ *     A change made between verification and ship that lands OUTSIDE that scope,
+ *     touches a protected path, or breaches a ceiling is refused; one that stays
+ *     inside is accepted, and the shipped record stays truthful about what is
+ *     actually on disk. (It is NOT re-compared against the reviewer's artifact
+ *     digest here, so this is not a promise that nothing changed since review.)
  *   - The registration is READ from the store and passed as `readRegistration`,
  *     so a revocation between verification and ship still lands.
  */
@@ -55,6 +59,10 @@ export interface ShipRouteDeps {
     readonly target: MissionRepositoryTarget;
     readonly worktreePath: string;
   } | null;
+  /** Records that a ship was attempted so the mission stops presenting as
+   *  shippable. Called AFTER the worktree is disposed — success, refusal, or
+   *  throw — so the registry record matches the now-gone worktree on disk. */
+  readonly recordShipOutcome: (missionId: string, outcome: { readonly shipped: boolean }) => void;
   readonly store: RepositoryRegistrationStore | null;
 }
 
@@ -93,8 +101,18 @@ export async function handleShipRoute(
 
   /**
    * RE-OBSERVE AND RE-JUDGE THE RETAINED WORKTREE. The commit is decided from
-   * what is on disk NOW, against the target's baseline. A worktree that no
-   * longer matches what was verified is re-judged and refused by the runner.
+   * what is on disk NOW, against the target's baseline, judged against scope,
+   * protected paths and ceilings — a change outside scope is refused by the
+   * runner; one inside is committed as-is.
+   *
+   * PRE-FLIGHT REFUSALS ARE RETRYABLE AND DELIBERATELY KEEP THE WORKTREE. The
+   * refusals before the ship acts — repository_not_registered above,
+   * worktree_unreadable and baseline_unresolved below — each name a condition an
+   * operator can fix and retry (re-register the repo, fix the base branch).
+   * Disposing the retained worktree on one of these would destroy a
+   * still-shippable deliverable on a fixable error, so disposal stays scoped to
+   * the ship attempt's `finally` and to fail()/cancelled() — never a pre-flight
+   * refusal. A review flagged the class as implicit; this states it.
    */
   /**
    * A REAL SHA IN THE SHA-TYPED FIELD. A review found the base BRANCH NAME
@@ -127,6 +145,7 @@ export async function handleShipRoute(
    * resource class the ship exists to release.
    */
   let outcome: Awaited<ReturnType<typeof shipVerifiedMission>>;
+  let shipped = false;
   try {
     outcome = await shipVerifiedMission({
       target: context.target,
@@ -140,6 +159,7 @@ export async function handleShipRoute(
       now: request.now,
       env: request.env,
     });
+    shipped = outcome.ok && (outcome.result.verdict?.shipped ?? false);
   } finally {
     disposeRetainedWorktree({
       worktreePath: context.worktreePath,
@@ -148,6 +168,16 @@ export async function handleShipRoute(
         : context.worktreePath,
       workingBranch: context.target.workingBranch,
     });
+    /**
+     * THE MISSION RECORD FOLLOWS THE DISPOSAL. The worktree the ship consumed is
+     * now gone; tell the registry so `shipContext` stops offering this mission
+     * and a re-ship is refused on explicit state rather than on a git
+     * side-effect. Inside the `finally`, so it runs on success, on a refusal,
+     * and on a throw — matching the disposal it accompanies. A review (Medium)
+     * found the record was never updated, so a shipped mission still read
+     * `verified_complete` and still presented as shippable.
+     */
+    deps.recordShipOutcome(missionId, { shipped });
   }
 
   if (!outcome.ok) {

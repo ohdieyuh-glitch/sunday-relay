@@ -244,6 +244,10 @@ interface MissionRecord {
   review?: MissionReview;
   attestations: Partial<Record<'prompt_architect' | 'coding_agent' | 'reviewer', ExecutionAttestation>>;
   codingOutcome?: CodingOutcome;
+  /** Recorded once a ship has been ATTEMPTED against this mission (success or a
+      refusal that consumed the retained worktree). Its presence means the
+      mission is no longer shippable — the worktree it would ship is gone. */
+  shipOutcome?: { readonly shipped: boolean; readonly at: string };
   ledger: Map<string, LedgerStatus>;
   completedAt: string | null;
   running: boolean;
@@ -394,6 +398,16 @@ export interface MissionRegistry {
     readonly target: MissionRepositoryTarget;
     readonly worktreePath: string;
   } | null;
+  /**
+   * RECORD THAT A SHIP WAS ATTEMPTED, so the mission stops presenting as
+   * shippable. The ship route disposes the retained worktree itself; this keeps
+   * the mission RECORD consistent with that disposal — it clears the retained
+   * path and stamps a ship marker, after which `shipContext` returns null. A
+   * re-ship is then refused on explicit state, not on a git side-effect.
+   * (Durability across a process restart is out of scope: the whole registry is
+   * in-memory, so a restart forgets the mission itself.)
+   */
+  recordShipOutcome(missionId: string, outcome: { readonly shipped: boolean }): void;
   cancel(missionId: string): LiveMissionUpdate | null;
   retry(missionId: string): LiveMissionUpdate | null;
 }
@@ -2350,12 +2364,25 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     shipContext(missionId) {
       const rec = records.get(missionId);
       if (rec === undefined) return null;
+      // A ship already attempted consumed the worktree — never shippable again.
+      if (rec.shipOutcome !== undefined) return null;
       // Only a VERIFIED mission with a real target and a retained worktree.
       if (rec.state !== 'verified_complete') return null;
       if (rec.repositoryTarget === null) return null;
       const worktreePath = rec.codingOutcome?.retainedWorktreePath ?? null;
       if (worktreePath === null) return null;
       return { target: rec.repositoryTarget, worktreePath };
+    },
+
+    recordShipOutcome(missionId, outcome) {
+      const rec = records.get(missionId);
+      if (rec === undefined) return;
+      // The worktree the ship consumed is gone (the ship route disposed it);
+      // keep the record consistent so `shipContext` stops offering it.
+      if (rec.codingOutcome !== undefined) {
+        rec.codingOutcome = { ...rec.codingOutcome, retainedWorktreePath: null };
+      }
+      rec.shipOutcome = { shipped: outcome.shipped, at: now() };
     },
 
     cancel(missionId) {
