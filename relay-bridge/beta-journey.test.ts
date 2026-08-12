@@ -5,23 +5,26 @@ import { join } from 'node:path';
 
 import { createBridgeServer } from './server';
 import { loadBridgeConfig } from './config';
+import { createMissionRegistry } from './mission';
+import { journeyRoleDeps } from './mission-journey-harness';
 import { createRepositoryRegistrationStore } from '../src/relay/persistence';
 
 /**
  * THE PRIVATE-BETA JOURNEY, driven by a FRESH PARTICIPANT over the real HTTP
  * boundary — no operator token, no founder terminal.
  *
- * This proves the authorization spine end to end as a beta user experiences it:
+ * This proves the beta journey end to end as a user experiences it:
  *   sign in with GitHub  →  authorize an app installation  →  register a repo
- *   they own  →  target that repo in a mission start  →  and be REFUSED any repo
- *   they do not own.
+ *   they own  →  target that repo in a mission start  →  (and be REFUSED any
+ *   repo they do not own)  →  start a real Mission  →  watch the actual
+ *   three-role pipeline reach verified_complete  →  reconnect without losing it.
  *
- * GitHub is mocked at the `fetch` seam; the mission engine is a stub here (the
- * REAL three-role pipeline is proven to reach verified_complete in
- * orchestrator.test.ts, and the config/limits flow through registry.start in
- * mission-auth.test.ts). What this file adds is the one thing neither proves: a
- * fresh, non-operator, GitHub-verified participant driving the product API from
- * sign-in through authorized mission targeting, with ownership enforced.
+ * GitHub is mocked at the `fetch` seam, and the three role BOUNDARIES are fake
+ * (see mission-journey-harness) so no provider is contacted — but the pipeline
+ * driving them is the one and only real `mission.ts` running behind a real
+ * `createBridgeServer`. What this file proves that no other does: a fresh,
+ * non-operator, GitHub-verified participant driving the whole product API from
+ * sign-in through a completed mission, with ownership and spend enforced.
  */
 
 const ORIGIN = 'https://sunday-relay.vercel.app';
@@ -196,4 +199,110 @@ describe('a fresh participant signs in, authorizes an installation, and connects
     });
     expect(reg.status).toBe(401);
   }, 30_000);
+});
+
+/** Boot with the REAL mission registry (fake role deps) so a mission actually
+    runs the three-role pipeline through the HTTP surface. */
+function bootReal(): { start: () => Promise<string>; calls: ReturnType<typeof journeyRoleDeps>['calls'] } {
+  const journey = journeyRoleDeps();
+  const start = async (): Promise<string> => {
+    const root = mkdtempSync(join(tmpdir(), 'relay-journey-real-'));
+    roots.push(root);
+    vi.stubEnv('RELAY_BRIDGE_API_TOKEN', OPERATOR);
+    vi.stubEnv('RELAY_ALLOWED_ORIGINS', ORIGIN);
+    vi.stubEnv('RELAY_DATA_DIR', root);
+    vi.stubEnv('RELAY_GITHUB_APP_CLIENT_ID', 'Iv1.public_client_id');
+    vi.stubEnv('RELAY_GITHUB_APP_CLIENT_SECRET', 'fixture-secret-never-surfaces');
+    vi.stubEnv('RELAY_GITHUB_APP_CALLBACK_URL', CALLBACK);
+    vi.stubEnv('RELAY_GITHUB_APP_INSTALL_URL', INSTALL_URL);
+    // The LIVE three-role path (architect → coding → independent reviewer). The
+    // OpenAI key is a synthetic fixture that is never served — the architect dep
+    // is injected, so nothing reaches a provider — but its PRESENCE selects the
+    // live path so the reviewer runs (the fusion path is review-less by design).
+    const liveEnv = {
+      RELAY_PROMPT_ARCHITECT_MODE: 'live',
+      OPENAI_API_KEY: 'sk-FAKETESTNOTREAL-never-served',
+      OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-test',
+    } as NodeJS.ProcessEnv;
+    vi.stubEnv('RELAY_PROMPT_ARCHITECT_MODE', 'live');
+    const config = loadBridgeConfig(process.env);
+    const registry = createMissionRegistry({
+      fusionBaseUrl: 'http://127.0.0.1:3999',
+      sundayMode: 'fast',
+      claudeMode: 'fake',
+      confirmLive: true,
+      architectEnv: liveEnv,
+      hermesEnv: liveEnv,
+      deps: journey.deps,
+    });
+    const server = createBridgeServer(
+      config, registry,
+      null, null, null, null, () => false, null, [], null, null,
+      createRepositoryRegistrationStore({ root }),
+    );
+    servers.push(server as never);
+    await new Promise<void>((r) => (server as never as { listen: (p: number, h: string, cb: () => void) => void }).listen(0, '127.0.0.1', r));
+    const address = (server as never as { address: () => { port: number } | null }).address();
+    return `http://127.0.0.1:${address === null ? 0 : address.port}`;
+  };
+  return { start, calls: journey.calls };
+}
+
+const TERMINAL = new Set(['verified_complete', 'failed', 'cancelled']);
+async function settleMission(base: string, token: string, missionId: string, tries = 300): Promise<Record<string, unknown>> {
+  for (let i = 0; i < tries; i++) {
+    const res = await realFetch(`${base}/relay-api/mission/${missionId}`, { headers: asUser(token) });
+    if (res.status === 200) {
+      const view = ((await res.json()) as { view: Record<string, unknown> }).view;
+      if (TERMINAL.has(view.state as string)) return view;
+    }
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error('mission did not settle');
+}
+
+describe('a fresh participant runs a real three-role mission end to end over HTTP', () => {
+  it('signs in, starts a mission, and watches it reach verified_complete with truthful evidence', async () => {
+    const real = bootReal();
+    const base = await real.start();
+
+    // Fresh participant, no operator token.
+    const token = await signIn(base, { login: 'beta-alice', id: 4242 });
+
+    // Give Relay an objective + a PSP config, and start a real Mission.
+    const started = await getJson(await startMission(base, token, {
+      missionId: 'm-run', objective: 'Implement the project-name normalizer.',
+      config: { mode: 'autonomous', review: 'independent', limits: { agentCalls: 6, spendUsd: 3 } },
+    }));
+    expect(started.status).toBe(200);
+
+    // Watch truthful live state to completion — the REAL pipeline ran.
+    const view = await settleMission(base, token, 'm-run');
+    expect(view.state).toBe('verified_complete');
+    // Each of the three roles actually ran: architect + coding + independent reviewer.
+    expect(real.calls.architect + real.calls.fusion).toBe(1);
+    expect(real.calls.coding).toBe(1);
+    expect(real.calls.reviewer).toBe(1);
+    // The config the user set is visible on the mission.
+    expect((view.config as { mode: string }).mode).toBe('autonomous');
+    // Actor/model evidence is present — attestations for the roles that executed.
+    expect(Array.isArray(view.attestations)).toBe(true);
+    expect((view.attestations as unknown[]).length).toBeGreaterThan(0);
+  }, 45_000);
+
+  it('survives a browser reconnect: a NEW poll with the same session sees the same mission', async () => {
+    const real = bootReal();
+    const base = await real.start();
+    const token = await signIn(base, { login: 'beta-alice', id: 4242 });
+    await getJson(await startMission(base, token, { missionId: 'm-reconnect', objective: 'Normalize names.' }));
+    const settled = await settleMission(base, token, 'm-reconnect');
+    expect(settled.state).toBe('verified_complete');
+
+    // "Refresh the browser": a brand-new request with only the session + missionId
+    // (the two things a reconnecting tab still holds) recovers the whole mission.
+    const reconnect = await getJson(await realFetch(`${base}/relay-api/mission/m-reconnect`, { headers: asUser(token) }));
+    expect(reconnect.status).toBe(200);
+    expect((reconnect.body.view as { state: string }).state).toBe('verified_complete');
+    expect((reconnect.body.view as { missionRevision?: string }).missionRevision).toBe((settled as { missionRevision?: string }).missionRevision);
+  }, 45_000);
 });
