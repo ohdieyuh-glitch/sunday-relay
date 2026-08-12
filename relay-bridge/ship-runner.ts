@@ -231,6 +231,43 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
     }
     const owner = target.identity.owner;
 
+    /**
+     * REGISTERED IS NOT THE SAME AS DRIVABLE, and the descriptor is what says so.
+     *
+     * The runner used to ignore `remote.descriptor` entirely. Two things follow
+     * from that, and a review found both:
+     *
+     *   - `descriptor.supports` is the provider's own statement of what this
+     *     implementation can actually DO. Calling `mergePullRequest` on a
+     *     provider that does not list `merge_pr` is asking for an operation
+     *     nobody built, and — before the Critical fix — a refusal from it was
+     *     recorded as a merge.
+     *   - `descriptor.credentialEnvVarName` is the env var the provider reads.
+     *     The registration NAMES the credential the founder authorized for this
+     *     repository. A provider holding a DIFFERENT credential would have been
+     *     driven without complaint, which is a credential boundary crossed
+     *     silently — the one failure the boundary exists to make impossible.
+     *
+     * Both are checked before any network call, and both refuse by name.
+     */
+    const authorizedEnvVar = target.credential.envVarName;
+    if (authorizedEnvVar !== null && remote.descriptor.credentialEnvVarName !== authorizedEnvVar) {
+      return {
+        stage, evidence, commitSha, verdict: null,
+        stoppedBy:
+          `This repository authorizes the credential in ${authorizedEnvVar}, and the provider reads `
+          + `${remote.descriptor.credentialEnvVarName ?? 'none'}. Relay will not act on a credential it was not given.`,
+      };
+    }
+    const unsupported = (permission: 'push_feature_branch' | 'create_pr' | 'merge_pr'): boolean =>
+      !remote.descriptor.supports.includes(permission);
+    if (unsupported('push_feature_branch')) {
+      return {
+        stage, evidence, commitSha, verdict: null,
+        stoppedBy: `Provider "${remote.descriptor.providerId}" does not support pushing a feature branch.`,
+      };
+    }
+
     const pushed = await remote.push({
       repositoryKey: target.repositoryKey,
       owner,
@@ -272,7 +309,7 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
     stage = 'pushed';
 
     const prGate = stillPermitted(request, 'pull_request_open', stage, null);
-    if (prGate.ok) {
+    if (prGate.ok && !unsupported('create_pr')) {
       const opened = await remote.openPullRequest({
         owner, repo: target.identity.name,
         head: target.workingBranch, base: target.baseBranch, title, body,
@@ -298,7 +335,7 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
        * and complete outcome, not a failure.
        */
       const mergeGate = stillPermitted(request, 'merged', stage, null);
-      if (mergeGate.ok && opened.reference !== null) {
+      if (mergeGate.ok && !unsupported('merge_pr') && opened.reference !== null) {
         const merged = await remote.mergePullRequest({
           owner, repo: target.identity.name,
           reference: opened.reference,

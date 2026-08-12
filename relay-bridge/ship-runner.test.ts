@@ -777,3 +777,58 @@ describe('the remote leg records what happened, not what was asked', () => {
     expect(result.stoppedBy).toContain('no remote owner');
   });
 });
+
+/**
+ * REGISTERED IS NOT THE SAME AS DRIVABLE.
+ *
+ * The runner ignored `remote.descriptor` entirely, so a provider reading a
+ * DIFFERENT credential than the one the registration authorizes was driven
+ * without complaint — a credential boundary crossed silently — and an
+ * unsupported merge was attempted anyway.
+ */
+describe('the provider descriptor is read before any network call', () => {
+  const L: readonly RepositoryPermission[] =
+    ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr', 'merge_pr'];
+
+  it('REFUSES a provider that reads a different credential than the one authorized', async () => {
+    const root = repository();
+    const reg = remoteRegistration(L);
+    const target = remoteTarget(reg, L, root);
+    const fake = fakeRemote();
+    // The registration authorizes GITHUB_TOKEN; this provider reads another.
+    (fake.provider as { descriptor: { credentialEnvVarName: string } }).descriptor =
+      { ...fake.provider.descriptor, credentialEnvVarName: 'SOMEONE_ELSES_TOKEN' } as never;
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: fake.provider, title: 't', body: 'b' },
+      now: () => NOW,
+    });
+    // Refused before anything left the machine.
+    expect(fake.calls).toEqual([]);
+    expect(result.stage).toBe('committed');
+    expect(result.stoppedBy).toContain('SOMEONE_ELSES_TOKEN');
+  });
+
+  it('does not attempt a merge on a provider that does not support one', async () => {
+    const root = repository();
+    const reg = remoteRegistration(L);
+    const target = remoteTarget(reg, L, root);
+    const fake = fakeRemote();
+    (fake.provider as { descriptor: { supports: readonly string[] } }).descriptor =
+      { ...fake.provider.descriptor, supports: ['push_feature_branch', 'create_pr'] } as never;
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: fake.provider, title: 't', body: 'b' },
+      now: () => NOW,
+    });
+    // The Mission HOLDS merge_pr; the provider cannot do it. Stops with the
+    // pull request open rather than calling an operation nobody built.
+    expect(fake.calls).not.toContain('merge');
+    expect(result.stage).toBe('pull_request_open');
+    expect(result.stoppedBy).toBeNull();
+  });
+});
