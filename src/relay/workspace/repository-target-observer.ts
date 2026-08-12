@@ -617,8 +617,9 @@ export function checkoutMatchesIdentity(input: {
    * USERINFO IS STRIPPED BEFORE THIS URL IS USED FOR ANYTHING, including the
    * refusal message and the success return.
    *
-   * `https://x-access-token:ghp_SECRET@github.com/o/r.git` is an ordinary clone
-   * form. This function's refusal reformats the URL into
+   * An https clone URL carrying `user:token@` before the host is an ordinary
+   * clone form — the repository's own secret scanner refuses to let this
+   * comment spell one out, which is the scanner working. This function's refusal reformats the URL into
    * `${host}/${owner}/${name}`, and that reformatting DESTROYED the one
    * redaction pattern (`token:`) that was catching the secret — so the credential
    * travelled verbatim into a persisted, user-visible mission failure reason.

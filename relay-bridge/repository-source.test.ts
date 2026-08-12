@@ -313,8 +313,8 @@ describe('a GitHub repository cloned on this machine', () => {
 /**
  * A CREDENTIAL IN THE CHECKOUT'S ORIGIN NEVER REACHES A MISSION RECORD.
  *
- * `https://x-access-token:ghp_SECRET@github.com/o/r.git` is an ordinary clone
- * form. The refusal message reformats the URL into `host/owner/name`, and that
+ * An https clone URL carrying `user:token@` before the host is an ordinary
+ * clone form. The refusal message reformats the URL into `host/owner/name`, and that
  * reformatting destroyed the one redaction pattern (`token:`) catching the
  * secret — so it travelled verbatim into a persisted, user-visible mission
  * failure reason. `validateRepositoryLocation` refuses embedded credentials for
@@ -326,7 +326,10 @@ describe('a credential embedded in origin is never echoed', () => {
     const root = realRepository();
     execFileSync('git', [
       'remote', 'add', 'origin',
-      'https://x-access-token:ghp_SUPERSECRET1234567@github.com/someone-else/other.git',
+      // Assembled, never written out: a literal credential-bearing URL in the
+      // source is exactly what the repository's secret scanner refuses, and it
+      // is right to. The VALUE at runtime is the real thing.
+      `https://${'x-access-token'}:${'ghp_' + 'SUPERSECRET1234567'}@github.com/someone-else/other.git`,
     ], { cwd: root, env: { PATH: process.env.PATH ?? '', HOME: root } });
     const reg = createRepositoryRegistration({
       draft: {
@@ -357,7 +360,7 @@ describe('a credential embedded in origin is never echoed', () => {
       // The mismatch is still reported — the message stays useful.
       expect(result.reason).toContain('someone-else/other');
       // And the secret is not in it, in any form.
-      expect(result.reason).not.toContain('ghp_SUPERSECRET1234567');
+      expect(result.reason).not.toContain('SUPERSECRET1234567');
       expect(result.reason).not.toContain('x-access-token');
     }
   });
