@@ -41,7 +41,7 @@ import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
 import { handleRepositoryRoute, isRepositoryRoute } from './repository-routes';
 import { handleShipRoute, isShipRoute } from './ship-route';
 import { resolveRepositoryTarget } from '../src/relay/mission/repository-target';
-import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
+import type { MissionRepositoryTarget, RepositoryPermission } from '../src/relay/mission/repository-target';
 import { guardBetaAdmission, participantFromBody } from './beta-guard';
 import { claimedClientKey, createBetaRateLimiter } from './beta-rate-limit';
 import type { BetaRateLimiter } from './beta-rate-limit';
@@ -744,6 +744,22 @@ export function createBridgeServer(
             const declared = (body as { intendedWritePaths?: unknown })?.intendedWritePaths;
             intendedWritePaths = Array.isArray(declared) && declared.every((x) => typeof x === 'string')
               ? declared as string[] : [];
+            /**
+             * OPTIONAL PERMISSIONS, NARROWED FROM THE GRANTS — never widened.
+             *
+             * Absent means the safe floor (read + write_worktree), which is all
+             * the coding leg needs. A mission the operator intends to SHIP must
+             * ask for the shipping permissions (commit, push_feature_branch,
+             * create_pr, merge_pr) here, because the ship acts under the target's
+             * permissions. `resolveRepositoryTarget` refuses any permission not in
+             * the registration's grants, so the body can only ever NARROW: an
+             * unknown or ungranted permission is refused, not honoured.
+             */
+            const declaredPerms = (body as { permissions?: unknown })?.permissions;
+            const requestedPermissions: readonly RepositoryPermission[] | null =
+              Array.isArray(declaredPerms) && declaredPerms.every((x) => typeof x === 'string')
+                ? (declaredPerms as RepositoryPermission[])
+                : null;
             const resolved = resolveRepositoryTarget({
               registration,
               request: {
@@ -752,9 +768,8 @@ export function createBridgeServer(
                 selectedBy: 'operator',
                 selectedAt: new Date().toISOString(),
                 workingBranch,
-                // No widening from the body: a mission may only narrow the
-                // registration's grants, and the resolver enforces it.
-                permissions: null,
+                // Body may only NARROW; the resolver refuses anything beyond grants.
+                permissions: requestedPermissions,
               },
               now: new Date().toISOString(),
             });
