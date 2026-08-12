@@ -3,11 +3,14 @@ import {
   decideShipped,
   pushLanded,
   refusePushTarget,
+  renderPullRequestBody,
+  renderPullRequestTitle,
   revalidateRepositoryTarget,
 } from '../src/relay/mission/repository-target';
 import { commitObservedWork } from '../src/relay/workspace/repository-target-observer';
 import type {
   DeploymentProvider,
+  PullRequestEvidence,
   RemoteRepositoryProvider,
   DiffJudgement,
   LiveProbeResult,
@@ -80,8 +83,19 @@ export interface ShipRunRequest {
    */
   readonly remote?: {
     readonly provider: RemoteRepositoryProvider;
-    readonly title: string;
-    readonly body: string;
+    /**
+     * EVIDENCE, NOT PROSE. The runner used to take a free-text `title` and
+     * `body` and post them verbatim, which made the founder-facing surface of a
+     * Mission able to carry an unverified narrative — "a claim is never
+     * presented as evidence" is the contract it broke.
+     *
+     * The domain already owns the renderer, and `planDryRun` already used it:
+     * `renderPullRequestBody` states an absent fact as absent, keeps requested
+     * and served separate, and emits a WARNING line when the Reviewer read a
+     * different artifact than the one being merged. The thing that actually
+     * opens pull requests was the one component bypassing it.
+     */
+    readonly evidence: PullRequestEvidence;
   };
   /**
    * Deploy only if this is given AND the Mission holds the grant. Absent means
@@ -194,7 +208,7 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
   /* --------------------------------------------------- PUSH / PR / MERGE */
 
   if (request.remote !== undefined) {
-    const { provider: remote, title, body } = request.remote;
+    const { provider: remote, evidence: prEvidence } = request.remote;
 
     const pushGate = stillPermitted(request, 'pushed', stage, null);
     if (!pushGate.ok) {
@@ -312,7 +326,15 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
     if (prGate.ok && !unsupported('create_pr')) {
       const opened = await remote.openPullRequest({
         owner, repo: target.identity.name,
-        head: target.workingBranch, base: target.baseBranch, title, body,
+        head: target.workingBranch, base: target.baseBranch,
+        title: renderPullRequestTitle(prEvidence),
+        // Rendered from the SAME live permissions the run is acting under.
+        body: renderPullRequestBody({
+          target: prGate.target,
+          permissions: prGate.target.permissions,
+          evidence: prEvidence,
+          judgement: request.judgement,
+        }),
       });
       if (!opened.ok) {
         // No row. A pull request that was refused is not an open one.

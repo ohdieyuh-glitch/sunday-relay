@@ -16,6 +16,7 @@ import {
 import { observeRepositoryWorktree } from '../src/relay/workspace/repository-target-observer';
 import type {
   MissionRepositoryTarget,
+  PullRequestEvidence,
   RemoteRepositoryProvider,
   RepositoryPermission,
   RepositoryRegistration,
@@ -38,6 +39,19 @@ import type {
  */
 
 const NOW = '2026-08-11T12:00:00.000Z';
+/** What Relay VERIFIED, which is what the pull request body is rendered from. */
+const PR_EVIDENCE: PullRequestEvidence = {
+  missionId: 'mission-1',
+  objective: 'Bump the version',
+  artifactDigest: 'sha256:aaa',
+  reviewedArtifactDigest: 'sha256:aaa',
+  reviewerVerdict: 'approved',
+  reviewerFindings: [],
+  relayVerification: ['npm test passed'],
+  attestations: [],
+  baselineSha: 'b'.repeat(40),
+};
+
 const LADDER: readonly RepositoryPermission[] = ['read', 'write_worktree', 'commit', 'deploy_staging'];
 const temporaries: string[] = [];
 const servers: Server[] = [];
@@ -515,7 +529,7 @@ describe('PUSH / PR / MERGE are invoked, and never implied', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, title: 't', body: 'b' },
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(fake.calls).toEqual(['push', 'pr'].map((c) => c === 'push' ? 'push:relay/mission-1' : c));
@@ -535,7 +549,7 @@ describe('PUSH / PR / MERGE are invoked, and never implied', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, title: 't', body: 'b' },
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(fake.calls).toContain('merge');
@@ -555,7 +569,7 @@ describe('PUSH / PR / MERGE are invoked, and never implied', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, title: 't', body: 'b' },
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(result.stage).toBe('committed');
@@ -594,7 +608,7 @@ describe('PUSH / PR / MERGE are invoked, and never implied', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, remoteTarget(reg, REMOTE_LADDER, root)),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, title: 't', body: 'b' },
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(result.commitSha).toBeNull();
@@ -630,7 +644,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, title: 't', body: 'b' },
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     // Stopped, and NO `pushed` row: a push that did not land is not a push.
@@ -648,7 +662,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, title: 't', body: 'b' },
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     const pr = result.evidence.find((e) => e.stage === 'pull_request_open');
@@ -667,7 +681,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fakeRemote().provider, title: 't', body: 'b' },
+      remote: { provider: fakeRemote().provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(result.stage).toBe('pull_request_open');
@@ -697,7 +711,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: refusing.provider, title: 't', body: 'b' },
+      remote: { provider: refusing.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(refusing.calls).toContain('merge');
@@ -722,7 +736,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: refusing.provider, title: 't', body: 'b' },
+      remote: { provider: refusing.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(result.stage).toBe('pushed');
@@ -749,7 +763,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       readRegistration: () => { reads += 1; return reads <= 1 ? full : withoutPush; },
       worktreePath: root, judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, title: 't', body: 'b' },
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(result.stage).toBe('committed');
@@ -770,7 +784,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, remoteTarget(reg, LADDER_NO_MERGE, root)),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, title: 't', body: 'b' },
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(fake.calls).toEqual([]);
@@ -802,7 +816,7 @@ describe('the provider descriptor is read before any network call', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, title: 't', body: 'b' },
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     // Refused before anything left the machine.
@@ -822,7 +836,7 @@ describe('the provider descriptor is read before any network call', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, title: 't', body: 'b' },
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     // The Mission HOLDS merge_pr; the provider cannot do it. Stops with the
@@ -830,5 +844,83 @@ describe('the provider descriptor is read before any network call', () => {
     expect(fake.calls).not.toContain('merge');
     expect(result.stage).toBe('pull_request_open');
     expect(result.stoppedBy).toBeNull();
+  });
+});
+
+/**
+ * THE PULL REQUEST BODY IS RENDERED EVIDENCE, NOT PROSE.
+ *
+ * The runner used to take free-text `title`/`body` and post them verbatim, so
+ * the founder-facing surface of a Mission could carry an unverified narrative —
+ * "a claim is never presented as evidence" is the contract that broke. The
+ * domain already owned the renderer and `planDryRun` already used it; the one
+ * component that actually opens pull requests was bypassing it.
+ */
+describe('the pull request carries what Relay verified', () => {
+  const L: readonly RepositoryPermission[] =
+    ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr'];
+
+  /** Capture what the provider was actually asked to post. */
+  function capturingRemote() {
+    const seen: { title?: string; body?: string } = {};
+    const base = fakeRemote();
+    base.provider.openPullRequest = async (r) => {
+      seen.title = r.title;
+      seen.body = r.body;
+      base.calls.push('pr');
+      return {
+        ok: true, providerId: 'fake', reference: '7', url: null,
+        state: 'open' as const, observedAt: NOW, detail: null,
+      };
+    };
+    return { seen, ...base };
+  }
+
+  it('posts the rendered evidence, not a caller-supplied narrative', async () => {
+    const root = repository();
+    const reg = remoteRegistration(L);
+    const target = remoteTarget(reg, L, root);
+    const cap = capturingRemote();
+    await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: cap.provider, evidence: PR_EVIDENCE },
+      now: () => NOW,
+    });
+    expect(cap.seen.title).toContain('Bump the version');
+    // The body is the domain's rendering: it names what Relay checked itself.
+    expect(cap.seen.body).toContain('npm test passed');
+    expect(cap.seen.body).toContain(PR_EVIDENCE.baselineSha as string);
+  });
+
+  it('SHOWS BOTH DIGESTS when the Reviewer read a different artifact', async () => {
+    /**
+     * The case the renderer exists for. A reviewer verdict about one artifact,
+     * attached to a pull request merging another, is the most misleading thing
+     * a Mission can publish, and free text would have said nothing at all.
+     *
+     * The contract is that BOTH digests are shown — the renderer's own words:
+     * "a reader can only notice that if both are shown" — not that a warning
+     * keyword is emitted. This test first asserted the word "warning", which I
+     * had taken from a description rather than from the renderer.
+     */
+    const root = repository();
+    const reg = remoteRegistration(L);
+    const target = remoteTarget(reg, L, root);
+    const cap = capturingRemote();
+    await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: {
+        provider: cap.provider,
+        evidence: { ...PR_EVIDENCE, reviewedArtifactDigest: 'sha256:something-else' },
+      },
+      now: () => NOW,
+    });
+    // Both present, so the disagreement is visible rather than described.
+    expect(cap.seen.body).toContain('sha256:aaa');
+    expect(cap.seen.body).toContain('sha256:something-else');
   });
 });
