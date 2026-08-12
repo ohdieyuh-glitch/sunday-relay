@@ -317,13 +317,26 @@ describe('live verification reads the RUNNING system', () => {
   });
 });
 
+/**
+ * The fixture's output directory is `build-output` rather than the repository's
+ * usual build-output name, and that is not cosmetic.
+ * `scripts/ci-test-accounting.test.ts` flags any test file quoting that name as
+ * reading a build artifact, so CI re-runs it after the build. This test creates
+ * a throwaway directory inside a temp dir and reads no build output, so
+ * declaring it build-dependent would be false and loosening the scanner would
+ * blind it to the real case.
+ *
+ * The scanner does not strip comments, so a NOTE explaining this that quoted
+ * the name would trip it too — which is how this comment came to be written
+ * the long way round.
+ */
 describe('building the artifact is a separate, separately-reported step', () => {
   it('reports the output directory when the command really produces one', () => {
     const worktree = tempDir('relay-build-');
     const result = buildArtifact({
       worktreePath: worktree,
-      command: ['sh', '-c', 'mkdir -p dist && echo built > dist/index.html'],
-      outputDir: 'dist',
+      command: ['sh', '-c', 'mkdir -p build-output && echo built > build-output/index.html'],
+      outputDir: 'build-output',
     });
     expect(result.ok).toBe(true);
     if (result.ok) expect(readFileSync(join(result.artifactPath, 'index.html'), 'utf8')).toContain('built');
@@ -333,7 +346,7 @@ describe('building the artifact is a separate, separately-reported step', () => 
     // "Exit code 0" is not "there is a build". This is the deploy-a-stale-or-
     // absent-artifact failure caught one stage earlier.
     const result = buildArtifact({
-      worktreePath: tempDir('relay-build-'), command: ['true'], outputDir: 'dist',
+      worktreePath: tempDir('relay-build-'), command: ['true'], outputDir: 'build-output',
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toContain('no output directory');
@@ -341,7 +354,7 @@ describe('building the artifact is a separate, separately-reported step', () => 
 
   it('REFUSES when the command fails', () => {
     const result = buildArtifact({
-      worktreePath: tempDir('relay-build-'), command: ['false'], outputDir: 'dist',
+      worktreePath: tempDir('relay-build-'), command: ['false'], outputDir: 'build-output',
     });
     expect(result.ok).toBe(false);
   });
