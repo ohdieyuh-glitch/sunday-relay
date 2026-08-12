@@ -1,4 +1,6 @@
-import { rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { buildSafeEditFixture } from '../src/relay/connectors/claude-code/fixture';
 import {
   checkoutMatchesIdentity,
@@ -7,6 +9,8 @@ import {
 import { validateSourceRepository } from '../src/relay/workspace/repository-inspector';
 import { pathInScope, protectedPathMatches } from '../src/relay/mission/repository-target';
 import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
+import { envVarCredentialProvider, buildEphemeralGitAuth } from './repository-credential';
+import { cloneAuthorizedRepository } from './repository-remote-transport';
 
 /**
  * WHERE A MISSION'S CODE COMES FROM — the seam the bridge was missing.
@@ -105,47 +109,20 @@ export function repositoryTargetSource(
   target: MissionRepositoryTarget,
   /** The files this Mission declares it will write, narrowed from the scope. */
   intendedWritePaths: readonly string[],
+  /** Server-side environment the credential seam resolves the token from. */
+  env: NodeJS.ProcessEnv = process.env,
 ): RepositorySourceResult {
-  if (target.location.kind === 'local_path' && target.identity.provider !== 'local') {
-    /**
-     * A REMOTE-HOSTED REPOSITORY, CHECKED OUT LOCALLY. Now supported, because
-     * refusing it made the whole PUSH/PR/MERGE leg unreachable: a `github`
-     * identity was forced to be `remote_clone`, and this function refuses
-     * `remote_clone` because nothing clones.
-     *
-     * The substance is checked below rather than assumed from the shape — the
-     * checkout's own `origin` must name this exact repository, or Relay would
-     * happily commit a scratch directory and push it to production.
-     */
-    const validatedCheckout = validateSourceRepository(target.location.path);
-    if (!validatedCheckout.ok) {
-      return { ok: false, reason: `Repository path refused: ${validatedCheckout.error.message}` };
-    }
-    const agrees = checkoutMatchesIdentity({
-      worktreePath: validatedCheckout.value.root,
-      host: target.identity.host,
-      owner: target.identity.owner,
-      name: target.identity.name,
-    });
-    if (!agrees.ok) return { ok: false, reason: agrees.error.message };
-  } else if (target.location.kind !== 'local_path') {
-    return {
-      ok: false,
-      reason:
-        'This Mission targets a remote repository, and Relay has no remote provider. '
-        + 'Nothing here clones or fetches; a remote target is refused rather than silently reached.',
-    };
-  }
+  /**
+   * CHEAP CONFIGURATION CHECKS FIRST — never spend a network clone on a Mission
+   * that is misconfigured. write_worktree, a narrowed intent, and scope/protected
+   * containment do not depend on where the code comes from.
+   */
   if (!target.permissions.includes('write_worktree')) {
-    // Read-only Missions are supported and useful, but not through the coding
-    // leg: it exists to produce a diff, and a Mission that may not write should
-    // never have an agent started for it.
     return {
       ok: false,
       reason: 'This Mission does not hold "write_worktree", so no Coding Agent may be started for it.',
     };
   }
-
   if (intendedWritePaths.length === 0) {
     return {
       ok: false,
@@ -154,13 +131,6 @@ export function repositoryTargetSource(
         + 'An agent turned loose on a whole write scope has no claim to check against.',
     };
   }
-  /**
-   * EVERY DECLARED PATH MUST BE INSIDE THE SCOPE AND OUTSIDE THE PROTECTED SET.
-   *
-   * Checked here, before a worktree exists, rather than only after the agent
-   * exits: a Mission that declares an out-of-scope file is misconfigured, and
-   * discovering that from the diff means the money is already spent.
-   */
   const outOfScope = intendedWritePaths.filter((path) => !pathInScope(target.scope.write, path));
   if (outOfScope.length > 0) {
     return { ok: false, reason: `Declared write paths outside this Mission's scope: ${outOfScope.join(', ')}.` };
@@ -173,42 +143,100 @@ export function repositoryTargetSource(
   }
 
   /**
-   * CANONICALIZED BEFORE USE. `validateSourceRepository` is the existing gate —
-   * it rejects traversal, non-directories, symlinked roots that escape and
-   * anything that is not a git repository — and it returns the realpath, which
-   * is what every containment check downstream compares against.
+   * OBTAIN THE SOURCE. A `local_path` names a checkout already on disk; a
+   * `remote_clone` is fetched over authenticated HTTPS into the isolated
+   * workspace. Either way the checkout's own `origin` is verified against the
+   * registered identity before a worktree exists, so Relay never commits a
+   * scratch directory and pushes it to a repository nobody registered.
    */
-  const validated = validateSourceRepository(target.location.path);
-  if (!validated.ok) return { ok: false, reason: `Repository path refused: ${validated.error.message}` };
-
-  /**
-   * THE BASELINE IS READ FROM GIT, NOT TAKEN FROM THE TARGET.
-   *
-   * `MissionRepositoryTarget.baselineSha` is null by construction — the pure
-   * domain cannot read a repository and says so. This is where it becomes known,
-   * and it is resolved from the BASE BRANCH rather than from HEAD: HEAD is
-   * whatever the founder last checked out, and a Mission measured against that
-   * would be measured against an accident.
-   */
-  const baseline = resolveBaselineSha({ worktreePath: validated.value.root, ref: target.baseBranch });
-  if (!baseline.ok) {
-    return {
-      ok: false,
-      reason: `The base branch "${target.baseBranch}" could not be resolved to a revision.`,
-    };
-  }
+  const obtained = target.location.kind === 'local_path'
+    ? obtainLocalCheckout(target, target.location.path)
+    : obtainRemoteClone(target, target.location.cloneUrl, env);
+  if (!obtained.ok) return { ok: false, reason: obtained.reason };
 
   return {
     ok: true,
     source: {
-      sourceRepositoryPath: validated.value.root,
-      baselineRevision: baseline.value,
+      sourceRepositoryPath: obtained.root,
+      baselineRevision: obtained.baselineRevision,
       allowedWritePaths: [...intendedWritePaths],
       protectedPaths: { forbidden: [...target.protectedPaths], readOnly: [] },
       disposable: false,
-      // Relay does not delete a founder's repository. The WORKTREE is removed by
-      // the workspace service; the source is not Relay's to touch.
-      dispose: () => undefined,
+      dispose: obtained.dispose,
     },
   };
+}
+
+type ObtainedSource =
+  | { readonly ok: true; readonly root: string; readonly baselineRevision: string; readonly dispose: () => void }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * A REMOTE-HOSTED REPOSITORY ALREADY CHECKED OUT LOCALLY. The checkout's own
+ * `origin` must name this exact repository (for a `github` identity), or Relay
+ * would commit a scratch directory and push it to production. Relay does not
+ * delete a founder's checkout — `dispose` is a no-op.
+ */
+function obtainLocalCheckout(target: MissionRepositoryTarget, path: string): ObtainedSource {
+  const validated = validateSourceRepository(path);
+  if (!validated.ok) return { ok: false, reason: `Repository path refused: ${validated.error.message}` };
+
+  if (target.identity.provider !== 'local') {
+    const agrees = checkoutMatchesIdentity({
+      worktreePath: validated.value.root,
+      host: target.identity.host,
+      owner: target.identity.owner,
+      name: target.identity.name,
+    });
+    if (!agrees.ok) return { ok: false, reason: agrees.error.message };
+  }
+  const baseline = resolveBaselineSha({ worktreePath: validated.value.root, ref: target.baseBranch });
+  if (!baseline.ok) {
+    return { ok: false, reason: `The base branch "${target.baseBranch}" could not be resolved to a revision.` };
+  }
+  return { ok: true, root: validated.value.root, baselineRevision: baseline.value, dispose: () => undefined };
+}
+
+/**
+ * A REMOTE REPOSITORY, CLONED OVER AUTHENTICATED HTTPS.
+ *
+ * The credential is resolved from the seam (the named env var today, a GitHub
+ * App installation token later) and injected only for the clone child; the clone
+ * refuses redirects and is verified against the registered identity, and the
+ * baseline is read from the base branch of the clone.
+ *
+ * `dispose` is a NO-OP on purpose: the retained worktree the ship pushes from is
+ * a `git worktree` of this clone, so the clone must outlive the coding leg's
+ * `finally`. It lives under the OS temp dir and is reclaimed on the next deploy;
+ * a follow-up removes it as part of the retained-worktree disposal.
+ */
+function obtainRemoteClone(target: MissionRepositoryTarget, cloneUrl: string, env: NodeJS.ProcessEnv): ObtainedSource {
+  const credential = envVarCredentialProvider(env).resolve(target);
+  const auth = buildEphemeralGitAuth(credential);
+  const parent = mkdtempSync(join(tmpdir(), 'relay-remote-src-'));
+  const dest = join(parent, 'checkout');
+  try {
+    const cloned = cloneAuthorizedRepository({
+      cloneUrl,
+      destPath: dest,
+      runFrom: parent,
+      baseBranch: target.baseBranch,
+      identity: target.identity,
+      auth,
+    });
+    if (!cloned.ok) {
+      rmSync(parent, { recursive: true, force: true });
+      return { ok: false, reason: cloned.error.message };
+    }
+    return {
+      ok: true,
+      root: cloned.value.root,
+      baselineRevision: cloned.value.baselineRevision,
+      dispose: () => undefined,
+    };
+  } finally {
+    // Remove the askpass helper immediately; the token is already out of every
+    // child env. The ship's push resolves a fresh credential of its own.
+    auth.dispose();
+  }
 }

@@ -59,7 +59,9 @@ src/relay/workspace/                     NODE — performs and OBSERVES
   repository-target-observer.ts  real git observation + the write surface
 
 relay-bridge/                            THE BRIDGE — performs
-  repository-source.ts          the one branch: fixture or registered target
+  repository-source.ts          the one branch: fixture, local checkout, or clone
+  repository-credential.ts      the credential seam: env var now, GitHub App later; ephemeral GIT_ASKPASS
+  repository-remote-transport.ts real clone/fetch/push over HTTPS; force refused, remote ref verified
   github-remote-provider.ts     the first remote provider, injected fetch
   local-directory-deployment-provider.ts
                                 the first REAL DeploymentProvider: staging only

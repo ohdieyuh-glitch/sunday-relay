@@ -24,6 +24,21 @@ import type {
 } from '../src/relay/mission/repository-target';
 
 /**
+ * A passing git transfer, so these tests drive the whole remote leg without a
+ * network. The REAL authenticated push (force refusal, remote-ref verification,
+ * token handling) is proven in `repository-remote-transport.test.ts`; here the
+ * subject is the provider's API observe/PR/merge, which the transfer precedes.
+ */
+const PASS_PUSH = (input: { expectedSha: string }) =>
+  ({ ok: true as const, value: { requestedSha: input.expectedSha, observedRemoteSha: input.expectedSha, matchesExpected: true } });
+/** The authenticated push failed outright. */
+const FAIL_PUSH = () =>
+  ({ ok: false as const, error: { code: 'validation-failed' as const, message: 'Authenticated push failed.' } });
+/** The push ran but the remote tip is NOT the committed SHA (race/rejection). */
+const MISMATCH_PUSH = (input: { expectedSha: string }) =>
+  ({ ok: true as const, value: { requestedSha: input.expectedSha, observedRemoteSha: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef', matchesExpected: false } });
+
+/**
  * THE SHIPPING LIFECYCLE, WALKED END TO END.
  *
  * `repository-lifecycle.ts` could DECIDE every step of this since the feature
@@ -539,7 +554,7 @@ describe('PUSH / PR / MERGE are invoked, and never implied', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(fake.calls).toEqual(['push', 'pr'].map((c) => c === 'push' ? 'push:relay/mission-1' : c));
@@ -559,7 +574,7 @@ describe('PUSH / PR / MERGE are invoked, and never implied', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(fake.calls).toContain('merge');
@@ -579,7 +594,7 @@ describe('PUSH / PR / MERGE are invoked, and never implied', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(result.stage).toBe('committed');
@@ -618,7 +633,7 @@ describe('PUSH / PR / MERGE are invoked, and never implied', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, remoteTarget(reg, REMOTE_LADDER, root)),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(result.commitSha).toBeNull();
@@ -654,7 +669,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     /**
@@ -681,7 +696,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     const pr = result.evidence.find((e) => e.stage === 'pull_request_open');
@@ -700,7 +715,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fakeRemote().provider, evidence: PR_EVIDENCE },
+      remote: { provider: fakeRemote().provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(result.stage).toBe('pull_request_open');
@@ -730,7 +745,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: refusing.provider, evidence: PR_EVIDENCE },
+      remote: { provider: refusing.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(refusing.calls).toContain('merge');
@@ -767,7 +782,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: refusing.provider, evidence: PR_EVIDENCE },
+      remote: { provider: refusing.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     /**
@@ -801,7 +816,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       readRegistration: () => { reads += 1; return reads <= 1 ? full : withoutPush; },
       worktreePath: root, judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(result.stage).toBe('committed');
@@ -822,7 +837,7 @@ describe('the remote leg records what happened, not what was asked', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, remoteTarget(reg, LADDER_NO_MERGE, root)),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(fake.calls).toEqual([]);
@@ -862,7 +877,7 @@ describe('the provider descriptor is read before any network call', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     // Refused before anything left the machine.
@@ -882,7 +897,7 @@ describe('the provider descriptor is read before any network call', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     // The Mission HOLDS merge_pr; the provider cannot do it. Stops with the
@@ -931,7 +946,7 @@ describe('the pull request carries what Relay verified', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: cap.provider, evidence: PR_EVIDENCE },
+      remote: { provider: cap.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
     expect(cap.seen.title).toContain('Bump the version');
@@ -961,6 +976,7 @@ describe('the pull request carries what Relay verified', () => {
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
       remote: {
         provider: cap.provider,
+        pushBranch: PASS_PUSH,
         evidence: { ...PR_EVIDENCE, reviewedArtifactDigest: 'sha256:something-else' },
       },
       now: () => NOW,
@@ -1074,7 +1090,7 @@ describe('the runner will not act on a checkout of a different repository', () =
       target, readRegistration: () => reg, worktreePath: scratch,
       judgement: editAndJudge(scratch, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       now: () => NOW,
     });
 
@@ -1120,7 +1136,7 @@ describe('a transient merge failure does not cost the deploy', () => {
       target, readRegistration: () => reg, worktreePath: root,
       judgement: editAndJudge(root, target),
       commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
-      remote: { provider: refusing.provider, evidence: PR_EVIDENCE },
+      remote: { provider: refusing.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
       deployment: {
         provider: createLocalDirectoryDeploymentProvider({
           deployRoot: temp('relay-deployroot-'), baseUrl: null, now: () => NOW,
@@ -1134,6 +1150,68 @@ describe('a transient merge failure does not cost the deploy', () => {
     expect(result.stage).toBe('deployed');
     expect(result.evidence.find((e) => e.stage === 'merged')).toBeUndefined();
     expect(result.evidence.find((e) => e.stage === 'deployed')).toBeDefined();
+  });
+});
+
+/**
+ * A PUSH THAT DID NOT LAND IS NOT A COMPLETED PUSH — and does not cost the
+ * deploy. The authenticated transfer runs before the provider ever observes.
+ * If it fails, or if the remote tip is not the exact committed SHA, Relay must
+ * NOT record a push, must NOT open or merge a pull request over unpushed code,
+ * and — because the staging deploy ships the WORKING branch, not the remote —
+ * must still deploy when that was independently authorized (monotonicity).
+ */
+describe('a push that does not land does not fake a ship, and does not cost the deploy', () => {
+  const withAll: readonly RepositoryPermission[] =
+    ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr', 'merge_pr', 'deploy_staging'];
+
+  const runWith = async (pushBranch: typeof PASS_PUSH | typeof FAIL_PUSH | typeof MISMATCH_PUSH) => {
+    const root = repository();
+    const reg = remoteRegistration(withAll);
+    const target = remoteTarget(reg, withAll, root);
+    const fake = fakeRemote();
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: fake.provider, pushBranch, evidence: PR_EVIDENCE },
+      deployment: {
+        provider: createLocalDirectoryDeploymentProvider({
+          deployRoot: temp('relay-deployroot-'), baseUrl: null, now: () => NOW,
+        }),
+        environment: 'staging', artifactPath: artifact(), liveUrl: null,
+      },
+      now: () => NOW,
+    });
+    return { result, fake };
+  };
+
+  it('a failed transfer opens no PR/merge, is not fatal, and the deploy still runs', async () => {
+    const { result, fake } = await runWith(FAIL_PUSH);
+    // The provider's API push/PR/merge were never reached — the transfer failed first.
+    expect(fake.calls).toEqual([]);
+    expect(result.evidence.find((e) => e.stage === 'pushed')).toBeUndefined();
+    expect(result.evidence.find((e) => e.stage === 'pull_request_open')).toBeUndefined();
+    expect(result.evidence.find((e) => e.stage === 'merged')).toBeUndefined();
+    // Reaching `deployed` proves BOTH non-fatal (the run continued past the
+    // skipped remote leg) AND monotonicity (the independently authorized deploy
+    // ran despite the push failing). A fatal push would have stopped at commit.
+    expect(result.stage).toBe('deployed');
+    expect(result.commitSha).not.toBeNull();
+  });
+
+  it('a remote tip that is not the committed SHA is treated the same way', async () => {
+    const { result, fake } = await runWith(MISMATCH_PUSH);
+    expect(fake.calls).toEqual([]);
+    expect(result.evidence.find((e) => e.stage === 'pushed')).toBeUndefined();
+    expect(result.evidence.find((e) => e.stage === 'merged')).toBeUndefined();
+    expect(result.stage).toBe('deployed');
+  });
+
+  it('and the passing transfer DOES push and open the PR (control)', async () => {
+    const { result, fake } = await runWith(PASS_PUSH);
+    expect(fake.calls).toContain('push:relay/mission-1');
+    expect(result.evidence.find((e) => e.stage === 'pushed')).toBeDefined();
   });
 });
 

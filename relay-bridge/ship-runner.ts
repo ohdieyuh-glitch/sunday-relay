@@ -9,6 +9,8 @@ import {
   revalidateRepositoryTarget,
 } from '../src/relay/mission/repository-target';
 import { checkoutMatchesIdentity, commitObservedWork } from '../src/relay/workspace/repository-target-observer';
+import { envVarCredentialProvider, buildEphemeralGitAuth } from './repository-credential';
+import { pushAuthorizedBranch } from './repository-remote-transport';
 import type {
   DeploymentProvider,
   PullRequestEvidence,
@@ -70,6 +72,9 @@ export interface ShipRunRequest {
    */
   readonly readRegistration: () => RepositoryRegistration | null;
   readonly worktreePath: string;
+  /** Server-side environment the push credential is resolved from (via the
+   *  credential seam). Absent means no credential — a private push fails closed. */
+  readonly env?: NodeJS.ProcessEnv;
   readonly judgement: DiffJudgement;
   readonly commitMessage: string;
   readonly authorName: string;
@@ -97,6 +102,12 @@ export interface ShipRunRequest {
      * opens pull requests was the one component bypassing it.
      */
     readonly evidence: PullRequestEvidence;
+    /**
+     * The authenticated git transfer that moves commits to the remote. Injected
+     * so a test can drive the whole remote leg without a network; production
+     * leaves it undefined and the real `pushAuthorizedBranch` is used.
+     */
+    readonly pushBranch?: typeof pushAuthorizedBranch;
   };
   /**
    * Deploy only if this is given AND the Mission holds the grant. Absent means
@@ -261,7 +272,7 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
    */
   let remoteSkipped: string | null = null;
   if (request.remote !== undefined) {
-    const { provider: remote, evidence: prEvidence } = request.remote;
+    const { provider: remote, evidence: prEvidence, pushBranch } = request.remote;
 
     const fatal = await (async (): Promise<string | null> => {
     const pushGate = stillPermitted(request, 'pushed', stage, null);
@@ -344,6 +355,40 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
       !remote.descriptor.supports.includes(permission);
     if (unsupported('push_feature_branch')) {
       remoteSkipped = `Provider "${remote.descriptor.providerId}" does not support pushing a feature branch.`;
+      return null;
+    }
+
+    /**
+     * TRANSFER THE COMMITS OVER AUTHENTICATED HTTPS. The provider observes the
+     * remote and opens/merges pull requests, but it never MOVED code — nothing
+     * did. This authenticated push does, from the worktree the commit landed in,
+     * with the credential injected ephemerally (never in the URL, config, disk or
+     * argv). It refuses force by construction and reads the remote ref back; a
+     * ref that is not the exact committed SHA is a race or a rejected push, not a
+     * completed one. WHERE it may push (never the base/protected branch) was
+     * already enforced by `refusePushTarget` above; this is the mechanics.
+     */
+    const doPush = pushBranch ?? pushAuthorizedBranch;
+    const gitAuth = buildEphemeralGitAuth(envVarCredentialProvider(request.env ?? {}).resolve(target));
+    let transfer: ReturnType<typeof pushAuthorizedBranch>;
+    try {
+      transfer = doPush({
+        worktreePath: request.worktreePath,
+        branch: target.workingBranch,
+        expectedSha: commitSha,
+        auth: gitAuth,
+      });
+    } finally {
+      gitAuth.dispose();
+    }
+    if (!transfer.ok) {
+      remoteSkipped = transfer.error.message;
+      return null;
+    }
+    if (!transfer.value.matchesExpected) {
+      // Requested vs actual, truthfully: the remote tip is not what Relay pushed.
+      remoteSkipped = `The remote branch tip is ${transfer.value.observedRemoteSha ?? 'unreadable'}, `
+        + `not the pushed commit ${commitSha}.`;
       return null;
     }
 
