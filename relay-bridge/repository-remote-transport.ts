@@ -38,10 +38,14 @@ export type GitRunner = typeof runGit;
 /**
  * CLONE EXACTLY THE AUTHORIZED REPOSITORY, then prove it is that repository.
  *
- * Redirects are refused (`http.followRedirects=false`), so a renamed or moved
- * repository fails rather than silently resolving to a different one; and the
- * checkout's own `origin` is then verified against the registered host/owner/
- * name, so even a redirect git honoured cannot pass as the target.
+ * REDIRECT SAFETY RESTS ON `http.followRedirects=false` ALONE: a renamed or
+ * moved repository fails to clone rather than silently resolving to a different
+ * one. `checkoutMatchesIdentity` is NOT a redirect backstop — git records
+ * `remote.origin.url` as the URL Relay passed, not the location a redirect
+ * resolved to, so a FOLLOWED redirect would still compare equal. The identity
+ * check guards a different case (a wrong local checkout whose origin genuinely
+ * names another repository); both are kept, but do not weaken the redirect flag
+ * believing the identity check covers it.
  */
 export function cloneAuthorizedRepository(input: {
   readonly cloneUrl: string;

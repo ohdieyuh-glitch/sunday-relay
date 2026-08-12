@@ -31,6 +31,12 @@ import type {
  */
 const PASS_PUSH = (input: { expectedSha: string }) =>
   ({ ok: true as const, value: { requestedSha: input.expectedSha, observedRemoteSha: input.expectedSha, matchesExpected: true } });
+/** The authenticated push failed outright. */
+const FAIL_PUSH = () =>
+  ({ ok: false as const, error: { code: 'validation-failed' as const, message: 'Authenticated push failed.' } });
+/** The push ran but the remote tip is NOT the committed SHA (race/rejection). */
+const MISMATCH_PUSH = (input: { expectedSha: string }) =>
+  ({ ok: true as const, value: { requestedSha: input.expectedSha, observedRemoteSha: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef', matchesExpected: false } });
 
 /**
  * THE SHIPPING LIFECYCLE, WALKED END TO END.
@@ -1144,6 +1150,68 @@ describe('a transient merge failure does not cost the deploy', () => {
     expect(result.stage).toBe('deployed');
     expect(result.evidence.find((e) => e.stage === 'merged')).toBeUndefined();
     expect(result.evidence.find((e) => e.stage === 'deployed')).toBeDefined();
+  });
+});
+
+/**
+ * A PUSH THAT DID NOT LAND IS NOT A COMPLETED PUSH — and does not cost the
+ * deploy. The authenticated transfer runs before the provider ever observes.
+ * If it fails, or if the remote tip is not the exact committed SHA, Relay must
+ * NOT record a push, must NOT open or merge a pull request over unpushed code,
+ * and — because the staging deploy ships the WORKING branch, not the remote —
+ * must still deploy when that was independently authorized (monotonicity).
+ */
+describe('a push that does not land does not fake a ship, and does not cost the deploy', () => {
+  const withAll: readonly RepositoryPermission[] =
+    ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr', 'merge_pr', 'deploy_staging'];
+
+  const runWith = async (pushBranch: typeof PASS_PUSH | typeof FAIL_PUSH | typeof MISMATCH_PUSH) => {
+    const root = repository();
+    const reg = remoteRegistration(withAll);
+    const target = remoteTarget(reg, withAll, root);
+    const fake = fakeRemote();
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: fake.provider, pushBranch, evidence: PR_EVIDENCE },
+      deployment: {
+        provider: createLocalDirectoryDeploymentProvider({
+          deployRoot: temp('relay-deployroot-'), baseUrl: null, now: () => NOW,
+        }),
+        environment: 'staging', artifactPath: artifact(), liveUrl: null,
+      },
+      now: () => NOW,
+    });
+    return { result, fake };
+  };
+
+  it('a failed transfer opens no PR/merge, is not fatal, and the deploy still runs', async () => {
+    const { result, fake } = await runWith(FAIL_PUSH);
+    // The provider's API push/PR/merge were never reached — the transfer failed first.
+    expect(fake.calls).toEqual([]);
+    expect(result.evidence.find((e) => e.stage === 'pushed')).toBeUndefined();
+    expect(result.evidence.find((e) => e.stage === 'pull_request_open')).toBeUndefined();
+    expect(result.evidence.find((e) => e.stage === 'merged')).toBeUndefined();
+    // Reaching `deployed` proves BOTH non-fatal (the run continued past the
+    // skipped remote leg) AND monotonicity (the independently authorized deploy
+    // ran despite the push failing). A fatal push would have stopped at commit.
+    expect(result.stage).toBe('deployed');
+    expect(result.commitSha).not.toBeNull();
+  });
+
+  it('a remote tip that is not the committed SHA is treated the same way', async () => {
+    const { result, fake } = await runWith(MISMATCH_PUSH);
+    expect(fake.calls).toEqual([]);
+    expect(result.evidence.find((e) => e.stage === 'pushed')).toBeUndefined();
+    expect(result.evidence.find((e) => e.stage === 'merged')).toBeUndefined();
+    expect(result.stage).toBe('deployed');
+  });
+
+  it('and the passing transfer DOES push and open the PR (control)', async () => {
+    const { result, fake } = await runWith(PASS_PUSH);
+    expect(fake.calls).toContain('push:relay/mission-1');
+    expect(result.evidence.find((e) => e.stage === 'pushed')).toBeDefined();
   });
 });
 

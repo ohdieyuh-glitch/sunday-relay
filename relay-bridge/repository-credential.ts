@@ -153,7 +153,10 @@ export function sanitizeRemoteUrl(raw: string): string {
     }
     return u.toString();
   } catch {
-    // Not a parseable URL — strip a `scheme://user:pass@host` prefix textually.
-    return raw.replace(/^([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/@]*@/, '$1');
+    // Not a parseable URL (e.g. a git error string that embeds one) — strip any
+    // `scheme://user:pass@host` ANYWHERE in the text, not only at the start, so a
+    // URL embedded mid-message is redacted too. Defence in depth: registration
+    // already forbids userinfo in a cloneUrl.
+    return raw.replace(/([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)[^/@\s]*@/g, '$1');
   }
 }
