@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -1092,24 +1093,54 @@ describe('the documented surface matches the code', () => {
  * Found by probing the built function, not by reading it.
  */
 describe('the remote subcommand cannot mutate where the repository points', () => {
+  /**
+   * EVERY PROBE RUNS IN A THROWAWAY REPOSITORY, NOT `process.cwd()`.
+   *
+   * The first version passed `process.cwd()` — the checkout the suite runs in,
+   * a linked worktree whose `remote.origin.url` lives in the SHARED
+   * `.git/config`. So the moment the guard regressed, the test whose entire
+   * purpose is "a Mission must never repoint origin" repointed origin for the
+   * main clone and every sibling worktree. A review proved it by deleting the
+   * gate: seven tests failed and `git remote get-url origin` afterwards read
+   * `https://evil.example/x.git`. In a repository whose practice is to delete
+   * guards to check that tests bite, that is a when and not an if.
+   *
+   * `permits only get-url` was non-hermetic too: it asserted success against
+   * whatever origin happened to exist, and failed in a checkout with none.
+   */
   const MUTATING = ['set-url', 'add', 'remove', 'rename', 'prune', 'update'];
+  const gitEnv = (root: string) => ({ PATH: process.env.PATH ?? '', HOME: root });
 
-  it.each(MUTATING)('refuses git remote %s', (verb) => {
-    const result = runRepositoryGit(['remote', verb, 'origin', 'https://evil.example/x.git'], process.cwd());
+  function throwawayRepo(): string {
+    const root = mkdtempSync(join(tmpdir(), 'relay-remote-probe-'));
+    temporaries.push(root);
+    execFileSync('git', ['init', '--quiet', '--initial-branch=main'], { cwd: root, env: gitEnv(root) });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/o/r.git'], { cwd: root, env: gitEnv(root) });
+    return root;
+  }
+
+  it.each(MUTATING)('refuses git remote %s and leaves origin alone', (verb) => {
+    const root = throwawayRepo();
+    const result = runRepositoryGit(['remote', verb, 'origin', 'https://evil.example/x.git'], root);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.message).toContain('outside Relay');
+    // Checked by OBSERVING the repository, not by trusting the return value —
+    // the same rule the product applies to providers.
+    const after = execFileSync('git', ['remote', 'get-url', 'origin'], {
+      cwd: root, encoding: 'utf8', env: gitEnv(root),
+    }).trim();
+    expect(after).toBe('https://github.com/o/r.git');
   });
 
   it('refuses git remote with no verb at all', () => {
-    // Bare `git remote` lists remotes; harmless, but the allow-list is a list
-    // of what is permitted, not of what is harmless.
-    const result = runRepositoryGit(['remote'], process.cwd());
-    expect(result.ok).toBe(false);
+    expect(runRepositoryGit(['remote'], throwawayRepo()).ok).toBe(false);
   });
 
   it('permits only get-url', () => {
-    const result = runRepositoryGit(['remote', 'get-url', 'origin'], process.cwd());
+    const root = throwawayRepo();
+    const result = runRepositoryGit(['remote', 'get-url', 'origin'], root);
     expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.trim()).toBe('https://github.com/o/r.git');
   });
 });
 

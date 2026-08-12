@@ -613,7 +613,20 @@ export function checkoutMatchesIdentity(input: {
       'This target names a remote repository and its checkout has no "origin" remote to compare against.',
     ));
   }
-  const url = read.value.trim();
+  /**
+   * USERINFO IS STRIPPED BEFORE THIS URL IS USED FOR ANYTHING, including the
+   * refusal message and the success return.
+   *
+   * `https://x-access-token:ghp_SECRET@github.com/o/r.git` is an ordinary clone
+   * form. This function's refusal reformats the URL into
+   * `${host}/${owner}/${name}`, and that reformatting DESTROYED the one
+   * redaction pattern (`token:`) that was catching the secret — so the credential
+   * travelled verbatim into a persisted, user-visible mission failure reason.
+   * `validateRepositoryLocation` refuses embedded credentials for a
+   * `remote_clone`; the local-checkout path re-admitted them and then printed
+   * them.
+   */
+  const url = read.value.trim().replace(/\/\/[^/@]*@/, '//');
   // `https://host/owner/name(.git)` or `git@host:owner/name(.git)`.
   const match = /^(?:https:\/\/|git@)([^/:]+)[/:]([^/]+)\/(.+?)(?:\.git)?$/.exec(url);
   if (match === null) {

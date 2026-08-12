@@ -309,3 +309,56 @@ describe('a GitHub repository cloned on this machine', () => {
     if (!result.ok) expect(result.reason).toContain('no "origin" remote');
   });
 });
+
+/**
+ * A CREDENTIAL IN THE CHECKOUT'S ORIGIN NEVER REACHES A MISSION RECORD.
+ *
+ * `https://x-access-token:ghp_SECRET@github.com/o/r.git` is an ordinary clone
+ * form. The refusal message reformats the URL into `host/owner/name`, and that
+ * reformatting destroyed the one redaction pattern (`token:`) catching the
+ * secret — so it travelled verbatim into a persisted, user-visible mission
+ * failure reason. `validateRepositoryLocation` refuses embedded credentials for
+ * a remote clone; the local-checkout path re-admitted them and then printed
+ * them.
+ */
+describe('a credential embedded in origin is never echoed', () => {
+  it('strips userinfo from the refusal message', () => {
+    const root = realRepository();
+    execFileSync('git', [
+      'remote', 'add', 'origin',
+      'https://x-access-token:ghp_SUPERSECRET1234567@github.com/someone-else/other.git',
+    ], { cwd: root, env: { PATH: process.env.PATH ?? '', HOME: root } });
+    const reg = createRepositoryRegistration({
+      draft: {
+        identity: { provider: 'github', host: 'github.com', owner: 'o', name: 'r', defaultBranch: 'main' },
+        location: { kind: 'local_path', path: root },
+        scope: { read: ['**'], write: ['src/**'] },
+        grants: LADDER.map((permission) => ({
+          permission, authorizedBy: 'founder', authorizedAt: NOW, expiresAt: null, note: null,
+        })),
+        ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+        registeredBy: 'founder',
+      },
+      now: NOW,
+    });
+    if (!reg.ok) throw new Error(reg.error.message);
+    const resolved = resolveRepositoryTarget({
+      registration: reg.value,
+      request: {
+        repositoryKey: reg.value.key, selectedBy: 'founder', selectedAt: NOW,
+        workingBranch: 'relay/mission-1', permissions: [...LADDER],
+      },
+      now: NOW,
+    });
+    if (!resolved.ok) throw new Error(resolved.error.message);
+    const result = repositoryTargetSource(resolved.target, ['src/app.ts']);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // The mismatch is still reported — the message stays useful.
+      expect(result.reason).toContain('someone-else/other');
+      // And the secret is not in it, in any form.
+      expect(result.reason).not.toContain('ghp_SUPERSECRET1234567');
+      expect(result.reason).not.toContain('x-access-token');
+    }
+  });
+});
