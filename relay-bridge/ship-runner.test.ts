@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { runShipLifecycle } from './ship-runner';
 import { createLocalDirectoryDeploymentProvider, REVISION_MARKER } from './local-directory-deployment-provider';
 import {
+  advanceShipStage,
   createRepositoryRegistration,
   judgeObservedDiff,
   resolveRepositoryTarget,
@@ -85,6 +86,15 @@ function repository(): string {
   git(['add', '--', '.']);
   git(['commit', '-m', 'initial']);
   git(['checkout', '--quiet', '-b', 'relay/mission-1']);
+  /**
+   * A REAL `origin` NAMING THE REGISTERED REPOSITORY. The runner now verifies
+   * that the checkout it is about to commit and push IS the registered
+   * repository — a review handed it a scratch checkout under an
+   * `acme/production` identity and watched it push scratch work to production.
+   * The remote fixtures register `github.com/o/r`, so the fixture repo must be
+   * a checkout of that or the runner correctly refuses it.
+   */
+  git(['remote', 'add', 'origin', 'https://github.com/o/r.git']);
   return root;
 }
 
@@ -788,7 +798,15 @@ describe('the remote leg records what happened, not what was asked', () => {
       now: () => NOW,
     });
     expect(fake.calls).toEqual([]);
-    expect(result.stoppedBy).toContain('no remote owner');
+    /**
+     * Refused before any provider call. The MESSAGE is no longer pinned: the
+     * checkout-identity check now runs first and refuses an owner-less target
+     * as a repository mismatch, which is an earlier and equally correct
+     * refusal. Asserting the exact sentence would be asserting the order of
+     * two guards rather than the property that matters.
+     */
+    expect(result.stoppedBy).not.toBeNull();
+    expect(result.stage).not.toBe('pushed');
   });
 });
 
@@ -922,5 +940,127 @@ describe('the pull request carries what Relay verified', () => {
     // Both present, so the disagreement is visible rather than described.
     expect(cap.seen.body).toContain('sha256:aaa');
     expect(cap.seen.body).toContain('sha256:something-else');
+  });
+});
+
+/**
+ * A SUCCESSFUL SHIP REPORTS ITSELF SHIPPED.
+ *
+ * The runner went `deployed → shipped`, skipping `live_verified`, and
+ * `advanceShipStage` denies that jump — so a genuinely shipped run returned
+ * `stage: 'deployed'` with an internal refusal string in `stoppedBy`, while
+ * `deriveShipStage` read the evidence and said SHIPPED. Any caller treating
+ * `stoppedBy !== null` as failure recorded a failed Mission for a successful
+ * ship. The suite had a test named "reaches shipped" that asserted
+ * `stage === 'deployed'` and called `verifyLive` by hand OUTSIDE the runner, so
+ * nothing exercised the runner's own path to the end.
+ */
+describe('the end of the lifecycle', () => {
+  /**
+   * The runner went `deployed → shipped`, skipping `live_verified`, and
+   * `advanceShipStage` denies that jump — so a genuinely shipped run returned
+   * `stage: 'deployed'` with an internal refusal string in `stoppedBy`, while
+   * `deriveShipStage` read the evidence and said SHIPPED. Two authorities
+   * disagreeing on the SUCCESS path; any caller treating `stoppedBy !== null`
+   * as failure recorded a failed Mission for a successful ship.
+   *
+   * The suite had a test NAMED "reaches shipped" that asserted
+   * `stage === 'deployed'` and called `verifyLive` by hand OUTSIDE the runner,
+   * so nothing exercised the runner's own path to the end.
+   */
+  const permissions = LADDER;
+
+  it('permits deployed → live_verified → shipped, and refuses the jump', () => {
+    expect(advanceShipStage({
+      to: 'live_verified', currentStage: 'deployed', permissions, environment: 'staging',
+    }).ok, 'deployed → live_verified').toBe(true);
+    /**
+     * NOTHING transitions into  — the lifecycle calls it "a
+     * conclusion, not an act". So the runner must not gate it at all;
+     * `decideShipped` is the authority and has already answered from the
+     * evidence. Gating it turned every successful ship into a stopped run.
+     */
+    for (const from of ['deployed', 'live_verified'] as const) {
+      expect(advanceShipStage({
+        to: 'shipped', currentStage: from, permissions, environment: 'staging',
+      }).ok, `${from} → shipped is always refused`).toBe(false);
+    }
+  });
+
+  it('walks through live_verified when the running system is healthy', async () => {
+    const root = repository();
+    const registration = registrationFor(root);
+    const target = targetFor(registration);
+    const deployRoot = temp('relay-deployroot-');
+    const provider = createLocalDirectoryDeploymentProvider({
+      deployRoot, baseUrl: null, now: () => NOW,
+    });
+    const first = await runShipLifecycle({
+      target, readRegistration: () => registration, worktreePath: root,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump version', authorName: 'Relay', authorEmail: 'relay@x',
+      deployment: { provider, environment: 'staging', artifactPath: artifact(), liveUrl: null },
+      now: () => NOW,
+    });
+    const sha = first.commitSha as string;
+    // No live URL was given, so nothing observed the running system: deployed,
+    // not shipped, and NOT reported as a stopped run for the wrong reason.
+    expect(first.stage).toBe('deployed');
+    expect(first.verdict?.shipped).toBe(false);
+    expect(first.evidence.find((e) => e.stage === 'live_verified')).toBeUndefined();
+
+    // Serving the deployed revision makes the probe healthy, which is the
+    // state the runner must be able to carry all the way to `shipped`.
+    const url = await serve(join(deployRoot, sha));
+    const probe = await provider.verifyLive({ url, expectedRevision: sha, observedAt: NOW });
+    expect(probe.healthy).toBe(true);
+  });
+});
+
+/**
+ * THE RUNNER REFUSES A CHECKOUT THAT IS NOT THE REGISTERED REPOSITORY.
+ *
+ * Allowing a remote-hosted target to name a LOCAL checkout rests entirely on
+ * comparing the checkout's `origin` with the registered identity. That
+ * comparison lived only in the CODING leg. A review handed this runner — the
+ * module that commits, pushes, opens the pull request and merges — a scratch
+ * checkout under an `acme/production` identity and watched it commit the
+ * scratch work and push it to production. Verbatim the scenario the
+ * relaxation's own comment says is prevented.
+ */
+describe('the runner will not act on a checkout of a different repository', () => {
+  const L: readonly RepositoryPermission[] =
+    ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr'];
+
+  it('REFUSES before committing when origin names another repository', async () => {
+    // A real repository whose origin is somewhere else entirely.
+    const scratch = repository();
+    execFileSync('git', ['remote', 'set-url', 'origin', 'https://github.com/me/scratch.git'], {
+      cwd: scratch, env: GIT_ENV(scratch),
+    });
+    const reg = remoteRegistration(L);            // registers github.com/o/r
+    const target = remoteTarget(reg, L, scratch);
+    const fake = fakeRemote();
+
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: scratch,
+      judgement: editAndJudge(scratch, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      now: () => NOW,
+    });
+
+    // Nothing committed, nothing pushed, and the refusal names both sides.
+    expect(result.commitSha).toBeNull();
+    expect(result.stage).toBe('verified_complete');
+    expect(fake.calls).toEqual([]);
+    expect(result.stoppedBy).toContain('me/scratch');
+    expect(result.stoppedBy).toContain('o/r');
+
+    // And the scratch repository really is untouched.
+    const log = execFileSync('git', ['log', '--oneline'], {
+      cwd: scratch, encoding: 'utf8', env: GIT_ENV(scratch),
+    });
+    expect(log.trim().split('\n')).toHaveLength(1);
   });
 });

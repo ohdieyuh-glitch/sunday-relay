@@ -7,7 +7,7 @@ import {
   renderPullRequestTitle,
   revalidateRepositoryTarget,
 } from '../src/relay/mission/repository-target';
-import { commitObservedWork } from '../src/relay/workspace/repository-target-observer';
+import { checkoutMatchesIdentity, commitObservedWork } from '../src/relay/workspace/repository-target-observer';
 import type {
   DeploymentProvider,
   PullRequestEvidence,
@@ -172,6 +172,33 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
   let stage: ShipStage = 'verified_complete';
 
   /* ------------------------------------------------------------- COMMIT */
+
+  /**
+   * THE CHECKOUT MUST BE THE REGISTERED REPOSITORY, CHECKED HERE TOO.
+   *
+   * Relaxing the domain rule to allow a remote-hosted target to name a LOCAL
+   * checkout rests entirely on comparing the checkout's `origin` with the
+   * registered identity. That comparison lived only in `repository-source.ts`,
+   * the CODING leg — and this is the module that commits, pushes, opens the
+   * pull request and merges. A review proved the gap by handing the runner a
+   * scratch checkout under an `acme/production` identity: it committed the
+   * scratch work and pushed it to production, which is verbatim the scenario
+   * the relaxation's own comment says is prevented.
+   *
+   * `worktreePath` is an independent parameter, so the check is against what
+   * this runner will actually write to, not against what the target says.
+   */
+  if (request.target.identity.provider !== 'local') {
+    const agrees = checkoutMatchesIdentity({
+      worktreePath: request.worktreePath,
+      host: request.target.identity.host,
+      owner: request.target.identity.owner,
+      name: request.target.identity.name,
+    });
+    if (!agrees.ok) {
+      return { stage, evidence: [], commitSha: null, verdict: null, stoppedBy: agrees.error.message };
+    }
+  }
 
   const commitGate = stillPermitted(request, 'committed', stage, null);
   if (!commitGate.ok) {
@@ -497,16 +524,59 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
     return { stage, evidence, commitSha, verdict, stoppedBy: verdict.reason };
   }
 
-  const shippedGate = stillPermitted(request, 'shipped', stage, environment);
-  if (!shippedGate.ok) {
-    return { stage, evidence, commitSha, verdict, stoppedBy: shippedGate.reason };
+  /**
+   * `live_verified` IS A STAGE, AND THE RUNNER WAS SKIPPING IT.
+   *
+   * The table is `deployed → live_verified → shipped`. This went from
+   * `deployed` straight to `shipped`, which `advanceShipStage` ALWAYS denies —
+   * so a genuinely shipped run returned `stage: 'deployed'` with an internal
+   * refusal string in `stoppedBy`, while `deriveShipStage` read the evidence
+   * and said SHIPPED. Two authorities disagreeing on the SUCCESS path, and any
+   * caller treating `stoppedBy !== null` as failure recorded a failed Mission
+   * for a successful ship. The lines after the gate were dead code.
+   *
+   * The runner already PERFORMS the live verification; it simply never wrote
+   * the stage down. Recording it is both the fix and the more truthful record —
+   * "the running system was observed" is a fact worth having in the evidence,
+   * separate from the conclusion drawn from it.
+   */
+  const liveGate = stillPermitted(request, 'live_verified', stage, environment);
+  if (!liveGate.ok) {
+    return { stage, evidence, commitSha, verdict, stoppedBy: liveGate.reason };
   }
+  stage = 'live_verified';
+  evidence.push({
+    stage: 'live_verified',
+    observedAt: liveProbe?.observedAt ?? request.now(),
+    commitSha,
+    branch: liveGate.target.workingBranch,
+    remoteRef: null,
+    pullRequestRef: null,
+    environment: observation.environment,
+    deployedRevision: observation.deployedRevision,
+    liveProbe,
+    detail: liveProbe?.detail ?? null,
+  });
+
+  /**
+   * `shipped` IS NOT GATED, AND MUST NOT BE. The lifecycle is explicit that it
+   * "is a conclusion, not an act — nothing may transition into it", so
+   * `advanceShipStage({ to: 'shipped' })` ALWAYS denies. Asking it here turned
+   * every successful ship into a stopped run carrying an internal refusal
+   * string, while `deriveShipStage` read the evidence and said SHIPPED.
+   *
+   * `decideShipped` is the authority, and it has already answered above: it
+   * required a commit, a deployment, a deployed revision matching that commit,
+   * a reachable and healthy system, and a reported revision that matches. A
+   * second gate could only ever disagree with a verdict already computed from
+   * the evidence.
+   */
   stage = 'shipped';
   evidence.push({
     stage: 'shipped',
     observedAt: request.now(),
     commitSha,
-    branch: shippedGate.target.workingBranch,
+    branch: liveGate.target.workingBranch,
     remoteRef: null,
     pullRequestRef: null,
     environment: observation.environment,
