@@ -38,10 +38,12 @@ import { decodeSegment } from './path-segment';
 import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
 import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
 import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
+import { handleRepositoryRoute, isRepositoryRoute } from './repository-routes';
 import { guardBetaAdmission, participantFromBody } from './beta-guard';
 import { claimedClientKey, createBetaRateLimiter } from './beta-rate-limit';
 import type { BetaRateLimiter } from './beta-rate-limit';
-import { createBetaEnrolmentStore } from '../src/relay/persistence';
+import { createBetaEnrolmentStore, createRepositoryRegistrationStore } from '../src/relay/persistence';
+import type { RepositoryRegistrationStore } from '../src/relay/persistence';
 import type { BetaWaveConfig } from '../src/relay/mission/beta';
 import type { BetaEnrolmentStore } from '../src/relay/persistence';
 import { createCronTickService } from './cron-service';
@@ -198,6 +200,12 @@ export function createBridgeServer(
    * see the note at the Live Reach branch below. `main()` always passes one.
    */
   liveReachService: LiveReachService | null = null,
+  /**
+   * The durable repository registration store. Absent on a bridge with no
+   * mounted state root — the registration surface then answers
+   * `repository_store_unavailable`, the same shape as the beta store.
+   */
+  repositoryStore: RepositoryRegistrationStore | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -493,6 +501,28 @@ export function createBridgeServer(
          * rather than a request, so no caller can name the wave they join or
          * the seats it holds — see WAVE_0.md.
          */
+        /**
+         * THE REPOSITORY REGISTRATION SURFACE. Operator-only, spends nothing,
+         * and validates through the domain — see `repository-routes.ts`. It is
+         * dispatched before the mission routes because it is a prerequisite of
+         * them: a mission may only name a repository this registered.
+         */
+        if (isRepositoryRoute(path.replace('/relay-api', ''))) {
+          const repoResult = handleRepositoryRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string'
+              ? req.headers.authorization : undefined,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            env: process.env,
+            now: new Date().toISOString(),
+          }, repositoryStore);
+          if (repoResult !== null) {
+            send(res, repoResult.status, repoResult.body, cors);
+            return;
+          }
+        }
+
         if (isBetaRoute(path.replace('/relay-api', ''))) {
           const betaResult = await handleBetaRoute({
             method,
@@ -897,6 +927,13 @@ export function main(): void {
   const betaStore = config.stateRoot === null
     ? null
     : createBetaEnrolmentStore({ root: config.stateRoot });
+  /**
+   * THE REPOSITORY REGISTRATION STORE. Built only when a durable root is
+   * mounted — a registration that does not survive a restart is not one.
+   */
+  const repositoryStore = config.stateRoot === null
+    ? null
+    : createRepositoryRegistrationStore({ root: config.stateRoot });
   // One limiter for the process, so its windows are shared across requests.
   const betaLimiter = createBetaRateLimiter();
   const betaWaves: readonly BetaWaveConfig[] = Object.freeze([
@@ -944,6 +981,7 @@ export function main(): void {
     // The SAME service the mission registry retrieves through, so one meter
     // counts both paths.
     liveReach,
+    repositoryStore,
   );
 
   /**
