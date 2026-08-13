@@ -23,11 +23,14 @@ export function RelayConnectRepository({
   installBeginImpl = beginRepositoryInstall,
   registerImpl = registerRepository,
   readInstallationImpl = readInstallationFromReturn,
+  onConnected,
 }: {
   readonly bridgeUrl?: string | null;
   readonly installBeginImpl?: typeof beginRepositoryInstall;
   readonly registerImpl?: typeof registerRepository;
   readonly readInstallationImpl?: typeof readInstallationFromReturn;
+  /** Called with the canonical key once the bridge confirms the registration. */
+  readonly onConnected?: (repositoryKey: string) => void;
 }) {
   const [installationId] = useState<string | null>(() => readInstallationImpl({}));
   const [owner, setOwner] = useState('');
@@ -67,9 +70,13 @@ export function RelayConnectRepository({
     };
     const result = await registerImpl({ draft, bridgeUrl });
     setBusy(false);
-    if (result.ok) setConnectedKey(result.key);
-    else setMessage(result.message);
-  }, [installationId, owner, name, registerImpl, bridgeUrl]);
+    if (result.ok) {
+      setConnectedKey(result.key);
+      if (result.key !== null) onConnected?.(result.key);
+    } else {
+      setMessage(result.message);
+    }
+  }, [installationId, owner, name, registerImpl, bridgeUrl, onConnected]);
 
   if (connectedKey !== null) {
     return (
