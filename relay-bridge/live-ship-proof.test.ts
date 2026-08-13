@@ -204,14 +204,27 @@ describe('LIVE github.com ship proof (real GitHub App + proof repo required)', (
     process.env.RELAY_BRIDGE_API_TOKEN = OPERATOR;
     process.env.RELAY_ALLOWED_ORIGINS = ORIGIN;
     process.env.RELAY_DATA_DIR = root;
+    // Select the LIVE three-role path so the mission reaches verified_complete
+    // THROUGH an independent review, exactly as beta-journey.test.ts proves. The
+    // architect/reviewer deps are INJECTED fakes (journey.deps) so nothing reaches
+    // a provider; the synthetic OpenAI key's PRESENCE + architect-mode=live merely
+    // select the live path (the fusion path is review-less by design). Never
+    // served — and the SHIP's own credential is the App token from RELAY_GITHUB_APP_*
+    // (server.ts passes process.env to the ship route), never this fixture.
+    process.env.RELAY_PROMPT_ARCHITECT_MODE = 'live';
     // RELAY_GITHUB_APP_* already in env from the founder. loadBridgeConfig reads them.
     const config = loadBridgeConfig(process.env);
+    const liveEnv = {
+      RELAY_PROMPT_ARCHITECT_MODE: 'live',
+      OPENAI_API_KEY: 'sk-FAKETESTNOTREAL-never-served',
+      OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-test',
+    } as NodeJS.ProcessEnv;
 
     // A registry REAL for the pipeline leg that serves the REAL worktree for the ship.
     const journey = journeyRoleDeps();
     const real = createMissionRegistry({
       fusionBaseUrl: 'http://127.0.0.1:3999', sundayMode: 'fast', claudeMode: 'fake',
-      confirmLive: true, architectEnv: process.env, hermesEnv: process.env, deps: journey.deps,
+      confirmLive: true, architectEnv: liveEnv, hermesEnv: liveEnv, deps: journey.deps,
     }) as unknown as Record<string, (...a: unknown[]) => unknown>;
     const registry = {
       start: (i: unknown) => real.start(i),
