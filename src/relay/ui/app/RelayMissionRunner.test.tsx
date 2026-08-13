@@ -327,4 +327,91 @@ describe('RelayMissionRunner', () => {
     await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('cancelled'));
   });
+
+  it('EDITOR: a checked permission + edited spend/agent ceilings are exactly what Start carries (criteria 3 & 5)', async () => {
+    let captured: unknown = null;
+    const start = vi.fn<typeof startBetaMission>(async (input) => { captured = input; return { ok: true, missionId: 'm-ed', view: coding, message: null }; });
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-ed', view: coding, message: null }));
+    // DEFAULT starts with no permissions and no ceilings — without the editor
+    // wiring, the payload below would carry those defaults, so this test bites.
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} />);
+    // Field-level edits in the pre-start editor.
+    fireEvent.click(screen.getByLabelText('push_feature_branch'));
+    fireEvent.change(screen.getByLabelText('Spend ceiling (USD)'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('Agent-call ceiling'), { target: { value: '4' } });
+    // The "Permissions requested" summary reflects the editor immediately.
+    expect(screen.getByText(/Permissions requested/i).textContent).toContain('push_feature_branch');
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'Push a branch' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    const config = (captured as { config: { permissions?: string[]; limits?: Record<string, number | null> } }).config;
+    expect(config.permissions).toContain('push_feature_branch');
+    expect(config.limits?.spendUsd).toBe(2);
+    expect(config.limits?.agentCalls).toBe(4);
+  });
+
+  it('EDITOR: checking merge_pr still fires the high-consequence Mission Contract gate before dispatch (criterion 7)', async () => {
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-hc2', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-hc2', view: coding, message: null }));
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} />);
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'Merge it' } });
+    // Requesting merge_pr in the editor turns Start into a Contract gate — the
+    // gate keys on the requested permission, wherever it was set.
+    fireEvent.click(screen.getByLabelText('merge_pr'));
+    fireEvent.click(screen.getByRole('button', { name: /Review Mission Contract/i }));
+    expect(screen.getByLabelText(/Mission Contract/i).textContent).toContain('merge_pr');
+    expect(start).not.toHaveBeenCalled();
+    // Only an explicit fresh confirmation dispatches.
+    fireEvent.click(screen.getByRole('button', { name: /Confirm authorization & start/i }));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+  });
+
+  it('EDITOR: clearing a ceiling yields null in the payload and discloses "not set", never 0', async () => {
+    let captured: unknown = null;
+    const start = vi.fn<typeof startBetaMission>(async (input) => { captured = input; return { ok: true, missionId: 'm-null', view: coding, message: null }; });
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-null', view: coding, message: null }));
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided', limits: { spendUsd: 5, agentCalls: 8 } }} />);
+    const spend = screen.getByLabelText('Spend ceiling (USD)') as HTMLInputElement;
+    expect(spend.value).toBe('5');
+    fireEvent.change(spend, { target: { value: '' } });
+    // The cleared ceiling discloses "not set" beside its own input — never "$0".
+    expect(spend.closest('label')?.textContent).toContain('not set');
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    const config = (captured as { config: { limits?: Record<string, number | null> } }).config;
+    expect(config.limits?.spendUsd).toBeNull();
+    // The untouched ceiling is carried unchanged — the edit is surgical.
+    expect(config.limits?.agentCalls).toBe(8);
+  });
+
+  it('EDITOR: a request that exceeds the repository grant is refused verbatim — never shown as success (criterion 5)', async () => {
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: false, missionId: null, view: null, message: 'permission_not_granted: push_feature_branch is not granted for this repository.' }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'x', view: coding, message: null }));
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} />);
+    // Request a permission the repo did not grant — the editor proposes, the
+    // bridge remains the authority and REFUSES.
+    fireEvent.click(screen.getByLabelText('push_feature_branch'));
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'overreach' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    // The bridge's refusal is surfaced verbatim; no running state, no watching.
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toMatch(/is not granted for this repository/i);
+    expect(screen.queryByText(/State:/i)).toBeNull();
+    expect(poll).not.toHaveBeenCalled();
+  });
+
+  it('EDITOR: editing config relabels it "Custom" so "Running under" never misnames an edited profile (F1, truthfulness)', () => {
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-e', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-e', view: coding, message: null }));
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} />);
+    // Before any edit the runner truthfully names the active profile.
+    const before = screen.getByText(/Running under/i).textContent ?? '';
+    expect(before).toContain('Default beta configuration');
+    expect(before).not.toContain('Custom');
+    // Editing a ceiling diverges the config from that profile; the label must
+    // stop presenting the pristine profile name as if it were unchanged.
+    fireEvent.change(screen.getByLabelText(/Spend ceiling/i), { target: { value: '2' } });
+    expect(screen.getByText(/Running under/i).textContent).toContain('Custom');
+  });
 });

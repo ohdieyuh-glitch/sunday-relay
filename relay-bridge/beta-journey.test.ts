@@ -148,6 +148,12 @@ const register = (base: string, token: string, draft: unknown) =>
     method: 'POST', headers: { 'content-type': 'application/json', ...asUser(token) }, body: JSON.stringify(draft),
   });
 
+/** GET the CALLER-SCOPED repository list. A verified participant session sees
+    only their own connected repositories; the operator token (no browser Origin,
+    a CLI-shaped request) sees every registration (WP-2, criterion 2). */
+const listRepositories = (base: string, headers: Record<string, string>) =>
+  realFetch(`${base}/relay-api/repository/list`, { headers });
+
 const startMission = (base: string, token: string, body: unknown) =>
   realFetch(`${base}/relay-api/mission/start`, {
     method: 'POST', headers: { 'content-type': 'application/json', ...asUser(token) }, body: JSON.stringify(body),
@@ -253,6 +259,98 @@ describe('a fresh participant signs in, authorizes an installation, and connects
       body: JSON.stringify(remoteRepoDraft('x', 'y', '1')),
     });
     expect(reg.status).toBe(401);
+  }, 30_000);
+});
+
+/**
+ * A RETURNING PARTICIPANT SELECTS A REPO THEY ALREADY CONNECTED (criterion 2).
+ * The repo-picker WP-3 will render consumes ONE endpoint, caller-scoped: a
+ * verified participant session lists only their OWN registrations, the operator
+ * lists every one, and an anonymous caller is refused. The biting property is
+ * cross-participant isolation — a participant can never see another's repo, nor
+ * an operator-owned one — and the list never carries a credential value.
+ */
+describe('a returning participant lists only the repositories THEY connected (criterion 2)', () => {
+  type RepoSummary = { key: string; owner: string | null; name: string; credentialEnvVarName: string | null };
+  const rowsOf = (body: Record<string, unknown>): RepoSummary[] =>
+    (body.data as { registrations: RepoSummary[] }).registrations;
+
+  it('scopes the list to the caller: participant A sees only A’s repo, B only B’s', async () => {
+    const base = await boot();
+
+    // Participant A signs in, authorizes their own installation, connects a repo.
+    const a = await signIn(base, { login: 'beta-alice', id: 4242 });
+    await authorizeInstallation(base, a, '55550001');
+    const aReg = await getJson(await register(base, a, remoteRepoDraft('beta-alice', 'alice-app', '55550001')));
+    expect(aReg.status).toBe(200);
+    const aKey = (aReg.body.data as { key: string; ownerParticipant: string }).key;
+    expect((aReg.body.data as { ownerParticipant: string }).ownerParticipant).toBe('ghu-4242');
+
+    // A DIFFERENT fresh participant B does the same with THEIR own repo.
+    const b = await signIn(base, { login: 'beta-bob', id: 7777 });
+    await authorizeInstallation(base, b, '55550002');
+    const bReg = await getJson(await register(base, b, remoteRepoDraft('beta-bob', 'bob-app', '55550002')));
+    expect(bReg.status).toBe(200);
+    const bKey = (bReg.body.data as { key: string }).key;
+    expect(bKey).not.toBe(aKey);
+
+    // A returning A lists — and sees EXACTLY their own repo, nothing else.
+    const aList = await getJson(await listRepositories(base, asUser(a)));
+    expect(aList.status).toBe(200);
+    const aKeys = rowsOf(aList.body).map((r) => r.key);
+    expect(aKeys).toContain(aKey);
+    // THE BITING ASSERTION: B's registration must NOT appear in A's list — a
+    // participant can never see another participant's connected repository.
+    expect(aKeys).not.toContain(bKey);
+    expect(aKeys).toEqual([aKey]); // and nothing operator-owned or foreign leaked in
+
+    // Symmetrically, B sees only B's — isolation holds in both directions.
+    const bList = await getJson(await listRepositories(base, asUser(b)));
+    expect(bList.status).toBe(200);
+    const bKeys = rowsOf(bList.body).map((r) => r.key);
+    expect(bKeys).toEqual([bKey]);
+    expect(bKeys).not.toContain(aKey);
+
+    // NAMES AND POSTURE ONLY, never a credential value. A's row carries the repo's
+    // identity; the credential env var NAME field is null (a user connects an App
+    // installation, not an env var), and the (secret-domain) installation id the
+    // credential actually holds appears NOWHERE in the payload.
+    const aRow = rowsOf(aList.body)[0];
+    expect(aRow.owner).toBe('beta-alice');
+    expect(aRow.name).toBe('alice-app');
+    expect(aRow.credentialEnvVarName).toBeNull();
+    expect(JSON.stringify(aList.body)).not.toContain('55550001');
+  }, 30_000);
+
+  it('the OPERATOR still lists EVERY registration — both A’s and B’s (branch unchanged)', async () => {
+    const base = await boot();
+    const a = await signIn(base, { login: 'beta-alice', id: 4242 });
+    await authorizeInstallation(base, a, '55550001');
+    const aKey = ((await getJson(await register(base, a, remoteRepoDraft('beta-alice', 'alice-app', '55550001')))).body.data as { key: string }).key;
+    const b = await signIn(base, { login: 'beta-bob', id: 7777 });
+    await authorizeInstallation(base, b, '55550002');
+    const bKey = ((await getJson(await register(base, b, remoteRepoDraft('beta-bob', 'bob-app', '55550002')))).body.data as { key: string }).key;
+
+    // The operator token (Bearer, no browser Origin — a CLI-shaped request) sees
+    // ALL registrations, across every participant: the operator branch is intact.
+    const opList = await getJson(await listRepositories(base, { Authorization: `Bearer ${OPERATOR}` }));
+    expect(opList.status).toBe(200);
+    const opKeys = rowsOf(opList.body).map((r) => r.key).sort();
+    expect(opKeys).toEqual([aKey, bKey].sort());
+  }, 30_000);
+
+  it('an anonymous caller is REFUSED and lists nothing', async () => {
+    const base = await boot();
+    // A real repo exists first, so "empty because the store is empty" cannot
+    // masquerade as "refused": if the guard failed open, an anon caller would SEE it.
+    const a = await signIn(base, { login: 'beta-alice', id: 4242 });
+    await authorizeInstallation(base, a, '55550001');
+    await getJson(await register(base, a, remoteRepoDraft('beta-alice', 'alice-app', '55550001')));
+
+    const anon = await listRepositories(base, { Origin: ORIGIN });
+    expect(anon.status).toBe(401);
+    const body = (await anon.json()) as Record<string, unknown>;
+    expect(body.data).toBeUndefined(); // zero listing — no registrations field at all
   }, 30_000);
 });
 

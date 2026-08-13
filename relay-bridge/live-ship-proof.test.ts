@@ -9,13 +9,16 @@
 // exchange (no fetch stub), and the ship lands a REAL branch + PR on a REAL repo,
 // asserted against github.com DIRECTLY — not Relay's account of itself.
 //
-// HONEST CREDENTIAL SPLIT (see [[relay-ship-app-credential-seam]] / task #25):
-// the GitHub App does its unique job — the participant's real GitHub-verified
-// sign-in and the installation handshake — while the code-TRANSFER credential is
-// a fine-grained repo PAT, because the App-installation push is refused at two
-// act-time guards today. When that seam is closed, swap the registration
-// credential to `{ installationId }` and drop the PAT: this same harness then
-// proves the pure-App push, which is the acceptance test for the seam.
+// PURE-APP CREDENTIAL PATH (seam closed 690d98d, PR #133). RELAY ships entirely on
+// the short-lived GitHub App INSTALLATION token: the registration credential is
+// `{ installationId }`, the ship body names no env var, and Relay's remote leg
+// resolves the App token server-side — it NEVER receives or uses RELAY_PROOF_REPO_TOKEN.
+// (resolveRepositoryCredential takes the installationId branch and does not fall back
+// to an env-var PAT.) The PAT is used ONLY by THIS harness's own scaffolding: the
+// setup clone that builds the shippable state, and the INDEPENDENT github.com read-back
+// that verifies the ref/PR against github.com directly (a separate credential for
+// independent verification is correct — it is not Relay speaking). This harness is the
+// acceptance test for the pure-App push.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
@@ -41,10 +44,11 @@ const REQUIRED_LIVE_ENV = [
   'RELAY_GITHUB_APP_ID', 'RELAY_GITHUB_APP_PRIVATE_KEY',
   'RELAY_GITHUB_APP_CLIENT_ID', 'RELAY_GITHUB_APP_CLIENT_SECRET',
   'RELAY_GITHUB_APP_CALLBACK_URL', 'RELAY_GITHUB_APP_INSTALL_URL',
-  // The proof target the App is installed on + the transfer/read-back credential:
+  // The proof target the App is installed on. RELAY ships on the installation token
+  // (below); the PAT is only THIS harness's setup-clone + independent read-back:
   'RELAY_PROOF_REPO',            // "owner/name" of a throwaway repo the signing-in user owns
-  'RELAY_PROOF_INSTALLATION_ID', // numeric installation id of the App on that repo
-  'RELAY_PROOF_REPO_TOKEN',      // fine-grained PAT: contents:write + pull_requests:write on RELAY_PROOF_REPO
+  'RELAY_PROOF_INSTALLATION_ID', // numeric installation id — RELAY's ship credential (App token)
+  'RELAY_PROOF_REPO_TOKEN',      // harness-only PAT (contents R/W + pull_requests R/W): setup clone + independent read-back; RELAY never sees it
   'RELAY_PROOF_OAUTH_CODE',      // fresh, single-use GitHub OAuth code for the real sign-in exchange
 ] as const;
 
@@ -64,7 +68,7 @@ it('live ship proof is gated on real GitHub App + proof-repo creds', () => {
 
 const ORIGIN = 'https://sunday-relay.vercel.app';
 const OPERATOR = 'operator-secret-for-live-proof-0123456789abcdef';
-const TOKEN_ENV = 'RELAY_PROOF_REPO_TOKEN';      // the transfer credential env var
+const TOKEN_ENV = 'RELAY_PROOF_REPO_TOKEN';      // harness-only: setup clone + independent read-back (NOT Relay's ship)
 const BASE_BRANCH = process.env.RELAY_PROOF_BASE_BRANCH ?? 'main';
 const WORKING_BRANCH = `relay/live-proof-${process.env.RELAY_PROOF_OAUTH_CODE?.slice(0, 6) ?? 'x'}`;
 const SHIP_MISSION_ID = 'm-live-ship';
@@ -171,9 +175,11 @@ describe('LIVE github.com ship proof (real GitHub App + proof repo required)', (
         ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
         registeredBy: PROOF_OWNER,
         ownerParticipant: session.participantId,      // the ship ownership gate reads this
-        // ENV-VAR credential = the path the remote leg accepts TODAY. (App-installation
-        // push is blocked by the App-credential seam — task #25.)
-        credential: { envVarName: TOKEN_ENV, installationId: null },
+        // PURE-APP path (seam closed 690d98d): Relay's remote leg resolves and uses
+        // the short-lived App INSTALLATION token and NEVER receives RELAY_PROOF_REPO_TOKEN.
+        // resolveRepositoryCredential takes the installationId branch and never falls
+        // back to an env var, so Relay structurally cannot touch the PAT.
+        credential: { envVarName: null, installationId: process.env.RELAY_PROOF_INSTALLATION_ID ?? null },
       },
       now: NOW(),
     });
@@ -283,7 +289,9 @@ describe('LIVE github.com ship proof (real GitHub App + proof repo required)', (
       method: 'POST', headers: { 'content-type': 'application/json', ...asUser(session.token) },
       body: JSON.stringify({
         remote: {
-          provider: 'github', credentialEnvVarName: TOKEN_ENV,
+          // No credentialEnvVarName — the App path. The credential comes from the
+          // target's installation (resolved server-side), never from this body.
+          provider: 'github',
           pullRequestTitle: 'Relay live-proof', pullRequestBody: prEvidence,
         },
       }),
