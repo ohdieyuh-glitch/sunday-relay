@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
-import { startBetaMission, pollBetaMission, shipBetaMission } from './beta-mission';
+import { startBetaMission, pollBetaMission, shipBetaMission, retryBetaMission, cancelBetaMission } from './beta-mission';
 import { RelayPspPicker } from './RelayPspPicker';
 import { rememberActiveMission, recallActiveMission, forgetActiveMission } from './active-mission';
 import type { listPsps, loadPsp, savePsp } from './psp-client';
@@ -28,6 +28,8 @@ export function RelayMissionRunner({
   startImpl = startBetaMission,
   pollImpl = pollBetaMission,
   shipImpl = shipBetaMission,
+  retryImpl = retryBetaMission,
+  cancelImpl = cancelBetaMission,
   pspListImpl,
   pspLoadImpl,
   pspSaveImpl,
@@ -40,6 +42,8 @@ export function RelayMissionRunner({
   readonly startImpl?: typeof startBetaMission;
   readonly pollImpl?: typeof pollBetaMission;
   readonly shipImpl?: typeof shipBetaMission;
+  readonly retryImpl?: typeof retryBetaMission;
+  readonly cancelImpl?: typeof cancelBetaMission;
   readonly pspListImpl?: typeof listPsps;
   readonly pspLoadImpl?: typeof loadPsp;
   readonly pspSaveImpl?: typeof savePsp;
@@ -120,6 +124,29 @@ export function RelayMissionRunner({
     else setMessage(result.message);
   }, [missionId, bridgeUrl, shipImpl]);
 
+  // Re-drive a failed Mission. On success the view returns to a running state,
+  // which flips `terminal` false and the poll effect above resumes watching.
+  const onRetry = useCallback(async () => {
+    if (missionId === null) return;
+    setBusy(true);
+    setMessage(null);
+    const result = await retryImpl({ missionId, bridgeUrl });
+    setBusy(false);
+    if (result.ok) setView(result.view);
+    else setMessage(result.message);
+  }, [missionId, bridgeUrl, retryImpl]);
+
+  // Stop an in-flight Mission — the user's lever on spend they authorized.
+  const onCancel = useCallback(async () => {
+    if (missionId === null) return;
+    setBusy(true);
+    setMessage(null);
+    const result = await cancelImpl({ missionId, bridgeUrl });
+    setBusy(false);
+    if (result.ok) setView(result.view);
+    else setMessage(result.message);
+  }, [missionId, bridgeUrl, cancelImpl]);
+
   if (missionId === null) {
     return (
       <form className="relay-mission-runner" data-state="idle" onSubmit={(e) => void onStart(e)}>
@@ -163,6 +190,18 @@ export function RelayMissionRunner({
 
       {view?.error !== undefined && (
         <p className="relay-mission-runner__failure" role="status">Stopped: {view.error.safeMessage}</p>
+      )}
+
+      {!terminal && (
+        <button type="button" className="relay-mission-runner__cancel" onClick={() => void onCancel()} disabled={busy}>
+          {busy ? 'Cancelling…' : 'Cancel Mission'}
+        </button>
+      )}
+
+      {state === 'failed' && view?.error?.retryable === true && (
+        <button type="button" className="relay-mission-runner__retry" onClick={() => void onRetry()} disabled={busy}>
+          {busy ? 'Retrying…' : 'Retry Mission'}
+        </button>
       )}
 
       {state === 'verified_complete' && ship === null && (

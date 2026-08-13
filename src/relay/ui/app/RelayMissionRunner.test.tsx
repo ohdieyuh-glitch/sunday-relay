@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { RelayMissionRunner } from './RelayMissionRunner';
-import type { startBetaMission, pollBetaMission, shipBetaMission } from './beta-mission';
+import type { startBetaMission, pollBetaMission, shipBetaMission, retryBetaMission, cancelBetaMission } from './beta-mission';
 import type { listPsps, loadPsp } from './psp-client';
 import { rememberActiveMission, recallActiveMission, clearActiveMissions } from './active-mission';
 import type { LiveMissionUpdate } from './contracts';
@@ -29,6 +29,11 @@ const verified = {
     { role: 'reviewer', attestationId: 'a2', requestedActor: 'Hermes', actualActor: 'Hermes', actualRuntime: 'hermes', provider: 'Anthropic' },
   ],
 } as unknown as LiveMissionUpdate;
+const failedRetryable = {
+  state: 'failed', currentRole: 'relay', events: [], phase: 'failed',
+  error: { safeMessage: 'Provider timed out.', retryable: true },
+} as unknown as LiveMissionUpdate;
+const cancelled = { state: 'cancelled', currentRole: 'relay', events: [], phase: 'cancelled' } as unknown as LiveMissionUpdate;
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); clearActiveMissions(); });
 
@@ -136,5 +141,50 @@ describe('RelayMissionRunner', () => {
     fireEvent.click(screen.getByRole('button', { name: /Start another Mission/i }));
     expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy();
     expect(recallActiveMission(KEY)).toBeNull();
+  });
+
+  it('offers Retry for a retryable failure and re-drives the same mission', async () => {
+    let failed = true; // first poll fails retryably; after retry, it runs again.
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-r', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-r', view: failed ? failedRetryable : coding, message: null }));
+    const retry = vi.fn<typeof retryBetaMission>(async ({ missionId }) => { failed = false; return { ok: true, missionId, view: coding, message: null }; });
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} retryImpl={retry} pspListImpl={emptyList} pollIntervalMs={10} />);
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    // The retryable failure is shown, with its safe reason.
+    await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('failed'));
+    expect(screen.getByText(/Stopped:/i).textContent).toContain('Provider timed out');
+    // Retrying re-drives the SAME mission and watching resumes.
+    fireEvent.click(screen.getByRole('button', { name: /Retry Mission/i }));
+    await waitFor(() => expect(retry).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('running'));
+  });
+
+  it('does not offer Retry for a non-retryable failure', async () => {
+    const nonRetryable = { state: 'failed', currentRole: 'relay', events: [], phase: 'failed', error: { safeMessage: 'Refused.', retryable: false } } as unknown as LiveMissionUpdate;
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-n', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-n', view: nonRetryable, message: null }));
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} pollIntervalMs={10} />);
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('failed'));
+    // Start another is offered (any terminal); Retry is not (not retryable).
+    expect(screen.getByRole('button', { name: /Start another Mission/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Retry Mission/i })).toBeNull();
+  });
+
+  it('cancels an in-flight mission', async () => {
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-c', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-c', view: coding, message: null }));
+    const cancel = vi.fn<typeof cancelBetaMission>(async ({ missionId }) => ({ ok: true, missionId, view: cancelled, message: null }));
+    // Long poll interval: the running state comes from start; no background poll
+    // races the authoritative cancel back to running.
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} cancelImpl={cancel} pspListImpl={emptyList} pollIntervalMs={100000} />);
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('running'));
+    fireEvent.click(screen.getByRole('button', { name: /Cancel Mission/i }));
+    await waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('cancelled'));
   });
 });

@@ -93,6 +93,62 @@ export async function pollBetaMission(input: {
   }
 }
 
+/** Parse a POST-action response ({ view } on success; a string OR a
+ *  {message} object under `error` on failure). The two mission-action routes
+ *  answer 404 with a bare-string error and a beta refusal with an object one. */
+function actionResult(missionId: string, ok: boolean, payload: { view?: LiveMissionUpdate; error?: unknown }, fallback: string): BetaMissionResult {
+  if (ok) return { ok: true, missionId, view: payload.view ?? null, message: null };
+  const e = payload.error;
+  const message = typeof e === 'string'
+    ? e
+    : (e !== null && typeof e === 'object' && typeof (e as { message?: unknown }).message === 'string'
+      ? (e as { message: string }).message
+      : fallback);
+  return { ok: false, missionId: null, view: null, message };
+}
+
+/** RE-DRIVE a failed Mission. Bounded server-side; a non-retryable one is a
+ *  no-op there. Spends money again, so it is auth-guarded exactly like start. */
+export async function retryBetaMission(input: {
+  missionId: string; bridgeUrl?: string | null; fetchImpl?: typeof fetch;
+}): Promise<BetaMissionResult> {
+  const base = input.bridgeUrl ?? configuredBridgeUrl();
+  if (base === null) return { ok: false, missionId: null, view: null, message: 'No Relay Bridge is configured.' };
+  if (loadBridgeSession() === null) return { ok: false, missionId: null, view: null, message: 'Sign in first.' };
+  const doFetch = input.fetchImpl ?? ((u: RequestInfo | URL, i?: RequestInit) => fetch(u, i));
+  try {
+    const res = await doFetch(`${base}${BASE}/mission/${encodeURIComponent(input.missionId)}/retry`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({}), credentials: 'omit', cache: 'no-store',
+    });
+    const payload = await res.json() as { view?: LiveMissionUpdate; error?: unknown };
+    return actionResult(input.missionId, res.ok, payload, 'The Mission could not be retried.');
+  } catch {
+    return { ok: false, missionId: null, view: null, message: 'The Relay Bridge could not be reached.' };
+  }
+}
+
+/** STOP an in-flight Mission. Authoritative — the browser holds no spend, so a
+ *  cancel is the user's lever on it. */
+export async function cancelBetaMission(input: {
+  missionId: string; bridgeUrl?: string | null; fetchImpl?: typeof fetch;
+}): Promise<BetaMissionResult> {
+  const base = input.bridgeUrl ?? configuredBridgeUrl();
+  if (base === null) return { ok: false, missionId: null, view: null, message: 'No Relay Bridge is configured.' };
+  if (loadBridgeSession() === null) return { ok: false, missionId: null, view: null, message: 'Sign in first.' };
+  const doFetch = input.fetchImpl ?? ((u: RequestInfo | URL, i?: RequestInit) => fetch(u, i));
+  try {
+    const res = await doFetch(`${base}${BASE}/mission/${encodeURIComponent(input.missionId)}/cancel`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({}), credentials: 'omit', cache: 'no-store',
+    });
+    const payload = await res.json() as { view?: LiveMissionUpdate; error?: unknown };
+    return actionResult(input.missionId, res.ok, payload, 'The Mission could not be cancelled.');
+  } catch {
+    return { ok: false, missionId: null, view: null, message: 'The Relay Bridge could not be reached.' };
+  }
+}
+
 export async function shipBetaMission(input: {
   missionId: string; bridgeUrl?: string | null; fetchImpl?: typeof fetch;
 }): Promise<{ readonly ok: boolean; readonly stage: string | null; readonly shipped: boolean; readonly message: string | null }> {
