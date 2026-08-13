@@ -9,7 +9,7 @@ import {
 import { validateSourceRepository } from '../src/relay/workspace/repository-inspector';
 import { pathInScope, protectedPathMatches } from '../src/relay/mission/repository-target';
 import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
-import { envVarCredentialProvider, buildEphemeralGitAuth } from './repository-credential';
+import { resolveRepositoryCredential, buildEphemeralGitAuth } from './repository-credential';
 import { cloneAuthorizedRepository } from './repository-remote-transport';
 
 /**
@@ -105,13 +105,13 @@ export function fixtureSource(): RepositorySource {
  * where the list came from. `readOnly` is empty: a real repository's read scope
  * is usually everything, and the write scope is what bounds the agent.
  */
-export function repositoryTargetSource(
+export async function repositoryTargetSource(
   target: MissionRepositoryTarget,
   /** The files this Mission declares it will write, narrowed from the scope. */
   intendedWritePaths: readonly string[],
   /** Server-side environment the credential seam resolves the token from. */
   env: NodeJS.ProcessEnv = process.env,
-): RepositorySourceResult {
+): Promise<RepositorySourceResult> {
   /**
    * CHEAP CONFIGURATION CHECKS FIRST — never spend a network clone on a Mission
    * that is misconfigured. write_worktree, a narrowed intent, and scope/protected
@@ -151,7 +151,7 @@ export function repositoryTargetSource(
    */
   const obtained = target.location.kind === 'local_path'
     ? obtainLocalCheckout(target, target.location.path)
-    : obtainRemoteClone(target, target.location.cloneUrl, env);
+    : await obtainRemoteClone(target, target.location.cloneUrl, env);
   if (!obtained.ok) return { ok: false, reason: obtained.reason };
 
   return {
@@ -210,9 +210,10 @@ function obtainLocalCheckout(target: MissionRepositoryTarget, path: string): Obt
  * `finally`. It lives under the OS temp dir and is reclaimed on the next deploy;
  * a follow-up removes it as part of the retained-worktree disposal.
  */
-function obtainRemoteClone(target: MissionRepositoryTarget, cloneUrl: string, env: NodeJS.ProcessEnv): ObtainedSource {
-  const credential = envVarCredentialProvider(env).resolve(target);
-  const auth = buildEphemeralGitAuth(credential);
+async function obtainRemoteClone(target: MissionRepositoryTarget, cloneUrl: string, env: NodeJS.ProcessEnv): Promise<ObtainedSource> {
+  const credResult = await resolveRepositoryCredential({ target, env });
+  if (!credResult.ok) return { ok: false, reason: credResult.error.message };
+  const auth = buildEphemeralGitAuth(credResult.value);
   const parent = mkdtempSync(join(tmpdir(), 'relay-remote-src-'));
   const dest = join(parent, 'checkout');
   try {

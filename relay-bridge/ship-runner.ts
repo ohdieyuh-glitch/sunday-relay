@@ -9,7 +9,7 @@ import {
   revalidateRepositoryTarget,
 } from '../src/relay/mission/repository-target';
 import { checkoutMatchesIdentity, commitObservedWork } from '../src/relay/workspace/repository-target-observer';
-import { envVarCredentialProvider, buildEphemeralGitAuth } from './repository-credential';
+import { resolveRepositoryCredential, buildEphemeralGitAuth } from './repository-credential';
 import { pushAuthorizedBranch } from './repository-remote-transport';
 import type {
   DeploymentProvider,
@@ -331,19 +331,34 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
      */
     const authorizedEnvVar = target.credential.envVarName;
     /**
-     * FAIL CLOSED WHEN THE TARGET AUTHORIZES NO CREDENTIAL.
+     * THE CREDENTIAL BOUNDARY: THE PROVIDER READS WHAT THE TARGET AUTHORIZES.
      *
-     * The check used to be skipped entirely when `envVarName` was null, so a
-     * provider reading `GITHUB_TOKEN` was driven for a repository that
-     * authorized no credential at all. Not reachable through
-     * `createRepositoryRegistration` today — it refuses a registration whose
-     * grants need a credential when none is named — so this is defence in depth
-     * rather than a live hole, and it is written that way deliberately: the
-     * module that would perform the operation should refuse for itself rather
-     * than rely on a registry check upstream.
+     * `authorizedEnvVar` (target.credential.envVarName) and
+     * `descriptor.credentialEnvVarName` must AGREE, and there are three shapes:
+     *
+     *   - env-var PAT target: both name the SAME env var → pass; different →
+     *     FATAL (a credential boundary crossed is not an optional stage failing).
+     *   - GitHub App installation target: the target authorizes no env var
+     *     (`envVarName === null`) and the provider reads no named env var either
+     *     (`descriptor.credentialEnvVarName === null`) — it consumes the target's
+     *     installation credential through the seam. null == null is INTENDED and
+     *     passes both guards below; the App path is a configured credential, not
+     *     the absence of one.
+     *   - a MISMATCH between those two — a target that authorizes no credential
+     *     while the provider reads a named env var, or vice versa — is FATAL.
+     *
+     * The first guard fires when the target authorizes NO credential yet the
+     * provider still reads a named env var: acting on a credential Relay was not
+     * given. It does NOT fire for the App case, where the descriptor is also
+     * null. Defence in depth: `createRepositoryRegistration` already refuses a
+     * grant needing a credential when neither an env var nor an installation is
+     * configured, but the module that performs the operation refuses for itself.
      */
     if (authorizedEnvVar === null && remote.descriptor.credentialEnvVarName !== null) {
-      return `This repository authorizes no credential, and the provider reads `
+      // Truthful for the installation case: the target may authorize an App
+      // installation (or nothing) — either way it does NOT authorize the env-var
+      // credential the provider names, so acting on it is a boundary crossing.
+      return `This repository authorizes no env-var credential, and the provider reads `
         + `${remote.descriptor.credentialEnvVarName}. Relay will not act on a credential it was not given.`;
     }
     if (authorizedEnvVar !== null && remote.descriptor.credentialEnvVarName !== authorizedEnvVar) {
@@ -369,7 +384,16 @@ export async function runShipLifecycle(request: ShipRunRequest): Promise<ShipRun
      * already enforced by `refusePushTarget` above; this is the mechanics.
      */
     const doPush = pushBranch ?? pushAuthorizedBranch;
-    const gitAuth = buildEphemeralGitAuth(envVarCredentialProvider(request.env ?? {}).resolve(target));
+    // Resolve the credential FRESH — an env-var PAT or a short-lived GitHub App
+    // installation token minted now, scoped to this repo and the push's least
+    // permissions. A resolution failure (e.g. the App is not configured) skips
+    // the remote leg truthfully rather than pushing unauthenticated.
+    const credResult = await resolveRepositoryCredential({ target, env: request.env ?? {} });
+    if (!credResult.ok) {
+      remoteSkipped = credResult.error.message;
+      return null;
+    }
+    const gitAuth = buildEphemeralGitAuth(credResult.value);
     let transfer: ReturnType<typeof pushAuthorizedBranch>;
     try {
       transfer = doPush({

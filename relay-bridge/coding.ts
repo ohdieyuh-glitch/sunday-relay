@@ -425,7 +425,7 @@ export async function runCodingMission(input: {
    */
   const sourceResult: RepositorySourceResult = input.repositoryTarget === undefined
     ? { ok: true, source: fixtureSource() }
-    : repositoryTargetSource(input.repositoryTarget, input.intendedWritePaths ?? []);
+    : await repositoryTargetSource(input.repositoryTarget, input.intendedWritePaths ?? []);
   if (!sourceResult.ok) {
     outcome.stopped = true;
     outcome.stopReason = safeText(sourceResult.reason);

@@ -32,6 +32,7 @@ import { runArchitect, ArchitectUnavailableError, type SundayMode } from './arch
 import { runCodingMission, codingHandoffDigest, type CancelHandle, type CodingOutcome } from './coding';
 import { disposeRetainedWorktree } from './ship-mission';
 import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
+import { defaultMissionConfig, type RelayMissionConfig } from '../src/relay/mission/mission-config';
 import { resolveClaudeRuntime } from './claude-runtime';
 import {
   ARCHITECT_COORDINATION_LABEL,
@@ -162,6 +163,7 @@ const PHASE_STATE: Record<MissionPhase, RelayMissionState> = {
   review_blocked: 'failed',
   cancelled: 'cancelled',
   timed_out: 'failed',
+  budget_exhausted: 'failed',
 };
 
 const PHASE_ROLE: Partial<Record<MissionPhase, MissionRole>> = {
@@ -189,6 +191,7 @@ const TERMINAL_FAILURE: ReadonlySet<MissionPhase> = new Set<MissionPhase>([
   'review_incomplete',
   'review_blocked',
   'timed_out',
+  'budget_exhausted',
 ]);
 
 /* ------------------------------------------------------- role ledger */
@@ -235,6 +238,11 @@ interface MissionRecord {
   repositoryTarget: MissionRepositoryTarget | null;
   /** The files it declared it would write. Empty for the fixture. */
   intendedWritePaths: readonly string[];
+  /** The validated execution config (PSP / Project Settings projection) this
+   *  Mission was started with — role selections, mode, review policy, requested
+   *  permissions and spend/compute limits. Never the fixture's business: a
+   *  Mission started with no config carries the conservative default. */
+  config: RelayMissionConfig;
   handoffDigest?: string;
   deliveredHandoffDigest?: string;
   claim?: MissionClaim;
@@ -254,6 +262,20 @@ interface MissionRecord {
   cancelRequested: boolean;
   cancelHandle: CancelHandle | null;
   retryCount: number;
+  /** How many paid role dispatches this Mission has made. The authorized
+   *  agent-call ceiling (config.limits.agentCalls) is checked against this
+   *  BEFORE each dispatch, so a cap halts the run with zero further spend. */
+  dispatchCount: number;
+  /** Epoch ms the Mission began, for the runtime ceiling. `NaN` disables the
+   *  runtime check (a clock that does not parse must not fabricate an elapsed). */
+  startedAtMs: number;
+  /** The participant who started this Mission, for their history list. Null for
+   *  an operator-started or fixture Mission (which has no participant identity),
+   *  so a participant's list can never include a Mission that is not theirs. */
+  startedByParticipant: string | null;
+  /** ISO time this Mission was created, for the history list. Kept separate from
+   *  `startedAtMs`, which is a runtime-ceiling epoch that may be `NaN`. */
+  createdAtIso: string;
 }
 
 /* --------------------------------------------------------- public API */
@@ -347,10 +369,28 @@ export interface MissionRegistryConfig {
   deps?: MissionRoleDeps;
 }
 
+/**
+ * A history-list row — enough to recognise a past Mission and reopen it, never
+ * its full record. Ordered newest first by the registry. Reflects only what THIS
+ * server still holds: the registry is in-memory, so a restart empties the list,
+ * which the surface discloses rather than implying a durable archive.
+ */
+export interface MissionSummary {
+  readonly missionId: string;
+  readonly objective: string;
+  readonly state: RelayMissionState;
+  readonly phase: MissionPhase;
+  readonly createdAt: string;
+  readonly completedAt: string | null;
+}
+
 export interface MissionRegistry {
   start(input: {
     missionId: string;
     objective: string;
+    /** The participant starting it, so it can appear in THEIR history and only
+     *  theirs. Null/absent for an operator or the controlled fixture. */
+    startedBy?: string | null;
     /**
      * References the Mission is AUTHORISED to retrieve before planning.
      *
@@ -383,8 +423,23 @@ export interface MissionRegistry {
      * would let the architect widen its own envelope.
      */
     intendedWritePaths?: readonly string[];
+    /**
+     * THE PSP / PROJECT SETTINGS THIS MISSION RUNS UNDER, validated at the API
+     * boundary. Absent means the conservative default. Carried onto the record
+     * and into the view so the mission states which configuration drove it —
+     * role selections, mode, review policy, requested permissions and limits.
+     */
+    config?: RelayMissionConfig;
   }): LiveMissionUpdate;
   get(missionId: string): LiveMissionUpdate | null;
+  /**
+   * THIS PARTICIPANT'S MISSIONS, newest first — their history list.
+   *
+   * Scoped by `startedByParticipant`: a Mission an operator or the fixture
+   * started (participant null) belongs to no one's list, and one participant can
+   * never see another's. Reflects only what this in-memory registry still holds.
+   */
+  listForParticipant(participantId: string): readonly MissionSummary[];
   /**
    * WHAT THE SHIP NEEDS FROM A COMPLETED MISSION, or null.
    *
@@ -594,6 +649,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     ...(rec.evidenceReferences.length === 0 ? {} : { evidence: [...rec.evidenceRecords] }),
     review: rec.review,
     attestations: toAttestationSummaries(rec),
+    // The configuration this Mission runs under — so the user sees what drove it.
+    config: rec.config,
   });
 
   /** Terminal failure. `phase` is the exact supported failure state; the code
@@ -661,6 +718,39 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     disposeIfRetained(rec);
     setPhase(rec, 'cancelled', 'relay');
     rec.completedAt = now();
+  };
+
+  /**
+   * THE SPEND/COMPUTE GATE — checked BEFORE every paid role dispatch.
+   *
+   * If the Mission has reached the authorized agent-call ceiling or runtime
+   * ceiling from its config, it halts to `budget_exhausted` and the caller
+   * returns WITHOUT dispatching — an authorized limit is never silently
+   * exceeded (criterion 15). Returns true when it BLOCKED (the caller must stop
+   * the pipeline), false when the dispatch may proceed — and in that case it
+   * records the dispatch, so the count reflects real paid work. A `null` limit
+   * is not a ceiling and never blocks; the runtime check is skipped when the
+   * clock did not parse rather than fabricating an elapsed time.
+   */
+  const budgetBlocked = (rec: MissionRecord, role: MissionRole): boolean => {
+    const limits = rec.config.limits;
+    if (limits.agentCalls !== null && rec.dispatchCount >= limits.agentCalls) {
+      fail(rec, 'budget_exhausted',
+        `The authorized agent-call limit (${limits.agentCalls}) was reached before the ${role} dispatch. No further provider was contacted.`,
+        { code: 'budget_exhausted', retryable: false });
+      return true;
+    }
+    if (limits.runtimeMinutes !== null && Number.isFinite(rec.startedAtMs)) {
+      const elapsedMs = Date.parse(now()) - rec.startedAtMs;
+      if (Number.isFinite(elapsedMs) && elapsedMs >= limits.runtimeMinutes * 60_000) {
+        fail(rec, 'budget_exhausted',
+          `The authorized runtime limit (${limits.runtimeMinutes} min) was reached before the ${role} dispatch. No further provider was contacted.`,
+          { code: 'budget_exhausted', retryable: false });
+        return true;
+      }
+    }
+    rec.dispatchCount += 1;
+    return false;
   };
 
   /* ------------------------------------------------------- the pipeline */
@@ -1127,6 +1217,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       }
 
       if (archStatus !== 'complete') {
+        // Spend/compute gate BEFORE the architect dispatch — covers both the
+        // live and Fusion paths, because both run under this block.
+        if (budgetBlocked(rec, 'prompt_architect')) return;
         setPhase(rec, 'prompt_architect_queued');
         append(rec, {
           role: 'prompt_architect',
@@ -1499,6 +1592,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           meta: `IDEMPOTENCY ${codeKey}`,
         });
       } else {
+        // Spend/compute gate BEFORE the Coding Agent dispatch.
+        if (budgetBlocked(rec, 'coding_agent')) return;
         setPhase(rec, 'coding_agent_assigned');
         append(rec, {
           role: 'coding_agent',
@@ -1674,6 +1769,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
           meta: `IDEMPOTENCY ${revKey}`,
         });
       } else {
+        // Spend/compute gate BEFORE the independent Reviewer dispatch.
+        if (budgetBlocked(rec, 'reviewer')) return;
         setPhase(rec, 'reviewer_assigned');
         append(rec, {
           role: 'reviewer',
@@ -1969,6 +2066,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         && reviewedContent !== null;
 
       if (canRepair && reviewedContent !== null) {
+        // Spend/compute gate BEFORE the repair dispatch. A Mission that cannot
+        // afford the repair halts here rather than spending past its ceiling.
+        if (budgetBlocked(rec, 'coding_agent')) return;
         append(rec, {
           role: 'coding_agent',
           category: 'repair',
@@ -2052,6 +2152,10 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
             detail: `Changed files (Relay-observed): ${repaired.changedFiles.join(', ') || '(none)'}`,
           });
 
+          // Spend/compute gate BEFORE the independent re-review dispatch. The
+          // repair was re-verified locally (free); the paid re-review is gated,
+          // so a budget halt here never claims completion — it is budget_exhausted.
+          if (budgetBlocked(rec, 'reviewer')) return;
           const secondOutcome = await callReviewer({
             packet: {
               missionId: rec.missionId,
@@ -2337,7 +2441,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   }
 
   return {
-    start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths }) {
+    start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths, config, startedBy }) {
       const existing = records.get(missionId);
       if (existing) return toView(existing); // idempotent — one dispatch per mission id
       const request = safeText(objective) || 'Implement the controlled demo task.';
@@ -2348,6 +2452,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         missionRevision: `rev_${digest(`${missionId}:${request}`)}`,
         repositoryTarget: repositoryTarget ?? null,
         intendedWritePaths: intendedWritePaths ?? [],
+        // The configuration this Mission was started with — a PSP projection, or
+        // the conservative default when the caller named none.
+        config: config ?? defaultMissionConfig(),
         phase: 'ready',
         state: 'ready',
         currentRole: 'relay',
@@ -2359,6 +2466,10 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         cancelRequested: false,
         cancelHandle: null,
         retryCount: 0,
+        dispatchCount: 0,
+        startedAtMs: Date.parse(now()),
+        startedByParticipant: startedBy ?? null,
+        createdAtIso: now(),
         evidenceReferences: evidenceReferences ?? [],
         liveEvidence: [],
         evidenceRecords: [],
@@ -2366,6 +2477,27 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       records.set(missionId, rec);
       void runPipeline(rec); // fire-and-forget; browser polls for progress
       return toView(rec);
+    },
+
+    listForParticipant(participantId) {
+      const mine: MissionSummary[] = [];
+      for (const rec of records.values()) {
+        // Null owner (operator/fixture) matches no participant — a participant's
+        // list holds only Missions they started.
+        if (rec.startedByParticipant !== null && rec.startedByParticipant === participantId) {
+          mine.push({
+            missionId: rec.missionId,
+            objective: rec.objective,
+            state: rec.state,
+            phase: rec.phase,
+            createdAt: rec.createdAtIso,
+            completedAt: rec.completedAt,
+          });
+        }
+      }
+      // Newest first. ISO-8601 timestamps sort lexically, so string compare is a
+      // correct chronological order without parsing a clock that might not.
+      return mine.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
     },
 
     get(missionId) {

@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runShipLifecycle } from './ship-runner';
 import { createLocalDirectoryDeploymentProvider, REVISION_MARKER } from './local-directory-deployment-provider';
@@ -77,6 +78,7 @@ afterEach(async () => {
   for (const path of temporaries.splice(0)) {
     try { rmSync(path, { recursive: true, force: true }); } catch { /* best effort */ }
   }
+  vi.unstubAllGlobals();
 });
 
 function temp(prefix: string): string {
@@ -487,18 +489,22 @@ function remoteTarget(reg: RepositoryRegistration, permissions: readonly Reposit
   });
   if (!resolved.ok) throw new Error(resolved.error.message);
   /**
-   * THE LOCATION IS OVERRIDDEN TO THE LOCAL CHECKOUT, AND THAT OVERRIDE IS
-   * ITSELF A FINDING.
+   * THE LOCATION IS OVERRIDDEN TO A LOCAL CHECKOUT so these tests can run with NO
+   * credential and NO network — they hold the ORCHESTRATION (call order, which
+   * legs are skipped, which refusals fire), not GitHub's own behaviour.
    *
-   * A `github` identity must be `remote_clone`, and `repository-source.ts`
-   * REFUSES `remote_clone` because nothing clones. So today no single valid
-   * registration can both be sourced for the coding leg AND carry the
-   * owner/name the remote provider needs — the remote leg is wired and
-   * unreachable end to end until a clone capability exists. Recorded in
-   * REPOSITORY_TARGETS.md rather than left for someone to discover.
-   *
-   * These tests hold the ORCHESTRATION: the order of the calls, which are
-   * skipped, and which refusals fire. GitHub's own behaviour is covered by
+   * STALE-PROSE CORRECTION (verified 2026-08-13): an earlier version here claimed
+   * `repository-source.ts` "refuses remote_clone because nothing clones", so the
+   * remote leg was "wired and unreachable end to end until a clone capability
+   * exists". That is no longer true. `repository-source.ts` now clones a
+   * `remote_clone` over authenticated HTTPS (`obtainRemoteClone` →
+   * `cloneAuthorizedRepository`), and a GitHub repository ALREADY on the machine
+   * registers as `local_path` with a github origin — so a single valid
+   * registration can both be SOURCED and carry the owner/name the remote provider
+   * needs. The remote leg is reachable end to end; the ONLY thing missing is the
+   * GitHub App installation credential (a founder action at github.com), which is
+   * why these tests still inject a fake provider. The real clone is proven in
+   * `repository-remote-transport.test.ts`, the real provider in
    * `github-remote-provider.test.ts`.
    */
   return { ...resolved.target, location: { kind: 'local_path', path: root } } as MissionRepositoryTarget;
@@ -1437,5 +1443,305 @@ describe('a provider is asked only for environments it supports', () => {
     // record itself, not only on a descriptor a reader may never see.
     const deployed = result.evidence.find((e) => e.stage === 'deployed');
     expect(deployed?.detail).toContain('SIMULATED');
+  });
+});
+
+/**
+ * THE SHIP RUNNER PERFORMS A REAL GIT PUSH TO A REAL REMOTE.
+ *
+ * Every other test in this file injects a FAKE `pushBranch` (PASS_PUSH and
+ * friends), so nothing here has ever driven the runner's remote leg through the
+ * REAL `pushAuthorizedBranch`. `repository-remote-transport.test.ts` drives the
+ * real push, but in ISOLATION — never through `runShipLifecycle`. This closes
+ * that gap: the runner ORCHESTRATION transfers committed code to a real remote,
+ * offline and with no credential, and we prove it landed by reading the remote
+ * ref back out of the bare repo itself.
+ *
+ * NO NETWORK, NO CREDENTIAL, NO github.com. The remote is a local `git
+ * init --bare` repo, which git pushes to over a filesystem path with no auth.
+ * `buildEphemeralGitAuth(null)` is what the runner builds when the authorized
+ * env var is unset — the exact credential-free path proven in the transport
+ * suite. The PR/merge are a GitHub API concern, so those stay a fake provider;
+ * the PUSH is real.
+ */
+describe('the ship runner performs a REAL push to a REAL local bare remote', () => {
+  const LADDER_WITH_DEPLOY: readonly RepositoryPermission[] =
+    ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr', 'deploy_staging'];
+
+  /**
+   * A work repo on the working branch whose `origin` is a REAL local bare repo.
+   * Mirrors `repository()` but points origin at a bare repo instead of
+   * github.com/o/r, so the real `pushAuthorizedBranch` reaches a real remote
+   * with no network. Both dirs are registered with `temp()` and torn down by the
+   * file's existing afterEach.
+   */
+  function repositoryWithBareOrigin(): { root: string; bare: string } {
+    const root = temp('relay-ship-real-');
+    const git = (args: string[]) => execFileSync('git', args, { cwd: root, env: GIT_ENV(root) });
+    git(['init', '--quiet', '--initial-branch=main']);
+    mkdirSync(join(root, 'src'), { recursive: true });
+    writeFileSync(join(root, 'src', 'app.js'), 'export const version = 1;\n');
+    git(['add', '--', '.']);
+    git(['commit', '-m', 'initial']);
+    // A real bare origin. `--bare` so the feature-branch push updates a ref
+    // rather than trying to write a checked-out working tree.
+    const bare = temp('relay-ship-bare-');
+    rmSync(bare, { recursive: true, force: true });
+    execFileSync('git', ['init', '--bare', '-b', 'main', bare], { cwd: root, env: GIT_ENV(root) });
+    git(['remote', 'add', 'origin', bare]);
+    git(['push', '--quiet', 'origin', 'main']);
+    git(['checkout', '--quiet', '-b', 'relay/mission-1']);
+    return { root, bare };
+  }
+
+  /**
+   * A faithful, no-network deploy provider — remembers what it deployed and
+   * reports THAT back, so the run can reach `shipped` without a live HTTP call.
+   * The same shape the suite already uses at "the runner reaches shipped by
+   * itself".
+   */
+  function honestProvider() {
+    let deployed: string | null = null;
+    return {
+      provider: {
+        descriptor: {
+          providerId: 'stub', displayName: 'Stub', environments: ['staging'] as const,
+          canReportDeployedRevision: true, canVerifyLive: true, simulated: true,
+          credentialEnvVarName: null,
+        },
+        deploy: async (r: { revision: string }) => {
+          deployed = r.revision;
+          return {
+            ok: true, providerId: 'stub', environment: 'staging' as const,
+            deployedRevision: deployed, deploymentRef: 'stub:1',
+            url: 'http://stub.invalid/app', observedAt: NOW, detail: null,
+          };
+        },
+        verifyLive: async (i: { expectedRevision: string }) => ({
+          reachable: true,
+          healthy: deployed !== null && deployed === i.expectedRevision,
+          reportedRevision: deployed, method: 'stub', observedAt: NOW, detail: null,
+        }),
+      },
+    };
+  }
+
+  it('transfers the committed code to the bare origin with the real push, then ships', async () => {
+    const { root, bare } = repositoryWithBareOrigin();
+    const reg = remoteRegistration(LADDER_WITH_DEPLOY);
+
+    /**
+     * A LOCAL-provider target whose checkout's origin is a real local bare repo.
+     *
+     * `remoteTarget` gives a github identity (owner `o`, name `r`, credential
+     * GITHUB_TOKEN) and overrides the location to this checkout. One adjustment:
+     * `identity.provider` -> 'local', which SKIPS the COMMIT-stage
+     * `checkoutMatchesIdentity` guard. That guard proves a remote-HOSTED target's
+     * checkout really is github.com/o/r; a real credential-free push offline
+     * requires origin to be a LOCAL bare repo, which by construction is not a
+     * github URL — so this is genuinely a local target (the "GitHub repo already
+     * on the machine" case), not a dodge. `owner` stays `o`, which is all the
+     * remote leg needs (it refuses a null owner before pushing), and the
+     * credential stays GITHUB_TOKEN so it matches the provider descriptor.
+     */
+    const base = remoteTarget(reg, LADDER_WITH_DEPLOY, root);
+    const target = {
+      ...base,
+      identity: { ...base.identity, provider: 'local' as const },
+    } as MissionRepositoryTarget;
+
+    // Fake PR/merge; its descriptor reads GITHUB_TOKEN, matching the target's
+    // authorized credential, so the credential boundary check passes.
+    const fake = fakeRemote();
+    const stub = honestProvider();
+
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      // GITHUB_TOKEN unset -> resolveRepositoryCredential returns ok(null) ->
+      // buildEphemeralGitAuth(null) -> a credential-free push, which a local
+      // remote accepts. Explicit {} makes it independent of the host env.
+      env: {},
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump version', authorName: 'Relay', authorEmail: 'relay@x',
+      // pushBranch OMITTED -> the REAL pushAuthorizedBranch runs against origin.
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      deployment: {
+        provider: stub.provider, environment: 'staging',
+        artifactPath: artifact(), liveUrl: 'http://stub.invalid/app',
+      },
+      now: () => NOW,
+    });
+
+    const sha = result.commitSha as string;
+    expect(sha).toMatch(/^[0-9a-f]{40}$/);
+
+    /**
+     * THE STRONGEST EVIDENCE OF A REAL SHIP: the code physically landed on a
+     * real remote. Read the bare repo's ref back from git itself — nothing but
+     * the real push could have created `refs/heads/relay/mission-1` over there,
+     * pointing at the exact commit the runner produced.
+     */
+    const bareTip = execFileSync('git', ['-C', bare, 'rev-parse', 'relay/mission-1'], {
+      encoding: 'utf8', env: GIT_ENV(root),
+    }).trim();
+    expect(bareTip).toBe(sha);
+
+    // The same fact read the way the transport reads it, from the remote side.
+    const ls = execFileSync('git', ['ls-remote', bare, 'refs/heads/relay/mission-1'], {
+      encoding: 'utf8', env: GIT_ENV(root),
+    }).trim();
+    expect(ls.split(/\s+/)[0]).toBe(sha);
+
+    // The runner recorded a `pushed` row from its OWN read-back of the remote
+    // ref — the real push verified the tip before the row was written.
+    const pushed = result.evidence.find((e) => e.stage === 'pushed');
+    expect(pushed).toBeDefined();
+    expect(pushed?.remoteRef).toBe(sha);
+
+    // The real transfer was not skipped: the provider then observed the pushed
+    // tip and opened a pull request over the landed commit.
+    expect(fake.calls).toContain('push:relay/mission-1');
+    expect(result.evidence.find((e) => e.stage === 'pull_request_open')).toBeDefined();
+
+    // And the whole lifecycle reached a truthful `shipped` verdict over a run
+    // that performed a real landed push.
+    expect(result.stage).toBe('shipped');
+    expect(result.stoppedBy).toBeNull();
+    expect(result.verdict?.shipped).toBe(true);
+    expect(result.verdict?.liveRevision).toBe(sha);
+    expect(result.evidence.map((e) => e.stage))
+      .toEqual(['committed', 'pushed', 'pull_request_open', 'deployed', 'live_verified', 'shipped']);
+  });
+});
+
+/**
+ * THE REMOTE LEG IS ADMITTED ON A GITHUB APP INSTALLATION CREDENTIAL.
+ *
+ * The user-safe path: the target authorizes a GitHub App INSTALLATION (no env
+ * var), and the provider descriptor names no env var either — it consumes the
+ * target's installation token through the seam. The credential-boundary check
+ * used to fatal-refuse this (a target authorizing null while the descriptor
+ * named an env var was a mismatch), so an App-installation remote leg never ran.
+ *
+ * `null == null` is the App case and is INTENDED: both sides agree the credential
+ * is not a named env var. This drives the runner's ORCHESTRATION with an injected
+ * `pushBranch` and a fake provider — the push credential resolution still mints a
+ * real short-lived App token (stubbed at the mint fetch, so nothing reaches
+ * github.com), proving the leg is admitted and each stage independently gated.
+ */
+describe('the remote leg is admitted on a GitHub App installation credential', () => {
+  const APP_LADDER: readonly RepositoryPermission[] =
+    ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr'];
+
+  const { privateKey: appKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const APP_PEM = appKey.export({ type: 'pkcs1', format: 'pem' }).toString();
+  const APP_ENV = { RELAY_GITHUB_APP_ID: '123456', RELAY_GITHUB_APP_PRIVATE_KEY: APP_PEM } as NodeJS.ProcessEnv;
+
+  /** A github registration whose credential is an App INSTALLATION — no env var. */
+  function appRemoteRegistration(permissions: readonly RepositoryPermission[]): RepositoryRegistration {
+    const result = createRepositoryRegistration({
+      draft: {
+        identity: { provider: 'github', host: 'github.com', owner: 'o', name: 'r', defaultBranch: 'main' },
+        location: { kind: 'remote_clone', cloneUrl: 'https://github.com/o/r.git' },
+        scope: { read: ['**'], write: ['src/**'] },
+        grants: permissions.map((permission) => ({
+          permission, authorizedBy: 'founder', authorizedAt: NOW, expiresAt: null, note: null,
+        })),
+        ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+        credential: { installationId: '55550123' },
+        registeredBy: 'founder',
+      },
+      now: NOW,
+    });
+    if (!result.ok) throw new Error(result.error.message);
+    return result.value;
+  }
+
+  /** A fake provider whose descriptor names NO env var — the installation path. */
+  function appFakeRemote() {
+    const base = fakeRemote();
+    (base.provider as { descriptor: { credentialEnvVarName: string | null } }).descriptor =
+      { ...base.provider.descriptor, credentialEnvVarName: null } as never;
+    return base;
+  }
+
+  it('ADMITS the App leg (null == null boundary) and runs push -> PR through the minted token', async () => {
+    const root = repository();
+    const reg = appRemoteRegistration(APP_LADDER);
+    const target = remoteTarget(reg, APP_LADDER, root);
+    // The target authorizes an installation, not an env var.
+    expect(target.credential.envVarName).toBeNull();
+    expect(target.credential.installationId).toBe('55550123');
+    const fake = appFakeRemote();
+    // And the provider reads no env var either — the App path on both sides.
+    expect(fake.provider.descriptor.credentialEnvVarName).toBeNull();
+
+    // The push credential resolution mints a short-lived App token via fetch. The
+    // injected PASS_PUSH ignores the token, so the mint is the ONLY thing that
+    // touches fetch and it never reaches github.com.
+    let mintHit = false;
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', (async (url: string) => {
+      if (String(url).includes('/access_tokens')) {
+        mintHit = true;
+        return {
+          ok: true, status: 201,
+          json: async () => ({ token: 'ghs_runner_app_token', expires_at: '2026-08-11T13:00:00Z', permissions: { contents: 'write', pull_requests: 'write' }, repository_selection: 'selected' }),
+          text: async () => '',
+        };
+      }
+      return realFetch(url as never);
+    }) as never);
+
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      env: APP_ENV,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
+      now: () => NOW,
+    });
+
+    // The boundary check did NOT fire: null (target) == null (descriptor) is the
+    // App case, not a mismatch. So the leg RAN instead of fatal-refusing.
+    expect(result.stoppedBy).toBeNull();
+    // The App token was minted for the push — the installation path was taken.
+    expect(mintHit).toBe(true);
+    // Push then PR happened; each stage is independently gated, so with no
+    // merge grant the run stops at pull_request_open.
+    expect(fake.calls).toEqual(['push:relay/mission-1', 'pr']);
+    expect(result.stage).toBe('pull_request_open');
+    expect(result.evidence.find((e) => e.stage === 'merged')).toBeUndefined();
+  });
+
+  it('FATAL-refuses the FIRST guard: a null-authorizing target vs a provider that NAMES an env var', async () => {
+    // Defence-in-depth (unreachable in production, where ship-mission wires the
+    // descriptor to the target's own null env var). If a provider that reads an
+    // env var were ever driven for an installation/no-env-var target, that is a
+    // credential the target never authorized — the first boundary guard is FATAL
+    // and nothing must leave the machine.
+    const root = repository();
+    const reg = appRemoteRegistration(APP_LADDER);
+    const target = remoteTarget(reg, APP_LADDER, root);
+    expect(target.credential.envVarName).toBeNull(); // authorizes an installation, not an env var
+
+    const fake = fakeRemote(); // default descriptor NAMES GITHUB_TOKEN
+    expect(fake.provider.descriptor.credentialEnvVarName).toBe('GITHUB_TOKEN');
+
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      env: APP_ENV,
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump', authorName: 'Relay', authorEmail: 'relay@x',
+      remote: { provider: fake.provider, pushBranch: PASS_PUSH, evidence: PR_EVIDENCE },
+      now: () => NOW,
+    });
+
+    // FATAL: stopped at commit, naming the un-authorized env var, nothing attempted.
+    expect(result.stage).toBe('committed');
+    expect(result.stoppedBy).toContain('GITHUB_TOKEN');
+    expect(result.stoppedBy).toContain('will not act on a credential it was not given');
+    expect(fake.calls).toEqual([]);
+    expect(result.evidence.find((e) => e.stage === 'pushed')).toBeUndefined();
   });
 });

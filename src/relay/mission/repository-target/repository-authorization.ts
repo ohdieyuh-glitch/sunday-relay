@@ -197,7 +197,19 @@ export function authorizeRepositoryAction(input: {
   // A credential-requiring action must have somewhere to read a credential
   // from. Refused by name here rather than failing at the provider, so the
   // Mission stops at CONFIGURATION — before a clone, before a spend.
-  if (requiresCredential(permission) && registration.credential.envVarName === null) {
+  //
+  // A credential is configured when EITHER an env var names it (the founder-PAT
+  // path) OR a GitHub App installation supplies it (the user-safe path). An App
+  // installation IS a configured credential — the bridge mints a short-lived,
+  // repo-scoped installation token from it at the point of use. So this refuses
+  // only when NEITHER source is present: no env var AND no installation id. That
+  // preserves fail-closed (a grant that reaches a remote with no credential at
+  // all is refused at configuration) while admitting the installation path.
+  if (
+    requiresCredential(permission) &&
+    registration.credential.envVarName === null &&
+    (registration.credential.installationId ?? null) === null
+  ) {
     return refuse({
       refusal: 'credential_missing',
       message: `"${permission}" on "${registration.key}" needs a server-side credential and none is configured.`,
@@ -319,4 +331,33 @@ export function renderPermissionLine(permissions: readonly RepositoryPermission[
   if (permissions.length === 0) return 'no repository permissions';
   const ordered = REPOSITORY_PERMISSIONS.filter((p) => permissions.includes(p));
   return ordered.join(', ');
+}
+
+/**
+ * WHO MAY TARGET OR SHIP A REGISTERED REPOSITORY.
+ *
+ * The operator owns everything: they hold the credential that gates registration
+ * itself. Beyond the operator, exactly one principal may act on a registration —
+ * the participant it is OWNED BY — and only when the owner is set. This is the
+ * rule that lets a beta user connect and ship THEIR OWN repository without the
+ * operator, while guaranteeing a user can never reach a repository someone else
+ * registered:
+ *
+ *   - operator            -> always allowed.
+ *   - ownerParticipant null (operator-owned / legacy) -> only the operator.
+ *   - ownerParticipant set -> the operator, or a caller whose participant EQUALS
+ *     it. A null caller participant never equals a set owner, so "signed in as
+ *     nobody in particular" is refused, not coincidentally admitted.
+ *
+ * The caller identity comes from the verified session, never a request body.
+ */
+export function registrationOwnerAdmits(input: {
+  readonly ownerParticipant: string | null;
+  readonly caller:
+    | { readonly kind: 'operator' }
+    | { readonly kind: 'participant'; readonly participantId: string | null };
+}): boolean {
+  if (input.caller.kind === 'operator') return true;
+  if (input.ownerParticipant === null) return false;
+  return input.caller.participantId !== null && input.caller.participantId === input.ownerParticipant;
 }

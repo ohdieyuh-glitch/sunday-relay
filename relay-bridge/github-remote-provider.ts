@@ -50,8 +50,23 @@ const SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 const BRANCH = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
 
 export interface GitHubProviderConfig {
-  /** The env var the credential is read from. The NAME travels; the value does not. */
-  readonly credentialEnvVarName: string;
+  /**
+   * The env var the credential is read from. The NAME travels; the value does
+   * not. `null` means the credential is NOT a named env var — it is the target's
+   * resolved installation token, supplied through `resolveToken`.
+   */
+  readonly credentialEnvVarName: string | null;
+  /**
+   * THE CANONICAL CREDENTIAL SEAM. When provided, this is the SOLE source of the
+   * credential for every API call — it wraps `resolveRepositoryCredential`, which
+   * returns the short-lived GitHub App installation token for an installation
+   * target OR the env-var value for an env-var target. There is no SEPARATE
+   * fallback: an installation target resolves the App token, an env-var target
+   * the PAT, and neither → null (fail closed). When NOT provided (unit tests
+   * only), the credential is read from `env[credentialEnvVarName]` if that name
+   * is a non-null string, else null.
+   */
+  readonly resolveToken?: () => Promise<string | null>;
   readonly env?: NodeJS.ProcessEnv;
   readonly fetchImpl?: FetchLike;
   readonly now?: () => string;
@@ -74,9 +89,22 @@ export function createGitHubRemoteProvider(config: GitHubProviderConfig): Remote
   const now = config.now ?? (() => new Date().toISOString());
   const root = config.apiRoot ?? GITHUB_API_ROOT;
 
-  /** Never returns the credential, and never says how long it is. */
-  const credential = (): string | null => {
-    const value = env[config.credentialEnvVarName];
+  /**
+   * Never returns the credential to a caller, and never says how long it is.
+   *
+   * When `resolveToken` is set it is the SOLE source — it wraps the credential
+   * seam (`resolveRepositoryCredential`), which mints the App installation token
+   * for an installation target or reads the PAT for an env-var target, so there
+   * is no separate env-var fallback here. Only when it is ABSENT (unit tests) is
+   * the value read from the named env var, and only if a name is configured.
+   */
+  const credential = async (): Promise<string | null> => {
+    if (config.resolveToken !== undefined) {
+      return config.resolveToken();
+    }
+    const name = config.credentialEnvVarName;
+    if (typeof name !== 'string' || name.trim() === '') return null;
+    const value = env[name];
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
   };
 
@@ -95,12 +123,17 @@ export function createGitHubRemoteProvider(config: GitHubProviderConfig): Remote
     path: string,
     body?: unknown,
   ): Promise<{ ok: true; json: Record<string, unknown> } | { ok: false; status: number; detail: string }> => {
-    const token = credential();
+    const token = await credential();
     if (token === null) {
+      // A null resolved token is a SAFE failure — never the token, never how it
+      // was resolved. Name the env var only when one is configured; the
+      // installation path has no name to disclose.
       return {
         ok: false,
         status: 0,
-        detail: `No credential is configured in ${config.credentialEnvVarName}.`,
+        detail: typeof config.credentialEnvVarName === 'string' && config.credentialEnvVarName.trim() !== ''
+          ? `No credential is configured in ${config.credentialEnvVarName}.`
+          : 'No credential is available for this repository.',
       };
     }
     try {

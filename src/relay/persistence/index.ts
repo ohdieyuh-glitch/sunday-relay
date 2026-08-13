@@ -47,3 +47,13 @@ export {
   createRepositoryRegistrationStore,
   type RepositoryRegistrationStore,
 } from './repository-registration-node';
+export {
+  createBrainMemoryStore,
+  type BrainMemoryStore,
+} from './brain-memory-node';
+
+export {
+  createPspConfigStore,
+  type PspConfigStore,
+  type SavedPsp,
+} from './psp-config-node';

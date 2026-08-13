@@ -2,6 +2,12 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { MissionRepositoryTarget } from '../src/relay/mission/repository-target';
+import { fail, ok, relayError, type RelayResult } from '../src/relay/protocol/errors';
+import {
+  githubAppPermissionsFor,
+  issueInstallationToken,
+  type IssueInstallationTokenInput,
+} from './github-app-installation';
 
 /**
  * THE REPOSITORY CREDENTIAL SEAM.
@@ -32,9 +38,13 @@ import type { MissionRepositoryTarget } from '../src/relay/mission/repository-ta
 export interface RepositoryCredential {
   /** The secret material. Only `buildEphemeralGitAuth` may read it. */
   readonly token: string;
-  /** Provenance, safe to record. NEVER the value. */
-  readonly source: 'env_var';
-  readonly envVarName: string;
+  /** Provenance, safe to record. NEVER the value. An env var (founder PAT) or a
+   *  short-lived GitHub App installation token (the user-safe path). */
+  readonly source: 'env_var' | 'github_app_installation';
+  /** For an env_var credential, the variable name; null for an App installation. */
+  readonly envVarName: string | null;
+  /** For a github_app_installation, the installation id (provenance, never a token). */
+  readonly installationId?: string | null;
 }
 
 /**
@@ -47,9 +57,9 @@ export interface RepositoryCredentialProvider {
 }
 
 /**
- * The current supplier: the named environment variable, read server-side. This
- * is the seam a GitHub-App installation-token issuer replaces — the callers
- * (clone, push) never learn which supplier answered.
+ * The env-var supplier: the named environment variable, read server-side. The
+ * founder-PAT path, kept for the operator flow and as a fallback; the user-safe
+ * path is a GitHub App installation (see `resolveRepositoryCredential`).
  */
 export function envVarCredentialProvider(env: NodeJS.ProcessEnv): RepositoryCredentialProvider {
   return {
@@ -61,6 +71,69 @@ export function envVarCredentialProvider(env: NodeJS.ProcessEnv): RepositoryCred
       return { token: value, source: 'env_var', envVarName: name };
     },
   };
+}
+
+/** The GitHub App the bridge holds, read server-side. The private key is held
+ *  ONLY in memory here and never surfaced — the same discipline as a repo token. */
+export interface GitHubAppServerConfig {
+  readonly appId: string;
+  readonly privateKeyPem: string;
+}
+
+/**
+ * Read the GitHub App config from server-side env: `RELAY_GITHUB_APP_ID` and
+ * `RELAY_GITHUB_APP_PRIVATE_KEY` (PEM; env stores often escape newlines as `\n`,
+ * which are restored). Returns null when the App is not configured — the bridge
+ * then has no user-safe credential path and says so, rather than falling back.
+ */
+export function githubAppConfigFromEnv(env: NodeJS.ProcessEnv): GitHubAppServerConfig | null {
+  const appId = env.RELAY_GITHUB_APP_ID;
+  const keyRaw = env.RELAY_GITHUB_APP_PRIVATE_KEY;
+  if (typeof appId !== 'string' || appId.trim() === '') return null;
+  if (typeof keyRaw !== 'string' || keyRaw.trim() === '') return null;
+  const privateKeyPem = keyRaw.includes('\\n') ? keyRaw.replace(/\\n/g, '\n') : keyRaw;
+  return { appId: appId.trim(), privateKeyPem };
+}
+
+/**
+ * THE ONE CREDENTIAL RESOLUTION callers should use — env var OR a GitHub App
+ * installation token minted FRESH at the point of use (clone, push), scoped to
+ * this repo and the least permissions the target holds. Async, because minting
+ * an App token is a network call; a repo's token is short-lived, so it is minted
+ * per operation rather than cached across a Mission's lifetime. Returns null when
+ * the target names no credential — a private op then fails closed downstream via
+ * `GIT_TERMINAL_PROMPT=0`.
+ */
+export async function resolveRepositoryCredential(input: {
+  readonly target: MissionRepositoryTarget;
+  readonly env: NodeJS.ProcessEnv;
+  readonly fetchImpl?: IssueInstallationTokenInput['fetchImpl'];
+  readonly nowSeconds?: number;
+}): Promise<RelayResult<RepositoryCredential | null>> {
+  const cb = input.target.credential;
+  if (cb.installationId !== null && cb.installationId !== undefined) {
+    const appConfig = githubAppConfigFromEnv(input.env);
+    if (appConfig === null) {
+      return fail(relayError('validation-failed',
+        'This repository authorizes a GitHub App installation, but the bridge has no GitHub App configured.'));
+    }
+    const minted = await issueInstallationToken({
+      appIdentity: appConfig,
+      installationId: cb.installationId,
+      repositories: [input.target.identity.name],
+      permissions: githubAppPermissionsFor(input.target.permissions),
+      fetchImpl: input.fetchImpl,
+      nowSeconds: input.nowSeconds ?? Math.floor(Date.now() / 1000),
+    });
+    if (!minted.ok) return minted;
+    return ok({
+      token: minted.value.token,
+      source: 'github_app_installation',
+      envVarName: null,
+      installationId: cb.installationId,
+    });
+  }
+  return ok(envVarCredentialProvider(input.env).resolve(input.target));
 }
 
 /**

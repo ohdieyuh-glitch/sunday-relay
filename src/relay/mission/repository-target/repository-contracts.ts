@@ -316,8 +316,16 @@ export interface PermissionGrant {
  * every other control in this file.
  */
 export interface CredentialBoundary {
-  /** Env var name the bridge reads the credential from. Server-side only. */
+  /** Env var name the bridge reads the credential from. Server-side only.
+   *  The founder-PAT path; null when a GitHub App installation supplies the
+   *  credential instead. Names the variable, never the value. */
   readonly envVarName: string | null;
+  /** GitHub App installation id, when the credential is a user-authorized App
+   *  installation (the private-beta, user-safe path). The bridge mints a
+   *  short-lived, repo-scoped installation token from this id plus the App key
+   *  held in server config. Names the installation, NEVER a token or key; null
+   *  when an env var supplies the credential instead. */
+  readonly installationId: string | null;
   /** Always false. Present so evidence states it rather than implying it. */
   readonly handedToAgent: false;
   /** What the credential is allowed to be used for, for the audit trail. */
@@ -347,6 +355,16 @@ export interface RepositoryRegistration {
    *  branch. The default branch is always one of these; see `protectedBranches`. */
   readonly protectedBranches: readonly string[];
   readonly registeredBy: string;
+  /**
+   * THE PRINCIPAL WHO OWNS THIS REGISTRATION, for authorization — distinct from
+   * `registeredBy` (a descriptive audit string). `null` means operator-owned:
+   * the legacy shape, targetable and shippable only by the operator. A non-null
+   * value is a signed-in user's participant (e.g. `ghu-<github-id>`); that user
+   * — and the operator — may target and ship it, and no one else. This is what
+   * lets a beta user connect and ship THEIR OWN repository without the operator,
+   * while a user can never reach a repository another user registered.
+   */
+  readonly ownerParticipant: string | null;
   readonly registeredAt: string;
   /** Set when revoked. A revoked registration is retained, never deleted, so
    *  the audit trail survives the revocation. */

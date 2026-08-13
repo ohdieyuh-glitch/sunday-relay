@@ -119,7 +119,11 @@ export type MissionPhase =
   | 'review_incomplete'
   | 'review_blocked'
   | 'cancelled'
-  | 'timed_out';
+  | 'timed_out'
+  /** Stopped because the Mission reached an authorized spend/compute ceiling
+   *  (agent-call count or runtime). No completion is claimed; the halt names
+   *  the cause so a user understands it without terminal logs. */
+  | 'budget_exhausted';
 
 export type MissionRole = 'relay' | 'prompt_architect' | 'coding_agent' | 'reviewer';
 
@@ -450,6 +454,36 @@ export interface LiveMissionUpdate {
   review?: MissionReview;
   /** One entry per role that has actually executed. */
   attestations?: MissionAttestationSummary[];
+  /**
+   * The configuration this Mission runs under — the PSP / Project Settings
+   * projection it was started with: role selections, execution mode, review
+   * policy, requested permissions and spend/compute limits. Present so the user
+   * can SEE what they configured drove this Mission (criteria 3, 5, 7, 10), and
+   * so requested-vs-actual is answerable. Absent only on a legacy view.
+   *
+   * Declared with primitives (not imported from mission-config) because this
+   * module imports NOTHING by design; the validated `RelayMissionConfig` is
+   * structurally assignable to this wire shape.
+   */
+  config?: {
+    readonly pspId: string | null;
+    readonly roles: {
+      readonly architect: string | null;
+      readonly coding: string | null;
+      readonly reviewer: string | null;
+    };
+    readonly mode: string;
+    readonly review: string;
+    readonly completionRule: string;
+    readonly permissions: readonly string[];
+    readonly limits: {
+      readonly runtimeMinutes: number | null;
+      readonly agentCalls: number | null;
+      readonly spendUsd: number | null;
+      readonly reviewCycles: number | null;
+      readonly repairCycles: number | null;
+    };
+  };
 }
 
 /** Persisted mission event — the domain record the Relay Console projects

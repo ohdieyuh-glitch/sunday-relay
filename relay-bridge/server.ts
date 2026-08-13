@@ -38,15 +38,18 @@ import { decodeSegment } from './path-segment';
 import { handleLoopRoute, isLoopRoute, type LoopRunPort } from './loop-routes';
 import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './cron-routes';
 import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
-import { handleRepositoryRoute, isRepositoryRoute } from './repository-routes';
+import { handleRepositoryRoute, isRepositoryRoute, type RepositoryCaller } from './repository-routes';
+import { handlePspRoute, isPspRoute } from './psp-routes';
 import { handleShipRoute, isShipRoute } from './ship-route';
-import { resolveRepositoryTarget } from '../src/relay/mission/repository-target';
+import { resolveRepositoryTarget, registrationOwnerAdmits } from '../src/relay/mission/repository-target';
+import { validateMissionConfig } from '../src/relay/mission/mission-config';
 import type { MissionRepositoryTarget, RepositoryPermission } from '../src/relay/mission/repository-target';
 import { guardBetaAdmission, participantFromBody } from './beta-guard';
 import { claimedClientKey, createBetaRateLimiter } from './beta-rate-limit';
 import type { BetaRateLimiter } from './beta-rate-limit';
-import { createBetaEnrolmentStore, createRepositoryRegistrationStore } from '../src/relay/persistence';
-import type { RepositoryRegistrationStore } from '../src/relay/persistence';
+import { createBetaEnrolmentStore, createRepositoryRegistrationStore, createBrainMemoryStore, createPspConfigStore } from '../src/relay/persistence';
+import { rememberShipRun } from './ship-brain-feed';
+import type { RepositoryRegistrationStore, BrainMemoryStore } from '../src/relay/persistence';
 import type { BetaWaveConfig } from '../src/relay/mission/beta';
 import type { BetaEnrolmentStore } from '../src/relay/persistence';
 import { createCronTickService } from './cron-service';
@@ -56,7 +59,12 @@ import {
 } from './cron-scheduler';
 import { createBrowserSessionStore } from './browser-session/grants';
 import {
-  authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute,
+  createInstallationGrants, createOAuthStateStore, createSignInClaimStore,
+  handleGithubAuthRoute, isGithubAuthRoute,
+} from './github-auth-routes';
+import { githubOAuthConfigFromEnv } from './github-oauth';
+import {
+  authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute, sessionTokenFrom,
 } from './browser-session/routes';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -209,6 +217,9 @@ export function createBridgeServer(
    * `repository_store_unavailable`, the same shape as the beta store.
    */
   repositoryStore: RepositoryRegistrationStore | null = null,
+  /** The durable Project Brain store. Absent on a bridge with no mounted state
+   *  root — a verified/shipped run's episode is then not written durably. */
+  brainStore: BrainMemoryStore | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -216,6 +227,33 @@ export function createBridgeServer(
    * browser credential is ever written to the mounted volume.
    */
   const browserSessions = createBrowserSessionStore();
+  /**
+   * SIGN IN WITH GITHUB. The CSRF state store lives in memory beside the
+   * sessions — a restart forgets an in-flight sign-in, which is fail-closed. The
+   * GitHub App config, the registered callback URL, and the origin a minted
+   * session is bound to are read from the environment and the CORS policy; when
+   * ANY is absent the routes answer 503, so an unconfigured bridge says "no
+   * sign-in" rather than fabricating a session.
+   */
+  const oauthStateStore = createOAuthStateStore();
+  const githubOAuthConfig = githubOAuthConfigFromEnv(process.env);
+  const githubCallbackUrl = typeof process.env.RELAY_GITHUB_APP_CALLBACK_URL === 'string'
+    ? process.env.RELAY_GITHUB_APP_CALLBACK_URL.trim() : '';
+  const githubSessionOrigin = config.allowedOrigins.find((o) => o !== '*') ?? null;
+  /**
+   * APP INSTALLATION: the state store and the grant registry are separate from
+   * sign-in (an install state and a sign-in state can never be crossed) and live
+   * in memory — a restart forgets a grant, which is fail-closed and safe, because
+   * a durable registration already carries the installation it was built with.
+   */
+  const installStateStore = createOAuthStateStore();
+  const installGrants = createInstallationGrants();
+  const signInClaimStore = createSignInClaimStore();
+  const githubInstallUrl = typeof process.env.RELAY_GITHUB_APP_INSTALL_URL === 'string'
+    ? process.env.RELAY_GITHUB_APP_INSTALL_URL.trim() : '';
+  /** Saved PSP profiles, participant-owned. Absent without a mounted state root —
+   *  the PSP surface then answers `psp_store_unavailable`, like the repo store. */
+  const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
   return createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
     const cors = corsHeaders(config, origin);
@@ -394,6 +432,46 @@ export function createBridgeServer(
           }
         }
 
+        /**
+         * SIGN IN WITH GITHUB — the one session-minting path that does NOT cost
+         * the operator token, because the user proves who they are to GitHub.
+         * `req.url` is passed WHOLE (query included): the callback reads `code`
+         * and `state` from it. A no-Origin top-level navigation from GitHub is
+         * admitted by `originAllowed`, so the callback reaches here.
+         */
+        if (isGithubAuthRoute(path.replace('/relay-api', ''))) {
+          const githubAuthResult = await handleGithubAuthRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            url: req.url ?? '/',
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            body: method === 'POST' ? await readBody(req) : undefined,
+          }, {
+            oauthConfig: githubOAuthConfig,
+            sessions: browserSessions,
+            stateStore: oauthStateStore,
+            redirectUri: githubCallbackUrl,
+            sessionOrigin: githubSessionOrigin,
+            now: Date.now(),
+            installStateStore,
+            installGrants,
+            installBaseUrl: githubInstallUrl === '' ? null : githubInstallUrl,
+            claimStore: signInClaimStore,
+          });
+          if (githubAuthResult !== null) {
+            // The sign-in callback redirects the browser back to the frontend
+            // with a one-time claim — never the token — in the URL fragment.
+            if (githubAuthResult.redirect !== undefined) {
+              res.writeHead(302, { ...cors, Location: githubAuthResult.redirect });
+              res.end();
+              return;
+            }
+            send(res, githubAuthResult.status, githubAuthResult.body, cors);
+            return;
+          }
+        }
+
         if (isReviewerRoute(path.replace('/relay-api', ''))) {
           const reviewerResult = await handleReviewerRoute({
             method,
@@ -511,17 +589,66 @@ export function createBridgeServer(
          * them: a mission may only name a repository this registered.
          */
         if (isRepositoryRoute(path.replace('/relay-api', ''))) {
+          /**
+           * WHO IS REGISTERING, resolved here from the operator token OR a
+           * verified control session — never the body. A signed-in user may
+           * register their OWN repository (operator-owned registration stays the
+           * operator's); the route enforces the installation binding.
+           */
+          const repoAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const repoCaller: RepositoryCaller = ((): RepositoryCaller => {
+            if (bearerMatches(repoAuthz, process.env.RELAY_BRIDGE_API_TOKEN)) return { kind: 'operator' };
+            const token = sessionTokenFrom(repoAuthz);
+            if (token !== null) {
+              const v = browserSessions.verifySession({ token, origin, now: Date.now() });
+              if (v.ok && v.scope === 'browser_control' && v.participantId !== null) {
+                return { kind: 'participant', participantId: v.participantId };
+              }
+            }
+            return { kind: 'anonymous' };
+          })();
           const repoResult = handleRepositoryRoute({
             method,
             path: path.replace('/relay-api', ''),
-            authorization: typeof req.headers.authorization === 'string'
-              ? req.headers.authorization : undefined,
+            authorization: repoAuthz,
             body: method === 'POST' ? await readBody(req) : undefined,
             env: process.env,
             now: new Date().toISOString(),
-          }, repositoryStore);
+            caller: repoCaller,
+          }, repositoryStore, installGrants);
           if (repoResult !== null) {
             send(res, repoResult.status, repoResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * SAVED PSP PROFILES — a signed-in participant saves/lists/loads their
+         * own configuration. Same caller resolution as the repository surface;
+         * PSPs belong to the participant, never the operator or the request body.
+         */
+        if (isPspRoute(path.replace('/relay-api', ''))) {
+          const pspAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const pspCaller: RepositoryCaller = ((): RepositoryCaller => {
+            if (bearerMatches(pspAuthz, process.env.RELAY_BRIDGE_API_TOKEN)) return { kind: 'operator' };
+            const token = sessionTokenFrom(pspAuthz);
+            if (token !== null) {
+              const v = browserSessions.verifySession({ token, origin, now: Date.now() });
+              if (v.ok && v.scope === 'browser_control' && v.participantId !== null) {
+                return { kind: 'participant', participantId: v.participantId };
+              }
+            }
+            return { kind: 'anonymous' };
+          })();
+          const pspResult = handlePspRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            body: method === 'POST' ? await readBody(req) : undefined,
+            now: new Date().toISOString(),
+            caller: pspCaller,
+          }, pspStore);
+          if (pspResult !== null) {
+            send(res, pspResult.status, pspResult.body, cors);
             return;
           }
         }
@@ -534,19 +661,45 @@ export function createBridgeServer(
          * cancel/retry pattern's sibling.
          */
         if (isShipRoute(path.replace('/relay-api', ''))) {
+          const shipAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          // WHO is shipping — operator token or a verified control session. Same
+          // resolution as targeting, so ownership means the same thing at both ends.
+          const shipCaller: RepositoryCaller = ((): RepositoryCaller => {
+            if (bearerMatches(shipAuthz, process.env.RELAY_BRIDGE_API_TOKEN)) return { kind: 'operator' };
+            const token = sessionTokenFrom(shipAuthz);
+            if (token !== null) {
+              const v = browserSessions.verifySession({ token, origin, now: Date.now() });
+              if (v.ok && v.scope === 'browser_control' && v.participantId !== null) {
+                return { kind: 'participant', participantId: v.participantId };
+              }
+            }
+            return { kind: 'anonymous' };
+          })();
           const shipResult = await handleShipRoute({
             method,
             path: path.replace('/relay-api', ''),
-            authorization: typeof req.headers.authorization === 'string'
-              ? req.headers.authorization : undefined,
+            authorization: shipAuthz,
             body: method === 'POST' ? await readBody(req) : undefined,
             env: process.env,
             now: () => new Date().toISOString(),
+            caller: shipCaller,
           }, {
             shipContext: (id) => registry.shipContext(id),
             recordShipOutcome: (id, o) => registry.recordShipOutcome(id, o),
             beginShip: (id) => registry.beginShip(id),
             endShip: (id) => registry.endShip(id),
+            rememberShip: brainStore === null ? undefined : (input) => {
+              // Load the project's memory, fold this run's episodes in, save it.
+              const memory = brainStore.load(input.repositoryKey);
+              const next = rememberShipRun(memory, {
+                result: input.result,
+                repositoryKey: input.repositoryKey,
+                missionId: input.missionId,
+                entryIdFor: (slug) => `${input.missionId}:${slug}`,
+                observedAt: input.observedAt,
+              });
+              brainStore.save(input.repositoryKey, next);
+            },
             store: repositoryStore,
           });
           if (shipResult !== null) {
@@ -722,10 +875,6 @@ export function createBridgeServer(
           const repositoryKey = typeof (body as { repositoryKey?: unknown })?.repositoryKey === 'string'
             ? (body as { repositoryKey: string }).repositoryKey : null;
           if (repositoryKey !== null) {
-            if (missionCaller?.kind !== 'operator') {
-              send(res, 403, { error: { kind: 'operator_required', message: 'Naming a repository target is operator-only.' } }, cors);
-              return;
-            }
             if (repositoryStore === null) {
               send(res, 503, { error: { kind: 'repository_store_unavailable', message: 'No durable state root is mounted, so no repository can be resolved.' } }, cors);
               return;
@@ -735,6 +884,24 @@ export function createBridgeServer(
               send(res, 404, { error: { kind: 'repository_not_registered', message: `No registered repository named "${repositoryKey}".` } }, cors);
               return;
             }
+            /**
+             * OWNERSHIP, NOT MERE OPERATOR-HOOD. The operator may target any
+             * registration; a signed-in user may target ONLY one they own — the
+             * check reads the registration's owner, never the request. An
+             * operator-owned (legacy) repo stays operator-only; a user can never
+             * reach a repository another user registered. Identity comes from the
+             * verified session (`missionCaller`), never the body.
+             */
+            const targetingCaller = missionCaller?.kind === 'operator'
+              ? { kind: 'operator' as const }
+              : { kind: 'participant' as const, participantId: missionCaller?.kind === 'browser' ? missionCaller.participantId : null };
+            if (!registrationOwnerAdmits({ ownerParticipant: registration.ownerParticipant, caller: targetingCaller })) {
+              send(res, 403, { error: { kind: 'repository_not_yours', message: 'This repository is not yours to target.' } }, cors);
+              return;
+            }
+            const selectedBy = targetingCaller.kind === 'operator'
+              ? 'operator'
+              : targetingCaller.participantId ?? 'operator';
             const workingBranch = typeof (body as { workingBranch?: unknown })?.workingBranch === 'string'
               ? (body as { workingBranch: string }).workingBranch : '';
             if (workingBranch === '') {
@@ -764,8 +931,8 @@ export function createBridgeServer(
               registration,
               request: {
                 repositoryKey,
-                // The OPERATOR selected it; the server stamps when.
-                selectedBy: 'operator',
+                // WHO selected it — operator or the owning participant; server stamps when.
+                selectedBy,
                 selectedAt: new Date().toISOString(),
                 workingBranch,
                 // Body may only NARROW; the resolver refuses anything beyond grants.
@@ -780,8 +947,37 @@ export function createBridgeServer(
             repositoryTarget = resolved.target;
           }
 
-          const view = registry.start({ missionId, objective, repositoryTarget, intendedWritePaths });
+          /**
+           * THE MISSION'S CONFIGURATION (PSP / Project Settings), validated at
+           * the boundary. A malformed limit is refused here — never coerced —
+           * so a Mission can never run under a spend or compute ceiling that is
+           * not a real number. Absent config runs under the conservative default.
+           */
+          const configResult = validateMissionConfig((body as { config?: unknown })?.config ?? {});
+          if (!configResult.ok) {
+            send(res, 422, { error: { kind: 'config_invalid', message: configResult.error.message } }, cors);
+            return;
+          }
+          const view = registry.start({
+            missionId, objective, repositoryTarget, intendedWritePaths, config: configResult.value,
+            // WHO started it — the verified session, never the body — so it lands
+            // in this participant's history and only theirs. Operator: null.
+            startedBy: missionCaller?.kind === 'browser' ? missionCaller.participantId : null,
+          });
           send(res, 200, { missionId, view }, cors);
+          return;
+        }
+
+        // THE CALLER'S MISSION HISTORY — this server's view, scoped to the
+        // session's participant. Spends nothing. An operator holds no participant
+        // identity here and a read-only session names no participant, so both get
+        // an empty list rather than another user's Missions; an anonymous caller
+        // was already refused by the mission-family auth gate above.
+        if (method === 'GET' && path === '/relay-api/missions') {
+          const missions = missionCaller?.kind === 'browser' && missionCaller.participantId !== null
+            ? registry.listForParticipant(missionCaller.participantId)
+            : [];
+          send(res, 200, { missions }, cors);
           return;
         }
 
@@ -1043,6 +1239,15 @@ export function main(): void {
   const repositoryStore = config.stateRoot === null
     ? null
     : createRepositoryRegistrationStore({ root: config.stateRoot });
+  /**
+   * THE DURABLE PROJECT BRAIN STORE. A verified/shipped run folds an episode
+   * into short-term memory that survives a restart; without a state root there
+   * is nowhere durable to write, and the fold is skipped rather than lost to a
+   * process that will forget it anyway.
+   */
+  const brainStore = config.stateRoot === null
+    ? null
+    : createBrainMemoryStore({ root: config.stateRoot });
   // One limiter for the process, so its windows are shared across requests.
   const betaLimiter = createBetaRateLimiter();
   const betaWaves: readonly BetaWaveConfig[] = Object.freeze([
@@ -1091,6 +1296,7 @@ export function main(): void {
     // counts both paths.
     liveReach,
     repositoryStore,
+    brainStore,
   );
 
   /**

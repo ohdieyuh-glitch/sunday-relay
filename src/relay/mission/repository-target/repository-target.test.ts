@@ -355,6 +355,57 @@ describe('permissions are granted one at a time and never escalate', () => {
     expect(accepted.ok).toBe(true);
   });
 
+  it('ADMITS a remote-reaching grant when a GitHub App installation supplies the credential', () => {
+    /**
+     * An App installation IS a configured credential — the bridge mints a
+     * short-lived, repo-scoped installation token from it at the point of use.
+     * So a push grant with an `installationId` and NO env var is authorized at
+     * act time, not refused for a missing credential. This is the user-safe path
+     * that lets a beta participant ship their own repository with no founder PAT.
+     *
+     * MUTATION PROBE (recorded, and re-run to confirm it bites): reverting the
+     * act-time guard in `authorizeRepositoryAction` to
+     *   `requiresCredential(permission) && credential.envVarName === null`
+     * — i.e. dropping the `&& installationId === null` clause — makes this test
+     * fail with `credential_missing`, because the guard would refuse the App
+     * installation path it must admit.
+     */
+    const registration = register({
+      grants: [grant('read'), grant('write_worktree'), grant('commit'), grant('push_feature_branch')],
+      credential: { installationId: '55550001' }, // no env var — the installation path
+    });
+    // The registration itself is accepted: EITHER source satisfies the registry.
+    expect(registration.credential.envVarName).toBeNull();
+    expect(registration.credential.installationId).toBe('55550001');
+    const decision = authorizeRepositoryAction({ registration, permission: 'push_feature_branch', now: NOW });
+    expect(decision.granted).toBe(true);
+    expect(decision.problem).toBeNull();
+    // And the grant travels, so evidence can name the authorization used.
+    expect(decision.grant?.authorizedBy).toBe('founder');
+  });
+
+  it('still FAILS CLOSED at act time when NEITHER an env var nor an installation is configured', () => {
+    /**
+     * The fail-closed half of the same guard, proven directly. A registration
+     * with a credential-requiring grant and NO credential at all is refused at
+     * REGISTRATION today, so this constructs the raw shape the constructor would
+     * reject — to hold that the act-time guard refuses it too, independently of
+     * the registry. Widening the guard to admit the App path must NOT weaken this:
+     * neither source present is still `credential_missing`.
+     */
+    const built = register({
+      grants: [grant('read'), grant('write_worktree'), grant('commit'), grant('push_feature_branch')],
+      credential: { installationId: '55550001' },
+    });
+    const noCredential: RepositoryRegistration = {
+      ...built,
+      credential: { ...built.credential, envVarName: null, installationId: null },
+    };
+    const decision = authorizeRepositoryAction({ registration: noCredential, permission: 'push_feature_branch', now: NOW });
+    expect(decision.granted).toBe(false);
+    expect(decision.problem?.refusal).toBe('credential_missing');
+  });
+
   it('resolves "whatever this Mission needs" to the safe FLOOR, never the full grant set', () => {
     const registration = register({
       grants: LADDER.map((p) => grant(p)),

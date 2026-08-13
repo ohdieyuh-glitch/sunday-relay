@@ -65,6 +65,7 @@ export {
   isRepositoryPermission,
   livePermissions,
   narrowPermissions,
+  registrationOwnerAdmits,
   renderPermissionLine,
   requiresCredential,
   validatePermissionGrants,
