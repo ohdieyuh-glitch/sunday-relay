@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
 import { startBetaMission, pollBetaMission, shipBetaMission } from './beta-mission';
+import { RelayPspPicker } from './RelayPspPicker';
+import type { listPsps, loadPsp, savePsp } from './psp-client';
 import type { LiveMissionUpdate } from './contracts';
 
 /**
@@ -25,6 +27,9 @@ export function RelayMissionRunner({
   startImpl = startBetaMission,
   pollImpl = pollBetaMission,
   shipImpl = shipBetaMission,
+  pspListImpl,
+  pspLoadImpl,
+  pspSaveImpl,
   pollIntervalMs = 60,
 }: {
   readonly repositoryKey: string;
@@ -34,9 +39,16 @@ export function RelayMissionRunner({
   readonly startImpl?: typeof startBetaMission;
   readonly pollImpl?: typeof pollBetaMission;
   readonly shipImpl?: typeof shipBetaMission;
+  readonly pspListImpl?: typeof listPsps;
+  readonly pspLoadImpl?: typeof loadPsp;
+  readonly pspSaveImpl?: typeof savePsp;
   readonly pollIntervalMs?: number;
 }) {
   const [objective, setObjective] = useState('');
+  // The config the next Mission carries: the passed default until the user picks
+  // a saved PSP. The label is display only — the config is what the engine acts on.
+  const [activeConfig, setActiveConfig] = useState<unknown>(config);
+  const [activeLabel, setActiveLabel] = useState('Default beta configuration');
   const [missionId, setMissionId] = useState<string | null>(null);
   const [view, setView] = useState<LiveMissionUpdate | null>(null);
   const [busy, setBusy] = useState(false);
@@ -70,7 +82,7 @@ export function RelayMissionRunner({
       repositoryKey,
       workingBranch,
       permissions: ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr'],
-      config,
+      config: activeConfig,
       bridgeUrl,
     });
     setBusy(false);
@@ -80,7 +92,7 @@ export function RelayMissionRunner({
     } else {
       setMessage(result.message);
     }
-  }, [objective, repositoryKey, workingBranch, config, bridgeUrl, startImpl]);
+  }, [objective, repositoryKey, workingBranch, activeConfig, bridgeUrl, startImpl]);
 
   const onShip = useCallback(async () => {
     if (missionId === null) return;
@@ -96,6 +108,16 @@ export function RelayMissionRunner({
     return (
       <form className="relay-mission-runner" data-state="idle" onSubmit={(e) => void onStart(e)}>
         <h2>Start a Mission on <code>{repositoryKey}</code></h2>
+        <RelayPspPicker
+          bridgeUrl={bridgeUrl}
+          defaultConfig={config}
+          activeConfig={activeConfig}
+          onSelect={(c, label) => { setActiveConfig(c); setActiveLabel(label); }}
+          {...(pspListImpl !== undefined ? { listImpl: pspListImpl } : {})}
+          {...(pspLoadImpl !== undefined ? { loadImpl: pspLoadImpl } : {})}
+          {...(pspSaveImpl !== undefined ? { saveImpl: pspSaveImpl } : {})}
+        />
+        <p className="relay-mission-runner__config">Running under <strong>{activeLabel}</strong>.</p>
         <label>
           Ask Relay an objective
           <input aria-label="Objective" value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="Implement…" />

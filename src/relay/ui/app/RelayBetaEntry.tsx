@@ -8,6 +8,7 @@ import { RelayGitHubSignIn } from './RelayGitHubSignIn';
 import { RelayConnectRepository } from './RelayConnectRepository';
 import { RelayMissionRunner } from './RelayMissionRunner';
 import type { startBetaMission, pollBetaMission, shipBetaMission } from './beta-mission';
+import type { listPsps, loadPsp, savePsp } from './psp-client';
 
 /** A conservative default config a beta Mission runs under until PSP selection is
  *  wired into this surface: guided, independent review, bounded spend/compute. */
@@ -40,6 +41,9 @@ export function RelayBetaEntry({
   missionStartImpl,
   missionPollImpl,
   missionShipImpl,
+  missionPspListImpl,
+  missionPspLoadImpl,
+  missionPspSaveImpl,
 }: {
   readonly children: ReactNode;
   readonly bridgeUrl?: string | null;
@@ -50,6 +54,9 @@ export function RelayBetaEntry({
   readonly missionStartImpl?: typeof startBetaMission;
   readonly missionPollImpl?: typeof pollBetaMission;
   readonly missionShipImpl?: typeof shipBetaMission;
+  readonly missionPspListImpl?: typeof listPsps;
+  readonly missionPspLoadImpl?: typeof loadPsp;
+  readonly missionPspSaveImpl?: typeof savePsp;
 }) {
   const resolvedBridge = bridgeUrl !== undefined ? bridgeUrl : configuredBridgeUrl();
   // With no bridge there is nothing to resolve — ready immediately, and transparent.
@@ -120,6 +127,9 @@ export function RelayBetaEntry({
         {...(missionStartImpl !== undefined ? { startImpl: missionStartImpl } : {})}
         {...(missionPollImpl !== undefined ? { pollImpl: missionPollImpl } : {})}
         {...(missionShipImpl !== undefined ? { shipImpl: missionShipImpl } : {})}
+        {...(missionPspListImpl !== undefined ? { pspListImpl: missionPspListImpl } : {})}
+        {...(missionPspLoadImpl !== undefined ? { pspLoadImpl: missionPspLoadImpl } : {})}
+        {...(missionPspSaveImpl !== undefined ? { pspSaveImpl: missionPspSaveImpl } : {})}
       />
     </div>
   );
