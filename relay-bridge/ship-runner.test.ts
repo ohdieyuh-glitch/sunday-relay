@@ -487,18 +487,22 @@ function remoteTarget(reg: RepositoryRegistration, permissions: readonly Reposit
   });
   if (!resolved.ok) throw new Error(resolved.error.message);
   /**
-   * THE LOCATION IS OVERRIDDEN TO THE LOCAL CHECKOUT, AND THAT OVERRIDE IS
-   * ITSELF A FINDING.
+   * THE LOCATION IS OVERRIDDEN TO A LOCAL CHECKOUT so these tests can run with NO
+   * credential and NO network — they hold the ORCHESTRATION (call order, which
+   * legs are skipped, which refusals fire), not GitHub's own behaviour.
    *
-   * A `github` identity must be `remote_clone`, and `repository-source.ts`
-   * REFUSES `remote_clone` because nothing clones. So today no single valid
-   * registration can both be sourced for the coding leg AND carry the
-   * owner/name the remote provider needs — the remote leg is wired and
-   * unreachable end to end until a clone capability exists. Recorded in
-   * REPOSITORY_TARGETS.md rather than left for someone to discover.
-   *
-   * These tests hold the ORCHESTRATION: the order of the calls, which are
-   * skipped, and which refusals fire. GitHub's own behaviour is covered by
+   * STALE-PROSE CORRECTION (verified 2026-08-13): an earlier version here claimed
+   * `repository-source.ts` "refuses remote_clone because nothing clones", so the
+   * remote leg was "wired and unreachable end to end until a clone capability
+   * exists". That is no longer true. `repository-source.ts` now clones a
+   * `remote_clone` over authenticated HTTPS (`obtainRemoteClone` →
+   * `cloneAuthorizedRepository`), and a GitHub repository ALREADY on the machine
+   * registers as `local_path` with a github origin — so a single valid
+   * registration can both be SOURCED and carry the owner/name the remote provider
+   * needs. The remote leg is reachable end to end; the ONLY thing missing is the
+   * GitHub App installation credential (a founder action at github.com), which is
+   * why these tests still inject a fake provider. The real clone is proven in
+   * `repository-remote-transport.test.ts`, the real provider in
    * `github-remote-provider.test.ts`.
    */
   return { ...resolved.target, location: { kind: 'local_path', path: root } } as MissionRepositoryTarget;
