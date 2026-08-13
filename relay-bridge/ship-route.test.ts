@@ -172,8 +172,9 @@ describe('POST /mission/:id/ship', () => {
     const r = await handleShipRoute(
       {
         method: 'POST', path: '/mission/m1/ship', authorization: opAuth,
-        // A remote authorization that names no credential → the seam refuses.
-        body: { remote: { provider: 'github', credentialEnvVarName: '  ', pullRequestTitle: 't', pullRequestBody: { missionId: 'm', objective: 'o', artifactDigest: null, reviewedArtifactDigest: null, reviewerVerdict: null, reviewerFindings: [], relayVerification: [], attestations: [], baselineSha: null } } },
+        // A remote authorization naming a credential the target does NOT authorize
+        // (requested != actual) → the ship route refuses (422 ship_refused).
+        body: { remote: { provider: 'github', credentialEnvVarName: 'SOMEONE_ELSES_TOKEN', pullRequestTitle: 't', pullRequestBody: { missionId: 'm', objective: 'o', artifactDigest: null, reviewedArtifactDigest: null, reviewerVerdict: null, reviewerFindings: [], relayVerification: [], attestations: [], baselineSha: null } } },
         env, now: () => NOW,
       },
       {
@@ -270,7 +271,7 @@ describe('POST /mission/:id/ship', () => {
     const r = await handleShipRoute(
       {
         method: 'POST', path: '/mission/m1/ship', authorization: opAuth,
-        body: { remote: { provider: 'github', credentialEnvVarName: '  ', pullRequestTitle: 't', pullRequestBody: { missionId: 'm', objective: 'o', artifactDigest: null, reviewedArtifactDigest: null, reviewerVerdict: null, reviewerFindings: [], relayVerification: [], attestations: [], baselineSha: null } } },
+        body: { remote: { provider: 'github', credentialEnvVarName: 'SOMEONE_ELSES_TOKEN', pullRequestTitle: 't', pullRequestBody: { missionId: 'm', objective: 'o', artifactDigest: null, reviewedArtifactDigest: null, reviewerVerdict: null, reviewerFindings: [], relayVerification: [], attestations: [], baselineSha: null } } },
         env, now: () => NOW,
       },
       {
