@@ -197,6 +197,75 @@ describe('RelayMissionRunner', () => {
     expect(start.mock.calls[0][0].permissions).toEqual(['read', 'write_worktree', 'commit']);
   });
 
+  it('surfaces repo, branch, contract revision, and the ACTUAL permissions held', async () => {
+    const evidenced = {
+      state: 'running', currentRole: 'coding_agent', events: [], phase: 'coding',
+      missionRevision: 'rev-7',
+      config: {
+        pspId: null, roles: { architect: null, coding: null, reviewer: null },
+        mode: 'guided', review: 'independent', completionRule: 'strict',
+        permissions: ['read', 'write_worktree'],
+        limits: { runtimeMinutes: null, agentCalls: null, spendUsd: null, reviewCycles: null, repairCycles: null },
+      },
+    } as unknown as LiveMissionUpdate;
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-e', view: evidenced, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-e', view: evidenced, message: null }));
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} workingBranch="relay/beta-x" pollIntervalMs={100000} />);
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Mission evidence/i)).toBeTruthy());
+    const facts = screen.getByLabelText(/Mission evidence/i).textContent ?? '';
+    expect(facts).toContain(KEY);              // repo
+    expect(facts).toContain('relay/beta-x');   // branch
+    expect(facts).toContain('rev-7');          // contract revision
+    // The permissions HELD come from the authoritative view, not the browser's request.
+    expect(facts).toContain('read, write_worktree');
+  });
+
+  it('shows the Mission brief from the architect handoff, with honest provenance', async () => {
+    const briefed = {
+      state: 'running', currentRole: 'coding_agent', events: [], phase: 'coding',
+      handoff: {
+        objective: 'Add a normalizer', instructions: ['do x'], constraints: ['no new deps'],
+        acceptanceCriteria: ['handles null input', 'has a unit test'],
+        architectLabel: 'Sunday Alcatraz (live)', architectProvenance: 'live',
+      },
+    } as unknown as LiveMissionUpdate;
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-b', view: briefed, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-b', view: briefed, message: null }));
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} pollIntervalMs={100000} />);
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    await waitFor(() => expect(screen.getByText(/Mission brief/i)).toBeTruthy());
+    // Honest provenance — the label says which architect, live or simulated.
+    expect(screen.getByText(/Mission brief/i).textContent).toMatch(/live/i);
+    const ac = screen.getByLabelText(/Acceptance criteria/i).textContent ?? '';
+    expect(ac).toContain('handles null input');
+    expect(ac).toContain('has a unit test');
+  });
+
+  it('shows the independent reviewer verdict and the SERVED model', async () => {
+    const reviewed = {
+      state: 'verified_complete', currentRole: 'relay', events: [], phase: 'verified_complete',
+      review: {
+        reviewer: 'Hermes', runtime: 'hermes', provider: 'Anthropic', requestedModel: 'claude',
+        servedModel: 'claude-opus-4-8', billing: 'api_billed', verdict: 'approved',
+        summary: 'Meets the stated acceptance criteria.', findings: [], requirementsChecked: [],
+        reviewedArtifactDigest: 'd', startedAt: 'a', completedAt: 'b',
+      },
+    } as unknown as LiveMissionUpdate;
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-rv', view: reviewed, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-rv', view: reviewed, message: null }));
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} pollIntervalMs={100000} />);
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Reviewer verdict/i)).toBeTruthy());
+    const rv = screen.getByLabelText(/Reviewer verdict/i).textContent ?? '';
+    expect(rv).toContain('approved');
+    // The served model is shown verbatim, not defaulted from the requested one.
+    expect(rv).toContain('claude-opus-4-8');
+  });
+
   it('cancels an in-flight mission', async () => {
     const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-c', view: coding, message: null }));
     const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-c', view: coding, message: null }));

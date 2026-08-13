@@ -202,6 +202,37 @@ export function RelayMissionRunner({
       <p>State: <strong className="relay-mission-runner__state">{state ?? 'starting'}</strong>
         {view?.phase !== undefined && <span className="relay-mission-runner__phase"> · {view.phase}</span>}</p>
 
+      {/* Repo / branch / contract revision / actual permissions held — the
+          authoritative view is the source, so "permissions held" is what the
+          bridge narrowed to, not what the browser asked for (criteria 10, 15). */}
+      <ul className="relay-mission-runner__facts" aria-label="Mission evidence">
+        <li>Repository: <code>{repositoryKey}</code></li>
+        <li>Working branch: <code>{workingBranch}</code></li>
+        {view?.missionRevision !== undefined && (
+          <li>Contract revision: <code>{view.missionRevision}</code></li>
+        )}
+        {view?.config !== undefined && (
+          <li>Permissions held: <strong>{view.config.permissions.length > 0
+            ? view.config.permissions.join(', ')
+            : 'read + write_worktree (floor)'}</strong></li>
+        )}
+      </ul>
+
+      {/* The Mission brief — the architect's plan the roles executed against
+          (criterion 7). Provenance is honest: it never claims a live architect
+          when one did not run. */}
+      {view?.handoff !== undefined && (
+        <details className="relay-mission-runner__brief" open>
+          <summary>Mission brief — {view.handoff.architectLabel} ({view.handoff.architectProvenance})</summary>
+          <p className="relay-mission-runner__brief-objective">{view.handoff.objective}</p>
+          {view.handoff.acceptanceCriteria.length > 0 && (
+            <ul aria-label="Acceptance criteria">
+              {view.handoff.acceptanceCriteria.map((criterion, i) => <li key={i}>{criterion}</li>)}
+            </ul>
+          )}
+        </details>
+      )}
+
       {view?.attestations !== undefined && view.attestations.length > 0 && (
         <ul className="relay-mission-runner__evidence" aria-label="Role evidence">
           {view.attestations.map((a) => (
@@ -211,6 +242,17 @@ export function RelayMissionRunner({
             </li>
           ))}
         </ul>
+      )}
+
+      {/* The independent reviewer's verdict, in its own words, with the model
+          the provider reported ANSWERED (served) — never defaulted from what was
+          requested (criteria 9, 10, 13). */}
+      {view?.review !== undefined && (
+        <div className="relay-mission-runner__review" aria-label="Reviewer verdict">
+          <p>Independent review: <strong>{view.review.verdict}</strong> — {view.review.reviewer}
+            {view.review.servedModel !== null && <> · served <code>{view.review.servedModel}</code></>}</p>
+          <p className="relay-mission-runner__review-summary">{view.review.summary}</p>
+        </div>
       )}
 
       {view?.error !== undefined && (
