@@ -394,7 +394,15 @@ export async function handleGithubAuthRoute(
       return errResult(401, 'github_install_state_invalid', 'That installation request is expired or was already used.');
     }
     deps.installGrants.record(consumed.participant, installationId);
-    return okResult({ installed: true, participantId: consumed.participant, installationId });
+    // Send the browser back to the frontend with the (public, non-secret)
+    // installation id in the fragment, so it can register a repository under it.
+    // Consistent with the sign-in callback: GitHub's redirect must land on the
+    // app, not a JSON page.
+    return {
+      status: 302,
+      redirect: `${sessionOrigin}/#relay_installation=${encodeURIComponent(installationId)}`,
+      body: { data: { installed: true, installationId } },
+    };
   }
 
   return errResult(404, 'github_auth_unknown', 'Unknown GitHub auth operation.');

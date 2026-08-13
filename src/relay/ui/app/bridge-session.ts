@@ -436,3 +436,80 @@ export async function completeGitHubSignIn(input: {
     return { signedIn: false, message: 'The Relay Bridge could not be reached.' };
   }
 }
+
+/* ------------------------------------------------- connect a repository */
+
+/**
+ * BEGIN INSTALLING the Relay GitHub App. A signed-in participant asks the bridge
+ * where to install; the bridge answers with the App's install URL carrying a
+ * participant-bound state, and the browser goes there. Needs a session — the
+ * installation is bound to WHO installs it.
+ */
+export async function beginRepositoryInstall(input: {
+  bridgeUrl?: string | null;
+  fetchImpl?: typeof fetch;
+  navigate?: (url: string) => void;
+} = {}): Promise<{ readonly ok: boolean; readonly message: string | null }> {
+  const session = loadBridgeSession();
+  if (session === null) return { ok: false, message: 'Sign in before connecting a repository.' };
+  const base = input.bridgeUrl ?? configuredBridgeUrl();
+  if (base === null) return { ok: false, message: 'No Relay Bridge is configured for this build.' };
+  const doFetch = input.fetchImpl ?? ((u: RequestInfo | URL, i?: RequestInit) => fetch(u, i));
+  try {
+    const res = await doFetch(`${base}/relay-api/auth/github/install/start`, {
+      method: 'POST', headers: bridgeSessionHeader(session), credentials: 'omit', cache: 'no-store',
+    });
+    if (!res.ok) return { ok: false, message: 'Connecting a repository is not available on this bridge.' };
+    const payload = await res.json() as { data?: { installUrl?: unknown } };
+    const url = payload.data?.installUrl;
+    if (typeof url !== 'string' || url === '') return { ok: false, message: 'The bridge returned no install URL.' };
+    (input.navigate ?? ((u: string) => { if (typeof window !== 'undefined') window.location.href = u; }))(url);
+    return { ok: true, message: null };
+  } catch {
+    return { ok: false, message: 'The Relay Bridge could not be reached.' };
+  }
+}
+
+/** Read the (public) installation id the install redirect left in the URL, or
+    null on an ordinary load. The id is not a secret; the token never rides here. */
+export function readInstallationFromReturn(input: { locationHash?: string } = {}): string | null {
+  const hash = input.locationHash ?? (typeof window !== 'undefined' ? window.location.hash : '');
+  const match = /[#&]relay_installation=([^&]+)/.exec(hash);
+  return match === null ? null : decodeURIComponent(match[1]);
+}
+
+/**
+ * REGISTER A REPOSITORY the signed-in participant owns. The bridge binds it to
+ * their identity from the session (never the body) and refuses a repository they
+ * did not authorize. Returns the canonical key on success, or the domain's own
+ * refusal message.
+ */
+export async function registerRepository(input: {
+  draft: unknown;
+  bridgeUrl?: string | null;
+  fetchImpl?: typeof fetch;
+}): Promise<{ readonly ok: boolean; readonly key: string | null; readonly message: string | null }> {
+  const session = loadBridgeSession();
+  if (session === null) return { ok: false, key: null, message: 'Sign in before connecting a repository.' };
+  const base = input.bridgeUrl ?? configuredBridgeUrl();
+  if (base === null) return { ok: false, key: null, message: 'No Relay Bridge is configured for this build.' };
+  const doFetch = input.fetchImpl ?? ((u: RequestInfo | URL, i?: RequestInit) => fetch(u, i));
+  try {
+    const res = await doFetch(`${base}/relay-api/repository/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bridgeSessionHeader(session) },
+      body: JSON.stringify(input.draft),
+      credentials: 'omit',
+      cache: 'no-store',
+    });
+    const payload = await res.json() as { data?: { key?: unknown }; error?: { message?: unknown } };
+    if (!res.ok) {
+      const message = typeof payload.error?.message === 'string' ? payload.error.message : 'The repository could not be connected.';
+      return { ok: false, key: null, message };
+    }
+    const key = payload.data?.key;
+    return { ok: true, key: typeof key === 'string' ? key : null, message: null };
+  } catch {
+    return { ok: false, key: null, message: 'The Relay Bridge could not be reached.' };
+  }
+}

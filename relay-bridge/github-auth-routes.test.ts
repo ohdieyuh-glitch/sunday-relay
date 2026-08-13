@@ -225,10 +225,12 @@ describe('the app-installation flow proves who controls an installation', () => 
 
     expect(d.installGrants.granted('ghu-4242', '55550001')).toBe(false);
     const cb = await installCallback(d, `installation_id=55550001&state=${state}`);
-    expect(cb?.status).toBe(200);
+    // Redirects the browser back to the frontend with the installation id.
+    expect(cb?.status).toBe(302);
+    expect(cb?.redirect).toContain('#relay_installation=55550001');
+    // The grant is recorded, bound to the participant who STARTED it — not to
+    // whoever hit the callback (there is no session on the redirect).
     expect(d.installGrants.granted('ghu-4242', '55550001')).toBe(true);
-    // Bound to the participant who STARTED it, not to whoever hit the callback.
-    expect((cb?.body as { data: { participantId: string } }).data.participantId).toBe('ghu-4242');
   });
 
   it('a forged install state records nothing', async () => {

@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   beginGitHubSignIn, completeGitHubSignIn, loadBridgeSession, clearBridgeSession,
+  saveBridgeSession, beginRepositoryInstall, readInstallationFromReturn, registerRepository,
 } from './bridge-session';
+
+/** A signed-in control session, for the seams that require one. */
+const saveBridgeSessionForTest = () =>
+  saveBridgeSession({ token: 't', origin: '', expiresAt: '', scope: 'browser_control', participantId: 'ghu-4242' });
 
 /**
  * SIGN IN WITH GITHUB, on the browser side. The two guarantees under test: begin
@@ -81,5 +86,42 @@ describe('completeGitHubSignIn', () => {
     expect(r.signedIn).toBe(false);
     expect(r.message).toContain('sign in again');
     expect(loadBridgeSession()).toBeNull();
+  });
+});
+
+describe('connect-a-repository client seams', () => {
+  it('reads the installation id the install redirect leaves, null otherwise', () => {
+    expect(readInstallationFromReturn({ locationHash: '#relay_installation=55550001' })).toBe('55550001');
+    expect(readInstallationFromReturn({ locationHash: '' })).toBeNull();
+  });
+
+  it('beginRepositoryInstall needs a session, then navigates to the install URL', async () => {
+    const noSession = await beginRepositoryInstall({ bridgeUrl: BRIDGE, fetchImpl: (async () => { throw new Error('no'); }) as typeof fetch });
+    expect(noSession.ok).toBe(false);
+
+    saveBridgeSessionForTest();
+    let navigatedTo: string | null = null;
+    const r = await beginRepositoryInstall({
+      bridgeUrl: BRIDGE,
+      fetchImpl: (async () => jsonRes(true, { installUrl: 'https://github.com/apps/relay/installations/new?state=s' })) as typeof fetch,
+      navigate: (u) => { navigatedTo = u; },
+    });
+    expect(r.ok).toBe(true);
+    expect(navigatedTo).toContain('/installations/new');
+  });
+
+  it('registerRepository returns the key on success and the refusal message on failure', async () => {
+    saveBridgeSessionForTest();
+    const okReg = await registerRepository({
+      draft: {}, bridgeUrl: BRIDGE, fetchImpl: (async () => jsonRes(true, { key: 'github:github.com/o/r' })) as typeof fetch,
+    });
+    expect(okReg).toMatchObject({ ok: true, key: 'github:github.com/o/r' });
+
+    const refused = await registerRepository({
+      draft: {}, bridgeUrl: BRIDGE,
+      fetchImpl: (async () => ({ ok: false, status: 403, json: async () => ({ error: { message: 'You have not authorized that GitHub App installation.' } }) }) as unknown as Response) as typeof fetch,
+    });
+    expect(refused.ok).toBe(false);
+    expect(refused.message).toContain('not authorized');
   });
 });

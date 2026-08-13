@@ -116,12 +116,15 @@ async function signIn(base: string, identity: { login: string; id: number }): Pr
   return ((await claimed.json()) as { data: { sessionToken: string } }).data.sessionToken;
 }
 
-/** Prove control of an installation the way GitHub's post-install redirect does. */
+/** Prove control of an installation the way GitHub's post-install redirect does.
+    The callback redirects the browser back to the frontend with the (public)
+    installation id in the fragment. */
 async function authorizeInstallation(base: string, token: string, installationId: string): Promise<void> {
   const started = await getJson(await realFetch(`${base}/relay-api/auth/github/install/start`, { method: 'POST', headers: asUser(token) }));
   const state = (started.body.data as { state: string }).state;
-  const cb = await realFetch(`${base}/relay-api/auth/github/install/callback?installation_id=${installationId}&state=${state}`);
-  expect(cb.status).toBe(200);
+  const cb = await realFetch(`${base}/relay-api/auth/github/install/callback?installation_id=${installationId}&state=${state}`, { redirect: 'manual' });
+  expect(cb.status).toBe(302);
+  expect(cb.headers.get('location') ?? '').toContain(`#relay_installation=${installationId}`);
 }
 
 function remoteRepoDraft(owner: string, name: string, installationId: string) {
