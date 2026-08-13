@@ -6,9 +6,10 @@ import {
 } from './bridge-session';
 import { RelayGitHubSignIn } from './RelayGitHubSignIn';
 import { RelayConnectRepository } from './RelayConnectRepository';
+import { RelayWonderlandEntrance } from './RelayWonderlandEntrance';
 import { RelayMissionRunner } from './RelayMissionRunner';
 import { loadConnectedRepository, saveConnectedRepository } from './connected-repository';
-import { listConnectedRepositories, type ConnectedRepository } from './repository-client';
+import { listConnectedRepositories, discoverInstallationRepositories, type ConnectedRepository } from './repository-client';
 import type { startBetaMission, pollBetaMission, shipBetaMission, listBetaMissions } from './beta-mission';
 import type { listPsps, loadPsp, savePsp } from './psp-client';
 
@@ -41,6 +42,7 @@ export function RelayBetaEntry({
   registerImpl = registerRepository,
   readInstallationImpl = readInstallationFromReturn,
   listRepositoriesImpl = listConnectedRepositories,
+  discoverRepositoriesImpl = discoverInstallationRepositories,
   missionStartImpl,
   missionPollImpl,
   missionShipImpl,
@@ -56,6 +58,7 @@ export function RelayBetaEntry({
   readonly registerImpl?: typeof registerRepository;
   readonly readInstallationImpl?: typeof readInstallationFromReturn;
   readonly listRepositoriesImpl?: typeof listConnectedRepositories;
+  readonly discoverRepositoriesImpl?: typeof discoverInstallationRepositories;
   readonly missionStartImpl?: typeof startBetaMission;
   readonly missionPollImpl?: typeof pollBetaMission;
   readonly missionShipImpl?: typeof shipBetaMission;
@@ -87,6 +90,11 @@ export function RelayBetaEntry({
   // The user asked to connect a DIFFERENT repository than the ones listed — the
   // existing connect flow, reached on demand from the picker.
   const [connectingNew, setConnectingNew] = useState(false);
+  // THE ENTRANCE IS WONDERLAND, NOT GITHUB. A fresh live participant begins in
+  // Wonderland with the Wandering Relay Dog; GitHub sign-in is deferred until
+  // they deliberately choose to start building. `wantsToBuild` records that
+  // choice — only then does the contextual sign-in appear.
+  const [wantsToBuild, setWantsToBuild] = useState(false);
 
   useEffect(() => {
     if (resolvedBridge === null) return undefined;
@@ -129,6 +137,12 @@ export function RelayBetaEntry({
   }
 
   if (participant === null) {
+    // The Wonderland entrance, NOT a GitHub wall: the fresh participant explores
+    // here with the Wandering Relay Dog until they choose to start building.
+    if (!wantsToBuild) {
+      return <RelayWonderlandEntrance onStartBuilding={() => setWantsToBuild(true)} />;
+    }
+    // They chose to start building — now the contextual GitHub sign-in.
     return (
       <div className="relay-beta-entry" data-state="sign-in">
         <h1>Sunday Relay — private beta</h1>
@@ -210,6 +224,7 @@ export function RelayBetaEntry({
           installBeginImpl={installBeginImpl}
           registerImpl={registerImpl}
           readInstallationImpl={readInstallationImpl}
+          discoverImpl={discoverRepositoriesImpl}
           onConnected={(key) => { saveConnectedRepository(key); setConnectedKey(key); }}
         />
       </div>

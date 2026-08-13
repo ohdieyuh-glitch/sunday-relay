@@ -94,3 +94,88 @@ export async function listConnectedRepositories(input: {
     return { ok: false, repositories: [], message: 'The Relay Bridge could not be reached.' };
   }
 }
+
+/* --------------------------------------------------- discovered repositories */
+
+/** One repository the just-installed GitHub App is authorized to reach, as the
+ *  bridge's discovery route reports it. It carries identity and posture only —
+ *  there is no token in the payload — so a participant can SELECT the repo to
+ *  connect instead of typing its owner and name. */
+export interface DiscoveredRepository {
+  readonly owner: string;
+  readonly name: string;
+  readonly fullName: string;
+  readonly defaultBranch: string;
+  /** GitHub's own posture for the repository, shown as a Private/Public badge. */
+  readonly private: boolean;
+}
+
+function toDiscoveredRepository(value: unknown): DiscoveredRepository | null {
+  if (value === null || typeof value !== 'object') return null;
+  const o = value as Record<string, unknown>;
+  if (typeof o.owner !== 'string' || typeof o.name !== 'string') return null;
+  const owner = o.owner;
+  const name = o.name;
+  return {
+    owner,
+    name,
+    fullName: typeof o.fullName === 'string' ? o.fullName : `${owner}/${name}`,
+    defaultBranch: typeof o.defaultBranch === 'string' ? o.defaultBranch : 'main',
+    // Posture is only claimed when the bridge asserts it; anything else is the
+    // less-claiming Public, never an invented Private badge.
+    private: o.private === true,
+  };
+}
+
+/**
+ * DISCOVER THE REPOSITORIES A FRESH INSTALLATION AUTHORIZES.
+ *
+ * After a participant installs the Relay GitHub App and returns with an
+ * `installationId`, this asks the bridge which repositories that installation
+ * can reach, so they SELECT one rather than typing owner/name by hand. The
+ * session travels with the request and the bridge scopes discovery to the
+ * caller who PROVED control of the installation — never to the body.
+ *
+ * Like {@link listConnectedRepositories} it never invents: no session means no
+ * network at all; a bridge that refuses comes back as a refusal in the bridge's
+ * own words; and an installation that authorizes nothing yet comes back as an
+ * empty array with `ok: true`, never an error and never a fabricated list.
+ */
+export async function discoverInstallationRepositories(input: {
+  installationId: string;
+  bridgeUrl?: string | null;
+  fetchImpl?: typeof fetch;
+}): Promise<{
+  readonly ok: boolean;
+  readonly repositories: readonly DiscoveredRepository[];
+  readonly truncated: boolean;
+  readonly message: string | null;
+}> {
+  const base = input.bridgeUrl ?? configuredBridgeUrl();
+  if (base === null) return { ok: false, repositories: [], truncated: false, message: 'No Relay Bridge is configured.' };
+  if (loadBridgeSession() === null) {
+    return { ok: false, repositories: [], truncated: false, message: 'Sign in to see the repositories you authorized.' };
+  }
+  const doFetch = input.fetchImpl ?? ((u: RequestInfo | URL, i?: RequestInit) => fetch(u, i));
+  try {
+    const query = `installation_id=${encodeURIComponent(input.installationId)}`;
+    const res = await doFetch(`${base}${BASE}/auth/github/install/repositories?${query}`, {
+      method: 'GET', headers: authHeaders(), credentials: 'omit', cache: 'no-store',
+    });
+    const payload = await res.json() as {
+      data?: { repositories?: unknown; truncated?: unknown }; error?: { message?: unknown };
+    };
+    if (!res.ok) {
+      // Surface the bridge's refusal verbatim; never coerce it into an empty success.
+      const message = typeof payload.error?.message === 'string'
+        ? payload.error.message
+        : 'The repositories you authorized could not be read.';
+      return { ok: false, repositories: [], truncated: false, message };
+    }
+    const raw = Array.isArray(payload.data?.repositories) ? payload.data.repositories : [];
+    const repositories = raw.map(toDiscoveredRepository).filter((r): r is DiscoveredRepository => r !== null);
+    return { ok: true, repositories, truncated: payload.data?.truncated === true, message: null };
+  } catch {
+    return { ok: false, repositories: [], truncated: false, message: 'The Relay Bridge could not be reached.' };
+  }
+}
