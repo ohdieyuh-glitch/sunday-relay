@@ -1443,3 +1443,171 @@ describe('a provider is asked only for environments it supports', () => {
     expect(deployed?.detail).toContain('SIMULATED');
   });
 });
+
+/**
+ * THE SHIP RUNNER PERFORMS A REAL GIT PUSH TO A REAL REMOTE.
+ *
+ * Every other test in this file injects a FAKE `pushBranch` (PASS_PUSH and
+ * friends), so nothing here has ever driven the runner's remote leg through the
+ * REAL `pushAuthorizedBranch`. `repository-remote-transport.test.ts` drives the
+ * real push, but in ISOLATION — never through `runShipLifecycle`. This closes
+ * that gap: the runner ORCHESTRATION transfers committed code to a real remote,
+ * offline and with no credential, and we prove it landed by reading the remote
+ * ref back out of the bare repo itself.
+ *
+ * NO NETWORK, NO CREDENTIAL, NO github.com. The remote is a local `git
+ * init --bare` repo, which git pushes to over a filesystem path with no auth.
+ * `buildEphemeralGitAuth(null)` is what the runner builds when the authorized
+ * env var is unset — the exact credential-free path proven in the transport
+ * suite. The PR/merge are a GitHub API concern, so those stay a fake provider;
+ * the PUSH is real.
+ */
+describe('the ship runner performs a REAL push to a REAL local bare remote', () => {
+  const LADDER_WITH_DEPLOY: readonly RepositoryPermission[] =
+    ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr', 'deploy_staging'];
+
+  /**
+   * A work repo on the working branch whose `origin` is a REAL local bare repo.
+   * Mirrors `repository()` but points origin at a bare repo instead of
+   * github.com/o/r, so the real `pushAuthorizedBranch` reaches a real remote
+   * with no network. Both dirs are registered with `temp()` and torn down by the
+   * file's existing afterEach.
+   */
+  function repositoryWithBareOrigin(): { root: string; bare: string } {
+    const root = temp('relay-ship-real-');
+    const git = (args: string[]) => execFileSync('git', args, { cwd: root, env: GIT_ENV(root) });
+    git(['init', '--quiet', '--initial-branch=main']);
+    mkdirSync(join(root, 'src'), { recursive: true });
+    writeFileSync(join(root, 'src', 'app.js'), 'export const version = 1;\n');
+    git(['add', '--', '.']);
+    git(['commit', '-m', 'initial']);
+    // A real bare origin. `--bare` so the feature-branch push updates a ref
+    // rather than trying to write a checked-out working tree.
+    const bare = temp('relay-ship-bare-');
+    rmSync(bare, { recursive: true, force: true });
+    execFileSync('git', ['init', '--bare', '-b', 'main', bare], { cwd: root, env: GIT_ENV(root) });
+    git(['remote', 'add', 'origin', bare]);
+    git(['push', '--quiet', 'origin', 'main']);
+    git(['checkout', '--quiet', '-b', 'relay/mission-1']);
+    return { root, bare };
+  }
+
+  /**
+   * A faithful, no-network deploy provider — remembers what it deployed and
+   * reports THAT back, so the run can reach `shipped` without a live HTTP call.
+   * The same shape the suite already uses at "the runner reaches shipped by
+   * itself".
+   */
+  function honestProvider() {
+    let deployed: string | null = null;
+    return {
+      provider: {
+        descriptor: {
+          providerId: 'stub', displayName: 'Stub', environments: ['staging'] as const,
+          canReportDeployedRevision: true, canVerifyLive: true, simulated: true,
+          credentialEnvVarName: null,
+        },
+        deploy: async (r: { revision: string }) => {
+          deployed = r.revision;
+          return {
+            ok: true, providerId: 'stub', environment: 'staging' as const,
+            deployedRevision: deployed, deploymentRef: 'stub:1',
+            url: 'http://stub.invalid/app', observedAt: NOW, detail: null,
+          };
+        },
+        verifyLive: async (i: { expectedRevision: string }) => ({
+          reachable: true,
+          healthy: deployed !== null && deployed === i.expectedRevision,
+          reportedRevision: deployed, method: 'stub', observedAt: NOW, detail: null,
+        }),
+      },
+    };
+  }
+
+  it('transfers the committed code to the bare origin with the real push, then ships', async () => {
+    const { root, bare } = repositoryWithBareOrigin();
+    const reg = remoteRegistration(LADDER_WITH_DEPLOY);
+
+    /**
+     * A LOCAL-provider target whose checkout's origin is a real local bare repo.
+     *
+     * `remoteTarget` gives a github identity (owner `o`, name `r`, credential
+     * GITHUB_TOKEN) and overrides the location to this checkout. One adjustment:
+     * `identity.provider` -> 'local', which SKIPS the COMMIT-stage
+     * `checkoutMatchesIdentity` guard. That guard proves a remote-HOSTED target's
+     * checkout really is github.com/o/r; a real credential-free push offline
+     * requires origin to be a LOCAL bare repo, which by construction is not a
+     * github URL — so this is genuinely a local target (the "GitHub repo already
+     * on the machine" case), not a dodge. `owner` stays `o`, which is all the
+     * remote leg needs (it refuses a null owner before pushing), and the
+     * credential stays GITHUB_TOKEN so it matches the provider descriptor.
+     */
+    const base = remoteTarget(reg, LADDER_WITH_DEPLOY, root);
+    const target = {
+      ...base,
+      identity: { ...base.identity, provider: 'local' as const },
+    } as MissionRepositoryTarget;
+
+    // Fake PR/merge; its descriptor reads GITHUB_TOKEN, matching the target's
+    // authorized credential, so the credential boundary check passes.
+    const fake = fakeRemote();
+    const stub = honestProvider();
+
+    const result = await runShipLifecycle({
+      target, readRegistration: () => reg, worktreePath: root,
+      // GITHUB_TOKEN unset -> resolveRepositoryCredential returns ok(null) ->
+      // buildEphemeralGitAuth(null) -> a credential-free push, which a local
+      // remote accepts. Explicit {} makes it independent of the host env.
+      env: {},
+      judgement: editAndJudge(root, target),
+      commitMessage: 'Relay: bump version', authorName: 'Relay', authorEmail: 'relay@x',
+      // pushBranch OMITTED -> the REAL pushAuthorizedBranch runs against origin.
+      remote: { provider: fake.provider, evidence: PR_EVIDENCE },
+      deployment: {
+        provider: stub.provider, environment: 'staging',
+        artifactPath: artifact(), liveUrl: 'http://stub.invalid/app',
+      },
+      now: () => NOW,
+    });
+
+    const sha = result.commitSha as string;
+    expect(sha).toMatch(/^[0-9a-f]{40}$/);
+
+    /**
+     * THE STRONGEST EVIDENCE OF A REAL SHIP: the code physically landed on a
+     * real remote. Read the bare repo's ref back from git itself — nothing but
+     * the real push could have created `refs/heads/relay/mission-1` over there,
+     * pointing at the exact commit the runner produced.
+     */
+    const bareTip = execFileSync('git', ['-C', bare, 'rev-parse', 'relay/mission-1'], {
+      encoding: 'utf8', env: GIT_ENV(root),
+    }).trim();
+    expect(bareTip).toBe(sha);
+
+    // The same fact read the way the transport reads it, from the remote side.
+    const ls = execFileSync('git', ['ls-remote', bare, 'refs/heads/relay/mission-1'], {
+      encoding: 'utf8', env: GIT_ENV(root),
+    }).trim();
+    expect(ls.split(/\s+/)[0]).toBe(sha);
+
+    // The runner recorded a `pushed` row from its OWN read-back of the remote
+    // ref — the real push verified the tip before the row was written.
+    const pushed = result.evidence.find((e) => e.stage === 'pushed');
+    expect(pushed).toBeDefined();
+    expect(pushed?.remoteRef).toBe(sha);
+
+    // The real transfer was not skipped: the provider then observed the pushed
+    // tip and opened a pull request over the landed commit.
+    expect(fake.calls).toContain('push:relay/mission-1');
+    expect(result.evidence.find((e) => e.stage === 'pull_request_open')).toBeDefined();
+
+    // And the whole lifecycle reached a truthful `shipped` verdict over a run
+    // that performed a real landed push.
+    expect(result.stage).toBe('shipped');
+    expect(result.stoppedBy).toBeNull();
+    expect(result.verdict?.shipped).toBe(true);
+    expect(result.verdict?.liveRevision).toBe(sha);
+    expect(result.evidence.map((e) => e.stage))
+      .toEqual(['committed', 'pushed', 'pull_request_open', 'deployed', 'live_verified', 'shipped']);
+  });
+});
