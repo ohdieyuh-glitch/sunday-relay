@@ -7,13 +7,14 @@ import {
   saveBridgeSession, clearBridgeSession,
   type completeGitHubSignIn, type registerRepository, type readInstallationFromReturn,
 } from './bridge-session';
-import type { startBetaMission, pollBetaMission, shipBetaMission } from './beta-mission';
+import type { startBetaMission, pollBetaMission, shipBetaMission, listBetaMissions } from './beta-mission';
 import type { listPsps } from './psp-client';
 import { clearActiveMissions } from './active-mission';
 import type { LiveMissionUpdate } from './contracts';
 
-// Keep the embedded PSP picker hermetic — no network on mount in these tests.
+// Keep the embedded picker + history hermetic — no network on mount in these tests.
 const emptyPspList = (async () => ({ ok: true as const, psps: [], message: null })) as unknown as typeof listPsps;
+const emptyHistory = (async () => ({ ok: true as const, missions: [], message: null })) as unknown as typeof listBetaMissions;
 
 /**
  * THE BETA ENTRY GATE, clicked through. A fresh participant sees a sign-in
@@ -71,6 +72,7 @@ describe('RelayBetaEntry', () => {
         readInstallationImpl={withInstall('55550001')}
         registerImpl={registerOk}
         missionPspListImpl={emptyPspList}
+        missionHistoryImpl={emptyHistory}
       >
         {APP}
       </RelayBetaEntry>,
@@ -106,6 +108,7 @@ describe('RelayBetaEntry', () => {
         missionPollImpl={poll}
         missionShipImpl={shipImpl}
         missionPspListImpl={emptyPspList}
+        missionHistoryImpl={emptyHistory}
       >
         {APP}
       </RelayBetaEntry>,

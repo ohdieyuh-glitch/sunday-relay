@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { retryBetaMission, cancelBetaMission } from './beta-mission';
+import { retryBetaMission, cancelBetaMission, listBetaMissions } from './beta-mission';
 import { saveBridgeSession, clearBridgeSession } from './bridge-session';
 import type { LiveMissionUpdate } from './contracts';
 
@@ -59,6 +59,26 @@ describe('retry/cancel mission client', () => {
     const result = await retryBetaMission({ missionId: 'm-1', bridgeUrl: BRIDGE, fetchImpl });
     expect(result.ok).toBe(false);
     expect(result.message).toBe('The private beta is not open to you yet.');
+  });
+
+  it('listBetaMissions requires a session and parses the rows the bridge returns', async () => {
+    const noSession = vi.fn<typeof fetch>();
+    const gated = await listBetaMissions({ bridgeUrl: BRIDGE, fetchImpl: noSession });
+    expect(gated.ok).toBe(false);
+    expect(noSession).not.toHaveBeenCalled();
+
+    signedIn();
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(200, {
+      missions: [
+        { missionId: 'm-1', objective: 'Do', state: 'running', createdAt: 'x', completedAt: null },
+        { junk: true }, // dropped: not a summary
+      ],
+    }));
+    const listed = await listBetaMissions({ bridgeUrl: BRIDGE, fetchImpl });
+    expect(listed.ok).toBe(true);
+    expect(listed.missions.map((m) => m.missionId)).toEqual(['m-1']);
+    expect(String(fetchImpl.mock.calls[0][0])).toBe('https://bridge.example/relay-api/missions');
+    expect((fetchImpl.mock.calls[0][1]?.headers as Record<string, string>).Authorization).toBe('Relay-Session sess');
   });
 
   it('cancel returns the bridge view on success and hits the cancel route', async () => {

@@ -75,6 +75,52 @@ export async function startBetaMission(input: StartBetaMissionInput): Promise<Be
   }
 }
 
+/** A history-list row — enough to recognise a past Mission and reopen it. */
+export interface BetaMissionSummary {
+  readonly missionId: string;
+  readonly objective: string;
+  readonly state: string;
+  readonly createdAt: string;
+  readonly completedAt: string | null;
+}
+
+function toSummary(value: unknown): BetaMissionSummary | null {
+  if (value === null || typeof value !== 'object') return null;
+  const o = value as Record<string, unknown>;
+  if (typeof o.missionId !== 'string' || typeof o.state !== 'string') return null;
+  return {
+    missionId: o.missionId,
+    objective: typeof o.objective === 'string' ? o.objective : '',
+    state: o.state,
+    createdAt: typeof o.createdAt === 'string' ? o.createdAt : '',
+    completedAt: typeof o.completedAt === 'string' ? o.completedAt : null,
+  };
+}
+
+/** THE CALLER'S MISSION HISTORY — the Missions this bridge currently holds for
+ *  the signed-in participant, newest first. The server scopes it to the session,
+ *  so a browser only ever lists its own. The in-memory registry forgets on
+ *  restart, which the surface discloses rather than implying a durable archive. */
+export async function listBetaMissions(input: {
+  bridgeUrl?: string | null; fetchImpl?: typeof fetch;
+} = {}): Promise<{ readonly ok: boolean; readonly missions: readonly BetaMissionSummary[]; readonly message: string | null }> {
+  const base = input.bridgeUrl ?? configuredBridgeUrl();
+  if (base === null) return { ok: false, missions: [], message: 'No Relay Bridge is configured.' };
+  if (loadBridgeSession() === null) return { ok: false, missions: [], message: 'Sign in to see your Missions.' };
+  const doFetch = input.fetchImpl ?? ((u: RequestInfo | URL, i?: RequestInit) => fetch(u, i));
+  try {
+    const res = await doFetch(`${base}${BASE}/missions`, {
+      method: 'GET', headers: authHeaders(), credentials: 'omit', cache: 'no-store',
+    });
+    if (!res.ok) return { ok: false, missions: [], message: 'Your Missions could not be read.' };
+    const payload = await res.json() as { missions?: unknown };
+    const raw = Array.isArray(payload.missions) ? payload.missions : [];
+    return { ok: true, missions: raw.map(toSummary).filter((m): m is BetaMissionSummary => m !== null), message: null };
+  } catch {
+    return { ok: false, missions: [], message: 'The Relay Bridge could not be reached.' };
+  }
+}
+
 export async function pollBetaMission(input: {
   missionId: string; bridgeUrl?: string | null; fetchImpl?: typeof fetch;
 }): Promise<BetaMissionResult> {

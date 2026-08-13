@@ -269,6 +269,13 @@ interface MissionRecord {
   /** Epoch ms the Mission began, for the runtime ceiling. `NaN` disables the
    *  runtime check (a clock that does not parse must not fabricate an elapsed). */
   startedAtMs: number;
+  /** The participant who started this Mission, for their history list. Null for
+   *  an operator-started or fixture Mission (which has no participant identity),
+   *  so a participant's list can never include a Mission that is not theirs. */
+  startedByParticipant: string | null;
+  /** ISO time this Mission was created, for the history list. Kept separate from
+   *  `startedAtMs`, which is a runtime-ceiling epoch that may be `NaN`. */
+  createdAtIso: string;
 }
 
 /* --------------------------------------------------------- public API */
@@ -362,10 +369,28 @@ export interface MissionRegistryConfig {
   deps?: MissionRoleDeps;
 }
 
+/**
+ * A history-list row — enough to recognise a past Mission and reopen it, never
+ * its full record. Ordered newest first by the registry. Reflects only what THIS
+ * server still holds: the registry is in-memory, so a restart empties the list,
+ * which the surface discloses rather than implying a durable archive.
+ */
+export interface MissionSummary {
+  readonly missionId: string;
+  readonly objective: string;
+  readonly state: RelayMissionState;
+  readonly phase: MissionPhase;
+  readonly createdAt: string;
+  readonly completedAt: string | null;
+}
+
 export interface MissionRegistry {
   start(input: {
     missionId: string;
     objective: string;
+    /** The participant starting it, so it can appear in THEIR history and only
+     *  theirs. Null/absent for an operator or the controlled fixture. */
+    startedBy?: string | null;
     /**
      * References the Mission is AUTHORISED to retrieve before planning.
      *
@@ -407,6 +432,14 @@ export interface MissionRegistry {
     config?: RelayMissionConfig;
   }): LiveMissionUpdate;
   get(missionId: string): LiveMissionUpdate | null;
+  /**
+   * THIS PARTICIPANT'S MISSIONS, newest first — their history list.
+   *
+   * Scoped by `startedByParticipant`: a Mission an operator or the fixture
+   * started (participant null) belongs to no one's list, and one participant can
+   * never see another's. Reflects only what this in-memory registry still holds.
+   */
+  listForParticipant(participantId: string): readonly MissionSummary[];
   /**
    * WHAT THE SHIP NEEDS FROM A COMPLETED MISSION, or null.
    *
@@ -2408,7 +2441,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   }
 
   return {
-    start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths, config }) {
+    start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths, config, startedBy }) {
       const existing = records.get(missionId);
       if (existing) return toView(existing); // idempotent — one dispatch per mission id
       const request = safeText(objective) || 'Implement the controlled demo task.';
@@ -2435,6 +2468,8 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
         retryCount: 0,
         dispatchCount: 0,
         startedAtMs: Date.parse(now()),
+        startedByParticipant: startedBy ?? null,
+        createdAtIso: now(),
         evidenceReferences: evidenceReferences ?? [],
         liveEvidence: [],
         evidenceRecords: [],
@@ -2442,6 +2477,27 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       records.set(missionId, rec);
       void runPipeline(rec); // fire-and-forget; browser polls for progress
       return toView(rec);
+    },
+
+    listForParticipant(participantId) {
+      const mine: MissionSummary[] = [];
+      for (const rec of records.values()) {
+        // Null owner (operator/fixture) matches no participant — a participant's
+        // list holds only Missions they started.
+        if (rec.startedByParticipant !== null && rec.startedByParticipant === participantId) {
+          mine.push({
+            missionId: rec.missionId,
+            objective: rec.objective,
+            state: rec.state,
+            phase: rec.phase,
+            createdAt: rec.createdAtIso,
+            completedAt: rec.completedAt,
+          });
+        }
+      }
+      // Newest first. ISO-8601 timestamps sort lexically, so string compare is a
+      // correct chronological order without parsing a clock that might not.
+      return mine.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
     },
 
     get(missionId) {

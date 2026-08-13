@@ -323,6 +323,40 @@ describe('a fresh participant runs a real three-role mission end to end over HTT
     expect((reconnect.body.view as { state: string }).state).toBe('verified_complete');
     expect((reconnect.body.view as { missionRevision?: string }).missionRevision).toBe((settled as { missionRevision?: string }).missionRevision);
   }, 45_000);
+
+  it('lists only the caller-participant’s own missions — never another user’s (criterion 12)', async () => {
+    const real = bootReal();
+    const base = await real.start();
+
+    // Two participants run missions on the SAME server.
+    const alice = await signIn(base, { login: 'beta-alice', id: 4242 });
+    await getJson(await startMission(base, alice, { missionId: 'm-alice-1', objective: 'Alice one.' }));
+    await getJson(await startMission(base, alice, { missionId: 'm-alice-2', objective: 'Alice two.' }));
+    await settleMission(base, alice, 'm-alice-1');
+    await settleMission(base, alice, 'm-alice-2');
+
+    const bob = await signIn(base, { login: 'beta-bob', id: 7777 });
+    await getJson(await startMission(base, bob, { missionId: 'm-bob-1', objective: 'Bob one.' }));
+    await settleMission(base, bob, 'm-bob-1');
+
+    // Alice's history is exactly her two missions — Bob's is absent (isolation).
+    const aliceList = await getJson(await realFetch(`${base}/relay-api/missions`, { headers: asUser(alice) }));
+    expect(aliceList.status).toBe(200);
+    const aliceIds = (aliceList.body.missions as Array<{ missionId: string }>).map((m) => m.missionId).sort();
+    expect(aliceIds).toEqual(['m-alice-1', 'm-alice-2']);
+
+    // Bob sees only his own.
+    const bobList = await getJson(await realFetch(`${base}/relay-api/missions`, { headers: asUser(bob) }));
+    const bobIds = (bobList.body.missions as Array<{ missionId: string }>).map((m) => m.missionId);
+    expect(bobIds).toEqual(['m-bob-1']);
+
+    // Each row carries what a history surface needs to render and reopen it.
+    const row = (aliceList.body.missions as Array<Record<string, unknown>>)[0];
+    expect(typeof row.missionId).toBe('string');
+    expect(typeof row.objective).toBe('string');
+    expect(typeof row.state).toBe('string');
+    expect(typeof row.createdAt).toBe('string');
+  }, 60_000);
 });
 
 const savePsp = (base: string, token: string, body: unknown) =>

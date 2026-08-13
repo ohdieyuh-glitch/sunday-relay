@@ -960,8 +960,24 @@ export function createBridgeServer(
           }
           const view = registry.start({
             missionId, objective, repositoryTarget, intendedWritePaths, config: configResult.value,
+            // WHO started it — the verified session, never the body — so it lands
+            // in this participant's history and only theirs. Operator: null.
+            startedBy: missionCaller?.kind === 'browser' ? missionCaller.participantId : null,
           });
           send(res, 200, { missionId, view }, cors);
+          return;
+        }
+
+        // THE CALLER'S MISSION HISTORY — this server's view, scoped to the
+        // session's participant. Spends nothing. An operator holds no participant
+        // identity here and a read-only session names no participant, so both get
+        // an empty list rather than another user's Missions; an anonymous caller
+        // was already refused by the mission-family auth gate above.
+        if (method === 'GET' && path === '/relay-api/missions') {
+          const missions = missionCaller?.kind === 'browser' && missionCaller.participantId !== null
+            ? registry.listForParticipant(missionCaller.participantId)
+            : [];
+          send(res, 200, { missions }, cors);
           return;
         }
 

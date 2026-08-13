@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
-import { startBetaMission, pollBetaMission, shipBetaMission, retryBetaMission, cancelBetaMission } from './beta-mission';
+import { startBetaMission, pollBetaMission, shipBetaMission, retryBetaMission, cancelBetaMission, listBetaMissions } from './beta-mission';
 import { RelayPspPicker } from './RelayPspPicker';
+import { RelayMissionHistory } from './RelayMissionHistory';
 import { rememberActiveMission, recallActiveMission, forgetActiveMission } from './active-mission';
 import type { listPsps, loadPsp, savePsp } from './psp-client';
 import type { LiveMissionUpdate } from './contracts';
@@ -43,6 +44,7 @@ export function RelayMissionRunner({
   shipImpl = shipBetaMission,
   retryImpl = retryBetaMission,
   cancelImpl = cancelBetaMission,
+  historyImpl,
   pspListImpl,
   pspLoadImpl,
   pspSaveImpl,
@@ -57,6 +59,7 @@ export function RelayMissionRunner({
   readonly shipImpl?: typeof shipBetaMission;
   readonly retryImpl?: typeof retryBetaMission;
   readonly cancelImpl?: typeof cancelBetaMission;
+  readonly historyImpl?: typeof listBetaMissions;
   readonly pspListImpl?: typeof listPsps;
   readonly pspLoadImpl?: typeof loadPsp;
   readonly pspSaveImpl?: typeof savePsp;
@@ -131,6 +134,16 @@ export function RelayMissionRunner({
     setObjective('');
   }, [repositoryKey]);
 
+  // Open a past Mission from the history — reconnect to its authoritative state
+  // exactly as a refresh does, and remember it so a refresh keeps it open.
+  const onOpenMission = useCallback((id: string) => {
+    rememberActiveMission(repositoryKey, id);
+    setMissionId(id);
+    setView(null);
+    setShip(null);
+    setMessage(null);
+  }, [repositoryKey]);
+
   const onShip = useCallback(async () => {
     if (missionId === null) return;
     setBusy(true);
@@ -166,6 +179,7 @@ export function RelayMissionRunner({
 
   if (missionId === null) {
     return (
+      <>
       <form className="relay-mission-runner" data-state="idle" onSubmit={(e) => void onStart(e)}>
         <h2>Start a Mission on <code>{repositoryKey}</code></h2>
         <RelayPspPicker
@@ -193,6 +207,12 @@ export function RelayMissionRunner({
         <button type="submit" disabled={busy || objective.trim() === ''}>{busy ? 'Starting…' : 'Start Mission'}</button>
         {message !== null && <p className="relay-mission-runner__error" role="alert">{message}</p>}
       </form>
+      <RelayMissionHistory
+        bridgeUrl={bridgeUrl}
+        onOpen={onOpenMission}
+        {...(historyImpl !== undefined ? { listImpl: historyImpl } : {})}
+      />
+      </>
     );
   }
 

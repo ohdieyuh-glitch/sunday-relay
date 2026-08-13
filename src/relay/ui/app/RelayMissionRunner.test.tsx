@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { RelayMissionRunner } from './RelayMissionRunner';
-import type { startBetaMission, pollBetaMission, shipBetaMission, retryBetaMission, cancelBetaMission } from './beta-mission';
+import type { startBetaMission, pollBetaMission, shipBetaMission, retryBetaMission, cancelBetaMission, listBetaMissions } from './beta-mission';
 import type { listPsps, loadPsp } from './psp-client';
 import { rememberActiveMission, recallActiveMission, clearActiveMissions } from './active-mission';
 import type { LiveMissionUpdate } from './contracts';
@@ -264,6 +264,22 @@ describe('RelayMissionRunner', () => {
     expect(rv).toContain('approved');
     // The served model is shown verbatim, not defaulted from the requested one.
     expect(rv).toContain('claude-opus-4-8');
+  });
+
+  it('opens a past Mission from history and reconnects to it without starting anything', async () => {
+    const history = (async () => ({
+      ok: true as const,
+      missions: [{ missionId: 'm-old', objective: 'Old one', state: 'verified_complete', createdAt: 'x', completedAt: 'y' }],
+      message: null,
+    })) as unknown as typeof listBetaMissions;
+    const start = vi.fn<typeof startBetaMission>();
+    const poll = vi.fn<typeof pollBetaMission>(async ({ missionId }) => ({ ok: true, missionId, view: verified, message: null }));
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} historyImpl={history} pollIntervalMs={10} />);
+    // Click "Open" on the past mission → reconnect to its authoritative state.
+    fireEvent.click(await screen.findByRole('button', { name: /Open/i }));
+    await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('verified_complete'));
+    expect(start).not.toHaveBeenCalled();
+    expect(recallActiveMission(KEY)).toBe('m-old');
   });
 
   it('cancels an in-flight mission', async () => {

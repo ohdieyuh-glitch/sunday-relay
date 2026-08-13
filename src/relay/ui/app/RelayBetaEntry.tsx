@@ -7,7 +7,7 @@ import {
 import { RelayGitHubSignIn } from './RelayGitHubSignIn';
 import { RelayConnectRepository } from './RelayConnectRepository';
 import { RelayMissionRunner } from './RelayMissionRunner';
-import type { startBetaMission, pollBetaMission, shipBetaMission } from './beta-mission';
+import type { startBetaMission, pollBetaMission, shipBetaMission, listBetaMissions } from './beta-mission';
 import type { listPsps, loadPsp, savePsp } from './psp-client';
 
 /** A conservative default config a beta Mission runs under until PSP selection is
@@ -44,6 +44,7 @@ export function RelayBetaEntry({
   missionPspListImpl,
   missionPspLoadImpl,
   missionPspSaveImpl,
+  missionHistoryImpl,
 }: {
   readonly children: ReactNode;
   readonly bridgeUrl?: string | null;
@@ -57,6 +58,7 @@ export function RelayBetaEntry({
   readonly missionPspListImpl?: typeof listPsps;
   readonly missionPspLoadImpl?: typeof loadPsp;
   readonly missionPspSaveImpl?: typeof savePsp;
+  readonly missionHistoryImpl?: typeof listBetaMissions;
 }) {
   const resolvedBridge = bridgeUrl !== undefined ? bridgeUrl : configuredBridgeUrl();
   // With no bridge there is nothing to resolve — ready immediately, and transparent.
@@ -130,6 +132,7 @@ export function RelayBetaEntry({
         {...(missionPspListImpl !== undefined ? { pspListImpl: missionPspListImpl } : {})}
         {...(missionPspLoadImpl !== undefined ? { pspLoadImpl: missionPspLoadImpl } : {})}
         {...(missionPspSaveImpl !== undefined ? { pspSaveImpl: missionPspSaveImpl } : {})}
+        {...(missionHistoryImpl !== undefined ? { historyImpl: missionHistoryImpl } : {})}
       />
     </div>
   );
