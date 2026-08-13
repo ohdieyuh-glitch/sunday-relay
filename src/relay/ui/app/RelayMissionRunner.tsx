@@ -70,6 +70,8 @@ export function RelayMissionRunner({
   // a saved PSP. The label is display only — the config is what the engine acts on.
   const [activeConfig, setActiveConfig] = useState<unknown>(config);
   const [activeLabel, setActiveLabel] = useState('Default beta configuration');
+  // Whether the high-consequence Mission Contract is being shown for confirmation.
+  const [contractShown, setContractShown] = useState(false);
   // Reconnect: a refresh restores the mission last started on this repository,
   // then the poll below re-reads its authoritative state from the bridge.
   const [missionId, setMissionId] = useState<string | null>(() => recallActiveMission(repositoryKey));
@@ -96,8 +98,7 @@ export function RelayMissionRunner({
     return () => { cancelled = true; clearTimeout(handle); };
   }, [missionId, terminal, pollImpl, bridgeUrl, pollIntervalMs]);
 
-  const onStart = useCallback(async (event: FormEvent) => {
-    event.preventDefault();
+  const dispatchStart = useCallback(async () => {
     setBusy(true);
     setMessage(null);
     // Least privilege: request exactly what the chosen profile named, or omit so
@@ -122,6 +123,18 @@ export function RelayMissionRunner({
       setMessage(result.message);
     }
   }, [objective, repositoryKey, workingBranch, activeConfig, bridgeUrl, startImpl]);
+
+  // Policy gate (criterion 7): a Mission that requests a HIGH-CONSEQUENCE
+  // permission — a merge or a production deploy, the two a branch delete cannot
+  // undo — must present its Contract for explicit, fresh confirmation before it
+  // runs. A standing registration grant is not enough; the user confirms THIS
+  // Mission. Anything less consequential starts without interruption.
+  const onStartSubmit = useCallback((event: FormEvent) => {
+    event.preventDefault();
+    const highConsequence = configPermissions(activeConfig).filter((p) => p === 'merge_pr' || p === 'deploy_production');
+    if (highConsequence.length > 0 && !contractShown) { setContractShown(true); return; }
+    void dispatchStart();
+  }, [activeConfig, contractShown, dispatchStart]);
 
   // Leave a finished Mission behind and return to Start — drops the pointer so a
   // later refresh does not reconnect to a Mission the user is done with.
@@ -178,9 +191,16 @@ export function RelayMissionRunner({
   }, [missionId, bridgeUrl, cancelImpl]);
 
   if (missionId === null) {
+    const highConsequencePerms = configPermissions(activeConfig).filter((p) => p === 'merge_pr' || p === 'deploy_production');
+    const limits = (activeConfig as { limits?: Record<string, number | null> } | null)?.limits ?? {};
+    const startLabel = busy
+      ? 'Starting…'
+      : contractShown ? 'Confirm authorization & start'
+      : highConsequencePerms.length > 0 ? 'Review Mission Contract'
+      : 'Start Mission';
     return (
       <>
-      <form className="relay-mission-runner" data-state="idle" onSubmit={(e) => void onStart(e)}>
+      <form className="relay-mission-runner" data-state="idle" onSubmit={onStartSubmit}>
         <h2>Start a Mission on <code>{repositoryKey}</code></h2>
         <RelayPspPicker
           bridgeUrl={bridgeUrl}
@@ -204,7 +224,18 @@ export function RelayMissionRunner({
           Ask Relay an objective
           <input aria-label="Objective" value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="Implement…" />
         </label>
-        <button type="submit" disabled={busy || objective.trim() === ''}>{busy ? 'Starting…' : 'Start Mission'}</button>
+        {contractShown && (
+          <div className="relay-mission-runner__contract" aria-label="Mission Contract">
+            <h3>Mission Contract — confirm before it runs</h3>
+            <p>Objective: {objective.trim() || '(none)'}</p>
+            <p>High-consequence authority requested:{' '}
+              <strong>{highConsequencePerms.join(', ')}</strong>. A standing grant is not enough — confirm this Mission.</p>
+            <p>Spend ceiling: {typeof limits.spendUsd === 'number' ? `$${limits.spendUsd}` : 'not set'}
+              {' '}· Agent-call ceiling: {typeof limits.agentCalls === 'number' ? limits.agentCalls : 'not set'}</p>
+            <button type="button" onClick={() => setContractShown(false)}>Back</button>
+          </div>
+        )}
+        <button type="submit" disabled={busy || objective.trim() === ''}>{startLabel}</button>
         {message !== null && <p className="relay-mission-runner__error" role="alert">{message}</p>}
       </form>
       <RelayMissionHistory
@@ -235,6 +266,11 @@ export function RelayMissionRunner({
           <li>Permissions held: <strong>{view.config.permissions.length > 0
             ? view.config.permissions.join(', ')
             : 'read + write_worktree (floor)'}</strong></li>
+        )}
+        {view?.config !== undefined && (
+          <li>Authorized ceiling: {view.config.limits.spendUsd !== null ? `$${view.config.limits.spendUsd}` : 'no spend cap set'}
+            {' · '}{view.config.limits.agentCalls !== null ? `${view.config.limits.agentCalls} agent calls` : 'no call cap set'}
+            {' — a Mission that reaches it halts with no further spend.'}</li>
         )}
       </ul>
 

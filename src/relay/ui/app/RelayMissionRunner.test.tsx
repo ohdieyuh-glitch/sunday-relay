@@ -171,6 +171,8 @@ describe('RelayMissionRunner', () => {
     // Start another is offered (any terminal); Retry is not (not retryable).
     expect(screen.getByRole('button', { name: /Start another Mission/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Retry Mission/i })).toBeNull();
+    // Never offers to ship a Mission that failed — completion is earned, not offered.
+    expect(screen.queryByRole('button', { name: /Ship this Mission/i })).toBeNull();
   });
 
   it('requests least privilege — omits permissions when the config names none (safe floor)', async () => {
@@ -205,7 +207,7 @@ describe('RelayMissionRunner', () => {
         pspId: null, roles: { architect: null, coding: null, reviewer: null },
         mode: 'guided', review: 'independent', completionRule: 'strict',
         permissions: ['read', 'write_worktree'],
-        limits: { runtimeMinutes: null, agentCalls: null, spendUsd: null, reviewCycles: null, repairCycles: null },
+        limits: { runtimeMinutes: null, agentCalls: 8, spendUsd: 5, reviewCycles: null, repairCycles: null },
       },
     } as unknown as LiveMissionUpdate;
     const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-e', view: evidenced, message: null }));
@@ -220,6 +222,35 @@ describe('RelayMissionRunner', () => {
     expect(facts).toContain('rev-7');          // contract revision
     // The permissions HELD come from the authoritative view, not the browser's request.
     expect(facts).toContain('read, write_worktree');
+    // The authorized spend/compute ceiling the Mission runs under (criterion 15).
+    expect(facts).toContain('$5');
+    expect(facts).toContain('8 agent calls');
+  });
+
+  it('requires Mission Contract confirmation before a high-consequence Mission runs (criterion 7)', async () => {
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-hc', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-hc', view: coding, message: null }));
+    render(
+      <RelayMissionRunner
+        repositoryKey={KEY}
+        bridgeUrl={BRIDGE}
+        startImpl={start}
+        pollImpl={poll}
+        pspListImpl={emptyList}
+        config={{ mode: 'guided', permissions: ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr', 'merge_pr'], limits: { spendUsd: 5, agentCalls: 8 } }}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'Merge the PR' } });
+    // The button is a Contract gate, not an immediate start.
+    fireEvent.click(screen.getByRole('button', { name: /Review Mission Contract/i }));
+    // The Contract is presented; nothing has been dispatched yet.
+    const contract = screen.getByLabelText(/Mission Contract/i).textContent ?? '';
+    expect(contract).toContain('merge_pr');
+    expect(contract).toContain('$5');
+    expect(start).not.toHaveBeenCalled();
+    // Only an explicit fresh confirmation runs the Mission.
+    fireEvent.click(screen.getByRole('button', { name: /Confirm authorization & start/i }));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
   });
 
   it('shows the Mission brief from the architect handoff, with honest provenance', async () => {
