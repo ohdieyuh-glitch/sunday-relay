@@ -9,7 +9,7 @@ import {
 } from './bridge-session';
 import type { startBetaMission, pollBetaMission, shipBetaMission, listBetaMissions } from './beta-mission';
 import type { listPsps } from './psp-client';
-import type { listConnectedRepositories, ConnectedRepository } from './repository-client';
+import type { listConnectedRepositories, discoverInstallationRepositories, ConnectedRepository } from './repository-client';
 import { clearActiveMissions } from './active-mission';
 import { clearConnectedRepository } from './connected-repository';
 import type { LiveMissionUpdate } from './contracts';
@@ -28,6 +28,19 @@ const aliceRepo: ConnectedRepository = {
   provider: 'github', owner: 'beta-alice', name: 'their-app', defaultBranch: 'main',
   grants: ['read', 'write_worktree'], revoked: false, registeredAt: '2026-08-12T00:00:00Z',
 };
+// Discovery of a fresh installation's authorized repositories, hermetic. The
+// post-install connect step now SELECTS from these instead of typing owner/name.
+// `discoverEmpty` models an installation that authorizes nothing yet, so the
+// connect flow degrades to its inline manual fallback — the shape the
+// degradation tests assert against.
+const discoverAlice = (async () => ({
+  ok: true as const,
+  repositories: [{ owner: 'beta-alice', name: 'their-app', fullName: 'beta-alice/their-app', defaultBranch: 'main', private: false }],
+  truncated: false, message: null,
+})) as unknown as typeof discoverInstallationRepositories;
+const discoverEmpty = (async () => ({
+  ok: true as const, repositories: [], truncated: false, message: null,
+})) as unknown as typeof discoverInstallationRepositories;
 
 /**
  * THE BETA ENTRY GATE, clicked through. A fresh participant sees a sign-in
@@ -62,21 +75,55 @@ describe('RelayBetaEntry', () => {
     expect(screen.getByTestId('app')).toBeTruthy();
   });
 
-  it('gates a fresh user at sign-in — the app is not shown', async () => {
+  it('AC-1/AC-3: a fresh live user lands in WONDERLAND with the Wandering Relay Dog — GitHub is deferred, no simulated data', async () => {
     render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
+    // The entrance is Wonderland, not a GitHub wall.
+    expect(await screen.findByText(/What are we building/i)).toBeTruthy();
+    // The Wandering Relay Dog is a real part of the experience.
+    expect(screen.getByText('WANDERING')).toBeTruthy();
+    expect(screen.getByText('RELAY DOG')).toBeTruthy();
+    // AC-3: the live entrance shows NO simulated data — no FIXTURE label, and the
+    // recent-projects surface is its honest empty state, never fixture projects.
+    expect(screen.queryByText(/FIXTURE/)).toBeNull();
+    expect(screen.getByText(/NO RELAY PROJECTS YET/i)).toBeTruthy();
+    // GitHub sign-in is DEFERRED — not shown until the user chooses to build.
+    expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
+    // And the app itself is never shown at the entrance.
+    expect(screen.queryByTestId('app')).toBeNull();
+  });
+
+  it('AC-2: choosing to start building reveals the contextual GitHub sign-in', async () => {
+    render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
+    const startBuilding = await screen.findByRole('button', { name: /CONNECT EXISTING PROJECT/i });
+    // Still no GitHub wall while exploring Wonderland.
+    expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
+    // Choosing to start building is the deliberate exit into sign-in.
+    fireEvent.click(startBuilding);
     expect(await screen.findByRole('button', { name: /Sign in with GitHub/i })).toBeTruthy();
     expect(screen.queryByTestId('app')).toBeNull();
   });
 
-  it('after sign-in, asks the user to connect a repository — still not the app', async () => {
+  it('after sign-in, asks the user to connect a repository — the post-install picker, still not the app', async () => {
     signedIn();
-    render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete} readInstallationImpl={withInstall('55550001')} listRepositoriesImpl={emptyRepoList}>{APP}</RelayBetaEntry>);
-    expect(await screen.findByRole('button', { name: /Connect this repository/i })).toBeTruthy();
+    render(
+      <RelayBetaEntry
+        bridgeUrl={BRIDGE}
+        completeImpl={noComplete}
+        readInstallationImpl={withInstall('55550001')}
+        listRepositoriesImpl={emptyRepoList}
+        discoverRepositoriesImpl={discoverAlice}
+      >
+        {APP}
+      </RelayBetaEntry>,
+    );
+    // The connect step SELECTS a discovered repository — no owner/name typed.
+    expect(await screen.findByRole('button', { name: /beta-alice\/their-app/i })).toBeTruthy();
+    expect(screen.queryByLabelText(/Repository owner/i)).toBeNull();
     expect(screen.getByText(/Signed in as/i).textContent).toContain('ghu-4242');
     expect(screen.queryByTestId('app')).toBeNull();
   });
 
-  it('clicks all the way through: signed in → connect a repo → the Mission surface for that repo', async () => {
+  it('clicks all the way through: signed in → SELECT a discovered repo → the Mission surface for that repo', async () => {
     signedIn();
     render(
       <RelayBetaEntry
@@ -85,18 +132,18 @@ describe('RelayBetaEntry', () => {
         readInstallationImpl={withInstall('55550001')}
         registerImpl={registerOk}
         listRepositoriesImpl={emptyRepoList}
+        discoverRepositoriesImpl={discoverAlice}
         missionPspListImpl={emptyPspList}
         missionHistoryImpl={emptyHistory}
       >
         {APP}
       </RelayBetaEntry>,
     );
-    // The connect-repository screen.
-    fireEvent.change(await screen.findByLabelText(/Repository owner/i), { target: { value: 'beta-alice' } });
-    fireEvent.change(screen.getByLabelText(/Repository name/i), { target: { value: 'their-app' } });
-    fireEvent.click(screen.getByRole('button', { name: /Connect this repository/i }));
-    // The bridge confirms → the gate advances to the Mission surface for the
-    // connected repository (start/watch/ship), keyed to what was registered.
+    // The post-install picker: select the discovered repository — no typing.
+    fireEvent.click(await screen.findByRole('button', { name: /beta-alice\/their-app/i }));
+    // The bridge confirms the registration → the gate advances to the Mission
+    // surface for the connected repository (start/watch/ship), keyed to what was
+    // registered.
     await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
     expect(screen.getByText(/Start a Mission on/i).textContent).toContain('github:github.com/beta-alice/their-app');
   });
@@ -112,15 +159,14 @@ describe('RelayBetaEntry', () => {
         readInstallationImpl={withInstall('55550001')}
         registerImpl={registerOk}
         listRepositoriesImpl={emptyRepoList}
+        discoverRepositoriesImpl={discoverAlice}
         missionPspListImpl={emptyPspList}
         missionHistoryImpl={emptyHistory}
       >
         {APP}
       </RelayBetaEntry>,
     );
-    fireEvent.change(await screen.findByLabelText(/Repository owner/i), { target: { value: 'beta-alice' } });
-    fireEvent.change(screen.getByLabelText(/Repository name/i), { target: { value: 'their-app' } });
-    fireEvent.click(screen.getByRole('button', { name: /Connect this repository/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /beta-alice\/their-app/i }));
     await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
 
     // Simulate a FULL PAGE RELOAD: tear down the whole tree, keep only what
@@ -163,6 +209,7 @@ describe('RelayBetaEntry', () => {
         completeImpl={noComplete}
         readInstallationImpl={withInstall('55550001')}
         registerImpl={registerOk}
+        discoverRepositoriesImpl={discoverAlice}
         missionStartImpl={start}
         missionPollImpl={poll}
         missionShipImpl={shipImpl}
@@ -174,10 +221,8 @@ describe('RelayBetaEntry', () => {
       </RelayBetaEntry>,
     );
 
-    // Connect the repository.
-    fireEvent.change(await screen.findByLabelText(/Repository owner/i), { target: { value: 'beta-alice' } });
-    fireEvent.change(screen.getByLabelText(/Repository name/i), { target: { value: 'their-app' } });
-    fireEvent.click(screen.getByRole('button', { name: /Connect this repository/i }));
+    // Connect the repository by SELECTING it from the post-install picker.
+    fireEvent.click(await screen.findByRole('button', { name: /beta-alice\/their-app/i }));
 
     // Give Relay an objective and start the Mission.
     fireEvent.change(await screen.findByLabelText(/Objective/i), { target: { value: 'Implement it' } });
@@ -229,9 +274,11 @@ describe('RelayBetaEntry', () => {
       <RelayBetaEntry
         bridgeUrl={BRIDGE}
         completeImpl={noComplete}
-        // An installation id is present, so the connect flow shows its register form.
+        // An installation id is present, so the connect flow runs its post-install
+        // step; with no repositories discovered it degrades to the manual fallback.
         readInstallationImpl={withInstall('55550001')}
         listRepositoriesImpl={repoListOf(aliceRepo)}
+        discoverRepositoriesImpl={discoverEmpty}
       >
         {APP}
       </RelayBetaEntry>,
@@ -251,12 +298,14 @@ describe('RelayBetaEntry', () => {
         completeImpl={noComplete}
         readInstallationImpl={withInstall('55550001')}
         listRepositoriesImpl={emptyRepoList}
+        discoverRepositoriesImpl={discoverEmpty}
       >
         {APP}
       </RelayBetaEntry>,
     );
 
-    // Today's first-time behaviour, preserved: straight to connect, no picker.
+    // Today's first-time behaviour, preserved: straight to connect, no returning-
+    // participant picker. With nothing discovered, the manual fallback is inline.
     expect(await screen.findByRole('button', { name: /Connect this repository/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Connect a different repository/i })).toBeNull();
     expect(screen.queryByRole('heading', { name: /Choose a repository/i })).toBeNull();
@@ -273,6 +322,7 @@ describe('RelayBetaEntry', () => {
         completeImpl={noComplete}
         readInstallationImpl={withInstall('55550001')}
         listRepositoriesImpl={failing}
+        discoverRepositoriesImpl={discoverEmpty}
       >
         {APP}
       </RelayBetaEntry>,
@@ -294,6 +344,7 @@ describe('RelayBetaEntry', () => {
         completeImpl={noComplete}
         readInstallationImpl={withInstall('55550001')}
         listRepositoriesImpl={repoListOf(revoked)}
+        discoverRepositoriesImpl={discoverEmpty}
       >
         {APP}
       </RelayBetaEntry>,

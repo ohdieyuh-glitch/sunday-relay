@@ -9,6 +9,8 @@ import {
 } from './github-oauth';
 import type { BrowserSessionStore } from './browser-session/grants';
 import { sessionTokenFrom } from './browser-session/routes';
+import { discoverInstallationRepositories, type FetchLike } from './github-app-installation';
+import type { AppIdentityConfig } from './github-app-identity';
 
 /**
  * "SIGN IN WITH GITHUB" — the product-boundary routes.
@@ -226,10 +228,19 @@ export interface GithubAuthDeps {
   /** One-time claims: the callback mints one and redirects the browser with it;
    *  the frontend exchanges it for the session token over POST /auth/github/claim. */
   readonly claimStore: SignInClaimStore;
+  /** The GitHub App's own identity (id + private key), for minting the short-lived
+   *  discovery token that lists an installation's repositories. Null => the
+   *  discovery route answers 503: there is no App key to mint a token with. The
+   *  key is held only here, passed to the mint, and never surfaced. */
+  readonly appIdentity: AppIdentityConfig | null;
   /** Test seam. Defaults to the real GitHub exchange. */
   readonly exchange?: (input: {
     config: GitHubOAuthConfig; code: string; redirectUri: string;
   }) => Promise<import('./github-oauth').GitHubUserIdentity | { readonly __error: string }>;
+  /** Test seam for the outbound GitHub calls the discovery route makes (mint +
+   *  list). Defaults to the real `fetch`; injected in tests so no real network
+   *  is touched — mirrors github-app-installation's own `doFetch` seam. */
+  readonly discoverFetch?: FetchLike;
 }
 
 /** A route result that may redirect. The github-auth callback redirects the
@@ -403,6 +414,65 @@ export async function handleGithubAuthRoute(
       redirect: `${sessionOrigin}/#relay_installation=${encodeURIComponent(installationId)}`,
       body: { data: { installed: true, installationId } },
     };
+  }
+
+  /* --------- DISCOVER the repositories a proven installation can access --- */
+  if (method === 'GET' && path === '/auth/github/install/repositories') {
+    // WHO is asking must be a signed-in control session — the participant comes
+    // from the VERIFIED session, never the query, mirroring install/start. A
+    // browser cannot claim an identity it was not paired for.
+    const token = sessionTokenFrom(request.authorization);
+    if (token === null) {
+      return errResult(401, 'authentication_required',
+        'Listing installation repositories requires a signed-in session.');
+    }
+    const verified = deps.sessions.verifySession({ token, origin: request.origin, now: deps.now });
+    if (!verified.ok || verified.scope !== 'browser_control' || verified.participantId === null) {
+      return errResult(401, 'authentication_failed', 'This session cannot list installation repositories.');
+    }
+    const installationId = queryOf(request.url).get('installation_id') ?? '';
+    if (!INSTALLATION_ID.test(installationId)) {
+      return errResult(400, 'github_install_invalid', 'A valid installation_id is required.');
+    }
+    // The participant must have PROVEN control of THIS installation via the
+    // install callback. A valid session is not enough — a browser cannot
+    // discover repositories for an installation it never proved.
+    if (!deps.installGrants.granted(verified.participantId, installationId)) {
+      return errResult(403, 'github_installation_not_proven',
+        'This session has not proven control of that installation.');
+    }
+    // Minting the discovery token needs the App's own key. Absent => a truthful
+    // 503, the same shape the other unconfigured routes answer with.
+    if (deps.appIdentity === null) {
+      return errResult(503, 'github_app_unconfigured',
+        'This bridge has no GitHub App key to list installation repositories.');
+    }
+    // Mint an all-repos, metadata:read token and list the repositories it can
+    // reach. The token never leaves `discoverInstallationRepositories`; this
+    // route only ever sees names and posture.
+    const discovered = await discoverInstallationRepositories({
+      appIdentity: deps.appIdentity,
+      installationId,
+      fetchImpl: deps.discoverFetch,
+      // The route's clock is in ms; the App-JWT mint wants seconds.
+      nowSeconds: Math.floor(deps.now / 1000),
+    });
+    if (!discovered.ok) {
+      // A truthful refusal — GitHub's status is inside the stripped message —
+      // never a fabricated empty list.
+      return errResult(502, 'github_repositories_unavailable', discovered.error.message);
+    }
+    return okResult({
+      installationId,
+      repositories: discovered.value.repositories.map((r) => ({
+        owner: r.owner,
+        name: r.name,
+        fullName: r.fullName,
+        defaultBranch: r.defaultBranch,
+        private: r.private,
+      })),
+      truncated: discovered.value.truncated,
+    });
   }
 
   return errResult(404, 'github_auth_unknown', 'Unknown GitHub auth operation.');

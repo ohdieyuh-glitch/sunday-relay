@@ -63,6 +63,8 @@ import {
   handleGithubAuthRoute, isGithubAuthRoute,
 } from './github-auth-routes';
 import { githubOAuthConfigFromEnv } from './github-oauth';
+import { githubAppReadiness } from './github-app-readiness';
+import { githubAppConfigFromEnv } from './repository-credential';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute, sessionTokenFrom,
 } from './browser-session/routes';
@@ -251,6 +253,13 @@ export function createBridgeServer(
   const signInClaimStore = createSignInClaimStore();
   const githubInstallUrl = typeof process.env.RELAY_GITHUB_APP_INSTALL_URL === 'string'
     ? process.env.RELAY_GITHUB_APP_INSTALL_URL.trim() : '';
+  /**
+   * THE GITHUB APP'S OWN IDENTITY (id + private key), for minting the short-lived
+   * discovery token that lists a proven installation's repositories. Null when
+   * the App key is unconfigured — the discovery route then answers 503. The key
+   * is held only here in memory and passed to the mint; it is never surfaced.
+   */
+  const githubAppIdentity = githubAppConfigFromEnv(process.env);
   /** Saved PSP profiles, participant-owned. Absent without a mounted state root —
    *  the PSP surface then answers `psp_store_unavailable`, like the repo store. */
   const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
@@ -317,6 +326,18 @@ export function createBridgeServer(
           const undispatchable = roles.binding.ok
             ? missionDispatchProblems(roles.binding.bindings)
             : [];
+          /**
+           * GITHUB-APP CONFIGURATION DETECTION, as booleans and codes only.
+           *
+           * A running deployment can DETECT whether it can sign users in, mint
+           * installation tokens, begin an install, and whether its registered
+           * callback URL is even valid — WITHOUT any secret leaving the process.
+           * The callback field is a code (`ok` / `not_absolute_https` /
+           * `wrong_path` / `missing`), never the URL: production currently
+           * carries a bare host with no scheme, which breaks OAuth, and this
+           * surfaces that as NOT ok while disclosing nothing about the value.
+           */
+          const githubReadiness = githubAppReadiness(process.env);
           send(res, 200, {
             ok: true,
             service: 'relay-bridge',
@@ -345,6 +366,11 @@ export function createBridgeServer(
             roleSlotRefusals: roles.binding.ok
               ? undispatchable.map((p) => `${p.role}:occupant_not_dispatchable`)
               : roles.binding.problems.map((p) => `${p.role}:${p.reason}`),
+            // GitHub-App configuration DETECTION — booleans + a code, never a value.
+            githubSignInReady: githubReadiness.githubSignInReady,
+            githubAppReady: githubReadiness.githubAppReady,
+            githubInstallReady: githubReadiness.githubInstallReady,
+            githubCallbackUrl: githubReadiness.githubCallbackUrl,
           }, cors);
           return;
         }
@@ -458,6 +484,7 @@ export function createBridgeServer(
             installGrants,
             installBaseUrl: githubInstallUrl === '' ? null : githubInstallUrl,
             claimStore: signInClaimStore,
+            appIdentity: githubAppIdentity,
           });
           if (githubAuthResult !== null) {
             // The sign-in callback redirects the browser back to the frontend

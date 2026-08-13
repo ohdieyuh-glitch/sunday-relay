@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -11,6 +12,12 @@ import {
   type GithubAuthDeps,
 } from './github-auth-routes';
 import { createBrowserSessionStore } from './browser-session/grants';
+import type { FetchLike } from './github-app-installation';
+
+/** A real RSA key so `mintAppJwt` (run inside the discovery path) actually signs;
+    GitHub itself is stubbed at the fetch seam, so no network is touched. */
+const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+const APP_IDENTITY = { appId: '123456', privateKeyPem: privateKey.export({ type: 'pkcs1', format: 'pem' }).toString() };
 
 /**
  * SIGN IN WITH GITHUB, at the route seam.
@@ -41,6 +48,7 @@ function deps(over: Partial<GithubAuthDeps> = {}): GithubAuthDeps {
     installGrants: createInstallationGrants(),
     installBaseUrl: INSTALL_BASE,
     claimStore: createSignInClaimStore(),
+    appIdentity: APP_IDENTITY,
     exchange: async () => ({ login: 'beta-user', id: 4242, type: 'User' }),
     ...over,
   };
@@ -192,6 +200,12 @@ describe('the app-installation flow proves who controls an installation', () => 
     }, d);
   const installCallback = (d: GithubAuthDeps, qs: string) =>
     handleGithubAuthRoute({ method: 'GET', path: '/auth/github/install/callback', url: `/relay-api/auth/github/install/callback?${qs}` }, d);
+  const discover = (d: GithubAuthDeps, installationId: string, headers: { authorization?: string; origin?: string } = {}) =>
+    handleGithubAuthRoute({
+      method: 'GET', path: '/auth/github/install/repositories',
+      url: `/relay-api/auth/github/install/repositories?installation_id=${installationId}`,
+      authorization: headers.authorization, origin: headers.origin,
+    }, d);
 
   function signedInSession(d: GithubAuthDeps): string {
     const minted = d.sessions.mintIdentitySession({ origin: ORIGIN, now: NOW, participantId: 'ghu-4242' });
@@ -247,5 +261,131 @@ describe('the app-installation flow proves who controls an installation', () => 
     const state = (started?.body as { data: { state: string } }).data.state;
     const cb = await installCallback(d, `installation_id=not-a-number&state=${state}`);
     expect(cb?.status).toBe(400);
+  });
+
+  /* -------------------------------- authorized-repository DISCOVERY (Steps 4-5) --- */
+
+  const INSTALLATION = '55550001';
+  // Short fixtures: after `ghs_` there is no 30-char alphanumeric run, so the
+  // repository-boundary secret tripwire is not tripped. Never a real token.
+  const DISCOVERY_TOKEN = 'ghs_discoveryFixtureToken';
+  const TWO_REPOS = [
+    { name: 'sunday-relay', full_name: 'ohdieyuh-glitch/sunday-relay', private: true, default_branch: 'main', owner: { login: 'ohdieyuh-glitch' } },
+    { name: 'beta-journey', full_name: 'beta-user/beta-journey', private: false, default_branch: 'develop', owner: { login: 'beta-user' } },
+  ];
+  /** A GitHub that mints a discovery token then lists `repos`. Both legs of the
+      real `discoverInstallationRepositories` run; only the network is stubbed. */
+  const discoveryFetch = (repos: unknown[], totalCount?: number): FetchLike =>
+    (async (url: string) => {
+      if (url.includes('/access_tokens')) {
+        return {
+          ok: true, status: 201,
+          json: async () => ({ token: DISCOVERY_TOKEN, expires_at: '2026-08-13T19:00:00Z', permissions: { metadata: 'read' }, repository_selection: 'all' }),
+          text: async () => '',
+        };
+      }
+      if (url.includes('/installation/repositories')) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({ total_count: totalCount ?? repos.length, repositories: repos }),
+          text: async () => '',
+        };
+      }
+      throw new Error(`unexpected discovery url ${url}`);
+    }) as FetchLike;
+  const neverFetch = (spy: { called: boolean }): FetchLike =>
+    (async () => { spy.called = true; return { ok: true, status: 200, json: async () => ({}), text: async () => '' }; }) as FetchLike;
+  const proveInstall = async (d: GithubAuthDeps, token: string): Promise<void> => {
+    const started = await installStart(d, { authorization: `Relay-Session ${token}`, origin: ORIGIN });
+    const state = (started?.body as { data: { state: string } }).data.state;
+    await installCallback(d, `installation_id=${INSTALLATION}&state=${state}`);
+  };
+
+  it('(a) refuses discovery without a signed-in session (401) and makes no GitHub call', async () => {
+    const spy = { called: false };
+    const d = deps({ discoverFetch: neverFetch(spy) });
+    const r = await discover(d, INSTALLATION);
+    expect(r?.status).toBe(401);
+    expect(spy.called).toBe(false); // gated before any mint or listing
+  });
+
+  it('(b) refuses discovery for an installation the session never proved (403), no GitHub call', async () => {
+    const spy = { called: false };
+    const d = deps({ discoverFetch: neverFetch(spy) });
+    const token = signedInSession(d); // a valid session, but no install grant recorded
+    const r = await discover(d, INSTALLATION, { authorization: `Relay-Session ${token}`, origin: ORIGIN });
+    expect(r?.status).toBe(403);
+    expect((r?.body as { kind: string }).kind).toBe('github_installation_not_proven');
+    expect(spy.called).toBe(false);
+  });
+
+  it('(c) with a proven grant, returns exactly the installation repositories as names/posture and NO token anywhere', async () => {
+    const d = deps({ discoverFetch: discoveryFetch(TWO_REPOS) });
+    const token = signedInSession(d);
+    await proveInstall(d, token);
+
+    const r = await discover(d, INSTALLATION, { authorization: `Relay-Session ${token}`, origin: ORIGIN });
+    expect(r?.status).toBe(200);
+    const data = (r?.body as { data: { installationId: string; truncated: boolean; repositories: Array<{ owner: string; name: string; fullName: string; defaultBranch: string | null; private: boolean }> } }).data;
+    expect(data.installationId).toBe(INSTALLATION);
+    expect(data.truncated).toBe(false);
+    expect(data.repositories).toHaveLength(2);
+    // Exactly the two repos, as identity + posture only.
+    expect(data.repositories[0]).toEqual({ owner: 'ohdieyuh-glitch', name: 'sunday-relay', fullName: 'ohdieyuh-glitch/sunday-relay', defaultBranch: 'main', private: true });
+    expect(data.repositories[1]).toEqual({ owner: 'beta-user', name: 'beta-journey', fullName: 'beta-user/beta-journey', defaultBranch: 'develop', private: false });
+    // The real assertion: the minted installation token appears NOWHERE in the
+    // response. Scan the serialized JSON for the exact stub token and any ghs_.
+    const json = JSON.stringify(r);
+    expect(json).not.toContain(DISCOVERY_TOKEN);
+    expect(json).not.toContain('ghs_');
+    expect(json).not.toContain('PRIVATE KEY');
+  });
+
+  it('(c-cap) reports truncated=true when GitHub has more repositories than the first page returned', async () => {
+    const d = deps({ discoverFetch: discoveryFetch(TWO_REPOS, 7) });
+    const token = signedInSession(d);
+    await proveInstall(d, token);
+    const r = await discover(d, INSTALLATION, { authorization: `Relay-Session ${token}`, origin: ORIGIN });
+    expect(r?.status).toBe(200);
+    expect((r?.body as { data: { truncated: boolean } }).data.truncated).toBe(true);
+  });
+
+  it('(d) answers 503 when the App key is unconfigured, even for a proven installation', async () => {
+    const spy = { called: false };
+    const d = deps({ appIdentity: null, discoverFetch: neverFetch(spy) });
+    const token = signedInSession(d);
+    await proveInstall(d, token);
+    const r = await discover(d, INSTALLATION, { authorization: `Relay-Session ${token}`, origin: ORIGIN });
+    expect(r?.status).toBe(503);
+    expect((r?.body as { kind: string }).kind).toBe('github_app_unconfigured');
+    expect(spy.called).toBe(false); // no key, so no mint is even attempted
+  });
+
+  it('a GitHub failure is a truthful 502 (carrying the status) and never a fabricated empty list', async () => {
+    const failFetch: FetchLike = (async (url: string) => {
+      if (url.includes('/access_tokens')) {
+        return { ok: false, status: 403, json: async () => ({ message: 'Bad credentials', token: 'ghs_should_not_appear' }), text: async () => 'Bad credentials' };
+      }
+      return { ok: true, status: 200, json: async () => ({ total_count: 0, repositories: [] }), text: async () => '' };
+    }) as FetchLike;
+    const d = deps({ discoverFetch: failFetch });
+    const token = signedInSession(d);
+    await proveInstall(d, token);
+    const r = await discover(d, INSTALLATION, { authorization: `Relay-Session ${token}`, origin: ORIGIN });
+    expect(r?.status).toBe(502);
+    expect((r?.body as { kind: string }).kind).toBe('github_repositories_unavailable');
+    expect((r?.body as { error: string }).error).toContain('403');
+    // No fabricated data, and no leaked token from the error body.
+    expect((r?.body as { data?: unknown }).data).toBeUndefined();
+    expect(JSON.stringify(r)).not.toContain('ghs_should_not_appear');
+  });
+
+  it('a discovery request with a non-numeric installation_id is refused (400) for a signed-in session', async () => {
+    const spy = { called: false };
+    const d = deps({ discoverFetch: neverFetch(spy) });
+    const token = signedInSession(d);
+    const r = await discover(d, 'not-a-number', { authorization: `Relay-Session ${token}`, origin: ORIGIN });
+    expect(r?.status).toBe(400);
+    expect(spy.called).toBe(false);
   });
 });
