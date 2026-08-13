@@ -1,10 +1,11 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { createRelayAppStore } from './store';
+import { createRelayAppStore, selectAdapter } from './store';
 import { createRelayAppStorage, RELAY_APP_STORAGE_KEY } from './persistence';
 import { createDemoRelayApplicationAdapter, DEMO_MISSION_SCRIPT } from './demo-adapter';
 import { deriveMissionProjection } from './projection';
 import { createDefaultSettingsDraft } from '../project-settings/defaults';
 import { buildProjectBriefDraft } from '../entry-home/project-brief';
+import { configuredBridgeUrl } from './bridge-session';
 import type { RelayAppStore } from './store';
 
 /**
@@ -404,5 +405,68 @@ describe('demo truthfulness and safety', () => {
     store.resetAll();
     expect(store.listProjects()).toEqual([]);
     expect(backing.getItem(RELAY_APP_STORAGE_KEY)).toBeNull();
+  });
+});
+
+/**
+ * AC-4: the store's adapter selector (`selectAdapter`) and the beta entry gate
+ * must AGREE on when a build is live. They now resolve their live/demo choice
+ * from ONE function — `configuredBridgeUrl` — so the previously ambiguous case,
+ * `VITE_RELAY_LIVE=1` with an empty bridge URL, has exactly ONE documented
+ * behavior: NOT live. store.ts selects the demo adapter and the entry gate
+ * renders the demo shell, so a live adapter can never end up behind the demo
+ * shell.
+ */
+describe('the live gate is reconciled across store.ts and bridge-session.ts (AC-4)', () => {
+  it('VITE_RELAY_LIVE=1 with an EMPTY or whitespace bridge URL is NOT live', () => {
+    expect(configuredBridgeUrl({ VITE_RELAY_LIVE: '1', VITE_RELAY_BRIDGE_URL: '' })).toBeNull();
+    expect(configuredBridgeUrl({ VITE_RELAY_LIVE: '1', VITE_RELAY_BRIDGE_URL: '   ' })).toBeNull();
+    expect(configuredBridgeUrl({ VITE_RELAY_LIVE: '1' })).toBeNull();
+  });
+
+  it('live requires BOTH the flag AND a non-empty URL, which it normalizes', () => {
+    expect(configuredBridgeUrl(undefined)).toBeNull();
+    expect(configuredBridgeUrl({ VITE_RELAY_BRIDGE_URL: 'https://bridge.example' })).toBeNull();
+    expect(configuredBridgeUrl({ VITE_RELAY_LIVE: '0', VITE_RELAY_BRIDGE_URL: 'https://bridge.example' })).toBeNull();
+    expect(configuredBridgeUrl({ VITE_RELAY_LIVE: '1', VITE_RELAY_BRIDGE_URL: 'https://bridge.example/' }))
+      .toBe('https://bridge.example');
+  });
+});
+
+/**
+ * AC-4 (store side): the same reconciliation exercised through the store's OWN
+ * consumer of the gate — `selectAdapter` — not merely through the gate function.
+ * The gate returning null must ACTUALLY select the DEMO adapter, and a resolved
+ * URL must select the LIVE adapter. This is the assertion the AC-4 block above
+ * cannot make: `configuredBridgeUrl` was already correct and unchanged by the
+ * WP-5 repair, so testing only it left the store's consumption unproven —
+ * reverting `selectAdapter`'s gate to `if (VITE_RELAY_LIVE === '1')` would wrongly
+ * back the demo shell with a LIVE adapter while every test stayed green. The
+ * adapter identity is read from its `kind` discriminator ('demo' | 'live').
+ */
+describe('selectAdapter resolves live/demo through the reconciled gate (AC-4, store side)', () => {
+  it('the flag with an EMPTY bridge URL selects the DEMO adapter', () => {
+    // THE ASSERTION THAT BITES: under the pre-fix gate `if (VITE_RELAY_LIVE==='1')`
+    // this case wrongly returned a LIVE adapter behind the demo shell.
+    const adapter = selectAdapter({ VITE_RELAY_LIVE: '1', VITE_RELAY_BRIDGE_URL: '' });
+    expect(adapter.kind).toBe('demo');
+  });
+
+  it('the flag with a WHITESPACE bridge URL selects the DEMO adapter', () => {
+    const adapter = selectAdapter({ VITE_RELAY_LIVE: '1', VITE_RELAY_BRIDGE_URL: '   ' });
+    expect(adapter.kind).toBe('demo');
+  });
+
+  it('the flag with a non-empty bridge URL selects the LIVE adapter', () => {
+    const adapter = selectAdapter({ VITE_RELAY_LIVE: '1', VITE_RELAY_BRIDGE_URL: 'https://bridge.example' });
+    expect(adapter.kind).toBe('live');
+  });
+
+  it('a same-origin "/" bridge URL still selects the LIVE adapter', () => {
+    // '/' trims to '' after the trailing-slash strip → non-null → live. Live
+    // adapter construction is pure (no network, no throw) without a participant,
+    // so no VITE_RELAY_PARTICIPANT_ID is needed to build it here.
+    const adapter = selectAdapter({ VITE_RELAY_LIVE: '1', VITE_RELAY_BRIDGE_URL: '/' });
+    expect(adapter.kind).toBe('live');
   });
 });

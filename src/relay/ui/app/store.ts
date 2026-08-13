@@ -18,6 +18,7 @@ import { createRelayAppStorage } from './persistence';
 import type { RelayAppStorage } from './persistence';
 import { createDemoRelayApplicationAdapter } from './demo-adapter';
 import { createLiveRelayApplicationAdapter } from './live-adapter';
+import { configuredBridgeUrl } from './bridge-session';
 import { createOperationalStore } from '../../shared/llmops';
 import type { RelayOperationalRecord, RunObservation } from '../../shared/llmops';
 
@@ -614,15 +615,38 @@ export function createRelayAppStore(
 
 let appStore: RelayAppStore | null = null;
 
-/** Selects the demo or live adapter from a NON-SECRET build flag. Live mode
-    (`VITE_RELAY_LIVE=1`) talks to the Relay bridge over HTTP — by default at
-    the same-origin `/relay-api` (the Vite dev proxy / a prod reverse proxy),
-    or an explicit `VITE_RELAY_BRIDGE_URL`. No provider key is ever read here. */
-function selectAdapter(): RelayApplicationAdapter {
-  const env = (typeof import.meta !== 'undefined' ? import.meta.env : undefined) as
-    | { VITE_RELAY_LIVE?: string; VITE_RELAY_BRIDGE_URL?: string; VITE_RELAY_PARTICIPANT_ID?: string }
-    | undefined;
-  if (env?.VITE_RELAY_LIVE === '1') {
+/** The non-secret, build-time environment the adapter selector reads. A
+ *  superset of the bridge gate's env (`BridgeBuildEnv`): the same
+ *  `VITE_RELAY_LIVE` / `VITE_RELAY_BRIDGE_URL` the live gate reads, plus the
+ *  controlled-beta participant. No secret ever appears here. */
+export interface AdapterBuildEnv {
+  readonly VITE_RELAY_LIVE?: string;
+  readonly VITE_RELAY_BRIDGE_URL?: string;
+  readonly VITE_RELAY_PARTICIPANT_ID?: string;
+}
+
+function adapterBuildEnv(): AdapterBuildEnv | undefined {
+  return (typeof import.meta !== 'undefined' ? import.meta.env : undefined) as AdapterBuildEnv | undefined;
+}
+
+/** Selects the demo or live adapter from NON-SECRET build flags.
+ *
+ *  ONE live gate, shared with the beta entry gate: the live/demo choice is
+ *  `configuredBridgeUrl()` (bridge-session.ts), which is live only when BOTH
+ *  `VITE_RELAY_LIVE=1` AND a non-empty `VITE_RELAY_BRIDGE_URL` are set. The flag
+ *  with an empty URL is NOT live — it selects the demo adapter, matching the
+ *  demo shell the entry gate renders in that case, so the demo shell can never
+ *  be backed by a live adapter. No provider key is ever read here.
+ *
+ *  The environment is injectable purely so this store-side reconciliation can
+ *  be tested — mirroring `configuredBridgeUrl`; in the product it defaults to
+ *  the real build-time `import.meta.env`, and the production call site
+ *  (`getRelayAppStore`) still calls it with no arguments, behaving identically. */
+export function selectAdapter(
+  env: AdapterBuildEnv | undefined = adapterBuildEnv(),
+): RelayApplicationAdapter {
+  const bridgeUrl = configuredBridgeUrl(env);
+  if (bridgeUrl !== null) {
     /**
      * THE HOST SUPPLIES THE PARTICIPANT, or the controlled beta cannot be
      * turned on at all.
@@ -639,8 +663,8 @@ function selectAdapter(): RelayApplicationAdapter {
      * browser that has not been told who it is.
      */
     return createLiveRelayApplicationAdapter({
-      bridgeBaseUrl: env.VITE_RELAY_BRIDGE_URL || undefined,
-      participantId: env.VITE_RELAY_PARTICIPANT_ID || undefined,
+      bridgeBaseUrl: bridgeUrl,
+      participantId: env?.VITE_RELAY_PARTICIPANT_ID || undefined,
     });
   }
   return createDemoRelayApplicationAdapter();

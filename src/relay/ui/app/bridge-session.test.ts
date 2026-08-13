@@ -125,9 +125,14 @@ describe('offline remains the default', () => {
   const REPO = resolve(__dirname, '..', '..', '..', '..');
 
   it('live mode is still opt-in via a non-secret flag', () => {
+    // THE live gate is configuredBridgeUrl: a flag that is not exactly '1'
+    // returns null, so live never turns on without the explicit opt-in.
+    const gate = readFileSync(join(REPO, 'src/relay/ui/app/bridge-session.ts'), 'utf8');
+    expect(gate).toContain("env?.VITE_RELAY_LIVE !== '1'");
+    // store.ts routes the adapter choice through that one gate and falls back to
+    // the demo adapter, so an unset flag stays offline.
     const store = readFileSync(join(REPO, 'src/relay/ui/app/store.ts'), 'utf8');
-    expect(store).toContain("VITE_RELAY_LIVE === '1'");
-    // The demo adapter is the fallback, so an unset flag stays offline.
+    expect(store).toContain('configuredBridgeUrl(env)');
     expect(store).toContain('createDemoRelayApplicationAdapter()');
   });
 

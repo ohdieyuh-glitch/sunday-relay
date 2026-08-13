@@ -97,9 +97,13 @@ describe('the offline demo build needs nothing configured', () => {
   });
 
   it('live mode stays off unless VITE_RELAY_LIVE is explicitly "1"', () => {
+    // Unset, empty and "0" all remain the offline demo adapter — enforced by the
+    // one gate configuredBridgeUrl (a flag ≠ '1' returns null), which store.ts
+    // routes the adapter choice through.
+    const gate = read('src/relay/ui/app/bridge-session.ts');
+    expect(gate).toContain("env?.VITE_RELAY_LIVE !== '1'");
     const store = read('src/relay/ui/app/store.ts');
-    // Unset, empty and "0" all remain the offline demo adapter.
-    expect(store).toContain("env?.VITE_RELAY_LIVE === '1'");
+    expect(store).toContain('configuredBridgeUrl(env)');
   });
 
   it('the build config adds no /relay-api infrastructure for production', () => {

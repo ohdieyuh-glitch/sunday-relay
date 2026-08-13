@@ -182,11 +182,30 @@ export function stateFromResponse(input: {
 
 /* ------------------------------------------------------ redeeming a grant */
 
-/** The bridge this browser was built to talk to. Non-secret, build-time. */
-export function configuredBridgeUrl(): string | null {
-  const env = (typeof import.meta !== 'undefined' ? import.meta.env : undefined) as
-    | { VITE_RELAY_BRIDGE_URL?: string; VITE_RELAY_LIVE?: string }
-    | undefined;
+/** The non-secret, build-time environment the live gate reads. */
+export interface BridgeBuildEnv {
+  readonly VITE_RELAY_BRIDGE_URL?: string;
+  readonly VITE_RELAY_LIVE?: string;
+}
+
+function bridgeBuildEnv(): BridgeBuildEnv | undefined {
+  return (typeof import.meta !== 'undefined' ? import.meta.env : undefined) as BridgeBuildEnv | undefined;
+}
+
+/**
+ * The bridge this browser was built to talk to. Non-secret, build-time.
+ *
+ * This is THE live gate. Live requires BOTH `VITE_RELAY_LIVE=1` AND a non-empty
+ * `VITE_RELAY_BRIDGE_URL`; the flag alone, or the flag with an empty/whitespace
+ * URL, is NOT live and returns null. The store's adapter selector
+ * (`selectAdapter` in store.ts) resolves its live/demo choice from this SAME
+ * function, so the two gates can never disagree — a live adapter can never end
+ * up behind the demo shell this returning null produces.
+ *
+ * The environment is injectable purely so the reconciliation can be tested; in
+ * the product it defaults to the real build-time `import.meta.env`.
+ */
+export function configuredBridgeUrl(env: BridgeBuildEnv | undefined = bridgeBuildEnv()): string | null {
   if (env?.VITE_RELAY_LIVE !== '1') return null;
   const url = env?.VITE_RELAY_BRIDGE_URL?.trim();
   return url !== undefined && url !== '' ? url.replace(/\/$/, '') : null;

@@ -6,6 +6,8 @@ import { RelayMissionHistory } from './RelayMissionHistory';
 import { rememberActiveMission, recallActiveMission, forgetActiveMission } from './active-mission';
 import type { listPsps, loadPsp, savePsp } from './psp-client';
 import type { LiveMissionUpdate } from './contracts';
+import { RELAY_EXECUTION_MODES, RELAY_REVIEW_REQUIREMENTS } from '../../mission/mission-config';
+import { REPOSITORY_PERMISSIONS, type RepositoryPermission } from '../../mission/repository-target';
 
 /**
  * RUN A MISSION — the surface a signed-in beta user starts, watches, and ships a
@@ -33,6 +35,49 @@ function configPermissions(config: unknown): readonly string[] {
   const perms = (config as { permissions?: unknown } | null)?.permissions;
   return Array.isArray(perms) && perms.every((p) => typeof p === 'string') ? perms as string[] : [];
 }
+
+/**
+ * The spend/compute ceilings the active configuration carries, as a plain record.
+ * An absent or malformed `limits` reads as an empty record, so every ceiling then
+ * discloses "not set" rather than a fabricated `0` or an implied "unlimited": the
+ * domain's `null` semantics, preserved verbatim into the editor.
+ */
+function configLimits(config: unknown): Record<string, number | null> {
+  const limits = (config as { limits?: unknown } | null)?.limits;
+  return (limits !== null && typeof limits === 'object') ? { ...(limits as Record<string, number | null>) } : {};
+}
+
+/**
+ * One enum-valued policy field of the active config, falling back to the domain's
+ * own conservative default when the config does not name it — the SAME fallback
+ * `validateMissionConfig` applies, so the select shows what will actually be
+ * requested rather than an empty control.
+ */
+function configEnum<T extends string>(config: unknown, key: string, allowed: readonly T[], fallback: T): T {
+  const value = (config as Record<string, unknown> | null)?.[key];
+  return (typeof value === 'string' && (allowed as readonly string[]).includes(value)) ? value as T : fallback;
+}
+
+/**
+ * Produce the next active config by patching the current one. Every unrelated
+ * field is preserved (a loaded PSP's `pspId`, `roles`, `completionRule`…), so the
+ * field-level editor and the PSP picker COMPOSE — pick a profile, then tweak —
+ * rather than one clobbering the other.
+ */
+function patchConfig(config: unknown, patch: Record<string, unknown>): Record<string, unknown> {
+  const base = (config !== null && typeof config === 'object') ? config as Record<string, unknown> : {};
+  return { ...base, ...patch };
+}
+
+/** The spend/compute ceilings the editor exposes, in the domain's own order. Each
+ *  is a number the config REQUESTS, or `null` = "not set" (disclosed as such). */
+const EDITOR_LIMITS = [
+  { field: 'spendUsd', label: 'Spend ceiling (USD)', step: '0.01' },
+  { field: 'agentCalls', label: 'Agent-call ceiling', step: '1' },
+  { field: 'runtimeMinutes', label: 'Runtime ceiling (minutes)', step: '1' },
+  { field: 'reviewCycles', label: 'Review cycles', step: '1' },
+  { field: 'repairCycles', label: 'Repair cycles', step: '1' },
+] as const;
 
 export function RelayMissionRunner({
   repositoryKey,
@@ -193,6 +238,45 @@ export function RelayMissionRunner({
   if (missionId === null) {
     const highConsequencePerms = configPermissions(activeConfig).filter((p) => p === 'merge_pr' || p === 'deploy_production');
     const limits = (activeConfig as { limits?: Record<string, number | null> } | null)?.limits ?? {};
+
+    // The editor's live view of what the next Mission will REQUEST, derived
+    // straight from activeConfig so a loaded PSP pre-fills every control and a
+    // later tweak composes with it. Each handler proposes a new config through
+    // the SAME setActiveConfig the PSP picker uses; the bridge stays the
+    // authority and narrows or refuses whatever the editor asks for.
+    const requestedPermissions = new Set(configPermissions(activeConfig));
+    const editorLimits = configLimits(activeConfig);
+    // Editing here diverges the config from any loaded PSP, so the "Running
+    // under <name>" label must stop claiming that saved profile's name — the
+    // config is now customised. Announce the fact, not the intention.
+    const markEdited = () =>
+      setActiveLabel((prev) => (prev.startsWith('Custom') ? prev : `Custom (from ${prev})`));
+    const togglePermission = (perm: RepositoryPermission, on: boolean) => {
+      const next = new Set<string>(requestedPermissions);
+      if (on) next.add(perm); else next.delete(perm);
+      // Rebuild in the ladder's canonical order — the request stays inspectable.
+      const ordered = REPOSITORY_PERMISSIONS.filter((p) => next.has(p));
+      setActiveConfig(patchConfig(activeConfig, { permissions: ordered }));
+      markEdited();
+    };
+    const setLimit = (field: string, raw: string) => {
+      const trimmed = raw.trim();
+      let value: number | null;
+      if (trimmed === '') {
+        value = null; // cleared = "not set" — never coerced to 0 or unlimited.
+      } else {
+        const parsed = Number(trimmed);
+        if (!Number.isFinite(parsed) || parsed < 0) return; // no negatives in the UI; the server refuses them regardless.
+        value = parsed;
+      }
+      setActiveConfig(patchConfig(activeConfig, { limits: { ...editorLimits, [field]: value } }));
+      markEdited();
+    };
+    const setPolicy = (key: 'mode' | 'review', value: string) => {
+      setActiveConfig(patchConfig(activeConfig, { [key]: value }));
+      markEdited();
+    };
+
     const startLabel = busy
       ? 'Starting…'
       : contractShown ? 'Confirm authorization & start'
@@ -211,6 +295,87 @@ export function RelayMissionRunner({
           {...(pspLoadImpl !== undefined ? { loadImpl: pspLoadImpl } : {})}
           {...(pspSaveImpl !== undefined ? { saveImpl: pspSaveImpl } : {})}
         />
+
+        {/* PRE-START CONFIGURATION EDITOR — set exactly what this Mission
+            REQUESTS before it runs (criteria 3 & 5). Every control is seeded
+            from activeConfig and writes back through setActiveConfig, so it
+            composes with the PSP picker above and stays consistent with the
+            "Permissions requested" summary below. These are the request side:
+            what the Mission runs UNDER (permissions held, authorized ceiling)
+            comes from the bridge's authoritative view once it starts, never
+            from here. */}
+        <fieldset className="relay-mission-runner__editor">
+          <legend>Configure this Mission before it starts</legend>
+
+          <div className="relay-mission-runner__editor-perms" role="group" aria-label="Permissions to request">
+            <p className="relay-mission-runner__editor-heading">Permissions to request</p>
+            {REPOSITORY_PERMISSIONS.map((perm) => (
+              <label key={perm} className="relay-mission-runner__editor-perm">
+                <input
+                  type="checkbox"
+                  aria-label={perm}
+                  checked={requestedPermissions.has(perm)}
+                  onChange={(e) => togglePermission(perm, e.target.checked)}
+                />
+                {' '}{perm}
+              </label>
+            ))}
+          </div>
+
+          <div className="relay-mission-runner__editor-limits" role="group" aria-label="Spend and compute ceilings">
+            <p className="relay-mission-runner__editor-heading">Spend &amp; compute ceilings</p>
+            {EDITOR_LIMITS.map(({ field, label, step }) => {
+              const raw = editorLimits[field];
+              const value = typeof raw === 'number' ? raw : null;
+              return (
+                <label key={field} className="relay-mission-runner__editor-limit">
+                  <span className="relay-mission-runner__editor-limit-label">{label}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={step}
+                    aria-label={label}
+                    value={value === null ? '' : String(value)}
+                    onChange={(e) => setLimit(field, e.target.value)}
+                  />
+                  <span className="relay-mission-runner__editor-unset">{value === null ? 'not set' : ''}</span>
+                </label>
+              );
+            })}
+          </div>
+
+          <div className="relay-mission-runner__editor-policy" role="group" aria-label="Execution and review policy">
+            <label>
+              Execution mode
+              <select
+                aria-label="Execution mode"
+                value={configEnum(activeConfig, 'mode', RELAY_EXECUTION_MODES, 'guided')}
+                onChange={(e) => setPolicy('mode', e.target.value)}
+              >
+                {RELAY_EXECUTION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </label>
+            <label>
+              Review requirement
+              <select
+                aria-label="Review requirement"
+                value={configEnum(activeConfig, 'review', RELAY_REVIEW_REQUIREMENTS, 'independent')}
+                onChange={(e) => setPolicy('review', e.target.value)}
+              >
+                {RELAY_REVIEW_REQUIREMENTS.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+          </div>
+
+          {/* Role OCCUPANTS (who fills architect/coding/reviewer) are deliberately
+              NOT edited here: no browser occupant catalog exists, roles are
+              staffed by the deployment, and criterion 10 shows the ACTUAL per-role
+              actor/model live once the Mission runs. */}
+          <p className="relay-mission-runner__editor-note">
+            Role occupants (architect, coding, reviewer) are staffed by the deployment and shown live per role once the Mission runs.
+          </p>
+        </fieldset>
+
         <p className="relay-mission-runner__config">Running under <strong>{activeLabel}</strong>.</p>
         <p className="relay-mission-runner__permissions">
           Permissions requested:{' '}
@@ -218,7 +383,7 @@ export function RelayMissionRunner({
             const p = configPermissions(activeConfig);
             return p.length > 0 ? p.join(', ') : 'read + write_worktree (safe floor)';
           })()}</strong>
-          {' '}— the bridge narrows these against what you granted.
+          {' '}— the bridge refuses anything you did not grant.
         </p>
         <label>
           Ask Relay an objective

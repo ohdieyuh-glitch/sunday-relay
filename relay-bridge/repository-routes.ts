@@ -1,6 +1,6 @@
 import { bearerMatches, BRIDGE_TOKEN_ENV, type ReviewerRouteResult } from './reviewer-routes';
 import { createRepositoryRegistration } from '../src/relay/mission/repository-target';
-import type { RepositoryRegistrationDraft } from '../src/relay/mission/repository-target';
+import type { RepositoryRegistrationDraft, RepositoryRegistration } from '../src/relay/mission/repository-target';
 import type { RepositoryRegistrationStore } from '../src/relay/persistence';
 
 /**
@@ -30,6 +30,27 @@ import type { RepositoryRegistrationStore } from '../src/relay/persistence';
 const ok = (data: unknown): ReviewerRouteResult => ({ status: 200, body: { data } });
 const err = (status: number, kind: string, message: string): ReviewerRouteResult =>
   ({ status, body: { error: { kind, message } } });
+
+/**
+ * NAMES AND POSTURE ONLY, never a credential value and never a local path. A
+ * registration record still carries a `credential.envVarName` and a
+ * `location.path`; the summary carries the key, identity, whether the repository
+ * is revoked, and the credential env var NAME — never its value, never the path.
+ * The one summary shape is shared by the operator listing (every registration)
+ * and the participant listing (only their own), so both surfaces expose exactly
+ * the same posture and neither can drift into leaking more than the other.
+ */
+const summarizeRegistration = (r: RepositoryRegistration) => ({
+  key: r.key,
+  provider: r.identity.provider,
+  owner: r.identity.owner,
+  name: r.identity.name,
+  defaultBranch: r.identity.defaultBranch,
+  grants: r.grants.map((g) => g.permission),
+  credentialEnvVarName: r.credential.envVarName,
+  revoked: r.revokedAt !== null,
+  registeredAt: r.registeredAt,
+});
 
 export function isRepositoryRoute(path: string): boolean {
   return path === '/repository/register' || path === '/repository/list';
@@ -148,36 +169,36 @@ export function handleRepositoryRoute(
   }
 
   if (request.method === 'GET' && request.path === '/repository/list') {
-    if (caller.kind !== 'operator') {
-      return err(403, 'operator_required', 'Listing every registration is operator-only.');
-    }
+    /**
+     * ONE ENDPOINT, CALLER-SCOPED. The operator lists EVERY registration; a
+     * verified participant lists ONLY their own; anonymous was already refused
+     * above. The scope is DERIVED FROM THE RESOLVED CALLER (the verified session
+     * or the operator token) — never from the request body or a query param, so
+     * a caller cannot widen their own view by asserting an identity.
+     */
     const listed = store.list();
     if (listed === null) {
       // The store could not read its directory. Unknown, and unknown is not an
-      // empty list — the same rule the store itself draws.
+      // empty list — the same rule the store itself draws. This holds for the
+      // participant scope too: a participant with an unreadable store is 503, not
+      // an empty (and falsely reassuring) list of their own repositories.
       return err(503, 'repository_store_unreadable',
         'Relay cannot read its registration records, so it will not answer against them.');
     }
+
+    if (caller.kind === 'operator') {
+      // THE OPERATOR SEES EVERY REGISTRATION — intentional and unchanged.
+      return ok({ registrations: listed.map(summarizeRegistration) });
+    }
+
     /**
-     * NAMES AND POSTURE ONLY, never a credential value and never a local path
-     * beyond what the operator already put there. `list` is an operator route,
-     * but a registration record still carries a `credential.envVarName` and a
-     * `location.path`; the summary carries the key, identity, whether the
-     * repository is revoked, and the credential env var NAME.
+     * A PARTICIPANT SEES ONLY THEIR OWN. Strict equality to the caller's own
+     * participant id: a participant can never see another participant's
+     * registration, nor an operator-owned (`ownerParticipant === null`) one. The
+     * id is the VERIFIED session's, so it cannot be forged from the request.
      */
-    return ok({
-      registrations: listed.map((r) => ({
-        key: r.key,
-        provider: r.identity.provider,
-        owner: r.identity.owner,
-        name: r.identity.name,
-        defaultBranch: r.identity.defaultBranch,
-        grants: r.grants.map((g) => g.permission),
-        credentialEnvVarName: r.credential.envVarName,
-        revoked: r.revokedAt !== null,
-        registeredAt: r.registeredAt,
-      })),
-    });
+    const mine = listed.filter((r) => r.ownerParticipant === caller.participantId);
+    return ok({ registrations: mine.map(summarizeRegistration) });
   }
 
   return err(404, 'unknown_repository_route', 'No such repository route.');
