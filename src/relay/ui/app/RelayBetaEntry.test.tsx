@@ -11,7 +11,8 @@ import type { startBetaMission, pollBetaMission, shipBetaMission, listBetaMissio
 import type { listPsps } from './psp-client';
 import type { listConnectedRepositories, discoverInstallationRepositories, ConnectedRepository } from './repository-client';
 import { clearActiveMissions } from './active-mission';
-import { clearConnectedRepository } from './connected-repository';
+import { clearConnectedRepository, saveConnectedRepository } from './connected-repository';
+import { clearConfiguredPsp, loadConfiguredPsp, saveConfiguredPsp } from './configured-psp';
 import type { LiveMissionUpdate } from './contracts';
 
 // Keep the embedded picker + history hermetic — no network on mount in these tests.
@@ -57,7 +58,7 @@ const noComplete = (async () => ({ signedIn: false, message: null })) as typeof 
 const withInstall = (id: string) => (() => id) as typeof readInstallationFromReturn;
 const registerOk = (async () => ({ ok: true as const, key: 'github:github.com/beta-alice/their-app', message: null })) as typeof registerRepository;
 
-afterEach(() => { cleanup(); clearBridgeSession(); clearActiveMissions(); clearConnectedRepository(); });
+afterEach(() => { cleanup(); clearBridgeSession(); clearActiveMissions(); clearConnectedRepository(); clearConfiguredPsp(); });
 
 function signedIn() {
   saveBridgeSession({ token: 't', origin: '', expiresAt: '', scope: 'browser_control', participantId: 'ghu-4242' });
@@ -92,15 +93,68 @@ describe('RelayBetaEntry', () => {
     expect(screen.queryByTestId('app')).toBeNull();
   });
 
-  it('AC-2: choosing to start building reveals the contextual GitHub sign-in', async () => {
+  it('AC-2: choosing to start building reveals CONFIGURE first, then sign-in — GitHub is never the entrance', async () => {
     render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
     const startBuilding = await screen.findByRole('button', { name: /CONNECT EXISTING PROJECT/i });
     // Still no GitHub wall while exploring Wonderland.
     expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
-    // Choosing to start building is the deliberate exit into sign-in.
+    // Choosing to start building lands on the CONFIGURE step — the Compound PSP
+    // Agent is configured BEFORE any GitHub. Sign-in is not shown yet.
     fireEvent.click(startBuilding);
+    expect(await screen.findByText(/Configure your Compound PSP Agent/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
+    // Continuing from Configure (its own Start Building) reveals the sign-in.
+    fireEvent.click(screen.getByRole('button', { name: /Start Building/i }));
     expect(await screen.findByRole('button', { name: /Sign in with GitHub/i })).toBeTruthy();
     expect(screen.queryByTestId('app')).toBeNull();
+  });
+
+  it('AC-4/AC-5: a config set BEFORE sign-in survives the OAuth reload and reaches the runner unchanged', async () => {
+    // A fresh participant configures the Agent, diverging from the default.
+    render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
+    fireEvent.click(await screen.findByRole('button', { name: /CONNECT EXISTING PROJECT/i }));
+    fireEvent.change(await screen.findByLabelText('Execution mode'), { target: { value: 'autonomous' } });
+    fireEvent.change(screen.getByLabelText('Spend ceiling (USD)'), { target: { value: '3' } });
+    // Start Building persists the configured Agent before the (redirecting) sign-in.
+    fireEvent.click(screen.getByRole('button', { name: /Start Building/i }));
+    expect((loadConfiguredPsp() as { mode?: string }).mode).toBe('autonomous');
+
+    // SIMULATE THE FULL OAUTH ROUND-TRIP: the redirect destroys React state, and
+    // the return is a fresh document load. Only sessionStorage survives — the
+    // session (now signed in), the connected repository, and the configured PSP.
+    // Nothing in the sign-in/install/discovery/select path cleared it (AC-5).
+    cleanup();
+    signedIn();
+    saveConnectedRepository('github:github.com/beta-alice/their-app');
+
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-cfg', view: codingView, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-cfg', view: codingView, message: null }));
+    render(
+      <RelayBetaEntry
+        bridgeUrl={BRIDGE}
+        completeImpl={noComplete}
+        missionStartImpl={start}
+        missionPollImpl={poll}
+        missionPspListImpl={emptyPspList}
+        missionHistoryImpl={emptyHistory}
+      >
+        {APP}
+      </RelayBetaEntry>,
+    );
+
+    // TRUTHFUL LABEL (F1): the runner names the rehydrated custom Agent honestly —
+    // never "Default beta configuration" over a config that is autonomous + $3.
+    expect((await screen.findByText(/Running under/i)).textContent).toContain('Your configured Agent');
+    expect(screen.getByText(/Running under/i).textContent).not.toContain('Default beta configuration');
+
+    // Straight to the runner for the connected repo, and its Start carries the
+    // CONFIGURED Agent — autonomous + the $3 ceiling — never DEFAULT_BETA_CONFIG.
+    fireEvent.change(await screen.findByLabelText(/Objective/i), { target: { value: 'Build it' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    const config = start.mock.calls[0][0].config as { mode?: string; limits?: { spendUsd?: number | null } };
+    expect(config.mode).toBe('autonomous');
+    expect(config.limits?.spendUsd).toBe(3);
   });
 
   it('after sign-in, asks the user to connect a repository — the post-install picker, still not the app', async () => {
@@ -125,6 +179,10 @@ describe('RelayBetaEntry', () => {
 
   it('clicks all the way through: signed in → SELECT a discovered repo → the Mission surface for that repo', async () => {
     signedIn();
+    // This participant configured their Agent before Start Building; without it the
+    // runner would (correctly) fail closed. The persisted Agent is what lets them
+    // reach Start Mission.
+    saveConfiguredPsp({ mode: 'guided' });
     render(
       <RelayBetaEntry
         bridgeUrl={BRIDGE}
@@ -150,6 +208,7 @@ describe('RelayBetaEntry', () => {
 
   it('AC-1: a full reload mid-Mission returns the signed-in user to the live Mission view, not the connect screen', async () => {
     signedIn();
+    saveConfiguredPsp({ mode: 'guided' });
     // First mount: sign in is already done; connect a repository and reach the
     // Mission surface.
     render(
@@ -194,6 +253,8 @@ describe('RelayBetaEntry', () => {
 
   it('THE WHOLE JOURNEY through the UI: connect → start → watch verified_complete → ship', async () => {
     signedIn();
+    // The participant configured a guided Agent before connecting the repository.
+    saveConfiguredPsp({ mode: 'guided' });
     const start = vi.fn<typeof startBetaMission>(async (input) => {
       // The mission targets the repo the user connected, under the beta config.
       expect(input.repositoryKey).toBe('github:github.com/beta-alice/their-app');
@@ -238,6 +299,7 @@ describe('RelayBetaEntry', () => {
 
   it('WP-3: a returning participant SELECTS an already-connected repo — no re-install/register', async () => {
     signedIn();
+    saveConfiguredPsp({ mode: 'guided' });
     render(
       <RelayBetaEntry
         bridgeUrl={BRIDGE}
@@ -353,5 +415,91 @@ describe('RelayBetaEntry', () => {
     expect(await screen.findByRole('button', { name: /Connect this repository/i })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /beta-alice\/old-app/i })).toBeNull();
     expect(screen.queryByRole('heading', { name: /Choose a repository/i })).toBeNull();
+  });
+
+  it('WP-2 RETURNING USER: signed in WITH a valid Agent + connected repo lands on the runner, NOT Configure', async () => {
+    signedIn();
+    // A returning participant: their Agent already exists and their repo is
+    // connected. They must NOT be forced back through Configure.
+    saveConfiguredPsp({ mode: 'guided' });
+    saveConnectedRepository('github:github.com/beta-alice/their-app');
+    render(
+      <RelayBetaEntry
+        bridgeUrl={BRIDGE}
+        completeImpl={noComplete}
+        missionPspListImpl={emptyPspList}
+        missionHistoryImpl={emptyHistory}
+      >
+        {APP}
+      </RelayBetaEntry>,
+    );
+    // Straight to the runner for their repo — Start Mission is available.
+    await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
+    expect(screen.getByText(/Start a Mission on/i).textContent).toContain('github:github.com/beta-alice/their-app');
+    // They were NOT dropped into the Configure surface.
+    expect(screen.queryByText(/Configure your Compound PSP Agent/i)).toBeNull();
+  });
+
+  it('WP-2 FAIL-CLOSED: signed in with a connected repo but NO Agent cannot start a Mission', async () => {
+    signedIn();
+    saveConnectedRepository('github:github.com/beta-alice/their-app');
+    // Deliberately NO saveConfiguredPsp — session restored, but no valid Agent.
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-fc', view: codingView, message: null }));
+    render(
+      <RelayBetaEntry
+        bridgeUrl={BRIDGE}
+        completeImpl={noComplete}
+        missionStartImpl={start}
+        missionPspListImpl={emptyPspList}
+        missionHistoryImpl={emptyHistory}
+      >
+        {APP}
+      </RelayBetaEntry>,
+    );
+    // The runner is reached (repo is connected) but FAILS CLOSED: the honest
+    // message, no Start Mission, and no silent default Agent.
+    expect((await screen.findByRole('alert')).textContent).toMatch(/No Compound PSP Agent is configured/i);
+    expect(screen.queryByRole('button', { name: /Start Mission/i })).toBeNull();
+    expect(screen.queryByLabelText(/Objective/i)).toBeNull();
+    // Both escape hatches are offered.
+    expect(screen.getByRole('button', { name: /Configure Agent/i })).toBeTruthy();
+    expect(screen.getByLabelText(/Configuration \(PSP\)/i)).toBeTruthy();
+    // Nothing was ever dispatched.
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('WP-2 RECONFIGURE: from the runner, Reconfigure opens Configure, Save Agent persists + returns with the UPDATED Agent — repo kept, no sign-in', async () => {
+    signedIn();
+    saveConfiguredPsp({ mode: 'guided' });
+    saveConnectedRepository('github:github.com/beta-alice/their-app');
+    render(
+      <RelayBetaEntry
+        bridgeUrl={BRIDGE}
+        completeImpl={noComplete}
+        missionPspListImpl={emptyPspList}
+        missionHistoryImpl={emptyHistory}
+      >
+        {APP}
+      </RelayBetaEntry>,
+    );
+    // On the runner with the current (guided) Agent.
+    await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
+    expect(screen.getByLabelText('Configured Compound PSP Agent').textContent).toContain('guided');
+
+    // Reconfigure → the dedicated Configure surface, NOT sign-in.
+    fireEvent.click(screen.getByRole('button', { name: /Reconfigure Agent/i }));
+    expect(await screen.findByText(/Configure your Compound PSP Agent/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
+
+    // Change a field and Save Agent — it persists first, then returns.
+    fireEvent.change(screen.getByLabelText('Execution mode'), { target: { value: 'autonomous' } });
+    fireEvent.click(screen.getByRole('button', { name: /Save Agent/i }));
+
+    // Back on the runner for the SAME repo, showing the UPDATED Agent.
+    await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
+    expect(screen.getByText(/Start a Mission on/i).textContent).toContain('github:github.com/beta-alice/their-app');
+    expect(screen.getByLabelText('Configured Compound PSP Agent').textContent).toContain('autonomous');
+    // And the durable pointer carries the change.
+    expect((loadConfiguredPsp() as { mode?: string }).mode).toBe('autonomous');
   });
 });

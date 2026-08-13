@@ -7,18 +7,13 @@ import {
 import { RelayGitHubSignIn } from './RelayGitHubSignIn';
 import { RelayConnectRepository } from './RelayConnectRepository';
 import { RelayWonderlandEntrance } from './RelayWonderlandEntrance';
+import { RelayConfigureAgent } from './RelayConfigureAgent';
 import { RelayMissionRunner } from './RelayMissionRunner';
 import { loadConnectedRepository, saveConnectedRepository } from './connected-repository';
+import { loadConfiguredPsp } from './configured-psp';
 import { listConnectedRepositories, discoverInstallationRepositories, type ConnectedRepository } from './repository-client';
 import type { startBetaMission, pollBetaMission, shipBetaMission, listBetaMissions } from './beta-mission';
 import type { listPsps, loadPsp, savePsp } from './psp-client';
-
-/** A conservative default config a beta Mission runs under until PSP selection is
- *  wired into this surface: guided, independent review, bounded spend/compute. */
-const DEFAULT_BETA_CONFIG = {
-  mode: 'guided', review: 'independent', completionRule: 'strict',
-  limits: { agentCalls: 8, runtimeMinutes: 30, spendUsd: 5, reviewCycles: 1, repairCycles: 1 },
-} as const;
 
 /**
  * THE BETA ENTRY GATE — the front door of the private beta.
@@ -90,11 +85,34 @@ export function RelayBetaEntry({
   // The user asked to connect a DIFFERENT repository than the ones listed — the
   // existing connect flow, reached on demand from the picker.
   const [connectingNew, setConnectingNew] = useState(false);
-  // THE ENTRANCE IS WONDERLAND, NOT GITHUB. A fresh live participant begins in
-  // Wonderland with the Wandering Relay Dog; GitHub sign-in is deferred until
-  // they deliberately choose to start building. `wantsToBuild` records that
-  // choice — only then does the contextual sign-in appear.
-  const [wantsToBuild, setWantsToBuild] = useState(false);
+  // THE CANONICAL FLOW: Wonderland → CONFIGURE the Compound PSP Agent → sign-in.
+  // A fresh live participant begins in Wonderland with the Wandering Relay Dog;
+  // choosing to start building advances to the pre-GitHub Configure step (which
+  // persists the Agent to sessionStorage so it survives the OAuth redirect), and
+  // only THEN does the contextual GitHub sign-in appear. GitHub is never the
+  // entrance, and the Agent is always configured before any repository connects.
+  const [phase, setPhase] = useState<'wonderland' | 'configure' | 'signin'>('wonderland');
+  // The active Compound PSP Agent, rehydrated on mount and RE-READABLE thereafter.
+  // The Configure step wrote it to sessionStorage before the redirect, and a fresh
+  // mount reads it back here — exactly as connectedKey is rehydrated from
+  // loadConnectedRepository(). It MAY be null: a signed-in participant who has not
+  // configured one has NO Agent, and we FAIL CLOSED rather than silently defaulting
+  // (founder rule A). The runner refuses to start a Mission without a valid Agent.
+  // It is a REQUEST the runner forwards; the bridge stays the authority for what
+  // actually runs. Note on the seam (founder rule E): `configured-psp` is
+  // sessionStorage — browser-FLOW continuity across the OAuth/install redirect, NOT
+  // the durable source of truth for PSP/Project Brain identity, which lands later.
+  const [configuredAgent, setConfiguredAgent] = useState<unknown>(() => loadConfiguredPsp());
+  const missionConfig = configuredAgent;
+  // The label matters only when an Agent exists; the fail-closed state shows no
+  // "running under" line, so a null Agent needs no label. A rehydrated custom
+  // Agent must never render as "Default beta configuration".
+  const missionConfigLabel = configuredAgent !== null ? 'Your configured Agent' : undefined;
+  // RECONFIGURE (founder rules B/C): a signed-in participant may re-open the
+  // dedicated Configure surface from the runner WITHOUT re-signing-in or losing the
+  // connected repo. This is distinct from `phase` (which only governs the
+  // pre-sign-in journey): it applies AFTER sign-in, in the runner branch.
+  const [reconfiguring, setReconfiguring] = useState(false);
 
   useEffect(() => {
     if (resolvedBridge === null) return undefined;
@@ -139,10 +157,18 @@ export function RelayBetaEntry({
   if (participant === null) {
     // The Wonderland entrance, NOT a GitHub wall: the fresh participant explores
     // here with the Wandering Relay Dog until they choose to start building.
-    if (!wantsToBuild) {
-      return <RelayWonderlandEntrance onStartBuilding={() => setWantsToBuild(true)} />;
+    if (phase === 'wonderland') {
+      // "Start building" from Wonderland advances to CONFIGURE, not sign-in: the
+      // Compound PSP Agent is set up BEFORE any GitHub, per the canonical flow.
+      return <RelayWonderlandEntrance onStartBuilding={() => setPhase('configure')} />;
     }
-    // They chose to start building — now the contextual GitHub sign-in.
+    // CONFIGURE the Compound PSP Agent before Start Building. Its own Start
+    // Building control persists the Agent to sessionStorage (so it survives the
+    // OAuth redirect) and THEN advances to the contextual GitHub sign-in.
+    if (phase === 'configure') {
+      return <RelayConfigureAgent onStartBuilding={() => setPhase('signin')} />;
+    }
+    // They finished configuring and chose to build — now the contextual sign-in.
     return (
       <div className="relay-beta-entry" data-state="sign-in">
         <h1>Sunday Relay — private beta</h1>
@@ -231,16 +257,40 @@ export function RelayBetaEntry({
     );
   }
 
+  // RECONFIGURE (founder rules B/C): the runner asked to (re)configure the Agent.
+  // Render the SAME dedicated Configure surface — never inline authoring in the
+  // runner, never a trip back through sign-in — and on completion re-read the
+  // persisted Agent and return to the runner. The session and the connected repo
+  // are untouched (participant/connectedKey are not cleared), so the participant
+  // lands back on their repository with the UPDATED Agent rehydrated. This same
+  // surface also resolves the FAIL-CLOSED state: a signed-in participant with no
+  // Agent configures one here before any Mission becomes startable.
+  if (reconfiguring) {
+    return (
+      <div className="relay-beta-entry" data-state="reconfigure">
+        <p>Signed in as <span className="relay-beta-entry__who">{participant}</span>.</p>
+        <RelayConfigureAgent
+          primaryLabel="Save Agent"
+          onStartBuilding={() => { setConfiguredAgent(loadConfiguredPsp()); setReconfiguring(false); }}
+        />
+      </div>
+    );
+  }
+
   // Signed in with a connected repository — the beta app: start, watch, ship a
-  // Mission on it. (`children` is the demo/preview shell, reached only when the
-  // gate is transparent because no live bridge is configured.)
+  // Mission on it. `config` MAY be null (fail-closed): the runner refuses to start
+  // a Mission and offers Configure / Load Saved PSP instead. (`children` is the
+  // demo/preview shell, reached only when the gate is transparent because no live
+  // bridge is configured.)
   return (
     <div className="relay-beta-entry" data-state="ready">
       <p>Signed in as <span className="relay-beta-entry__who">{participant}</span>.</p>
       <RelayMissionRunner
         repositoryKey={connectedKey}
         bridgeUrl={resolvedBridge}
-        config={DEFAULT_BETA_CONFIG}
+        config={missionConfig}
+        onReconfigure={() => setReconfiguring(true)}
+        {...(missionConfigLabel !== undefined ? { configLabel: missionConfigLabel } : {})}
         {...(missionStartImpl !== undefined ? { startImpl: missionStartImpl } : {})}
         {...(missionPollImpl !== undefined ? { pollImpl: missionPollImpl } : {})}
         {...(missionShipImpl !== undefined ? { shipImpl: missionShipImpl } : {})}
