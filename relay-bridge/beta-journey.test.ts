@@ -182,6 +182,41 @@ describe('a fresh participant signs in, authorizes an installation, and connects
     expect(lastStart?.repositoryTarget?.repositoryKey).toBe(registered.key);
   }, 30_000);
 
+  it('P7 — a mission cannot GAIN a permission the registration did not grant (Permission Monotonicity)', async () => {
+    const base = await boot();
+    const token = await signIn(base, { login: 'beta-narrow', id: 6006 });
+    await authorizeInstallation(base, token, '55550001');
+
+    // Register a repo granting ONLY read + write_worktree — no commit, no push.
+    const narrowDraft = {
+      identity: { provider: 'github', host: 'github.com', owner: 'beta-narrow', name: 'their-app', defaultBranch: 'main' },
+      location: { kind: 'remote_clone', cloneUrl: 'https://github.com/beta-narrow/their-app.git' },
+      scope: { read: ['**'], write: ['src/**'] },
+      grants: ['read', 'write_worktree'].map((permission) => ({
+        permission, authorizedBy: 'beta-narrow', authorizedAt: '2026-08-12T00:00:00.000Z', expiresAt: null, note: null,
+      })),
+      ceilings: { maxFilesChanged: 20, maxLinesRemoved: 500, allowDeletions: false },
+      registeredBy: 'beta-narrow',
+      credential: { installationId: '55550001' },
+    };
+    const reg = await getJson(await register(base, token, narrowDraft));
+    expect(reg.status).toBe(200);
+    const key = (reg.body.data as { key: string }).key;
+
+    // Start a mission REQUESTING commit + push — authority the registration never
+    // granted. Permission Monotonicity: it is REFUSED at resolution, and the
+    // engine is NEVER reached — no silent narrow-and-run into a lesser mission.
+    const started = await getJson(await startMission(base, token, {
+      missionId: 'm-narrow', objective: 'Try to commit without the grant',
+      repositoryKey: key, workingBranch: 'relay/feature',
+      permissions: ['read', 'write_worktree', 'commit', 'push_feature_branch'],
+      config: { mode: 'autonomous', review: 'independent' },
+    }));
+    expect(started.status).toBe(422);
+    expect((started.body.error as { kind: string }).kind).toBe('repository_resolution_refused');
+    expect(lastStart).toBeNull();
+  }, 30_000);
+
   it('REFUSES a different participant targeting a repo they do not own', async () => {
     const base = await boot();
 
