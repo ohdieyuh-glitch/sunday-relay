@@ -24,6 +24,7 @@ export function RelayPspPicker({
   listImpl = listPsps,
   loadImpl = loadPsp,
   saveImpl = savePsp,
+  canSave = true,
 }: {
   readonly bridgeUrl?: string | null;
   readonly defaultConfig: unknown;
@@ -33,6 +34,9 @@ export function RelayPspPicker({
   readonly listImpl?: typeof listPsps;
   readonly loadImpl?: typeof loadPsp;
   readonly saveImpl?: typeof savePsp;
+  /** When false, the picker is LOAD-ONLY — no "save this configuration" control.
+   *  Used in the fail-closed no-Agent state, where there is no config to save. */
+  readonly canSave?: boolean;
 }) {
   const [psps, setPsps] = useState<readonly PspSummary[]>([]);
   const [selectedId, setSelectedId] = useState('');
@@ -106,21 +110,23 @@ export function RelayPspPicker({
         </select>
       </label>
 
-      <div className="relay-psp-picker__save">
-        <label>
-          Save this configuration as
-          <input
-            aria-label="New profile name"
-            value={saveName}
-            disabled={busy}
-            onChange={(e) => setSaveName(e.target.value)}
-            placeholder="e.g. Careful"
-          />
-        </label>
-        <button type="button" onClick={() => void onSave()} disabled={busy || saveName.trim() === ''}>
-          {busy ? 'Working…' : 'Save as PSP'}
-        </button>
-      </div>
+      {canSave && (
+        <div className="relay-psp-picker__save">
+          <label>
+            Save this configuration as
+            <input
+              aria-label="New profile name"
+              value={saveName}
+              disabled={busy}
+              onChange={(e) => setSaveName(e.target.value)}
+              placeholder="e.g. Careful"
+            />
+          </label>
+          <button type="button" onClick={() => void onSave()} disabled={busy || saveName.trim() === ''}>
+            {busy ? 'Working…' : 'Save as PSP'}
+          </button>
+        </div>
+      )}
 
       {note !== null && <p className="relay-psp-picker__note" role="status">{note}</p>}
     </fieldset>

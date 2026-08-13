@@ -58,7 +58,7 @@ describe('RelayMissionRunner', () => {
     // The mission progresses to verified_complete on the next poll.
     const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-2', view: verified, message: null }));
     const shipImpl = vi.fn<typeof shipBetaMission>(async () => ({ ok: true, stage: 'committed', shipped: false, message: null }));
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} shipImpl={shipImpl} pspListImpl={emptyList} pollIntervalMs={10} />);
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} shipImpl={shipImpl} pspListImpl={emptyList} config={{ mode: 'guided' }} pollIntervalMs={10} />);
     fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'Do it' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
 
@@ -79,7 +79,7 @@ describe('RelayMissionRunner', () => {
   it('states a start refusal in the bridge’s own words, and does not begin watching', async () => {
     const start = vi.fn<typeof startBetaMission>(async () => ({ ok: false, missionId: null, view: null, message: 'This repository is not yours to target.' }));
     const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'x', view: coding, message: null }));
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} />);
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} />);
     fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'sneak' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
     expect(await screen.findByRole('alert')).toBeTruthy();
@@ -133,7 +133,7 @@ describe('RelayMissionRunner', () => {
       expect(missionId).toBe('m-prev');
       return { ok: true, missionId, view: verified, message: null };
     });
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} pollIntervalMs={10} />);
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} pollIntervalMs={10} />);
     // No Start form — it went straight to watching the remembered mission.
     await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('verified_complete'));
     expect(start).not.toHaveBeenCalled();
@@ -148,7 +148,7 @@ describe('RelayMissionRunner', () => {
     const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-r', view: coding, message: null }));
     const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-r', view: failed ? failedRetryable : coding, message: null }));
     const retry = vi.fn<typeof retryBetaMission>(async ({ missionId }) => { failed = false; return { ok: true, missionId, view: coding, message: null }; });
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} retryImpl={retry} pspListImpl={emptyList} pollIntervalMs={10} />);
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} retryImpl={retry} pspListImpl={emptyList} config={{ mode: 'guided' }} pollIntervalMs={10} />);
     fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
     // The retryable failure is shown, with its safe reason.
@@ -164,7 +164,7 @@ describe('RelayMissionRunner', () => {
     const nonRetryable = { state: 'failed', currentRole: 'relay', events: [], phase: 'failed', error: { safeMessage: 'Refused.', retryable: false } } as unknown as LiveMissionUpdate;
     const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-n', view: coding, message: null }));
     const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-n', view: nonRetryable, message: null }));
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} pollIntervalMs={10} />);
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} pollIntervalMs={10} />);
     fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
     await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('failed'));
@@ -212,7 +212,7 @@ describe('RelayMissionRunner', () => {
     } as unknown as LiveMissionUpdate;
     const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-e', view: evidenced, message: null }));
     const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-e', view: evidenced, message: null }));
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} workingBranch="relay/beta-x" pollIntervalMs={100000} />);
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} workingBranch="relay/beta-x" pollIntervalMs={100000} />);
     fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
     await waitFor(() => expect(screen.getByLabelText(/Mission evidence/i)).toBeTruthy());
@@ -264,7 +264,7 @@ describe('RelayMissionRunner', () => {
     } as unknown as LiveMissionUpdate;
     const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-b', view: briefed, message: null }));
     const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-b', view: briefed, message: null }));
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} pollIntervalMs={100000} />);
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} pollIntervalMs={100000} />);
     fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
     await waitFor(() => expect(screen.getByText(/Mission brief/i)).toBeTruthy());
@@ -287,7 +287,7 @@ describe('RelayMissionRunner', () => {
     } as unknown as LiveMissionUpdate;
     const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-rv', view: reviewed, message: null }));
     const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-rv', view: reviewed, message: null }));
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} pollIntervalMs={100000} />);
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} pollIntervalMs={100000} />);
     fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
     await waitFor(() => expect(screen.getByLabelText(/Reviewer verdict/i)).toBeTruthy());
@@ -319,7 +319,7 @@ describe('RelayMissionRunner', () => {
     const cancel = vi.fn<typeof cancelBetaMission>(async ({ missionId }) => ({ ok: true, missionId, view: cancelled, message: null }));
     // Long poll interval: the running state comes from start; no background poll
     // races the authoritative cancel back to running.
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} cancelImpl={cancel} pspListImpl={emptyList} pollIntervalMs={100000} />);
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} cancelImpl={cancel} pspListImpl={emptyList} config={{ mode: 'guided' }} pollIntervalMs={100000} />);
     fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
     await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('running'));
@@ -328,90 +328,190 @@ describe('RelayMissionRunner', () => {
     await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('cancelled'));
   });
 
-  it('EDITOR: a checked permission + edited spend/agent ceilings are exactly what Start carries (criteria 3 & 5)', async () => {
-    let captured: unknown = null;
-    const start = vi.fn<typeof startBetaMission>(async (input) => { captured = input; return { ok: true, missionId: 'm-ed', view: coding, message: null }; });
-    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-ed', view: coding, message: null }));
-    // DEFAULT starts with no permissions and no ceilings — without the editor
-    // wiring, the payload below would carry those defaults, so this test bites.
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} />);
-    // Field-level edits in the pre-start editor.
-    fireEvent.click(screen.getByLabelText('push_feature_branch'));
-    fireEvent.change(screen.getByLabelText('Spend ceiling (USD)'), { target: { value: '2' } });
-    fireEvent.change(screen.getByLabelText('Agent-call ceiling'), { target: { value: '4' } });
-    // The "Permissions requested" summary reflects the editor immediately.
-    expect(screen.getByText(/Permissions requested/i).textContent).toContain('push_feature_branch');
-    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'Push a branch' } });
-    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
-    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-    const config = (captured as { config: { permissions?: string[]; limits?: Record<string, number | null> } }).config;
-    expect(config.permissions).toContain('push_feature_branch');
-    expect(config.limits?.spendUsd).toBe(2);
-    expect(config.limits?.agentCalls).toBe(4);
+  it('renders a READ-ONLY summary of the configured Compound PSP Agent from the passed config (invariant 7)', () => {
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-ro', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-ro', view: coding, message: null }));
+    render(
+      <RelayMissionRunner
+        repositoryKey={KEY}
+        bridgeUrl={BRIDGE}
+        startImpl={start}
+        pollImpl={poll}
+        pspListImpl={emptyList}
+        config={{
+          pspId: 'careful-v2',
+          roles: { architect: 'gpt-4o-architect', coding: 'claude-code', reviewer: 'hermes' },
+          mode: 'autonomous', review: 'security',
+          permissions: ['read', 'write_worktree', 'commit'],
+          limits: { spendUsd: 5, agentCalls: 8, runtimeMinutes: 30, reviewCycles: 1, repairCycles: 1 },
+        }}
+      />,
+    );
+    const agent = screen.getByLabelText('Configured Compound PSP Agent').textContent ?? '';
+    // The three configured role identities, plus Relay orchestrating them.
+    expect(agent).toContain('gpt-4o-architect');
+    expect(agent).toContain('claude-code');
+    expect(agent).toContain('hermes');
+    expect(agent).toMatch(/Relay/);
+    // The policy (mode + review requirement) and ceilings, as REQUESTED before the
+    // repository was connected.
+    expect(agent).toContain('autonomous');
+    expect(agent).toContain('security');
+    expect(agent).toContain('$5');
+    // PSP identity/version — shown from config.pspId when present (founder rule D).
+    // Asserted with the colon so it cannot pass on the "Compound PSP Agent" heading.
+    expect(agent).toContain('PSP: careful-v2');
+    // The requested permissions are surfaced (distinct from the authoritative
+    // "permissions held" the running Mission shows from the bridge).
+    expect(screen.getByText(/Permissions requested/i).textContent).toContain('commit');
+    // It is labelled a request — never presented as authority already held.
+    expect(agent).toMatch(/request/i);
+    // Nothing here is editable — the runner consumes the config, it does not edit it.
+    expect(screen.queryByLabelText('Spend ceiling (USD)')).toBeNull();
+    expect(screen.queryByLabelText('merge_pr')).toBeNull();
   });
 
-  it('EDITOR: checking merge_pr still fires the high-consequence Mission Contract gate before dispatch (criterion 7)', async () => {
-    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-hc2', view: coding, message: null }));
-    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-hc2', view: coding, message: null }));
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} />);
-    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'Merge it' } });
-    // Requesting merge_pr in the editor turns Start into a Contract gate — the
-    // gate keys on the requested permission, wherever it was set.
-    fireEvent.click(screen.getByLabelText('merge_pr'));
-    fireEvent.click(screen.getByRole('button', { name: /Review Mission Contract/i }));
-    expect(screen.getByLabelText(/Mission Contract/i).textContent).toContain('merge_pr');
-    expect(start).not.toHaveBeenCalled();
-    // Only an explicit fresh confirmation dispatches.
-    fireEvent.click(screen.getByRole('button', { name: /Confirm authorization & start/i }));
-    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-  });
-
-  it('EDITOR: clearing a ceiling yields null in the payload and discloses "not set", never 0', async () => {
+  it('MERGES a loaded PSP onto the pre-configured Agent — unrelated pre-set fields survive (AC-7)', async () => {
+    const list = (async () => ({
+      ok: true as const,
+      psps: [{ pspId: 'careful', name: 'Careful', updatedAt: 'x', mode: 'guided' }],
+      message: null,
+    })) as unknown as typeof listPsps;
+    // The saved profile names mode + a tag, but is SILENT on permissions/limits.
+    const load = vi.fn<typeof loadPsp>(async ({ pspId }) => ({
+      ok: true, pspId, name: 'Careful', config: { mode: 'guided', tag: pspId }, message: null,
+    }));
     let captured: unknown = null;
-    const start = vi.fn<typeof startBetaMission>(async (input) => { captured = input; return { ok: true, missionId: 'm-null', view: coding, message: null }; });
-    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-null', view: coding, message: null }));
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided', limits: { spendUsd: 5, agentCalls: 8 } }} />);
-    const spend = screen.getByLabelText('Spend ceiling (USD)') as HTMLInputElement;
-    expect(spend.value).toBe('5');
-    fireEvent.change(spend, { target: { value: '' } });
-    // The cleared ceiling discloses "not set" beside its own input — never "$0".
-    expect(spend.closest('label')?.textContent).toContain('not set');
+    const start = vi.fn<typeof startBetaMission>(async (input) => { captured = input; return { ok: true, missionId: 'm-mg', view: coding, message: null }; });
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-mg', view: coding, message: null }));
+    render(
+      <RelayMissionRunner
+        repositoryKey={KEY}
+        bridgeUrl={BRIDGE}
+        startImpl={start}
+        pollImpl={poll}
+        pspListImpl={list}
+        pspLoadImpl={load}
+        // The pre-configured Agent carries autonomous mode, a commit permission
+        // and a $9 ceiling — none of which the loaded profile mentions.
+        config={{ mode: 'autonomous', permissions: ['read', 'write_worktree', 'commit'], limits: { spendUsd: 9 } }}
+      />,
+    );
+    fireEvent.change(await screen.findByLabelText(/Configuration \(PSP\)/i), { target: { value: 'careful' } });
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
     fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
     await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-    const config = (captured as { config: { limits?: Record<string, number | null> } }).config;
-    expect(config.limits?.spendUsd).toBeNull();
-    // The untouched ceiling is carried unchanged — the edit is surgical.
-    expect(config.limits?.agentCalls).toBe(8);
+    const config = (captured as { config: { mode?: string; tag?: string; permissions?: string[]; limits?: Record<string, number | null> } }).config;
+    // The loaded profile overrode only what it named…
+    expect(config.mode).toBe('guided');
+    expect(config.tag).toBe('careful');
+    // …and the pre-configured Agent's own fields SURVIVED the load — not wiped.
+    expect(config.permissions).toContain('commit');
+    expect(config.limits?.spendUsd).toBe(9);
   });
 
-  it('EDITOR: a request that exceeds the repository grant is refused verbatim — never shown as success (criterion 5)', async () => {
-    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: false, missionId: null, view: null, message: 'permission_not_granted: push_feature_branch is not granted for this repository.' }));
-    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'x', view: coding, message: null }));
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} />);
-    // Request a permission the repo did not grant — the editor proposes, the
-    // bridge remains the authority and REFUSES.
-    fireEvent.click(screen.getByLabelText('push_feature_branch'));
-    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'overreach' } });
+  it('FAIL-CLOSED: with NO valid Agent, withholds Start Mission and never dispatches — offers Configure / Load Saved PSP', () => {
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-x', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-x', view: coding, message: null }));
+    const onReconfigure = vi.fn();
+    render(
+      // NO config — a signed-in participant whose session was restored but who has
+      // no configured Compound PSP Agent. The runner must NOT default one.
+      <RelayMissionRunner
+        repositoryKey={KEY}
+        bridgeUrl={BRIDGE}
+        startImpl={start}
+        pollImpl={poll}
+        pspListImpl={emptyList}
+        onReconfigure={onReconfigure}
+      />,
+    );
+    // The honest fail-closed message, and NO way to start a Mission.
+    expect(screen.getByRole('alert').textContent).toMatch(/No Compound PSP Agent is configured/i);
+    expect(screen.queryByRole('button', { name: /Start Mission/i })).toBeNull();
+    expect(screen.queryByLabelText(/Objective/i)).toBeNull();
+    // Both escape hatches are offered: Configure Agent (routes to the Configure
+    // surface) and the Load-Saved-PSP picker.
+    fireEvent.click(screen.getByRole('button', { name: /Configure Agent/i }));
+    expect(onReconfigure).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText(/Configuration \(PSP\)/i)).toBeTruthy();
+    // Nothing was ever dispatched — the fail-closed gate held.
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('FAIL-CLOSED: loading a saved PSP supplies the Agent and makes Start Mission reachable', async () => {
+    const list = (async () => ({
+      ok: true as const,
+      psps: [{ pspId: 'careful', name: 'Careful', updatedAt: 'x', mode: 'guided' }],
+      message: null,
+    })) as unknown as typeof listPsps;
+    const load = vi.fn<typeof loadPsp>(async ({ pspId }) => ({
+      ok: true, pspId, name: 'Careful', config: { mode: 'guided', pspId }, message: null,
+    }));
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-fc', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-fc', view: coding, message: null }));
+    render(
+      <RelayMissionRunner
+        repositoryKey={KEY}
+        bridgeUrl={BRIDGE}
+        startImpl={start}
+        pollImpl={poll}
+        pspListImpl={list}
+        pspLoadImpl={load}
+        onReconfigure={() => {}}
+      />,
+    );
+    // Fail-closed at first: no Start Mission.
+    expect(screen.queryByRole('button', { name: /Start Mission/i })).toBeNull();
+    // Loading a REAL saved PSP becomes the Agent, lifting the gate.
+    fireEvent.change(await screen.findByLabelText(/Configuration \(PSP\)/i), { target: { value: 'careful' } });
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
+    // Now a Mission can start, carrying the loaded PSP's config (never a default).
+    fireEvent.change(await screen.findByLabelText(/Objective/i), { target: { value: 'go' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
-    // The bridge's refusal is surfaced verbatim; no running state, no watching.
-    expect(await screen.findByRole('alert')).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toMatch(/is not granted for this repository/i);
-    expect(screen.queryByText(/State:/i)).toBeNull();
-    expect(poll).not.toHaveBeenCalled();
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    expect((start.mock.calls[0][0].config as { pspId?: string }).pspId).toBe('careful');
   });
 
-  it('EDITOR: editing config relabels it "Custom" so "Running under" never misnames an edited profile (F1, truthfulness)', () => {
-    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-e', view: coding, message: null }));
-    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-e', view: coding, message: null }));
-    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} />);
-    // Before any edit the runner truthfully names the active profile.
-    const before = screen.getByText(/Running under/i).textContent ?? '';
-    expect(before).toContain('Default beta configuration');
-    expect(before).not.toContain('Custom');
-    // Editing a ceiling diverges the config from that profile; the label must
-    // stop presenting the pristine profile name as if it were unchanged.
-    fireEvent.change(screen.getByLabelText(/Spend ceiling/i), { target: { value: '2' } });
-    expect(screen.getByText(/Running under/i).textContent).toContain('Custom');
+  it('RETURNING USER: with a valid Agent, offers Reconfigure and hands off to the Configure surface — never inline', () => {
+    const onReconfigure = vi.fn();
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-rc', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-rc', view: coding, message: null }));
+    render(
+      <RelayMissionRunner
+        repositoryKey={KEY}
+        bridgeUrl={BRIDGE}
+        startImpl={start}
+        pollImpl={poll}
+        pspListImpl={emptyList}
+        config={{ mode: 'guided' }}
+        onReconfigure={onReconfigure}
+      />,
+    );
+    // A returning user is NOT forced to reconfigure — Start Mission is right there.
+    expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy();
+    // …and Reconfigure routes to the Configure surface; the runner authors nothing.
+    fireEvent.click(screen.getByRole('button', { name: /Reconfigure Agent/i }));
+    expect(onReconfigure).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText('Spend ceiling (USD)')).toBeNull();
+  });
+
+  it('omits the PSP line when the config carries no pspId — never fabricates one', () => {
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-np', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-np', view: coding, message: null }));
+    render(
+      <RelayMissionRunner
+        repositoryKey={KEY}
+        bridgeUrl={BRIDGE}
+        startImpl={start}
+        pollImpl={poll}
+        pspListImpl={emptyList}
+        config={{ mode: 'guided', limits: { spendUsd: 5 } }}
+      />,
+    );
+    const agent = screen.getByLabelText('Configured Compound PSP Agent').textContent ?? '';
+    // No pspId in the config → no PSP line (the "PSP Agent" heading has no colon).
+    expect(agent).not.toContain('PSP:');
   });
 });

@@ -19,10 +19,12 @@ const ENTRANCE_CONNECTION_STATUSES: ConnectionStatuses = {
  *
  * Relay does NOT use GitHub as its entrance. A fresh live participant begins
  * HERE, in Wonderland, with the Wandering Relay Dog: they can read the routes,
- * ask the guide, and describe an idea. GitHub sign-in, install and discovery are
- * deferred and CONTEXTUAL — they happen only when the participant deliberately
- * chooses to start building, at which point {@link onStartBuilding} advances the
- * gate to sign-in.
+ * ask the guide, and describe an idea. Configuring the Compound PSP Agent, then
+ * GitHub sign-in, install and discovery are deferred and CONTEXTUAL — they happen
+ * only when the participant deliberately chooses to start building, at which
+ * point {@link onStartBuilding} advances the gate to the Configure step (which
+ * precedes sign-in in the canonical flow). GitHub is never the entrance, and the
+ * Agent is configured before any repository is connected.
  *
  * This is a thin LIVE wrapper over the PURE {@link RelayEntryHome} — never the
  * preview shell, never the demo store, never any fixture. The props it feeds are
@@ -45,8 +47,8 @@ export function RelayWonderlandEntrance({
   const [selectedRoute, setSelectedRoute] = useState<ProjectRouteDefinition | null>(null);
 
   // Any deliberate "begin building" affordance leaves the entrance for the
-  // contextual GitHub sign-in. Describing an idea, choosing a route or asking
-  // the guide are exploration and keep the participant here.
+  // Configure step (which precedes GitHub sign-in). Describing an idea, choosing
+  // a route or asking the guide are exploration and keep the participant here.
   const startBuilding = useCallback(() => { onStartBuilding(); }, [onStartBuilding]);
 
   return (

@@ -4,10 +4,10 @@ import { startBetaMission, pollBetaMission, shipBetaMission, retryBetaMission, c
 import { RelayPspPicker } from './RelayPspPicker';
 import { RelayMissionHistory } from './RelayMissionHistory';
 import { rememberActiveMission, recallActiveMission, forgetActiveMission } from './active-mission';
+import { configPermissions, configLimits, configEnum, patchConfig, EDITOR_LIMITS } from './RelayAgentConfigEditor';
 import type { listPsps, loadPsp, savePsp } from './psp-client';
 import type { LiveMissionUpdate } from './contracts';
 import { RELAY_EXECUTION_MODES, RELAY_REVIEW_REQUIREMENTS } from '../../mission/mission-config';
-import { REPOSITORY_PERMISSIONS, type RepositoryPermission } from '../../mission/repository-target';
 
 /**
  * RUN A MISSION — the surface a signed-in beta user starts, watches, and ships a
@@ -24,65 +24,21 @@ import { REPOSITORY_PERMISSIONS, type RepositoryPermission } from '../../mission
 const TERMINAL = new Set(['verified_complete', 'failed', 'cancelled']);
 
 /**
- * The repository permissions the active configuration (PSP) REQUESTS. The
- * browser never invents authority: it forwards only what the chosen profile
- * names, and the bridge narrows even that against the registration's grants.
- * Empty means the profile named none, and the runner then omits permissions so
- * the server applies its own safe floor (read + write_worktree) rather than
- * requesting a ship ladder the task never asked for.
+ * The configured occupant of a role, for the READ-ONLY requested view. A `null`
+ * selector means the deployment staffs that role with its own default — disclosed
+ * as such, never guessed at, and never presented as an actual actor (the actual
+ * per-role actor/model is shown live from the bridge once the Mission runs).
  */
-function configPermissions(config: unknown): readonly string[] {
-  const perms = (config as { permissions?: unknown } | null)?.permissions;
-  return Array.isArray(perms) && perms.every((p) => typeof p === 'string') ? perms as string[] : [];
+function roleOccupantLabel(selector: unknown): string {
+  return typeof selector === 'string' && selector.trim() !== '' ? selector : 'deployment default';
 }
-
-/**
- * The spend/compute ceilings the active configuration carries, as a plain record.
- * An absent or malformed `limits` reads as an empty record, so every ceiling then
- * discloses "not set" rather than a fabricated `0` or an implied "unlimited": the
- * domain's `null` semantics, preserved verbatim into the editor.
- */
-function configLimits(config: unknown): Record<string, number | null> {
-  const limits = (config as { limits?: unknown } | null)?.limits;
-  return (limits !== null && typeof limits === 'object') ? { ...(limits as Record<string, number | null>) } : {};
-}
-
-/**
- * One enum-valued policy field of the active config, falling back to the domain's
- * own conservative default when the config does not name it — the SAME fallback
- * `validateMissionConfig` applies, so the select shows what will actually be
- * requested rather than an empty control.
- */
-function configEnum<T extends string>(config: unknown, key: string, allowed: readonly T[], fallback: T): T {
-  const value = (config as Record<string, unknown> | null)?.[key];
-  return (typeof value === 'string' && (allowed as readonly string[]).includes(value)) ? value as T : fallback;
-}
-
-/**
- * Produce the next active config by patching the current one. Every unrelated
- * field is preserved (a loaded PSP's `pspId`, `roles`, `completionRule`…), so the
- * field-level editor and the PSP picker COMPOSE — pick a profile, then tweak —
- * rather than one clobbering the other.
- */
-function patchConfig(config: unknown, patch: Record<string, unknown>): Record<string, unknown> {
-  const base = (config !== null && typeof config === 'object') ? config as Record<string, unknown> : {};
-  return { ...base, ...patch };
-}
-
-/** The spend/compute ceilings the editor exposes, in the domain's own order. Each
- *  is a number the config REQUESTS, or `null` = "not set" (disclosed as such). */
-const EDITOR_LIMITS = [
-  { field: 'spendUsd', label: 'Spend ceiling (USD)', step: '0.01' },
-  { field: 'agentCalls', label: 'Agent-call ceiling', step: '1' },
-  { field: 'runtimeMinutes', label: 'Runtime ceiling (minutes)', step: '1' },
-  { field: 'reviewCycles', label: 'Review cycles', step: '1' },
-  { field: 'repairCycles', label: 'Repair cycles', step: '1' },
-] as const;
 
 export function RelayMissionRunner({
   repositoryKey,
   workingBranch = 'relay/beta',
   config,
+  configLabel,
+  onReconfigure,
   bridgeUrl,
   startImpl = startBetaMission,
   pollImpl = pollBetaMission,
@@ -98,6 +54,15 @@ export function RelayMissionRunner({
   readonly repositoryKey: string;
   readonly workingBranch?: string;
   readonly config?: unknown;
+  /** A truthful display name for `config` — "Your configured Agent" when the
+   *  participant configured it before Start Building, or the default's name.
+   *  Display only; the engine acts on `config`, never this. */
+  readonly configLabel?: string;
+  /** Open the dedicated Configure surface (founder rules B/C). Reached from BOTH
+   *  the fail-closed state ("Configure Agent", when no valid Agent exists) and the
+   *  returning-user idle form ("Reconfigure Agent"). The runner never authors the
+   *  Agent inline — it hands off to the Configure surface and consumes the result. */
+  readonly onReconfigure?: () => void;
   readonly bridgeUrl?: string | null;
   readonly startImpl?: typeof startBetaMission;
   readonly pollImpl?: typeof pollBetaMission;
@@ -114,7 +79,18 @@ export function RelayMissionRunner({
   // The config the next Mission carries: the passed default until the user picks
   // a saved PSP. The label is display only — the config is what the engine acts on.
   const [activeConfig, setActiveConfig] = useState<unknown>(config);
-  const [activeLabel, setActiveLabel] = useState('Default beta configuration');
+  // FAIL-CLOSED (founder rule A): a Mission may start ONLY when a valid Compound
+  // PSP Agent is present. A valid Agent is a non-empty plain object — never null,
+  // never a silent default, never a bare `{}` conjured from an empty selection.
+  // Until one exists (configured before sign-in, or a saved PSP loaded here) the
+  // runner withholds Start Mission entirely. Derived from `activeConfig`, not the
+  // static `config` prop, so loading a saved PSP resolves the fail-closed state
+  // live.
+  const hasValidAgent = activeConfig !== null && typeof activeConfig === 'object'
+    && !Array.isArray(activeConfig) && Object.keys(activeConfig as object).length > 0;
+  // Seeded truthfully from the caller: a rehydrated custom Agent must NOT read as
+  // "Default beta configuration". The PSP picker's onSelect overrides it on load.
+  const [activeLabel, setActiveLabel] = useState(configLabel ?? 'Default beta configuration');
   // Whether the high-consequence Mission Contract is being shown for confirmation.
   const [contractShown, setContractShown] = useState(false);
   // Reconnect: a refresh restores the mission last started on this repository,
@@ -144,6 +120,9 @@ export function RelayMissionRunner({
   }, [missionId, terminal, pollImpl, bridgeUrl, pollIntervalMs]);
 
   const dispatchStart = useCallback(async () => {
+    // Fail-closed guard, defence in depth: even if a control were reached, a
+    // Mission never dispatches without a valid Agent (founder rule A).
+    if (!hasValidAgent) return;
     setBusy(true);
     setMessage(null);
     // Least privilege: request exactly what the chosen profile named, or omit so
@@ -167,7 +146,7 @@ export function RelayMissionRunner({
     } else {
       setMessage(result.message);
     }
-  }, [objective, repositoryKey, workingBranch, activeConfig, bridgeUrl, startImpl]);
+  }, [objective, repositoryKey, workingBranch, activeConfig, bridgeUrl, startImpl, hasValidAgent]);
 
   // Policy gate (criterion 7): a Mission that requests a HIGH-CONSEQUENCE
   // permission — a merge or a production deploy, the two a branch delete cannot
@@ -176,10 +155,11 @@ export function RelayMissionRunner({
   // Mission. Anything less consequential starts without interruption.
   const onStartSubmit = useCallback((event: FormEvent) => {
     event.preventDefault();
+    if (!hasValidAgent) return; // fail-closed — no Agent, no Mission.
     const highConsequence = configPermissions(activeConfig).filter((p) => p === 'merge_pr' || p === 'deploy_production');
     if (highConsequence.length > 0 && !contractShown) { setContractShown(true); return; }
     void dispatchStart();
-  }, [activeConfig, contractShown, dispatchStart]);
+  }, [activeConfig, contractShown, dispatchStart, hasValidAgent]);
 
   // Leave a finished Mission behind and return to Start — drops the pointer so a
   // later refresh does not reconnect to a Mission the user is done with.
@@ -236,46 +216,64 @@ export function RelayMissionRunner({
   }, [missionId, bridgeUrl, cancelImpl]);
 
   if (missionId === null) {
+    // FAIL-CLOSED (founder rule A): a signed-in participant whose session was
+    // restored but who has NO valid Agent may NOT start a Mission. We do not
+    // default one. Instead we withhold Start Mission entirely and offer the two
+    // ways to obtain a real Agent: configure one (the dedicated Configure surface,
+    // via onReconfigure) or load a saved PSP (which patchConfig turns into the
+    // Agent, lifting this gate). Start Mission is unreachable until then.
+    if (!hasValidAgent) {
+      return (
+        <>
+        <div className="relay-mission-runner" data-state="no-agent">
+          <h2>Start a Mission on <code>{repositoryKey}</code></h2>
+          <p className="relay-mission-runner__no-agent" role="alert">
+            No Compound PSP Agent is configured. Configure your Agent or load a saved PSP to start a Mission.
+          </p>
+          {onReconfigure !== undefined && (
+            <button type="button" className="relay-mission-runner__configure" onClick={onReconfigure}>
+              Configure Agent
+            </button>
+          )}
+          {/* Load Saved PSP: selecting a REAL saved profile patches it onto the
+              (null) base and yields a valid Agent, lifting the fail-closed gate.
+              The empty/default option never fires on mount and patches to a bare
+              {}, which is NOT a valid Agent — so no Agent is silently conjured. */}
+          <RelayPspPicker
+            bridgeUrl={bridgeUrl}
+            defaultConfig={config}
+            defaultLabel="No Agent configured"
+            activeConfig={activeConfig}
+            // Load-only in the fail-closed state: there is no configured Agent to
+            // save, so the picker offers only LOAD (which supplies the Agent).
+            canSave={false}
+            onSelect={(c, label) => { setActiveConfig(patchConfig(config, c as Record<string, unknown>)); setActiveLabel(label); }}
+            {...(pspListImpl !== undefined ? { listImpl: pspListImpl } : {})}
+            {...(pspLoadImpl !== undefined ? { loadImpl: pspLoadImpl } : {})}
+            {...(pspSaveImpl !== undefined ? { saveImpl: pspSaveImpl } : {})}
+          />
+        </div>
+        <RelayMissionHistory
+          bridgeUrl={bridgeUrl}
+          onOpen={onOpenMission}
+          {...(historyImpl !== undefined ? { listImpl: historyImpl } : {})}
+        />
+        </>
+      );
+    }
+
     const highConsequencePerms = configPermissions(activeConfig).filter((p) => p === 'merge_pr' || p === 'deploy_production');
     const limits = (activeConfig as { limits?: Record<string, number | null> } | null)?.limits ?? {};
 
-    // The editor's live view of what the next Mission will REQUEST, derived
-    // straight from activeConfig so a loaded PSP pre-fills every control and a
-    // later tweak composes with it. Each handler proposes a new config through
-    // the SAME setActiveConfig the PSP picker uses; the bridge stays the
-    // authority and narrows or refuses whatever the editor asks for.
-    const requestedPermissions = new Set(configPermissions(activeConfig));
-    const editorLimits = configLimits(activeConfig);
-    // Editing here diverges the config from any loaded PSP, so the "Running
-    // under <name>" label must stop claiming that saved profile's name — the
-    // config is now customised. Announce the fact, not the intention.
-    const markEdited = () =>
-      setActiveLabel((prev) => (prev.startsWith('Custom') ? prev : `Custom (from ${prev})`));
-    const togglePermission = (perm: RepositoryPermission, on: boolean) => {
-      const next = new Set<string>(requestedPermissions);
-      if (on) next.add(perm); else next.delete(perm);
-      // Rebuild in the ladder's canonical order — the request stays inspectable.
-      const ordered = REPOSITORY_PERMISSIONS.filter((p) => next.has(p));
-      setActiveConfig(patchConfig(activeConfig, { permissions: ordered }));
-      markEdited();
-    };
-    const setLimit = (field: string, raw: string) => {
-      const trimmed = raw.trim();
-      let value: number | null;
-      if (trimmed === '') {
-        value = null; // cleared = "not set" — never coerced to 0 or unlimited.
-      } else {
-        const parsed = Number(trimmed);
-        if (!Number.isFinite(parsed) || parsed < 0) return; // no negatives in the UI; the server refuses them regardless.
-        value = parsed;
-      }
-      setActiveConfig(patchConfig(activeConfig, { limits: { ...editorLimits, [field]: value } }));
-      markEdited();
-    };
-    const setPolicy = (key: 'mode' | 'review', value: string) => {
-      setActiveConfig(patchConfig(activeConfig, { [key]: value }));
-      markEdited();
-    };
+    // The read-only view of what the pre-configured Agent will REQUEST, derived
+    // straight from activeConfig: the roles, the policy and the ceilings the
+    // participant set BEFORE this repository was connected, plus any profile
+    // later merged onto it. Nothing is editable here — the runner is a CONSUMER
+    // of that config (the editor lives in the Configure step). What the Mission
+    // actually runs UNDER (permissions held, served model) comes from the
+    // bridge's authoritative view once it starts, never from this request side.
+    const agentRoles = (activeConfig as { roles?: Record<string, unknown> } | null)?.roles ?? {};
+    const shownLimits = configLimits(activeConfig);
 
     const startLabel = busy
       ? 'Starting…'
@@ -290,91 +288,70 @@ export function RelayMissionRunner({
           bridgeUrl={bridgeUrl}
           defaultConfig={config}
           activeConfig={activeConfig}
-          onSelect={(c, label) => { setActiveConfig(c); setActiveLabel(label); }}
+          // MERGE the loaded profile onto the pre-configured Agent, never REPLACE
+          // it: loading a saved PSP overrides only the fields it names, so the
+          // Agent configured before this repository was connected (its roles,
+          // its ceilings, any pre-set field the profile is silent on) survives.
+          onSelect={(c, label) => { setActiveConfig(patchConfig(config, c as Record<string, unknown>)); setActiveLabel(label); }}
           {...(pspListImpl !== undefined ? { listImpl: pspListImpl } : {})}
           {...(pspLoadImpl !== undefined ? { loadImpl: pspLoadImpl } : {})}
           {...(pspSaveImpl !== undefined ? { saveImpl: pspSaveImpl } : {})}
         />
 
-        {/* PRE-START CONFIGURATION EDITOR — set exactly what this Mission
-            REQUESTS before it runs (criteria 3 & 5). Every control is seeded
-            from activeConfig and writes back through setActiveConfig, so it
-            composes with the PSP picker above and stays consistent with the
-            "Permissions requested" summary below. These are the request side:
-            what the Mission runs UNDER (permissions held, authorized ceiling)
-            comes from the bridge's authoritative view once it starts, never
-            from here. */}
-        <fieldset className="relay-mission-runner__editor">
-          <legend>Configure this Mission before it starts</legend>
+        {/* RETURNING USER (founder rule B/C): reconfigure the Agent without being
+            forced back through sign-in. It hands off to the dedicated Configure
+            surface — the runner never authors the Agent inline — and returns here
+            with the updated Agent rehydrated. Sits alongside the Load-Saved-PSP
+            picker as the second way to change the active Agent. */}
+        {onReconfigure !== undefined && (
+          <button type="button" className="relay-mission-runner__reconfigure" onClick={onReconfigure}>
+            Reconfigure Agent
+          </button>
+        )}
 
-          <div className="relay-mission-runner__editor-perms" role="group" aria-label="Permissions to request">
-            <p className="relay-mission-runner__editor-heading">Permissions to request</p>
-            {REPOSITORY_PERMISSIONS.map((perm) => (
-              <label key={perm} className="relay-mission-runner__editor-perm">
-                <input
-                  type="checkbox"
-                  aria-label={perm}
-                  checked={requestedPermissions.has(perm)}
-                  onChange={(e) => togglePermission(perm, e.target.checked)}
-                />
-                {' '}{perm}
-              </label>
-            ))}
-          </div>
-
-          <div className="relay-mission-runner__editor-limits" role="group" aria-label="Spend and compute ceilings">
-            <p className="relay-mission-runner__editor-heading">Spend &amp; compute ceilings</p>
-            {EDITOR_LIMITS.map(({ field, label, step }) => {
-              const raw = editorLimits[field];
-              const value = typeof raw === 'number' ? raw : null;
-              return (
-                <label key={field} className="relay-mission-runner__editor-limit">
-                  <span className="relay-mission-runner__editor-limit-label">{label}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={step}
-                    aria-label={label}
-                    value={value === null ? '' : String(value)}
-                    onChange={(e) => setLimit(field, e.target.value)}
-                  />
-                  <span className="relay-mission-runner__editor-unset">{value === null ? 'not set' : ''}</span>
-                </label>
-              );
-            })}
-          </div>
-
-          <div className="relay-mission-runner__editor-policy" role="group" aria-label="Execution and review policy">
-            <label>
-              Execution mode
-              <select
-                aria-label="Execution mode"
-                value={configEnum(activeConfig, 'mode', RELAY_EXECUTION_MODES, 'guided')}
-                onChange={(e) => setPolicy('mode', e.target.value)}
-              >
-                {RELAY_EXECUTION_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </label>
-            <label>
-              Review requirement
-              <select
-                aria-label="Review requirement"
-                value={configEnum(activeConfig, 'review', RELAY_REVIEW_REQUIREMENTS, 'independent')}
-                onChange={(e) => setPolicy('review', e.target.value)}
-              >
-                {RELAY_REVIEW_REQUIREMENTS.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </label>
-          </div>
-
-          {/* Role OCCUPANTS (who fills architect/coding/reviewer) are deliberately
-              NOT edited here: no browser occupant catalog exists, roles are
-              staffed by the deployment, and criterion 10 shows the ACTUAL per-role
-              actor/model live once the Mission runs. */}
-          <p className="relay-mission-runner__editor-note">
-            Role occupants (architect, coding, reviewer) are staffed by the deployment and shown live per role once the Mission runs.
+        {/* THE CONFIGURED COMPOUND PSP AGENT (REQUESTED) — read only. This is the
+            Agent the participant configured BEFORE connecting this repository,
+            carried here unchanged (invariant 7): its roles, its policy, its
+            ceilings. It is a REQUEST, kept deliberately DISTINCT from the
+            authoritative "permissions held" / served-model view the running
+            Mission shows from the bridge (criteria 10, 15) — the two are
+            different truth classes and must never read as equal. Editing lives in
+            the earlier Configure step; the runner only consumes. */}
+        <section className="relay-mission-runner__agent" aria-label="Configured Compound PSP Agent">
+          <h3>Configured Compound PSP Agent (requested)</h3>
+          <p className="relay-mission-runner__agent-note">
+            What you configured before connecting this repository — a request, not a claim. The
+            authority actually HELD and the model actually SERVED are shown from the bridge once
+            the Mission runs.
           </p>
-        </fieldset>
+          <ul className="relay-mission-runner__agent-roles" aria-label="Configured roles">
+            <li>Prompt Architect: <strong>{roleOccupantLabel(agentRoles.architect)}</strong></li>
+            <li>Coding Agent: <strong>{roleOccupantLabel(agentRoles.coding)}</strong></li>
+            <li>Independent Reviewer: <strong>{roleOccupantLabel(agentRoles.reviewer)}</strong></li>
+            <li>Relay: <strong>orchestrates the Mission</strong></li>
+          </ul>
+          {/* PSP identity/version (founder rule D) — shown only when the config
+              actually carries a non-empty pspId. Never fabricated: a config with no
+              PSP identity omits this line rather than inventing "none" as a fact. */}
+          {(() => {
+            const pspId = (activeConfig as { pspId?: unknown } | null)?.pspId;
+            return typeof pspId === 'string' && pspId.trim() !== ''
+              ? <p className="relay-mission-runner__agent-psp">PSP: <strong>{pspId}</strong></p>
+              : null;
+          })()}
+          <p className="relay-mission-runner__agent-policy">
+            Execution mode: <strong>{configEnum(activeConfig, 'mode', RELAY_EXECUTION_MODES, 'guided')}</strong>
+            {' · '}Review requirement: <strong>{configEnum(activeConfig, 'review', RELAY_REVIEW_REQUIREMENTS, 'independent')}</strong>
+          </p>
+          <ul className="relay-mission-runner__agent-limits" aria-label="Configured ceilings">
+            {EDITOR_LIMITS.map(({ field, label }) => {
+              const raw = shownLimits[field];
+              const value = typeof raw === 'number' ? raw : null;
+              const shown = value === null ? 'not set' : field === 'spendUsd' ? `$${value}` : String(value);
+              return <li key={field}>{label}: <strong>{shown}</strong></li>;
+            })}
+          </ul>
+        </section>
 
         <p className="relay-mission-runner__config">Running under <strong>{activeLabel}</strong>.</p>
         <p className="relay-mission-runner__permissions">
