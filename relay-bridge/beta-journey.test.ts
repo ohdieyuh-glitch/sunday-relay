@@ -686,4 +686,25 @@ describe('a fresh participant SHIPS their own verified mission over HTTP (criter
     // The worktree is untouched — a refused ship ships nothing.
     expect(existsSync(m.worktreePath)).toBe(true);
   }, 45_000);
+
+  it('P4 — a remote ship that names NO credential is refused, and nothing is falsely shipped', async () => {
+    // The closest autonomous analog to the blocked github.com push: a ship that
+    // authorizes a remote leg but names no credential env var cannot authenticate,
+    // so it is REFUSED — never falsely marked shipped (RELIABILITY: a GitHub/credential
+    // failure fails truthfully; SHIPPED is earned, not claimed).
+    const m = participantVerifiedMission('ghu-4242');
+    const { base, brain } = await bootShip(m);
+    const token = await signIn(base, { login: 'beta-alice', id: 4242 });
+
+    const res = await getJson(await realFetch(`${base}/relay-api/mission/m-ship/ship`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...asUser(token) },
+      body: JSON.stringify({
+        remote: { provider: 'github', credentialEnvVarName: '   ', pullRequestTitle: 'x', pullRequestBody: {} },
+      }),
+    }));
+    expect(res.status).toBe(422);
+    expect((res.body.error as { kind: string }).kind).toBe('ship_refused');
+    // Never falsely shipped: the refusal wrote NO ship episode to the Project Brain.
+    expect(brain.load(m.reg.key).entries).toHaveLength(0);
+  }, 45_000);
 });
