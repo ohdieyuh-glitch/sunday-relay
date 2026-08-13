@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
 import { startBetaMission, pollBetaMission, shipBetaMission } from './beta-mission';
 import { RelayPspPicker } from './RelayPspPicker';
+import { rememberActiveMission, recallActiveMission, forgetActiveMission } from './active-mission';
 import type { listPsps, loadPsp, savePsp } from './psp-client';
 import type { LiveMissionUpdate } from './contracts';
 
@@ -49,7 +50,9 @@ export function RelayMissionRunner({
   // a saved PSP. The label is display only — the config is what the engine acts on.
   const [activeConfig, setActiveConfig] = useState<unknown>(config);
   const [activeLabel, setActiveLabel] = useState('Default beta configuration');
-  const [missionId, setMissionId] = useState<string | null>(null);
+  // Reconnect: a refresh restores the mission last started on this repository,
+  // then the poll below re-reads its authoritative state from the bridge.
+  const [missionId, setMissionId] = useState<string | null>(() => recallActiveMission(repositoryKey));
   const [view, setView] = useState<LiveMissionUpdate | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -87,12 +90,25 @@ export function RelayMissionRunner({
     });
     setBusy(false);
     if (result.ok && result.missionId !== null) {
+      // Remember it BEFORE showing it, so a refresh mid-first-render still finds it.
+      rememberActiveMission(repositoryKey, result.missionId);
       setMissionId(result.missionId);
       setView(result.view);
     } else {
       setMessage(result.message);
     }
   }, [objective, repositoryKey, workingBranch, activeConfig, bridgeUrl, startImpl]);
+
+  // Leave a finished Mission behind and return to Start — drops the pointer so a
+  // later refresh does not reconnect to a Mission the user is done with.
+  const onStartAnother = useCallback(() => {
+    forgetActiveMission(repositoryKey);
+    setMissionId(null);
+    setView(null);
+    setShip(null);
+    setMessage(null);
+    setObjective('');
+  }, [repositoryKey]);
 
   const onShip = useCallback(async () => {
     if (missionId === null) return;
@@ -158,6 +174,11 @@ export function RelayMissionRunner({
         <p className="relay-mission-runner__shipped" data-state="shipped">
           Ship reached <strong>{ship.stage ?? 'an unknown stage'}</strong>{ship.shipped ? ' — shipped.' : '.'}
         </p>
+      )}
+      {terminal && (
+        <button type="button" className="relay-mission-runner__another" onClick={onStartAnother}>
+          Start another Mission
+        </button>
       )}
       {message !== null && <p className="relay-mission-runner__error" role="alert">{message}</p>}
     </section>

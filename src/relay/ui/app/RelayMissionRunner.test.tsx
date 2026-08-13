@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { RelayMissionRunner } from './RelayMissionRunner';
 import type { startBetaMission, pollBetaMission, shipBetaMission } from './beta-mission';
 import type { listPsps, loadPsp } from './psp-client';
+import { rememberActiveMission, recallActiveMission, clearActiveMissions } from './active-mission';
 import type { LiveMissionUpdate } from './contracts';
 
 // A hermetic PSP list so the embedded picker never reaches the network in tests.
@@ -29,7 +30,7 @@ const verified = {
   ],
 } as unknown as LiveMissionUpdate;
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); clearActiveMissions(); });
 
 describe('RelayMissionRunner', () => {
   it('starts a Mission on the connected repo, carrying the objective + config', async () => {
@@ -116,5 +117,24 @@ describe('RelayMissionRunner', () => {
     fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'Do it carefully' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
     await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+  });
+
+  it('reconnects to a remembered mission after a refresh, then can start another', async () => {
+    // A prior render started m-prev; a "refresh" is a fresh mount for the same repo.
+    rememberActiveMission(KEY, 'm-prev');
+    const start = vi.fn<typeof startBetaMission>();
+    const poll = vi.fn<typeof pollBetaMission>(async ({ missionId }) => {
+      // The runner re-reads the SAME mission's authoritative state from the bridge.
+      expect(missionId).toBe('m-prev');
+      return { ok: true, missionId, view: verified, message: null };
+    });
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} pollIntervalMs={10} />);
+    // No Start form — it went straight to watching the remembered mission.
+    await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('verified_complete'));
+    expect(start).not.toHaveBeenCalled();
+    // "Start another" drops the pointer and returns to Start.
+    fireEvent.click(screen.getByRole('button', { name: /Start another Mission/i }));
+    expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy();
+    expect(recallActiveMission(KEY)).toBeNull();
   });
 });

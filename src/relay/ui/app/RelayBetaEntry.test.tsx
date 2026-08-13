@@ -9,6 +9,7 @@ import {
 } from './bridge-session';
 import type { startBetaMission, pollBetaMission, shipBetaMission } from './beta-mission';
 import type { listPsps } from './psp-client';
+import { clearActiveMissions } from './active-mission';
 import type { LiveMissionUpdate } from './contracts';
 
 // Keep the embedded PSP picker hermetic — no network on mount in these tests.
@@ -29,7 +30,7 @@ const noComplete = (async () => ({ signedIn: false, message: null })) as typeof 
 const withInstall = (id: string) => (() => id) as typeof readInstallationFromReturn;
 const registerOk = (async () => ({ ok: true as const, key: 'github:github.com/beta-alice/their-app', message: null })) as typeof registerRepository;
 
-afterEach(() => { cleanup(); clearBridgeSession(); });
+afterEach(() => { cleanup(); clearBridgeSession(); clearActiveMissions(); });
 
 function signedIn() {
   saveBridgeSession({ token: 't', origin: '', expiresAt: '', scope: 'browser_control', participantId: 'ghu-4242' });
