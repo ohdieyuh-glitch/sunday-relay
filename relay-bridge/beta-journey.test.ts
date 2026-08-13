@@ -743,3 +743,80 @@ describe('a fresh participant SHIPS their own verified mission over HTTP (criter
     expect(brain.load(m.reg.key).entries).toHaveLength(0);
   }, 45_000);
 });
+
+/* ---------------------------------- durability across a restart (WP-5) --- */
+
+/**
+ * RECOVER WHERE SUPPORTED, FAIL CLOSED WHERE NOT. A bridge restart must not lose
+ * the participant's SETUP — their connected repo and saved PSP are on disk and
+ * come back — while an IN-MEMORY session must NOT survive (a token that outlived
+ * the process that minted it would be a credential nobody can revoke). This is
+ * the honest split the security model already draws; here it is proven end to
+ * end over HTTP with a real second server on the same data dir.
+ */
+describe('a participant’s setup survives a bridge restart (durability — recover where supported)', () => {
+  async function bootOnRoot(root: string): Promise<{ base: string; server: { close: (cb: () => void) => void } }> {
+    vi.stubEnv('RELAY_BRIDGE_API_TOKEN', OPERATOR);
+    vi.stubEnv('RELAY_ALLOWED_ORIGINS', ORIGIN);
+    vi.stubEnv('RELAY_DATA_DIR', root);
+    vi.stubEnv('RELAY_GITHUB_APP_CLIENT_ID', 'Iv1.public_client_id');
+    vi.stubEnv('RELAY_GITHUB_APP_CLIENT_SECRET', 'fixture-secret-never-surfaces');
+    vi.stubEnv('RELAY_GITHUB_APP_CALLBACK_URL', CALLBACK);
+    vi.stubEnv('RELAY_GITHUB_APP_INSTALL_URL', INSTALL_URL);
+    const config = loadBridgeConfig(process.env);
+    const registry = {
+      start: (input: unknown) => { lastStart = input as typeof lastStart; return { state: 'ready', missionId: 'm' } as never; },
+      get: () => ({ state: 'ready' }) as never, cancel: () => undefined, retry: () => undefined,
+    };
+    const server = createBridgeServer(
+      config, registry as never,
+      null, null, null, null, () => false, null, [], null, null,
+      createRepositoryRegistrationStore({ root }),
+    );
+    await new Promise<void>((r) => (server as never as { listen: (p: number, h: string, cb: () => void) => void }).listen(0, '127.0.0.1', r));
+    const address = (server as never as { address: () => { port: number } | null }).address();
+    return { base: `http://127.0.0.1:${address === null ? 0 : address.port}`, server: server as never };
+  }
+
+  it('a registered repo and a saved PSP persist across a restart; the in-memory session does not', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'relay-durable-'));
+    roots.push(root);
+
+    // --- Server A: the participant connects a repo and saves a PSP ---
+    const a = await bootOnRoot(root);
+    const tokenA = await signIn(a.base, { login: 'beta-durable', id: 6006 });
+    await authorizeInstallation(a.base, tokenA, '55550001');
+    const reg = await getJson(await register(a.base, tokenA, remoteRepoDraft('beta-durable', 'their-app', '55550001')));
+    expect(reg.status).toBe(200);
+    const key = (reg.body.data as { key: string }).key;
+    const saved = await getJson(await savePsp(a.base, tokenA, {
+      pspId: 'my-psp', name: 'My PSP', config: { mode: 'autonomous', limits: { spendUsd: 3 } },
+    }));
+    expect(saved.status).toBe(200);
+
+    // --- Restart: close A, boot B on the SAME data dir ---
+    await new Promise<void>((r) => a.server.close(() => r()));
+    const b = await bootOnRoot(root);
+    servers.push(b.server); // afterEach disposes B
+
+    // The in-memory session did NOT survive the restart — fail closed, re-sign-in required.
+    const stale = await realFetch(`${b.base}/relay-api/psp`, { headers: asUser(tokenA) });
+    expect(stale.status).toBe(401);
+
+    // Re-sign-in as the SAME GitHub identity → the SAME participantId → the durable setup is theirs again.
+    const tokenB = await signIn(b.base, { login: 'beta-durable', id: 6006 });
+
+    // The saved PSP survived the restart.
+    const list = await getJson(await realFetch(`${b.base}/relay-api/psp`, { headers: asUser(tokenB) }));
+    expect((list.body.data as { psps: { pspId: string }[] }).psps.map((p) => p.pspId)).toContain('my-psp');
+
+    // The registered repo survived AND is still owned by this participant: a NEW
+    // mission can target it without re-connecting — recovery where it is supported.
+    const started = await startMission(b.base, tokenB, {
+      missionId: 'm-after-restart', objective: 'Continue after restart',
+      repositoryKey: key, workingBranch: 'relay/feature', permissions: ['read', 'write_worktree'],
+    });
+    expect(started.status).toBe(200);
+    expect(lastStart?.repositoryTarget?.repositoryKey).toBe(key);
+  }, 30_000);
+});
