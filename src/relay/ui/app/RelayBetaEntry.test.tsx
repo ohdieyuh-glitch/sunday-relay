@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { RelayBetaEntry } from './RelayBetaEntry';
@@ -7,6 +7,8 @@ import {
   saveBridgeSession, clearBridgeSession,
   type completeGitHubSignIn, type registerRepository, type readInstallationFromReturn,
 } from './bridge-session';
+import type { startBetaMission, pollBetaMission, shipBetaMission } from './beta-mission';
+import type { LiveMissionUpdate } from './contracts';
 
 /**
  * THE BETA ENTRY GATE, clicked through. A fresh participant sees a sign-in
@@ -29,6 +31,12 @@ function signedIn() {
   saveBridgeSession({ token: 't', origin: '', expiresAt: '', scope: 'browser_control', participantId: 'ghu-4242' });
 }
 
+const codingView = { state: 'running', currentRole: 'coding_agent', events: [], phase: 'coding' } as unknown as LiveMissionUpdate;
+const verifiedView = {
+  state: 'verified_complete', currentRole: 'relay', events: [], phase: 'verified_complete',
+  attestations: [{ role: 'coding_agent', attestationId: 'a1', requestedActor: 'Claude Code', actualActor: 'Claude Code', actualRuntime: 'claude-code-local' }],
+} as unknown as LiveMissionUpdate;
+
 describe('RelayBetaEntry', () => {
   it('is TRANSPARENT with no bridge configured — the app renders unchanged', () => {
     render(<RelayBetaEntry bridgeUrl={null}>{APP}</RelayBetaEntry>);
@@ -49,7 +57,7 @@ describe('RelayBetaEntry', () => {
     expect(screen.queryByTestId('app')).toBeNull();
   });
 
-  it('clicks all the way through: signed in → connect a repo → the app appears', async () => {
+  it('clicks all the way through: signed in → connect a repo → the Mission surface for that repo', async () => {
     signedIn();
     render(
       <RelayBetaEntry
@@ -65,7 +73,51 @@ describe('RelayBetaEntry', () => {
     fireEvent.change(await screen.findByLabelText(/Repository owner/i), { target: { value: 'beta-alice' } });
     fireEvent.change(screen.getByLabelText(/Repository name/i), { target: { value: 'their-app' } });
     fireEvent.click(screen.getByRole('button', { name: /Connect this repository/i }));
-    // The bridge confirms → the gate advances to the app.
-    await waitFor(() => expect(screen.getByTestId('app')).toBeTruthy());
+    // The bridge confirms → the gate advances to the Mission surface for the
+    // connected repository (start/watch/ship), keyed to what was registered.
+    await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
+    expect(screen.getByText(/Start a Mission on/i).textContent).toContain('github:github.com/beta-alice/their-app');
+  });
+
+  it('THE WHOLE JOURNEY through the UI: connect → start → watch verified_complete → ship', async () => {
+    signedIn();
+    const start = vi.fn<typeof startBetaMission>(async (input) => {
+      // The mission targets the repo the user connected, under the beta config.
+      expect(input.repositoryKey).toBe('github:github.com/beta-alice/their-app');
+      expect((input.config as { mode?: string }).mode).toBe('guided');
+      return { ok: true, missionId: 'm-journey', view: codingView, message: null };
+    });
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-journey', view: verifiedView, message: null }));
+    const shipImpl = vi.fn<typeof shipBetaMission>(async () => ({ ok: true, stage: 'committed', shipped: false, message: null }));
+
+    render(
+      <RelayBetaEntry
+        bridgeUrl={BRIDGE}
+        completeImpl={noComplete}
+        readInstallationImpl={withInstall('55550001')}
+        registerImpl={registerOk}
+        missionStartImpl={start}
+        missionPollImpl={poll}
+        missionShipImpl={shipImpl}
+      >
+        {APP}
+      </RelayBetaEntry>,
+    );
+
+    // Connect the repository.
+    fireEvent.change(await screen.findByLabelText(/Repository owner/i), { target: { value: 'beta-alice' } });
+    fireEvent.change(screen.getByLabelText(/Repository name/i), { target: { value: 'their-app' } });
+    fireEvent.click(screen.getByRole('button', { name: /Connect this repository/i }));
+
+    // Give Relay an objective and start the Mission.
+    fireEvent.change(await screen.findByLabelText(/Objective/i), { target: { value: 'Implement it' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+
+    // Watch truthful live state to verified_complete, then ship.
+    await waitFor(() => expect(screen.getByText(/State:/i).textContent).toContain('verified_complete'));
+    fireEvent.click(screen.getByRole('button', { name: /Ship this Mission/i }));
+    await waitFor(() => expect(screen.getByText(/Ship reached/i).textContent).toContain('committed'));
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(shipImpl).toHaveBeenCalledTimes(1);
   });
 });

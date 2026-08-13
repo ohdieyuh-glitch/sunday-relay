@@ -6,6 +6,15 @@ import {
 } from './bridge-session';
 import { RelayGitHubSignIn } from './RelayGitHubSignIn';
 import { RelayConnectRepository } from './RelayConnectRepository';
+import { RelayMissionRunner } from './RelayMissionRunner';
+import type { startBetaMission, pollBetaMission, shipBetaMission } from './beta-mission';
+
+/** A conservative default config a beta Mission runs under until PSP selection is
+ *  wired into this surface: guided, independent review, bounded spend/compute. */
+const DEFAULT_BETA_CONFIG = {
+  mode: 'guided', review: 'independent', completionRule: 'strict',
+  limits: { agentCalls: 8, runtimeMinutes: 30, spendUsd: 5, reviewCycles: 1, repairCycles: 1 },
+} as const;
 
 /**
  * THE BETA ENTRY GATE — the front door of the private beta.
@@ -28,6 +37,9 @@ export function RelayBetaEntry({
   installBeginImpl = beginRepositoryInstall,
   registerImpl = registerRepository,
   readInstallationImpl = readInstallationFromReturn,
+  missionStartImpl,
+  missionPollImpl,
+  missionShipImpl,
 }: {
   readonly children: ReactNode;
   readonly bridgeUrl?: string | null;
@@ -35,12 +47,15 @@ export function RelayBetaEntry({
   readonly installBeginImpl?: typeof beginRepositoryInstall;
   readonly registerImpl?: typeof registerRepository;
   readonly readInstallationImpl?: typeof readInstallationFromReturn;
+  readonly missionStartImpl?: typeof startBetaMission;
+  readonly missionPollImpl?: typeof pollBetaMission;
+  readonly missionShipImpl?: typeof shipBetaMission;
 }) {
   const resolvedBridge = bridgeUrl !== undefined ? bridgeUrl : configuredBridgeUrl();
   // With no bridge there is nothing to resolve — ready immediately, and transparent.
   const [ready, setReady] = useState(resolvedBridge === null);
   const [participant, setParticipant] = useState<string | null>(() => loadBridgeSession()?.participantId ?? null);
-  const [repoConnected, setRepoConnected] = useState(false);
+  const [connectedKey, setConnectedKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (resolvedBridge === null) return undefined;
@@ -76,7 +91,7 @@ export function RelayBetaEntry({
     );
   }
 
-  if (!repoConnected) {
+  if (connectedKey === null) {
     return (
       <div className="relay-beta-entry" data-state="connect-repo">
         <h1>Connect a repository</h1>
@@ -86,11 +101,26 @@ export function RelayBetaEntry({
           installBeginImpl={installBeginImpl}
           registerImpl={registerImpl}
           readInstallationImpl={readInstallationImpl}
-          onConnected={() => setRepoConnected(true)}
+          onConnected={(key) => setConnectedKey(key)}
         />
       </div>
     );
   }
 
-  return <>{children}</>;
+  // Signed in with a connected repository — the beta app: start, watch, ship a
+  // Mission on it. (`children` is the demo/preview shell, reached only when the
+  // gate is transparent because no live bridge is configured.)
+  return (
+    <div className="relay-beta-entry" data-state="ready">
+      <p>Signed in as <span className="relay-beta-entry__who">{participant}</span>.</p>
+      <RelayMissionRunner
+        repositoryKey={connectedKey}
+        bridgeUrl={resolvedBridge}
+        config={DEFAULT_BETA_CONFIG}
+        {...(missionStartImpl !== undefined ? { startImpl: missionStartImpl } : {})}
+        {...(missionPollImpl !== undefined ? { pollImpl: missionPollImpl } : {})}
+        {...(missionShipImpl !== undefined ? { shipImpl: missionShipImpl } : {})}
+      />
+    </div>
+  );
 }
