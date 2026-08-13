@@ -89,6 +89,81 @@ describe('the credential goes into a header and nowhere else', () => {
   });
 });
 
+describe('the canonical seam: the credential is the RESOLVED token, never the env', () => {
+  /**
+   * When `resolveToken` is wired it is the SOLE credential source — it wraps
+   * `resolveRepositoryCredential`, which returns the short-lived GitHub App
+   * installation token for an installation target. There is NO separate env-var
+   * fallback: an env value under the conventional name is a decoy that must
+   * never reach a header. This is the seam the ship path uses for the PR/merge
+   * API, so the App token authorizes the ENTIRE remote lifecycle, not only push.
+   */
+  const APP_TOKEN = 'ghs_APP_INSTALLATION_TOKEN_never_from_env';
+  const ENV_DECOY = 'ghp_ENV_DECOY_must_not_be_used';
+
+  const appProvider = (fetchImpl: FetchLike, resolved: string | null = APP_TOKEN) =>
+    createGitHubRemoteProvider({
+      // The App path names NO env var; the credential comes from the target.
+      credentialEnvVarName: null,
+      // A decoy under the conventional name proves resolveToken is the sole source.
+      env: { RELAY_GITHUB_TOKEN: ENV_DECOY } as NodeJS.ProcessEnv,
+      resolveToken: async () => resolved,
+      fetchImpl,
+      now: () => NOW,
+    });
+
+  it('opens a pull request with the RESOLVED token, never the env value', async () => {
+    const { fn, calls } = captured(201, { number: 7, html_url: 'https://github.com/o/r/pull/7' });
+    const obs = await appProvider(fn).openPullRequest({
+      owner: 'o', repo: 'r', head: 'relay/x', base: 'main', title: 't', body: 'b',
+    });
+    expect(obs.ok).toBe(true);
+    expect(calls[0]?.headers.authorization).toBe(`Bearer ${APP_TOKEN}`);
+    expect(calls[0]?.headers.authorization).not.toContain(ENV_DECOY);
+  });
+
+  it('merges with the RESOLVED token on both the merge and the read-back', async () => {
+    let call = 0;
+    const seen: string[] = [];
+    const fn: FetchLike = (_url, init) => {
+      seen.push(init.headers.authorization);
+      call += 1;
+      return call === 1 ? reply(200, { merged: true }) : reply(200, { merged: true, html_url: 'https://github.com/o/r/pull/7' });
+    };
+    const obs = await appProvider(fn).mergePullRequest({ owner: 'o', repo: 'r', reference: '7' });
+    expect(obs.state).toBe('merged');
+    expect(seen).toHaveLength(2);
+    expect(seen.every((a) => a === `Bearer ${APP_TOKEN}`)).toBe(true);
+    expect(JSON.stringify(seen)).not.toContain(ENV_DECOY);
+  });
+
+  it('reads the pushed tip back with the RESOLVED token', async () => {
+    const { fn, calls } = captured(200, { object: { sha: SHA } });
+    const obs = await appProvider(fn).push({
+      repositoryKey: 'k', owner: 'o', repo: 'r', branch: 'relay/x', expectedHeadSha: SHA,
+    });
+    expect(obs.ok).toBe(true);
+    expect(calls[0]?.headers.authorization).toBe(`Bearer ${APP_TOKEN}`);
+  });
+
+  it('a null resolved token fails SAFELY — no request, and nothing surfaced', async () => {
+    const fetchImpl = vi.fn();
+    const obs = await appProvider(fetchImpl as unknown as FetchLike, null).openPullRequest({
+      owner: 'o', repo: 'r', head: 'relay/x', base: 'main', title: 't', body: 'b',
+    });
+    expect(obs.ok).toBe(false);
+    // A null credential attempts NO request — it never reaches unauthenticated.
+    expect(fetchImpl).not.toHaveBeenCalled();
+    // The App path has no name to disclose, and nothing about the env decoy or a
+    // token shape leaks into the safe failure.
+    const serialized = JSON.stringify(obs);
+    expect(serialized).not.toContain(ENV_DECOY);
+    expect(serialized).not.toContain('ghs_');
+    expect(serialized).not.toContain('RELAY_GITHUB_TOKEN');
+    expect(obs.detail).toBe('No credential is available for this repository.');
+  });
+});
+
 describe('the dangerous operations are unreachable, not merely refused', () => {
   it('exposes exactly three operations', () => {
     const p = provider(() => reply(200, {}));

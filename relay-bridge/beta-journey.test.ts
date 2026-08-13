@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { execFileSync } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 
 import { createBridgeServer } from './server';
@@ -646,6 +647,71 @@ function participantVerifiedMission(owner: string): {
   return { target: resolved.target, reg: built.value, worktreePath };
 }
 
+/** A real RSA key for the GitHub App JWT — generated, not a secret. */
+const { privateKey: BETA_APP_KEY } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+const BETA_APP_PEM = BETA_APP_KEY.export({ type: 'pkcs1', format: 'pem' }).toString();
+const APP_REMOTE_LADDER = ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr'] as const;
+
+/**
+ * Like `participantVerifiedMission`, but the repository authorizes a GitHub App
+ * INSTALLATION (no env var) and holds push + create_pr, and its checkout's
+ * `origin` is a REAL local bare repo so the runner's real authenticated push runs
+ * OFFLINE. `identity.provider` is overridden to `local` (its origin is a
+ * filesystem bare repo, not github.com) which skips the checkout-identity guard;
+ * `owner` stays `o` (the remote leg needs it) and `credential.installationId`
+ * stays set (the App path). The token mint and the PR API are driven through a
+ * stubbed global fetch — nothing reaches github.com.
+ */
+function participantAppRemoteMission(owner: string, installationId: string): {
+  target: MissionRepositoryTarget; reg: RepositoryRegistration; worktreePath: string; bare: string;
+} {
+  const repoRoot = mkdtempSync(join(tmpdir(), 'relay-jappship-src-'));
+  roots.push(repoRoot);
+  const git = (a: string[], cwd = repoRoot) => execFileSync('git', a, { cwd, env: GIT_ENV(repoRoot) });
+  git(['init', '--quiet', '--initial-branch=main']);
+  mkdirSync(join(repoRoot, 'src'), { recursive: true });
+  writeFileSync(join(repoRoot, 'src', 'app.js'), 'export const v = 1;\n');
+  git(['add', '--', '.']); git(['commit', '-m', 'initial']);
+  const bare = mkdtempSync(join(tmpdir(), 'relay-jappship-bare-'));
+  roots.push(bare);
+  rmSync(bare, { recursive: true, force: true });
+  execFileSync('git', ['init', '--bare', '-b', 'main', bare], { cwd: repoRoot, env: GIT_ENV(repoRoot) });
+  git(['remote', 'add', 'origin', bare]);
+  git(['push', '--quiet', 'origin', 'main']);
+  const worktreePath = mkdtempSync(join(tmpdir(), 'relay-jappship-wt-'));
+  roots.push(worktreePath);
+  rmSync(worktreePath, { recursive: true, force: true });
+  git(['worktree', 'add', '-b', 'relay/mission-1', worktreePath, 'main']);
+  writeFileSync(join(worktreePath, 'src', 'app.js'), 'export const v = 2;\n');
+
+  const built = createRepositoryRegistration({
+    draft: {
+      identity: { provider: 'github', host: 'github.com', owner: 'o', name: 'r', defaultBranch: 'main' },
+      location: { kind: 'remote_clone', cloneUrl: 'https://github.com/o/r.git' },
+      scope: { read: ['**'], write: ['src/**'] },
+      grants: APP_REMOTE_LADDER.map((permission) => ({ permission, authorizedBy: owner, authorizedAt: NOW, expiresAt: null, note: null })),
+      ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+      credential: { installationId },  // THE APP PATH: an installation, no env var.
+      registeredBy: owner,
+      ownerParticipant: owner,
+    },
+    now: NOW,
+  });
+  if (!built.ok) throw new Error(built.error.message);
+  const resolved = resolveRepositoryTarget({
+    registration: built.value,
+    request: { repositoryKey: built.value.key, selectedBy: owner, selectedAt: NOW, workingBranch: 'relay/mission-1', permissions: [...APP_REMOTE_LADDER] },
+    now: NOW,
+  });
+  if (!resolved.ok) throw new Error(resolved.error.message);
+  const target = {
+    ...resolved.target,
+    identity: { ...resolved.target.identity, provider: 'local' as const },
+    location: { kind: 'local_path' as const, path: repoRoot },
+  } as MissionRepositoryTarget;
+  return { target, reg: built.value, worktreePath, bare };
+}
+
 async function bootShip(m: { target: MissionRepositoryTarget; reg: RepositoryRegistration; worktreePath: string }):
   Promise<{ base: string; brain: BrainMemoryStore }> {
   const root = mkdtempSync(join(tmpdir(), 'relay-jship-')); roots.push(root);
@@ -656,6 +722,12 @@ async function bootShip(m: { target: MissionRepositoryTarget; reg: RepositoryReg
   vi.stubEnv('RELAY_GITHUB_APP_CLIENT_SECRET', 'fixture-secret-never-surfaces');
   vi.stubEnv('RELAY_GITHUB_APP_CALLBACK_URL', CALLBACK);
   vi.stubEnv('RELAY_GITHUB_APP_INSTALL_URL', INSTALL_URL);
+  // The GitHub App server config, so the ship path can mint a short-lived
+  // installation token for an App-authorized target. The App LADDER tests use
+  // it; the env-var / no-credential ship tests carry no installationId and are
+  // unaffected.
+  vi.stubEnv('RELAY_GITHUB_APP_ID', '123456');
+  vi.stubEnv('RELAY_GITHUB_APP_PRIVATE_KEY', BETA_APP_PEM);
   const config = loadBridgeConfig(process.env);
   const repoStore = createRepositoryRegistrationStore({ root });
   repoStore.save(m.reg);
@@ -722,26 +794,120 @@ describe('a fresh participant SHIPS their own verified mission over HTTP (criter
     expect(existsSync(m.worktreePath)).toBe(true);
   }, 45_000);
 
-  it('P4 — a remote ship that names NO credential is refused, and nothing is falsely shipped', async () => {
-    // The closest autonomous analog to the blocked github.com push: a ship that
-    // authorizes a remote leg but names no credential env var cannot authenticate,
-    // so it is REFUSED — never falsely marked shipped (RELIABILITY: a GitHub/credential
-    // failure fails truthfully; SHIPPED is earned, not claimed).
+  it('P4 — a remote ship naming a credential the target does not authorize is refused, never a false ship', async () => {
+    /**
+     * RE-EXPRESSED for the credential-seam model. The credential is ALWAYS the
+     * TARGET's authorized credential, resolved through `resolveRepositoryCredential`
+     * — never a body-supplied env var. This target authorizes NO env-var credential
+     * (a local ship, no push grants), so a body that NAMES one is a request for a
+     * credential the target does not authorize (requested != actual) and is
+     * REFUSED — never falsely marked shipped (SHIPPED is earned, not claimed).
+     *
+     * The OLD assertion (a blank credentialEnvVarName → 422) is no longer the
+     * security property: a blank/omitted credential is now the legitimate
+     * App-installation path. Refusing it would refuse the user-safe path. The
+     * security-relevant refusal is a body naming a credential the target does not
+     * authorize, which this proves.
+     */
     const m = participantVerifiedMission('ghu-4242');
     const { base, brain } = await bootShip(m);
     const token = await signIn(base, { login: 'beta-alice', id: 4242 });
+    expect(m.target.credential.envVarName).toBeNull();
 
     const res = await getJson(await realFetch(`${base}/relay-api/mission/m-ship/ship`, {
       method: 'POST', headers: { 'content-type': 'application/json', ...asUser(token) },
       body: JSON.stringify({
-        remote: { provider: 'github', credentialEnvVarName: '   ', pullRequestTitle: 'x', pullRequestBody: {} },
+        remote: { provider: 'github', credentialEnvVarName: 'SOMEONE_ELSES_TOKEN', pullRequestTitle: 'x', pullRequestBody: {} },
       }),
     }));
     expect(res.status).toBe(422);
     expect((res.body.error as { kind: string }).kind).toBe('ship_refused');
+    expect((res.body.error as { message: string }).message).toContain('SOMEONE_ELSES_TOKEN');
     // Never falsely shipped: the refusal wrote NO ship episode to the Project Brain.
     expect(brain.load(m.reg.key).entries).toHaveLength(0);
   }, 45_000);
+
+  it('ADMITS the App-installation remote leg end to end — push and PR through the minted App token', async () => {
+    /**
+     * THE PACKAGE, END TO END OVER HTTP. A participant ships an App-authorized
+     * repository: the body OMITS a credential env var (the App path), and Relay
+     * resolves the TARGET's installation credential — a short-lived App token
+     * minted through `resolveRepositoryCredential` — for BOTH the git push and
+     * the PR API. The App-installation remote leg used to be fatal-refused before
+     * the push; it is now admitted, and requested == actual (the target's own
+     * installation) throughout.
+     *
+     * The real authenticated push lands on a REAL local bare remote (offline); the
+     * token mint, the push read-back and the PR API are a stubbed global fetch, so
+     * NOTHING reaches github.com. Each stage is independently gated: with no
+     * merge grant the run stops at pull_request_open, not merged.
+     */
+    const m = participantAppRemoteMission('ghu-4242', '55550001');
+    const { base, brain } = await bootShip(m);
+    const token = await signIn(base, { login: 'beta-alice', id: 4242 });
+
+    // Re-stub fetch AFTER sign-in: mint + push-readback + PR are faked; localhost
+    // (the test's own HTTP to the bridge) passes through.
+    const APP_TOKEN = 'ghs_beta_journey_app_token';
+    const seen: { mintHit: boolean; prAuth?: string } = { mintHit: false };
+    vi.stubGlobal('fetch', (async (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+      const u = String(url);
+      if (u.includes('/app/installations/') && u.includes('/access_tokens')) {
+        seen.mintHit = true;
+        return {
+          ok: true, status: 201,
+          json: async () => ({ token: APP_TOKEN, expires_at: '2026-08-12T19:00:00Z', permissions: { contents: 'write', pull_requests: 'write' }, repository_selection: 'selected' }),
+          text: async () => '',
+        };
+      }
+      if (u.includes('/git/ref/heads/')) {
+        const sha = execFileSync('git', ['-C', m.bare, 'rev-parse', 'relay/mission-1'], { encoding: 'utf8', env: GIT_ENV(m.bare) }).trim();
+        return { ok: true, status: 200, json: async () => ({ object: { sha } }), text: async () => JSON.stringify({ object: { sha } }) };
+      }
+      if (u.includes('/pulls')) {
+        seen.prAuth = init?.headers?.authorization;
+        return { ok: true, status: 201, json: async () => ({}), text: async () => JSON.stringify({ number: 7, html_url: 'https://github.com/o/r/pull/7' }) };
+      }
+      return realFetch(url as never, init as never);
+    }) as never);
+
+    const res = await getJson(await realFetch(`${base}/relay-api/mission/m-ship/ship`, {
+      method: 'POST', headers: { 'content-type': 'application/json', ...asUser(token) },
+      // The body OMITS a credential env var — the App path — and authorizes push+PR.
+      body: JSON.stringify({
+        remote: {
+          provider: 'github', pullRequestTitle: 'Bump the util',
+          pullRequestBody: {
+            missionId: 'm-ship', objective: 'Bump the util', artifactDigest: null, reviewedArtifactDigest: null,
+            reviewerVerdict: null, reviewerFindings: [], relayVerification: [], attestations: [], baselineSha: null,
+          },
+        },
+      }),
+    }));
+
+    expect(res.status).toBe(200);
+    const data = res.body.data as { stage: string; stoppedBy: string | null; evidence: { stage: string; detail: string | null }[] };
+    // The leg was ADMITTED (no longer fatal-refused) and ran to the pull request.
+    expect(data.stage).toBe('pull_request_open');
+    expect(data.stoppedBy).toBeNull();
+    // Push and PR really ran; merge did NOT (no merge grant — independent gating).
+    expect(data.evidence.map((e) => e.stage)).toContain('pushed');
+    expect(data.evidence.map((e) => e.stage)).toContain('pull_request_open');
+    expect(data.evidence.map((e) => e.stage)).not.toContain('merged');
+    // The App token was MINTED (App path) and the PR API consumed the RESOLVED
+    // App token — never a founder env var.
+    expect(seen.mintHit).toBe(true);
+    expect(seen.prAuth).toBe(`Bearer ${APP_TOKEN}`);
+    // The commit physically LANDED on the real bare remote through the real push.
+    const bareTip = execFileSync('git', ['-C', m.bare, 'rev-parse', 'relay/mission-1'], { encoding: 'utf8', env: GIT_ENV(m.bare) }).trim();
+    expect(bareTip).toMatch(/^[0-9a-f]{40}$/);
+    // The retained worktree was disposed by the ship.
+    expect(existsSync(m.worktreePath)).toBe(false);
+    // The Brain recorded the REAL stage reached — requested == actual, no false ship.
+    const summaries = brain.load(m.reg.key).entries.map((e) => e.summary);
+    expect(summaries.some((s) => s.includes('reached pull_request_open'))).toBe(true);
+    expect(summaries.some((s) => s.includes('reached merged'))).toBe(false);
+  }, 60_000);
 });
 
 /* ---------------------------------- durability across a restart (WP-5) --- */

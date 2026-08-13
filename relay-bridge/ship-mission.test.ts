@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { shipVerifiedMission } from './ship-mission';
 import { REVISION_MARKER } from './local-directory-deployment-provider';
@@ -41,7 +42,14 @@ afterEach(async () => {
   for (const path of temporaries.splice(0)) {
     try { rmSync(path, { recursive: true, force: true }); } catch { /* best effort */ }
   }
+  vi.unstubAllGlobals();
 });
+
+/** A real RSA key for the GitHub App JWT — generated, not a secret. The App path
+ *  mints a JWT with this to authenticate the installation-token request. */
+const { privateKey: APP_PRIVATE_KEY } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+const APP_PEM = APP_PRIVATE_KEY.export({ type: 'pkcs1', format: 'pem' }).toString();
+const APP_ENV = { RELAY_GITHUB_APP_ID: '123456', RELAY_GITHUB_APP_PRIVATE_KEY: APP_PEM } as NodeJS.ProcessEnv;
 
 function temp(prefix: string): string {
   const path = mkdtempSync(join(tmpdir(), prefix));
@@ -115,6 +123,72 @@ async function serve(root: string): Promise<string> {
   if (a === null || typeof a === 'string') throw new Error('no port');
   return `http://127.0.0.1:${String(a.port)}`;
 }
+
+/**
+ * A verified mission whose target authorizes a GitHub App INSTALLATION (no env
+ * var) and holds push + create_pr. Its checkout's `origin` is a REAL local bare
+ * repo, so the runner's real authenticated push runs offline — the "GitHub repo
+ * already on the machine" case. `identity.provider` is `local` (its origin is a
+ * filesystem bare repo, not github.com), which skips the checkout-identity guard;
+ * `owner` stays `o` (the remote leg needs it) and `credential.installationId`
+ * stays set (the App path). The PR/merge API is driven through a stubbed global
+ * fetch, so nothing reaches github.com.
+ */
+const APP_REMOTE_LADDER = ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr'] as const;
+function appRemoteMission(): { root: string; bare: string; target: MissionRepositoryTarget; reg: RepositoryRegistration } {
+  const root = temp('relay-shipm-app-');
+  const git = (a: string[]) => execFileSync('git', a, { cwd: root, env: GIT_ENV(root) });
+  git(['init', '--quiet', '--initial-branch=main']);
+  mkdirSync(join(root, 'src'), { recursive: true });
+  writeFileSync(join(root, 'src', 'app.js'), 'export const version = 1;\n');
+  writeFileSync(join(root, 'index.html'), '<!doctype html><title>app</title>\n');
+  git(['add', '--', '.']);
+  git(['commit', '-m', 'initial']);
+  const bare = temp('relay-shipm-appbare-');
+  rmSync(bare, { recursive: true, force: true });
+  execFileSync('git', ['init', '--bare', '-b', 'main', bare], { cwd: root, env: GIT_ENV(root) });
+  git(['remote', 'add', 'origin', bare]);
+  git(['push', '--quiet', 'origin', 'main']);
+  git(['checkout', '--quiet', '-b', 'relay/mission-1']);
+
+  const built = createRepositoryRegistration({
+    draft: {
+      identity: { provider: 'github', host: 'github.com', owner: 'o', name: 'r', defaultBranch: 'main' },
+      location: { kind: 'remote_clone', cloneUrl: 'https://github.com/o/r.git' },
+      scope: { read: ['**'], write: ['src/**'] },
+      grants: APP_REMOTE_LADDER.map((permission) => ({ permission, authorizedBy: 'founder', authorizedAt: NOW, expiresAt: null, note: null })),
+      ceilings: { maxFilesChanged: 5, maxLinesRemoved: 100, allowDeletions: false },
+      // THE APP PATH: an installation id, and NO env var. The bridge mints a
+      // short-lived installation token from it.
+      credential: { installationId: '55550123' },
+      registeredBy: 'founder',
+    },
+    now: NOW,
+  });
+  if (!built.ok) throw new Error(built.error.message);
+  const resolved = resolveRepositoryTarget({
+    registration: built.value,
+    request: { repositoryKey: built.value.key, selectedBy: 'founder', selectedAt: NOW, workingBranch: 'relay/mission-1', permissions: [...APP_REMOTE_LADDER] },
+    now: NOW,
+  });
+  if (!resolved.ok) throw new Error(resolved.error.message);
+  const target = {
+    ...resolved.target,
+    identity: { ...resolved.target.identity, provider: 'local' as const },
+    location: { kind: 'local_path' as const, path: root },
+  } as MissionRepositoryTarget;
+  return { root, bare, target, reg: built.value };
+}
+
+/** Reads the bare repo's actual tip — what the real push just landed, which is
+ *  exactly what the GitHub ref read-back would report. */
+const bareTipOf = (bare: string) =>
+  execFileSync('git', ['-C', bare, 'rev-parse', 'relay/mission-1'], { encoding: 'utf8', env: GIT_ENV(bare) }).trim();
+
+const APP_PR_BODY = {
+  missionId: 'm', objective: 'Bump the version', artifactDigest: null, reviewedArtifactDigest: null,
+  reviewerVerdict: null, reviewerFindings: [], relayVerification: [], attestations: [], baselineSha: null,
+} as const;
 
 describe('shipVerifiedMission', () => {
   it('COMMITS a verified mission and stops there when nothing else is authorized', async () => {
@@ -221,15 +295,28 @@ describe('shipVerifiedMission', () => {
     expect(finalShip.result.stage).toBe('deployed');
   });
 
-  it('REFUSES a remote authorization that names no credential', async () => {
+  it('REFUSES a remote authorization naming a credential the target does not authorize (requested != actual)', async () => {
+    /**
+     * The credential is ALWAYS the target's authorized credential. This target
+     * authorizes NO env-var credential (a local ship with no push grants), so a
+     * body that NAMES one is a request for a credential the target does not
+     * authorize — refused before anything runs, never a false ship.
+     *
+     * MUTATION PROBE (recorded, re-run to confirm it bites): removing the
+     * requested==actual check in `shipVerifiedMission` makes this pass through to
+     * a run that stops at `committed` with `ok: true` — so the `ok === false`
+     * assertion below fails, which is the guard biting.
+     */
     const { root, target, reg } = verifiedRepository();
+    expect(target.credential.envVarName).toBeNull();
     const outcome = await shipVerifiedMission({
       target, readRegistration: () => reg, worktreePath: root,
       judgement: judgeEdit(root, target),
       commitMessage: 'Relay: bump version', authorName: 'Relay', authorEmail: 'relay@x',
       authorization: {
         remote: {
-          provider: 'github', credentialEnvVarName: '   ',
+          // A credential the target does NOT authorize.
+          provider: 'github', credentialEnvVarName: 'SOMEONE_ELSES_TOKEN',
           pullRequestTitle: 't',
           pullRequestBody: {
             missionId: 'm', objective: 'o', artifactDigest: null, reviewedArtifactDigest: null,
@@ -240,8 +327,73 @@ describe('shipVerifiedMission', () => {
       },
       now: () => NOW,
     });
-    // Fail-closed, before anything runs.
+    // Fail-closed, before anything runs — the request named a credential the
+    // target does not authorize.
     expect(outcome.ok).toBe(false);
-    if (!outcome.ok) expect(outcome.reason).toContain('must name the env var');
+    if (!outcome.ok) {
+      expect(outcome.reason).toContain('SOMEONE_ELSES_TOKEN');
+      expect(outcome.reason).toContain('authorizes no environment-variable credential');
+    }
   });
+
+  it('builds the remote provider from the TARGET — an App installation resolves the App token through the seam', async () => {
+    /**
+     * THE WHOLE POINT OF THIS PACKAGE, at the ship-mission seam: the body omits a
+     * credential env var (the App path), and the provider Relay builds consumes
+     * the TARGET's installation credential — a short-lived App token minted
+     * through `resolveRepositoryCredential` — for the PR API, not a founder env
+     * var. The push is real (to a local bare origin, offline); the mint and the
+     * PR API are a stubbed global fetch, so nothing reaches github.com.
+     */
+    const { root, bare, target, reg } = appRemoteMission();
+    const APP_TOKEN = 'ghs_shipmission_app_token';
+    const seen: { mintHit: boolean; prAuth?: string; refAuth?: string } = { mintHit: false };
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', (async (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string }) => {
+      const u = String(url);
+      if (u.includes('/app/installations/') && u.includes('/access_tokens')) {
+        seen.mintHit = true;
+        return {
+          ok: true, status: 201,
+          json: async () => ({ token: APP_TOKEN, expires_at: '2026-08-12T19:00:00Z', permissions: { contents: 'write', pull_requests: 'write' }, repository_selection: 'selected' }),
+          text: async () => '',
+        };
+      }
+      if (u.includes('/git/ref/heads/')) {
+        seen.refAuth = init?.headers?.authorization;
+        const sha = bareTipOf(bare);
+        return { ok: true, status: 200, json: async () => ({ object: { sha } }), text: async () => JSON.stringify({ object: { sha } }) };
+      }
+      if (u.includes('/pulls')) {
+        seen.prAuth = init?.headers?.authorization;
+        return { ok: true, status: 201, json: async () => ({}), text: async () => JSON.stringify({ number: 7, html_url: 'https://github.com/o/r/pull/7' }) };
+      }
+      return realFetch(url as never, init as never);
+    }) as never);
+
+    const outcome = await shipVerifiedMission({
+      target, readRegistration: () => reg, worktreePath: root,
+      judgement: judgeEdit(root, target),
+      commitMessage: 'Relay: bump version', authorName: 'Relay', authorEmail: 'relay@x',
+      // The body OMITS a credential env var — the App path — and authorizes push+PR.
+      authorization: { remote: { provider: 'github', pullRequestTitle: 'Bump the version', pullRequestBody: APP_PR_BODY } },
+      now: () => NOW,
+      // App config in env; NO founder PAT anywhere.
+      env: APP_ENV,
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    // The App token was MINTED — the App path was taken, not an env-var PAT.
+    expect(seen.mintHit).toBe(true);
+    // The PR API and the ref read-back consumed the RESOLVED App token.
+    expect(seen.prAuth).toBe(`Bearer ${APP_TOKEN}`);
+    expect(seen.refAuth).toBe(`Bearer ${APP_TOKEN}`);
+    // The leg was ADMITTED and ran to the pull request; each stage is
+    // independently gated, so with no merge grant it stops at pull_request_open.
+    expect(outcome.result.stage).toBe('pull_request_open');
+    expect(outcome.result.stoppedBy).toBeNull();
+    // The commit physically LANDED on the real bare remote through the real push.
+    expect(bareTipOf(bare)).toBe(outcome.result.commitSha);
+  }, 30_000);
 });

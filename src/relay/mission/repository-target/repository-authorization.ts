@@ -197,7 +197,19 @@ export function authorizeRepositoryAction(input: {
   // A credential-requiring action must have somewhere to read a credential
   // from. Refused by name here rather than failing at the provider, so the
   // Mission stops at CONFIGURATION — before a clone, before a spend.
-  if (requiresCredential(permission) && registration.credential.envVarName === null) {
+  //
+  // A credential is configured when EITHER an env var names it (the founder-PAT
+  // path) OR a GitHub App installation supplies it (the user-safe path). An App
+  // installation IS a configured credential — the bridge mints a short-lived,
+  // repo-scoped installation token from it at the point of use. So this refuses
+  // only when NEITHER source is present: no env var AND no installation id. That
+  // preserves fail-closed (a grant that reaches a remote with no credential at
+  // all is refused at configuration) while admitting the installation path.
+  if (
+    requiresCredential(permission) &&
+    registration.credential.envVarName === null &&
+    (registration.credential.installationId ?? null) === null
+  ) {
     return refuse({
       refusal: 'credential_missing',
       message: `"${permission}" on "${registration.key}" needs a server-side credential and none is configured.`,

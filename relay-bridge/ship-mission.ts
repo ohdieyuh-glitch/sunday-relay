@@ -3,6 +3,7 @@ import { rmSync } from 'node:fs';
 
 import { createLocalDirectoryDeploymentProvider } from './local-directory-deployment-provider';
 import { createGitHubRemoteProvider } from './github-remote-provider';
+import { resolveRepositoryCredential } from './repository-credential';
 import { runShipLifecycle } from './ship-runner';
 import type { ShipRunResult } from './ship-runner';
 import type {
@@ -29,11 +30,12 @@ import type {
  *     present. No deploy authorization → the run stops after COMMIT, which is a
  *     complete outcome.
  *   - The remote provider (push/PR/merge) is built only when a `remote`
- *     authorization is present AND names the credential env var. It is never
- *     constructed from an absent credential name — the credential boundary says
- *     Relay performs remote operations from code that names, server-side, where
- *     the credential is read, and a remote leg with no named credential is a
- *     remote leg that would read `undefined`.
+ *     authorization is present, and its credential is ALWAYS the TARGET's
+ *     authorized credential, resolved through `resolveRepositoryCredential` — an
+ *     env-var PAT or a short-lived GitHub App installation token. The body may
+ *     NAME a credential (checked to equal the target's, requested == actual) but
+ *     is never a credential SOURCE, and a body that names one the target does not
+ *     authorize is refused before anything runs.
  *   - The registration is READ, not captured: `readRegistration` is threaded
  *     straight through so a revocation between build and ship still lands.
  *
@@ -55,10 +57,14 @@ export interface ShipAuthorization {
     /** GitHub is the first remote provider; the value is the provider id. */
     readonly provider: 'github';
     /**
-     * The env var the push credential is read from, server-side. NAMED here,
-     * never the value. A remote authorization that does not name it is refused.
+     * OPTIONAL. The credential is ALWAYS the target's authorized credential,
+     * resolved through `resolveRepositoryCredential` — never a body-supplied env
+     * var. When the body names this, it is checked to EQUAL the target's
+     * authorized env var (requested == actual) and is otherwise refused; when the
+     * body omits it, that is the App-installation path and is allowed. It is
+     * never used as a credential SOURCE.
      */
-    readonly credentialEnvVarName: string;
+    readonly credentialEnvVarName?: string | null;
     readonly pullRequestTitle: string;
     readonly pullRequestBody: import('../src/relay/mission/repository-target').PullRequestEvidence;
   };
@@ -112,24 +118,55 @@ export async function shipVerifiedMission(request: ShipMissionRequest): Promise<
     };
 
   /**
-   * THE REMOTE PROVIDER, only if a remote operation is authorized AND names
-   * its credential. Fail-closed: an authorization that omits the credential
-   * name is refused before anything runs, rather than building a provider that
-   * would read `undefined` and surface a confusing downstream failure.
+   * THE REMOTE PROVIDER, only if a remote operation is authorized. Its
+   * credential is ALWAYS the TARGET's authorized credential, resolved through
+   * the canonical seam `resolveRepositoryCredential` — an env-var PAT
+   * (`target.credential.envVarName`) OR a short-lived GitHub App installation
+   * token (`target.credential.installationId`), minted fresh per call. Never a
+   * body-supplied env var, never a silent PAT fallback.
+   *
+   * REQUESTED == ACTUAL. If the body DOES name a credential, it must equal the
+   * one the target authorizes — a request naming a credential the target does
+   * not authorize is refused before anything runs. If the body omits it, that is
+   * the installation path (the target authorizes no env var) and is allowed. The
+   * body's value is a CHECK, never a source.
    */
   let remote: Parameters<typeof runShipLifecycle>[0]['remote'];
   if (authorization.remote === undefined) {
     remote = undefined;
   } else {
-    if (authorization.remote.credentialEnvVarName.trim() === '') {
+    const authorizedEnvVar = request.target.credential.envVarName;
+    const requestedEnvVar = authorization.remote.credentialEnvVarName;
+    if (typeof requestedEnvVar === 'string' && requestedEnvVar.trim() !== ''
+      && requestedEnvVar.trim() !== (authorizedEnvVar ?? '')) {
       return {
         ok: false,
-        reason: 'A remote ship authorization must name the env var its credential is read from.',
+        reason: authorizedEnvVar === null
+          ? `The remote ship names the credential in ${requestedEnvVar.trim()}, but this repository `
+            + 'authorizes no environment-variable credential (it uses a GitHub App installation). '
+            + 'Relay ships with the credential the target authorizes, not one the request names.'
+          : `The remote ship names the credential in ${requestedEnvVar.trim()}, but this repository `
+            + `authorizes the credential in ${authorizedEnvVar}. Relay ships with the credential the `
+            + 'target authorizes, not one the request names.',
       };
     }
     remote = {
       provider: createGitHubRemoteProvider({
-        credentialEnvVarName: authorization.remote.credentialEnvVarName,
+        // Authoritative: the target's env var name, or null for the App path.
+        credentialEnvVarName: authorizedEnvVar,
+        // THE CANONICAL SEAM. The sole credential source for the provider's API
+        // calls — the App installation token for an installation target, the
+        // env-var value for an env-var target, null (fail closed) for neither.
+        resolveToken: async () => {
+          // The SAME base the git-push leg resolves against (ship-runner uses
+          // `request.env ?? {}`), never `process.env`: a missing env must fail
+          // closed against an empty environment, not silently read a host var.
+          const resolved = await resolveRepositoryCredential({
+            target: request.target,
+            env: request.env ?? {},
+          });
+          return resolved.ok ? (resolved.value?.token ?? null) : null;
+        },
         env: request.env,
         now: request.now,
       }),

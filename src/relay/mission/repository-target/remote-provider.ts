@@ -37,8 +37,14 @@ export interface RemoteProviderDescriptor {
    * The env var the credential is read from, server-side. The NAME only — never
    * the value, no prefix, no length, no fingerprint. This descriptor travels
    * into Mission evidence and the UI.
+   *
+   * `null` means the provider does NOT read a named env var: it consumes the
+   * TARGET's resolved credential — a short-lived GitHub App installation token
+   * minted per operation through the credential seam. A null here is the
+   * user-safe installation path, not "no credential"; the credential is resolved
+   * from the target, not from a founder-named variable.
    */
-  readonly credentialEnvVarName: string;
+  readonly credentialEnvVarName: string | null;
   /** What this implementation can actually do today. Registered is not the same
    *  as drivable, the same distinction role slots and providers already draw. */
   readonly supports: readonly RepositoryPermission[];
