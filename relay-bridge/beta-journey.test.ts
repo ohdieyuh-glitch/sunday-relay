@@ -357,6 +357,24 @@ describe('a fresh participant runs a real three-role mission end to end over HTT
     expect(typeof row.state).toBe('string');
     expect(typeof row.createdAt).toBe('string');
   }, 60_000);
+
+  it('a duplicate start of the same mission never dispatches twice (reliability, no double spend)', async () => {
+    const real = bootReal();
+    const base = await real.start();
+    const token = await signIn(base, { login: 'beta-alice', id: 4242 });
+
+    // A reconnect racing a submit, or a double-click, POSTs the same start twice.
+    await getJson(await startMission(base, token, { missionId: 'm-dup', objective: 'Do it once.' }));
+    const second = await getJson(await startMission(base, token, { missionId: 'm-dup', objective: 'Do it once.' }));
+    expect(second.status).toBe(200); // the duplicate is answered, not errored…
+
+    await settleMission(base, token, 'm-dup');
+    // …but exactly ONE three-role run happened — idempotent by mission id, so a
+    // duplicate can never double-spend.
+    expect(real.calls.architect + real.calls.fusion).toBe(1);
+    expect(real.calls.coding).toBe(1);
+    expect(real.calls.reviewer).toBe(1);
+  }, 45_000);
 });
 
 const savePsp = (base: string, token: string, body: unknown) =>
