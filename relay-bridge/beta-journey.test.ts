@@ -480,6 +480,27 @@ describe('a fresh participant’s mission is repaired, re-reviewed, and only the
     expect(real.calls.coding).toBe(0);
     expect(real.calls.reviewer).toBe(0);
   }, 45_000);
+
+  it('P5 — a FAILED mission appears in the participant’s own history as failed, never as a success', async () => {
+    // A persistently-rejected mission fails (as P2 proves); it must then show up
+    // TRUTHFULLY in the participant's history — the exact record a Brain fed only
+    // successes would corrupt into "everything works" (criteria 12/13).
+    const real = bootReal({ reviewVerdicts: ['changes_required', 'changes_required'] });
+    const base = await real.start();
+    const token = await signIn(base, { login: 'beta-failhist', id: 5150 });
+    await getJson(await startMission(base, token, { missionId: 'm-failhist', objective: 'Will be rejected.' }));
+    const view = await settleMission(base, token, 'm-failhist');
+    expect(view.state).toBe('failed');
+
+    // The participant's own history lists it as failed — never verified/shipped.
+    const list = await getJson(await realFetch(`${base}/relay-api/missions`, { headers: asUser(token) }));
+    const rows = list.body.missions as Array<{ missionId: string; state: string }>;
+    const row = rows.find((m) => m.missionId === 'm-failhist');
+    expect(row).toBeDefined();
+    expect(row?.state).toBe('failed');
+    // Nothing in this participant's history is falsely presented as complete.
+    expect(rows.every((m) => m.state !== 'verified_complete')).toBe(true);
+  }, 45_000);
 });
 
 const savePsp = (base: string, token: string, body: unknown) =>
