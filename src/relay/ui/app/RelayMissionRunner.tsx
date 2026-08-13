@@ -20,6 +20,19 @@ import type { LiveMissionUpdate } from './contracts';
 
 const TERMINAL = new Set(['verified_complete', 'failed', 'cancelled']);
 
+/**
+ * The repository permissions the active configuration (PSP) REQUESTS. The
+ * browser never invents authority: it forwards only what the chosen profile
+ * names, and the bridge narrows even that against the registration's grants.
+ * Empty means the profile named none, and the runner then omits permissions so
+ * the server applies its own safe floor (read + write_worktree) rather than
+ * requesting a ship ladder the task never asked for.
+ */
+function configPermissions(config: unknown): readonly string[] {
+  const perms = (config as { permissions?: unknown } | null)?.permissions;
+  return Array.isArray(perms) && perms.every((p) => typeof p === 'string') ? perms as string[] : [];
+}
+
 export function RelayMissionRunner({
   repositoryKey,
   workingBranch = 'relay/beta',
@@ -84,11 +97,15 @@ export function RelayMissionRunner({
     event.preventDefault();
     setBusy(true);
     setMessage(null);
+    // Least privilege: request exactly what the chosen profile named, or omit so
+    // the server applies its safe floor. Never a hardcoded ship ladder — that
+    // would 422 a read/write-only registration and over-hold authority besides.
+    const requested = configPermissions(activeConfig);
     const result = await startImpl({
       objective: objective.trim(),
       repositoryKey,
       workingBranch,
-      permissions: ['read', 'write_worktree', 'commit', 'push_feature_branch', 'create_pr'],
+      ...(requested.length > 0 ? { permissions: requested } : {}),
       config: activeConfig,
       bridgeUrl,
     });
@@ -161,6 +178,14 @@ export function RelayMissionRunner({
           {...(pspSaveImpl !== undefined ? { saveImpl: pspSaveImpl } : {})}
         />
         <p className="relay-mission-runner__config">Running under <strong>{activeLabel}</strong>.</p>
+        <p className="relay-mission-runner__permissions">
+          Permissions requested:{' '}
+          <strong>{(() => {
+            const p = configPermissions(activeConfig);
+            return p.length > 0 ? p.join(', ') : 'read + write_worktree (safe floor)';
+          })()}</strong>
+          {' '}— the bridge narrows these against what you granted.
+        </p>
         <label>
           Ask Relay an objective
           <input aria-label="Objective" value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="Implement…" />

@@ -173,6 +173,30 @@ describe('RelayMissionRunner', () => {
     expect(screen.queryByRole('button', { name: /Retry Mission/i })).toBeNull();
   });
 
+  it('requests least privilege — omits permissions when the config names none (safe floor)', async () => {
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-lp', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-lp', view: coding, message: null }));
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided' }} />);
+    // The user sees what authority the Mission will ask for, before starting.
+    expect(screen.getByText(/safe floor/i)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'inspect' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    // No hardcoded ship ladder — the key is absent, so the server applies its floor.
+    expect('permissions' in start.mock.calls[0][0]).toBe(false);
+  });
+
+  it('forwards exactly the permissions the chosen profile names — never more', async () => {
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-lp2', view: coding, message: null }));
+    const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-lp2', view: coding, message: null }));
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} startImpl={start} pollImpl={poll} pspListImpl={emptyList} config={{ mode: 'guided', permissions: ['read', 'write_worktree', 'commit'] }} />);
+    expect(screen.getByText(/Permissions requested/i).textContent).toContain('commit');
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'build' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+    expect(start.mock.calls[0][0].permissions).toEqual(['read', 'write_worktree', 'commit']);
+  });
+
   it('cancels an in-flight mission', async () => {
     const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-c', view: coding, message: null }));
     const poll = vi.fn<typeof pollBetaMission>(async () => ({ ok: true, missionId: 'm-c', view: coding, message: null }));
