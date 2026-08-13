@@ -538,8 +538,16 @@ describe('a fresh participant SHIPS their own verified mission over HTTP (criter
     expect(log).toContain('Relay mission');
     // The retained worktree was disposed by the ship.
     expect(existsSync(m.worktreePath)).toBe(false);
-    // The Project Brain recorded the ship as a verified episode (WP-6).
-    expect(brain.load(m.reg.key).entries.length).toBeGreaterThan(0);
+    // The Project Brain recorded the ship as a verified episode SCOPED TO THIS
+    // repository (repo identity), carrying the real stage the ship reached — a
+    // verified fact, not an unverified model claim. `load(key)` is repo-scoped,
+    // so a non-empty result is itself evidence the episode is filed under the
+    // participant's own repository.
+    const brainEntries = brain.load(m.reg.key).entries;
+    expect(brainEntries.length).toBeGreaterThan(0);
+    expect(brainEntries.map((e) => e.summary).some((s) => s.includes('reached committed'))).toBe(true);
+    // And nothing about a stage the ship did NOT reach was fabricated.
+    expect(brainEntries.map((e) => e.summary).some((s) => s.includes('reached deployed'))).toBe(false);
   }, 45_000);
 
   it('REFUSES a different participant shipping a mission they do not own', async () => {
