@@ -30,6 +30,13 @@ const GOOD_HANDOFF = {
 };
 
 const ARTIFACT_DIGEST = digest('artifact-v1');
+/**
+ * What a REPAIRED implementation hashes to. A repair changes the bytes, so it
+ * changes the digest — mirrored from `orchestrator.test.ts` so a reject → repair
+ * → approve run can prove the REPAIRED artifact (not the rejected first attempt)
+ * is the one the mission verifies and the re-review reviewed.
+ */
+const REPAIRED_ARTIFACT_DIGEST = digest('artifact-v2-repaired');
 
 const ARCHITECT_RESULT: OpenAiArchitectResult = {
   handoff: GOOD_HANDOFF,
@@ -110,7 +117,11 @@ function codingAttestation(missionRevision: string): ExecutionAttestation {
   });
 }
 
-function goodCodingOutcome(handoffDigest: string, missionRevision: string): CodingOutcome {
+function goodCodingOutcome(
+  handoffDigest: string,
+  missionRevision: string,
+  artifactDigest: string = ARTIFACT_DIGEST,
+): CodingOutcome {
   return {
     verifiedComplete: false,
     verificationPassed: true,
@@ -142,7 +153,7 @@ function goodCodingOutcome(handoffDigest: string, missionRevision: string): Codi
       unifiedDiff: '--- a/src/normalize.js\n+++ b/src/normalize.js',
       claimedFileContent: 'export function normalizeProjectName() {}',
       changedFileContents: 'function normalizeProjectName(){}',
-      artifactDigest: ARTIFACT_DIGEST,
+      artifactDigest,
       relayEvidence: ['Relay inspection assessment: allowed'],
     },
   };
@@ -164,41 +175,125 @@ const approvedReview = (): HermesOutcome => ({
   },
 });
 
+/**
+ * A GENUINE rejection: verdict `changes_required` carrying one BLOCKING finding.
+ * Only a blocking finding triggers the bounded repair, so this is what makes the
+ * pipeline treat the rejection as real work to redo rather than an advisory
+ * note. Requested and served models match (no substitution), so an accepted
+ * re-review after the repair is adopted rather than refused. Mirrors
+ * `rejectedReview` in `orchestrator.test.ts`.
+ */
+const rejectedReview = (): HermesOutcome => ({
+  kind: 'reviewed',
+  startedAt: AT,
+  completedAt: AT,
+  provider: 'Anthropic',
+  requestedModel: 'claude-opus-4-8',
+  servedModel: 'claude-opus-4-8',
+  result: {
+    verdict: 'changes_required',
+    summary: 'The normalizer does not guard empty input.',
+    findings: [{
+      findingId: 'F-1',
+      severity: 'blocking',
+      requirement: 'Reject empty project names.',
+      explanation: 'No guard exists for the empty string.',
+      evidence: 'src/normalize.js line 4',
+    }],
+    requirementsChecked: [{ requirement: 'Reject empty project names', status: 'failed', evidence: 'No guard.' }],
+    parseRepaired: false,
+  },
+});
+
 export interface JourneyHarness {
   readonly deps: MissionRoleDeps;
   readonly calls: { architect: number; fusion: number; coding: number; reviewer: number };
 }
 
 /**
- * Fake role deps that carry the real pipeline to `verified_complete`. The
- * architect is the FUSION (offline) path so no provider key is required; the
- * coding leg emits real state transitions and a terminal, and the reviewer
- * approves. Every call is counted so a test can assert who actually ran.
+ * Scenario knobs for the journey deps. Every field defaults to the proven
+ * happy path, so the zero-arg call is unchanged for existing callers.
  */
-export function journeyRoleDeps(): JourneyHarness {
+export interface JourneyRoleDepsOptions {
+  /**
+   * Reviewer verdicts, consumed ONE PER REVIEW CALL in order. A missing entry
+   * (and the default empty sequence) means APPROVE — so the zero-arg call still
+   * always approves. Each `changes_required` carries a real BLOCKING finding
+   * (see `rejectedReview`), which is what makes the pipeline treat it as a
+   * genuine rejection that triggers the one bounded repair, not an advisory
+   * note. `['changes_required','approved']` drives reject → repair → approve;
+   * `['changes_required','changes_required']` drives a persistent rejection.
+   */
+  readonly reviewVerdicts?: ReadonlyArray<'approved' | 'changes_required'>;
+  /**
+   * When false, the Hermes reviewer preflight reports NOT ready with a truthful
+   * `missing`/`reason`, so the mission fails closed at preflight BEFORE any paid
+   * dispatch (no architect, no coding, no reviewer).
+   */
+  readonly hermesReady?: boolean;
+  /**
+   * When false, the Claude runtime resolves NOT ready, blocking the mission at
+   * preflight before any spend, the same way an unavailable Coding Agent does.
+   */
+  readonly claudeReady?: boolean;
+}
+
+/**
+ * Fake role deps that carry the real pipeline to `verified_complete`. The
+ * architect path (live vs offline) is selected by the mission env, not here;
+ * the coding leg emits real state transitions and a terminal, and the reviewer
+ * approves by default. Every call is counted so a test can assert who actually
+ * ran.
+ *
+ * With `options` a test can drive the load-bearing beta paths the happy path
+ * cannot: a reject → repair → re-review completion, a persistently-rejected
+ * mission that must end `failed` (never falsely verified), and a role reported
+ * unavailable so the mission fails closed before any paid dispatch. The pipeline
+ * exercised is still the one and only `mission.ts`.
+ */
+export function journeyRoleDeps(options: JourneyRoleDepsOptions = {}): JourneyHarness {
+  const reviewVerdicts = options.reviewVerdicts ?? [];
+  const hermesReady = options.hermesReady ?? true;
+  const claudeReady = options.claudeReady ?? true;
   const calls = { architect: 0, fusion: 0, coding: 0, reviewer: 0 };
   const deps: MissionRoleDeps = {
-    resolveClaudeRuntime: () => ({
-      ok: true,
-      runtime: {
-        executablePath: '/fake/claude',
-        capabilities: { executablePath: '/fake/claude' } as never,
-        provenance: 'fake',
-      },
-    }),
-    hermesPreflight: () => ({
-      ready: true,
-      missing: [],
-      reason: null,
-      executable: 'hermes',
-      oneShotSupported: true,
-      readOnlySupported: true,
-      model: 'claude-opus-4-8',
-      provider: 'Anthropic',
-      authenticatedProviders: ['Anthropic'],
-      livenessVerified: true,
-      billingPath: 'subscription',
-    }) as never,
+    resolveClaudeRuntime: () => (claudeReady
+      ? {
+          ok: true,
+          runtime: {
+            executablePath: '/fake/claude',
+            capabilities: { executablePath: '/fake/claude' } as never,
+            provenance: 'fake',
+          },
+        }
+      : { ok: false, code: 'live_not_ready', safeMessage: 'Claude Code is not logged in.' }),
+    hermesPreflight: (() => (hermesReady
+      ? {
+          ready: true,
+          missing: [],
+          reason: null,
+          executable: 'hermes',
+          oneShotSupported: true,
+          readOnlySupported: true,
+          model: 'claude-opus-4-8',
+          provider: 'Anthropic',
+          authenticatedProviders: ['Anthropic'],
+          livenessVerified: true,
+          billingPath: 'subscription',
+        }
+      : {
+          ready: false,
+          missing: ['hermes provider authentication (the configured provider rejected the reviewer credential)'],
+          reason: 'The Hermes reviewer is not available. Missing: hermes provider authentication.',
+          executable: 'hermes',
+          oneShotSupported: true,
+          readOnlySupported: true,
+          model: null,
+          provider: null,
+          authenticatedProviders: [],
+          livenessVerified: false,
+          billingPath: 'subscription',
+        })) as never,
     runOpenAiArchitect: async () => { calls.architect += 1; return ARCHITECT_RESULT; },
     runFusionArchitect: async () => {
       calls.fusion += 1;
@@ -220,9 +315,24 @@ export function journeyRoleDeps(): JourneyHarness {
       input.publishTerminal?.(terminalState());
       input.onState?.('claim_submitted');
       input.onState?.('relay_verifying');
-      return goodCodingOutcome(codingHandoffDigest(input.handoff), input.missionRevision ?? '');
+      // A REPAIR IS A DIFFERENT ARTIFACT. The bytes change on the repair pass, so
+      // the digest does. Keyed on the revision input (present only on a repair),
+      // exactly as `orchestrator.test.ts` does — it is the repair that makes it
+      // different, not the fact of a second run.
+      return goodCodingOutcome(
+        codingHandoffDigest(input.handoff),
+        input.missionRevision ?? '',
+        input.revision === undefined ? ARTIFACT_DIGEST : REPAIRED_ARTIFACT_DIGEST,
+      );
     },
-    runHermesReview: async () => { calls.reviewer += 1; return approvedReview(); },
+    runHermesReview: async () => {
+      // Consume one verdict per review call; default to APPROVE past the end of
+      // the sequence so an unspecified extra review never blocks.
+      const idx = calls.reviewer;
+      calls.reviewer += 1;
+      const verdict = reviewVerdicts[idx] ?? 'approved';
+      return verdict === 'changes_required' ? rejectedReview() : approvedReview();
+    },
     relayPreflight: () => ({ ready: true, missing: [] }),
   };
   return { deps, calls };

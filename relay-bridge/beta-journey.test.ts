@@ -9,7 +9,8 @@ import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { createBridgeServer } from './server';
 import { loadBridgeConfig } from './config';
 import { createMissionRegistry } from './mission';
-import { journeyRoleDeps } from './mission-journey-harness';
+import { journeyRoleDeps, type JourneyRoleDepsOptions } from './mission-journey-harness';
+import { digest } from './attestation';
 import {
   createRepositoryRegistrationStore, createBrainMemoryStore, type BrainMemoryStore,
 } from '../src/relay/persistence';
@@ -221,8 +222,8 @@ describe('a fresh participant signs in, authorizes an installation, and connects
 
 /** Boot with the REAL mission registry (fake role deps) so a mission actually
     runs the three-role pipeline through the HTTP surface. */
-function bootReal(): { start: () => Promise<string>; calls: ReturnType<typeof journeyRoleDeps>['calls'] } {
-  const journey = journeyRoleDeps();
+function bootReal(harnessOpts: JourneyRoleDepsOptions = {}): { start: () => Promise<string>; calls: ReturnType<typeof journeyRoleDeps>['calls'] } {
+  const journey = journeyRoleDeps(harnessOpts);
   const start = async (): Promise<string> => {
     const root = mkdtempSync(join(tmpdir(), 'relay-journey-real-'));
     roots.push(root);
@@ -374,6 +375,110 @@ describe('a fresh participant runs a real three-role mission end to end over HTT
     expect(real.calls.architect + real.calls.fusion).toBe(1);
     expect(real.calls.coding).toBe(1);
     expect(real.calls.reviewer).toBe(1);
+  }, 45_000);
+});
+
+/**
+ * THE CORE BETA PROMISE, OVER REAL HTTP: build → verify → review → REPAIR →
+ * reverify → ship. The happy path above proves an approve-first run; these three
+ * prove the parts that carry the guarantee — a rejection is actually repaired and
+ * re-judged, a persistent rejection is NEVER falsely verified, and an unavailable
+ * role fails closed before a cent is spent. Each is a fresh participant driving
+ * the one real `mission.ts` behind a real `createBridgeServer`, asserting only
+ * from the AUTHORITATIVE mission view.
+ */
+describe('a fresh participant’s mission is repaired, re-reviewed, and only then completed — or never completed at all', () => {
+  it('P1 — a rejected implementation is REPAIRED, RE-REVIEWED, and only THEN verified_complete', async () => {
+    // First review rejects with a blocking finding; the SAME reviewer approves
+    // the repair on the second look.
+    const real = bootReal({ reviewVerdicts: ['changes_required', 'approved'] });
+    const base = await real.start();
+    const token = await signIn(base, { login: 'beta-repair', id: 5101 });
+
+    const started = await getJson(await startMission(base, token, {
+      missionId: 'm-repair', objective: 'Implement the project-name normalizer.',
+      config: { mode: 'autonomous', review: 'independent', limits: { agentCalls: 8, spendUsd: 4 } },
+    }));
+    expect(started.status).toBe(200);
+
+    const view = await settleMission(base, token, 'm-repair');
+    // Completion is EARNED: it took a real second coding pass and a real second
+    // independent review before the mission was allowed to complete.
+    expect(view.state).toBe('verified_complete');
+    expect(real.calls.coding).toBe(2);
+    expect(real.calls.reviewer).toBe(2);
+
+    // The record evidences the repair and the re-review actually happened.
+    const headlines = (view.events as Array<{ headline: string }>).map((e) => e.headline);
+    expect(headlines.some((h) => h.includes('Repair attempt started'))).toBe(true);
+    expect(headlines.some((h) => h.includes('Re-review complete'))).toBe(true);
+
+    // The REPAIRED artifact is the one the mission verified and the one the
+    // standing review reviewed — not the rejected first attempt. Different bytes,
+    // different digest, and the two agree.
+    const review = view.review as { reviewedArtifactDigest: string; verdict: string };
+    expect(review.verdict).toBe('approved');
+    expect(view.artifactDigest).toBe(review.reviewedArtifactDigest);
+    // And it is genuinely the repaired digest, not the first attempt's — proof
+    // the repaired artifact, not the rejected one, became the mission's artifact.
+    expect(view.artifactDigest).not.toBe(digest('artifact-v1'));
+    expect(view.artifactDigest).toBe(digest('artifact-v2-repaired'));
+  }, 45_000);
+
+  it('P2 — a persistently-rejected mission ends failed and is NEVER falsely verified', async () => {
+    // The reviewer objects on the first look AND on the re-review of the repair.
+    const real = bootReal({ reviewVerdicts: ['changes_required', 'changes_required'] });
+    const base = await real.start();
+    const token = await signIn(base, { login: 'beta-reject', id: 5102 });
+
+    const started = await getJson(await startMission(base, token, {
+      missionId: 'm-reject', objective: 'Implement the project-name normalizer.',
+      config: { mode: 'autonomous', review: 'independent', limits: { agentCalls: 8, spendUsd: 4 } },
+    }));
+    expect(started.status).toBe(200);
+
+    const view = await settleMission(base, token, 'm-reject');
+    // The negative guard for the completion invariant: a mission a reviewer never
+    // approved can NEVER be verified_complete.
+    expect(view.state).toBe('failed');
+    expect(view.state).not.toBe('verified_complete');
+    expect((view.error as { code: string }).code).toBe('review_blocked');
+
+    // The bound is EXACTLY ONE repair: two coding runs, two reviews, then it
+    // stops — never an unbounded loop spending in a circle.
+    expect(real.calls.coding).toBe(2);
+    expect(real.calls.reviewer).toBe(2);
+  }, 45_000);
+
+  it('P3 — an unavailable reviewer fails the mission closed BEFORE any paid dispatch', async () => {
+    // The Hermes reviewer preflight reports NOT ready.
+    const real = bootReal({ hermesReady: false });
+    const base = await real.start();
+    const token = await signIn(base, { login: 'beta-noreviewer', id: 5103 });
+
+    const started = await getJson(await startMission(base, token, {
+      missionId: 'm-noreviewer', objective: 'Implement the project-name normalizer.',
+      config: { mode: 'autonomous', review: 'independent', limits: { agentCalls: 8, spendUsd: 4 } },
+    }));
+    expect(started.status).toBe(200);
+
+    const view = await settleMission(base, token, 'm-noreviewer');
+    // Fails closed at preflight, and is never falsely verified.
+    expect(view.state).toBe('failed');
+    expect(view.state).not.toBe('verified_complete');
+    expect(view.phase).toBe('preflight_blocked');
+    const error = view.error as { code: string; safeMessage: string; retryable: boolean };
+    expect(error.code).toBe('reviewer_not_available');
+    expect(error.retryable).toBe(false);
+    // The view states the unavailability truthfully — a real reason, not a blank.
+    expect(error.safeMessage.length).toBeGreaterThan(0);
+    expect(error.safeMessage).toMatch(/review|hermes|available/i);
+
+    // ZERO paid dispatch: the spend/permission guard held at the HTTP boundary.
+    expect(real.calls.architect).toBe(0);
+    expect(real.calls.fusion).toBe(0);
+    expect(real.calls.coding).toBe(0);
+    expect(real.calls.reviewer).toBe(0);
   }, 45_000);
 });
 
