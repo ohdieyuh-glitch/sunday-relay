@@ -18,6 +18,10 @@ export {
 } from './RelayColiseumConsole';
 export { RelayDuelResults } from './RelayDuelResults';
 export {
+  RelayAgentProgression,
+  type RelayAgentProgressionProps,
+} from './RelayAgentProgression';
+export {
   DUEL_COMMAND_NAMES,
   DUEL_MODE_LABEL,
   DUEL_PARTICIPANT_KIND_LABEL,
@@ -43,4 +47,7 @@ export {
   CHALLENGED_DUEL_FIXTURE,
   COLISEUM_FIXTURE_DISCLOSURE,
   CONCLUDED_MANUAL_DUEL_FIXTURE,
+  FRESH_AGENT_PROGRESSION_FIXTURE,
+  LEVELED_AGENT_PROGRESSION_FIXTURE,
+  MAX_LEVEL_AGENT_PROGRESSION_FIXTURE,
 } from './fixtures';

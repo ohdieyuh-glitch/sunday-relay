@@ -905,7 +905,7 @@
     },
     {
       "capabilityId": "wonderland-coliseum-duels",
-      "name": "Wonderland Coliseum: duel results, proof meter, command bindings",
+      "name": "Wonderland Coliseum: duel results, proof meter, command bindings, agent progression",
       "domain": "mission",
       "parityClass": "functional_required",
       "websiteStatus": "tested",
@@ -914,7 +914,8 @@
         "src/relay/ui/coliseum/RelayColiseumConsole.tsx",
         "src/relay/ui/coliseum/RelayDuelResults.tsx",
         "src/relay/ui/coliseum/RelayProofMeter.tsx",
-        "src/relay/ui/coliseum/projections.ts"
+        "src/relay/ui/coliseum/projections.ts",
+        "src/relay/ui/coliseum/RelayAgentProgression.tsx"
       ],
       "cliEntryPoints": [
         "relay mission coliseum",
@@ -922,7 +923,8 @@
         "src/relay/cli/coliseum-cli.ts#renderColiseumCommands"
       ],
       "websiteTestReferences": [
-        "src/relay/ui/coliseum/coliseum-ui.test.tsx"
+        "src/relay/ui/coliseum/coliseum-ui.test.tsx",
+        "src/relay/ui/coliseum/agent-progression-ui.test.tsx"
       ],
       "cliTestReferences": [
         "src/relay/cli/coliseum-cli.test.ts"
@@ -934,7 +936,9 @@
         "src/relay/mission/coliseum/duel-fixtures.ts",
         "src/relay/mission/coliseum/duel-results-projection.ts",
         "src/relay/mission/coliseum/proof-meter.test.ts",
-        "src/relay/mission/coliseum/proof-meter.ts"
+        "src/relay/mission/coliseum/proof-meter.ts",
+        "src/relay/mission/coliseum/agent-progression.ts",
+        "src/relay/mission/coliseum/agent-progression.test.ts"
       ]
     }
   ]

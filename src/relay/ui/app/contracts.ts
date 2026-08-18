@@ -192,9 +192,12 @@ export interface RelayAppData {
    * The Relay Dog's chosen progression tier, or `null` for no tier.
    *
    * APPEARANCE, exactly like the colorway and the backdrop, and stored with
-   * them for that reason. Relay awards no levels — nothing here counts
-   * missions toward a rank — so this is chosen and never earned, and no
-   * surface may present it as a rank. `null` means no choice has been
+   * them for that reason. THIS field is chosen and never earned, and no
+   * surface may present it as a rank. (Relay's one EARNED tier source is the
+   * Coliseum XP ledger via `mission/coliseum/agent-progression.ts`; a surface
+   * holding a progression view prefers the earned tier — see
+   * `preferredChakraTier` — but that fact never lives here.)
+   * `null` means no choice has been
    * recorded and renders the Dog as shipped, rather than defaulting to root
    * and thereby asserting a level nobody reached.
    */

@@ -4,8 +4,14 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { createElement, type ComponentProps } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+
 import { RelayPixelDog } from '../pixel-dog';
 import { RelayChakraTierPicker } from './RelayChakraTierPicker';
+import { RelayProjectWorkspace } from './RelayProjectWorkspace';
+import { WORKSPACE_FIXTURES } from './fixtures';
+import { MAX_LEVEL_AGENT_PROGRESSION_FIXTURE } from '../coliseum/fixtures';
 import {
   CHAKRA_ACCENTS,
   CHAKRA_TIERS,
@@ -34,6 +40,8 @@ import {
  */
 
 afterEach(cleanup);
+
+const noop = () => undefined;
 
 describe('the tier data', () => {
   it('covers the seven chakras in order, once each', () => {
@@ -120,6 +128,62 @@ describe('the Dog with a tier', () => {
   });
 });
 
+describe('earned over chosen', () => {
+  type WorkspaceProps = ComponentProps<typeof RelayProjectWorkspace>;
+  const workspaceHtml = (overrides: Partial<WorkspaceProps> = {}) =>
+    renderToStaticMarkup(
+      createElement(RelayProjectWorkspace, {
+        ...WORKSPACE_FIXTURES.implementing,
+        terminalOpen: false,
+        onSendProjectMessage: noop,
+        onApproveDecision: noop,
+        onRejectDecision: noop,
+        onOpenTerminal: noop,
+        onCloseTerminal: noop,
+        onOpenProjectSettings: noop,
+        onOpenManualTask: noop,
+        onApproveManualTask: noop,
+        onRejectManualTask: noop,
+        onRequestResearch: noop,
+        onOpenFinding: noop,
+        onOpenRepair: noop,
+        onReturnHome: noop,
+        chakraTier: 'heart',
+        ...overrides,
+      } as WorkspaceProps),
+    );
+
+  it('a supplied progression view makes the EARNED tier win on the Dog and the accent', () => {
+    // The max-level fixture earned CROWN through the real curve; HEART is chosen.
+    const html = workspaceHtml({
+      agentProgression: {
+        view: MAX_LEVEL_AGENT_PROGRESSION_FIXTURE,
+        source: 'development_fixture',
+      },
+    });
+    expect(MAX_LEVEL_AGENT_PROGRESSION_FIXTURE.earnedChakraTier).toBe('crown');
+    expect(html).toContain('rpd--tier-crown');
+    expect(html).not.toContain('rpd--tier-heart');
+    expect(html).toContain(`--rpb-accent:${CHAKRA_ACCENTS.crown.accent}`);
+    expect(html).not.toContain(`--rpb-accent:${CHAKRA_ACCENTS.heart.accent}`);
+    // The picker states the override truthfully and drops the no-levels claim.
+    expect(html).toContain('earned in the Coliseum');
+    expect(html).toContain('overrides the');
+    expect(html).not.toContain('Relay awards no levels');
+    // And the mounted panel carries its fixture disclosure.
+    expect(html).toContain('SIMULATED DATA');
+  });
+
+  it('absent progression renders EXACTLY as before: the chosen tier stands', () => {
+    const html = workspaceHtml();
+    expect(html).toContain('rpd--tier-heart');
+    expect(html).not.toContain('rpd--tier-crown');
+    expect(html).toContain(`--rpb-accent:${CHAKRA_ACCENTS.heart.accent}`);
+    expect(html).toContain('Relay awards no levels');
+    expect(html).not.toContain('earned in the Coliseum');
+  });
+});
+
 describe('the tier picker', () => {
   it('says the tier is chosen and not earned', () => {
     render(<RelayChakraTierPicker selected={null} onSelect={vi.fn()} />);
@@ -143,6 +207,23 @@ describe('the tier picker', () => {
     expect(onSelect).toHaveBeenCalledWith('crown');
     fireEvent.click(screen.getByRole('radio', { name: /NO TIER/ }));
     expect(onSelect).toHaveBeenLastCalledWith(null);
+  });
+
+  it('states an earned override instead of the no-levels note when a tier is earned', () => {
+    render(<RelayChakraTierPicker selected="heart" earnedTier="crown" onSelect={vi.fn()} />);
+    expect(screen.getByTestId('rctp-earned-note').textContent)
+      .toContain('CROWN was earned in the Coliseum');
+    expect(screen.getByTestId('rctp-earned-note').textContent)
+      .toContain('overrides the chosen appearance');
+    expect(screen.queryByText(/Relay awards no levels/)).toBeNull();
+    // The CHOICE itself is untouched: heart stays selected.
+    expect((screen.getByRole('radio', { name: /HEART/ }) as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('with no earned tier — the default — the picker reads exactly as before', () => {
+    render(<RelayChakraTierPicker selected="heart" earnedTier={null} onSelect={vi.fn()} />);
+    expect(screen.getByText(/chosen, not earned/)).toBeTruthy();
+    expect(screen.queryByTestId('rctp-earned-note')).toBeNull();
   });
 
   it('draws no inputs for a host that cannot store the choice', () => {

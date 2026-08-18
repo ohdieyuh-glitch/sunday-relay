@@ -6,6 +6,7 @@ import { RelayConsole } from './RelayConsole';
 import { RelayProjectConversation } from './RelayProjectConversation';
 import { RelayLoopSurfaceHost, type RelayLoopSurface } from '../loop/RelayLoopSurface';
 import { RelayColiseumConsole, type RelayColiseumConsoleProps } from '../coliseum/RelayColiseumConsole';
+import { RelayAgentProgression, type RelayAgentProgressionProps } from '../coliseum/RelayAgentProgression';
 import { RelayLiveTerminalPanel } from './RelayLiveTerminalPanel';
 import { RelayCodingAgentTerminal } from './RelayCodingAgentTerminal';
 import { RelayRoleBilling } from './RelayRoleBilling';
@@ -15,7 +16,7 @@ import { RelayVerificationSummary } from './RelayVerificationSummary';
 import { RelayResearchStatus } from './RelayResearchStatus';
 import { RelayProjectBrainStatus } from './RelayProjectBrainStatus';
 import { RelayProjectBrainOrb } from './RelayProjectBrainOrb';
-import { chakraAccent as chakraAccentFor } from '../../shared/relay-chakra';
+import { chakraAccent as chakraAccentFor, preferredChakraTier } from '../../shared/relay-chakra';
 import { RelayChakraTierPicker } from './RelayChakraTierPicker';
 import { RelayRoleSelector } from './RelayRoleSelector';
 import type { WorkforceRole } from '../project-settings';
@@ -184,6 +185,15 @@ export function RelayProjectWorkspace(
      */
     coliseum?: RelayColiseumConsoleProps;
     /**
+     * Optional Coliseum agent-progression view. Present only once a host has
+     * derived one from the real XP ledger; absent, the workspace renders
+     * exactly as before. When present, its EARNED chakra tier overrides the
+     * chosen `chakraTier` on the Dog and the shared accent
+     * (`preferredChakraTier`) — an earned rank outranks a chosen look — and
+     * the tier picker states the override.
+     */
+    agentProgression?: RelayAgentProgressionProps;
+    /**
      * Isolated-worktree state for the Coding Agent's Environment. Optional:
      * a caller that cannot know (the static deployment has no Node bridge)
      * passes the offline view rather than nothing pretending to be nothing.
@@ -252,6 +262,16 @@ export function RelayProjectWorkspace(
     operationsView,
     projectBrainDocument,
   } = props;
+
+  /**
+   * EARNED over CHOSEN. The earned tier exists only where a host supplied a
+   * real progression view; absent, it is null and `preferredChakraTier`
+   * returns the chosen tier unchanged, so everything renders exactly as
+   * before. The Dog and the shared column accent read the EFFECTIVE tier;
+   * the picker keeps showing the CHOICE, plus a truthful override note.
+   */
+  const earnedTier = props.agentProgression?.view.earnedChakraTier ?? null;
+  const effectiveTier = preferredChakraTier(earnedTier, chakraTier);
 
   const completion = completionDisplay({ completionState, reviewerState, findings, repairs });
   const openTasks = manualTasks.filter((t) => t.status === 'open').length;
@@ -403,8 +423,8 @@ export function RelayProjectWorkspace(
            founder is looking at are lit by one source rather than decorated
            separately. Untiered resolves to the shipped colours. */
         style={{
-          ['--rpb-accent' as string]: chakraAccentFor(chakraTier).accent,
-          ['--rpb-glow' as string]: chakraAccentFor(chakraTier).glow,
+          ['--rpb-accent' as string]: chakraAccentFor(effectiveTier).accent,
+          ['--rpb-glow' as string]: chakraAccentFor(effectiveTier).glow,
         }}
       >
         {/* THE PROJECT BRAIN, ABOVE THE DOG, ABOVE THE MISSION BOX.
@@ -468,7 +488,7 @@ export function RelayProjectWorkspace(
               <RelayStageBackdrop backdrop={selectedBackdrop} reducedMotion={reducedMotion} />
             )}
             render={(id) => (id === 'relay-dog'
-              ? <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} tier={chakraTier} />
+              ? <RelayWorkspaceDog state={dogState} reducedMotion={reducedMotion} tier={effectiveTier} />
               : null)}
           />
           {/* WHO IS WORKING AND CANNOT BE DRAWN. Computing this and showing it
@@ -504,6 +524,7 @@ export function RelayProjectWorkspace(
             renders read-only rather than silently forgetting a choice. */}
         <RelayChakraTierPicker
           selected={chakraTier}
+          earnedTier={earnedTier}
           {...(onSelectChakraTier === undefined ? {} : { onSelect: onSelectChakraTier })}
         />
         {completion.showVerifiedComplete ? (
@@ -570,6 +591,9 @@ export function RelayProjectWorkspace(
             ) : null}
             {props.coliseum !== undefined ? (
               <RelayColiseumConsole {...props.coliseum} />
+            ) : null}
+            {props.agentProgression !== undefined ? (
+              <RelayAgentProgression {...props.agentProgression} />
             ) : null}
           </div>
 
