@@ -5,6 +5,7 @@ import { RelayWorkforceStrip } from './RelayWorkforceStrip';
 import { RelayConsole } from './RelayConsole';
 import { RelayProjectConversation } from './RelayProjectConversation';
 import { RelayLoopSurfaceHost, type RelayLoopSurface } from '../loop/RelayLoopSurface';
+import { RelayColiseumConsole, type RelayColiseumConsoleProps } from '../coliseum/RelayColiseumConsole';
 import { RelayLiveTerminalPanel } from './RelayLiveTerminalPanel';
 import { RelayCodingAgentTerminal } from './RelayCodingAgentTerminal';
 import { RelayRoleBilling } from './RelayRoleBilling';
@@ -175,6 +176,13 @@ export function RelayProjectWorkspace(
      * is an approved screen and Loops must not rebuild it.
      */
     loopSurface?: RelayLoopSurface;
+    /**
+     * Optional Wonderland Coliseum console. Present only once a host has a
+     * duel view to show; absent, the workspace renders exactly as before.
+     * Additive for the same reason as `loopSurface`: this is an approved
+     * screen and the Coliseum must not rebuild it.
+     */
+    coliseum?: RelayColiseumConsoleProps;
     /**
      * Isolated-worktree state for the Coding Agent's Environment. Optional:
      * a caller that cannot know (the static deployment has no Node bridge)
@@ -559,6 +567,9 @@ export function RelayProjectWorkspace(
             ))}
             {props.loopSurface !== undefined ? (
               <RelayLoopSurfaceHost surface={props.loopSurface} />
+            ) : null}
+            {props.coliseum !== undefined ? (
+              <RelayColiseumConsole {...props.coliseum} />
             ) : null}
           </div>
 

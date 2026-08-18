@@ -902,6 +902,40 @@
         "src/relay/shared/llmops/spend-citation.test.ts",
         "src/relay/shared/llmops/spend-citation.ts"
       ]
+    },
+    {
+      "capabilityId": "wonderland-coliseum-duels",
+      "name": "Wonderland Coliseum: duel results, proof meter, command bindings",
+      "domain": "mission",
+      "parityClass": "functional_required",
+      "websiteStatus": "tested",
+      "cliStatus": "tested",
+      "websiteEntryPoints": [
+        "src/relay/ui/coliseum/RelayColiseumConsole.tsx",
+        "src/relay/ui/coliseum/RelayDuelResults.tsx",
+        "src/relay/ui/coliseum/RelayProofMeter.tsx",
+        "src/relay/ui/coliseum/projections.ts"
+      ],
+      "cliEntryPoints": [
+        "relay mission coliseum",
+        "src/relay/cli/coliseum-cli.ts#renderColiseumDuel",
+        "src/relay/cli/coliseum-cli.ts#renderColiseumCommands"
+      ],
+      "websiteTestReferences": [
+        "src/relay/ui/coliseum/coliseum-ui.test.tsx"
+      ],
+      "cliTestReferences": [
+        "src/relay/cli/coliseum-cli.test.ts"
+      ],
+      "sharedDomainReferences": [
+        "src/relay/mission/coliseum/duel-commands.test.ts",
+        "src/relay/mission/coliseum/duel-commands.ts",
+        "src/relay/mission/coliseum/duel-contracts.ts",
+        "src/relay/mission/coliseum/duel-fixtures.ts",
+        "src/relay/mission/coliseum/duel-results-projection.ts",
+        "src/relay/mission/coliseum/proof-meter.test.ts",
+        "src/relay/mission/coliseum/proof-meter.ts"
+      ]
     }
   ]
 }
