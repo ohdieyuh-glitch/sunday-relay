@@ -9,6 +9,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 import { detectRenderOptions, renderAudit, renderEvent, renderManualTask, welcome, badge, type RenderOptions } from './render';
 import { buildCompetitiveFrames, competitiveJson } from './competitive';
 import { buildMissionControlFrames } from './mission-control';
+import { buildColiseumFixture, renderColiseumDuel } from './coliseum-cli';
 import { EXIT, exitCodeForFinalStatus } from './exit-codes';
 import { bridgeClientFrom, runReviewerBridgeCli } from './reviewer-bridge-cli';
 import { BRIDGE_URL_ENV } from '../reviewer-bridge-client';
@@ -113,7 +114,7 @@ export interface ParsedCli {
   agentAction?: 'import' | 'profile';
   /** Which agent's operating profile to print; all three when absent. */
   role?: string;
-  missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree' | 'coding-agent' | 'prompt-architect' | 'reviewer' | 'mcp';
+  missionAction?: 'economics' | 'budget' | 'receipts' | 'worktree' | 'coding-agent' | 'prompt-architect' | 'reviewer' | 'mcp' | 'coliseum';
   reviewerMode?: 'status' | 'inspect' | 'stop' | 'test-connection' | 'start' | 'retry';
   reviewerAction?: 'harnesses' | 'pair-browser';
   pairOrigin?: string;
@@ -282,13 +283,13 @@ export function parseCli(argv: string[]): ParsedCli {
       return { command: 'loop', loopArgs: positionals, ...base };
     }
     if (first === 'mission') {
-      const missionActions = ['economics', 'budget', 'receipts', 'worktree', 'coding-agent', 'prompt-architect', 'reviewer'] as const;
+      const missionActions = ['economics', 'budget', 'receipts', 'worktree', 'coding-agent', 'prompt-architect', 'reviewer', 'coliseum'] as const;
       type MissionAction = (typeof missionActions)[number];
       if (!missionActions.includes(second as MissionAction)) {
         return {
           command: 'mission',
           ...base,
-          error: 'mission requires an action: economics, budget, receipts, worktree, coding-agent, prompt-architect, or reviewer.',
+          error: 'mission requires an action: economics, budget, receipts, worktree, coding-agent, prompt-architect, reviewer, or coliseum.',
         };
       }
       if (second === 'reviewer') {
@@ -647,6 +648,7 @@ export const HELP_TEXT = [
   '  relay mcp approve <id>         grant a pending MCP approval',
   '  relay mcp revoke <id>          revoke an MCP approval',
   '  relay mission mcp preflight <mission-id>   mission MCP readiness (blocked/degraded/ready)',
+  '  relay mission coliseum         Wonderland Coliseum duels + proof meter (SIMULATED fixture)',
   '  relay yc check                 YC demo preflight (read-only, no provider call)',
   '  relay yc demo                  founder YC demo launcher (offline simulation only)',
   '  relay session                  legacy simulated interactive session',
@@ -1548,8 +1550,20 @@ async function runMissionCli(parsed: ParsedCli, io: CliIo): Promise<number> {
       return await runMissionArchitectCli(parsed, io);
     case 'reviewer':
       return await runMissionReviewerCli(parsed, io);
+    case 'coliseum': {
+      // WONDERLAND COLISEUM — read-only. Renders the SAME shared duel
+      // projection the website renders, over the deterministic development
+      // fixtures; every duel render carries the SIMULATED DATA disclosure
+      // structurally (the renderer requires the source before any figure).
+      const coliseum = buildColiseumFixture();
+      for (const view of [coliseum.concluded, coliseum.activeFight, coliseum.challenged]) {
+        for (const line of renderColiseumDuel(view, coliseum.source, options)) io.out(line);
+        io.out('');
+      }
+      return EXIT.completed;
+    }
     default:
-      io.out('mission requires an action: economics, budget, receipts, worktree, coding-agent, prompt-architect, or reviewer.');
+      io.out('mission requires an action: economics, budget, receipts, worktree, coding-agent, prompt-architect, reviewer, or coliseum.');
       return EXIT.usage;
   }
 }

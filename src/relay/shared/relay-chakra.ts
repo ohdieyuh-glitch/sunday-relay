@@ -9,11 +9,13 @@
  *
  * WHAT THIS IS NOT, and this is the important part.
  *
- * Relay has NO level ledger. Nothing in this repository awards experience,
- * counts missions toward a rank, or advances an agent — PSP agent evolution is
- * captured and deliberately not started. So a tier here is a CHOSEN
- * appearance, stored beside the colorway and the stage backdrop because it is
- * the same kind of fact: how this browser looks, to this user.
+ * Relay now has the STORE for its first progression source: the Wonderland
+ * Coliseum XP ledger (`src/relay/mission/coliseum/duel-store.ts`), an
+ * append-only per-agent record — but nothing awards into it yet (no caller
+ * outside tests), and this module is NOT wired to it — nothing here reads
+ * that ledger, and a tier here is still
+ * a CHOSEN appearance, stored beside the colorway and the stage backdrop
+ * because it is the same kind of fact: how this browser looks, to this user.
  *
  * It is emphatically not an earned rank, and no surface may present it as one.
  * That restraint is the whole reason this module exists as data rather than as

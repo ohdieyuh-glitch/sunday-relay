@@ -1,0 +1,386 @@
+/* ==========================================================================
+   Sunday Relay — Wonderland Coliseum console
+
+   Obsidian canvas, bone-white type, the established periwinkle/lilac accent
+   with the Coliseum's arcane-violet flavour carried by the same token family.
+   Every class is prefixed `relay-coliseum-` — the cross-stylesheet collision
+   guard enforces uniqueness across the bundle.
+
+   Every state is legible without colour: a word carries the fact, colour is a
+   secondary signal.
+   ========================================================================== */
+
+.relay-coliseum-console {
+  background: var(--surface-solid);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elev-1);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.55;
+  max-width: 760px;
+  padding: 20px 22px 18px;
+}
+
+.relay-coliseum-console-head {
+  align-items: baseline;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  padding-bottom: 12px;
+}
+
+.relay-coliseum-console-title {
+  color: var(--text);
+  font-family: var(--font-brand);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin: 0;
+}
+
+.relay-coliseum-console-status {
+  color: var(--gold-400);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.relay-coliseum-console-versus {
+  color: var(--text);
+  font-weight: 600;
+  margin: 12px 0 0;
+}
+
+.relay-coliseum-console-vs {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.relay-coliseum-disclosure {
+  border: 1px dashed var(--warn);
+  border-radius: var(--radius-md);
+  color: var(--warn);
+  font-size: 12px;
+  margin: 10px 0 0;
+  padding: 6px 10px;
+}
+
+/* ------------------------------------------------------------- commands */
+
+.relay-coliseum-commands {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.relay-coliseum-command {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+}
+
+.relay-coliseum-command-name {
+  color: var(--gold-400);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  min-width: 82px;
+}
+
+.relay-coliseum-command[data-binding='unbound'] .relay-coliseum-command-name {
+  color: var(--text-dim);
+}
+
+.relay-coliseum-command-desc {
+  color: var(--text-dim);
+  flex: 1;
+}
+
+.relay-coliseum-command-binding {
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.relay-coliseum-command[data-binding='bound'] .relay-coliseum-command-binding {
+  color: var(--ok);
+}
+
+/* ------------------------------------------------------------- results */
+
+.relay-coliseum-results {
+  border-top: 1px solid var(--hairline);
+  margin-top: 16px;
+  padding-top: 12px;
+}
+
+.relay-coliseum-results-head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.relay-coliseum-results-title,
+.relay-coliseum-fixes-title {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  margin: 0;
+}
+
+.relay-coliseum-results-meta {
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.relay-coliseum-results-winner {
+  color: var(--gold-400);
+  font-weight: 600;
+  margin: 8px 0 0;
+}
+
+.relay-coliseum-results-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-top: 12px;
+}
+
+.relay-coliseum-participant {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+
+.relay-coliseum-participant-head {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.relay-coliseum-participant-name {
+  font-weight: 700;
+}
+
+.relay-coliseum-participant-kind {
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.relay-coliseum-stats {
+  display: grid;
+  gap: 2px 12px;
+  grid-template-columns: auto 1fr;
+  margin: 10px 0 0;
+}
+
+.relay-coliseum-stats dt {
+  color: var(--text-dim);
+}
+
+.relay-coliseum-stats dd {
+  margin: 0;
+}
+
+/* ---------------------------------------------------------- proof meter */
+
+.relay-coliseum-proof {
+  border-top: 1px solid var(--hairline);
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+.relay-coliseum-proof-head {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.relay-coliseum-proof-name {
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.relay-coliseum-proof-score {
+  color: var(--gold-400);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.relay-coliseum-proof-score-unit {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.relay-coliseum-proof-empty,
+.relay-coliseum-fixes-empty {
+  color: var(--text-dim);
+  margin: 6px 0 0;
+}
+
+.relay-coliseum-proof-entries {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.relay-coliseum-proof-entry {
+  display: grid;
+  gap: 2px 10px;
+  grid-template-columns: auto 1fr auto;
+}
+
+.relay-coliseum-proof-entry[data-verified='false'] {
+  color: var(--text-dim);
+}
+
+.relay-coliseum-proof-category {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.relay-coliseum-proof-summary {
+  color: var(--text-dim);
+}
+
+.relay-coliseum-proof-points {
+  font-weight: 700;
+  text-align: right;
+}
+
+.relay-coliseum-proof-points--penalty {
+  color: var(--danger);
+}
+
+.relay-coliseum-proof-verdict {
+  color: var(--text-dim);
+  font-size: 11px;
+  grid-column: 1 / -1;
+}
+
+.relay-coliseum-proof-entry[data-verified='true'] .relay-coliseum-proof-verdict {
+  color: var(--ok);
+}
+
+/* --------------------------------------------------------------- fixes */
+
+.relay-coliseum-fixes {
+  border-top: 1px solid var(--hairline);
+  margin-top: 14px;
+  padding-top: 10px;
+}
+
+.relay-coliseum-fixes-list {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.relay-coliseum-fix {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.relay-coliseum-fix-state {
+  color: var(--gold-400);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.relay-coliseum-fix[data-applied='applied'] .relay-coliseum-fix-state {
+  color: var(--text-dim);
+}
+
+/* ----------------------------------------------------------------- log */
+
+.relay-coliseum-log {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.relay-coliseum-log-line {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.relay-coliseum-log-line[data-tone='dispatched'] {
+  color: var(--ok);
+}
+
+.relay-coliseum-log-line[data-tone='unbound'] {
+  color: var(--warn);
+}
+
+/* ----------------------------------------------------------- input line */
+
+.relay-coliseum-inputline {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.relay-coliseum-input {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  flex: 1;
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.relay-coliseum-input:focus-visible {
+  outline: 2px solid var(--gold-400);
+  outline-offset: 2px;
+}
+
+.relay-coliseum-send {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  color: var(--gold-400);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  padding: 8px 14px;
+  text-transform: uppercase;
+}
+
+.relay-coliseum-send:focus-visible {
+  outline: 2px solid var(--gold-400);
+  outline-offset: 2px;
+}

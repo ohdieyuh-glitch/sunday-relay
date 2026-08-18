@@ -40,7 +40,8 @@
     "relay-dog-state-semantics",
     "repair",
     "review",
-    "verified-mission-cost"
+    "verified-mission-cost",
+    "wonderland-coliseum-duels"
   ],
   "requiredFiles": {
     "websiteEntry": [

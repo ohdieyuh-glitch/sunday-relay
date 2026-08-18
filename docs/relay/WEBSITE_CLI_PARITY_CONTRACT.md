@@ -194,9 +194,9 @@ the same functions.
 A passing strict run reports what it actually inspected, at manifest `1.2.0`:
 
 ```text
-  declared surface files: 329/329 present
-  declared CLI commands: 27 (verified by the CLI's own command tests)
-  website entry points reachable: 42/51 mounted
+  declared surface files: 344/344 present
+  declared CLI commands: 28 (verified by the CLI's own command tests)
+  website entry points reachable: 46/55 mounted
 ```
 
 The file total counts every declaration that resolved, across all five
@@ -207,7 +207,10 @@ declarations existed before and were counted in nothing. It rose again from
 `mcp-mission-preflight`, whose shared-domain declarations name the projection,
 connection, registry, risk, approval and preflight modules both surfaces
 render from. It rose to 222 when those two capabilities declared the settings
-host that actually mounts them.
+host that actually mounts them. It rose from 329 to 344 when
+`wonderland-coliseum-duels` declared the Coliseum console, its CLI renderer
+(`relay mission coliseum`) and the shared duel projection both surfaces
+render from.
 `docs/documentation-contract.test.ts` holds all three quoted lines to what the
 checker really prints, so a stale number fails rather than reassures.
 

@@ -226,6 +226,13 @@ export {
   type ReviewerHarnessView, type ReviewerIdentityEvidence, type ReviewerIdentityRow,
 } from './reviewer-harness';
 
+// Wonderland Coliseum — the duel domain (lifecycle, sandbox guarantee,
+// command console, proof meter, rewards, durable store, results projection).
+// Re-exported through the barrel for the same reason economics is: the CLI
+// boundary permits only the bare '../mission' path, and BOTH surfaces must
+// render the ONE results projection rather than each building their own.
+export * from './coliseum';
+
 /**
  * ROLE SLOTS — the permanent roles, as TYPES and vocabulary only.
  *
