@@ -7,21 +7,25 @@
  * visor and every pose are untouched, because the identity is the animal and
  * the tier is what it is carrying.
  *
- * WHAT THIS IS NOT, and this is the important part.
+ * TWO KINDS OF TIER NOW EXIST, and this is the important part.
  *
- * Relay now has the STORE for its first progression source: the Wonderland
- * Coliseum XP ledger (`src/relay/mission/coliseum/duel-store.ts`), an
- * append-only per-agent record whose single writer is `concludeDuelAndAward`
- * (only a concluded, unmarked duel pays) — but this module is NOT wired to
- * it — nothing here reads
- * that ledger, and a tier here is still
- * a CHOSEN appearance, stored beside the colorway and the stage backdrop
- * because it is the same kind of fact: how this browser looks, to this user.
+ * A tier stored beside the colorway and the stage backdrop is a CHOSEN
+ * appearance: how this browser looks, to this user. It is not a rank and no
+ * surface may present it as one.
  *
- * It is emphatically not an earned rank, and no surface may present it as one.
- * That restraint is the whole reason this module exists as data rather than as
- * an engine: when a real progression system lands, it supplies the tier and
- * every accent follows, with no second scale to contradict it.
+ * An EARNED tier now also exists: the Wonderland Coliseum progression
+ * projection (`src/relay/mission/coliseum/agent-progression.ts`) derives it
+ * from the append-only XP ledger (`duel-store.ts`, single writer
+ * `concludeDuelAndAward` — only a concluded, unmarked duel pays), mapping
+ * levels 1–7 onto these seven tiers via `earnedChakraTierForLevel`. That is
+ * the real progression system this module was waiting for: it supplies the
+ * tier and every accent here follows, with no second scale to contradict it.
+ *
+ * This module still reads NO ledger — it stays pure appearance data. A
+ * surface holding both facts should prefer the EARNED tier when one exists
+ * (`preferredChakraTier` below): an earned rank outranks a chosen look, and
+ * an agent with no earned tier falls back to the chosen appearance, which
+ * remains merely chosen.
  *
  * `null` is a first-class answer meaning NO TIER HAS BEEN CHOSEN. It renders
  * the Dog exactly as it has always looked — gold — rather than defaulting to
@@ -134,6 +138,21 @@ export function chakraAccent(tier: unknown): {
 export function chakraDogPalette(tier: unknown): { readonly y: string; readonly c: string } {
   const { accent, bright } = chakraAccent(tier);
   return { y: bright, c: accent };
+}
+
+/**
+ * EARNED-over-CHOSEN preference for a surface holding both facts.
+ *
+ * `earned` comes from a real progression source (today:
+ * `mission/coliseum/agent-progression.ts` deriving from the XP ledger — this
+ * module never reads the ledger itself); `chosen` is the persisted appearance
+ * and crosses the same untrusted boundary as `chakraAccent`, so it is
+ * `unknown`. An earned tier wins; with none earned the chosen tier stands as
+ * appearance; `null` means neither exists and the Dog stays gold.
+ */
+export function preferredChakraTier(earned: ChakraTier | null, chosen: unknown): ChakraTier | null {
+  if (earned !== null) return earned;
+  return isChakraTier(chosen) ? chosen : null;
 }
 
 /** Tier label for a surface that names it. Untiered says so rather than guessing. */

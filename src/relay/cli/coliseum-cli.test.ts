@@ -240,4 +240,25 @@ describe('Coliseum CLI — `relay mission coliseum demo` runs the REAL engines o
     expect(out).toContain('already awarded');
     expect(out).not.toContain('DOUBLE-AWARD BUG');
   });
+
+  it('prints the progression view DERIVED from the demo ledger, truthfully per agent', async () => {
+    const { io, text: rendered } = capture();
+    await runCli(['mission', 'coliseum', 'demo'], io);
+    const out = rendered();
+    expect(out).toContain('AGENT PROGRESSION (derived from the XP ledger — nothing stored)');
+    // The volatile backing label is repeated for the progression section too.
+    const sectionStart = out.indexOf('AGENT PROGRESSION');
+    expect(out.slice(sectionStart)).toContain('[volatile-test-only]');
+    // auto-red: 60 (verified repair-accepted) + 50 (opponent fix) + 25 (winner)
+    // = 135 XP → level 1 → ROOT, turn cap 3, depth 1, the three bound basics.
+    expect(out).toContain('total XP 135 → level 1 (35 into level, 115 XP to next level)');
+    expect(out).toContain('earned chakra tier: ROOT');
+    expect(out).toContain('autonomous-run turn cap: 3 · evaluation depth: 1');
+    expect(out).toContain(
+      'unlocked commands: /TRACE /SB /VERIFY (an unlocked-but-unbound command still refuses)',
+    );
+    // auto-blue earned 0 XP: level 0 and NO earned tier — never defaulted.
+    expect(out).toContain('total XP 0 → level 0 (0 into level, 100 XP to next level)');
+    expect(out).toContain('earned chakra tier: none earned (level 0 earns no tier)');
+  });
 });

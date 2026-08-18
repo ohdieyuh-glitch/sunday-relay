@@ -36,7 +36,7 @@ export {
   type ScoredProofEntry,
 } from './proof-meter';
 export {
-  EVALUATION_DEPTH_XP_DIVISOR, OPPONENT_FIX_BONUS_XP, RUN_EXTENSION_XP_DIVISOR,
+  OPPONENT_FIX_BONUS_XP,
   WINNER_BONUS_XP, computeDuelReward,
   type DuelReward, type DuelRewardInput,
 } from './duel-rewards';
@@ -57,6 +57,13 @@ export {
   type DuelEngineBindingDeps, type DuelRepairPlan, type DuelTraceLedgerResult,
   type DuelTraceSeedEntry, type DuelTraceSource,
 } from './duel-engine-bindings';
+export {
+  BASE_AUTONOMOUS_RUN_TURN_CAP, COMMAND_UNLOCK_LEVELS, LEVEL_XP_THRESHOLDS,
+  MAX_LEVEL, autonomousRunTurnCapForLevel, deriveAgentProgression,
+  earnedChakraTierForLevel, evaluationDepthForLevel, isCommandUnlocked,
+  levelForXp, resolveCommandForAgent, unlockedCommandsForLevel,
+  type AgentProgressionView,
+} from './agent-progression';
 export {
   concludeDuelAndAward, readAwardMarker,
   type ConcludeDuelAwardInput, type ConcludeDuelAwardResult,
