@@ -11,8 +11,9 @@
  * so a token-named key can never reach durable storage.
  *
  * THE XP LEDGER IS APPEND-ONLY: an award is a new entry, never a rewrite. It
- * is the STORE for Relay's first progression source — nothing awards into it
- * yet; see the note in `src/relay/shared/relay-chakra.ts`.
+ * is the STORE for Relay's first progression source — its single writer is
+ * `concludeDuelAndAward` (`duel-conclusion.ts`): only a concluded, unmarked
+ * duel pays. See the note in `src/relay/shared/relay-chakra.ts`.
  */
 
 import type { DurableKeyValueBacking } from '../durable';

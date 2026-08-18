@@ -53,6 +53,24 @@ export {
   type ProofCategory, type ProofEntryView, type VerifiedFixFact, type VerifiedFixView,
 } from './duel-results-projection';
 export {
+  buildDuelTraceLedger, createDuelEngineBindings,
+  type DuelEngineBindingDeps, type DuelRepairPlan, type DuelTraceLedgerResult,
+  type DuelTraceSeedEntry, type DuelTraceSource,
+} from './duel-engine-bindings';
+export {
+  concludeDuelAndAward, readAwardMarker,
+  type ConcludeDuelAwardInput, type ConcludeDuelAwardResult,
+  type DuelAwardMarker, type ParticipantAwardWritten,
+} from './duel-conclusion';
+// Re-exported for the composition root: the CLI may import only the bare
+// '../mission' barrel, and the demo duel needs the in-memory durable backing
+// (to hold the XP ledger), the scripted loop agent (the sanctioned offline
+// agent for the loop port), and the repair-loop port types (to supply a real
+// `runRepairLoop` plan). All PURE and browser-safe.
+export { createInMemoryDurableBacking, type DurableKeyValueBacking } from '../durable';
+export { createFakeLoopAgent, type FakeLoopAgentStep } from '../loop/runtime/fake-loop-agent';
+export type { RepairLoopInput, RepairLoopPorts } from '../repair/repair-loop-engine';
+export {
   ACTIVE_AUTOMATION_FIGHT, CHALLENGED_DUEL, CONCLUDED_MANUAL_DUEL,
   CONCLUDED_MANUAL_PROOF_ENTRIES, CONCLUDED_MANUAL_VERIFIED_FIXES,
   activeAutomationFightResults, challengedDuelResults, concludedManualDuelResults,

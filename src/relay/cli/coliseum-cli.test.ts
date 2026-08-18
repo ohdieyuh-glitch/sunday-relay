@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  COLISEUM_DEMO_DISCLOSURE,
   COLISEUM_FIXTURE_DISCLOSURE,
   buildColiseumFixture,
   formatDelta,
@@ -168,5 +169,75 @@ describe('Coliseum CLI — `relay mission coliseum` dispatches through the entry
 
   it('the mission action list names coliseum in the usage error', () => {
     expect(parseCli(['mission']).error).toContain('coliseum');
+  });
+
+  it('an unknown coliseum argument is a usage error, not a silent fixture render', async () => {
+    const { io, text: rendered } = capture();
+    const code = await runCli(['mission', 'coliseum', 'bogus'], io);
+    expect(code).not.toBe(0);
+    expect(rendered()).toContain("or 'demo'");
+  });
+});
+
+describe('Coliseum CLI — `relay mission coliseum demo` runs the REAL engines offline', () => {
+  function capture() {
+    const lines: string[] = [];
+    return {
+      io: { out: (line: string) => lines.push(line), isTTY: false, env: {} as NodeJS.ProcessEnv },
+      text: () => lines.join('\n'),
+    };
+  }
+
+  it('discloses REAL ENGINES / DEMONSTRATION INPUTS before any result, and never the SIMULATED banner', async () => {
+    const { io, text: rendered } = capture();
+    const code = await runCli(['mission', 'coliseum', 'demo'], io);
+    expect(code).toBe(0);
+    const out = rendered();
+    expect(out).toContain(COLISEUM_DEMO_DISCLOSURE);
+    // The demo is real engine output over demo inputs — the fixture banner
+    // ('SIMULATED DATA — ... NOT LIVE DUEL DATA') must NOT appear.
+    expect(out).not.toContain(COLISEUM_FIXTURE_DISCLOSURE);
+    expect(out.indexOf(COLISEUM_DEMO_DISCLOSURE)).toBeLessThan(out.indexOf('/TRACE'));
+  });
+
+  it('dispatches TRACE, SB and VERIFY through the real engines and refuses RED truthfully', async () => {
+    const { io, text: rendered } = capture();
+    await runCli(['mission', 'coliseum', 'demo'], io);
+    const out = rendered();
+    // TRACE: the real Aquala ledger — genesis + the two seeded command events.
+    expect(out).toContain('/TRACE → 3 ledger entries');
+    expect(out).toContain('trace-duel-demo-duel-001-genesis');
+    expect(out).toContain('command_executed: sandboxes provisioned for both participants');
+    // SB: the real bounded repair loop, verifier-closed.
+    expect(out).toMatch(/\/SB → repaired — .*verifier/iu);
+    // VERIFY: the real reviewer gate, independent verifier named.
+    expect(out).toContain('/VERIFY → verified-true (independent verifier: gate-verifier)');
+    // RED has no engine on main; the resolver refuses, nothing is fabricated.
+    expect(out).toMatch(/\/RED → REFUSED: RED has no engine on main/u);
+  });
+
+  it('runs the bounded automation fight through the real loop-agent port with real costs', async () => {
+    const { io, text: rendered } = capture();
+    await runCli(['mission', 'coliseum', 'demo'], io);
+    const out = rendered();
+    expect(out).toContain('Turn cap: 2 · Budget cap: not configured');
+    expect(out).toContain('auto-red turn 1: completed (cost 1000 micros)');
+    expect(out).toContain('auto-blue turn 2: completed (cost 1000 micros)');
+    expect(out).toContain('Relay ran the check itself.');
+  });
+
+  it('awards XP through the real conclusion writer, labels the volatile backing, and refuses a double award', async () => {
+    const { io, text: rendered } = capture();
+    await runCli(['mission', 'coliseum', 'demo'], io);
+    const out = rendered();
+    // The store's own durability label — the demo ledger is in-memory and says so.
+    expect(out).toContain('[volatile-test-only]');
+    // auto-red: verified repair-accepted + opponent-fix bonus 50 + winner 25.
+    expect(out).toMatch(/auto-red: WRITTEN — \d+ XP \(opponent-fix bonus 50\); ledger total \d+/u);
+    // auto-blue's unverified claim earns 0 — truthfully written as 0.
+    expect(out).toContain('auto-blue: WRITTEN — 0 XP (opponent-fix bonus 0); ledger total 0');
+    expect(out).toContain('second award refused:');
+    expect(out).toContain('already awarded');
+    expect(out).not.toContain('DOUBLE-AWARD BUG');
   });
 });

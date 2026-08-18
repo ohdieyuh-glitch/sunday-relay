@@ -25,11 +25,28 @@ import type {
   DuelCommandView,
   DuelParticipantResultView,
   DuelResultsView,
+  ProofEntry,
+  VerifiedFixFact,
 } from '../mission';
 import {
+  acceptChallenge,
+  activateDuel,
   activeAutomationFightResults,
+  beginProvisioning,
+  buildDuelTraceLedger,
   challengedDuelResults,
+  concludeDuel,
+  concludeDuelAndAward,
   concludedManualDuelResults,
+  createChallenge,
+  createDuelEngineBindings,
+  createDuelStore,
+  createFakeLoopAgent,
+  createInMemoryDurableBacking,
+  planAutomationFight,
+  provisionSandbox,
+  resolveCommand,
+  totalXp,
 } from '../mission';
 
 export interface ColiseumRenderOptions {
@@ -254,6 +271,228 @@ export function renderColiseumNoDuel(options: ColiseumRenderOptions): string[] {
  * Coliseum source, when one exists, supplies real duels through the identical
  * shared core; none of the semantics change when it does.
  */
+/* ---------------------------------------------------------- demo duel run */
+
+export const COLISEUM_DEMO_DISCLOSURE =
+  'LOCAL DEMONSTRATION DUEL — REAL ENGINES, DEMONSTRATION INPUTS';
+
+const DEMO_T = '2026-08-18T00:00:00.000Z';
+
+/**
+ * THE DEMONSTRATION DUEL — the sanctioned offline composition root.
+ *
+ * This is NOT the SIMULATED-DATA fixture rendering above: every engine result
+ * printed here is REAL engine output — the real Aquala trace ledger (real
+ * hash chain), the real bounded repair loop, the real reviewer gate, and the
+ * real loop-agent port (the scripted fake agent, the only agent that runs
+ * offline) — dispatched against deterministic sandboxed fixture targets. No
+ * network, no provider call, no money. The XP award goes through the real
+ * duel-conclusion writer into an IN-MEMORY durable backing; the store's own
+ * durability label is printed rather than asserted.
+ */
+export async function runColiseumDemoDuel(options: ColiseumRenderOptions): Promise<string[]> {
+  const out: string[] = [];
+  const rule = '─'.repeat(Math.max(20, Math.min(options.width - 2, COLISEUM_DEMO_DISCLOSURE.length + 4)));
+  out.push('WONDERLAND COLISEUM — DEMONSTRATION DUEL');
+  out.push(`  ${rule}`);
+  out.push(...wrap(COLISEUM_DEMO_DISCLOSURE, options.width, '  '));
+  out.push(...wrap(
+    'Every engine result below is REAL engine output (trace ledger, bounded repair loop, '
+    + 'reviewer gate, loop-agent port) dispatched over deterministic offline inputs against '
+    + 'sandboxed fixture targets. No network, no provider call, no money. This is not the '
+    + 'SIMULATED DATA fixture view.',
+    options.width, '  ',
+  ));
+  out.push(`  ${rule}`, '');
+
+  /* -- lifecycle: challenge → accept → provision → activate (real domain) -- */
+  const duelId = 'demo-duel-001';
+  const challenged = createChallenge({
+    duelId, mode: 'automation-fight',
+    challenger: { participantId: 'auto-red', displayName: 'Red Loop', kind: 'automation' },
+    opponent: { participantId: 'auto-blue', displayName: 'Blue Loop', kind: 'automation' },
+    at: DEMO_T,
+  });
+  if (!challenged.ok) { out.push(`  challenge refused: ${challenged.reason}`); return out; }
+  const accepted = acceptChallenge(challenged.duel, DEMO_T);
+  if (!accepted.ok) { out.push(`  accept refused: ${accepted.reason}`); return out; }
+  const provisioning = beginProvisioning(accepted.duel, DEMO_T);
+  if (!provisioning.ok) { out.push(`  provisioning refused: ${provisioning.reason}`); return out; }
+  const sandboxRed = provisionSandbox({
+    sourceTargetRef: 'fixture:red-target@demo', sandboxCopyId: 'sandbox-demo-red', provisionedAt: DEMO_T,
+  });
+  const sandboxBlue = provisionSandbox({
+    sourceTargetRef: 'fixture:blue-target@demo', sandboxCopyId: 'sandbox-demo-blue', provisionedAt: DEMO_T,
+  });
+  const activated = activateDuel(provisioning.duel, [sandboxRed, sandboxBlue], DEMO_T);
+  if (!activated.ok) { out.push(`  activation refused: ${activated.reason}`); return out; }
+  out.push(`  duel ${duelId} active — sandboxes ${sandboxRed.sandboxCopyId} / ${sandboxBlue.sandboxCopyId}`, '');
+
+  /* ---------------- composition root: the REAL engine bindings ---------------- */
+  const ledger = buildDuelTraceLedger({
+    duelId, createdByActorId: 'relay', createdAt: DEMO_T,
+    entries: [
+      { eventId: 'demo-evt-1', summary: 'sandboxes provisioned for both participants', occurredAt: DEMO_T, actorId: 'auto-red' },
+      { eventId: 'demo-evt-2', summary: 'duel activated in automation-fight mode', occurredAt: DEMO_T, actorId: 'auto-blue' },
+    ],
+  });
+  if (!ledger.ok) { out.push(`  trace ledger refused: ${ledger.reason}`); return out; }
+
+  // 2 turns per lane, 2 lanes → 4 scripted iterations for the real agent port.
+  const loopAgent = createFakeLoopAgent([
+    { kind: 'verified_evidence' }, { kind: 'continuing' },
+    { kind: 'continuing' }, { kind: 'verified_evidence' },
+  ], { adapterId: 'demo-loop-agent', agentId: 'demo-agent' });
+
+  const ports = createDuelEngineBindings({
+    traceSource: { eventsForDuel: (id) => (id === duelId ? ledger.events : null) },
+    planRepairPass: (request) => ({
+      // A deterministic single-finding repair plan; the LOOP that runs it is
+      // the real bounded engine, verifier-closed, scope-checked.
+      ports: {
+        async dispatchRepair() {
+          return { touchedFiles: ['src/target/parser.ts'], claimsFixed: true };
+        },
+        async verify() {
+          return { finding: 'closed' as const };
+        },
+        now: () => DEMO_T,
+      },
+      input: {
+        loopId: `repair-${request.duelId}`, findingId: 'DEMO-F-1',
+        claimedFiles: ['src/target/parser.ts'], maxCycles: 2,
+      },
+    }),
+    gateInputFor: (request) => ({
+      entitlement: 'pro', verificationPassed: true, runStatus: 'completed',
+      reviewer: { agentId: 'gate-verifier', sessionId: 'demo-s1', adapterId: 'gate-verifier-adapter', independenceGroup: 'reviewers' },
+      implementer: { agentId: request.submitterId, sessionId: 'demo-s2', adapterId: 'demo-implementer-adapter', independenceGroup: 'implementers' },
+      completionPolicySatisfied: true,
+      ledger: {
+        missionId: `coliseum-${request.duelId}`, taskId: request.entryId, reviewerRunId: 'demo-review-run',
+        missionRevision: 1, taskRevision: 1, workspaceRevision: 'demo-rev-1',
+        originalClaimedFiles: ['src/target/parser.ts'], affectedCriterionIds: ['AC-1'],
+        reviews: [{
+          attempt: 1, verdict: 'approved', reviewerAgentId: 'gate-verifier',
+          requestedReviewerAgentId: 'gate-verifier', independent: true, provenance: 'manual', findings: [],
+        }],
+        postRepairEvidenceIds: [], repairDispatched: false, maxRepairIterations: 1, now: DEMO_T,
+      },
+    }),
+    loopAgent,
+    iterationDeadlineMs: 60_000,
+  });
+
+  /* -------------------- TRACE / SB / VERIFY through the real ports -------------------- */
+  out.push('  COMMAND DISPATCHES (real engines)');
+  const dispatch = async (name: 'TRACE' | 'SB' | 'VERIFY' | 'RED', body: () => Promise<string[]>): Promise<void> => {
+    const resolved = resolveCommand(name, ports);
+    if (!resolved.executed) {
+      out.push(`  /${name} → REFUSED: ${resolved.refusal}`);
+      return;
+    }
+    try {
+      for (const line of await body()) out.push(line);
+    } catch (error) {
+      out.push(`  /${name} → REFUSED: ${error instanceof Error ? error.message : 'refused'}`);
+    }
+  };
+
+  await dispatch('TRACE', async () => {
+    const entries = await ports.trace!.readEntries(duelId);
+    return [
+      `  /TRACE → ${entries.length} ledger entries (real hash-chained Aquala trace):`,
+      ...entries.map((e) => `      ${e.entryId} @ ${e.at} — ${e.summary}`),
+    ];
+  });
+  await dispatch('SB', async () => {
+    const repair = await ports.sandboxRepair!.runRepairPass({
+      duelId, sandboxCopyId: sandboxBlue.sandboxCopyId, objective: 'close DEMO-F-1',
+    });
+    return [`  /SB → ${repair.outcome} — ${repair.summary}`];
+  });
+  const verifyOutcome: {
+    verdict: 'verified-true' | 'verified-false' | 'unknown';
+    verifierId: string | null;
+  } = { verdict: 'unknown', verifierId: null };
+  await dispatch('VERIFY', async () => {
+    const verified = await ports.verify!.verify({ duelId, entryId: 'proof-red-1', submitterId: 'auto-red' });
+    verifyOutcome.verdict = verified.verdict;
+    verifyOutcome.verifierId = verified.verifierId;
+    return [`  /VERIFY → ${verified.verdict} (independent verifier: ${verified.verifierId})`];
+  });
+  // An unbound command refuses truthfully, live, through the same resolver.
+  await dispatch('RED', async () => []);
+  out.push('');
+
+  /* ------------------------- the bounded automation fight ------------------------- */
+  const turnCap = 2;
+  out.push('  AUTOMATION FIGHT (real loop-agent port, scripted offline agent)');
+  out.push(`  Turn cap: ${turnCap} · Budget cap: not configured`);
+  const plan = planAutomationFight(activated.duel, [sandboxRed, sandboxBlue], { turnCap, budgetCap: null }, ports);
+  if (!plan.ok) { out.push(`  fight refused: ${plan.reason}`); return out; }
+  for (const lane of plan.lanes) {
+    for (let turn = 1; turn <= plan.limits.turnCap; turn += 1) {
+      const iteration = await ports.automationLoop!.runIteration({
+        duelId, participantId: lane.participantId, sandboxCopyId: lane.sandboxCopyId, turn,
+      });
+      const cost = iteration.costMicros === null ? 'Unknown' : `${iteration.costMicros} micros`;
+      out.push(`    ${lane.participantId} turn ${turn}: ${iteration.outcome} (cost ${cost}) — ${iteration.summary}`);
+    }
+  }
+  out.push('');
+
+  /* ----------------------- conclusion and the REAL XP award ----------------------- */
+  const concluded = concludeDuel(activated.duel, 'auto-red', DEMO_T);
+  if (!concluded.ok) { out.push(`  conclusion refused: ${concluded.reason}`); return out; }
+
+  // Proof facts derived from what the engines ACTUALLY returned above: the
+  // repair claim is credited as verified only if the real gate verified it.
+  const realVerifierId: string | null = verifyOutcome.verdict === 'verified-true' ? verifyOutcome.verifierId : null;
+  const gateVerified = realVerifierId !== null;
+  const proofEntries: Readonly<Record<string, readonly ProofEntry[]>> = {
+    'auto-red': [{
+      entryId: 'proof-red-1', category: 'repair-accepted', submitterId: 'auto-red',
+      summary: 'repaired DEMO-F-1 in the opponent sandbox (verifier-closed repair loop)',
+      verification: gateVerified ? 'verified-true' : 'unverified',
+      verifierId: realVerifierId, brokeSandbox: false,
+    }],
+    'auto-blue': [{
+      entryId: 'proof-blue-1', category: 'bug-discovery', submitterId: 'auto-blue',
+      summary: 'claims a parser defect in the red sandbox (no independent verification ran)',
+      verification: 'unverified', verifierId: null, brokeSandbox: false,
+    }],
+  };
+  const verifiedFixes: readonly VerifiedFixFact[] = realVerifierId !== null ? [{
+    id: 'fix-demo-1', summary: 'DEMO-F-1 repaired in the blue sandbox',
+    targetParticipantId: 'auto-blue', authorParticipantId: 'auto-red',
+    appliedState: 'applied', verifierId: realVerifierId,
+  }] : [];
+
+  const backing = createInMemoryDurableBacking();
+  const store = createDuelStore(backing);
+  out.push('  XP AWARD (real duel-conclusion writer)');
+  out.push(`  Ledger backing: ${store.locationLabel} [${store.durability}]`);
+  const award = await concludeDuelAndAward(store, backing, {
+    duel: concluded.duel, proofEntries, verifiedFixes, awardedAt: DEMO_T,
+  });
+  if (!award.ok) { out.push(`  award refused: ${award.refusal}`); return out; }
+  for (const participant of award.participants) {
+    const ledgerNow = await store.readXpLedger(participant.participantId);
+    out.push(
+      `    ${participant.participantId}: ${participant.written ? 'WRITTEN' : `NOT WRITTEN (${participant.writeFailure ?? 'unknown reason'})`}`
+      + ` — ${participant.reward.xp} XP (opponent-fix bonus ${participant.reward.opponentFixBonus}); ledger total ${totalXp(ledgerNow)}`,
+    );
+  }
+  const doubleAward = await concludeDuelAndAward(store, backing, {
+    duel: concluded.duel, proofEntries, verifiedFixes, awardedAt: DEMO_T,
+  });
+  out.push(doubleAward.ok
+    ? '    DOUBLE-AWARD BUG: a second award was accepted'
+    : `    second award refused: ${doubleAward.refusal}`);
+  return out;
+}
+
 export function buildColiseumFixture(): {
   source: ColiseumDataSource;
   concluded: DuelResultsView;

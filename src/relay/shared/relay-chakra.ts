@@ -11,8 +11,9 @@
  *
  * Relay now has the STORE for its first progression source: the Wonderland
  * Coliseum XP ledger (`src/relay/mission/coliseum/duel-store.ts`), an
- * append-only per-agent record — but nothing awards into it yet (no caller
- * outside tests), and this module is NOT wired to it — nothing here reads
+ * append-only per-agent record whose single writer is `concludeDuelAndAward`
+ * (only a concluded, unmarked duel pays) — but this module is NOT wired to
+ * it — nothing here reads
  * that ledger, and a tier here is still
  * a CHOSEN appearance, stored beside the colorway and the stage backdrop
  * because it is the same kind of fact: how this browser looks, to this user.
