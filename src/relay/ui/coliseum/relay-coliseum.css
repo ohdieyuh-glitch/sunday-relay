@@ -320,6 +320,106 @@
   color: var(--text-dim);
 }
 
+/* ----------------------------------------------------------- progression */
+
+.relay-coliseum-prog {
+  background: var(--surface-solid);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elev-1);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.55;
+  max-width: 760px;
+  padding: 16px 18px 14px;
+}
+
+.relay-coliseum-prog-head {
+  align-items: baseline;
+  border-bottom: 1px solid var(--hairline);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  padding-bottom: 10px;
+}
+
+.relay-coliseum-prog-title {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  margin: 0;
+}
+
+.relay-coliseum-prog-agent {
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+
+.relay-coliseum-prog-stats {
+  margin-top: 10px;
+}
+
+.relay-coliseum-prog-unlocks {
+  border-top: 1px solid var(--hairline);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.relay-coliseum-prog-unlocks-title {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  margin: 0;
+}
+
+.relay-coliseum-prog-unlocks-note {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin: 4px 0 0;
+}
+
+.relay-coliseum-prog-unlock-list {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.relay-coliseum-prog-unlock {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+}
+
+.relay-coliseum-prog-unlock-name {
+  color: var(--gold-400);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  min-width: 82px;
+}
+
+.relay-coliseum-prog-unlock[data-binding='unbound'] .relay-coliseum-prog-unlock-name,
+.relay-coliseum-prog-unlock[data-binding='unknown'] .relay-coliseum-prog-unlock-name {
+  color: var(--text-dim);
+}
+
+.relay-coliseum-prog-unlock-verdict {
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.relay-coliseum-prog-unlock[data-binding='bound'] .relay-coliseum-prog-unlock-verdict {
+  color: var(--ok);
+}
+
 /* ----------------------------------------------------------------- log */
 
 .relay-coliseum-log {

@@ -194,9 +194,9 @@ the same functions.
 A passing strict run reports what it actually inspected, at manifest `1.2.0`:
 
 ```text
-  declared surface files: 344/344 present
+  declared surface files: 348/348 present
   declared CLI commands: 28 (verified by the CLI's own command tests)
-  website entry points reachable: 46/55 mounted
+  website entry points reachable: 47/56 mounted
 ```
 
 The file total counts every declaration that resolved, across all five
@@ -210,7 +210,8 @@ render from. It rose to 222 when those two capabilities declared the settings
 host that actually mounts them. It rose from 329 to 344 when
 `wonderland-coliseum-duels` declared the Coliseum console, its CLI renderer
 (`relay mission coliseum`) and the shared duel projection both surfaces
-render from.
+render from, and to 348 when the same capability declared the Agent
+progression panel and its ledger-derived domain.
 `docs/documentation-contract.test.ts` holds all three quoted lines to what the
 checker really prints, so a stale number fails rather than reassures.
 
