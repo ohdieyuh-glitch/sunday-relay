@@ -9,7 +9,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 import { detectRenderOptions, renderAudit, renderEvent, renderManualTask, welcome, badge, type RenderOptions } from './render';
 import { buildCompetitiveFrames, competitiveJson } from './competitive';
 import { buildMissionControlFrames } from './mission-control';
-import { buildColiseumFixture, renderColiseumDuel } from './coliseum-cli';
+import { buildColiseumFixture, renderColiseumDuel, runColiseumDemoDuel } from './coliseum-cli';
 import { EXIT, exitCodeForFinalStatus } from './exit-codes';
 import { bridgeClientFrom, runReviewerBridgeCli } from './reviewer-bridge-cli';
 import { BRIDGE_URL_ENV } from '../reviewer-bridge-client';
@@ -636,6 +636,7 @@ export const HELP_TEXT = [
   '  relay mcp revoke <id>          revoke an MCP approval',
   '  relay mission mcp preflight <mission-id>   mission MCP readiness (blocked/degraded/ready)',
   '  relay mission coliseum         Wonderland Coliseum duels + proof meter (SIMULATED fixture)',
+  '  relay mission coliseum demo    Offline demonstration duel — REAL engines, demo inputs',
   '  relay yc check                 YC demo preflight (read-only, no provider call)',
   '  relay yc demo                  founder YC demo launcher (offline simulation only)',
   '  relay session                  legacy simulated interactive session',
@@ -1538,10 +1539,21 @@ async function runMissionCli(parsed: ParsedCli, io: CliIo): Promise<number> {
     case 'reviewer':
       return await runMissionReviewerCli(parsed, io);
     case 'coliseum': {
-      // WONDERLAND COLISEUM — read-only. Renders the SAME shared duel
-      // projection the website renders, over the deterministic development
-      // fixtures; every duel render carries the SIMULATED DATA disclosure
-      // structurally (the renderer requires the source before any figure).
+      // WONDERLAND COLISEUM. Default: read-only render of the SAME shared
+      // duel projection the website renders, over the deterministic
+      // development fixtures, with the SIMULATED DATA disclosure structural.
+      // `relay mission coliseum demo` instead runs the offline DEMONSTRATION
+      // DUEL — real engines (trace ledger, repair loop, reviewer gate,
+      // loop-agent port) over deterministic sandboxed fixture targets, with
+      // the XP award written through the real duel-conclusion writer.
+      if (parsed.projectRef === 'demo') {
+        for (const line of await runColiseumDemoDuel(options)) io.out(line);
+        return EXIT.completed;
+      }
+      if (parsed.projectRef !== undefined) {
+        io.out("mission coliseum accepts no argument, or 'demo' for the offline demonstration duel.");
+        return EXIT.usage;
+      }
       const coliseum = buildColiseumFixture();
       for (const view of [coliseum.concluded, coliseum.activeFight, coliseum.challenged]) {
         for (const line of renderColiseumDuel(view, coliseum.source, options)) io.out(line);
