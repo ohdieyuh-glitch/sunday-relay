@@ -32,6 +32,7 @@ import {
   acceptChallenge,
   activateDuel,
   activeAutomationFightResults,
+  BASE_AUTONOMOUS_RUN_TURN_CAP,
   beginProvisioning,
   buildDuelTraceLedger,
   challengedDuelResults,
@@ -43,6 +44,7 @@ import {
   createDuelStore,
   createFakeLoopAgent,
   createInMemoryDurableBacking,
+  deriveAgentProgression,
   planAutomationFight,
   provisionSandbox,
   resolveCommand,
@@ -385,6 +387,8 @@ export async function runColiseumDemoDuel(options: ColiseumRenderOptions): Promi
 
   /* -------------------- TRACE / SB / VERIFY through the real ports -------------------- */
   out.push('  COMMAND DISPATCHES (real engines)');
+  out.push('  (un-attributed to an agent, so no unlock gate applies here — a');
+  out.push('   player-issued command goes through the level-gated resolver instead)');
   const dispatch = async (name: 'TRACE' | 'SB' | 'VERIFY' | 'RED', body: () => Promise<string[]>): Promise<void> => {
     const resolved = resolveCommand(name, ports);
     if (!resolved.executed) {
@@ -426,7 +430,7 @@ export async function runColiseumDemoDuel(options: ColiseumRenderOptions): Promi
   out.push('');
 
   /* ------------------------- the bounded automation fight ------------------------- */
-  const turnCap = 2;
+  const turnCap = BASE_AUTONOMOUS_RUN_TURN_CAP;
   out.push('  AUTOMATION FIGHT (real loop-agent port, scripted offline agent)');
   out.push(`  Turn cap: ${turnCap} · Budget cap: not configured`);
   const plan = planAutomationFight(activated.duel, [sandboxRed, sandboxBlue], { turnCap, budgetCap: null }, ports);
@@ -490,6 +494,33 @@ export async function runColiseumDemoDuel(options: ColiseumRenderOptions): Promi
   out.push(doubleAward.ok
     ? '    DOUBLE-AWARD BUG: a second award was accepted'
     : `    second award refused: ${doubleAward.refusal}`);
+
+  /* -------------------- progression: a PROJECTION of the real ledger -------------------- */
+  // Nothing below is stored anywhere: every figure is derived, on this line,
+  // from the XP the duel-conclusion writer actually appended above.
+  out.push('');
+  out.push('  AGENT PROGRESSION (derived from the XP ledger — nothing stored)');
+  out.push(`  Ledger backing: ${store.locationLabel} [${store.durability}]`);
+  for (const participant of award.participants) {
+    const progression = deriveAgentProgression(
+      await store.readXpLedger(participant.participantId),
+    );
+    const next = progression.xpToNextLevel === null
+      ? 'at max level'
+      : `${progression.xpToNextLevel} XP to next level`;
+    // No earned tier is the truthful answer at low XP — never defaulted.
+    const tier = progression.earnedChakraTier === null
+      ? 'none earned (level 0 earns no tier)'
+      : progression.earnedChakraTier.toUpperCase();
+    out.push(`    ${progression.agentId}:`);
+    out.push(`      total XP ${progression.totalXp} → level ${progression.level} `
+      + `(${progression.xpIntoLevel} into level, ${next})`);
+    out.push(`      earned chakra tier: ${tier}`);
+    out.push(`      autonomous-run turn cap: ${progression.autonomousRunTurnCap}`
+      + ` · evaluation depth: ${progression.evaluationDepth}`);
+    out.push(`      unlocked commands: ${progression.unlockedCommands.map((c) => `/${c}`).join(' ')}`
+      + ' (an unlocked-but-unbound command still refuses)');
+  }
   return out;
 }
 

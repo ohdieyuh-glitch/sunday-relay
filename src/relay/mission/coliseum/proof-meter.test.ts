@@ -119,8 +119,6 @@ describe('rewards — both sides earn, opponent fixes earn most', () => {
     const reward = computeDuelReward({ participantId: 'p', isWinner: false, proof: penalizedProof, verifiedOpponentFixCount: 0 });
     expect(penalizedProof.totalPoints).toBeLessThan(0);
     expect(reward.xp).toBe(0);
-    expect(reward.runExtensionUnits).toBe(0);
-    expect(reward.evaluationDepthUnits).toBe(0);
   });
 
   it('unverified-only work earns nothing at all', () => {
