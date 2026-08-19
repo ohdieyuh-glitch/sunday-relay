@@ -236,6 +236,7 @@ def main():
         records.append(("cube", (_dx, _dy - 84.0 * _s, 120.0 * _s),
                         (0.36 * _s, 0.06 * _s, 0.20 * _s), "dog_visor", "DOGPROXY_%02dv" % _i, (0.0, 0.0, 0.0)))
     spec = ns["MATERIAL_SPEC"]
+    mat_name_for = ns["mat_name_for"]
     lay = json.load(io.open(LAYOUT, encoding="utf8"))
     hero = [c for c in lay["heroCameras"] if c["id"] == "cam_arrival_hero"][0]
     eye = [float(v) for v in hero["location"]]
@@ -270,7 +271,10 @@ def main():
     SKY = (0.62, 0.70, 0.88)
 
     def shade(mat, z):
-        m = spec.get(mat or "plaza", ((0.5, 0.5, 0.5), 0, 0.5, (0, 0, 0), 0.0))
+        # same fallback the generator applies, so the preview shows the colour
+        # an object will actually get rather than a neutral stand-in
+        m = spec.get(mat or mat_name_for(mesh, lb),
+                     ((0.5, 0.5, 0.5), 0, 0.5, (0, 0, 0), 0.0))
         base, emi, es = m[0], m[3], m[4]
         col = [min(1.0, base[c] * 0.80 + emi[c] * min(es, 2.0) * 0.30) for c in range(3)]
         hz = 1.0 - math.exp(-max(z, 0.0) / HAZE)

@@ -59,7 +59,8 @@ def load_world():
         gns["build"](json.load(io.open("WorldDesign/hub-layout.json", encoding="utf8")))
     finally:
         os.chdir(cwd)
-    return ns["records"], gns["MATERIAL_SPEC"], ns["write_png"]
+    return (ns["records"], gns["MATERIAL_SPEC"], ns["write_png"],
+            gns["mat_name_for"])
 
 
 def load_textures():
@@ -95,7 +96,7 @@ TEXTURED = {
 
 
 def main():
-    records, SPEC, write_png = load_world()
+    records, SPEC, write_png, mat_name_for = load_world()
     FAMS, TSZ = load_textures()
     lay = json.load(io.open(os.path.join(_WL, "WorldDesign", "hub-layout.json"), encoding="utf8"))
     hero = [c for c in lay["heroCameras"] if c["id"] == "cam_arrival_hero"][0]
@@ -112,7 +113,13 @@ def main():
         if hx < 1e-4 or hy < 1e-4 or hz < 1e-4:
             continue
         yaw = math.radians(rot[1] if mesh not in ROUND else 0.0)
-        m = SPEC.get(mat or "plaza", ((0.5, 0.5, 0.5), 0.0, 0.5, (0, 0, 0), 0.0))
+        # RESOLVE THE FALLBACK. Objects spawned without an explicit material get
+        # one from mat_name_for(mesh, label) in the generator; painting them
+        # neutral grey instead greyed out a FIFTH of the frame, and I was making
+        # colour judgements from that.
+        if not mat:
+            mat = mat_name_for(mesh, lb)
+        m = SPEC.get(mat, ((0.5, 0.5, 0.5), 0.0, 0.5, (0, 0, 0), 0.0))
         base = m[0]
         emis = (m[3][0] * m[4], m[3][1] * m[4], m[3][2] * m[4])
         kind = 0 if mesh in ROUND else 1
