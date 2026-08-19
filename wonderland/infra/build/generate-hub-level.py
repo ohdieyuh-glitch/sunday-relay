@@ -192,6 +192,11 @@ MATERIAL_SPEC = {
     # a string of pearls.
     "spray":       ((0.96, 0.98, 1.00), 0.0, 0.14, (0.30, 0.40, 0.48), 0.55),
     "magic_cyan":  ((0.20, 0.85, 1.00), 0.0, 0.30, (0.20, 0.85, 1.00), 2.2),
+    # The Brain is now 72 folded lobes where it used to be 5 spheres. At the
+    # bright value that is fourteen times the glowing area, and a structure
+    # whose whole point is that you can read its folds becomes one cyan blob.
+    # Most of it takes this; the crowns of the folds keep the bright one.
+    "magic_cyan_d":((0.16, 0.62, 0.78), 0.0, 0.36, (0.14, 0.52, 0.68), 0.85),
     "magic_gold":  ((1.00, 0.84, 0.42), 0.0, 0.28, (1.00, 0.74, 0.30), 4.5),
     # Lamp glass, separately: magic_gold at 4.5 is right for a threshold disc
     # and far too hot for a lantern that also carries a real point light — at
@@ -1682,8 +1687,14 @@ def build(layout):
                     px = x + hemi * (58.0 + rr * 0.30 * abs(math.sin(ang)))
                     py = y + math.sin(ang) * rr
                     pz = bz + math.cos(ang) * rr * 0.80 + fold * 120.0 + g * 34.0 - 50.0
-                    _p("sphere", px, py, pz, 0.62, 0.62, 0.62, "magic_cyan",
-                          "%s_gyr%d_%d_%d" % (label, hemi, g, k))
+                    # Bright only on the crown of each fold, so the Brain reads
+                    # as a folded structure lit from within rather than as one
+                    # even glow — which is what 72 lobes at the bright value is.
+                    _crown = (k % 3 == 1) and (g % 2 == 0)
+                    _p("sphere", px, py, pz, 0.62, 0.62, 0.62,
+                       "magic_cyan" if (_crown or "magic_cyan_d" not in MATS)
+                       else "magic_cyan_d",
+                       "%s_gyr%d_%d_%d" % (label, hemi, g, k))
         _p("cylinder", x, y, bz - 190.0, 0.5, 0.5, 1.5, "magic_cyan", "%s_stem" % label)
         # --- armillary rings turning around it ---------------------------
         for r_i, (tilt, rad, mat) in enumerate(((0.0, 430.0, "gold"),
