@@ -1970,7 +1970,15 @@ def build(layout):
 
     def kit_teacup(x, y, s, label):
         _part("cylinder", x, y, 8.0 * s, 2.4 * s, 2.4 * s, 0.16 * s, "porcelain", "%s_saucer" % label)
-        _part("cylinder", x, y, 78.0 * s, 1.5 * s, 1.5 * s, 1.3 * s, "porcelain", "%s_body" % label)
+        # A CUP FLARES. One straight cylinder is a mug at best and a tin can at
+        # worst; the whole silhouette of fine china is the curve from a narrow
+        # foot out to a wide rim. Stacked tapering courses give that curve, and
+        # the eye reads the profile long before it reads the decoration.
+        for _c in range(7):
+            _t = _c / 6.0
+            _r = (1.06 + 0.70 * (_t ** 0.72)) * s
+            _part("cylinder", x, y, (30.0 + 96.0 * _t) * s, _r, _r, 0.20 * s,
+                  "porcelain", "%s_body%d" % (label, _c))
         _part("cylinder", x, y, 140.0 * s, 1.72 * s, 1.72 * s, 0.12 * s, "gold", "%s_rim" % label)
         # GOLD TRIM AND PAINTED ACCENTS. Fine china is banded, footed and
         # decorated; the rim light added with the Fresnel pass supplies the
@@ -1986,7 +1994,17 @@ def build(layout):
             _part("cube", x + math.cos(_a) * 74.0 * s, y + math.sin(_a) * 74.0 * s,
                   50.0 * s, 0.10 * s, 0.03 * s, 0.05 * s, "foliage",
                   "%s_sprigleaf%d" % (label, _k), rot=(0.0, 0.0, math.degrees(_a)))
-        _part("cube", x + 88.0 * s, y, 80.0 * s, 0.22 * s, 0.5 * s, 0.62 * s, "porcelain", "%s_handle" % label)
+        # A HANDLE IS A LOOP, and the hole in the middle is the whole read: a
+        # solid slab against the cup is a lug, and reads as one from any angle.
+        # Short segments around an arc, each rotated tangent, leave real negative
+        # space for the light to come through.
+        for _h in range(9):
+            _ha = -1.30 + (_h / 8.0) * 2.60
+            _part("cube", x + (84.0 + math.cos(_ha) * 34.0) * s, y,
+                  (86.0 + math.sin(_ha) * 40.0) * s,
+                  0.15 * s, 0.13 * s, 0.26 * s, "porcelain",
+                  "%s_handle%d" % (label, _h),
+                  rot=(0.0, -math.degrees(_ha), 0.0))
         # painted red HEARTS around the cup (the reference's Queen-of-Hearts teacup)
         for k in range(4):
             a = k * (math.pi / 2.0) + 0.4
@@ -2739,8 +2757,21 @@ def build(layout):
     def kit_teapot(x, y, z, label):
         # Original teapot prop: porcelain body + spout + handle + gold lid & knob.
         _part("sphere", x, y, z, 1.6, 1.6, 1.28, "porcelain", "%s_body" % label)
-        _part("cylinder", x + 78, y, z + 8, 0.24, 0.24, 0.9, "porcelain", "%s_spout" % label, rot=(0, 52, 0))
-        _part("cube", x - 76, y, z + 4, 0.16, 0.5, 0.5, "porcelain", "%s_handle" % label)
+        # A SPOUT CURVES and a handle LOOPS. Straight cylinder plus solid slab
+        # is the pot every prototype has; the S of the spout and the hole in the
+        # handle are what make it porcelain rather than blocking-out.
+        for _sp in range(6):
+            _t = _sp / 5.0
+            _part("cylinder", x + 62.0 + _t * 58.0, y,
+                  z - 6.0 + math.sin(_t * 1.9) * 46.0,
+                  0.24 - _t * 0.10, 0.24 - _t * 0.10, 0.22, "porcelain",
+                  "%s_spout%d" % (label, _sp), rot=(0.0, 62.0 - _t * 34.0, 0.0))
+        for _h in range(9):
+            _ha = -1.35 + (_h / 8.0) * 2.70
+            _part("cube", x - 68.0 - math.cos(_ha) * 30.0, y,
+                  z + 6.0 + math.sin(_ha) * 44.0,
+                  0.15, 0.14, 0.26, "porcelain", "%s_handle%d" % (label, _h),
+                  rot=(0.0, math.degrees(_ha), 0.0))
         _part("cylinder", x, y, z + 66, 0.7, 0.7, 0.16, "gold", "%s_lid" % label)
         _part("cylinder", x, y, z - 58, 1.05, 1.05, 0.12, "gold", "%s_foot" % label)
         _part("cylinder", x, y, z + 34, 1.52, 1.52, 0.05, "gold", "%s_band" % label)
