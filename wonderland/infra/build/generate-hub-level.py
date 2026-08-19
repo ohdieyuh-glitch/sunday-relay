@@ -1816,6 +1816,15 @@ def build(layout):
         what gives it scale."""
         S = 1.0
 
+        def _p_rail(ax, ay, bx, by, cz, lb):
+            railing(x + (ax - x) * K, y + (ay - y) * K,
+                    x + (bx - x) * K, y + (by - y) * K, cz * K,
+                    "spire", lb, n=3, h=110.0 * K, rail_mat="stone")
+
+        def _p_corn(cx, cy, cz, r, lb):
+            cornice(x + (cx - x) * K, y + (cy - y) * K, cz * K,
+                    r * K / 50.0, r * K / 50.0, "stone", lb, dentils=16)
+
         def _p(prim, cx, cy, cz, sx, sy, sz, mat, lb, rot=(0.0, 0.0, 0.0)):
             """Everything below is authored at full size and scaled about the
             building's own footprint. Measured against the hero frame the
@@ -1842,6 +1851,15 @@ def build(layout):
             _p("cylinder", cx, cy, base_z + 452.0, 0.60, 0.60, 0.34, "stone",
                   "%s_ccap%d" % (label, i))
         arch_z = base_z + 490.0
+        # A BALUSTRADE BETWEEN THE COLUMNS. A peristyle is a colonnade with a
+        # low screen wall between its lower drums; without one you see straight
+        # through the building and it reads as scaffolding holding up a dome.
+        for i in range(16):
+            a0 = i * (2.0 * math.pi / 16.0)
+            a1 = (i + 1) * (2.0 * math.pi / 16.0)
+            _p_rail(x + math.cos(a0) * col_r, y + math.sin(a0) * col_r,
+                    x + math.cos(a1) * col_r, y + math.sin(a1) * col_r,
+                    base_z + 30.0, "%s_peri%d" % (label, i))
         # --- architrave + frieze ring -----------------------------------
         for i in range(16):
             a = (i + 0.5) * (2.0 * math.pi / 16.0)
@@ -1850,6 +1868,8 @@ def build(layout):
                   "%s_arch%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
             _p("cube", ax, ay, arch_z + 54.0, 2.05, 0.66, 0.34, "gold",
                   "%s_frieze%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
+        # a moulded cornice where the architrave meets the dome
+        _p_corn(x, y, arch_z + 66.0, col_r * 1.10, "%s_cornice" % label)
         dome_z = arch_z + 88.0
         # --- ribbed dome -------------------------------------------------
         R = col_r * 1.02
@@ -1925,6 +1945,8 @@ def build(layout):
             _p("cube", ox, y - 520.0, 60.0, 0.80, 0.80, 1.2, "stone", "%s_obb%d" % (label, sx))
             _p("cube", ox, y - 520.0, 340.0, 0.52, 0.52, 4.4, "spire", "%s_ob%d" % (label, sx))
             _p("cone", ox, y - 520.0, 600.0, 0.62, 0.62, 1.1, "gold", "%s_obt%d" % (label, sx))
+            finial(x + (ox - x) * K, y + ((y - 520.0) - y) * K, 660.0 * K, 1.5 * K,
+                   "gold", "%s_obfin%d" % (label, sx), glow="gold_glow")
 
     def kit_clock_tower(x, y, s, label):
         """A TOWER. The layout has specified one here from the beginning and the
@@ -3621,8 +3643,15 @@ def build(layout):
         _part("cube", kx, ky, 34.0, 1.34, 0.52, 0.10, "plaza", "PlazaCap%d" % i,
               rot=(0.0, 0.0, math.degrees(a) + 90.0))
         if i % 8 == 0:                                  # piers with lanterns' scale
-            _part("cube", kx, ky, 52.0, 0.56, 0.56, 0.92, "stone", "PlazaPier%d" % i)
-            _part("sphere", kx, ky, 108.0, 0.28, 0.28, 0.28, "gold", "PlazaPierBall%d" % i)
+            # a trimmed pier with a terminated cap, and a balustrade running to
+            # the next one — "ceremonial and expensive" is a continuous edge, not
+            # a ring of separate posts
+            trim_box(kx, ky, 52.0, 0.56, 0.56, 0.92, "stone", "PlazaPier%d" % i,
+                     yaw=math.degrees(a), trim="plaza")
+            finial(kx, ky, 104.0, 0.85, "gold", "PlazaPierFin%d" % i, glow="gold_glow")
+            _a2 = (i + 8) * (2.0 * math.pi / 64.0)
+            railing(kx, ky, math.cos(_a2) * _PR, math.sin(_a2) * _PR, 34.0,
+                    "plaza", "PlazaBal%d" % i, n=5, h=62.0, rail_mat="stone")
         if i % 3 == 0:                                  # moss at the transition
             _part("sphere", math.cos(a) * (_PR + 34.0), math.sin(a) * (_PR + 34.0), 7.0,
                   0.30, 0.30, 0.09, "moss", "PlazaMoss%d" % i)
