@@ -193,6 +193,11 @@ MATERIAL_SPEC = {
     "spray":       ((0.96, 0.98, 1.00), 0.0, 0.14, (0.30, 0.40, 0.48), 0.55),
     "magic_cyan":  ((0.20, 0.85, 1.00), 0.0, 0.30, (0.20, 0.85, 1.00), 2.2),
     "magic_gold":  ((1.00, 0.84, 0.42), 0.0, 0.28, (1.00, 0.74, 0.30), 4.5),
+    # Lamp glass, separately: magic_gold at 4.5 is right for a threshold disc
+    # and far too hot for a lantern that also carries a real point light — at
+    # eight of them down the boulevard that reads as flare, and the brief asks
+    # for restrained bloom.
+    "lamp_glass":  ((1.00, 0.88, 0.58), 0.0, 0.22, (1.00, 0.80, 0.42), 2.0),
     "arcane":      ((0.66, 0.36, 1.00), 0.0, 0.30, (0.62, 0.28, 1.00), 11.0),
     "crystal":     ((0.65, 0.40, 0.95), 0.1, 0.20, (0.40, 0.20, 0.80), 1.5),
     "dog_body":    ((0.985, 0.985, 0.995), 0.0, 0.34, (0.02, 0.02, 0.03), 0.10),
@@ -218,8 +223,14 @@ MATERIAL_SPEC = {
     "mush_gill":   ((0.80, 0.66, 0.58), 0.0, 0.70, (0, 0, 0), 0.0),
     # Cumulus. Slightly self-lit so the shaded undersides stay soft and
     # bright rather than going grey — stylised cloud, not storm cloud.
-    "cloud":       ((1.00, 1.00, 1.00), 0.0, 1.00, (0.94, 0.96, 1.00), 3.6),
-    "cloud_warm":  ((1.00, 0.99, 0.99), 0.0, 1.00, (1.00, 0.95, 0.96), 3.6),
+    # 2.6 is the value that was PROVEN on a streamed frame. It went to 3.6
+    # unrendered at the same time the cluster count went 28 -> 44, which
+    # together is 2.2x the emissive sky area that was proven — and the
+    # histogram auto-exposure meters against exactly that, which is what
+    # crushed the foreground to mud once already this sprint. Back to the
+    # proven radiance, spread over more sky rather than concentrated.
+    "cloud":       ((1.00, 1.00, 1.00), 0.0, 1.00, (0.94, 0.96, 1.00), 2.6),
+    "cloud_warm":  ((1.00, 0.99, 0.99), 0.0, 1.00, (1.00, 0.95, 0.96), 2.6),
     # A leaf card: thin, matte, and a touch deeper than the blob green so
     # the fanned cards read as separate leaves rather than one mass.
     "leaf":        ((0.30, 0.52, 0.30), 0.0, 0.74, (0, 0, 0), 0.0),
@@ -1942,7 +1953,7 @@ def build(layout):
               "rose" if _a % 2 else "porcelain", "awning%d" % _a, rot=(-26.0, 0.0, 0.0))
         P("cube", W_ * 34.0, -D_ * 50.0 - 6.0, 118.0, 0.34, 0.08, 1.5, "trunk", "door")
         P("sphere", W_ * 34.0 + 12.0, -D_ * 50.0 - 14.0, 210.0, 0.16, 0.16, 0.20,
-          "magic_gold", "doorlamp")
+          "lamp_glass" if "lamp_glass" in MATS else "magic_gold", "doorlamp")
         # jettied upper storey, wider than the floor below — the overhang is what
         # makes a street of these read as old and built rather than extruded
         P("cube", 0, 0, 330.0, W_ * 1.12, D_ * 1.12, 1.9, body, "upper")
@@ -2334,7 +2345,8 @@ def build(layout):
             a = k * (math.pi / 2.0) + 0.785
             _part("cube", x + math.cos(a) * 26.0 * s, y + math.sin(a) * 26.0 * s, lz,
                   0.055 * s, 0.055 * s, 0.92 * s, "gold", "%s_mull%d" % (label, k))
-        _part("cube", x, y, lz, 0.46 * s, 0.46 * s, 0.86 * s, "magic_gold", "%s_glass" % label)
+        _part("cube", x, y, lz, 0.46 * s, 0.46 * s, 0.86 * s,
+              "lamp_glass" if "lamp_glass" in MATS else "magic_gold", "%s_glass" % label)
         _part("cone", x, y, lz + 66.0 * s, 0.46 * s, 0.46 * s, 0.50 * s, "gold", "%s_crown" % label)
         _part("sphere", x, y, lz + 104.0 * s, 0.13 * s, 0.13 * s, 0.13 * s, "gold_glow",
               "%s_fin" % label)
