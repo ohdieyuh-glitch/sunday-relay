@@ -70,6 +70,24 @@ They answer composition and value structure. **The streamed California frame is
 the only thing that answers how it looks**, and no substitute here should be
 shown to anyone as if it were one.
 
+## What the offline tools are worth, measured
+
+Rendering the exact world state that produced the real streamed frame `p18`,
+and comparing, the CPU tracer runs **+94% luma, +26% contrast and -76%
+saturation** against Unreal. Unreal is roughly four times more saturated,
+because Lumen's bounce, PBR specular and the filmic tonemap all contribute
+colour the tracer has none of.
+
+Consequences worth carrying:
+
+- **Do not judge the palette from an offline render.** Every one of them looks
+  washed out compared with what the engine produces. I concluded the palette
+  was pale from exactly that mistake.
+- **Relative comparisons transfer, absolute ones do not.** A-versus-B at the
+  same settings is meaningful; "luma 100 is too dark" is not.
+- **Per-object frame coverage is the most reliable output.** It is geometry,
+  not shading, and it is what caught the gate at 8.15% of the frame in gold.
+
 ## Two things that will bite the next person
 
 - **`cam_arrival_hero` has `auto_activate_for_player = PLAYER0`.** It hijacks
