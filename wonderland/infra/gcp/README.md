@@ -71,6 +71,37 @@ It **stops** rather than deletes. Compute billing ends either way and stopping
 keeps the disk, which holds the built engine, the packaged game and the
 generated textures — all expensive to rebuild. Deleting stays a human act.
 
+## One thing GCP fixes that Vast could not
+
+The Vast path ends in a **Cloudflare quick tunnel**, whose URL is regenerated on
+every restart. Every time that box stopped, the founder-facing link died and a
+new one had to be fetched off the machine. That happened again on 2026-08-19 and
+is why there is currently no live link at all.
+
+A GCE instance has an **external IP that persists for as long as the VM exists**.
+`http://<ip>:443/` survives stop/start, so `VITE_WONDERLAND_SIGNALLING_URL` can
+be set once. Reserve a static address if it needs to survive deletion too — but
+reserved-and-unused addresses bill, which is why `gcp-migration-verify.sh 12`
+checks for them.
+
+## The lifecycle closes on its own
+
+GCE runs the startup script on **every** boot, not just the first. So:
+
+```
+./wonderland-gcp.sh start      # VM boots -> GPU verified -> watchdog armed
+                               # -> TURN -> signalling -> streamer -> URL logged
+```
+
+A resumed VM comes back **serving**, not just running. That distinction matters:
+a machine that resumes and streams nothing is a GPU billing for nothing, which
+is precisely what the idle watchdog exists to catch — building that in
+deliberately would have been absurd.
+
+On the very first boot there is no package yet and the block correctly does
+nothing; it says so in the log and tells you to build once. After that, every
+boot serves.
+
 ## What is genuinely different from Vast
 
 | | Vast | GCE |

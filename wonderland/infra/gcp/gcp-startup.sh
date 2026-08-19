@@ -156,7 +156,57 @@ else
   log "  docker run --rm --gpus all -v $WORK:/work $IMAGE bash /work/src/infra/build/build-wonderland.sh"
 fi
 
+# ------------------------------------------------------- 6. serve, if we can
+# THE LIFECYCLE HAS TO CLOSE. GCE runs this script on EVERY boot, so a VM that
+# has already been built should come back serving — otherwise `start` resumes a
+# GPU that bills and streams nothing, which is the exact failure the watchdog
+# exists to punish and a silly one to build in deliberately.
+#
+# On the very first boot there is no package yet and this block correctly does
+# nothing. That is the only time it should.
+PKG="$WORK/packaged/Linux/Wonderland.sh"
+if [ -x "$PKG" ]; then
+  log "packaged build present — bringing the stack up"
+
+  # TURN first: the media path needs it advertised in the signalling peer
+  # options, which is the single fix that made remote streaming work at all.
+  if [ -f /etc/turnserver.conf ] && ! pgrep -x turnserver >/dev/null 2>&1; then
+    setsid nohup turnserver -c /etc/turnserver.conf >/var/log/turn.log 2>&1 </dev/null &
+    log "turnserver started"
+  fi
+
+  SIGDIR="$(find / -maxdepth 8 -type d -name SignallingWebServer 2>/dev/null | head -1)"
+  NODE="$(find "${SIGDIR:-/}" -path '*platform_scripts/bash/node/bin/node' 2>/dev/null | head -1)"
+  if [ -n "$SIGDIR" ] && [ -n "$NODE" ] && ! pgrep -f '[W]ilbur' >/dev/null 2>&1; then
+    # the BUNDLED node, not the system one — the system v12 cannot run Wilbur
+    ( cd "$SIGDIR" && setsid nohup "$NODE" ./dist/Wilbur.js \
+        --peer_options "{\"iceServers\":[{\"urls\":[\"turn:127.0.0.1:${TURN_PORT}\"]}]}" \
+        >"$WORK/sig.log" 2>&1 </dev/null & )
+    log "signalling started with TURN advertised"
+    sleep 6
+  fi
+
+  if ! pgrep -x Wonderland >/dev/null 2>&1; then
+    # as ue4, never root: the packaged app refuses to run with root privileges.
+    # Auto-exposure does not converge headless, so the bias is forced at launch.
+    RUNAS="$(id -u ue4 >/dev/null 2>&1 && echo ue4 || echo root)"
+    setsid nohup runuser -u "$RUNAS" -- env HOME="/home/$RUNAS" "$PKG" \
+      -RenderOffscreen -PixelStreamingURL="ws://127.0.0.1:8888" \
+      -ResX=1920 -ResY=1080 -ExecCmds="r.AutoExposure.Bias -0.15" \
+      -Unattended -stdout -FullStdOutLogOutput \
+      >>"$WORK/app.log" 2>&1 </dev/null &
+    log "streamer started as $RUNAS"
+  fi
+
+  IP="$(curl -s -H 'Metadata-Flavor: Google' \
+        http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip)"
+  log "PLAYER URL: http://${IP}:${SIG_TCP}/   (external IP, stable while the VM exists)"
+  log "  Unlike the Vast path this address does NOT change on every restart —"
+  log "  no quick tunnel in the loop. Put it in VITE_WONDERLAND_SIGNALLING_URL."
+else
+  log "no packaged build yet — not starting the stack."
+  log "Build once with infra/build/build-wonderland.sh inside $IMAGE; after that"
+  log "every boot serves automatically."
+fi
+
 log "=== startup-script end. GPU up, watchdog armed. ==="
-log "Application start is deliberately NOT automatic on first boot: the build has"
-log "to succeed once before there is anything to serve. Run infra/build, then"
-log "start the stack, then future boots can be made automatic."
