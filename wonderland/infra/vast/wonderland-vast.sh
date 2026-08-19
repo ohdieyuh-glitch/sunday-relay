@@ -275,7 +275,8 @@ env_string() {
 # useless in the exact emergency it exists for.
 legacy_guard() {
   [ "${WONDERLAND_PROVIDER:-gcp}" = "vast" ] && return 0
-  say "REFUSING: Vast is the LEGACY provider. The active one is GCP:"
+  say "REFUSING: this project is migrating to GCP. New Vast rentals are off."
+  say "  (GCP is DESIGNATED, not proven — it has never provisioned anything.)"
   say "    ../gcp/wonderland-gcp.sh preflight"
   say ""
   say "Renting new Vast capacity would re-establish the provider this project has"
