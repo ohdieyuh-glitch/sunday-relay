@@ -80,6 +80,28 @@ shown to anyone as if it were one.
   is off the bottom edge. This silently deleted foreground work twice in one
   sprint before `_hero_ground_band()` started deriving it.
 
+## Three regressions the audit caught, and the shape they share
+
+None of these was caught by a test, because the generator runs, the actor
+count is right, and neither offline harness models bloom:
+
+| rebuilt | count went | radiance left at |
+|---|---|---|
+| clouds | 28 -> 44 clusters | raised 2.6 -> 3.6 as well |
+| arcane spill | 0 -> 78 crack strips | the circle's own 11.0 |
+| Project Brain | 5 -> 72 lobes | 2.2 on every one |
+
+The exposure is histogram auto-exposure: it meters against the brightest large
+area and darkens everything else to compensate. So the symptom is never "the
+sky is too bright", it is **"the foreground went to mud"** — which sends you
+into materials and lighting while the cause is overhead. That hunt already
+cost this sprint a full pass once.
+
+If you rebuild something emissive with more pieces, divide the per-piece
+radiance or give it a falloff. Audit with: list every entry in
+`MATERIAL_SPEC` by `max(emissive) * strength`, flag anything over ~2, and grep
+where those are used.
+
 ## Not resolved here
 
 The UE 5.8 `.uproject`, `Config/` and most of the C++ are **staged but
