@@ -270,9 +270,12 @@ def main():
     HAZE = 34000.0
     SKY = (0.62, 0.70, 0.88)
 
-    def shade(mat, z):
-        # same fallback the generator applies, so the preview shows the colour
-        # an object will actually get rather than a neutral stand-in
+    def shade(mat, z, mesh="", lb=""):
+        # Same fallback the generator applies, so the preview shows the colour an
+        # object will actually get rather than a neutral stand-in. mesh and lb
+        # are PARAMETERS: closing over them picked up whatever those names
+        # happened to hold at the call site, which in the plane path was nothing
+        # at all.
         m = spec.get(mat or mat_name_for(mesh, lb),
                      ((0.5, 0.5, 0.5), 0, 0.5, (0, 0, 0), 0.0))
         base, emi, es = m[0], m[3], m[4]
@@ -296,7 +299,8 @@ def main():
     planes = []
     for mesh, loc, sc, mat, _lb, _rt in records:
         if mesh in ("plane", "water_plane"):
-            planes.append((loc[2], loc[0], loc[1], abs(sc[0]) * 50.0, abs(sc[1]) * 50.0, mat))
+            planes.append((loc[2], loc[0], loc[1], abs(sc[0]) * 50.0, abs(sc[1]) * 50.0,
+                           mat, mesh, _lb))
     planes.sort(key=lambda q: q[0])
     depth = [1e18] * (W * H)
     for yy in range(H):
@@ -308,7 +312,7 @@ def main():
             dy = f[1] + r[1] * sx + u2[1] * sy
             dz = f[2] + r[2] * sx + u2[2] * sy
             best = None
-            for pz, px0, py0, hx, hy, mat in planes:
+            for pz, px0, py0, hx, hy, mat, pmesh, plb in planes:
                 if abs(dz) < 1e-9:
                     continue
                 t = (pz - eye[2]) / dz
@@ -320,10 +324,10 @@ def main():
                     continue
                 zz = t * (dx * f[0] + dy * f[1] + dz * f[2])
                 if best is None or zz < best[0]:
-                    best = (zz, mat)
+                    best = (zz, mat, pmesh, plb)
             if best is None:
                 continue
-            col = shade(best[1], best[0])
+            col = shade(best[1], best[0], best[2], best[3])
             i = (yy * W + xx) * 3
             px[i] = int(col[0] * 255)
             px[i + 1] = int(col[1] * 255)
@@ -366,7 +370,7 @@ def main():
 
     blobs.sort(key=lambda b: -b[0])
     for z, x0, y0, x1, y1, mesh, mat, lb in blobs:
-        col = shade(mat, z)
+        col = shade(mat, z, mesh, lb)
         cr, cg, cb = int(col[0] * 255), int(col[1] * 255), int(col[2] * 255)
         rnd = mesh in ROUND
         ex, ey = (x1 - x0) * 0.5, (y1 - y0) * 0.5
