@@ -126,6 +126,25 @@ billing and GPU quota are all unverified. Those are yours to clear:
 and request GPU quota — new projects ship with **zero** and only Google can
 raise it. `preflight` checks every one of them and names the exact fix.
 
+## Offline regression test
+
+`./gcp-provider.test.sh` — 14 assertions, no credentials, no network, nothing
+billed. It stubs `gcloud` to answer like a healthy project, then tells it to
+answer like an unhealthy one and checks the provider notices.
+
+**The point is not that preflight passes. It is that each gate can FAIL.** Every
+one of auth, billing, API, global quota, regional quota, accelerator
+availability and the instance ceiling is asserted to block when its answer goes
+bad, because a check incapable of failing is worse than no check — it converts
+"verified" into "unexamined" without anyone noticing. Also asserted: multi-GPU
+is refused, `create` refuses on a blocked preflight and emits on a clear one,
+SPOT reaches the command, an unknown subcommand exits non-zero, and **no secret
+value ever appears in `create`'s output** (fed a fake PAT and a tokenised repo
+URL, and grepped for them).
+
+Without this every one of those paths would first execute against a real billed
+project, in front of someone waiting.
+
 ## Staged verification
 
 `./gcp-migration-verify.sh [1..12|readonly]` — the brief's twelve steps, each

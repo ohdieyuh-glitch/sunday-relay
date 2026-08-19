@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# A stub gcloud that answers like a HEALTHY project, so the provider's own
+# parsing and filter syntax get exercised. Set MOCK_FAIL=<what> to make one
+# answer unhealthy and check the script actually notices.
+args="$*"
+case "$args" in
+  *"config get-value account"*)      [ "${MOCK_FAIL:-}" = auth ] && echo "(unset)" || echo "founder@example.com" ;;
+  *"billing projects describe"*)     [ "${MOCK_FAIL:-}" = billing ] && echo "False" || echo "True" ;;
+  *"services list"*)                 [ "${MOCK_FAIL:-}" = api ] || echo "compute.googleapis.com" ;;
+  *"project-info describe"*)         [ "${MOCK_FAIL:-}" = gquota ] && echo "0" || echo "8" ;;
+  *"regions describe"*)              [ "${MOCK_FAIL:-}" = rquota ] && echo "0" || echo "4" ;;
+  *"accelerator-types describe"*)    [ "${MOCK_FAIL:-}" = accel ] && exit 1 || echo "nvidia-l4" ;;
+  *"machine-types describe"*)        echo "g2-standard-8" ;;
+  *"instances list"*)                [ "${MOCK_FAIL:-}" = ceiling ] && echo "wonderland-stream" || true ;;
+  *"instances describe"*)            echo "RUNNING" ;;
+  *) : ;;
+esac
+exit 0
