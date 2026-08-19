@@ -157,21 +157,21 @@ MATERIAL_SPEC = {
     "ground":      ((0.17, 0.30, 0.14), 0.0, 0.86, (0, 0, 0), 0.0),
     "trunk":       ((0.30, 0.20, 0.13), 0.0, 0.78, (0, 0, 0), 0.0),
     "foliage":     ((0.16, 0.38, 0.17), 0.0, 0.72, (0, 0, 0), 0.0),
-    "foliage_hi":  ((0.27, 0.52, 0.24), 0.0, 0.66, (0, 0, 0), 0.0),
-    "rose":        ((0.82, 0.10, 0.22), 0.0, 0.42, (0.18, 0, 0.03), 0.4),
+    "foliage_hi":  ((0.38, 0.57, 0.38), 0.0, 0.66, (0, 0, 0), 0.0),
+    "rose":        ((0.78, 0.22, 0.36), 0.0, 0.42, (0.18, 0, 0.03), 0.4),
     "rose_pink":   ((0.96, 0.42, 0.62), 0.0, 0.40, (0.10, 0.0, 0.04), 0.3),
     "petal_pink":  ((0.94, 0.40, 0.66), 0.0, 0.38, (0, 0, 0), 0.0),
-    "petal_violet":((0.60, 0.30, 0.90), 0.0, 0.40, (0.08, 0.02, 0.16), 0.3),
+    "petal_violet":((0.62, 0.42, 0.88), 0.0, 0.40, (0.08, 0.02, 0.16), 0.3),
     "petal_air":   ((0.98, 0.62, 0.82), 0.0, 0.36, (0.10, 0.02, 0.06), 0.2),
-    "mush_red":    ((0.82, 0.09, 0.12), 0.0, 0.28, (0.14, 0, 0), 0.3),
+    "mush_red":    ((0.74, 0.16, 0.26), 0.0, 0.28, (0.14, 0, 0), 0.3),
     "mush_white":  ((0.96, 0.94, 0.90), 0.0, 0.42, (0, 0, 0), 0.0),
-    "mush_purple": ((0.56, 0.24, 0.76), 0.0, 0.30, (0.12, 0.02, 0.18), 0.3),
+    "mush_purple": ((0.52, 0.30, 0.74), 0.0, 0.30, (0.12, 0.02, 0.18), 0.3),
     "spire":       ((0.94, 0.90, 0.86), 0.0, 0.40, (0, 0, 0), 0.0),
     "spire_pink":  ((0.98, 0.74, 0.82), 0.0, 0.34, (0, 0, 0), 0.0),
     "spire_blue":  ((0.74, 0.82, 0.98), 0.0, 0.34, (0, 0, 0), 0.0),
     "spire_teal":  ((0.66, 0.92, 0.88), 0.0, 0.34, (0, 0, 0), 0.0),
     "porcelain":   ((0.96, 0.95, 0.93), 0.0, 0.10, (0, 0, 0), 0.0),
-    "water":       ((0.06, 0.20, 0.34), 0.0, 0.06, (0, 0.02, 0.05), 0.1),
+    "water":       ((0.18, 0.40, 0.52), 0.0, 0.06, (0, 0.02, 0.05), 0.1),
     "magic_cyan":  ((0.20, 0.85, 1.00), 0.0, 0.30, (0.20, 0.85, 1.00), 2.2),
     "magic_gold":  ((1.00, 0.84, 0.42), 0.0, 0.28, (1.00, 0.74, 0.30), 4.5),
     "arcane":      ((0.66, 0.36, 1.00), 0.0, 0.30, (0.62, 0.28, 1.00), 11.0),
@@ -629,7 +629,46 @@ def build(layout):
         # deep, layered crown so it reads as a real canopy, not a lollipop.
         th = 980.0 * s if giant else 240.0 * s
         tr = 82.0 * s if giant else 28.0 * s
-        _part("cylinder", x, y, th * 0.5, tr / 50.0, tr / 50.0, th / 100.0, "trunk", "%s_trunk" % label)
+        if giant:
+            # A GNARLED TRUNK, not a post. The reference's great tree frames the
+            # whole shot with a trunk that LEANS, swells and twists; a single
+            # straight cylinder reads as scaffolding no matter how good the
+            # canopy above it is. Stack tapering segments, each nudged off-axis
+            # and rotated, so the silhouette wanders the way a real bole does.
+            segs = 7
+            cx_, cy_ = x, y
+            for i in range(segs):
+                t = i / float(segs - 1)
+                sw = tr * (1.35 - 0.62 * t)          # swells at the base
+                sh_ = th / segs
+                cx_ += math.cos(i * 1.9) * tr * 0.13
+                cy_ += math.sin(i * 1.9) * tr * 0.11
+                _part("cylinder", cx_, cy_, sh_ * (i + 0.5), sw / 50.0, sw / 50.0,
+                      sh_ * 1.10 / 100.0, "trunk", "%s_bole%d" % (label, i),
+                      rot=(math.degrees(math.sin(i * 1.3)) * 0.09, 0.0,
+                           math.degrees(math.cos(i * 1.1)) * 0.09))
+                # bark ridges catching the key light
+                for k in range(3):
+                    a = i * 1.7 + k * 2.09
+                    _part("cube", cx_ + math.cos(a) * sw * 0.92, cy_ + math.sin(a) * sw * 0.92,
+                          sh_ * (i + 0.5), 0.16 * s, 0.10 * s, sh_ * 0.9 / 100.0,
+                          "trunk", "%s_ridge%d_%d" % (label, i, k),
+                          rot=(0.0, math.degrees(a), 0.0))
+            # HANGING VINES from the lower canopy — the reference's tree drips green.
+            for k in range(10):
+                a = k * 2.39996
+                vx, vy = x + math.cos(a) * tr * 2.6, y + math.sin(a) * tr * 2.6
+                drop = 150.0 + 190.0 * (((k * 13) % 5) / 5.0)
+                _part("cylinder", vx, vy, th * 0.86 - drop * 0.5, 0.05 * s, 0.05 * s,
+                      drop / 100.0, "foliage", "%s_vine%d" % (label, k))
+                _part("sphere", vx, vy, th * 0.86 - drop, 0.22 * s, 0.22 * s, 0.30 * s,
+                      "foliage_hi", "%s_vinetip%d" % (label, k))
+            # A CLOCK FACE set into the bole, exactly as the reference does — it
+            # is the single detail that makes the tree read as Wonderland's tree
+            # rather than any large tree.
+            kit_clock(x, y - tr * 1.30, th * 0.42, "%s_clock" % label)
+        else:
+            _part("cylinder", x, y, th * 0.5, tr / 50.0, tr / 50.0, th / 100.0, "trunk", "%s_trunk" % label)
         if giant:
             # flared roots + a couple of boughs reaching out under the crown
             for k in range(5):
@@ -702,14 +741,47 @@ def build(layout):
             _part("cube", x + b * 52.0 * s, y, ph * 0.46, 0.08 * s, 0.14 * s, ph * 0.9 / 100.0,
                   "gold", "%s_bar%d" % (label, b))
         # scrollwork curls along the top rail
-        for b in range(-3, 4):
-            _part("sphere", x + b * 74.0 * s, y, ph * 0.86, 0.28 * s, 0.16 * s, 0.28 * s,
-                  "gold", "%s_curl%d" % (label, b))
+        # SCROLLWORK, properly. One row of seven blobs is a fence; ornate ironwork
+        # is layered curl-work reading at several scales, so this is three rows
+        # at different heights and sizes plus corner spirals that turn the eye.
+        for row, (hz, sz, step) in enumerate(((0.86, 0.28, 74.0), (0.66, 0.20, 96.0), (0.44, 0.15, 118.0))):
+            for b in range(-3, 4):
+                _part("sphere", x + b * step * s, y, ph * hz, sz * s, sz * 0.6 * s, sz * s,
+                      "gold", "%s_curl%d_%d" % (label, row, b))
+        # corner spirals: a short arc of shrinking beads sweeping in from each post
+        for sx in (-1, 1):
+            for k in range(6):
+                t = k / 5.0
+                _part("sphere", x + sx * (250.0 - 92.0 * t) * s, y,
+                      ph * (0.92 - 0.16 * t), (0.24 - 0.11 * t) * s,
+                      (0.14 - 0.06 * t) * s, (0.24 - 0.11 * t) * s,
+                      "gold", "%s_spiral%d_%d" % (label, sx, k))
+        # CLIMBING ROSES on the posts — the reference's gate is planted, not bare.
+        for sx in (-1, 1):
+            for k in range(9):
+                t = k / 8.0
+                a = t * 6.0 + (0.0 if sx < 0 else 1.7)
+                _part("sphere", x + sx * 250.0 * s + math.cos(a) * 34.0 * s,
+                      y + math.sin(a) * 30.0 * s, 40.0 * s + t * ph * 0.92,
+                      0.30 * s, 0.30 * s, 0.30 * s, "foliage", "%s_ivy%d_%d" % (label, sx, k))
+                if k % 3 == 0:
+                    _part("sphere", x + sx * 250.0 * s + math.cos(a + 0.6) * 40.0 * s,
+                          y + math.sin(a + 0.6) * 34.0 * s, 46.0 * s + t * ph * 0.92,
+                          0.17 * s, 0.17 * s, 0.17 * s,
+                          "rose_pink" if k % 2 else "rose", "%s_rose%d_%d" % (label, sx, k))
         # GATE ACTIVATION — a glowing arcane veil across the portal, drifting gold
         # glyphs, and a warm threshold ring underfoot, so the Golden Build Gate reads
         # as an ACTIVE threshold into Building rather than an inert arch.
-        _part("cube", x, y + 3.0 * s, ph * 0.46, 4.5 * s, 0.05 * s, ph * 0.84 / 100.0,
-              "arcane", "%s_veil" % label)
+        # NO SOLID VEIL. This was one opaque emissive slab spanning the whole
+        # portal, and on an opaque master it read as a sheet of purple plastic
+        # — the single ugliest object in the hero frame. The reference's gate is
+        # OPEN: you see the garden through the scrollwork, and that see-through
+        # depth is most of why it looks ornate rather than blocked. The
+        # activation now reads as a few slender vertical shimmer bars instead,
+        # which say "threshold" without walling the view off.
+        for v in range(-3, 4):
+            _part("cube", x + v * 62.0 * s, y + 3.0 * s, ph * 0.46,
+                  0.10 * s, 0.05 * s, ph * 0.80 / 100.0, "arcane", "%s_shimmer%d" % (label, v))
         for k in range(-2, 3):
             _part("sphere", x + k * 92.0 * s, y - 10.0 * s, ph * (0.34 + 0.14 * (k % 2)),
                   0.16 * s, 0.16 * s, 0.16 * s, "float_glow", "%s_glyph%d" % (label, k))

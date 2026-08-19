@@ -15,7 +15,7 @@
     "fogDensity": 0.025,
     "skyTint": "lavender",
     "_note": "DESIGN INTENT targeting WONDERLAND_VISUAL_ACCEPTANCE.md \u00a76 (sun elevation 22-38\u00b0 above horizon, warm golden key ~4400-5200K) and \u00a77 (fog density 0.015-0.040, lavender haze). sunElevationDeg is elevation ABOVE horizon; the generator negates it into a downward light pitch.",
-    "volumetricCloud": false,
+    "volumetricCloud": true,
     "_visualPass1": "Sun raised 30 -> 52 deg and volumetric cloud enabled: the reference is a bright midday garden city, and the low golden-hour key was reading as dusk.",
     "_sunAzimuth": "Moved 34 -> 205: the hero view looks north, so the old sun sat in frame and washed the sky to cream. Behind the camera front-lights the plaza and leaves blue sky in view."
   },
