@@ -184,6 +184,19 @@ MATERIAL_SPEC = {
     "dog_gray":    ((0.55, 0.57, 0.60), 0.0, 0.40, (0, 0, 0), 0.0),
     "dog_tan":     ((0.82, 0.66, 0.42), 0.0, 0.40, (0, 0, 0), 0.0),
     "dog_brown":   ((0.50, 0.33, 0.21), 0.0, 0.50, (0, 0, 0), 0.0),
+    # --- horizon + skyline (visual pass 1) -------------------------------
+    # The far meadow that closes the horizon. Soft lilac-green rather than
+    # grass-green: at this distance the height fog tints toward the sky, and a
+    # saturated green read as a hard band instead of receding.
+    "meadow_far":  ((0.42, 0.52, 0.40), 0.0, 0.92, (0, 0, 0), 0.0),
+    # Distant towers, deliberately pale and low-contrast so the skyline recedes
+    # behind the hero landmarks instead of competing with them.
+    "spire_far":   ((0.88, 0.86, 0.94), 0.0, 0.62, (0, 0, 0), 0.0),
+    # Rose and pink rooflines — the reference's skyline is warm, not gold.
+    "roof_rose":   ((0.85, 0.30, 0.42), 0.0, 0.44, (0.05, 0.0, 0.01), 0.15),
+    "roof_pink":   ((0.96, 0.58, 0.70), 0.0, 0.42, (0, 0, 0), 0.0),
+    # Gills under a mushroom cap: warm shadow, never black.
+    "mush_gill":   ((0.80, 0.66, 0.58), 0.0, 0.70, (0, 0, 0), 0.0),
 }
 
 
@@ -572,12 +585,37 @@ def build(layout):
                   d / 100.0, d / 100.0, d / 100.0, mat, "%s_canopy%d" % (label, i))
 
     def kit_mushroom(x, y, s, label, cap_mat):
-        sh, sr, cap = 120.0 * s, 22.0 * s, 74.0 * s
-        _part("cylinder", x, y, sh * 0.5, sr / 50.0, sr / 50.0, sh / 100.0, "mush_white", "%s_stem" % label)
-        _part("sphere", x, y, sh + cap * 0.20, cap * 2 / 100.0, cap * 2 / 100.0, cap * 1.15 / 100.0,
+        # A HERO AMANITA, not a lollipop. The reference's mushrooms carry whole
+        # corners of the frame, so this builds the parts the eye actually reads:
+        # a stem that swells at the base, a deep cap with a rolled rim, a gill
+        # ring in shadow beneath it, and an irregular scatter of white flecks
+        # (evenly-spaced dots look printed; these are placed on a drifting angle).
+        sh, sr, cap = 150.0 * s, 24.0 * s, 92.0 * s
+        _part("cylinder", x, y, sh * 0.52, sr / 50.0, sr / 50.0, sh / 100.0, "mush_white", "%s_stem" % label)
+        # bulbous volva at the base
+        _part("sphere", x, y, sr * 0.55, sr * 2.1 / 100.0, sr * 2.1 / 100.0, sr * 1.5 / 100.0,
+              "mush_white", "%s_volva" % label)
+        # skirt ring where the veil tore
+        _part("cylinder", x, y, sh * 0.74, sr * 1.9 / 100.0, sr * 1.9 / 100.0, 0.06 * s,
+              "mush_white", "%s_ring" % label)
+        # gills: a darker disc tucked under the cap
+        _part("cylinder", x, y, sh + cap * 0.02, cap * 1.62 / 100.0, cap * 1.62 / 100.0, 0.10 * s,
+              "mush_gill" if "mush_gill" in MATS else "mush_white", "%s_gills" % label)
+        # the cap itself, domed and slightly wider than tall
+        _part("sphere", x, y, sh + cap * 0.24, cap * 2.05 / 100.0, cap * 2.05 / 100.0, cap * 1.30 / 100.0,
               cap_mat, "%s_cap" % label)
-        for i, (ox, oy) in enumerate([(0.45, 0.0), (-0.30, 0.35), (0.10, -0.45)]):
-            _part("sphere", x + ox * cap, y + oy * cap, sh + cap * 0.5, 0.16 * s, 0.16 * s, 0.10 * s,
+        # rolled rim so the silhouette is not a bare hemisphere
+        _part("cylinder", x, y, sh + cap * 0.10, cap * 1.92 / 100.0, cap * 1.92 / 100.0, 0.16 * s,
+              cap_mat, "%s_rim" % label)
+        # white flecks, drifting so they never look stamped on
+        import math as _m
+        for i in range(11):
+            a = i * 2.39996 + (x + y) * 0.01
+            rr = (0.22 + 0.62 * ((i * 37) % 11) / 11.0)
+            _part("sphere",
+                  x + _m.cos(a) * cap * rr, y + _m.sin(a) * cap * rr,
+                  sh + cap * 0.46 - (rr * rr) * cap * 0.20,
+                  (0.20 - 0.07 * rr) * s, (0.20 - 0.07 * rr) * s, (0.11 - 0.03 * rr) * s,
                   "mush_white", "%s_dot%d" % (label, i))
 
     def kit_gate(x, y, s, label):
@@ -711,9 +749,28 @@ def build(layout):
         _part("cylinder", x, y, 8.0, 1.2, 1.2, 0.14, "magic_gold", "ArcaneCore")
 
     def kit_float_key(x, y, z, label):
-        _part("cylinder", x, y, z, 0.2, 0.2, 1.3, "float_glow", "%s_shaft" % label, rot=(0, 0, 20))
-        _part("sphere", x, y, z + 78.0, 0.5, 0.5, 0.5, "float_glow", "%s_bow" % label)
-        _part("cube", x + 12, y, z - 60.0, 0.35, 0.12, 0.18, "float_glow", "%s_tooth" % label)
+        # An ORNATE key, because these hang in open sky where silhouette is the
+        # whole read: a ring bow with a heart at its centre, a collar, a tapered
+        # shaft, and a bit with real teeth. Tilted so it never reads as a post.
+        tilt = (0.0, 0.0, 22.0)
+        _part("cylinder", x, y, z, 0.17, 0.17, 1.45, "gold", "%s_shaft" % label, rot=tilt)
+        # bow: a ring of small spheres rather than one ball
+        import math as _m
+        for i in range(8):
+            a = i * (2.0 * _m.pi / 8.0)
+            _part("sphere", x + _m.cos(a) * 34.0, y, z + 86.0 + _m.sin(a) * 34.0,
+                  0.22, 0.20, 0.22, "gold", "%s_bow%d" % (label, i))
+        # heart at the centre of the bow — the Wonderland motif, in gold
+        _part("sphere", x - 9.0, y, z + 92.0, 0.24, 0.20, 0.24, "gold_glow", "%s_heartL" % label)
+        _part("sphere", x + 9.0, y, z + 92.0, 0.24, 0.20, 0.24, "gold_glow", "%s_heartR" % label)
+        _part("cone", x, y, z + 74.0, 0.34, 0.28, 0.42, "gold_glow", "%s_heartT" % label,
+              rot=(180.0, 0.0, 0.0))
+        # collar
+        _part("cylinder", x, y, z + 34.0, 0.30, 0.30, 0.10, "gold", "%s_collar" % label, rot=tilt)
+        # bit and two teeth
+        _part("cube", x + 16.0, y, z - 58.0, 0.34, 0.10, 0.30, "gold", "%s_bit" % label, rot=tilt)
+        _part("cube", x + 30.0, y, z - 44.0, 0.16, 0.09, 0.14, "gold", "%s_tooth0" % label, rot=tilt)
+        _part("cube", x + 30.0, y, z - 70.0, 0.16, 0.09, 0.14, "gold", "%s_tooth1" % label, rot=tilt)
 
     def kit_clock(x, y, z, label):
         # Floating ornate clock: gold case + pale face + two hands, facing -Y.
@@ -722,6 +779,12 @@ def build(layout):
         _part("cube", x, y - 18, z + 34, 0.07, 0.07, 0.66, "dog_visor", "%s_min" % label)
         _part("cube", x + 26, y - 18, z + 4, 0.5, 0.07, 0.07, "dog_visor", "%s_hr" % label)
         _part("sphere", x, y - 20, z, 0.14, 0.1, 0.14, "gold_glow", "%s_hub" % label)
+        # twelve gold markers so it reads as a CLOCK at distance, not a disc
+        import math as _m
+        for i in range(12):
+            a = i * (2.0 * _m.pi / 12.0)
+            _part("cube", x + _m.sin(a) * 108.0, y - 16, z + _m.cos(a) * 108.0,
+                  0.09, 0.06, 0.09 if i % 3 else 0.15, "gold", "%s_mark%d" % (label, i))
 
     def kit_teapot(x, y, z, label):
         # Original teapot prop: porcelain body + spout + handle + gold lid & knob.
@@ -1017,7 +1080,10 @@ def build(layout):
     # circle glows against it (the reference's hero moment). Lighting here just sets a
     # BRIGHT day so the SkyAtmosphere reads as bright lavender sky and shadows fill;
     # the bias does the richness. Full sun; a generous sky fill so nothing crushes.
-    _lux = float(atm.get("sunIntensityLux", 0)) or 240.0
+    # Raised from 240: the reference is a bright midday garden, not the
+    # late-afternoon key this scene was tuned for. The auto-exposure bias
+    # (launch cvar) still does the final richness pass.
+    _lux = float(atm.get("sunIntensityLux", 0)) or 340.0
     sun_comp.set_intensity(_lux)
     try:
         sun_comp.set_light_color(unreal.LinearColor(1.0, 0.80, 0.52, 1.0))
@@ -1047,7 +1113,7 @@ def build(layout):
         # with a warm Mie haze near the sun for a golden horizon. The pink/purple of
         # Wonderland lives in the DISTANCE fog, the flowers and the castles — NOT the
         # whole sky. (An earlier violet Rayleigh made it a dark twilight.)
-        set_prop(sac, "RayleighScatteringScale", 0.033)
+        set_prop(sac, "RayleighScatteringScale", 0.045)
         set_prop(sac, "MieScatteringScale", 0.004)
         set_prop(sac, "MieAnisotropy", 0.80)
     if atm.get("skyLight"):
@@ -1056,7 +1122,7 @@ def build(layout):
         sky_comp.set_mobility(unreal.ComponentMobility.MOVABLE)
         # Gentle ambient fill so shadowed sides read without flooding the frame.
         try:
-            sky_comp.set_intensity(0.14)
+            sky_comp.set_intensity(0.42)
         except Exception:
             pass
         # Real-time captured sky ambient — needs no lighting build.
@@ -1065,6 +1131,17 @@ def build(layout):
             sky_comp.set_editor_property("source_type", unreal.SkyLightSourceType.SLS_CAPTURED_SCENE)
         except Exception:
             pass
+    if atm.get("volumetricCloud", True):
+        # Fat storybook cumulus. Layer kept low and thin so the castle
+        # skyline still reads through it rather than being swallowed.
+        try:
+            cloud = spawn(unreal.VolumetricCloud, (0, 0, 0), label="WonderlandClouds")
+            cc = cloud.get_component_by_class(unreal.VolumetricCloudComponent)
+            set_prop(cc, "LayerBottomAltitude", 6.0)
+            set_prop(cc, "LayerHeight", 5.0)
+            set_prop(cc, "TracingMaxDistance", 40.0)
+        except Exception as _e:
+            unreal.log_warning("volumetric cloud skipped: %s" % _e)
     if atm.get("volumetricFog"):
         fog = spawn(unreal.ExponentialHeightFog, (0, 0, 250), label="AtmosphereFog")
         fog_comp = fog.get_component_by_class(unreal.ExponentialHeightFogComponent)
@@ -1072,12 +1149,23 @@ def build(layout):
         # in-scatter previously flooded the frame to min-luma 226). Distant geometry
         # fades toward pink-purple; the halo around the sun stays warm gold. Near/mid
         # geometry reads clear thanks to StartDistance.
-        set_prop(fog_comp, "FogDensity", 0.0035)
-        set_prop(fog_comp, "FogHeightFalloff", 0.12)
-        set_prop(fog_comp, "StartDistance", 1700.0)
-        set_prop(fog_comp, "FogInscatteringColor", unreal.LinearColor(0.50, 0.34, 0.66, 1.0))
+        # SOFTENED for the bright-reference pass. At 0.0035 with a 1700uu start the
+        # fog was greying the sky itself into a navy band, which is most of why the
+        # dome read as dusk while the ground read as midday. Thinner, starting
+        # further out, and tinted a light lilac rather than a deep violet: distance
+        # still recedes, the sky stays sky.
+        set_prop(fog_comp, "FogDensity", 0.0016)
+        set_prop(fog_comp, "FogHeightFalloff", 0.09)
+        set_prop(fog_comp, "StartDistance", 3200.0)
+        set_prop(fog_comp, "FogInscatteringColor", unreal.LinearColor(0.66, 0.56, 0.82, 1.0))
         set_prop(fog_comp, "DirectionalInscatteringColor", unreal.LinearColor(1.0, 0.66, 0.30, 1.0))
         set_prop(fog_comp, "DirectionalInscatteringExponent", 4.0)
+        # CAP THE FOG ON THE SKY. Height fog applies to the sky dome at full
+        # strength, so even a thin fog repaints the whole sky its inscattering
+        # colour — which is why the dome read as flat lilac-grey instead of the
+        # reference's blue. Capping max opacity lets the SkyAtmosphere show
+        # through while distant GEOMETRY still hazes normally.
+        set_prop(fog_comp, "FogMaxOpacity", 0.45)
         set_prop(fog_comp, "bEnableVolumetricFog", False)
 
     # Auto-exposure (histogram) on an unbound PPV. Auto-exposure's job is to drive
@@ -1135,6 +1223,39 @@ def build(layout):
     # --- Ground -----------------------------------------------------------
     g = layout["ground"]
     static_mesh(g["mesh"], g["location"], g["scale"], "HubGround")
+
+    # THE HORIZON. The plaza's own ground is 4,200uu across — about forty metres
+    # — and past its edge the SkyAtmosphere's PLANET GROUND was showing through
+    # as a dark navy band sitting right where the reference has bright sky and a
+    # receding city. It read as dusk in an otherwise midday scene, and no amount
+    # of fog or exposure tuning could fix it, because it was never haze: it was
+    # the edge of the world.
+    #
+    # A far meadow closes it. Deliberately enormous, slightly below the plaza so
+    # it never z-fights the flagstone, and in a soft lilac-green that the height
+    # fog then carries toward the sky colour.
+    static_mesh("plane", [0.0, 2000.0, -12.0], [620.0, 620.0, 1.0], "FarMeadow",
+                mat="meadow_far" if "meadow_far" in MATS else "foliage")
+
+    # LAYERED SKYLINE. The reference's depth comes from castle rooflines at
+    # several distances, each smaller and hazier than the last. The layout ships
+    # eight spires on one ring; these are the extra rings behind them, placed on
+    # an irrational angular step so the towers never line up in a visible lattice.
+    import math as _m
+    for ring, (dist, count, hgt, mat) in enumerate((
+            (7200.0, 14, 11.0, "spire"),
+            (12800.0, 18, 15.0, "spire_far" if "spire_far" in MATS else "spire"),
+            (19500.0, 22, 20.0, "spire_far" if "spire_far" in MATS else "spire"))):
+        for i in range(count):
+            a = i * 2.39996 + ring * 0.7
+            bx = _m.cos(a) * dist
+            by = _m.sin(a) * dist + 1200.0
+            if by < 900.0:
+                continue            # keep the ring out of the player's back yard
+            jitter = 0.72 + 0.56 * (((i * 37 + ring * 11) % 13) / 13.0)
+            kit_spire(bx, by, jitter * (1.0 + ring * 0.28), "SkylineR%dS%d" % (ring, i),
+                      roof_mat="roof_pink" if (i + ring) % 3 else "roof_rose",
+                      flag=(i % 4 == 0))
 
     # --- Spawn: player + wandering Dog ------------------------------------
     sp = layout["spawn"]

@@ -1,0 +1,2211 @@
+{
+  "schema": "wonderland-hub-layout.v2",
+  "_comment": "WORLD DESIGN DATA (Hub Design 3.0) for the first Wonderland Hub, kept separate from the generator so artists/assets swap without touching systems. Composed per docs/relay/WONDERLAND_ART_DIRECTION.md + docs/relay/WONDERLAND_VISUAL_ACCEPTANCE.md and documented in docs/relay/wonderland/HUB_DESIGN.md.",
+  "_status": "AUTHORED / SPECIFIED, NOT RENDERED and NOT COMPILED. No Unreal Engine exists in this environment (2-core Chromebook, no GPU). There is no .umap, no lighting, no materials, no foliage, no frame. Every dimension, elevation, count and radius below is DESIGN INTENT for whoever builds the level and its assets \u2014 a target, never a measurement. See docs/relay/wonderland/HUB_DESIGN.md 'Unproven'.",
+  "_units": "Unreal world units. 1 uu = 1 cm. Positions are [x, y, z]. +Y is world-north (arrival at -Y, the distant skyline at +Y); +X is world-east; +Z is up. Ground plane is z = 0. Landmark 'location' z is the mesh PIVOT height (BasicShapes cube/cylinder/cone pivots are centred), so a ground-standing object sits at z = height/2.",
+  "_designNote": "This is a TIGHT, DENSE vertical slice, not a large world. The walkable footprint is deliberately smaller than a sprawling map; quality comes from composition density and sight-lines, not acreage. Distant silhouettes sit OUTSIDE the nav bounds as pure background.",
+  "level": "/Game/Wonderland/Maps/WonderlandHub",
+  "atmosphere": {
+    "sunElevationDeg": 52,
+    "sunAzimuthDeg": 34,
+    "sunIntensity": 7.0,
+    "skyAtmosphere": true,
+    "skyLight": true,
+    "volumetricFog": true,
+    "fogDensity": 0.025,
+    "skyTint": "lavender",
+    "_note": "DESIGN INTENT targeting WONDERLAND_VISUAL_ACCEPTANCE.md \u00a76 (sun elevation 22-38\u00b0 above horizon, warm golden key ~4400-5200K) and \u00a77 (fog density 0.015-0.040, lavender haze). sunElevationDeg is elevation ABOVE horizon; the generator negates it into a downward light pitch.",
+    "volumetricCloud": true,
+    "_visualPass1": "Sun raised 30 -> 52 deg and volumetric cloud enabled: the reference is a bright midday garden city, and the low golden-hour key was reading as dusk."
+  },
+  "camera": {
+    "boomLengthUu": 420,
+    "fovDeg": 68,
+    "pitchDeg": -12,
+    "socketHeightUu": 90,
+    "_note": "Third-person gameplay pawn spring-arm; matches AWonderlandDogPawn constants (WONDERLAND.md \u00a74). The heroCameras below are separate framing cameras for reference stills, not the gameplay rig."
+  },
+  "heroCameras": [
+    {
+      "id": "cam_arrival_hero",
+      "name": "Arrival Hero (iconic first frame)",
+      "location": [
+        0,
+        -1240,
+        405
+      ],
+      "lookAt": [
+        0,
+        150,
+        160
+      ],
+      "fovDeg": 60,
+      "rollDeg": 0,
+      "note": "The founder's first frame on entering. Dog + violet arcane circle at lower-centre, Golden Build Gate framing the left edge, Great Framing Tree framing the right, boulevard leading the eye north to the Brain. Graded by WONDERLAND_VISUAL_ACCEPTANCE.md \u00a74."
+    },
+    {
+      "id": "cam_gate_approach",
+      "name": "Golden Build Gate approach",
+      "location": [
+        -250,
+        -60,
+        175
+      ],
+      "lookAt": [
+        -1050,
+        400,
+        300
+      ],
+      "fovDeg": 70,
+      "rollDeg": 0,
+      "note": "Looking west-north across Heart Plaza to the Start-Building landmark; the gate reads as the tallest warm-gold vertical on the west side."
+    },
+    {
+      "id": "cam_brain_vista",
+      "name": "Project Brain vista (north axis)",
+      "location": [
+        0,
+        -180,
+        220
+      ],
+      "lookAt": [
+        0,
+        1500,
+        720
+      ],
+      "fovDeg": 66,
+      "rollDeg": 0,
+      "note": "Straight up the main boulevard to the Brain Observatory and its reflecting pool; the deepest sight-line in the slice."
+    },
+    {
+      "id": "cam_overlook_panorama",
+      "name": "Mission Overlook panorama",
+      "location": [
+        560,
+        -280,
+        320
+      ],
+      "lookAt": [
+        -120,
+        700,
+        200
+      ],
+      "fovDeg": 72,
+      "rollDeg": 0,
+      "note": "From the elevated east terrace looking back across Heart Plaza toward the gate and brain; the vantage that reads the whole slice at once."
+    },
+    {
+      "id": "cam_tree_portrait",
+      "name": "Great Framing Tree portrait",
+      "location": [
+        520,
+        300,
+        210
+      ],
+      "lookAt": [
+        1300,
+        470,
+        560
+      ],
+      "fovDeg": 65,
+      "rollDeg": 0,
+      "note": "The gnarled hero tree with its oval portrait frame, canopy overhanging the Agent Garden."
+    },
+    {
+      "id": "cam_hidden_reveal",
+      "name": "Hidden Grove reveal",
+      "location": [
+        1650,
+        1150,
+        70
+      ],
+      "lookAt": [
+        400,
+        1450,
+        260
+      ],
+      "fovDeg": 70,
+      "rollDeg": 0,
+      "note": "The reward vantage at the end of the hidden path, looking back out of the sunken grove toward the Brain \u2014 the payoff that makes exploration earn its place."
+    }
+  ],
+  "spawn": {
+    "dog": [
+      0,
+      0,
+      60
+    ],
+    "player": [
+      0,
+      -600,
+      100
+    ],
+    "playerFacingYawDeg": 90,
+    "_note": "Player spawns in the Arrival Plaza facing world-north (+Y) so the first frame is cam_arrival_hero's composition. The Dog idles on the arcane circle at world origin."
+  },
+  "navBounds": {
+    "min": [
+      -2200,
+      -1500,
+      -300
+    ],
+    "max": [
+      2200,
+      2100,
+      2600
+    ],
+    "_note": "AABB of the WALKABLE volume only. Deliberately tighter than a sprawl. Distant silhouettes (below) sit outside this and are never walkable."
+  },
+  "navBoundsPolygon": {
+    "closed": true,
+    "elevationUu": 0,
+    "vertices": [
+      [
+        -1350,
+        -1150
+      ],
+      [
+        -200,
+        -1260
+      ],
+      [
+        200,
+        -1260
+      ],
+      [
+        1350,
+        -1080
+      ],
+      [
+        1520,
+        -200
+      ],
+      [
+        1360,
+        720
+      ],
+      [
+        1790,
+        1010
+      ],
+      [
+        1820,
+        1360
+      ],
+      [
+        1400,
+        1760
+      ],
+      [
+        300,
+        1900
+      ],
+      [
+        -320,
+        1900
+      ],
+      [
+        -1260,
+        1600
+      ],
+      [
+        -1520,
+        700
+      ],
+      [
+        -1420,
+        -200
+      ]
+    ],
+    "_note": "Tight walkable footprint (~33 m x ~32 m at widest). The east bulge (1790,1010 -> 1820,1360) is the spur to the Hidden Grove; everything beyond is background."
+  },
+  "ground": {
+    "mesh": "plane",
+    "location": [
+      0,
+      250,
+      0
+    ],
+    "scale": [
+      42,
+      42,
+      1
+    ],
+    "material": "cobblestone_checkered",
+    "dimensionsUu": [
+      4200,
+      4200,
+      0
+    ],
+    "_note": "Two-tone checkered flagstone, the strongest ground read in the reference. Sized to the tight footprint, not the sprawl."
+  },
+  "hubZones": [
+    {
+      "id": "arrival_plaza",
+      "name": "Arrival Plaza",
+      "kind": "Arrival",
+      "presentsWorldSection": null,
+      "center": [
+        0,
+        -750,
+        0
+      ],
+      "radiusUu": 640,
+      "elevationUu": 0,
+      "collision": "none",
+      "streamGroup": "south_arrival",
+      "occlusionGroup": "open_south",
+      "boundsPolygon": [
+        [
+          -560,
+          -1200
+        ],
+        [
+          560,
+          -1200
+        ],
+        [
+          640,
+          -700
+        ],
+        [
+          520,
+          -260
+        ],
+        [
+          -520,
+          -260
+        ],
+        [
+          -640,
+          -700
+        ]
+      ],
+      "band": "foreground",
+      "note": "Where the player and Dog arrive. Quiet, legible, presents no Relay surface. Holds the survey vista and the strongest foreground flowers/petals."
+    },
+    {
+      "id": "heart_plaza",
+      "name": "Heart Plaza",
+      "kind": "AgentGrounds",
+      "presentsWorldSection": "agent",
+      "center": [
+        0,
+        0,
+        0
+      ],
+      "radiusUu": 520,
+      "elevationUu": 0,
+      "collision": "none",
+      "streamGroup": "core_plaza",
+      "occlusionGroup": "core",
+      "boundsPolygon": [
+        [
+          -520,
+          -260
+        ],
+        [
+          520,
+          -260
+        ],
+        [
+          520,
+          320
+        ],
+        [
+          300,
+          520
+        ],
+        [
+          -300,
+          520
+        ],
+        [
+          -520,
+          320
+        ]
+      ],
+      "band": "midground",
+      "note": "The hub's heart: the Dog spawns here on the violet arcane circle, and the live Compound-Agent terminal reads beneath it. AgentGrounds per WonderlandHubLevel.h. Presents the 'agent' world section as a read-only terminal; it computes no substitute when that section is absent."
+    },
+    {
+      "id": "agent_garden",
+      "name": "Agent Garden",
+      "kind": "AgentGrounds",
+      "presentsWorldSection": "agent",
+      "center": [
+        820,
+        360,
+        30
+      ],
+      "radiusUu": 440,
+      "elevationUu": 30,
+      "collision": "none",
+      "streamGroup": "east_garden",
+      "occlusionGroup": "east",
+      "boundsPolygon": [
+        [
+          440,
+          120
+        ],
+        [
+          1160,
+          160
+        ],
+        [
+          1240,
+          540
+        ],
+        [
+          1000,
+          720
+        ],
+        [
+          560,
+          640
+        ],
+        [
+          420,
+          360
+        ]
+      ],
+      "band": "midground",
+      "note": "A hedged garden alcove off the east trail, under the Great Framing Tree's canopy, holding the Configure-Agent pedestal. Second AgentGrounds zone: Heart Plaza is the live-terminal ground, this is the configuration garden. Raising the intent is what opens config; standing in the garden does not."
+    },
+    {
+      "id": "golden_build_gate_court",
+      "name": "Golden Build Gate Court",
+      "kind": "ChaseGate",
+      "presentsWorldSection": null,
+      "center": [
+        -980,
+        360,
+        0
+      ],
+      "radiusUu": 430,
+      "elevationUu": 0,
+      "collision": "none",
+      "streamGroup": "west_gate",
+      "occlusionGroup": "west",
+      "boundsPolygon": [
+        [
+          -1360,
+          120
+        ],
+        [
+          -680,
+          160
+        ],
+        [
+          -620,
+          560
+        ],
+        [
+          -880,
+          720
+        ],
+        [
+          -1300,
+          640
+        ],
+        [
+          -1400,
+          360
+        ]
+      ],
+      "band": "midground",
+      "note": "The forecourt of the Start-Building landmark (ChaseGate kind: 'where a build begins'). The gate itself is a product landmark and must be custom Relay art. Presents no world section \u2014 Start Building is an ACTION request, gated downstream, not a status display."
+    },
+    {
+      "id": "mission_overlook",
+      "name": "Mission Overlook",
+      "kind": "Atrium",
+      "presentsWorldSection": "missions",
+      "center": [
+        560,
+        -280,
+        120
+      ],
+      "radiusUu": 380,
+      "elevationUu": 120,
+      "collision": "blocking",
+      "streamGroup": "east_overlook",
+      "occlusionGroup": "east",
+      "boundsPolygon": [
+        [
+          300,
+          -520
+        ],
+        [
+          820,
+          -520
+        ],
+        [
+          900,
+          -160
+        ],
+        [
+          700,
+          40
+        ],
+        [
+          360,
+          20
+        ],
+        [
+          260,
+          -280
+        ]
+      ],
+      "band": "midground",
+      "note": "A raised stone terrace (+120 cm, reached by 3 steps) with a balustrade over the plaza, where verified missions and their standings display read-only. Atrium kind is the nearest authoring vocabulary (read-only standings/badges); presents the 'missions' section."
+    },
+    {
+      "id": "project_field",
+      "name": "Active-Project Field",
+      "kind": "ProjectField",
+      "presentsWorldSection": "entities",
+      "center": [
+        -580,
+        -260,
+        -20
+      ],
+      "radiusUu": 470,
+      "elevationUu": -20,
+      "collision": "none",
+      "streamGroup": "west_field",
+      "occlusionGroup": "west",
+      "boundsPolygon": [
+        [
+          -880,
+          -540
+        ],
+        [
+          -300,
+          -540
+        ],
+        [
+          -260,
+          -120
+        ],
+        [
+          -460,
+          60
+        ],
+        [
+          -820,
+          40
+        ],
+        [
+          -920,
+          -260
+        ]
+      ],
+      "band": "midground",
+      "note": "A gently sunken field (-20 cm) west of the boulevard where active project entities stand in the form their category chose (see WONDERLAND.md \u00a75). Presents the 'entities' section; the standing stone raises open_project."
+    },
+    {
+      "id": "brain_observatory",
+      "name": "Project Brain Observatory",
+      "kind": "Observatory",
+      "presentsWorldSection": "brain",
+      "center": [
+        0,
+        1500,
+        0
+      ],
+      "radiusUu": 620,
+      "elevationUu": 0,
+      "collision": "blocking",
+      "streamGroup": "north_brain",
+      "occlusionGroup": "north",
+      "boundsPolygon": [
+        [
+          -560,
+          1040
+        ],
+        [
+          560,
+          1040
+        ],
+        [
+          620,
+          1500
+        ],
+        [
+          420,
+          1920
+        ],
+        [
+          -420,
+          1920
+        ],
+        [
+          -620,
+          1500
+        ]
+      ],
+      "band": "midground",
+      "note": "Northern terminus of the boulevard: a luminous observatory landmark whose canopy shows the Brain's weather (sky/light/atmosphere \u2014 Observatory kind), with a reflecting pool that doubles the sky. Presents the 'brain' section; the pool rim raises open_brain."
+    },
+    {
+      "id": "main_boulevard",
+      "name": "Heart Boulevard",
+      "kind": "Passage",
+      "presentsWorldSection": null,
+      "center": [
+        0,
+        300,
+        0
+      ],
+      "radiusUu": 0,
+      "elevationUu": 0,
+      "collision": "none",
+      "streamGroup": "core_plaza",
+      "occlusionGroup": "core",
+      "boundsPolygon": [
+        [
+          -280,
+          -1200
+        ],
+        [
+          280,
+          -1200
+        ],
+        [
+          280,
+          1180
+        ],
+        [
+          -280,
+          1180
+        ]
+      ],
+      "band": "midground",
+      "note": "The central north-south spine connecting Arrival \u2192 Heart \u2192 Brain. Traversal only; carries no product meaning."
+    },
+    {
+      "id": "hidden_grove",
+      "name": "Hidden Grove",
+      "kind": "Passage",
+      "presentsWorldSection": null,
+      "center": [
+        1650,
+        1150,
+        -40
+      ],
+      "radiusUu": 340,
+      "elevationUu": -40,
+      "collision": "none",
+      "streamGroup": "hidden_grove",
+      "occlusionGroup": "hidden",
+      "boundsPolygon": [
+        [
+          1420,
+          940
+        ],
+        [
+          1860,
+          980
+        ],
+        [
+          1900,
+          1280
+        ],
+        [
+          1720,
+          1420
+        ],
+        [
+          1440,
+          1360
+        ],
+        [
+          1380,
+          1140
+        ]
+      ],
+      "band": "midground",
+      "note": "A sunken hollow (-40 cm) behind the Great Framing Tree, reached only by the concealed east path, ringed with oversized mushrooms and a secret vista back to the Brain. Streams in on approach; carries no product meaning \u2014 exploration reward only."
+    }
+  ],
+  "interactionAnchors": [
+    {
+      "id": "start_building_gate",
+      "name": "Golden Build Gate threshold",
+      "kind": "start_building",
+      "intent": "wonderland.start_building",
+      "target": "start_building",
+      "requiresControl": true,
+      "location": [
+        -950,
+        300,
+        0
+      ],
+      "proximityRadiusUu": 260,
+      "zone": "golden_build_gate_court",
+      "collision": "overlap",
+      "note": "PROXIMITY ONLY. Standing at the threshold raises NO intent and starts NO build. An explicit interaction emits wonderland.start_building, a REQUEST; the downstream flow is gated (requiresControl=true) so the shell can prompt for a control session rather than fail. Relay decides."
+    },
+    {
+      "id": "agent_config",
+      "name": "Agent Garden configuration pedestal",
+      "kind": "configure_agent",
+      "intent": "wonderland.configure_agent",
+      "target": "agent_config",
+      "requiresControl": false,
+      "location": [
+        760,
+        320,
+        30
+      ],
+      "proximityRadiusUu": 240,
+      "zone": "agent_garden",
+      "collision": "overlap",
+      "note": "PROXIMITY ONLY. An explicit interaction emits wonderland.configure_agent, which opens the EXISTING Configure Compound PSP Agent surface through Relay's own routes. Walking near it does nothing."
+    },
+    {
+      "id": "missions_point",
+      "name": "Mission Overlook balustrade",
+      "kind": "open_missions",
+      "intent": "wonderland.open_missions",
+      "target": "mission",
+      "requiresControl": false,
+      "location": [
+        520,
+        -230,
+        120
+      ],
+      "proximityRadiusUu": 240,
+      "zone": "mission_overlook",
+      "collision": "overlap",
+      "note": "PROXIMITY ONLY. An explicit interaction emits wonderland.open_missions, opening the existing Missions surface. Proximity raises nothing."
+    },
+    {
+      "id": "project_point",
+      "name": "Active-Project standing stone",
+      "kind": "open_project",
+      "intent": "wonderland.open_project",
+      "target": "project",
+      "requiresControl": false,
+      "location": [
+        -520,
+        -230,
+        0
+      ],
+      "proximityRadiusUu": 240,
+      "zone": "project_field",
+      "collision": "overlap",
+      "note": "PROXIMITY ONLY. An explicit interaction emits wonderland.open_project, opening the existing Project surface. Proximity raises nothing."
+    },
+    {
+      "id": "brain_point",
+      "name": "Project Brain reflecting-pool rim",
+      "kind": "open_brain",
+      "intent": "wonderland.open_brain",
+      "target": "brain",
+      "requiresControl": false,
+      "location": [
+        0,
+        1180,
+        0
+      ],
+      "proximityRadiusUu": 300,
+      "zone": "brain_observatory",
+      "collision": "overlap",
+      "note": "PROXIMITY ONLY. An explicit interaction emits wonderland.open_brain, opening the existing Project Brain surface. Proximity raises nothing."
+    },
+    {
+      "id": "arrival_vista",
+      "name": "Arrival Overlook",
+      "kind": "vista",
+      "intent": null,
+      "target": "none",
+      "requiresControl": false,
+      "location": [
+        0,
+        -1050,
+        40
+      ],
+      "proximityRadiusUu": 0,
+      "zone": "arrival_plaza",
+      "collision": "none",
+      "note": "A survey point, not an interaction. Raises NO intent by design; it exists so the first thing the player does is read the whole slice."
+    }
+  ],
+  "landmarks": [
+    {
+      "id": "golden_gate",
+      "name": "Golden Build Gate",
+      "mesh": "gate",
+      "location": [
+        -1050,
+        400,
+        320
+      ],
+      "scale": [
+        7,
+        2.2,
+        6.4
+      ],
+      "dimensionsUu": [
+        700,
+        220,
+        640
+      ],
+      "elevationUu": 0,
+      "tier": "primary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "west_gate",
+      "occlusionGroup": "west",
+      "asset": "custom_relay",
+      "sightlineHero": true,
+      "note": "The Start-Building product landmark: ornate heart-finialed ivy gate, ~6.4 m tall, left repoussoir of the arrival frame. Custom Relay art (identity-critical). Frames the left edge per WONDERLAND_VISUAL_ACCEPTANCE.md \u00a73."
+    },
+    {
+      "id": "framing_tree",
+      "name": "Great Framing Tree",
+      "mesh": "tree",
+      "location": [
+        1300,
+        470,
+        560
+      ],
+      "scale": [
+        5,
+        5,
+        11
+      ],
+      "dimensionsUu": [
+        900,
+        900,
+        1400
+      ],
+      "elevationUu": 0,
+      "tier": "primary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "east_garden",
+      "occlusionGroup": "east",
+      "asset": "megascans_or_custom",
+      "sightlineHero": true,
+      "note": "The huge gnarled hero tree carrying the oval portrait frame; right repoussoir, canopy overhanging the Agent Garden. Trunk blocks; canopy overlaps. Frames the right edge per \u00a73. This is the 'giant-tree composition'."
+    },
+    {
+      "id": "brain_landmark",
+      "name": "Project Brain Observatory core",
+      "mesh": "brain",
+      "location": [
+        0,
+        1560,
+        720
+      ],
+      "scale": [
+        8,
+        8,
+        14
+      ],
+      "dimensionsUu": [
+        800,
+        800,
+        1440
+      ],
+      "elevationUu": 0,
+      "tier": "primary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "north_brain",
+      "occlusionGroup": "north",
+      "asset": "custom_relay",
+      "sightlineHero": true,
+      "note": "A luminous crystalline observatory (distinct silhouette from the tree) at the boulevard's north end; its canopy is the Brain's ambient weather. Custom Relay art. The tallest north vertical, visible from Arrival down the whole spine."
+    },
+    {
+      "id": "heart_topiary",
+      "name": "Heart Topiary",
+      "mesh": "topiary",
+      "location": [
+        340,
+        540,
+        150
+      ],
+      "scale": [
+        3,
+        1.2,
+        3
+      ],
+      "dimensionsUu": [
+        300,
+        120,
+        300
+      ],
+      "elevationUu": 0,
+      "tier": "secondary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "core_plaza",
+      "occlusionGroup": "core",
+      "asset": "custom",
+      "note": "Heart-shaped hedge, left-inboard midground accent behind Heart Plaza."
+    },
+    {
+      "id": "rose_arch",
+      "name": "Rose Arch",
+      "mesh": "arch",
+      "location": [
+        0,
+        -300,
+        220
+      ],
+      "scale": [
+        5.5,
+        1,
+        4.4
+      ],
+      "dimensionsUu": [
+        550,
+        100,
+        440
+      ],
+      "elevationUu": 0,
+      "tier": "secondary",
+      "band": "foreground",
+      "collision": "blocking",
+      "streamGroup": "south_arrival",
+      "occlusionGroup": "open_south",
+      "asset": "megascans_or_custom",
+      "note": "Rose-wrapped arch over the boulevard between Arrival and Heart Plaza; a foreground frame the player walks through, adding depth to the first shot."
+    },
+    {
+      "id": "stacked_teacup_a",
+      "name": "Stacked Teacups (east)",
+      "mesh": "teacup",
+      "location": [
+        660,
+        120,
+        130
+      ],
+      "scale": [
+        2.4,
+        2.4,
+        2.6
+      ],
+      "dimensionsUu": [
+        240,
+        240,
+        260
+      ],
+      "elevationUu": 0,
+      "tier": "tertiary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "core_plaza",
+      "occlusionGroup": "east",
+      "asset": "custom",
+      "note": "Heart-patterned porcelain stack, right-inboard landmark."
+    },
+    {
+      "id": "stacked_teacup_b",
+      "name": "Toppled Teacup (garden)",
+      "mesh": "teacup",
+      "location": [
+        980,
+        520,
+        90
+      ],
+      "scale": [
+        1.8,
+        1.8,
+        1.4
+      ],
+      "dimensionsUu": [
+        180,
+        180,
+        140
+      ],
+      "elevationUu": 30,
+      "tier": "tertiary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "east_garden",
+      "occlusionGroup": "east",
+      "asset": "custom",
+      "note": "A smaller tipped cup in the Agent Garden, a rest-ledge read."
+    },
+    {
+      "id": "clock_tower",
+      "name": "Ornate Clock Tower",
+      "mesh": "clock",
+      "location": [
+        -1180,
+        720,
+        300
+      ],
+      "scale": [
+        1.4,
+        1.4,
+        6
+      ],
+      "dimensionsUu": [
+        140,
+        140,
+        600
+      ],
+      "elevationUu": 0,
+      "tier": "secondary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "west_gate",
+      "occlusionGroup": "west",
+      "asset": "custom",
+      "note": "Freestanding ornate clock behind the gate court; whimsy vertical on the west."
+    },
+    {
+      "id": "playing_card_sign",
+      "name": "Heart Playing-Card Signpost",
+      "mesh": "sign",
+      "location": [
+        220,
+        -520,
+        130
+      ],
+      "scale": [
+        1.6,
+        0.3,
+        2.6
+      ],
+      "dimensionsUu": [
+        160,
+        30,
+        260
+      ],
+      "elevationUu": 0,
+      "tier": "tertiary",
+      "band": "foreground",
+      "collision": "blocking",
+      "streamGroup": "south_arrival",
+      "occlusionGroup": "open_south",
+      "asset": "custom",
+      "note": "A heart-emblazoned card sign near the arrival split, a wayfinding read (original design, no borrowed suit iconography beyond a generic heart)."
+    },
+    {
+      "id": "mushroom_red_a",
+      "name": "Giant Red Mushroom (arrival)",
+      "mesh": "mushroom",
+      "location": [
+        -380,
+        -520,
+        180
+      ],
+      "scale": [
+        3.6,
+        3.6,
+        3.6
+      ],
+      "dimensionsUu": [
+        360,
+        360,
+        360
+      ],
+      "elevationUu": 0,
+      "tier": "secondary",
+      "band": "foreground",
+      "collision": "blocking",
+      "streamGroup": "south_arrival",
+      "occlusionGroup": "open_south",
+      "note": "Near red/white-spotted cap breaking the bottom-left of the arrival frame; foreground scale anchor."
+    },
+    {
+      "id": "mushroom_red_b",
+      "name": "Giant Red Mushroom (garden)",
+      "mesh": "mushroom",
+      "location": [
+        1040,
+        220,
+        200
+      ],
+      "scale": [
+        4,
+        4,
+        4
+      ],
+      "dimensionsUu": [
+        400,
+        400,
+        400
+      ],
+      "elevationUu": 30,
+      "tier": "secondary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "east_garden",
+      "occlusionGroup": "east",
+      "note": "Largest hero cap (~4 m) in the Agent Garden; the Dog reads ~1/3 its height."
+    },
+    {
+      "id": "mushroom_purple_a",
+      "name": "Purple Mushroom Cluster (west)",
+      "mesh": "mushroom",
+      "location": [
+        -760,
+        -40,
+        120
+      ],
+      "scale": [
+        2.2,
+        2.2,
+        2.2
+      ],
+      "dimensionsUu": [
+        220,
+        220,
+        220
+      ],
+      "elevationUu": 0,
+      "tier": "tertiary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "west_field",
+      "occlusionGroup": "west",
+      "note": "Mid-scale purple caps giving the west a second mushroom scale."
+    },
+    {
+      "id": "mushroom_purple_b",
+      "name": "Purple Mushroom Ring (grove)",
+      "mesh": "mushroom",
+      "location": [
+        1650,
+        1150,
+        150
+      ],
+      "scale": [
+        3,
+        3,
+        3
+      ],
+      "dimensionsUu": [
+        300,
+        300,
+        300
+      ],
+      "elevationUu": -40,
+      "tier": "tertiary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "hidden_grove",
+      "occlusionGroup": "hidden",
+      "note": "The ring of caps that marks the Hidden Grove reward."
+    },
+    {
+      "id": "floating_teapot",
+      "name": "Floating Teapot",
+      "mesh": "teapot",
+      "location": [
+        520,
+        40,
+        640
+      ],
+      "scale": [
+        1.8,
+        1.8,
+        1.4
+      ],
+      "dimensionsUu": [
+        180,
+        180,
+        140
+      ],
+      "elevationUu": 640,
+      "tier": "tertiary",
+      "band": "midground",
+      "collision": "none",
+      "streamGroup": "core_plaza",
+      "occlusionGroup": "core",
+      "asset": "custom",
+      "note": "Slowly drifting white teapot in the upper-mid frame; catches the warm key. Ambient drift only, no state."
+    },
+    {
+      "id": "agent_pergola",
+      "name": "Agent Garden Pergola",
+      "mesh": "pergola",
+      "location": [
+        820,
+        460,
+        150
+      ],
+      "scale": [
+        5,
+        5,
+        3
+      ],
+      "dimensionsUu": [
+        500,
+        500,
+        300
+      ],
+      "elevationUu": 30,
+      "tier": "secondary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "east_garden",
+      "occlusionGroup": "east",
+      "asset": "megascans_or_custom",
+      "note": "Wisteria-draped pergola sheltering the configuration pedestal; defines the garden room."
+    },
+    {
+      "id": "overlook_terrace",
+      "name": "Mission Overlook Terrace",
+      "mesh": "terrace",
+      "location": [
+        560,
+        -280,
+        60
+      ],
+      "scale": [
+        7,
+        6,
+        1.2
+      ],
+      "dimensionsUu": [
+        700,
+        600,
+        120
+      ],
+      "elevationUu": 0,
+      "tier": "secondary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "east_overlook",
+      "occlusionGroup": "east",
+      "asset": "custom",
+      "note": "The raised stone platform (+120 cm top) with balustrade; blocking, with a stepped walkable edge on the boulevard side."
+    },
+    {
+      "id": "project_standing_stones",
+      "name": "Project Standing Stones",
+      "mesh": "standing_stone",
+      "location": [
+        -520,
+        -230,
+        130
+      ],
+      "scale": [
+        1.2,
+        1.2,
+        2.6
+      ],
+      "dimensionsUu": [
+        120,
+        120,
+        260
+      ],
+      "elevationUu": -20,
+      "tier": "secondary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "west_field",
+      "occlusionGroup": "west",
+      "asset": "custom_relay",
+      "note": "The open_project marker: a runic standing stone in the sunken Project Field around which project entities are arranged."
+    },
+    {
+      "id": "portrait_frame",
+      "name": "Oval Portrait Frame",
+      "mesh": "portrait",
+      "location": [
+        1180,
+        470,
+        620
+      ],
+      "scale": [
+        0.4,
+        2.4,
+        3.2
+      ],
+      "dimensionsUu": [
+        40,
+        240,
+        320
+      ],
+      "elevationUu": 0,
+      "tier": "tertiary",
+      "band": "midground",
+      "collision": "none",
+      "streamGroup": "east_garden",
+      "occlusionGroup": "east",
+      "asset": "custom_relay",
+      "note": "The oval frame hung in the Great Framing Tree; its contents are custom Relay art (never a borrowed likeness)."
+    },
+    {
+      "id": "brain_pool_rim",
+      "name": "Reflecting Pool Rim",
+      "mesh": "pool_rim",
+      "location": [
+        0,
+        1360,
+        20
+      ],
+      "scale": [
+        13,
+        12,
+        0.4
+      ],
+      "dimensionsUu": [
+        1300,
+        1200,
+        40
+      ],
+      "elevationUu": 0,
+      "tier": "secondary",
+      "band": "midground",
+      "collision": "blocking",
+      "streamGroup": "north_brain",
+      "occlusionGroup": "north",
+      "asset": "custom",
+      "note": "The ornate stone rim around the Brain's reflecting pool; walkable rim, blocking inner lip. The open_brain anchor sits on this rim."
+    }
+  ],
+  "backgroundSilhouettes": [
+    {
+      "id": "castle_spire_0",
+      "name": "Castle Spire 0",
+      "mesh": "spire",
+      "location": [
+        -620,
+        3000,
+        720
+      ],
+      "scale": [
+        3,
+        3,
+        14
+      ],
+      "dimensionsUu": [
+        300,
+        300,
+        1400
+      ],
+      "tier": "background",
+      "band": "background",
+      "collision": "none",
+      "streamGroup": "background_far",
+      "occlusionGroup": "far",
+      "note": "Pink/white/blue whimsical spire; haze-blended, never out-contrasts the hero."
+    },
+    {
+      "id": "castle_spire_1",
+      "name": "Castle Spire 1",
+      "mesh": "spire",
+      "location": [
+        -280,
+        3220,
+        760
+      ],
+      "scale": [
+        3,
+        3,
+        16
+      ],
+      "dimensionsUu": [
+        300,
+        300,
+        1600
+      ],
+      "tier": "background",
+      "band": "background",
+      "collision": "none",
+      "streamGroup": "background_far",
+      "occlusionGroup": "far"
+    },
+    {
+      "id": "castle_spire_2",
+      "name": "Castle Spire 2 (tallest)",
+      "mesh": "spire",
+      "location": [
+        60,
+        3140,
+        820
+      ],
+      "scale": [
+        3,
+        3,
+        18
+      ],
+      "dimensionsUu": [
+        300,
+        300,
+        1800
+      ],
+      "tier": "background",
+      "band": "background",
+      "collision": "none",
+      "streamGroup": "background_far",
+      "occlusionGroup": "far"
+    },
+    {
+      "id": "castle_spire_3",
+      "name": "Castle Spire 3",
+      "mesh": "spire",
+      "location": [
+        380,
+        3220,
+        720
+      ],
+      "scale": [
+        3,
+        3,
+        15
+      ],
+      "dimensionsUu": [
+        300,
+        300,
+        1500
+      ],
+      "tier": "background",
+      "band": "background",
+      "collision": "none",
+      "streamGroup": "background_far",
+      "occlusionGroup": "far"
+    },
+    {
+      "id": "castle_spire_4",
+      "name": "Castle Spire 4",
+      "mesh": "spire",
+      "location": [
+        700,
+        3000,
+        660
+      ],
+      "scale": [
+        3,
+        3,
+        13
+      ],
+      "dimensionsUu": [
+        300,
+        300,
+        1300
+      ],
+      "tier": "background",
+      "band": "background",
+      "collision": "none",
+      "streamGroup": "background_far",
+      "occlusionGroup": "far"
+    },
+    {
+      "id": "float_island_w",
+      "name": "Floating Island (west)",
+      "mesh": "island",
+      "location": [
+        -1900,
+        2600,
+        1100
+      ],
+      "scale": [
+        9,
+        9,
+        3
+      ],
+      "dimensionsUu": [
+        900,
+        900,
+        300
+      ],
+      "tier": "background",
+      "band": "background",
+      "collision": "none",
+      "streamGroup": "background_far",
+      "occlusionGroup": "far",
+      "note": "Mushroom-capped floating island, deep-background lavender silhouette."
+    },
+    {
+      "id": "float_island_e",
+      "name": "Floating Island (east)",
+      "mesh": "island",
+      "location": [
+        2000,
+        2500,
+        1300
+      ],
+      "scale": [
+        8,
+        8,
+        3
+      ],
+      "dimensionsUu": [
+        800,
+        800,
+        300
+      ],
+      "tier": "background",
+      "band": "background",
+      "collision": "none",
+      "streamGroup": "background_far",
+      "occlusionGroup": "far"
+    },
+    {
+      "id": "distant_treeline",
+      "name": "Distant Treeline",
+      "mesh": "tree",
+      "location": [
+        0,
+        3400,
+        500
+      ],
+      "scale": [
+        40,
+        4,
+        10
+      ],
+      "dimensionsUu": [
+        4000,
+        400,
+        1000
+      ],
+      "tier": "background",
+      "band": "background",
+      "collision": "none",
+      "streamGroup": "background_far",
+      "occlusionGroup": "far",
+      "note": "A haze-toned band closing the horizon behind the spires."
+    }
+  ],
+  "roamingZones": [
+    {
+      "id": "roam_heart",
+      "name": "Heart Plaza patrol",
+      "shape": "circle",
+      "center": [
+        0,
+        40,
+        0
+      ],
+      "radiusUu": 460,
+      "maxOccupants": 3,
+      "note": "The hero Dog's idle patrol around the arcane circle. Wandering is AMBIENT LIFE and encodes NO Relay state (WONDERLAND_ART_DIRECTION.md \u00a75)."
+    },
+    {
+      "id": "roam_boulevard",
+      "name": "Boulevard drift",
+      "shape": "polygon",
+      "polygon": [
+        [
+          -240,
+          -900
+        ],
+        [
+          240,
+          -900
+        ],
+        [
+          240,
+          1000
+        ],
+        [
+          -240,
+          1000
+        ]
+      ],
+      "maxOccupants": 2,
+      "note": "Ambient skinned Dogs drift the main spine. Bounded so no Dog wanders into un-art-directed space."
+    },
+    {
+      "id": "roam_garden",
+      "name": "Agent Garden roam",
+      "shape": "circle",
+      "center": [
+        820,
+        380,
+        30
+      ],
+      "radiusUu": 360,
+      "maxOccupants": 2,
+      "note": "Garden Dogs among the wisteria and mushrooms."
+    },
+    {
+      "id": "roam_arrival",
+      "name": "Arrival Plaza roam",
+      "shape": "circle",
+      "center": [
+        0,
+        -760,
+        0
+      ],
+      "radiusUu": 520,
+      "maxOccupants": 2,
+      "note": "A Dog or two greeting arrival, among the foreground flowers."
+    }
+  ],
+  "foliageClusters": [
+    {
+      "id": "foliage_core",
+      "name": "Core plaza greenery",
+      "center": [
+        0,
+        400,
+        0
+      ],
+      "radiusUu": 900,
+      "density": 0.935,
+      "note": "Grass, small plants, ground cover keeping <10% of non-path ground bare (VISUAL_ACCEPTANCE \u00a78). DESIGN INTENT density; real scatter is M2 Editor foliage work."
+    },
+    {
+      "id": "foliage_gate",
+      "name": "Gate court ivy & hedge",
+      "center": [
+        -980,
+        420,
+        0
+      ],
+      "radiusUu": 560,
+      "density": 0.95,
+      "note": "Ivy climbing the gate, low hedges framing the court."
+    },
+    {
+      "id": "foliage_garden",
+      "name": "Agent Garden beds",
+      "center": [
+        860,
+        380,
+        30
+      ],
+      "radiusUu": 520,
+      "density": 0.95,
+      "note": "Densest planting; wisteria, ferns, hedge walls."
+    },
+    {
+      "id": "foliage_brain",
+      "name": "Observatory verge",
+      "center": [
+        0,
+        1700,
+        0
+      ],
+      "radiusUu": 640,
+      "density": 0.85,
+      "note": "Reeds and pale blooms around the reflecting pool."
+    },
+    {
+      "id": "foliage_grove",
+      "name": "Hidden Grove undergrowth",
+      "center": [
+        1650,
+        1150,
+        -40
+      ],
+      "radiusUu": 380,
+      "density": 0.95,
+      "note": "Overgrown, concealing the reward."
+    }
+  ],
+  "mushroomClusters": [
+    {
+      "id": "mush_arrival",
+      "name": "Arrival caps",
+      "center": [
+        -360,
+        -560,
+        0
+      ],
+      "radiusUu": 420,
+      "density": 0.4,
+      "scaleMix": [
+        "giant",
+        "mid"
+      ],
+      "note": "Red/white foreground caps at two scales.",
+      "count": 19
+    },
+    {
+      "id": "mush_garden",
+      "name": "Garden caps",
+      "center": [
+        1020,
+        260,
+        30
+      ],
+      "radiusUu": 520,
+      "density": 0.45,
+      "scaleMix": [
+        "giant",
+        "mid",
+        "small"
+      ],
+      "note": "The garden's three-scale mushroom rhythm; hero cap ~4 m.",
+      "count": 19
+    },
+    {
+      "id": "mush_grove",
+      "name": "Grove ring",
+      "center": [
+        1650,
+        1150,
+        -40
+      ],
+      "radiusUu": 320,
+      "density": 0.6,
+      "scaleMix": [
+        "mid",
+        "small"
+      ],
+      "note": "Purple ring around the hidden reward.",
+      "count": 19
+    }
+  ],
+  "flowerBeds": [
+    {
+      "id": "flowers_arrival",
+      "name": "Arrival close-focus blooms",
+      "center": [
+        0,
+        -820,
+        0
+      ],
+      "radiusUu": 900,
+      "density": 0.85,
+      "palette": [
+        "purple",
+        "pink"
+      ],
+      "bloomsIntent": 260,
+      "note": "Foreground hero flowers; DESIGN INTENT \u2265200 blooms visible in the arrival frame (VISUAL_ACCEPTANCE \u00a78). Close-focus, may soften under subtle DoF while the Dog stays sharp.",
+      "count": 31
+    },
+    {
+      "id": "flowers_boulevard",
+      "name": "Boulevard verges",
+      "center": [
+        0,
+        250,
+        0
+      ],
+      "radiusUu": 700,
+      "density": 0.6,
+      "palette": [
+        "pink",
+        "white"
+      ],
+      "note": "Rose and wisteria along the spine.",
+      "count": 31
+    },
+    {
+      "id": "flowers_pool",
+      "name": "Pool lilies",
+      "center": [
+        0,
+        1360,
+        -8
+      ],
+      "radiusUu": 520,
+      "density": 0.5,
+      "palette": [
+        "white",
+        "violet"
+      ],
+      "note": "Floating blooms on the reflecting pool.",
+      "count": 31
+    }
+  ],
+  "waterFeatures": [
+    {
+      "id": "brain_reflecting_pool",
+      "name": "Brain Reflecting Pool",
+      "kind": "reflecting_pool",
+      "mesh": "water_plane",
+      "center": [
+        0,
+        1360,
+        -8
+      ],
+      "radiusUu": 560,
+      "depthUu": 40,
+      "surfaceZUu": -8,
+      "collision": "blocking",
+      "streamGroup": "north_brain",
+      "occlusionGroup": "north",
+      "earnsPlace": [
+        "Doubles the Brain's ambient sky/weather read \u2014 the Observatory 'shows the sky' twice (reinforces the open_brain landmark's meaning).",
+        "A single glossy Lumen-reflection surface that showcases the AAA material/lighting target at exactly one hero location.",
+        "Bounded (~11 m across) and terminal \u2014 it closes the north axis instead of sprawling."
+      ],
+      "note": "The ONE water feature. It is not decorative filler: it is the mirror that makes the Brain's weather legible from the plaza. Blocking inner surface with a walkable stone rim (see brain_pool_rim). Ambient only; the reflection encodes no Relay state."
+    }
+  ],
+  "benchPoints": [
+    {
+      "id": "bench_arrival",
+      "name": "Arrival bench",
+      "location": [
+        280,
+        -760,
+        0
+      ],
+      "facingYawDeg": 90,
+      "note": "Rest-and-survey seat looking north up the boulevard."
+    },
+    {
+      "id": "bench_heart_w",
+      "name": "Heart Plaza bench (west)",
+      "location": [
+        -360,
+        60,
+        0
+      ],
+      "facingYawDeg": 45,
+      "note": "Faces the arcane circle and the Dog."
+    },
+    {
+      "id": "bench_garden",
+      "name": "Garden bench",
+      "location": [
+        700,
+        500,
+        30
+      ],
+      "facingYawDeg": 200,
+      "note": "Under the pergola, facing the framing tree."
+    },
+    {
+      "id": "bench_overlook",
+      "name": "Overlook bench",
+      "location": [
+        620,
+        -360,
+        120
+      ],
+      "facingYawDeg": 250,
+      "note": "On the raised terrace, facing back across the plaza."
+    },
+    {
+      "id": "bench_pool",
+      "name": "Poolside bench",
+      "location": [
+        -300,
+        1300,
+        0
+      ],
+      "facingYawDeg": 315,
+      "note": "Faces the reflecting pool and the Brain."
+    }
+  ],
+  "vfxAnchors": [
+    {
+      "id": "arcane_circle",
+      "kind": "spawn_ground_effect",
+      "location": [
+        0,
+        0,
+        5
+      ],
+      "radiusUu": 300,
+      "ambientOnly": true,
+      "encodesRelayState": false,
+      "note": "The violet summoning circle beneath the Dog. Time-driven ONLY; brightening on activity would be an untruthful second status channel (WONDERLAND_ART_DIRECTION.md \u00a72)."
+    },
+    {
+      "id": "rising_glyphs",
+      "kind": "particles",
+      "location": [
+        0,
+        0,
+        120
+      ],
+      "ambientOnly": true,
+      "encodesRelayState": false,
+      "note": "Cross/plus glyphs rising 0.5-1.5 m and fading; spawn 1-3/s, 6-16 airborne (VISUAL_ACCEPTANCE \u00a710). Elapsed-time driven only."
+    },
+    {
+      "id": "ambient_sparkles_core",
+      "kind": "particles",
+      "location": [
+        0,
+        200,
+        200
+      ],
+      "ambientOnly": true,
+      "encodesRelayState": false,
+      "note": "40-120 drifting sparkles near circle/keys/flowers."
+    },
+    {
+      "id": "floating_keys",
+      "kind": "particles",
+      "location": [
+        400,
+        -120,
+        660
+      ],
+      "ambientOnly": true,
+      "encodesRelayState": false,
+      "note": "Slowly drifting gold keys, upper-right of the arrival frame."
+    },
+    {
+      "id": "godrays_key",
+      "kind": "light_shaft",
+      "location": [
+        -200,
+        200,
+        900
+      ],
+      "ambientOnly": true,
+      "encodesRelayState": false,
+      "note": "Volumetric godray shafts in the warm key; 20-60 motes."
+    },
+    {
+      "id": "petals_arrival",
+      "kind": "particles",
+      "location": [
+        0,
+        -820,
+        120
+      ],
+      "ambientOnly": true,
+      "encodesRelayState": false,
+      "note": "20-60 drifting petals over the foreground flower bed."
+    },
+    {
+      "id": "gate_shimmer",
+      "kind": "particles",
+      "location": [
+        -1000,
+        340,
+        300
+      ],
+      "ambientOnly": true,
+      "encodesRelayState": false,
+      "note": "Soft gold shimmer around the Build Gate; ambient, NOT a build indicator."
+    },
+    {
+      "id": "brain_aurora",
+      "kind": "particles",
+      "location": [
+        0,
+        1560,
+        1200
+      ],
+      "ambientOnly": true,
+      "encodesRelayState": false,
+      "note": "Ambient aurora around the Observatory canopy. The Brain's REAL weather reaches the world through the projection/terminal in words \u2014 this glow is scenery, not a data channel."
+    },
+    {
+      "id": "pool_mist",
+      "kind": "particles",
+      "location": [
+        0,
+        1360,
+        30
+      ],
+      "ambientOnly": true,
+      "encodesRelayState": false,
+      "note": "Low mist over the reflecting pool."
+    }
+  ],
+  "audioZones": [
+    {
+      "id": "plaza_ambient",
+      "center": [
+        0,
+        200,
+        0
+      ],
+      "radiusUu": 2600,
+      "sound": "ambient_wonderland",
+      "note": "Broad bed over the whole slice."
+    },
+    {
+      "id": "gate_chimes",
+      "center": [
+        -980,
+        360,
+        200
+      ],
+      "radiusUu": 700,
+      "sound": "soft_chimes",
+      "note": "Ambient chimes at the gate; not a build cue."
+    },
+    {
+      "id": "garden_birdsong",
+      "center": [
+        820,
+        380,
+        60
+      ],
+      "radiusUu": 700,
+      "sound": "birdsong_rustle"
+    },
+    {
+      "id": "brain_hum",
+      "center": [
+        0,
+        1500,
+        200
+      ],
+      "radiusUu": 900,
+      "sound": "low_arcane_hum"
+    },
+    {
+      "id": "pool_water",
+      "center": [
+        0,
+        1360,
+        0
+      ],
+      "radiusUu": 600,
+      "sound": "water_trickle"
+    },
+    {
+      "id": "grove_secret",
+      "center": [
+        1650,
+        1150,
+        0
+      ],
+      "radiusUu": 480,
+      "sound": "secret_motif",
+      "note": "A soft distinct motif rewarding the hidden path."
+    },
+    {
+      "id": "overlook_wind",
+      "center": [
+        560,
+        -280,
+        160
+      ],
+      "radiusUu": 520,
+      "sound": "soft_wind"
+    }
+  ],
+  "paths": {
+    "main": {
+      "id": "boulevard",
+      "name": "Heart Boulevard",
+      "widthUu": 550,
+      "material": "cobblestone_checkered",
+      "points": [
+        [
+          0,
+          -1050,
+          0
+        ],
+        [
+          0,
+          -300,
+          0
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          700,
+          0
+        ],
+        [
+          0,
+          1150,
+          0
+        ]
+      ],
+      "note": "Arrival \u2192 rose arch \u2192 Heart Plaza \u2192 Brain approach. The dominant ground read; 5.5 m wide for third-person traversal."
+    },
+    "secondary": [
+      {
+        "id": "trail_gate",
+        "name": "Gate trail",
+        "widthUu": 320,
+        "points": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            -480,
+            200,
+            0
+          ],
+          [
+            -950,
+            300,
+            0
+          ]
+        ]
+      },
+      {
+        "id": "trail_garden",
+        "name": "Garden trail",
+        "widthUu": 320,
+        "points": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            420,
+            220,
+            0
+          ],
+          [
+            760,
+            320,
+            30
+          ]
+        ]
+      },
+      {
+        "id": "trail_overlook",
+        "name": "Overlook steps",
+        "widthUu": 300,
+        "points": [
+          [
+            180,
+            -320,
+            0
+          ],
+          [
+            400,
+            -280,
+            60
+          ],
+          [
+            520,
+            -240,
+            120
+          ]
+        ],
+        "note": "Rises 120 cm over 3 steps to the terrace."
+      },
+      {
+        "id": "trail_field",
+        "name": "Project Field trail",
+        "widthUu": 300,
+        "points": [
+          [
+            -180,
+            -320,
+            0
+          ],
+          [
+            -380,
+            -260,
+            -10
+          ],
+          [
+            -520,
+            -230,
+            -20
+          ]
+        ]
+      }
+    ],
+    "hidden": {
+      "id": "hidden_grove_path",
+      "name": "Hidden Grove Path",
+      "widthUu": 140,
+      "concealment": "screened by the Great Framing Tree roots and the garden hedge; entrance reads as undergrowth until approached",
+      "points": [
+        [
+          1000,
+          640,
+          30
+        ],
+        [
+          1240,
+          820,
+          0
+        ],
+        [
+          1500,
+          980,
+          -20
+        ],
+        [
+          1650,
+          1150,
+          -40
+        ]
+      ],
+      "note": "Narrow single-file trail branching off the Garden trail behind the framing tree, winding down into the sunken Hidden Grove. Streams in on approach."
+    }
+  },
+  "sightlines": [
+    {
+      "from": "arrival_vista",
+      "to": "golden_gate",
+      "hero": true,
+      "note": "REQUIRED: the arrival plaza must see the Golden Build Gate. Front-left, unobstructed above the foreground flowers."
+    },
+    {
+      "from": "arrival_vista",
+      "to": "framing_tree",
+      "hero": true,
+      "note": "REQUIRED: the arrival plaza must see the giant tree. Front-right repoussoir."
+    },
+    {
+      "from": "arrival_vista",
+      "to": "brain_landmark",
+      "hero": true,
+      "note": "The Brain closes the axis: visible straight up the boulevard, canopy rising above the Heart Plaza."
+    },
+    {
+      "from": "arrival_vista",
+      "to": "heart_plaza",
+      "hero": true,
+      "note": "The Dog on the arcane circle is the eye's first destination."
+    },
+    {
+      "from": "arrival_vista",
+      "to": "mission_overlook",
+      "hero": false,
+      "note": "The raised terrace reads front-right-near."
+    },
+    {
+      "from": "arrival_vista",
+      "to": "project_field",
+      "hero": false,
+      "note": "The sunken field reads front-left-near."
+    },
+    {
+      "from": "heart_plaza",
+      "to": "golden_gate",
+      "hero": false
+    },
+    {
+      "from": "heart_plaza",
+      "to": "agent_garden",
+      "hero": false
+    },
+    {
+      "from": "heart_plaza",
+      "to": "brain_landmark",
+      "hero": true,
+      "note": "Straight north up the spine."
+    },
+    {
+      "from": "mission_overlook",
+      "to": "brain_landmark",
+      "hero": true,
+      "note": "The panorama vantage reads the whole slice."
+    },
+    {
+      "from": "mission_overlook",
+      "to": "golden_gate",
+      "hero": false
+    },
+    {
+      "from": "brain_observatory",
+      "to": "heart_plaza",
+      "hero": false,
+      "note": "Looking back south down the boulevard."
+    },
+    {
+      "from": "hidden_grove",
+      "to": "brain_landmark",
+      "hero": true,
+      "note": "The reward vista: the grove opens onto the Brain across the pool."
+    }
+  ]
+}
