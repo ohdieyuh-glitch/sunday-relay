@@ -70,8 +70,18 @@ AWonderlandDogPawn::AWonderlandDogPawn()
 	// Framed for the visible Dog now that BuildVisibleBody gives the pawn a body:
 	// stand back far enough that the ~2.4m Dog reads in the lower third of frame
 	// (third-person over-the-back), not pressed against the lens.
-	CameraBoom->TargetArmLength = 680.0f;
-	CameraBoom->SocketOffset = FVector(0.0f, 0.0f, 150.0f);
+	// COMPOSITION, not just distance. At 680uu with a 150uu socket the camera
+	// sat inside the prop field: the Dog filled the centre, mushrooms crowded
+	// both edges, and the sky — half the reference's charm — was almost
+	// entirely out of frame. Pulling back and lifting puts the plaza, the
+	// castle skyline and real sky in the same shot, which is the hierarchy the
+	// reference is built on.
+	//
+	// These live here rather than in hub-layout.json on purpose: the layout's
+	// `camera` block is DESIGN DOCUMENTATION, and editing it changes nothing.
+	// Anyone tuning framing must edit this constructor.
+	CameraBoom->TargetArmLength = 1150.0f;
+	CameraBoom->SocketOffset = FVector(0.0f, 0.0f, 420.0f);
 	CameraBoom->bUsePawnControlRotation = true;
 	// Collision test OFF: the plaza is thick with mushrooms, flowers and props, and
 	// the arm was collapsing onto the first one behind the Dog, jamming the camera
