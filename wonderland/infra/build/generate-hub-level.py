@@ -1241,6 +1241,118 @@ def build(layout):
     def _part(prim, cx, cy, cz, sx, sy, sz, mat, label, rot=(0.0, 0.0, 0.0)):
         return static_mesh(prim, [cx, cy, cz], [sx, sy, sz], label, rotation=rot, mat=mat)
 
+
+    # ---- ORNAMENT VOCABULARY -----------------------------------------------
+    # Recurring architectural pieces, defined once. Every one takes a yaw so it
+    # can sit on a rotated building, and every one is cheap enough to use freely
+    # except `window` and `railing`, which are gated by a detail level.
+
+    def trim_box(cx, cy, cz, sx, sy, sz, mat, label, yaw=0.0, trim=None, band=True):
+        """A box with chamfered arrises and an edge band.
+
+        A raw cube reads as a cube because its edges are a single hard line. What
+        makes masonry read as masonry at any distance is the HIGHLIGHT running
+        along a chamfer — a thin bright strip where the arris catches the key
+        light. Four slim vertical strips at the corners plus a band top and
+        bottom is six parts, and it is the cheapest possible purchase of the
+        thing the brief calls "bevels, trim"."""
+        t = trim or mat
+        _part("cube", cx, cy, cz, sx, sy, sz, mat, label, rot=(0.0, 0.0, yaw))
+        ch = min(sx, sy) * 0.13
+        for ox, oy in ((-1, -1), (-1, 1), (1, -1), (1, 1)):
+            wx = cx + (ox * sx * 50.0 * math.cos(math.radians(yaw))
+                       - oy * sy * 50.0 * math.sin(math.radians(yaw)))
+            wy = cy + (ox * sx * 50.0 * math.sin(math.radians(yaw))
+                       + oy * sy * 50.0 * math.cos(math.radians(yaw)))
+            _part("cube", wx, wy, cz, ch, ch, sz * 0.99, t,
+                  "%s_arris%d%d" % (label, ox, oy), rot=(0.0, 0.0, yaw + 45.0))
+        if band:
+            for e, zz in ((-1, cz - sz * 49.0), (1, cz + sz * 49.0)):
+                _part("cube", cx, cy, zz, sx * 1.06, sy * 1.06, sz * 0.045, t,
+                      "%s_band%d" % (label, e), rot=(0.0, 0.0, yaw))
+
+    def cornice(cx, cy, cz, sx, sy, mat, label, yaw=0.0, dentils=0):
+        """A projecting moulded band: three courses, each wider than the last.
+        Without one a wall meets its roof in a butt joint, which is the join a
+        real building never has."""
+        for i, (w, h) in enumerate(((1.00, 0.055), (1.10, 0.075), (1.20, 0.045))):
+            _part("cube", cx, cy, cz + i * (sx * 5.0), sx * w, sy * w, h, mat,
+                  "%s_c%d" % (label, i), rot=(0.0, 0.0, yaw))
+        for d in range(dentils):
+            a = math.radians(yaw) + d * (2.0 * math.pi / max(dentils, 1))
+            _part("cube", cx + math.cos(a) * sx * 48.0, cy + math.sin(a) * sy * 48.0,
+                  cz - sx * 3.0, sx * 0.09, sy * 0.09, 0.09, mat,
+                  "%s_d%d" % (label, d), rot=(0.0, 0.0, yaw))
+
+    def railing(x0, y0, x1, y1, z, mat, label, n=7, h=64.0, rail_mat=None):
+        """Cap rail, bottom rail, turned balusters. Balconies in this world
+        currently have corner posts and open air between them, which reads as
+        scaffolding rather than a balcony."""
+        rm = rail_mat or mat
+        dx, dy = x1 - x0, y1 - y0
+        ln = math.hypot(dx, dy)
+        if ln < 1.0:
+            return
+        yaw = math.degrees(math.atan2(dy, dx))
+        mx, my = (x0 + x1) * 0.5, (y0 + y1) * 0.5
+        for zz, th in ((z + h, 0.075), (z + h * 0.12, 0.05)):
+            _part("cube", mx, my, zz, ln / 100.0, 0.12, th, rm,
+                  "%s_rail%d" % (label, int(zz)), rot=(0.0, 0.0, yaw))
+        for i in range(n):
+            t = (i + 0.5) / n
+            _part("cylinder", x0 + dx * t, y0 + dy * t, z + h * 0.55,
+                  0.055, 0.055, h * 0.9 / 100.0, mat, "%s_bal%d" % (label, i))
+            _part("sphere", x0 + dx * t, y0 + dy * t, z + h * 0.55,
+                  0.085, 0.085, 0.10, mat, "%s_belly%d" % (label, i))
+
+    def window(cx, cy, cz, w, h, yaw, mat, label, glass="dog_visor", arched=True):
+        """Surround, sill, mullion cross, arched head. Fenestration is the cue
+        the eye uses to judge a building's SIZE — a wall with no windows has no
+        scale at all, which is most of why plain extrusions read as toys."""
+        ca, sa = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+        def P(ox, oz, sxx, syy, szz, m, sfx, rr=0.0):
+            _part("cube", cx + ox * -sa, cy + ox * ca, cz + oz, sxx, syy, szz, m,
+                  "%s_%s" % (label, sfx), rot=(0.0, 0.0, yaw + rr))
+        P(0.0, 0.0, w, 0.06, h, glass, "glass")
+        for e in (-1, 1):                                    # jambs
+            P(e * w * 52.0, 0.0, w * 0.16, 0.11, h * 1.04, mat, "jamb%d" % e)
+        P(0.0, -h * 52.0, w * 1.24, 0.16, h * 0.13, mat, "sill")
+        P(0.0, h * 50.0, w * 1.14, 0.11, h * 0.10, mat, "lintel")
+        P(0.0, 0.0, w * 0.10, 0.09, h * 0.96, mat, "mullion")
+        P(0.0, 0.0, w * 0.96, 0.09, h * 0.09, mat, "transom")
+        if arched:
+            for k in range(5):
+                t = (k + 0.5) / 5.0
+                ang = math.pi * t
+                P(math.cos(math.pi - ang) * w * 52.0,
+                  h * 52.0 + math.sin(ang) * w * 40.0,
+                  w * 0.20, 0.11, w * 0.20, mat, "arch%d" % k,
+                  rr=0.0)
+
+    def volute(cx, cy, cz, s, mat, label, yaw=0.0, turns=2.2, flip=1.0):
+        """A real logarithmic spiral. The gate's scrollwork is presently a row of
+        spheres at three heights, which reads as beads on a wire; a volute is a
+        curve that TIGHTENS, and the tightening is the whole ornament."""
+        n = 16
+        for i in range(n):
+            t = i / float(n - 1)
+            ang = t * turns * 2.0 * math.pi
+            r = s * 34.0 * math.exp(-1.05 * t)
+            px = cx + (math.cos(ang) * r * flip) * math.cos(math.radians(yaw))
+            py = cy + (math.cos(ang) * r * flip) * math.sin(math.radians(yaw))
+            pz = cz + math.sin(ang) * r
+            d = s * (0.115 - 0.062 * t)
+            _part("sphere", px, py, pz, d, d * 0.55, d, mat, "%s_v%d" % (label, i))
+
+    def finial(cx, cy, cz, s, mat, label, glow=None):
+        """Base, ball, neck, spike. A post that simply stops is a post; a post
+        that terminates is architecture."""
+        g = glow or mat
+        _part("cylinder", cx, cy, cz, 0.20 * s, 0.20 * s, 0.10 * s, mat, "%s_fbase" % label)
+        _part("sphere", cx, cy, cz + 18.0 * s, 0.26 * s, 0.26 * s, 0.26 * s, mat, "%s_fball" % label)
+        _part("cylinder", cx, cy, cz + 34.0 * s, 0.09 * s, 0.09 * s, 0.16 * s, mat, "%s_fneck" % label)
+        _part("cone", cx, cy, cz + 56.0 * s, 0.15 * s, 0.15 * s, 0.34 * s, g, "%s_fspike" % label)
+
     def kit_tree(x, y, s, label, giant=False):
         # The GREAT FRAMING TREE towers over the district (the reference's storybook
         # tree); ordinary trees stay modest. A tapered trunk with a knotted base and a
@@ -1439,18 +1551,20 @@ def build(layout):
         # SCROLLWORK, properly. One row of seven blobs is a fence; ornate ironwork
         # is layered curl-work reading at several scales, so this is three rows
         # at different heights and sizes plus corner spirals that turn the eye.
-        for row, (hz, sz, step) in enumerate(((0.86, 0.28, 74.0), (0.66, 0.20, 96.0), (0.44, 0.15, 118.0))):
-            for b in range(-3, 4):
-                _part("sphere", x + b * step * s, y, ph * hz, sz * s, sz * 0.6 * s, sz * s,
-                      "gold", "%s_curl%d_%d" % (label, row, b))
-        # corner spirals: a short arc of shrinking beads sweeping in from each post
+        # VOLUTES, which is what scrollwork is. Rows of evenly-spaced spheres at
+        # three heights read as beads threaded on a wire; a volute is a curve
+        # that TIGHTENS as it turns, and the tightening is the entire ornament.
+        # Paired and mirrored, the way wrought ironwork actually comes.
+        for b in range(-3, 4):
+            volute(x + b * 88.0 * s, y, ph * 0.80, s * 0.72,
+                   "gold", "%s_scrollA%d" % (label, b), flip=1.0 if b % 2 == 0 else -1.0)
+        for b in range(-2, 3):
+            volute(x + b * 112.0 * s, y, ph * 0.56, s * 0.52,
+                   "gold", "%s_scrollB%d" % (label, b), flip=-1.0 if b % 2 == 0 else 1.0)
+        # a bigger pair springing off each pier, turning the eye back inward
         for sx in (-1, 1):
-            for k in range(6):
-                t = k / 5.0
-                _part("sphere", x + sx * (250.0 - 92.0 * t) * s, y,
-                      ph * (0.92 - 0.16 * t), (0.24 - 0.11 * t) * s,
-                      (0.14 - 0.06 * t) * s, (0.24 - 0.11 * t) * s,
-                      "gold", "%s_spiral%d_%d" % (label, sx, k))
+            volute(x + sx * 196.0 * s, y, ph * 0.86, s * 1.05,
+                   "gold", "%s_scrollP%d" % (label, sx), flip=float(sx))
         # CLIMBING ROSES on the posts — the reference's gate is planted, not bare.
         for sx in (-1, 1):
             for k in range(9):
@@ -1494,7 +1608,13 @@ def build(layout):
               rot=(0.0, 0.0, 45.0))
         _part("cube", x, y, ph + 120.0 * s, 1.4 * s, 1.35 * s, 1.0 * s, "gold_glow", "%s_keystone" % label)
 
-    def kit_spire(x, y, s, label, body_mat="spire", roof_mat="gold", flag=True):
+    def kit_spire(x, y, s, label, body_mat="spire", roof_mat="gold", flag=True,
+                  detail=0):
+        """detail: 0 = silhouette (the far skyline bands, sixty of them),
+        1 = trimmed with a railed balcony and proper windows (near towers).
+        The brief asks for near detail and far silhouette; this is where that
+        distinction is actually spent, and it keeps sixty towers from each
+        carrying ornament nobody can resolve."""
         # A CASTLE TURRET, not a cylinder wearing a cone. The skyline fills the
         # upper third of every wide shot, so a bare cone-on-a-tube was the single
         # most visible "prototype" cue left in the world. The reference's towers
@@ -1528,13 +1648,29 @@ def build(layout):
             _part("cube", x + math.cos(a) * br * 1.10, y + math.sin(a) * br * 1.10,
                   bh + 58.0 * s, 0.17 * s, 0.17 * s, 0.30 * s, body_mat,
                   "%s_merlon%d" % (label, i), rot=(0.0, math.degrees(a), 0.0))
+        if detail >= 1:
+            # a railed balcony between the merlons, and a moulded corbel band —
+            # posts with open air between them read as scaffolding
+            for i in range(8):
+                a0 = i * (2.0 * math.pi / 8.0)
+                a1 = (i + 1) * (2.0 * math.pi / 8.0)
+                railing(x + math.cos(a0) * br * 1.10, y + math.sin(a0) * br * 1.10,
+                        x + math.cos(a1) * br * 1.10, y + math.sin(a1) * br * 1.10,
+                        bh + 34.0 * s, roof_mat, "%s_rail%d" % (label, i), n=3, h=30.0 * s)
+            cornice(x, y, bh * 0.60, br * 1.06 / 50.0, br * 1.06 / 50.0,
+                    roof_mat, "%s_corn" % label, dentils=8)
         # windows: two tiers of four, the scale cue
         for tier, tz in enumerate((bh * 0.34, bh * 0.66)):
             for i in range(4):
                 a = i * (math.pi / 2.0) + tier * 0.4
-                _part("cube", x + math.cos(a) * br * 0.99, y + math.sin(a) * br * 0.99, tz,
-                      0.10 * s, 0.20 * s, 0.34 * s, "dog_visor", "%s_win%d_%d" % (label, tier, i),
-                      rot=(0.0, math.degrees(a), 0.0))
+                if detail >= 1:
+                    window(x + math.cos(a) * br * 0.99, y + math.sin(a) * br * 0.99, tz,
+                           0.20 * s, 0.34 * s, math.degrees(a) + 90.0, body_mat,
+                           "%s_w%d_%d" % (label, tier, i))
+                else:
+                    _part("cube", x + math.cos(a) * br * 0.99, y + math.sin(a) * br * 0.99, tz,
+                          0.10 * s, 0.20 * s, 0.34 * s, "dog_visor",
+                          "%s_win%d_%d" % (label, tier, i), rot=(0.0, math.degrees(a), 0.0))
         # roof with an EAVE lip, then the spire proper
         _part("cylinder", x, y, bh + 76.0 * s, br * 1.30 / 50.0, br * 1.30 / 50.0, 0.14 * s,
               roof_mat, "%s_eave" % label)
@@ -1873,9 +2009,9 @@ def build(layout):
             _part("sphere", x + ox + nx * 12.0 * s, y + oy + ny * 12.0 * s, fz,
                   0.10 * s, 0.10 * s, 0.10 * s, "gold_glow", "%s_hub%d" % (label, f))
         zc += ch * 100.0 * s
-        # cornice with modillions
-        _part("cube", x, y, zc + 14.0 * s, w0 * 1.10 / 50.0, w0 * 1.10 / 50.0, 0.30 * s,
-              "stone", "%s_cornice" % label)
+        # cornice with modillions — now the moulded three-course kind
+        cornice(x, y, zc + 8.0 * s, w0 * 1.10 / 50.0, w0 * 1.10 / 50.0,
+                "stone", "%s_cornice" % label)
         for m in range(16):
             ma = m * (2.0 * math.pi / 16.0)
             _part("cube", x + math.cos(ma) * w0 * 1.02, y + math.sin(ma) * w0 * 1.02,
@@ -1894,8 +2030,14 @@ def build(layout):
                       "%s_sp%d_%d" % (label, f, k), rot=(0.0, 0.0, math.degrees(fa)))
         _part("cylinder", x, y, zc + 500.0 * s, 0.18 * s, 0.18 * s, 0.9 * s, "gold",
               "%s_finpole" % label)
-        _part("sphere", x, y, zc + 560.0 * s, 0.26 * s, 0.26 * s, 0.26 * s, "gold_glow",
-              "%s_finial" % label)
+        finial(x, y, zc + 545.0 * s, s * 1.4, "gold", "%s_fin" % label, glow="gold_glow")
+        # a railed gallery around the belfry, which is what a belfry has
+        for _q in range(4):
+            _a0 = _q * (math.pi / 2.0) + 0.785
+            _a1 = (_q + 1) * (math.pi / 2.0) + 0.785
+            railing(x + math.cos(_a0) * w0 * 1.02, y + math.sin(_a0) * w0 * 1.02,
+                    x + math.cos(_a1) * w0 * 1.02, y + math.sin(_a1) * w0 * 1.02,
+                    zc - 34.0 * s, "stone", "%s_gallery%d" % (label, _q), n=4, h=42.0 * s)
         # weathervane
         _part("cube", x, y, zc + 610.0 * s, 1.05 * s, 0.05 * s, 0.05 * s, "gold",
               "%s_vane" % label, rot=(0.0, 0.0, 34.0))
@@ -2047,20 +2189,32 @@ def build(layout):
         P("cube", 0, 0, 246.0, W_ * 1.16, D_ * 1.16, 0.20, "trunk", "jetty")
         for _w in range(3):
             ox = (_w - 1) * 62.0
-            P("cube", ox, -D_ * 56.0, 350.0, 0.40, 0.06, 0.62, "dog_visor", "win%d" % _w)
+            # world-space, because the ornament vocabulary works in world space
+            # and a house may be rotated; P() exists only to spare doing this by
+            # hand for the dozens of parts that need no yaw of their own
+            _wx = x + (ox * ca - (-D_ * 56.0) * sa) * s
+            _wy = y + (ox * sa + (-D_ * 56.0) * ca) * s
+            window(_wx, _wy, 350.0 * s, 0.40 * s, 0.62 * s, yaw + 90.0,
+                   "stone" if "stone" in MATS else body, "%s_win%d" % (label, _w))
             for _sh in (-1, 1):
-                P("cube", ox + _sh * 26.0, -D_ * 57.0, 350.0, 0.16, 0.05, 0.64,
+                P("cube", ox + _sh * 30.0, -D_ * 57.0, 350.0, 0.16, 0.05, 0.64,
                   "spire_blue" if _w % 2 else "spire_teal", "shutter%d_%d" % (_w, _sh))
         # balcony with balusters and flower boxes
         P("cube", 0, -D_ * 58.0, 288.0, W_ * 1.06, 0.34, 0.10, "stone", "balcony")
-        for _b in range(7):
-            P("cylinder", (_b - 3) * 30.0, -D_ * 58.0, 306.0, 0.06, 0.06, 0.28,
-              "porcelain", "baluster%d" % _b)
+        # a real balustrade rather than seven bare pins
+        _bx0 = x + (-W_ * 52.0 * ca - (-D_ * 58.0) * sa) * s
+        _by0 = y + (-W_ * 52.0 * sa + (-D_ * 58.0) * ca) * s
+        _bx1 = x + (W_ * 52.0 * ca - (-D_ * 58.0) * sa) * s
+        _by1 = y + (W_ * 52.0 * sa + (-D_ * 58.0) * ca) * s
+        railing(_bx0, _by0, _bx1, _by1, 293.0 * s, "porcelain",
+                "%s_balustrade" % label, n=7, h=34.0 * s, rail_mat="stone")
         P("cube", 0, -D_ * 60.0, 300.0, W_ * 0.98, 0.16, 0.16, "trunk", "flowerbox")
         for _f in range(6):
             P("sphere", (_f - 2.5) * 32.0, -D_ * 62.0, 320.0, 0.15, 0.15, 0.14,
               ("rose", "petal_violet", "petal_pink", "rose_pink")[_f % 4], "bloom%d" % _f)
         # steep roof, dormers, ridge, chimney
+        cornice(x, y, 424.0 * s, W_ * 1.14 * s, D_ * 1.14 * s, "stone",
+                "%s_cornice" % label, yaw=yaw)
         P("cone", 0, 0, 500.0, W_ * 1.30, D_ * 1.30, 1.7, roof, "roof")
         for _d in (-1, 1):
             P("cube", _d * 48.0, -D_ * 34.0, 452.0, 0.34, 0.34, 0.44, body, "dormer%d" % _d)
@@ -3670,7 +3824,7 @@ def build(layout):
                                body=body or castle_bodies[i % len(castle_bodies)],
                                roof=castle_roofs[i % len(castle_roofs)])
             else:
-                kit_spire(bx, by, _bs, "SkylineB%dS%d" % (band, i),
+                kit_spire(bx, by, _bs, "SkylineB%dS%d" % (band, i), detail=(1 if band == 0 else 0),
                           body_mat=body or castle_bodies[i % len(castle_bodies)],
                           roof_mat=castle_roofs[i % len(castle_roofs)] if body is None
                           else ("roof_pink" if i % 3 else "roof_rose"),
