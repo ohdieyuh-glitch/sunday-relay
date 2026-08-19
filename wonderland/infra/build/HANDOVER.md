@@ -104,6 +104,30 @@ Consequences worth carrying:
 - **Per-object frame coverage is the most reliable output.** It is geometry,
   not shading, and it is what caught the gate at 8.15% of the frame in gold.
 
+## PASS 8, the Relay Dog: verified against the C++, not assumed
+
+The Dog's body is built in C++ (`WonderlandStrollingDog::BuildBody`, and the
+player pawn's equivalent), so the generator cannot see whether the canonical
+identity survives. Checked by reading it:
+
+| the brief asks for | the C++ loads | the palette gives |
+|---|---|---|
+| white blocky body | `MI_<CoatName>` | `dog_body` 0.985 / 0.985 / 0.995 |
+| black visor | `MI_dog_visor` | 0.02 / 0.02 / 0.03 |
+| gold eyes | `MI_dog_eye` | 1.00 / 0.80 / 0.22, emissive x5 |
+| the tag | `MI_gold_glow` | present |
+
+Every coat the generator passes — `dog_body`, `dog_pink`, `dog_gray`, `dog_tan`,
+`dog_brown` — resolves to a real material instance. Companions vary the coat and
+keep the canonical body form, which is what the addendum allows.
+
+**Known failure mode.** The C++ does `if (Mat != nullptr) SetMaterial(...)`, so a
+material that fails to load leaves the engine default — the Dog renders on the
+missing-material checkerboard rather than crashing. That has happened once
+before in this project, when a materials change broke the master and every
+instance fell back. It is why the build now logs `master=yes/MISSING` in its
+WORLD REPORT: read that line before reading the capture.
+
 ## Two things that will bite the next person
 
 - **`cam_arrival_hero` has `auto_activate_for_player = PLAYER0`.** It hijacks
