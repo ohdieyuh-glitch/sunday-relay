@@ -1113,8 +1113,8 @@ def build(layout):
         # with a warm Mie haze near the sun for a golden horizon. The pink/purple of
         # Wonderland lives in the DISTANCE fog, the flowers and the castles — NOT the
         # whole sky. (An earlier violet Rayleigh made it a dark twilight.)
-        set_prop(sac, "RayleighScatteringScale", 0.045)
-        set_prop(sac, "MieScatteringScale", 0.004)
+        set_prop(sac, "RayleighScatteringScale", 0.085)
+        set_prop(sac, "MieScatteringScale", 0.0022)
         set_prop(sac, "MieAnisotropy", 0.80)
     if atm.get("skyLight"):
         sky = spawn(unreal.SkyLight, (0, 0, 0), label="SkyLight")
@@ -1154,7 +1154,7 @@ def build(layout):
         # dome read as dusk while the ground read as midday. Thinner, starting
         # further out, and tinted a light lilac rather than a deep violet: distance
         # still recedes, the sky stays sky.
-        set_prop(fog_comp, "FogDensity", 0.0016)
+        set_prop(fog_comp, "FogDensity", 0.0011)
         set_prop(fog_comp, "FogHeightFalloff", 0.09)
         set_prop(fog_comp, "StartDistance", 3200.0)
         set_prop(fog_comp, "FogInscatteringColor", unreal.LinearColor(0.66, 0.56, 0.82, 1.0))
@@ -1165,7 +1165,7 @@ def build(layout):
         # colour — which is why the dome read as flat lilac-grey instead of the
         # reference's blue. Capping max opacity lets the SkyAtmosphere show
         # through while distant GEOMETRY still hazes normally.
-        set_prop(fog_comp, "FogMaxOpacity", 0.45)
+        set_prop(fog_comp, "FogMaxOpacity", 0.30)
         set_prop(fog_comp, "bEnableVolumetricFog", False)
 
     # Auto-exposure (histogram) on an unbound PPV. Auto-exposure's job is to drive

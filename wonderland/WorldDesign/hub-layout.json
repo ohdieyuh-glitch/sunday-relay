@@ -15,15 +15,16 @@
     "fogDensity": 0.025,
     "skyTint": "lavender",
     "_note": "DESIGN INTENT targeting WONDERLAND_VISUAL_ACCEPTANCE.md \u00a76 (sun elevation 22-38\u00b0 above horizon, warm golden key ~4400-5200K) and \u00a77 (fog density 0.015-0.040, lavender haze). sunElevationDeg is elevation ABOVE horizon; the generator negates it into a downward light pitch.",
-    "volumetricCloud": true,
+    "volumetricCloud": false,
     "_visualPass1": "Sun raised 30 -> 52 deg and volumetric cloud enabled: the reference is a bright midday garden city, and the low golden-hour key was reading as dusk."
   },
   "camera": {
-    "boomLengthUu": 420,
+    "boomLengthUu": 760,
     "fovDeg": 68,
-    "pitchDeg": -12,
-    "socketHeightUu": 90,
-    "_note": "Third-person gameplay pawn spring-arm; matches AWonderlandDogPawn constants (WONDERLAND.md \u00a74). The heroCameras below are separate framing cameras for reference stills, not the gameplay rig."
+    "pitchDeg": -18,
+    "socketHeightUu": 150,
+    "_note": "Third-person gameplay pawn spring-arm; matches AWonderlandDogPawn constants (WONDERLAND.md \u00a74). The heroCameras below are separate framing cameras for reference stills, not the gameplay rig.",
+    "_composition": "Boom 420->760uu, pitch -12->-18, socket 90->150uu: the short boom framed the Dog against whatever prop happened to be behind it."
   },
   "heroCameras": [
     {
@@ -31,17 +32,18 @@
       "name": "Arrival Hero (iconic first frame)",
       "location": [
         0,
-        -1240,
-        405
+        -2450,
+        1020
       ],
       "lookAt": [
         0,
-        150,
-        160
+        620,
+        150
       ],
-      "fovDeg": 60,
+      "fovDeg": 62,
       "rollDeg": 0,
-      "note": "The founder's first frame on entering. Dog + violet arcane circle at lower-centre, Golden Build Gate framing the left edge, Great Framing Tree framing the right, boulevard leading the eye north to the Brain. Graded by WONDERLAND_VISUAL_ACCEPTANCE.md \u00a74."
+      "note": "The founder's first frame on entering. Dog + violet arcane circle at lower-centre, Golden Build Gate framing the left edge, Great Framing Tree framing the right, boulevard leading the eye north to the Brain. Graded by WONDERLAND_VISUAL_ACCEPTANCE.md \u00a74.",
+      "_composition": "Pulled back 1240->2450uu and raised 405->1020uu. At the old distance the foreground props were larger in frame than the castle city, which is the opposite of the reference's hierarchy."
     },
     {
       "id": "cam_gate_approach",
