@@ -53,6 +53,8 @@ IMAGE="${IMAGE:-ghcr.io/epicgames/unreal-engine:dev-5.8}"
 ALLOWED_ORIGIN="${ALLOWED_ORIGIN:-https://sunday-relay.vercel.app}"
 QUALITY_PROFILE="${QUALITY_PROFILE:-WONDERLAND_BROWSER_ULTRA}"
 BUILD_URL="${BUILD_URL:-}"
+SRC_URL="${WONDERLAND_SRC_URL:-}"          # tarball of the source; no credential on the VM
+PSI_BRANCH="${WONDERLAND_PSI_BRANCH:-UE5.5}"  # Epic's signalling infra branch
 SIGNALLING_TCP="${SIGNALLING_TCP:-443}"
 TURN_PORT="${TURN_PORT:-3478}"
 UDP_START="${WEBRTC_UDP_START:-50000}"
@@ -190,7 +192,7 @@ create() {
   [ -n "$SERVICE_ACCOUNT" ] && say "  --service-account=${SERVICE_ACCOUNT} \\"
   say "  --scopes=https://www.googleapis.com/auth/cloud-platform \\"
   say "  --metadata-from-file=startup-script=${STARTUP} \\"
-  say "  --metadata=^::^wonderland-image=${IMAGE}::wonderland-allowed-origin=${ALLOWED_ORIGIN}::wonderland-quality=${QUALITY_PROFILE}::wonderland-build-url=${BUILD_URL}::wonderland-max-runtime-min=${MAX_RUNTIME_MIN}::wonderland-idle-min=${IDLE_MIN}::wonderland-signalling-tcp=${SIGNALLING_TCP}::wonderland-turn-port=${TURN_PORT}::wonderland-udp-start=${UDP_START}::wonderland-udp-end=${UDP_END}::ghcr-user=\${GHCR_USER}::ghcr-pat=\${GHCR_PAT}"
+  say "  --metadata=^::^wonderland-image=${IMAGE}::wonderland-allowed-origin=${ALLOWED_ORIGIN}::wonderland-quality=${QUALITY_PROFILE}::wonderland-build-url=${BUILD_URL}::wonderland-max-runtime-min=${MAX_RUNTIME_MIN}::wonderland-idle-min=${IDLE_MIN}::wonderland-signalling-tcp=${SIGNALLING_TCP}::wonderland-turn-port=${TURN_PORT}::wonderland-udp-start=${UDP_START}::wonderland-udp-end=${UDP_END}::wonderland-src-url=${SRC_URL}::wonderland-repo-url=\${WONDERLAND_REPO_URL}::wonderland-psi-branch=${PSI_BRANCH}::ghcr-user=\${GHCR_USER}::ghcr-pat=\${GHCR_PAT}"
   say ""
   say "# The image family above ships the NVIDIA driver and CUDA already, which is"
   say "# the difference that matters versus Vast: there the host provided the"

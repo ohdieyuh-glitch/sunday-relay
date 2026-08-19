@@ -41,6 +41,9 @@ SIG_TCP="$(md wonderland-signalling-tcp)";          SIG_TCP="${SIG_TCP:-443}"
 TURN_PORT="$(md wonderland-turn-port)";             TURN_PORT="${TURN_PORT:-3478}"
 UDP_START="$(md wonderland-udp-start)";             UDP_START="${UDP_START:-50000}"
 UDP_END="$(md wonderland-udp-end)";                 UDP_END="${UDP_END:-50009}"
+REPO_URL="$(md wonderland-repo-url)"
+SRC_URL="$(md wonderland-src-url)"
+PSI_BRANCH="$(md wonderland-psi-branch)"; PSI_BRANCH="${PSI_BRANCH:-UE5.5}"
 GHCR_USER="$(md ghcr-user)"
 GHCR_PAT="$(md ghcr-pat)"
 
@@ -142,6 +145,46 @@ systemctl daemon-reload
 systemctl enable --now wonderland-watchdog.service >/dev/null 2>&1
 log "watchdog armed: stop at ${MAX_RUNTIME_MIN}m runtime or ${IDLE_MIN}m with no viewer"
 
+# ------------------------------------------------ 4b. the source and the server
+# TWO THINGS THE VM CANNOT BUILD OR SERVE WITHOUT, and neither arrives by magic.
+# I had written the serve step to `find` a SignallingWebServer that nothing ever
+# put there, and to build from a $WORK/src that nothing ever populated — both
+# would have failed on a fresh VM with a confusing "not found" rather than an
+# honest "never fetched".
+SRC="$WORK/src"
+if [ ! -d "$SRC/wonderland" ]; then
+  if [ -n "$SRC_URL" ]; then
+    # A tarball over plain HTTPS. Preferred: no credential touches the VM.
+    log "fetching source tarball"
+    mkdir -p "$SRC"
+    curl -fsSL "$SRC_URL" | tar -xz -C "$SRC" --strip-components=1 \
+      && log "source unpacked" || log "source tarball FAILED"
+  elif [ -n "$REPO_URL" ]; then
+    # May embed a token, supplied from the operator's shell at create time —
+    # the same seam as the GHCR pull secret, and for the same reason: it lives
+    # in the operator's environment and never in this repository.
+    log "cloning source"
+    git clone --depth 1 "$REPO_URL" "$SRC" >/dev/null 2>&1 \
+      && log "source cloned" || log "git clone FAILED (private repo needs a token in the URL)"
+  else
+    log "NO SOURCE. Supply wonderland-src-url (tarball, preferred) or"
+    log "  wonderland-repo-url at create time, or push it yourself:"
+    log "  gcloud compute scp --recurse ./wonderland <instance>:$SRC/ --zone <zone>"
+  fi
+fi
+[ -d "$SRC/wonderland" ] && log "source present at $SRC" || log "source absent — build and serve will be skipped"
+
+# The signalling server is a separate Epic repository (public, unlike the engine
+# image). Without it there is nothing for the streamer to connect to.
+PSI="$WORK/PixelStreamingInfrastructure"
+if [ ! -d "$PSI" ]; then
+  log "cloning PixelStreamingInfrastructure ($PSI_BRANCH)"
+  git clone --depth 1 --branch "$PSI_BRANCH" \
+    https://github.com/EpicGames/PixelStreamingInfrastructure.git "$PSI" >/dev/null 2>&1 \
+    && log "signalling infrastructure cloned" \
+    || log "PSI clone FAILED — check the branch name matches the engine version"
+fi
+
 # --------------------------------------------------------- 5. the application
 # Left as the explicit seam to the existing build path rather than duplicated:
 # infra/build/build-wonderland.sh already knows how to build, cook, stage and
@@ -175,7 +218,7 @@ if [ -x "$PKG" ]; then
     log "turnserver started"
   fi
 
-  SIGDIR="$(find / -maxdepth 8 -type d -name SignallingWebServer 2>/dev/null | head -1)"
+  SIGDIR="$(find "$PSI" -maxdepth 4 -type d -name SignallingWebServer 2>/dev/null | head -1)"
   NODE="$(find "${SIGDIR:-/}" -path '*platform_scripts/bash/node/bin/node' 2>/dev/null | head -1)"
   if [ -n "$SIGDIR" ] && [ -n "$NODE" ] && ! pgrep -f '[W]ilbur' >/dev/null 2>&1; then
     # the BUNDLED node, not the system one — the system v12 cannot run Wilbur
