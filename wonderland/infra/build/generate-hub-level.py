@@ -22,6 +22,7 @@
 # resolves only inside the Editor. The design of this file is documented in
 # docs/relay/wonderland/HUB_DESIGN.md.
 
+import io
 import json
 import math
 import os
@@ -147,8 +148,16 @@ def set_prop(actor, cpp_name, value):
 # is what turns the engine checker graybox into a warm-gold, jewel-toned world.
 # name -> (baseRGB, metallic, roughness, emissiveRGB, emissiveStrength)
 MATERIAL_SPEC = {
-    "gold":        ((1.00, 0.78, 0.34), 1.0, 0.26, (0, 0, 0), 0.0),
+    # Pure metal mirrors its surroundings, and around here the surroundings
+    # are grass and sky — so the most golden object in the world rendered
+    # olive. Slightly less metallic, slightly rougher, with a warm emissive
+    # floor so it reads gold in any environment.
+    "gold":        ((1.00, 0.80, 0.38), 0.86, 0.31, (0.30, 0.21, 0.06), 0.60),
     "gold_glow":   ((1.00, 0.80, 0.38), 1.0, 0.24, (1.00, 0.70, 0.25), 1.7),
+    # Aged brass for crevices, undersides and the deep parts of ornament.
+    # Real gilding is dark where it is sheltered and bright where it is
+    # rubbed; one flat tone across every face is the "toy" read.
+    "brass_deep":  ((0.42, 0.30, 0.13), 0.92, 0.52, (0.05, 0.03, 0.00), 0.10),
     "float_glow":  ((1.00, 0.80, 0.40), 1.0, 0.24, (1.00, 0.72, 0.28), 1.9),
     "cobble":      ((0.44, 0.37, 0.31), 0.0, 0.80, (0, 0, 0), 0.0),
     "cobble2":     ((0.50, 0.43, 0.35), 0.0, 0.82, (0, 0, 0), 0.0),
@@ -156,8 +165,14 @@ MATERIAL_SPEC = {
     "moss":        ((0.20, 0.40, 0.16), 0.0, 0.72, (0, 0, 0), 0.0),
     "ground":      ((0.17, 0.30, 0.14), 0.0, 0.86, (0, 0, 0), 0.0),
     "trunk":       ((0.30, 0.20, 0.13), 0.0, 0.78, (0, 0, 0), 0.0),
-    "foliage":     ((0.16, 0.38, 0.17), 0.0, 0.72, (0, 0, 0), 0.0),
+    "foliage":     ((0.23, 0.46, 0.22), 0.0, 0.72, (0, 0, 0), 0.0),
     "foliage_hi":  ((0.38, 0.57, 0.38), 0.0, 0.66, (0, 0, 0), 0.0),
+    # THE RANGE THE ADDENDUM ASKS FOR: deep forest for the shadowed core of
+    # a canopy, spring for the sunlit outside. A cluster built from one green
+    # is a blob however many spheres it has; built from three it has an
+    # inside and an outside, which is what makes it read as leaves.
+    "foliage_deep":((0.09, 0.21, 0.11), 0.0, 0.80, (0, 0, 0), 0.0),
+    "foliage_spr": ((0.50, 0.72, 0.34), 0.0, 0.62, (0, 0, 0), 0.0),
     "rose":        ((0.78, 0.22, 0.36), 0.0, 0.42, (0.18, 0, 0.03), 0.4),
     "rose_pink":   ((0.96, 0.42, 0.62), 0.0, 0.40, (0.10, 0.0, 0.04), 0.3),
     "petal_pink":  ((0.94, 0.40, 0.66), 0.0, 0.38, (0, 0, 0), 0.0),
@@ -188,22 +203,22 @@ MATERIAL_SPEC = {
     # The far meadow that closes the horizon. Soft lilac-green rather than
     # grass-green: at this distance the height fog tints toward the sky, and a
     # saturated green read as a hard band instead of receding.
-    "meadow_far":  ((0.42, 0.52, 0.40), 0.0, 0.92, (0, 0, 0), 0.0),
+    "meadow_far":  ((0.46, 0.53, 0.45), 0.0, 0.94, (0, 0, 0), 0.0),
     # Distant towers, deliberately pale and low-contrast so the skyline recedes
     # behind the hero landmarks instead of competing with them.
     "spire_far":   ((0.88, 0.86, 0.94), 0.0, 0.62, (0, 0, 0), 0.0),
     # Rose and pink rooflines — the reference's skyline is warm, not gold.
-    "roof_rose":   ((0.85, 0.30, 0.42), 0.0, 0.44, (0.05, 0.0, 0.01), 0.15),
+    "roof_rose":   ((0.78, 0.38, 0.44), 0.0, 0.46, (0.04, 0.0, 0.01), 0.10),
     "roof_pink":   ((0.96, 0.58, 0.70), 0.0, 0.42, (0, 0, 0), 0.0),
     # Gills under a mushroom cap: warm shadow, never black.
     "mush_gill":   ((0.80, 0.66, 0.58), 0.0, 0.70, (0, 0, 0), 0.0),
     # Cumulus. Slightly self-lit so the shaded undersides stay soft and
     # bright rather than going grey — stylised cloud, not storm cloud.
-    "cloud":       ((1.00, 1.00, 1.00), 0.0, 1.00, (0.86, 0.89, 0.98), 2.6),
-    "cloud_warm":  ((1.00, 0.97, 0.98), 0.0, 1.00, (0.98, 0.88, 0.92), 2.6),
+    "cloud":       ((1.00, 1.00, 1.00), 0.0, 1.00, (0.94, 0.96, 1.00), 3.6),
+    "cloud_warm":  ((1.00, 0.99, 0.99), 0.0, 1.00, (1.00, 0.95, 0.96), 3.6),
     # A leaf card: thin, matte, and a touch deeper than the blob green so
     # the fanned cards read as separate leaves rather than one mass.
-    "leaf":        ((0.24, 0.44, 0.27), 0.0, 0.74, (0, 0, 0), 0.0),
+    "leaf":        ((0.30, 0.52, 0.30), 0.0, 0.74, (0, 0, 0), 0.0),
     "leaf_hi":     ((0.36, 0.56, 0.34), 0.0, 0.70, (0, 0, 0), 0.0),
 }
 
@@ -289,9 +304,84 @@ def build_audio():
     return out
 
 
-def build_material_library():
+def build_textures():
+    """Generate (once) and import our ORIGINAL procedural PBR maps as Texture2D
+    assets. Provenance: 100% synthesised by wonderland/infra/build/gen-textures.py
+    from integer hashes — no third-party asset, nothing to license or attribute,
+    byte-identical on every rebuild. Returns {name: Texture2D}."""
+    outdir = "/opt/wonderland/textures"
+    gen = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gen-textures.py")
+    try:
+        if not os.path.isfile(os.path.join(outdir, "T_cobble_a.png")):
+            ns = {"__name__": "wl_gen_textures", "__file__": gen}
+            with io.open(gen, encoding="utf8") as fh:
+                exec(compile(fh.read(), gen, "exec"), ns)
+            ns["generate"](outdir)
+    except Exception as e:
+        unreal.log_warning("texture synthesis failed (%s); world keeps flat surfaces" % e)
+        return {}
+
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+    eal = unreal.EditorAssetLibrary
+    names = ["flat_white", "flat_normal", "flat_grey"]
+    for fam in ("cobble", "ashlar", "sward", "bark", "plaster", "roof"):
+        names += ["%s_a" % fam, "%s_n" % fam, "%s_r" % fam]
+
+    out, pending = {}, []
+    for nm in names:
+        asset = "T_" + nm
+        dst = "/Game/Wonderland/Textures/" + asset
+        src = os.path.join(outdir, asset + ".png")
+        if eal.does_asset_exist(dst):
+            out[nm] = eal.load_asset(dst)
+            continue
+        if not os.path.isfile(src):
+            continue
+        t = unreal.AssetImportTask()
+        t.set_editor_property("filename", src)
+        t.set_editor_property("destination_path", "/Game/Wonderland/Textures")
+        t.set_editor_property("destination_name", asset)
+        t.set_editor_property("automated", True)
+        t.set_editor_property("save", True)
+        t.set_editor_property("replace_existing", True)
+        pending.append((nm, dst, t))
+    if pending:
+        try:
+            tools.import_asset_tasks([t for _, _, t in pending])
+        except Exception as e:
+            unreal.log_warning("texture import failed: %s" % e)
+        for nm, dst, _ in pending:
+            if eal.does_asset_exist(dst):
+                out[nm] = eal.load_asset(dst)
+
+    # COLOUR SPACE IS NOT COSMETIC HERE. A normal or roughness map read as sRGB
+    # is silently wrong everywhere, and a roughness map that decodes to 0.22
+    # instead of 0.5 halves the roughness of the ENTIRE palette through the
+    # multiply below. Set it explicitly rather than trusting import heuristics.
+    for nm, tex in out.items():
+        try:
+            if nm.endswith("_n") or nm == "flat_normal":
+                tex.set_editor_property("srgb", False)
+                tex.set_editor_property("compression_settings",
+                                        unreal.TextureCompressionSettings.TC_NORMALMAP)
+            elif nm.endswith("_r") or nm == "flat_grey":
+                tex.set_editor_property("srgb", False)
+                _tcg = getattr(unreal.TextureCompressionSettings, "TC_GRAYSCALE", None)
+                if _tcg is not None:
+                    tex.set_editor_property("compression_settings", _tcg)
+            else:
+                tex.set_editor_property("srgb", True)
+            eal.save_asset(tex.get_path_name())
+        except Exception as e:
+            unreal.log_warning("texture settings on %s skipped: %s" % (nm, e))
+    unreal.log("TEXTURES %d imported: %s" % (len(out), ",".join(sorted(out.keys()))))
+    return out
+
+
+def build_material_library(texs=None):
     """Create (once) the master material + all palette instances, saved as cookable
     assets. Idempotent: re-runs reuse existing assets. Returns name -> instance."""
+    texs = texs or {}
     tools = unreal.AssetToolsHelpers.get_asset_tools()
     mel = unreal.MaterialEditingLibrary
     eal = unreal.EditorAssetLibrary
@@ -317,6 +407,9 @@ def build_material_library():
             return e
 
         bc = param(unreal.MaterialExpressionVectorParameter, "BaseColor", -200, unreal.LinearColor(0.8, 0.6, 0.3, 1))
+        # whatever ends up driving base colour, so a later graft has one handle
+        # to multiply into whether or not the noise below wired successfully
+        _bc_out = bc
         # Procedural world-space NOISE modulates base-colour brightness so every
         # surface has organic variation instead of dead-flat plastic — the single
         # biggest step away from a solid-colour graybox without external textures.
@@ -330,6 +423,7 @@ def build_material_library():
             mel.connect_material_expressions(bc, "", bcmul, "A")
             mel.connect_material_expressions(noise, "", bcmul, "B")
             mel.connect_material_property(bcmul, "", unreal.MaterialProperty.MP_BASE_COLOR)
+            _bc_out = bcmul
         except Exception as _e:
             unreal.log_warning("material noise skipped (%s); flat base colour" % _e)
             mel.connect_material_property(bc, "", unreal.MaterialProperty.MP_BASE_COLOR)
@@ -347,6 +441,7 @@ def build_material_library():
         # the Dog rendered the missing-material checkerboard. The noise emits its
         # multiplier range directly so no add/clamp is needed at all.
         _rough_wired = False
+        _rg_out = rg
         try:
             rn = mel.create_material_expression(master, unreal.MaterialExpressionNoise, -820, 120)
             rn.set_editor_property("scale", 0.05)
@@ -357,6 +452,7 @@ def build_material_library():
             mel.connect_material_expressions(rg, "", rmul, "A")
             mel.connect_material_expressions(rn, "", rmul, "B")
             mel.connect_material_property(rmul, "", unreal.MaterialProperty.MP_ROUGHNESS)
+            _rg_out = rmul
             _rough_wired = True
         except Exception as _e:
             unreal.log_warning("roughness breakup skipped (%s)" % _e)
@@ -372,6 +468,7 @@ def build_material_library():
         # clamp/constant roughness chain and took the whole master down with it.
         # If VectorNoise is unavailable on this engine build the except leaves
         # the graph exactly as it was.
+        _nrm_flat = _nrm_vscaled = None
         try:
             damp = param(unreal.MaterialExpressionScalarParameter, "DetailAmp", 560, 0.30)
             vn = mel.create_material_expression(master, unreal.MaterialExpressionVectorNoise, -820, 340)
@@ -380,6 +477,7 @@ def build_material_library():
             mel.connect_material_expressions(damp, "", vscaled, "B")
             flat = mel.create_material_expression(master, unreal.MaterialExpressionConstant3Vector, -600, 470)
             flat.set_editor_property("constant", unreal.LinearColor(0.0, 0.0, 1.0, 1.0))
+            _nrm_flat, _nrm_vscaled = flat, vscaled
             nadd = mel.create_material_expression(master, unreal.MaterialExpressionAdd, -420, 400)
             mel.connect_material_expressions(flat, "", nadd, "A")
             mel.connect_material_expressions(vscaled, "", nadd, "B")
@@ -390,12 +488,212 @@ def build_material_library():
         except Exception as _e:
             unreal.log_warning("normal detail skipped (%s); flat shading normals" % _e)
 
+        # ---- AUTHORED TEXTURE INPUTS ------------------------------------
+        # Three parameters whose DEFAULTS ARE EXACT NO-OPS: white albedo, flat
+        # normal, mid-grey roughness. Every material that does not bind a map
+        # renders exactly as it did before this pass, which is the only reason
+        # it is safe to touch a master that the whole world inherits.
+        #
+        # UVs are the world XY plane times a per-instance TexScale, so stone
+        # size is authored in centimetres and does not change when a flagstone
+        # is scaled or yawed. That projection is correct for ground surfaces —
+        # which is where the gap was — and vertical surfaces simply do not bind
+        # a map and keep the world-space noise relief below.
+        _uv = None
+        _alb_s = _nrm_s = _rgh_s = None
+        try:
+            _wp = mel.create_material_expression(master, unreal.MaterialExpressionWorldPosition, -1500, -160)
+            _msk = mel.create_material_expression(master, unreal.MaterialExpressionComponentMask, -1330, -160)
+            _msk.set_editor_property("r", True)
+            _msk.set_editor_property("g", True)
+            _msk.set_editor_property("b", False)
+            _msk.set_editor_property("a", False)
+            mel.connect_material_expressions(_wp, "", _msk, "")
+            _tsc = param(unreal.MaterialExpressionScalarParameter, "TexScale", -420, 0.0040)
+            _uv = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -1160, -160)
+            mel.connect_material_expressions(_msk, "", _uv, "A")
+            mel.connect_material_expressions(_tsc, "", _uv, "B")
+
+            # ---- SIDE PROJECTION ------------------------------------------
+            # A pure XY projection is right for the ground and WRONG for
+            # everything standing up: a wall's UV stops changing along its own
+            # height, so the map draws as vertical streaks. Blend in a second
+            # projection, (x+y, z), chosen by how vertical the surface is.
+            #
+            # (x+y) rather than x or y because either alone smears the half of
+            # the walls that face the other axis; the sum varies on both, and
+            # only a wall standing at exactly 45 degrees loses it.
+            try:
+                _mx = mel.create_material_expression(master, unreal.MaterialExpressionComponentMask, -1330, -40)
+                _mx.set_editor_property("r", True)
+                _mx.set_editor_property("g", False)
+                _mx.set_editor_property("b", False)
+                _mx.set_editor_property("a", False)
+                mel.connect_material_expressions(_wp, "", _mx, "")
+                _my = mel.create_material_expression(master, unreal.MaterialExpressionComponentMask, -1330, 40)
+                _my.set_editor_property("r", False)
+                _my.set_editor_property("g", True)
+                _my.set_editor_property("b", False)
+                _my.set_editor_property("a", False)
+                mel.connect_material_expressions(_wp, "", _my, "")
+                _mz = mel.create_material_expression(master, unreal.MaterialExpressionComponentMask, -1330, 120)
+                _mz.set_editor_property("r", False)
+                _mz.set_editor_property("g", False)
+                _mz.set_editor_property("b", True)
+                _mz.set_editor_property("a", False)
+                mel.connect_material_expressions(_wp, "", _mz, "")
+                _sxy = mel.create_material_expression(master, unreal.MaterialExpressionAdd, -1180, 0)
+                mel.connect_material_expressions(_mx, "", _sxy, "A")
+                mel.connect_material_expressions(_my, "", _sxy, "B")
+                _app = mel.create_material_expression(master, unreal.MaterialExpressionAppendVector, -1040, 40)
+                mel.connect_material_expressions(_sxy, "", _app, "A")
+                mel.connect_material_expressions(_mz, "", _app, "B")
+                _uvs = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -900, 40)
+                mel.connect_material_expressions(_app, "", _uvs, "A")
+                mel.connect_material_expressions(_tsc, "", _uvs, "B")
+                # how horizontal is this surface: |normal.z|, sharpened so the
+                # crossover is a narrow band rather than a wide smeared belt
+                _vn2 = mel.create_material_expression(master, unreal.MaterialExpressionVertexNormalWS, -1330, 220)
+                _nz = mel.create_material_expression(master, unreal.MaterialExpressionComponentMask, -1180, 220)
+                _nz.set_editor_property("r", False)
+                _nz.set_editor_property("g", False)
+                _nz.set_editor_property("b", True)
+                _nz.set_editor_property("a", False)
+                mel.connect_material_expressions(_vn2, "", _nz, "")
+                _anz = mel.create_material_expression(master, unreal.MaterialExpressionAbs, -1040, 220)
+                mel.connect_material_expressions(_nz, "", _anz, "")
+                _sh1 = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -900, 220)
+                mel.connect_material_expressions(_anz, "", _sh1, "A")
+                mel.connect_material_expressions(_anz, "", _sh1, "B")
+                _sh2 = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -800, 240)
+                mel.connect_material_expressions(_sh1, "", _sh2, "A")
+                mel.connect_material_expressions(_sh1, "", _sh2, "B")
+                _lrp = mel.create_material_expression(master, unreal.MaterialExpressionLinearInterpolate, -760, 120)
+                mel.connect_material_expressions(_uvs, "", _lrp, "A")
+                mel.connect_material_expressions(_uv, "", _lrp, "B")
+                mel.connect_material_expressions(_sh2, "", _lrp, "Alpha")
+                _uv = _lrp
+                unreal.log("SIDE PROJECTION wired")
+            except Exception as _pe:
+                unreal.log_warning("side projection skipped (%s); ground-only UVs" % _pe)
+
+            def _sampler(pname, texkey, stype, px, py):
+                sm = mel.create_material_expression(
+                    master, unreal.MaterialExpressionTextureSampleParameter2D, px, py)
+                sm.set_editor_property("parameter_name", pname)
+                tx = texs.get(texkey)
+                if tx is not None:
+                    sm.set_editor_property("texture", tx)
+                if stype is not None:
+                    try:
+                        sm.set_editor_property("sampler_type", stype)
+                    except Exception:
+                        pass
+                mel.connect_material_expressions(_uv, "", sm, "UVs")
+                return sm
+
+            # Enum spellings differ across engine versions, and a bad
+            # attribute here would raise while EVALUATING the call arguments —
+            # taking the whole texture block down before a single node exists.
+            def _stype(*candidates):
+                for c in candidates:
+                    v = getattr(unreal.MaterialSamplerType, c, None)
+                    if v is not None:
+                        return v
+                return None
+
+            _alb_s = _sampler("AlbedoTex", "flat_white",
+                              _stype("SAMPLERTYPE_COLOR"), -980, -300)
+            _nrm_s = _sampler("NormalTex", "flat_normal",
+                              _stype("SAMPLERTYPE_NORMAL"), -980, 470)
+            _rgh_s = _sampler("RoughTex", "flat_grey",
+                              _stype("SAMPLERTYPE_LINEAR_GRAYSCALE",
+                                     "SAMPLERTYPE_GRAYSCALE",
+                                     "SAMPLERTYPE_MASKS"), -980, 60)
+            unreal.log("TEXTURE INPUTS wired")
+        except Exception as _e:
+            unreal.log_warning("texture inputs skipped (%s); surfaces stay untextured" % _e)
+
+        # base colour * albedo map (white default = unchanged)
+        if _alb_s is not None:
+            try:
+                _bt = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -160, -260)
+                mel.connect_material_expressions(_bc_out, "", _bt, "A")
+                mel.connect_material_expressions(_alb_s, "", _bt, "B")
+                mel.connect_material_property(_bt, "", unreal.MaterialProperty.MP_BASE_COLOR)
+            except Exception as _e:
+                unreal.log_warning("albedo map not applied: %s" % _e)
+
+        # roughness * (map * 2) — the grey default decodes to 0.5, so *2 = 1.0
+        if _rgh_s is not None:
+            try:
+                _r2 = mel.create_material_expression(master, unreal.MaterialExpressionConstant, -820, 20)
+                _r2.set_editor_property("r", 2.0)
+                _rx = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -640, 40)
+                mel.connect_material_expressions(_rgh_s, "", _rx, "A")
+                mel.connect_material_expressions(_r2, "", _rx, "B")
+                _rf = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -180, 130)
+                mel.connect_material_expressions(_rg_out, "", _rf, "A")
+                mel.connect_material_expressions(_rx, "", _rf, "B")
+                mel.connect_material_property(_rf, "", unreal.MaterialProperty.MP_ROUGHNESS)
+            except Exception as _e:
+                unreal.log_warning("roughness map not applied: %s" % _e)
+
+        # normal map + procedural relief. The flat default IS (0,0,1), which is
+        # precisely the constant the procedural chain was already adding to, so
+        # substituting the sampler for that constant is a no-op until a map is
+        # bound and needs no second code path.
+        if _nrm_s is not None and _nrm_flat is not None:
+            try:
+                _na = mel.create_material_expression(master, unreal.MaterialExpressionAdd, -420, 520)
+                mel.connect_material_expressions(_nrm_s, "", _na, "A")
+                mel.connect_material_expressions(_nrm_vscaled, "", _na, "B")
+                _nn = mel.create_material_expression(master, unreal.MaterialExpressionNormalize, -250, 520)
+                mel.connect_material_expressions(_na, "", _nn, "")
+                mel.connect_material_property(_nn, "", unreal.MaterialProperty.MP_NORMAL)
+            except Exception as _e:
+                unreal.log_warning("normal map not applied: %s" % _e)
+
         em = param(unreal.MaterialExpressionVectorParameter, "Emissive", 300, unreal.LinearColor(0, 0, 0, 1))
         es = param(unreal.MaterialExpressionScalarParameter, "EmissiveStrength", 450, 0.0)
         mul = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -300, 350)
         mel.connect_material_expressions(em, "", mul, "A")
         mel.connect_material_expressions(es, "", mul, "B")
         mel.connect_material_property(mul, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+
+        # ---- RIM / EDGE LIGHT -------------------------------------------
+        # Every surface here is lit by sun plus ambient and nothing else, so a
+        # form is bright where it faces the light and flat everywhere else. It
+        # has no grazing-angle response at all — which is precisely why gold
+        # reads as yellow plastic and a bush reads as one green blob.
+        #
+        # A Fresnel term added into emissive supplies it: gold gets the edge
+        # highlight that separates it from paint, foliage gets the sunlit rim
+        # that separates a leaf cluster's edge from its shadowed interior, and
+        # everything that does not opt in keeps RimAmp at zero and is unchanged.
+        try:
+            fres = mel.create_material_expression(master, unreal.MaterialExpressionFresnel, -820, 560)
+            try:
+                fres.set_editor_property("exponent", 3.4)
+                fres.set_editor_property("base_reflect_fraction", 0.02)
+            except Exception:
+                pass
+            rimc = param(unreal.MaterialExpressionVectorParameter, "RimColor", 640,
+                         unreal.LinearColor(1.0, 0.86, 0.58, 1.0))
+            rima = param(unreal.MaterialExpressionScalarParameter, "RimAmp", 700, 0.0)
+            r1 = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -600, 590)
+            mel.connect_material_expressions(fres, "", r1, "A")
+            mel.connect_material_expressions(rima, "", r1, "B")
+            r2 = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -450, 600)
+            mel.connect_material_expressions(r1, "", r2, "A")
+            mel.connect_material_expressions(rimc, "", r2, "B")
+            rsum = mel.create_material_expression(master, unreal.MaterialExpressionAdd, -180, 420)
+            mel.connect_material_expressions(mul, "", rsum, "A")
+            mel.connect_material_expressions(r2, "", rsum, "B")
+            mel.connect_material_property(rsum, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+            unreal.log("RIM LIGHT wired")
+        except Exception as _e:
+            unreal.log_warning("rim light skipped (%s); no edge response" % _e)
         # BREATHING via World-Position-Offset: vertices pulse along their normal on a
         # Time->Sine wave, scaled by a per-instance BreatheAmp (default 0 = static).
         # The Dogs (and foliage) get amp>0 so they are ALIVE with no skeletal rig —
@@ -457,6 +755,79 @@ def build_material_library():
         mel.set_material_instance_scalar_parameter_value(mi, "EmissiveStrength", es)
         eal.save_asset(mi.get_path_name())
         mats[name] = mi
+    # ---- AUTHORED SURFACES ------------------------------------------------
+    # Only these opt in. TexScale is in 1/uu: 0.0038 puts one 512px sheet across
+    # 263 uu, so a cobble sett lands at about 29 cm — a real one, not a tile the
+    # size of a car. The tint multiplies the map, which is how three ground
+    # materials stay visibly different while sharing one sheet.
+    textured = {
+        "cobble":     ("cobble",  0.0038, (1.06, 1.00, 0.92)),
+        "cobble2":    ("cobble",  0.0031, (0.96, 0.96, 1.00)),
+        "plaza":      ("cobble",  0.0044, (1.02, 0.99, 0.94)),
+        "stone":      ("ashlar",  0.0026, (1.00, 1.00, 1.00)),
+        "ground":     ("sward",   0.0060, (1.00, 1.00, 0.96)),
+        "moss":       ("sward",   0.0110, (0.80, 1.05, 0.78)),
+        # meadow_far deliberately absent: a grass map five kilometres out
+        # averages to one flat saturated lime, which reads WORSE than the
+        # muted sage it replaced. That surface is carried by tint and by
+        # aerial perspective, not by structure the eye can never resolve.
+        "trunk":      ("bark",    0.0090, (1.00, 1.00, 1.00)),
+        "moss":       ("sward",   0.0110, (0.80, 1.05, 0.78)),
+        "spire":      ("plaster", 0.0055, (1.00, 1.00, 1.00)),
+        "spire_pink": ("plaster", 0.0055, (1.02, 0.80, 0.86)),
+        "spire_blue": ("plaster", 0.0055, (0.80, 0.88, 1.04)),
+        "spire_teal": ("plaster", 0.0055, (0.72, 1.00, 0.96)),
+        "roof_rose":  ("roof",    0.0070, (1.00, 1.00, 1.00)),
+        "roof_pink":  ("roof",    0.0070, (1.12, 1.05, 1.05)),
+    }
+    if texs:
+        for nm, (fam, scale, tint) in textured.items():
+            mi = mats.get(nm)
+            if mi is None:
+                continue
+            try:
+                for pname, key in (("AlbedoTex", "%s_a" % fam),
+                                   ("NormalTex", "%s_n" % fam),
+                                   ("RoughTex", "%s_r" % fam)):
+                    tex = texs.get(key)
+                    if tex is not None:
+                        mel.set_material_instance_texture_parameter_value(mi, pname, tex)
+                mel.set_material_instance_scalar_parameter_value(mi, "TexScale", scale)
+                # the map carries the colour now, so the instance tint goes to
+                # roughly white — otherwise base colour and albedo multiply and
+                # every textured surface drops a stop and a half.
+                mel.set_material_instance_vector_parameter_value(
+                    mi, "BaseColor", unreal.LinearColor(tint[0], tint[1], tint[2], 1.0))
+                # authored relief replaces the procedural stand-in on these
+                mel.set_material_instance_scalar_parameter_value(mi, "DetailAmp", 0.06)
+                eal.save_asset(mi.get_path_name())
+            except Exception as _e:
+                unreal.log_warning("texture binding on %s skipped: %s" % (nm, _e))
+    # WHO CATCHES LIGHT ON ITS EDGES. Gold and brass most of all — that edge
+    # highlight is the difference between metal and yellow paint. Foliage next,
+    # in a green-gold so leaf edges look sun-through rather than outlined.
+    # Ceramic a little, for glaze. Everything else stays at zero.
+    rim = {"gold": (1.05, (1.00, 0.84, 0.50)), "gold_glow": (0.90, (1.00, 0.86, 0.54)),
+           "float_glow": (0.85, (1.00, 0.86, 0.54)), "magic_gold": (0.70, (1.00, 0.88, 0.60)),
+           "foliage": (0.60, (0.62, 0.92, 0.38)), "foliage_hi": (0.72, (0.72, 0.98, 0.44)),
+           "foliage_deep": (0.40, (0.48, 0.78, 0.30)),
+           "leaf": (0.66, (0.68, 0.96, 0.42)), "leaf_hi": (0.78, (0.78, 1.00, 0.48)),
+           "porcelain": (0.34, (1.00, 0.97, 0.92)), "crystal": (0.80, (0.80, 0.60, 1.00)),
+           "water": (0.55, (0.72, 0.92, 1.00)), "rose": (0.34, (1.00, 0.60, 0.70)),
+           "rose_pink": (0.38, (1.00, 0.72, 0.82)), "mush_red": (0.30, (1.00, 0.62, 0.56)),
+           "spire": (0.22, (1.00, 0.94, 0.86)), "spire_pink": (0.24, (1.00, 0.90, 0.92)),
+           "stone": (0.16, (1.00, 0.96, 0.88)),
+           "dog_body": (0.42, (0.92, 0.96, 1.00)), "dog_eye": (0.90, (1.00, 0.90, 0.40))}
+    for _nm, (_ra, _rc) in rim.items():
+        if _nm in mats:
+            try:
+                mel.set_material_instance_scalar_parameter_value(mats[_nm], "RimAmp", _ra)
+                mel.set_material_instance_vector_parameter_value(
+                    mats[_nm], "RimColor", unreal.LinearColor(_rc[0], _rc[1], _rc[2], 1.0))
+                eal.save_asset(mats[_nm].get_path_name())
+            except Exception as _e:
+                unreal.log_warning("rim on %s skipped: %s" % (_nm, _e))
+
     # PER-SURFACE RELIEF. One global strength would make porcelain look
     # sandblasted and bark look shrink-wrapped.
     relief = {"porcelain": 0.04, "gold": 0.06, "gold_glow": 0.06, "dog_body": 0.05,
@@ -476,7 +847,9 @@ def build_material_library():
     # Bring the Dogs alive (clear breathe) + a gentle foliage sway; everything else
     # keeps BreatheAmp 0 (static). Live motion in the stream, invisible in a still.
     breathe = {"dog_body": 6.5, "dog_pink": 6.0, "dog_gray": 6.0, "dog_tan": 6.0,
-               "dog_brown": 6.0, "foliage": 3.0, "foliage_hi": 3.5, "petal_pink": 2.5,
+               "dog_brown": 6.0, "foliage": 3.0, "foliage_hi": 3.5,
+               "foliage_deep": 2.4, "foliage_spr": 4.0, "leaf": 3.6, "leaf_hi": 4.2,
+               "petal_pink": 2.5,
                "petal_violet": 2.5, "rose_pink": 2.2, "rose": 2.0}
     for nm, ampv in breathe.items():
         if nm in mats:
@@ -582,7 +955,8 @@ def build(layout):
     level_editor = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
     asset_lib = unreal.EditorAssetLibrary
-    MATS = build_material_library()
+    TEXS = build_textures()
+    MATS = build_material_library(TEXS)
     unreal.log("MATLIB %d materials ready" % len(MATS))
     # Enhanced Input is now built in C++ at runtime (WonderlandDogPawn) — no .uasset
     # authoring needed here (the Python factory API proved unreliable).
@@ -855,6 +1229,59 @@ def build(layout):
             _part("cylinder", x, y, bh + 400.0 * s, 0.05 * s, 0.05 * s, 1.1 * s, "gold", "%s_pole" % label)
             _part("cube", x + 24.0 * s, y, bh + 470.0 * s, 0.02 * s, 0.42 * s, 0.28 * s, roof_mat, "%s_flag" % label)
 
+    def kit_castle(x, y, s, label):
+        """The hero castle that closes the north axis. One dominant silhouette
+        rather than a picket line of identical turrets: a great keep, four corner
+        towers stepped in height, a curtain wall with merlons and a gatehouse.
+        The reference's skyline reads as a CITY because it has a subject; a ring
+        of equal towers reads as a fence."""
+        wall_r = 620.0 * s
+        # curtain wall: 20 segments around a circle, with merlons on top
+        for i in range(20):
+            a = i * (2.0 * math.pi / 20.0)
+            wx, wy = x + math.cos(a) * wall_r, y + math.sin(a) * wall_r
+            _part("cube", wx, wy, 150.0 * s, 2.1 * s, 0.62 * s, 3.0 * s, "spire_far",
+                  "%s_wall%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
+            _part("cube", wx, wy, 320.0 * s, 2.1 * s, 0.74 * s, 0.34 * s, "spire_far",
+                  "%s_walk%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
+            for k in (-1, 1):
+                _part("cube", wx + math.cos(a + 1.5708) * 46.0 * s * k,
+                      wy + math.sin(a + 1.5708) * 46.0 * s * k, 360.0 * s,
+                      0.42 * s, 0.42 * s, 0.5 * s, "spire_far",
+                      "%s_merl%d_%d" % (label, i, k))
+        # four corner towers, stepped so the mass is not symmetrical
+        for i, (ca, cs) in enumerate(((0.6, 1.30), (2.0, 1.05), (3.5, 1.22), (5.1, 0.95))):
+            kit_spire(x + math.cos(ca) * wall_r, y + math.sin(ca) * wall_r, s * cs,
+                      "%s_ctow%d" % (label, i), body_mat="spire_far",
+                      roof_mat="roof_rose" if i % 2 else "roof_pink", flag=(i % 2 == 0))
+        # gatehouse facing the plaza
+        for k in (-1, 1):
+            kit_spire(x + k * 190.0 * s, y - wall_r, s * 0.85, "%s_gate%d" % (label, k),
+                      body_mat="spire_far", roof_mat="roof_pink", flag=False)
+        # the KEEP: a broad drum, a machicolated band, a taller inner tower
+        _part("cylinder", x, y, 230.0 * s, 3.6 * s, 3.6 * s, 4.6 * s, "spire_far",
+              "%s_keep" % label)
+        _part("cylinder", x, y, 470.0 * s, 4.1 * s, 4.1 * s, 0.42 * s, "spire_far",
+              "%s_machic" % label)
+        for i in range(16):
+            a = i * (2.0 * math.pi / 16.0)
+            _part("cube", x + math.cos(a) * 195.0 * s, y + math.sin(a) * 195.0 * s,
+                  520.0 * s, 0.5 * s, 0.5 * s, 0.62 * s, "spire_far",
+                  "%s_kmerl%d" % (label, i))
+        kit_spire(x, y, s * 1.85, "%s_donjon" % label, body_mat="spire_far",
+                  roof_mat="roof_rose", flag=True)
+        # a great dome beside the donjon, so the mass is not all cones
+        kit_dome(x - 300.0 * s, y + 210.0 * s, 460.0 * s, 300.0 * s, "%s_dome" % label,
+                 mat="spire_far", rib="roof_pink")
+        # flanking halls so the base is a MASS, not a stick
+        for k, (hx, hy, hs, hr) in enumerate(((-1.0, -0.35, 1.6, 0.0), (1.0, -0.15, 1.9, 0.0),
+                                              (-0.55, 0.75, 1.4, 0.0), (0.7, 0.8, 1.5, 0.0))):
+            bx, by = x + hx * 380.0 * s, y + hy * 380.0 * s
+            _part("cube", bx, by, 120.0 * s, hs * s, hs * 0.7 * s, 2.4 * s, "spire_far",
+                  "%s_hall%d" % (label, k))
+            _part("cone", bx, by, 330.0 * s, hs * 1.15 * s, hs * 0.85 * s, 1.5 * s,
+                  "roof_rose" if k % 2 else "roof_pink", "%s_hallroof%d" % (label, k))
+
     def kit_teacup(x, y, s, label):
         _part("cylinder", x, y, 8.0 * s, 2.4 * s, 2.4 * s, 0.16 * s, "porcelain", "%s_saucer" % label)
         _part("cylinder", x, y, 78.0 * s, 1.5 * s, 1.5 * s, 1.3 * s, "porcelain", "%s_body" % label)
@@ -911,6 +1338,383 @@ def build(layout):
                                              (0.2, -0.4, 0.2, 210), (-0.2, -0.3, 0.28, 180)]):
             _part("sphere", x + ox * 180, y + oy * 180, bz + oz * 180, d / 100.0, d / 100.0, d / 100.0,
                   "magic_cyan", "%s_lobe%d" % (label, i))
+
+    def kit_observatory(x, y, z, label):
+        """The Project Brain Observatory: the building that closes the north axis.
+
+        This is the one landmark the hero camera looks directly at, and it was a
+        plinth with five spheres balanced on it. A domed observatory gives the
+        axis something to arrive at — and the Brain reads better suspended in an
+        oculus than floating in open air, because the architecture around it is
+        what gives it scale."""
+        S = 1.0
+        # --- stepped stylobate ------------------------------------------
+        for k, (rr, hh) in enumerate(((7.4, 0.60), (6.8, 0.56), (6.2, 0.52))):
+            _part("cylinder", x, y, 26.0 + k * 52.0, rr * S, rr * S, hh * S,
+                  "stone", "%s_step%d" % (label, k))
+        base_z = 190.0
+        # --- peristyle: sixteen columns, each with base, shaft, capital --
+        col_r = 520.0
+        for i in range(16):
+            a = i * (2.0 * math.pi / 16.0)
+            cx, cy = x + math.cos(a) * col_r, y + math.sin(a) * col_r
+            _part("cylinder", cx, cy, base_z + 22.0, 0.62, 0.62, 0.44, "stone",
+                  "%s_cbase%d" % (label, i))
+            _part("cylinder", cx, cy, base_z + 240.0, 0.44, 0.44, 4.0, "spire",
+                  "%s_col%d" % (label, i))
+            _part("cylinder", cx, cy, base_z + 452.0, 0.60, 0.60, 0.34, "stone",
+                  "%s_ccap%d" % (label, i))
+        arch_z = base_z + 490.0
+        # --- architrave + frieze ring -----------------------------------
+        for i in range(16):
+            a = (i + 0.5) * (2.0 * math.pi / 16.0)
+            ax, ay = x + math.cos(a) * col_r, y + math.sin(a) * col_r
+            _part("cube", ax, ay, arch_z, 2.15, 0.78, 0.42, "stone",
+                  "%s_arch%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
+            _part("cube", ax, ay, arch_z + 54.0, 2.05, 0.66, 0.34, "gold",
+                  "%s_frieze%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
+        dome_z = arch_z + 88.0
+        # --- ribbed dome -------------------------------------------------
+        R = col_r * 1.02
+        for i in range(14):
+            a = i * (2.0 * math.pi / 14.0)
+            for k in range(7):
+                t = (k + 0.5) / 7.0
+                ang = t * (math.pi * 0.46)
+                rr = R * math.cos(ang)
+                zz = dome_z + math.sin(ang) * R * 0.86
+                _part("cube", x + math.cos(a) * rr, y + math.sin(a) * rr, zz,
+                      0.30, 0.30, 0.46, "spire", "%s_rib%d_%d" % (label, i, k),
+                      rot=(0.0, math.degrees(ang), math.degrees(a)))
+        # dome shell between the ribs, as three latitude bands
+        for b, t in enumerate((0.12, 0.40, 0.68)):
+            ang = t * (math.pi * 0.46)
+            rr = R * math.cos(ang)
+            zz = dome_z + math.sin(ang) * R * 0.86
+            for i in range(20):
+                a = (i + 0.5) * (2.0 * math.pi / 20.0)
+                _part("cube", x + math.cos(a) * rr, y + math.sin(a) * rr, zz,
+                      rr / 300.0, 0.42, 0.44, "spire_pink" if b == 1 else "spire",
+                      "%s_shell%d_%d" % (label, b, i),
+                      rot=(0.0, 0.0, math.degrees(a) + 90.0))
+        oc_z = dome_z + R * 0.86
+        # --- gold oculus ring -------------------------------------------
+        for i in range(18):
+            a = i * (2.0 * math.pi / 18.0)
+            _part("cube", x + math.cos(a) * 190.0, y + math.sin(a) * 190.0, oc_z,
+                  0.72, 0.30, 0.26, "gold", "%s_oc%d" % (label, i),
+                  rot=(0.0, 0.0, math.degrees(a) + 90.0))
+        # --- THE BRAIN: folded lobes, not a bag of balls ------------------
+        bz = oc_z + 230.0
+        for hemi in (-1, 1):
+            for g in range(4):                      # four gyri per hemisphere
+                for k in range(9):
+                    t = k / 8.0
+                    # a folded ridge: sweeps front-to-back while it undulates
+                    ang = -1.15 + t * 2.30
+                    fold = math.sin(t * 9.0 + g * 1.7) * 0.24
+                    rr = 210.0 * (0.62 + 0.30 * math.cos(ang * 0.9))
+                    px = x + hemi * (58.0 + rr * 0.30 * abs(math.sin(ang)))
+                    py = y + math.sin(ang) * rr
+                    pz = bz + math.cos(ang) * rr * 0.80 + fold * 120.0 + g * 34.0 - 50.0
+                    _part("sphere", px, py, pz, 0.62, 0.62, 0.62, "magic_cyan",
+                          "%s_gyr%d_%d_%d" % (label, hemi, g, k))
+        _part("cylinder", x, y, bz - 190.0, 0.5, 0.5, 1.5, "magic_cyan", "%s_stem" % label)
+        # --- armillary rings turning around it ---------------------------
+        for r_i, (tilt, rad, mat) in enumerate(((0.0, 430.0, "gold"),
+                                                (62.0, 380.0, "gold_glow"),
+                                                (118.0, 340.0, "gold"))):
+            for i in range(22):
+                a = i * (2.0 * math.pi / 22.0)
+                ux, uy = math.cos(a) * rad, math.sin(a) * rad
+                tr = math.radians(tilt)
+                py = uy * math.cos(tr)
+                pz = uy * math.sin(tr)
+                _part("cube", x + ux, y + py, bz + pz, 0.36, 0.13, 0.13, mat,
+                      "%s_arm%d_%d" % (label, r_i, i),
+                      rot=(tilt, 0.0, math.degrees(a) + 90.0))
+        # --- approach: flanking stairs and two obelisks -------------------
+        for k in range(4):
+            _part("cube", x, y - (620.0 + k * 78.0), 24.0 - k * 5.0,
+                  (3.4 - k * 0.22), 0.40, 0.13, "stone", "%s_stair%d" % (label, k))
+        for sx in (-1, 1):
+            ox = x + sx * 840.0
+            _part("cube", ox, y - 520.0, 60.0, 0.80, 0.80, 1.2, "stone", "%s_obb%d" % (label, sx))
+            _part("cube", ox, y - 520.0, 340.0, 0.52, 0.52, 4.4, "spire", "%s_ob%d" % (label, sx))
+            _part("cone", ox, y - 520.0, 600.0, 0.62, 0.62, 1.1, "gold", "%s_obt%d" % (label, sx))
+
+    def kit_clock_tower(x, y, s, label):
+        """A TOWER. The layout has specified one here from the beginning and the
+        dispatcher sent it to kit_clock, which builds a floating clock FACE — so
+        for every build so far there has been a disc hanging in the air where a
+        tower belongs. Plinth, buttresses, three tapering stages with string
+        courses, a belfry with real arched openings, four clock faces, cornice,
+        octagonal spire and a weathervane."""
+        w0 = 130.0 * s
+        # plinth + corbelled buttresses at the corners
+        _part("cube", x, y, 34.0 * s, w0 * 1.42 / 50.0, w0 * 1.42 / 50.0, 0.68 * s,
+              "stone", "%s_plinth" % label)
+        for cx_, cy_ in ((-1, -1), (-1, 1), (1, -1), (1, 1)):
+            for k in range(3):
+                bw = (0.62 - k * 0.16) * s
+                _part("cube", x + cx_ * w0 * 0.86, y + cy_ * w0 * 0.86,
+                      (90.0 + k * 150.0) * s, bw, bw, 1.5 * s, "stone",
+                      "%s_butt%d%d_%d" % (label, cx_, cy_, k))
+        # three tapering stages with a string course between each
+        zc = 70.0 * s
+        for st, (ww, hh, mat) in enumerate(((1.00, 3.4, "spire"), (0.90, 3.0, "spire"),
+                                            (0.82, 2.6, "spire"))):
+            _part("cube", x, y, zc + hh * 50.0 * s, w0 * ww / 50.0, w0 * ww / 50.0, hh * s,
+                  mat, "%s_stage%d" % (label, st))
+            zc += hh * 100.0 * s
+            _part("cube", x, y, zc, w0 * (ww + 0.14) / 50.0, w0 * (ww + 0.14) / 50.0, 0.20 * s,
+                  "stone", "%s_course%d" % (label, st))
+            # a tall lancet window on each face of each stage
+            for f in range(4):
+                fa = f * (math.pi / 2.0)
+                _part("cube", x + math.cos(fa) * w0 * ww * 1.01, y + math.sin(fa) * w0 * ww * 1.01,
+                      zc - hh * 52.0 * s, 0.16 * s, 0.30 * s, hh * 0.42 * s, "dog_visor",
+                      "%s_lan%d_%d" % (label, st, f), rot=(0.0, math.degrees(fa), 0.0))
+        # BELFRY: four openings that are actually arched
+        bh = 3.0 * s
+        _part("cube", x, y, zc + bh * 50.0 * s, w0 * 0.80 / 50.0, w0 * 0.80 / 50.0, bh * s,
+              "spire", "%s_belfry" % label)
+        for f in range(4):
+            fa = f * (math.pi / 2.0)
+            ox, oy = math.cos(fa) * w0 * 0.81, math.sin(fa) * w0 * 0.81
+            for k in range(7):
+                t = (k + 0.5) / 7.0
+                ang = math.pi * t
+                ax = math.cos(math.pi - ang) * w0 * 0.34
+                az = zc + bh * 62.0 * s + math.sin(ang) * w0 * 0.30
+                _part("cube", x + ox - math.sin(fa) * ax, y + oy + math.cos(fa) * ax, az,
+                      0.16 * s, 0.16 * s, 0.16 * s, "stone",
+                      "%s_barch%d_%d" % (label, f, k), rot=(0.0, math.degrees(fa), 0.0))
+            for b in range(3):
+                _part("cube", x + ox, y + oy, zc + bh * (26.0 + b * 16.0) * s,
+                      0.56 * s, 0.10 * s, 0.10 * s, "trunk",
+                      "%s_louvre%d_%d" % (label, f, b), rot=(0.0, math.degrees(fa), 0.0))
+        zc += bh * 100.0 * s
+        # CLOCK STAGE: four faces
+        ch = 2.2 * s
+        _part("cube", x, y, zc + ch * 50.0 * s, w0 * 0.86 / 50.0, w0 * 0.86 / 50.0, ch * s,
+              "spire_pink", "%s_clockstage" % label)
+        fz = zc + ch * 52.0 * s
+        for f in range(4):
+            fa = f * (math.pi / 2.0)
+            nx, ny = math.cos(fa), math.sin(fa)
+            ox, oy = nx * w0 * 0.88, ny * w0 * 0.88
+            _part("cylinder", x + ox, y + oy, fz, 0.90 * s, 0.90 * s, 0.10 * s, "gold",
+                  "%s_case%d" % (label, f), rot=(90.0, math.degrees(fa), 0.0))
+            _part("cylinder", x + ox + nx * 6.0 * s, y + oy + ny * 6.0 * s, fz,
+                  0.74 * s, 0.74 * s, 0.07 * s, "porcelain", "%s_face%d" % (label, f),
+                  rot=(90.0, math.degrees(fa), 0.0))
+            for m in range(12):
+                ma = m * (2.0 * math.pi / 12.0)
+                _part("cube", x + ox + nx * 9.0 * s - ny * math.sin(ma) * 30.0 * s,
+                      y + oy + ny * 9.0 * s + nx * math.sin(ma) * 30.0 * s,
+                      fz + math.cos(ma) * 30.0 * s,
+                      0.06 * s, 0.06 * s, 0.11 * s if m % 3 == 0 else 0.06 * s,
+                      "dog_visor", "%s_mk%d_%d" % (label, f, m), rot=(0.0, math.degrees(fa), 0.0))
+            # hands, each face at its own hour so the tower reads as ornamental
+            _part("cube", x + ox + nx * 11.0 * s, y + oy + ny * 11.0 * s, fz + 12.0 * s,
+                  0.05 * s, 0.05 * s, 0.24 * s, "dog_visor", "%s_min%d" % (label, f),
+                  rot=(float(f * 24), math.degrees(fa), 0.0))
+            _part("cube", x + ox + nx * 11.0 * s - ny * 9.0 * s, y + oy + ny * 11.0 * s + nx * 9.0 * s,
+                  fz, 0.18 * s, 0.05 * s, 0.05 * s, "dog_visor", "%s_hr%d" % (label, f),
+                  rot=(0.0, math.degrees(fa), 0.0))
+            _part("sphere", x + ox + nx * 12.0 * s, y + oy + ny * 12.0 * s, fz,
+                  0.10 * s, 0.10 * s, 0.10 * s, "gold_glow", "%s_hub%d" % (label, f))
+        zc += ch * 100.0 * s
+        # cornice with modillions
+        _part("cube", x, y, zc + 14.0 * s, w0 * 1.10 / 50.0, w0 * 1.10 / 50.0, 0.30 * s,
+              "stone", "%s_cornice" % label)
+        for m in range(16):
+            ma = m * (2.0 * math.pi / 16.0)
+            _part("cube", x + math.cos(ma) * w0 * 1.02, y + math.sin(ma) * w0 * 1.02,
+                  zc - 6.0 * s, 0.15 * s, 0.15 * s, 0.22 * s, "stone",
+                  "%s_mod%d" % (label, m))
+        # OCTAGONAL SPIRE
+        for f in range(8):
+            fa = f * (math.pi / 4.0) + 0.3927
+            for k in range(5):
+                t = (k + 0.5) / 5.0
+                rr = w0 * 0.92 * (1.0 - t)
+                _part("cube", x + math.cos(fa) * rr * 0.62, y + math.sin(fa) * rr * 0.62,
+                      zc + 40.0 * s + t * 420.0 * s,
+                      rr / 90.0 + 0.06, 0.20 * s, 1.0 * s,
+                      "roof_rose" if f % 2 else "roof_pink",
+                      "%s_sp%d_%d" % (label, f, k), rot=(0.0, 0.0, math.degrees(fa)))
+        _part("cylinder", x, y, zc + 500.0 * s, 0.18 * s, 0.18 * s, 0.9 * s, "gold",
+              "%s_finpole" % label)
+        _part("sphere", x, y, zc + 560.0 * s, 0.26 * s, 0.26 * s, 0.26 * s, "gold_glow",
+              "%s_finial" % label)
+        # weathervane
+        _part("cube", x, y, zc + 610.0 * s, 1.05 * s, 0.05 * s, 0.05 * s, "gold",
+              "%s_vane" % label, rot=(0.0, 0.0, 34.0))
+        _part("cone", x + 46.0 * s, y + 31.0 * s, zc + 610.0 * s, 0.22 * s, 0.22 * s, 0.34 * s,
+              "gold", "%s_vanetip" % label, rot=(0.0, 90.0, 34.0))
+        # ivy and a door at the foot, so it is planted rather than dropped
+        for k in range(10):
+            t = k / 9.0
+            a = t * 6.6
+            _part("sphere", x + math.cos(a) * w0 * 1.06, y + math.sin(a) * w0 * 1.06,
+                  40.0 * s + t * 520.0 * s, 0.30 * s, 0.30 * s, 0.30 * s,
+                  "foliage" if k % 2 else "foliage_hi", "%s_ivy%d" % (label, k))
+        _part("cube", x, y - w0 * 1.03, 105.0 * s, 0.50 * s, 0.12 * s, 1.6 * s, "trunk",
+              "%s_door" % label)
+        _part("sphere", x + 14.0 * s, y - w0 * 1.10, 105.0 * s, 0.07 * s, 0.07 * s, 0.07 * s,
+              "gold", "%s_knob" % label)
+
+    def kit_bench(x, y, yaw, label):
+        """A garden bench. The placeholder was one cube, and bench_arrival sits
+        ten metres from the hero camera — so the placeholder was a prominent
+        white box in the most important frame in the world."""
+        ry = math.radians(yaw)
+        fx, fy = math.cos(ry), math.sin(ry)          # forward
+        sx, sy = -fy, fx                             # sideways along the seat
+        for e in (-1, 1):
+            ex, ey = x + sx * 78.0 * e, y + sy * 78.0 * e
+            for lz, lo in ((21.0, 0.42), (21.0, -0.42)):
+                _part("cube", ex + fx * lo * 60.0, ey + fy * lo * 60.0, lz,
+                      0.13, 0.13, 0.42, "trunk", "%s_leg%d_%d" % (label, e, int(lo * 10)))
+            _part("cube", ex, ey, 45.0, 0.62, 0.14, 0.10, "trunk",
+                  "%s_rail%d" % (label, e), rot=(0.0, 0.0, yaw))
+            # arm rest
+            _part("cube", ex, ey, 62.0, 0.66, 0.11, 0.09, "trunk",
+                  "%s_arm%d" % (label, e), rot=(0.0, 0.0, yaw))
+            _part("cube", ex + fx * 26.0, ey + fy * 26.0, 54.0, 0.10, 0.10, 0.28, "trunk",
+                  "%s_armpost%d" % (label, e), rot=(0.0, 0.0, yaw))
+        for k in range(4):                            # seat slats
+            off = (k - 1.5) * 17.0
+            _part("cube", x + fx * off, y + fy * off, 50.0, 1.62, 0.14, 0.055, "trunk",
+                  "%s_seat%d" % (label, k), rot=(0.0, 0.0, yaw))
+        for k in range(3):                            # back slats, leaning back
+            _part("cube", x - fx * 32.0, y - fy * 32.0, 74.0 + k * 20.0, 1.62, 0.10, 0.10,
+                  "trunk", "%s_back%d" % (label, k), rot=(0.0, -12.0, yaw))
+        for e in (-1, 1):                             # back uprights
+            _part("cube", x + sx * 74.0 * e - fx * 30.0, y + sy * 74.0 * e - fy * 30.0,
+                  74.0, 0.12, 0.12, 0.80, "trunk", "%s_up%d" % (label, e),
+                  rot=(0.0, -12.0, yaw))
+
+    def kit_dome(x, y, z, r, label, mat="spire", rib="gold"):
+        """A ribbed dome. The skyline reference is not all cones."""
+        for i in range(10):
+            a = i * (2.0 * math.pi / 10.0)
+            for k in range(5):
+                t = (k + 0.5) / 5.0
+                ang = t * (math.pi * 0.48)
+                rr = r * math.cos(ang)
+                _part("cube", x + math.cos(a) * rr, y + math.sin(a) * rr,
+                      z + math.sin(ang) * r * 0.90,
+                      r / 300.0, r / 320.0, r / 190.0, mat,
+                      "%s_dm%d_%d" % (label, i, k), rot=(0.0, math.degrees(ang), math.degrees(a)))
+            _part("cube", x + math.cos(a) * r * 0.72, y + math.sin(a) * r * 0.72,
+                  z + r * 0.58, r / 420.0, r / 420.0, r / 130.0, rib,
+                  "%s_rib%d" % (label, i), rot=(0.0, 42.0, math.degrees(a)))
+        _part("cylinder", x, y, z + r * 0.94, r / 190.0, r / 190.0, r / 260.0, rib,
+              "%s_drum" % label)
+        _part("cone", x, y, z + r * 1.16, r / 150.0, r / 150.0, r / 130.0, rib, "%s_tip" % label)
+
+    def kit_towerblock(x, y, s, label, body="spire_far", roof="roof_pink"):
+        """Four to six towers on a shared podium, linked by bridges, one domed.
+
+        A ring of single spires reads as chess pieces on a board. A city reads as
+        a city because its towers OVERLAP — near ones cutting across far ones,
+        roofs at different heights, walls and bridges tying the mass together."""
+        # podium the whole block stands on
+        _part("cube", x, y, 90.0 * s, 5.4 * s, 4.4 * s, 1.8 * s, body, "%s_pod" % label,
+              rot=(0.0, 0.0, float((int(x) * 7) % 40) - 20.0))
+        placed = []
+        n = 4 + (int(abs(x) + abs(y)) % 3)
+        for i in range(n):
+            a = i * 2.39996 + (x + y) * 0.0001
+            rr = (60.0 + 150.0 * ((i * 13) % 4) / 4.0) * s
+            tx, ty = x + math.cos(a) * rr, y + math.sin(a) * rr
+            ts = s * (0.62 + 0.52 * ((i * 7) % 5) / 5.0)
+            if i == 1:
+                # one domed hall instead of a spire, for silhouette variety
+                _part("cylinder", tx, ty, 190.0 * ts, 2.3 * ts, 2.3 * ts, 3.4 * ts, body,
+                      "%s_hall%d" % (label, i))
+                kit_dome(tx, ty, 360.0 * ts, 220.0 * ts, "%s_dome%d" % (label, i),
+                         mat=body, rib=roof)
+            else:
+                kit_spire(tx, ty, ts, "%s_t%d" % (label, i), body_mat=body,
+                          roof_mat=roof if i % 2 else "roof_rose", flag=(i == 0))
+            placed.append((tx, ty, ts))
+        # BRIDGES between the first pairs of towers: the strongest "city" cue
+        for i in range(len(placed) - 1):
+            ax, ay, asz = placed[i]
+            bx, by, bsz = placed[i + 1]
+            mx, my = (ax + bx) * 0.5, (ay + by) * 0.5
+            dx, dy = bx - ax, by - ay
+            ln = math.hypot(dx, dy)
+            if ln < 1.0 or i > 1:
+                continue
+            yaw = math.degrees(math.atan2(dy, dx))
+            bz = 300.0 * min(asz, bsz)
+            _part("cube", mx, my, bz, ln / 200.0, 0.30 * s, 0.22 * s, body,
+                  "%s_br%d" % (label, i), rot=(0.0, 0.0, yaw))
+            for k in range(5):                       # bridge arcade
+                t = (k + 0.5) / 5.0
+                _part("cube", ax + dx * t, ay + dy * t, bz + 34.0 * s,
+                      0.16 * s, 0.16 * s, 0.30 * s, body, "%s_brp%d_%d" % (label, i, k))
+        # a curtain of low roofs filling the gaps between the towers
+        for k in range(6):
+            a = k * (2.0 * math.pi / 6.0) + 0.5
+            rx, ry = x + math.cos(a) * 210.0 * s, y + math.sin(a) * 210.0 * s
+            hh = (60.0 + 40.0 * ((k * 5) % 3)) * s
+            _part("cube", rx, ry, hh * 0.5 + 90.0 * s, 1.5 * s, 1.1 * s, hh / 100.0, body,
+                  "%s_low%d" % (label, k), rot=(0.0, 0.0, math.degrees(a)))
+            _part("cone", rx, ry, hh + 130.0 * s, 1.8 * s, 1.35 * s, 1.0 * s,
+                  "roof_rose" if k % 2 else roof, "%s_lowr%d" % (label, k),
+                  rot=(0.0, 0.0, math.degrees(a)))
+
+    def kit_bed(cx, cy, r, label, palette=("petal_violet", "rose_pink", "petal_pink")):
+        """A landscaped garden bed with a RAISED STONE BORDER. The addendum asks
+        for exactly this: planting held inside a kerb rather than scattered onto
+        open lawn, which is the difference between a garden and a field."""
+        n = max(10, int(r / 26.0))
+        for i in range(n):
+            a = i * (2.0 * math.pi / n)
+            _part("cube", cx + math.cos(a) * r, cy + math.sin(a) * r, 17.0,
+                  (2.0 * math.pi * r / n) / 88.0, 0.30, 0.34, "stone",
+                  "%s_kerb%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
+            if i % 3 == 0:                            # moss where kerb meets soil
+                _part("sphere", cx + math.cos(a) * (r - 22.0), cy + math.sin(a) * (r - 22.0),
+                      8.0, 0.22, 0.22, 0.07, "moss", "%s_moss%d" % (label, i))
+        # soil, then dense planting inside it
+        _part("cylinder", cx, cy, 12.0, r / 47.0, r / 47.0, 0.20, "trunk", "%s_soil" % label)
+        cnt = max(9, int((r * r) / 1400.0))
+        for i in range(cnt):
+            a = i * 2.39996
+            rr = r * 0.86 * math.sqrt((i + 0.5) / cnt)
+            px, py = cx + math.cos(a) * rr, cy + math.sin(a) * rr
+            hh = 26.0 + (i % 4) * 13.0
+            _part("cylinder", px, py, 20.0 + hh * 0.5, 0.05, 0.05, hh / 100.0,
+                  "foliage_deep" if i % 3 else "foliage", "%s_stem%d" % (label, i))
+            _part("sphere", px, py, 24.0 + hh, 0.22, 0.22, 0.20,
+                  palette[i % len(palette)], "%s_bloom%d" % (label, i))
+            if i % 5 == 0:
+                _part("sphere", px + 9.0, py - 7.0, 20.0, 0.26, 0.26, 0.12,
+                      "foliage_spr", "%s_leaf%d" % (label, i))
+
+    def kit_root(x, y, ang, length, thick, label):
+        """A buttress root: an arc that leaves the trunk high, dips, and enters
+        the ground. Roots breaking the surface are what stop a big tree looking
+        like a cylinder standing on a lawn."""
+        segs = 8
+        for k in range(segs):
+            t = (k + 0.5) / segs
+            rr = length * t
+            zz = thick * 140.0 * (1.0 - t) ** 1.7 + 6.0
+            th = thick * (1.0 - 0.62 * t)
+            _part("sphere", x + math.cos(ang) * rr, y + math.sin(ang) * rr, zz,
+                  th * 1.5, th, th * 1.1, "trunk", "%s_r%d" % (label, k),
+                  rot=(0.0, 0.0, math.degrees(ang)))
+            if k % 3 == 1:                             # moss on the shaded side
+                _part("sphere", x + math.cos(ang) * rr, y + math.sin(ang) * rr, zz + th * 40.0,
+                      th * 0.8, th * 0.7, th * 0.3, "moss", "%s_m%d" % (label, k))
 
     def kit_plaza(x, y):
         # The Dog's Relay-identity stage: a glowing VIOLET arcane circle of concentric
@@ -1028,13 +1832,171 @@ def build(layout):
         _part("sphere", x, y, z + 84, 0.3, 0.3, 0.3, "gold_glow", "%s_knob" % label)
 
     def kit_fountain(x, y, label):
-        # Tiered stone fountain with water discs + a glowing finial.
-        _part("cylinder", x, y, 22.0, 3.8, 3.8, 0.44, "stone", "%s_basin" % label)
-        _part("cylinder", x, y, 46.0, 3.4, 3.4, 0.10, "water", "%s_pool" % label)
-        _part("cylinder", x, y, 120.0, 0.7, 0.7, 1.5, "stone", "%s_column" % label)
-        _part("cylinder", x, y, 205.0, 1.9, 1.9, 0.40, "stone", "%s_tier" % label)
-        _part("cylinder", x, y, 228.0, 1.6, 1.6, 0.10, "water", "%s_tierpool" % label)
-        _part("sphere", x, y, 258.0, 0.55, 0.55, 0.55, "gold_glow", "%s_finial" % label)
+        """A real fountain. The old one was five stacked cylinders, which is a
+        cake stand. Water is the only reason to build a fountain: this one has a
+        masonry basin with a carved rim, jets that ARC, spray where they land,
+        lilies on the water and a heart-shaped upper bowl."""
+        # octagonal masonry basin
+        for i in range(16):
+            a = i * (2.0 * math.pi / 16.0)
+            _part("cube", x + math.cos(a) * 385.0, y + math.sin(a) * 385.0, 34.0,
+                  1.60, 0.62, 0.68, "stone", "%s_wall%d" % (label, i),
+                  rot=(0.0, 0.0, math.degrees(a) + 90.0))
+            _part("cube", x + math.cos(a) * 385.0, y + math.sin(a) * 385.0, 72.0,
+                  1.66, 0.80, 0.16, "stone", "%s_rim%d" % (label, i),
+                  rot=(0.0, 0.0, math.degrees(a) + 90.0))
+            if i % 2 == 0:                                  # carved rosettes
+                _part("sphere", x + math.cos(a) * 400.0, y + math.sin(a) * 400.0, 50.0,
+                      0.20, 0.12, 0.20, "gold", "%s_ros%d" % (label, i))
+        _part("cylinder", x, y, 58.0, 3.62, 3.62, 0.16, "water", "%s_pool" % label)
+        # lily pads and blooms on the water
+        for i in range(9):
+            a = i * 2.39996
+            r = 120.0 + 190.0 * ((i * 7) % 5) / 5.0
+            lx, ly = x + math.cos(a) * r, y + math.sin(a) * r
+            _part("cylinder", lx, ly, 64.0, 0.42, 0.42, 0.02, "foliage_hi", "%s_pad%d" % (label, i))
+            if i % 3 == 0:
+                _part("sphere", lx + 12.0, ly, 72.0, 0.13, 0.13, 0.12, "petal_pink",
+                      "%s_lily%d" % (label, i))
+        # pedestal, then the heart bowl
+        _part("cylinder", x, y, 120.0, 0.86, 0.86, 1.1, "stone", "%s_ped" % label)
+        _part("cylinder", x, y, 182.0, 1.30, 1.30, 0.22, "stone", "%s_pedcap" % label)
+        for i in range(22):
+            t = (i / 22.0) * 2.0 * math.pi
+            hx = 16.0 * math.sin(t) ** 3
+            hz = 13.0 * math.cos(t) - 5.0 * math.cos(2 * t) - 2.0 * math.cos(3 * t) - math.cos(4 * t)
+            _part("sphere", x + hx * 6.4, y + hz * 6.4, 236.0, 0.24, 0.24, 0.14, "gold",
+                  "%s_heart%d" % (label, i))
+        _part("cylinder", x, y, 232.0, 1.05, 1.05, 0.10, "water", "%s_bowl" % label)
+        # JETS. Eight arcs of shrinking beads leaving the bowl and falling to the
+        # pool — the shape of moving water is the whole read.
+        for j in range(8):
+            a = j * (2.0 * math.pi / 8.0)
+            for k in range(9):
+                t = k / 8.0
+                rr = 40.0 + t * 300.0
+                zz = 250.0 + math.sin(t * math.pi) * 150.0 - t * t * 120.0
+                _part("sphere", x + math.cos(a) * rr, y + math.sin(a) * rr, zz,
+                      (0.14 - 0.07 * t), (0.14 - 0.07 * t), (0.14 - 0.07 * t),
+                      "water" if k % 3 else "porcelain", "%s_jet%d_%d" % (label, j, k))
+            # spray where the arc lands
+            _part("sphere", x + math.cos(a) * 340.0, y + math.sin(a) * 340.0, 74.0,
+                  0.30, 0.30, 0.12, "porcelain", "%s_spray%d" % (label, j))
+        _part("cylinder", x, y, 268.0, 0.16, 0.16, 0.30, "gold", "%s_nozzle" % label)
+        _part("sphere", x, y, 300.0, 0.30, 0.30, 0.30, "gold_glow", "%s_finial" % label)
+
+    def kit_arcane_ring(x, y, s, label):
+        """A compact violet arcane circle. The hero Dog stands on the big one at
+        the world origin; bringing the Dog forward into the founder's frame took
+        it off its own identity, so the ring travels with it."""
+        rings = [(6.2, "arcane"), (5.9, "plaza"), (5.2, "arcane"), (4.9, "plaza"),
+                 (4.0, "arcane"), (3.7, "plaza"), (2.6, "arcane")]
+        for k, (rr, mat) in enumerate(rings):
+            _part("cylinder", x, y, 6.0 + k * 0.5, rr * s, rr * s, 0.035, mat,
+                  "%s_ring%d" % (label, k))
+        for i in range(12):
+            a = i * (2.0 * math.pi / 12.0)
+            _part("cube", x + math.cos(a) * 265.0 * s, y + math.sin(a) * 265.0 * s, 8.0,
+                  0.62 * s, 0.10 * s, 0.03, "arcane", "%s_spoke%d" % (label, i),
+                  rot=(0.0, 0.0, math.degrees(a)))
+            _part("sphere", x + math.cos(a) * 330.0 * s, y + math.sin(a) * 330.0 * s, 11.0,
+                  0.13 * s, 0.13 * s, 0.05, "gold_glow", "%s_stud%d" % (label, i))
+        # rising glyphs: crosses that hang over the ring
+        for i in range(7):
+            a = i * 2.39996
+            gx, gy = x + math.cos(a) * 190.0 * s, y + math.sin(a) * 190.0 * s
+            gz = 90.0 + (i * 47) % 160
+            _part("cube", gx, gy, gz, 0.20 * s, 0.05 * s, 0.05 * s, "arcane",
+                  "%s_glyphA%d" % (label, i))
+            _part("cube", gx, gy, gz, 0.05 * s, 0.05 * s, 0.20 * s, "arcane",
+                  "%s_glyphB%d" % (label, i))
+
+    def kit_lantern(x, y, s, label, yaw=0.0):
+        """An ornate street lantern. A boulevard without lamp posts reads as a
+        path across a field; with them it reads as a street in a city, and the
+        warm points of light give the middle distance something to hold."""
+        # stepped base + fluted column
+        _part("cylinder", x, y, 12.0 * s, 0.52 * s, 0.52 * s, 0.24 * s, "stone", "%s_base" % label)
+        _part("cylinder", x, y, 30.0 * s, 0.40 * s, 0.40 * s, 0.20 * s, "gold", "%s_base2" % label)
+        _part("cylinder", x, y, 200.0 * s, 0.13 * s, 0.13 * s, 3.4 * s, "gold", "%s_col" % label)
+        for k in range(6):                              # flutes
+            a = k * (2.0 * math.pi / 6.0)
+            _part("cube", x + math.cos(a) * 8.0 * s, y + math.sin(a) * 8.0 * s, 200.0 * s,
+                  0.035 * s, 0.035 * s, 3.3 * s, "gold", "%s_flute%d" % (label, k))
+        _part("cylinder", x, y, 372.0 * s, 0.22 * s, 0.22 * s, 0.14 * s, "gold", "%s_cap" % label)
+        # scrolled brackets
+        for e in (-1, 1):
+            for k in range(4):
+                t = k / 3.0
+                _part("sphere", x + e * (14.0 + 26.0 * t) * s, y, (352.0 - 30.0 * t * t) * s,
+                      (0.11 - 0.03 * t) * s, (0.08 - 0.02 * t) * s, (0.11 - 0.03 * t) * s,
+                      "gold", "%s_scroll%d_%d" % (label, e, k))
+        # the lantern itself: gold frame, glowing glass, a crown and a finial
+        lz = 430.0 * s
+        for k in range(4):
+            a = k * (math.pi / 2.0) + 0.785
+            _part("cube", x + math.cos(a) * 26.0 * s, y + math.sin(a) * 26.0 * s, lz,
+                  0.055 * s, 0.055 * s, 0.92 * s, "gold", "%s_mull%d" % (label, k))
+        _part("cube", x, y, lz, 0.46 * s, 0.46 * s, 0.86 * s, "magic_gold", "%s_glass" % label)
+        _part("cone", x, y, lz + 66.0 * s, 0.46 * s, 0.46 * s, 0.50 * s, "gold", "%s_crown" % label)
+        _part("sphere", x, y, lz + 104.0 * s, 0.13 * s, 0.13 * s, 0.13 * s, "gold_glow",
+              "%s_fin" % label)
+        _part("cylinder", x, y, lz - 52.0 * s, 0.20 * s, 0.20 * s, 0.10 * s, "gold",
+              "%s_skirt" % label)
+        # a real point light, so the lantern lights the paving under it
+        try:
+            pl = spawn(unreal.PointLight, (x, y, lz), label="%s_light" % label)
+            plc = pl.get_component_by_class(unreal.PointLightComponent)
+            plc.set_intensity(14000.0)
+            plc.set_light_color(unreal.Color(255, 208, 140))
+            set_prop(plc, "AttenuationRadius", 1100.0)
+            set_prop(plc, "SourceRadius", 18.0)
+            set_prop(plc, "CastShadows", False)
+        except Exception as _e:
+            unreal.log_warning("lantern light skipped: %s" % _e)
+
+    def kit_garland(x0, y0, x1, y1, z0, label, sag=110.0):
+        """Playing-card pennants on a catenary. The card motif the brief asks for,
+        at a size the eye can read from across the plaza."""
+        n = 11
+        suits = ("rose", "dog_visor", "rose", "dog_visor")
+        for k in range(n + 1):
+            t = k / float(n)
+            px = x0 + (x1 - x0) * t
+            py = y0 + (y1 - y0) * t
+            dip = math.sin(t * math.pi) * sag
+            _part("cube", px, py, z0 - dip, 0.36, 0.03, 0.03, "trunk",
+                  "%s_cord%d" % (label, k),
+                  rot=(0.0, math.degrees(math.atan2(sag * math.cos(t * math.pi) * 0.02, 1.0)),
+                       math.degrees(math.atan2(y1 - y0, x1 - x0))))
+            if k < n:
+                _part("cube", px, py, z0 - dip - 34.0, 0.30, 0.04, 0.44, "porcelain",
+                      "%s_card%d" % (label, k),
+                      rot=(0.0, 0.0, math.degrees(math.atan2(y1 - y0, x1 - x0))))
+                _part("sphere", px, py - 4.0, z0 - dip - 30.0, 0.10, 0.03, 0.10,
+                      suits[k % 4], "%s_pip%d" % (label, k))
+
+    def butterfly(x, y, i):
+        z = 90.0 + (i * 67) % 260
+        col = ("petal_air", "petal_violet", "petal_pink", "rose_pink")[i % 4]
+        yaw = float((i * 53) % 360)
+        _part("cube", x, y, z, 0.045, 0.11, 0.012, "dog_visor", "Bfly%d_b" % i,
+              rot=(0.0, 0.0, yaw))
+        for w in (-1, 1):
+            _part("sphere", x + math.cos(math.radians(yaw + 90 * w)) * 9.0,
+                  y + math.sin(math.radians(yaw + 90 * w)) * 9.0, z + 3.0,
+                  0.10, 0.075, 0.016, col, "Bfly%d_w%d" % (i, w),
+                  rot=(float(26 * w), 0.0, yaw))
+
+    def kit_bird(x, y, z, i):
+        """A distant bird: two swept wings. Far enough that a silhouette is all
+        there is, which is exactly all this is."""
+        yaw = float((i * 71) % 360)
+        for w in (-1, 1):
+            _part("cube", x + math.cos(math.radians(yaw + 90 * w)) * 34.0,
+                  y + math.sin(math.radians(yaw + 90 * w)) * 34.0, z,
+                  0.62, 0.16, 0.06, "dog_visor", "Bird%d_w%d" % (i, w),
+                  rot=(float(-18 * w), 0.0, yaw + 90 * w))
 
     def kit_sign(x, y, label):
         # Playing-card style sign on a post: white card + a red heart.
@@ -1045,10 +2007,27 @@ def build(layout):
     def kit_arch(x, y, s, label):
         # A rose-wrapped SEE-THROUGH archway: two vine posts + a top beam you look
         # through (a foreground frame that adds depth), never a solid wall.
-        h = 560.0 * s
+        # TALLER AND THINNER. At 5 uu radius in solid green these posts read as
+        # two fat green columns planted in the middle of the view — the eye met a
+        # wall where it should have met a frame. Slim wooden uprights wrapped in
+        # vine let the plaza and the city read THROUGH the arch, which is the
+        # only reason to put an arch on a sightline.
+        h = 760.0 * s
         for sx in (-1, 1):
-            _part("cylinder", x + sx * 210.0 * s, y, h * 0.5, 0.5 * s, 0.5 * s, h / 100.0,
-                  "foliage", "%s_post%d" % (label, sx))
+            _part("cylinder", x + sx * 210.0 * s, y, h * 0.5, 0.19 * s, 0.19 * s, h / 100.0,
+                  "trunk", "%s_post%d" % (label, sx))
+            for k in range(9):
+                t = k / 8.0
+                aa = t * 7.2 + sx
+                _part("sphere", x + sx * 210.0 * s + math.cos(aa) * 21.0 * s,
+                      y + math.sin(aa) * 21.0 * s, 30.0 * s + t * (h - 70.0 * s),
+                      0.15 * s, 0.15 * s, 0.15 * s, "foliage" if k % 2 else "foliage_hi",
+                      "%s_pvine%d_%d" % (label, sx, k))
+                if k % 3 == 1:
+                    _part("sphere", x + sx * 210.0 * s + math.cos(aa) * 27.0 * s,
+                          y + math.sin(aa) * 27.0 * s, 30.0 * s + t * (h - 70.0 * s),
+                          0.13 * s, 0.13 * s, 0.13 * s, "rose" if k % 2 else "rose_pink",
+                          "%s_prose%d_%d" % (label, sx, k))
         # AN ARCH IS A CURVE. Two posts and a straight beam is a doorframe, and
         # the curve is the entire reason the shape reads as a garden arch. The
         # span is built from short segments following a semicircle, each rotated
@@ -1061,7 +2040,7 @@ def build(layout):
             az = h * 0.72 + math.sin(ang) * span * 0.86
             tangent = math.degrees(math.atan2(math.cos(ang) * span * 0.86,
                                               math.sin(math.pi - ang) * span))
-            _part("cube", ax, y, az, 0.62 * s, 0.60 * s, 0.34 * s, "foliage",
+            _part("cube", ax, y, az, 0.30 * s, 0.24 * s, 0.20 * s, "trunk",
                   "%s_arc%d" % (label, i), rot=(0.0, tangent, 0.0))
             # roses and leaves ON the curve, both faces
             if i % 2 == 0:
@@ -1213,6 +2192,14 @@ def build(layout):
             _part("cube", x + bx * 90.0 * s, y, 34.0 * s, 0.16 * s, 0.42 * s, 0.62 * s,
                   "trunk", "%s_benchleg%d" % (label, bx))
 
+    def _on_paving(gx, gy):
+        """The plaza and the boulevard are STONE. Nothing that grows out of soil
+        may be scattered onto them — that single rule is most of the difference
+        between a planted courtyard and a rash."""
+        if math.hypot(gx, gy) < 1180.0:
+            return True
+        return abs(gx) < 300.0 and -1150.0 < gy < 1250.0
+
     def scatter(cx, cy, count, radius, fn, keep_clear=0.0, clear_at=(0.0, 0.0)):
         # Deterministic phyllotaxis spread (golden angle) — no RNG, so regen is
         # reproducible. fn(x, y, i) places one element.
@@ -1275,8 +2262,11 @@ def build(layout):
         # A drifting petal in the air — a soft flattened rose petal riding the Bob WPO,
         # so it bobs on its own phase. Environmental motion, never a status channel.
         z = 130.0 + (i * 71) % 430
-        d = 0.16 + (i % 3) * 0.05
-        _part("cube", x, y, z, d, d * 0.34, d * 0.9, "petal_air", "Petal_%d" % i,
+        d = 0.105 + (i % 3) * 0.032
+        # A CUBE IS NOT A PETAL. At this size a flat box reads as pink confetti,
+        # and a hundred of them read as litter over the whole frame. A thin
+        # curved-looking ellipsoid at two-thirds the size reads as blossom.
+        _part("sphere", x, y, z, d, d * 0.62, d * 0.16, "petal_air", "Petal_%d" % i,
               rot=(float((i * 37) % 360), float((i * 53) % 360), float((i * 19) % 360)))
 
     def rock(x, y, i):
@@ -1324,7 +2314,7 @@ def build(layout):
         elif "teacup" in mid:
             kit_teacup(x, y, norm, mid)
         elif mid == "brain_landmark" or mesh == "brain":
-            kit_brain(x, y, z, mid)
+            kit_observatory(x, y, z, mid)
         elif mesh == "arch" or "arch" in mid:
             kit_arch(x, y, 1.2, mid)
         elif "overlook" in mid or "terrace" in mid:
@@ -1335,6 +2325,8 @@ def build(layout):
             kit_teapot(x, y, max(400.0, z), mid)
         elif "sign" in mid or "card" in mid:
             kit_sign(x, y, mid)
+        elif "clock_tower" in mid or "tower" in mid:
+            kit_clock_tower(x, y, 1.6, mid)
         elif "clock" in mid:
             kit_clock(x, y, max(240.0, z), mid)
         else:
@@ -1436,15 +2428,43 @@ def build(layout):
         # Wonderland lives in the DISTANCE fog, the flowers and the castles — NOT the
         # whole sky. (An earlier violet Rayleigh made it a dark twilight.)
         set_prop(sac, "RayleighScatteringScale", 0.0331)
-        set_prop(sac, "MieScatteringScale", 0.0030)
         set_prop(sac, "MieAnisotropy", 0.80)
+        # ATMOSPHERIC PERSPECTIVE. Distance only reads as distance when the air
+        # between takes something out of it. Height fog cannot do this job here:
+        # it applies to the sky dome as well, so any density strong enough to
+        # haze a tower also repaints the sky — which is exactly how the last
+        # three attempts produced a navy band instead of a blue one.
+        #
+        # SkyAtmosphere's aerial perspective hazes GEOMETRY by depth and leaves
+        # the dome alone.
+        #
+        # THE SCALE IS THE WHOLE POINT. This world is under a kilometre across —
+        # the great castle is 420 m out, not 42 km — and real air does almost
+        # nothing over 420 m, so the honest setting produced a castle exactly as
+        # crisp as a foreground mushroom. Stretching the optical depth by 45x
+        # makes 420 m behave like 19 km: the near ground stays clear, the town
+        # cools, the castle sits back in the blue. This is the instrument the
+        # previous five attempts were reaching for when they kept reaching for
+        # fog and kept repainting the sky instead.
+        for _nm in ("AerialPespectiveViewDistanceScale",
+                    "AerialPerspectiveViewDistanceScale"):
+            set_prop(sac, _nm, 45.0)
+        # a little more Mie puts warm haze along the horizon where the land meets
+        # the sky, which is what softens the join
+        set_prop(sac, "MieScatteringScale", 0.0075)
     if atm.get("skyLight"):
         sky = spawn(unreal.SkyLight, (0, 0, 0), label="SkyLight")
         sky_comp = sky.get_component_by_class(unreal.SkyLightComponent)
         sky_comp.set_mobility(unreal.ComponentMobility.MOVABLE)
-        # Gentle ambient fill so shadowed sides read without flooding the frame.
+        # AMBIENT IS THE MISSING RANGE. At 0.42 the sky contributes almost
+        # nothing, so anything the sun does not reach falls to near-black — and
+        # once the sky and the clouds got brighter, the auto-exposure metered
+        # against them and crushed the whole shadowed foreground to mud. Open-air
+        # daylight has an enormous blue fill from the entire dome; restoring it
+        # lifts the shadows without touching the highlights, which is precisely
+        # the range the frame was missing.
         try:
-            sky_comp.set_intensity(0.42)
+            sky_comp.set_intensity(1.15)
         except Exception:
             pass
         # Real-time captured sky ambient — needs no lighting build.
@@ -1479,8 +2499,12 @@ def build(layout):
         set_prop(fog_comp, "FogDensity", 0.0011)
         set_prop(fog_comp, "FogHeightFalloff", 0.09)
         set_prop(fog_comp, "StartDistance", 3200.0)
-        set_prop(fog_comp, "FogInscatteringColor", unreal.LinearColor(0.66, 0.56, 0.82, 1.0))
-        set_prop(fog_comp, "DirectionalInscatteringColor", unreal.LinearColor(1.0, 0.66, 0.30, 1.0))
+        # UE5 renamed both of these to *Luminance; the old names silently do
+        # nothing, which is why the haze has never actually been tinted.
+        for _fn in ("FogInscatteringLuminance", "FogInscatteringColor"):
+            set_prop(fog_comp, _fn, unreal.LinearColor(0.62, 0.60, 0.78, 1.0))
+        for _dn in ("DirectionalInscatteringLuminance", "DirectionalInscatteringColor"):
+            set_prop(fog_comp, _dn, unreal.LinearColor(1.0, 0.72, 0.38, 1.0))
         set_prop(fog_comp, "DirectionalInscatteringExponent", 4.0)
         # CAP THE FOG ON THE SKY. Height fog applies to the sky dome at full
         # strength, so even a thin fog repaints the whole sky its inscattering
@@ -1566,34 +2590,52 @@ def build(layout):
     # always done cumulus, they light correctly off the same sun, and the
     # silhouette is what the eye reads anyway.
     import math as _mc
-    for i in range(34):
+    # ALTITUDE AND DISTANCE ARE WHAT MAKE A SPHERE READ AS A CLOUD. The first
+    # version put these 50-90 m up and 90-240 m out, which is where a hill is,
+    # so they rendered as grey boulders behind the town. Cumulus lives 200-450 m
+    # up and half a kilometre to two kilometres away; at that remove the eye
+    # reads scale before it reads geometry. More puffs per cluster, heavily
+    # overlapped, so the silhouette stops showing which spheres it is made of.
+    for i in range(28):
         a = i * 2.39996
-        dist = 9000.0 + 15000.0 * (((i * 23) % 9) / 9.0)
+        dist = 52000.0 + 168000.0 * (((i * 23) % 9) / 9.0)
         cx0 = _mc.cos(a) * dist
-        cy0 = _mc.sin(a) * dist + 4000.0
-        cz0 = 5200.0 + 3400.0 * (((i * 17) % 7) / 7.0)
-        puffs = 5 + (i % 4)
-        base = 1500.0 + 900.0 * (((i * 13) % 5) / 5.0)
+        cy0 = _mc.sin(a) * dist + 20000.0
+        cz0 = 19000.0 + 26000.0 * (((i * 17) % 7) / 7.0)
+        puffs = 11 + (i % 5)
+        base = 7000.0 + 8000.0 * (((i * 13) % 5) / 5.0)
         for k in range(puffs):
-            t = k / float(puffs)
-            px = cx0 + (t - 0.5) * base * 1.7
-            py = cy0 + _mc.sin(k * 2.1 + i) * base * 0.30
-            pz = cz0 + _mc.sin(t * _mc.pi) * base * 0.42
-            r = base * (0.42 + 0.30 * _mc.sin(t * _mc.pi))
-            static_mesh("sphere", [px, py, pz], [r / 100.0, r / 100.0, r * 0.68 / 100.0],
+            t = (k + 0.5) / float(puffs)
+            lobe = _mc.sin(t * _mc.pi)
+            px = cx0 + (t - 0.5) * base * 2.6
+            py = cy0 + _mc.sin(k * 2.1 + i) * base * 0.42
+            # flat-bottomed, domed on top: the cumulus read
+            pz = cz0 + lobe * base * 0.30
+            r = base * (0.34 + 0.42 * lobe) * (0.86 + 0.22 * ((k * 7 + i) % 4) / 4.0)
+            static_mesh("sphere", [px, py, pz], [r / 100.0, r / 100.0, r * 0.62 / 100.0],
                         "Cloud%d_%d" % (i, k),
-                        mat="cloud_warm" if (i + k) % 4 == 0 else "cloud")
+                        mat="cloud_warm" if (i + k) % 5 == 0 else "cloud")
 
     # DISTANT HILLS. A flat plane meeting the sky in a dead-straight line reads
     # as a backdrop, not a world. A ring of very wide, very shallow domes gives
     # the horizon a soft, uneven edge for the castle rooflines to sit against.
     import math as _mh
-    for i in range(26):
+    # THE HORIZON HAS TO HAVE A SHAPE. The previous ring was fifteen metres tall
+    # a kilometre out — geometrically present and visually absent, which is why
+    # the meadow still met the sky in a ruled line. These are real landforms:
+    # a rolling near range behind the town, and a far range of two-hundred-metre
+    # ridges behind the castle that the aerial perspective turns to pale blue.
+    for i in range(30):
         a = i * 2.39996
-        d = 26000.0 + 9000.0 * ((i * 17) % 7) / 7.0
-        hx, hy = _mh.cos(a) * d, _mh.sin(a) * d + 3000.0
-        w = 90.0 + 40.0 * ((i * 13) % 5) / 5.0
-        static_mesh("sphere", [hx, hy, -1400.0], [w, w, 15.0 + 9.0 * ((i * 11) % 4) / 4.0],
+        near = (i % 2 == 1)
+        d = (52000.0 + 30000.0 * ((i * 17) % 7) / 7.0 if near
+             else 210000.0 + 190000.0 * ((i * 23) % 5) / 5.0)
+        hx, hy = _mh.cos(a) * d, _mh.sin(a) * d + 6000.0
+        if near:
+            w, hz, zc = 620.0 + 240.0 * ((i * 13) % 5) / 5.0, 62.0 + 26.0 * ((i * 11) % 4) / 4.0, -2400.0
+        else:
+            w, hz, zc = 2600.0 + 1400.0 * ((i * 13) % 5) / 5.0, 260.0 + 150.0 * ((i * 11) % 4) / 4.0, -9000.0
+        static_mesh("sphere", [hx, hy, zc], [w, w * 0.72, hz],
                     "Hill%d" % i, mat="meadow_far" if "meadow_far" in MATS else "foliage")
 
     # LAYERED SKYLINE. The reference's depth comes from castle rooflines at
@@ -1626,12 +2668,142 @@ def build(layout):
         unreal.log_warning("WonderlandDogPawn not found — build the C++ module first.")
 
     # --- Hero meshes + background silhouettes (kitbashed forms) ------------
-    for m in layout.get("landmarks", []) + layout.get("backgroundSilhouettes", []):
+    for m in layout.get("landmarks", []):
         kit_dispatch(m)
+    # THE GREAT FRAMING TREE HAS TO FRAME. It is named for the job and was doing
+    # none of it: a trunk with a ball on top, standing in grass, entirely inside
+    # the frame. Buttress roots break the ground it stands in, and one long
+    # branch arcs across the top of the hero view carrying canopy, hanging vines
+    # and a clock — the repoussoir the composition has been missing.
+    _TX, _TY = 1300.0, 470.0
+    for _i in range(9):
+        _a = _i * (2.0 * math.pi / 9.0) + 0.3
+        kit_root(_TX, _TY, _a, 430.0 + 190.0 * ((_i * 7) % 4) / 4.0,
+                 0.90 + 0.34 * ((_i * 5) % 3) / 3.0, "TreeRoot%d" % _i)
+    # the framing branch: out of the bole, across the frame, drooping at the end
+    for _k in range(14):
+        _t = (_k + 0.5) / 14.0
+        _bx = _TX - _t * 1500.0
+        _by = _TY - _t * 520.0
+        _bz = 1180.0 + math.sin(_t * 2.1) * 190.0 - _t * _t * 260.0
+        _th = 1.15 * (1.0 - 0.62 * _t)
+        _part("sphere", _bx, _by, _bz, _th * 2.2, _th * 1.3, _th * 1.2, "trunk",
+              "TreeBranch%d" % _k, rot=(0.0, 0.0, float(_k * 9)))
+        # canopy on the branch: deep interior, spring-green outside
+        if _k % 2 == 0:
+            _part("sphere", _bx, _by, _bz - 40.0, 2.9, 2.5, 1.5, "foliage_deep",
+                  "TreeBranchCoreA%d" % _k)
+            for _j in range(4):
+                _ja = _j * 1.57 + _k
+                _part("sphere", _bx + math.cos(_ja) * 190.0, _by + math.sin(_ja) * 150.0,
+                      _bz + 30.0 + (_j % 2) * 60.0, 2.1, 1.9, 1.2,
+                      "foliage_spr" if _j % 2 else "foliage_hi",
+                      "TreeBranchLeaf%d_%d" % (_k, _j))
+        if _k % 3 == 1:                       # hanging vines and blossom
+            for _v in range(6):
+                _part("sphere", _bx + 16.0, _by + 12.0, _bz - 90.0 - _v * 62.0,
+                      0.30, 0.30, 0.30, "foliage" if _v % 2 else "rose_pink",
+                      "TreeHang%d_%d" % (_k, _v))
+    kit_clock(_TX - 980.0, _TY - 330.0, 1140.0, "BranchClock")
+    kit_float_key(_TX - 1240.0, _TY - 440.0, 1010.0, "BranchKey")
+    # BACKGROUND IS A DISTANCE, NOT A LABEL. The layout files these under
+    # "backgroundSilhouettes" and then places them 2.5-3.4 km out at 14 m tall —
+    # so they rendered at the same apparent size as the foreground props and the
+    # frame had no depth at all. Pushed out and grown by the same factor they
+    # keep the authored composition (which tower is where) and finally read as
+    # what they were designed to be.
+    _PUSH = 8.5
+    for m in layout.get("backgroundSilhouettes", []):
+        _lo = m["location"]
+        _mid, _mesh = m.get("id", ""), m.get("mesh", "")
+        _bx = float(_lo[0]) * _PUSH
+        _by = (float(_lo[1]) - 300.0) * _PUSH + 300.0
+        _sc = m.get("scale", [1, 1, 1])
+        _sz = max(0.8, (float(_sc[0]) + float(_sc[1])) / 2.0)
+        if _mesh == "spire":
+            kit_spire(_bx, _by, _sz * 1.9, _mid, body_mat="spire_far",
+                      roof_mat="roof_pink" if "1" in _mid or "3" in _mid else "roof_rose")
+        elif _mesh == "island":
+            # floating islands, kept high and pale so they sit in the sky rather
+            # than on the horizon line
+            # HIGH and small. At the previous altitude they cut the horizon like
+            # grey slabs; a floating island only reads as magic when it is clearly
+            # in the SKY, above the castle, with air underneath it.
+            _iz = float(_lo[2]) * _PUSH * 1.35 + 9000.0
+            static_mesh("cylinder", [_bx, _by, _iz],
+                        [_sz * 5.0, _sz * 5.0, _sz * 0.9], _mid, mat="spire_far")
+            static_mesh("cone", [_bx, _by, _iz - _sz * 420.0],
+                        [_sz * 4.0, _sz * 4.0, _sz * 6.0], _mid + "_keel",
+                        rotation=(180.0, 0.0, 0.0), mat="meadow_far")
+            for _k in range(4):
+                kit_spire(_bx + math.cos(_k * 1.6) * _sz * 150.0,
+                          _by + math.sin(_k * 1.6) * _sz * 150.0,
+                          _sz * 0.30, "%s_t%d" % (_mid, _k), body_mat="spire_far",
+                          roof_mat="roof_pink", flag=False)
+            _iz = _iz + _sz * 55.0
+        else:
+            # the treeline: a long low band of canopy, not one stretched tree
+            for _k in range(46):
+                _tx = _bx + (_k - 23) * 1450.0
+                static_mesh("sphere", [_tx, _by + math.sin(_k * 1.7) * 1800.0, 620.0],
+                            [11.0 + 3.0 * ((_k * 7) % 4), 9.0, 7.0 + 2.0 * ((_k * 5) % 3)],
+                            "%s_%d" % (_mid, _k), mat="meadow_far")
 
     # Arrival plaza + glowing arcane circle (the Dog's home / Relay identity) in
     # front of the arrival camera, plus a few floating magical keys for whimsy.
     kit_plaza(0.0, 0.0)
+    # A CEREMONIAL EDGE. The plaza was a paved disc lying on grass with a hard
+    # boundary; the reference's arrival space is HELD — a raised kerb all the way
+    # round, steps down at each approach, and planting tight against the stone.
+    _PR = 1230.0
+    for i in range(64):
+        a = i * (2.0 * math.pi / 64.0)
+        kx, ky = math.cos(a) * _PR, math.sin(a) * _PR
+        _part("cube", kx, ky, 16.0, 1.30, 0.44, 0.34, "stone", "PlazaKerb%d" % i,
+              rot=(0.0, 0.0, math.degrees(a) + 90.0))
+        _part("cube", kx, ky, 34.0, 1.34, 0.52, 0.10, "plaza", "PlazaCap%d" % i,
+              rot=(0.0, 0.0, math.degrees(a) + 90.0))
+        if i % 8 == 0:                                  # piers with lanterns' scale
+            _part("cube", kx, ky, 52.0, 0.56, 0.56, 0.92, "stone", "PlazaPier%d" % i)
+            _part("sphere", kx, ky, 108.0, 0.28, 0.28, 0.28, "gold", "PlazaPierBall%d" % i)
+        if i % 3 == 0:                                  # moss at the transition
+            _part("sphere", math.cos(a) * (_PR + 34.0), math.sin(a) * (_PR + 34.0), 7.0,
+                  0.30, 0.30, 0.09, "moss", "PlazaMoss%d" % i)
+    # steps down at the four approaches
+    for q, (dx, dy) in enumerate(((0.0, 1.0), (0.0, -1.0), (1.0, 0.0), (-1.0, 0.0))):
+        for k in range(3):
+            _part("cube", dx * (_PR + 40.0 + k * 46.0), dy * (_PR + 40.0 + k * 46.0),
+                  12.0 - k * 5.0, 3.6 if dx == 0 else 0.46, 0.46 if dx == 0 else 3.6, 0.12,
+                  "cobble", "PlazaStep%d_%d" % (q, k))
+    # LANDSCAPED BEDS just outside the kerb, each with its own border
+    for i, (ba, br) in enumerate(((0.5, 250.0), (1.6, 200.0), (2.7, 260.0),
+                                  (3.8, 210.0), (4.9, 240.0), (5.9, 190.0))):
+        kit_bed(math.cos(ba) * (_PR + 330.0), math.sin(ba) * (_PR + 330.0), br, "Bed%d" % i,
+                palette=(("petal_violet", "rose_pink", "petal_pink") if i % 2
+                         else ("rose", "petal_pink", "petal_air")))
+    # CRACKS in the paving, glowing violet where the arcane circle runs under it.
+    # "occasional cracks" and "purple magical spill near arcane areas" in one
+    # element: the magic is IN the ground rather than painted on top of it.
+    for i in range(26):
+        a = i * 2.39996
+        r0 = 330.0 + (i % 5) * 60.0
+        for k in range(7):
+            t = (k + 0.5) / 7.0
+            rr = r0 + t * 520.0
+            wob = math.sin(t * 6.0 + i) * 0.16
+            _part("cube", math.cos(a + wob) * rr, math.sin(a + wob) * rr, 7.4,
+                  0.34, 0.055, 0.02,
+                  "arcane" if t < 0.45 else "dog_visor", "Crack%d_%d" % (i, k),
+                  rot=(0.0, 0.0, math.degrees(a + wob) + 4.0))
+    # flowers and mushrooms taking hold at the path edges
+    for i in range(40):
+        a = i * 2.39996
+        rr = _PR + 60.0 + (i % 4) * 40.0
+        px, py = math.cos(a) * rr, math.sin(a) * rr
+        flower(px, py, i)
+        if i % 5 == 0:
+            kit_mushroom(px + 26.0, py - 18.0, 0.24 + 0.10 * (i % 3), "EdgeCap%d" % i,
+                         "mush_purple" if i % 3 else "mush_red")
     # Cobblestone boulevard (N-S) + radial paths from the plaza to the gate and the
     # great tree — the premium walkable spine of the district.
     kit_path(0, -1450, 0, 1250, 470, "BLVD")
@@ -1639,13 +2811,45 @@ def build(layout):
     kit_path(0, 0, 1300, 470, 340, "PATH_tree")
     kit_path(-1150, 0, 1150, 0, 300, "PATH_cross")
     # The Wandering Relay Dog, on the arcane circle, facing the arrival camera.
-    stroll_dog(0.0, 40.0, "RelayDog", s=1.5, is_hero=True, roam=560.0)
-    for i, (kx, ky, kz) in enumerate([(-640, 240, 430), (540, 120, 520), (240, 780, 560)]):
+    # THE DOG IS THE SUBJECT. At the world origin it stands 26 m from the hero
+    # camera and subtends about three degrees — a detail, not a foreground
+    # character. On the arrival plaza it is 10 m out and reads as the figure the
+    # frame is about, which is what PASS 8 asks for. Slightly off the centre
+    # line so the composition is not a bullseye, and roaming a short leash so it
+    # stays in frame while it lives.
+    stroll_dog(300.0, -1580.0, "RelayDog", s=2.1, is_hero=True, roam=340.0)
+    # THE DOG'S ARRIVAL RING travels with it, so the Relay identity is under
+    # the Dog wherever the composition needs the Dog to stand.
+    kit_arcane_ring(300.0, -1580.0, 0.62, "ArrivalRing")
+    # A DRIFT OF KEYS, not three of them. They read as a current of magic moving
+    # toward the Build Gate, which is where the brief wants the eye to go next.
+    for i, (kx, ky, kz) in enumerate([(-640, 240, 430), (540, 120, 520), (240, 780, 560),
+                                      (-880, 40, 610), (-1180, 250, 700), (-380, -180, 480),
+                                      (760, -320, 560), (120, -560, 640), (980, 640, 690),
+                                      (-160, 1150, 720)]):
         kit_float_key(kx, ky, kz, "FloatKey%d" % i)
+    # LAMP POSTS + GARLANDS down the boulevard. Vertical rhythm, warm light in
+    # the middle distance, and the card motif at a readable size.
+    _lamp_y = (-1080.0, -640.0, -200.0, 260.0, 720.0, 1180.0)
+    for _e in (-1, 1):
+        for _i, _ly in enumerate(_lamp_y):
+            kit_lantern(_e * 430.0, _ly, 1.15, "Lamp%d_%d" % (_e, _i))
+            if _i:
+                kit_garland(_e * 430.0, _lamp_y[_i - 1], _e * 430.0, _ly, 470.0,
+                            "Garl%d_%d" % (_e, _i))
+    # BUTTERFLIES over the planting, BIRDS in the sky. Both ride the bob offset,
+    # so they live in the stream and vanish in a still — ambient life, never a
+    # status channel.
+    scatter(140.0, 420.0, 34, 1450.0, butterfly)
+    for _f, (_fx, _fy, _fz) in enumerate(((-5200.0, 14000.0, 6200.0), (7400.0, 19000.0, 7600.0),
+                                          (1800.0, 26000.0, 9000.0))):
+        for _k in range(7):
+            kit_bird(_fx + _k * 620.0 - (_k % 3) * 260.0,
+                     _fy + _k * 420.0, _fz + (_k % 4) * 210.0, _f * 7 + _k)
     # Restrained magical motes: static emissive sparkles (gold/cyan/violet) drifting
     # over the district — the bloom pass gives them a firefly glow.
     scatter(0.0, 350.0, 64, 1950.0, mote)
-    scatter(0.0, 300.0, 110, 1800.0, air_petal)   # drifting petals overhead — living air
+    scatter(0.0, 300.0, 58, 1500.0, air_petal)   # drifting petals overhead — living air
     # Ambient companions: voxel dogs of varied coats gathered AROUND the plaza (never
     # on the arcane circle — that is the hero Dog's). Matches the reference's plaza
     # full of creatures; a real wander behaviour animates them in a later pass.
@@ -1659,19 +2863,61 @@ def build(layout):
                                              (-620, -120, "dog_pink", "crown"),
                                              (640, 40, "dog_tan", "tophat")]):
         stroll_dog(cx, cy, "Companion%d" % i, s=1.05, body=coat, roam=1100.0, accessory=acc)
-    # Candy-castle skyline in TWO layers fading into the violet haze — a real city
-    # edge of pink / white / blue / teal spired turrets with flags (the reference).
+    # THE DISTANCE LADDER. Four bands, each further, larger and paler than the
+    # last, so the eye can measure the world by comparing them. The previous
+    # skyline put every tower between 2 km and 3.6 km at a uniform 14 m — one
+    # band, no ladder, and therefore no depth however good the materials were.
+    #
+    # A band is kept OUT of the near arc behind the camera: a tower at the
+    # player's back is invisible in every framing and still costs a draw.
     castle_bodies = ("spire_pink", "spire", "spire_blue", "spire", "spire_teal", "spire_pink")
-    castle_roofs = ("spire_blue", "gold", "spire_pink", "spire_teal", "gold", "spire_blue")
-    far = [(-1950, 3000, 1.4), (-1250, 3300, 1.15), (-600, 3550, 1.5), (60, 3650, 1.3),
-           (720, 3450, 1.6), (1420, 3250, 1.2), (2050, 3000, 1.4), (-2450, 2600, 1.1),
-           (2500, 2500, 1.25), (-3050, 2100, 1.2), (3050, 2000, 1.3)]
-    near = [(-1650, 2350, 1.7), (-820, 2500, 1.35), (240, 2600, 1.9), (1050, 2450, 1.5),
-            (1780, 2300, 1.7), (-2300, 2000, 1.4)]
-    for i, (sx, sy, ss) in enumerate(far + near):
-        kit_spire(sx, sy, ss, "Skyline%d" % i,
-                  body_mat=castle_bodies[i % len(castle_bodies)],
-                  roof_mat=castle_roofs[i % len(castle_roofs)])
+    castle_roofs = ("roof_pink", "gold", "roof_rose", "spire_teal", "gold", "roof_pink")
+    for band, (d0, d1, count, s0, s1, body) in enumerate((
+            (9000.0, 13000.0, 15, 1.7, 2.9, None),
+            (22000.0, 30000.0, 19, 4.0, 6.6, "spire_far"),
+            (62000.0, 84000.0, 21, 11.0, 19.0, "spire_far"))):
+        for i in range(count):
+            a = i * 2.39996 + band * 0.83
+            t = ((i * 29 + band * 7) % 11) / 11.0
+            dist = d0 + (d1 - d0) * t
+            bx = math.cos(a) * dist
+            by = math.sin(a) * dist + 2000.0
+            if by < 3000.0:
+                continue
+            # A tower standing alone on grass is a lollipop. Low roofs around
+            # its foot are what make a skyline read as a TOWN the towers belong
+            # to, and they cost four boxes each.
+            if band < 2:
+                for _h in range(5):
+                    _ha = a + (_h - 2) * 0.055
+                    _hd = dist * (0.985 + 0.006 * ((_h * 7 + i) % 5))
+                    _hx, _hy = math.cos(_ha) * _hd, math.sin(_ha) * _hd + 2000.0
+                    _hs = (s0 + (s1 - s0) * t) * (34.0 + 12.0 * ((_h * 5 + i) % 4))
+                    _part("cube", _hx, _hy, _hs * 0.5, _hs / 90.0, _hs / 110.0, _hs / 100.0,
+                          "spire_far", "TownB%dS%dH%d" % (band, i, _h))
+                    _part("cone", _hx, _hy, _hs * 1.32, _hs / 62.0, _hs / 78.0, _hs / 88.0,
+                          "roof_rose" if (_h + i) % 2 else "roof_pink",
+                          "TownB%dS%dR%d" % (band, i, _h))
+            # OVERLAP IS WHAT MAKES A SKYLINE DENSE. Every third position is a
+            # BLOCK of towers on a shared podium with bridges and a dome rather
+            # than one spire, so near towers cut across far ones instead of
+            # standing apart from them like chess pieces.
+            _bs = s0 + (s1 - s0) * t
+            if i % 3 == 0:
+                kit_towerblock(bx, by, _bs * 0.78, "BlockB%dS%d" % (band, i),
+                               body=body or castle_bodies[i % len(castle_bodies)],
+                               roof=castle_roofs[i % len(castle_roofs)])
+            else:
+                kit_spire(bx, by, _bs, "SkylineB%dS%d" % (band, i),
+                          body_mat=body or castle_bodies[i % len(castle_bodies)],
+                          roof_mat=castle_roofs[i % len(castle_roofs)] if body is None
+                          else ("roof_pink" if i % 3 else "roof_rose"),
+                          flag=(i % 3 == 0))
+    # THE SUBJECT. One great castle closing the north axis, slightly off centre
+    # so the composition is not a bullseye, at a distance that makes it 130 m of
+    # architecture rather than another turret.
+    kit_castle(6000.0, 54000.0, 17.0, "GreatCastle")
+    kit_castle(-30000.0, 36000.0, 8.5, "WestCastle")
     # Gentle rolling terrain: large low ground mounds sunk into the plane so only
     # their crowns show, breaking the dead-flat floor at the district edges.
     for i, (mx, my, mr) in enumerate([(-1650, -650, 8.0), (1750, -450, 7.0), (-2050, 1500, 9.0),
@@ -1779,16 +3025,144 @@ def build(layout):
     def ground_cover(gx, gy, i):
         if math.hypot(gx, gy - 40.0) < 320.0:      # keep the Dog's arcane circle clear
             return
+        # THE NEAR FIELD IS A FOREGROUND, NOT A HEDGE. Full density right up to
+        # the camera puts a wall of blossom between the viewer and the subject;
+        # the eye has to climb over it to reach the Dog. Thinning what lands in
+        # the front of the frame keeps the lushness where it reads as lushness.
+        if gy < -900.0 and (i % 3) != 0:
+            return
+        if gy < -1500.0:
+            return
         (flower if i % 3 else tuft)(gx, gy, i)
     # Dense carpet: three overlapping phyllotaxis passes for a lush, un-gridded
     # spread of lavender + rose (the reference's flowering courtyard).
     scatter(0.0, 300.0, 280, 1900.0, ground_cover)
     scatter(120.0, 500.0, 170, 1500.0, ground_cover)
     scatter(-140.0, 250.0, 110, 1150.0, ground_cover)
-    # Classic red-and-white spotted mushrooms scattered thick (red-dominant, 2:1).
-    scatter(0.0, 380.0, 44, 2050.0,
-            lambda gx, gy, i: None if math.hypot(gx, gy - 40.0) < 360.0
-            else kit_mushroom(gx, gy, 0.4 + 0.28 * (i % 3), "GM%d" % i, "mush_purple" if i % 3 == 0 else "mush_red"))
+    # AMANITAS GROW IN SOIL, IN FAMILIES, AT THE FOOT OF THINGS. Scattering
+    # them by even phyllotaxis over the whole district put fungus on the paving
+    # and gave the foreground a rash of identical caps — clutter, which the brief
+    # names as the thing to avoid. Half as many, each one a family of three to
+    # five around a dominant cap, and none of them on stone.
+    def _on_stone(gx, gy):
+        # the paved plaza, and the boulevard corridor running north
+        if math.hypot(gx, gy) < 1180.0:
+            return True
+        return abs(gx) < 300.0 and -1150.0 < gy < 1250.0
+
+    def mushroom_family(gx, gy, i):
+        if _on_stone(gx, gy):
+            return
+        cap = "mush_purple" if i % 4 == 0 else "mush_red"
+        big = 0.52 + 0.26 * (i % 3)
+        kit_mushroom(gx, gy, big, "GM%d" % i, cap)
+        for k in range(2 + (i % 3)):
+            a = (i * 2.39996 + k * 1.9)
+            r = 42.0 + 30.0 * ((i + k) % 3) * big
+            fx, fy = gx + math.cos(a) * r * big, gy + math.sin(a) * r * big
+            if _on_stone(fx, fy):
+                continue
+            kit_mushroom(fx, fy, big * (0.34 + 0.14 * (k % 3)), "GM%d_%d" % (i, k), cap)
+
+    # ...and pushed OUT of the near field. Fungus at the district edge frames
+    # the plaza; fungus across the plaza floor is a rash in front of the subject.
+    scatter(0.0, 900.0, 18, 2350.0,
+            lambda gx, gy, i: None if math.hypot(gx, gy + 700.0) < 1500.0
+            else mushroom_family(gx, gy, i))
+
+
+    # ================= THE LAND BETWEEN ==================================
+    # The middle third of every wide shot was an empty plane. Depth is not two
+    # layers with a gap; it is continuous. Courtyard -> gardens -> fields and
+    # woods and water -> town -> castle -> hills, each cooled a little more by
+    # the aerial perspective than the last.
+    #
+    # Everything here is deliberately COARSE. It lives 40 m to 600 m out, where
+    # a canopy is a few pixels across, so it is built from the cheapest forms
+    # that carry the right silhouette and nothing else. Detail spent here would
+    # be invisible and would cost the frame rate that keeps the stream usable.
+    _land = 0
+    # a green mid-meadow over the pale far plane, so the ground the town stands
+    # on is grass rather than haze
+    # THREE KILOMETRES, not 750 m. At the smaller size the plane's own edge
+    # sat inside the haze gradient and showed as a step from green to pale —
+    # a ruled line across the middle of the frame. Past 1.5 km the haze has
+    # taken enough out of it that no edge is legible.
+    static_mesh("plane", [0.0, 60000.0, -9.0], [3000.0, 3000.0, 1.0], "MidMeadow",
+                mat="ground" if "ground" in MATS else "foliage")
+    # rolling ground: wide shallow domes so the plane is never a plane
+    for i in range(52):
+        a = i * 2.39996
+        d = 5200.0 + 46000.0 * (((i * 19) % 13) / 13.0) ** 0.7
+        mx, my = math.cos(a) * d, math.sin(a) * d + 4000.0
+        if my < 2600.0:
+            continue
+        w = 34.0 + 26.0 * ((i * 11) % 5) / 5.0
+        static_mesh("sphere", [mx, my, -w * 34.0],
+                    [w, w * 0.78, w * 0.42], "Roll%d" % i,
+                    mat="ground" if "ground" in MATS else "foliage")
+        _land += 1
+    # WOODS. Groves read as woodland; evenly spread single trees read as an
+    # orchard, and an orchard is what a scatter gives you unless you cluster.
+    for i in range(30):
+        a = i * 2.39996 + 0.4
+        d = 6500.0 + 40000.0 * (((i * 23) % 11) / 11.0) ** 0.8
+        gx, gy = math.cos(a) * d, math.sin(a) * d + 4200.0
+        if gy < 3000.0:
+            continue
+        sc = 4.2 + 3.4 * ((i * 7) % 5) / 5.0
+        for k in range(6 + (i % 4)):
+            ka = k * 2.39996 + i
+            kr = (26.0 + 62.0 * ((k * 13 + i) % 7) / 7.0) * sc
+            tx, ty = gx + math.cos(ka) * kr, gy + math.sin(ka) * kr
+            th = (170.0 + 90.0 * ((k * 5 + i) % 4) / 4.0) * sc
+            static_mesh("cylinder", [tx, ty, th * 0.42], [sc * 0.24, sc * 0.24, th * 0.9 / 100.0],
+                        "Wood%d_%d" % (i, k), mat="trunk")
+            static_mesh("sphere", [tx, ty, th], [sc * 1.30, sc * 1.16, sc * 1.05],
+                        "Wood%d_%dc" % (i, k),
+                        mat="foliage" if (i + k) % 3 else "foliage_hi")
+            _land += 2
+    # HEDGEROWS. Fields need edges; the edges are what tell the eye how big the
+    # ground is, which is most of how a landscape communicates distance.
+    for i in range(16):
+        a = i * 2.39996 + 1.1
+        d = 9000.0 + 30000.0 * (((i * 17) % 9) / 9.0)
+        hx, hy = math.cos(a) * d, math.sin(a) * d + 5000.0
+        if hy < 3400.0:
+            continue
+        ang = (i * 47) % 180
+        for k in range(14):
+            ox = math.cos(math.radians(ang)) * (k - 7) * 640.0
+            oy = math.sin(math.radians(ang)) * (k - 7) * 640.0
+            static_mesh("cube", [hx + ox, hy + oy, 90.0], [6.6, 2.0, 1.9],
+                        "Hedge%d_%d" % (i, k),
+                        mat="foliage" if k % 2 else "foliage_hi", rotation=(0.0, 0.0, float(ang)))
+            _land += 1
+    # COTTAGES on the approach roads, so the town does not begin abruptly
+    for i in range(16):
+        a = i * 2.39996 + 2.2
+        d = 7000.0 + 12000.0 * (((i * 29) % 7) / 7.0)
+        cx, cy = math.cos(a) * d, math.sin(a) * d + 4000.0
+        if cy < 3200.0:
+            continue
+        w = 3.0 + 1.4 * ((i * 13) % 4) / 4.0
+        static_mesh("cube", [cx, cy, w * 46.0], [w, w * 0.74, w * 0.92], "Cot%d" % i,
+                    mat="spire", rotation=(0.0, 0.0, float((i * 61) % 360)))
+        static_mesh("cone", [cx, cy, w * 128.0], [w * 1.22, w * 0.96, w * 0.86], "Cot%dr" % i,
+                    mat="roof_rose" if i % 2 else "roof_pink",
+                    rotation=(0.0, 0.0, float((i * 61) % 360)))
+        static_mesh("cube", [cx + w * 22.0, cy, w * 150.0], [w * 0.16, w * 0.16, w * 0.5],
+                    "Cot%dch" % i, mat="stone")
+        _land += 3
+    # A LAKE, because water is the one surface that hands the sky back to the
+    # ground and it is how the middle distance stops being one flat green.
+    static_mesh("plane", [-19000.0, 27000.0, 40.0], [190.0, 130.0, 1.0], "MidLake", mat="water")
+    for i in range(22):
+        a = i * (2.0 * math.pi / 22.0)
+        static_mesh("sphere", [-19000.0 + math.cos(a) * 9800.0, 27000.0 + math.sin(a) * 6700.0, 60.0],
+                    [22.0, 22.0, 5.0], "LakeRim%d" % i, mat="ground")
+        _land += 1
+    unreal.log("LANDSCAPE %d mid-distance elements" % _land)
 
     # --- Water features ---------------------------------------------------
     for w in layout.get("waterFeatures", []):
@@ -1797,8 +3171,9 @@ def build(layout):
 
     # --- Benches (dressing; placeholder cube, facing baked from data) -----
     for b in layout.get("benchPoints", []):
-        static_mesh("bench", b["location"], [1.6, 0.5, 0.5], "BENCH_%s" % b["id"],
-                    rotation=(0.0, float(b.get("facingYawDeg", 0.0)), 0.0))
+        _bl = b["location"]
+        kit_bench(float(_bl[0]), float(_bl[1]), float(b.get("facingYawDeg", 0.0)),
+                  "BENCH_%s" % b["id"])
 
     # --- Hub zones: tagged empties at each centre -------------------------
     # Tag by kind + the world section it presents (or 'presents_none'), so a
@@ -1877,9 +3252,10 @@ def build(layout):
                         keep_clear=PLAZA_CLEAR)
             else:
                 n = int(c.get("count", 0)) or int(10 * area)
-                scatter(ctr[0], ctr[1], min(n, 90), rad,
-                        lambda x, y, i: kit_mushroom(x, y, 0.30 + 0.13 * (i % 4),
-                                                     "mini%d" % i, "mush_purple" if i % 2 else "mush_red"),
+                scatter(ctr[0], ctr[1], min(n, 70), rad,
+                        lambda x, y, i: None if _on_paving(x, y) else
+                        kit_mushroom(x, y, 0.30 + 0.13 * (i % 4),
+                                     "mini%d" % i, "mush_purple" if i % 2 else "mush_red"),
                         keep_clear=PLAZA_CLEAR)
 
     # --- Paths: one locator per point (real splines/nav are M2) -----------
