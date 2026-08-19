@@ -240,10 +240,13 @@ def main():
     # state and matching mean, spread and saturation. Residual at these values:
     # luma +15%, contrast -3%, saturation -11% against the real frame — close
     # enough to be REPRESENTATIVE, and not to be quoted as a measurement.
-    CAL_SAT = float(os.environ.get("WL_CAL_SAT", "8.6"))
-    CAL_SRC = float(os.environ.get("WL_CAL_SRC", "136.7"))   # this tracer on p18
-    CAL_DST = float(os.environ.get("WL_CAL_DST", "68.0"))    # Unreal on p18
-    CAL_SD = float(os.environ.get("WL_CAL_SD", "1.02"))
+    # Residual at these values, measured on p18: luma +7%, contrast -21%,
+    # saturation -41%. Better than the raw output's -76% saturation and nowhere
+    # near a match. A cosmetic transform of an approximation is not evidence and
+    # this mode stays OFF by default; the raw output is what the tool is for.
+    CAL_SAT = float(os.environ.get("WL_CAL_SAT", "3.4"))
+    CAL_DST = float(os.environ.get("WL_CAL_DST", "70.4"))     # Unreal mean on p18
+    CAL_SD_DST = float(os.environ.get("WL_CAL_SD", "49.1"))   # Unreal spread on p18
     JIT = [(0.0, 0.0, 0.0)]
     for _k in range(1, 8):
         _a = _k * 2.39996
@@ -421,31 +424,32 @@ def main():
             _r = 255.0*(cr/(1.0+cr))**0.4545
             _g = 255.0*(cg/(1.0+cg))**0.4545
             _b = 255.0*(cb/(1.0+cb))**0.4545
-            if CALIB:
-                # THE MEASURED OFFSET, APPLIED. Against the streamed frame p18 on
-                # the same world this tracer runs +94% luma and -76% saturation,
-                # because it models no bounce, no specular and no filmic curve.
-                # Scaling by those two factors gives a picture much closer to
-                # what the engine puts on screen. It is a CORRECTED
-                # APPROXIMATION, not a render, and it is only as good as a
-                # single-frame calibration — but it is far better than handing
-                # someone an image that is four times too grey.
-                _l = 0.2126*_r + 0.7152*_g + 0.0722*_b
-                _r = _l + (_r - _l) * CAL_SAT
-                _g = _l + (_g - _l) * CAL_SAT
-                _b = _l + (_b - _l) * CAL_SAT
-                # Match the MEAN AND THE SPREAD, not just the level. Scaling
-                # luma flat matched p18's average exactly and halved its
-                # contrast, which trades one wrong picture for another; mapping
-                # about the source mean preserves the structure.
-                _t = CAL_DST + (_l - CAL_SRC) * CAL_SD
-                _k = 1.0 if _l <= 0.001 else _t / _l
-                _r *= _k; _g *= _k; _b *= _k
             px[i]   = 0 if _r < 0 else (255 if _r > 255 else int(_r))
             px[i+1] = 0 if _g < 0 else (255 if _g > 255 else int(_g))
             px[i+2] = 0 if _b < 0 else (255 if _b > 255 else int(_b))
         if yy % 20 == 0:
             print("  row %d/%d" % (yy, H)); sys.stdout.flush()
+
+    if CALIB:
+        # NORMALISE BY THIS IMAGE'S OWN STATISTICS. The first attempt subtracted
+        # a fixed offset fitted to one frame's mean, which is only correct for
+        # frames with that mean — applied to a darker render it produced a neon
+        # night scene. A histogram match works on any input: measure this
+        # image's mean and spread, map them onto the streamed frame's, then
+        # boost saturation by the measured ratio.
+        lum = [0.2126*px[i] + 0.7152*px[i+1] + 0.0722*px[i+2] for i in range(0, len(px), 3)]
+        m0 = sum(lum) / len(lum)
+        sd0 = (sum((v - m0) ** 2 for v in lum) / len(lum)) ** 0.5 or 1.0
+        for j in range(0, len(px), 3):
+            r0, g0, b0 = px[j], px[j+1], px[j+2]
+            l0 = 0.2126*r0 + 0.7152*g0 + 0.0722*b0
+            r1 = l0 + (r0 - l0) * CAL_SAT
+            g1 = l0 + (g0 - l0) * CAL_SAT
+            b1 = l0 + (b0 - l0) * CAL_SAT
+            lt = CAL_DST + (l0 - m0) * (CAL_SD_DST / sd0)
+            k = 1.0 if l0 <= 0.5 else lt / l0
+            for off, v in ((0, r1*k), (1, g1*k), (2, b1*k)):
+                px[j+off] = 0 if v < 0 else (255 if v > 255 else int(v))
 
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(SP, "rt.png")
     write_png(out, W, H, px)
