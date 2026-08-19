@@ -217,8 +217,12 @@ def main():
     src = io.open(GEN, encoding="utf8").read()
     # inject a recorder at the top of static_mesh's body: every primitive in the
     # world goes through it, including everything _part builds
-    anchor = ("    def static_mesh(mesh_key, location, scale, label, "
-              "rotation=(0.0, 0.0, 0.0), mat=None):")
+    # Inject AFTER the label is made unique, not at the function's first line:
+    # recording the argument records the name the caller asked for, and the
+    # generator may have had to rename it. Attribution has to see what the world
+    # actually contains.
+    anchor = ("        actor = spawn(unreal.StaticMeshActor, location, "
+              "rotation=rotation, scale=scale, label=label)")
     if anchor not in src:
         raise SystemExit("static_mesh signature changed; preview needs its anchor updated")
     src = src.replace(anchor, anchor + "\n        __wl_record__(mesh_key, location, scale, label, rotation, mat)", 1)

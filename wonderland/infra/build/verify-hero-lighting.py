@@ -65,8 +65,12 @@ def load_world():
     exec(compile(src[:cut], "verify-hero-composition.py", "exec"), ns)
     sys.modules["unreal"] = ns["make_unreal"]()
     gen = io.open(os.path.join(SP, "generate-hub-level.py"), encoding="utf8").read()
-    anchor = ("    def static_mesh(mesh_key, location, scale, label, "
-              "rotation=(0.0, 0.0, 0.0), mat=None):")
+    # Inject AFTER the label is made unique, not at the function's first line:
+    # recording the argument records the name the caller asked for, and the
+    # generator may have had to rename it. Attribution has to see what the world
+    # actually contains.
+    anchor = ("        actor = spawn(unreal.StaticMeshActor, location, "
+              "rotation=rotation, scale=scale, label=label)")
     gen = gen.replace(anchor, anchor + "\n        __wl_record__(mesh_key, location, scale, label, rotation, mat)", 1)
     gns = {"__name__": "__wl_rt_gen__",
            "__file__": os.path.join(SP, "generate-hub-level.py"),

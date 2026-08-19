@@ -1167,10 +1167,27 @@ def build(layout):
             actor.set_actor_label(label)
         return actor
 
+    _USED_LABELS = {}
+
     def static_mesh(mesh_key, location, scale, label, rotation=(0.0, 0.0, 0.0), mat=None):
         path = PLACEHOLDER_MESH.get(mesh_key, UNKNOWN_MESH)
         if mesh_key not in PLACEHOLDER_MESH:
             unreal.log_warning("No placeholder mesh for '%s' (%s); using fallback." % (mesh_key, label))
+        # UNIQUE LABELS. Scattered kits key their label off the per-call index,
+        # and scatter() restarts that index for every cluster — so 7,050 of the
+        # 24,851 actors shared a name with another, `tuft_126` ten times over.
+        # UE auto-uniquifies display names so nothing breaks, but the labels are
+        # what any attribution of the frame reads, and ambiguous names make that
+        # analysis quietly wrong.
+        #
+        # Done HERE rather than by changing the index, deliberately: the index
+        # also seeds every colour choice and jitter in those kits, so touching it
+        # would move the world. This touches only the name.
+        if label in _USED_LABELS:
+            _USED_LABELS[label] += 1
+            label = "%s__%d" % (label, _USED_LABELS[label])
+        else:
+            _USED_LABELS[label] = 0
         actor = spawn(unreal.StaticMeshActor, location, rotation=rotation, scale=scale, label=label)
         smc = actor.get_component_by_class(unreal.StaticMeshComponent)
         # MOVABLE so the mesh is fully dynamic: with r.AllowStaticLighting=False and
