@@ -3004,13 +3004,20 @@ def build(layout):
         # lifts the shadows without touching the highlights, which is precisely
         # the range the frame was missing.
         #
-        # 1.15 was the first guess. A CPU trace of this exact geometry at 0.42 /
-        # 0.70 / 1.15 says none of them crush or clip — luma sd moves 54.7 -> 51.7
-        # and saturation 0.176 -> 0.161 across the whole range — so the choice sits
-        # inside a safe band rather than on a cliff, and 0.90 takes most of the
-        # shadow lift for two thirds of the saturation cost. This is the first
-        # value to revisit against a real streamed frame; the trace has no Lumen,
-        # so it can bound this decision but not settle it.
+        # 1.15 was the first guess. A CPU trace of this exact geometry, swept at
+        # 0.42 / 0.70 / 0.90 / 1.15, says the choice barely matters: luma sd moves
+        # 60.3 -> 59.0 across the entire range and saturation 0.193 -> 0.185, with
+        # no clipping anywhere. So this is a flat region, not a cliff, and 0.90
+        # takes most of the shadow lift for almost none of the contrast.
+        #
+        # (Those are the CORRECTED figures. The first sweep read 54.7 -> 51.7 and
+        # 0.176 -> 0.161 because the tracer was giving UE's flat Plane asset 50 uu
+        # of thickness, so the ground plane engulfed the paving. Same conclusion,
+        # different numbers — but a comment carrying measurements that were never
+        # true is worse than one carrying none.)
+        #
+        # Still the first value to revisit against a real streamed frame: the
+        # trace has no Lumen, so it can bound this decision and cannot settle it.
         try:
             sky_comp.set_intensity(0.90)
         except Exception:
