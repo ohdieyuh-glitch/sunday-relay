@@ -328,7 +328,60 @@ def build_material_library():
         mt = param(unreal.MaterialExpressionScalarParameter, "Metallic", 0, 0.0)
         mel.connect_material_property(mt, "", unreal.MaterialProperty.MP_METALLIC)
         rg = param(unreal.MaterialExpressionScalarParameter, "Roughness", 150, 0.6)
-        mel.connect_material_property(rg, "", unreal.MaterialProperty.MP_ROUGHNESS)
+        # ROUGHNESS BREAKUP, minimally. A flat roughness scalar is half of why
+        # these surfaces read as plastic: a real surface is duller where it is
+        # worn and cleaner where it is not, and that variation is what makes a
+        # highlight TRAVEL across a form instead of sitting on it.
+        #
+        # Deliberately two nodes. A previous attempt wired nine (clamp, constant,
+        # add, vector-noise, normalize) in one go and compiled to a BROKEN master:
+        # every instance fell back to default, the world went monochrome brown and
+        # the Dog rendered the missing-material checkerboard. The noise emits its
+        # multiplier range directly so no add/clamp is needed at all.
+        _rough_wired = False
+        try:
+            rn = mel.create_material_expression(master, unreal.MaterialExpressionNoise, -820, 120)
+            rn.set_editor_property("scale", 0.05)
+            rn.set_editor_property("output_min", 0.72)
+            rn.set_editor_property("output_max", 1.28)
+            rn.set_editor_property("levels", 3)
+            rmul = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -320, 150)
+            mel.connect_material_expressions(rg, "", rmul, "A")
+            mel.connect_material_expressions(rn, "", rmul, "B")
+            mel.connect_material_property(rmul, "", unreal.MaterialProperty.MP_ROUGHNESS)
+            _rough_wired = True
+        except Exception as _e:
+            unreal.log_warning("roughness breakup skipped (%s)" % _e)
+        if not _rough_wired:
+            mel.connect_material_property(rg, "", unreal.MaterialProperty.MP_ROUGHNESS)
+        # PROCEDURAL NORMAL DETAIL. The master had no normal input at all, so
+        # every surface was geometrically perfect — the strongest "prototype"
+        # cue left after silhouette. A gradient vector-noise field perturbs the
+        # shading normal so stone, bark and plaster catch the key light with
+        # real micro-relief. No textures, so nothing to license or ship.
+        #
+        # Wired ALONE and last: an earlier attempt landed this together with a
+        # clamp/constant roughness chain and took the whole master down with it.
+        # If VectorNoise is unavailable on this engine build the except leaves
+        # the graph exactly as it was.
+        try:
+            damp = param(unreal.MaterialExpressionScalarParameter, "DetailAmp", 560, 0.30)
+            vn = mel.create_material_expression(master, unreal.MaterialExpressionVectorNoise, -820, 340)
+            vscaled = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -600, 360)
+            mel.connect_material_expressions(vn, "", vscaled, "A")
+            mel.connect_material_expressions(damp, "", vscaled, "B")
+            flat = mel.create_material_expression(master, unreal.MaterialExpressionConstant3Vector, -600, 470)
+            flat.set_editor_property("constant", unreal.LinearColor(0.0, 0.0, 1.0, 1.0))
+            nadd = mel.create_material_expression(master, unreal.MaterialExpressionAdd, -420, 400)
+            mel.connect_material_expressions(flat, "", nadd, "A")
+            mel.connect_material_expressions(vscaled, "", nadd, "B")
+            nnorm = mel.create_material_expression(master, unreal.MaterialExpressionNormalize, -250, 400)
+            mel.connect_material_expressions(nadd, "", nnorm, "")
+            mel.connect_material_property(nnorm, "", unreal.MaterialProperty.MP_NORMAL)
+            unreal.log("NORMAL DETAIL wired")
+        except Exception as _e:
+            unreal.log_warning("normal detail skipped (%s); flat shading normals" % _e)
+
         em = param(unreal.MaterialExpressionVectorParameter, "Emissive", 300, unreal.LinearColor(0, 0, 0, 1))
         es = param(unreal.MaterialExpressionScalarParameter, "EmissiveStrength", 450, 0.0)
         mul = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -300, 350)
@@ -396,6 +449,22 @@ def build_material_library():
         mel.set_material_instance_scalar_parameter_value(mi, "EmissiveStrength", es)
         eal.save_asset(mi.get_path_name())
         mats[name] = mi
+    # PER-SURFACE RELIEF. One global strength would make porcelain look
+    # sandblasted and bark look shrink-wrapped.
+    relief = {"porcelain": 0.04, "gold": 0.06, "gold_glow": 0.06, "dog_body": 0.05,
+              "dog_visor": 0.03, "water": 0.02, "spire": 0.20, "spire_pink": 0.20,
+              "spire_blue": 0.20, "spire_teal": 0.20, "spire_far": 0.10,
+              "roof_rose": 0.16, "roof_pink": 0.16, "stone": 0.80, "meadow_far": 0.50,
+              "trunk": 0.85, "foliage": 0.50, "foliage_hi": 0.50, "mush_red": 0.26,
+              "mush_purple": 0.26, "mush_white": 0.30, "mush_gill": 0.40,
+              "rose": 0.28, "rose_pink": 0.28, "petal_pink": 0.20, "petal_violet": 0.20}
+    for _nm, _dv in relief.items():
+        if _nm in mats:
+            try:
+                mel.set_material_instance_scalar_parameter_value(mats[_nm], "DetailAmp", _dv)
+                eal.save_asset(mats[_nm].get_path_name())
+            except Exception as _e:
+                unreal.log_warning("relief on %s skipped: %s" % (_nm, _e))
     # Bring the Dogs alive (clear breathe) + a gentle foliage sway; everything else
     # keeps BreatheAmp 0 (static). Live motion in the stream, invisible in a still.
     breathe = {"dog_body": 6.5, "dog_pink": 6.0, "dog_gray": 6.0, "dog_tan": 6.0,
@@ -917,13 +986,26 @@ def build(layout):
             _part("sphere", fx, y + 60.0 * s, 300.0 * s, 0.4 * s, 0.4 * s, 0.4 * s,
                   "rose" if i % 2 else "petal_pink", "%s_bloom%d" % (label, i))
 
-    def scatter(cx, cy, count, radius, fn):
+    def scatter(cx, cy, count, radius, fn, keep_clear=0.0, clear_at=(0.0, 0.0)):
         # Deterministic phyllotaxis spread (golden angle) — no RNG, so regen is
         # reproducible. fn(x, y, i) places one element.
+        #
+        # KEEP-CLEAR is the composition rule. Phyllotaxis fills from the cluster
+        # centre outward, and the core cluster sits near the world origin, so
+        # planting grew straight over the arcane circle and right up under the
+        # camera. The reference does the opposite: an OPEN plaza with the Dog
+        # legible on the circle, and the density beginning further out. Anything
+        # inside the clear radius is skipped rather than nudged, so the plaza
+        # edge stays an edge instead of becoming a dense ring.
         for i in range(count):
             a = math.radians(i * 137.508)
             r = radius * math.sqrt((i + 0.5) / max(1, count))
-            fn(cx + math.cos(a) * r, cy + math.sin(a) * r, i)
+            px, py = cx + math.cos(a) * r, cy + math.sin(a) * r
+            if keep_clear > 0.0:
+                dx, dy = px - clear_at[0], py - clear_at[1]
+                if (dx * dx + dy * dy) < (keep_clear * keep_clear):
+                    continue
+            fn(px, py, i)
 
     def flower(x, y, i):
         h = 24.0 + (i % 3) * 9.0
@@ -1086,7 +1168,7 @@ def build(layout):
     _lux = float(atm.get("sunIntensityLux", 0)) or 340.0
     sun_comp.set_intensity(_lux)
     try:
-        sun_comp.set_light_color(unreal.LinearColor(1.0, 0.80, 0.52, 1.0))
+        sun_comp.set_light_color(unreal.LinearColor(1.0, 0.94, 0.84, 1.0))
     except Exception:
         pass
     set_prop(sun_comp, "bAtmosphereSunLight", True)
@@ -1113,8 +1195,8 @@ def build(layout):
         # with a warm Mie haze near the sun for a golden horizon. The pink/purple of
         # Wonderland lives in the DISTANCE fog, the flowers and the castles — NOT the
         # whole sky. (An earlier violet Rayleigh made it a dark twilight.)
-        set_prop(sac, "RayleighScatteringScale", 0.085)
-        set_prop(sac, "MieScatteringScale", 0.0022)
+        set_prop(sac, "RayleighScatteringScale", 0.0331)
+        set_prop(sac, "MieScatteringScale", 0.0030)
         set_prop(sac, "MieAnisotropy", 0.80)
     if atm.get("skyLight"):
         sky = spawn(unreal.SkyLight, (0, 0, 0), label="SkyLight")
@@ -1234,8 +1316,20 @@ def build(layout):
     # A far meadow closes it. Deliberately enormous, slightly below the plaza so
     # it never z-fights the flagstone, and in a soft lilac-green that the height
     # fog then carries toward the sky colour.
-    static_mesh("plane", [0.0, 2000.0, -12.0], [620.0, 620.0, 1.0], "FarMeadow",
+    static_mesh("plane", [0.0, 2000.0, -12.0], [5200.0, 5200.0, 1.0], "FarMeadow",
                 mat="meadow_far" if "meadow_far" in MATS else "foliage")
+
+    # DISTANT HILLS. A flat plane meeting the sky in a dead-straight line reads
+    # as a backdrop, not a world. A ring of very wide, very shallow domes gives
+    # the horizon a soft, uneven edge for the castle rooflines to sit against.
+    import math as _mh
+    for i in range(26):
+        a = i * 2.39996
+        d = 26000.0 + 9000.0 * ((i * 17) % 7) / 7.0
+        hx, hy = _mh.cos(a) * d, _mh.sin(a) * d + 3000.0
+        w = 90.0 + 40.0 * ((i * 13) % 5) / 5.0
+        static_mesh("sphere", [hx, hy, -1400.0], [w, w, 15.0 + 9.0 * ((i * 11) % 4) / 4.0],
+                    "Hill%d" % i, mat="meadow_far" if "meadow_far" in MATS else "foliage")
 
     # LAYERED SKYLINE. The reference's depth comes from castle rooflines at
     # several distances, each smaller and hazier than the last. The layout ships
@@ -1498,14 +1592,30 @@ def build(layout):
             # Real scattered instances (not fake — deterministic phyllotaxis) so the
             # clusters read as dense planting rather than a single locator.
             rad = float(c.get("radiusUu", 320))
+            # COUNTS COME FROM THE DATA NOW. These were hardcoded at 24/18/7, so
+            # every density and count field in hub-layout.json was decorative —
+            # raising them in the layout changed nothing on screen, which is a
+            # convincing way to believe you have increased density when you have
+            # not. Density scales the count with the cluster's own area so a big
+            # bed reads as full rather than as the same handful spread thinner.
+            area = max(1.0, (rad / 320.0) ** 2)
+            # THE ARRIVAL PLAZA STAYS OPEN. 620uu around the origin is the circle
+            # plus reading room; the reference's charm needs somewhere to stand.
+            PLAZA_CLEAR = 620.0
             if key == "foliageClusters":
-                scatter(ctr[0], ctr[1], 24, rad, tuft)
+                n = int(28 * area * (float(c.get("density", 0.55)) / 0.55))
+                scatter(ctr[0], ctr[1], min(n, 220), rad, tuft,
+                        keep_clear=PLAZA_CLEAR)
             elif key == "flowerBeds":
-                scatter(ctr[0], ctr[1], 18, rad, flower)
+                n = int(c.get("count", 0)) or int(26 * area)
+                scatter(ctr[0], ctr[1], min(n, 200), rad, flower,
+                        keep_clear=PLAZA_CLEAR)
             else:
-                scatter(ctr[0], ctr[1], 7, rad,
-                        lambda x, y, i: kit_mushroom(x, y, 0.3 + 0.1 * (i % 3),
-                                                     "mini%d" % i, "mush_purple" if i % 2 else "mush_red"))
+                n = int(c.get("count", 0)) or int(10 * area)
+                scatter(ctr[0], ctr[1], min(n, 90), rad,
+                        lambda x, y, i: kit_mushroom(x, y, 0.30 + 0.13 * (i % 4),
+                                                     "mini%d" % i, "mush_purple" if i % 2 else "mush_red"),
+                        keep_clear=PLAZA_CLEAR)
 
     # --- Paths: one locator per point (real splines/nav are M2) -----------
     def place_path(path, prefix):

@@ -39,8 +39,10 @@
 class UCameraComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
+class UFloatingPawnMovement;
 class UInputAction;
 class UInputMappingContext;
+struct FInputActionValue;
 
 UCLASS(Blueprintable)
 class AWonderlandDogPawn : public APawn
@@ -61,7 +63,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Camera")
 	TObjectPtr<UCameraComponent> FollowCamera;
 
-	/** Enhanced Input bindings, assigned in the Blueprint subclass. */
+	/**
+	 * Locomotion. Without it AddMovementInput is a no-op and the Dog cannot be
+	 * explored — this is what makes "explore with Wandering the Relay Dog" possible
+	 * at all. Local and presentational: movement changes where the body is, never
+	 * any Relay state. (A graybox flyer on an APawn; a later ground-walking Dog
+	 * would reparent to ACharacter for gravity + navmesh.)
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Movement")
+	TObjectPtr<UFloatingPawnMovement> Movement;
+
+	/** Enhanced Input bindings, assigned in the Blueprint subclass or by the level
+	 *  generator's created input assets. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Wonderland|Input")
 	TObjectPtr<UInputMappingContext> InputContext;
 
@@ -133,7 +146,50 @@ protected:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	/**
+	 * Register with the Relay link so it can push ApplyWorldState, and apply
+	 * whatever world it has already accepted. This is the runtime half of closing
+	 * "ApplyWorldState has no caller": the subsystem is the caller, and this is
+	 * where the pawn makes itself known to it. Still READ-ONLY — registration
+	 * grants the link no power over Relay; it only lets Relay reach the pawn.
+	 */
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 private:
+	/**
+	 * Local movement + look, driven by Enhanced Input. Camera-relative planar
+	 * movement and controller look — presentation only. Neither reads or writes a
+	 * single field of Relay state; where the player walks never becomes an Agent
+	 * activity (that arrives only through ApplyWorldState).
+	 */
+	void Move(const FInputActionValue& Value);
+	void Look(const FInputActionValue& Value);
+
+	// Legacy axis fallback (DefaultInput.ini) so WASD / mouse-look bind even when no
+	// Enhanced Input assets are assigned — coexists with the Enhanced Input path.
+	void MoveForwardAxis(float Value);
+	void MoveBackwardAxis(float Value);
+	void MoveRightAxis(float Value);
+	void MoveLeftAxis(float Value);
+	void TurnAxis(float Value);
+	void LookUpAxis(float Value);
+
+	// Explicit Interact (E): raises the intent of the nearest in-proximity
+	// WonderlandInteractable. A REQUEST only — Relay decides; the pawn never acts.
+	void OnInteract();
+
+	// Build the player's visible voxel Dog as child components of the movement
+	// root at BeginPlay. Presentation only — every part is NoCollision and reads
+	// nothing from Relay. Runs once; the world's ambient Dogs are built the same
+	// way by the level generator's kit_dog.
+	void BuildVisibleBody();
+
+	// Interact is delivered via the (proven) legacy AXIS path with rising-edge
+	// detection, because the discrete ActionMapping did not fire over the stream.
+	void InteractAxis(float Value);
+	bool bInteractHeld = false;
+
 	/** The last agent section Relay sent. Default-constructed = unobserved. */
 	UPROPERTY()
 	FWonderlandAgent ObservedAgent;
