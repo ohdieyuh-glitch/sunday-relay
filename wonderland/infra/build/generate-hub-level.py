@@ -173,14 +173,14 @@ MATERIAL_SPEC = {
     # inside and an outside, which is what makes it read as leaves.
     "foliage_deep":((0.09, 0.21, 0.11), 0.0, 0.80, (0, 0, 0), 0.0),
     "foliage_spr": ((0.50, 0.72, 0.34), 0.0, 0.62, (0, 0, 0), 0.0),
-    "rose":        ((0.78, 0.22, 0.36), 0.0, 0.42, (0.18, 0, 0.03), 0.4),
+    "rose":        ((0.72, 0.13, 0.28), 0.0, 0.40, (0.20, 0, 0.03), 0.45),
     "rose_pink":   ((0.96, 0.42, 0.62), 0.0, 0.40, (0.10, 0.0, 0.04), 0.3),
     "petal_pink":  ((0.94, 0.40, 0.66), 0.0, 0.38, (0, 0, 0), 0.0),
-    "petal_violet":((0.62, 0.42, 0.88), 0.0, 0.40, (0.08, 0.02, 0.16), 0.3),
+    "petal_violet":((0.52, 0.28, 0.86), 0.0, 0.40, (0.09, 0.02, 0.20), 0.35),
     "petal_air":   ((0.98, 0.62, 0.82), 0.0, 0.36, (0.10, 0.02, 0.06), 0.2),
     "mush_red":    ((0.74, 0.16, 0.26), 0.0, 0.28, (0.14, 0, 0), 0.3),
     "mush_white":  ((0.96, 0.94, 0.90), 0.0, 0.42, (0, 0, 0), 0.0),
-    "mush_purple": ((0.52, 0.30, 0.74), 0.0, 0.30, (0.12, 0.02, 0.18), 0.3),
+    "mush_purple": ((0.44, 0.20, 0.76), 0.0, 0.30, (0.13, 0.02, 0.22), 0.35),
     "spire":       ((0.94, 0.90, 0.86), 0.0, 0.40, (0, 0, 0), 0.0),
     "spire_pink":  ((0.98, 0.74, 0.82), 0.0, 0.34, (0, 0, 0), 0.0),
     "spire_blue":  ((0.74, 0.82, 0.98), 0.0, 0.34, (0, 0, 0), 0.0),
@@ -213,7 +213,7 @@ MATERIAL_SPEC = {
     "spire_far":   ((0.88, 0.86, 0.94), 0.0, 0.62, (0, 0, 0), 0.0),
     # Rose and pink rooflines — the reference's skyline is warm, not gold.
     "roof_rose":   ((0.78, 0.38, 0.44), 0.0, 0.46, (0.04, 0.0, 0.01), 0.10),
-    "roof_pink":   ((0.96, 0.58, 0.70), 0.0, 0.42, (0, 0, 0), 0.0),
+    "roof_pink":   ((0.92, 0.46, 0.62), 0.0, 0.42, (0, 0, 0), 0.0),
     # Gills under a mushroom cap: warm shadow, never black.
     "mush_gill":   ((0.80, 0.66, 0.58), 0.0, 0.70, (0, 0, 0), 0.0),
     # Cumulus. Slightly self-lit so the shaded undersides stay soft and
@@ -1909,6 +1909,71 @@ def build(layout):
         _part("cylinder", x + 90.0 * s, y - 56.0 * s, 168.0 * s, 0.14 * s, 0.14 * s, 0.20 * s,
               "crystal", "%s_eyep" % label, rot=(38.0, 0.0, 0.0))
 
+    def kit_townhouse(x, y, yaw, s, label, body="spire", roof="roof_rose"):
+        """An ornate townhouse: plinth, shopfront with an awning, a jettied upper
+        storey, a balcony with balusters and flower boxes, shutters, a steep roof
+        with dormers, a chimney and a lantern by the door.
+
+        The reference's density is not foliage, it is BUILDING — close enough to
+        read its trim. A block of these behind the garden is the step the
+        composition was missing between planting and skyline."""
+        ca, sa = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+
+        def P(prim, ox, oy, oz, sx, sy, sz, mat, lb, rot=(0.0, 0.0, 0.0)):
+            # place in the house's own frame so the whole thing can be rotated
+            wx = x + ox * ca - oy * sa
+            wy = y + ox * sa + oy * ca
+            _part(prim, wx, wy, oz * s, sx * s, sy * s, sz * s, mat, "%s_%s" % (label, lb),
+                  rot=(rot[0], rot[1] + yaw, rot[2]))
+
+        W_, D_ = 2.10, 1.55
+        P("cube", 0, 0, 26.0, W_ * 1.06, D_ * 1.06, 0.52, "stone", "plinth")
+        P("cube", 0, 0, 150.0, W_, D_, 2.4, body, "ground_floor")
+        # shopfront: dark timber frame, glazing, and an awning over it
+        P("cube", 0, -D_ * 50.0 - 4.0, 130.0, W_ * 0.82, 0.10, 1.7, "trunk", "shopfront")
+        P("cube", 0, -D_ * 50.0 - 8.0, 140.0, W_ * 0.68, 0.06, 1.3, "dog_visor", "glazing")
+        for _a in range(5):
+            P("cube", (_a - 2) * 34.0, -D_ * 50.0 - 26.0, 232.0, 0.34, 0.62, 0.10,
+              "rose" if _a % 2 else "porcelain", "awning%d" % _a, rot=(-26.0, 0.0, 0.0))
+        P("cube", W_ * 34.0, -D_ * 50.0 - 6.0, 118.0, 0.34, 0.08, 1.5, "trunk", "door")
+        P("sphere", W_ * 34.0 + 12.0, -D_ * 50.0 - 14.0, 210.0, 0.16, 0.16, 0.20,
+          "magic_gold", "doorlamp")
+        # jettied upper storey, wider than the floor below — the overhang is what
+        # makes a street of these read as old and built rather than extruded
+        P("cube", 0, 0, 330.0, W_ * 1.12, D_ * 1.12, 1.9, body, "upper")
+        P("cube", 0, 0, 246.0, W_ * 1.16, D_ * 1.16, 0.20, "trunk", "jetty")
+        for _w in range(3):
+            ox = (_w - 1) * 62.0
+            P("cube", ox, -D_ * 56.0, 350.0, 0.40, 0.06, 0.62, "dog_visor", "win%d" % _w)
+            for _sh in (-1, 1):
+                P("cube", ox + _sh * 26.0, -D_ * 57.0, 350.0, 0.16, 0.05, 0.64,
+                  "spire_blue" if _w % 2 else "spire_teal", "shutter%d_%d" % (_w, _sh))
+        # balcony with balusters and flower boxes
+        P("cube", 0, -D_ * 58.0, 288.0, W_ * 1.06, 0.34, 0.10, "stone", "balcony")
+        for _b in range(7):
+            P("cylinder", (_b - 3) * 30.0, -D_ * 58.0, 306.0, 0.06, 0.06, 0.28,
+              "porcelain", "baluster%d" % _b)
+        P("cube", 0, -D_ * 60.0, 300.0, W_ * 0.98, 0.16, 0.16, "trunk", "flowerbox")
+        for _f in range(6):
+            P("sphere", (_f - 2.5) * 32.0, -D_ * 62.0, 320.0, 0.15, 0.15, 0.14,
+              ("rose", "petal_violet", "petal_pink", "rose_pink")[_f % 4], "bloom%d" % _f)
+        # steep roof, dormers, ridge, chimney
+        P("cone", 0, 0, 500.0, W_ * 1.30, D_ * 1.30, 1.7, roof, "roof")
+        for _d in (-1, 1):
+            P("cube", _d * 48.0, -D_ * 34.0, 452.0, 0.34, 0.34, 0.44, body, "dormer%d" % _d)
+            P("cone", _d * 48.0, -D_ * 34.0, 498.0, 0.46, 0.46, 0.40, roof, "dormerroof%d" % _d)
+            P("cube", _d * 48.0, -D_ * 42.0, 452.0, 0.20, 0.05, 0.24, "dog_visor",
+              "dormerwin%d" % _d)
+        P("cube", W_ * 30.0, D_ * 26.0, 560.0, 0.26, 0.26, 1.1, "stone", "chimney")
+        P("cube", W_ * 30.0, D_ * 26.0, 618.0, 0.34, 0.34, 0.12, "brass_deep"
+          if "brass_deep" in MATS else "stone", "chimneycap")
+        # ivy up one flank, so the row is planted rather than dropped
+        for _v in range(6):
+            _t = _v / 5.0
+            P("sphere", -W_ * 52.0, -D_ * 20.0 + math.sin(_t * 5.0) * 18.0,
+              40.0 + _t * 420.0, 0.26, 0.26, 0.26,
+              "foliage" if _v % 2 else "foliage_hi", "ivy%d" % _v)
+
     def kit_dome(x, y, z, r, label, mat="spire", rib="gold"):
         """A ribbed dome. The skyline reference is not all cones."""
         for i in range(10):
@@ -2982,7 +3047,7 @@ def build(layout):
     # up and half a kilometre to two kilometres away; at that remove the eye
     # reads scale before it reads geometry. More puffs per cluster, heavily
     # overlapped, so the silhouette stops showing which spheres it is made of.
-    for i in range(28):
+    for i in range(44):
         a = i * 2.39996
         dist = 52000.0 + 168000.0 * (((i * 23) % 9) / 9.0)
         cx0 = _mc.cos(a) * dist
@@ -3404,6 +3469,35 @@ def build(layout):
                           roof_mat=castle_roofs[i % len(castle_roofs)] if body is None
                           else ("roof_pink" if i % 3 else "roof_rose"),
                           flag=(i % 3 == 0))
+    # THE NEAR QUARTER. Two terraces of townhouses standing 30-60 m out, well
+    # clear of the hero sight-line, so the eye steps garden -> street -> town ->
+    # skyline instead of jumping from planting to a horizon. Close enough that
+    # their trim reads, which is the whole point: this is the band where
+    # ornament is still legible and the far bands are silhouette.
+    _bodies = ("spire", "spire_pink", "spire_blue", "spire_teal", "spire")
+    _roofs = ("roof_rose", "roof_pink", "roof_rose", "gold", "roof_pink")
+    _quarter = 0
+    for _side in (-1, 1):
+        for _i in range(9):
+            _hx = _side * (2050.0 + 250.0 * ((_i * 5) % 3))
+            _hy = 900.0 + _i * 640.0
+            if abs(_hx) < 1500.0:
+                continue
+            kit_townhouse(_hx, _hy, (90.0 if _side > 0 else -90.0) + ((_i * 17) % 13) - 6.0,
+                          1.05 + 0.24 * ((_i * 7) % 4) / 4.0,
+                          "Town%d_%d" % (_side, _i),
+                          body=_bodies[(_i + (_side > 0)) % len(_bodies)],
+                          roof=_roofs[_i % len(_roofs)])
+            _quarter += 1
+    # a short parade facing the boulevard at the far end, closing the street
+    for _i in range(5):
+        kit_townhouse((_i - 2) * 700.0, 6100.0, 180.0 + ((_i * 23) % 11) - 5.0,
+                      1.25 + 0.18 * (_i % 3),
+                      "Parade%d" % _i, body=_bodies[_i % len(_bodies)],
+                      roof=_roofs[(_i + 2) % len(_roofs)])
+        _quarter += 1
+    unreal.log("NEAR QUARTER %d townhouses" % _quarter)
+
     # THE SUBJECT. One great castle closing the north axis, slightly off centre
     # so the composition is not a bullseye, at a distance that makes it 130 m of
     # architecture rather than another turret.
