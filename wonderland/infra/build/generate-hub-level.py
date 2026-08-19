@@ -199,6 +199,11 @@ MATERIAL_SPEC = {
     # for restrained bloom.
     "lamp_glass":  ((1.00, 0.88, 0.58), 0.0, 0.22, (1.00, 0.80, 0.42), 2.0),
     "arcane":      ((0.66, 0.36, 1.00), 0.0, 0.30, (0.62, 0.28, 1.00), 11.0),
+    # The SPILL, not the source. Light leaking out of the arcane circle into
+    # the paving has to fall off; at the ring's own radiance it stops reading
+    # as a spill and becomes 78 more light sources in the near foreground.
+    "arcane_dim":  ((0.60, 0.34, 0.92), 0.0, 0.34, (0.52, 0.24, 0.90), 3.2),
+    "arcane_faint":((0.44, 0.30, 0.62), 0.0, 0.42, (0.20, 0.09, 0.34), 1.1),
     "crystal":     ((0.65, 0.40, 0.95), 0.1, 0.20, (0.40, 0.20, 0.80), 1.5),
     "dog_body":    ((0.985, 0.985, 0.995), 0.0, 0.34, (0.02, 0.02, 0.03), 0.10),
     "dog_visor":   ((0.02, 0.02, 0.03), 0.1, 0.12, (0, 0, 0), 0.0),
@@ -3353,7 +3358,15 @@ def build(layout):
             wob = math.sin(t * 6.0 + i) * 0.16
             _part("cube", math.cos(a + wob) * rr, math.sin(a + wob) * rr, 7.4,
                   0.34, 0.055, 0.02,
-                  "arcane" if t < 0.45 else "dog_visor", "Crack%d_%d" % (i, k),
+                  # A GRADIENT, because that is what a spill is: the ring's own
+                  # radiance at the lip, falling through two dimmer steps into
+                  # an unlit crack. Flat-bright to 45% of the run put 78 strips
+                  # at peak radiance across the plaza right in front of the
+                  # camera, which is a second light source, not a leak.
+                  ("arcane" if t < 0.16 else
+                   "arcane_dim" if (t < 0.34 and "arcane_dim" in MATS) else
+                   "arcane_faint" if (t < 0.55 and "arcane_faint" in MATS) else
+                   "dog_visor"), "Crack%d_%d" % (i, k),
                   rot=(0.0, 0.0, math.degrees(a + wob) + 4.0))
     # flowers and mushrooms taking hold at the path edges
     for i in range(40):
