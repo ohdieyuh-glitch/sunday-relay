@@ -1,3 +1,6 @@
+import os as _os
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_WL = _os.path.dirname(_os.path.dirname(_HERE))          # <repo>/wonderland
 #!/usr/bin/env python3
 """Run generate-hub-level.py OFFLINE against a stubbed `unreal` module.
 
@@ -17,8 +20,8 @@ import os
 import sys
 import types
 
-GEN = "/home/kaisinrogodfree5/wonderland-ca-fixes/wonderland/infra/build/generate-hub-level.py"
-LAYOUT = "/home/kaisinrogodfree5/wonderland-ca-fixes/wonderland/WorldDesign/hub-layout.json"
+GEN = _os.path.join(_HERE, "generate-hub-level.py")
+LAYOUT = _os.path.join(_WL, "WorldDesign", "hub-layout.json")
 
 spawned = collections.Counter()
 warnings = []

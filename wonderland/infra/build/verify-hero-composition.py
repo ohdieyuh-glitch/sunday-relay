@@ -1,3 +1,6 @@
+import os as _os
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_WL = _os.path.dirname(_os.path.dirname(_HERE))          # <repo>/wonderland
 #!/usr/bin/env python3
 """Rasterise the hero camera OFFLINE from the dry run's actor list.
 
@@ -24,9 +27,9 @@ import sys
 import types
 import zlib
 
-REPO = "/home/kaisinrogodfree5/wonderland-ca-fixes"
-GEN = REPO + "/wonderland/infra/build/generate-hub-level.py"
-LAYOUT = REPO + "/wonderland/WorldDesign/hub-layout.json"
+REPO = _os.path.dirname(_WL)
+GEN = _os.path.join(_HERE, "generate-hub-level.py")
+LAYOUT = _os.path.join(_WL, "WorldDesign", "hub-layout.json")
 
 W, H = 800, 450
 records = []

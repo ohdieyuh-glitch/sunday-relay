@@ -1,3 +1,6 @@
+import os as _os
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_WL = _os.path.dirname(_os.path.dirname(_HERE))          # <repo>/wonderland
 #!/usr/bin/env python3
 """A CPU ray trace of the hero frame, for LIGHTING only.
 
@@ -27,29 +30,29 @@ import struct
 import sys
 import zlib
 
-SP = os.path.dirname(os.path.abspath(__file__))
-REPO = "/home/kaisinrogodfree5/wonderland-ca-fixes"
+SP = _HERE
+REPO = _os.path.dirname(_WL)
 W, H = int(os.environ.get('WL_W', '336')), int(os.environ.get('WL_H', '189'))
 SPP_SHADOW = 1
 
 
 def load_world():
     """Reuse the preview's recorder to get every primitive the generator emits."""
-    src = io.open(os.path.join(SP, "preview.py"), encoding="utf8").read()
-    ns = {"__name__": "__wl_rt__", "__file__": os.path.join(SP, "preview.py")}
+    src = io.open(os.path.join(SP, "verify-hero-composition.py"), encoding="utf8").read()
+    ns = {"__name__": "__wl_rt__", "__file__": os.path.join(SP, "verify-hero-composition.py")}
     # run only the top half: the stub, the recorder, the png writer
     cut = src.index("def main():")
-    exec(compile(src[:cut], "preview.py", "exec"), ns)
+    exec(compile(src[:cut], "verify-hero-composition.py", "exec"), ns)
     sys.modules["unreal"] = ns["make_unreal"]()
-    gen = io.open(REPO + "/wonderland/infra/build/generate-hub-level.py", encoding="utf8").read()
+    gen = io.open(os.path.join(SP, "generate-hub-level.py"), encoding="utf8").read()
     anchor = ("    def static_mesh(mesh_key, location, scale, label, "
               "rotation=(0.0, 0.0, 0.0), mat=None):")
     gen = gen.replace(anchor, anchor + "\n        __wl_record__(mesh_key, location, scale, label, rotation, mat)", 1)
     gns = {"__name__": "__wl_rt_gen__",
-           "__file__": REPO + "/wonderland/infra/build/generate-hub-level.py",
+           "__file__": os.path.join(SP, "generate-hub-level.py"),
            "__wl_record__": ns["record"]}
     cwd = os.getcwd()
-    os.chdir(REPO + "/wonderland")
+    os.chdir(_WL)
     try:
         exec(compile(gen, "gen.py", "exec"), gns)
         ns["records"][:] = []
@@ -61,7 +64,7 @@ def load_world():
 
 def main():
     records, SPEC, write_png = load_world()
-    lay = json.load(io.open(REPO + "/wonderland/WorldDesign/hub-layout.json", encoding="utf8"))
+    lay = json.load(io.open(os.path.join(_WL, "WorldDesign", "hub-layout.json"), encoding="utf8"))
     hero = [c for c in lay["heroCameras"] if c["id"] == "cam_arrival_hero"][0]
     atm = lay.get("atmosphere", {})
 
