@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-hub-layout.v2",
   "_comment": "WORLD DESIGN DATA (Hub Design 3.0) for the first Wonderland Hub, kept separate from the generator so artists/assets swap without touching systems. Composed per docs/relay/WONDERLAND_ART_DIRECTION.md + docs/relay/WONDERLAND_VISUAL_ACCEPTANCE.md and documented in docs/relay/wonderland/HUB_DESIGN.md.",
-  "_status": "AUTHORED / SPECIFIED, NOT RENDERED and NOT COMPILED. No Unreal Engine exists in this environment (2-core Chromebook, no GPU). There is no .umap, no lighting, no materials, no foliage, no frame. Every dimension, elevation, count and radius below is DESIGN INTENT for whoever builds the level and its assets \u2014 a target, never a measurement. See docs/relay/wonderland/HUB_DESIGN.md 'Unproven'.",
+  "_status": "AUTHORED / SPECIFIED, NOT RENDERED and NOT COMPILED. No Unreal Engine exists in this environment (2-core Chromebook, no GPU). There is no .umap, no lighting, no materials, no foliage, no frame. Every dimension, elevation, count and radius below is DESIGN INTENT for whoever builds the level and its assets — a target, never a measurement. See docs/relay/wonderland/HUB_DESIGN.md 'Unproven'.",
   "_units": "Unreal world units. 1 uu = 1 cm. Positions are [x, y, z]. +Y is world-north (arrival at -Y, the distant skyline at +Y); +X is world-east; +Z is up. Ground plane is z = 0. Landmark 'location' z is the mesh PIVOT height (BasicShapes cube/cylinder/cone pivots are centred), so a ground-standing object sits at z = height/2.",
   "_designNote": "This is a TIGHT, DENSE vertical slice, not a large world. The walkable footprint is deliberately smaller than a sprawling map; quality comes from composition density and sight-lines, not acreage. Distant silhouettes sit OUTSIDE the nav bounds as pure background.",
   "level": "/Game/Wonderland/Maps/WonderlandHub",
@@ -14,7 +14,7 @@
     "volumetricFog": true,
     "fogDensity": 0.025,
     "skyTint": "lavender",
-    "_note": "DESIGN INTENT targeting WONDERLAND_VISUAL_ACCEPTANCE.md \u00a76 (sun elevation 22-38\u00b0 above horizon, warm golden key ~4400-5200K) and \u00a77 (fog density 0.015-0.040, lavender haze). sunElevationDeg is elevation ABOVE horizon; the generator negates it into a downward light pitch.",
+    "_note": "DESIGN INTENT targeting WONDERLAND_VISUAL_ACCEPTANCE.md §6 (sun elevation 22-38° above horizon, warm golden key ~4400-5200K) and §7 (fog density 0.015-0.040, lavender haze). sunElevationDeg is elevation ABOVE horizon; the generator negates it into a downward light pitch.",
     "volumetricCloud": true,
     "_visualPass1": "Sun raised 30 -> 52 deg and volumetric cloud enabled: the reference is a bright midday garden city, and the low golden-hour key was reading as dusk.",
     "_sunAzimuth": "Moved 34 -> 205: the hero view looks north, so the old sun sat in frame and washed the sky to cream. Behind the camera front-lights the plaza and leaves blue sky in view."
@@ -24,7 +24,7 @@
     "fovDeg": 68,
     "pitchDeg": -18,
     "socketHeightUu": 150,
-    "_note": "Third-person gameplay pawn spring-arm; matches AWonderlandDogPawn constants (WONDERLAND.md \u00a74). The heroCameras below are separate framing cameras for reference stills, not the gameplay rig.",
+    "_note": "Third-person gameplay pawn spring-arm; matches AWonderlandDogPawn constants (WONDERLAND.md §4). The heroCameras below are separate framing cameras for reference stills, not the gameplay rig.",
     "_composition": "Boom 420->760uu, pitch -12->-18, socket 90->150uu: the short boom framed the Dog against whatever prop happened to be behind it."
   },
   "heroCameras": [
@@ -33,17 +33,17 @@
       "name": "Arrival Hero (iconic first frame)",
       "location": [
         0,
-        -2600,
-        700
+        -2050,
+        430
       ],
       "lookAt": [
         0,
-        900,
-        600
+        1000,
+        330
       ],
-      "fovDeg": 64,
+      "fovDeg": 66,
       "rollDeg": 0,
-      "note": "The founder's first frame on entering. Dog + violet arcane circle at lower-centre, Golden Build Gate framing the left edge, Great Framing Tree framing the right, boulevard leading the eye north to the Brain. Graded by WONDERLAND_VISUAL_ACCEPTANCE.md \u00a74.",
+      "note": "The founder's first frame. AT z=700 LOOKING LEVEL THE GROUND IN FRONT OF THE CAMERA WAS NOT IN FRAME: the near ground sat 34 deg below a view axis with a 19 deg half-angle, so the frame only opened onto the ground about 20 m out and anything staged in the foreground was below the bottom edge, not merely small. Eye lowered to 430 and tilted ~2 deg down: ground reads from ~10 m, which is where a foreground subject can stand.",
       "_composition": "Pulled back 1240->2450uu and raised 405->1020uu. At the old distance the foreground props were larger in frame than the castle city, which is the opposite of the reference's hierarchy."
     },
     {
@@ -129,7 +129,7 @@
       ],
       "fovDeg": 70,
       "rollDeg": 0,
-      "note": "The reward vantage at the end of the hidden path, looking back out of the sunken grove toward the Brain \u2014 the payoff that makes exploration earn its place."
+      "note": "The reward vantage at the end of the hidden path, looking back out of the sunken grove toward the Brain — the payoff that makes exploration earn its place."
     }
   ],
   "spawn": {
@@ -417,7 +417,7 @@
         ]
       ],
       "band": "midground",
-      "note": "The forecourt of the Start-Building landmark (ChaseGate kind: 'where a build begins'). The gate itself is a product landmark and must be custom Relay art. Presents no world section \u2014 Start Building is an ACTION request, gated downstream, not a status display."
+      "note": "The forecourt of the Start-Building landmark (ChaseGate kind: 'where a build begins'). The gate itself is a product landmark and must be custom Relay art. Presents no world section — Start Building is an ACTION request, gated downstream, not a status display."
     },
     {
       "id": "mission_overlook",
@@ -505,7 +505,7 @@
         ]
       ],
       "band": "midground",
-      "note": "A gently sunken field (-20 cm) west of the boulevard where active project entities stand in the form their category chose (see WONDERLAND.md \u00a75). Presents the 'entities' section; the standing stone raises open_project."
+      "note": "A gently sunken field (-20 cm) west of the boulevard where active project entities stand in the form their category chose (see WONDERLAND.md §5). Presents the 'entities' section; the standing stone raises open_project."
     },
     {
       "id": "brain_observatory",
@@ -549,7 +549,7 @@
         ]
       ],
       "band": "midground",
-      "note": "Northern terminus of the boulevard: a luminous observatory landmark whose canopy shows the Brain's weather (sky/light/atmosphere \u2014 Observatory kind), with a reflecting pool that doubles the sky. Presents the 'brain' section; the pool rim raises open_brain."
+      "note": "Northern terminus of the boulevard: a luminous observatory landmark whose canopy shows the Brain's weather (sky/light/atmosphere — Observatory kind), with a reflecting pool that doubles the sky. Presents the 'brain' section; the pool rim raises open_brain."
     },
     {
       "id": "main_boulevard",
@@ -585,7 +585,7 @@
         ]
       ],
       "band": "midground",
-      "note": "The central north-south spine connecting Arrival \u2192 Heart \u2192 Brain. Traversal only; carries no product meaning."
+      "note": "The central north-south spine connecting Arrival → Heart → Brain. Traversal only; carries no product meaning."
     },
     {
       "id": "hidden_grove",
@@ -629,7 +629,7 @@
         ]
       ],
       "band": "midground",
-      "note": "A sunken hollow (-40 cm) behind the Great Framing Tree, reached only by the concealed east path, ringed with oversized mushrooms and a secret vista back to the Brain. Streams in on approach; carries no product meaning \u2014 exploration reward only."
+      "note": "A sunken hollow (-40 cm) behind the Great Framing Tree, reached only by the concealed east path, ringed with oversized mushrooms and a secret vista back to the Brain. Streams in on approach; carries no product meaning — exploration reward only."
     }
   ],
   "interactionAnchors": [
@@ -764,7 +764,7 @@
       "occlusionGroup": "west",
       "asset": "custom_relay",
       "sightlineHero": true,
-      "note": "The Start-Building product landmark: ornate heart-finialed ivy gate, ~6.4 m tall, left repoussoir of the arrival frame. Custom Relay art (identity-critical). Frames the left edge per WONDERLAND_VISUAL_ACCEPTANCE.md \u00a73."
+      "note": "The Start-Building product landmark: ornate heart-finialed ivy gate, ~6.4 m tall, left repoussoir of the arrival frame. Custom Relay art (identity-critical). Frames the left edge per WONDERLAND_VISUAL_ACCEPTANCE.md §3."
     },
     {
       "id": "framing_tree",
@@ -793,7 +793,7 @@
       "occlusionGroup": "east",
       "asset": "megascans_or_custom",
       "sightlineHero": true,
-      "note": "The huge gnarled hero tree carrying the oval portrait frame; right repoussoir, canopy overhanging the Agent Garden. Trunk blocks; canopy overlaps. Frames the right edge per \u00a73. This is the 'giant-tree composition'."
+      "note": "The huge gnarled hero tree carrying the oval portrait frame; right repoussoir, canopy overhanging the Agent Garden. Trunk blocks; canopy overlaps. Frames the right edge per §3. This is the 'giant-tree composition'."
     },
     {
       "id": "brain_landmark",
@@ -858,7 +858,7 @@
       "mesh": "arch",
       "location": [
         0,
-        -300,
+        820,
         220
       ],
       "scale": [
@@ -878,7 +878,8 @@
       "streamGroup": "south_arrival",
       "occlusionGroup": "open_south",
       "asset": "megascans_or_custom",
-      "note": "Rose-wrapped arch over the boulevard between Arrival and Heart Plaza; a foreground frame the player walks through, adding depth to the first shot."
+      "note": "Rose-wrapped arch over the boulevard between Arrival and Heart Plaza; a foreground frame the player walks through, adding depth to the first shot.",
+      "_note": " MOVED from y=-300: at 23 m from the hero camera the uprights blocked the sight-line they were meant to frame; at 34 m the Observatory reads through the opening."
     },
     {
       "id": "stacked_teacup_a",
@@ -969,8 +970,8 @@
       "name": "Heart Playing-Card Signpost",
       "mesh": "sign",
       "location": [
-        220,
-        -520,
+        -620,
+        -1080,
         130
       ],
       "scale": [
@@ -990,7 +991,8 @@
       "streamGroup": "south_arrival",
       "occlusionGroup": "open_south",
       "asset": "custom",
-      "note": "A heart-emblazoned card sign near the arrival split, a wayfinding read (original design, no borrowed suit iconography beyond a generic heart)."
+      "note": "A heart-emblazoned card sign near the arrival split, a wayfinding read (original design, no borrowed suit iconography beyond a generic heart).",
+      "_note": " MOVED off the hero Dog's stage: at [220,-520] it stood directly beside the subject in the founder's first frame."
     },
     {
       "id": "mushroom_red_a",
@@ -1486,7 +1488,7 @@
       ],
       "radiusUu": 460,
       "maxOccupants": 3,
-      "note": "The hero Dog's idle patrol around the arcane circle. Wandering is AMBIENT LIFE and encodes NO Relay state (WONDERLAND_ART_DIRECTION.md \u00a75)."
+      "note": "The hero Dog's idle patrol around the arcane circle. Wandering is AMBIENT LIFE and encodes NO Relay state (WONDERLAND_ART_DIRECTION.md §5)."
     },
     {
       "id": "roam_boulevard",
@@ -1551,7 +1553,7 @@
       ],
       "radiusUu": 900,
       "density": 0.935,
-      "note": "Grass, small plants, ground cover keeping <10% of non-path ground bare (VISUAL_ACCEPTANCE \u00a78). DESIGN INTENT density; real scatter is M2 Editor foliage work."
+      "note": "Grass, small plants, ground cover keeping <10% of non-path ground bare (VISUAL_ACCEPTANCE §8). DESIGN INTENT density; real scatter is M2 Editor foliage work."
     },
     {
       "id": "foliage_gate",
@@ -1672,7 +1674,7 @@
         "pink"
       ],
       "bloomsIntent": 260,
-      "note": "Foreground hero flowers; DESIGN INTENT \u2265200 blooms visible in the arrival frame (VISUAL_ACCEPTANCE \u00a78). Close-focus, may soften under subtle DoF while the Dog stays sharp.",
+      "note": "Foreground hero flowers; DESIGN INTENT ≥200 blooms visible in the arrival frame (VISUAL_ACCEPTANCE §8). Close-focus, may soften under subtle DoF while the Dog stays sharp.",
       "count": 31
     },
     {
@@ -1728,9 +1730,9 @@
       "streamGroup": "north_brain",
       "occlusionGroup": "north",
       "earnsPlace": [
-        "Doubles the Brain's ambient sky/weather read \u2014 the Observatory 'shows the sky' twice (reinforces the open_brain landmark's meaning).",
+        "Doubles the Brain's ambient sky/weather read — the Observatory 'shows the sky' twice (reinforces the open_brain landmark's meaning).",
         "A single glossy Lumen-reflection surface that showcases the AAA material/lighting target at exactly one hero location.",
-        "Bounded (~11 m across) and terminal \u2014 it closes the north axis instead of sprawling."
+        "Bounded (~11 m across) and terminal — it closes the north axis instead of sprawling."
       ],
       "note": "The ONE water feature. It is not decorative filler: it is the mirror that makes the Brain's weather legible from the plaza. Blocking inner surface with a walkable stone rim (see brain_pool_rim). Ambient only; the reflection encodes no Relay state."
     }
@@ -1804,7 +1806,7 @@
       "radiusUu": 300,
       "ambientOnly": true,
       "encodesRelayState": false,
-      "note": "The violet summoning circle beneath the Dog. Time-driven ONLY; brightening on activity would be an untruthful second status channel (WONDERLAND_ART_DIRECTION.md \u00a72)."
+      "note": "The violet summoning circle beneath the Dog. Time-driven ONLY; brightening on activity would be an untruthful second status channel (WONDERLAND_ART_DIRECTION.md §2)."
     },
     {
       "id": "rising_glyphs",
@@ -1816,7 +1818,7 @@
       ],
       "ambientOnly": true,
       "encodesRelayState": false,
-      "note": "Cross/plus glyphs rising 0.5-1.5 m and fading; spawn 1-3/s, 6-16 airborne (VISUAL_ACCEPTANCE \u00a710). Elapsed-time driven only."
+      "note": "Cross/plus glyphs rising 0.5-1.5 m and fading; spawn 1-3/s, 6-16 airborne (VISUAL_ACCEPTANCE §10). Elapsed-time driven only."
     },
     {
       "id": "ambient_sparkles_core",
@@ -1888,7 +1890,7 @@
       ],
       "ambientOnly": true,
       "encodesRelayState": false,
-      "note": "Ambient aurora around the Observatory canopy. The Brain's REAL weather reaches the world through the projection/terminal in words \u2014 this glow is scenery, not a data channel."
+      "note": "Ambient aurora around the Observatory canopy. The Brain's REAL weather reaches the world through the projection/terminal in words — this glow is scenery, not a data channel."
     },
     {
       "id": "pool_mist",
@@ -1987,22 +1989,32 @@
       "points": [
         [
           0,
-          -1050,
+          -1150,
+          0
+        ],
+        [
+          95,
+          -760,
+          0
+        ],
+        [
+          -60,
+          -330,
           0
         ],
         [
           0,
-          -300,
-          0
-        ],
-        [
-          0,
           0,
           0
         ],
         [
-          0,
-          700,
+          115,
+          380,
+          0
+        ],
+        [
+          -55,
+          780,
           0
         ],
         [
@@ -2011,7 +2023,8 @@
           0
         ]
       ],
-      "note": "Arrival \u2192 rose arch \u2192 Heart Plaza \u2192 Brain approach. The dominant ground read; 5.5 m wide for third-person traversal."
+      "note": "Arrival → rose arch → Heart Plaza → Brain approach. The dominant ground read; 5.5 m wide for third-person traversal.",
+      "_note": " WINDING: the five original points were collinear, which builds a runway; the eye jumps to the end of a straight path and travels along a bent one. The lateral offsets are small (<=115 uu on a 550 uu way) so the Brain still closes the axis."
     },
     "secondary": [
       {

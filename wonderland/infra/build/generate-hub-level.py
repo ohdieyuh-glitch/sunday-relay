@@ -1029,6 +1029,33 @@ def build(layout):
                       sh_ * 1.10 / 100.0, "trunk", "%s_bole%d" % (label, i),
                       rot=(math.degrees(math.sin(i * 1.3)) * 0.09, 0.0,
                            math.degrees(math.cos(i * 1.1)) * 0.09))
+                # KNOTS AND BROKEN STUBS. "avoid smooth cylinders" — a bole reads
+                # as bark because of where branches used to be, not because of
+                # its taper.
+                if i % 2 == 0:
+                    ka = i * 2.1
+                    _part("sphere", cx_ + math.cos(ka) * sw * 0.95,
+                          cy_ + math.sin(ka) * sw * 0.95, sh_ * (i + 0.5) + 30.0 * s,
+                          0.44 * s, 0.44 * s, 0.36 * s, "trunk", "%s_knot%d" % (label, i))
+                    _part("sphere", cx_ + math.cos(ka) * sw * 1.02,
+                          cy_ + math.sin(ka) * sw * 1.02, sh_ * (i + 0.5) + 30.0 * s,
+                          0.22 * s, 0.22 * s, 0.18 * s, "brass_deep" if "brass_deep" in MATS
+                          else "trunk", "%s_knothole%d" % (label, i))
+                if i in (2, 4):
+                    ka = i * 2.7 + 1.1
+                    for st in range(3):
+                        _part("cylinder", cx_ + math.cos(ka) * sw * (1.1 + st * 0.55),
+                              cy_ + math.sin(ka) * sw * (1.1 + st * 0.55),
+                              sh_ * (i + 0.5) + 40.0 * s + st * 26.0 * s,
+                              (0.30 - st * 0.07) * s, (0.30 - st * 0.07) * s, 0.44 * s,
+                              "trunk", "%s_stub%d_%d" % (label, i, st),
+                              rot=(0.0, 62.0, math.degrees(ka)))
+                # moss on the north side of the bole
+                for m in range(2):
+                    ma = 3.6 + m * 0.5
+                    _part("sphere", cx_ + math.cos(ma) * sw * 0.94,
+                          cy_ + math.sin(ma) * sw * 0.94, sh_ * (i + 0.25),
+                          0.34 * s, 0.30 * s, 0.52 * s, "moss", "%s_bmoss%d_%d" % (label, i, m))
                 # bark ridges catching the key light
                 for k in range(3):
                     a = i * 1.7 + k * 2.09
@@ -1115,9 +1142,45 @@ def build(layout):
         ph = 540.0 * s
         for sx in (-1, 1):
             px = x + sx * 250.0 * s
-            _part("cube", px, y, ph * 0.5, 0.95 * s, 0.95 * s, ph / 100.0, "gold", "%s_pillar%d" % (label, sx))
-            _part("sphere", px, y, ph + 40.0 * s, 0.7 * s, 0.7 * s, 0.7 * s, "gold", "%s_ball%d" % (label, sx))
-            _part("cone", px, y, ph + 95.0 * s, 0.7 * s, 0.7 * s, 1.5 * s, "gold_glow", "%s_finial%d" % (label, sx))
+            # A DECORATIVE PILLAR, not a box. Everything ornate on this gate was
+            # bolted to two plain cuboids, so the eye read "box with jewellery".
+            # Stone plinth, moulded base, fluted shaft, astragal, dentilled
+            # capital, cornice — the standard vocabulary, because it is the
+            # vocabulary the reference's architecture speaks.
+            _part("cube", px, y, 26.0 * s, 1.30 * s, 1.30 * s, 0.52 * s, "stone",
+                  "%s_plinth%d" % (label, sx))
+            _part("cube", px, y, 62.0 * s, 1.14 * s, 1.14 * s, 0.24 * s, "gold",
+                  "%s_pbase%d" % (label, sx))
+            _part("cube", px, y, ph * 0.52, 0.86 * s, 0.86 * s, ph * 0.86 / 100.0, "gold",
+                  "%s_pillar%d" % (label, sx))
+            # fluting: shallow reeds down each visible face, with the shadow
+            # between them carried by aged brass rather than by a shadow that
+            # this lighting will never actually cast at that scale
+            for f in range(5):
+                fo = (f - 2) * 0.30 * s * 55.0
+                for fx_, fy_ in ((0.0, -1.0), (0.0, 1.0), (-1.0, 0.0), (1.0, 0.0)):
+                    _part("cube", px + fx_ * 44.0 * s + (fo if fx_ == 0 else 0.0),
+                          y + fy_ * 44.0 * s + (fo if fy_ == 0 else 0.0), ph * 0.52,
+                          0.09 * s, 0.09 * s, ph * 0.80 / 100.0,
+                          "brass_deep" if "brass_deep" in MATS else "gold",
+                          "%s_flute%d_%d_%d" % (label, sx, f, int(fx_ * 2 + fy_)))
+            _part("cube", px, y, ph * 0.90, 1.02 * s, 1.02 * s, 0.16 * s, "gold",
+                  "%s_astrag%d" % (label, sx))
+            # dentilled capital
+            for d in range(8):
+                da = d * (2.0 * math.pi / 8.0)
+                _part("cube", px + math.cos(da) * 52.0 * s, y + math.sin(da) * 52.0 * s,
+                      ph * 0.97, 0.17 * s, 0.17 * s, 0.16 * s,
+                      "brass_deep" if "brass_deep" in MATS else "gold",
+                      "%s_dent%d_%d" % (label, sx, d))
+            _part("cube", px, y, ph + 12.0 * s, 1.22 * s, 1.22 * s, 0.20 * s, "gold",
+                  "%s_cornice%d" % (label, sx))
+            _part("sphere", px, y, ph + 46.0 * s, 0.62 * s, 0.62 * s, 0.62 * s, "gold",
+                  "%s_ball%d" % (label, sx))
+            _part("cylinder", px, y, ph + 78.0 * s, 0.30 * s, 0.30 * s, 0.16 * s, "gold",
+                  "%s_neck%d" % (label, sx))
+            _part("cone", px, y, ph + 118.0 * s, 0.58 * s, 0.58 * s, 1.4 * s, "gold_glow",
+                  "%s_finial%d" % (label, sx))
         # grille of slender vertical bars
         for b in range(-4, 5):
             _part("cube", x + b * 52.0 * s, y, ph * 0.46, 0.08 * s, 0.14 * s, ph * 0.9 / 100.0,
@@ -1286,6 +1349,20 @@ def build(layout):
         _part("cylinder", x, y, 8.0 * s, 2.4 * s, 2.4 * s, 0.16 * s, "porcelain", "%s_saucer" % label)
         _part("cylinder", x, y, 78.0 * s, 1.5 * s, 1.5 * s, 1.3 * s, "porcelain", "%s_body" % label)
         _part("cylinder", x, y, 140.0 * s, 1.72 * s, 1.72 * s, 0.12 * s, "gold", "%s_rim" % label)
+        # GOLD TRIM AND PAINTED ACCENTS. Fine china is banded, footed and
+        # decorated; the rim light added with the Fresnel pass supplies the
+        # glaze highlight that separates porcelain from plastic.
+        _part("cylinder", x, y, 24.0 * s, 1.10 * s, 1.10 * s, 0.14 * s, "gold", "%s_foot" % label)
+        _part("cylinder", x, y, 104.0 * s, 1.56 * s, 1.56 * s, 0.05 * s, "gold", "%s_band" % label)
+        _part("cylinder", x, y, 12.0 * s, 2.5 * s, 2.5 * s, 0.04 * s, "gold", "%s_saucertrim" % label)
+        for _k in range(6):                        # painted rose sprigs
+            _a = _k * (2.0 * math.pi / 6.0) + 0.9
+            _part("sphere", x + math.cos(_a) * 74.0 * s, y + math.sin(_a) * 74.0 * s,
+                  62.0 * s, 0.13 * s, 0.05 * s, 0.13 * s,
+                  "rose_pink" if _k % 2 else "petal_violet", "%s_sprig%d" % (label, _k))
+            _part("cube", x + math.cos(_a) * 74.0 * s, y + math.sin(_a) * 74.0 * s,
+                  50.0 * s, 0.10 * s, 0.03 * s, 0.05 * s, "foliage",
+                  "%s_sprigleaf%d" % (label, _k), rot=(0.0, 0.0, math.degrees(_a)))
         _part("cube", x + 88.0 * s, y, 80.0 * s, 0.22 * s, 0.5 * s, 0.62 * s, "porcelain", "%s_handle" % label)
         # painted red HEARTS around the cup (the reference's Queen-of-Hearts teacup)
         for k in range(4):
@@ -1339,7 +1416,7 @@ def build(layout):
             _part("sphere", x + ox * 180, y + oy * 180, bz + oz * 180, d / 100.0, d / 100.0, d / 100.0,
                   "magic_cyan", "%s_lobe%d" % (label, i))
 
-    def kit_observatory(x, y, z, label):
+    def kit_observatory(x, y, z, label, K=0.60):
         """The Project Brain Observatory: the building that closes the north axis.
 
         This is the one landmark the hero camera looks directly at, and it was a
@@ -1348,9 +1425,19 @@ def build(layout):
         oculus than floating in open air, because the architecture around it is
         what gives it scale."""
         S = 1.0
+
+        def _p(prim, cx, cy, cz, sx, sy, sz, mat, lb, rot=(0.0, 0.0, 0.0)):
+            """Everything below is authored at full size and scaled about the
+            building's own footprint. Measured against the hero frame the
+            Observatory was 68% of the frame's height and 39% of its width — it
+            closed the axis by swallowing the city it was supposed to stand in
+            front of."""
+            _part(prim, x + (cx - x) * K, y + (cy - y) * K, cz * K,
+                  sx * K, sy * K, sz * K, mat, lb, rot)
+
         # --- stepped stylobate ------------------------------------------
         for k, (rr, hh) in enumerate(((7.4, 0.60), (6.8, 0.56), (6.2, 0.52))):
-            _part("cylinder", x, y, 26.0 + k * 52.0, rr * S, rr * S, hh * S,
+            _p("cylinder", x, y, 26.0 + k * 52.0, rr * S, rr * S, hh * S,
                   "stone", "%s_step%d" % (label, k))
         base_z = 190.0
         # --- peristyle: sixteen columns, each with base, shaft, capital --
@@ -1358,20 +1445,20 @@ def build(layout):
         for i in range(16):
             a = i * (2.0 * math.pi / 16.0)
             cx, cy = x + math.cos(a) * col_r, y + math.sin(a) * col_r
-            _part("cylinder", cx, cy, base_z + 22.0, 0.62, 0.62, 0.44, "stone",
+            _p("cylinder", cx, cy, base_z + 22.0, 0.62, 0.62, 0.44, "stone",
                   "%s_cbase%d" % (label, i))
-            _part("cylinder", cx, cy, base_z + 240.0, 0.44, 0.44, 4.0, "spire",
+            _p("cylinder", cx, cy, base_z + 240.0, 0.44, 0.44, 4.0, "spire",
                   "%s_col%d" % (label, i))
-            _part("cylinder", cx, cy, base_z + 452.0, 0.60, 0.60, 0.34, "stone",
+            _p("cylinder", cx, cy, base_z + 452.0, 0.60, 0.60, 0.34, "stone",
                   "%s_ccap%d" % (label, i))
         arch_z = base_z + 490.0
         # --- architrave + frieze ring -----------------------------------
         for i in range(16):
             a = (i + 0.5) * (2.0 * math.pi / 16.0)
             ax, ay = x + math.cos(a) * col_r, y + math.sin(a) * col_r
-            _part("cube", ax, ay, arch_z, 2.15, 0.78, 0.42, "stone",
+            _p("cube", ax, ay, arch_z, 2.15, 0.78, 0.42, "stone",
                   "%s_arch%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
-            _part("cube", ax, ay, arch_z + 54.0, 2.05, 0.66, 0.34, "gold",
+            _p("cube", ax, ay, arch_z + 54.0, 2.05, 0.66, 0.34, "gold",
                   "%s_frieze%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
         dome_z = arch_z + 88.0
         # --- ribbed dome -------------------------------------------------
@@ -1383,7 +1470,7 @@ def build(layout):
                 ang = t * (math.pi * 0.46)
                 rr = R * math.cos(ang)
                 zz = dome_z + math.sin(ang) * R * 0.86
-                _part("cube", x + math.cos(a) * rr, y + math.sin(a) * rr, zz,
+                _p("cube", x + math.cos(a) * rr, y + math.sin(a) * rr, zz,
                       0.30, 0.30, 0.46, "spire", "%s_rib%d_%d" % (label, i, k),
                       rot=(0.0, math.degrees(ang), math.degrees(a)))
         # dome shell between the ribs, as three latitude bands
@@ -1393,7 +1480,7 @@ def build(layout):
             zz = dome_z + math.sin(ang) * R * 0.86
             for i in range(20):
                 a = (i + 0.5) * (2.0 * math.pi / 20.0)
-                _part("cube", x + math.cos(a) * rr, y + math.sin(a) * rr, zz,
+                _p("cube", x + math.cos(a) * rr, y + math.sin(a) * rr, zz,
                       rr / 300.0, 0.42, 0.44, "spire_pink" if b == 1 else "spire",
                       "%s_shell%d_%d" % (label, b, i),
                       rot=(0.0, 0.0, math.degrees(a) + 90.0))
@@ -1401,7 +1488,7 @@ def build(layout):
         # --- gold oculus ring -------------------------------------------
         for i in range(18):
             a = i * (2.0 * math.pi / 18.0)
-            _part("cube", x + math.cos(a) * 190.0, y + math.sin(a) * 190.0, oc_z,
+            _p("cube", x + math.cos(a) * 190.0, y + math.sin(a) * 190.0, oc_z,
                   0.72, 0.30, 0.26, "gold", "%s_oc%d" % (label, i),
                   rot=(0.0, 0.0, math.degrees(a) + 90.0))
         # --- THE BRAIN: folded lobes, not a bag of balls ------------------
@@ -1417,9 +1504,9 @@ def build(layout):
                     px = x + hemi * (58.0 + rr * 0.30 * abs(math.sin(ang)))
                     py = y + math.sin(ang) * rr
                     pz = bz + math.cos(ang) * rr * 0.80 + fold * 120.0 + g * 34.0 - 50.0
-                    _part("sphere", px, py, pz, 0.62, 0.62, 0.62, "magic_cyan",
+                    _p("sphere", px, py, pz, 0.62, 0.62, 0.62, "magic_cyan",
                           "%s_gyr%d_%d_%d" % (label, hemi, g, k))
-        _part("cylinder", x, y, bz - 190.0, 0.5, 0.5, 1.5, "magic_cyan", "%s_stem" % label)
+        _p("cylinder", x, y, bz - 190.0, 0.5, 0.5, 1.5, "magic_cyan", "%s_stem" % label)
         # --- armillary rings turning around it ---------------------------
         for r_i, (tilt, rad, mat) in enumerate(((0.0, 430.0, "gold"),
                                                 (62.0, 380.0, "gold_glow"),
@@ -1430,18 +1517,18 @@ def build(layout):
                 tr = math.radians(tilt)
                 py = uy * math.cos(tr)
                 pz = uy * math.sin(tr)
-                _part("cube", x + ux, y + py, bz + pz, 0.36, 0.13, 0.13, mat,
+                _p("cube", x + ux, y + py, bz + pz, 0.36, 0.13, 0.13, mat,
                       "%s_arm%d_%d" % (label, r_i, i),
                       rot=(tilt, 0.0, math.degrees(a) + 90.0))
         # --- approach: flanking stairs and two obelisks -------------------
         for k in range(4):
-            _part("cube", x, y - (620.0 + k * 78.0), 24.0 - k * 5.0,
+            _p("cube", x, y - (620.0 + k * 78.0), 24.0 - k * 5.0,
                   (3.4 - k * 0.22), 0.40, 0.13, "stone", "%s_stair%d" % (label, k))
         for sx in (-1, 1):
             ox = x + sx * 840.0
-            _part("cube", ox, y - 520.0, 60.0, 0.80, 0.80, 1.2, "stone", "%s_obb%d" % (label, sx))
-            _part("cube", ox, y - 520.0, 340.0, 0.52, 0.52, 4.4, "spire", "%s_ob%d" % (label, sx))
-            _part("cone", ox, y - 520.0, 600.0, 0.62, 0.62, 1.1, "gold", "%s_obt%d" % (label, sx))
+            _p("cube", ox, y - 520.0, 60.0, 0.80, 0.80, 1.2, "stone", "%s_obb%d" % (label, sx))
+            _p("cube", ox, y - 520.0, 340.0, 0.52, 0.52, 4.4, "spire", "%s_ob%d" % (label, sx))
+            _p("cone", ox, y - 520.0, 600.0, 0.62, 0.62, 1.1, "gold", "%s_obt%d" % (label, sx))
 
     def kit_clock_tower(x, y, s, label):
         """A TOWER. The layout has specified one here from the beginning and the
@@ -1596,6 +1683,69 @@ def build(layout):
             _part("cube", x + sx * 74.0 * e - fx * 30.0, y + sy * 74.0 * e - fy * 30.0,
                   74.0, 0.12, 0.12, 0.80, "trunk", "%s_up%d" % (label, e),
                   rot=(0.0, -12.0, yaw))
+
+    def kit_card_pedestal(x, y, s, label):
+        """The C.A.R.D. pedestal: the Agent Garden's focus. A garden destination
+        needs something to be about, and this one was about a pergola."""
+        _part("cylinder", x, y, 22.0 * s, 1.5 * s, 1.5 * s, 0.44 * s, "stone", "%s_step" % label)
+        _part("cylinder", x, y, 60.0 * s, 1.05 * s, 1.05 * s, 0.36 * s, "stone", "%s_base" % label)
+        _part("cylinder", x, y, 150.0 * s, 0.62 * s, 0.62 * s, 1.5 * s, "spire", "%s_col" % label)
+        for k in range(8):                                  # fluting
+            a = k * (2.0 * math.pi / 8.0)
+            _part("cube", x + math.cos(a) * 29.0 * s, y + math.sin(a) * 29.0 * s, 150.0 * s,
+                  0.07 * s, 0.07 * s, 1.4 * s, "brass_deep" if "brass_deep" in MATS else "gold",
+                  "%s_fl%d" % (label, k))
+        _part("cylinder", x, y, 232.0 * s, 0.95 * s, 0.95 * s, 0.22 * s, "gold", "%s_cap" % label)
+        # the card itself, standing on edge above the plinth, haloed
+        _part("cube", x, y, 330.0 * s, 0.66 * s, 0.07 * s, 0.96 * s, "porcelain", "%s_card" % label,
+              rot=(0.0, 0.0, 22.0))
+        _part("cube", x, y, 330.0 * s, 0.72 * s, 0.05 * s, 1.02 * s, "gold", "%s_cardtrim" % label,
+              rot=(0.0, 0.0, 22.0))
+        for e in (-1, 1):
+            _part("sphere", x + e * 13.0 * s, y - 6.0 * s, 348.0 * s, 0.17 * s, 0.05 * s, 0.17 * s,
+                  "rose", "%s_pip%d" % (label, e))
+        _part("cube", x, y - 6.0 * s, 322.0 * s, 0.22 * s, 0.05 * s, 0.22 * s, "rose",
+              "%s_pippt" % label, rot=(0.0, 0.0, 45.0))
+        for k in range(16):                                  # halo of glyphs
+            a = k * (2.0 * math.pi / 16.0)
+            _part("sphere", x + math.cos(a) * 118.0 * s, y + math.sin(a) * 118.0 * s,
+                  336.0 * s + math.sin(k * 1.3) * 26.0 * s,
+                  0.09 * s, 0.09 * s, 0.09 * s, "arcane", "%s_halo%d" % (label, k))
+
+    def kit_belvedere(x, y, s, label):
+        """Four columns and a canopy: the Mission Overlook's own silhouette. An
+        overlook is a place you stand under something and look out from."""
+        for i, (cx_, cy_) in enumerate(((-1, -1), (-1, 1), (1, -1), (1, 1))):
+            px, py = x + cx_ * 150.0 * s, y + cy_ * 150.0 * s
+            _part("cylinder", px, py, 22.0 * s, 0.52 * s, 0.52 * s, 0.44 * s, "stone",
+                  "%s_cb%d" % (label, i))
+            _part("cylinder", px, py, 200.0 * s, 0.34 * s, 0.34 * s, 3.2 * s, "stone",
+                  "%s_col%d" % (label, i))
+            _part("cylinder", px, py, 370.0 * s, 0.48 * s, 0.48 * s, 0.28 * s, "stone",
+                  "%s_cc%d" % (label, i))
+        for e in range(4):                                    # architrave
+            ea = e * (math.pi / 2.0)
+            _part("cube", x + math.cos(ea) * 150.0 * s, y + math.sin(ea) * 150.0 * s, 396.0 * s,
+                  3.1 * s, 0.36 * s, 0.30 * s, "stone", "%s_arch%d" % (label, e),
+                  rot=(0.0, 0.0, math.degrees(ea) + 90.0))
+        # warm stone and a rose roof, so it is not a second white building
+        # standing next to the Observatory and merging with it
+        kit_dome(x, y, 410.0 * s, 178.0 * s, "%s_dome" % label, mat="roof_rose", rib="gold")
+        # a real telescope on a tripod, pointed out over the plaza
+        _part("cylinder", x + 90.0 * s, y - 90.0 * s, 60.0 * s, 0.10 * s, 0.10 * s, 1.2 * s,
+              "gold", "%s_tripod" % label)
+        for t in range(3):
+            ta = t * (2.0 * math.pi / 3.0)
+            _part("cylinder", x + 90.0 * s + math.cos(ta) * 26.0 * s,
+                  y - 90.0 * s + math.sin(ta) * 26.0 * s, 34.0 * s,
+                  0.05 * s, 0.05 * s, 0.72 * s, "gold", "%s_leg%d" % (label, t),
+                  rot=(float(16), math.degrees(ta), 0.0))
+        _part("cylinder", x + 90.0 * s, y - 90.0 * s, 132.0 * s, 0.20 * s, 0.20 * s, 1.05 * s,
+              "gold", "%s_tube" % label, rot=(38.0, 0.0, 0.0))
+        _part("cylinder", x + 90.0 * s, y - 128.0 * s, 96.0 * s, 0.26 * s, 0.26 * s, 0.22 * s,
+              "brass_deep" if "brass_deep" in MATS else "gold", "%s_lens" % label, rot=(38.0, 0.0, 0.0))
+        _part("cylinder", x + 90.0 * s, y - 56.0 * s, 168.0 * s, 0.14 * s, 0.14 * s, 0.20 * s,
+              "crystal", "%s_eyep" % label, rot=(38.0, 0.0, 0.0))
 
     def kit_dome(x, y, z, r, label, mat="spire", rib="gold"):
         """A ribbed dome. The skyline reference is not all cones."""
@@ -1829,6 +1979,13 @@ def build(layout):
         _part("cylinder", x + 78, y, z + 8, 0.24, 0.24, 0.9, "porcelain", "%s_spout" % label, rot=(0, 52, 0))
         _part("cube", x - 76, y, z + 4, 0.16, 0.5, 0.5, "porcelain", "%s_handle" % label)
         _part("cylinder", x, y, z + 66, 0.7, 0.7, 0.16, "gold", "%s_lid" % label)
+        _part("cylinder", x, y, z - 58, 1.05, 1.05, 0.12, "gold", "%s_foot" % label)
+        _part("cylinder", x, y, z + 34, 1.52, 1.52, 0.05, "gold", "%s_band" % label)
+        for _k in range(5):
+            _a = _k * (2.0 * math.pi / 5.0) + 0.4
+            _part("sphere", x + math.cos(_a) * 128.0, y + math.sin(_a) * 128.0, z + 4,
+                  0.17, 0.06, 0.17, "rose" if _k % 2 else "petal_violet",
+                  "%s_sprig%d" % (label, _k))
         _part("sphere", x, y, z + 84, 0.3, 0.3, 0.3, "gold_glow", "%s_knob" % label)
 
     def kit_fountain(x, y, label):
@@ -2012,19 +2169,23 @@ def build(layout):
         # wall where it should have met a frame. Slim wooden uprights wrapped in
         # vine let the plaza and the city read THROUGH the arch, which is the
         # only reason to put an arch on a sightline.
-        h = 760.0 * s
+        # PROPORTION. At 760 tall against a 210 half-span this was three and a
+        # half times taller than it was wide — a slot, not an arch, and narrower
+        # than the Observatory it is meant to frame. A garden arch is roughly as
+        # wide as it is high.
+        h = 430.0 * s
         for sx in (-1, 1):
-            _part("cylinder", x + sx * 210.0 * s, y, h * 0.5, 0.19 * s, 0.19 * s, h / 100.0,
+            _part("cylinder", x + sx * 330.0 * s, y, h * 0.5, 0.19 * s, 0.19 * s, h / 100.0,
                   "trunk", "%s_post%d" % (label, sx))
             for k in range(9):
                 t = k / 8.0
                 aa = t * 7.2 + sx
-                _part("sphere", x + sx * 210.0 * s + math.cos(aa) * 21.0 * s,
+                _part("sphere", x + sx * 330.0 * s + math.cos(aa) * 21.0 * s,
                       y + math.sin(aa) * 21.0 * s, 30.0 * s + t * (h - 70.0 * s),
                       0.15 * s, 0.15 * s, 0.15 * s, "foliage" if k % 2 else "foliage_hi",
                       "%s_pvine%d_%d" % (label, sx, k))
                 if k % 3 == 1:
-                    _part("sphere", x + sx * 210.0 * s + math.cos(aa) * 27.0 * s,
+                    _part("sphere", x + sx * 330.0 * s + math.cos(aa) * 27.0 * s,
                           y + math.sin(aa) * 27.0 * s, 30.0 * s + t * (h - 70.0 * s),
                           0.13 * s, 0.13 * s, 0.13 * s, "rose" if k % 2 else "rose_pink",
                           "%s_prose%d_%d" % (label, sx, k))
@@ -2032,7 +2193,7 @@ def build(layout):
         # the curve is the entire reason the shape reads as a garden arch. The
         # span is built from short segments following a semicircle, each rotated
         # to sit tangent to it, then smothered in roses and leaves.
-        span, segs = 210.0 * s, 13
+        span, segs = 330.0 * s, 15
         for i in range(segs):
             t = (i + 0.5) / segs
             ang = math.pi * t
@@ -2192,6 +2353,44 @@ def build(layout):
             _part("cube", x + bx * 90.0 * s, y, 34.0 * s, 0.16 * s, 0.42 * s, 0.62 * s,
                   "trunk", "%s_benchleg%d" % (label, bx))
 
+
+    # ---- WHERE THE HERO FRAME ACTUALLY OPENS ONTO THE GROUND -------------
+    # Derived, never guessed. Twice in this sprint foreground work was authored
+    # nearer than this and vanished off the bottom edge — not small, absent.
+    def _hero_ground_band():
+        cams = [c for c in layout.get("heroCameras", []) if c.get("id") == "cam_arrival_hero"]
+        if not cams:
+            return (-980.0, 60.0, -760.0)
+        c = cams[0]
+        ex, ey, ez = [float(v) for v in c["location"]]
+        tx, ty, tz = [float(v) for v in c["lookAt"]]
+        fov_h = math.radians(float(c.get("fovDeg", 66.0)))
+        # vertical half-angle for 16:9
+        half_v = math.atan(math.tan(fov_h * 0.5) * (9.0 / 16.0))
+        run = math.hypot(tx - ex, ty - ey)
+        pitch = math.atan2(tz - ez, run) if run else 0.0
+        drop = half_v - pitch                      # angle of the bottom ray below level
+        near = ez / math.tan(drop) if drop > 1e-4 else 1e6
+        unreal.log_warning("HERO GROUND BAND starts %.0f uu ahead (world y >= %.0f)"
+                           % (near, ey + near))
+        return (ey + near, ex, ey)
+
+    NEAR_Y, _CAM_X, _CAM_Y = _hero_ground_band()
+
+    # WHERE THE HERO DOG STANDS, AND THE GROUND IT STANDS ON. Nothing that
+    # grows gets planted here: a subject knee-deep in blossom is not staged, it
+    # is camouflaged.
+    DOG_STAGE = (60.0, -760.0, 560.0)
+
+    def _on_stage(gx, gy):
+        return math.hypot(gx - DOG_STAGE[0], gy - DOG_STAGE[1]) < DOG_STAGE[2]
+
+    def _in_corridor(gx, gy, half=430.0, y0=-1450.0, y1=1500.0):
+        """The hero sight-line, protected. The composition the brief asks for is
+        Dog -> path -> landmarks -> skyline, and every step of that only works if
+        the step behind it is visible. Nothing tall gets to stand in here."""
+        return abs(gx) < half and y0 < gy < y1
+
     def _on_paving(gx, gy):
         """The plaza and the boulevard are STONE. Nothing that grows out of soil
         may be scattered onto them — that single rule is most of the difference
@@ -2316,7 +2515,10 @@ def build(layout):
         elif mid == "brain_landmark" or mesh == "brain":
             kit_observatory(x, y, z, mid)
         elif mesh == "arch" or "arch" in mid:
-            kit_arch(x, y, 1.2, mid)
+            # WIDER, so its posts stand on the verges rather than in the way.
+            # An arch frames by being something you look THROUGH; at the old
+            # span its uprights were exactly where the eye wanted to travel.
+            kit_arch(x, y, 1.85, mid)
         elif "overlook" in mid or "terrace" in mid:
             kit_overlook(x, y, min(1.5, max(0.9, norm)), mid)
         elif "pergola" in mid:
@@ -2326,7 +2528,10 @@ def build(layout):
         elif "sign" in mid or "card" in mid:
             kit_sign(x, y, mid)
         elif "clock_tower" in mid or "tower" in mid:
-            kit_clock_tower(x, y, 1.6, mid)
+            # 1.6 ran it out of the top of the hero frame and put it shoulder to
+            # shoulder with the Golden Build Gate. A landmark that leaves the
+            # frame stops being a landmark and becomes a wall.
+            kit_clock_tower(x, y, 0.62, mid)
         elif "clock" in mid:
             kit_clock(x, y, max(240.0, z), mid)
         else:
@@ -2800,6 +3005,8 @@ def build(layout):
         a = i * 2.39996
         rr = _PR + 60.0 + (i % 4) * 40.0
         px, py = math.cos(a) * rr, math.sin(a) * rr
+        if _on_stage(px, py):
+            continue
         flower(px, py, i)
         if i % 5 == 0:
             kit_mushroom(px + 26.0, py - 18.0, 0.24 + 0.10 * (i % 3), "EdgeCap%d" % i,
@@ -2817,10 +3024,14 @@ def build(layout):
     # frame is about, which is what PASS 8 asks for. Slightly off the centre
     # line so the composition is not a bullseye, and roaming a short leash so it
     # stays in frame while it lives.
-    stroll_dog(300.0, -1580.0, "RelayDog", s=2.1, is_hero=True, roam=340.0)
-    # THE DOG'S ARRIVAL RING travels with it, so the Relay identity is under
-    # the Dog wherever the composition needs the Dog to stand.
-    kit_arcane_ring(300.0, -1580.0, 0.62, "ArrivalRing")
+    # ON THE CIRCLE, AND IN FRAME. Forward of it the Dog fell below the bottom
+    # edge; at the world origin it was 26 m away and read as a detail. On the
+    # southern arc of the arcane circle it is about 13 m out, a quarter of the
+    # frame's height, and standing on the violet ring that is its Relay identity
+    # — which is exactly the foreground the brief describes.
+    stroll_dog(60.0, -760.0, "RelayDog", s=2.1, is_hero=True, roam=230.0)
+    # (The travelling arrival ring is gone: with the camera fixed the Dog stands
+    # on the real arcane circle, so a second one would only sit inside the first.)
     # A DRIFT OF KEYS, not three of them. They read as a current of magic moving
     # toward the Build Gate, which is where the brief wants the eye to go next.
     for i, (kx, ky, kz) in enumerate([(-640, 240, 430), (540, 120, 520), (240, 780, 560),
@@ -2830,13 +3041,20 @@ def build(layout):
         kit_float_key(kx, ky, kz, "FloatKey%d" % i)
     # LAMP POSTS + GARLANDS down the boulevard. Vertical rhythm, warm light in
     # the middle distance, and the card motif at a readable size.
-    _lamp_y = (-1080.0, -640.0, -200.0, 260.0, 720.0, 1180.0)
+    # OUT OF THE FRAME'S THROAT. At x = +/-430 these sat fifteen degrees off the
+    # hero axis with the nearest pair 16 m from the camera — they fenced the
+    # boulevard instead of framing it. Pushed to the verges, shrunk, and the
+    # nearest pair deleted entirely so the first thing the eye meets is the Dog.
+    _lamp_y = (-520.0, 40.0, 620.0, 1200.0)
     for _e in (-1, 1):
         for _i, _ly in enumerate(_lamp_y):
-            kit_lantern(_e * 430.0, _ly, 1.15, "Lamp%d_%d" % (_e, _i))
-            if _i:
-                kit_garland(_e * 430.0, _lamp_y[_i - 1], _e * 430.0, _ly, 470.0,
-                            "Garl%d_%d" % (_e, _i))
+            kit_lantern(_e * 660.0, _ly, 0.82, "Lamp%d_%d" % (_e, _i))
+            # garlands on alternate spans only: strung between every pair they
+            # read as one continuous band of confetti across the middle of the
+            # frame rather than as bunting
+            if _i and _i % 2 == 1:
+                kit_garland(_e * 660.0, _lamp_y[_i - 1], _e * 660.0, _ly, 352.0,
+                            "Garl%d_%d" % (_e, _i), sag=78.0)
     # BUTTERFLIES over the planting, BIRDS in the sky. Both ride the bob offset,
     # so they live in the stream and vanish in a still — ambient life, never a
     # status channel.
@@ -2848,8 +3066,8 @@ def build(layout):
                      _fy + _k * 420.0, _fz + (_k % 4) * 210.0, _f * 7 + _k)
     # Restrained magical motes: static emissive sparkles (gold/cyan/violet) drifting
     # over the district — the bloom pass gives them a firefly glow.
-    scatter(0.0, 350.0, 64, 1950.0, mote)
-    scatter(0.0, 300.0, 58, 1500.0, air_petal)   # drifting petals overhead — living air
+    scatter(0.0, 350.0, 38, 1950.0, mote)
+    scatter(0.0, 300.0, 34, 1500.0, air_petal)   # drifting petals overhead — living air
     # Ambient companions: voxel dogs of varied coats gathered AROUND the plaza (never
     # on the arcane circle — that is the hero Dog's). Matches the reference's plaza
     # full of creatures; a real wander behaviour animates them in a later pass.
@@ -2916,7 +3134,7 @@ def build(layout):
     # THE SUBJECT. One great castle closing the north axis, slightly off centre
     # so the composition is not a bullseye, at a distance that makes it 130 m of
     # architecture rather than another turret.
-    kit_castle(6000.0, 54000.0, 17.0, "GreatCastle")
+    kit_castle(9000.0, 66000.0, 12.0, "GreatCastle")
     kit_castle(-30000.0, 36000.0, 8.5, "WestCastle")
     # Gentle rolling terrain: large low ground mounds sunk into the plane so only
     # their crowns show, breaking the dead-flat floor at the district edges.
@@ -2926,9 +3144,43 @@ def build(layout):
     # Signature Wonderland props: rose-heart topiaries flanking the deeper garden, a
     # giant Queen-of-Hearts teacup you could sit in, a fountain, floating clocks + a
     # teapot — the storybook furniture of the reference.
+    # THE AGENT GARDEN AS A DESTINATION. Terrace, clipped hedge walls, a rose
+    # walk leading in, and the C.A.R.D. pedestal as the thing it is all about.
+    _GX, _GY = 820.0, 360.0
+    for _k, (_rr, _hh, _mt) in enumerate(((5.6, 0.34, "stone"), (5.1, 0.30, "plaza"))):
+        _part("cylinder", _GX, _GY, 18.0 + _k * 22.0, _rr, _rr, _hh, _mt, "GardenTerr%d" % _k)
+    for _i in range(40):
+        _a = _i * (2.0 * math.pi / 40.0)
+        if math.cos(_a) < -0.55:                     # leave the entrance open
+            continue
+        # and never let the west arc of the hedge cross the hero sight-line
+        if _GX + math.cos(_a) * 560.0 < 460.0:
+            continue
+        _part("cube", _GX + math.cos(_a) * 560.0, _GY + math.sin(_a) * 560.0, 92.0,
+              0.95, 0.62, 1.80, "foliage_deep", "GardenHedge%d" % _i,
+              rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+        _part("cube", _GX + math.cos(_a) * 560.0, _GY + math.sin(_a) * 560.0, 176.0,
+              0.99, 0.68, 0.28, "foliage_spr", "GardenHedgeTop%d" % _i,
+              rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+        if _i % 4 == 0:
+            _part("sphere", _GX + math.cos(_a) * 585.0, _GY + math.sin(_a) * 585.0, 150.0,
+                  0.20, 0.20, 0.20, "rose" if _i % 8 else "rose_pink", "GardenHedgeRose%d" % _i)
+    for _k in range(3):                              # the rose walk in, from the
+        kit_arch(_GX + 60.0, _GY - 620.0 - _k * 300.0, 0.62, "GardenArch%d" % _k)
+    kit_card_pedestal(_GX, _GY, 1.25, "CardPedestal")
+    for _b, _ba in enumerate((0.9, 2.2, 4.1, 5.3)):
+        kit_bed(_GX + math.cos(_ba) * 350.0, _GY + math.sin(_ba) * 350.0, 130.0,
+                "GardenBed%d" % _b,
+                palette=("rose", "rose_pink", "petal_violet") if _b % 2
+                else ("petal_pink", "petal_air", "petal_violet"))
+    kit_heart_topiary(_GX - 300.0, _GY + 430.0, 40.0, 0.85, "GardenTopiaryA")
+    kit_heart_topiary(_GX + 300.0, _GY + 430.0, 40.0, 0.85, "GardenTopiaryB")
+    # THE MISSION OVERLOOK'S OWN SILHOUETTE, over the terrace it already has.
+    kit_belvedere(620.0, -190.0, 0.72, "OverlookBelvedere")
+
     kit_heart_topiary(1180, 1150, 70.0, 1.5, "HeartTopiaryR")
     kit_heart_topiary(-1240, 1200, 70.0, 1.35, "HeartTopiaryL")
-    kit_teacup(1320, 250, 3.4, "GiantTeacup")
+    kit_teacup(1460, 520, 2.2, "GiantTeacup")
     kit_fountain(900, -560, "Fountain")
     for i, (cx, cy, cz) in enumerate([(-540, 300, 610), (700, 560, 680)]):
         kit_clock(cx, cy, cz, "Clock%d" % i)
@@ -3022,23 +3274,57 @@ def build(layout):
     # LUSH GROUND COVER — the reference world is densely PLANTED, so carpet the whole
     # district with flowers + grass tufts + more scattered mushrooms. Deterministic
     # phyllotaxis; a hole is left over the arcane circle so it stays clear.
+    def low_mat(x, y, i):
+        """Mat-forming cover: wide, low, dark. Sits in the very front of the
+        frame where anything upright would block the subject, and gives the
+        first few metres a texture to read."""
+        d = 0.34 + (i % 4) * 0.11
+        _part("sphere", x, y, 5.0, d * 1.7, d * 1.5, 0.14,
+              "foliage_deep" if i % 3 else "moss", "mat_%d" % i,
+              rot=(0.0, 0.0, float((i * 47) % 360)))
+        for k in range(3):
+            a = (i * 37 + k * 120) % 360
+            _part("cube", x + math.cos(math.radians(a)) * 13.0 * d,
+                  y + math.sin(math.radians(a)) * 13.0 * d, 9.0,
+                  d * 0.5, d * 0.06, d * 0.22,
+                  "leaf" if (i + k) % 2 else "foliage", "mat%d_l%d" % (i, k),
+                  rot=(74.0, float(a), 0.0))
+        if i % 6 == 0:
+            _part("sphere", x + 8.0, y - 6.0, 16.0, 0.13, 0.13, 0.12,
+                  "petal_air" if i % 12 else "petal_violet", "mat%d_b" % i)
+
     def ground_cover(gx, gy, i):
         if math.hypot(gx, gy - 40.0) < 320.0:      # keep the Dog's arcane circle clear
             return
-        # THE NEAR FIELD IS A FOREGROUND, NOT A HEDGE. Full density right up to
-        # the camera puts a wall of blossom between the viewer and the subject;
-        # the eye has to climb over it to reach the Dog. Thinning what lands in
-        # the front of the frame keeps the lushness where it reads as lushness.
-        if gy < -900.0 and (i % 3) != 0:
+        if _on_stage(gx, gy):
             return
-        if gy < -1500.0:
+        # LAYERS, NOT THINNING. Emptying the near field stopped it walling off
+        # the subject and cost the depth in the first ten metres. What the
+        # reference actually has is a gradient of HEIGHT: mat-forming cover
+        # nearest the camera, mid shrubs behind it, tall planting only past the
+        # subject. Depth in the foreground, and still a clear view through.
+        if gy < -1750.0:
+            low_mat(gx, gy, i)
+            return
+        if gy < -1150.0:
+            (low_mat if i % 2 else tuft)(gx, gy, i)
             return
         (flower if i % 3 else tuft)(gx, gy, i)
-    # Dense carpet: three overlapping phyllotaxis passes for a lush, un-gridded
-    # spread of lavender + rose (the reference's flowering courtyard).
-    scatter(0.0, 300.0, 280, 1900.0, ground_cover)
-    scatter(120.0, 500.0, 170, 1500.0, ground_cover)
-    scatter(-140.0, 250.0, 110, 1150.0, ground_cover)
+    # DRIFTS, NOT A CARPET. Phyllotaxis spreads perfectly evenly, which is the
+    # most artificial distribution there is — it is why the foreground read as
+    # confetti rather than as planting. Real colonies clump, with bare ground
+    # between them, and the bare ground is what makes the clumps read. Same
+    # total count, gathered: a scatter of COLONY CENTRES, each filled locally.
+    def colony(cx, cy, i):
+        n = 5 + (i % 6)
+        for k in range(n):
+            a = k * 2.39996 + i
+            rr = 34.0 + 92.0 * math.sqrt((k + 0.4) / n)
+            ground_cover(cx + math.cos(a) * rr, cy + math.sin(a) * rr, i * 7 + k)
+
+    scatter(0.0, 300.0, 46, 1900.0, colony)
+    scatter(120.0, 500.0, 28, 1500.0, colony)
+    scatter(-140.0, 250.0, 18, 1150.0, colony)
     # AMANITAS GROW IN SOIL, IN FAMILIES, AT THE FOOT OF THINGS. Scattering
     # them by even phyllotaxis over the whole district put fungus on the paving
     # and gave the foreground a rash of identical caps — clutter, which the brief
@@ -3051,10 +3337,12 @@ def build(layout):
         return abs(gx) < 300.0 and -1150.0 < gy < 1250.0
 
     def mushroom_family(gx, gy, i):
-        if _on_stone(gx, gy):
+        if _on_stone(gx, gy) or _in_corridor(gx, gy) or _on_stage(gx, gy):
             return
         cap = "mush_purple" if i % 4 == 0 else "mush_red"
-        big = 0.52 + 0.26 * (i % 3)
+        # smaller near the camera: a foreground cap at hero scale competes
+        # with the subject standing next to it
+        big = (0.52 + 0.26 * (i % 3)) * (0.62 if gy < NEAR_Y + 700.0 else 1.0)
         kit_mushroom(gx, gy, big, "GM%d" % i, cap)
         for k in range(2 + (i % 3)):
             a = (i * 2.39996 + k * 1.9)
@@ -3067,7 +3355,8 @@ def build(layout):
     # ...and pushed OUT of the near field. Fungus at the district edge frames
     # the plaza; fungus across the plaza floor is a rash in front of the subject.
     scatter(0.0, 900.0, 18, 2350.0,
-            lambda gx, gy, i: None if math.hypot(gx, gy + 700.0) < 1500.0
+            lambda gx, gy, i: None if (math.hypot(gx, gy + 700.0) < 1500.0
+                                       or _on_stage(gx, gy))
             else mushroom_family(gx, gy, i))
 
 
@@ -3164,10 +3453,150 @@ def build(layout):
         _land += 1
     unreal.log("LANDSCAPE %d mid-distance elements" % _land)
 
+
+    # ================= NEAR FIELD =========================================
+    # A third of the hero frame is the first fifteen metres, and it had emptied
+    # to bare ground once the sight corridor and the Dog's stage were protected.
+    # Everything here is deliberately LOW — under knee height — so it enriches
+    # the foreground without becoming something the eye has to climb over.
+    def near_ok(px, py):
+        return (not _on_stage(px, py)) and (not _on_paving(px, py)) \
+            and (not _in_corridor(px, py, half=330.0, y0=-1400.0, y1=1500.0))
+
+    _near = 0
+    # MOSSY BOULDER GROUPS. Rock is the cheapest way to give ground structure,
+    # and moss on the shaded side is what stops it reading as a grey ball.
+    # Placed relative to NEAR_Y, so they sit in the first few metres of ground
+    # the frame can actually see rather than under it.
+    for i, (bx, _byo, bs) in enumerate(((-1250.0, 40.0, 1.5), (-1620.0, 300.0, 1.1),
+                                        (1300.0, 20.0, 1.4), (1680.0, 330.0, 1.0),
+                                        (-880.0, 480.0, 0.9), (980.0, 520.0, 1.2))):
+        by = NEAR_Y + _byo
+        for k in range(4):
+            a = k * 1.9 + i
+            rx = bx + math.cos(a) * 70.0 * bs
+            ry = by + math.sin(a) * 70.0 * bs
+            rs = bs * (0.55 + 0.34 * ((k * 7 + i) % 4) / 4.0)
+            _part("sphere", rx, ry, rs * 26.0, rs * 1.5, rs * 1.25, rs * 0.72, "stone",
+                  "NearRock%d_%d" % (i, k), rot=(0.0, float((i * 31 + k * 47) % 360),
+                                                 float((k * 23) % 22)))
+            _part("sphere", rx - rs * 18.0, ry + rs * 14.0, rs * 44.0,
+                  rs * 0.80, rs * 0.66, rs * 0.20, "moss", "NearMoss%d_%d" % (i, k))
+            _near += 2
+        for k in range(5):                       # ferns tucked against the rock
+            a = k * 1.3 + i * 0.7
+            tuft(bx + math.cos(a) * 130.0 * bs, by + math.sin(a) * 130.0 * bs, i * 11 + k)
+            _near += 1
+
+    # ROOT RUNS breaking the surface, as the addendum asks for. They also tie the
+    # foreground to the great tree the eye has just travelled past.
+    for i in range(7):
+        a = 2.1 + i * 0.42
+        rx = math.cos(a) * (1350.0 + 220.0 * (i % 3))
+        ry = NEAR_Y + 120.0 + 190.0 * (i % 4)
+        if not near_ok(rx, ry):
+            continue
+        kit_root(rx, ry, a + 1.6, 300.0 + 120.0 * (i % 3), 0.42 + 0.12 * (i % 2),
+                 "NearRoot%d" % i)
+        _near += 8
+
+    # FALLEN PETALS AND LEAVES lying flat on the ground. Almost free, and it is
+    # what makes ground read as ground that things grow over rather than a plane.
+    def litter(px, py, i):
+        if not near_ok(px, py):
+            return
+        col = ("petal_pink", "petal_air", "rose_pink", "leaf", "leaf_hi",
+               "petal_violet")[i % 6]
+        _part("sphere", px, py, 3.4, 0.15, 0.09, 0.012, col, "Litter%d" % i,
+              rot=(0.0, 0.0, float((i * 53) % 360)))
+
+    scatter(0.0, NEAR_Y + 420.0, 210, 1350.0, litter)
+    _near += 190
+
+    # COLONIES filling the near corners, outside the corridor and the stage
+    def near_colony(cx, cy, i):
+        if not near_ok(cx, cy):
+            return
+        for k in range(4 + (i % 5)):
+            a = k * 2.39996 + i
+            rr = 30.0 + 84.0 * math.sqrt((k + 0.4) / 8.0)
+            px, py = cx + math.cos(a) * rr, cy + math.sin(a) * rr
+            if not near_ok(px, py):
+                continue
+            (low_mat if (i + k) % 3 else flower)(px, py, i * 9 + k)
+
+    scatter(0.0, NEAR_Y + 380.0, 40, 1300.0, near_colony)
+    _near += 34
+
+    # FLOWERS IN THE JOINTS. "flowers between stones" — they take hold at the
+    # edge of the paving where the mortar has given way.
+    for i in range(54):
+        a = i * 2.39996
+        rr = 1180.0 + 46.0 * (i % 3)
+        px, py = math.cos(a) * rr, math.sin(a) * rr
+        if _in_corridor(px, py, half=300.0) or _on_stage(px, py):
+            continue
+        _part("cylinder", px, py, 12.0, 0.035, 0.035, 0.22, "foliage_deep",
+              "JointStem%d" % i)
+        _part("sphere", px, py, 26.0, 0.13, 0.13, 0.12,
+              ("petal_violet", "petal_air", "rose_pink")[i % 3], "JointBloom%d" % i)
+        _near += 2
+
+    # REPOUSSOIR at the extreme frame edges, well outside the sight corridor:
+    # tall grasses and ferns that the eye reads as "near" and never has to see
+    # past, which is what gives a wide shot its sense of standing somewhere.
+    # AT THE FRAME EDGE, WHICH IS NARROWER THAN IT LOOKS. 1,100 uu ahead the
+    # frame is only about 715 uu wide either side of the axis, so grasses at
+    # |x| = 1500 were as absent as the ones that were under the bottom edge.
+    # Derived from the same camera the ground band comes from.
+    _edge_x = (NEAR_Y - _CAM_Y) * math.tan(math.radians(33.0))
+    for e in (-1, 1):
+        for k in range(9):
+            gx = e * (_edge_x * (0.88 + 0.07 * (k % 3)))
+            gy = NEAR_Y + 30.0 + 90.0 * k
+            for b in range(7):
+                ba = b * 0.9 + k
+                _part("cube", gx + math.cos(ba) * 26.0, gy + math.sin(ba) * 26.0, 96.0,
+                      0.10, 0.028, 1.9, "foliage_deep" if b % 2 else "foliage",
+                      "EdgeGrass%d_%d_%d" % (e, k, b),
+                      rot=(float(9 + (b * 7) % 16), float((b * 51) % 360), 0.0))
+            _near += 7
+    unreal.log("NEAR FIELD %d elements" % _near)
+
     # --- Water features ---------------------------------------------------
     for w in layout.get("waterFeatures", []):
         s = scale_for_radius(w.get("radiusUu", 100))
         static_mesh(w.get("mesh", "water_plane"), w["center"], [s, s, 1.0], "WATER_%s" % w["id"])
+        # STILL WATER IS A MIRROR. What makes a pool read as water is the
+        # disturbance at its edge: a stone rim, foam where it meets the stone,
+        # and ripple rings spreading across the surface.
+        _wc = w["center"]
+        _wr = float(w.get("radiusUu", 100))
+        for _i in range(30):
+            _a = _i * (2.0 * math.pi / 30.0)
+            _part("cube", _wc[0] + math.cos(_a) * _wr, _wc[1] + math.sin(_a) * _wr,
+                  float(_wc[2]) + 16.0, (2.0 * math.pi * _wr / 30.0) / 92.0, 0.44, 0.36,
+                  "stone", "%s_rim%d" % (w["id"], _i), rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+            _part("sphere", _wc[0] + math.cos(_a) * (_wr - 26.0),
+                  _wc[1] + math.sin(_a) * (_wr - 26.0), float(_wc[2]) + 6.0,
+                  0.34, 0.28, 0.05, "porcelain", "%s_foam%d" % (w["id"], _i))
+        for _r in range(4):
+            _rr = _wr * (0.30 + 0.17 * _r)
+            for _i in range(24):
+                _a = _i * (2.0 * math.pi / 24.0)
+                _part("cube", _wc[0] + math.cos(_a) * _rr, _wc[1] + math.sin(_a) * _rr,
+                      float(_wc[2]) + 3.0, (2.0 * math.pi * _rr / 24.0) / 105.0, 0.10, 0.012,
+                      "porcelain", "%s_ripple%d_%d" % (w["id"], _r, _i),
+                      rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+        for _i in range(11):                       # lilies on the reflecting pool
+            _a = _i * 2.39996
+            _lr = _wr * 0.78 * math.sqrt((_i + 0.5) / 11.0)
+            _lx, _ly = _wc[0] + math.cos(_a) * _lr, _wc[1] + math.sin(_a) * _lr
+            _part("cylinder", _lx, _ly, float(_wc[2]) + 5.0, 0.60, 0.60, 0.02,
+                  "foliage_hi", "%s_pad%d" % (w["id"], _i))
+            if _i % 2 == 0:
+                _part("sphere", _lx + 18.0, _ly, float(_wc[2]) + 14.0, 0.17, 0.17, 0.16,
+                      "petal_air" if _i % 4 else "petal_violet", "%s_lily%d" % (w["id"], _i))
 
     # --- Benches (dressing; placeholder cube, facing baked from data) -----
     for b in layout.get("benchPoints", []):
@@ -3244,7 +3673,8 @@ def build(layout):
             PLAZA_CLEAR = 620.0
             if key == "foliageClusters":
                 n = int(28 * area * (float(c.get("density", 0.55)) / 0.55))
-                scatter(ctr[0], ctr[1], min(n, 220), rad, tuft,
+                scatter(ctr[0], ctr[1], min(n, 220), rad,
+                        lambda x, y, i: (low_mat if _in_corridor(x, y) else tuft)(x, y, i),
                         keep_clear=PLAZA_CLEAR)
             elif key == "flowerBeds":
                 n = int(c.get("count", 0)) or int(26 * area)
@@ -3253,7 +3683,7 @@ def build(layout):
             else:
                 n = int(c.get("count", 0)) or int(10 * area)
                 scatter(ctr[0], ctr[1], min(n, 70), rad,
-                        lambda x, y, i: None if _on_paving(x, y) else
+                        lambda x, y, i: None if (_on_paving(x, y) or _in_corridor(x, y)) else
                         kit_mushroom(x, y, 0.30 + 0.13 * (i % 4),
                                      "mini%d" % i, "mush_purple" if i % 2 else "mush_red"),
                         keep_clear=PLAZA_CLEAR)
