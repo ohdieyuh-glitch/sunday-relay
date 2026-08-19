@@ -17,10 +17,30 @@ of them is tractable in Python at a small resolution.
 
 WHAT THIS IS NOT. No Lumen global illumination, no virtual shadow map softness,
 no specular, no PBR, no TSR, no post grade, no auto-exposure histogram, and
-textures reduced to their average colour. It answers exactly one question — is
-the VALUE STRUCTURE right: does the sun read, do shadows land, is the shadowed
-side lifted or crushed, does gold separate from stone. The streamed California
-frame remains the only ground truth for how it looks.
+textures point-sampled at 96px. It answers whether the VALUE STRUCTURE is right:
+does the sun read, do shadows land, is the shadowed side lifted or crushed.
+
+CALIBRATION AGAINST GROUND TRUTH. Rendering the world state that produced the
+real streamed frame `p18`, and comparing the two, this tracer runs:
+
+    luma        +94%   much brighter than Unreal
+    contrast    +26%
+    saturation  -76%   Unreal is roughly FOUR TIMES more saturated
+
+Its absolute numbers are therefore not Unreal's, and in one direction badly so:
+every image this produces looks far more washed out than the engine's, because
+Lumen's bounce, PBR specular and the filmic tonemap all add colour this model
+has none of. DO NOT conclude "the palette is pale" from a picture made here — I
+did, and it was wrong by a factor of four.
+
+What transfers is RELATIVE comparison — A versus B at the same settings — and
+per-object coverage of the frame, which is geometry rather than shading. Use it
+for those. The streamed California frame remains the only ground truth for how
+the world looks.
+
+(Caveat on the calibration: the reference frame carries a partly-cropped player
+UI and is 1600x900 against this tracer's 320x180. Direction and magnitude hold;
+the exact percentages do not.)
 """
 import io
 import json
