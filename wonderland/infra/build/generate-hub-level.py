@@ -2841,8 +2841,16 @@ def build(layout):
         # daylight has an enormous blue fill from the entire dome; restoring it
         # lifts the shadows without touching the highlights, which is precisely
         # the range the frame was missing.
+        #
+        # 1.15 was the first guess. A CPU trace of this exact geometry at 0.42 /
+        # 0.70 / 1.15 says none of them crush or clip — luma sd moves 54.7 -> 51.7
+        # and saturation 0.176 -> 0.161 across the whole range — so the choice sits
+        # inside a safe band rather than on a cliff, and 0.90 takes most of the
+        # shadow lift for two thirds of the saturation cost. This is the first
+        # value to revisit against a real streamed frame; the trace has no Lumen,
+        # so it can bound this decision but not settle it.
         try:
-            sky_comp.set_intensity(1.15)
+            sky_comp.set_intensity(0.90)
         except Exception:
             pass
         # Real-time captured sky ambient — needs no lighting build.
