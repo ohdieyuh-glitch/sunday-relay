@@ -1457,6 +1457,9 @@ def build(layout):
         in three layers: a DARK INTERIOR that never catches light, a mid mass,
         and a bright outer rim, with leaf cards breaking the silhouette. One
         sphere of one green is the blob this replaces."""
+        if in_camera_lap(x, y, 120.0):
+            return
+
         _part("sphere", x, y, 26.0 * s, 1.05 * s, 0.95 * s, 0.80 * s,
               "foliage_deep", "%s_core" % label)
         for k in range(5):
@@ -1489,6 +1492,9 @@ def build(layout):
         world has exactly one shape of it — a heart. Clipped cones, spirals and
         standards are what a formal garden is actually made of, and they read as
         DESIGNED in a way scattered planting never does."""
+        if in_camera_lap(x, y, 250.0):
+            return
+
         # planter first: moulded, trimmed, with a soil line
         _part("cylinder", x, y, 14.0 * s, 0.62 * s, 0.62 * s, 0.28 * s, "stone", "%s_pot" % label)
         _part("cylinder", x, y, 30.0 * s, 0.70 * s, 0.70 * s, 0.10 * s, "plaza", "%s_potlip" % label)
@@ -2255,6 +2261,9 @@ def build(layout):
         The reference's density is not foliage, it is BUILDING — close enough to
         read its trim. A block of these behind the garden is the step the
         composition was missing between planting and skyline."""
+        if in_camera_lap(x, y, 400.0):
+            return
+
         ca, sa = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
 
         def P(prim, ox, oy, oz, sx, sy, sz, mat, lb, rot=(0.0, 0.0, 0.0)):
@@ -2552,7 +2561,18 @@ def build(layout):
         _part("cube", x + 30.0, y, z - 70.0, 0.16, 0.09, 0.14, "gold", "%s_tooth1" % label, rot=tilt)
 
     def kit_clock(x, y, z, label):
-        # Floating ornate clock: gold case + pale face + two hands, facing -Y.
+        """Floating ornate clock. The case was one gold disc behind the face; a
+        real clock case has a bezel that PROJECTS, a moulded surround and a
+        crown, which is what makes it read as an object rather than a decal."""
+        for _b, (_r, _d) in enumerate(((1.62, 0.10), (1.54, 0.14), (1.44, 0.18))):
+            _part("cylinder", x, y + _b * 4.0, z, _r, _d, _r,
+                  "gold" if _b % 2 == 0 else ("brass_deep" if "brass_deep" in MATS else "gold"),
+                  "%s_bezel%d" % (label, _b), rot=(90, 0, 0))
+        for _k in range(12):
+            _a = _k * (2.0 * math.pi / 12.0)
+            _part("sphere", x + math.sin(_a) * 148.0, y + 6.0, z + math.cos(_a) * 148.0,
+                  0.10, 0.06, 0.10, "gold", "%s_stud%d" % (label, _k))
+        finial(x, y - 4.0, z + 158.0, 0.66, "gold", "%s_crown" % label, glow="gold_glow")
         _part("cylinder", x, y, z, 1.5, 0.16, 1.5, "gold", "%s_case" % label, rot=(90, 0, 0))
         _part("cylinder", x, y - 10, z, 1.2, 0.10, 1.2, "porcelain", "%s_face" % label, rot=(90, 0, 0))
         _part("cube", x, y - 18, z + 34, 0.07, 0.07, 0.66, "dog_visor", "%s_min" % label)
@@ -2757,10 +2777,26 @@ def build(layout):
                   rot=(float(-18 * w), 0.0, yaw + 90 * w))
 
     def kit_sign(x, y, label):
-        # Playing-card style sign on a post: white card + a red heart.
-        _part("cylinder", x, y, 62.0, 0.12, 0.12, 1.24, "trunk", "%s_post" % label)
-        _part("cube", x, y, 158.0, 1.0, 0.12, 1.5, "porcelain", "%s_card" % label)
-        _part("sphere", x, y - 10.0, 168.0, 0.4, 0.14, 0.4, "rose", "%s_heart" % label)
+        """An ornate hanging signpost. It was a dowel with a white rectangle and
+        a red dot — the reference's wayfinding is wrought iron with a scrolled
+        bracket, a swinging board and suit pips, and that is four more parts."""
+        _part("cylinder", x, y, 8.0, 0.42, 0.42, 0.16, "stone", "%s_base" % label)
+        _part("cylinder", x, y, 92.0, 0.11, 0.11, 1.72, "trunk", "%s_post" % label)
+        # scrolled bracket reaching out, with the board hung from it
+        volute(x + 22.0, y, 196.0, 0.62, "gold", "%s_scroll" % label)
+        _part("cube", x + 34.0, y, 202.0, 0.66, 0.05, 0.05, "gold", "%s_arm" % label)
+        for e in (-1, 1):
+            _part("cylinder", x + 34.0 + e * 26.0, y, 186.0, 0.022, 0.022, 0.30,
+                  "gold", "%s_chain%d" % (label, e))
+        _part("cube", x + 34.0, y, 152.0, 0.72, 0.07, 0.52, "porcelain", "%s_card" % label)
+        _part("cube", x + 34.0, y - 5.0, 152.0, 0.76, 0.03, 0.56, "gold", "%s_cardtrim" % label)
+        # the suit: a heart, built rather than dotted
+        for e in (-1, 1):
+            _part("sphere", x + 34.0 + e * 9.0, y - 9.0, 160.0, 0.15, 0.05, 0.15,
+                  "rose", "%s_lobe%d" % (label, e))
+        _part("cube", x + 34.0, y - 9.0, 146.0, 0.19, 0.05, 0.19, "rose",
+              "%s_pt" % label, rot=(0.0, 0.0, 45.0))
+        finial(x, y, 178.0, 0.72, "gold", "%s_fin" % label, glow="gold_glow")
 
     def kit_arch(x, y, s, label):
         # A rose-wrapped SEE-THROUGH archway: two vine posts + a top beam you look
@@ -2978,6 +3014,22 @@ def build(layout):
 
     NEAR_Y, _CAM_X, _CAM_Y = _hero_ground_band()
 
+    def in_camera_lap(px, py, margin=250.0):
+        """True if something TALL placed here would sit inside the hero camera's
+        blind foreground.
+
+        This has now caught three separate placements — the Great Framing Tree at
+        11 m filling six frame-heights, a pair of topiary at 5 m filling 72% of
+        one, and the Dog's own staging, which fell off the bottom entirely. Each
+        time it was found by measuring after the fact, and each time the fix was
+        the same test written again at a new call site.
+
+        So it lives here once and the tall kits ask it. NEAR_Y is derived from
+        the camera, so if the camera moves the rule moves with it. Short things
+        are exempt: ground cover nearer than this is simply not in shot, which
+        costs a few draws and misleads nobody."""
+        return py < NEAR_Y + margin
+
     # WHERE THE HERO DOG STANDS, AND THE GROUND IT STANDS ON. Nothing that
     # grows gets planted here: a subject knee-deep in blossom is not staged, it
     # is camouflaged.
@@ -3107,7 +3159,8 @@ def build(layout):
         if mesh == "gate" or "gate" in mid:
             kit_gate(x, y, 1.4, mid)
         elif "framing_tree" in mid:
-            kit_tree(x, y, 1.7, mid, giant=True)
+            if not in_camera_lap(x, y, 600.0):
+                kit_tree(x, y, 1.7, mid, giant=True)
         elif mesh == "tree" or "tree" in mid or "topiary" in mid:
             kit_tree(x, y, norm, mid)
         elif mesh == "mushroom" or "mushroom" in mid:
@@ -3985,6 +4038,8 @@ def build(layout):
                                           (1650.0, 1850.0, 1.05),
                                           (2250.0, 2750.0, 1.00))):
         if _in_corridor(_gx, _gy) or _on_stage(_gx, _gy):
+            continue
+        if in_camera_lap(_gx, _gy, 600.0):
             continue
         kit_tree(_gx, _gy, _gs, "GreatTree%d" % _i, giant=True)
         # buttress roots, the thing that stops a big trunk reading as a post
