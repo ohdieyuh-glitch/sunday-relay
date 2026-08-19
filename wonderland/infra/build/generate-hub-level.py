@@ -248,6 +248,22 @@ MATERIAL_SPEC = {
 }
 
 
+# Which surfaces never cast a shadow. See the SHADOW BUDGET note in static_mesh:
+# virtual shadow maps cost per casting object, and neither of these classes puts
+# a visible shadow anywhere — one is too small, the other too far.
+NO_SHADOW_MATS = frozenset((
+    "cloud", "cloud_warm",          # geometry standing in for cumulus
+    "meadow_far", "spire_far",      # the far meadow and the distant skyline
+    "petal_air", "petal_pink", "petal_violet",
+))
+NO_SHADOW_PREFIX = (
+    "Cloud", "Hill", "Petal", "Mote", "Bfly", "Litter", "Bird",
+    "SkylineB", "BlockB", "GreatCastle", "WestCastle", "Town", "Parade",
+    "Wood", "Hedge", "Cot", "Roll", "LakeRim", "MidLake", "FarMeadow",
+    "MidMeadow", "castle_spire", "float_island", "distant_treeline",
+)
+
+
 def build_niagara():
     """REAL Niagara, not emissive-sphere stand-ins. Headless Python cannot AUTHOR a
     Niagara graph (no NiagaraEditorLibrary, no emitter-add API — proven), but it CAN
@@ -1169,6 +1185,26 @@ def build(layout):
             m = MATS.get(mat_name_for(mesh_key, label))
         if m is not None:
             smc.set_material(0, m)
+        # ---- SHADOW BUDGET -------------------------------------------------
+        # Virtual shadow maps cost per shadow-CASTING object, and this world has
+        # twenty-two thousand of them. Two whole classes gain nothing by casting:
+        #
+        #   things too small to cast a shadow anyone can see — petals, motes,
+        #   butterflies, litter, sparkles, the flecks on a mushroom cap;
+        #   things too far away for their shadow to land anywhere in frame —
+        #   the skyline bands, the castles, the hills, the far meadow, and the
+        #   clouds, whose geometry is a stand-in and whose shadow would be a lie.
+        #
+        # Everything the player can walk up to still casts normally. This is the
+        # first lever to reach for if the streamed frame rate is short, and it is
+        # free: none of it changes what the frame looks like.
+        _lb = label or ""
+        if (mat in NO_SHADOW_MATS
+                or any(_lb.startswith(_p) for _p in NO_SHADOW_PREFIX)):
+            try:
+                smc.set_editor_property("cast_shadow", False)
+            except Exception:
+                pass
         return actor
 
     def marker(location, label, tags=(), rotation=(0.0, 0.0, 0.0)):
