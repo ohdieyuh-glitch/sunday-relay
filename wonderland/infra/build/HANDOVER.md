@@ -55,6 +55,22 @@ reading the capture — `LogPython` *Display* is filtered out of the packaged
 build log, which is why everything this pipeline logs at Display has been
 invisible after the fact.
 
+## A route past the port block, if you want it — founder's call
+
+This machine can only open 80, 443, 8080 and 53 outbound, which is why nothing
+here can reach the box. A GitHub Actions runner has no such restriction and
+could run `resume-california.sh` on our behalf: the repo is already pushed, and
+a workflow could SSH to the instance, rebuild, capture the hero frame and
+upload it as an artifact.
+
+**I have not set this up, and it is not a technical decision.** It requires the
+box's SSH private key to be stored as a GitHub Actions secret — moving a
+credential onto a third-party service, which is yours to authorise, not mine.
+Worth knowing the option exists; worth not taking it silently.
+
+It also does not help by itself while the instance is stopped. Starting the
+instance is the first step either way.
+
 ## Verifying without a GPU
 
 Three harnesses, all path-independent, all runnable from this directory:
