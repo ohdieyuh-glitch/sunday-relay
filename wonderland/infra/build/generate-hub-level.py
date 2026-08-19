@@ -173,12 +173,12 @@ MATERIAL_SPEC = {
     "porcelain":   ((0.96, 0.95, 0.93), 0.0, 0.10, (0, 0, 0), 0.0),
     "water":       ((0.06, 0.20, 0.34), 0.0, 0.06, (0, 0.02, 0.05), 0.1),
     "magic_cyan":  ((0.20, 0.85, 1.00), 0.0, 0.30, (0.20, 0.85, 1.00), 2.2),
-    "magic_gold":  ((1.00, 0.82, 0.40), 0.0, 0.30, (1.00, 0.72, 0.28), 2.2),
-    "arcane":      ((0.60, 0.30, 0.95), 0.0, 0.35, (0.58, 0.26, 1.00), 3.0),
+    "magic_gold":  ((1.00, 0.84, 0.42), 0.0, 0.28, (1.00, 0.74, 0.30), 4.5),
+    "arcane":      ((0.66, 0.36, 1.00), 0.0, 0.30, (0.62, 0.28, 1.00), 11.0),
     "crystal":     ((0.65, 0.40, 0.95), 0.1, 0.20, (0.40, 0.20, 0.80), 1.5),
-    "dog_body":    ((0.92, 0.92, 0.90), 0.0, 0.30, (0, 0, 0), 0.0),
+    "dog_body":    ((0.985, 0.985, 0.995), 0.0, 0.34, (0.02, 0.02, 0.03), 0.10),
     "dog_visor":   ((0.02, 0.02, 0.03), 0.1, 0.12, (0, 0, 0), 0.0),
-    "dog_eye":     ((1.00, 0.78, 0.25), 0.0, 0.30, (1.00, 0.72, 0.20), 2.6),
+    "dog_eye":     ((1.00, 0.80, 0.22), 0.0, 0.28, (1.00, 0.74, 0.18), 5.0),
     "stone":       ((0.44, 0.42, 0.40), 0.0, 0.90, (0, 0, 0), 0.0),
     "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.35, (0, 0, 0), 0.0),
     "dog_gray":    ((0.55, 0.57, 0.60), 0.0, 0.40, (0, 0, 0), 0.0),
@@ -724,14 +724,53 @@ def build(layout):
         _part("cube", x, y, ph + 120.0 * s, 1.4 * s, 1.35 * s, 1.0 * s, "gold_glow", "%s_keystone" % label)
 
     def kit_spire(x, y, s, label, body_mat="spire", roof_mat="gold", flag=True):
-        # A candy-castle turret: tall glossy tower, a mid tier, a tall conical roof,
-        # a gold ball finial and (optionally) a little flag — the pink/white/blue
-        # spired castles of the reference skyline.
+        # A CASTLE TURRET, not a cylinder wearing a cone. The skyline fills the
+        # upper third of every wide shot, so a bare cone-on-a-tube was the single
+        # most visible "prototype" cue left in the world. The reference's towers
+        # read as architecture because they have four things this now has:
+        #
+        #   BREAK IN THE SILHOUETTE - a base plinth, a corbel band and a balcony
+        #     ring, so the vertical is interrupted instead of being one extrusion;
+        #   OVERHANG - the balcony is WIDER than the shaft it sits on, which is
+        #     what makes a tower read as built rather than turned on a lathe;
+        #   FENESTRATION - windows in a vertical rhythm, the cue the eye uses to
+        #     judge a building's scale at any distance;
+        #   A ROOF WITH A LIP - the eave is what stops a cone reading as a party
+        #     hat, plus a lantern under the finial.
         bh, br = 440.0 * s, 72.0 * s
-        _part("cylinder", x, y, bh * 0.5, br / 50.0, br / 50.0, bh / 100.0, body_mat, "%s_body" % label)
-        _part("cylinder", x, y, bh + 60.0 * s, br * 0.72 / 50.0, br * 0.72 / 50.0, 1.2 * s, body_mat, "%s_tier" % label)
+        # plinth
+        _part("cylinder", x, y, 16.0 * s, br * 1.24 / 50.0, br * 1.24 / 50.0, 0.34 * s,
+              "stone" if "stone" in MATS else body_mat, "%s_plinth" % label)
+        # shaft, very slightly tapered by stacking two drums
+        _part("cylinder", x, y, bh * 0.30, br / 50.0, br / 50.0, bh * 0.62 / 100.0,
+              body_mat, "%s_shaft" % label)
+        _part("cylinder", x, y, bh * 0.74, br * 0.92 / 50.0, br * 0.92 / 50.0, bh * 0.52 / 100.0,
+              body_mat, "%s_shaft2" % label)
+        # corbel band + balcony that OVERHANGS the shaft
+        _part("cylinder", x, y, bh * 0.60, br * 1.10 / 50.0, br * 1.10 / 50.0, 0.16 * s,
+              roof_mat, "%s_corbel" % label)
+        _part("cylinder", x, y, bh + 34.0 * s, br * 1.18 / 50.0, br * 1.18 / 50.0, 0.22 * s,
+              body_mat, "%s_balcony" % label)
+        # merlons around the balcony rim
+        for i in range(8):
+            a = i * (2.0 * math.pi / 8.0)
+            _part("cube", x + math.cos(a) * br * 1.10, y + math.sin(a) * br * 1.10,
+                  bh + 58.0 * s, 0.17 * s, 0.17 * s, 0.30 * s, body_mat,
+                  "%s_merlon%d" % (label, i), rot=(0.0, math.degrees(a), 0.0))
+        # windows: two tiers of four, the scale cue
+        for tier, tz in enumerate((bh * 0.34, bh * 0.66)):
+            for i in range(4):
+                a = i * (math.pi / 2.0) + tier * 0.4
+                _part("cube", x + math.cos(a) * br * 0.99, y + math.sin(a) * br * 0.99, tz,
+                      0.10 * s, 0.20 * s, 0.34 * s, "dog_visor", "%s_win%d_%d" % (label, tier, i),
+                      rot=(0.0, math.degrees(a), 0.0))
+        # roof with an EAVE lip, then the spire proper
+        _part("cylinder", x, y, bh + 76.0 * s, br * 1.30 / 50.0, br * 1.30 / 50.0, 0.14 * s,
+              roof_mat, "%s_eave" % label)
         _part("cone", x, y, bh + 210.0 * s, 1.9 * s, 1.9 * s, 2.9 * s, roof_mat, "%s_roof" % label)
-        _part("sphere", x, y, bh + 330.0 * s, 0.32 * s, 0.32 * s, 0.32 * s, "gold_glow", "%s_finial" % label)
+        # lantern under the finial
+        _part("cylinder", x, y, bh + 306.0 * s, 0.26 * s, 0.26 * s, 0.30 * s, "gold", "%s_lantern" % label)
+        _part("sphere", x, y, bh + 336.0 * s, 0.32 * s, 0.32 * s, 0.32 * s, "gold_glow", "%s_finial" % label)
         if flag:
             _part("cylinder", x, y, bh + 400.0 * s, 0.05 * s, 0.05 * s, 1.1 * s, "gold", "%s_pole" % label)
             _part("cube", x + 24.0 * s, y, bh + 470.0 * s, 0.02 * s, 0.42 * s, 0.28 * s, roof_mat, "%s_flag" % label)
@@ -801,8 +840,14 @@ def build(layout):
                 if hsh % 7 == 0:  # moss creeping between stones
                     _part("sphere", x + gx * tile + 40.0, y + gy * tile - 30.0, 6.0,
                           0.30, 0.30, 0.10, "moss", "Moss%d_%d" % (gx, gy))
-        rings = [(9.0, 6.2, "arcane"), (12.0, 5.6, "plaza"), (14.0, 4.6, "arcane"),
-                 (17.0, 4.0, "plaza"), (19.0, 3.0, "arcane"), (22.0, 2.4, "plaza")]
+        # Many THIN concentric rings rather than six fat bands: the reference's
+        # circle reads as engraved light, and thickness is what made ours read
+        # as painted vinyl.
+        rings = [(9.0, 6.4, "arcane"), (9.6, 6.05, "plaza"), (10.2, 5.7, "arcane"),
+                 (10.8, 5.45, "plaza"), (12.0, 5.1, "arcane"), (12.6, 4.85, "plaza"),
+                 (14.0, 4.3, "arcane"), (14.6, 4.05, "plaza"), (16.0, 3.4, "arcane"),
+                 (16.6, 3.15, "plaza"), (18.0, 2.5, "arcane"), (18.6, 2.25, "plaza"),
+                 (20.0, 1.5, "arcane")]
         for j, (rz, rr, mat) in enumerate(rings):
             _part("cylinder", x, y, rz, rr, rr, 0.10, mat, "ArcaneRing%d" % j)
         # radiating rune spokes (thin emissive bars from centre to rim)
@@ -815,6 +860,17 @@ def build(layout):
             a = (i / 8.0) * 2.0 * math.pi + 0.26
             _part("cylinder", x + math.cos(a) * 300.0, y + math.sin(a) * 300.0, 20.0,
                   0.26, 0.26, 0.42, "magic_gold", "Glyph%d" % i)
+        # DRIFTING CROSS-SPARKS. Small emissive plus-signs hovering over the
+        # ring, on the Bob world-position-offset so they rise and fall. In the
+        # reference these are what make the circle feel ALIVE rather than
+        # printed on the stone.
+        for i in range(26):
+            a = i * 2.39996
+            rr = 90.0 + 240.0 * (((i * 29) % 11) / 11.0)
+            sx, sy = x + math.cos(a) * rr, y + math.sin(a) * rr
+            sz = 26.0 + 66.0 * (((i * 17) % 7) / 7.0)
+            _part("cube", sx, sy, sz, 0.22, 0.05, 0.05, "arcane", "Spark%dH" % i)
+            _part("cube", sx, sy, sz, 0.05, 0.05, 0.22, "arcane", "Spark%dV" % i)
         _part("cylinder", x, y, 8.0, 1.2, 1.2, 0.14, "magic_gold", "ArcaneCore")
 
     def kit_float_key(x, y, z, label):
