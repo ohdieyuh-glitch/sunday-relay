@@ -94,3 +94,36 @@ billing and GPU quota are all unverified. Those are yours to clear:
 `gcloud auth login`, `gcloud auth application-default login`, pick a project,
 and request GPU quota — new projects ship with **zero** and only Google can
 raise it. `preflight` checks every one of them and names the exact fix.
+
+## Staged verification
+
+`./gcp-migration-verify.sh [1..12|readonly]` — the brief's twelve steps, each
+refusing to run before the one ahead of it has passed.
+
+- **1-4 and 12 are read-only.** Run them now, as often as you like, for nothing.
+  `readonly` runs exactly those.
+- **5 is the paid boundary.** Plan-only; it prints the create command.
+- **6-11 act on an instance that already exists.**
+
+Step 12 is the one to run after every experiment: it lists RUNNING instances,
+**unattached disks** and **reserved-but-unused external addresses**. Those last
+two are how a migration quietly keeps costing money after everything visible has
+been shut down.
+
+Nothing in it removes Vast. Vast stays the fallback until step 12 passes on a
+clean project.
+
+### Current result, on this machine
+
+```
+1. configuration   4 passed, 1 failed   (GCP_PROJECT_ID unset)
+2. authentication  blocked              (gcloud not installed)
+3. API             blocked              (gcloud not installed)
+4. quota           blocked              (gcloud not installed)
+```
+
+The authoring box is at 95% disk with 2.0 GB free and carries ~30 worktrees at
+~700 MB each that belong to other work. Installing a ~1 GB SDK there is how you
+break somebody else's build, so it has not been installed. Either free space
+deliberately, or drive GCP from a machine with room — the scripts are
+self-contained and take their configuration from the environment.
