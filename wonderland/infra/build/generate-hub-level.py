@@ -744,14 +744,32 @@ def build_material_library(texs=None):
         _rough_wired = False
         _rg_out = rg
         try:
+            # PER-INSTANCE STRENGTH. The breakup used to be a fixed 0.72-1.28
+            # multiplier baked into the noise node, which meant the only way to
+            # adjust it was to edit this file and rebuild — on a rented GPU that
+            # is a whole cook per guess. RoughVary scales the noise's DEVIATION
+            # from 1.0, so 1.0 reproduces the previous render exactly and each
+            # material family can take as much or as little as it wants. Ceramic
+            # and gold want almost none; a uniformly broken-up world is just a
+            # different uniformity.
+            rvary = param(unreal.MaterialExpressionScalarParameter, "RoughVary", 210, 1.0)
             rn = mel.create_material_expression(master, unreal.MaterialExpressionNoise, -820, 120)
             rn.set_editor_property("scale", 0.05)
-            rn.set_editor_property("output_min", 0.72)
-            rn.set_editor_property("output_max", 1.28)
+            rn.set_editor_property("output_min", -0.28)
+            rn.set_editor_property("output_max", 0.28)
             rn.set_editor_property("levels", 3)
+            # roughness * (1 + RoughVary * noise)
+            rdev = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -620, 120)
+            mel.connect_material_expressions(rn, "", rdev, "A")
+            mel.connect_material_expressions(rvary, "", rdev, "B")
+            rone = mel.create_material_expression(master, unreal.MaterialExpressionConstant, -620, 200)
+            rone.set_editor_property("r", 1.0)
+            radd = mel.create_material_expression(master, unreal.MaterialExpressionAdd, -470, 150)
+            mel.connect_material_expressions(rone, "", radd, "A")
+            mel.connect_material_expressions(rdev, "", radd, "B")
             rmul = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -320, 150)
             mel.connect_material_expressions(rg, "", rmul, "A")
-            mel.connect_material_expressions(rn, "", rmul, "B")
+            mel.connect_material_expressions(radd, "", rmul, "B")
             mel.connect_material_property(rmul, "", unreal.MaterialProperty.MP_ROUGHNESS)
             _rg_out = rmul
             _rough_wired = True
@@ -1138,6 +1156,18 @@ def build_material_library(texs=None):
               "trunk": 0.85, "foliage": 0.50, "foliage_hi": 0.50, "mush_red": 0.26,
               "mush_purple": 0.26, "mush_white": 0.30, "mush_gill": 0.40,
               "rose": 0.28, "rose_pink": 0.28, "petal_pink": 0.20, "petal_violet": 0.20}
+    # How much each family's roughness is allowed to WANDER. Manufactured
+    # surfaces are even by definition — a sandblasted teacup is a wrong teacup —
+    # while stone and bark are duller where worn and cleaner where not, and it is
+    # that wander which makes a highlight travel across a form instead of sitting
+    # on it as a dead sheen. Unlisted materials keep the master default of 1.0.
+    rough_vary = {"porcelain": 0.18, "gold": 0.30, "gold_glow": 0.30,
+                  "dog_body": 0.20, "dog_visor": 0.10, "water": 0.12,
+                  "spire": 0.55, "spire_pink": 0.55, "spire_blue": 0.55,
+                  "spire_teal": 0.55, "spire_far": 0.35,
+                  "roof_rose": 0.60, "roof_pink": 0.60,
+                  "stone": 1.00, "cobble": 1.00, "cobble2": 1.00, "plaza": 0.85,
+                  "trunk": 1.00, "foliage": 0.75, "foliage_hi": 0.75}
     for _nm, _dv in relief.items():
         if _nm in mats:
             try:
@@ -1145,6 +1175,13 @@ def build_material_library(texs=None):
                 eal.save_asset(mats[_nm].get_path_name())
             except Exception as _e:
                 unreal.log_warning("relief on %s skipped: %s" % (_nm, _e))
+    for _nm, _rv in rough_vary.items():
+        if _nm in mats:
+            try:
+                mel.set_material_instance_scalar_parameter_value(mats[_nm], "RoughVary", _rv)
+                eal.save_asset(mats[_nm].get_path_name())
+            except Exception as _e:
+                unreal.log_warning("rough vary on %s skipped: %s" % (_nm, _e))
     # Bring the Dogs alive (clear breathe) + a gentle foliage sway; everything else
     # keeps BreatheAmp 0 (static). Live motion in the stream, invisible in a still.
     breathe = {"dog_body": 6.5, "dog_pink": 6.0, "dog_gray": 6.0, "dog_tan": 6.0,
