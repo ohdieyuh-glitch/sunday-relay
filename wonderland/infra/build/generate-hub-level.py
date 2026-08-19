@@ -1920,9 +1920,14 @@ def build(layout):
         ca, sa = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
 
         def P(prim, ox, oy, oz, sx, sy, sz, mat, lb, rot=(0.0, 0.0, 0.0)):
-            # place in the house's own frame so the whole thing can be rotated
-            wx = x + ox * ca - oy * sa
-            wy = y + ox * sa + oy * ca
+            # Place in the house's own frame so the whole thing can be rotated —
+            # and scale the HORIZONTAL offsets too. Scaling the parts and the
+            # heights but not the plan is a non-uniform scale of an assembly:
+            # at s=1.25 the body got 25% wider while its balcony, dormers and
+            # awning stayed where they were, so every house but the smallest
+            # came apart. Caught reviewing my own pass, not by a test.
+            wx = x + (ox * ca - oy * sa) * s
+            wy = y + (ox * sa + oy * ca) * s
             _part(prim, wx, wy, oz * s, sx * s, sy * s, sz * s, mat, "%s_%s" % (label, lb),
                   rot=(rot[0], rot[1] + yaw, rot[2]))
 
