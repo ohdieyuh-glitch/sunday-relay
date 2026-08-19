@@ -197,6 +197,14 @@ MATERIAL_SPEC = {
     "roof_pink":   ((0.96, 0.58, 0.70), 0.0, 0.42, (0, 0, 0), 0.0),
     # Gills under a mushroom cap: warm shadow, never black.
     "mush_gill":   ((0.80, 0.66, 0.58), 0.0, 0.70, (0, 0, 0), 0.0),
+    # Cumulus. Slightly self-lit so the shaded undersides stay soft and
+    # bright rather than going grey — stylised cloud, not storm cloud.
+    "cloud":       ((1.00, 1.00, 1.00), 0.0, 1.00, (0.86, 0.89, 0.98), 2.6),
+    "cloud_warm":  ((1.00, 0.97, 0.98), 0.0, 1.00, (0.98, 0.88, 0.92), 2.6),
+    # A leaf card: thin, matte, and a touch deeper than the blob green so
+    # the fanned cards read as separate leaves rather than one mass.
+    "leaf":        ((0.24, 0.44, 0.27), 0.0, 0.74, (0, 0, 0), 0.0),
+    "leaf_hi":     ((0.36, 0.56, 0.34), 0.0, 0.70, (0, 0, 0), 0.0),
 }
 
 
@@ -906,12 +914,27 @@ def build(layout):
             for gy in range(-6, 7):
                 hsh = (gx * 73856093) ^ (gy * 19349663)
                 mat = stones[hsh % 3]
-                jz = 3.0 + (hsh % 5) * 0.5
-                _part("cube", x + gx * tile, y + gy * tile, jz,
-                      tile / 100.0 * 0.97, tile / 100.0 * 0.97, 0.055, mat, "Tile%d_%d" % (gx, gy))
-                if hsh % 7 == 0:  # moss creeping between stones
-                    _part("sphere", x + gx * tile + 40.0, y + gy * tile - 30.0, 6.0,
-                          0.30, 0.30, 0.10, "moss", "Moss%d_%d" % (gx, gy))
+                # IRREGULARITY IS THE WHOLE READ. Identical size, height and
+                # rotation on every tile is a grid, and a grid is lino. Jittering
+                # all three — and letting the gaps widen unevenly — is what makes
+                # it laid stone. The offsets are hash-derived so a rebuild lays
+                # the exact same courtyard.
+                jz = 3.0 + (hsh % 5) * 0.6
+                shrink = 0.86 + ((hsh >> 3) % 9) * 0.014
+                yaw = ((hsh >> 7) % 9) - 4.0
+                ox = (((hsh >> 11) % 7) - 3) * 2.6
+                oy = (((hsh >> 15) % 7) - 3) * 2.6
+                _part("cube", x + gx * tile + ox, y + gy * tile + oy, jz,
+                      tile / 100.0 * shrink, tile / 100.0 * shrink, 0.055 + (hsh % 3) * 0.012,
+                      mat, "Tile%d_%d" % (gx, gy), rot=(0.0, 0.0, yaw))
+                # moss in roughly half the joints, in clumps rather than dots
+                if hsh % 2 == 0:
+                    for m in range(2 + (hsh % 3)):
+                        _part("sphere",
+                              x + gx * tile + ox + (((hsh >> (m + 2)) % 11) - 5) * 12.0,
+                              y + gy * tile + oy + (((hsh >> (m + 5)) % 11) - 5) * 12.0,
+                              5.5, 0.20 + (m % 3) * 0.07, 0.20 + (m % 3) * 0.07, 0.07,
+                              "moss", "Moss%d_%d_%d" % (gx, gy, m))
         # Many THIN concentric rings rather than six fat bands: the reference's
         # circle reads as engraved light, and thickness is what made ours read
         # as painted vinyl.
@@ -1013,13 +1036,28 @@ def build(layout):
         for sx in (-1, 1):
             _part("cylinder", x + sx * 210.0 * s, y, h * 0.5, 0.5 * s, 0.5 * s, h / 100.0,
                   "foliage", "%s_post%d" % (label, sx))
-        _part("cube", x, y, h + 15.0 * s, 4.8 * s, 0.7 * s, 0.7 * s, "foliage", "%s_top" % label)
-        for i in range(9):
-            t = i / 8.0
-            rx = x + (-1.0 + 2.0 * t) * 210.0 * s
-            rz = 130.0 * s + math.sin(t * math.pi) * (h - 60.0 * s)
-            _part("sphere", rx, y + 34.0 * s, rz, 0.52 * s, 0.52 * s, 0.52 * s,
-                  "rose" if i % 3 else "petal_pink", "%s_rose%d" % (label, i))
+        # AN ARCH IS A CURVE. Two posts and a straight beam is a doorframe, and
+        # the curve is the entire reason the shape reads as a garden arch. The
+        # span is built from short segments following a semicircle, each rotated
+        # to sit tangent to it, then smothered in roses and leaves.
+        span, segs = 210.0 * s, 13
+        for i in range(segs):
+            t = (i + 0.5) / segs
+            ang = math.pi * t
+            ax = x + math.cos(math.pi - ang) * span
+            az = h * 0.72 + math.sin(ang) * span * 0.86
+            tangent = math.degrees(math.atan2(math.cos(ang) * span * 0.86,
+                                              math.sin(math.pi - ang) * span))
+            _part("cube", ax, y, az, 0.62 * s, 0.60 * s, 0.34 * s, "foliage",
+                  "%s_arc%d" % (label, i), rot=(0.0, tangent, 0.0))
+            # roses and leaves ON the curve, both faces
+            if i % 2 == 0:
+                _part("sphere", ax, y + 30.0 * s, az + 14.0 * s, 0.40 * s, 0.40 * s, 0.40 * s,
+                      "rose" if i % 3 else "rose_pink", "%s_rose%d" % (label, i))
+                _part("sphere", ax, y - 30.0 * s, az + 10.0 * s, 0.30 * s, 0.30 * s, 0.30 * s,
+                      "petal_pink", "%s_roseb%d" % (label, i))
+            _part("cube", ax, y + 20.0 * s, az - 12.0 * s, 0.34 * s, 0.06 * s, 0.40 * s,
+                  "leaf", "%s_leaf%d" % (label, i), rot=(24.0, tangent + 40.0, 0.0))
 
     def kit_dog(x, y, label, s=1.4, fy=-1.0, body="dog_body", tag="gold_glow"):
         # The canonical Relay Dog BODY TYPE (founder reference): a compact voxel body
@@ -1150,8 +1188,21 @@ def build(layout):
             _part("sphere", x, y, h + 7.0, 0.28, 0.28, 0.26, col, "flw_%d" % i)
 
     def tuft(x, y, i):
+        # LEAF CARDS, not a blob. One squashed sphere per plant is the single
+        # reason the greenery read as bubbles; a plant's silhouette is broken and
+        # spiky, and that is carried by flat cards fanned at different angles.
         d = 0.5 + (i % 3) * 0.14
-        _part("sphere", x, y, 12.0, d, d, 0.55, "foliage" if i % 2 else "foliage_hi", "tuft_%d" % i)
+        _part("sphere", x, y, 9.0, d * 0.62, d * 0.62, 0.30,
+              "foliage" if i % 2 else "foliage_hi", "tuft_%d" % i)
+        blades = 5 + (i % 3)
+        for k in range(blades):
+            a = (k / float(blades)) * 360.0 + (i * 37) % 360
+            lean = 22.0 + ((i * 13 + k * 7) % 26)
+            _part("cube", x + math.cos(math.radians(a)) * 9.0 * d,
+                  y + math.sin(math.radians(a)) * 9.0 * d, 12.0 + 12.0 * d,
+                  d * 0.46, d * 0.06, d * 0.62,
+                  "leaf" if (i + k) % 2 else "leaf_hi", "tuft%d_leaf%d" % (i, k),
+                  rot=(lean, a, 0.0))
 
     def mote(x, y, i):
         z = 70.0 + (i * 53) % 540
@@ -1446,6 +1497,31 @@ def build(layout):
     # fog then carries toward the sky colour.
     static_mesh("plane", [0.0, 2000.0, -12.0], [5200.0, 5200.0, 1.0], "FarMeadow",
                 mat="meadow_far" if "meadow_far" in MATS else "foliage")
+
+    # CUMULUS, AS GEOMETRY. UE's stock volumetric cloud material renders as a
+    # flat grey sheet under this lighting, so it was disabled and the sky has
+    # been empty since. Authoring a real cloud material headlessly is not
+    # dependable; clusters of large soft spheres are how stylised games have
+    # always done cumulus, they light correctly off the same sun, and the
+    # silhouette is what the eye reads anyway.
+    import math as _mc
+    for i in range(34):
+        a = i * 2.39996
+        dist = 9000.0 + 15000.0 * (((i * 23) % 9) / 9.0)
+        cx0 = _mc.cos(a) * dist
+        cy0 = _mc.sin(a) * dist + 4000.0
+        cz0 = 5200.0 + 3400.0 * (((i * 17) % 7) / 7.0)
+        puffs = 5 + (i % 4)
+        base = 1500.0 + 900.0 * (((i * 13) % 5) / 5.0)
+        for k in range(puffs):
+            t = k / float(puffs)
+            px = cx0 + (t - 0.5) * base * 1.7
+            py = cy0 + _mc.sin(k * 2.1 + i) * base * 0.30
+            pz = cz0 + _mc.sin(t * _mc.pi) * base * 0.42
+            r = base * (0.42 + 0.30 * _mc.sin(t * _mc.pi))
+            static_mesh("sphere", [px, py, pz], [r / 100.0, r / 100.0, r * 0.68 / 100.0],
+                        "Cloud%d_%d" % (i, k),
+                        mat="cloud_warm" if (i + k) % 4 == 0 else "cloud")
 
     # DISTANT HILLS. A flat plane meeting the sky in a dead-straight line reads
     # as a backdrop, not a world. A ring of very wide, very shallow domes gives

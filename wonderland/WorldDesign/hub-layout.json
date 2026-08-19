@@ -33,15 +33,15 @@
       "name": "Arrival Hero (iconic first frame)",
       "location": [
         0,
-        -2450,
-        1020
+        -2600,
+        700
       ],
       "lookAt": [
         0,
-        620,
-        150
+        900,
+        600
       ],
-      "fovDeg": 62,
+      "fovDeg": 64,
       "rollDeg": 0,
       "note": "The founder's first frame on entering. Dog + violet arcane circle at lower-centre, Golden Build Gate framing the left edge, Great Framing Tree framing the right, boulevard leading the eye north to the Brain. Graded by WONDERLAND_VISUAL_ACCEPTANCE.md \u00a74.",
       "_composition": "Pulled back 1240->2450uu and raised 405->1020uu. At the old distance the foreground props were larger in frame than the castle city, which is the opposite of the reference's hierarchy."
