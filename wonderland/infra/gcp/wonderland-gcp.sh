@@ -300,5 +300,10 @@ case "${1:-}" in
   ssh)       shift; ssh_in "$@" ;;
   logs)      logs ;;
   health)    health ;;
-  *)         usage ;;
+  help|-h|--help) usage ;;
+  # An unknown subcommand must FAIL. Printing usage and exiting 0 means a typo in
+  # automation reports success — `wonderland-gcp.sh statsu` would look like it
+  # worked. Explicit help still exits 0, because asking for help succeeded.
+  "")        usage; exit 2 ;;
+  *)         printf 'unknown subcommand: %s\n\n' "$1"; usage; exit 2 ;;
 esac
