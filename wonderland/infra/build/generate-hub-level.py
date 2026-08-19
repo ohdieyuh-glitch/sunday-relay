@@ -43,6 +43,120 @@ LAYOUT_PATH = os.path.normpath(os.path.join(HERE, "..", "..", "WorldDesign", "hu
 # Every `mesh` string that appears anywhere in hub-layout.json must have a key
 # here; UNKNOWN_MESH is the visible fallback so a missing mapping is obvious in
 # the viewport rather than silent.
+
+# =====================================================================
+# THE LOOK TABLE
+# ---------------------------------------------------------------------
+# Every number that decides how Wonderland LOOKS, in one place, with how
+# each one was arrived at written next to it. They used to be scattered
+# through two hundred lines of prose, which made a lighting session a
+# code hunt instead of a parameter sweep — and made it impossible to see
+# at a glance which values are evidence and which are taste.
+#
+# Provenance tags, and they matter:
+#   MEASURED  fixed by inspecting a REAL streamed California frame. Do
+#             not "improve" one of these from a CPU preview or from
+#             reasoning about it; the offline tracer is calibrated at
+#             +94% luma / -76% saturation against the real renderer, so
+#             it will confidently tell you the opposite of the truth.
+#   PROVEN    a structural fact about this pipeline, established by a
+#             failed build or a black frame. Changing it re-breaks that.
+#   CHOSEN    art direction. Sweep these freely.
+#   UNTESTED  authored offline and never yet rendered. Suspect by default.
+#
+# Any key may be overridden at build time without editing this file:
+#     WONDERLAND_LOOK="sunLux=420,vignette=0.2,heroLights=0" \
+#       UnrealEditor ... -run=pythonscript ...
+# which is what makes a GPU session a sweep — several looks per cook
+# instead of one edit, one rebuild, one look.
+# =====================================================================
+LOOK = {
+    # --- key light -------------------------------------------------
+    # MEASURED. Physical lux. The layout's legacy unitless sunIntensity
+    # (7.0) is ~moonlight in UE 5.8 units and rendered a black frame
+    # under Lumen; the old build hid that behind static lighting.
+    "sunLux": 340.0,
+    "sunWarm": (1.0, 0.94, 0.84),          # CHOSEN. Warm daylight key.
+    "sunPitchMin": 25.0,                   # PROVEN. Flatter than this and
+                                           # the long shadows swallow the plaza.
+    # --- fill ------------------------------------------------------
+    # PROVEN. A second directional at the reciprocal azimuth, shadowless.
+    # Skylight and Lumen ambient do NOT reliably contribute in headless
+    # -RenderOffscreen, so without this some surfaces face nothing at all.
+    "fillRatio": 0.50,
+    "fillYawOffset": 160.0,
+    "fillPitch": -45.0,
+    # --- exposure --------------------------------------------------
+    # MEASURED, and the single most expensive lesson in this file:
+    # histogram auto-exposure RE-METERS the packaged frame to mid-grey,
+    # so the bias barely moves the result (-3.2 and -4.2 were identical).
+    # Brightness cannot be fixed here. It is fixed in the grade, which
+    # runs after metering, and in the absolute light level.
+    "exposureBias": -3.4,
+    # --- bloom -----------------------------------------------------
+    # CHOSEN. Thresholded high so only gold, emissive and true highlights
+    # glow. Lower the threshold and the midtones haze into milk.
+    "bloomIntensity": 0.5,
+    "bloomThreshold": 1.5,
+    # --- grade (runs AFTER metering; this is the real brightness lever)
+    "gain":            (0.60, 0.60, 0.64),  # MEASURED. <1 to stop the wash.
+    "saturation":      (1.52, 1.48, 1.60),  # CHOSEN. Jewel tones.
+    "contrast":        (1.18, 1.17, 1.16),  # CHOSEN.
+    "gainHighlights":  (0.82, 0.78, 0.68),  # MEASURED. Holds the white Dog,
+                                            # spires and porcelain off pure
+                                            # white so they keep hue and form.
+    "gainShadows":     (0.88, 0.91, 1.20),  # CHOSEN. Cool-violet shadows for
+                                            # the warm-near / cool-far split.
+    "gamma":           (1.0, 1.0, 1.02),    # CHOSEN.
+    "whiteTemp": 6000.0,                    # CHOSEN.
+    "vignette": 0.44,                       # CHOSEN.
+    # --- local light -----------------------------------------------
+    # UNTESTED. The world has exactly one kind of light actor (lantern
+    # points) and otherwise relies on emissive geometry, which Lumen
+    # bounces only weakly. The hero beats — the arcane circle the Dog
+    # stands on, the gate's gold, the fountain — therefore glow without
+    # throwing anything, and a glow that lights nothing reads as a decal.
+    # These are tightly attenuated so they stay pools rather than a
+    # second ambient. Set heroLights=0 to A/B them in one cook.
+    "heroLights": 1,
+    "heroLightLumens": 9000.0,
+    "heroLightRadius": 900.0,
+}
+
+
+def _look_overrides():
+    """Apply WONDERLAND_LOOK=key=value,... over the table.
+
+    Unknown keys are refused rather than ignored: a silently-dropped
+    override means a sweep reports a value it never actually rendered,
+    which is worse than no sweep at all."""
+    raw = os.environ.get("WONDERLAND_LOOK", "").strip()
+    if not raw:
+        return
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        if "=" not in item:
+            raise ValueError("WONDERLAND_LOOK entry %r is not key=value" % item)
+        k, v = item.split("=", 1)
+        k, v = k.strip(), v.strip()
+        if k not in LOOK:
+            raise KeyError("WONDERLAND_LOOK: unknown key %r (known: %s)"
+                           % (k, ", ".join(sorted(LOOK))))
+        cur = LOOK[k]
+        if isinstance(cur, tuple):
+            parts = [float(x) for x in v.split("/")]
+            if len(parts) != len(cur):
+                raise ValueError("WONDERLAND_LOOK %s wants %d values a/b/c, got %r"
+                                 % (k, len(cur), v))
+            LOOK[k] = tuple(parts)
+        else:
+            LOOK[k] = float(v)
+
+
+_look_overrides()
+
 UNKNOWN_MESH = "/Engine/BasicShapes/Cube"
 PLACEHOLDER_MESH = {
     # Raw primitives the kitbash builders compose richer forms from.
@@ -3228,7 +3342,7 @@ def build(layout):
     # and lit nothing (black frame) once we went fully dynamic — the old build hid
     # this behind the direction-independent static-lighting preview.
     _sun_rot = unreal.Rotator()
-    _sun_rot.set_editor_property("pitch", -max(25.0, float(atm["sunElevationDeg"])))
+    _sun_rot.set_editor_property("pitch", -max(LOOK["sunPitchMin"], float(atm["sunElevationDeg"])))
     _sun_rot.set_editor_property("yaw", float(atm["sunAzimuthDeg"]))
     _sun_rot.set_editor_property("roll", 0.0)
     sun.set_actor_rotation(_sun_rot, False)
@@ -3259,10 +3373,10 @@ def build(layout):
     # Raised from 240: the reference is a bright midday garden, not the
     # late-afternoon key this scene was tuned for. The auto-exposure bias
     # (launch cvar) still does the final richness pass.
-    _lux = float(atm.get("sunIntensityLux", 0)) or 340.0
+    _lux = float(atm.get("sunIntensityLux", 0)) or LOOK["sunLux"]
     sun_comp.set_intensity(_lux)
     try:
-        sun_comp.set_light_color(unreal.LinearColor(1.0, 0.94, 0.84, 1.0))
+        sun_comp.set_light_color(unreal.LinearColor(*(LOOK["sunWarm"] + (1.0,))))
     except Exception:
         pass
     set_prop(sun_comp, "bAtmosphereSunLight", True)
@@ -3272,15 +3386,53 @@ def build(layout):
     # / Lumen ambient — which do not reliably contribute in headless -RenderOffscreen.
     fill = spawn(unreal.DirectionalLight, (0, 0, 1600), label="FillLight")
     _fill_rot = unreal.Rotator()
-    _fill_rot.set_editor_property("pitch", -45.0)
-    _fill_rot.set_editor_property("yaw", float(atm["sunAzimuthDeg"]) + 160.0)
+    _fill_rot.set_editor_property("pitch", LOOK["fillPitch"])
+    _fill_rot.set_editor_property("yaw", float(atm["sunAzimuthDeg"]) + LOOK["fillYawOffset"])
     _fill_rot.set_editor_property("roll", 0.0)
     fill.set_actor_rotation(_fill_rot, False)
     fill_comp = fill.get_component_by_class(unreal.DirectionalLightComponent)
     fill_comp.set_mobility(unreal.ComponentMobility.MOVABLE)
-    fill_comp.set_intensity(_lux * 0.5)
+    fill_comp.set_intensity(_lux * LOOK["fillRatio"])
     set_prop(fill_comp, "bCastShadows", False)
     set_prop(fill_comp, "CastShadows", False)
+
+    # --- HERO PRACTICALS -------------------------------------------------
+    # Every glowing thing in this world glows and throws NOTHING. The arcane
+    # circle, the gate's gold, the fountain — all emissive geometry, which
+    # Lumen bounces only weakly, so each one reads as a decal painted on the
+    # scene rather than a source sitting in it. What sells a magic circle is
+    # not the circle; it is the violet on the Dog's white chest and the wet
+    # violet on the stone around it.
+    #
+    # Three lights, tightly attenuated so they stay POOLS. A wide radius here
+    # would become a second ambient and flatten the very shadows the key light
+    # is there to cast, which is the usual way scenes acquire practicals and
+    # get worse. Shadowless: these are bounce stand-ins, not casters, and
+    # thirty shadow-casting practicals is how a stream loses its frame rate.
+    #
+    # UNTESTED — authored offline, never rendered. WONDERLAND_LOOK=heroLights=0
+    # turns them off, so the A/B is one cook rather than two branches.
+    if LOOK["heroLights"]:
+        _lum, _rad = LOOK["heroLightLumens"], LOOK["heroLightRadius"]
+        for _hx, _hy, _hz, _hcol, _hs, _hlabel in (
+            # the circle the Dog stands on — violet, low, throwing UP onto it
+            (0.0, 0.0, 150.0, (176, 108, 255), 1.00, "HeroLight_Arcane"),
+            # the Golden Build Gate — warm gold, at the height of the arch
+            (-1050.0, 400.0, 420.0, (255, 206, 138), 0.85, "HeroLight_Gate"),
+            # the rose arch on the sight line — a soft warm pink under the span
+            (0.0, 820.0, 230.0, (255, 178, 196), 0.55, "HeroLight_Arch"),
+        ):
+            try:
+                _hl = spawn(unreal.PointLight, (_hx, _hy, _hz), label=_hlabel)
+                _hc = _hl.get_component_by_class(unreal.PointLightComponent)
+                _hc.set_mobility(unreal.ComponentMobility.MOVABLE)
+                _hc.set_intensity(_lum * _hs)
+                _hc.set_light_color(unreal.Color(*_hcol))
+                set_prop(_hc, "AttenuationRadius", _rad)
+                set_prop(_hc, "SourceRadius", 40.0)
+                set_prop(_hc, "CastShadows", False)
+            except Exception as _e:
+                unreal.log_warning("hero practical %s skipped: %s" % (_hlabel, _e))
 
     if atm.get("skyAtmosphere"):
         sky_atm = spawn(unreal.SkyAtmosphere, (0, 0, 0), label="SkyAtmosphere")
@@ -3419,11 +3571,11 @@ def build(layout):
         # identical. The real richness controls therefore live in the color GRADE, which
         # runs AFTER metering and so cannot be undone by auto-exposure. Bias stays near
         # neutral; the grade below pulls the blown whites down and deepens the colour.
-        sset("AutoExposureBias", "auto_exposure_bias", -3.4)
+        sset("AutoExposureBias", "auto_exposure_bias", LOOK["exposureBias"])
         # Dreamy candy bloom, thresholded HIGH so only gold/emissive accents + true
         # highlights glow — never the midtones (which reads as milky haze).
-        sset("BloomIntensity", "bloom_intensity", 0.5)
-        sset("BloomThreshold", "bloom_threshold", 1.5)
+        sset("BloomIntensity", "bloom_intensity", LOOK["bloomIntensity"])
+        sset("BloomThreshold", "bloom_threshold", LOOK["bloomThreshold"])
         # SATURATED storybook-jewel grade (the reference is vivid, glossy, deep):
         #  - master GAIN < 1 darkens the whole frame post-metering (auto-exposure can't
         #    fight a post-tonemap gain), so colours stop washing to white;
@@ -3431,14 +3583,14 @@ def build(layout):
         #    stop blowing to pure white and keep their form and hue;
         #  - strong saturation + contrast for jewel tones; COOL-VIOLET shadows for the
         #    near-gold / distant-purple depth split.
-        sset("ColorGain", "color_gain", unreal.Vector4(0.60, 0.60, 0.64, 1.0))
-        sset("ColorSaturation", "color_saturation", unreal.Vector4(1.52, 1.48, 1.60, 1.0))
-        sset("ColorContrast", "color_contrast", unreal.Vector4(1.18, 1.17, 1.16, 1.0))
-        sset("ColorGainHighlights", "color_gain_highlights", unreal.Vector4(0.82, 0.78, 0.68, 1.0))
-        sset("ColorGainShadows", "color_gain_shadows", unreal.Vector4(0.88, 0.91, 1.20, 1.0))
-        sset("ColorGamma", "color_gamma", unreal.Vector4(1.0, 1.0, 1.02, 1.0))
-        sset("WhiteTemp", "white_temp", 6000.0)
-        sset("VignetteIntensity", "vignette_intensity", 0.44)
+        sset("ColorGain", "color_gain", unreal.Vector4(*(LOOK["gain"] + (1.0,))))
+        sset("ColorSaturation", "color_saturation", unreal.Vector4(*(LOOK["saturation"] + (1.0,))))
+        sset("ColorContrast", "color_contrast", unreal.Vector4(*(LOOK["contrast"] + (1.0,))))
+        sset("ColorGainHighlights", "color_gain_highlights", unreal.Vector4(*(LOOK["gainHighlights"] + (1.0,))))
+        sset("ColorGainShadows", "color_gain_shadows", unreal.Vector4(*(LOOK["gainShadows"] + (1.0,))))
+        sset("ColorGamma", "color_gamma", unreal.Vector4(*(LOOK["gamma"] + (1.0,))))
+        sset("WhiteTemp", "white_temp", LOOK["whiteTemp"])
+        sset("VignetteIntensity", "vignette_intensity", LOOK["vignette"])
         ppv.set_editor_property("settings", pps)
     except Exception as _e:
         unreal.log_warning("grade PPV skipped: %s" % _e)
