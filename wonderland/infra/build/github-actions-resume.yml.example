@@ -1,0 +1,76 @@
+# Resume California from CI — NOT INSTALLED, and deliberately not.
+#
+# WHY THIS EXISTS. The authoring laptop's outbound ports are limited to
+# 80/443/8080/53, so it cannot reach the GPU box on any SSH port. A GitHub
+# Actions runner has no such restriction, so it can do what this machine cannot:
+# start the stack, rebuild, capture the hero frame, and hand back a URL.
+#
+# WHY IT IS NOT INSTALLED. It needs an SSH key with root on the instance stored
+# as a repository secret. That moves a credential onto a third-party service,
+# which is the founder's decision and not a technical one. It also sits under
+# .github/workflows/, which the repository boundary scanner audits for active
+# behaviour — so dropping it in unasked risks breaking a gate as well.
+#
+# TO USE IT:
+#   1. Make a key FOR THIS PURPOSE — do not reuse the founder's:
+#        ssh-keygen -t ed25519 -f ./ci_wonderland -N ''
+#      Attach the public half to the instance:
+#        vastai attach ssh 48078961 "$(cat ./ci_wonderland.pub)"
+#   2. gh secret set CA_SSH_KEY  < ./ci_wonderland
+#      gh secret set VAST_API_KEY --body '<your vast key>'
+#   3. Move this file to .github/workflows/wonderland-resume.yml
+#   4. Run it from the Actions tab. It prints the player URL in the log and
+#      uploads the captured hero frame as an artifact.
+#
+# The key is scoped to this job and revocable: delete it from the instance and
+# from the repository secrets and the access is gone.
+
+name: Wonderland — resume California
+on:
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: 'rebuild from the synced generators (off = reproduce the last built frame)'
+        type: boolean
+        default: true
+
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the instance
+        env:
+          VAST_API_KEY: ${{ secrets.VAST_API_KEY }}
+        run: |
+          pip install --quiet vastai
+          vastai start instance 48078961 --api-key "$VAST_API_KEY" || true
+          # the SSH daemon takes a moment; the resume script waits for it too
+          sleep 45
+          vastai show instances --api-key "$VAST_API_KEY" --raw \
+            | python3 -c "import json,sys; [print(i['id'], i['actual_status'], i['ssh_host'], i['ssh_port']) for i in json.load(sys.stdin)]"
+
+      - name: Install the job key
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${{ secrets.CA_SSH_KEY }}" > ~/.ssh/ca
+          chmod 600 ~/.ssh/ca
+
+      - name: Resume, rebuild and capture
+        env:
+          CA_KEY: /home/runner/.ssh/ca
+          OUT_DIR: ${{ github.workspace }}/capture
+        run: |
+          chmod +x wonderland/infra/build/resume-california.sh
+          wonderland/infra/build/resume-california.sh \
+            ${{ inputs.rebuild && ' ' || 'nobuild' }}
+
+      - name: Upload the hero frame
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wonderland-hero-frame
+          path: capture/
+          if-no-files-found: warn
