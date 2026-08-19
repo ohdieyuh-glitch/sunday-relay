@@ -3474,6 +3474,53 @@ def build(layout):
                           roof_mat=castle_roofs[i % len(castle_roofs)] if body is None
                           else ("roof_pink" if i % 3 else "roof_rose"),
                           flag=(i % 3 == 0))
+    # A CANOPY LAYER, not one tree. The reference is full of huge enchanted
+    # trees; this world had exactly one, so everything but the left edge of the
+    # frame sat under open sky with nothing at canopy scale in it. These are
+    # deliberately smaller than the Great Framing Tree so it keeps its job, and
+    # each is placed to do something the composition needs rather than to fill
+    # space: two closing the right beyond the gate, one massing behind the Agent
+    # Garden, one over the Project Field.
+    _greats = 0
+    # Positions measured, not guessed. The first attempt put one of these 11 m
+    # from the hero camera, where a giant tree is six times the frame's height
+    # and is exactly the "giant object blocking view" the brief rules out, and
+    # another entirely outside the frustum. Nothing of canopy scale belongs
+    # inside the near band; these sit 20-35 m out, flanking.
+    for _i, (_gx, _gy, _gs) in enumerate(((-1950.0, 1250.0, 0.95),
+                                          (-2750.0, 2300.0, 1.10),
+                                          (1650.0, 1850.0, 1.05),
+                                          (2250.0, 2750.0, 1.00))):
+        if _in_corridor(_gx, _gy) or _on_stage(_gx, _gy):
+            continue
+        kit_tree(_gx, _gy, _gs, "GreatTree%d" % _i, giant=True)
+        # buttress roots, the thing that stops a big trunk reading as a post
+        for _r in range(7):
+            _a = _r * (2.0 * math.pi / 7.0) + _i
+            kit_root(_gx, _gy, _a, (300.0 + 130.0 * ((_r * 5) % 3)) * _gs,
+                     (0.62 + 0.20 * ((_r * 3) % 2)) * _gs, "GreatRoot%d_%d" % (_i, _r))
+        # a ring of alpha-cut cards around the crown, so its edge is ragged
+        if "leafcard" in MATS:
+            for _c in range(9):
+                _ca = _c * 0.698 + _i
+                _part("cube", _gx + math.cos(_ca) * 330.0 * _gs,
+                      _gy + math.sin(_ca) * 300.0 * _gs,
+                      (980.0 * _gs) + math.sin(_ca * 1.4) * 120.0 * _gs,
+                      3.4 * _gs, 0.03, 3.4 * _gs,
+                      "leafcard_hi" if _c % 2 else "leafcard",
+                      "GreatTreeCard%d_%d" % (_i, _c),
+                      rot=(float((_c * 37) % 60) - 30.0, float((_c * 61) % 360),
+                           float((_c * 23) % 40) - 20.0))
+        # something hanging in each, the way the hero tree carries its clock
+        if _i % 2 == 0:
+            kit_float_key(_gx + 190.0 * _gs, _gy - 150.0 * _gs, 820.0 * _gs,
+                          "GreatTreeKey%d" % _i)
+        else:
+            kit_teapot(_gx - 210.0 * _gs, _gy + 130.0 * _gs, 800.0 * _gs,
+                       "GreatTreePot%d" % _i)
+        _greats += 1
+    unreal.log("GREAT TREES %d" % _greats)
+
     # THE NEAR QUARTER. Two terraces of townhouses standing 30-60 m out, well
     # clear of the hero sight-line, so the eye steps garden -> street -> town ->
     # skyline instead of jumping from planting to a horizon. Close enough that
