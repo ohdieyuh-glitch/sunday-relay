@@ -157,6 +157,7 @@ def main():
             mat = mat_name_for(mesh, lb)
         m = SPEC.get(mat, ((0.5, 0.5, 0.5), 0.0, 0.5, (0, 0, 0), 0.0))
         base = m[0]
+        met, rgh = float(m[1]), float(m[2])
         emis = (m[3][0] * m[4], m[3][1] * m[4], m[3][2] * m[4])
         kind = 0 if mesh in ROUND else 1
         tf = TEXTURED.get(mat or "")
@@ -164,7 +165,7 @@ def main():
         tsc = tf[1] if tf else 0.0
         prims.append((kind, loc[0], loc[1], loc[2], hx, hy, hz,
                       math.cos(yaw), math.sin(yaw), base, emis, tex, tsc,
-                      mat or "", lb))
+                      mat or "", lb, met, rgh))
     n = len(prims)
 
     # ---- BVH ----------------------------------------------------------
@@ -238,6 +239,14 @@ def main():
     NSHAD = int(os.environ.get('WL_SHADOW', '3'))
     NAO = int(os.environ.get('WL_AO', '4'))
     AO_R = 340.0
+    BOUNCE = float(os.environ.get("WL_BOUNCE", "0.55"))
+    # Swept against the streamed frame p18. Lower exposure does recover
+    # saturation — 0.164 at 1.0, 0.223 at 0.20 — because a Reinhard curve
+    # desaturates whatever it compresses. It does not come close to closing the
+    # gap to the real frame's 0.640, and neither did adding specular or a bounce
+    # term. What is left is global illumination and a filmic tonemap, and this
+    # tracer is not going to grow either. 0.30 is a reasonable place to sit.
+    EXPOSURE = float(os.environ.get("WL_EXPOSURE", "0.30"))
     # measured against the streamed frame p18 on the identical world state
     CALIB = os.environ.get("WL_CALIBRATE", "") not in ("", "0")
     # Fitted against the streamed frame p18 by rendering the identical world
@@ -412,19 +421,61 @@ def main():
                     ti = (iy*TSZ+ix)*3
                     base = (base[0]*tex[ti]/140.0, base[1]*tex[ti+1]/140.0,
                             base[2]*tex[ti+2]/140.0)
+                # ---- SPECULAR ------------------------------------------
+                # One of the two terms this model was missing entirely, and the
+                # reason gold and porcelain read as matte paint here while the
+                # engine gives them highlights. Blinn-Phong off the same sun:
+                # metals tint the highlight with their own colour, dielectrics
+                # take a small white one.
+                _met, _rgh = p[15], p[16]
+                _spec = 0.0
+                if ndl > 0.0:
+                    _hx2 = lx - dx; _hy2 = ly - dy; _hz2 = lz - dz
+                    _hl = math.sqrt(_hx2*_hx2 + _hy2*_hy2 + _hz2*_hz2) or 1.0
+                    _ndh = (nx*_hx2 + ny*_hy2 + nz*_hz2) / _hl
+                    if _ndh > 0.0:
+                        _a2 = max(_rgh, 0.05) ** 4
+                        _expn = max(2.0, 2.0 / _a2 - 2.0)
+                        if _expn > 4096.0:
+                            _expn = 4096.0
+                        _spec = (_ndh ** _expn) * ndl
+                _sr = (0.04 + (base[0] - 0.04) * _met) * _spec * SUN_I * 2.0
+                _sg = (0.04 + (base[1] - 0.04) * _met) * _spec * SUN_I * 2.0
+                _sb = (0.04 + (base[2] - 0.04) * _met) * _spec * SUN_I * 2.0
+
+                # ---- ONE CRUDE BOUNCE ----------------------------------
+                # The other missing term. Lumen puts light back into a surface
+                # from its neighbours, tinted by THEIR colour; approximating it
+                # as this surface's own albedo re-lit by the sun is wrong in
+                # detail and right in character — it warms shadows and returns
+                # saturation that a pure sun-plus-blue-sky model throws away.
+                _bnc = BOUNCE * ao
                 # rim, the same instrument the master got this sprint
                 vdn = -(dx*nx + dy*ny + dz*nz)
                 rim = (1.0 - (vdn if vdn > 0.0 else 0.0)) ** 3.4
                 rr_ = RIM.get(p[13], 0.0)
-                cr = base[0]*(SUN[0]*SUN_I*ndl + SKY_UP[0]*SKY_I*amb) + emis[0] + rim*rr_*1.00
-                cg = base[1]*(SUN[1]*SUN_I*ndl + SKY_UP[1]*SKY_I*amb) + emis[1] + rim*rr_*0.86
-                cb = base[2]*(SUN[2]*SUN_I*ndl + SKY_UP[2]*SKY_I*amb) + emis[2] + rim*rr_*0.55
+                cr = (base[0]*(SUN[0]*SUN_I*ndl + SKY_UP[0]*SKY_I*amb
+                               + base[0]*SUN[0]*SUN_I*_bnc)
+                      + emis[0] + rim*rr_*1.00 + _sr)
+                cg = (base[1]*(SUN[1]*SUN_I*ndl + SKY_UP[1]*SKY_I*amb
+                               + base[1]*SUN[1]*SUN_I*_bnc)
+                      + emis[1] + rim*rr_*0.86 + _sg)
+                cb = (base[2]*(SUN[2]*SUN_I*ndl + SKY_UP[2]*SKY_I*amb
+                               + base[2]*SUN[2]*SUN_I*_bnc)
+                      + emis[2] + rim*rr_*0.55 + _sb)
             # clamp before the gamma: a negative channel raised to a fractional
             # power is complex, and one such value takes the whole frame down
             if cr < 0.0: cr = 0.0
             if cg < 0.0: cg = 0.0
             if cb < 0.0: cb = 0.0
             i = (yy*W+xx)*3
+            # EXPOSURE. The model was running at roughly twice the streamed
+            # frame's mean, and a Reinhard curve desaturates everything it
+            # compresses — so an over-bright render loses colour in the highlights
+            # and reads washed. That, not a missing saturation term, is why this
+            # was four times less saturated than Unreal. Exposing correctly
+            # recovers the colour instead of painting it back on.
+            cr *= EXPOSURE; cg *= EXPOSURE; cb *= EXPOSURE
             _r = 255.0*(cr/(1.0+cr))**0.4545
             _g = 255.0*(cg/(1.0+cg))**0.4545
             _b = 255.0*(cb/(1.0+cb))**0.4545
