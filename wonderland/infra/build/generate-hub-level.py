@@ -1449,6 +1449,82 @@ def build(layout):
             _part("sphere", x + ox * cr, y + oy * cr, th + cr * 0.30 + i * cr * 0.12,
                   d / 100.0, d / 100.0, d / 100.0, mat, "%s_canopy%d" % (label, i))
 
+    def kit_shrub(x, y, s, label, bloom=None):
+        """A layered shrub — the missing storey.
+
+        This world jumps from ankle-high ground cover straight to trees, and the
+        gap is exactly where a garden's body lives. A shrub that reads is built
+        in three layers: a DARK INTERIOR that never catches light, a mid mass,
+        and a bright outer rim, with leaf cards breaking the silhouette. One
+        sphere of one green is the blob this replaces."""
+        _part("sphere", x, y, 26.0 * s, 1.05 * s, 0.95 * s, 0.80 * s,
+              "foliage_deep", "%s_core" % label)
+        for k in range(5):
+            a = k * 2.39996 + (x + y) * 0.01
+            r = 34.0 * s
+            _part("sphere", x + math.cos(a) * r, y + math.sin(a) * r, 40.0 * s + (k % 2) * 14.0 * s,
+                  0.82 * s, 0.74 * s, 0.66 * s,
+                  "foliage" if k % 2 else "foliage_hi", "%s_mass%d" % (label, k))
+        for k in range(4):
+            a = k * 1.9 + 0.6
+            _part("sphere", x + math.cos(a) * 26.0 * s, y + math.sin(a) * 26.0 * s, 66.0 * s,
+                  0.56 * s, 0.52 * s, 0.44 * s, "foliage_spr", "%s_lit%d" % (label, k))
+        if "leafcard" in MATS:
+            for k in range(6):
+                a = k * 1.047 + (x * 0.003)
+                _part("cube", x + math.cos(a) * 52.0 * s, y + math.sin(a) * 52.0 * s,
+                      44.0 * s + (k % 3) * 12.0 * s, 0.72 * s, 0.02, 0.86 * s,
+                      "leafcard_hi" if k % 2 else "leafcard", "%s_card%d" % (label, k),
+                      rot=(float((k * 23) % 40) - 20.0, math.degrees(a), 0.0))
+        if bloom:
+            for k in range(5):
+                a = k * 1.257 + 0.3
+                _part("sphere", x + math.cos(a) * 40.0 * s, y + math.sin(a) * 40.0 * s,
+                      70.0 * s, 0.20 * s, 0.20 * s, 0.19 * s, bloom, "%s_bloom%d" % (label, k))
+        # a woody base, because a shrub grows out of something
+        _part("cylinder", x, y, 10.0 * s, 0.10 * s, 0.10 * s, 0.22 * s, "trunk", "%s_stem" % label)
+
+    def kit_topiary_form(x, y, s, label, form="cone"):
+        """Sculpted topiary in a planter. The brief names topiary twice and this
+        world has exactly one shape of it — a heart. Clipped cones, spirals and
+        standards are what a formal garden is actually made of, and they read as
+        DESIGNED in a way scattered planting never does."""
+        # planter first: moulded, trimmed, with a soil line
+        _part("cylinder", x, y, 14.0 * s, 0.62 * s, 0.62 * s, 0.28 * s, "stone", "%s_pot" % label)
+        _part("cylinder", x, y, 30.0 * s, 0.70 * s, 0.70 * s, 0.10 * s, "plaza", "%s_potlip" % label)
+        _part("cylinder", x, y, 34.0 * s, 0.52 * s, 0.52 * s, 0.06 * s, "trunk", "%s_soil" % label)
+        if form == "cone":
+            for k in range(7):
+                t = k / 6.0
+                _part("sphere", x, y, 46.0 * s + t * 150.0 * s,
+                      (0.78 - 0.62 * t) * s, (0.78 - 0.62 * t) * s, 0.42 * s,
+                      "foliage_deep" if k % 3 == 0 else ("foliage" if k % 2 else "foliage_hi"),
+                      "%s_c%d" % (label, k))
+        elif form == "spiral":
+            for k in range(14):
+                t = k / 13.0
+                a = t * 4.4 * math.pi
+                r = (0.62 - 0.44 * t) * s * 42.0
+                _part("sphere", x + math.cos(a) * r, y + math.sin(a) * r,
+                      46.0 * s + t * 168.0 * s, 0.34 * s, 0.34 * s, 0.30 * s,
+                      "foliage" if k % 2 else "foliage_hi", "%s_s%d" % (label, k))
+            _part("cylinder", x, y, 130.0 * s, 0.08 * s, 0.08 * s, 1.7 * s, "trunk", "%s_spine" % label)
+        else:                                    # standard: a ball on a clear stem
+            _part("cylinder", x, y, 92.0 * s, 0.09 * s, 0.09 * s, 1.2 * s, "trunk", "%s_stem" % label)
+            _part("sphere", x, y, 176.0 * s, 0.86 * s, 0.86 * s, 0.80 * s, "foliage_deep", "%s_ball" % label)
+            for k in range(6):
+                a = k * 1.047
+                _part("sphere", x + math.cos(a) * 34.0 * s, y + math.sin(a) * 34.0 * s,
+                      182.0 * s, 0.50 * s, 0.50 * s, 0.46 * s,
+                      "foliage" if k % 2 else "foliage_spr", "%s_b%d" % (label, k))
+        if "leafcard" in MATS:
+            for k in range(4):
+                a = k * 1.571 + 0.4
+                _part("cube", x + math.cos(a) * 44.0 * s, y + math.sin(a) * 44.0 * s,
+                      110.0 * s, 0.60 * s, 0.02, 0.72 * s,
+                      "leafcard" if k % 2 else "leafcard_hi", "%s_card%d" % (label, k),
+                      rot=(float((k * 31) % 34) - 17.0, math.degrees(a), 0.0))
+
     def kit_mushroom(x, y, s, label, cap_mat):
         # A HERO AMANITA, not a lollipop. The reference's mushrooms carry whole
         # corners of the frame, so this builds the parts the eye actually reads:
@@ -3661,6 +3737,39 @@ def build(layout):
             _part("cube", dx * (_PR + 40.0 + k * 46.0), dy * (_PR + 40.0 + k * 46.0),
                   12.0 - k * 5.0, 3.6 if dx == 0 else 0.46, 0.46 if dx == 0 else 3.6, 0.12,
                   "cobble", "PlazaStep%d_%d" % (q, k))
+    # SHRUB BANKS AND TOPIARY, placed rather than scattered. The brief asks for
+    # intentional clusters and explicitly not spam, so these sit where a
+    # gardener would put them: a bank of shrubs behind each bed to give it a
+    # back, and clipped standards flanking the four approaches like gateposts.
+    for _i, _ba in enumerate((0.5, 1.6, 2.7, 3.8, 4.9, 5.9)):
+        for _k in range(5):
+            _sa = _ba + (_k - 2) * 0.11
+            _sr = _PR + 560.0 + (_k % 2) * 70.0
+            _shx, _shy = math.cos(_sa) * _sr, math.sin(_sa) * _sr
+            if _shy < NEAR_Y + 120.0:
+                continue
+            kit_shrub(_shx, _shy,
+                      0.95 + 0.22 * ((_i + _k) % 3),
+                      "PlazaShrub%d_%d" % (_i, _k),
+                      bloom=("rose" if (_i + _k) % 3 == 0 else
+                             "petal_violet" if (_i + _k) % 3 == 1 else None))
+    for _q, (_dx, _dy) in enumerate(((0.0, 1.0), (0.0, -1.0), (1.0, 0.0), (-1.0, 0.0))):
+        for _side in (-1, 1):
+            _tx = _dx * (_PR + 300.0) + (-_dy) * _side * 300.0
+            _ty = _dy * (_PR + 300.0) + _dx * _side * 300.0
+            # NOT IN THE CAMERA'S LAP. The south approach sits 5 m in front of
+            # the hero eye; a 2 m topiary there is 72% of the frame's height and
+            # is precisely the "giant object blocking view" the brief rules out.
+            # NEAR_Y is where the frame opens onto the ground, derived from the
+            # camera — anything nearer is either invisible or in the way, and a
+            # tall object is the second one.
+            if _ty < NEAR_Y + 250.0:
+                continue
+            kit_topiary_form(_tx, _ty, 1.15,
+                             "PlazaTopiary%d_%d" % (_q, _side),
+                             form=("spiral" if _q % 3 == 0 else
+                                   "standard" if _q % 3 == 1 else "cone"))
+
     # LANDSCAPED BEDS just outside the kerb, each with its own border
     for i, (ba, br) in enumerate(((0.5, 250.0), (1.6, 200.0), (2.7, 260.0),
                                   (3.8, 210.0), (4.9, 240.0), (5.9, 190.0))):
@@ -3976,6 +4085,15 @@ def build(layout):
                 "GardenBed%d" % _b,
                 palette=("rose", "rose_pink", "petal_violet") if _b % 2
                 else ("petal_pink", "petal_air", "petal_violet"))
+    for _t, (_ta, _tf) in enumerate(((0.6, "cone"), (1.9, "spiral"), (3.4, "standard"),
+                                     (4.7, "cone"), (5.6, "spiral"))):
+        kit_topiary_form(_GX + math.cos(_ta) * 430.0, _GY + math.sin(_ta) * 430.0,
+                         1.0, "GardenTop%d" % _t, form=_tf)
+    for _t in range(7):
+        _ta = _t * 0.898 + 0.3
+        kit_shrub(_GX + math.cos(_ta) * 620.0, _GY + math.sin(_ta) * 620.0,
+                  1.05, "GardenShrub%d" % _t,
+                  bloom="rose_pink" if _t % 2 else "petal_violet")
     kit_heart_topiary(_GX - 300.0, _GY + 430.0, 40.0, 0.85, "GardenTopiaryA")
     kit_heart_topiary(_GX + 300.0, _GY + 430.0, 40.0, 0.85, "GardenTopiaryB")
     # THE MISSION OVERLOOK'S OWN SILHOUETTE, over the terrace it already has.
