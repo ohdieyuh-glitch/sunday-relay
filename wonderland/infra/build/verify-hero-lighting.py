@@ -62,8 +62,41 @@ def load_world():
     return ns["records"], gns["MATERIAL_SPEC"], ns["write_png"]
 
 
+def load_textures():
+    """Sample the world's OWN generated maps. gen-textures.py is stdlib-only, so
+    the same albedo the engine will get can be produced here and sampled per
+    hit — the difference between a render of the world's colours and a render of
+    its material NAMES."""
+    gt_path = _os.path.join(_HERE, "gen-textures.py")
+    ns = {"__name__": "__wl_tex__", "__file__": gt_path}
+    exec(compile(io.open(gt_path, encoding="utf8").read(), gt_path, "exec"), ns)
+    size = 96                       # small: this is sampled, not displayed
+    fams = {}
+    for name, fn in (("cobble", ns["make_cobble"]), ("ashlar", ns["make_ashlar"]),
+                     ("sward", ns["make_sward"]), ("bark", ns["make_bark"]),
+                     ("plaster", ns["make_plaster"]), ("roof", ns["make_roof"])):
+        alb = fn(size)[0]
+        fams[name] = alb
+    print("textures: %d families at %dpx" % (len(fams), size))
+    return fams, size
+
+
+# which palette entries take which map, and at what world scale — mirrored from
+# the generator's own `textured` table so the render matches what will cook
+TEXTURED = {
+    "cobble": ("cobble", 0.0038), "cobble2": ("cobble", 0.0031),
+    "plaza": ("cobble", 0.0044), "stone": ("ashlar", 0.0026),
+    "ground": ("sward", 0.0060), "moss": ("sward", 0.0110),
+    "trunk": ("bark", 0.0090), "spire": ("plaster", 0.0055),
+    "spire_pink": ("plaster", 0.0055), "spire_blue": ("plaster", 0.0055),
+    "spire_teal": ("plaster", 0.0055), "roof_rose": ("roof", 0.0070),
+    "roof_pink": ("roof", 0.0070),
+}
+
+
 def main():
     records, SPEC, write_png = load_world()
+    FAMS, TSZ = load_textures()
     lay = json.load(io.open(os.path.join(_WL, "WorldDesign", "hub-layout.json"), encoding="utf8"))
     hero = [c for c in lay["heroCameras"] if c["id"] == "cam_arrival_hero"][0]
     atm = lay.get("atmosphere", {})
@@ -83,8 +116,12 @@ def main():
         base = m[0]
         emis = (m[3][0] * m[4], m[3][1] * m[4], m[3][2] * m[4])
         kind = 0 if mesh in ROUND else 1
+        tf = TEXTURED.get(mat or "")
+        tex = FAMS.get(tf[0]) if tf else None
+        tsc = tf[1] if tf else 0.0
         prims.append((kind, loc[0], loc[1], loc[2], hx, hy, hz,
-                      math.cos(yaw), math.sin(yaw), base, emis))
+                      math.cos(yaw), math.sin(yaw), base, emis, tex, tsc,
+                      mat or ""))
     n = len(prims)
 
     # ---- BVH ----------------------------------------------------------
@@ -154,7 +191,22 @@ def main():
     SKY_UP = (0.42, 0.58, 0.95)
     SKY_DN = (0.55, 0.52, 0.46)
     # the value under test: SkyLight intensity was raised 0.42 -> 1.15
-    SKY_I = float(os.environ.get('WL_SKY_I', '1.15'))
+    SKY_I = float(os.environ.get('WL_SKY_I', '0.90'))
+    NSHAD = int(os.environ.get('WL_SHADOW', '3'))
+    NAO = int(os.environ.get('WL_AO', '4'))
+    AO_R = 340.0
+    JIT = [(0.0, 0.0, 0.0)]
+    for _k in range(1, 8):
+        _a = _k * 2.39996
+        JIT.append((math.cos(_a)*0.035, math.sin(_a)*0.035, math.cos(_a*1.7)*0.035))
+    HEMI = []
+    for _k in range(8):
+        _a = _k * 2.39996
+        _r = math.sqrt((_k + 0.5) / 8.0)
+        HEMI.append((math.cos(_a)*_r*1.15, math.sin(_a)*_r*1.15, 0.30))
+    RIM = {"gold": 1.05, "gold_glow": 0.90, "float_glow": 0.85, "magic_gold": 0.70,
+           "foliage": 0.60, "foliage_hi": 0.72, "leaf": 0.66, "leaf_hi": 0.78,
+           "porcelain": 0.34, "water": 0.55, "dog_body": 0.42, "dog_eye": 0.90}
 
     def hit(ox, oy, oz, dx, dy, dz, tmax, anyhit):
         best = tmax; bi = -1
@@ -261,14 +313,56 @@ def main():
                 nx, ny, nz = normal_at(pi, hx, hy, hz)
                 p = prims[pi]
                 base = p[9]; emis = p[10]
+                # SOFT SHADOW: the sun is a disc, not a point, and a hard-edged
+                # shadow is one of the loudest "not a real render" cues there is
                 ndl = nx*lx + ny*ly + nz*lz
-                if ndl > 0.0:
-                    _, si = hit(hx+nx*0.6, hy+ny*0.6, hz+nz*0.6, lx, ly, lz, 1e9, True)
-                    if si >= 0: ndl = 0.0
-                amb = 0.5 + 0.5*nz
-                cr = base[0]*(SUN[0]*SUN_I*ndl + SKY_UP[0]*SKY_I*amb) + emis[0]
-                cg = base[1]*(SUN[1]*SUN_I*ndl + SKY_UP[1]*SKY_I*amb) + emis[1]
-                cb = base[2]*(SUN[2]*SUN_I*ndl + SKY_UP[2]*SKY_I*amb) + emis[2]
+                if ndl > 0.0 and NSHAD:
+                    lit = 0
+                    for _q in range(NSHAD):
+                        jx = lx + JIT[_q][0]; jy = ly + JIT[_q][1]; jz = lz + JIT[_q][2]
+                        _, si = hit(hx+nx*0.8, hy+ny*0.8, hz+nz*0.8, jx, jy, jz, 1e9, True)
+                        if si < 0: lit += 1
+                    ndl *= lit / float(NSHAD)
+                # AMBIENT OCCLUSION: short cosine-ish rays off the normal. Contact
+                # darkening is most of what makes geometry sit ON something.
+                ao = 1.0
+                if NAO:
+                    occ = 0
+                    for _q in range(NAO):
+                        ox_ = nx + HEMI[_q][0]; oy_ = ny + HEMI[_q][1]; oz_ = nz + HEMI[_q][2]
+                        ol = math.sqrt(ox_*ox_+oy_*oy_+oz_*oz_) or 1.0
+                        _, si = hit(hx+nx*0.8, hy+ny*0.8, hz+nz*0.8,
+                                    ox_/ol, oy_/ol, oz_/ol, AO_R, True)
+                        if si >= 0: occ += 1
+                    # 0.78 was too strong: this traces no global illumination at
+                    # all, and UE's Lumen will bounce light back into every one
+                    # of these creases. Occluding as hard as a GI-less model
+                    # suggests makes the render systematically darker than the
+                    # engine, which is the wrong direction for a tool whose job
+                    # is to warn me about darkness.
+                    ao = 1.0 - 0.55 * (occ / float(NAO))
+                amb = (0.5 + 0.5*nz) * ao
+                # albedo from the world's own map, projected the way the master
+                # projects it: world XY on horizontal, (x+y, z) on vertical
+                tex = p[11]
+                if tex is not None:
+                    ts = p[12]
+                    if abs(nz) > 0.55:
+                        uu = hx*ts; vv = hy*ts
+                    else:
+                        uu = (hx+hy)*ts; vv = hz*ts
+                    ix = int((uu % 1.0)*TSZ) % TSZ
+                    iy = int((vv % 1.0)*TSZ) % TSZ
+                    ti = (iy*TSZ+ix)*3
+                    base = (base[0]*tex[ti]/140.0, base[1]*tex[ti+1]/140.0,
+                            base[2]*tex[ti+2]/140.0)
+                # rim, the same instrument the master got this sprint
+                vdn = -(dx*nx + dy*ny + dz*nz)
+                rim = (1.0 - (vdn if vdn > 0.0 else 0.0)) ** 3.4
+                rr_ = RIM.get(p[13], 0.0)
+                cr = base[0]*(SUN[0]*SUN_I*ndl + SKY_UP[0]*SKY_I*amb) + emis[0] + rim*rr_*1.00
+                cg = base[1]*(SUN[1]*SUN_I*ndl + SKY_UP[1]*SKY_I*amb) + emis[1] + rim*rr_*0.86
+                cb = base[2]*(SUN[2]*SUN_I*ndl + SKY_UP[2]*SKY_I*amb) + emis[2] + rim*rr_*0.55
             # clamp before the gamma: a negative channel raised to a fractional
             # power is complex, and one such value takes the whole frame down
             if cr < 0.0: cr = 0.0
