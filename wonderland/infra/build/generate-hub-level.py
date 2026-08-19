@@ -1368,9 +1368,23 @@ def build(layout):
             # vocabulary the reference's architecture speaks.
             _part("cube", px, y, 26.0 * s, 1.30 * s, 1.30 * s, 0.52 * s, "stone",
                   "%s_plinth%d" % (label, sx))
+            _part("cube", px, y, 58.0 * s, 1.16 * s, 1.16 * s, 0.16 * s, "stone",
+                  "%s_plinthcap%d" % (label, sx))
             _part("cube", px, y, 62.0 * s, 1.14 * s, 1.14 * s, 0.24 * s, "gold",
                   "%s_pbase%d" % (label, sx))
-            _part("cube", px, y, ph * 0.52, 0.86 * s, 0.86 * s, ph * 0.86 / 100.0, "gold",
+            # WROUGHT GOLD ON STONE PIERS. Measured against the hero frame this
+            # gate alone was covering 8.15% of it in solid gold — more than half
+            # of all the gold in the image — because rebuilding the pillars gave
+            # them plinths, shafts, capitals and cornices and made every one of
+            # them metal. The brief asks for "elegant wrought-gold" with
+            # "readable negative space", and wrought work is slender members
+            # against a gap, not a slab.
+            #
+            # The shaft and plinth become dressed stone; gold stays on the trim,
+            # the grille, the scrollwork, the finials and the crest. Metal read
+            # against stone is also richer than metal read against metal.
+            _part("cube", px, y, ph * 0.52, 0.86 * s, 0.86 * s, ph * 0.86 / 100.0,
+                  "spire" if "spire" in MATS else "gold",
                   "%s_pillar%d" % (label, sx))
             # fluting: shallow reeds down each visible face, with the shadow
             # between them carried by aged brass rather than by a shadow that
@@ -1392,7 +1406,7 @@ def build(layout):
                       ph * 0.97, 0.17 * s, 0.17 * s, 0.16 * s,
                       "brass_deep" if "brass_deep" in MATS else "gold",
                       "%s_dent%d_%d" % (label, sx, d))
-            _part("cube", px, y, ph + 12.0 * s, 1.22 * s, 1.22 * s, 0.20 * s, "gold",
+            _part("cube", px, y, ph + 12.0 * s, 1.22 * s, 1.22 * s, 0.13 * s, "gold",
                   "%s_cornice%d" % (label, sx))
             _part("sphere", px, y, ph + 46.0 * s, 0.62 * s, 0.62 * s, 0.62 * s, "gold",
                   "%s_ball%d" % (label, sx))
@@ -1450,7 +1464,11 @@ def build(layout):
             _part("sphere", x + k * 92.0 * s, y - 10.0 * s, ph * (0.34 + 0.14 * (k % 2)),
                   0.16 * s, 0.16 * s, 0.16 * s, "float_glow", "%s_glyph%d" % (label, k))
         _part("cylinder", x, y, 5.0, 3.1 * s, 3.1 * s, 0.04, "magic_gold", "%s_threshold" % label)
-        _part("cube", x, y, ph + 45.0 * s, 6.2 * s, 1.15 * s, 0.85 * s, "gold", "%s_beam" % label)
+        # The lintel was a solid gold slab spanning the entire portal. A
+        # wrought gate carries its span on a slender rail with the ornament
+        # ABOVE it, so the opening stays an opening.
+        _part("cube", x, y, ph + 45.0 * s, 6.2 * s, 0.62 * s, 0.34 * s, "gold", "%s_beam" % label)
+        _part("cube", x, y, ph + 68.0 * s, 6.0 * s, 0.30 * s, 0.16 * s, "gold", "%s_beamtrim" % label)
         # a glowing heart crest: two lobes + a point below the keystone
         for sx in (-1, 1):
             _part("sphere", x + sx * 44.0 * s, y, ph + 150.0 * s, 0.5 * s, 0.3 * s, 0.5 * s,
