@@ -1504,12 +1504,39 @@ def build(layout):
         _part("cylinder", cx, cy, cz + 34.0 * s, 0.09 * s, 0.09 * s, 0.16 * s, mat, "%s_fneck" % label)
         _part("cone", cx, cy, cz + 56.0 * s, 0.15 * s, 0.15 * s, 0.34 * s, g, "%s_fspike" % label)
 
+    def ground_skirt(x, y, r, label, n=7, flowers=True):
+        """Thicken the ground where something meets it.
+
+        Grass grows longer at the base of a tree and against a rock because
+        nothing crops it there, and that ring of rough growth is what stops
+        an object from looking like it was dropped onto a lawn rather than
+        grown out of one. A hard line where a trunk meets flat green is one
+        of the loudest prototype cues there is, and it survives any amount
+        of detail higher up the object.
+
+        Relational by construction: the skirt only exists where an object
+        already does, so this cannot degenerate into the uniform scatter the
+        art direction warns against."""
+        h = (int(x) * 73856093) ^ (int(y) * 19349663) ^ (len(label) * 83492791)
+        for i in range(n):
+            a = (i / float(n)) * 2.0 * math.pi + ((h >> 3) % 17) * 0.11
+            # ragged: the ring wanders in and out rather than sitting true
+            rr = r * (0.86 + ((h >> (i + 2)) % 9) * 0.045)
+            gx, gy = x + math.cos(a) * rr, y + math.sin(a) * rr
+            tuft(gx, gy, (h + i * 13) % 97)
+            if flowers and (h >> (i + 6)) % 4 == 0:
+                _part("sphere", gx + 6.0, gy - 4.0, 20.0, 0.10, 0.10, 0.09,
+                      ("rose_pink", "petal_violet", "petal_air",
+                       "petal_pink")[(h + i) % 4], "%s_skirtfl%d" % (label, i))
+
     def kit_tree(x, y, s, label, giant=False):
         # The GREAT FRAMING TREE towers over the district (the reference's storybook
         # tree); ordinary trees stay modest. A tapered trunk with a knotted base and a
         # deep, layered crown so it reads as a real canopy, not a lollipop.
         th = 980.0 * s if giant else 240.0 * s
         tr = 82.0 * s if giant else 28.0 * s
+        ground_skirt(x, y, tr * (2.4 if giant else 2.9), label,
+                     n=13 if giant else 6)
         if giant:
             # A GNARLED TRUNK, not a post. The reference's great tree frames the
             # whole shot with a trunk that LEANS, swells and twists; a single
@@ -3309,6 +3336,7 @@ def build(layout):
     def rock(x, y, i):
         # A weathered boulder cluster (stone) for environmental framing.
         d = 0.85 + (i % 4) * 0.35
+        ground_skirt(x, y, d * 62.0, "rock_%d" % i, n=5, flowers=False)
         _part("sphere", x, y, d * 24.0, d, d, d * 0.68, "stone", "rock_%d" % i,
               rot=(0.0, (i * 47) % 360, (i * 23) % 26))
         if i % 2 == 0:
@@ -4928,6 +4956,60 @@ def build(layout):
                     if hsh % 3 == 0:
                         _part("sphere", kx, ky, 7.0, 0.16, 0.16, 0.06, "moss",
                               "%s_kmoss_%d_%d_%d" % (prefix, i, k, sgn))
+
+                # ---- VERGE DRESSING ---------------------------------
+                # The ground is about forty per cent of the hero frame and
+                # was carrying almost no incident: smooth rolls, smooth
+                # lawn, smooth paving. That is the "huge featureless lawn"
+                # the art direction names, and the tempting fix — scatter
+                # ten thousand small things uniformly — produces the OTHER
+                # thing it names, obvious procedural repetition. Uniform
+                # noise reads as noise at any density.
+                #
+                # So the dressing is RELATIONAL: it derives from the path's
+                # own geometry and clumps where a real one would. Petals
+                # and leaves drift against a kerb rather than lying evenly
+                # across a lawn; grass thickens where mowing cannot reach;
+                # puddles sit in the low spots of worn paving. Placement
+                # is hash-driven from world position, so a rebuild lays
+                # the identical mess.
+                _nx = math.cos(math.radians(yaw + 90.0)) * sgn
+                _ny = math.sin(math.radians(yaw + 90.0)) * sgn
+
+                # a DRIFT of fallen petals and leaves piled against the kerb
+                if (hsh >> 17) % 3 == 0:
+                    _n = 6 + ((hsh >> 19) % 5)
+                    for _d in range(_n):
+                        # tight to the kerb, thinning outward — a drift, not a disc
+                        _out = 14.0 + (_d / float(_n)) ** 1.7 * 96.0
+                        _along = ((((hsh >> (_d + 3)) % 23) - 11) / 11.0) * 74.0
+                        _px = kx + _nx * _out + math.cos(math.radians(yaw)) * _along
+                        _py = ky + _ny * _out + math.sin(math.radians(yaw)) * _along
+                        _m = ("petal_pink", "petal_violet", "rose_pink",
+                              "leaf", "leaf_hi")[(hsh + _d) % 5]
+                        _part("cube", _px, _py, 5.0 + (_d % 2) * 0.6,
+                              0.12 + (_d % 3) * 0.03, 0.10 + (_d % 3) * 0.03, 0.012,
+                              _m, "%s_drift_%d_%d_%d_%d" % (prefix, i, k, sgn, _d),
+                              rot=(0.0, 0.0, float(((hsh >> _d) * 37) % 180)))
+
+                # grass thickening where a mower cannot reach — hard against
+                # the stone, never out in the open where it would read as spam
+                if (hsh >> 21) % 2 == 0:
+                    for _g in range(2 + ((hsh >> 23) % 3)):
+                        _go = 8.0 + ((hsh >> (_g + 5)) % 13) * 2.2
+                        _ga = ((((hsh >> (_g + 9)) % 17) - 8) / 8.0) * 62.0
+                        tuft(kx + _nx * _go + math.cos(math.radians(yaw)) * _ga,
+                             ky + _ny * _go + math.sin(math.radians(yaw)) * _ga,
+                             (hsh + _g) % 97)
+
+                # a puddle in a worn hollow, with the darker wet stone around
+                # it — one of the few things that puts SKY into the ground
+                if sgn == 1 and (hsh >> 13) % 9 == 0:
+                    _pd = 0.30 + ((hsh >> 25) % 5) * 0.06
+                    _part("cylinder", px, py, 5.4, _pd * 1.55, _pd * 1.25, 0.010,
+                          "stone", "%s_wet_%d_%d" % (prefix, i, k))
+                    _part("cylinder", px, py, 5.9, _pd, _pd * 0.80, 0.012,
+                          "water", "%s_pool_%d_%d" % (prefix, i, k))
 
     paths = layout.get("paths", {})
     if isinstance(paths.get("main"), dict):
