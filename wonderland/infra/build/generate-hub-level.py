@@ -2189,6 +2189,16 @@ def build(layout):
         # chessboard): three close warm-stone tones chosen by a deterministic hash,
         # each tile slightly inset with a hair of height jitter so the seams read as
         # laid stone, and a scatter of moss creeping in the gaps.
+        # A MORTAR BED UNDER THE SETTS. Stones bedded in mortar is the correct
+        # construction and this is one actor, so it stays — but the reason I
+        # added it turned out to be WRONG and the comment should say so rather
+        # than repeat it. I expected the irregularity pass (tiles shrunk to
+        # 0.86-0.99 and nudged up to 8 uu off grid) to open gaps down to the
+        # grass plane. Measuring the frame before and after, paving and lawn
+        # coverage were unchanged: the gaps are too small to resolve from the
+        # hero camera. Cheap insurance for a closer view, not a fix.
+        _part("cylinder", x, y, 1.6, 13.4, 13.4, 0.04,
+              "stone" if "stone" in MATS else "plaza", "PlazaBed")
         stones = ("cobble", "cobble2", "plaza")
         for gx in range(-6, 7):
             for gy in range(-6, 7):
@@ -3344,6 +3354,83 @@ def build(layout):
     # Arrival plaza + glowing arcane circle (the Dog's home / Relay identity) in
     # front of the arrival camera, plus a few floating magical keys for whimsy.
     kit_plaza(0.0, 0.0)
+    # THE NORTH GARDENS. Measured on the hero frame, bare lawn covered 22% of it
+    # and paving 1.6% — and extending the boulevard barely moved either, because
+    # the lawn is not the corridor, it is the open ground either SIDE of it
+    # between the plaza and the town. That band is a third of the middle of the
+    # frame and the reference has garden there, not a field.
+    #
+    # Beds with their own kerbs, clipped hedge runs to give the beds edges, and
+    # planted verges — all outside the protected sight-line so the Observatory
+    # still closes the axis through the gap.
+    _ng = 0
+    for _i, (_bx, _by, _br) in enumerate((
+            (-980.0, 1450.0, 250.0), (-1500.0, 1950.0, 210.0), (-820.0, 2350.0, 230.0),
+            (960.0, 1500.0, 240.0), (1480.0, 2000.0, 220.0), (800.0, 2400.0, 200.0),
+            (-1750.0, 1350.0, 190.0), (1700.0, 1300.0, 190.0))):
+        if _in_corridor(_bx, _by):
+            continue
+        kit_bed(_bx, _by, _br, "NorthBed%d" % _i,
+                palette=(("rose", "rose_pink", "petal_violet") if _i % 2
+                         else ("petal_pink", "petal_violet", "petal_air")))
+        _ng += 1
+    # clipped hedge runs, which are what give beds an edge and a lawn a shape
+    for _h, (_hx, _hy, _ang, _len) in enumerate((
+            (-1250.0, 1700.0, 78.0, 9), (1250.0, 1750.0, 102.0, 9),
+            (-700.0, 2600.0, 6.0, 7), (700.0, 2620.0, 174.0, 7),
+            (-1900.0, 1700.0, 92.0, 6), (1900.0, 1650.0, 88.0, 6))):
+        for _k in range(_len):
+            _ox = _hx + math.cos(math.radians(_ang)) * (_k - _len / 2.0) * 190.0
+            _oy = _hy + math.sin(math.radians(_ang)) * (_k - _len / 2.0) * 190.0
+            if _in_corridor(_ox, _oy):
+                continue
+            _part("cube", _ox, _oy, 74.0, 1.02, 0.68, 1.46, "foliage_deep",
+                  "NorthHedge%d_%d" % (_h, _k), rot=(0.0, 0.0, _ang))
+            _part("cube", _ox, _oy, 142.0, 1.06, 0.74, 0.22, "foliage_spr",
+                  "NorthHedgeTop%d_%d" % (_h, _k), rot=(0.0, 0.0, _ang))
+            if _k % 3 == 0:
+                _part("sphere", _ox, _oy - 40.0, 130.0, 0.20, 0.20, 0.20,
+                      "rose" if _k % 2 else "rose_pink", "NorthHedgeRose%d_%d" % (_h, _k))
+            _ng += 2
+    # planted verges filling what is left, in colonies rather than a wash
+    def north_colony(cx, cy, i):
+        if _in_corridor(cx, cy) or _on_paving(cx, cy) or cy < 1250.0:
+            return
+        for k in range(5 + (i % 4)):
+            a = k * 2.39996 + i
+            rr = 40.0 + 110.0 * math.sqrt((k + 0.4) / 8.0)
+            px_, py_ = cx + math.cos(a) * rr, cy + math.sin(a) * rr
+            if _in_corridor(px_, py_):
+                continue
+            (tuft if (i + k) % 3 else flower)(px_, py_, i * 11 + k)
+
+    scatter(0.0, 1900.0, 44, 2100.0, north_colony)
+    unreal.log("NORTH GARDENS %d elements" % _ng)
+
+    # A PAVED FORECOURT under the Observatory, so the way north arrives at
+    # something rather than dissolving into grass. Measured: lawn covered 21.8%
+    # of the hero frame against the plaza's 1.6%, which is the opposite of the
+    # reference, where the middle distance is a paved approach.
+    for _r in range(9):
+        _rr = 240.0 + _r * 170.0
+        _n = max(24, int(_rr / 34.0))
+        for _i in range(_n):
+            _a = _i * (2.0 * math.pi / _n)
+            _fx = math.cos(_a) * _rr
+            _fy = 1560.0 + math.sin(_a) * _rr * 0.78
+            _h = (int(_fx) * 73856093) ^ (int(_fy) * 19349663)
+            _part("cube", _fx, _fy, 4.0,
+                  (2.0 * math.pi * _rr / _n) / 92.0, 0.62, 0.04,
+                  ("plaza", "cobble", "cobble2")[_h % 3], "Forecourt%d_%d" % (_r, _i),
+                  rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+        if _r == 8:                                  # a kerb closing it
+            for _i in range(_n):
+                _a = _i * (2.0 * math.pi / _n)
+                _part("cube", math.cos(_a) * (_rr + 40.0),
+                      1560.0 + math.sin(_a) * (_rr + 40.0) * 0.78, 14.0,
+                      (2.0 * math.pi * _rr / _n) / 90.0, 0.34, 0.28, "stone",
+                      "ForecourtKerb%d" % _i, rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+
     # A CEREMONIAL EDGE. The plaza was a paved disc lying on grass with a hard
     # boundary; the reference's arrival space is HELD — a raised kerb all the way
     # round, steps down at each approach, and planting tight against the stone.

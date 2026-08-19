@@ -106,10 +106,22 @@ def main():
     # 0 = ellipsoid, 1 = oriented box. Cones and cylinders are traced as boxes:
     # at this resolution their silhouette contribution is a few pixels and their
     # LIGHTING behaves like a box, which is the only thing being measured.
+    # element 13 is the material name and 14 the actor label, so a hit can be
+    # attributed to the OBJECT that produced it — needed twice now to answer
+    # "what exactly is that 20% of the frame", and both times the answer was not
+    # what I would have guessed
     ROUND = ("sphere",)
     prims = []
     for mesh, loc, sc, mat, lb, rot in records:
         hx, hy, hz = abs(sc[0]) * 50.0, abs(sc[1]) * 50.0, abs(sc[2]) * 50.0
+        # A PLANE IS FLAT. Engine BasicShapes are 100 uu, so half-extent = 50 x
+        # scale — but /Engine/BasicShapes/Plane has no thickness at all, and
+        # giving it 50 uu turned every ground plane into a 100 uu SLAB that
+        # swallowed the paving lying on top of it. That artifact reported the
+        # plaza as 1.6% of the frame and bare lawn as 21.8%, and I acted on both
+        # numbers before checking the tool.
+        if mesh in ("plane", "water_plane"):
+            hz = 0.5
         if hx < 1e-4 or hy < 1e-4 or hz < 1e-4:
             continue
         yaw = math.radians(rot[1] if mesh not in ROUND else 0.0)
@@ -128,7 +140,7 @@ def main():
         tsc = tf[1] if tf else 0.0
         prims.append((kind, loc[0], loc[1], loc[2], hx, hy, hz,
                       math.cos(yaw), math.sin(yaw), base, emis, tex, tsc,
-                      mat or ""))
+                      mat or "", lb))
     n = len(prims)
 
     # ---- BVH ----------------------------------------------------------

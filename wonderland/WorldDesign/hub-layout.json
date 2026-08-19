@@ -2021,10 +2021,25 @@
           0,
           1150,
           0
+        ],
+        [
+          70,
+          1650,
+          0
+        ],
+        [
+          -40,
+          2150,
+          0
+        ],
+        [
+          0,
+          2650,
+          0
         ]
       ],
       "note": "Arrival → rose arch → Heart Plaza → Brain approach. The dominant ground read; 5.5 m wide for third-person traversal.",
-      "_note": " WINDING: the five original points were collinear, which builds a runway; the eye jumps to the end of a straight path and travels along a bent one. The lateral offsets are small (<=115 uu on a 550 uu way) so the Brain still closes the axis."
+      "_note": " WINDING: the five original points were collinear, which builds a runway; the eye jumps to the end of a straight path and travels along a bent one. The lateral offsets are small (<=115 uu on a 550 uu way) so the Brain still closes the axis. EXTENDED north to y=2650: the paving stopped at 1150 and left a wide band of LAWN between the plaza and the town, right across the middle of the hero frame — measured at 21.8% of it, against 1.6% for the plaza itself. The reference's middle distance is a paved way leading in, not a field."
     },
     "secondary": [
       {
