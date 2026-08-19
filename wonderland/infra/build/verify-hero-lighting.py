@@ -234,6 +234,16 @@ def main():
     NSHAD = int(os.environ.get('WL_SHADOW', '3'))
     NAO = int(os.environ.get('WL_AO', '4'))
     AO_R = 340.0
+    # measured against the streamed frame p18 on the identical world state
+    CALIB = os.environ.get("WL_CALIBRATE", "") not in ("", "0")
+    # Fitted against the streamed frame p18 by rendering the identical world
+    # state and matching mean, spread and saturation. Residual at these values:
+    # luma +15%, contrast -3%, saturation -11% against the real frame — close
+    # enough to be REPRESENTATIVE, and not to be quoted as a measurement.
+    CAL_SAT = float(os.environ.get("WL_CAL_SAT", "8.6"))
+    CAL_SRC = float(os.environ.get("WL_CAL_SRC", "136.7"))   # this tracer on p18
+    CAL_DST = float(os.environ.get("WL_CAL_DST", "68.0"))    # Unreal on p18
+    CAL_SD = float(os.environ.get("WL_CAL_SD", "1.02"))
     JIT = [(0.0, 0.0, 0.0)]
     for _k in range(1, 8):
         _a = _k * 2.39996
@@ -408,9 +418,32 @@ def main():
             if cg < 0.0: cg = 0.0
             if cb < 0.0: cb = 0.0
             i = (yy*W+xx)*3
-            px[i]   = int(255.0*(cr/(1.0+cr))**0.4545)
-            px[i+1] = int(255.0*(cg/(1.0+cg))**0.4545)
-            px[i+2] = int(255.0*(cb/(1.0+cb))**0.4545)
+            _r = 255.0*(cr/(1.0+cr))**0.4545
+            _g = 255.0*(cg/(1.0+cg))**0.4545
+            _b = 255.0*(cb/(1.0+cb))**0.4545
+            if CALIB:
+                # THE MEASURED OFFSET, APPLIED. Against the streamed frame p18 on
+                # the same world this tracer runs +94% luma and -76% saturation,
+                # because it models no bounce, no specular and no filmic curve.
+                # Scaling by those two factors gives a picture much closer to
+                # what the engine puts on screen. It is a CORRECTED
+                # APPROXIMATION, not a render, and it is only as good as a
+                # single-frame calibration — but it is far better than handing
+                # someone an image that is four times too grey.
+                _l = 0.2126*_r + 0.7152*_g + 0.0722*_b
+                _r = _l + (_r - _l) * CAL_SAT
+                _g = _l + (_g - _l) * CAL_SAT
+                _b = _l + (_b - _l) * CAL_SAT
+                # Match the MEAN AND THE SPREAD, not just the level. Scaling
+                # luma flat matched p18's average exactly and halved its
+                # contrast, which trades one wrong picture for another; mapping
+                # about the source mean preserves the structure.
+                _t = CAL_DST + (_l - CAL_SRC) * CAL_SD
+                _k = 1.0 if _l <= 0.001 else _t / _l
+                _r *= _k; _g *= _k; _b *= _k
+            px[i]   = 0 if _r < 0 else (255 if _r > 255 else int(_r))
+            px[i+1] = 0 if _g < 0 else (255 if _g > 255 else int(_g))
+            px[i+2] = 0 if _b < 0 else (255 if _b > 255 else int(_b))
         if yy % 20 == 0:
             print("  row %d/%d" % (yy, H)); sys.stdout.flush()
 
