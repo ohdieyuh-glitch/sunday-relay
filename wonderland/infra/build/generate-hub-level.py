@@ -872,17 +872,30 @@ def build(layout):
         # A hedge trimmed into a HEART, studded with roses, on a short trunk — the
         # reference's rose-heart topiary. Built in an upright plane facing the plaza.
         _part("cylinder", cx, cy, base_z * 0.5, 0.5 * s, 0.5 * s, base_z / 100.0, "trunk", "%s_trunk" % label)
-        n = 18
-        for i in range(n):
-            t = (i / float(n)) * 2.0 * math.pi
-            hx = 16.0 * math.sin(t) ** 3
-            hz = 13.0 * math.cos(t) - 5.0 * math.cos(2 * t) - 2.0 * math.cos(3 * t) - math.cos(4 * t)
-            px = cx + hx * 11.0 * s
-            pz = base_z + 170.0 * s + hz * 11.0 * s
-            _part("sphere", px, cy, pz, 0.66 * s, 0.34 * s, 0.66 * s, "foliage", "%s_h%d" % (label, i))
-            if i % 3 == 0:
-                _part("sphere", px, cy - 20.0 * s, pz, 0.22 * s, 0.22 * s, 0.22 * s,
-                      "rose" if i % 2 else "rose_pink", "%s_r%d" % (label, i))
+        # DENSITY IS WHAT MAKES A HEDGE. Eighteen spheres on a heart curve is a
+        # dotted outline; a trimmed topiary is a SOLID mass with a crisp edge.
+        # Two concentric heart curves plus an inner fill give it body, and the
+        # roses go all over rather than every third node.
+        n = 40
+        for ring, (scale_, depth, mat) in enumerate(((1.0, 0.34, "foliage"),
+                                                     (0.80, 0.30, "foliage_hi"),
+                                                     (0.58, 0.26, "foliage"))):
+            for i in range(n):
+                t = (i / float(n)) * 2.0 * math.pi
+                hx = 16.0 * math.sin(t) ** 3
+                hz = (13.0 * math.cos(t) - 5.0 * math.cos(2 * t)
+                      - 2.0 * math.cos(3 * t) - math.cos(4 * t))
+                px = cx + hx * 11.0 * s * scale_
+                pz = base_z + 170.0 * s + hz * 11.0 * s * scale_
+                _part("sphere", px, cy, pz, 0.60 * s, depth * s, 0.60 * s, mat,
+                      "%s_h%d_%d" % (label, ring, i))
+                if ring == 0 and i % 2 == 0:
+                    _part("sphere", px, cy - 20.0 * s, pz, 0.20 * s, 0.20 * s, 0.20 * s,
+                          "rose" if i % 3 else "rose_pink", "%s_r%d" % (label, i))
+                if ring == 0 and i % 5 == 0:
+                    _part("cube", px, cy - 14.0 * s, pz, 0.26 * s, 0.05 * s, 0.30 * s,
+                          "leaf" if "leaf" in MATS else "foliage", "%s_lf%d" % (label, i),
+                          rot=(0.0, 0.0, float((i * 37) % 90)))
         for k, (fx, fz) in enumerate([(0.0, 0.2), (0.32, 0.42), (-0.32, 0.42), (0.0, 0.72)]):
             _part("sphere", cx + fx * 60.0 * s, cy + 8.0 * s, base_z + 170.0 * s + fz * 60.0 * s,
                   0.72 * s, 0.34 * s, 0.72 * s, "foliage_hi", "%s_fill%d" % (label, k))
@@ -1135,6 +1148,30 @@ def build(layout):
             a = (i / 10.0) * 2.0 * math.pi
             _part("cylinder", x + math.cos(a) * 150.0 * s, y + math.sin(a) * 150.0 * s, 120.0 * s,
                   0.14 * s, 0.14 * s, 0.5 * s, "gold", "%s_rail%d" % (label, i))
+        # A BALUSTRADE, not ten bare posts: a capping rail joining them, turned
+        # balusters between, steps up to the deck and planting around the base.
+        for i in range(10):
+            a = (i / 10.0) * 2.0 * math.pi
+            a2 = ((i + 0.5) / 10.0) * 2.0 * math.pi
+            # cap rail segment bridging post i to post i+1
+            mx = math.cos(a2) * 150.0 * s
+            my = math.sin(a2) * 150.0 * s
+            _part("cube", x + mx, y + my, 142.0 * s, 0.98 * s, 0.16 * s, 0.10 * s,
+                  "gold", "%s_cap%d" % (label, i),
+                  rot=(0.0, math.degrees(a2) + 90.0, 0.0))
+            # a turned baluster between each pair
+            _part("sphere", x + mx, y + my, 118.0 * s, 0.15 * s, 0.15 * s, 0.22 * s,
+                  "plaza", "%s_bal%d" % (label, i))
+        # steps
+        for k in range(3):
+            _part("cylinder", x, y - (170.0 + k * 34.0) * s, (34.0 - k * 11.0) * s,
+                  (1.5 - k * 0.16) * s, 0.42 * s, 0.12 * s, "cobble", "%s_step%d" % (label, k))
+        # planting around the dais so it sits IN the garden
+        for i in range(12):
+            a = i * 2.39996
+            _part("sphere", x + math.cos(a) * 205.0 * s, y + math.sin(a) * 205.0 * s, 16.0 * s,
+                  0.44 * s, 0.44 * s, 0.30 * s,
+                  "foliage" if i % 2 else "foliage_hi", "%s_bush%d" % (label, i))
         _part("cylinder", x, y, 150.0 * s, 0.28 * s, 0.28 * s, 1.1 * s, "gold", "%s_scope" % label, rot=(24, 0, 0))
 
     def kit_pergola(x, y, s, label):
@@ -1146,11 +1183,35 @@ def build(layout):
                       0.24 * s, 0.24 * s, 3.0 * s, "trunk", "%s_post%d%d" % (label, sx, sy))
         for sy in (-1, 1):
             _part("cube", x, y + sy * 150.0 * s, 305.0 * s, 3.4 * s, 0.22 * s, 0.16 * s, "trunk", "%s_beamx%d" % (label, sy))
-        for i in range(5):
-            fx = x + (-1.0 + i * 0.5) * 150.0 * s
-            _part("sphere", fx, y, 330.0 * s, 1.2 * s, 1.2 * s, 0.7 * s, "foliage", "%s_leaf%d" % (label, i))
-            _part("sphere", fx, y + 60.0 * s, 300.0 * s, 0.4 * s, 0.4 * s, 0.4 * s,
+        # Cross rafters, then a smothering of climbing growth. A pergola with a
+        # bare frame reads as scaffolding; the whole charm of one is being
+        # buried under what grows on it.
+        for i in range(7):
+            rx = x + (-1.0 + i / 3.0) * 150.0 * s
+            _part("cube", rx, y, 318.0 * s, 0.14 * s, 3.3 * s, 0.12 * s, "trunk",
+                  "%s_rafter%d" % (label, i))
+        for i in range(9):
+            fx = x + (-1.0 + i * 0.25) * 150.0 * s
+            _part("sphere", fx, y + math.sin(i * 1.3) * 70.0 * s, 336.0 * s,
+                  1.05 * s, 1.05 * s, 0.60 * s, "foliage" if i % 2 else "foliage_hi",
+                  "%s_leaf%d" % (label, i))
+            _part("sphere", fx, y + 60.0 * s - math.cos(i * 1.1) * 40.0 * s, 302.0 * s,
+                  0.34 * s, 0.34 * s, 0.34 * s,
                   "rose" if i % 2 else "petal_pink", "%s_bloom%d" % (label, i))
+        # vines running DOWN the posts, and a bench in the shade
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                for k in range(6):
+                    t = k / 5.0
+                    a = t * 5.4
+                    _part("sphere", x + sx * 150.0 * s + math.cos(a) * 26.0 * s,
+                          y + sy * 150.0 * s + math.sin(a) * 26.0 * s,
+                          40.0 * s + t * 270.0 * s, 0.24 * s, 0.24 * s, 0.24 * s,
+                          "foliage", "%s_vine%d%d_%d" % (label, sx, sy, k))
+        _part("cube", x, y, 62.0 * s, 2.2 * s, 0.5 * s, 0.14 * s, "trunk", "%s_bench" % label)
+        for bx in (-1, 1):
+            _part("cube", x + bx * 90.0 * s, y, 34.0 * s, 0.16 * s, 0.42 * s, 0.62 * s,
+                  "trunk", "%s_benchleg%d" % (label, bx))
 
     def scatter(cx, cy, count, radius, fn, keep_clear=0.0, clear_at=(0.0, 0.0)):
         # Deterministic phyllotaxis spread (golden angle) — no RNG, so regen is
@@ -1822,17 +1883,53 @@ def build(layout):
                         keep_clear=PLAZA_CLEAR)
 
     # --- Paths: one locator per point (real splines/nav are M2) -----------
-    def place_path(path, prefix):
-        for i, pt in enumerate(path.get("points", [])):
+    def place_path(path, prefix, width=170.0, paved=True):
+        pts = path.get("points", [])
+        for i, pt in enumerate(pts):
             marker(pt, "%s_%s_%02d" % (prefix, path.get("id", "path"), i), tags=[path.get("id")])
+        if not paved:
+            return
+        # LAY REAL STONE. The paths existed only as invisible locators, so the
+        # plaza had no route through it and nothing led the eye toward the city.
+        # A paved way running from the foreground into the distance is most of
+        # where the reference gets its depth. Flags are laid along each segment,
+        # alternating tone, with an edging kerb and moss in the joints.
+        for i in range(len(pts) - 1):
+            ax, ay = float(pts[i][0]), float(pts[i][1])
+            bx, by = float(pts[i + 1][0]), float(pts[i + 1][1])
+            dx, dy = bx - ax, by - ay
+            seg = math.hypot(dx, dy)
+            if seg < 1.0:
+                continue
+            yaw = math.degrees(math.atan2(dy, dx))
+            steps = max(1, int(seg / (width * 0.62)))
+            for k in range(steps):
+                t = (k + 0.5) / steps
+                px, py = ax + dx * t, ay + dy * t
+                hsh = (int(px) * 73856093) ^ (int(py) * 19349663) ^ (i * 83492791)
+                mat = ("cobble", "cobble2", "plaza")[hsh % 3]
+                jitter = 0.90 + ((hsh >> 4) % 7) * 0.018
+                _part("cube", px, py, 4.5, width / 100.0 * jitter,
+                      width * 0.60 / 100.0 * jitter, 0.05, mat,
+                      "%s_flag_%d_%d" % (prefix, i, k), rot=(0.0, 0.0, yaw + ((hsh >> 9) % 7) - 3.0))
+                # kerb stones either side, and moss where they meet
+                for sgn in (-1, 1):
+                    kx = px + math.cos(math.radians(yaw + 90.0)) * width * 0.60 * sgn
+                    ky = py + math.sin(math.radians(yaw + 90.0)) * width * 0.60 * sgn
+                    _part("cube", kx, ky, 6.5, 0.30, 0.22, 0.09,
+                          "stone" if "stone" in MATS else mat,
+                          "%s_kerb_%d_%d_%d" % (prefix, i, k, sgn), rot=(0.0, 0.0, yaw))
+                    if hsh % 3 == 0:
+                        _part("sphere", kx, ky, 7.0, 0.16, 0.16, 0.06, "moss",
+                              "%s_kmoss_%d_%d_%d" % (prefix, i, k, sgn))
 
     paths = layout.get("paths", {})
     if isinstance(paths.get("main"), dict):
-        place_path(paths["main"], "PATH")
+        place_path(paths["main"], "PATH", width=210.0)
     for s in paths.get("secondary", []):
-        place_path(s, "TRAIL")
+        place_path(s, "TRAIL", width=120.0)
     if isinstance(paths.get("hidden"), dict):
-        place_path(paths["hidden"], "HIDDEN")
+        place_path(paths["hidden"], "HIDDEN", paved=False)
 
     # --- Hero framing cameras (aimed from their lookAt) -------------------
     for cam in layout.get("heroCameras", []):
