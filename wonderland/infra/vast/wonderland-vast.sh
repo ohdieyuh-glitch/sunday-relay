@@ -259,7 +259,36 @@ env_string() {
 
 # THE PAID-RENT AUTHORIZATION BOUNDARY. Never runs `vastai create`; runs
 # preflight, then PRINTS the exact command for the operator to run by hand.
+# ------------------------------------------------- LEGACY PROVIDER GUARD
+# Vast is no longer the active provider; GCP is (../gcp/wonderland-gcp.sh). Vast
+# is kept as a FALLBACK, which means its lifecycle commands still work — you can
+# still start, stop, inspect and rescue the existing instance, and you should be
+# able to without ceremony.
+#
+# What is disabled is RENTING SOMETHING NEW. That is the one Vast action that
+# would quietly re-establish the provider the project has migrated off, and it
+# is the one the brief asks to prevent. Opting back in is deliberate and loud:
+#
+#   WONDERLAND_PROVIDER=vast ./wonderland-vast.sh create
+#
+# The guard sits on `create` only. Guarding `start` would make the fallback
+# useless in the exact emergency it exists for.
+legacy_guard() {
+  [ "${WONDERLAND_PROVIDER:-gcp}" = "vast" ] && return 0
+  say "REFUSING: Vast is the LEGACY provider. The active one is GCP:"
+  say "    ../gcp/wonderland-gcp.sh preflight"
+  say ""
+  say "Renting new Vast capacity would re-establish the provider this project has"
+  say "migrated off. Lifecycle commands on the EXISTING instance still work —"
+  say "start / stop / destroy / status / ssh / logs — because that is what a"
+  say "fallback is for."
+  say ""
+  say "If you genuinely mean it:  WONDERLAND_PROVIDER=vast $0 create"
+  return 1
+}
+
 create() {
+  legacy_guard || return 1
   # ONE live selection, carried ATOMICALLY into both the preflight display and the
   # emitted command. Vast re-issues ids per query, so a second selection would
   # drift — this is the fix for the "picked A / created B" inconsistency.
