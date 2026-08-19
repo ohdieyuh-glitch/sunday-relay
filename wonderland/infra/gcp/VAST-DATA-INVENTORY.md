@@ -32,6 +32,42 @@ the enumerate command at the bottom before acting on this.**
 | Packaged Wonderland | `/opt/wonderland/packaged` | `build-wonderland.sh`; ~2 min incremental once the engine exists, much longer from cold. |
 | The level itself | `Content/Wonderland/**` | `generate-hub-level.py`, ~30 s headless. In the repo. |
 
+## The project configuration is split across two copies and neither is complete
+
+I went to consolidate this and stopped, because a copy in either direction
+destroys work. Measured, not assumed:
+
+| | `relay/wonderland-ca-fixes` (committed) | `relay/wonderland-foundation` (UNCOMMITTED) |
+|---|---|---|
+| `.uproject` | UE **5.4**, 2 plugins | UE **5.8** + PixelStreaming2, Niagara, PythonScriptPlugin |
+| `Config/` | absent | 5 files incl. `DefaultEngine.ini` (Lumen, VSM, TSR) |
+| `Source/Wonderland/` | 11 files | 24 files |
+
+Four files exist in both and differ, in **both** directions:
+
+| file | committed branch | foundation worktree |
+|---|---|---|
+| `WonderlandPlayerController.cpp` | 178 ln — **has `OnPossess`** | 156 ln — **does not** |
+| `WonderlandDogPawn.cpp` | 542 ln — has the camera work | 532 ln |
+| `RelayWorldState.h` | 651 ln | **657 ln — newer** |
+| `Wonderland.Build.cs` | 28 ln | **32 ln — newer** |
+
+`OnPossess` is not cosmetic: it was declared and never defined, and the first
+real build failed to link on exactly that symbol. Overwriting the committed
+branch with the foundation worktree loses it. Overwriting the other way loses
+whatever the foundation session did to `RelayWorldState.h` and the build rules —
+which is probably the PixelStreaming2 module wiring that makes 5.8 work at all.
+
+**So this needs a deliberate three-way merge by whoever owns both, not a copy,
+and I have not attempted one.** Merging another session's uncommitted working
+tree is how this project previously lost real edits. What I have done is
+establish exactly which files diverge and in which direction, so the merge is
+mechanical rather than archaeological.
+
+Until it happens, **the only configuration that can actually build Wonderland
+exists on the Vast disk and in one uncommitted worktree.** That is the single
+largest data risk here and it is unrelated to which cloud the GPU comes from.
+
 ## Before decommissioning
 
 1. **Start the instance** and run the enumerate command below.
