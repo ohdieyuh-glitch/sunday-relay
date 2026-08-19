@@ -1111,10 +1111,14 @@ def build(layout):
     asset_lib = unreal.EditorAssetLibrary
     TEXS = build_textures()
     MATS = build_material_library(TEXS)
+    _REPORT = {"textures": len(TEXS)}
     # Folded into the same name->instance map, so a kit asks for "leafcard" the
     # same way it asks for "foliage"; if the masked master did not build, the
     # names are simply absent and every call site falls back.
-    MATS.update(build_leaf_material(TEXS))
+    _LEAF = build_leaf_material(TEXS)
+    MATS.update(_LEAF)
+    _REPORT["leafcards"] = len(_LEAF)
+    _REPORT["materials"] = len(MATS)
     unreal.log("MATLIB %d materials ready" % len(MATS))
     # Enhanced Input is now built in C++ at runtime (WonderlandDogPawn) — no .uasset
     # authoring needed here (the Python factory API proved unreliable).
@@ -4059,6 +4063,27 @@ def build(layout):
             saved = level_editor.save_current_level()
         except Exception as _e2:
             unreal.log_warning("save_current_level also failed: %s" % _e2)
+    # ---- WORLD REPORT ------------------------------------------------
+    # Logged at warning level on purpose: LogPython Display is filtered out of
+    # the packaged build log, so anything logged at Display is invisible
+    # afterwards. Builds here are expensive and rare enough that the log has to
+    # answer "did the texture inputs wire, did the masked foliage master build,
+    # where does the frame open onto the ground" without needing a capture to
+    # infer it from.
+    try:
+        _mp = "/Game/Wonderland/Materials/"
+        _has = unreal.EditorAssetLibrary.does_asset_exist
+        unreal.log_warning(
+            "WORLD REPORT textures=%d materials=%d leafcards=%d master=%s leafmaster=%s "
+            "ground_band_y=%.0f"
+            % (_REPORT.get("textures", -1), _REPORT.get("materials", -1),
+               _REPORT.get("leafcards", -1),
+               "yes" if _has(_mp + "M_WLMaster") else "MISSING",
+               "yes" if _has(_mp + "M_WLLeaf") else "no",
+               NEAR_Y))
+    except Exception as _re:
+        unreal.log_warning("world report failed: %s" % _re)
+
     _n = len(actors.get_all_level_actors())
     unreal.log("LIFECYCLE saved=%s actors=%d level=%s" % (saved, _n, layout["level"]))
     unreal.log("WonderlandHub generated from %s (Hub Design 3.0, M1 placeholder composition)." % LAYOUT_PATH)
