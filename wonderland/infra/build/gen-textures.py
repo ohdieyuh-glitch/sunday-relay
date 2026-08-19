@@ -180,10 +180,19 @@ def make_cobble(size):
             grain = fbm(u, v, 48, 48, 4, SEED + 3)
             fine = fbm(u, v, 160, 160, 2, SEED + 21)
 
-            # per-stone tone: warm greys through to sand, never the same twice
-            t = 0.34 + 0.26 * (((cid >> 9) & 255) / 255.0)
-            warm = 0.90 + 0.20 * (((cid >> 17) & 255) / 255.0)
-            sr, sg, sb = t * 1.10 * warm, t * 1.00, t * 0.86 / warm
+            # A MIXTURE, per the brief: brown, grey and warm slate, drawn per
+            # stone so no two neighbours match. One hue family across a whole
+            # courtyard is the thing that reads as a printed texture.
+            t = 0.32 + 0.28 * (((cid >> 9) & 255) / 255.0)
+            fam = (cid >> 21) % 3
+            if fam == 0:            # warm brown sandstone
+                sr, sg, sb = t * 1.16, t * 0.97, t * 0.76
+            elif fam == 1:          # cool grey granite
+                sr, sg, sb = t * 0.98, t * 1.00, t * 1.04
+            else:                   # warm slate, slightly violet in shadow
+                sr, sg, sb = t * 1.04, t * 0.95, t * 0.99
+            tone = 0.90 + 0.20 * (((cid >> 17) & 255) / 255.0)
+            sr, sg, sb = sr * tone, sg * tone, sb * tone
             # wear on the crown of each stone, grime toward its edge
             wear = 0.88 + 0.30 * dome
             sr, sg, sb = sr * wear, sg * wear, sb * wear
@@ -220,14 +229,27 @@ def make_cobble(size):
             g = g + (0.31 - g) * mossy * 0.62
             b = b + (0.13 - b) * mossy * 0.62
 
+            # OCCASIONAL CRACKS. A hairline splitting the odd stone, following
+            # a wandering line rather than a straight one. Only a few stones get
+            # one, which is what makes them read as damage instead of pattern.
+            crack = 0.0
+            if (cid % 9) == 0:
+                cw = math.sin(v * 21.0 + (cid % 17)) * 0.06
+                cd = abs((u + cw) - (0.02 + ((cid >> 3) % 100) / 100.0))
+                crack = 1.0 - smooth(0.0, 0.006, cd)
+                crack *= edge
+            r = r * (1.0 - 0.55 * crack)
+            g = g * (1.0 - 0.55 * crack)
+            b = b * (1.0 - 0.52 * crack)
+
             i = y * size + x
             alb[i * 3] = _b(r * 255.0)
             alb[i * 3 + 1] = _b(g * 255.0)
             alb[i * 3 + 2] = _b(b * 255.0)
-            # worn crowns are smoother; mortar and moss are matte
-            rv = 0.94 - 0.30 * dome + 0.10 * grain + 0.16 * mossy
+            # worn crowns are smoother; mortar, moss and open cracks are matte
+            rv = 0.94 - 0.30 * dome + 0.10 * grain + 0.16 * mossy + 0.18 * crack
             rgh[i] = _b(clamp01(rv) * 255.0)
-            hgt[i] = dome * 0.86 + grain * 0.10 + fine * 0.04
+            hgt[i] = dome * 0.86 + grain * 0.10 + fine * 0.04 - crack * 0.30
     return alb, height_to_normal(hgt, size, 3.4), rgh
 
 
@@ -256,10 +278,20 @@ def make_ashlar(size):
             edge = smooth(0.0, 0.10, dj)
             grain = fbm(u, v, 64, 64, 4, SEED + 5)
             chisel = fbm(u * 1.0, v, 24, 96, 3, SEED + 9)   # tool marks run across
-            t = 0.40 + 0.16 * (((cid >> 11) & 255) / 255.0)
-            r = t * 1.04 * (0.88 + 0.26 * grain) * (0.94 + 0.10 * chisel)
-            g = t * 1.00 * (0.88 + 0.26 * grain) * (0.94 + 0.10 * chisel)
-            b = t * 0.93 * (0.88 + 0.26 * grain) * (0.94 + 0.10 * chisel)
+            # AGED WARM LIMESTONE, not concrete grey: the brief asks for pale
+            # fantasy stone with pores, stains and worn arrises. Pores are a
+            # sparse high-frequency pit field; stains are a slow low-frequency
+            # wash that darkens where water has run down the face.
+            pore = clamp01((fbm(u, v, 190, 190, 1, SEED + 31) - 0.76) * 3.4)
+            stain = fbm(u, v * 0.35, 5, 14, 3, SEED + 37)
+            t = 0.56 + 0.16 * (((cid >> 11) & 255) / 255.0)
+            wash = 0.90 + 0.16 * stain
+            r = t * 1.10 * (0.90 + 0.20 * grain) * (0.95 + 0.09 * chisel) * wash
+            g = t * 1.03 * (0.90 + 0.20 * grain) * (0.95 + 0.09 * chisel) * wash
+            b = t * 0.90 * (0.90 + 0.20 * grain) * (0.95 + 0.09 * chisel) * (wash * 0.98)
+            r *= (1.0 - 0.22 * pore)
+            g *= (1.0 - 0.22 * pore)
+            b *= (1.0 - 0.20 * pore)
             mr = 0.22 + 0.05 * grain
             k = smooth(0.02, 0.40, edge)
             r = mr + (r - mr) * k
@@ -270,8 +302,8 @@ def make_ashlar(size):
             alb[i * 3] = _b(r * ao * 255.0)
             alb[i * 3 + 1] = _b(g * ao * 255.0)
             alb[i * 3 + 2] = _b(b * ao * 255.0)
-            rgh[i] = _b(clamp01(0.92 - 0.14 * edge + 0.12 * grain) * 255.0)
-            hgt[i] = edge * 0.80 + grain * 0.14 + chisel * 0.06
+            rgh[i] = _b(clamp01(0.86 - 0.16 * edge + 0.12 * grain + 0.20 * pore) * 255.0)
+            hgt[i] = edge * 0.80 + grain * 0.14 + chisel * 0.06 - pore * 0.35
     return alb, height_to_normal(hgt, size, 3.0), rgh
 
 
@@ -427,6 +459,92 @@ def make_roof(size):
     return alb, height_to_normal(hgt, size, 2.6), rgh
 
 
+def make_leafcard(size):
+    """A CLUSTER OF LEAVES ON A CARD, with a real alpha silhouette.
+
+    Foliage built from opaque boxes and spheres can never stop reading as
+    foliage-shaped furniture: what makes a canopy read as leaves is the ragged,
+    holed silhouette, and a silhouette is an opacity mask. This paints a spray of
+    leaves — each a lens shape with a midrib and veins, on its own petiole off a
+    central stem — and returns albedo, normal and the MASK that cuts the card.
+
+    Returns (albedo, normal, mask). The mask is what makes this worth having.
+    """
+    alb = bytearray(size * size * 3)
+    msk = bytearray(size * size)
+    hgt = [0.0] * (size * size)
+    inv = 1.0 / size
+
+    # a spray: leaves fanned off a stem running up the middle of the card
+    leaves = []
+    n = 13
+    for i in range(n):
+        t = (i + 0.5) / n
+        side = 1 if i % 2 else -1
+        base_v = 0.10 + 0.80 * t
+        ang = side * (0.55 + 0.42 * (1.0 - t)) + (_r01(i, 3, SEED + 201) - 0.5) * 0.30
+        ln = (0.30 - 0.13 * t) * (0.82 + 0.36 * _r01(i, 7, SEED + 203))
+        wd = ln * (0.42 + 0.16 * _r01(i, 11, SEED + 207))
+        leaves.append((0.5, base_v, ang, ln, wd, i))
+    # a terminal leaf pointing straight up
+    leaves.append((0.5, 0.86, 0.0, 0.16, 0.075, 99))
+
+    for y in range(size):
+        v = (y + 0.5) * inv
+        for x in range(size):
+            u = (x + 0.5) * inv
+            inside = 0.0
+            shade = 0.0
+            rib = 0.0
+            lid = 0
+            for (lu, lv, ang, ln, wd, idx) in leaves:
+                du, dv = u - lu, v - lv
+                ca, sa = math.cos(ang), math.sin(ang)
+                # leaf-local: s along the leaf, t across it
+                sL = dv * ca + du * sa
+                tL = du * ca - dv * sa
+                if sL < 0.0 or sL > ln:
+                    continue
+                f = sL / ln
+                half = wd * 0.5 * (math.sin(math.pi * f) ** 0.62)
+                if abs(tL) > half:
+                    continue
+                inside = 1.0
+                lid = idx
+                across = abs(tL) / max(half, 1e-5)
+                # domed cross-section, midrib and veins
+                rib = max(rib, 1.0 - min(1.0, across * 7.0))
+                vein = abs(math.sin((f * 9.0 + across * 2.0) * math.pi)) ** 6.0
+                shade = max(shade, (1.0 - across * across) * 0.72 + rib * 0.28 + vein * 0.10)
+            # the stem
+            if abs(u - 0.5) < 0.008 and 0.06 < v < 0.90:
+                inside = 1.0
+                shade = max(shade, 0.55)
+                rib = 1.0
+                lid = 50
+
+            i = y * size + x
+            if inside <= 0.0:
+                msk[i] = 0
+                alb[i * 3] = alb[i * 3 + 1] = alb[i * 3 + 2] = 0
+                hgt[i] = 0.0
+                continue
+            msk[i] = 255
+            grain = fbm(u, v, 60, 60, 3, SEED + 211)
+            # deep in the middle of a leaf, brighter and yellower at its edge:
+            # that gradient is what makes a canopy look lit rather than painted
+            k = 0.40 + 0.60 * (1.0 - shade)
+            base_r = 0.13 + 0.30 * k + 0.10 * ((lid * 37) % 7) / 7.0
+            base_g = 0.27 + 0.42 * k
+            base_b = 0.10 + 0.16 * k
+            gm = 0.88 + 0.26 * grain
+            alb[i * 3] = _b(base_r * gm * 255.0)
+            alb[i * 3 + 1] = _b(base_g * gm * 255.0)
+            alb[i * 3 + 2] = _b(base_b * gm * 255.0)
+            hgt[i] = shade * 0.7 + rib * 0.3
+    return alb, height_to_normal(hgt, size, 2.4), msk
+
+
 FAMILIES = (
     ("cobble", make_cobble, 512),
     ("ashlar", make_ashlar, 512),
@@ -463,6 +581,15 @@ def generate(out="/opt/wonderland/textures"):
         total += write_png(os.path.join(out, "T_%s_n.png" % name), size, size, nrm)
         total += write_png(os.path.join(out, "T_%s_r.png" % name), size, size, rgh, greyscale=True)
         print("  T_%s_{a,n,r} %dx%d" % (name, size, size))
+
+    # THE LEAF CARD AND ITS MASK. Kept out of FAMILIES because its third map is
+    # an opacity MASK rather than a roughness map — it is the only surface here
+    # whose point is the shape of its own hole.
+    lalb, lnrm, lmsk = make_leafcard(256)
+    total += write_png(os.path.join(out, "T_leafcard_a.png"), 256, 256, lalb)
+    total += write_png(os.path.join(out, "T_leafcard_n.png"), 256, 256, lnrm)
+    total += write_png(os.path.join(out, "T_leafcard_m.png"), 256, 256, lmsk, greyscale=True)
+    print("  T_leafcard_{a,n,m} 256x256")
     print("gen-textures: %d families, %.1f KiB, seed 0x%X" % (len(FAMILIES), total / 1024.0, SEED))
     return total
 

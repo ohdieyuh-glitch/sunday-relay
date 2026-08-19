@@ -309,7 +309,9 @@ def build_textures():
     assets. Provenance: 100% synthesised by wonderland/infra/build/gen-textures.py
     from integer hashes — no third-party asset, nothing to license or attribute,
     byte-identical on every rebuild. Returns {name: Texture2D}."""
-    outdir = "/opt/wonderland/textures"
+    # Overridable so the offline dry run can exercise this path; the build
+    # host leaves it unset and writes where the packager expects.
+    outdir = os.environ.get("WONDERLAND_TEXTURE_DIR", "/opt/wonderland/textures")
     gen = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gen-textures.py")
     try:
         if not os.path.isfile(os.path.join(outdir, "T_cobble_a.png")):
@@ -323,7 +325,8 @@ def build_textures():
 
     tools = unreal.AssetToolsHelpers.get_asset_tools()
     eal = unreal.EditorAssetLibrary
-    names = ["flat_white", "flat_normal", "flat_grey"]
+    names = ["flat_white", "flat_normal", "flat_grey",
+             "leafcard_a", "leafcard_n", "leafcard_m"]
     for fam in ("cobble", "ashlar", "sward", "bark", "plaster", "roof"):
         names += ["%s_a" % fam, "%s_n" % fam, "%s_r" % fam]
 
@@ -364,7 +367,7 @@ def build_textures():
                 tex.set_editor_property("srgb", False)
                 tex.set_editor_property("compression_settings",
                                         unreal.TextureCompressionSettings.TC_NORMALMAP)
-            elif nm.endswith("_r") or nm == "flat_grey":
+            elif nm.endswith("_r") or nm.endswith("_m") or nm == "flat_grey":
                 tex.set_editor_property("srgb", False)
                 _tcg = getattr(unreal.TextureCompressionSettings, "TC_GRAYSCALE", None)
                 if _tcg is not None:
@@ -375,6 +378,149 @@ def build_textures():
         except Exception as e:
             unreal.log_warning("texture settings on %s skipped: %s" % (nm, e))
     unreal.log("TEXTURES %d imported: %s" % (len(out), ",".join(sorted(out.keys()))))
+    return out
+
+
+
+def build_leaf_material(texs):
+    """A small dedicated MASKED master for alpha-cut foliage, plus its instances.
+
+    Deliberately NOT a duplicate of M_WLMaster: that one projects its UVs from
+    world position, which is right for ground and walls and wrong for a cut-out,
+    where the mask has to line up with the card it is cutting. This one samples
+    mesh UVs. It keeps only what foliage needs — tint, mask, normal, roughness,
+    a rim term and the sway offset — so there is very little to go wrong, and if
+    any of it does the caller falls back to the opaque leaf material.
+    """
+    if not texs.get("leafcard_m"):
+        unreal.log_warning("no leaf mask texture; foliage stays opaque")
+        return {}
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+    mel = unreal.MaterialEditingLibrary
+    eal = unreal.EditorAssetLibrary
+    pkg = "/Game/Wonderland/Materials"
+    path = pkg + "/M_WLLeaf"
+    try:
+        if eal.does_asset_exist(path):
+            master = eal.load_asset(path)
+        else:
+            master = tools.create_asset("M_WLLeaf", pkg, unreal.Material,
+                                        unreal.MaterialFactoryNew())
+            # MASKED + TWO SIDED is the entire reason this material exists
+            master.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
+            master.set_editor_property("two_sided", True)
+            try:
+                master.set_editor_property("opacity_mask_clip_value", 0.33)
+            except Exception:
+                pass
+
+            uv = mel.create_material_expression(
+                master, unreal.MaterialExpressionTextureCoordinate, -900, 0)
+
+            def sampler(pname, key, stype, py):
+                sm = mel.create_material_expression(
+                    master, unreal.MaterialExpressionTextureSampleParameter2D, -700, py)
+                sm.set_editor_property("parameter_name", pname)
+                if texs.get(key) is not None:
+                    sm.set_editor_property("texture", texs[key])
+                v = getattr(unreal.MaterialSamplerType, stype, None)
+                if v is not None:
+                    try:
+                        sm.set_editor_property("sampler_type", v)
+                    except Exception:
+                        pass
+                mel.connect_material_expressions(uv, "", sm, "UVs")
+                return sm
+
+            alb = sampler("LeafAlbedo", "leafcard_a", "SAMPLERTYPE_COLOR", -260)
+            nrm = sampler("LeafNormal", "leafcard_n", "SAMPLERTYPE_NORMAL", 120)
+            msk = sampler("LeafMask", "leafcard_m", "SAMPLERTYPE_LINEAR_GRAYSCALE", 380)
+
+            tint = mel.create_material_expression(
+                master, unreal.MaterialExpressionVectorParameter, -700, -420)
+            tint.set_editor_property("parameter_name", "BaseColor")
+            tint.set_editor_property("default_value", unreal.LinearColor(1, 1, 1, 1))
+            bmul = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -420, -320)
+            mel.connect_material_expressions(tint, "", bmul, "A")
+            mel.connect_material_expressions(alb, "", bmul, "B")
+            mel.connect_material_property(bmul, "", unreal.MaterialProperty.MP_BASE_COLOR)
+            mel.connect_material_property(nrm, "", unreal.MaterialProperty.MP_NORMAL)
+            mel.connect_material_property(msk, "", unreal.MaterialProperty.MP_OPACITY_MASK)
+
+            rg = mel.create_material_expression(
+                master, unreal.MaterialExpressionScalarParameter, -700, 260)
+            rg.set_editor_property("parameter_name", "Roughness")
+            rg.set_editor_property("default_value", 0.70)
+            mel.connect_material_property(rg, "", unreal.MaterialProperty.MP_ROUGHNESS)
+
+            # sunlit edge, same instrument as the opaque palette
+            try:
+                fres = mel.create_material_expression(master, unreal.MaterialExpressionFresnel, -700, 540)
+                ra = mel.create_material_expression(
+                    master, unreal.MaterialExpressionScalarParameter, -700, 640)
+                ra.set_editor_property("parameter_name", "RimAmp")
+                ra.set_editor_property("default_value", 0.55)
+                rc = mel.create_material_expression(
+                    master, unreal.MaterialExpressionVectorParameter, -700, 720)
+                rc.set_editor_property("parameter_name", "RimColor")
+                rc.set_editor_property("default_value", unreal.LinearColor(0.72, 0.98, 0.44, 1.0))
+                m1 = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -460, 580)
+                mel.connect_material_expressions(fres, "", m1, "A")
+                mel.connect_material_expressions(ra, "", m1, "B")
+                m2 = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -300, 600)
+                mel.connect_material_expressions(m1, "", m2, "A")
+                mel.connect_material_expressions(rc, "", m2, "B")
+                mel.connect_material_property(m2, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+            except Exception as _e:
+                unreal.log_warning("leaf rim skipped: %s" % _e)
+
+            # SWAY. Foliage motion is one of the goal's named items and it costs
+            # four nodes: vertices ride a sine along their own normal.
+            try:
+                tn = mel.create_material_expression(master, unreal.MaterialExpressionTime, -900, 860)
+                sn = mel.create_material_expression(master, unreal.MaterialExpressionSine, -700, 860)
+                mel.connect_material_expressions(tn, "", sn, "")
+                vn = mel.create_material_expression(
+                    master, unreal.MaterialExpressionVertexNormalWS, -900, 960)
+                amp = mel.create_material_expression(
+                    master, unreal.MaterialExpressionScalarParameter, -900, 1040)
+                amp.set_editor_property("parameter_name", "BreatheAmp")
+                amp.set_editor_property("default_value", 4.5)
+                w1 = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -460, 900)
+                mel.connect_material_expressions(vn, "", w1, "A")
+                mel.connect_material_expressions(sn, "", w1, "B")
+                w2 = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -300, 920)
+                mel.connect_material_expressions(w1, "", w2, "A")
+                mel.connect_material_expressions(amp, "", w2, "B")
+                mel.connect_material_property(w2, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+            except Exception as _e:
+                unreal.log_warning("leaf sway skipped: %s" % _e)
+
+            mel.recompile_material(master)
+            eal.save_asset(master.get_path_name())
+    except Exception as e:
+        unreal.log_warning("leaf master failed (%s); foliage stays opaque" % e)
+        return {}
+
+    out = {}
+    for nm, tint in (("leafcard", (0.88, 0.96, 0.82)),
+                     ("leafcard_hi", (1.10, 1.14, 0.92)),
+                     ("leafcard_deep", (0.52, 0.68, 0.52))):
+        ip = pkg + "/MI_" + nm
+        try:
+            if eal.does_asset_exist(ip):
+                mi = eal.load_asset(ip)
+            else:
+                mi = tools.create_asset("MI_" + nm, pkg, unreal.MaterialInstanceConstant,
+                                        unreal.MaterialInstanceConstantFactoryNew())
+                mel.set_material_instance_parent(mi, master)
+            mel.set_material_instance_vector_parameter_value(
+                mi, "BaseColor", unreal.LinearColor(tint[0], tint[1], tint[2], 1.0))
+            eal.save_asset(mi.get_path_name())
+            out[nm] = mi
+        except Exception as e:
+            unreal.log_warning("leaf instance %s skipped: %s" % (nm, e))
+    unreal.log("LEAF CARDS %d instances" % len(out))
     return out
 
 
@@ -957,6 +1103,10 @@ def build(layout):
     asset_lib = unreal.EditorAssetLibrary
     TEXS = build_textures()
     MATS = build_material_library(TEXS)
+    # Folded into the same name->instance map, so a kit asks for "leafcard" the
+    # same way it asks for "foliage"; if the masked master did not build, the
+    # names are simply absent and every call site falls back.
+    MATS.update(build_leaf_material(TEXS))
     unreal.log("MATLIB %d materials ready" % len(MATS))
     # Enhanced Input is now built in C++ at runtime (WonderlandDogPawn) — no .uasset
     # authoring needed here (the Python factory API proved unreliable).
@@ -2445,11 +2595,14 @@ def build(layout):
         for k in range(blades):
             a = (k / float(blades)) * 360.0 + (i * 37) % 360
             lean = 22.0 + ((i * 13 + k * 7) % 26)
+            # ALPHA-CUT. A blade of grass is a shape, not a box; the mask is
+            # what makes a hundred of these read as a lawn.
             _part("cube", x + math.cos(math.radians(a)) * 9.0 * d,
-                  y + math.sin(math.radians(a)) * 9.0 * d, 12.0 + 12.0 * d,
-                  d * 0.46, d * 0.06, d * 0.62,
-                  "leaf" if (i + k) % 2 else "leaf_hi", "tuft%d_leaf%d" % (i, k),
-                  rot=(lean, a, 0.0))
+                  y + math.sin(math.radians(a)) * 9.0 * d, 12.0 + 14.0 * d,
+                  d * 0.72, d * 0.02, d * 0.90,
+                  ("leafcard" if (i + k) % 2 else "leafcard_hi") if "leafcard" in MATS
+                  else ("leaf" if (i + k) % 2 else "leaf_hi"),
+                  "tuft%d_leaf%d" % (i, k), rot=(lean, a, 0.0))
 
     def mote(x, y, i):
         z = 70.0 + (i * 53) % 540
@@ -2904,6 +3057,19 @@ def build(layout):
                       _bz + 30.0 + (_j % 2) * 60.0, 2.1, 1.9, 1.2,
                       "foliage_spr" if _j % 2 else "foliage_hi",
                       "TreeBranchLeaf%d_%d" % (_k, _j))
+        if _k % 2 == 0 and "leafcard" in MATS:
+            # THE EDGE OF A CANOPY IS WHERE IT READS. A solid core keeps the
+            # mass and its shadow; cards around the outside give it the ragged,
+            # holed silhouette no arrangement of spheres can produce.
+            for _c in range(7):
+                _ca = _c * 0.898 + _k
+                _part("cube", _bx + math.cos(_ca) * 250.0, _by + math.sin(_ca) * 205.0,
+                      _bz + 20.0 + math.sin(_ca * 1.7) * 95.0,
+                      3.1, 0.03, 3.1,
+                      "leafcard_hi" if _c % 2 else "leafcard",
+                      "TreeBranchCard%d_%d" % (_k, _c),
+                      rot=(float((_c * 29) % 60) - 30.0, float((_c * 47) % 360),
+                           float((_c * 17) % 40) - 20.0))
         if _k % 3 == 1:                       # hanging vines and blossom
             for _v in range(6):
                 _part("sphere", _bx + 16.0, _by + 12.0, _bz - 90.0 - _v * 62.0,
