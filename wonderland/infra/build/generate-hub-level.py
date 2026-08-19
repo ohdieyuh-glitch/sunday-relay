@@ -3075,6 +3075,47 @@ def build(layout):
                 _part("sphere", _bx + 16.0, _by + 12.0, _bz - 90.0 - _v * 62.0,
                       0.30, 0.30, 0.30, "foliage" if _v % 2 else "rose_pink",
                       "TreeHang%d_%d" % (_k, _v))
+    # THE TOP-RIGHT CORNER LEAKS. The tree frames the left and the gate frames
+    # the right at eye level, but between them the top of the frame is open sky
+    # and the eye runs out of it. A second bough, thrown the other way across
+    # the top of the view, closes the arch of foliage the brief asks for.
+    for _k in range(11):
+        _t = (_k + 0.5) / 11.0
+        # ACROSS the top, toward screen-right (which is world -X when the camera
+        # looks along +Y), and high enough to hang INTO the frame rather than
+        # across the Observatory that closes the axis beneath it.
+        _bx = _TX - 300.0 - _t * 1500.0
+        _by = _TY + 120.0 + _t * 520.0
+        _bz = 1300.0 + math.sin(_t * 1.9) * 90.0 - _t * _t * 140.0
+        _th = 0.92 * (1.0 - 0.58 * _t)
+        _part("sphere", _bx, _by, _bz, _th * 2.0, _th * 1.25, _th * 1.1, "trunk",
+              "TreeBough2_%d" % _k, rot=(0.0, 0.0, float(_k * 11)))
+        if _k % 2 == 0:
+            _part("sphere", _bx, _by, _bz - 34.0, 2.5, 2.2, 1.35, "foliage_deep",
+                  "TreeBough2Core%d" % _k)
+            for _j in range(3):
+                _ja = _j * 2.1 + _k
+                _part("sphere", _bx + math.cos(_ja) * 165.0, _by + math.sin(_ja) * 135.0,
+                      _bz + 26.0 + (_j % 2) * 52.0, 1.85, 1.65, 1.05,
+                      "foliage_spr" if _j % 2 else "foliage_hi",
+                      "TreeBough2Leaf%d_%d" % (_k, _j))
+            if "leafcard" in MATS:
+                for _c in range(5):
+                    _ca = _c * 1.257 + _k
+                    _part("cube", _bx + math.cos(_ca) * 215.0, _by + math.sin(_ca) * 180.0,
+                          _bz + 12.0 + math.sin(_ca * 1.6) * 80.0, 2.7, 0.03, 2.7,
+                          "leafcard_hi" if _c % 2 else "leafcard",
+                          "TreeBough2Card%d_%d" % (_k, _c),
+                          rot=(float((_c * 31) % 56) - 28.0, float((_c * 53) % 360),
+                               float((_c * 19) % 36) - 18.0))
+        # wisteria hanging out of it, which is the reference's signature
+        if _k % 2 == 1:
+            for _v in range(7):
+                _part("sphere", _bx + 12.0, _by - 10.0, _bz - 80.0 - _v * 58.0,
+                      0.26, 0.26, 0.26,
+                      "petal_violet" if _v % 2 else "petal_pink",
+                      "Wisteria%d_%d" % (_k, _v))
+
     kit_clock(_TX - 980.0, _TY - 330.0, 1140.0, "BranchClock")
     kit_float_key(_TX - 1240.0, _TY - 440.0, 1010.0, "BranchKey")
     # BACKGROUND IS A DISTANCE, NOT A LABEL. The layout files these under
@@ -3152,6 +3193,44 @@ def build(layout):
         kit_bed(math.cos(ba) * (_PR + 330.0), math.sin(ba) * (_PR + 330.0), br, "Bed%d" % i,
                 palette=(("petal_violet", "rose_pink", "petal_pink") if i % 2
                          else ("rose", "petal_pink", "petal_air")))
+    # A CEREMONIAL PAVEMENT. The largest area of the founder's first frame was
+    # carrying texture and no DESIGN: real ceremonial ground has order laid into
+    # it, and order at this scale is what separates "expensive" from "paved".
+    #
+    # A banded border inside the kerb, gold inlay radiating from the circle, a
+    # compass rose where the axes cross, and contrasting stone marking the four
+    # approaches — all of it flat, so it enriches the foreground without putting
+    # anything in front of the subject standing on it.
+    for _b, (_br, _bw, _bm) in enumerate(((1120.0, 0.30, "stone"), (1080.0, 0.16, "gold"),
+                                          (1040.0, 0.26, "cobble2"))):
+        _n = max(40, int(_br / 14.0))
+        for _i in range(_n):
+            _a = _i * (2.0 * math.pi / _n)
+            _part("cube", math.cos(_a) * _br, math.sin(_a) * _br, 7.2,
+                  (2.0 * math.pi * _br / _n) / 92.0, _bw, 0.03, _bm,
+                  "PaveBand%d_%d" % (_b, _i), rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+    # gold inlay radiating out of the circle to the border
+    for _i in range(24):
+        _a = _i * (2.0 * math.pi / 24.0)
+        for _k in range(9):
+            _t = (_k + 0.5) / 9.0
+            _rr = 380.0 + _t * 640.0
+            _part("cube", math.cos(_a) * _rr, math.sin(_a) * _rr, 7.3,
+                  0.42, 0.045 + 0.03 * (1.0 - _t), 0.028,
+                  "gold" if _i % 2 else "brass_deep", "PaveRay%d_%d" % (_i, _k),
+                  rot=(0.0, 0.0, math.degrees(_a)))
+        # a lozenge where each ray meets the border
+        _part("cube", math.cos(_a) * 1005.0, math.sin(_a) * 1005.0, 7.4,
+              0.26, 0.26, 0.03, "porcelain" if _i % 3 else "rose",
+              "PaveStud%d" % _i, rot=(0.0, 0.0, math.degrees(_a) + 45.0))
+    # contrasting stone marking the four ways in
+    for _q, (_dx, _dy) in enumerate(((0.0, 1.0), (0.0, -1.0), (1.0, 0.0), (-1.0, 0.0))):
+        for _k in range(7):
+            _rr = 560.0 + _k * 86.0
+            _part("cube", _dx * _rr, _dy * _rr, 7.1,
+                  1.05 if _dx == 0 else 0.34, 0.34 if _dx == 0 else 1.05, 0.026,
+                  "cobble2" if _k % 2 else "plaza", "PaveWay%d_%d" % (_q, _k))
+
     # CRACKS in the paving, glowing violet where the arcane circle runs under it.
     # "occasional cracks" and "purple magical spill near arcane areas" in one
     # element: the magic is IN the ground rather than painted on top of it.
@@ -3346,7 +3425,9 @@ def build(layout):
 
     kit_heart_topiary(1180, 1150, 70.0, 1.5, "HeartTopiaryR")
     kit_heart_topiary(-1240, 1200, 70.0, 1.35, "HeartTopiaryL")
-    kit_teacup(1460, 520, 2.2, "GiantTeacup")
+    # further back and smaller: at 35% of the frame it was competing with
+    # the Observatory that closes the axis
+    kit_teacup(1760, 900, 1.85, "GiantTeacup")
     kit_fountain(900, -560, "Fountain")
     for i, (cx, cy, cz) in enumerate([(-540, 300, 610), (700, 560, 680)]):
         kit_clock(cx, cy, cz, "Clock%d" % i)
