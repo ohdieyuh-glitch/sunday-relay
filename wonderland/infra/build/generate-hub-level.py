@@ -186,7 +186,11 @@ MATERIAL_SPEC = {
     "spire_blue":  ((0.74, 0.82, 0.98), 0.0, 0.34, (0, 0, 0), 0.0),
     "spire_teal":  ((0.66, 0.92, 0.88), 0.0, 0.34, (0, 0, 0), 0.0),
     "porcelain":   ((0.96, 0.95, 0.93), 0.0, 0.10, (0, 0, 0), 0.0),
-    "water":       ((0.18, 0.40, 0.52), 0.0, 0.06, (0, 0.02, 0.05), 0.1),
+    "water":       ((0.16, 0.42, 0.56), 0.0, 0.05, (0.01, 0.04, 0.07), 0.15),
+    # Spray and foam: near-white, barely self-lit so it stays bright against
+    # the dark of a basin, and it BOBS — a jet of beads that does not move is
+    # a string of pearls.
+    "spray":       ((0.96, 0.98, 1.00), 0.0, 0.14, (0.30, 0.40, 0.48), 0.55),
     "magic_cyan":  ((0.20, 0.85, 1.00), 0.0, 0.30, (0.20, 0.85, 1.00), 2.2),
     "magic_gold":  ((1.00, 0.84, 0.42), 0.0, 0.28, (1.00, 0.74, 0.30), 4.5),
     "arcane":      ((0.66, 0.36, 1.00), 0.0, 0.30, (0.62, 0.28, 1.00), 11.0),
@@ -1007,7 +1011,11 @@ def build_material_library(texs=None):
     # WORLD LIFE — things that DRIFT up/down on the Bob WPO: the magical keys, the
     # air's drifting petals, and the Project-Brain lobes (so the Brain slowly
     # "thinks"). Static gold accents (dog tags, gate keystone) keep BobAmp 0 and stay put.
-    bob = {"float_glow": 24.0, "petal_air": 22.0, "magic_cyan": 16.0}
+    # Water is the one surface whose whole character is movement, and it had
+    # none. Small on the pools (a swell, not a trampoline), large on the jets
+    # and spray, where the eye reads it as flow.
+    bob = {"float_glow": 24.0, "petal_air": 22.0, "magic_cyan": 16.0,
+           "water": 5.0, "spray": 19.0}
     for nm, amp in bob.items():
         if nm in mats:
             try:
@@ -2185,10 +2193,18 @@ def build(layout):
                 zz = 250.0 + math.sin(t * math.pi) * 150.0 - t * t * 120.0
                 _part("sphere", x + math.cos(a) * rr, y + math.sin(a) * rr, zz,
                       (0.14 - 0.07 * t), (0.14 - 0.07 * t), (0.14 - 0.07 * t),
-                      "water" if k % 3 else "porcelain", "%s_jet%d_%d" % (label, j, k))
-            # spray where the arc lands
+                      "spray" if "spray" in MATS else "porcelain",
+                      "%s_jet%d_%d" % (label, j, k))
+            # spray where the arc lands, and a ring of it spreading on the pool
             _part("sphere", x + math.cos(a) * 340.0, y + math.sin(a) * 340.0, 74.0,
-                  0.30, 0.30, 0.12, "porcelain", "%s_spray%d" % (label, j))
+                  0.30, 0.30, 0.12, "spray" if "spray" in MATS else "porcelain",
+                  "%s_spray%d" % (label, j))
+            for _f in range(3):
+                _fr = 300.0 + _f * 26.0
+                _part("cylinder", x + math.cos(a) * _fr, y + math.sin(a) * _fr, 66.0,
+                      0.20 - 0.04 * _f, 0.20 - 0.04 * _f, 0.02,
+                      "spray" if "spray" in MATS else "porcelain",
+                      "%s_foam%d_%d" % (label, j, _f))
         _part("cylinder", x, y, 268.0, 0.16, 0.16, 0.30, "gold", "%s_nozzle" % label)
         _part("sphere", x, y, 300.0, 0.30, 0.30, 0.30, "gold_glow", "%s_finial" % label)
 
@@ -3826,14 +3842,16 @@ def build(layout):
                   "stone", "%s_rim%d" % (w["id"], _i), rot=(0.0, 0.0, math.degrees(_a) + 90.0))
             _part("sphere", _wc[0] + math.cos(_a) * (_wr - 26.0),
                   _wc[1] + math.sin(_a) * (_wr - 26.0), float(_wc[2]) + 6.0,
-                  0.34, 0.28, 0.05, "porcelain", "%s_foam%d" % (w["id"], _i))
+                  0.34, 0.28, 0.05, "spray" if "spray" in MATS else "porcelain",
+                  "%s_foam%d" % (w["id"], _i))
         for _r in range(4):
             _rr = _wr * (0.30 + 0.17 * _r)
             for _i in range(24):
                 _a = _i * (2.0 * math.pi / 24.0)
                 _part("cube", _wc[0] + math.cos(_a) * _rr, _wc[1] + math.sin(_a) * _rr,
                       float(_wc[2]) + 3.0, (2.0 * math.pi * _rr / 24.0) / 105.0, 0.10, 0.012,
-                      "porcelain", "%s_ripple%d_%d" % (w["id"], _r, _i),
+                      "spray" if "spray" in MATS else "porcelain",
+                      "%s_ripple%d_%d" % (w["id"], _r, _i),
                       rot=(0.0, 0.0, math.degrees(_a) + 90.0))
         for _i in range(11):                       # lilies on the reflecting pool
             _a = _i * 2.39996
