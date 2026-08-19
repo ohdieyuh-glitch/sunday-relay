@@ -80,6 +80,39 @@ shown to anyone as if it were one.
   is off the bottom edge. This silently deleted foreground work twice in one
   sprint before `_hero_ground_band()` started deriving it.
 
+## If the first build looks worse than p23
+
+It might. Fifteen passes land at once and none has been rendered.
+
+**The box still holds the p23 generator.** `/home/ue4/wonderland-src/infra/build/`
+was last synced at the sky pass, which is the state `p23` was captured from, and
+the instance stopped before anything newer reached it. So the fastest rollback
+is to NOT sync:
+
+```
+./resume-california.sh nobuild      # stack up, stream live, nothing overwritten
+ssh <box> 'FORCE_REBUILD=1 /root/run-build3.sh'
+```
+
+That reproduces the last frame anyone has actually seen. Only after that is
+worth comparing against should you run the full `resume-california.sh`, which
+syncs the new generators over it.
+
+**Bisecting instead.** The passes are one per commit with the reasoning in each
+message, so `git log --oneline` reads as an ordered list of what changed and
+why. The likeliest single causes of a worse frame, in order:
+
+1. sky light 0.42 -> 0.90 (bounded by the CPU trace, not settled by it — the
+   trace has no global illumination, so it can say this does not crush or clip
+   and cannot say how Lumen will carry it)
+2. the emissive rebalance — clouds, arcane spill, Brain lobes, lamp glass
+3. the masked foliage master: if `M_WLLeaf` fails to compile, the leaf cards
+   fall back to the opaque material and foliage loses its silhouette, which the
+   WORLD REPORT line will tell you before the capture does
+4. actor count 15,044 -> 22,681 (+51%) with ~4,500 masked two-sided cards, which
+   is the first thing to cut if the frame rate is short — `verify-hero-composition.py
+   --budget` prints the count by group
+
 ## Three regressions the audit caught, and the shape they share
 
 None of these was caught by a test, because the generator runs, the actor
