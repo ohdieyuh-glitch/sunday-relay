@@ -1561,6 +1561,24 @@ def build(layout):
                       sh_ * 1.10 / 100.0, "trunk", "%s_bole%d" % (label, i),
                       rot=(math.degrees(math.sin(i * 1.3)) * 0.09, 0.0,
                            math.degrees(math.cos(i * 1.1)) * 0.09))
+                # BARK RUNS UP. The framing tree's bole segments are three of
+                # the ten most visible objects in the hero frame, and between
+                # the knots they are smooth tapered cylinders. What reads as
+                # bark on a trunk this size is not the taper and not the
+                # texture — it is the VERTICAL RIDGE, the long shadow line
+                # running the height of the segment. Six per segment, at
+                # irregular spacing and varying depth, because evenly spaced
+                # flutes read as a column rather than a tree.
+                for _rg in range(6):
+                    _ra = (_rg / 6.0) * 2.0 * math.pi + i * 0.83
+                    _rd = sw * (0.94 + ((i * 7 + _rg * 5) % 5) * 0.028)
+                    _part("cube", cx_ + math.cos(_ra) * _rd, cy_ + math.sin(_ra) * _rd,
+                          sh_ * (i + 0.5),
+                          (0.13 + ((_rg + i) % 3) * 0.05) * s,
+                          (0.09 + ((_rg * 3 + i) % 3) * 0.04) * s,
+                          sh_ * 1.02 / 100.0, "trunk",
+                          "%s_ridge%d_%d" % (label, i, _rg),
+                          rot=(0.0, 0.0, math.degrees(_ra)))
                 # KNOTS AND BROKEN STUBS. "avoid smooth cylinders" — a bole reads
                 # as bark because of where branches used to be, not because of
                 # its taper.
