@@ -278,6 +278,12 @@ MATERIAL_SPEC = {
     "plaza":       ((0.47, 0.40, 0.32), 0.0, 0.76, (0, 0, 0), 0.0),
     "moss":        ((0.20, 0.40, 0.16), 0.0, 0.72, (0, 0, 0), 0.0),
     "ground":      ((0.17, 0.30, 0.14), 0.0, 0.86, (0, 0, 0), 0.0),
+    # A MEADOW IS NOT ONE GREEN. Real turf is patchy: sun-bleached where it is
+    # exposed and thin, deeper and bluer where it lies in shade or holds water.
+    # Two extra tones either side of `ground` are what let large open areas read
+    # as grass rather than as a coloured plane, and they cost two materials.
+    "ground_sun":  ((0.29, 0.40, 0.17), 0.0, 0.88, (0, 0, 0), 0.0),
+    "ground_shade":((0.11, 0.23, 0.15), 0.0, 0.84, (0, 0, 0), 0.0),
     "trunk":       ((0.30, 0.20, 0.13), 0.0, 0.78, (0, 0, 0), 0.0),
     "foliage":     ((0.23, 0.46, 0.22), 0.0, 0.72, (0, 0, 0), 0.0),
     "foliage_hi":  ((0.38, 0.57, 0.38), 0.0, 0.66, (0, 0, 0), 0.0),
@@ -2699,6 +2705,32 @@ def build(layout):
                               y + gy * tile + oy + (((hsh >> (m + 5)) % 11) - 5) * 12.0,
                               5.5, 0.20 + (m % 3) * 0.07, 0.20 + (m % 3) * 0.07, 0.07,
                               "moss", "Moss%d_%d_%d" % (gx, gy, m))
+        # ---- WHAT BLOWS ACROSS THE STONE --------------------------------
+        # Measuring the hero frame per object corrected me here. I had read the
+        # bottom third of the shot as featureless LAWN and dressed the turf for
+        # it; the measurement says that band is PlazaBed at 15.5%, the boulevard,
+        # the dais and the fountain — it is paving, and the near-field turf pass
+        # placed three patches in a frame where it expected twenty-six.
+        #
+        # Paving wants a different kind of incident. Cobble irregularity and
+        # moss are already here, but the stone reads clean and swept, and a
+        # plaza in a garden city is never swept: petals come off the roses and
+        # collect where the wind drops them, which is against a raised edge and
+        # in the lee of anything standing. Placed by that rule, not scattered —
+        # collecting against the arcane ring's outer rim, where the eye is
+        # already going.
+        for _pb in range(72):
+            _h = (_pb * 19349663) ^ 0xC0BB1E
+            _pa = (_h % 628) / 100.0
+            # a ring of collected petals just outside the arcane circle, its
+            # radius wandering so the drift is uneven the way a real one is
+            _pr = 980.0 + ((_h >> 5) % 100) / 100.0 * 300.0
+            _px, _py = x + math.cos(_pa) * _pr, y + math.sin(_pa) * _pr
+            _part("cube", _px, _py, 5.6, 0.12 + (_h % 3) * 0.03,
+                  0.10 + (_h % 3) * 0.03, 0.010,
+                  ("petal_pink", "rose_pink", "petal_violet", "petal_air",
+                   "leaf")[_h % 5], "PlazaPetal%d" % _pb,
+                  rot=(0.0, 0.0, float((_h >> 3) % 180)))
         # Many THIN concentric rings rather than six fat bands: the reference's
         # circle reads as engraved light, and thickness is what made ours read
         # as painted vinyl.
@@ -3740,6 +3772,77 @@ def build(layout):
             static_mesh("sphere", [px, py, pz], [r / 100.0, r / 100.0, r * 0.62 / 100.0],
                         "Cloud%d_%d" % (i, k),
                         mat="cloud_warm" if (i + k) % 5 == 0 else "cloud")
+
+    # ---- MEADOW PATCHES -------------------------------------------------
+    # The open ground is the largest single thing in the hero frame and it was
+    # one flat green. Covering it in objects would be spam; what an open meadow
+    # actually needs is TONE — broad, soft, overlapping areas of slightly
+    # different grass, the way real turf goes pale where it is thin and deep
+    # where it lies in shade.
+    #
+    # Placement clumps by design. Positions come from a low-frequency walk
+    # rather than uniform sampling, so the patches gather into a few large
+    # regions with clear ground between them; sampling uniformly produces an
+    # even speckle, which is precisely the procedural tell this is meant to
+    # remove. Sizes vary by a factor of four so no repeated element is legible.
+    _mp = 0
+    for _c in range(11):                       # a handful of REGIONS...
+        _ca = _c * 2.39996
+        _cr = 900.0 + ((_c * 37) % 11) / 11.0 * 5200.0
+        _cx = math.cos(_ca) * _cr
+        _cy = math.sin(_ca) * _cr + 900.0
+        for _k in range(7 + (_c % 5)):         # ...each a cluster of patches
+            _h = (_c * 73856093) ^ (_k * 19349663)
+            _a = (_h % 628) / 100.0
+            _d = ((_h >> 5) % 100) / 100.0
+            _px = _cx + math.cos(_a) * _d * 1400.0
+            _py = _cy + math.sin(_a) * _d * 1400.0
+            # skip the plaza, which is paved and does not want turf on it
+            if math.hypot(_px, _py) < 1500.0:
+                continue
+            _sz = 2.6 + ((_h >> 11) % 9) * 1.15
+            _part("cylinder", _px, _py, 2.2, _sz, _sz * (0.66 + ((_h >> 17) % 5) * 0.10),
+                  0.012, "ground_sun" if (_h >> 7) % 2 else "ground_shade",
+                  "MeadowPatch%d" % _mp, rot=(0.0, 0.0, float((_h >> 3) % 180)))
+            _mp += 1
+            # a drift of wildflower riding the same clump, never on its own
+            if (_h >> 19) % 3 == 0:
+                for _f in range(3 + ((_h >> 21) % 4)):
+                    _fa = _a + (((_h >> (_f + 2)) % 21) - 10) / 10.0 * 0.9
+                    _fd = _d * 1400.0 * (0.5 + ((_h >> (_f + 6)) % 7) / 14.0)
+                    _part("sphere", _cx + math.cos(_fa) * _fd, _cy + math.sin(_fa) * _fd,
+                          16.0, 0.11, 0.11, 0.10,
+                          ("petal_air", "rose_pink", "petal_violet",
+                           "petal_pink")[(_h + _f) % 4], "MeadowFl%d_%d" % (_mp, _f))
+
+    # NEAR-FIELD TURF. The radial pass above lands its patches by distance from
+    # the world origin, which put every one of them near the horizon: measured,
+    # 36 patches reached the frame and all sat in a 9%-tall band at depth ~3,000.
+    # The bottom third of the hero frame — the ground the viewer stands closest
+    # to, where flat tone is most obvious — got nothing.
+    #
+    # So the near band is placed against the CAMERA rather than the origin, in
+    # the strip between where the frame opens onto the ground and the plaza edge,
+    # and pushed off the boulevard's centre line so it dresses the verges the
+    # eye travels past rather than the paving it travels along.
+    for _n in range(26):
+        _h = (_n * 73856093) ^ 0x5EED
+        _ny = NEAR_Y + 120.0 + ((_h % 100) / 100.0) * 1750.0
+        _side = -1.0 if _n % 2 else 1.0
+        _nx = _CAM_X + _side * (330.0 + ((_h >> 7) % 100) / 100.0 * 1250.0)
+        if math.hypot(_nx, _ny) < 1450.0:      # not on the paved plaza
+            continue
+        _sz = 2.2 + ((_h >> 11) % 9) * 0.95
+        _part("cylinder", _nx, _ny, 2.2, _sz, _sz * (0.62 + ((_h >> 17) % 5) * 0.11),
+              0.012, "ground_sun" if (_h >> 5) % 2 else "ground_shade",
+              "MeadowNear%d" % _n, rot=(0.0, 0.0, float((_h >> 3) % 180)))
+        # a few tufts riding each near patch — close enough to the camera that
+        # silhouette matters, so these are real leaf cards, not flat colour
+        for _t in range(2 + ((_h >> 13) % 3)):
+            _ta = ((_h >> (_t + 2)) % 628) / 100.0
+            _td = ((_h >> (_t + 9)) % 100) / 100.0 * _sz * 82.0
+            tuft(_nx + math.cos(_ta) * _td, _ny + math.sin(_ta) * _td,
+                 (_h + _t * 17) % 97)
 
     # DISTANT HILLS. A flat plane meeting the sky in a dead-straight line reads
     # as a backdrop, not a world. A ring of very wide, very shallow domes gives
