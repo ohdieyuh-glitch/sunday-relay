@@ -2001,6 +2001,76 @@ def build(layout):
             _part("cone", bx, by, 330.0 * s, hs * 1.15 * s, hs * 0.85 * s, 1.5 * s,
                   "roof_rose" if k % 2 else "roof_pink", "%s_hallroof%d" % (label, k))
 
+        # ---- WHAT MAKES A SKYLINE A CITY --------------------------------
+        # The mass was all here — keep, dome, corner towers, halls — and it
+        # still read as a CLUSTER rather than a city. What a fantasy skyline
+        # has that a cluster does not is SPAN: bridges thrown between towers,
+        # and the sky visible underneath them. Negative space is the thing the
+        # eye uses to separate one tower from the next at a quarter-kilometre,
+        # where no amount of surface detail survives.
+        #
+        # Each bridge is an arc of short segments rotated tangent to it, the
+        # same construction as the rose arch, with piers under the span and a
+        # parapet along the top. Built from the corner towers inward to the
+        # keep so they cross at different heights and read as a tangle rather
+        # than a wheel.
+        for i, (ca, bh, sag) in enumerate(((0.6, 400.0, 0.30), (2.0, 330.0, 0.22),
+                                           (3.5, 470.0, 0.34), (5.1, 290.0, 0.18))):
+            ax_, ay_ = x + math.cos(ca) * wall_r, y + math.sin(ca) * wall_r
+            # UNSCALED span. wall_r already carries s, so using it inside an
+            # expression that is multiplied by s again applies the scale twice.
+            # At s=12 that sent the catenary to -21,984 uu — the bridges dived
+            # underground and dragged the castle's measured height from 44% of
+            # frame to 93%. Same failure as the townhouse assembly: the parts
+            # were scaled and the PLAN was not.
+            span = 620.0
+            segs = 9
+            for j in range(segs):
+                t = (j + 0.5) / segs
+                px_ = ax_ + (x - ax_) * t
+                py_ = ay_ + (y - ay_) * t
+                # a shallow catenary: high at the towers, dipping in the middle
+                pz_ = (bh - math.sin(t * math.pi) * span * sag) * s
+                yaw = math.degrees(math.atan2(y - ay_, x - ax_))
+                seg_len = span * s / 100.0 / segs * 1.25
+                _part("cube", px_, py_, pz_, seg_len, 0.62 * s,
+                      0.20 * s, "spire_far", "%s_span%d_%d" % (label, i, j),
+                      rot=(0.0, 0.0, yaw))
+                # parapet, so the bridge has a top edge against the sky
+                _part("cube", px_, py_, pz_ + 26.0 * s, seg_len,
+                      0.70 * s, 0.09 * s, "spire_far",
+                      "%s_spanrail%d_%d" % (label, i, j), rot=(0.0, 0.0, yaw))
+                # a pier from the GROUND to the span. The first version centred
+                # it at half the span height with a quarter-height box, so it
+                # floated with daylight under it — a pier that touches nothing
+                # is a hanging block.
+                if j % 3 == 1:
+                    _part("cube", px_, py_, pz_ * 0.5, 0.34 * s, 0.34 * s,
+                          pz_ / 100.0, "spire_far",
+                          "%s_spanpier%d_%d" % (label, i, j))
+
+        # BUTTRESSES on the keep drum. A smooth cylinder at this scale is a
+        # silo; the vertical rhythm of buttresses is what gives a keep its
+        # weight, and it survives distance because it is a silhouette break
+        # rather than a surface treatment.
+        for i in range(10):
+            a = i * (2.0 * math.pi / 10.0)
+            _part("cube", x + math.cos(a) * 350.0 * s, y + math.sin(a) * 350.0 * s,
+                  200.0 * s, 0.46 * s, 0.92 * s, 4.0 * s, "spire_far",
+                  "%s_butt%d" % (label, i), rot=(0.0, 0.0, math.degrees(a)))
+            _part("cone", x + math.cos(a) * 350.0 * s, y + math.sin(a) * 350.0 * s,
+                  420.0 * s, 0.52 * s, 0.52 * s, 0.7 * s,
+                  "roof_pink" if i % 2 else "roof_rose", "%s_buttcap%d" % (label, i))
+
+        # SECONDARY DOMES at other heights, so the roofline steps rather than
+        # jumping straight from halls to donjon.
+        for i, (dx_, dy_, dz_, dr_) in enumerate(((0.62, -0.48, 300.0, 175.0),
+                                                  (-0.72, 0.22, 355.0, 205.0),
+                                                  (0.18, 0.82, 265.0, 150.0))):
+            kit_dome(x + dx_ * 430.0 * s, y + dy_ * 430.0 * s, dz_ * s, dr_ * s,
+                     "%s_dome2_%d" % (label, i), mat="spire_far",
+                     rib="roof_rose" if i % 2 else "roof_pink")
+
     def kit_teacup(x, y, s, label):
         _part("cylinder", x, y, 8.0 * s, 2.4 * s, 2.4 * s, 0.16 * s, "porcelain", "%s_saucer" % label)
         # A CUP FLARES. One straight cylinder is a mug at best and a tin can at
