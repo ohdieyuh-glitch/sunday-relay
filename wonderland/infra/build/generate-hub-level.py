@@ -2800,9 +2800,50 @@ def build(layout):
         # hero camera. Cheap insurance for a closer view, not a fix.
         _part("cylinder", x, y, 1.6, 13.4, 13.4, 0.04,
               "stone" if "stone" in MATS else "plaza", "PlazaBed")
+        # THE BED IS THE MOST VISIBLE SURFACE IN THE HERO FRAME.
+        #
+        # Measuring pixels actually owned after occlusion — rather than
+        # projected boxes, which is what the report used to rank by — PlazaBed
+        # comes first at 7.9% of frame. The comment above it used to say the
+        # gaps between the jittered setts were too small to resolve from the
+        # hero camera. That was measured with the wrong instrument and it is
+        # wrong: a twelfth of the shot is bare bed showing between the stones.
+        #
+        # Real cobble does not leave the bed showing. It fills the interstices
+        # with SMALLER stones, which is both the correct construction and
+        # exactly the density the surface needs. An offset half-step grid drops
+        # a smaller sett into each gap, sitting slightly lower so the courses
+        # still read.
+        for igx in range(-8, 9):
+            for igy in range(-8, 9):
+                ih = ((igx * 2654435761) ^ (igy * 40503)) & 0x7FFFFFFF
+                ix = x + (igx + 0.5) * tile
+                iy = y + (igy + 0.5) * tile
+                if math.hypot(ix - x, iy - y) > 13.4 * 100.0:
+                    continue
+                isz = tile / 100.0 * (0.40 + (ih % 7) * 0.028)
+                _part("cube", ix + ((ih >> 5) % 5 - 2) * 3.0,
+                      iy + ((ih >> 9) % 5 - 2) * 3.0, 3.4 + (ih % 3) * 0.3,
+                      isz, isz * (0.78 + (ih % 5) * 0.05), 0.048,
+                      ("cobble2", "plaza", "cobble")[ih % 3],
+                      "PlazaFill%d_%d" % (igx, igy),
+                      rot=(0.0, 0.0, float((ih >> 13) % 25) - 12.0))
+                if ih % 4 == 0:
+                    _part("sphere", ix + 14.0, iy - 11.0, 5.0, 0.13, 0.13, 0.05,
+                          "moss", "PlazaFillMoss%d_%d" % (igx, igy))
         stones = ("cobble", "cobble2", "plaza")
-        for gx in range(-6, 7):
-            for gy in range(-6, 7):
+        # THE SETTS HAVE TO COVER THE BED THEY SIT ON.
+        # The bed is a disc of radius 1,340 uu; the sett field ran -6..6 at 190
+        # uu, reaching only 1,140. So a 200 uu ring of bare mortar showed all
+        # the way round the paving, and that ring is why PlazaBed was the most
+        # visible object in the hero frame at 7.9%. Filling the interstices did
+        # nothing about it, because the gap was never between the stones — it
+        # was outside them. Widen the field and cull to the disc.
+        _bed_r = 13.4 * 100.0
+        for gx in range(-8, 9):
+            for gy in range(-8, 9):
+                if math.hypot(gx * tile, gy * tile) > _bed_r + tile * 0.55:
+                    continue
                 hsh = (gx * 73856093) ^ (gy * 19349663)
                 mat = stones[hsh % 3]
                 # IRREGULARITY IS THE WHOLE READ. Identical size, height and

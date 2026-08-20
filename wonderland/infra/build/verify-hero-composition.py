@@ -418,7 +418,15 @@ def main():
         blobs.append((minz, minx, miny, maxx, maxy, mesh, mat, lb))
 
     blobs.sort(key=lambda b: -b[0])
-    for z, x0, y0, x1, y1, mesh, mat, lb in blobs:
+    # WHO ACTUALLY OWNS EACH PIXEL. The report used to rank objects by their
+    # projected bounding-box AREA and print it under the heading "largest on
+    # screen ... % of frame", which reads as visible coverage and is not.
+    # Occlusion was ignored entirely, so PlazaBed — a disc lying UNDER the
+    # cobbles, almost none of which is ever seen — ranked as the single largest
+    # thing in the hero frame at 15.5%, and I planned two passes around that.
+    # The rasteriser already resolves depth; it just was not asked who won.
+    owner = [-1] * (W * H)
+    for _bi, (z, x0, y0, x1, y1, mesh, mat, lb) in enumerate(blobs):
         col = shade(mat, z, mesh, lb)
         cr, cg, cb = int(col[0] * 255), int(col[1] * 255), int(col[2] * 255)
         rnd = mesh in ROUND
@@ -436,9 +444,18 @@ def main():
                 if z > depth[k]:
                     continue
                 depth[k] = z
+                owner[k] = _bi
                 i = k * 3
                 px[i], px[i + 1], px[i + 2] = cr, cg, cb
         drawn += 1
+
+    # tally the pixels each object still owns after everything in front of it
+    # has been drawn: that is what the viewer sees
+    import collections as _cv
+    _vis = _cv.Counter()
+    for _o in owner:
+        if _o >= 0:
+            _vis[_o] += 1
 
     # LANDMARK EXTENTS. "Is the Observatory visible" is a measurable question,
     # and measuring it beats squinting at a 800px preview.
@@ -469,11 +486,20 @@ def main():
         for k, v in tally.most_common(22):
             print("    %-24s %6d  %4.1f%%" % (k, v, 100.0 * v / tot))
 
-    big = sorted(blobs, key=lambda b: -((b[3] - b[1]) * (b[4] - b[2])))
-    print("  largest on screen (label, %% of frame, screen box):")
+    big = [(blobs[_i], _n) for _i, _n in _vis.most_common(18)]
+    print("  MOST VISIBLE (pixels actually owned after occlusion, %% of frame):")
+    _tot = float(W * H)
+    for (z, x0, y0, x1, y1, mesh, mat, lb), _n in big:
+        print("    %-30s %5.2f%%  x[%5d %5d] y[%4d %4d] z=%7.0f %s"
+              % (lb[:30], 100.0 * _n / _tot, x0, x1, y0, y1, z, mat))
+    _seen = sum(_vis.values())
+    print("  frame is %.1f%% painted by objects, %.1f%% sky/ground planes"
+          % (100.0 * _seen / _tot, 100.0 * (_tot - _seen) / _tot))
+    _unused = sorted(blobs, key=lambda b: -((b[3] - b[1]) * (b[4] - b[2])))
+    print("  largest PROJECTED BOXES (extent only - NOT visible area):")
     seen = set()
     shown = 0
-    for z, x0, y0, x1, y1, mesh, mat, lb in big:
+    for z, x0, y0, x1, y1, mesh, mat, lb in _unused:
         key = lb.rstrip("0123456789_")
         if key in seen:
             continue
@@ -484,7 +510,7 @@ def main():
         print("    %-30s %5.1f%%  x[%5d %5d] y[%4d %4d] z=%7.0f %s"
               % (lb[:30], 100.0 * area / (W * H), x0, x1, y0, y1, z, mat))
         shown += 1
-        if shown >= 18:
+        if shown >= 6:
             break
 
     out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/preview.png"

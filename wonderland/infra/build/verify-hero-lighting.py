@@ -50,6 +50,10 @@ import struct
 import sys
 import zlib
 
+import sys as _sys2
+_sys2.path.insert(0, _HERE)
+from wl_preview_leaf import apply as _wl_leaf_apply  # noqa: E402
+
 SP = _HERE
 REPO = _os.path.dirname(_WL)
 W, H = int(os.environ.get('WL_W', '336')), int(os.environ.get('WL_H', '189'))
@@ -61,12 +65,11 @@ def load_world():
     src = io.open(os.path.join(SP, "verify-hero-composition.py"), encoding="utf8").read()
     ns = {"__name__": "__wl_rt__", "__file__": os.path.join(SP, "verify-hero-composition.py")}
     # run only the top half: the stub, the recorder, the png writer
-    cut = src.index("import sys as _sys, os as _os
-_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
-from wl_preview_leaf import apply as _wl_leaf_apply  # noqa: E402
-
-
-def main():")
+    # NOTE: this cuts on a literal that also appears as CODE in that file. A
+    # blind textual patch of "def main():" once rewrote this string too and
+    # broke the harness; the anchor is deliberately the import line that now
+    # precedes it, which is unique.
+    cut = src.index("\ndef main():")
     exec(compile(src[:cut], "verify-hero-composition.py", "exec"), ns)
     sys.modules["unreal"] = ns["make_unreal"]()
     gen = io.open(os.path.join(SP, "generate-hub-level.py"), encoding="utf8").read()
