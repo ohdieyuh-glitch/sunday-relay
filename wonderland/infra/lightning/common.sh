@@ -61,6 +61,12 @@ export WL_UE_ARCHIVE="${WL_UE_ARCHIVE:-$WL_ROOT/ue58-dev.tar}"
 # A docker save of UE 5.8 is tens of gigabytes. Anything far below this is a
 # truncated or aborted export, and loading it would fail late and confusingly.
 export WL_UE_ARCHIVE_MIN_GB="${WL_UE_ARCHIVE_MIN_GB:-20}"
+# Machine floors the launcher refuses to start below. A UE 5.8 cook genuinely
+# needs this much — a 261 GiB sparse intermediate killed an export once — but
+# they live here as overridable constants rather than as literals inside an
+# `if`, so the launcher can be smoke-tested on a machine that has neither.
+export WL_MIN_DISK_GB="${WL_MIN_DISK_GB:-60}"
+export WL_MIN_RAM_GB="${WL_MIN_RAM_GB:-16}"
 
 # ---------------------------------------------------------------- ports
 # 8080 player web page, 8888 streamer websocket, 3478 TURN.

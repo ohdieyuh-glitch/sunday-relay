@@ -36,8 +36,10 @@ RAM_GB=$(awk '/MemTotal/ {printf "%d", $2/1048576}' /proc/meminfo 2>/dev/null ||
 echo "  disk free: ${DISK_GB} GB    RAM: ${RAM_GB} GB    cpus: $(nproc)"
 # A cook needs real room. The last host lost an export to a 261 GiB sparse
 # intermediate, so this is a hard floor rather than a suggestion.
-[ "${DISK_GB:-0}" -ge 60 ] || wl_die "only ${DISK_GB} GB free under $WL_ROOT; a UE 5.8 cook needs 60+ GB"
-[ "${RAM_GB:-0}"  -ge 16 ] || wl_warn "only ${RAM_GB} GB RAM; shader compilation may thrash"
+[ "${DISK_GB:-0}" -ge "$WL_MIN_DISK_GB" ] \
+  || wl_die "only ${DISK_GB} GB free under $WL_ROOT; a UE 5.8 cook needs ${WL_MIN_DISK_GB}+ GB"
+[ "${RAM_GB:-0}"  -ge "$WL_MIN_RAM_GB" ] \
+  || wl_warn "only ${RAM_GB} GB RAM; shader compilation may thrash"
 
 # ------------------------------------------------------------ 2. the engine
 banner "2/8  UNREAL 5.8"
