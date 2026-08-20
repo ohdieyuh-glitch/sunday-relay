@@ -47,8 +47,21 @@ die()  { echo "[build-wonderland] ERROR: $*" >&2; exit 1; }
 # Extracts an integer field from Engine/Build/Build.version WITHOUT assuming jq
 # is installed (the build container may be minimal). Prints nothing on miss.
 version_field() {
-  grep -o "\"$1\"[[:space:]]*:[[:space:]]*[0-9]\+" "$BUILD_VERSION_FILE" 2>/dev/null \
-    | grep -o '[0-9]\+$' | head -n1
+  # THE PIPELINE RUNS WITH pipefail DISABLED, and that is not cosmetic. The
+  # comment above promises "prints nothing on miss", and under `set -euo
+  # pipefail` this function could not keep that promise: a missing
+  # Build.version or an absent field makes grep exit 1, pipefail propagates it,
+  # the enclosing `VAR="$(version_field ...)"` fails, and `set -e` kills the
+  # build with NO message at all. `head -n1` adds a second route to the same
+  # place by closing the pipe and handing the upstream grep a SIGPIPE.
+  #
+  # A miss here is a legitimate outcome — it is handled explicitly by the
+  # caller, which warns and proceeds without a version assertion. Disabling
+  # pipefail for the subshell, plus the `|| true`, makes the code able to do
+  # what its own documentation says.
+  ( set +o pipefail
+    grep -o "\"$1\"[[:space:]]*:[[:space:]]*[0-9]\+" "$BUILD_VERSION_FILE" 2>/dev/null \
+      | grep -o '[0-9]\+$' | head -n1 ) || true
 }
 
 # Runs one UAT/editor step fail-closed: capture the log, check the exit code
@@ -110,14 +123,67 @@ mkdir -p "$OUT" "$LOG_DIR"
 # Content-addressed on purpose: a touched-but-unchanged file must NOT force a
 # multi-hour rebuild. If the stamp matches and a staged build already exists,
 # skip — unless FORCE_REBUILD=1.
+# WHICH INPUTS MUST EXIST, AND WHICH MAY NOT.
+#
+# This distinction is the whole bug. `find` was given four paths unconditionally
+# and `Config/` does not exist in this project — Unreal does not require one and
+# nothing here creates it. find then exits nonzero, its stderr is discarded by
+# the 2>/dev/null, pipefail propagates the failure to the command substitution,
+# and `set -e` terminates the script WITHOUT PRINTING ANYTHING. On a real paid
+# L4 run the build stopped dead one line after the engine version banner, and
+# build.log contained exactly that one line.
+#
+# Required: the project descriptor, the C++ Source tree, and WorldDesign —
+# hub-layout.json lives there and the generator cannot build a world without it,
+# so its absence must be loud rather than silently hashed around.
+REQUIRED_INPUTS=("$PROJECT" "$SRC_DIR" "$WORLD_DIR")
+# Optional: Config/ is included when present and simply skipped when not.
+OPTIONAL_INPUTS=("$CFG_DIR")
+
+validate_build_inputs() {
+  # Deliberately NOT inside the command substitution. A `die` from within
+  # $( ) exits the subshell and leaves the caller to fail on its own terms,
+  # which is how a clear error becomes an obscure one.
+  local p missing=0
+  for p in "${REQUIRED_INPUTS[@]}"; do
+    if [ ! -e "$p" ]; then
+      echo "[build-wonderland] ERROR: required build input missing: $p" >&2
+      missing=1
+    fi
+  done
+  [ "$missing" -eq 0 ] || die "cannot compute an input hash without every required build input"
+  for p in "${OPTIONAL_INPUTS[@]}"; do
+    [ -e "$p" ] || log "optional build input absent, skipping: $p"
+  done
+}
+
 compute_input_hash() {
   # sha256sum every input file, sort for stable order, hash the digest list.
-  find "$PROJECT" "$SRC_DIR" "$CFG_DIR" "$WORLD_DIR" -type f -print0 2>/dev/null \
-    | sort -z \
-    | xargs -0 sha256sum 2>/dev/null \
-    | sha256sum | cut -d' ' -f1
+  local -a paths=()
+  local p
+  for p in "${REQUIRED_INPUTS[@]}" "${OPTIONAL_INPUTS[@]}"; do
+    [ -e "$p" ] && paths+=("$p")
+  done
+  # pipefail off for the subshell so no benign stage status can terminate the
+  # build, and `xargs -r` so an empty file list does not invoke sha256sum with
+  # no arguments — where it would read STDIN and hash the wrong thing rather
+  # than fail.
+  ( set +o pipefail
+    find "${paths[@]}" -type f -print0 2>/dev/null \
+      | sort -z \
+      | xargs -0 -r sha256sum 2>/dev/null \
+      | sha256sum | cut -d' ' -f1 )
 }
+
+validate_build_inputs
 INPUT_HASH="$(compute_input_hash)"
+# The belt to the braces: if anything above still produced something that is not
+# a hash, say so HERE rather than writing a meaningless stamp that makes the
+# next run skip a build it should have done.
+case "$INPUT_HASH" in
+  [0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) : ;;
+  *) die "input hash came back as '${INPUT_HASH:-<empty>}' — refusing to stamp a build with it" ;;
+esac
 log "input content hash: ${INPUT_HASH:-<none>}"
 
 STAGED_DIR="$OUT/${PLATFORM}"
