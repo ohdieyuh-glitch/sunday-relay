@@ -1143,6 +1143,14 @@ def build_material_library(texs=None):
         # Water with a flat normal is glass, and glass in a garden reads as a
         # hole in the ground.
         "water":       ("ripple", 0.0060, (1.00, 1.00, 1.00)),
+        # Petals carry most of the world's pink and violet, and flat colour on
+        # one is the "candy" read the direction names: a saturated hue with no
+        # surface under it is moulded plastic whatever the shape.
+        "rose":        ("petal",  0.0210, (1.00, 1.00, 1.00)),
+        "rose_pink":   ("petal",  0.0210, (1.00, 1.00, 1.00)),
+        "petal_pink":  ("petal",  0.0240, (1.00, 1.00, 1.00)),
+        "petal_violet":("petal",  0.0240, (1.00, 1.00, 1.00)),
+        "petal_air":   ("petal",  0.0260, (1.00, 1.00, 1.00)),
     }
     if texs:
         for nm, (fam, scale, tint) in textured.items():

@@ -740,6 +740,52 @@ def make_ripple(size):
     return alb, height_to_normal(hgt, size, 0.55), rgh
 
 
+def make_petal(size):
+    """Petal: velvet nap, faint venation, a bruise where it has been handled.
+
+    The last of the named surfaces still running on base colour alone, and the
+    one carrying most of the world's pink and violet — roses, blooms, the beds,
+    the drifts on the plaza. Flat colour on a petal is the "candy" read the art
+    direction names: a saturated hue with no surface under it looks like moulded
+    plastic no matter how good the shape is.
+
+    What a petal actually has is NAP. The cells stand up like velvet, so the
+    surface scatters more than it reflects and its brightness changes with the
+    angle far more than a leaf's does. That is roughness, high and gently
+    varying, and it is most of the read.
+
+    Venation is kept very faint and, as with the mushroom cap, ISOTROPIC — the
+    master projects world position, so anything with a direction or a centre
+    would tile across the world rather than follow a petal. See make_cap.
+    """
+    alb = bytearray(size * size * 3)
+    rgh = bytearray(size * size)
+    hgt = [0.0] * (size * size)
+    inv = 1.0 / size
+    for y in range(size):
+        v = (y + 0.5) * inv
+        for x in range(size):
+            u = (x + 0.5) * inv
+            nap = fbm(u, v, 120, 120, 2, SEED + 801)
+            # the vein network, thin and low-contrast: on a real petal you see
+            # it as a slight unevenness of colour, never as drawn lines
+            f1, f2, _ = voronoi(u, v, 11, SEED + 809, jitter=0.85)
+            vein = clamp01(1.0 - (f2 - f1) * 15.0)
+            broad = fbm(u, v, 5, 5, 3, SEED + 817)
+            # petals bruise; the mark is a deepening, not a stain
+            bruise = clamp01((fbm(u, v, 17, 17, 3, SEED + 823) - 0.60) * 2.4)
+            t = 0.94 + 0.09 * broad - 0.10 * bruise + 0.03 * vein
+            i = y * size + x
+            alb[i * 3] = _b(t * 255.0)
+            alb[i * 3 + 1] = _b(t * (0.985 - 0.02 * bruise) * 255.0)
+            alb[i * 3 + 2] = _b(t * (0.99 - 0.01 * bruise) * 255.0)
+            # velvet: high and soft, dropping slightly along the veins where the
+            # surface is stretched tighter over them
+            rgh[i] = _b(clamp01(0.68 + 0.14 * nap - 0.10 * vein + 0.06 * broad) * 255.0)
+            hgt[i] = nap * 0.30 + vein * 0.35 + broad * 0.20
+    return alb, height_to_normal(hgt, size, 0.8), rgh
+
+
 FAMILIES = (
     ("cobble", make_cobble, 512),
     ("ashlar", make_ashlar, 512),
@@ -751,6 +797,7 @@ FAMILIES = (
     ("glaze", make_glaze, 256),
     ("cap", make_cap, 256),
     ("ripple", make_ripple, 256),
+    ("petal", make_petal, 256),
 )
 
 

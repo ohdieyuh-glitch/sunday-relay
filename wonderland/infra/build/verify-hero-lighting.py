@@ -126,7 +126,7 @@ def load_textures():
     # specular that ignores the roughness map cannot see the difference between
     # gold and a yellow plastic, which is the exact question being asked.
     for name in ("cobble", "ashlar", "sward", "bark", "plaster", "roof",
-                 "metal", "glaze", "cap", "ripple"):
+                 "metal", "glaze", "cap", "ripple", "petal"):
         fn = ns.get("make_" + name)
         if fn is None:
             continue
@@ -152,6 +152,9 @@ TEXTURED = {
     "mush_red": ("cap", 0.0170), "mush_purple": ("cap", 0.0170),
     "mush_white": ("cap", 0.0190),
     "water": ("ripple", 0.0060),
+    "rose": ("petal", 0.0210), "rose_pink": ("petal", 0.0210),
+    "petal_pink": ("petal", 0.0240), "petal_violet": ("petal", 0.0240),
+    "petal_air": ("petal", 0.0260),
 }
 
 
