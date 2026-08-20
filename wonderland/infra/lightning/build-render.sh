@@ -18,6 +18,20 @@ PROJECT="$WL_SRC/wonderland/Wonderland.uproject"
 [ -f "$PROJECT" ] || wl_die "no project at $PROJECT — run prepare.sh first"
 
 FORCE="${FORCE_REBUILD:-0}"
+
+# ------------------------------------------------- generated-asset preflight
+# The level generator IMPORTS textures and audio from disk. If those
+# directories are empty or invisible it does not fail — it logs a warning and
+# packages a world with no texture maps and no sound, which looks like an art
+# problem and is not. Checking costs nothing here and a whole GPU session
+# later.
+_ntex=$(find "$WONDERLAND_TEXTURE_DIR" -type f -name '*.png' 2>/dev/null | wc -l)
+_naud=$(find "$WONDERLAND_AUDIO_DIR" -type f -name '*.wav' 2>/dev/null | wc -l)
+wl_say "assets: $_ntex textures in $WONDERLAND_TEXTURE_DIR"
+wl_say "        $_naud wavs in $WONDERLAND_AUDIO_DIR"
+if [ "$_ntex" -eq 0 ] || [ "$_naud" -eq 0 ]; then
+  wl_die "generated assets missing — run prepare.sh before spending GPU time"
+fi
 WL_UE_IMAGE="${WL_UE_IMAGE:-ghcr.io/epicgames/unreal-engine:dev-5.8}"
 
 # ------------------------------------------------------- choose an engine path
@@ -41,6 +55,8 @@ BUILD_SH="wonderland/infra/build/build-wonderland.sh"
 
 run_native() {
   UE_ROOT="$WL_UE" OUT="$WL_OUT" FORCE_REBUILD="$FORCE" \
+    WONDERLAND_TEXTURE_DIR="$WONDERLAND_TEXTURE_DIR" \
+    WONDERLAND_AUDIO_DIR="$WONDERLAND_AUDIO_DIR" \
     bash "$WL_SRC/$BUILD_SH" 2>&1 | tee "$WL_LOG/build.log"
   return "${PIPESTATUS[0]}"
 }
@@ -52,12 +68,44 @@ run_container() {
   # in a layer that vanishes with the container.
   local gpuflag=""
   wl_have_gpu && gpuflag="--gpus all"
+
+  # MOUNT WHAT THE GENERATOR WILL READ. $WL_ROOT is bound at the same path
+  # inside, so anything under it is already visible; an asset directory
+  # pointed somewhere else needs its own bind or the container sees nothing.
+  local extra=""
+  case "$WONDERLAND_TEXTURE_DIR" in
+    "$WL_ROOT"/*) ;;
+    *) extra="$extra -v $WONDERLAND_TEXTURE_DIR:$WONDERLAND_TEXTURE_DIR:ro" ;;
+  esac
+  case "$WONDERLAND_AUDIO_DIR" in
+    "$WL_ROOT"/*) ;;
+    *) extra="$extra -v $WONDERLAND_AUDIO_DIR:$WONDERLAND_AUDIO_DIR:ro" ;;
+  esac
+
+  # PROVE IT, do not assume it. "The host variable is set" and "the container
+  # can read that directory" are different claims, and only the second one
+  # matters. This is a two-second container run against the same image, mounts
+  # and environment the real build will use.
   # shellcheck disable=SC2086
-  docker run --rm $gpuflag \
+  if ! docker run --rm $extra -v "$WL_ROOT:$WL_ROOT" \
+        -e WONDERLAND_TEXTURE_DIR="$WONDERLAND_TEXTURE_DIR" \
+        -e WONDERLAND_AUDIO_DIR="$WONDERLAND_AUDIO_DIR" \
+        "$WL_UE_IMAGE" bash -lc '
+          t=$(find "$WONDERLAND_TEXTURE_DIR" -name "*.png" 2>/dev/null | wc -l)
+          a=$(find "$WONDERLAND_AUDIO_DIR"   -name "*.wav" 2>/dev/null | wc -l)
+          echo "in-container: $t textures, $a wavs"
+          [ "$t" -gt 0 ] && [ "$a" -gt 0 ]' 2>&1 | tee -a "$WL_LOG/build.log"; then
+    wl_die "the UE container cannot see the generated assets. Host paths are set but not visible inside — check the bind mounts above."
+  fi
+
+  # shellcheck disable=SC2086
+  docker run --rm $gpuflag $extra \
     -v "$WL_ROOT:$WL_ROOT" \
     -e UE_ROOT=/home/ue4/UnrealEngine \
     -e OUT="$WL_OUT" \
     -e FORCE_REBUILD="$FORCE" \
+    -e WONDERLAND_TEXTURE_DIR="$WONDERLAND_TEXTURE_DIR" \
+    -e WONDERLAND_AUDIO_DIR="$WONDERLAND_AUDIO_DIR" \
     -w "$WL_SRC" \
     "$WL_UE_IMAGE" \
     bash "$WL_SRC/$BUILD_SH" 2>&1 | tee "$WL_LOG/build.log"

@@ -113,6 +113,86 @@ for f in common.sh prepare.sh build-render.sh run-stream.sh launch-wonderland.sh
 done
 [ "$leak" = 0 ] && ok "no Vast paths in any Lightning script"
 
+echo "== generated assets land on persistent storage =="
+# THE FIRST REAL LIGHTNING RUN FOUND THIS. prepare.sh generated 24 textures and
+# 7 wavs successfully, and the build would still have imported NOTHING: the
+# synthesis tools defaulted to the old host's /opt/wonderland while the assets
+# sat on Studio storage. Nothing failed. Nothing warned. It would have cost a
+# GPU session to discover.
+out=$(WL_ROOT=/teamspace/studios/this_studio/wonderland bash -c \
+      ". $HERE/common.sh; echo \$WONDERLAND_TEXTURE_DIR \$WONDERLAND_AUDIO_DIR")
+case "$out" in
+  /teamspace/*/textures\ /teamspace/*/audio) ok "asset dirs default under persistent storage ($out)" ;;
+  *) bad "asset dirs are not on persistent storage: $out" ;;
+esac
+
+GEN="$HERE/../build/generate-hub-level.py"
+GT="$HERE/../build/gen-textures.py"
+GA="$HERE/../build/gen-audio.py"
+
+# the generator must READ both from the environment, not hardcode either
+for var in WONDERLAND_TEXTURE_DIR WONDERLAND_AUDIO_DIR; do
+  if grep -q "$var" "$GEN"; then ok "generator reads $var"; else bad "generator ignores $var"; fi
+done
+# and the env var must actually WIN over the legacy default
+out=$(cd "$HERE/../build" && WONDERLAND_AUDIO_DIR=/tmp/wl-a WONDERLAND_TEXTURE_DIR=/tmp/wl-t python3 - <<'PY'
+import io, os
+src = io.open("generate-hub-level.py", encoding="utf8").read()
+head = src[:src.index("\ndef build_niagara")]
+g = {"__name__": "p", "__file__": os.path.abspath("generate-hub-level.py")}
+exec(compile(head, "g", "exec"), g)
+print(g["_AUDIO_DIR"], g["_TEX_DIR"])
+PY
+)
+check "$out" "/tmp/wl-a /tmp/wl-t" "the environment overrides the legacy asset paths"
+
+# No *.wav path may be hardcoded to the old host in the generator's live code.
+#
+# NOT WRITTEN AS `sed ... | grep -q`. Under `set -o pipefail`, grep -q exits the
+# instant it matches, sed dies of SIGPIPE (141), the PIPELINE reports failure,
+# and the `if` takes the else branch — announcing "no hardcoded path" exactly
+# when there is one. Mutation-testing caught this: re-hardcoding the audio path
+# passed 30/30. The stages are separated so each exit code means what it says.
+sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$GEN" > "$TMP/gen-live.py"
+if grep -qE '"/opt/wonderland/audio/' "$TMP/gen-live.py"; then
+  bad "generator still hardcodes the old audio path in live code"
+else
+  ok "no hardcoded /opt/wonderland audio path in generator code"
+fi
+
+# both synthesis tools must honour the same variable, or prepare.sh can set it,
+# believe it directed the output, and write somewhere else entirely
+grep -q "WONDERLAND_TEXTURE_DIR" "$GT" && ok "gen-textures.py honours WONDERLAND_TEXTURE_DIR" \
+  || bad "gen-textures.py ignores WONDERLAND_TEXTURE_DIR"
+grep -q "WONDERLAND_AUDIO_DIR" "$GA" && ok "gen-audio.py honours WONDERLAND_AUDIO_DIR" \
+  || bad "gen-audio.py ignores WONDERLAND_AUDIO_DIR"
+
+# gen-textures.py must actually WRITE where it is told
+rm -rf "$TMP/tex"; mkdir -p "$TMP/tex"
+if (cd "$HERE/../build" && WONDERLAND_TEXTURE_DIR="$TMP/tex" timeout 600 python3 gen-textures.py >/dev/null 2>&1); then
+  n=$(find "$TMP/tex" -name '*.png' 2>/dev/null | wc -l)
+  [ "$n" -gt 0 ] && ok "gen-textures.py wrote $n PNGs to the requested directory" \
+                 || bad "gen-textures.py wrote nothing to WONDERLAND_TEXTURE_DIR"
+else
+  bad "gen-textures.py failed when directed by environment"
+fi
+
+echo "== the container is given, and shown, the asset dirs =="
+for var in WONDERLAND_TEXTURE_DIR WONDERLAND_AUDIO_DIR; do
+  n=$(grep -c -- "-e $var=" "$HERE/build-render.sh" 2>/dev/null || echo 0)
+  [ "$n" -ge 2 ] && ok "build-render.sh passes $var into the container ($n sites)" \
+                 || bad "build-render.sh passes $var into the container only $n time(s)"
+  grep -q "$var" "$HERE/build-render.sh" || bad "build-render.sh never mentions $var"
+done
+# and it must PROVE visibility rather than assume it
+grep -q "cannot see the generated assets" "$HERE/build-render.sh" \
+  && ok "build-render.sh verifies the container can read them" \
+  || bad "build-render.sh assumes container visibility instead of checking"
+# refuse to cook with no assets at all
+grep -q "run prepare.sh before spending GPU time" "$HERE/build-render.sh" \
+  && ok "build-render.sh refuses to cook without generated assets" \
+  || bad "build-render.sh would cook a world with no textures or audio"
+
 echo "== gpu guard =="
 # launch-wonderland must refuse to run without a GPU rather than start a long
 # build and fail at the end.

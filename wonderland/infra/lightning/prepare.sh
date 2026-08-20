@@ -101,12 +101,27 @@ done
 # single biggest saving in the whole flow, because the alternative is a warm
 # GPU sitting idle while Python writes PNGs.
 wl_say "synthesising textures and audio on CPU"
-( cd "$BUILD_DIR" && python3 gen-textures.py >>"$WL_LOG/gen.log" 2>&1 ) \
+wl_say "  textures -> $WONDERLAND_TEXTURE_DIR"
+wl_say "  audio    -> $WONDERLAND_AUDIO_DIR"
+# The destination is passed EXPLICITLY as well as exported. The first real
+# Lightning run generated both sets successfully and the build would still have
+# imported nothing, because the tools defaulted to the old host's
+# /opt/wonderland while the assets sat on Studio storage. Belt and braces here
+# is cheap; a silent empty import costs a GPU session.
+( cd "$BUILD_DIR" && python3 gen-textures.py "$WONDERLAND_TEXTURE_DIR" >>"$WL_LOG/gen.log" 2>&1 ) \
   && wl_ok "textures generated" || wl_warn "gen-textures.py failed; see $WL_LOG/gen.log"
 if [ -f "$BUILD_DIR/gen-audio.py" ]; then
-  ( cd "$BUILD_DIR" && python3 gen-audio.py >>"$WL_LOG/gen.log" 2>&1 ) \
+  ( cd "$BUILD_DIR" && WONDERLAND_AUDIO_DIR="$WONDERLAND_AUDIO_DIR" \
+      python3 gen-audio.py >>"$WL_LOG/gen.log" 2>&1 ) \
     && wl_ok "audio generated" || wl_warn "gen-audio.py failed; see $WL_LOG/gen.log"
 fi
+
+# Announce the fact, not the intention: count what is actually on disk.
+_ntex=$(find "$WONDERLAND_TEXTURE_DIR" -type f -name '*.png' 2>/dev/null | wc -l)
+_naud=$(find "$WONDERLAND_AUDIO_DIR" -type f -name '*.wav' 2>/dev/null | wc -l)
+wl_say "on disk: $_ntex textures, $_naud wavs"
+[ "$_ntex" -gt 0 ] || wl_warn "NO textures on disk - the build will import none"
+[ "$_naud" -gt 0 ] || wl_warn "NO wavs on disk - the build will import no audio"
 
 # ------------------------------------------------------------ 5. the engine
 # UE 5.8 is the one thing this script cannot obtain on its own. Epic gate it

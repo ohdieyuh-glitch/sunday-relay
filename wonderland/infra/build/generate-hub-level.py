@@ -38,6 +38,19 @@ except ImportError:
 HERE = os.path.dirname(os.path.abspath(__file__))
 LAYOUT_PATH = os.path.normpath(os.path.join(HERE, "..", "..", "WorldDesign", "hub-layout.json"))
 
+# WHERE THE GENERATED ASSETS LIVE. Textures and audio are synthesised on CPU
+# before the engine ever starts and imported from disk here. The directories
+# are environment-driven because the build host is not fixed: the old Vast box
+# kept them at /opt/wonderland, a Lightning Studio keeps them on persistent
+# storage under /teamspace, and a container sees whatever was mounted. Hardcode
+# either one and the build silently imports nothing on the other — which is
+# exactly what the first real Lightning run would have done.
+_LEGACY_ASSET_ROOT = "/opt/wonderland"
+_DEFAULT_TEX_DIR = _LEGACY_ASSET_ROOT + "/textures"
+_DEFAULT_AUDIO_DIR = _LEGACY_ASSET_ROOT + "/audio"
+_TEX_DIR = os.environ.get("WONDERLAND_TEXTURE_DIR", _DEFAULT_TEX_DIR)
+_AUDIO_DIR = os.environ.get("WONDERLAND_AUDIO_DIR", _DEFAULT_AUDIO_DIR)
+
 # M1 placeholder meshes, keyed by the design data's `mesh` field. M2 replaces the
 # right-hand side with real assets (or the whole map with a Fab/Megascans lookup).
 # Every `mesh` string that appears anywhere in hub-layout.json must have a key
@@ -424,7 +437,7 @@ def build_niagara():
 def build_audio():
     """Import our PROCEDURAL Wonderland audio (created by us with gen-audio.py — no
     third-party license) as SoundWaves and return {name: SoundWave}. Ambient loops are
-    marked looping. WAVs live at /opt/wonderland/audio on the build host. Provenance:
+    marked looping. WAVs are read from WONDERLAND_AUDIO_DIR. Provenance:
     100% procedurally synthesised in-repo (noise/sine/envelope), CC0-equivalent."""
     tools = unreal.AssetToolsHelpers.get_asset_tools()
     eal = unreal.EditorAssetLibrary
@@ -438,7 +451,11 @@ def build_audio():
             out[nm] = eal.load_asset(dst)
             continue
         t = unreal.AssetImportTask()
-        t.set_editor_property("filename", "/opt/wonderland/audio/%s.wav" % nm)
+        # WHERE THE WAVS ACTUALLY ARE. This was hardcoded to the old build
+        # host's /opt/wonderland/audio, which exists on exactly one machine
+        # that no longer runs. The directory now comes from the environment;
+        # the old location remains the fallback so an existing host still works.
+        t.set_editor_property("filename", os.path.join(_AUDIO_DIR, "%s.wav" % nm))
         t.set_editor_property("destination_path", "/Game/Wonderland/Audio")
         t.set_editor_property("destination_name", nm)
         t.set_editor_property("automated", True)
@@ -472,7 +489,7 @@ def build_textures():
     byte-identical on every rebuild. Returns {name: Texture2D}."""
     # Overridable so the offline dry run can exercise this path; the build
     # host leaves it unset and writes where the packager expects.
-    outdir = os.environ.get("WONDERLAND_TEXTURE_DIR", "/opt/wonderland/textures")
+    outdir = os.environ.get("WONDERLAND_TEXTURE_DIR", _DEFAULT_TEX_DIR)
     gen = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gen-textures.py")
     try:
         if not os.path.isfile(os.path.join(outdir, "T_cobble_a.png")):

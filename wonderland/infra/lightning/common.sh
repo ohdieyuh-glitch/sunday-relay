@@ -31,6 +31,14 @@ export WL_OUT="${WL_OUT:-$WL_ROOT/packaged}"            # cooked/staged build
 export WL_LOG="${WL_LOG:-$WL_ROOT/logs}"
 export WL_PROOF="${WL_PROOF:-$WL_ROOT/proof}"           # hero frames
 export WL_RUN="${WL_RUN:-$WL_ROOT/run}"                 # pids, urls, scratch
+# GENERATED ASSETS. Synthesised on CPU before the engine starts, imported from
+# disk by the level generator. Exported under the names the generator and the
+# two synthesis tools actually read, so there is ONE place that decides this
+# and no way for the writer and the reader to disagree — which is exactly what
+# happened on the first real Lightning run: prepare.sh wrote to the Studio and
+# the generator read /opt/wonderland.
+export WONDERLAND_TEXTURE_DIR="${WONDERLAND_TEXTURE_DIR:-$WL_ROOT/textures}"
+export WONDERLAND_AUDIO_DIR="${WONDERLAND_AUDIO_DIR:-$WL_ROOT/audio}"
 export WL_BRANCH="${WL_BRANCH:-relay/wonderland-ca-fixes}"
 export WL_REPO="${WL_REPO:-https://github.com/ohdieyuh-glitch/sunday-relay.git}"
 
@@ -48,7 +56,10 @@ wl_ok()   { printf '\033[1;32m[wonderland]\033[0m %s\n' "$*"; }
 wl_warn() { printf '\033[1;33m[wonderland]\033[0m %s\n' "$*" >&2; }
 wl_die()  { printf '\033[1;31m[wonderland] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
-wl_mkdirs() { mkdir -p "$WL_ROOT" "$WL_SRC" "$WL_OUT" "$WL_LOG" "$WL_PROOF" "$WL_RUN"; }
+wl_mkdirs() {
+  mkdir -p "$WL_ROOT" "$WL_SRC" "$WL_OUT" "$WL_LOG" "$WL_PROOF" "$WL_RUN" \
+           "$WONDERLAND_TEXTURE_DIR" "$WONDERLAND_AUDIO_DIR"
+}
 
 # `ss` is not installed on every image and reports "nothing listening" when
 # something is — that cost an hour on the Vast box. /proc/net/tcp is always

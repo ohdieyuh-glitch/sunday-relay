@@ -595,5 +595,10 @@ def generate(out="/opt/wonderland/textures"):
 
 
 if __name__ == "__main__":
-    generate(sys.argv[1] if len(sys.argv) > 1 else "/opt/wonderland/textures")
+    # Accept the same environment variable the generator reads, so one setting
+    # drives both sides. gen-audio.py already worked this way; this one only
+    # took a positional argument, so prepare.sh could set the variable, believe
+    # it had directed the output, and write to the old host path anyway.
+    _default = os.environ.get("WONDERLAND_TEXTURE_DIR", "/opt/wonderland/textures")
+    generate(sys.argv[1] if len(sys.argv) > 1 else _default)
     sys.exit(0)
