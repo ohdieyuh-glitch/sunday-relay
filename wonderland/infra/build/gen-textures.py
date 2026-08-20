@@ -644,6 +644,102 @@ def make_glaze(size):
     return alb, height_to_normal(hgt, size, 0.9), rgh
 
 
+def make_cap(size):
+    """An amanita cap: waxy, radially striated, faintly pored at the rim.
+
+    Measured by pixels actually owned in the hero frame, a mushroom cap is the
+    LARGEST single visible object in the shot. It had no texture at all — a
+    smooth dome of flat red, which is the reddest possible way to look like
+    plastic.
+
+    A real cap is not uniform. The cuticle stretches as the cap opens, so the
+    colour thins toward the rim and the surface carries faint RADIAL striation
+    running from centre to edge. It is waxy rather than glossy, and wax means
+    roughness that varies slowly in broad patches instead of a single value.
+    The white veil remnants are geometry, not texture, so nothing here draws
+    them — a fleck painted flat on a dome reads as a sticker.
+
+    NO RADIAL STRIATION, and the reason matters. A cap really does carry
+    striation running from its apex to its rim, and the first version of this
+    drew exactly that — a handsome map, and wrong for this renderer. The master
+    material builds UVs by projecting WORLD POSITION, not per-object
+    coordinates, so a pattern centred in the tile does not centre on anything;
+    it repeats on a world grid, giving some caps an off-centre slice and any
+    cap that happens to land on a tile centre a bullseye.
+
+    So the structure here is ISOTROPIC: waxy mottling that varies slowly, and a
+    fine pore break-up. Both survive arbitrary world placement, which is the
+    only kind this material system offers. Radial striation would need
+    per-object UVs and is worth revisiting if the master ever grows them.
+
+    The white veil flecks are geometry, not texture — a fleck painted flat on a
+    dome reads as a sticker.
+    """
+    alb = bytearray(size * size * 3)
+    rgh = bytearray(size * size)
+    hgt = [0.0] * (size * size)
+    inv = 1.0 / size
+    for y in range(size):
+        v = (y + 0.5) * inv
+        for x in range(size):
+            u = (x + 0.5) * inv
+            # broad waxy variation: the slow one carries the sheen, the finer
+            # one keeps it from looking like a gradient
+            wax = fbm(u, v, 14, 14, 3, SEED + 607)
+            grain = fbm(u, v, 46, 46, 3, SEED + 601)
+            # where the cuticle has stretched thin, it pales
+            thin = clamp01((wax * 0.7 + grain * 0.3 - 0.36) * 2.1)
+            pore = clamp01((fbm(u, v, 150, 150, 2, SEED + 613) - 0.58) * 3.0)
+            shade = 0.90 + 0.13 * wax + 0.05 * grain - 0.14 * thin
+            i = y * size + x
+            alb[i * 3] = _b(shade * 255.0)
+            alb[i * 3 + 1] = _b(shade * (0.90 + 0.10 * thin) * 255.0)
+            alb[i * 3 + 2] = _b(shade * (0.86 + 0.12 * thin) * 255.0)
+            # waxy: broad slow variation, never a mirror and never chalk
+            rgh[i] = _b(clamp01(0.42 + 0.20 * wax + 0.14 * pore + 0.08 * thin) * 255.0)
+            hgt[i] = wax * 0.50 + grain * 0.22 - pore * 0.35
+    return alb, height_to_normal(hgt, size, 1.1), rgh
+
+
+def make_ripple(size):
+    """Still water with a breath of movement on it.
+
+    Water with a flat normal is glass, and glass in a garden reads as a hole in
+    the ground. What makes a pond read is that the sky it reflects is BROKEN —
+    two wave trains at different scales and angles, crossing, so the reflection
+    shears rather than mirrors.
+
+    Deliberately gentle. These are ornamental pools, not the sea: amplitude
+    stays low so the surface still reflects, and the normal carries the whole
+    effect. Albedo is near-flat because the colour of water in a rendered scene
+    comes from what it reflects and what is under it, not from a map.
+    """
+    alb = bytearray(size * size * 3)
+    rgh = bytearray(size * size)
+    hgt = [0.0] * (size * size)
+    inv = 1.0 / size
+    for y in range(size):
+        v = (y + 0.5) * inv
+        for x in range(size):
+            u = (x + 0.5) * inv
+            # two crossing trains, incommensurate periods so they never resolve
+            # into a visible tile
+            w1 = math.sin((u * 7.0 + v * 3.0) * 2.0 * math.pi)
+            w2 = math.sin((u * -4.0 + v * 9.0) * 2.0 * math.pi + 1.3)
+            chop = fbm(u, v, 30, 30, 3, SEED + 701) - 0.5
+            h = w1 * 0.5 + w2 * 0.35 + chop * 0.5
+            i = y * size + x
+            tone = 0.97 + 0.03 * h
+            alb[i * 3] = _b(tone * 0.92 * 255.0)
+            alb[i * 3 + 1] = _b(tone * 0.97 * 255.0)
+            alb[i * 3 + 2] = _b(tone * 255.0)
+            # very smooth everywhere; the slight roughening on wave crests is
+            # what keeps a highlight from being a single hard dot
+            rgh[i] = _b(clamp01(0.045 + 0.05 * abs(h)) * 255.0)
+            hgt[i] = h
+    return alb, height_to_normal(hgt, size, 0.55), rgh
+
+
 FAMILIES = (
     ("cobble", make_cobble, 512),
     ("ashlar", make_ashlar, 512),
@@ -653,6 +749,8 @@ FAMILIES = (
     ("roof", make_roof, 256),
     ("metal", make_metal, 256),
     ("glaze", make_glaze, 256),
+    ("cap", make_cap, 256),
+    ("ripple", make_ripple, 256),
 )
 
 

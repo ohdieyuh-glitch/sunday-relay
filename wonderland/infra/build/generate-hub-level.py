@@ -1134,6 +1134,15 @@ def build_material_library(texs=None):
         # break the highlight into something fired rather than moulded.
         "porcelain":  ("glaze",   0.0130, (1.00, 1.00, 1.00)),
         "dog_body":   ("glaze",   0.0150, (1.00, 1.00, 1.00)),
+        # The mushroom cap is the LARGEST single visible object in the hero
+        # frame by pixels actually owned, and it was a smooth dome of flat red —
+        # the reddest possible way to look like plastic.
+        "mush_red":    ("cap",    0.0170, (1.00, 1.00, 1.00)),
+        "mush_purple": ("cap",    0.0170, (0.86, 0.74, 1.06)),
+        "mush_white":  ("cap",    0.0190, (1.06, 1.04, 1.00)),
+        # Water with a flat normal is glass, and glass in a garden reads as a
+        # hole in the ground.
+        "water":       ("ripple", 0.0060, (1.00, 1.00, 1.00)),
     }
     if texs:
         for nm, (fam, scale, tint) in textured.items():
