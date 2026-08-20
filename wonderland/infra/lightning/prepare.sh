@@ -87,7 +87,7 @@ GATE_FAIL=0
 # verify-target-config.py runs FIRST and cheaply: a legacy target config is the
 # failure that reached UnrealBuildTool on a paid L4 before dying, so catching it
 # here costs a second instead of a compile.
-for g in verify-target-config.py verify-look-table.py verify-docs.py verify-dog-proxy.py verify-generator-dryrun.py; do
+for g in verify-target-config.py verify-local-includes.py verify-look-table.py verify-docs.py verify-dog-proxy.py verify-generator-dryrun.py; do
   if [ -f "$BUILD_DIR/$g" ]; then
     if python3 "$BUILD_DIR/$g" >>"$WL_LOG/gates.log" 2>&1; then
       wl_ok "gate $g"

@@ -450,6 +450,19 @@ else
   bad "verify-target-config.py fails on the current tree"
 fi
 
+echo "== project-local headers are gated before a paid compile =="
+# A real L4 got through UHT and nine compile actions before dying on a header
+# that had never been committed. Finding those one at a time costs a compile
+# each; this finds all of them in under a second.
+grep -q 'verify-local-includes.py' "$HERE/prepare.sh" \
+  && ok "prepare.sh runs the local-include gate" \
+  || bad "a missing project header would not be caught until the L4 compile"
+if python3 "$HERE/../build/verify-local-includes.py" >/dev/null 2>&1; then
+  ok "every project-local include resolves"
+else
+  bad "verify-local-includes.py fails on the current tree"
+fi
+
 echo "== gpu guard =="
 # launch-wonderland must refuse to run without a GPU rather than start a long
 # build and fail at the end.
