@@ -108,12 +108,21 @@ def load_textures():
     exec(compile(io.open(gt_path, encoding="utf8").read(), gt_path, "exec"), ns)
     size = 96                       # small: this is sampled, not displayed
     fams = {}
-    for name, fn in (("cobble", ns["make_cobble"]), ("ashlar", ns["make_ashlar"]),
-                     ("sward", ns["make_sward"]), ("bark", ns["make_bark"]),
-                     ("plaster", ns["make_plaster"]), ("roof", ns["make_roof"])):
-        alb = fn(size)[0]
-        fams[name] = alb
-    print("textures: %d families at %dpx" % (len(fams), size))
+    # ALBEDO **AND** ROUGHNESS. The trace carried only albedo, so every material
+    # was shaded with its AUTHORED scalar roughness and the maps were invisible
+    # to it. That made four material passes — hammered gold, glazed porcelain,
+    # waxy mushroom cap, rippled water — unverifiable offline, because the whole
+    # point of each is roughness that VARIES across the surface. A model with
+    # specular that ignores the roughness map cannot see the difference between
+    # gold and a yellow plastic, which is the exact question being asked.
+    for name in ("cobble", "ashlar", "sward", "bark", "plaster", "roof",
+                 "metal", "glaze", "cap", "ripple"):
+        fn = ns.get("make_" + name)
+        if fn is None:
+            continue
+        out = fn(size)
+        fams[name] = (out[0], out[2])          # (albedo rgb, roughness grey)
+    print("textures: %d families at %dpx (albedo + roughness)" % (len(fams), size))
     return fams, size
 
 
@@ -127,6 +136,12 @@ TEXTURED = {
     "spire_pink": ("plaster", 0.0055), "spire_blue": ("plaster", 0.0055),
     "spire_teal": ("plaster", 0.0055), "roof_rose": ("roof", 0.0070),
     "roof_pink": ("roof", 0.0070),
+    "gold": ("metal", 0.0090), "gold_glow": ("metal", 0.0090),
+    "brass_deep": ("metal", 0.0075),
+    "porcelain": ("glaze", 0.0130), "dog_body": ("glaze", 0.0150),
+    "mush_red": ("cap", 0.0170), "mush_purple": ("cap", 0.0170),
+    "mush_white": ("cap", 0.0190),
+    "water": ("ripple", 0.0060),
 }
 
 
@@ -421,6 +436,7 @@ def main():
                 # albedo from the world's own map, projected the way the master
                 # projects it: world XY on horizontal, (x+y, z) on vertical
                 tex = p[11]
+                _rgh_mul = 1.0
                 if tex is not None:
                     ts = p[12]
                     if abs(nz) > 0.55:
@@ -429,9 +445,16 @@ def main():
                         uu = (hx+hy)*ts; vv = hz*ts
                     ix = int((uu % 1.0)*TSZ) % TSZ
                     iy = int((vv % 1.0)*TSZ) % TSZ
+                    _alb, _rmap = tex
                     ti = (iy*TSZ+ix)*3
-                    base = (base[0]*tex[ti]/140.0, base[1]*tex[ti+1]/140.0,
-                            base[2]*tex[ti+2]/140.0)
+                    base = (base[0]*_alb[ti]/140.0, base[1]*_alb[ti+1]/140.0,
+                            base[2]*_alb[ti+2]/140.0)
+                    # Exactly what the master does: roughness = authored * (map*2),
+                    # so a mid-grey map is neutral. Mirroring the formula rather
+                    # than inventing one is the only way this render answers a
+                    # question about the cooked material.
+                    if _rmap is not None:
+                        _rgh_mul = (_rmap[iy*TSZ+ix] / 255.0) * 2.0
                 # ---- SPECULAR ------------------------------------------
                 # One of the two terms this model was missing entirely, and the
                 # reason gold and porcelain read as matte paint here while the
@@ -439,6 +462,9 @@ def main():
                 # metals tint the highlight with their own colour, dielectrics
                 # take a small white one.
                 _met, _rgh = p[15], p[16]
+                _rgh = _rgh * _rgh_mul
+                if _rgh < 0.02: _rgh = 0.02
+                elif _rgh > 1.0: _rgh = 1.0
                 _spec = 0.0
                 if ndl > 0.0:
                     _hx2 = lx - dx; _hy2 = ly - dy; _hz2 = lz - dz
