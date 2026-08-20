@@ -508,9 +508,11 @@ fi
 
 echo "== the PS infrastructure version is proven exactly =="
 ps_env() {   # $1 = version string or "none", $2 = dist? $3 = www?
-  rm -rf "$TMP/ps"; mkdir -p "$TMP/ps/SignallingWebServer/platform_scripts/bash"
-  [ "$1" = none ] || printf 'NODE_VERSION=v22.14.0\nDOWNLOAD_VERSION=%s\n' "$1" \
-    > "$TMP/ps/SignallingWebServer/platform_scripts/bash/common.sh"
+  # The REAL checkout layout: two bare one-line files at the infrastructure
+  # root, not shell declarations buried in platform_scripts.
+  rm -rf "$TMP/ps"; mkdir -p "$TMP/ps/SignallingWebServer"
+  [ "$1" = none ] || printf '%s\n' "$1" > "$TMP/ps/DOWNLOAD_VERSION"
+  printf 'v22.14.0\n' > "$TMP/ps/NODE_VERSION"
   [ "$2" = yes ] && mkdir -p "$TMP/ps/SignallingWebServer/dist"
   [ "$3" = yes ] && mkdir -p "$TMP/ps/SignallingWebServer/www"
   return 0
@@ -552,68 +554,110 @@ echo "REACHED:[$V]"' 2>&1); rc=$?
 check "$rc" "0" "wl_ps_version survives a missing tree under set -euo pipefail"
 case "$out" in *"REACHED:[]"*) ok "  and returns empty" ;; *) bad "  wrong result: $out" ;; esac
 
-echo "== the version parser reads every real declaration form =="
-# THE REAL LIGHTNING CHECKOUT BROKE THE FIRST PARSER. Its file plainly read
-# UE5.8 and the helper extracted nothing, so wl_ps_status said WRONG_VERSION
-# for a correct checkout and stage 5 would have failed closed on a healthy
-# machine. A gate that blocks the good case is not stricter, it is broken —
-# and it is the worse direction to fail in, because it burns a GPU session
-# proving something that was already right.
-vform() {   # $1 = description, $2 = the literal declaration line
-  rm -rf "$TMP/vf"; mkdir -p "$TMP/vf"
-  printf '%s\n' "$2" > "$TMP/vf/common.sh"
-  local got
-  got="$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" bash -c ". $HERE/common.sh; wl_ps_version" 2>/dev/null)"
-  check "$got" "UE5.8" "parses $1"
+echo "== the version comes from the real DOWNLOAD_VERSION file =="
+# THE REAL LIGHTNING CHECKOUT, exactly. $WL_PS_INFRA/DOWNLOAD_VERSION holds a
+# bare version string and nothing else — it is NOT a shell declaration. Two
+# earlier parsers searched the tree for an assignment, found nothing, and made
+# wl_ps_status answer WRONG_VERSION for a correct UE5.8 — so stage 5 would have
+# refused to start on a healthy machine. Failing the GOOD case is the worse
+# direction: it spends a GPU session disproving something already right.
+real_ps() {   # $1 = version file contents or "none"
+  rm -rf "$TMP/ps"; mkdir -p "$TMP/ps/SignallingWebServer/dist" "$TMP/ps/SignallingWebServer/www"
+  [ "$1" = none ] || printf '%s\n' "$1" > "$TMP/ps/DOWNLOAD_VERSION"
+  printf 'v22.14.0\n' > "$TMP/ps/NODE_VERSION"
+  return 0
 }
-vform "a bare value"            'DOWNLOAD_VERSION=UE5.8'
-vform "a double-quoted value"   'DOWNLOAD_VERSION="UE5.8"'
-vform "a single-quoted value"   "DOWNLOAD_VERSION='UE5.8'"
-vform "an exported value"       'export DOWNLOAD_VERSION=UE5.8'
-vform "an indented value"       '   DOWNLOAD_VERSION=UE5.8'
-vform "an overridable default"  'DOWNLOAD_VERSION=${DOWNLOAD_VERSION:-UE5.8}'
-vform "a set-if-unset default"  ': ${DOWNLOAD_VERSION:=UE5.8}'
-vform "a trailing comment"      'DOWNLOAD_VERSION=UE5.8   # the branch'
-vform "quoted and exported"     'export DOWNLOAD_VERSION="UE5.8"'
+ps_call() { WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/ps" bash -c ". $HERE/common.sh; $1" 2>/dev/null; }
 
-# CRLF: a checkout that has been through a Windows tool leaves \r on the value,
-# and 'UE5.8\r' != 'UE5.8' — an exact match would reject it for an invisible
-# reason, which is the hardest kind of failure to diagnose on a paid machine.
-rm -rf "$TMP/vf"; mkdir -p "$TMP/vf"; printf 'DOWNLOAD_VERSION=UE5.8\r\n' > "$TMP/vf/common.sh"
-check "$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" bash -c ". $HERE/common.sh; wl_ps_version")" \
-  "UE5.8" "parses a CRLF file"
+real_ps UE5.8
+check "$(ps_call wl_ps_version)" "UE5.8"  "the real file layout reads UE5.8"
+check "$(ps_call wl_ps_status)"  "READY"  "and a built UE5.8 checkout reads READY"
 
-# A COMMENT IS NOT A DECLARATION. The infrastructure's own docs mention
-# DOWNLOAD_VERSION; matching one would give a confident wrong answer.
-rm -rf "$TMP/vf"; mkdir -p "$TMP/vf"
-printf '# DOWNLOAD_VERSION names the branch\nDOWNLOAD_VERSION=UE5.8\n' > "$TMP/vf/common.sh"
-check "$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" bash -c ". $HERE/common.sh; wl_ps_version")" \
-  "UE5.8" "skips a comment mentioning DOWNLOAD_VERSION"
+real_ps UE5.7   ; check "$(ps_call wl_ps_status)" "WRONG_VERSION" "UE5.7 is rejected"
+real_ps UE5.8.1 ; check "$(ps_call wl_ps_status)" "WRONG_VERSION" "UE5.8.1 does not satisfy an exact UE5.8"
+real_ps none    ; check "$(ps_call wl_ps_status)" "WRONG_VERSION" "a MISSING version file fails closed"
+real_ps none    ; check "$(ps_call wl_ps_version)" ""             "  and reports no version rather than guessing"
 
-# AND IT MUST STILL FAIL OPEN FOR NOBODY. Tolerating more forms must not make
-# a wrong branch parse as the right one.
-for wrong in 'DOWNLOAD_VERSION="UE5.5"' 'export DOWNLOAD_VERSION=UE5.4' 'DOWNLOAD_VERSION=${DOWNLOAD_VERSION:-UE5.6}'; do
-  rm -rf "$TMP/vf"; mkdir -p "$TMP/vf"; printf '%s\n' "$wrong" > "$TMP/vf/common.sh"
-  got="$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" bash -c ". $HERE/common.sh; wl_ps_version")"
-  if [ "$got" = "UE5.8" ] || [ -z "$got" ]; then
-    bad "a wrong branch parsed as '$got' from: $wrong"
-  else
-    ok "a wrong branch is still read correctly ($got)"
-  fi
-  st="$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" bash -c ". $HERE/common.sh; mkdir -p \$WL_PS_INFRA/SignallingWebServer/dist \$WL_PS_INFRA/SignallingWebServer/www; wl_ps_status")"
-  check "$st" "WRONG_VERSION" "  and a built checkout on it is rejected"
-done
+# trailing newline and CRLF are both ordinary for a one-line file
+real_ps UE5.8; printf 'UE5.8\r\n' > "$TMP/ps/DOWNLOAD_VERSION"
+check "$(ps_call wl_ps_version)" "UE5.8" "a CRLF version file still reads UE5.8"
+real_ps UE5.8; printf '  UE5.8  \n' > "$TMP/ps/DOWNLOAD_VERSION"
+check "$(ps_call wl_ps_version)" "UE5.8" "surrounding whitespace is trimmed"
 
-# THE DIAGNOSIS PATH. An extraction bug and a wrong branch both land on
-# WRONG_VERSION and need opposite responses from the founder, so the raw line
-# has to be printed.
-rm -rf "$TMP/vf"; mkdir -p "$TMP/vf/SignallingWebServer/dist" "$TMP/vf/SignallingWebServer/www"
-printf 'DOWNLOAD_VERSION="UE5.5"\n' > "$TMP/vf/common.sh"
-out=$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" \
-      bash -c ". $HERE/common.sh; wl_require_ps_infra" 2>&1); rc=$?
-[ "$rc" != "0" ] && ok "a wrong branch still fails closed" || bad "a wrong branch was accepted"
-has "$out" 'DOWNLOAD_VERSION="UE5.5"' && ok "  and the raw declaration line is shown" \
-  || bad "  the failure does not show what it actually found"
+# and it must NOT go hunting through the tree any more
+sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$HERE/common.sh" > "$TMP/cs-live.sh"
+if grep -qE 'grep -r.*DOWNLOAD_VERSION' "$TMP/cs-live.sh"; then
+  bad "wl_ps_version still recursively greps the infrastructure tree"
+else
+  ok "the recursive tree search is gone"
+fi
+grep -q 'DOWNLOAD_VERSION' "$TMP/cs-live.sh" && ok "common.sh names the authoritative file" \
+  || bad "common.sh no longer reads DOWNLOAD_VERSION at all"
+
+echo "== the node is verified against NODE_VERSION before Wilbur starts =="
+# The real checkout has NODE_VERSION=v22.14.0 and NO bundled node; the host
+# node happens to match. That is a pass — but only because it was CHECKED. A
+# mismatched node fails deep inside a dependency and reads as a networking
+# problem, which is an expensive way to learn a version number on a GPU.
+mkdir -p "$TMP/nbin"
+mknode() {  # $1 = version it reports
+  printf '#!/bin/sh\ncase "$1" in -v) echo %s ;; esac\nexit 0\n' "$1" > "$TMP/nbin/node"
+  chmod +x "$TMP/nbin/node"
+  printf '#!/bin/sh\nexit 0\n' > "$TMP/nbin/npm"; chmod +x "$TMP/nbin/npm"
+}
+node_call() {  # $1 = function
+  PATH="$TMP/nbin:/usr/bin:/bin" WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/ps" \
+    bash -c ". $HERE/common.sh; $1" 2>&1
+}
+real_ps UE5.8; mknode v22.14.0
+out="$(node_call wl_require_node)"; rc=$?
+check "$rc" "0" "a host node matching NODE_VERSION is accepted"
+check "$(node_call wl_node_status)" "READY" "  and reads READY"
+
+mknode v18.20.4
+out="$(node_call wl_require_node)"; rc=$?
+[ "$rc" != "0" ] && ok "a MISMATCHED host node fails closed (exit $rc)" \
+                 || bad "a mismatched node was accepted - Wilbur would fail deep in a dependency"
+has "$out" "v22.14.0" && ok "  and the message names the required version" \
+  || bad "  the failure does not say which version is needed"
+check "$(node_call wl_node_status)" "WRONG_VERSION" "  and reads WRONG_VERSION"
+
+# v22.14.1 is not v22.14.0. Exact, like the UE version.
+mknode v22.14.1
+out="$(node_call wl_require_node)"; rc=$?
+[ "$rc" != "0" ] && ok "a near-miss node version is still refused" \
+                 || bad "v22.14.1 was accepted for a v22.14.0 requirement"
+
+# no NODE_VERSION file at all is a failure, never an assumption
+real_ps UE5.8; rm -f "$TMP/ps/NODE_VERSION"; mknode v22.14.0
+out="$(node_call wl_require_node)"; rc=$?
+[ "$rc" != "0" ] && ok "a missing NODE_VERSION file fails closed" \
+                 || bad "it ran without knowing which node was required"
+check "$(node_call wl_node_status)" "MISSING" "  and reads MISSING"
+
+# stage 5 must verify BEFORE launching, not after
+sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$HERE/run-stream.sh" > "$TMP/rs-live2.sh"
+grep -q 'wl_require_node' "$TMP/rs-live2.sh" && ok "run-stream.sh verifies the node" \
+  || bad "run-stream.sh starts Wilbur without checking the node"
+ln_req=$( ( set +o pipefail; grep -n 'wl_require_node' "$TMP/rs-live2.sh" | head -1 | cut -d: -f1 ) || true)
+ln_npm=$( ( set +o pipefail; grep -n 'npm start' "$TMP/rs-live2.sh" | head -1 | cut -d: -f1 ) || true)
+if [ -n "$ln_req" ] && [ -n "$ln_npm" ] && [ "$ln_req" -lt "$ln_npm" ]; then
+  ok "the node is verified before Wilbur is launched (lines $ln_req < $ln_npm)"
+else
+  bad "Wilbur launches before the node is verified (require=$ln_req npm=$ln_npm)"
+fi
+# and no live line may fetch a node during a GPU launch
+if grep -qE 'npm[[:space:]]+install[[:space:]]+.*node|nvm[[:space:]]+install|curl.*nodejs\.org' "$TMP/rs-live2.sh"; then
+  bad "run-stream.sh would download a node during a GPU launch"
+else
+  ok "no node is downloaded in the launch path"
+fi
+
+echo "== prepare.sh reports both signalling facts =="
+grep -q 'SIGNALLING READY - \$WL_PS_VERSION' "$HERE/prepare.sh" \
+  && ok "prepare.sh reports SIGNALLING READY - UE5.8" || bad "prepare.sh does not report the signalling version"
+grep -q 'SIGNALLING NODE READY' "$HERE/prepare.sh" \
+  && ok "prepare.sh reports SIGNALLING NODE READY - v22.14.0" || bad "prepare.sh does not report the node version"
 
 echo "== coturn comes from persistent storage, never the network =="
 # Same cost invariant as the engine, same three answers. A host `turnserver`

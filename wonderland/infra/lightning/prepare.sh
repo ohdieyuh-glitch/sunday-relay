@@ -188,10 +188,16 @@ esac
 # than from a GPU that is already attached and billing.
 PS_STATE="$(wl_ps_status)"
 case "$PS_STATE" in
-  READY)         wl_ok "SIGNALLING READY - $WL_PS_VERSION at $WL_PS_INFRA, built (dist + www)" ;;
+  READY)         wl_ok "SIGNALLING READY - $WL_PS_VERSION" ;;
   NOT_BUILT)     wl_warn "SIGNALLING NOT BUILT - $WL_PS_SIG needs its CPU build (dist/ and www/)" ;;
   WRONG_VERSION) wl_warn "SIGNALLING WRONG BRANCH - DOWNLOAD_VERSION='$(wl_ps_version)', need $WL_PS_VERSION" ;;
   *)             wl_warn "SIGNALLING MISSING - no checkout at $WL_PS_INFRA" ;;
+esac
+NODE_STATE="$(wl_node_status)"
+case "$NODE_STATE" in
+  READY)         wl_ok "SIGNALLING NODE READY - $(wl_ps_required_node)" ;;
+  WRONG_VERSION) wl_warn "SIGNALLING NODE WRONG - need $(wl_ps_required_node), stage 5 will fail closed" ;;
+  *)             wl_warn "SIGNALLING NODE MISSING - no NODE_VERSION file or no node at all" ;;
 esac
 TURN_STATE="$(wl_turn_status)"
 case "$TURN_STATE" in
@@ -222,6 +228,11 @@ case "$PS_STATE" in
   NOT_BUILT) printf '  signalling   NOT BUILT - stage 5 will fail closed\n' ;;
   WRONG_VERSION) printf '  signalling   WRONG BRANCH - stage 5 will fail closed\n' ;;
   *)         printf '  signalling   MISSING - stage 5 will fail closed\n' ;;
+esac
+case "$NODE_STATE" in
+  READY)         printf '  node         READY (%s)\n' "$(wl_ps_required_node)" ;;
+  WRONG_VERSION) printf '  node         WRONG VERSION - stage 5 will fail closed\n' ;;
+  *)             printf '  node         MISSING - stage 5 will fail closed\n' ;;
 esac
 case "$TURN_STATE" in
   READY)      printf '  turn         READY\n' ;;

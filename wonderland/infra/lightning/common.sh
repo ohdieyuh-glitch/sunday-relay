@@ -290,51 +290,28 @@ export WL_TURN_REALM="${WL_TURN_REALM:-wonderland}"
 # invalidate silently. The whole pipeline runs inside a subshell with pipefail
 # disabled: no match is the ordinary answer here, and under the callers'
 # `set -euo pipefail` a bare grep miss would end the script with no message.
-# THE RAW LINE that declares the version, or empty. Kept separate from the
-# parse so a failure can SHOW the founder what it found instead of only saying
-# it found nothing.
-wl_ps_version_line() {
-  local root="${1:-$WL_PS_INFRA}"
-  [ -d "$root" ] || return 0
-  # Comment-only lines are excluded: the infrastructure's own docs mention
-  # DOWNLOAD_VERSION, and matching one of those would produce a confident
-  # wrong answer rather than an honest empty one.
-  ( set +o pipefail
-    grep -rhF 'DOWNLOAD_VERSION' "$root" 2>/dev/null \
-      | grep -vE '^[[:space:]]*#' | head -1 ) || true
-}
-
 # WHICH UE VERSION THE CHECKOUT IS. Empty when it cannot be determined, which
 # callers must treat as a failure rather than as "probably fine".
 #
-# FORM-AGNOSTIC ON PURPOSE. The first version of this demanded a bare
-# unquoted value at the start of a line, and on the real Lightning checkout it
-# extracted NOTHING from a file that plainly reads UE5.8 — so wl_ps_status
-# reported WRONG_VERSION for a perfectly correct checkout and stage 5 would
-# have failed closed on a healthy machine. A gate that blocks the good case is
-# not a stricter gate, it is a broken one. Every shell form a version file
-# realistically uses is accepted here and covered by a fixture in the tests:
-#
-#   DOWNLOAD_VERSION=UE5.8              bare
-#   DOWNLOAD_VERSION="UE5.8"            quoted, either quote
-#   export DOWNLOAD_VERSION=UE5.8       exported
-#     DOWNLOAD_VERSION=UE5.8            indented
-#   DOWNLOAD_VERSION=${DOWNLOAD_VERSION:-UE5.8}   overridable default
-#   : ${DOWNLOAD_VERSION:=UE5.8}        set-if-unset
-#   DOWNLOAD_VERSION=UE5.8   # comment  trailing comment
-#   ...and any of the above written with CRLF line endings.
+# ONE AUTHORITATIVE FILE. $WL_PS_INFRA/DOWNLOAD_VERSION holds the bare version
+# string and nothing else — it is NOT a shell declaration, which is what the
+# two previous attempts assumed. Both searched the tree for an assignment and
+# both returned empty on the real checkout, so wl_ps_status answered
+# WRONG_VERSION for a correct UE5.8 and stage 5 would have refused to start on
+# a healthy machine. Reading the one file that exists cannot go wrong in that
+# direction, and a recursive grep is not needed to find a fixed path.
 wl_ps_version() {
-  local line; line="$(wl_ps_version_line "${1:-$WL_PS_INFRA}")"
-  [ -n "$line" ] || return 0
-  ( set +o pipefail
-    printf '%s' "$line" | sed \
-      -e 's/\r//g' \
-      -e 's/.*DOWNLOAD_VERSION//' \
-      -e 's/^[:+=-]*//' \
-      -e 's/#.*$//' \
-      -e 's/[}"'"'"'`]//g' \
-      -e 's/^[[:space:]]*//' \
-      -e 's/[[:space:]].*$//' ) || true
+  local f="${1:-$WL_PS_INFRA}/DOWNLOAD_VERSION"
+  [ -r "$f" ] || return 0
+  tr -d '\r\n' < "$f" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+}
+
+# The node the signalling server must run under, from the checkout's own
+# NODE_VERSION file. Empty when absent — again a failure, never a default.
+wl_ps_required_node() {
+  local f="${1:-$WL_PS_INFRA}/NODE_VERSION"
+  [ -r "$f" ] || return 0
+  tr -d '\r\n' < "$f" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
 # READY | WRONG_VERSION | NOT_BUILT | MISSING. Reporting only; changes nothing.
@@ -364,9 +341,8 @@ wl_require_ps_infra() {
       # the raw declaration line separates them in one glance instead of a
       # GPU session. This is not hypothetical: the first version of the parser
       # returned empty on a correct UE5.8 checkout.
-      wl_warn "declaration line found: $(wl_ps_version_line)"
-      wl_warn "parsed as: '$(wl_ps_version)'   expected: '$WL_PS_VERSION'"
-      wl_die "the checkout at $WL_PS_INFRA is not $WL_PS_VERSION. Wilbur's command line differs between branches, so the wrong one starts and serves nothing. If the line above plainly reads $WL_PS_VERSION, the parser is at fault, not the checkout." ;;
+      wl_warn "$WL_PS_INFRA/DOWNLOAD_VERSION reads '$(wl_ps_version)', expected '$WL_PS_VERSION'"
+      wl_die "the checkout at $WL_PS_INFRA is not $WL_PS_VERSION. Wilbur's command line differs between branches, so the wrong one starts and serves nothing. Check out the $WL_PS_VERSION branch on CPU." ;;
     NOT_BUILT)
       wl_die "$WL_PS_SIG is present but not built (need both dist/ and www/). Run the CPU build before attaching a GPU." ;;
   esac
@@ -411,4 +387,45 @@ wl_ensure_turn_image() {
 wl_turn_container_running() {
   command -v docker >/dev/null 2>&1 || return 1
   [ "$(docker inspect -f '{{.State.Running}}' "$WL_TURN_CONTAINER" 2>/dev/null || echo false)" = "true" ]
+}
+
+# THE NODE WILBUR MUST RUN UNDER, verified before it starts.
+#
+# A wrong node fails deep inside a dependency and reads as a networking
+# problem, which is an expensive way to learn a version number on a GPU. The
+# required value comes from the checkout's own NODE_VERSION file; the bundled
+# node is preferred when one exists, and the host node is accepted only when it
+# matches EXACTLY. Nothing here downloads a node — same cost invariant as the
+# engine and coturn.
+#
+# Prints the node binary to use on success. Fails closed otherwise.
+wl_require_node() {
+  local required actual node
+  required="$(wl_ps_required_node)"
+  [ -n "$required" ] || wl_die "no $WL_PS_INFRA/NODE_VERSION; cannot know which node Wilbur needs"
+  node="$(wl_bundled_node)"
+  if [ -n "$node" ]; then
+    actual="$("$node" -v 2>/dev/null || true)"
+    [ "$actual" = "$required" ] || wl_die \
+      "the bundled node at $node is $actual, but this checkout requires $required. Install the matching node on CPU; a GPU launch will not download one."
+  else
+    node="$(command -v node || true)"
+    [ -n "$node" ] || wl_die "no bundled node and no node on PATH; Wilbur cannot start (requires $required)"
+    actual="$("$node" -v 2>/dev/null || true)"
+    [ "$actual" = "$required" ] || wl_die \
+      "no bundled node, and the host node is $actual but this checkout requires $required. Install the matching node on CPU; a GPU launch will not download one."
+  fi
+  printf '%s' "$node"
+}
+
+# READY | WRONG_VERSION | MISSING, for reporting without failing.
+wl_node_status() {
+  local required actual node
+  required="$(wl_ps_required_node)"
+  [ -n "$required" ] || { echo MISSING; return; }
+  node="$(wl_bundled_node)"
+  [ -n "$node" ] || node="$(command -v node || true)"
+  [ -n "$node" ] || { echo MISSING; return; }
+  actual="$("$node" -v 2>/dev/null || true)"
+  [ "$actual" = "$required" ] && echo READY || echo WRONG_VERSION
 }

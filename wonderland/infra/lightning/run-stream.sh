@@ -88,24 +88,18 @@ start_signalling() {
   # missing www serves 404 on the page the founder was handed.
   wl_require_ps_infra
 
-  # The infrastructure ships the node Wilbur was built against (v22.14.0 on
-  # the UE5.8 branch). Prefer it over anything on PATH — this is the same
-  # class of bug as the engine's bundled node, and the symptom is identical:
-  # a syntax error deep in a dependency that reads as a network failure.
-  local node npm_bin nodedir
-  node="$(wl_bundled_node)"
-  if [ -n "$node" ]; then
-    nodedir="$(dirname "$node")"
-    PATH="$nodedir:$PATH"
-    export PATH
-  else
-    wl_warn "no bundled node found under $WL_PS_INFRA; falling back to $(command -v node || echo none)"
-  fi
-  npm_bin="$(command -v npm || true)"
-  [ -n "$npm_bin" ] || wl_die "no npm available to start Wilbur"
+  # THE NODE IS VERIFIED, NOT ASSUMED. A wrong node fails deep inside a
+  # dependency and reads as a networking problem — an expensive way to learn a
+  # version number on a GPU. wl_require_node compares against the checkout's
+  # own NODE_VERSION and fails closed before Wilbur is launched.
+  local node nodedir
+  node="$(wl_require_node)"
+  nodedir="$(dirname "$node")"
+  PATH="$nodedir:$PATH"; export PATH
+  command -v npm >/dev/null 2>&1 || wl_die "no npm alongside $node; Wilbur cannot start"
 
   wl_say "signalling: $WL_PS_SIG ($WL_PS_VERSION)"
-  wl_say "node:       $(command -v node || echo '?') ($(node -v 2>/dev/null || echo '?'))"
+  wl_say "node:       $node ($("$node" -v 2>/dev/null || echo '?'), required $(wl_ps_required_node))"
 
   # THE MEDIA-PATH FIX. peerConnectionOptions carries the ICE servers the
   # BROWSER will use. A stun-only list works on the same host and fails across
@@ -230,6 +224,8 @@ done
 # every one of them has an unambiguous answer on CPU — so the GPU is never the
 # thing that finds out.
 wl_require_ps_infra
+wl_require_node >/dev/null
+wl_ok "node $(wl_ps_required_node) verified for Wilbur"
 case "$(wl_turn_status)" in
   READY)      wl_ok "coturn image present: $WL_TURN_IMAGE" ;;
   RESTORABLE) wl_say "coturn image absent; will restore from $WL_TURN_ARCHIVE" ;;
