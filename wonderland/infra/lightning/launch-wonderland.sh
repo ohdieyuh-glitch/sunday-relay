@@ -75,7 +75,29 @@ SHOT="$WL_PROOF/hero-$(date -u +%Y%m%dT%H%M%SZ).png"
 if [ "$SKIP_SHOT" = "1" ]; then
   wl_say "SKIP_SHOT=1"
 else
-  NODE="$(wl_bundled_node)"; [ -n "$NODE" ] || NODE="$(command -v node || true)"
+  # PICK A NODE THAT CAN ACTUALLY LOAD PLAYWRIGHT.
+  #
+  # The engine's bundled node is the right choice for the SIGNALLING server —
+  # the system one is usually too old for it. It is the wrong choice here:
+  # playwright is installed into $WL_TOOLS by the system npm, and loading it
+  # under a different node build fails on native bindings. Two jobs, two
+  # answers, and taking the signalling answer for the capture is how stage 6
+  # fails on a machine where everything is installed correctly.
+  #
+  # So: ask each candidate whether it can require playwright, and believe the
+  # answer rather than assuming one.
+  NODE=""
+  for _cand in "$(command -v node || true)" "$(wl_bundled_node)"; do
+    [ -n "$_cand" ] || continue
+    if "$_cand" -e "require('${WL_TOOLS}/node_modules/playwright')" >/dev/null 2>&1 \
+       || "$_cand" -e "require('playwright')" >/dev/null 2>&1; then
+      NODE="$_cand"; break
+    fi
+  done
+  # Nothing could load it — fall back so the failure comes from shot.cjs, which
+  # explains what to do, rather than from an empty variable here.
+  [ -n "$NODE" ] || NODE="$(command -v node || true)"
+  [ -n "$NODE" ] || NODE="$(wl_bundled_node)"
   if [ -z "$NODE" ]; then
     wl_warn "no node available; cannot capture the hero frame"
   else

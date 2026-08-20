@@ -428,6 +428,12 @@ grep -q 'hero capture' "$HERE/prepare.sh" && ok "readiness reports whether captu
 grep -q "node_modules/playwright" "$HERE/shot.cjs" && ok "shot.cjs resolves from the tools dir" \
   || bad "shot.cjs cannot find a locally installed playwright"
 
+# The capture and the signalling server need DIFFERENT nodes, and taking one
+# answer for both breaks stage 6 on a correctly-installed machine.
+grep -q "require('playwright')" "$HERE/launch-wonderland.sh" \
+  && ok "the launcher picks a node that can load playwright" \
+  || bad "the launcher assumes a node instead of testing it"
+
 echo "== the launcher states its own completion criteria =="
 for crit in "packaged Wonderland" "pixel streaming" "browser url" "hero frame" "verification"; do
   grep -q "$crit" "$HERE/launch-wonderland.sh" \
