@@ -22,7 +22,7 @@ START=$(date +%s)
 banner() { printf '\n\033[1;35m========== %s ==========\033[0m\n' "$1"; }
 
 # ------------------------------------------------------------ 1. the machine
-banner "1/7  MACHINE"
+banner "1/8  MACHINE"
 if ! wl_have_gpu; then
   wl_warn "nvidia-smi reports no GPU."
   wl_warn "Switch the Lightning Studio to a GPU machine, then re-run this."
@@ -39,13 +39,25 @@ echo "  disk free: ${DISK_GB} GB    RAM: ${RAM_GB} GB    cpus: $(nproc)"
 [ "${DISK_GB:-0}" -ge 60 ] || wl_die "only ${DISK_GB} GB free under $WL_ROOT; a UE 5.8 cook needs 60+ GB"
 [ "${RAM_GB:-0}"  -ge 16 ] || wl_warn "only ${RAM_GB} GB RAM; shader compilation may thrash"
 
-# ------------------------------------------------- 2. source, gates, assets
-banner "2/7  PREPARE (cpu)"
+# ------------------------------------------------------------ 2. the engine
+banner "2/8  UNREAL 5.8"
+# BEFORE prepare.sh, deliberately. Lightning has already discarded the local
+# Docker image once across a machine change, and prepare.sh would otherwise
+# report the engine unavailable and send the founder to relink Epic and
+# re-download 69 GB — with a verified archive sitting on the same disk.
+#
+# This never reaches the network. A missing image plus a missing archive is a
+# failure to report, not a problem to solve by downloading Unreal onto a
+# running GPU.
+wl_ensure_ue_image
+
+# ------------------------------------------------- 3. source, gates, assets
+banner "3/8  PREPARE (cpu)"
 bash "$HERE/prepare.sh"
 [ -f "$WL_RUN/prepared.stamp" ] || wl_die "prepare.sh did not complete"
 
 # ------------------------------------------------------------- 3. the build
-banner "3/7  BUILD + COOK"
+banner "4/8  BUILD + COOK"
 if [ "$SKIP_BUILD" = "1" ]; then
   wl_say "SKIP_BUILD=1 — using whatever is already staged"
 else
@@ -53,12 +65,12 @@ else
 fi
 
 # ------------------------------------------------------------ 4. the stream
-banner "4/7  STREAM UP"
+banner "5/8  STREAM UP"
 bash "$HERE/stop-wonderland.sh" --quiet >/dev/null 2>&1 || true
 bash "$HERE/run-stream.sh"
 
 # ------------------------------------------------------ 5. the hero frame
-banner "5/7  HERO FRAME"
+banner "6/8  HERO FRAME"
 SHOT="$WL_PROOF/hero-$(date -u +%Y%m%dT%H%M%SZ).png"
 if [ "$SKIP_SHOT" = "1" ]; then
   wl_say "SKIP_SHOT=1"
@@ -75,7 +87,7 @@ else
 fi
 
 # --------------------------------------------------- 6. is it really drawing
-banner "6/7  VERIFY"
+banner "7/8  VERIFY"
 # "It is running" is not "it is rendering". A packaged client with a dead
 # renderer holds the port open and logs nothing wrong, so check the frame
 # itself: a real Wonderland frame is neither uniformly black nor uniformly one
@@ -131,7 +143,7 @@ PYEOF
 fi
 
 # ----------------------------------------------------------------- 7. the URL
-banner "7/7  WONDERLAND IS OPEN"
+banner "8/8  WONDERLAND IS OPEN"
 ELAPSED=$(( $(date +%s) - START ))
 URL="$(cat "$WL_RUN/player-url.txt" 2>/dev/null || true)"
 echo

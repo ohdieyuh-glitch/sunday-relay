@@ -15,6 +15,17 @@ PASS=0; FAIL=0
 ok()   { echo "  ok   $*"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL $*"; FAIL=$((FAIL+1)); }
 check(){ if [ "$1" = "$2" ]; then ok "$3"; else bad "$3 (wanted '$2', got '$1')"; fi; }
+# SUBSTRING TESTS WITHOUT A PIPE.
+#
+# `echo "$x" | grep -q P` is wrong in this file and wrong in a way that hides:
+# under `set -o pipefail` grep exits the moment it matches, echo takes SIGPIPE,
+# the PIPELINE reports failure, and the assertion inverts — it says "not found"
+# precisely when it did find it. Worse, it is FLAKY BY MESSAGE LENGTH: short
+# strings finish writing before grep leaves, so the same construct passes for
+# some assertions and fails for others in the same run. That is exactly how it
+# presented here. This is the third time this trap has bitten in this codebase;
+# bash pattern matching has no pipe and no subprocess, so it cannot do it.
+has(){ case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac; }
 
 echo "== syntax =="
 for f in common.sh prepare.sh build-render.sh run-stream.sh launch-wonderland.sh stop-wonderland.sh; do
@@ -192,6 +203,160 @@ grep -q "cannot see the generated assets" "$HERE/build-render.sh" \
 grep -q "run prepare.sh before spending GPU time" "$HERE/build-render.sh" \
   && ok "build-render.sh refuses to cook without generated assets" \
   || bad "build-render.sh would cook a world with no textures or audio"
+
+echo "== the UE engine is restored, never re-downloaded =="
+# Lightning discarded the local Docker image once across a machine change. The
+# image is ~69 GB, so re-acquiring it over the network ON A GPU MACHINE would
+# spend credits on a download. These tests pin the behaviour that prevents it.
+#
+# A mock docker records every invocation and answers `image inspect` from a
+# state file, so the whole decision tree runs without touching a real image.
+mkdir -p "$TMP/bin"
+cat > "$TMP/bin/docker" <<'MOCKEOF'
+#!/bin/sh
+echo "$@" >> "$WL_TEST_DOCKER_LOG"
+case "$1 $2" in
+  "image inspect")
+    [ -f "$WL_TEST_IMAGE_PRESENT" ] && exit 0
+    exit 1 ;;
+esac
+case "$1" in
+  load)
+    [ "$WL_TEST_LOAD_FAILS" = "1" ] && exit 1
+    # a real `docker load` makes the image present; the mock does the same
+    [ "$WL_TEST_LOAD_WRONG_IMAGE" = "1" ] || : > "$WL_TEST_IMAGE_PRESENT"
+    echo "Loaded image: ghcr.io/epicgames/unreal-engine:dev-5.8"
+    exit 0 ;;
+  pull) exit 0 ;;
+esac
+exit 0
+MOCKEOF
+chmod +x "$TMP/bin/docker"
+
+ue_env() {   # $1 = image present? $2 = archive present?
+  # Reset the fault switches too. Every case begins from the same state or one
+  # case's fault silently becomes the next one's.
+  LOADFAIL=0; LOADWRONG=0
+  rm -f "$TMP/img" "$TMP/dockerlog" "$TMP/root/ue58-dev.tar"
+  mkdir -p "$TMP/root"
+  [ "$1" = yes ] && : > "$TMP/img"
+  if [ "$2" = yes ]; then
+    # a tiny but VALID tar standing in for the 69 GB archive; the size floor is
+    # lowered for the test rather than fabricating gigabytes
+    ( cd "$TMP" && echo hi > _a && tar -cf "$TMP/root/ue58-dev.tar" _a && rm -f _a )
+  fi
+}
+
+run_ensure() {
+  PATH="$TMP/bin:$PATH" \
+  WL_TEST_DOCKER_LOG="$TMP/dockerlog" \
+  WL_TEST_IMAGE_PRESENT="$TMP/img" \
+  WL_TEST_LOAD_FAILS="${LOADFAIL:-0}" \
+  WL_TEST_LOAD_WRONG_IMAGE="${LOADWRONG:-0}" \
+  WL_ROOT="$TMP/root" WL_UE="$TMP/root/UnrealEngine" WL_UE_ARCHIVE_MIN_GB=0 \
+  bash -c ". $HERE/common.sh; wl_ensure_ue_image" 2>&1
+}
+
+ue_env yes no
+out="$(run_ensure)"; rc=$?
+check "$rc" "0" "a present image is accepted"
+has "$out" "already present" && ok "it says the image was already present" \
+  || bad "it did not report the present image"
+if grep -q "^load" "$TMP/dockerlog" 2>/dev/null; then
+  bad "it loaded the archive even though the image was present"
+else
+  ok "the archive is NOT loaded when the image is present"
+fi
+
+ue_env no yes
+out="$(run_ensure)"; rc=$?
+check "$rc" "0" "a missing image is restored from the archive"
+grep -q "^load -i" "$TMP/dockerlog" && ok "docker load ran against the archive" \
+  || bad "docker load did not run"
+has "$out" "restored" && ok "it reports the restore" || bad "it did not report a restore"
+
+ue_env no yes
+# NOT `LOADFAIL=1 out=...`. A variable prefix on an ASSIGNMENT is not a command
+# prefix — it sets the variable for the whole rest of the script, and the next
+# case inherited it, so the "wrong image" test was silently exercising the
+# "load failed" path instead. It passed while testing nothing it claimed to.
+out="$(LOADFAIL=1 run_ensure)"; rc=$?
+[ "$rc" != "0" ] && ok "a failed docker load fails closed (exit $rc)" \
+  || bad "a failed docker load was treated as success"
+
+# docker load can exit 0 having loaded something that is NOT the image we need
+ue_env no yes
+out="$(LOADWRONG=1 run_ensure)"; rc=$?
+[ "$rc" != "0" ] && ok "load exiting 0 without the expected image still fails" \
+  || bad "it trusted docker load instead of verifying the image"
+has "$out" "different image" && ok "and it says the archive holds a different image" \
+  || bad "the message does not explain what went wrong"
+
+ue_env no no
+out="$(run_ensure)"; rc=$?
+[ "$rc" != "0" ] && ok "no image and no archive fails closed" || bad "it did not fail"
+has "$out" "will NOT download" && ok "and it says it will not download Unreal" \
+  || bad "the failure does not state the no-download rule"
+
+# THE COST INVARIANT. No live line in any Lightning script may pull an image.
+pullhits=0
+for f in common.sh prepare.sh build-render.sh run-stream.sh launch-wonderland.sh stop-wonderland.sh; do
+  sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$HERE/$f" > "$TMP/nc.sh"
+  # Lines the script PRINTS to the founder are not lines it runs. The CPU
+  # acquisition instructions legitimately mention a pull; what must never exist
+  # is an executed one. Printed guidance in this project is prefixed
+  # "[wonderland]", so those lines are excluded.
+  if grep -vE '^\[wonderland\]' "$TMP/nc.sh" | grep -qE '^[^#]*docker[[:space:]]+pull'; then
+    bad "$f contains a live 'docker pull' — a GPU launch must never download Unreal"
+    pullhits=1
+  fi
+done
+[ "$pullhits" = 0 ] && ok "no Lightning script pulls an image in live code"
+if grep -q "^pull" "$TMP/dockerlog" 2>/dev/null; then
+  bad "the ensure helper invoked docker pull"
+else
+  ok "the ensure helper never invoked docker pull"
+fi
+
+echo "== readiness distinguishes RESTORABLE from NOT READY =="
+status_of() {
+  ue_env "$1" "$2"
+  PATH="$TMP/bin:$PATH" WL_TEST_DOCKER_LOG="$TMP/dockerlog" \
+  WL_TEST_IMAGE_PRESENT="$TMP/img" \
+  WL_ROOT="$TMP/root" WL_UE="$TMP/root/UnrealEngine" WL_UE_ARCHIVE_MIN_GB=0 \
+  bash -c ". $HERE/common.sh; wl_ue_status" 2>/dev/null
+}
+check "$(status_of yes no)" "READY"      "image loaded reads READY"
+check "$(status_of no yes)" "RESTORABLE" "image absent + archive present reads RESTORABLE"
+check "$(status_of no no)"  "MISSING"    "neither reads MISSING"
+
+# a truncated export must not read as restorable
+ue_env no yes
+out="$(PATH="$TMP/bin:$PATH" WL_TEST_IMAGE_PRESENT="$TMP/img" \
+      WL_ROOT="$TMP/root" WL_UE="$TMP/root/UnrealEngine" WL_UE_ARCHIVE_MIN_GB=20 \
+      bash -c ". $HERE/common.sh; wl_ue_status" 2>/dev/null)"
+check "$out" "MISSING" "an archive below the size floor is not RESTORABLE"
+
+echo "== one definition of the engine constants =="
+for f in prepare.sh build-render.sh; do
+  # grep -c prints 0 AND exits 1 when nothing matches, so `|| echo 0` appended
+  # a second zero and the count read "0\n0". Count lines instead.
+  n=$(grep 'WL_UE_IMAGE:-' "$HERE/$f" 2>/dev/null | wc -l | tr -d ' ')
+  [ "$n" = "0" ] && ok "$f does not redefine WL_UE_IMAGE" \
+                 || bad "$f redefines WL_UE_IMAGE ($n site(s)) - two defaults drift apart"
+done
+grep -q 'WL_UE_ARCHIVE:-' "$HERE/common.sh" && ok "common.sh defines WL_UE_ARCHIVE" \
+  || bad "WL_UE_ARCHIVE is not defined in common.sh"
+
+echo "== the launcher restores before it prepares =="
+le=$(grep -n "wl_ensure_ue_image" "$HERE/launch-wonderland.sh" | head -1 | cut -d: -f1)
+# match the INVOCATION, not the header comment that mentions the file
+lp=$(grep -n 'bash "\$HERE/prepare.sh"' "$HERE/launch-wonderland.sh" | head -1 | cut -d: -f1)
+if [ -n "$le" ] && [ -n "$lp" ] && [ "$le" -lt "$lp" ]; then
+  ok "wl_ensure_ue_image runs before prepare.sh (lines $le < $lp)"
+else
+  bad "the launcher prepares before restoring the engine (ensure=$le prepare=$lp)"
+fi
 
 echo "== gpu guard =="
 # launch-wonderland must refuse to run without a GPU rather than start a long

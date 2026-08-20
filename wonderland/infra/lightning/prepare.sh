@@ -127,18 +127,31 @@ wl_say "on disk: $_ntex textures, $_naud wavs"
 # UE 5.8 is the one thing this script cannot obtain on its own. Epic gate it
 # behind an account link, and working around that is not something to automate.
 # So: report precisely what is present and what the founder must do.
-UE_READY=0
-if [ -x "$WL_UE/Engine/Build/BatchFiles/RunUAT.sh" ]; then
-  UE_VER="$(grep -o '"MinorVersion"[[:space:]]*:[[:space:]]*[0-9]*' \
-            "$WL_UE/Engine/Build/Build.version" 2>/dev/null | grep -o '[0-9]*$' || echo '?')"
-  wl_ok "Unreal Engine present at $WL_UE (minor version ${UE_VER})"
-  UE_READY=1
-elif command -v docker >/dev/null 2>&1 && docker image inspect "${WL_UE_IMAGE:-ghcr.io/epicgames/unreal-engine:dev-5.8}" >/dev/null 2>&1; then
-  wl_ok "Epic UE 5.8 container image is present locally"
-  UE_READY=1
-else
-  wl_warn "Unreal Engine 5.8 is NOT yet available. This is the one founder action."
-fi
+# THREE STATES, NOT TWO. "Image absent" and "engine unobtainable" are different
+# situations and only the second needs the founder. Lightning has already
+# discarded the local image once across a session change, and reporting that as
+# NOT READY would send someone to relink Epic and re-download 69 GB while a
+# verified archive sits on the same disk.
+UE_STATE="$(wl_ue_status)"
+case "$UE_STATE" in
+  READY)
+    if [ -x "$WL_UE/Engine/Build/BatchFiles/RunUAT.sh" ]; then
+      UE_VER="$(grep -o '"MinorVersion"[[:space:]]*:[[:space:]]*[0-9]*' \
+                "$WL_UE/Engine/Build/Build.version" 2>/dev/null | grep -o '[0-9]*$' || echo '?')"
+      wl_ok "ENGINE READY - native Unreal at $WL_UE (minor version ${UE_VER})"
+    else
+      wl_ok "ENGINE READY - $WL_UE_IMAGE is loaded"
+    fi
+    ;;
+  RESTORABLE)
+    wl_ok "ENGINE RESTORABLE - image not loaded, but the persistent archive is here:"
+    wl_say "    $WL_UE_ARCHIVE ($(du -h "$WL_UE_ARCHIVE" 2>/dev/null | cut -f1))"
+    wl_say "    launch-wonderland.sh restores it automatically. No download, no founder action."
+    ;;
+  *)
+    wl_warn "ENGINE NOT READY - neither a loaded image nor a usable archive."
+    ;;
+esac
 
 # ------------------------------------------------------------ 6. report
 printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ) prepared at $(git -C "$WL_SRC" rev-parse --short HEAD)" \
@@ -150,10 +163,16 @@ printf '  storage      %s\n' "$WL_ROOT"
 printf '  source       %s (%s)\n' "$(git -C "$WL_SRC" rev-parse --short HEAD)" "$WL_BRANCH"
 printf '  textures     %s\n' "$([ -d "$WL_SRC/wonderland/Content" ] || [ -d "$WL_ROOT/textures" ] && echo present || echo 'see gen.log')"
 printf '  offline gates %s\n' "$([ "$GATE_FAIL" = 0 ] && echo pass || echo FAIL)"
-printf '  engine       %s\n' "$([ "$UE_READY" = 1 ] && echo ready || echo 'NOT READY - founder action needed')"
+case "$UE_STATE" in
+  READY)      printf '  engine       READY\n' ;;
+  RESTORABLE) printf '  engine       RESTORABLE (archive on persistent storage; auto-restored at launch)\n' ;;
+  *)          printf '  engine       NOT READY - founder action needed\n' ;;
+esac
 printf '  gpu          %s\n' "$(wl_have_gpu && nvidia-smi --query-gpu=name --format=csv,noheader | head -1 || echo 'none (expected while on CPU)')"
 echo
-if [ "$UE_READY" != 1 ]; then
+if [ "$UE_STATE" = "RESTORABLE" ]; then
+  wl_ok "Nothing to do about the engine. It is restored from persistent storage at launch."
+elif [ "$UE_STATE" != "READY" ]; then
   cat <<'NEEDED'
 [wonderland] FOUNDER ACTION REQUIRED — obtaining Unreal Engine 5.8
 [wonderland]

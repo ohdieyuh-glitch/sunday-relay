@@ -32,16 +32,22 @@ wl_say "        $_naud wavs in $WONDERLAND_AUDIO_DIR"
 if [ "$_ntex" -eq 0 ] || [ "$_naud" -eq 0 ]; then
   wl_die "generated assets missing — run prepare.sh before spending GPU time"
 fi
-WL_UE_IMAGE="${WL_UE_IMAGE:-ghcr.io/epicgames/unreal-engine:dev-5.8}"
+# WL_UE_IMAGE and WL_UE_ARCHIVE come from common.sh. This file used to define
+# the image with its own default-in-place, which is how the launcher and the
+# readiness report end up disagreeing about whether an engine exists.
 
 # ------------------------------------------------------- choose an engine path
+# Ensure the engine is here BEFORE choosing a mode. Idempotent, restores from
+# the persistent archive if the image was discarded across a session, and never
+# reaches the network.
+wl_ensure_ue_image
 MODE=""
 if [ -x "$WL_UE/Engine/Build/BatchFiles/RunUAT.sh" ]; then
   MODE=native
-elif command -v docker >/dev/null 2>&1 && docker image inspect "$WL_UE_IMAGE" >/dev/null 2>&1; then
+elif wl_ue_image_present; then
   MODE=container
 else
-  wl_die "no Unreal Engine 5.8 found. Run prepare.sh and follow its FOUNDER ACTION block."
+  wl_die "no Unreal Engine 5.8 found. Run prepare.sh and read its readiness block."
 fi
 wl_say "engine mode: $MODE"
 
