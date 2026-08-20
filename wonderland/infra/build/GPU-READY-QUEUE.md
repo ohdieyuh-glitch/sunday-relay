@@ -79,6 +79,21 @@ Four per cent is not a sky. The frame is pinched at both edges: the Dog's feet
 land at y=430 in a 449-tall frame, and the castle's tallest spires reach y=19.
 There is no room above or below without moving something structural.
 
+Measured ownership of the TOP THIRD — who is actually roofing the shot:
+
+```
+10.6% sky, 89.4% covered
+  golden_gate          9.5%      tree canopy, all sources  ~31.6%
+  TreeBranchCard12     7.7%      (the framing branch + the great trees)
+  GreatTree0_lc3       4.8%
+  framing_tree         3.7%
+```
+
+So the canopy is the biggest single cause and the gate is the second. Opening a
+two-segment window in the framing branch changed total sky by **nothing** —
+whatever sits behind it fills the same pixels — so thinning the canopy piecemeal
+is not the answer. That experiment was reverted rather than kept.
+
 The options, none of them free:
 
 1. **Tilt the camera up.** Gains sky, pushes the Dog's feet out of frame.
@@ -94,6 +109,38 @@ The options, none of them free:
 real frame and the founder's eye, and making it blind from a CPU preview is the
 mistake that has already cost two passes today. Look at the first Lightning
 render before changing any of it.
+
+### A2. The instrument was wrong three times — trust the NEW numbers only
+
+Every composition figure quoted before 2026-08-19 late-session is suspect. Three
+separate defects in the offline harness, all involving large flat surfaces or
+occlusion:
+
+1. **One depth per object.** Each blob carried its nearest corner's depth
+   applied to every pixel it painted, so the plaza bed overdrew hundreds of
+   cobbles genuinely in front of it. It measured 8.1% of the visible frame and
+   ranked as the largest lone primitive in the world; the truth was zero. Fixed
+   by fitting depth as a plane across the footprint.
+2. **Bounding-box area printed as "% of frame on screen."** Occlusion ignored.
+   Now reports pixels actually owned.
+3. **Leaf cards absent entirely.** The masked leaf master cannot be built
+   offline, so seven `if "leafcard" in MATS` guards took their false branch and
+   every preview showed a world with no foliage cards in it.
+
+Each time several signals AGREED, because they shared the broken substrate.
+**Agreement between metrics built on the same rasteriser is not corroboration.**
+
+Current, post-fix numbers:
+
+```
+lone primitives carrying the frame   0.72%   (stop condition 2, now measurable)
+largest single visible object        1.28%   mushroom_red_a_cap
+sky                                  4.1%
+```
+
+A frame where the biggest object owns 1.28% is a densely detailed frame; no one
+thing carries it. That is the shape you want, and it is worth checking the real
+render agrees rather than assuming the CPU preview earned it.
 
 ### B. Emissive budget — HIGH RISK
 

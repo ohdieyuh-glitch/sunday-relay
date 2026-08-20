@@ -548,6 +548,38 @@ def main():
             _grd += 1
     print("  frame is %.1f%% objects, %.1f%% SKY, %.1f%% bare ground plane"
           % (100.0 * _seen / _tot, 100.0 * _sky / _tot, 100.0 * _grd / _tot))
+    # ---- WHAT ROOFS THE SHOT --------------------------------------------
+    # "The frame is 4.1% sky" says there is a problem; it does not say who is
+    # causing it. Opening a window in the framing branch's canopy changed the
+    # number by nothing, which means the branch was never the whole answer —
+    # something behind it fills the same pixels. Tallying ownership of the TOP
+    # THIRD names the culprits instead of inviting another guess.
+    _topcut = int(H * 0.34)
+    _top = _cv.Counter()
+    _topsky = 0
+    for _y in range(_topcut):
+        for _x in range(W):
+            _k = _y * W + _x
+            _o = owner[_k]
+            if _o >= 0:
+                _top[_o] += 1
+            else:
+                _i = _k * 3
+                if px[_i + 2] > px[_i] + 8:
+                    _topsky += 1
+    _tt = float(_topcut * W)
+    print("  TOP THIRD OF FRAME  %.1f%% sky, %.1f%% covered" %
+          (100.0 * _topsky / _tt, 100.0 * (_tt - _topsky) / _tt))
+    _tstem = _cv.Counter()
+    for _o, _n in _top.items():
+        _lb = blobs[_o][7]
+        _k2 = _lb.rstrip("0123456789")
+        if "_" in _k2:
+            _k2 = _k2.rsplit("_", 1)[0]
+        _tstem[_k2] += _n
+    for _k2, _n in _tstem.most_common(8):
+        print("    %-30s %5.1f%% of the top third" % (_k2[:30], 100.0 * _n / _tt))
+
     # ---- THE PRIMITIVE AUDIT -------------------------------------------
     # Stop condition 2 of the art brief is "primitive prototype appearance is
     # no longer dominant", and until now that was a matter of opinion. It does
