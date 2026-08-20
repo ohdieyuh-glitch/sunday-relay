@@ -39,6 +39,12 @@ export WL_RUN="${WL_RUN:-$WL_ROOT/run}"                 # pids, urls, scratch
 # the generator read /opt/wonderland.
 export WONDERLAND_TEXTURE_DIR="${WONDERLAND_TEXTURE_DIR:-$WL_ROOT/textures}"
 export WONDERLAND_AUDIO_DIR="${WONDERLAND_AUDIO_DIR:-$WL_ROOT/audio}"
+# The hero-frame capture toolchain, installed on CPU and kept on persistent
+# storage. Local rather than global: a global npm install needs root the Studio
+# may not give, and pins the capture to whichever node happens to be first on
+# PATH. A directory beside the engine survives a Studio stop like everything
+# else here.
+export WL_TOOLS="${WL_TOOLS:-$WL_ROOT/tools}"
 export WL_BRANCH="${WL_BRANCH:-relay/wonderland-ca-fixes}"
 export WL_REPO="${WL_REPO:-https://github.com/ohdieyuh-glitch/sunday-relay.git}"
 

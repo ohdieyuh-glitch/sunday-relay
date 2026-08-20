@@ -138,8 +138,13 @@ if sd < 6:
 print("  frame has real structure - Wonderland is rendering.")
 PYEOF
   RC=$?
-  [ "$RC" = 0 ] && wl_ok "verified: the frame carries real image structure" \
-                || wl_warn "the captured frame did NOT pass the structure check (rc=$RC)"
+  if [ "$RC" = 0 ]; then
+    VERIFY_RESULT="structured"
+    wl_ok "verified: the frame carries real image structure"
+  else
+    VERIFY_RESULT="FAILED (rc=$RC)"
+    wl_warn "the captured frame did NOT pass the structure check (rc=$RC)"
+  fi
 fi
 
 # ----------------------------------------------------------------- 7. the URL
@@ -157,6 +162,22 @@ else
   wl_warn "no public URL. Either set WL_PUBLIC=lightning and expose port"
   wl_warn "$WL_HTTP_PORT from the Studio's Ports panel, or check $WL_LOG/tunnel.log"
 fi
+# THE PHASE'S OWN COMPLETION CRITERIA, stated where they cannot be missed.
+# A run can reach 8/8 with a URL and no hero frame — the capture only warns —
+# and that reads as success while two criteria are unmet. Printing the list
+# turns "it finished" into "here is what it actually produced".
+echo
+echo "  PHASE CRITERIA"
+_c() { printf '    %-22s %s\n' "$1" "$2"; }
+[ -d "$WL_OUT/Linux" ] && [ -n "$(ls -A "$WL_OUT/Linux" 2>/dev/null || true)" ] \
+  && _c "packaged Wonderland" "yes" || _c "packaged Wonderland" "NO"
+wl_port_listening "$WL_HTTP_PORT" && _c "pixel streaming" "up on $WL_HTTP_PORT" \
+  || _c "pixel streaming" "NO"
+[ -n "$URL" ] && _c "browser url" "yes" || _c "browser url" "NO"
+[ -n "${SHOT:-}" ] && [ -f "${SHOT:-}" ] && _c "hero frame" "yes" || _c "hero frame" "NO"
+_c "verification" "${VERIFY_RESULT:-not run}"
+_c "runtime evidence" "run proof.sh for the full report"
+echo
 echo "  hero frame : ${SHOT:-none}"
 echo "  logs       : $WL_LOG"
 echo "  elapsed    : $((ELAPSED / 60))m $((ELAPSED % 60))s"

@@ -17,11 +17,20 @@ const SETTLE_MS = parseInt(process.env.WL_SETTLE_MS || '12000', 10);
 
 (async () => {
   let chromium;
-  try {
-    ({ chromium } = require('playwright'));
-  } catch (e) {
-    console.error('playwright is not installed. In the Studio:');
-    console.error('  npm i -g playwright && npx playwright install chrome');
+  // Resolve from the persistent tools directory FIRST. prepare.sh installs
+  // playwright there on CPU, and a local install is what lets this work
+  // without root and without depending on which node is first on PATH.
+  const toolRoot = process.env.WL_TOOLS
+    || (process.env.WL_ROOT ? process.env.WL_ROOT + '/tools' : null);
+  const candidates = [];
+  if (toolRoot) candidates.push(toolRoot + '/node_modules/playwright');
+  candidates.push('playwright');
+  for (const c of candidates) {
+    try { ({ chromium } = require(c)); break; } catch (_) { /* try the next */ }
+  }
+  if (!chromium) {
+    console.error('playwright is not installed. Run prepare.sh on CPU; it');
+    console.error('installs it into ' + (toolRoot || '$WL_ROOT/tools') + '.');
     process.exit(3);
   }
 

@@ -408,6 +408,32 @@ else
   ok "the tunnel URL poll tolerates no-match"
 fi
 
+echo "== stage 6 can actually capture a frame =="
+# A run reaching "8/8" with no hero frame is not a successful run: the phase's
+# own criteria list one, and VERIFY has nothing to check without it. Nothing
+# installed playwright, so shot.cjs exited 3, the launcher only warned, and the
+# gap was invisible until someone read the report.
+grep -q 'WL_TOOLS' "$HERE/common.sh" && ok "common.sh defines a tools dir" \
+  || bad "no WL_TOOLS definition"
+out=$(WL_ROOT=/teamspace/studios/this_studio/wonderland bash -c ". $HERE/common.sh; echo \$WL_TOOLS")
+case "$out" in /teamspace/*/tools) ok "the toolchain lives on persistent storage ($out)" ;;
+  *) bad "toolchain is not on persistent storage: $out" ;; esac
+grep -q 'npm install playwright' "$HERE/prepare.sh" && ok "prepare.sh installs playwright on CPU" \
+  || bad "prepare.sh does not install playwright — stage 6 will produce no frame"
+grep -q 'playwright install --with-deps chrome' "$HERE/prepare.sh" \
+  && ok "prepare.sh installs real Chrome (the bundled Chromium has no H264)" \
+  || bad "prepare.sh does not install Chrome"
+grep -q 'hero capture' "$HERE/prepare.sh" && ok "readiness reports whether capture can run" \
+  || bad "readiness does not report capture readiness"
+grep -q "node_modules/playwright" "$HERE/shot.cjs" && ok "shot.cjs resolves from the tools dir" \
+  || bad "shot.cjs cannot find a locally installed playwright"
+
+echo "== the launcher states its own completion criteria =="
+for crit in "packaged Wonderland" "pixel streaming" "browser url" "hero frame" "verification"; do
+  grep -q "$crit" "$HERE/launch-wonderland.sh" \
+    && ok "8/8 reports: $crit" || bad "8/8 does not report: $crit"
+done
+
 echo "== gpu guard =="
 # launch-wonderland must refuse to run without a GPU rather than start a long
 # build and fail at the end.

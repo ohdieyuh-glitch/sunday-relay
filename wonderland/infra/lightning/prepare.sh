@@ -123,6 +123,31 @@ wl_say "on disk: $_ntex textures, $_naud wavs"
 [ "$_ntex" -gt 0 ] || wl_warn "NO textures on disk - the build will import none"
 [ "$_naud" -gt 0 ] || wl_warn "NO wavs on disk - the build will import no audio"
 
+# ------------------------------------------------- 4b. the capture toolchain
+# STAGE 6 CANNOT RUN WITHOUT THIS, and nothing installed it. shot.cjs requires
+# playwright; without it the launcher warns and carries on, so a paid run
+# reaches "8/8" having produced NO hero frame and nothing for VERIFY to check —
+# two of the phase's completion criteria, silently unmet.
+#
+# Installed here because here is CPU. Downloading a browser on a GPU machine is
+# the same waste as downloading the engine on one.
+CAPTURE_READY=0
+if [ -d "$WL_TOOLS/node_modules/playwright" ]; then
+  wl_ok "capture toolchain already present at $WL_TOOLS"
+  CAPTURE_READY=1
+elif command -v npm >/dev/null 2>&1; then
+  wl_say "installing the hero-frame capture toolchain (CPU, one time)"
+  mkdir -p "$WL_TOOLS"
+  ( cd "$WL_TOOLS" && npm init -y >>"$WL_LOG/capture.log" 2>&1       && npm install playwright >>"$WL_LOG/capture.log" 2>&1 )     && wl_ok "playwright installed"     || wl_warn "playwright install failed; see $WL_LOG/capture.log"
+  # Real Chrome, not the bundled Chromium: the bundled build has NO H264
+  # decoder, so the page loads, the stream negotiates and the video stays
+  # black with nothing reporting an error.
+  ( cd "$WL_TOOLS" && npx --yes playwright install --with-deps chrome       >>"$WL_LOG/capture.log" 2>&1 )     && wl_ok "chrome installed (H264 capable)"     || wl_warn "chrome install failed; see $WL_LOG/capture.log"
+  [ -d "$WL_TOOLS/node_modules/playwright" ] && CAPTURE_READY=1
+else
+  wl_warn "no npm; the hero frame cannot be captured on this Studio"
+fi
+
 # ------------------------------------------------------------ 5. the engine
 # UE 5.8 is the one thing this script cannot obtain on its own. Epic gate it
 # behind an account link, and working around that is not something to automate.
@@ -163,6 +188,7 @@ printf '  storage      %s\n' "$WL_ROOT"
 printf '  source       %s (%s)\n' "$(git -C "$WL_SRC" rev-parse --short HEAD)" "$WL_BRANCH"
 printf '  textures     %s\n' "$([ -d "$WL_SRC/wonderland/Content" ] || [ -d "$WL_ROOT/textures" ] && echo present || echo 'see gen.log')"
 printf '  offline gates %s\n' "$([ "$GATE_FAIL" = 0 ] && echo pass || echo FAIL)"
+printf '  hero capture %s\n' "$([ "$CAPTURE_READY" = 1 ] && echo READY || echo 'NOT READY - stage 6 will produce no frame')"
 case "$UE_STATE" in
   READY)      printf '  engine       READY\n' ;;
   RESTORABLE) printf '  engine       RESTORABLE (archive on persistent storage; auto-restored at launch)\n' ;;
