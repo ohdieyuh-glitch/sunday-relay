@@ -3531,8 +3531,42 @@ def build(layout):
         # A weathered boulder cluster (stone) for environmental framing.
         d = 0.85 + (i % 4) * 0.35
         ground_skirt(x, y, d * 62.0, "rock_%d" % i, n=5, flowers=False)
-        _part("sphere", x, y, d * 24.0, d, d, d * 0.68, "stone", "rock_%d" % i,
-              rot=(0.0, (i * 47) % 360, (i * 23) % 26))
+        # A BOULDER IS FACETED. Measuring which objects actually own pixels
+        # after occlusion, two rocks landed in the ten most visible things in
+        # the hero frame — ahead of the gate's pillars. They were ONE squashed
+        # sphere each, which is a raw primitive sitting in the near field where
+        # the eye is sharpest, and no amount of work on the distant skyline
+        # compensates for that.
+        #
+        # Rock reads by its PLANES: a boulder is a few large flat faces meeting
+        # at hard edges, with the weathering in the joints rather than over the
+        # whole surface. Stacked, rotated slabs give those planes; the sphere
+        # stays underneath as the mass they clad.
+        _part("sphere", x, y, d * 24.0, d * 0.86, d * 0.86, d * 0.58, "stone",
+              "rock_%d" % i, rot=(0.0, (i * 47) % 360, (i * 23) % 26))
+        for _f in range(4):
+            _fa = _f * 1.5708 + (i * 0.7)
+            _fr = d * 15.0 * (0.7 + ((i * 13 + _f * 7) % 5) * 0.12)
+            _part("cube", x + math.cos(_fa) * _fr, y + math.sin(_fa) * _fr,
+                  d * (16.0 + (_f % 3) * 7.0),
+                  d * (0.52 + (_f % 3) * 0.11), d * (0.46 + (_f % 2) * 0.14),
+                  d * (0.34 + (_f % 3) * 0.10), "stone",
+                  "rock%d_face%d" % (i, _f),
+                  rot=(float((i * 11 + _f * 23) % 34) - 17.0,
+                       math.degrees(_fa) + ((i * 5) % 20),
+                       float((i * 17 + _f * 13) % 28) - 14.0))
+        # a capping slab, tilted, so the top is not a dome
+        _part("cube", x + d * 3.0, y - d * 2.0, d * 34.0, d * 0.74, d * 0.66, d * 0.26,
+              "stone", "rock%d_cap" % i,
+              rot=(float((i * 29) % 22) - 11.0, float((i * 41) % 360), float((i * 7) % 18) - 9.0))
+        # WEATHERING LIVES IN THE JOINTS. Moss on the shaded north side and in
+        # the seams, not sprayed evenly over the stone — an evenly mossy rock
+        # reads as a green rock.
+        for _m in range(3 + (i % 3)):
+            _ma = 2.2 + _m * 0.9 + (i * 0.3)
+            _part("sphere", x + math.cos(_ma) * d * 13.0, y + math.sin(_ma) * d * 13.0,
+                  d * (12.0 + (_m % 2) * 9.0), d * 0.24, d * 0.24, d * 0.12,
+                  "moss", "rock%d_moss%d" % (i, _m))
         if i % 2 == 0:
             _part("cube", x + 22.0, y - 16.0, d * 18.0, d * 0.6, d * 0.6, d * 0.5, "stone",
                   "rockb_%d" % i, rot=(14.0, (i * 31) % 360, 0.0))
