@@ -493,8 +493,22 @@ def main():
         print("    %-30s %5.2f%%  x[%5d %5d] y[%4d %4d] z=%7.0f %s"
               % (lb[:30], 100.0 * _n / _tot, x0, x1, y0, y1, z, mat))
     _seen = sum(_vis.values())
-    print("  frame is %.1f%% painted by objects, %.1f%% sky/ground planes"
-          % (100.0 * _seen / _tot, 100.0 * (_tot - _seen) / _tot))
+    # SPLIT SKY FROM GROUND. "95.8% is objects" is only actionable once you know
+    # whether the remainder is sky or dirt: the reference names vivid blue sky
+    # and soft clouds as an element, and a hero shot roofed over by canopy has
+    # none of it. Unowned pixels above the horizon row are sky.
+    _sky = _grd = 0
+    for _k in range(W * H):
+        if owner[_k] >= 0:
+            continue
+        _i = _k * 3
+        # sky is the only unowned thing that is bluer than it is red
+        if px[_i + 2] > px[_i] + 8:
+            _sky += 1
+        else:
+            _grd += 1
+    print("  frame is %.1f%% objects, %.1f%% SKY, %.1f%% bare ground plane"
+          % (100.0 * _seen / _tot, 100.0 * _sky / _tot, 100.0 * _grd / _tot))
     _unused = sorted(blobs, key=lambda b: -((b[3] - b[1]) * (b[4] - b[2])))
     print("  largest PROJECTED BOXES (extent only - NOT visible area):")
     seen = set()

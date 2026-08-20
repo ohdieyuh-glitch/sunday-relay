@@ -66,7 +66,36 @@ Same camera, same framing as p23. Then, and only then, work the queue below.
 Highest risk first. This ordering is the deliverable — it is where the
 unrendered work is most likely to have gone astray, and why.
 
-### A. Emissive budget — HIGHEST RISK
+### A. THE HERO FRAME HAS ALMOST NO SKY — measured, unresolved
+
+The reference names **vivid blue sky and soft clouds** as an element. Measured
+by real visible-pixel ownership (not projected boxes), the hero frame is:
+
+```
+95.8% objects     4.1% SKY     0.1% bare ground plane
+```
+
+Four per cent is not a sky. The frame is pinched at both edges: the Dog's feet
+land at y=430 in a 449-tall frame, and the castle's tallest spires reach y=19.
+There is no room above or below without moving something structural.
+
+The options, none of them free:
+
+1. **Tilt the camera up.** Gains sky, pushes the Dog's feet out of frame.
+2. **Lower the castle silhouette** (drop the donjon, or push the city further
+   out). Gains sky, and partly undoes the skyline mass just added.
+3. **Open holes in the canopy.** A real canopy is dappled and this one is
+   solid; gaps would let sky through without moving the camera. Best art
+   answer, hardest to control from a kit.
+4. **Accept it** — decide the hero shot is a canopied garden view and the sky
+   belongs to a different camera.
+
+**This is deliberately unresolved.** It is a composition judgement that wants a
+real frame and the founder's eye, and making it blind from a CPU preview is the
+mistake that has already cost two passes today. Look at the first Lightning
+render before changing any of it.
+
+### B. Emissive budget — HIGH RISK
 
 Three separate regressions this sprint came from multiplying emissive geometry
 without dividing its radiance: clouds (28→44 clusters *and* 2.6→3.6 radiance),
@@ -81,7 +110,7 @@ as a foreground problem and sends you to fix the wrong thing.
 *first*. Sweep `exposureBias` and confirm it barely moves — if it does move the
 frame a lot, that itself is new information, because it did not at p23.
 
-### B. Hero practicals — NEW, NEVER RENDERED
+### C. Hero practicals — NEW, NEVER RENDERED
 
 Three shadowless point lights (arcane circle, gate, rose arch) added on top of
 a world that previously had only lantern practicals. Tightly attenuated by
@@ -95,7 +124,7 @@ WONDERLAND_LOOK="heroLights=0"   # then rebuild the level and compare
 If they wash out the plaza, drop `heroLightLumens` before dropping the lights —
 the violet bounce onto the Dog's white chest is the point of the whole beat.
 
-### C. Procedural normals and roughness breakup
+### D. Procedural normals and roughness breakup
 
 Added to the master material, so **every surface in the world** inherits them at
 once. `DetailAmp` and `RoughVary` are per-instance and tuned per family, but the
@@ -106,28 +135,28 @@ everything looks like orange peel.
 **If so:** the fix is per-family `DetailAmp`, not a global reduction — a global
 one trades one uniformity for another.
 
-### D. Generated textures
+### E. Generated textures
 
 `gen-textures.py` synthesises cobble, ashlar, sward, bark, plaster, roof and
 leaf cards from pure stdlib. They have been inspected as PNGs and never as
 materials on geometry. Watch for tiling repetition at mid-distance, which is the
 usual way procedural texture betrays itself and which no still inspection shows.
 
-### E. Shadow budget
+### F. Shadow budget
 
 29.2% of meshes were switched to cast nothing. This was a performance change
 justified by "nobody can see these shadows" — a claim made from projection
 geometry, not from a render. If contact shadows have gone missing somewhere the
 eye lands, `NO_SHADOW_MATS` / `NO_SHADOW_PREFIX` in the generator is the dial.
 
-### F. Ornament vocabulary and density
+### G. Ornament vocabulary and density
 
 `+2,845` static meshes from the ornament, shrub and topiary passes. Two things
 to watch: frame rate on the stream, and whether the near-camera guard
 (`in_camera_lap`) is doing its job — the tracer says the topiary sits at 19% of
 frame height, but the tracer has been wrong about geometry before.
 
-### G. The hero Dog's size in frame — CHECK THIS FIRST BY EYE
+### H. The hero Dog's size in frame — CHECK THIS FIRST BY EYE
 
 Not a code risk, a **judgement** one, and the only item here that wants the
 founder's eye rather than a measurement.
@@ -147,7 +176,7 @@ and which of those the hero frame should be is the founder's call. If it wants
 to be the latter, move the Dog's staging back along the boulevard rather than
 shrinking it — the Dog standing ON its arcane identity circle is the beat.
 
-### H. The clouds
+### I. The clouds
 
 Geometry cumulus, because UE's stock volumetric cloud material renders as a flat
 grey sheet under this lighting. Lowest risk of the group and the easiest to turn
