@@ -440,6 +440,16 @@ for crit in "packaged Wonderland" "pixel streaming" "browser url" "hero frame" "
     && ok "8/8 reports: $crit" || bad "8/8 does not report: $crit"
 done
 
+echo "== the UE target config is gated before a paid cook =="
+grep -q 'verify-target-config.py' "$HERE/prepare.sh" \
+  && ok "prepare.sh runs the target-config gate" \
+  || bad "a legacy target config would not be caught until the L4 compile"
+if python3 "$HERE/../build/verify-target-config.py" >/dev/null 2>&1; then
+  ok "the targets are on UE 5.8 settings"
+else
+  bad "verify-target-config.py fails on the current tree"
+fi
+
 echo "== gpu guard =="
 # launch-wonderland must refuse to run without a GPU rather than start a long
 # build and fail at the end.

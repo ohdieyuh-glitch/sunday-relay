@@ -84,7 +84,10 @@ BUILD_DIR="$WL_SRC/wonderland/infra/build"
 # means a broken generator is found on CPU, not after the GPU is already warm.
 wl_say "running the offline gates"
 GATE_FAIL=0
-for g in verify-look-table.py verify-docs.py verify-dog-proxy.py verify-generator-dryrun.py; do
+# verify-target-config.py runs FIRST and cheaply: a legacy target config is the
+# failure that reached UnrealBuildTool on a paid L4 before dying, so catching it
+# here costs a second instead of a compile.
+for g in verify-target-config.py verify-look-table.py verify-docs.py verify-dog-proxy.py verify-generator-dryrun.py; do
   if [ -f "$BUILD_DIR/$g" ]; then
     if python3 "$BUILD_DIR/$g" >>"$WL_LOG/gates.log" 2>&1; then
       wl_ok "gate $g"
