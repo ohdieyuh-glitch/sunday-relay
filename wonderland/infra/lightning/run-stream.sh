@@ -20,7 +20,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 wl_mkdirs
 STAGED="$WL_OUT/Linux"
-APP="$(find "$STAGED" -maxdepth 3 -name 'Wonderland.sh' -type f 2>/dev/null | head -1)"
+APP="$(wl_find_first "$STAGED" -maxdepth 3 -name 'Wonderland.sh' -type f)"
 [ -n "$APP" ] || wl_die "no packaged Wonderland.sh under $STAGED — run build-render.sh first"
 
 PUBLIC_MODE="${WL_PUBLIC:-tunnel}"        # tunnel | lightning | none
@@ -48,8 +48,10 @@ TURNEOF
 # ------------------------------------------------------------- 2. signalling
 start_signalling() {
   local sigdir node
-  sigdir="$(find "$WL_UE" -type d -name 'SignallingWebServer' 2>/dev/null | head -1)"
-  [ -n "$sigdir" ] || sigdir="$(find "$WL_UE" -type d -name 'Wilbur' 2>/dev/null | head -1)"
+  # Searching a 69 GB engine tree is precisely where `| head -1` guarantees a
+  # SIGPIPE, because find cannot possibly have finished first.
+  sigdir="$(wl_find_first "$WL_UE" -type d -name 'SignallingWebServer')"
+  [ -n "$sigdir" ] || sigdir="$(wl_find_first "$WL_UE" -type d -name 'Wilbur')"
   [ -n "$sigdir" ] || wl_die "no signalling server found under $WL_UE (PixelStreaming2 plugin missing?)"
 
   node="$(wl_bundled_node)"
@@ -136,7 +138,13 @@ start_public() {
     >>"$WL_LOG/tunnel.log" 2>&1 </dev/null &
   local i=0 url=""
   while [ "$i" -lt 40 ]; do
-    url="$(grep -aoE 'https://[a-z0-9-]+\.trycloudflare\.com' "$WL_LOG/tunnel.log" | tail -1)"
+    # NO MATCH IS THE NORMAL CASE HERE — the loop polls until the tunnel
+    # prints its URL, so grep exits 1 on nearly every early pass. Under
+    # pipefail that status reaches the assignment and `set -e` kills the
+    # script on the FIRST poll, before the tunnel could ever have been ready.
+    url="$( ( set +o pipefail
+              grep -aoE 'https://[a-z0-9-]+\.trycloudflare\.com' "$WL_LOG/tunnel.log" \
+                | tail -1 ) || true)"
     [ -n "$url" ] && break
     sleep 2; i=$((i + 1))
   done

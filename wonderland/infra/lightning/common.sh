@@ -97,7 +97,32 @@ wl_wait_port() {
 # too old for the Wilbur signalling server, and using it fails in a way that
 # looks like a networking problem rather than a version problem.
 wl_bundled_node() {
-  find "$WL_UE" -path "*platform_scripts/bash/node/bin/node" -type f 2>/dev/null | head -1
+  # Same hazard as everywhere else, and this one searches the WHOLE ENGINE:
+  # `| head -1` hands find a SIGPIPE it cannot survive under pipefail, and
+  # run-stream.sh assigns straight from this call at stage 5. Found by the
+  # regression test rather than by reading — I had already "finished" the
+  # audit when it reported this one.
+  #
+  # (Definition order does not matter: common.sh is sourced whole, so
+  # wl_find_first exists by the time anything calls this.)
+  wl_find_first "$WL_UE" -path "*platform_scripts/bash/node/bin/node" -type f
+}
+
+# FIRST MATCH WITHOUT A PIPE.
+#
+# `find ... | head -1` is the shape that has now silently killed two paid GPU
+# runs, by two different mechanisms. head exits as soon as it has its line, find
+# is still walking a 69 GB tree, find takes a SIGPIPE and dies 141, `pipefail`
+# hands that to the command substitution and `set -e` ends the script with no
+# message. Reproduced here at exit 141 before this was written.
+#
+# `-print -quit` makes find stop itself at the first hit. No pipe, no signal,
+# nothing for pipefail to propagate. `|| true` covers the no-match case, where
+# find legitimately exits non-zero on some builds.
+wl_find_first() {   # $1 = root, rest = find predicates
+  local root="$1"; shift
+  [ -d "$root" ] || return 0
+  find "$root" "$@" -print -quit 2>/dev/null || true
 }
 
 wl_have_gpu() {

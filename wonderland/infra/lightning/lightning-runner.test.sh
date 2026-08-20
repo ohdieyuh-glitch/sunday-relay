@@ -358,6 +358,56 @@ else
   bad "the launcher prepares before restoring the engine (ensure=$le prepare=$lp)"
 fi
 
+echo "== stage 5 pipeline hazards (the class that killed two paid runs) =="
+# Both reproduced before being fixed: `find | head -1` over a large tree exits
+# 141 on SIGPIPE, and `grep | tail -1` with no match exits 1. Under
+# `set -euo pipefail` either one ends the script with NO output — the same
+# silent death as the Config/ hash bug, in the next unproven stage.
+mkdir -p "$TMP/big/a/b/c"
+i=0; while [ "$i" -lt 200 ]; do mkdir -p "$TMP/big/d$i/e"; : > "$TMP/big/d$i/e/x$i"; i=$((i+1)); done
+: > "$TMP/big/a/b/c/Wonderland.sh"
+
+# the helper must survive a tree big enough that find is still running
+out=$(WL_ROOT="$TMP/root" bash -c ". $HERE/common.sh
+set -euo pipefail
+R=\"\$(wl_find_first $TMP/big -maxdepth 4 -name 'x*' -type f)\"
+echo \"REACHED:\$R\"" 2>&1); rc=$?
+check "$rc" "0" "wl_find_first survives a large tree under set -euo pipefail"
+case "$out" in *REACHED:*) ok "  and the line after it runs" ;; *) bad "  it died before the next line" ;; esac
+
+# a no-match search must return empty, not kill the caller
+out=$(WL_ROOT="$TMP/root" bash -c ". $HERE/common.sh
+set -euo pipefail
+R=\"\$(wl_find_first $TMP/big -name 'definitely-not-here')\"
+echo \"REACHED:[\$R]\"" 2>&1); rc=$?
+check "$rc" "0" "a no-match search does not kill the caller"
+case "$out" in *"REACHED:[]"*) ok "  and returns empty" ;; *) bad "  wrong no-match result: $out" ;; esac
+
+# a missing root must not kill it either
+out=$(WL_ROOT="$TMP/root" bash -c ". $HERE/common.sh
+set -euo pipefail
+R=\"\$(wl_find_first $TMP/nope -name x)\"
+echo REACHED" 2>&1); rc=$?
+check "$rc" "0" "a missing search root does not kill the caller"
+
+# no live `find ... | head` may remain in the launch path
+leak=0
+for f in common.sh prepare.sh build-render.sh run-stream.sh launch-wonderland.sh; do
+  sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$HERE/$f" > "$TMP/nc2.sh"
+  if grep -qE 'find .*\| *head' "$TMP/nc2.sh"; then
+    bad "$f still pipes find into head — SIGPIPE kills it under pipefail"; leak=1
+  fi
+done
+[ "$leak" = 0 ] && ok "no 'find | head' remains in the launch path"
+
+# the tunnel poll must tolerate the no-match case it hits on every early pass
+sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$HERE/run-stream.sh" > "$TMP/nc3.sh"
+if grep -qE 'url="\$\(grep' "$TMP/nc3.sh"; then
+  bad "the tunnel URL poll still assigns straight from a bare grep pipeline"
+else
+  ok "the tunnel URL poll tolerates no-match"
+fi
+
 echo "== gpu guard =="
 # launch-wonderland must refuse to run without a GPU rather than start a long
 # build and fail at the end.

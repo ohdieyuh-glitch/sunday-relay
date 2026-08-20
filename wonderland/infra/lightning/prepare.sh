@@ -117,8 +117,8 @@ if [ -f "$BUILD_DIR/gen-audio.py" ]; then
 fi
 
 # Announce the fact, not the intention: count what is actually on disk.
-_ntex=$(find "$WONDERLAND_TEXTURE_DIR" -type f -name '*.png' 2>/dev/null | wc -l)
-_naud=$(find "$WONDERLAND_AUDIO_DIR" -type f -name '*.wav' 2>/dev/null | wc -l)
+_ntex=$( ( set +o pipefail; find "$WONDERLAND_TEXTURE_DIR" -type f -name '*.png' 2>/dev/null | wc -l ) || echo 0)
+_naud=$( ( set +o pipefail; find "$WONDERLAND_AUDIO_DIR" -type f -name '*.wav' 2>/dev/null | wc -l ) || echo 0)
 wl_say "on disk: $_ntex textures, $_naud wavs"
 [ "$_ntex" -gt 0 ] || wl_warn "NO textures on disk - the build will import none"
 [ "$_naud" -gt 0 ] || wl_warn "NO wavs on disk - the build will import no audio"
