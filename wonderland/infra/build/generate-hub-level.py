@@ -1121,6 +1121,19 @@ def build_material_library(texs=None):
         "spire_teal": ("plaster", 0.0055, (0.72, 1.00, 0.96)),
         "roof_rose":  ("roof",    0.0070, (1.00, 1.00, 1.00)),
         "roof_pink":  ("roof",    0.0070, (1.12, 1.05, 1.05)),
+        # GOLD MUST NOT READ AS FLAT YELLOW — the art direction says so, and a
+        # bare base colour gives exactly that however well it is lit. The metal
+        # map carries hammer facets, a drawn grain and tarnish in the creases,
+        # and its roughness variation is what makes the highlight TRAVEL across
+        # a surface instead of sitting on it.
+        "gold":       ("metal",   0.0090, (1.00, 1.00, 1.00)),
+        "gold_glow":  ("metal",   0.0090, (1.06, 1.02, 0.94)),
+        "brass_deep": ("metal",   0.0075, (0.82, 0.74, 0.62)),
+        # Fine china is not white plastic and the difference is crazing: a
+        # hairline network in the glaze, too fine to see as lines but enough to
+        # break the highlight into something fired rather than moulded.
+        "porcelain":  ("glaze",   0.0130, (1.00, 1.00, 1.00)),
+        "dog_body":   ("glaze",   0.0150, (1.00, 1.00, 1.00)),
     }
     if texs:
         for nm, (fam, scale, tint) in textured.items():

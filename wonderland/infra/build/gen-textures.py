@@ -545,6 +545,105 @@ def make_leafcard(size):
     return alb, height_to_normal(hgt, size, 2.4), msk
 
 
+def make_metal(size):
+    """Cast and hammered gold.
+
+    The art direction is explicit that gold must not read as flat yellow, and
+    flat yellow is exactly what a bare base colour gives you no matter how well
+    it is lit. What makes metal read as metal is that its highlight MOVES: it
+    travels across a hammered face, catches on a burr, and dulls where hands
+    and weather have been.
+
+    Three things, in the order the eye uses them: broad hammer facets from a
+    coarse Voronoi, so the surface has planes; fine directional draw marks from
+    an anisotropic fbm, because cast and drawn metal carries a grain; and
+    tarnish settling into the low spots, which is the only one that touches
+    albedo. Roughness does most of the work here — a metal whose roughness does
+    not vary is a plastic that happens to be yellow.
+    """
+    alb = bytearray(size * size * 3)
+    rgh = bytearray(size * size)
+    hgt = [0.0] * (size * size)
+    inv = 1.0 / size
+    for y in range(size):
+        v = (y + 0.5) * inv
+        for x in range(size):
+            u = (x + 0.5) * inv
+            # hammer facets: f2-f1 gives the ridge BETWEEN cells, which is where
+            # a hammered surface actually creases
+            # Fewer, larger cells and a HARD crease. The first version used 9
+            # cells with a soft falloff and the roughness map came out as mush:
+            # the tarnish noise drowned the planes, which is the opposite of
+            # what makes metal read. A hammered face is a flat plane meeting
+            # another flat plane at a line, so the cell interior is flat and
+            # only the boundary creases.
+            f1, f2, cid = voronoi(u, v, 6, SEED + 401, jitter=0.9)
+            crease = clamp01(1.0 - (f2 - f1) * 11.0)
+            # each facet sits at its own angle, so neighbouring planes catch
+            # the light differently instead of averaging to one tone
+            facet = 1.0 - crease
+            tilt = ((cid % 13) / 13.0 - 0.5) * 0.34
+            # drawn grain, stretched along x so it reads as a direction
+            grain = fbm(u, v, 160, 20, 3, SEED + 409)
+            # where tarnish collects: the creases, not the faces
+            low = crease
+            tarnish = clamp01((fbm(u, v, 24, 24, 3, SEED + 417) - 0.42) * 1.9) * low
+            # warm gold, pulled greener and darker where it has tarnished
+            shade = 0.86 + 0.14 * facet + 0.05 * grain + tilt * 0.30
+            r = shade * (1.00 - 0.22 * tarnish)
+            g = shade * (0.84 - 0.10 * tarnish)
+            b = shade * (0.46 + 0.10 * tarnish)
+            i = y * size + x
+            alb[i * 3] = _b(r * 255.0)
+            alb[i * 3 + 1] = _b(g * 255.0)
+            alb[i * 3 + 2] = _b(b * 255.0)
+            # polished on the faces, dull in the creases and where tarnished
+            # polished across a face, dull along the crease and where tarnished
+            rgh[i] = _b(clamp01(0.14 + 0.42 * crease + 0.26 * tarnish
+                                + 0.05 * grain + tilt * 0.18) * 255.0)
+            hgt[i] = facet * 0.85 + tilt * 0.5 + grain * 0.10 - tarnish * 0.20
+    return alb, height_to_normal(hgt, size, 1.9), rgh
+
+
+def make_glaze(size):
+    """Glazed porcelain.
+
+    Fine china is not white plastic, and the difference is almost entirely
+    CRAZING: the network of hairline cracks in the glaze, too fine to see as
+    lines but enough to break the highlight into something that looks fired
+    rather than moulded. A Voronoi edge distance gives the network; a very low
+    amplitude keeps it hairline instead of cracked-pot.
+
+    A faint pooling of glaze — thicker in hollows, thinner on rims — supplies
+    the slight unevenness that separates a glazed surface from a painted one.
+    Albedo stays nearly white on purpose: this is a surface whose character
+    lives in roughness and normal, and tinting it here would fight the
+    per-instance colours the material library assigns.
+    """
+    alb = bytearray(size * size * 3)
+    rgh = bytearray(size * size)
+    hgt = [0.0] * (size * size)
+    inv = 1.0 / size
+    for y in range(size):
+        v = (y + 0.5) * inv
+        for x in range(size):
+            u = (x + 0.5) * inv
+            f1, f2, _ = voronoi(u, v, 26, SEED + 503, jitter=0.95)
+            # the crack is the boundary; sharpen it hard so it stays hairline
+            craze = clamp01(1.0 - (f2 - f1) * 26.0)
+            pool = fbm(u, v, 7, 7, 3, SEED + 511)
+            dust = fbm(u, v, 190, 190, 2, SEED + 519)
+            t = 0.985 + 0.015 * pool
+            i = y * size + x
+            alb[i * 3] = _b(t * (1.0 - 0.05 * craze) * 255.0)
+            alb[i * 3 + 1] = _b(t * (1.0 - 0.045 * craze) * 255.0)
+            alb[i * 3 + 2] = _b(t * (1.0 - 0.035 * craze) * 255.0)
+            # glass-smooth, roughening only along the crazing and in the dust
+            rgh[i] = _b(clamp01(0.11 + 0.34 * craze + 0.05 * dust) * 255.0)
+            hgt[i] = -craze * 0.55 + pool * 0.28
+    return alb, height_to_normal(hgt, size, 0.9), rgh
+
+
 FAMILIES = (
     ("cobble", make_cobble, 512),
     ("ashlar", make_ashlar, 512),
@@ -552,6 +651,8 @@ FAMILIES = (
     ("bark", make_bark, 256),
     ("plaster", make_plaster, 256),
     ("roof", make_roof, 256),
+    ("metal", make_metal, 256),
+    ("glaze", make_glaze, 256),
 )
 
 
