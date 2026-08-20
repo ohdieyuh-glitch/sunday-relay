@@ -156,6 +156,19 @@ start_public() {
   fi
 }
 
+# PRE-FLIGHT: a port someone else already holds.
+#
+# stop-wonderland.sh has just run, so anything of ours is gone. Whatever is
+# still on these ports belongs to something else, and starting into that
+# collision is the quiet failure: our server fails to bind, and every later
+# check that merely asks "is the port listening" passes on the intruder.
+for _p in "$WL_HTTP_PORT" "$WL_STREAMER_PORT"; do
+  if wl_port_listening "$_p"; then
+    _owner="$(wl_port_owner_pid "$_p" || true)"
+    wl_die "port $_p is already in use${_owner:+ by pid $_owner} — Wonderland cannot bind it. Free it, or set WL_HTTP_PORT / WL_STREAMER_PORT."
+  fi
+done
+
 start_turn
 start_signalling
 start_app

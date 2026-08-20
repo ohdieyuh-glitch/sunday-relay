@@ -211,7 +211,30 @@ if [ -n "$FRAME" ] && [ -f "$FRAME" ] && command -v python3 >/dev/null 2>&1; the
   fv() { case "$FC" in *"$1="*) printf '%s' "${FC#*$1=}" | head -1 ;; esac; }
   W="$(fv width)"; H="$(fv height)"; V="$(fv verdict)"
   LM="$(fv luma_mean)"; LS="$(fv luma_sd)"; NOTE="$(fv note)"
-  item PASS "hero frame present" "$FRAME"
+  # FRESHNESS. proof.sh picks the newest hero-*.png in $WL_PROOF, and after a
+  # failed capture the newest one belongs to an EARLIER run. A frame that
+  # predates this run's own logs cannot be evidence about this run, so it is
+  # reported as UNVERIFIED with its age rather than passed as if it were.
+  _fr_age="unknown age"
+  _fr_stale=0
+  _fr_m="$(stat -c %Y "$FRAME" 2>/dev/null || echo 0)"
+  _newest_log=0
+  for _l in "$BUILD_LOG" "$APP_LOG" "$SIG_LOG"; do
+    [ -f "$_l" ] || continue
+    _lm="$(stat -c %Y "$_l" 2>/dev/null || echo 0)"
+    [ "$_lm" -gt "$_newest_log" ] && _newest_log="$_lm"
+  done
+  if [ "${_fr_m:-0}" -gt 0 ]; then
+    _fr_age="$(( ( $(date +%s) - _fr_m ) / 60 )) min old"
+    if [ "$_newest_log" -gt 0 ] && [ "$_fr_m" -lt "$_newest_log" ]; then
+      _fr_stale=1
+    fi
+  fi
+  if [ "$_fr_stale" = "1" ]; then
+    item UNVERIFIED "hero frame present" "$FRAME ($_fr_age) — OLDER than this run's logs; it is a previous run's frame"
+  else
+    item PASS "hero frame present" "$FRAME ($_fr_age)"
+  fi
   if [ -n "${W:-}" ] && [ -n "${H:-}" ]; then
     item PASS "hero frame size" "${W}x${H}"
   else
@@ -219,7 +242,9 @@ if [ -n "$FRAME" ] && [ -f "$FRAME" ] && command -v python3 >/dev/null 2>&1; the
   fi
   case "$V" in
     STRUCTURED)
-      FRAME_VERDICT="STRUCTURED"
+      # A structured frame from a PREVIOUS run is still not evidence about this
+      # one; leaving FRAME_VERDICT unset keeps the rung below STREAMED.
+      [ "$_fr_stale" = "1" ] || FRAME_VERDICT="STRUCTURED"
       item PASS "hero frame structure" "luma ${LM:-?} sd ${LS:-?} — real image structure"
       ;;
     FAIL)

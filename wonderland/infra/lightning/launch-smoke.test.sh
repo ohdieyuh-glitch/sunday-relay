@@ -40,6 +40,24 @@ EOF
 printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/docker"
 chmod +x "$TMP/bin/nvidia-smi" "$TMP/bin/docker"
 
+mkpng() {   # $1 = path, $2 = black|flat|real
+  python3 - "$1" "$2" <<'PY'
+import zlib, struct, sys
+path, kind = sys.argv[1], sys.argv[2]
+w = h = 96
+if kind == "black":  fn = lambda y: [0] * (w * 3)
+elif kind == "flat": fn = lambda y: [120, 90, 60] * w
+else: fn = lambda y: [v for x in range(w) for v in ((x*7+y*13)%256, (x*5+y*3)%256, (y*11+x)%256)]
+raw = b''.join(b'\x00' + bytes(fn(y)) for y in range(h))
+def ch(t, d):
+    c = t + d
+    return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+open(path, 'wb').write(b'\x89PNG\r\n\x1a\n'
+    + ch(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
+    + ch(b'IDAT', zlib.compress(raw)) + ch(b'IEND', b''))
+PY
+}
+
 # A launcher directory holding the REAL launcher and common.sh, with every
 # stage it shells out to replaced by a stub we control.
 stage_dir() {   # $1 = dir, $2..= which stages should fail
@@ -85,10 +103,73 @@ world "$TMP/w" staged url
 printf '#!/bin/sh\ncase "$1 $2" in "image inspect") exit 0;; esac\nexit 0\n' > "$TMP/bin/docker"
 out="$(launch "$TMP/L" "$TMP/w")"; rc=$?
 for st in "1/8  MACHINE" "2/8  UNREAL 5.8" "3/8  PREPARE" "4/8  BUILD + COOK" \
-          "5/8  STREAM UP" "6/8  HERO FRAME" "7/8  VERIFY" "8/8  WONDERLAND IS OPEN"; do
+          "5/8  STREAM UP" "6/8  HERO FRAME" "7/8  VERIFY"; do
   has "$out" "$st" && ok "reached $st" || bad "never reached $st"
 done
+# Stage 8 now has TWO forms. Reaching it is what this section tests; WHICH form
+# it prints is evidence-dependent and is the subject of the next section.
+if has "$out" "8/8  WONDERLAND IS OPEN" || has "$out" "8/8  NOT OPEN"; then
+  ok "reached stage 8/8"
+else
+  bad "never reached stage 8/8"
+fi
 [ "$rc" -eq 0 ] && ok "a fully-stubbed run exits 0" || bad "a fully-stubbed run exited $rc"
+
+echo "== 8/8 is EARNED, not printed =="
+# The stubbed run has a staged build and nothing else: no live process, no
+# reachable player page, no URL, no hero frame, no verification. Announcing
+# WONDERLAND IS OPEN there would send the founder to a dead link.
+if has "$out" "8/8  WONDERLAND IS OPEN"; then
+  bad "it announced OPEN with no process, URL, frame or verification"
+else
+  ok "it refuses to announce OPEN without evidence"
+fi
+has "$out" "NOT OPEN" && ok "  and says so plainly" || bad "  it did not say NOT OPEN"
+for miss in "the Wonderland process is not running" \
+            "no hero frame from this run" "verification did not pass"; do
+  has "$out" "$miss" && ok "  names missing evidence: $miss" || bad "  did not name: $miss"
+done
+# This fixture DOES write a player-url.txt, so the honest complaint is that the
+# URL cannot be reached — not that it is absent. Asserting "no browser URL"
+# here was my error, and it would have masked the reachability check working.
+if has "$out" "no browser URL" || has "$out" "is not reachable"; then
+  ok "  names the URL problem correctly (absent or unreachable)"
+else
+  bad "  a URL that cannot be opened was accepted"
+fi
+has "$out" "Logs for diagnosis" && ok "  and points at the logs" || bad "  no diagnosis pointer"
+
+echo "== a stale hero frame cannot satisfy VERIFY =="
+stage_dir "$TMP/Ls"
+world "$TMP/ws" staged url
+mkdir -p "$TMP/ws/proof"
+mkpng "$TMP/ws/proof/hero-20200101T000000Z.png" real
+touch -d "2020-01-01" "$TMP/ws/proof/hero-20200101T000000Z.png" 2>/dev/null || true
+# The check is worthless if the fixture was never written — mkpng lived in the
+# other suite and this silently passed on a directory with no PNG in it.
+if [ -s "$TMP/ws/proof/hero-20200101T000000Z.png" ]; then
+  ok "the stale-frame fixture exists ($(stat -c %s "$TMP/ws/proof/hero-20200101T000000Z.png") bytes)"
+else
+  bad "the stale-frame fixture was not created; the next check proves nothing"
+fi
+outs="$(launch "$TMP/Ls" "$TMP/ws")"
+if has "$outs" "8/8  WONDERLAND IS OPEN"; then
+  bad "a frame from 2020 satisfied this run"
+else
+  ok "an old frame does not satisfy this run"
+fi
+
+echo "== cleanup only touches Wonderland-owned processes =="
+sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$HERE/stop-wonderland.sh" > "$TMP/nostop.sh"
+grep -qE 'kill_match "tunnel"[[:space:]]+"\[c\]loudflared"[[:space:]]*$' "$TMP/nostop.sh" \
+  && bad "stop-wonderland kills ANY cloudflared, including the founder's own" \
+  || ok "the tunnel pattern is scoped to our port"
+grep -qE 'kill_match "turn"[[:space:]]+"\[t\]urnserver"[[:space:]]*$' "$TMP/nostop.sh" \
+  && bad "stop-wonderland kills ANY turnserver" \
+  || ok "the turn pattern is scoped to our config"
+grep -q 'already in use' "$HERE/run-stream.sh" \
+  && ok "run-stream refuses a port someone else holds" \
+  || bad "no port-collision preflight"
 
 echo "== stages appear in order =="
 prev=0; order_ok=1

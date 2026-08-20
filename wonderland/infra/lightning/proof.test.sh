@@ -166,6 +166,34 @@ has "$out4" "requires the founder to" && ok "  and it says who must judge it" \
 
 kill "$LISTEN_PID" 2>/dev/null || true
 
+echo "== a frame from a PREVIOUS run is not evidence about this one =="
+# The exact trap: this run's capture failed, so the newest hero-*.png in
+# $WL_PROOF belongs to an earlier run. proof.sh picks the newest one, so
+# without a freshness check it would report a structured frame and promote the
+# assurance rung on a stream that rendered nothing today.
+make_world "$TMP/wstale" built real url
+# age the frame well behind the run's own logs
+touch -d "2020-01-01" "$TMP/wstale/proof/hero-20260820T000000Z.png" 2>/dev/null \
+  || touch -t 202001010000 "$TMP/wstale/proof/hero-20260820T000000Z.png"
+outst="$(run_proof "$TMP/wstale")"
+has "$outst" "OLDER than this run" \
+  && ok "a frame older than the logs is called out" \
+  || bad "a stale frame was accepted as this run's evidence"
+has "$outst" "UNVERIFIED  hero frame present" \
+  && ok "  and reported UNVERIFIED, not PASS" \
+  || bad "  a stale frame was reported PASS"
+if has "$outst" "ASSURANCE: STREAMED" || has "$outst" "ASSURANCE: DEPLOYED"; then
+  bad "  a stale frame promoted the assurance rung"
+else
+  ok "  and does not promote the rung"
+fi
+# a FRESH frame must still pass, or the check is just refusing everything
+make_world "$TMP/wfresh" built real url
+outfr="$(run_proof "$TMP/wfresh")"
+has "$outfr" "PASS        hero frame present" \
+  && ok "a fresh frame still passes" \
+  || bad "the freshness check now rejects good frames too"
+
 echo "== the report is persisted =="
 n=0; for f in "$TMP/w4/proof"/proof-*.txt; do [ -e "$f" ] && n=$((n+1)); done
 [ "$n" -ge 1 ] && ok "a proof-*.txt is written under WL_PROOF" || bad "no persisted report"

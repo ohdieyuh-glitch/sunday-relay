@@ -15,6 +15,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=common.sh
 . "$HERE/common.sh"
 
+# WHEN THIS RUN STARTED. Stage 7 uses it to refuse a hero frame that predates
+# the run — a previous run's PNG sitting in $WL_PROOF would otherwise satisfy
+# VERIFY and let 8/8 announce a stream that never rendered anything today.
+RUN_STARTED_EPOCH="$(date +%s)"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 SKIP_SHOT="${SKIP_SHOT:-0}"
 START=$(date +%s)
@@ -116,7 +120,16 @@ banner "7/8  VERIFY"
 # renderer holds the port open and logs nothing wrong, so check the frame
 # itself: a real Wonderland frame is neither uniformly black nor uniformly one
 # colour. This is the cheapest honest test available without a human eye.
-if [ -f "$SHOT" ] && command -v python3 >/dev/null 2>&1; then
+# FRESHNESS FIRST. A frame from an earlier run is not evidence about this one,
+# and it is exactly what would be lying around after a capture failure.
+if [ -f "$SHOT" ]; then
+  _shot_mtime="$(stat -c %Y "$SHOT" 2>/dev/null || echo 0)"
+  if [ "${_shot_mtime:-0}" -lt "$RUN_STARTED_EPOCH" ]; then
+    wl_warn "hero frame $SHOT predates this run — refusing to verify a stale artifact"
+    SHOT=""
+  fi
+fi
+if [ -n "${SHOT:-}" ] && [ -f "$SHOT" ] && command -v python3 >/dev/null 2>&1; then
   python3 - "$SHOT" <<'PYEOF' || wl_warn "frame check inconclusive"
 import sys, zlib, struct
 p = sys.argv[1]
@@ -172,9 +185,42 @@ PYEOF
 fi
 
 # ----------------------------------------------------------------- 7. the URL
-banner "8/8  WONDERLAND IS OPEN"
-ELAPSED=$(( $(date +%s) - START ))
+# ---------------------------------------------- 8. earned, or not printed
+#
+# "WONDERLAND IS OPEN" was printed unconditionally: the launcher reached the end
+# and said so. Every stage below it can fail softly — run-stream warns rather
+# than dies when no streamer join line appears, the capture warns when it
+# produces nothing — so the banner could announce a world that was never
+# running to a founder who then opens a dead URL.
+#
+# Six pieces of evidence, each checked here rather than assumed from having got
+# this far. Anything missing and this reports what IS true instead.
+OPEN_FAILS=""
+_need() { OPEN_FAILS="${OPEN_FAILS}${OPEN_FAILS:+, }$1"; }
+
+[ -d "$WL_OUT/Linux" ] && [ -n "$(ls -A "$WL_OUT/Linux" 2>/dev/null || true)" ]   || _need "no packaged executable"
+pgrep -f "[W]onderland.*PixelStreamingURL" >/dev/null 2>&1   || pgrep -x Wonderland >/dev/null 2>&1   || _need "the Wonderland process is not running"
+wl_port_listening "$WL_HTTP_PORT" || _need "pixel streaming is not listening on $WL_HTTP_PORT"
+if wl_http_ok "http://127.0.0.1:$WL_HTTP_PORT/" 10; then :; else _need "the player page did not answer"; fi
 URL="$(cat "$WL_RUN/player-url.txt" 2>/dev/null || true)"
+if [ -z "$URL" ]; then
+  _need "no browser URL"
+elif ! wl_http_ok "$URL" 20; then
+  _need "the browser URL $URL is not reachable"
+fi
+[ -n "${SHOT:-}" ] && [ -f "${SHOT:-}" ] || _need "no hero frame from this run"
+[ "${VERIFY_RESULT:-}" = "structured" ] || _need "verification did not pass"
+
+if [ -n "$OPEN_FAILS" ]; then
+  banner "8/8  NOT OPEN"
+  wl_warn "Wonderland is NOT open. Missing: $OPEN_FAILS"
+  wl_say "Logs for diagnosis without re-running the GPU:"
+  wl_say "  $WL_LOG/build.log  $WL_LOG/app.log  $WL_LOG/sig.log  $WL_LOG/tunnel.log"
+  wl_say "  then: bash $HERE/proof.sh"
+else
+  banner "8/8  WONDERLAND IS OPEN"
+fi
+ELAPSED=$(( $(date +%s) - START ))
 echo
 if [ -n "$URL" ]; then
   printf '\033[1;32m'

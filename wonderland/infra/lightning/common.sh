@@ -137,6 +137,30 @@ wl_find_first() {   # $1 = root, rest = find predicates
   find "$root" "$@" -print -quit 2>/dev/null || true
 }
 
+# WHO HOLDS A PORT. wl_port_listening answers "is something there", which is
+# the wrong question before we start: if a FOREIGN process already holds 8080,
+# our signalling server fails to bind, and every later check that only asks "is
+# the port listening" then passes — on someone else's service. The stream would
+# be reported up while nothing of ours is running.
+wl_port_owner_pid() {
+  local port="$1"
+  command -v ss >/dev/null 2>&1 || return 1
+  ss -lptnH "sport = :$port" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2
+}
+
+# Is an HTTP endpoint actually answering? "A URL exists" and "a browser can open
+# it" are different claims and only the second one is worth printing.
+wl_http_ok() {
+  local url="$1" timeout="${2:-10}"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsS --max-time "$timeout" -o /dev/null "$url" 2>/dev/null
+    return $?
+  fi
+  # No curl is NOT a pass. Report unknown by failing; the caller decides how to
+  # describe it rather than assuming the best.
+  return 2
+}
+
 wl_have_gpu() {
   command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1
 }

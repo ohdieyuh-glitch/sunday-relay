@@ -28,12 +28,20 @@ kill_match() {
   stopped=1
 }
 
-# The client first: it is the only one actually holding the GPU.
+# ONLY WHAT IS OURS.
+#
+# These patterns used to be bare process names — cloudflared, turnserver,
+# anything matching "signalling". On a shared Studio that is indiscriminate: a
+# founder's own tunnel or another project's TURN server matches just as well as
+# ours, and "stop Wonderland" would take them down without a word.
+#
+# Every pattern below is anchored to a path this deployment owns — the packaged
+# build, the engine tree, our generated turnserver.conf, our HTTP port — so a
+# process that merely shares a binary name is left alone.
 kill_match "Wonderland client" "[W]onderland.*PixelStreamingURL"
-pgrep -x Wonderland >/dev/null 2>&1 && { pkill -9 -x Wonderland 2>/dev/null; stopped=1; }
-kill_match "signalling"        "[s]ignalling|[c]irrus|[W]ilbur"
-kill_match "tunnel"            "[c]loudflared"
-kill_match "turn"              "[t]urnserver"
+kill_match "signalling"        "${WL_UE//\//\/}.*(signalling|cirrus|Wilbur)"
+kill_match "tunnel"            "[c]loudflared.*127\.0\.0\.1:${WL_HTTP_PORT}"
+kill_match "turn"              "[t]urnserver.*${WL_RUN//\//\/}/turnserver\.conf"
 
 sleep 2
 echo
