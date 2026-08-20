@@ -179,6 +179,11 @@ def make_unreal():
     return u
 
 
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from wl_preview_leaf import apply as _wl_leaf_apply  # noqa: E402
+
+
 def main():
     stub = make_unreal()
     sys.modules["unreal"] = stub
@@ -187,6 +192,9 @@ def main():
     # module-level `import unreal` picks up the stub; anything the stub misses
     # surfaces as a real AttributeError here rather than in a 12-minute build
     exec(compile(src, GEN, "exec"), ns)
+    # Without this the leaf-card branches are all skipped and the dry run counts
+    # a world with no foliage cards in it — see verify-hero-composition.py.
+    _wl_leaf_apply(ns)
     import json
     layout = json.load(io.open(LAYOUT, encoding="utf8"))
     ns["build"](layout)

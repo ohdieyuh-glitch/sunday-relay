@@ -1626,12 +1626,63 @@ def build(layout):
                  (0.30, -0.5, 0.72, "foliage_hi"), (-0.35, -0.4, 0.68, "foliage"), (0.05, 0.15, 0.6, "foliage_hi"),
                  (0.62, -0.28, 0.66, "foliage"), (-0.6, -0.18, 0.62, "foliage_hi"), (0.0, 0.55, 0.7, "foliage"),
                  (0.28, 0.42, 0.56, "foliage_hi"), (-0.28, 0.02, 0.9, "foliage")]
+        # A CANOPY IS A SILHOUETTE, AND A SILHOUETTE IS A BROKEN EDGE.
+        #
+        # This was eleven smooth spheres, and across the five great trees it is
+        # roughly a THIRD of the hero frame — by far the largest primitive read
+        # left in the world. The shrubs got leaf cards a while ago and the hero
+        # trees never did, which is the wrong way round: the trees are what the
+        # eye lands on.
+        #
+        # Three things per blob, in the order the eye reads them:
+        #   the DARK INTERIOR that never catches light, so the mass has depth
+        #   instead of being lit evenly all the way through;
+        #   the blob itself, unchanged;
+        #   LEAF CARDS around its outer surface, which is the only one of the
+        #   three that changes the outline. Cards sit at 0.95 of the radius so
+        #   they break the edge rather than floating outside it, and lean at
+        #   varying angles because a fan of parallel cards reads as a fan.
         for i, (ox, oy, cs, mat) in enumerate(blobs):
             if not giant and i > 2:
                 break
             d = 2.0 * cr * cs
-            _part("sphere", x + ox * cr, y + oy * cr, th + cr * 0.30 + i * cr * 0.12,
+            bx_ = x + ox * cr
+            by_ = y + oy * cr
+            bz_ = th + cr * 0.30 + i * cr * 0.12
+            if giant and i < 4:
+                _part("sphere", bx_, by_, bz_, d * 0.72 / 100.0, d * 0.72 / 100.0,
+                      d * 0.72 / 100.0, "foliage_deep", "%s_dark%d" % (label, i))
+            _part("sphere", bx_, by_, bz_,
                   d / 100.0, d / 100.0, d / 100.0, mat, "%s_canopy%d" % (label, i))
+            if "leafcard" in MATS:
+                ncards = (11 if giant else 4)
+                for k in range(ncards):
+                    # golden-angle spiral, biased to the upper hemisphere where
+                    # the light is and where the outline is actually read
+                    u = (k + 0.5) / ncards
+                    zc = 1.0 - u * 1.42
+                    zc = max(-0.72, zc)
+                    rr = math.sqrt(max(0.0, 1.0 - zc * zc))
+                    aa = k * 2.39996 + (i * 0.7)
+                    px_ = bx_ + math.cos(aa) * rr * d * 0.475
+                    py_ = by_ + math.sin(aa) * rr * d * 0.475
+                    pz_ = bz_ + zc * d * 0.475
+                    cw = d * 0.0052 * (0.8 + ((k * 7 + i * 3) % 5) * 0.1)
+                    _part("cube", px_, py_, pz_, cw, 0.02, cw * 1.15,
+                          "leafcard_hi" if (k + i) % 2 else "leafcard",
+                          "%s_lc%d_%d" % (label, i, k),
+                          rot=(float((k * 31 + i * 17) % 54) - 27.0,
+                               math.degrees(aa), float((k * 13) % 40) - 20.0))
+                # a sunlit rim on the top-outer blobs: the addendum asks for
+                # shadowed interiors AND sunlit edges, and only one of those
+                # was here
+                if giant and cs > 0.7:
+                    for k in range(4):
+                        aa = k * 1.5708 + 0.4
+                        _part("sphere", bx_ + math.cos(aa) * d * 0.40,
+                              by_ + math.sin(aa) * d * 0.40, bz_ + d * 0.30,
+                              d * 0.16 / 100.0, d * 0.16 / 100.0, d * 0.13 / 100.0,
+                              "foliage_spr", "%s_rim%d_%d" % (label, i, k))
 
     def kit_shrub(x, y, s, label, bloom=None):
         """A layered shrub — the missing storey.

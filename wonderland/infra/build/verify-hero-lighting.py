@@ -61,7 +61,12 @@ def load_world():
     src = io.open(os.path.join(SP, "verify-hero-composition.py"), encoding="utf8").read()
     ns = {"__name__": "__wl_rt__", "__file__": os.path.join(SP, "verify-hero-composition.py")}
     # run only the top half: the stub, the recorder, the png writer
-    cut = src.index("def main():")
+    cut = src.index("import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from wl_preview_leaf import apply as _wl_leaf_apply  # noqa: E402
+
+
+def main():")
     exec(compile(src[:cut], "verify-hero-composition.py", "exec"), ns)
     sys.modules["unreal"] = ns["make_unreal"]()
     gen = io.open(os.path.join(SP, "generate-hub-level.py"), encoding="utf8").read()
@@ -79,6 +84,9 @@ def load_world():
     os.chdir(_WL)
     try:
         exec(compile(gen, "gen.py", "exec"), gns)
+        # leaf cards exist on the GPU; make the trace agree (see the
+        # composition harness for why this matters)
+        _wl_leaf_apply(gns)
         ns["records"][:] = []
         gns["build"](json.load(io.open("WorldDesign/hub-layout.json", encoding="utf8")))
     finally:

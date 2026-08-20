@@ -212,6 +212,13 @@ def write_png(path, w, h, px):
                            + ck(b"IDAT", zlib.compress(bytes(raw), 6)) + ck(b"IEND", b""))
 
 
+
+
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from wl_preview_leaf import apply as _wl_leaf_apply  # noqa: E402
+
+
 def main():
     sys.modules["unreal"] = make_unreal()
     src = io.open(GEN, encoding="utf8").read()
@@ -228,6 +235,10 @@ def main():
     src = src.replace(anchor, anchor + "\n        __wl_record__(mesh_key, location, scale, label, rotation, mat)", 1)
     ns = {"__name__": "__wl_preview__", "__file__": GEN, "__wl_record__": record}
     exec(compile(src, GEN, "exec"), ns)
+    # Patch AFTER the module executes and BEFORE build() runs: build() is what
+    # calls build_leaf_material and then MATS.update()s the result, so the
+    # substitution has to be in place for that call and not before it.
+    _wl_leaf_apply(ns)
     records[:] = []                                   # drop the module-level build
     ns["build"](json.load(io.open(LAYOUT, encoding="utf8")))
     # STAND-INS FOR THE DOGS, transcribed from the C++ pawn.
