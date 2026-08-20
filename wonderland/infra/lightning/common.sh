@@ -105,19 +105,26 @@ wl_wait_port() {
   return 1
 }
 
-# The engine ships its own Node. The system one on these images is often far
-# too old for the Wilbur signalling server, and using it fails in a way that
-# looks like a networking problem rather than a version problem.
+# THE SIGNALLING SERVER'S OWN NODE.
+#
+# It lives in the PixelStreamingInfrastructure checkout, NOT in the engine.
+# This searched $WL_UE, which on Lightning is a Docker image and therefore an
+# empty or absent directory — so the search always came back empty and the
+# fallback quietly used whatever system node was on PATH. The system one on
+# these images is typically far too old for Wilbur, and it fails in a way that
+# looks like a networking problem rather than a version problem. $WL_UE is
+# still searched second so a native-engine host keeps working.
 wl_bundled_node() {
-  # Same hazard as everywhere else, and this one searches the WHOLE ENGINE:
-  # `| head -1` hands find a SIGPIPE it cannot survive under pipefail, and
-  # run-stream.sh assigns straight from this call at stage 5. Found by the
-  # regression test rather than by reading — I had already "finished" the
-  # audit when it reported this one.
+  # Same hazard as everywhere else: `| head -1` hands find a SIGPIPE it cannot
+  # survive under pipefail, and run-stream.sh assigns straight from this call
+  # at stage 5. Found by the regression test rather than by reading.
   #
   # (Definition order does not matter: common.sh is sourced whole, so
   # wl_find_first exists by the time anything calls this.)
-  wl_find_first "$WL_UE" -path "*platform_scripts/bash/node/bin/node" -type f
+  local n
+  n="$(wl_find_first "$WL_PS_INFRA" -path "*node/bin/node" -type f)"
+  [ -n "$n" ] || n="$(wl_find_first "$WL_UE" -path "*platform_scripts/bash/node/bin/node" -type f)"
+  printf '%s' "$n"
 }
 
 # FIRST MATCH WITHOUT A PIPE.
@@ -239,4 +246,122 @@ wl_ensure_ue_image() {
     wl_die "docker load succeeded but $WL_UE_IMAGE is still not present — the archive holds a different image"
   fi
   wl_die "no UE image and no usable archive at $WL_UE_ARCHIVE. This launcher will NOT download Unreal on a GPU machine; obtain it on CPU first (see prepare.sh)."
+}
+
+# ------------------------------------- Pixel Streaming infrastructure (UE5.8)
+#
+# THE ARCHITECTURE THAT WAS PROVEN WRONG. run-stream.sh used to search $WL_UE
+# for a SignallingWebServer directory, because on the old host the plugin's
+# copy shipped inside the engine tree. On Lightning the engine is a Docker
+# image, not a directory, so that search finds nothing no matter how healthy
+# the stack is. The infrastructure is a SEPARATE checkout on persistent
+# storage, cloned and built on CPU, and that is what these point at.
+export WL_PS_INFRA="${WL_PS_INFRA:-$WL_ROOT/pixel-streaming-infra}"
+# EXACT, not minimum. The UE5.8 branch of PixelStreamingInfrastructure changed
+# Wilbur's command line — --player_port and --peer_options_file replaced the
+# older --http_port and inline --peer_options JSON. A UE5.5 checkout would
+# start, ignore the flags it does not know, and serve nothing on the port we
+# then report as up. Matching the string exactly is the only check that
+# separates those two outcomes before a GPU is attached.
+export WL_PS_VERSION="${WL_PS_VERSION:-UE5.8}"
+export WL_PS_SIG="${WL_PS_SIG:-$WL_PS_INFRA/SignallingWebServer}"
+
+# ------------------------------------------------------------------- coturn
+# The host `turnserver` binary does not exist on the Lightning image and
+# installing one needs root the Studio may not grant. The proven path is the
+# official container, saved to persistent storage on CPU exactly like the
+# engine, and restored — never pulled — when a GPU is already attached.
+export WL_TURN_IMAGE="${WL_TURN_IMAGE:-coturn/coturn:4.17.0-r0-debian}"
+export WL_TURN_ARCHIVE="${WL_TURN_ARCHIVE:-$WL_ROOT/coturn-4.17.0-r0-debian.tar}"
+# A NAME THIS DEPLOYMENT OWNS. Cleanup removes containers by this exact name
+# and nothing else: a Studio may be shared, and `docker rm` against anything
+# merely running coturn would take down someone else's relay without a word.
+export WL_TURN_CONTAINER="${WL_TURN_CONTAINER:-wonderland-turn}"
+export WL_TURN_USER="${WL_TURN_USER:-wonderland}"
+export WL_TURN_PASS="${WL_TURN_PASS:-wonderland}"
+export WL_TURN_REALM="${WL_TURN_REALM:-wonderland}"
+
+# WHICH UE VERSION THE CHECKOUT IS. Empty when it cannot be determined, which
+# callers must treat as a failure rather than as "probably fine".
+#
+# The value lives in a shell file inside the infrastructure checkout, and its
+# exact path has moved between UE releases — so this searches for the
+# assignment rather than hardcoding a location that a future branch would
+# invalidate silently. The whole pipeline runs inside a subshell with pipefail
+# disabled: no match is the ordinary answer here, and under the callers'
+# `set -euo pipefail` a bare grep miss would end the script with no message.
+wl_ps_version() {
+  local root="${1:-$WL_PS_INFRA}"
+  [ -d "$root" ] || return 0
+  ( set +o pipefail
+    grep -rhoE '^[[:space:]]*(export[[:space:]]+)?DOWNLOAD_VERSION=[A-Za-z0-9._-]+' \
+      "$root" 2>/dev/null | head -1 | sed 's/.*DOWNLOAD_VERSION=//' ) || true
+}
+
+# READY | WRONG_VERSION | NOT_BUILT | MISSING. Reporting only; changes nothing.
+wl_ps_status() {
+  [ -d "$WL_PS_SIG" ] || { echo MISSING; return; }
+  local v; v="$(wl_ps_version)"
+  [ "$v" = "$WL_PS_VERSION" ] || { echo WRONG_VERSION; return; }
+  # BOTH halves, because they fail independently and for different reasons:
+  # dist/ is Wilbur compiled from TypeScript, www/ is the player frontend
+  # bundled separately. A checkout with one and not the other starts a server
+  # that answers 404 for the page a founder was told to open.
+  [ -d "$WL_PS_SIG/dist" ] || { echo NOT_BUILT; return; }
+  [ -d "$WL_PS_SIG/www" ]  || { echo NOT_BUILT; return; }
+  echo READY
+}
+
+# Fail closed with a message that names the one thing to do about it.
+wl_require_ps_infra() {
+  case "$(wl_ps_status)" in
+    READY) wl_ok "pixel streaming infrastructure $WL_PS_VERSION at $WL_PS_INFRA"; return 0 ;;
+    MISSING)
+      wl_die "no SignallingWebServer at $WL_PS_SIG. Clone the ${WL_PS_VERSION} branch of PixelStreamingInfrastructure to $WL_PS_INFRA and build it on CPU (see prepare.sh); this launcher will not fetch it on a GPU machine." ;;
+    WRONG_VERSION)
+      wl_die "the checkout at $WL_PS_INFRA is DOWNLOAD_VERSION='$(wl_ps_version)', not $WL_PS_VERSION. Wilbur's command line differs between branches, so the wrong one starts and serves nothing. Check out the $WL_PS_VERSION branch on CPU." ;;
+    NOT_BUILT)
+      wl_die "$WL_PS_SIG is present but not built (need both dist/ and www/). Run the CPU build before attaching a GPU." ;;
+  esac
+}
+
+wl_turn_image_present() {
+  command -v docker >/dev/null 2>&1 || return 1
+  docker image inspect "$WL_TURN_IMAGE" >/dev/null 2>&1
+}
+
+# READY | RESTORABLE | MISSING, same three answers as the engine.
+wl_turn_status() {
+  if wl_turn_image_present; then echo READY; return; fi
+  if [ -f "$WL_TURN_ARCHIVE" ]; then
+    local first
+    first="$( ( set +o pipefail; tar -tf "$WL_TURN_ARCHIVE" 2>/dev/null | head -1 ) || true)"
+    [ -n "$first" ] && { echo RESTORABLE; return; }
+  fi
+  echo MISSING
+}
+
+# Make coturn available, or fail closed. NO BRANCH REACHES THE NETWORK — the
+# cost invariant that governs the engine governs this too, and a `docker pull`
+# here would spend GPU time on a download the archive exists to prevent.
+wl_ensure_turn_image() {
+  if wl_turn_image_present; then
+    wl_ok "coturn image already present: $WL_TURN_IMAGE (archive not touched)"
+    return 0
+  fi
+  command -v docker >/dev/null 2>&1 || wl_die "no docker; cannot start the TURN relay"
+  [ -f "$WL_TURN_ARCHIVE" ] || wl_die \
+    "no coturn image and no archive at $WL_TURN_ARCHIVE. This launcher will NOT download it on a GPU machine; save it on CPU first (see prepare.sh)."
+  wl_say "coturn image absent; restoring from $WL_TURN_ARCHIVE"
+  docker load -i "$WL_TURN_ARCHIVE" || wl_die "docker load failed from $WL_TURN_ARCHIVE"
+  # Announce the fact, not the intention: docker load exits 0 having loaded
+  # whatever the archive happened to contain.
+  wl_turn_image_present && { wl_ok "restored $WL_TURN_IMAGE"; return 0; }
+  wl_die "docker load succeeded but $WL_TURN_IMAGE is still absent — the archive holds a different image"
+}
+
+# Is OUR container running? Named exactly, never matched by pattern.
+wl_turn_container_running() {
+  command -v docker >/dev/null 2>&1 || return 1
+  [ "$(docker inspect -f '{{.State.Running}}' "$WL_TURN_CONTAINER" 2>/dev/null || echo false)" = "true" ]
 }

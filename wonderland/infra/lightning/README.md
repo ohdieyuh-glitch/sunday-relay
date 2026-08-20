@@ -88,6 +88,8 @@ session keeps costing money.
 | `$WL_ROOT` | `/teamspace/studios/this_studio/wonderland` by default |
 | `$WL_ROOT/src` | the git checkout of `relay/wonderland-ca-fixes` |
 | `$WL_ROOT/UnrealEngine` | the engine, if installed natively |
+| `$WL_ROOT/pixel-streaming-infra` | the `UE5.8` PixelStreamingInfrastructure checkout (Wilbur + frontend) |
+| `$WL_ROOT/coturn-4.17.0-r0-debian.tar` | the saved coturn image, restored at launch |
 | `$WL_ROOT/packaged` | the cooked build |
 | `$WL_ROOT/proof` | hero frames, `hero-latest.png` symlinked to the newest |
 | `$WL_ROOT/logs` | build, app, signalling, tunnel, gates |
@@ -125,8 +127,24 @@ this is why.
 - **TURN must be advertised in the signalling server's peer options.** Not just
   running — advertised. Without it the stream works on the host and is black
   everywhere else.
-- **Use the engine's bundled Node for signalling.** The system Node on these
+- **Use the signalling server's own bundled Node.** The system Node on these
   images is usually far too old, and it fails looking like a network problem.
+  On the `UE5.8` branch that node is `v22.14.0`, and it ships inside the
+  infrastructure checkout — not inside the engine.
+- **The signalling server is NOT inside the engine on Lightning.** The engine
+  is a Docker image, so there is no tree to search; `run-stream.sh` used to
+  look for `SignallingWebServer` under `$WL_UE` and could never find it no
+  matter how healthy the stack was. It lives in its own checkout at
+  `$WL_PS_INFRA`, cloned and built on CPU.
+- **UE5.8 Wilbur takes `--player_port`, not `--http_port`,** and prefers
+  `--peer_options_file` over inline `--peer_options` JSON. A UE5.5 checkout
+  accepts the old flags, ignores the new ones, and serves nothing on the port
+  you then report as up — which is why the exact `DOWNLOAD_VERSION=UE5.8` is
+  required before anything starts.
+- **coturn is a container, not a host binary.** There is no `turnserver` on the
+  Lightning image and no root to install one, so the old `command -v turnserver`
+  check took the "same-host only" branch on every run — a warning, not an
+  error, and a stream that reaches a remote browser and stays black.
 - **`ss` is not always installed** and reports "nothing listening" when
   something is. `common.sh` reads `/proc/net/tcp`.
 - **Auto-exposure does not converge in the packaged stream.** Capturing

@@ -6,10 +6,14 @@
 #                    last time was ADVERTISING this to the browser through the
 #                    signalling server's peer options. Without it the page
 #                    connects, negotiates, and stays black.
-#   2. Wilbur        PixelStreaming2's signalling server. Launch it with the
-#                    ENGINE'S OWN NODE. The system node on these images is
-#                    typically ancient and fails in ways that look like a
-#                    network problem.
+#   2. Wilbur        PixelStreaming2's signalling server, from the SEPARATE
+#                    PixelStreamingInfrastructure checkout on persistent
+#                    storage — NOT from inside the engine. On Lightning the
+#                    engine is a Docker image, so there is no engine tree to
+#                    search and the old lookup could never succeed. Launch it
+#                    with the infrastructure's OWN NODE; the system node on
+#                    these images is typically ancient and fails in ways that
+#                    look like a network problem.
 #   3. Wonderland    the packaged client, pointed at signalling.
 #   4. cloudflared   a public https URL over outbound 443 only, so it does not
 #                    matter which ports the provider exposes.
@@ -26,74 +30,123 @@ APP="$(wl_find_first "$STAGED" -maxdepth 3 -name 'Wonderland.sh' -type f)"
 PUBLIC_MODE="${WL_PUBLIC:-tunnel}"        # tunnel | lightning | none
 
 # ------------------------------------------------------------------ 1. TURN
+#
+# THE CONTAINER, NOT A HOST BINARY. There is no `turnserver` on the Lightning
+# image and no root to install one, so the old `command -v turnserver` check
+# took the "coturn absent, same-host only" branch on every run — a warning,
+# not an error, which is how a stream reaches a browser and stays black.
 start_turn() {
-  command -v turnserver >/dev/null 2>&1 || { wl_warn "coturn absent; the stream will only work same-host"; return; }
-  pgrep -x turnserver >/dev/null && { wl_ok "turn already up"; return; }
+  wl_ensure_turn_image
+  if wl_turn_container_running; then
+    wl_ok "turn container $WL_TURN_CONTAINER already running"
+    return 0
+  fi
+  # A stopped container of ours keeps the name and blocks `docker run`. Remove
+  # only the one we own, by exact name.
+  docker rm -f "$WL_TURN_CONTAINER" >/dev/null 2>&1 || true
+
   cat > "$WL_RUN/turnserver.conf" <<TURNEOF
 listening-port=$WL_TURN_PORT
 fingerprint
 lt-cred-mech
-user=wonderland:wonderland
-realm=wonderland
+user=$WL_TURN_USER:$WL_TURN_PASS
+realm=$WL_TURN_REALM
 no-tls
 no-dtls
 no-multicast-peers
 TURNEOF
-  setsid nohup turnserver -c "$WL_RUN/turnserver.conf" >"$WL_LOG/turn.log" 2>&1 </dev/null &
-  sleep 1
-  wl_port_listening "$WL_TURN_PORT" && wl_ok "turn listening on $WL_TURN_PORT" \
-    || wl_warn "turn did not come up; see $WL_LOG/turn.log"
+
+  # --network host so the relay's advertised address is the machine's own and
+  # the allocated media ports need no mapping; a bridged coturn hands the
+  # browser an address inside Docker that nothing outside can reach.
+  docker run -d --name "$WL_TURN_CONTAINER" --network host \
+    -v "$WL_RUN/turnserver.conf:/etc/coturn/turnserver.conf:ro" \
+    "$WL_TURN_IMAGE" -c /etc/coturn/turnserver.conf \
+    >"$WL_LOG/turn.container" 2>>"$WL_LOG/turn.log" \
+    || wl_die "docker run failed for $WL_TURN_IMAGE; see $WL_LOG/turn.log"
+
+  # RUNNING IS NOT LISTENING. A container that exits immediately still leaves
+  # a zero exit from `docker run -d`, so both facts are checked.
+  local i=0
+  while [ "$i" -lt 15 ]; do
+    wl_port_listening "$WL_TURN_PORT" && break
+    sleep 1; i=$((i + 1))
+  done
+  wl_turn_container_running || {
+    docker logs "$WL_TURN_CONTAINER" >>"$WL_LOG/turn.log" 2>&1 || true
+    wl_die "the TURN container exited; see $WL_LOG/turn.log"; }
+  wl_port_listening "$WL_TURN_PORT" \
+    || wl_die "TURN container is up but nothing is listening on $WL_TURN_PORT; see $WL_LOG/turn.log"
+  wl_ok "turn listening on $WL_TURN_PORT (container $WL_TURN_CONTAINER)"
 }
 
 # ------------------------------------------------------------- 2. signalling
 start_signalling() {
-  local sigdir node
-  # Searching a 69 GB engine tree is precisely where `| head -1` guarantees a
-  # SIGPIPE, because find cannot possibly have finished first.
-  sigdir="$(wl_find_first "$WL_UE" -type d -name 'SignallingWebServer')"
-  [ -n "$sigdir" ] || sigdir="$(wl_find_first "$WL_UE" -type d -name 'Wilbur')"
-  [ -n "$sigdir" ] || wl_die "no signalling server found under $WL_UE (PixelStreaming2 plugin missing?)"
+  # Version, dist/ and www/ all proven before anything is started. Each of the
+  # three fails differently and none of them announces itself at run time: the
+  # wrong branch ignores unknown flags, a missing dist has no entry point, a
+  # missing www serves 404 on the page the founder was handed.
+  wl_require_ps_infra
 
+  # The infrastructure ships the node Wilbur was built against (v22.14.0 on
+  # the UE5.8 branch). Prefer it over anything on PATH — this is the same
+  # class of bug as the engine's bundled node, and the symptom is identical:
+  # a syntax error deep in a dependency that reads as a network failure.
+  local node npm_bin nodedir
   node="$(wl_bundled_node)"
-  if [ -z "$node" ]; then
-    wl_warn "engine-bundled node not found; falling back to system node ($(node -v 2>/dev/null || echo none))"
-    node="$(command -v node || true)"
-    [ -n "$node" ] || wl_die "no node at all; signalling cannot start"
+  if [ -n "$node" ]; then
+    nodedir="$(dirname "$node")"
+    PATH="$nodedir:$PATH"
+    export PATH
+  else
+    wl_warn "no bundled node found under $WL_PS_INFRA; falling back to $(command -v node || echo none)"
   fi
-  wl_say "signalling: $sigdir"
-  wl_say "node:       $node ($("$node" -v 2>/dev/null || echo '?'))"
+  npm_bin="$(command -v npm || true)"
+  [ -n "$npm_bin" ] || wl_die "no npm available to start Wilbur"
+
+  wl_say "signalling: $WL_PS_SIG ($WL_PS_VERSION)"
+  wl_say "node:       $(command -v node || echo '?') ($(node -v 2>/dev/null || echo '?'))"
 
   # THE MEDIA-PATH FIX. peerConnectionOptions carries the ICE servers the
   # BROWSER will use. A stun-only list works on the same host and fails across
   # a network, which is the exact shape of "it worked locally" bugs here.
-  local peer
+  #
+  # PASSED AS A FILE, not as inline JSON. UE5.8's Wilbur recommends
+  # --peer_options_file, and the inline form loses its quoting through the
+  # `npm start --` boundary — the server then starts with DEFAULT ICE servers
+  # and no TURN, silently, which is indistinguishable from success until a
+  # remote browser tries to play.
+  local host peer
+  host="$( ( set +o pipefail; hostname -I 2>/dev/null | awk '{print $1}' ) || true)"
+  [ -n "$host" ] || host="127.0.0.1"
   peer='{"iceServers":[{"urls":["stun:stun.l.google.com:19302"]},'
-  peer+='{"urls":["turn:'"$(hostname -I 2>/dev/null | awk '{print $1}')"':'"$WL_TURN_PORT"'"],'
-  peer+='"username":"wonderland","credential":"wonderland"}]}'
+  peer+='{"urls":["turn:'"$host"':'"$WL_TURN_PORT"'"],'
+  peer+='"username":"'"$WL_TURN_USER"'","credential":"'"$WL_TURN_PASS"'"}]}'
   printf '%s\n' "$peer" > "$WL_RUN/peer_options.json"
 
-  local entry=""
-  for cand in "$sigdir/dist/index.js" "$sigdir/build/index.js" "$sigdir/index.js" "$sigdir/cirrus.js"; do
-    [ -f "$cand" ] && { entry="$cand"; break; }
-  done
   : > "$WL_LOG/sig.log"
-  if [ -n "$entry" ]; then
-    setsid nohup "$node" "$entry" \
-      --http_port "$WL_HTTP_PORT" --streamer_port "$WL_STREAMER_PORT" \
-      --peer_options "$peer" \
-      >>"$WL_LOG/sig.log" 2>&1 </dev/null &
-  elif [ -x "$sigdir/platform_scripts/bash/start.sh" ]; then
-    # The shipped launcher; pass the same options through.
-    setsid nohup "$sigdir/platform_scripts/bash/start.sh" \
-      --http_port "$WL_HTTP_PORT" --streamer_port "$WL_STREAMER_PORT" \
-      --peer_options "$peer" \
-      >>"$WL_LOG/sig.log" 2>&1 </dev/null &
-  else
-    wl_die "found $sigdir but no entry point in it"
-  fi
+  # UE5.8 Wilbur flags, exactly: --player_port (not --http_port), --serve with
+  # an explicit --http_root, and the peer options from a file.
+  ( cd "$WL_PS_SIG" && setsid nohup npm start -- \
+      --streamer_port "$WL_STREAMER_PORT" \
+      --player_port "$WL_HTTP_PORT" \
+      --serve \
+      --http_root "$WL_PS_SIG/www" \
+      --peer_options_file "$WL_RUN/peer_options.json" \
+      >>"$WL_LOG/sig.log" 2>&1 </dev/null & )
 
-  wl_wait_port "$WL_HTTP_PORT" 60 && wl_ok "signalling http on $WL_HTTP_PORT" \
+  wl_wait_port "$WL_HTTP_PORT" 60 \
     || { tail -20 "$WL_LOG/sig.log" >&2; wl_die "signalling never listened on $WL_HTTP_PORT"; }
+  # BOTH ports. The streamer socket is the one the packaged client connects
+  # to; a Wilbur serving the page while that socket never opened would pass
+  # every HTTP check and never receive a single frame.
+  wl_wait_port "$WL_STREAMER_PORT" 30 \
+    || { tail -20 "$WL_LOG/sig.log" >&2; wl_die "signalling never listened on the streamer port $WL_STREAMER_PORT"; }
+  # And the page must ANSWER, not merely be bound. --serve with a wrong
+  # --http_root binds happily and 404s every request.
+  wl_http_ok "http://127.0.0.1:$WL_HTTP_PORT/" 15 \
+    || { tail -20 "$WL_LOG/sig.log" >&2; wl_die "the player page at 127.0.0.1:$WL_HTTP_PORT did not answer; check --http_root"; }
+  wl_ok "signalling http $WL_HTTP_PORT, streamer $WL_STREAMER_PORT, player page answering"
 }
 
 # --------------------------------------------------------------------- 3. app
@@ -162,12 +215,26 @@ start_public() {
 # still on these ports belongs to something else, and starting into that
 # collision is the quiet failure: our server fails to bind, and every later
 # check that merely asks "is the port listening" passes on the intruder.
-for _p in "$WL_HTTP_PORT" "$WL_STREAMER_PORT"; do
+for _p in "$WL_HTTP_PORT" "$WL_STREAMER_PORT" "$WL_TURN_PORT"; do
   if wl_port_listening "$_p"; then
     _owner="$(wl_port_owner_pid "$_p" || true)"
-    wl_die "port $_p is already in use${_owner:+ by pid $_owner} — Wonderland cannot bind it. Free it, or set WL_HTTP_PORT / WL_STREAMER_PORT."
+    wl_die "port $_p is already in use${_owner:+ by pid $_owner} — Wonderland cannot bind it. Free it, or set WL_HTTP_PORT / WL_STREAMER_PORT / WL_TURN_PORT."
   fi
 done
+
+# PRE-FLIGHT: everything that can be known before anything is started.
+#
+# Each of these used to be discovered mid-launch, after a TURN server or a
+# signalling process was already running, which leaves the machine in a half-up
+# state that the next run then has to clean up. They are also all cheap, and
+# every one of them has an unambiguous answer on CPU — so the GPU is never the
+# thing that finds out.
+wl_require_ps_infra
+case "$(wl_turn_status)" in
+  READY)      wl_ok "coturn image present: $WL_TURN_IMAGE" ;;
+  RESTORABLE) wl_say "coturn image absent; will restore from $WL_TURN_ARCHIVE" ;;
+  MISSING)    wl_die "no coturn image and no archive at $WL_TURN_ARCHIVE. Save it on CPU first; this launcher will not download it on a GPU machine." ;;
+esac
 
 start_turn
 start_signalling

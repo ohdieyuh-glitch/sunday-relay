@@ -181,6 +181,26 @@ case "$UE_STATE" in
     ;;
 esac
 
+# ------------------------------- 5b. pixel streaming infrastructure + coturn
+# Stage 5 has never once run to completion on Lightning, and both of its
+# dependencies are things a CPU session can settle for free. Reported here so
+# the founder learns about a wrong branch or an absent coturn image now, rather
+# than from a GPU that is already attached and billing.
+PS_STATE="$(wl_ps_status)"
+case "$PS_STATE" in
+  READY)         wl_ok "SIGNALLING READY - $WL_PS_VERSION at $WL_PS_INFRA, built (dist + www)" ;;
+  NOT_BUILT)     wl_warn "SIGNALLING NOT BUILT - $WL_PS_SIG needs its CPU build (dist/ and www/)" ;;
+  WRONG_VERSION) wl_warn "SIGNALLING WRONG BRANCH - DOWNLOAD_VERSION='$(wl_ps_version)', need $WL_PS_VERSION" ;;
+  *)             wl_warn "SIGNALLING MISSING - no checkout at $WL_PS_INFRA" ;;
+esac
+TURN_STATE="$(wl_turn_status)"
+case "$TURN_STATE" in
+  READY)      wl_ok "TURN READY - $WL_TURN_IMAGE is loaded" ;;
+  RESTORABLE) wl_ok "TURN RESTORABLE - restored automatically at launch from"
+              wl_say "    $WL_TURN_ARCHIVE ($(du -h "$WL_TURN_ARCHIVE" 2>/dev/null | cut -f1))" ;;
+  *)          wl_warn "TURN NOT READY - no image and no archive at $WL_TURN_ARCHIVE" ;;
+esac
+
 # ------------------------------------------------------------ 6. report
 printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ) prepared at $(git -C "$WL_SRC" rev-parse --short HEAD)" \
   > "$WL_RUN/prepared.stamp"
@@ -196,6 +216,17 @@ case "$UE_STATE" in
   READY)      printf '  engine       READY\n' ;;
   RESTORABLE) printf '  engine       RESTORABLE (archive on persistent storage; auto-restored at launch)\n' ;;
   *)          printf '  engine       NOT READY - founder action needed\n' ;;
+esac
+case "$PS_STATE" in
+  READY)     printf '  signalling   READY (%s)\n' "$WL_PS_VERSION" ;;
+  NOT_BUILT) printf '  signalling   NOT BUILT - stage 5 will fail closed\n' ;;
+  WRONG_VERSION) printf '  signalling   WRONG BRANCH - stage 5 will fail closed\n' ;;
+  *)         printf '  signalling   MISSING - stage 5 will fail closed\n' ;;
+esac
+case "$TURN_STATE" in
+  READY)      printf '  turn         READY\n' ;;
+  RESTORABLE) printf '  turn         RESTORABLE (archive on persistent storage)\n' ;;
+  *)          printf '  turn         NOT READY - the stream would stay black remotely\n' ;;
 esac
 printf '  gpu          %s\n' "$(wl_have_gpu && nvidia-smi --query-gpu=name --format=csv,noheader | head -1 || echo 'none (expected while on CPU)')"
 echo

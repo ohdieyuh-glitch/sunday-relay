@@ -35,13 +35,27 @@ kill_match() {
 # founder's own tunnel or another project's TURN server matches just as well as
 # ours, and "stop Wonderland" would take them down without a word.
 #
-# Every pattern below is anchored to a path this deployment owns — the packaged
-# build, the engine tree, our generated turnserver.conf, our HTTP port — so a
-# process that merely shares a binary name is left alone.
+# Every pattern below is anchored to something this deployment owns — the
+# packaged build, our infrastructure checkout, our HTTP port, our container
+# name — so a process that merely shares a binary name is left alone.
 kill_match "Wonderland client" "[W]onderland.*PixelStreamingURL"
-kill_match "signalling"        "${WL_UE//\//\/}.*(signalling|cirrus|Wilbur)"
+kill_match "signalling"        "${WL_PS_INFRA//\//\/}.*(SignallingWebServer|Wilbur|signalling)"
 kill_match "tunnel"            "[c]loudflared.*127\.0\.0\.1:${WL_HTTP_PORT}"
-kill_match "turn"              "[t]urnserver.*${WL_RUN//\//\/}/turnserver\.conf"
+
+# TURN IS A CONTAINER NOW, and it is removed BY NAME.
+#
+# The old line killed any host process matching turnserver. There is no host
+# turnserver on Lightning, so it did nothing; the danger is the shape it would
+# have taken next — `docker rm $(docker ps -q --filter ancestor=coturn)` would
+# stop every coturn on a shared Studio, including one that is not ours. Only
+# the exact name this deployment created is touched.
+if command -v docker >/dev/null 2>&1; then
+  if [ -n "$(docker ps -aq --filter "name=^/${WL_TURN_CONTAINER}$" 2>/dev/null || true)" ]; then
+    say "stopping turn container $WL_TURN_CONTAINER"
+    docker rm -f "$WL_TURN_CONTAINER" >/dev/null 2>&1 || true
+    stopped=1
+  fi
+fi
 
 sleep 2
 echo

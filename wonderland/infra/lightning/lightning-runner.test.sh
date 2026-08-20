@@ -472,6 +472,267 @@ rc=$?
 check "$rc" "2" "launcher exits 2 when nvidia-smi finds nothing"
 grep -q "no GPU" "$TMP/noGpu.log" && ok "it says why" || bad "it exits without explaining"
 
+echo "== stage 5 uses the PROVEN Lightning architecture =="
+# THE ARCHITECTURE THAT WAS WRONG. run-stream.sh searched $WL_UE for a
+# SignallingWebServer directory. On Lightning the engine is a Docker image, so
+# that directory can never exist and the search returned empty on a perfectly
+# healthy machine. Every assertion below pins the replacement.
+sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$HERE/run-stream.sh" > "$TMP/rs-live.sh"
+
+if grep -qE 'wl_find_first "\$WL_UE".*SignallingWebServer|-name .SignallingWebServer' "$TMP/rs-live.sh"; then
+  bad "run-stream.sh still searches the engine tree for SignallingWebServer"
+else
+  ok "the engine-tree SignallingWebServer lookup is gone"
+fi
+grep -q 'WL_PS_SIG' "$TMP/rs-live.sh" && ok "run-stream.sh uses the separate PS infrastructure checkout" \
+  || bad "run-stream.sh does not reference WL_PS_SIG"
+
+# UE5.8 Wilbur's flags, exactly. --http_port is the UE5.5 name; passing it to a
+# UE5.8 Wilbur is accepted, ignored, and the server listens somewhere else —
+# which every later port check then reports as a failure to start.
+grep -q -- '--player_port' "$TMP/rs-live.sh"   && ok "uses --player_port" || bad "does not pass --player_port"
+grep -q -- '--streamer_port' "$TMP/rs-live.sh" && ok "uses --streamer_port" || bad "does not pass --streamer_port"
+grep -q -- '--peer_options_file' "$TMP/rs-live.sh" && ok "uses --peer_options_file" \
+  || bad "does not use --peer_options_file"
+grep -q -- '--http_root' "$TMP/rs-live.sh" && ok "serves an explicit --http_root" || bad "no --http_root"
+if grep -qE -- '--peer_options[[:space:]]' "$TMP/rs-live.sh"; then
+  bad "the old inline --peer_options JSON is still passed"
+else
+  ok "the inline --peer_options form is gone"
+fi
+if grep -q -- '--http_port' "$TMP/rs-live.sh"; then
+  bad "run-stream.sh still passes the UE5.5-era --http_port"
+else
+  ok "no UE5.5-era --http_port remains"
+fi
+
+echo "== the PS infrastructure version is proven exactly =="
+ps_env() {   # $1 = version string or "none", $2 = dist? $3 = www?
+  rm -rf "$TMP/ps"; mkdir -p "$TMP/ps/SignallingWebServer/platform_scripts/bash"
+  [ "$1" = none ] || printf 'NODE_VERSION=v22.14.0\nDOWNLOAD_VERSION=%s\n' "$1" \
+    > "$TMP/ps/SignallingWebServer/platform_scripts/bash/common.sh"
+  [ "$2" = yes ] && mkdir -p "$TMP/ps/SignallingWebServer/dist"
+  [ "$3" = yes ] && mkdir -p "$TMP/ps/SignallingWebServer/www"
+  return 0
+}
+ps_status() {
+  WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/ps" \
+    bash -c ". $HERE/common.sh; wl_ps_status" 2>/dev/null
+}
+ps_env UE5.8 yes yes; check "$(ps_status)" "READY"         "a built UE5.8 checkout reads READY"
+ps_env UE5.5 yes yes; check "$(ps_status)" "WRONG_VERSION" "a UE5.5 checkout is rejected by version"
+ps_env UE5.8 no  yes; check "$(ps_status)" "NOT_BUILT"     "no dist/ reads NOT_BUILT"
+ps_env UE5.8 yes no ; check "$(ps_status)" "NOT_BUILT"     "no www/ reads NOT_BUILT (the page would 404)"
+ps_env none  yes yes; check "$(ps_status)" "WRONG_VERSION" "an undeterminable version is not assumed good"
+rm -rf "$TMP/ps";     check "$(ps_status)" "MISSING"       "an absent checkout reads MISSING"
+
+# EXACT, not prefix. 'UE5.8.1' is a different branch and must not satisfy UE5.8.
+ps_env UE5.8.1 yes yes; check "$(ps_status)" "WRONG_VERSION" "UE5.8.1 does not satisfy an exact UE5.8"
+
+# and each failing state must fail CLOSED with a message, not warn and continue
+for st in "none:no checkout" "UE5.5:wrong branch" ; do
+  v="${st%%:*}"; desc="${st#*:}"
+  if [ "$v" = none ]; then rm -rf "$TMP/ps"; else ps_env "$v" yes yes; fi
+  out=$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/ps" \
+        bash -c ". $HERE/common.sh; wl_require_ps_infra" 2>&1); rc=$?
+  [ "$rc" != "0" ] && ok "wl_require_ps_infra fails closed: $desc (exit $rc)" \
+                   || bad "wl_require_ps_infra accepted: $desc"
+done
+ps_env UE5.8 yes yes
+out=$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/ps" \
+      bash -c ". $HERE/common.sh; wl_require_ps_infra" 2>&1); rc=$?
+check "$rc" "0" "wl_require_ps_infra accepts a correct checkout"
+
+# a version lookup over a tree must not die under the callers' set -euo pipefail
+out=$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/nope" bash -c '
+set -euo pipefail
+. '"$HERE"'/common.sh
+V="$(wl_ps_version)"
+echo "REACHED:[$V]"' 2>&1); rc=$?
+check "$rc" "0" "wl_ps_version survives a missing tree under set -euo pipefail"
+case "$out" in *"REACHED:[]"*) ok "  and returns empty" ;; *) bad "  wrong result: $out" ;; esac
+
+echo "== coturn comes from persistent storage, never the network =="
+# Same cost invariant as the engine, same three answers. A host `turnserver`
+# binary does not exist on the Lightning image, so the old check took the
+# "coturn absent, same-host only" branch every time — a warning, and a stream
+# that reaches a remote browser and stays black.
+cat > "$TMP/bin/docker" <<'MOCKEOF'
+#!/bin/sh
+echo "$@" >> "$WL_TEST_DOCKER_LOG"
+case "$1 $2" in
+  "image inspect")
+    [ -f "$WL_TEST_IMAGE_PRESENT" ] && exit 0
+    exit 1 ;;
+esac
+case "$1" in
+  load)
+    [ "${WL_TEST_LOAD_FAILS:-0}" = "1" ] && exit 1
+    [ "${WL_TEST_LOAD_WRONG_IMAGE:-0}" = "1" ] || : > "$WL_TEST_IMAGE_PRESENT"
+    echo "Loaded image: coturn/coturn:4.17.0-r0-debian"
+    exit 0 ;;
+  pull) exit 0 ;;
+esac
+exit 0
+MOCKEOF
+chmod +x "$TMP/bin/docker"
+
+turn_env() {  # $1 = image present? $2 = archive present?
+  LOADFAIL=0; LOADWRONG=0
+  rm -f "$TMP/img" "$TMP/dockerlog" "$TMP/root/coturn.tar"; mkdir -p "$TMP/root"
+  [ "$1" = yes ] && : > "$TMP/img"
+  if [ "$2" = yes ]; then
+    ( cd "$TMP" && echo hi > _t && tar -cf "$TMP/root/coturn.tar" _t && rm -f _t )
+  fi
+  return 0
+}
+turn_run() {  # $1 = function to call
+  PATH="$TMP/bin:$PATH" \
+  WL_TEST_DOCKER_LOG="$TMP/dockerlog" WL_TEST_IMAGE_PRESENT="$TMP/img" \
+  WL_TEST_LOAD_FAILS="${LOADFAIL:-0}" WL_TEST_LOAD_WRONG_IMAGE="${LOADWRONG:-0}" \
+  WL_ROOT="$TMP/root" WL_TURN_ARCHIVE="$TMP/root/coturn.tar" \
+  bash -c ". $HERE/common.sh; $1" 2>&1
+}
+
+turn_env yes no; check "$(turn_run wl_turn_status)" "READY"      "a loaded coturn image reads READY"
+turn_env no yes; check "$(turn_run wl_turn_status)" "RESTORABLE" "image absent + archive reads RESTORABLE"
+turn_env no no ; check "$(turn_run wl_turn_status)" "MISSING"    "neither reads MISSING"
+
+turn_env yes no
+out="$(turn_run wl_ensure_turn_image)"; rc=$?
+check "$rc" "0" "a present coturn image is accepted"
+if grep -q "^load" "$TMP/dockerlog" 2>/dev/null; then
+  bad "it loaded the coturn archive although the image was present"
+else
+  ok "the coturn archive is NOT loaded when the image is present"
+fi
+
+turn_env no yes
+out="$(turn_run wl_ensure_turn_image)"; rc=$?
+check "$rc" "0" "a missing coturn image is restored from the archive"
+grep -q "^load -i" "$TMP/dockerlog" && ok "docker load ran against the coturn archive" \
+  || bad "docker load did not run for coturn"
+
+turn_env no yes
+out="$(LOADWRONG=1 turn_run wl_ensure_turn_image)"; rc=$?
+[ "$rc" != "0" ] && ok "a coturn load exiting 0 without the image still fails closed" \
+                 || bad "it trusted docker load instead of verifying the coturn image"
+has "$out" "different image" && ok "  and says the archive holds a different image" \
+  || bad "  the coturn failure message does not explain what went wrong"
+
+turn_env no no
+out="$(turn_run wl_ensure_turn_image)"; rc=$?
+[ "$rc" != "0" ] && ok "no coturn image and no archive fails closed" || bad "it did not fail"
+has "$out" "will NOT download" && ok "  and states the no-download rule" \
+  || bad "  the coturn failure does not state the no-download rule"
+if grep -q "^pull" "$TMP/dockerlog" 2>/dev/null; then
+  bad "the coturn ensure helper invoked docker pull"
+else
+  ok "the coturn ensure helper never invoked docker pull"
+fi
+
+echo "== cleanup touches only the Wonderland-owned TURN container =="
+sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$HERE/stop-wonderland.sh" > "$TMP/stop-live.sh"
+grep -q 'WL_TURN_CONTAINER' "$TMP/stop-live.sh" && ok "cleanup names the container it owns" \
+  || bad "cleanup does not reference WL_TURN_CONTAINER"
+# The dangerous shapes: removing by IMAGE, or by everything running.
+if grep -qE 'ancestor=|docker (rm|stop)[^"]*\$\(docker ps -q\)' "$TMP/stop-live.sh"; then
+  bad "cleanup removes containers by image or wholesale — it would kill a foreign coturn"
+else
+  ok "cleanup never removes by image or wholesale"
+fi
+if grep -q 'turnserver' "$TMP/stop-live.sh"; then
+  bad "cleanup still hunts a host turnserver process that does not exist on Lightning"
+else
+  ok "the host-turnserver kill is gone"
+fi
+# and it must survive a machine with no docker at all
+grep -q 'command -v docker' "$TMP/stop-live.sh" && ok "cleanup tolerates a machine without docker" \
+  || bad "cleanup assumes docker exists"
+
+echo "== stage 5 pre-flight refuses a foreign process on any port =="
+# THE QUIET FAILURE. If something else already holds 8080, our signalling
+# server cannot bind, and every later check that merely asks "is the port
+# listening" then passes on the intruder — the stream is reported up while
+# nothing of ours is running. Run the real script with a common.sh whose port
+# reader always answers yes.
+mkdir -p "$TMP/rs" "$TMP/root/packaged/Linux/w"
+: > "$TMP/root/packaged/Linux/w/Wonderland.sh"; chmod +x "$TMP/root/packaged/Linux/w/Wonderland.sh"
+cp "$HERE/run-stream.sh" "$TMP/rs/run-stream.sh"
+{ cat "$HERE/common.sh"; printf '\nwl_port_listening() { return 0; }\n'; } > "$TMP/rs/common.sh"
+# ALL THREE PORTS, checked structurally: the behavioural case below proves the
+# loop refuses a collision, but it would pass just as well if the loop had
+# quietly stopped covering the streamer or TURN port. Mutation-testing found
+# exactly that — dropping two ports from the loop changed nothing here.
+PREFLIGHT_LOOP="$( ( set +o pipefail; grep -m1 'for _p in ' "$TMP/rs-live.sh" ) || true)"
+for _v in WL_HTTP_PORT WL_STREAMER_PORT WL_TURN_PORT; do
+  if has "$PREFLIGHT_LOOP" "$_v"; then
+    ok "pre-flight covers $_v"
+  else
+    bad "pre-flight no longer checks $_v for a foreign owner"
+  fi
+done
+for port_case in WL_HTTP_PORT WL_STREAMER_PORT WL_TURN_PORT; do
+  out=$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/ps" bash "$TMP/rs/run-stream.sh" 2>&1); rc=$?
+  [ "$rc" != "0" ] && ok "pre-flight refuses to start when a port is held ($port_case path)" \
+                   || bad "pre-flight started into a port collision ($port_case)"
+  has "$out" "already in use" && ok "  and says which port" || bad "  it did not name the collision"
+  break   # one execution proves the loop; the ports are checked in one pass
+done
+
+# and with all ports FREE it must still refuse when the infrastructure is absent
+{ cat "$HERE/common.sh"; printf '\nwl_port_listening() { return 1; }\n'; } > "$TMP/rs/common.sh"
+rm -rf "$TMP/ps"
+out=$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/ps" WL_TURN_ARCHIVE="$TMP/none.tar" \
+      bash "$TMP/rs/run-stream.sh" 2>&1); rc=$?
+[ "$rc" != "0" ] && ok "pre-flight refuses to start with no PS infrastructure" \
+                 || bad "it started stage 5 with no signalling server present"
+has "$out" "SignallingWebServer" && ok "  and names what is missing" \
+  || bad "  the message does not name the missing infrastructure"
+
+echo "== stage 5 success requires an answering player page =="
+# A bound port is not a served page: --serve with a wrong --http_root binds
+# happily and 404s every request, and the founder opens a dead URL.
+grep -q 'wl_http_ok "http://127.0.0.1:\$WL_HTTP_PORT/"' "$TMP/rs-live.sh" \
+  && ok "run-stream.sh probes the player page over HTTP before claiming success" \
+  || bad "run-stream.sh accepts a listening port as proof the page is served"
+grep -q 'wl_wait_port "\$WL_STREAMER_PORT"' "$TMP/rs-live.sh" \
+  && ok "and it proves the streamer socket opened too" \
+  || bad "the streamer port is never proven — the client could never connect"
+# the probe itself must not pass on a closed port
+out=$(WL_ROOT="$TMP/root" bash -c ". $HERE/common.sh; wl_http_ok http://127.0.0.1:9/ 2; echo rc=\$?" 2>&1)
+case "$out" in *"rc=0"*) bad "wl_http_ok returned success for a closed port" ;;
+  *) ok "wl_http_ok does not pass on a closed port" ;; esac
+
+echo "== TURN is proven running, not merely launched =="
+# NOT just "the helper is mentioned somewhere". It is called twice — once as
+# an idempotence check at the top of start_turn, once as the post-launch
+# verification — and mutation-testing showed that deleting the SECOND call left
+# a bare mention behind, so this assertion passed while the launch was no
+# longer verified at all. Pin the failure branch instead, which only the
+# verification has.
+grep -q 'the TURN container exited' "$TMP/rs-live.sh" \
+  && ok "run-stream.sh confirms the container is actually up after launching it" \
+  || bad "it trusts 'docker run -d' exiting 0 - a container that exits at once reads as success"
+# Anchored on the failure branch for the same reason as the check above: the
+# helper also appears in the poll loop, so a bare mention survives deleting the
+# assertion entirely. Mutation-testing caught this one too.
+grep -q 'nothing is listening on' "$TMP/rs-live.sh" \
+  && ok "and it fails when nothing is listening on the TURN port" \
+  || bad "the TURN port is polled but never actually required"
+grep -q -- '--network host' "$TMP/rs-live.sh" \
+  && ok "coturn runs on the host network (a bridged relay advertises an unreachable address)" \
+  || bad "coturn is not on the host network"
+
+echo "== one definition of the new constants =="
+for v in WL_PS_INFRA WL_PS_VERSION WL_TURN_IMAGE WL_TURN_ARCHIVE WL_TURN_CONTAINER; do
+  grep -q "$v:-" "$HERE/common.sh" && ok "common.sh defines $v" || bad "$v is not defined in common.sh"
+  for f in run-stream.sh stop-wonderland.sh prepare.sh; do
+    n=$(grep "$v:-" "$HERE/$f" 2>/dev/null | wc -l | tr -d ' ')
+    [ "$n" = "0" ] || bad "$f redefines $v ($n site(s)) - two defaults drift apart"
+  done
+done
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" = 0 ]
