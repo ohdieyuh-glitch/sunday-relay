@@ -39,13 +39,16 @@ cook until the free checks pass.
 ```bash
 cd wonderland/infra/build
 python3 verify-look-table.py        # LOOK table wired + overrides refused correctly
+python3 verify-docs.py              # these docs still describe code that exists
+python3 verify-dog-proxy.py         # the preview's Dog still matches the C++ pawn
 python3 verify-generator-dryrun.py  # the generator EXECUTES; counts actors; surfaces warnings
 python3 verify-hero-composition.py /tmp/hero.png   # per-object frame coverage
 python3 verify-hero-lighting.py     /tmp/lit.png   # CPU value structure
 ```
 
-All four must exit 0. The dry run is the one that has actually saved a cook:
-it caught an art pass silently deleting another pass's kits.
+All six must exit 0. The dry run is the one that has actually saved a cook:
+it caught an art pass silently deleting another pass's kits. `verify-dog-proxy.py`
+is the one that caught the worst error of the sprint — see below.
 
 ### 2. Cook and stream, unchanged settings
 
@@ -124,7 +127,27 @@ to watch: frame rate on the stream, and whether the near-camera guard
 (`in_camera_lap`) is doing its job — the tracer says the topiary sits at 19% of
 frame height, but the tracer has been wrong about geometry before.
 
-### G. The clouds
+### G. The hero Dog's size in frame — CHECK THIS FIRST BY EYE
+
+Not a code risk, a **judgement** one, and the only item here that wants the
+founder's eye rather than a measurement.
+
+The Dog is built by the C++ pawn, not the generator, so the offline harness
+carries a transcription of it — and for most of this sprint that transcription
+was three eyeballed cubes at barely half the real Dog's height. Corrected, the
+Dog is **15.1% of frame width by 65.5% of its height**, not the 22.5% every
+earlier note claimed. Its feet land at y=430 in a 449-tall frame, the golden
+gate is clear of it, and its head overlaps the lower Brain.
+
+The staging was deliberately left alone, because the number had just been
+fixed and moving the world on the strength of a freshly-corrected instrument
+is how you introduce the opposite error. But 65.5% is a **character portrait
+with a city behind it**, not a city establishing shot with a character in it,
+and which of those the hero frame should be is the founder's call. If it wants
+to be the latter, move the Dog's staging back along the boulevard rather than
+shrinking it — the Dog standing ON its arcane identity circle is the beat.
+
+### H. The clouds
 
 Geometry cumulus, because UE's stock volumetric cloud material renders as a flat
 grey sheet under this lighting. Lowest risk of the group and the easiest to turn
