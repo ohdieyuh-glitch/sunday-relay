@@ -399,6 +399,7 @@ def main():
         maxx = maxy = -1e18
         minz = 1e18
         ok = False
+        _cor = []
         for cx in (-1, 1):
             for cy in (-1, 1):
                 for cz in (-1, 1):
@@ -406,6 +407,7 @@ def main():
                     if q is None:
                         continue
                     ok = True
+                    _cor.append(q)
                     minx = min(minx, q[0]); maxx = max(maxx, q[0])
                     miny = min(miny, q[1]); maxy = max(maxy, q[1])
                     minz = min(minz, q[2])
@@ -415,7 +417,39 @@ def main():
             continue
         if (maxx - minx) < 0.6 and (maxy - miny) < 0.6:
             continue
-        blobs.append((minz, minx, miny, maxx, maxy, mesh, mat, lb))
+        # DEPTH VARIES ACROSS A BIG FLAT THING, AND PRETENDING IT DOES NOT
+        # BREAKS THE PICTURE. Each blob used to carry ONE depth — its nearest
+        # corner — applied to every pixel it painted. For the plaza bed, whose
+        # near edge is metres closer than its far edge, that meant its NEAREST
+        # depth won everywhere, so it overdrew hundreds of cobbles genuinely in
+        # front of the parts of it they cover. The bed then measured as 8% of
+        # the visible frame and as the single largest lone primitive in the
+        # world, and I spent two passes trying to fix a plaza that was not
+        # broken.
+        #
+        # Fit depth as a plane over screen position from the projected corners
+        # (least squares on z = a*x + b*y + c). Exact for a flat quad, which is
+        # the case that was wrong, and a good approximation for everything else.
+        _za = _zb = 0.0
+        _zc = minz
+        if len(_cor) >= 3:
+            _n = float(len(_cor))
+            _mx = sum(q[0] for q in _cor) / _n
+            _my = sum(q[1] for q in _cor) / _n
+            _mz = sum(q[2] for q in _cor) / _n
+            _sxx = sum((q[0] - _mx) ** 2 for q in _cor)
+            _syy = sum((q[1] - _my) ** 2 for q in _cor)
+            _sxy = sum((q[0] - _mx) * (q[1] - _my) for q in _cor)
+            _sxz = sum((q[0] - _mx) * (q[2] - _mz) for q in _cor)
+            _syz = sum((q[1] - _my) * (q[2] - _mz) for q in _cor)
+            _det = _sxx * _syy - _sxy * _sxy
+            if abs(_det) > 1e-9:
+                _za = (_sxz * _syy - _syz * _sxy) / _det
+                _zb = (_syz * _sxx - _sxz * _sxy) / _det
+                _zc = _mz - _za * _mx - _zb * _my
+            else:
+                _zc = _mz
+        blobs.append((minz, minx, miny, maxx, maxy, mesh, mat, lb, _za, _zb, _zc))
 
     blobs.sort(key=lambda b: -b[0])
     # WHO ACTUALLY OWNS EACH PIXEL. The report used to rank objects by their
@@ -426,7 +460,7 @@ def main():
     # thing in the hero frame at 15.5%, and I planned two passes around that.
     # The rasteriser already resolves depth; it just was not asked who won.
     owner = [-1] * (W * H)
-    for _bi, (z, x0, y0, x1, y1, mesh, mat, lb) in enumerate(blobs):
+    for _bi, (z, x0, y0, x1, y1, mesh, mat, lb, _za, _zb, _zc) in enumerate(blobs):
         col = shade(mat, z, mesh, lb)
         cr, cg, cb = int(col[0] * 255), int(col[1] * 255), int(col[2] * 255)
         rnd = mesh in ROUND
@@ -441,9 +475,14 @@ def main():
                     if dx * dx + dy * dy > 1.0:
                         continue
                 k = yy * W + xx
-                if z > depth[k]:
+                # per-pixel depth from the fitted plane, floored at the object's
+                # own nearest corner so the fit cannot invent something closer
+                zp = _za * (xx + 0.5) + _zb * (yy + 0.5) + _zc
+                if zp < z:
+                    zp = z
+                if zp > depth[k]:
                     continue
-                depth[k] = z
+                depth[k] = zp
                 owner[k] = _bi
                 i = k * 3
                 px[i], px[i + 1], px[i + 2] = cr, cg, cb
@@ -489,7 +528,7 @@ def main():
     big = [(blobs[_i], _n) for _i, _n in _vis.most_common(18)]
     print("  MOST VISIBLE (pixels actually owned after occlusion, %% of frame):")
     _tot = float(W * H)
-    for (z, x0, y0, x1, y1, mesh, mat, lb), _n in big:
+    for (z, x0, y0, x1, y1, mesh, mat, lb, _za, _zb, _zc), _n in big:
         print("    %-30s %5.2f%%  x[%5d %5d] y[%4d %4d] z=%7.0f %s"
               % (lb[:30], 100.0 * _n / _tot, x0, x1, y0, y1, z, mat))
     _seen = sum(_vis.values())
@@ -509,11 +548,54 @@ def main():
             _grd += 1
     print("  frame is %.1f%% objects, %.1f%% SKY, %.1f%% bare ground plane"
           % (100.0 * _seen / _tot, 100.0 * _sky / _tot, 100.0 * _grd / _tot))
+    # ---- THE PRIMITIVE AUDIT -------------------------------------------
+    # Stop condition 2 of the art brief is "primitive prototype appearance is
+    # no longer dominant", and until now that was a matter of opinion. It does
+    # not have to be. A form reads as a raw primitive when ONE unbroken
+    # sphere/cylinder/cone/cube carries a large area of the frame by itself:
+    # that is precisely what a cube looks like when it is being a cube. A form
+    # built of many parts reads as a made thing whatever its parts are.
+    #
+    # So: for every object owning real screen area, count how many meshes share
+    # its label stem. Big + alone = a primitive on show. The number this prints
+    # is the share of the visible frame carried by lone primitives, and driving
+    # it down IS the pass-1 task, stated as something that can be checked.
+    _stem = {}
+    for _m, _l, _sc, _mt, _lb, _r in records:
+        _k = _lb.rstrip("0123456789")
+        for _sep in ("_", ):
+            if _sep in _k:
+                _k = _k.rsplit(_sep, 1)[0]
+        _stem[_k] = _stem.get(_k, 0) + 1
+    _lone_px = 0
+    _lone = []
+    for _bi, _n in _vis.items():
+        _b = blobs[_bi]
+        _lb = _b[7]
+        _k = _lb.rstrip("0123456789")
+        if "_" in _k:
+            _k = _k.rsplit("_", 1)[0]
+        _sib = _stem.get(_k, 1)
+        # "alone" is generous on purpose: up to three siblings still counts as
+        # a bare form. A cube with two friends is three cubes.
+        if _sib <= 3 and _n > (W * H) * 0.0015:
+            _lone_px += _n
+            _lone.append((_n, _lb, _b[5], _b[6], _sib))
+    _lone.sort(reverse=True)
+    print("  PRIMITIVE AUDIT  %.2f%% of the visible frame is carried by LONE forms"
+          % (100.0 * _lone_px / _tot))
+    for _n, _lb, _mesh, _mt, _sib in _lone[:10]:
+        print("    %-28s %5.2f%%  %-9s %-12s (%d part%s)"
+              % (_lb[:28], 100.0 * _n / _tot, _mesh, _mt, _sib,
+                 "" if _sib == 1 else "s"))
+    if not _lone:
+        print("    none above 0.15% of frame")
+
     _unused = sorted(blobs, key=lambda b: -((b[3] - b[1]) * (b[4] - b[2])))
     print("  largest PROJECTED BOXES (extent only - NOT visible area):")
     seen = set()
     shown = 0
-    for z, x0, y0, x1, y1, mesh, mat, lb in _unused:
+    for z, x0, y0, x1, y1, mesh, mat, lb, _za, _zb, _zc in _unused:
         key = lb.rstrip("0123456789_")
         if key in seen:
             continue
