@@ -4604,7 +4604,36 @@ def build(layout):
     # BUTTERFLIES over the planting, BIRDS in the sky. Both ride the bob offset,
     # so they live in the stream and vanish in a still — ambient life, never a
     # status channel.
-    scatter(140.0, 420.0, 34, 1450.0, butterfly)
+    # LIFE GATHERS WHERE THE FOOD IS.
+    #
+    # Butterflies, motes and drifting petals were each ONE phyllotaxis spread
+    # over a 1,450-1,950 uu radius — a perfectly even sprinkle across nine
+    # tenths of the frame. Looking at the projected image, that is what reads
+    # as confetti: hundreds of small bright dots at uniform spacing, which the
+    # art direction names twice as the thing to avoid.
+    #
+    # Uniform is also simply WRONG about the subject. Butterflies are not
+    # evenly distributed over a garden; they are over the flowers, in twos and
+    # threes, with empty air between. So the airborne life is anchored to the
+    # layout's own flower beds, in a few tight clusters, and the space between
+    # them is left empty on purpose — the emptiness is what makes a cluster
+    # read as one.
+    _life_anchors = []
+    for _fb in layout.get("flowerBeds", []):
+        _c = _fb.get("center")
+        if _c:
+            _life_anchors.append((float(_c[0]), float(_c[1])))
+    for _wf in layout.get("waterFeatures", []):
+        _c = _wf.get("center") or _wf.get("location")
+        if _c:
+            _life_anchors.append((float(_c[0]), float(_c[1])))
+    if not _life_anchors:
+        _life_anchors = [(140.0, 420.0)]
+
+    for _ai, (_ax, _ay) in enumerate(_life_anchors):
+        scatter(_ax, _ay, 10 + (_ai % 3) * 3, 340.0, butterfly)
+        scatter(_ax + 120.0, _ay - 90.0, 9 + (_ai % 2) * 4, 300.0, mote)
+        scatter(_ax - 90.0, _ay + 110.0, 8 + (_ai % 3) * 3, 380.0, air_petal)
     for _f, (_fx, _fy, _fz) in enumerate(((-5200.0, 14000.0, 6200.0), (7400.0, 19000.0, 7600.0),
                                           (1800.0, 26000.0, 9000.0))):
         for _k in range(7):
@@ -4612,8 +4641,6 @@ def build(layout):
                      _fy + _k * 420.0, _fz + (_k % 4) * 210.0, _f * 7 + _k)
     # Restrained magical motes: static emissive sparkles (gold/cyan/violet) drifting
     # over the district — the bloom pass gives them a firefly glow.
-    scatter(0.0, 350.0, 38, 1950.0, mote)
-    scatter(0.0, 300.0, 34, 1500.0, air_petal)   # drifting petals overhead — living air
     # Ambient companions: voxel dogs of varied coats gathered AROUND the plaza (never
     # on the arcane circle — that is the hero Dog's). Matches the reference's plaza
     # full of creatures; a real wander behaviour animates them in a later pass.
