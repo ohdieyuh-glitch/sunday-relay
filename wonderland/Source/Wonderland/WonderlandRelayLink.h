@@ -92,7 +92,12 @@ private:
 	/** Resolve the endpoint from the command line, then the environment. */
 	static FString ResolveBridgeBaseUrl();
 
-	UPROPERTY()
+	// NOT a UPROPERTY, deliberately. A TWeakObjectPtr is already safe without
+	// one — it is nulled automatically when its object dies and it never keeps
+	// anything alive — so the macro would buy reflection and serialisation this
+	// subsystem has no use for, while asking UHT to reason about a type that is
+	// only forward-declared in this header. Removing it costs nothing and takes
+	// a parse risk off the next paid compile.
 	TArray<TWeakObjectPtr<AWonderlandDogPawn>> DogPawns;
 
 	FWonderlandWorld LastWorld;
