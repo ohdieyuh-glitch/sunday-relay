@@ -552,6 +552,69 @@ echo "REACHED:[$V]"' 2>&1); rc=$?
 check "$rc" "0" "wl_ps_version survives a missing tree under set -euo pipefail"
 case "$out" in *"REACHED:[]"*) ok "  and returns empty" ;; *) bad "  wrong result: $out" ;; esac
 
+echo "== the version parser reads every real declaration form =="
+# THE REAL LIGHTNING CHECKOUT BROKE THE FIRST PARSER. Its file plainly read
+# UE5.8 and the helper extracted nothing, so wl_ps_status said WRONG_VERSION
+# for a correct checkout and stage 5 would have failed closed on a healthy
+# machine. A gate that blocks the good case is not stricter, it is broken —
+# and it is the worse direction to fail in, because it burns a GPU session
+# proving something that was already right.
+vform() {   # $1 = description, $2 = the literal declaration line
+  rm -rf "$TMP/vf"; mkdir -p "$TMP/vf"
+  printf '%s\n' "$2" > "$TMP/vf/common.sh"
+  local got
+  got="$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" bash -c ". $HERE/common.sh; wl_ps_version" 2>/dev/null)"
+  check "$got" "UE5.8" "parses $1"
+}
+vform "a bare value"            'DOWNLOAD_VERSION=UE5.8'
+vform "a double-quoted value"   'DOWNLOAD_VERSION="UE5.8"'
+vform "a single-quoted value"   "DOWNLOAD_VERSION='UE5.8'"
+vform "an exported value"       'export DOWNLOAD_VERSION=UE5.8'
+vform "an indented value"       '   DOWNLOAD_VERSION=UE5.8'
+vform "an overridable default"  'DOWNLOAD_VERSION=${DOWNLOAD_VERSION:-UE5.8}'
+vform "a set-if-unset default"  ': ${DOWNLOAD_VERSION:=UE5.8}'
+vform "a trailing comment"      'DOWNLOAD_VERSION=UE5.8   # the branch'
+vform "quoted and exported"     'export DOWNLOAD_VERSION="UE5.8"'
+
+# CRLF: a checkout that has been through a Windows tool leaves \r on the value,
+# and 'UE5.8\r' != 'UE5.8' — an exact match would reject it for an invisible
+# reason, which is the hardest kind of failure to diagnose on a paid machine.
+rm -rf "$TMP/vf"; mkdir -p "$TMP/vf"; printf 'DOWNLOAD_VERSION=UE5.8\r\n' > "$TMP/vf/common.sh"
+check "$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" bash -c ". $HERE/common.sh; wl_ps_version")" \
+  "UE5.8" "parses a CRLF file"
+
+# A COMMENT IS NOT A DECLARATION. The infrastructure's own docs mention
+# DOWNLOAD_VERSION; matching one would give a confident wrong answer.
+rm -rf "$TMP/vf"; mkdir -p "$TMP/vf"
+printf '# DOWNLOAD_VERSION names the branch\nDOWNLOAD_VERSION=UE5.8\n' > "$TMP/vf/common.sh"
+check "$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" bash -c ". $HERE/common.sh; wl_ps_version")" \
+  "UE5.8" "skips a comment mentioning DOWNLOAD_VERSION"
+
+# AND IT MUST STILL FAIL OPEN FOR NOBODY. Tolerating more forms must not make
+# a wrong branch parse as the right one.
+for wrong in 'DOWNLOAD_VERSION="UE5.5"' 'export DOWNLOAD_VERSION=UE5.4' 'DOWNLOAD_VERSION=${DOWNLOAD_VERSION:-UE5.6}'; do
+  rm -rf "$TMP/vf"; mkdir -p "$TMP/vf"; printf '%s\n' "$wrong" > "$TMP/vf/common.sh"
+  got="$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" bash -c ". $HERE/common.sh; wl_ps_version")"
+  if [ "$got" = "UE5.8" ] || [ -z "$got" ]; then
+    bad "a wrong branch parsed as '$got' from: $wrong"
+  else
+    ok "a wrong branch is still read correctly ($got)"
+  fi
+  st="$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" bash -c ". $HERE/common.sh; mkdir -p \$WL_PS_INFRA/SignallingWebServer/dist \$WL_PS_INFRA/SignallingWebServer/www; wl_ps_status")"
+  check "$st" "WRONG_VERSION" "  and a built checkout on it is rejected"
+done
+
+# THE DIAGNOSIS PATH. An extraction bug and a wrong branch both land on
+# WRONG_VERSION and need opposite responses from the founder, so the raw line
+# has to be printed.
+rm -rf "$TMP/vf"; mkdir -p "$TMP/vf/SignallingWebServer/dist" "$TMP/vf/SignallingWebServer/www"
+printf 'DOWNLOAD_VERSION="UE5.5"\n' > "$TMP/vf/common.sh"
+out=$(WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/vf" \
+      bash -c ". $HERE/common.sh; wl_require_ps_infra" 2>&1); rc=$?
+[ "$rc" != "0" ] && ok "a wrong branch still fails closed" || bad "a wrong branch was accepted"
+has "$out" 'DOWNLOAD_VERSION="UE5.5"' && ok "  and the raw declaration line is shown" \
+  || bad "  the failure does not show what it actually found"
+
 echo "== coturn comes from persistent storage, never the network =="
 # Same cost invariant as the engine, same three answers. A host `turnserver`
 # binary does not exist on the Lightning image, so the old check took the

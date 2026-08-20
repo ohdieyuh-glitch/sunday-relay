@@ -290,12 +290,51 @@ export WL_TURN_REALM="${WL_TURN_REALM:-wonderland}"
 # invalidate silently. The whole pipeline runs inside a subshell with pipefail
 # disabled: no match is the ordinary answer here, and under the callers'
 # `set -euo pipefail` a bare grep miss would end the script with no message.
-wl_ps_version() {
+# THE RAW LINE that declares the version, or empty. Kept separate from the
+# parse so a failure can SHOW the founder what it found instead of only saying
+# it found nothing.
+wl_ps_version_line() {
   local root="${1:-$WL_PS_INFRA}"
   [ -d "$root" ] || return 0
+  # Comment-only lines are excluded: the infrastructure's own docs mention
+  # DOWNLOAD_VERSION, and matching one of those would produce a confident
+  # wrong answer rather than an honest empty one.
   ( set +o pipefail
-    grep -rhoE '^[[:space:]]*(export[[:space:]]+)?DOWNLOAD_VERSION=[A-Za-z0-9._-]+' \
-      "$root" 2>/dev/null | head -1 | sed 's/.*DOWNLOAD_VERSION=//' ) || true
+    grep -rhF 'DOWNLOAD_VERSION' "$root" 2>/dev/null \
+      | grep -vE '^[[:space:]]*#' | head -1 ) || true
+}
+
+# WHICH UE VERSION THE CHECKOUT IS. Empty when it cannot be determined, which
+# callers must treat as a failure rather than as "probably fine".
+#
+# FORM-AGNOSTIC ON PURPOSE. The first version of this demanded a bare
+# unquoted value at the start of a line, and on the real Lightning checkout it
+# extracted NOTHING from a file that plainly reads UE5.8 — so wl_ps_status
+# reported WRONG_VERSION for a perfectly correct checkout and stage 5 would
+# have failed closed on a healthy machine. A gate that blocks the good case is
+# not a stricter gate, it is a broken one. Every shell form a version file
+# realistically uses is accepted here and covered by a fixture in the tests:
+#
+#   DOWNLOAD_VERSION=UE5.8              bare
+#   DOWNLOAD_VERSION="UE5.8"            quoted, either quote
+#   export DOWNLOAD_VERSION=UE5.8       exported
+#     DOWNLOAD_VERSION=UE5.8            indented
+#   DOWNLOAD_VERSION=${DOWNLOAD_VERSION:-UE5.8}   overridable default
+#   : ${DOWNLOAD_VERSION:=UE5.8}        set-if-unset
+#   DOWNLOAD_VERSION=UE5.8   # comment  trailing comment
+#   ...and any of the above written with CRLF line endings.
+wl_ps_version() {
+  local line; line="$(wl_ps_version_line "${1:-$WL_PS_INFRA}")"
+  [ -n "$line" ] || return 0
+  ( set +o pipefail
+    printf '%s' "$line" | sed \
+      -e 's/\r//g' \
+      -e 's/.*DOWNLOAD_VERSION//' \
+      -e 's/^[:+=-]*//' \
+      -e 's/#.*$//' \
+      -e 's/[}"'"'"'`]//g' \
+      -e 's/^[[:space:]]*//' \
+      -e 's/[[:space:]].*$//' ) || true
 }
 
 # READY | WRONG_VERSION | NOT_BUILT | MISSING. Reporting only; changes nothing.
@@ -319,7 +358,15 @@ wl_require_ps_infra() {
     MISSING)
       wl_die "no SignallingWebServer at $WL_PS_SIG. Clone the ${WL_PS_VERSION} branch of PixelStreamingInfrastructure to $WL_PS_INFRA and build it on CPU (see prepare.sh); this launcher will not fetch it on a GPU machine." ;;
     WRONG_VERSION)
-      wl_die "the checkout at $WL_PS_INFRA is DOWNLOAD_VERSION='$(wl_ps_version)', not $WL_PS_VERSION. Wilbur's command line differs between branches, so the wrong one starts and serves nothing. Check out the $WL_PS_VERSION branch on CPU." ;;
+      # SHOW THE EVIDENCE. An extraction bug and a genuinely wrong branch both
+      # arrive here, and they need opposite responses from the founder — one is
+      # "fix the launcher", the other is "check out the right branch". Printing
+      # the raw declaration line separates them in one glance instead of a
+      # GPU session. This is not hypothetical: the first version of the parser
+      # returned empty on a correct UE5.8 checkout.
+      wl_warn "declaration line found: $(wl_ps_version_line)"
+      wl_warn "parsed as: '$(wl_ps_version)'   expected: '$WL_PS_VERSION'"
+      wl_die "the checkout at $WL_PS_INFRA is not $WL_PS_VERSION. Wilbur's command line differs between branches, so the wrong one starts and serves nothing. If the line above plainly reads $WL_PS_VERSION, the parser is at fault, not the checkout." ;;
     NOT_BUILT)
       wl_die "$WL_PS_SIG is present but not built (need both dist/ and www/). Run the CPU build before attaching a GPU." ;;
   esac
