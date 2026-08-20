@@ -4121,7 +4121,20 @@ def build(layout):
         # world, and the frustum is a wedge: the closer the band, the narrower
         # the room in it.
         _fx = _side * (170.0 + ((_h >> 3) % 100) / 100.0 * 520.0)
+
         _fy = NEAR_Y + 40.0 + ((_h >> 11) % 100) / 100.0 * 760.0
+        # RESPECT THE CORRIDOR. This band spans +/-170..690 uu and the protected
+        # sight line is +/-430, so the foreground staging was dropping mushrooms
+        # and flower clusters straight into the one channel the composition
+        # depends on. Looking at the frame, that is most of why the bottom
+        # centre has no rest in it: density everywhere and a path nowhere.
+        #
+        # Lushness is not the same as fullness. What separates a composed garden
+        # from a rash is that the full parts are full BECAUSE other parts are
+        # not, and the corridor is where the eye travels from the Dog to the
+        # gate. It stays open.
+        if _in_corridor(_fx, _fy):
+            continue
         _kind = _h % 5
         if _kind == 0:
             # a low mossy kerb stone, half-buried
@@ -4183,6 +4196,8 @@ def build(layout):
         _side = -1.0 if _n % 2 else 1.0
         _nx = _CAM_X + _side * (330.0 + ((_h >> 7) % 100) / 100.0 * 1250.0)
         if math.hypot(_nx, _ny) < 1450.0:      # not on the paved plaza
+            continue
+        if _in_corridor(_nx, _ny):             # and not in the sight line
             continue
         _sz = 2.2 + ((_h >> 11) % 9) * 0.95
         _part("cylinder", _nx, _ny, 2.2, _sz, _sz * (0.62 + ((_h >> 17) % 5) * 0.11),
