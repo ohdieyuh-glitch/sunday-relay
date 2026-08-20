@@ -230,15 +230,49 @@ def main():
     exec(compile(src, GEN, "exec"), ns)
     records[:] = []                                   # drop the module-level build
     ns["build"](json.load(io.open(LAYOUT, encoding="utf8")))
-    # stand-ins for the Dogs, at the body proportions the C++ pawn builds
+    # STAND-INS FOR THE DOGS, transcribed from the C++ pawn.
+    #
+    # The Dog is the focal subject of the hero frame and it is NOT built by the
+    # generator — AWonderlandDogPawn::BuildVisibleBody assembles it at runtime —
+    # so the preview has to supply its own. The old stand-in was three cubes
+    # eyeballed at "about dog-shaped", and measuring it against the C++ it was
+    # 168 uu tall where the real Dog is 325: barely half, with no legs at all.
+    # Every composition number quoted for the Dog was therefore understating the
+    # one object the whole shot is arranged around.
+    #
+    # These are the real part list from WonderlandDogPawn.cpp, S = 1.3f. THIS IS
+    # A TRANSCRIPTION AND IT WILL ROT — if the pawn's proportions change, this
+    # must change with them, and verify-dog-proxy.py checks that they still
+    # agree.
+    #
+    # The pawn builds the Dog facing +X and is yawed at spawn; the hero Dog
+    # faces the camera, which looks along +Y, so local +X maps to world -Y and
+    # local +Y to world +X. Scales swap with the axes.
     for _i, (_dx, _dy, _dz) in enumerate(_pending_dogs):
-        _s = _dog_scale.get(_i, 1.2)
-        records.append(("cube", (_dx, _dy, 74.0 * _s), (0.62 * _s, 1.05 * _s, 0.52 * _s),
-                        "dog_body", "DOGPROXY_%02d" % _i, (0.0, 0.0, 0.0)))
-        records.append(("cube", (_dx, _dy - 62.0 * _s, 118.0 * _s),
-                        (0.48 * _s, 0.44 * _s, 0.44 * _s), "dog_body", "DOGPROXY_%02dh" % _i, (0.0, 0.0, 0.0)))
-        records.append(("cube", (_dx, _dy - 84.0 * _s, 120.0 * _s),
-                        (0.36 * _s, 0.06 * _s, 0.20 * _s), "dog_visor", "DOGPROXY_%02dv" % _i, (0.0, 0.0, 0.0)))
+        _S = 1.3 * (_dog_scale.get(_i, 1.2) / 1.2)   # C++ S, carrying any per-dog scale
+        _LegH = 100.0 * _S
+        _Bz = _LegH + 34.0 * _S
+        _Hz = _Bz + 50.0 * _S
+        _M = "dog_body"
+        for _n, (_lx, _ly, _lz, _sx, _sy, _sz, _mat) in enumerate((
+            # four legs, with the gaps between them that make the Dog read lean
+            (-48.0 * _S, -30.0 * _S, _LegH * 0.5, 0.19 * _S, 0.19 * _S, _LegH / 100.0, _M),
+            (-48.0 * _S,  30.0 * _S, _LegH * 0.5, 0.19 * _S, 0.19 * _S, _LegH / 100.0, _M),
+            ( 48.0 * _S, -30.0 * _S, _LegH * 0.5, 0.19 * _S, 0.19 * _S, _LegH / 100.0, _M),
+            ( 48.0 * _S,  30.0 * _S, _LegH * 0.5, 0.19 * _S, 0.19 * _S, _LegH / 100.0, _M),
+            (0.0, 0.0, _Bz, 1.28 * _S, 0.86 * _S, 0.66 * _S, _M),            # body
+            (78.0 * _S, 0.0, _Hz, 0.80 * _S, 0.82 * _S, 0.80 * _S, _M),      # head
+            (6.0 * _S, -26.0 * _S, _Hz + 46.0 * _S, 0.24 * _S, 0.2 * _S, 0.40 * _S, _M),
+            (6.0 * _S,  26.0 * _S, _Hz + 46.0 * _S, 0.24 * _S, 0.2 * _S, 0.40 * _S, _M),
+            (118.0 * _S, 0.0, _Hz + 6.0 * _S, 0.18 * _S, 0.86 * _S, 0.30 * _S, "dog_visor"),
+            (124.0 * _S, -21.0 * _S, _Hz + 2.0 * _S, 0.1 * _S, 0.22 * _S, 0.13 * _S, "dog_eye"),
+            (124.0 * _S,  21.0 * _S, _Hz + 2.0 * _S, 0.1 * _S, 0.22 * _S, 0.13 * _S, "dog_eye"),
+            (-74.0 * _S, 0.0, _Bz + 24.0 * _S, 0.44 * _S, 0.18 * _S, 0.20 * _S, _M),
+        )):
+            records.append(("cube",
+                            (_dx + _ly, _dy - _lx, _lz),
+                            (_sy, _sx, _sz), _mat,
+                            "DOGPROXY_%02d_%d" % (_i, _n), (0.0, 0.0, 0.0)))
     spec = ns["MATERIAL_SPEC"]
     mat_name_for = ns["mat_name_for"]
     lay = json.load(io.open(LAYOUT, encoding="utf8"))
