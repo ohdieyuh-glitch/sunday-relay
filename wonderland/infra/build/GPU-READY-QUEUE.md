@@ -250,7 +250,13 @@ WONDERLAND_LOOK="heroLights=0"
 ```
 
 **Do not sweep a MEASURED value from a CPU preview.** The offline tracer runs
-**+94% luma, +26% contrast, −76% saturation** against the real renderer. It once
+brighter and far less saturated than the real renderer — it was once measured
+at +94% luma, +26% contrast, −76% saturation, but **those magnitudes are stale**:
+the tracer now samples roughness maps, which moved its own output to luma 94.0,
+contrast 50.3, saturation 0.311. The direction of each offset still holds; the
+ratios do not. **Re-derive them from the first Lightning frame** — that is a
+five-minute job with a captured frame and it makes every later comparison
+honest. It once
 told me the palette read washed out; the streamed frame said the opposite. The
 table tags every value with its provenance for exactly this reason.
 

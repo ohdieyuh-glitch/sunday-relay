@@ -27,6 +27,16 @@ real streamed frame `p18`, and comparing the two, this tracer runs:
     contrast    +26%
     saturation  -76%   Unreal is roughly FOUR TIMES more saturated
 
+THOSE THREE NUMBERS ARE NOW STALE, and saying so is the point of this
+paragraph. They were measured against p18 with a tracer that sampled ALBEDO
+ONLY. It now samples the roughness maps too, and on the same world that moved
+luma 88.8 -> 94.0, contrast 46.3 -> 50.3 and saturation 0.278 -> 0.311 — so the
+gap to Unreal has narrowed by an unknown amount in every one of them. The SIGN
+of each offset is still right (this model is brighter and much less saturated
+than the engine), and the direction is what the warning below depends on, so
+the warning stands. The magnitudes do not. Re-derive them against the first
+Lightning frame before quoting a ratio.
+
 Its absolute numbers are therefore not Unreal's, and in one direction badly so:
 every image this produces looks far more washed out than the engine's, because
 Lumen's bounce, PBR specular and the filmic tonemap all add colour this model
