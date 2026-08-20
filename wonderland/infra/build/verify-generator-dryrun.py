@@ -203,9 +203,49 @@ def main():
     print("  spawned actors: %d" % total)
     for k, v in spawned.most_common(8):
         print("    %-46s %6d" % (k[:46], v))
+    # ---- THE STREAMING BUDGET ------------------------------------------
+    # PERFORMANCE is a stated requirement — the California stream has to stay
+    # usable — and actor count is the number that creeps. It has gone from
+    # ~24,900 to ~33,700 across this art sprint, one justified pass at a time,
+    # which is exactly how a budget is spent without anyone deciding to.
+    #
+    # The one piece of REAL evidence: ~25,000 movable actors streamed at
+    # 1280x720 / 140 fps on an RTX 6000 Ada. Everything above that is
+    # extrapolation, so this does not pretend to know the true ceiling. It
+    # warns where the world has grown a third past the last measured-good
+    # figure, and fails where it has doubled — a tripwire against runaway
+    # growth, not a performance model.
+    #
+    # NANITE IS DELIBERATELY NOT USED and this is the place to say why: these
+    # are engine BasicShapes, a dozen triangles each. Nanite's per-instance
+    # overhead exceeds any benefit on geometry that simple, so enabling it
+    # here would cost frame time rather than save it. If the stream ever needs
+    # actors back, the lever is HISM for the repeated small props — tufts,
+    # flowers and leaf cards are about a fifth of the world between them — not
+    # Nanite and not deleting detail.
+    STREAMED_OK = 25000          # measured, on an RTX 6000 Ada
+    WARN_AT = int(STREAMED_OK * 1.35)
+    FAIL_AT = STREAMED_OK * 2
+    per_build = total // 2 if total > FAIL_AT else total
+    print("  streaming budget: %d actors per build (last measured-good: %d)"
+          % (per_build, STREAMED_OK))
+    if per_build > FAIL_AT:
+        print("  BUDGET FAIL: %d actors is more than double the only figure ever "
+              "streamed. Instance the repeated props before adding more."
+              % per_build)
+        budget_bad = True
+    elif per_build > WARN_AT:
+        print("  budget warning: %d actors is %.0f%% of the last measured-good "
+              "figure; unverified above it." % (per_build, 100.0 * per_build / STREAMED_OK))
+        budget_bad = False
+    else:
+        budget_bad = False
+
     print("  generator warnings: %d" % len(warnings))
     for w in warnings[:12]:
         print("    ! %s" % w[:150])
+    if budget_bad:
+        return 1
     return 0
 
 

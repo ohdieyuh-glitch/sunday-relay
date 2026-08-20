@@ -189,21 +189,52 @@ leaf cards from pure stdlib. They have been inspected as PNGs and never as
 materials on geometry. Watch for tiling repetition at mid-distance, which is the
 usual way procedural texture betrays itself and which no still inspection shows.
 
-### F. Shadow budget
+### F. Frame rate — the world grew 35% and nobody decided to
+
+**33,048 actors per build**, against the only figure ever actually streamed:
+**~25,000 movable actors at 1280x720 / 140 fps on an RTX 6000 Ada**. Everything
+above that number is extrapolation. The world is at 132% of it — just under the
+tripwire the dry run now carries, which warns at 135% and fails at 200%.
+
+The growth was one justified pass at a time, which is exactly how a budget is
+spent without anyone deciding to. Where it went, by group:
+
+```
+tuft 1224 (3.6%)   flowers 1134 (3.4%)   townhouses 1746 (5.2%)
+brain 737 (2.2%)   castles 1278 (3.8%)   clouds 570 (1.7%)
+```
+
+Nothing pathological — no group over 3.6%, and the distribution is flat, which
+is what a densely detailed world should look like.
+
+**Nanite is deliberately NOT used, and the temptation should be resisted.**
+These are engine BasicShapes — a dozen triangles each. Nanite's per-instance
+overhead exceeds any benefit on geometry that simple, so switching it on here
+would cost frame time rather than save it. The brief says "use Nanite
+appropriately", and appropriately here means not at all.
+
+**If the stream is short of frames, the lever is HISM**, not deleting detail:
+tufts, flowers and leaf cards are roughly a fifth of the world between them and
+are highly repeated (mesh, material) pairs. Instancing those is a contained
+change. Deleting them undoes the lushness the whole sprint was for.
+
+The shadow budget below already trims 29% of casters, so that lever is spent.
+
+### G. Shadow budget
 
 29.2% of meshes were switched to cast nothing. This was a performance change
 justified by "nobody can see these shadows" — a claim made from projection
 geometry, not from a render. If contact shadows have gone missing somewhere the
 eye lands, `NO_SHADOW_MATS` / `NO_SHADOW_PREFIX` in the generator is the dial.
 
-### G. Ornament vocabulary and density
+### H. Ornament vocabulary and density
 
 `+2,845` static meshes from the ornament, shrub and topiary passes. Two things
 to watch: frame rate on the stream, and whether the near-camera guard
 (`in_camera_lap`) is doing its job — the tracer says the topiary sits at 19% of
 frame height, but the tracer has been wrong about geometry before.
 
-### H. The hero Dog's size in frame — CHECK THIS FIRST BY EYE
+### I. The hero Dog's size in frame — CHECK THIS FIRST BY EYE
 
 Not a code risk, a **judgement** one, and the only item here that wants the
 founder's eye rather than a measurement.
@@ -223,7 +254,7 @@ and which of those the hero frame should be is the founder's call. If it wants
 to be the latter, move the Dog's staging back along the boulevard rather than
 shrinking it — the Dog standing ON its arcane identity circle is the beat.
 
-### I. The clouds
+### J. The clouds
 
 Geometry cumulus, because UE's stock volumetric cloud material renders as a flat
 grey sheet under this lighting. Lowest risk of the group and the easiest to turn
