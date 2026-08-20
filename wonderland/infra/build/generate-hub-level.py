@@ -4653,6 +4653,22 @@ def build(layout):
                                              (150, 560, "dog_gray", "none"),
                                              (-620, -120, "dog_pink", "crown"),
                                              (640, 40, "dog_tan", "tophat")]):
+        # THE HERO NEEDS TO BE THE ONLY ONE OF ITS KIND IN ITS PATCH OF FRAME.
+        # Companion 2 sits at (-300,-200) and the hero now stands at (-260,-260)
+        # — SEVENTY-TWO uu apart, which in the projected frame is a second white
+        # Dog with a black visor standing directly against the subject. The
+        # brief asks for the Relay Dog prominent, and prominence is not scale,
+        # it is being unambiguous. A companion of the same silhouette at the
+        # same distance costs more legibility than any amount of extra size buys.
+        #
+        # Displaced outward along its own bearing rather than deleted: the
+        # world should still feel populated, just not doubled.
+        _dxh, _dyh = cx - HERO_DOG[0], cy - HERO_DOG[1]
+        _dh = math.hypot(_dxh, _dyh)
+        if _dh < 900.0:
+            _ba = math.atan2(_dyh, _dxh) if _dh > 1.0 else (i * 1.7)
+            cx = HERO_DOG[0] + math.cos(_ba) * 1150.0
+            cy = HERO_DOG[1] + math.sin(_ba) * 1150.0
         stroll_dog(cx, cy, "Companion%d" % i, s=1.05, body=coat, roam=1100.0, accessory=acc)
     # THE DISTANCE LADDER. Four bands, each further, larger and paler than the
     # last, so the eye can measure the world by comparing them. The previous
