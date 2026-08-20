@@ -3454,7 +3454,24 @@ def build(layout):
     # WHERE THE HERO DOG STANDS, AND THE GROUND IT STANDS ON. Nothing that
     # grows gets planted here: a subject knee-deep in blossom is not staged, it
     # is camouflaged.
-    DOG_STAGE = (60.0, -760.0, 560.0)
+    # ONE definition of where the hero Dog stands, used both to clear the
+    # ground for it and to place it. These were two separate constants and
+    # moving the Dog without moving its clearing would stand it in a flower bed.
+    #
+    # It was at (60, -760) at scale 2.1 — 75% larger than a standard Dog, 1,290
+    # uu from the camera — which put it at 65.5% of frame height, dead centre,
+    # covering the plaza and most of the route to the gate. The brief asks for
+    # the Dog PROMINENT IN THE FOREGROUND and separately forbids a giant object
+    # blocking the view, and at that staging the second was beating the first.
+    # Looking at the projected frame rather than the numbers made it obvious in
+    # a way three sessions of measurement had not.
+    #
+    # Now: further back onto its own arcane circle — which is the beat, the Dog
+    # standing on its Relay identity — and off dead centre so the boulevard
+    # still leads the eye past it to the gate.
+    HERO_DOG = (-260.0, -260.0)
+    HERO_DOG_SCALE = 1.75
+    DOG_STAGE = (HERO_DOG[0], HERO_DOG[1], 560.0)
 
     def _on_stage(gx, gy):
         return math.hypot(gx - DOG_STAGE[0], gy - DOG_STAGE[1]) < DOG_STAGE[2]
@@ -4029,6 +4046,80 @@ def build(layout):
                           ("petal_air", "rose_pink", "petal_violet",
                            "petal_pink")[(_h + _f) % 4], "MeadowFl%d_%d" % (_mp, _f))
 
+    # ---- THE FOREGROUND BAND -------------------------------------------
+    # Looking at the projected frame instead of the numbers: the bottom third
+    # of the hero shot is empty. Flat paving, a few scattered petals, nothing
+    # for the eye to rest on before it travels into the scene.
+    #
+    # And it is my own guard that did it. in_camera_lap() keeps TALL kits out
+    # of the camera's blind foreground, which is right — a hedge in the lens is
+    # what it was written for — but with a 250-400 uu margin it clears the
+    # entire near band, and nothing was ever put back. A rule that prevents the
+    # wrong thing does not by itself produce the right one.
+    #
+    # So the foreground gets deliberate LOW staging: everything here is capped
+    # well under the height that would intrude, and placed to either side of
+    # the sight line so the route through the plaza stays open. This is the
+    # repoussoir the composition has been missing at the bottom edge, the same
+    # job the framing tree does at the top.
+    for _fg in range(30):
+        _h = (_fg * 2654435761) & 0x7FFFFFFF
+        _side = -1.0 if _fg % 2 else 1.0
+        # hug the frame edges: the centre is the route the eye travels
+        # THE FRAME IS NARROW THIS CLOSE. First attempt spread these from 620 to
+        # 1520 uu off the axis "to hug the edges", and at ~1,100 uu from the
+        # camera the frame is only about +/-714 uu wide — so 32 parts of roughly
+        # 200 landed in shot and the foreground stayed empty. Near-field
+        # placement has to be measured against the FRUSTUM, not against the
+        # world, and the frustum is a wedge: the closer the band, the narrower
+        # the room in it.
+        _fx = _side * (170.0 + ((_h >> 3) % 100) / 100.0 * 520.0)
+        _fy = NEAR_Y + 40.0 + ((_h >> 11) % 100) / 100.0 * 760.0
+        _kind = _h % 5
+        if _kind == 0:
+            # a low mossy kerb stone, half-buried
+            _sz = 0.9 + ((_h >> 17) % 5) * 0.22
+            _part("cube", _fx, _fy, 14.0, _sz, _sz * 0.72, 0.22, "stone",
+                  "FG_stone%d" % _fg,
+                  rot=(float((_h >> 5) % 14) - 7.0, float((_h >> 9) % 90), 0.0))
+            _part("sphere", _fx + 12.0, _fy - 9.0, 26.0, _sz * 0.34, _sz * 0.30, 0.12,
+                  "moss", "FG_stonemoss%d" % _fg)
+        elif _kind == 1:
+            # a clump of tall grass — tall for ground cover, still knee height
+            for _t in range(4 + (_h % 3)):
+                _ta = _t * 1.6 + _fg
+                tuft(_fx + math.cos(_ta) * 46.0, _fy + math.sin(_ta) * 46.0,
+                     (_h + _t * 11) % 97)
+        elif _kind == 2:
+            # a low flower cluster, warm so the frame edge is not all green
+            for _b in range(5 + (_h % 4)):
+                _ba = _b * 1.257 + _fg * 0.4
+                _br = 20.0 + ((_h >> (_b + 2)) % 40)
+                _part("sphere", _fx + math.cos(_ba) * _br, _fy + math.sin(_ba) * _br,
+                      30.0 + (_b % 3) * 9.0, 0.17, 0.17, 0.15,
+                      ("rose", "rose_pink", "petal_violet", "petal_pink")[(_h + _b) % 4],
+                      "FG_bloom%d_%d" % (_fg, _b))
+                _part("cube", _fx + math.cos(_ba) * _br, _fy + math.sin(_ba) * _br,
+                      15.0, 0.05, 0.05, 0.30, "foliage", "FG_stem%d_%d" % (_fg, _b))
+        elif _kind == 3:
+            # a small amanita group — the reference names them and the near
+            # field is where their spots actually resolve
+            for _m in range(2 + (_h % 2)):
+                kit_mushroom(_fx + _m * 62.0 - 30.0, _fy + ((_h >> _m) % 40) - 20.0,
+                             0.34 + ((_h >> (_m + 4)) % 3) * 0.07,
+                             "FGMush%d_%d" % (_fg, _m),
+                             "mush_red" if (_h + _m) % 3 else "mush_purple")
+        else:
+            # fallen leaves and petals drifted into a hollow
+            for _d in range(7 + (_h % 5)):
+                _da = _d * 2.39996 + _fg
+                _dr = 14.0 + _d * 9.0
+                _part("cube", _fx + math.cos(_da) * _dr, _fy + math.sin(_da) * _dr,
+                      5.0, 0.13, 0.11, 0.012,
+                      ("leaf", "leaf_hi", "petal_pink", "rose_pink")[(_h + _d) % 4],
+                      "FG_drift%d_%d" % (_fg, _d),
+                      rot=(0.0, 0.0, float((_h >> _d) % 180)))
+
     # NEAR-FIELD TURF. The radial pass above lands its patches by distance from
     # the world origin, which put every one of them near the horizon: measured,
     # 36 patches reached the frame and all sat in a 9%-tall band at depth ~3,000.
@@ -4483,7 +4574,8 @@ def build(layout):
     # southern arc of the arcane circle it is about 13 m out, a quarter of the
     # frame's height, and standing on the violet ring that is its Relay identity
     # — which is exactly the foreground the brief describes.
-    stroll_dog(60.0, -760.0, "RelayDog", s=2.1, is_hero=True, roam=230.0)
+    stroll_dog(HERO_DOG[0], HERO_DOG[1], "RelayDog", s=HERO_DOG_SCALE,
+               is_hero=True, roam=230.0)
     # (The travelling arrival ring is gone: with the camera fixed the Dog stands
     # on the real arcane circle, so a second one would only sit inside the first.)
     # A DRIFT OF KEYS, not three of them. They read as a current of magic moving
