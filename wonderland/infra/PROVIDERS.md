@@ -47,3 +47,23 @@ seam between Relay and a GPU machine is one browser env var,
 `src/relay/` would create a coupling that does not currently exist — so the
 provider boundary lives here, at the shell, which is also where it already lived
 for AWS and Vast before GCP arrived.
+
+## Lightning AI — the current path (2026-08-19)
+
+The founder moved GPU compute to Lightning AI Studios. `wonderland/infra/lightning/`
+holds a complete runner: CPU preparation, build/cook, streaming stack, hero-frame
+capture and a clean shutdown, driven by one command.
+
+**Claude Code does not run inside Lightning.** It stays on the founder's machine;
+the Studio only executes these scripts.
+
+Status: **WRITTEN, NEVER RUN.** No Lightning Studio has executed it and no
+Lightning GPU has rendered a Wonderland frame. Its offline tests pass 18/18
+(syntax, storage detection, port reader, frame verifier, no-Vast-paths, no-GPU
+refusal) — that is coverage of what can be checked without hardware, and it is
+not the same as working.
+
+One non-obvious constraint is recorded in its README and worth repeating here:
+**A100 and H100 have no NVENC encoder**, so they are the wrong choice for Pixel
+Streaming despite being the strongest cards on offer. L4 or A10G.
+

@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# Wonderland on Lightning — EVERYTHING THAT DOES NOT NEED A GPU.
+#
+# Run this while the Studio is still on CPU. Every minute of work done here is
+# a minute the GPU is not being paid for, and most of the cost of a Wonderland
+# build is not the rendering — it is fetching an engine, installing packages,
+# and synthesising textures and audio, all of which are pure CPU.
+#
+# Safe to re-run. Nothing here needs a GPU, and nothing here starts one.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=common.sh
+. "$HERE/common.sh"
+
+wl_say "preparing Wonderland under $WL_ROOT"
+wl_mkdirs
+
+# ------------------------------------------------------------ 0. environment
+if [ -d /teamspace/studios/this_studio ]; then
+  wl_ok "Lightning persistent storage detected — artifacts survive a Studio stop"
+else
+  wl_warn "no /teamspace found; using $WL_ROOT. If this is a Lightning Studio,"
+  wl_warn "check that the path exists, or set WL_ROOT to persistent storage."
+fi
+df -h "$WL_ROOT" 2>/dev/null | tail -1 | awk '{print "[wonderland] disk on " $6 ": " $4 " free of " $2}'
+awk '/MemTotal/ {printf "[wonderland] RAM: %.1f GB\n", $2/1048576}' /proc/meminfo 2>/dev/null || true
+wl_say "cpus: $(nproc 2>/dev/null || echo '?')"
+
+# ------------------------------------------------------------ 1. packages
+# Best-effort: a Studio may not give us root, and that is fine — the only hard
+# requirement below is python3 and git. Missing extras are reported, not fatal.
+WL_APT="${WL_APT:-1}"
+if [ "$WL_APT" = "1" ] && command -v apt-get >/dev/null 2>&1; then
+  SUDO=""
+  [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1 && SUDO="sudo"
+  if [ "$(id -u)" -eq 0 ] || [ -n "$SUDO" ]; then
+    wl_say "installing CPU-side packages (best effort)"
+    $SUDO apt-get update -qq >>"$WL_LOG/apt.log" 2>&1 || wl_warn "apt update failed; see $WL_LOG/apt.log"
+    # coturn: the media path needs a TURN server ADVERTISED to the browser, and
+    # that single fact was the difference between a black player and a picture
+    # when this last worked. cloudflared: gives a public https URL over outbound
+    # 443 only, so it works regardless of what the provider exposes.
+    $SUDO apt-get install -y -qq --no-install-recommends \
+      git curl ca-certificates python3 xz-utils coturn \
+      libvulkan1 libsdl2-2.0-0 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+      libcups2 libdrm2 libgbm1 libasound2t64 libxkbcommon0 libxcomposite1 \
+      libxdamage1 libxfixes3 libxrandr2 libpango-1.0-0 \
+      >>"$WL_LOG/apt.log" 2>&1 || wl_warn "some packages failed; see $WL_LOG/apt.log"
+  else
+    wl_warn "no root and no sudo; skipping package install"
+  fi
+fi
+
+command -v python3 >/dev/null 2>&1 || wl_die "python3 is required and absent"
+command -v git     >/dev/null 2>&1 || wl_die "git is required and absent"
+
+if ! command -v cloudflared >/dev/null 2>&1 && [ ! -x "$WL_RUN/cloudflared" ]; then
+  wl_say "fetching cloudflared (public URL over outbound 443 only)"
+  curl -fsSL -o "$WL_RUN/cloudflared" \
+    https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+    >>"$WL_LOG/prepare.log" 2>&1 && chmod +x "$WL_RUN/cloudflared" \
+    || wl_warn "cloudflared download failed; the Lightning port panel is the fallback"
+fi
+
+# ------------------------------------------------------------ 2. source
+if [ -d "$WL_SRC/.git" ]; then
+  wl_say "updating $WL_BRANCH"
+  git -C "$WL_SRC" fetch --depth 50 origin "$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1
+  git -C "$WL_SRC" checkout -q "$WL_BRANCH" 2>>"$WL_LOG/git.log" || \
+    git -C "$WL_SRC" checkout -qb "$WL_BRANCH" "origin/$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1
+  git -C "$WL_SRC" reset --hard "origin/$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1
+else
+  wl_say "cloning $WL_BRANCH"
+  git clone --depth 50 --branch "$WL_BRANCH" "$WL_REPO" "$WL_SRC" >>"$WL_LOG/git.log" 2>&1 \
+    || wl_die "clone failed; see $WL_LOG/git.log (a private repo needs a credential in the Studio)"
+fi
+wl_ok "source at $(git -C "$WL_SRC" rev-parse --short HEAD) on $(git -C "$WL_SRC" rev-parse --abbrev-ref HEAD)"
+
+BUILD_DIR="$WL_SRC/wonderland/infra/build"
+[ -d "$BUILD_DIR" ] || wl_die "expected $BUILD_DIR in the checkout"
+
+# ------------------------------------------------------------ 3. offline gates
+# These are the cheap checks that have actually saved cooks. Running them here
+# means a broken generator is found on CPU, not after the GPU is already warm.
+wl_say "running the offline gates"
+GATE_FAIL=0
+for g in verify-look-table.py verify-docs.py verify-dog-proxy.py verify-generator-dryrun.py; do
+  if [ -f "$BUILD_DIR/$g" ]; then
+    if python3 "$BUILD_DIR/$g" >>"$WL_LOG/gates.log" 2>&1; then
+      wl_ok "gate $g"
+    else
+      wl_warn "gate $g FAILED — see $WL_LOG/gates.log"
+      GATE_FAIL=1
+    fi
+  fi
+done
+[ "$GATE_FAIL" = 0 ] || wl_warn "one or more gates failed; fix before spending GPU time"
+
+# ------------------------------------------------------------ 4. textures + audio
+# Pure-stdlib synthesis: no GPU, no network, no licence. Doing it here is the
+# single biggest saving in the whole flow, because the alternative is a warm
+# GPU sitting idle while Python writes PNGs.
+wl_say "synthesising textures and audio on CPU"
+( cd "$BUILD_DIR" && python3 gen-textures.py >>"$WL_LOG/gen.log" 2>&1 ) \
+  && wl_ok "textures generated" || wl_warn "gen-textures.py failed; see $WL_LOG/gen.log"
+if [ -f "$BUILD_DIR/gen-audio.py" ]; then
+  ( cd "$BUILD_DIR" && python3 gen-audio.py >>"$WL_LOG/gen.log" 2>&1 ) \
+    && wl_ok "audio generated" || wl_warn "gen-audio.py failed; see $WL_LOG/gen.log"
+fi
+
+# ------------------------------------------------------------ 5. the engine
+# UE 5.8 is the one thing this script cannot obtain on its own. Epic gate it
+# behind an account link, and working around that is not something to automate.
+# So: report precisely what is present and what the founder must do.
+UE_READY=0
+if [ -x "$WL_UE/Engine/Build/BatchFiles/RunUAT.sh" ]; then
+  UE_VER="$(grep -o '"MinorVersion"[[:space:]]*:[[:space:]]*[0-9]*' \
+            "$WL_UE/Engine/Build/Build.version" 2>/dev/null | grep -o '[0-9]*$' || echo '?')"
+  wl_ok "Unreal Engine present at $WL_UE (minor version ${UE_VER})"
+  UE_READY=1
+elif command -v docker >/dev/null 2>&1 && docker image inspect "${WL_UE_IMAGE:-ghcr.io/epicgames/unreal-engine:dev-5.8}" >/dev/null 2>&1; then
+  wl_ok "Epic UE 5.8 container image is present locally"
+  UE_READY=1
+else
+  wl_warn "Unreal Engine 5.8 is NOT yet available. This is the one founder action."
+fi
+
+# ------------------------------------------------------------ 6. report
+printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ) prepared at $(git -C "$WL_SRC" rev-parse --short HEAD)" \
+  > "$WL_RUN/prepared.stamp"
+
+echo
+wl_say "================ READINESS ================"
+printf '  storage      %s\n' "$WL_ROOT"
+printf '  source       %s (%s)\n' "$(git -C "$WL_SRC" rev-parse --short HEAD)" "$WL_BRANCH"
+printf '  textures     %s\n' "$([ -d "$WL_SRC/wonderland/Content" ] || [ -d "$WL_ROOT/textures" ] && echo present || echo 'see gen.log')"
+printf '  offline gates %s\n' "$([ "$GATE_FAIL" = 0 ] && echo pass || echo FAIL)"
+printf '  engine       %s\n' "$([ "$UE_READY" = 1 ] && echo ready || echo 'NOT READY - founder action needed')"
+printf '  gpu          %s\n' "$(wl_have_gpu && nvidia-smi --query-gpu=name --format=csv,noheader | head -1 || echo 'none (expected while on CPU)')"
+echo
+if [ "$UE_READY" != 1 ]; then
+  cat <<'NEEDED'
+[wonderland] FOUNDER ACTION REQUIRED — obtaining Unreal Engine 5.8
+[wonderland]
+[wonderland] Epic put UE behind an account link and I will not work around it.
+[wonderland] Pick ONE of these, in the Lightning Studio terminal:
+[wonderland]
+[wonderland]   A) Epic's official container (fastest, recommended)
+[wonderland]      1. Link your Epic account to GitHub once, at
+[wonderland]         https://www.unrealengine.com/en-US/ue-on-github
+[wonderland]      2. Make a GitHub personal access token with read:packages
+[wonderland]      3. In the Studio:
+[wonderland]           echo <TOKEN> | docker login ghcr.io -u <GITHUB_USER> --password-stdin
+[wonderland]           docker pull ghcr.io/epicgames/unreal-engine:dev-5.8
+[wonderland]
+[wonderland]   B) Build from source (no container, several hours of CPU)
+[wonderland]           git clone --depth 1 -b 5.8 git@github.com:EpicGames/UnrealEngine.git \
+[wonderland]             /teamspace/studios/this_studio/wonderland/UnrealEngine
+[wonderland]           cd /teamspace/studios/this_studio/wonderland/UnrealEngine
+[wonderland]           ./Setup.sh && ./GenerateProjectFiles.sh && make
+[wonderland]
+[wonderland] Do A or B while the Studio is still on CPU. Neither needs a GPU.
+NEEDED
+else
+  wl_ok "CPU preparation complete. Next: enable the GPU, then run launch-wonderland.sh"
+fi
