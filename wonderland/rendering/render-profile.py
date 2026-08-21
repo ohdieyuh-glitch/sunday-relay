@@ -71,9 +71,24 @@ def gate(names, strict, where):
         return list(names), []
 
     verdicts = probe.get("verdicts", {})
-    if probe.get("warning"):
-        sys.stderr.write("WARNING: the probe file itself is suspect — %s\n"
-                         % probe["warning"])
+    # A PROBE THAT MEASURED NOTHING IS NOT A PROBE. If the build hung or died
+    # before it reached a console, every name comes back `silent` — and silent
+    # names are filtered out of the payload rather than refused, so --strict
+    # would have emitted an EMPTY -ExecCmds and reported success. The bench
+    # would then have measured the engine's defaults under a profile's name.
+    # Found by pointing the probe at a process that just sleeps.
+    if probe.get("warning") or (verdicts and
+                                all(v == "silent" for v in verdicts.values())):
+        message = ("the probe file at %s answered for NOTHING (%s). It did not "
+                   "measure this engine — the build most likely never reached a "
+                   "console. Re-run probe-cvars.sh and check its log before "
+                   "trusting any verdict.\n"
+                   % (os.path.basename(PROBE),
+                      probe.get("warning", "every name is silent")))
+        if strict:
+            sys.stderr.write("REFUSED (%s): " % where + message)
+            raise SystemExit(2)
+        sys.stderr.write("WARNING (%s): " % where + message)
     absent = [n for n in names if verdicts.get(n) == "absent"]
     silent = [n for n in names if verdicts.get(n) in (None, "silent")]
     if absent:

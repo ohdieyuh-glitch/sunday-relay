@@ -100,6 +100,45 @@ json.dump({"engine": "5.8", "verdicts": {n: "present" for n in names},
            "counts": {"present": len(names)}},
           io.open(os.path.join(root, "engine-cvars.5.8.json"), "w", encoding="utf8"))
 PY
+# A PROBE THAT ANSWERED FOR NOTHING must refuse in strict mode. Silent names
+# are filtered out of the payload rather than refused, so without this a hung
+# or crashed probe yields an EMPTY -ExecCmds that reports success — and the
+# bench then measures engine defaults under a profile's name. Reproduced by
+# pointing probe-cvars.sh at a process that only sleeps.
+python3 - "$HERE" <<'DEADPROBE'
+import io, json, os, sys
+root = sys.argv[1]
+data = json.load(io.open(os.path.join(root, "profiles.json"), encoding="utf8"))
+names = set()
+for profile in data["profiles"].values():
+    names |= set(profile["cvars"])
+json.dump({"engine": "5.8", "verdicts": {n: "silent" for n in names},
+           "counts": {"present": 0, "absent": 0, "silent": len(names)},
+           "warning": "not one name was answered."},
+          io.open(os.path.join(root, "engine-cvars.5.8.json"), "w", encoding="utf8"))
+DEADPROBE
+python3 "$HERE/render-profile.py" --strict emit BALANCED >/dev/null 2>&1
+[ $? -ne 0 ]; check $? "a probe that answered for NOTHING refuses in strict mode"
+# Captured, not piped: this harness runs under pipefail and the gate is
+# SUPPOSED to exit non-zero here, so a pipeline hands grep's success back as
+# the gate's failure. Third time in this file — the pattern is the hazard.
+python3 "$HERE/render-profile.py" --strict emit BALANCED >/dev/null 2>"$TMP/dead.txt" || true
+grep -q "did not measure this engine" "$TMP/dead.txt"
+check $? "...and says the probe did not measure the engine"
+DEAD_PAYLOAD="$(python3 "$HERE/render-profile.py" --strict emit BALANCED 2>/dev/null || true)"
+[ -z "$DEAD_PAYLOAD" ]; check $? "...and emits nothing rather than an empty payload that looks fine"
+
+python3 - "$HERE" <<'GOODPROBE'
+import io, json, os, sys
+root = sys.argv[1]
+data = json.load(io.open(os.path.join(root, "profiles.json"), encoding="utf8"))
+names = set()
+for profile in data["profiles"].values():
+    names |= set(profile["cvars"])
+json.dump({"engine": "5.8", "verdicts": {n: "present" for n in names},
+           "counts": {"present": len(names)}},
+          io.open(os.path.join(root, "engine-cvars.5.8.json"), "w", encoding="utf8"))
+GOODPROBE
 PAYLOAD="$(python3 "$HERE/render-profile.py" --strict emit BALANCED 2>/dev/null)"
 [ -n "$PAYLOAD" ]; check $? "with a clean probe, --strict emits the payload"
 case "$PAYLOAD" in

@@ -48,19 +48,41 @@ else
   wl_mkdirs
   APP="$(wl_find_first "$WL_OUT/Linux" -maxdepth 3 -name 'Wonderland.sh' -type f)"
 fi
-[ -n "${APP:-}" ] && [ -x "$APP" ] \
-  || { echo "no packaged Wonderland.sh found; build it first, or set WL_APP" >&2; exit 2; }
+if [ -z "${APP:-}" ]; then
+  echo "no packaged Wonderland.sh found under \$WL_OUT/Linux. Build it first," >&2
+  echo "or point WL_APP at one." >&2
+  exit 2
+fi
+if [ ! -x "$APP" ]; then
+  # Naming the path matters: "not found" when WL_APP WAS set sends someone
+  # looking for a build that is sitting right there without the execute bit.
+  echo "$APP is not executable (WL_APP=${WL_APP:-unset})" >&2
+  exit 2
+fi
 
 LOG="$(mktemp -d)/probe.log"
 EXEC="$(paste -sd, "$NAMES_FILE"),quit"
+# A HARD CEILING. The exec list ends in `quit`, but a build that dies before it
+# reaches a console, or one that decides to wait for a Pixel Streaming
+# connection that will never come, hangs here forever — on a GPU that is being
+# paid for by the minute. Two minutes is many times what this needs.
+PROBE_TIMEOUT="${WL_PROBE_TIMEOUT:-120}"
 
 # -nullrhi would be faster but a null RHI does not register renderer console
 # variables, so a probe under it reports every r.* name as missing. That is a
 # wrong answer delivered quickly, which is worse than a slow right one.
 set +e
-"$APP" -RenderOffscreen -Unattended -stdout -FullStdOutLogOutput \
-       -ExecCmds="$EXEC" -ResX=320 -ResY=240 >"$LOG" 2>&1
+timeout "$PROBE_TIMEOUT" \
+  "$APP" -RenderOffscreen -Unattended -stdout -FullStdOutLogOutput \
+         -ExecCmds="$EXEC" -ResX=320 -ResY=240 >"$LOG" 2>&1
+APP_RC=$?
 set -e
+if [ "$APP_RC" = "124" ]; then
+  # Not fatal on its own: the log may already hold every answer, and
+  # parse-cvar-probe.py refuses to call anything absent when nothing answered.
+  echo "the build did not exit within ${PROBE_TIMEOUT}s and was stopped." >&2
+  echo "reading whatever it logged before that; check the verdicts." >&2
+fi
 
 python3 "$HERE/parse-cvar-probe.py" "$NAMES_FILE" "$LOG" "$OUT"
 echo "wrote $OUT"
