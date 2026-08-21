@@ -88,9 +88,44 @@
         "path": "assets/splat_full_res.spz",
         "bytes": 30810551,
         "fetched_at": "2026-08-21T16:27:43Z"
+      },
+      "hq_mesh_url": {
+        "path": "assets/mesh_hq.glb",
+        "bytes": 141473320,
+        "fetched_at": "2026-08-21T17:34:00Z",
+        "note": "Downloaded directly onto the Lightning box, not through fetch(): 141 MB and the import happens there. The signed URL needs no auth, so the API key never left the control machine. On the box the file is a symlink into wonderland/marble-assets/ so the 471 MB of mesh lives outside the repo."
+      },
+      "full_res_mesh_url": {
+        "path": "assets/mesh_full_res.glb",
+        "bytes": 330491072,
+        "fetched_at": "2026-08-21T17:34:00Z",
+        "note": "FREE, and it only appeared after the paid HQ export ran — worth knowing before paying again. 16.5 M triangles at a 2 cm median edge (119.7 tri/m2), vertex-coloured with NO textures. Too heavy for a backdrop; mesh_hq is the one to import."
       }
     },
-    "url_note": "Marble asset URLs are signed and expire. `downloaded` holds the local paths, which do not."
+    "url_note": "Marble asset URLs are signed and expire. `downloaded` holds the local paths, which do not.",
+    "mesh_geometry_measured": {
+      "collider": {
+        "tris": 192796,
+        "median_edge_m": 0.98,
+        "tri_per_m2": 3.27,
+        "textures": 0
+      },
+      "hq_textured": {
+        "tris": 592580,
+        "median_edge_m": 0.283,
+        "textures": 1,
+        "materials": 1,
+        "credits": 3500,
+        "verdict": "THE ONE TO IMPORT — textured, and 592k tris is nothing on an L4"
+      },
+      "full_res": {
+        "tris": 16521682,
+        "median_edge_m": 0.02,
+        "tri_per_m2": 119.7,
+        "textures": 0,
+        "verdict": "real game-density geometry but vertex-coloured only, and 16.5M tris for a backdrop is waste"
+      }
+    }
   },
   "exports": [
     {
