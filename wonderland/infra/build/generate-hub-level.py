@@ -4448,11 +4448,19 @@ def build(layout):
         kit_root(_TX, _TY, _a, 430.0 + 190.0 * ((_i * 7) % 4) / 4.0,
                  0.90 + 0.34 * ((_i * 5) % 3) / 3.0, "TreeRoot%d" % _i)
     # the framing branch: out of the bole, across the frame, drooping at the end
+    # THE FIRST BOUGH, same problem and the same two knobs. Between them the
+    # two boughs' leaf cards were 22.2% of the whole frame — the single largest
+    # colour in a shot whose reference is a pastel stone city. Lifted and
+    # thinned until sky reads through the arch instead of being shut out by it.
+    # verify-visual-target.py measures the result; these are the numbers to
+    # move if the founder wants the canopy heavier or lighter.
+    BOUGH1_LIFT = 320.0        # uu
+    BOUGH1_CARDS = 4           # was 7
     for _k in range(14):
         _t = (_k + 0.5) / 14.0
         _bx = _TX - _t * 1500.0
         _by = _TY - _t * 520.0
-        _bz = 1180.0 + math.sin(_t * 2.1) * 190.0 - _t * _t * 260.0
+        _bz = 1180.0 + BOUGH1_LIFT + math.sin(_t * 2.1) * 190.0 - _t * _t * 260.0
         _th = 1.15 * (1.0 - 0.62 * _t)
         _part("sphere", _bx, _by, _bz, _th * 2.2, _th * 1.3, _th * 1.2, "trunk",
               "TreeBranch%d" % _k, rot=(0.0, 0.0, float(_k * 9)))
@@ -4470,7 +4478,7 @@ def build(layout):
             # THE EDGE OF A CANOPY IS WHERE IT READS. A solid core keeps the
             # mass and its shadow; cards around the outside give it the ragged,
             # holed silhouette no arrangement of spheres can produce.
-            for _c in range(7):
+            for _c in range(BOUGH1_CARDS):
                 _ca = _c * 0.898 + _k
                 _part("cube", _bx + math.cos(_ca) * 250.0, _by + math.sin(_ca) * 205.0,
                       _bz + 20.0 + math.sin(_ca * 1.7) * 95.0,
@@ -4484,10 +4492,24 @@ def build(layout):
                 _part("sphere", _bx + 16.0, _by + 12.0, _bz - 90.0 - _v * 62.0,
                       0.30, 0.30, 0.30, "foliage" if _v % 2 else "rose_pink",
                       "TreeHang%d_%d" % (_k, _v))
-    # THE TOP-RIGHT CORNER LEAKS. The tree frames the left and the gate frames
-    # the right at eye level, but between them the top of the frame is open sky
-    # and the eye runs out of it. A second bough, thrown the other way across
-    # the top of the view, closes the arch of foliage the brief asks for.
+    # THE TOP-RIGHT CORNER LEAKS — and then this closed it too far.
+    #
+    # A second bough was thrown across the top of the view to close an arch of
+    # foliage, and it worked: the top third of the frame measures 89.4% covered
+    # and the whole frame is 4.1% sky. The reference is a bright lavender sky
+    # with soft cloud seen THROUGH a framing tree, not a shot roofed over by
+    # one, and the palette says the same thing — green is 30.6% of the frame
+    # and 22.2 of those points are this canopy's leaf cards.
+    #
+    # So the bough stays and the arch stays. What changes is that it is lifted
+    # and thinned until sky reads BETWEEN the foliage, which is what a real
+    # canopy does. Deleting it would trade one wrong frame for another.
+    #
+    # These are the two numbers to move if the founder wants more or less sky.
+    # Every value they touch is measured by verify-visual-target.py, so the
+    # effect is a number rather than an opinion.
+    BOUGH2_LIFT = 260.0        # uu the top bough is raised out of the frame
+    BOUGH2_CARDS = 3           # leaf cards per canopy node, was 5
     for _k in range(11):
         _t = (_k + 0.5) / 11.0
         # ACROSS the top, toward screen-right (which is world -X when the camera
@@ -4495,7 +4517,7 @@ def build(layout):
         # across the Observatory that closes the axis beneath it.
         _bx = _TX - 300.0 - _t * 1500.0
         _by = _TY + 120.0 + _t * 520.0
-        _bz = 1300.0 + math.sin(_t * 1.9) * 90.0 - _t * _t * 140.0
+        _bz = 1300.0 + BOUGH2_LIFT + math.sin(_t * 1.9) * 90.0 - _t * _t * 140.0
         _th = 0.92 * (1.0 - 0.58 * _t)
         _part("sphere", _bx, _by, _bz, _th * 2.0, _th * 1.25, _th * 1.1, "trunk",
               "TreeBough2_%d" % _k, rot=(0.0, 0.0, float(_k * 11)))
@@ -4509,7 +4531,7 @@ def build(layout):
                       "foliage_spr" if _j % 2 else "foliage_hi",
                       "TreeBough2Leaf%d_%d" % (_k, _j))
             if "leafcard" in MATS:
-                for _c in range(5):
+                for _c in range(BOUGH2_CARDS):
                     _ca = _c * 1.257 + _k
                     _part("cube", _bx + math.cos(_ca) * 215.0, _by + math.sin(_ca) * 180.0,
                           _bz + 12.0 + math.sin(_ca * 1.6) * 80.0, 2.7, 0.03, 2.7,

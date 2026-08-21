@@ -12,32 +12,39 @@
     "here are what should change — not the measurement."
   ],
   "_measured_at_2026_08_21": {
-    "note": "the state when this file was written, so drift in either direction is visible",
-    "objects_pct": 95.9,
-    "sky_pct": 4.1,
-    "bare_ground_pct": 0.04,
-    "actors_drawn": 25829,
-    "distinct_materials_visible": 49,
-    "lone_primitive_pct": 0.81,
-    "depth_near_mid_far": [
-      38.7,
-      51.0,
-      6.2
-    ],
-    "relay_dogs_readable": 4,
-    "tallest_dog_px": 172,
-    "palette": {
-      "green_foliage": 30.6,
-      "warm_timber_stone": 15.4,
-      "neutral_stone": 14.1,
-      "gold_amber": 13.0,
-      "cream_white": 7.9,
-      "pink_rose_red": 7.6,
-      "violet_purple": 4.3,
-      "blue_teal": 4.2,
-      "dark": 2.9
+    "note": "Two snapshots, so the direction of travel is visible. `before` is the frame as the L4 last streamed it; `after` is the same frame with the two framing boughs lifted and thinned. Nothing was deleted — the arch of foliage the composition is built on is still there, it just stopped roofing the shot.",
+    "before": {
+      "objects_pct": 95.85,
+      "sky_pct": 4.1,
+      "bare_ground_pct": 0.04,
+      "top_third_sky_pct": 10.6,
+      "lone_primitive_pct": 0.81,
+      "palette": {
+        "green_foliage": 30.57,
+        "cream_white": 7.93,
+        "pink_rose_red": 7.58,
+        "violet_purple": 4.3,
+        "gold_amber": 12.98
+      }
     },
-    "palette_note": "The warm 20-65 degree hue band was originally one bucket and read 28.3%, which said gold dominates the frame. It does not: splitting bright saturated gold from dull warm timber and paving puts real gold at 13.0% (inside its accent band) and moves 15.4% to bark and flagstone. The first number would have sent someone to de-gold a world that is not over-gold."
+    "after": {
+      "objects_pct": 93.42,
+      "sky_pct": 6.54,
+      "bare_ground_pct": 0.04,
+      "top_third_sky_pct": 17.8,
+      "lone_primitive_pct": 1.19,
+      "distinct_materials_visible": 49,
+      "relay_dogs_readable": 4,
+      "palette": {
+        "green_foliage": 25.21,
+        "cream_white": 8.29,
+        "pink_rose_red": 7.71,
+        "violet_purple": 4.44,
+        "gold_amber": 13.63,
+        "warm_timber_stone": 17.38
+      }
+    },
+    "palette_note": "The warm 20-65 degree hue band was originally one bucket and read 28.3%, which said gold dominates the frame. It does not: splitting bright saturated gold from dull warm timber and paving puts real gold at 13.6% (inside its accent band). The first number would have sent someone to de-gold a world that is not over-gold."
   },
   "criteria": {
     "environment_density": {
@@ -54,7 +61,7 @@
       "metric": "coverage.sky_pct",
       "min": 8.0,
       "max": 20.0,
-      "why": "The reference names a bright lavender sky with soft cloud as an element. Measured at 4.1%, and GPU-READY-QUEUE.md already recorded that as a standing problem — 'four per cent is not a sky' — with the top third of the frame 89.4% covered, roofed by the framing tree's canopy and the golden gate. This threshold was originally set to 3.0, which PASSED the very frame another document in this repo calls broken. Two artifacts disagreeing about the same measurement is how a known issue becomes an unknown one, so the gate now agrees with the queue."
+      "why": "The reference names a bright lavender sky with soft cloud as an element. It measured 4.1% — GPU-READY-QUEUE.md called that a standing problem, 'four per cent is not a sky', with the top third 89.4% covered. Lifting and thinning the two framing boughs took it to 6.54%, and the top third from 10.6% to 17.8% sky. The remaining gap is held by the golden gate (9.5% of the top third) and the framing tree (8.0%) — BOTH of which the reference explicitly calls for, so closing it further means moving them rather than deleting foliage. That is a founder decision, not a threshold to quietly lower."
     },
     "material_diversity": {
       "metric": "distinct_materials_visible",
@@ -84,7 +91,7 @@
     "palette_cream": {
       "metric": "palette_pct.cream_white",
       "min": 15.0,
-      "why": "The reference is pale cream and white stone before it is anything else. Measured at 7.9%, and 3.3 of those points are the Relay Dogs' own white coats — actual pale stone is nearer 4.6%. This is the largest measured gap to the target look."
+      "why": "The reference is pale cream and white stone before it is anything else. Measured at 8.29%, and 3.3 of those points are the Relay Dogs' own white coats — actual pale stone is nearer 5%. This is the largest remaining gap to the target look and it will not be closed by thinning foliage: it needs more pale stone architecture in frame, which is exactly what the Marble Royal Garden is for."
     },
     "palette_pink": {
       "metric": "palette_pct.pink_rose_red",
@@ -105,7 +112,7 @@
     "foliage_not_dominant": {
       "metric": "palette_pct.green_foliage",
       "max": 25.0,
-      "why": "Lush, not a forest. Measured at 30.6% and it is the largest colour in the frame: leafcard 13.0% and leafcard_hi 9.2% together are 22.2%, which is the framing tree's canopy roofing the shot. The reference is a pastel stone city seen THROUGH planting, not planting with a city behind it."
+      "why": "Lush, not a forest. It measured 30.6% and was the largest colour in the frame — the two framing boughs' leaf cards alone were 22.2 of those points, roofing a shot whose reference is a pastel stone city seen THROUGH planting. Lifting and thinning them took green to 25.21%, which is 0.21 over. The remainder is the great trees' crowns; thinning those globally would touch every tree in the world, so it is left as a deliberate near-miss rather than a change made to clear a threshold."
     },
     "warm_surfaces_not_dominant": {
       "metric": "palette_pct.warm_timber_stone",
