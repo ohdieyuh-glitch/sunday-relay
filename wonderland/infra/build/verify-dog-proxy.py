@@ -43,10 +43,24 @@ def cpp_parts():
     if not m:
         raise SystemExit("could not find the reference scale in %s" % PAWN)
     S = float(m.group(1))
-    LegH = 100.0 * S
-    Bz = LegH + 34.0 * S
-    Hz = Bz + 50.0 * S
-    env = {"S": S, "LegH": LegH, "Bz": Bz, "Hz": Hz, "FRotator": None}
+    env = {"S": S, "FRotator": None}
+    # PARSE THE LOCAL CONSTANTS INSTEAD OF HARDCODING THEM.
+    #
+    # This used to assume LegH/Bz/Hz and compute them itself. The moment the
+    # part table gained HeadX and LegT, every row that used them failed to
+    # evaluate and was SILENTLY SKIPPED — so the checker compared the surviving
+    # rows against the wrong preview rows and reported a mismatch at part 3
+    # that had nothing to do with part 3. A checker that drops what it cannot
+    # read reports the failure in the wrong place.
+    for name, expr in re.findall(r"const float (\w+)\s*=\s*([^;]+);", src):
+        text = expr.replace("f", "").strip()
+        try:
+            env[name] = float(eval(text, {"__builtins__": {}}, env))
+        except Exception:
+            continue
+    for required in ("LegH", "Bz", "Hz"):
+        if required not in env:
+            raise SystemExit("could not evaluate %s from %s" % (required, PAWN))
 
     rows = []
     for loc, scale in re.findall(
@@ -78,9 +92,20 @@ def preview_parts():
         raise SystemExit("preview's Dog transcription block not found — the "
                          "harness changed shape and this check needs updating")
     S = 1.3
-    env = {"_S": S, "_LegH": 100.0 * S, "_Bz": 100.0 * S + 34.0 * S,
-           "_M": "dog_body"}
-    env["_Hz"] = env["_Bz"] + 50.0 * S
+    env = {"_S": S, "_M": "dog_body"}
+    # PARSE THE PREVIEW'S OWN DERIVED HEIGHTS, for the same reason the C++ side
+    # does: these were hardcoded as _LegH = 100 * S, and when the Dog's legs
+    # changed to 92 the checker compared correct rows against heights nobody
+    # used any more and blamed the tail. Both halves read their constants from
+    # the source now, so there is no third place for the number to live.
+    for name, expr in re.findall(r"^\s*(_LegH|_Bz|_Hz)\s*=\s*(.+)$", src, re.M):
+        try:
+            env[name] = float(eval(expr.strip(), {"__builtins__": {}}, env))
+        except Exception:
+            continue
+    for required in ("_LegH", "_Bz", "_Hz"):
+        if required not in env:
+            raise SystemExit("could not evaluate %s from %s" % (required, PREVIEW))
     rows = []
     for line in m.group(2).splitlines():
         # Strip trailing comments BEFORE parsing. Without this the rows that

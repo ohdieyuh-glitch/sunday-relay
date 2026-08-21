@@ -31,9 +31,9 @@ namespace WonderlandDogBody
 	FVector HeadLocation(const FSkin& Skin)
 	{
 		const float S = Skin.Scale;
-		const float LegH = 100.0f * S;
+		const float LegH = 92.0f * S;
 		const float Bz = LegH + 34.0f * S;
-		return FVector(78.0f * S, 0.0f, Bz + 50.0f * S - Skin.FootOffset);
+		return FVector(84.0f * S, 0.0f, Bz + 50.0f * S - Skin.FootOffset);
 	}
 
 	int32 Build(AActor* Owner, USceneComponent* Parent, const FSkin& Skin)
@@ -52,33 +52,56 @@ namespace WonderlandDogBody
 		const TCHAR* const Eye = EyeMat;
 		const TCHAR* const Gold = GoldMat;
 
-		const float LegH = 100.0f * S;
+		const float LegH = 92.0f * S;
 		const float Bz = LegH + 34.0f * S;
 		const float Hz = Bz + 50.0f * S;
 
 		struct FPart { FVector Loc; FVector Scale; FRotator Rot; const TCHAR* Mat; };
+		// THE ORIGINAL RELAY DOG, built to the founder's spec sheet.
+		//
+		// Three things in here are the identity and none of them is decoration:
+		//
+		//  1. THE VISOR IS A RECESS, NOT A STRIPE. It used to be one dark cube
+		//     laid flat on the face, which reads as a painted band. The sheet
+		//     shows a slot cut INTO the head — so the head is a brow block and a
+		//     jaw block with a gap between them and a back wall closing it, and
+		//     the eyes sit INSIDE that gap. The shadow the brow casts into the
+		//     recess is what makes the face read as a visor at any distance.
+		//  2. THE TAIL IS A STEPPED STAIRCASE rising up and back, three blocks
+		//     of decreasing size. A single rotated cube was a stand-in.
+		//  3. THERE IS NO CHEST TAG. The sheet's body is plain. One was added
+		//     here from an earlier reference and it is removed.
+		//
+		// Square ears sit on the head's top corners with a notch between them,
+		// the face is flat with no snout, and the legs are blocky rather than
+		// slender. Proportions are identity: change these numbers and it stops
+		// being the Relay Dog.
+		const float HeadX = 84.0f * S;          // face plane, forward of the body
+		const float LegT = 0.26f * S;           // blocky legs, not posts
 		const FPart Parts[] = {
-			// four slender legs, clear gap under the body
-			{ FVector(-48.0f * S, -30.0f * S, LegH * 0.5f), FVector(0.19f * S, 0.19f * S, LegH / 100.0f), FRotator::ZeroRotator, Body },
-			{ FVector(-48.0f * S,  30.0f * S, LegH * 0.5f), FVector(0.19f * S, 0.19f * S, LegH / 100.0f), FRotator::ZeroRotator, Body },
-			{ FVector( 48.0f * S, -30.0f * S, LegH * 0.5f), FVector(0.19f * S, 0.19f * S, LegH / 100.0f), FRotator::ZeroRotator, Body },
-			{ FVector( 48.0f * S,  30.0f * S, LegH * 0.5f), FVector(0.19f * S, 0.19f * S, LegH / 100.0f), FRotator::ZeroRotator, Body },
-			// compact body
-			{ FVector(0.0f, 0.0f, Bz), FVector(1.28f * S, 0.86f * S, 0.66f * S), FRotator::ZeroRotator, Body },
-			// head at the front (+X), flat face, no snout
-			{ FVector(78.0f * S, 0.0f, Hz), FVector(0.80f * S, 0.82f * S, 0.80f * S), FRotator::ZeroRotator, Body },
-			// two square ears
-			{ FVector(6.0f * S, -26.0f * S, Hz + 46.0f * S), FVector(0.24f * S, 0.2f * S, 0.40f * S), FRotator::ZeroRotator, Body },
-			{ FVector(6.0f * S,  26.0f * S, Hz + 46.0f * S), FVector(0.24f * S, 0.2f * S, 0.40f * S), FRotator::ZeroRotator, Body },
-			// black visor band across the flat face
-			{ FVector(118.0f * S, 0.0f, Hz + 6.0f * S), FVector(0.18f * S, 0.86f * S, 0.30f * S), FRotator::ZeroRotator, Visor },
-			// gold glowing eyes
-			{ FVector(124.0f * S, -21.0f * S, Hz + 2.0f * S), FVector(0.1f * S, 0.22f * S, 0.13f * S), FRotator::ZeroRotator, Eye },
-			{ FVector(124.0f * S,  21.0f * S, Hz + 2.0f * S), FVector(0.1f * S, 0.22f * S, 0.13f * S), FRotator::ZeroRotator, Eye },
-			// small gold identity tag at the chest
-			{ FVector(60.0f * S, 0.0f, Bz - 2.0f * S), FVector(0.12f * S, 0.26f * S, 0.26f * S), FRotator::ZeroRotator, Gold },
-			// up-tail at the back
-			{ FVector(-74.0f * S, 0.0f, Bz + 24.0f * S), FVector(0.44f * S, 0.18f * S, 0.20f * S), FRotator(-38.0f, 0.0f, 0.0f), Body },
+			// four blocky legs, clear gap under the body
+			{ FVector(-46.0f * S, -30.0f * S, LegH * 0.5f), FVector(LegT, LegT, LegH / 100.0f), FRotator::ZeroRotator, Body },
+			{ FVector(-46.0f * S,  30.0f * S, LegH * 0.5f), FVector(LegT, LegT, LegH / 100.0f), FRotator::ZeroRotator, Body },
+			{ FVector( 46.0f * S, -30.0f * S, LegH * 0.5f), FVector(LegT, LegT, LegH / 100.0f), FRotator::ZeroRotator, Body },
+			{ FVector( 46.0f * S,  30.0f * S, LegH * 0.5f), FVector(LegT, LegT, LegH / 100.0f), FRotator::ZeroRotator, Body },
+			// body
+			{ FVector(0.0f, 0.0f, Bz), FVector(1.30f * S, 0.92f * S, 0.76f * S), FRotator::ZeroRotator, Body },
+			// HEAD AS THREE BLOCKS — brow, jaw, and the wall behind the slot.
+			{ FVector(HeadX, 0.0f, Hz + 22.0f * S), FVector(0.86f * S, 0.90f * S, 0.42f * S), FRotator::ZeroRotator, Body },
+			{ FVector(HeadX, 0.0f, Hz - 26.0f * S), FVector(0.86f * S, 0.90f * S, 0.34f * S), FRotator::ZeroRotator, Body },
+			{ FVector(HeadX - 30.0f * S, 0.0f, Hz), FVector(0.34f * S, 0.90f * S, 0.94f * S), FRotator::ZeroRotator, Body },
+			// the dark interior of the recess, set BACK from the face plane
+			{ FVector(HeadX - 6.0f * S, 0.0f, Hz - 4.0f * S), FVector(0.62f * S, 0.80f * S, 0.13f * S), FRotator::ZeroRotator, Visor },
+			// two glowing gold eyes INSIDE the slot
+			{ FVector(HeadX + 4.0f * S, -22.0f * S, Hz - 4.0f * S), FVector(0.14f * S, 0.26f * S, 0.11f * S), FRotator::ZeroRotator, Eye },
+			{ FVector(HeadX + 4.0f * S,  22.0f * S, Hz - 4.0f * S), FVector(0.14f * S, 0.26f * S, 0.11f * S), FRotator::ZeroRotator, Eye },
+			// two square ears with a notch between them
+			{ FVector(HeadX - 12.0f * S, -28.0f * S, Hz + 62.0f * S), FVector(0.30f * S, 0.26f * S, 0.44f * S), FRotator::ZeroRotator, Body },
+			{ FVector(HeadX - 12.0f * S,  28.0f * S, Hz + 62.0f * S), FVector(0.30f * S, 0.26f * S, 0.44f * S), FRotator::ZeroRotator, Body },
+			// stepped tail, rising up and back
+			{ FVector(-74.0f * S, 0.0f, Bz + 14.0f * S), FVector(0.30f * S, 0.24f * S, 0.24f * S), FRotator::ZeroRotator, Body },
+			{ FVector(-90.0f * S, 0.0f, Bz + 34.0f * S), FVector(0.26f * S, 0.22f * S, 0.26f * S), FRotator::ZeroRotator, Body },
+			{ FVector(-102.0f * S, 0.0f, Bz + 56.0f * S), FVector(0.22f * S, 0.20f * S, 0.28f * S), FRotator::ZeroRotator, Body },
 		};
 
 		int32 Built = 0;

@@ -267,25 +267,30 @@ def main():
     # local +Y to world +X. Scales swap with the axes.
     for _i, (_dx, _dy, _dz) in enumerate(_pending_dogs):
         _S = 1.3 * (_dog_scale.get(_i, 1.2) / 1.2)   # C++ S, carrying any per-dog scale
-        _LegH = 100.0 * _S
+        _LegH = 92.0 * _S
         _Bz = _LegH + 34.0 * _S
         _Hz = _Bz + 50.0 * _S
         _M = "dog_body"
         for _n, (_lx, _ly, _lz, _sx, _sy, _sz, _mat) in enumerate((
-            # four legs, with the gaps between them that make the Dog read lean
-            (-48.0 * _S, -30.0 * _S, _LegH * 0.5, 0.19 * _S, 0.19 * _S, _LegH / 100.0, _M),
-            (-48.0 * _S,  30.0 * _S, _LegH * 0.5, 0.19 * _S, 0.19 * _S, _LegH / 100.0, _M),
-            ( 48.0 * _S, -30.0 * _S, _LegH * 0.5, 0.19 * _S, 0.19 * _S, _LegH / 100.0, _M),
-            ( 48.0 * _S,  30.0 * _S, _LegH * 0.5, 0.19 * _S, 0.19 * _S, _LegH / 100.0, _M),
-            (0.0, 0.0, _Bz, 1.28 * _S, 0.86 * _S, 0.66 * _S, _M),            # body
-            (78.0 * _S, 0.0, _Hz, 0.80 * _S, 0.82 * _S, 0.80 * _S, _M),      # head
-            (6.0 * _S, -26.0 * _S, _Hz + 46.0 * _S, 0.24 * _S, 0.2 * _S, 0.40 * _S, _M),
-            (6.0 * _S,  26.0 * _S, _Hz + 46.0 * _S, 0.24 * _S, 0.2 * _S, 0.40 * _S, _M),
-            (118.0 * _S, 0.0, _Hz + 6.0 * _S, 0.18 * _S, 0.86 * _S, 0.30 * _S, "dog_visor"),
-            (124.0 * _S, -21.0 * _S, _Hz + 2.0 * _S, 0.1 * _S, 0.22 * _S, 0.13 * _S, "dog_eye"),
-            (124.0 * _S,  21.0 * _S, _Hz + 2.0 * _S, 0.1 * _S, 0.22 * _S, 0.13 * _S, "dog_eye"),
-            (60.0 * _S, 0.0, _Bz - 2.0 * _S, 0.12 * _S, 0.26 * _S, 0.26 * _S, "gold_glow"),
-            (-74.0 * _S, 0.0, _Bz + 24.0 * _S, 0.44 * _S, 0.18 * _S, 0.20 * _S, _M),
+            # THE ORIGINAL RELAY DOG — transcribed from WonderlandDogBody.cpp.
+            # verify-dog-proxy.py fails if this drifts from the C++.
+            # four blocky legs
+            (-46.0 * _S, -30.0 * _S, _LegH * 0.5, 0.26 * _S, 0.26 * _S, _LegH / 100.0, _M),
+            (-46.0 * _S,  30.0 * _S, _LegH * 0.5, 0.26 * _S, 0.26 * _S, _LegH / 100.0, _M),
+            ( 46.0 * _S, -30.0 * _S, _LegH * 0.5, 0.26 * _S, 0.26 * _S, _LegH / 100.0, _M),
+            ( 46.0 * _S,  30.0 * _S, _LegH * 0.5, 0.26 * _S, 0.26 * _S, _LegH / 100.0, _M),
+            (0.0, 0.0, _Bz, 1.30 * _S, 0.92 * _S, 0.76 * _S, _M),                 # body
+            (84.0 * _S, 0.0, _Hz + 22.0 * _S, 0.86 * _S, 0.90 * _S, 0.42 * _S, _M),   # brow
+            (84.0 * _S, 0.0, _Hz - 26.0 * _S, 0.86 * _S, 0.90 * _S, 0.34 * _S, _M),   # jaw
+            (54.0 * _S, 0.0, _Hz, 0.34 * _S, 0.90 * _S, 0.94 * _S, _M),               # slot back wall
+            (78.0 * _S, 0.0, _Hz - 4.0 * _S, 0.62 * _S, 0.80 * _S, 0.13 * _S, "dog_visor"),
+            (88.0 * _S, -22.0 * _S, _Hz - 4.0 * _S, 0.14 * _S, 0.26 * _S, 0.11 * _S, "dog_eye"),
+            (88.0 * _S,  22.0 * _S, _Hz - 4.0 * _S, 0.14 * _S, 0.26 * _S, 0.11 * _S, "dog_eye"),
+            (72.0 * _S, -28.0 * _S, _Hz + 62.0 * _S, 0.30 * _S, 0.26 * _S, 0.44 * _S, _M),
+            (72.0 * _S,  28.0 * _S, _Hz + 62.0 * _S, 0.30 * _S, 0.26 * _S, 0.44 * _S, _M),
+            (-74.0 * _S, 0.0, _Bz + 14.0 * _S, 0.30 * _S, 0.24 * _S, 0.24 * _S, _M),
+            (-90.0 * _S, 0.0, _Bz + 34.0 * _S, 0.26 * _S, 0.22 * _S, 0.26 * _S, _M),
+            (-102.0 * _S, 0.0, _Bz + 56.0 * _S, 0.22 * _S, 0.20 * _S, 0.28 * _S, _M),
         )):
             records.append(("cube",
                             (_dx + _ly, _dy - _lx, _lz),
