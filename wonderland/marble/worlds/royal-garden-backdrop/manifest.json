@@ -40,11 +40,11 @@
     "note": "reported by the API on the completed operation"
   },
   "assets": {
-    "caption": "The scene is a cinematic fairy-tale royal garden plaza at the gates of an extravagant pastel castle city, rendered at high-end animated-film quality, with a bright, warm daylight illuminating the fantastical environment. The overall tone is enchanting and whimsical, inviting exploration into a meticulously crafted dreamscape. The plaza, a wide expanse of pale cream and soft grey checkered flagstone, shows signs of elegant age with worn, mossy joints and scattered pink and violet petals. A tall, ornate gold gate with dense filigree scrollwork, curled volutes, and heart-shaped finials, is hung between pale carved stone piers wrapped in ivy and climbing roses, with a round red-and-white playing-card sign bearing a heart beside it. An enormous gnarled tree with deeply furrowed bark rises from the plaza, an ornate gold-rimmed clock face set into its trunk and an oval gilt portrait frame hanging from it, while curtains of wisteria and ivy trail down its massive form. A rose-covered stone archway extends over shallow steps, leading deeper into the garden, while hedges clipped into a giant heart shape are studded with pink roses. A colossal porcelain teacup, painted with hearts and sitting on stacked saucers, is placed near a matching teapot, creating a playful focal point. Giant mushrooms in clusters—scarlet caps with white spots, deep violet caps, and pale cream ones—emerge from dense beds of pink, violet, and white flowers, including foxgloves and hydrangeas. The backdrop is a dense fantasy castle city of slender white and cream stone towers with conical roofs in rose pink, magenta, lilac, and pale blue, adorned with gold finials and small pennants, and complemented by mushroom-domed turrets, tier upon tier receding into a soft lavender atmospheric haze. The sky is bright blue-to-lavender, featuring soft white and pink clouds, with ornate gold keys and a white porcelain teapot floating weightlessly in the air. The materials used throughout—glossy glazed porcelain, polished gold leaf, carved pale limestone, painted timber, moss, and wet stone—contribute to an extremely high geometric density, where every surface is detailed and intentional, creating a strong foreground-to-distance depth and volumetric light filtering through the arch. The 360 scene is faultless.",
+    "caption": "The scene is a cinematic fairy-tale royal garden plaza at the gates of an extravagant pastel castle city, rendered at high-end animated-film quality, with a bright, warm daylight illuminating the fantastical environment. The overall tone is enchanting and whimsical, inviting exploration into a meticulously crafted dreamscape. The plaza, a wide expanse of pale cream and soft grey checkered flagstone, shows signs of elegant age with worn, mossy joints and scattered pink and violet petals. A tall, ornate gold gate with dense filigree scrollwork, curled volutes, and heart-shaped finials, is hung between pale carved stone piers wrapped in ivy and climbing roses, with a round red-and-white playing-card sign bearing a heart beside it. An enormous gnarled tree with deeply furrowed bark rises from the plaza, an ornate gold-rimmed clock face set into its trunk and an oval gilt portrait frame hanging from it, while curtains of wisteria and ivy trail down its massive form. A rose-covered stone archway extends over shallow steps, leading deeper into the garden, while hedges clipped into a giant heart shape are studded with pink roses. A colossal porcelain teacup, painted with hearts and sitting on stacked saucers, is placed near a matching teapot, creating a playful focal point. Giant mushrooms in clusters—scarlet caps with white spots, deep violet caps, and pale cream ones—emerge from dense beds of pink, violet, and white flowers, including foxgloves and hydrangeas. The backdrop is a dense fantasy castle city of slender white and cream stone towers with conical roofs in rose pink, magenta, lilac, and pale blue, adorned with gold finials and small pennants, and complemented by mushroom-domed turrets, tier upon tier receding into a soft lavender atmospheric haze. The sky is bright blue-to-lavender, featuring soft white and pink clouds, with ornate gold keys and a white porcelain teapot floating weightlessly in the air. The materials used throughout—glossy glazed porcelain, polished gold leaf, carved pale limestone, painted timber, moss, and wet stone—contribute to an extremely high geometric density, where every surface is detailed and intentional, creating a strong foreground-to-distance depth and volumetric light filtering through the arch. ",
     "thumbnail_url": "https://cdn.marble.worldlabs.ai/ae83acaa-df79-4e92-b31f-53af690d5deb/f88039da-7a0b-4f22-a599-0a16ab8fa74e_sand_mpi/thumbnail.webp",
     "pano_url": "https://cdn.marble.worldlabs.ai/ae83acaa-df79-4e92-b31f-53af690d5deb/63660c6e-d83e-47e5-bb1a-0ca8f3b96b37_panos/rgb_0.png",
-    "full_res_mesh_url": null,
-    "hq_mesh_url": null,
+    "full_res_mesh_url": "https://cdn.marble.worldlabs.ai/operations/cb0a992b-07ba-4972-b36f-3c20aaa660c5/2d8aae5c_vcolor.glb",
+    "hq_mesh_url": "https://cdn.marble.worldlabs.ai/operations/cb0a992b-07ba-4972-b36f-3c20aaa660c5/2d8aae5c.glb",
     "collider_mesh_url": "https://cdn.marble.worldlabs.ai/ae83acaa-df79-4e92-b31f-53af690d5deb/a58ba481.glb",
     "splat_spz_urls": {
       "500k": "https://cdn.marble.worldlabs.ai/ae83acaa-df79-4e92-b31f-53af690d5deb/e3eda40a-8024-46f3-ab9f-9d5a05c2e882_ceramic_500k.spz",
@@ -92,11 +92,21 @@
     },
     "url_note": "Marble asset URLs are signed and expire. `downloaded` holds the local paths, which do not."
   },
-  "exports": [],
+  "exports": [
+    {
+      "asset_type": "mesh",
+      "format": "glb",
+      "url_expires": true,
+      "local_path": "assets/mesh_hq.glb",
+      "credits": 3500,
+      "mesh_variant": "textured",
+      "note": "charged; credits 10,090 -> 6,590. Downloaded on the L4."
+    }
+  ],
   "transform": {
-    "metric_scale_factor": 2.114534,
-    "ground_plane_offset_m": 1.2398534,
-    "unreal_uniform_scale": 211.4534,
+    "metric_scale_factor": 2.1145339012145996,
+    "ground_plane_offset_m": 1.2398533821105957,
+    "unreal_uniform_scale": 211.45339012145996,
     "unreal_origin_cm": [
       0.0,
       0.0,
@@ -153,5 +163,6 @@
     "terms_url": "https://www.worldlabs.ai/terms",
     "checked_at": null,
     "note": "The World object schema carries no licence fields. Commercial terms must be read from the vendor's terms of service and recorded here by a person."
-  }
+  },
+  "world_updated_at": "2026-08-21T17:02:33Z"
 }

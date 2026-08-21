@@ -1503,6 +1503,20 @@ grep -q "SKIP_PREPARE" "$HERE/launch-wonderland.sh" \
   && ok "the launcher can skip work the CPU machine already did" \
   || bad "the GPU session has to redo the CPU preparation"
 
+echo "== the generator's knobs cross the container boundary =="
+# WONDERLAND_LOOK is the documented way to sweep the art LOOK table without
+# editing code. It was never forwarded into the container, so every sweep in
+# container mode silently did nothing — and an override that is ignored is
+# worse than one that is unavailable, because the operator believes it applied.
+for v in WONDERLAND_LOOK WONDERLAND_BATCH WONDERLAND_MARBLE_BACKDROP; do
+  n=$(grep -c -- "-e $v=" "$HERE/build-render.sh" || true)
+  [ "${n:-0}" -ge 1 ] && ok "$v is forwarded into the container" \
+    || bad "$v never reaches the generator in container mode"
+  grep -q "$v=\"\${$v" "$HERE/build-render.sh" \
+    && ok "  and the native path passes it too" \
+    || bad "  the native path drops $v"
+done
+
 echo "== the opt-in full CPU build =="
 if bash -n "$HERE/cpu-build-all.sh" 2>/dev/null; then ok "cpu-build-all.sh parses"
 else bad "cpu-build-all.sh does not parse"; fi

@@ -69,6 +69,9 @@ run_native() {
   UE_ROOT="$WL_UE" OUT="$WL_OUT" FORCE_REBUILD="$FORCE" \
     WONDERLAND_TEXTURE_DIR="$WONDERLAND_TEXTURE_DIR" \
     WONDERLAND_AUDIO_DIR="$WONDERLAND_AUDIO_DIR" \
+    WONDERLAND_LOOK="${WONDERLAND_LOOK:-}" \
+    WONDERLAND_BATCH="${WONDERLAND_BATCH:-1}" \
+    WONDERLAND_MARBLE_BACKDROP="${WONDERLAND_MARBLE_BACKDROP:-0}" \
     bash "$WL_SRC/$BUILD_SH" 2>&1 | tee "$WL_LOG/build.log"
   return "${PIPESTATUS[0]}"
 }
@@ -111,6 +114,14 @@ run_container() {
   fi
 
   # shellcheck disable=SC2086
+  # THE GENERATOR'S OWN KNOBS HAVE TO CROSS THE CONTAINER BOUNDARY.
+  #
+  # WONDERLAND_LOOK is the documented way to sweep the art LOOK table without
+  # editing code, WONDERLAND_BATCH selects the batched or unbatched world, and
+  # WONDERLAND_MARBLE_BACKDROP hands the far distance to Marble. None of them
+  # were forwarded, so every one of them silently did nothing in container mode
+  # — an override that is ignored is worse than one that is unavailable,
+  # because the operator believes the sweep happened.
   docker run --rm $gpuflag $extra \
     -v "$WL_ROOT:$WL_ROOT" \
     -e UE_ROOT=/home/ue4/UnrealEngine \
@@ -118,6 +129,10 @@ run_container() {
     -e FORCE_REBUILD="$FORCE" \
     -e WONDERLAND_TEXTURE_DIR="$WONDERLAND_TEXTURE_DIR" \
     -e WONDERLAND_AUDIO_DIR="$WONDERLAND_AUDIO_DIR" \
+    -e WONDERLAND_LOOK="${WONDERLAND_LOOK:-}" \
+    -e WONDERLAND_BATCH="${WONDERLAND_BATCH:-1}" \
+    -e WONDERLAND_MARBLE_BACKDROP="${WONDERLAND_MARBLE_BACKDROP:-0}" \
+    -e WONDERLAND_GENERATOR_EXTRA="${WL_GENERATOR_EXTRA:-}" \
     -w "$WL_SRC" \
     "$WL_UE_IMAGE" \
     bash "$WL_SRC/$BUILD_SH" 2>&1 | tee "$WL_LOG/build.log"
