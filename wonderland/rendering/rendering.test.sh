@@ -169,6 +169,51 @@ grep -q "hub-layout.json" "$HERE/audit-draw-cost.py"
 check $? "the audit builds from the real layout, not a default one"
 
 echo
+echo "-- the before/after report --"
+python3 -c "import ast,io;ast.parse(io.open('$HERE/compare.py',encoding='utf8').read())"
+check $? "compare.py parses"
+export WL_PROOF="$TMP/proof"
+python3 - "$TMP" <<'MKBENCH'
+import io, json, os, sys
+tmp = sys.argv[1]
+def write(label, profile, execcmds, fps, status="ok"):
+    d = os.path.join(tmp, "proof", "bench", label)
+    os.makedirs(d, exist_ok=True)
+    json.dump({"label": label, "profile": profile, "exec_cmds": execcmds,
+               "gpu": "NVIDIA L4, 23034 MiB",
+               "runs": [{"camera": "0", "status": status,
+                         "stream": {"fps_p50": fps, "fps_min": fps - 4,
+                                    "bitrate_kbps": 4200.0, "resolution": "1280x720",
+                                    "freeze_count": 0, "mean_decode_ms": 1.4},
+                         "gpu": {"gpu_util_mean_pct": 61.0, "vram_used_max_mib": 4100.0},
+                         "screenshot": None}]},
+              io.open(os.path.join(d, "report.json"), "w", encoding="utf8"))
+write("b1", "BALANCED", "r.ScreenPercentage 100,r.MotionBlurQuality 0", 58.0)
+write("b2", "CINEMATIC", "r.ScreenPercentage 150,r.MotionBlurQuality 0", 41.0)
+write("b3", "BALANCED", "r.ScreenPercentage 100,r.MotionBlurQuality 0", 57.0)
+write("b4", "BALANCED", "r.ScreenPercentage 100,r.MotionBlurQuality 0", 30.0, status="FAILED: nothing streamed")
+MKBENCH
+python3 "$HERE/compare.py" b1 b2 --out "$TMP/rep.html" >/dev/null 2>&1
+check $? "compare.py builds a report from two bench runs"
+grep -q "r.ScreenPercentage" "$TMP/rep.html"
+check $? "the report shows WHICH console variable differed"
+grep -q "150" "$TMP/rep.html"; check $? "...and both values"
+grep -qi "no image-match score" "$TMP/rep.html"
+check $? "the report states plainly that it does not score the images"
+# Look for a NUMBER presented as a likeness, not for the words: the report's
+# own disclaimer contains the phrase "image-match score", and a check that its
+# own honesty trips is a check that will be deleted rather than fixed.
+! grep -qiE "([0-9]+(\.[0-9]+)?[ ]*%?[ ]*(similar|match|likeness))|((similarity|match[ -]?score|ssim|psnr)[ ]*[:=][ ]*[0-9])" "$TMP/rep.html"
+check $? "no NUMBER is presented as an image likeness anywhere in it"
+python3 "$HERE/compare.py" b1 b3 --out "$TMP/rep2.html" 2>&1 | grep -q "identical console variables"
+check $? "two runs with identical settings are called out, not silently compared"
+python3 "$HERE/compare.py" b1 b4 --out "$TMP/rep3.html" 2>&1 | grep -q "produced no measurement"
+check $? "a failed run is flagged rather than counted as a result"
+grep -q "not evidence of anything" "$TMP/rep3.html"
+check $? "...and the report says so too"
+unset WL_PROOF
+
+echo
 echo "-- the measurement instrument --"
 node --check "$HERE/measure.cjs" >/dev/null 2>&1
 check $? "measure.cjs parses"

@@ -14,7 +14,9 @@ applied when it is not.
 | `bench.sh` | before/after evidence per deterministic hero camera |
 | `measure.cjs` | measures the stream the founder receives, from a real Chrome |
 | `bench-row.py` | folds one camera's measurements into the report |
-| `rendering.test.sh` | 29 offline gates; no GPU, seconds |
+| `compare.py` | before/after side by side — no image-match score, ever |
+| `audit-draw-cost.py` | what the world costs to draw, measured with no GPU |
+| `rendering.test.sh` | 41 offline gates; no GPU, seconds |
 
 ## Order of operations on the box
 
@@ -22,6 +24,13 @@ applied when it is not.
 bash wonderland/rendering/probe-cvars.sh
 bash wonderland/rendering/bench.sh --label before --profile BALANCED
 bash wonderland/rendering/bench.sh --label after  --profile CINEMATIC
+python3 wonderland/rendering/compare.py before after
+```
+
+And once, to see whether the engine is already batching the world's draws:
+
+```
+r.MeshDrawCommands.LogDynamicInstancingStats 1
 ```
 
 `WL_RENDER_PROFILE=CINEMATIC bash wonderland/infra/lightning/run-stream.sh`
