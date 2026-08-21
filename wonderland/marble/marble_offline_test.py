@@ -419,6 +419,13 @@ def test_upload_reference(root):
     spec = json.load(io.open(os.path.join(HERE, "prompts", "royal-garden.json"), encoding="utf8"))
     spec["slug"] = "image-conditioned"
     spec["reference_image"] = image
+    # CONSTRUCT the un-uploaded case rather than assuming the shipped spec is in
+    # it. It is not any more: royal-garden.json carries a real media_asset_id
+    # from the live upload, which is correct — the spec should record what was
+    # actually sent — and it silently turned this assertion into a no-op that
+    # still passed everything around it.
+    spec["world_prompt"]["image_prompt"]["media_asset_id"] = None
+    spec.setdefault("source_reference", {})["media_asset_id"] = None
     spec_path = os.path.join(spec_dir, "spec.json")
     json.dump(spec, io.open(spec_path, "w", encoding="utf8"))
 
