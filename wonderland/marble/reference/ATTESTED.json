@@ -1,0 +1,37 @@
+{
+  "schema": "wonderland.marble.reference-attestation/1",
+  "why": [
+    "Generation 47928d7e cost 1,580 credits and was rejected because Marble",
+    "reproduced the Relay Dogs out of the reference image, despite an explicit",
+    "NO-DOGS instruction in the text prompt. Image conditioning beat the",
+    "negative. The fix was to crop above the dog band — but nothing STOPPED the",
+    "full reference being used again, and a text prompt saying 'no dogs' had",
+    "already been shown not to work.",
+    "",
+    "So this file is the gate. An image may be used to condition a paid Marble",
+    "generation only if it is listed here as dog-free, and only if its bytes",
+    "still hash to what was attested. Nothing in this repository can LOOK at an",
+    "image and decide — this records that a person did, which file they looked",
+    "at, and when."
+  ],
+  "the_rule": "Marble supplies the BACKDROP. Relay Dogs are authored Unreal assets placed after and over it. An image containing Dogs must never condition a generation, because what Marble copies out of it is unremovable scenery.",
+  "images": {
+    "wonderland-backdrop-nodogs.jpg": {
+      "sha256": "5d8852d6e89db45f1115a2c8b07d0a538a1c018f92863e9b9d68bb7df26aaf5b",
+      "relay_dogs_present": false,
+      "attested_by": "the agent, from the crop geometry",
+      "attested_at": "2026-08-21",
+      "how": "ffmpeg crop=1672:428:0:0 of the 1672x941 founder reference. The Dogs occupy the lower plaza band; the crop keeps only the top 428 rows, which end above them. This is a geometric fact about the crop, not a visual judgement of the output.",
+      "used_by": ["royal-garden-backdrop"]
+    },
+    "wonderland-reference.jpg": {
+      "sha256": "62d65e80a3523f7ebb5b712238d3919c8a9647d7c28de4a8a1fb18fec31fa4eb",
+      "relay_dogs_present": true,
+      "attested_by": "the founder, who supplied it",
+      "attested_at": "2026-08-21",
+      "how": "The canonical reference. Its whole lower half is Relay Dogs arranged around the hero on the arcane circle — that is the point of the image.",
+      "note": "LISTED SO IT IS REFUSED, not so it is available. This is the image that cost 1,580 credits. It remains the art-direction authority and must never condition a generation.",
+      "used_by": []
+    }
+  }
+}

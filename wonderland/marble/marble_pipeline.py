@@ -36,6 +36,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
+import dog_separation as dog_sep           # noqa: E402
 import manifest as manifest_mod            # noqa: E402
 from marble_api import (                    # noqa: E402
     EXPORT_COST, MarbleClient, MarbleError, MarbleRefusal,
@@ -119,9 +120,26 @@ def estimate_for(spec):
 # ---------------------------------------------------------------- submit
 
 def submit(spec, confirm_credits=None, root=None, client=None, force_new=False,
-           check_balance=True):
+           check_balance=True, log=print):
     """The billable call. Refuses unless the price was typed and the guard is clear."""
     slug = spec["slug"]
+
+    # --- guard 0: Relay Dogs stay OUT of Marble scenery ---------------------
+    # FIRST, before the price is even estimated, because this is the check that
+    # already has a bill attached to it: 47928d7e cost 1,580 credits and was
+    # thrown away because Marble copied the Dogs out of the reference image. The
+    # repair at the time was to crop the reference — a repair that held only
+    # until someone pointed the spec back at the full one.
+    separation = dog_sep.check_spec(spec, HERE)
+    if separation.get("negated_creature_words"):
+        # SAID OUT LOUD, because the prompt reads as though it is protecting
+        # the world and it is not. Both the rejected and the accepted
+        # generation carried these same exclusions; the image was the variable.
+        log("[marble] the prompt excludes %s in text. That is INERT — 47928d7e "
+            "said the same and Marble drew Dogs anyway. The attested dog-free "
+            "image is what is doing the work here."
+            % ", ".join(separation["negated_creature_words"]))
+
     # Defence in depth: the CLI resolves this too, but a caller reaching past the
     # CLI must not be able to spend credits on a body the API will reject.
     prompt = spec["world_prompt"]
