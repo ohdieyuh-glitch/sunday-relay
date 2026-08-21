@@ -9,9 +9,9 @@
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInterface.h"
 
 #include "WonderlandDogPawn.h"
-#include "WonderlandInstancedBatch.h"
 #include "WonderlandInstancedBatch.h"
 #include "WonderlandStrollingDog.h"
 
@@ -41,6 +41,13 @@ namespace WonderlandWorldProof
 	int32 GExpectedMinPieces = 5000;
 
 	static FDelegateHandle GHandle;
+
+	// MUST MATCH import-marble-world.py's MARBLE_TAG. The two live in different
+	// languages and neither can import the other, so the pair is asserted by
+	// lightning-runner.test.sh — a tag that drifts makes this report say the
+	// backdrop is absent from a world that contains it, which is the worse of
+	// the two failures because it looks like a build problem.
+	static const TCHAR* const MarbleVisualTag = TEXT("MarbleVisualLayer");
 
 	static bool IsProxyActor(const AActor* Actor)
 	{
@@ -84,6 +91,15 @@ namespace WonderlandWorldProof
 		int32 Batches = 0;
 		int32 InstancedPieces = 0;
 		int32 LoosePieces = 0;
+		int32 MarbleActors = 0;
+		// THE BACKDROP'S ONE SILENT FAILURE. A single-viewpoint reconstruction is
+		// a shell seen FROM THE INSIDE. If its material imports single-sided,
+		// every check upstream still passes — one actor placed, the right size,
+		// the level saved, a clean cook — and the frame is empty. Two-sidedness
+		// is a property of the cooked material, so this is the only place it can
+		// be answered without looking at a picture.
+		int32 MarbleTwoSided = 0;
+		int32 MarbleColliding = 0;
 
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
@@ -153,6 +169,34 @@ namespace WonderlandWorldProof
 			{
 				++Proxies;
 			}
+
+			if (Actor->ActorHasTag(MarbleVisualTag))
+			{
+				++MarbleActors;
+				TArray<UStaticMeshComponent*> MarbleMeshes;
+				Actor->GetComponents<UStaticMeshComponent>(MarbleMeshes);
+				for (const UStaticMeshComponent* const Mesh : MarbleMeshes)
+				{
+					if (Mesh == nullptr)
+					{
+						continue;
+					}
+					if (Mesh->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
+					{
+						// The architectural boundary, checked in the shipped
+						// world rather than trusted from the importer's log.
+						// Marble geometry never blocks a Dog.
+						++MarbleColliding;
+					}
+					if (const UMaterialInterface* const Material = Mesh->GetMaterial(0))
+					{
+						if (Material->IsTwoSided())
+						{
+							++MarbleTwoSided;
+						}
+					}
+				}
+			}
 		}
 
 		// Warning level on purpose: Display is filtered out of the packaged log,
@@ -168,6 +212,29 @@ namespace WonderlandWorldProof
 		UE_LOG(LogWonderlandProof, Warning, TEXT("LOOSE_PIECES=%d"), LoosePieces);
 		UE_LOG(LogWonderlandProof, Warning, TEXT("VISIBLE_PIECES=%d"),
 			   InstancedPieces + LoosePieces);
+		UE_LOG(LogWonderlandProof, Warning, TEXT("MARBLE_ACTORS=%d"), MarbleActors);
+		if (MarbleActors > 0)
+		{
+			UE_LOG(LogWonderlandProof, Warning,
+				   TEXT("MARBLE_TWO_SIDED_COMPONENTS=%d"), MarbleTwoSided);
+			if (MarbleTwoSided == 0)
+			{
+				UE_LOG(LogWonderlandProof, Warning,
+					   TEXT("MARBLE_TWO_SIDED_COMPONENTS=0 — the backdrop shell is "
+							"SINGLE-SIDED. It is a shell viewed from inside, so it "
+							"will be invisible from the hero camera no matter how "
+							"correctly it was placed. Set Two Sided on the imported "
+							"material; do not move the actor."));
+			}
+			if (MarbleColliding > 0)
+			{
+				UE_LOG(LogWonderlandProof, Warning,
+					   TEXT("MARBLE_COLLIDING_COMPONENTS=%d — Marble geometry is "
+							"BLOCKING. Unreal owns collision; the visual layer "
+							"must never decide where a Dog can stand."),
+					   MarbleColliding);
+			}
+		}
 		// THE SECOND REPORT, AFTER BeginPlay HAS RUN.
 		//
 		// Everything above describes what the MAP shipped, which is knowable at

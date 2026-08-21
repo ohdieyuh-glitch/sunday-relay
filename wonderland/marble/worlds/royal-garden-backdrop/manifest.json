@@ -144,8 +144,8 @@
     "unreal_uniform_scale": 211.45339012145996,
     "unreal_origin_cm": [
       0.0,
-      0.0,
-      0.0
+      -1150.0,
+      430.0
     ],
     "unreal_rotation_deg": [
       0.0,
@@ -176,7 +176,16 @@
       "tolerance_deg": 3.0
     },
     "backdrop_scale_multiplier": 6.0,
-    "unreal_backdrop_scale": 1268.72
+    "unreal_backdrop_scale": 1268.72,
+    "placement_mode": "backdrop_at_camera",
+    "anchor_camera": "HeroCam0",
+    "anchor_camera_source": "hero_shots[0] in wonderland/infra/build/generate-hub-level.py — ARRIVAL_HERO, the shot the world opens on",
+    "origin_why": "The mesh origin is the reconstruction viewpoint, so the actor origin goes ON the arrival camera. Every ray from HeroCam0 is then unchanged by the uniform scale, which is what makes the 6x backdrop lever free.",
+    "expected_unreal_extent_cm": [
+      123039.2,
+      187695.7,
+      103315.7
+    ]
   },
   "bounds": {
     "source": null,
@@ -199,5 +208,51 @@
     "checked_at": null,
     "note": "The World object schema carries no licence fields. Commercial terms must be read from the vendor's terms of service and recorded here by a person."
   },
-  "world_updated_at": "2026-08-21T17:02:33Z"
+  "world_updated_at": "2026-08-21T17:02:33Z",
+  "source_mesh": {
+    "file": "assets/mesh_hq.glb",
+    "measured_from": "glTF accessor POSITION min/max in the GLB JSON chunk",
+    "min": [
+      -49.38,
+      -72.215,
+      -0.941
+    ],
+    "max": [
+      47.599,
+      75.726,
+      80.492
+    ],
+    "span": [
+      96.979,
+      147.941,
+      81.433
+    ],
+    "triangles": 592580,
+    "materials": 1,
+    "images": 1,
+    "extensions_used": [
+      "KHR_materials_unlit"
+    ],
+    "unlit_note": "The export is KHR_materials_unlit: its lighting is BAKED INTO the texture. That is what a backdrop wants. If UE's importer drops the extension the mesh becomes lit and Wonderland's sun re-lights an already-lit texture — check the material after the first import rather than assuming either way.",
+    "node_rotation_quat_xyzw": [
+      0.7071068286895752,
+      0.0,
+      0.0,
+      0.7071068286895752
+    ],
+    "axis_note": "The raw vertex data is Z-UP (Z runs -0.94 to +80.5 while X and Y spread horizontally) and the single node carries a +90-degree X rotation that presents it as glTF's Y-up. UE's importer applies node transforms and then its own Y-up to Z-up conversion, so NO manual axis correction is declared here. That is a prediction from the file's own header, not a measurement in the engine — the first import's measured bounds and a look at the frame settle it.",
+    "vertices": 1777213,
+    "texture": {
+      "count": 1,
+      "mime": "image/png",
+      "pixels": [
+        8192,
+        8192
+      ],
+      "png_bytes": 77489946,
+      "note": "8192 is exactly UE's default maximum texture dimension, so it imports without being downsized. Block-compressed it is about 43 MiB of VRAM with mips — nothing on a 23 GB L4."
+    },
+    "double_sided": true,
+    "double_sided_risk": "THE MOST LIKELY WAY THIS IMPORT LOOKS LIKE A FAILURE WHILE REPORTING SUCCESS. The material is doubleSided, which matters because a single-viewpoint reconstruction is a shell VIEWED FROM INSIDE: if UE imports it single-sided and the winding faces outward, every gate here passes — one actor placed, right size, level saved, cook clean — and the frame shows nothing. If the backdrop is missing from the capture, check the material's Two Sided flag before touching placement."
+  }
 }

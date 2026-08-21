@@ -246,6 +246,137 @@ else
   bad "the silent-stub case was misjudged (exit $rc)"
 fi
 
+# ------------------------------------------------------- the Marble layer step
+#
+# The failure mode being guarded: a python exception under -run=pythonscript
+# does NOT reliably fail the process, so the import step can exit 0 having
+# imported nothing, saved nothing, or saved a world with no backdrop in it —
+# and the cook, the package and the stream all succeed afterwards. The only
+# evidence is what the importer prints, so the build has to read it.
+echo "== the Marble visual layer =="
+
+# An editor stub that speaks the importer's report lines on demand. It answers
+# only when it is handed the Marble script, so the level-generation step is
+# unaffected and stays silent exactly as before.
+make_marble_engine() {   # $1 = engine root; $2 = what the importer "prints"
+  make_engine "$1"
+  cat > "$1/Engine/Binaries/Linux/UnrealEditor-Cmd" <<STUB
+#!/bin/sh
+echo "stub editor: \$*"
+case "\$*" in
+  *import-marble-world*) printf '%s\n' '$2' ;;
+esac
+exit 0
+STUB
+  chmod +x "$1/Engine/Binaries/Linux/UnrealEditor-Cmd"
+}
+
+# The world fixture the step insists on before it will spend a build on it.
+make_marble_world() {   # $1 = project root; $2 = slug
+  mkdir -p "$1/marble/worlds/$2"
+  printf '# stub importer\n' > "$1/marble/import-marble-world.py"
+  printf '{"transform":{}}\n' > "$1/marble/worlds/$2/manifest.json"
+}
+
+SLUG=royal-garden-backdrop
+
+make_project "$TMP/pm" no-config
+make_marble_world "$TMP/pm" "$SLUG"
+make_marble_engine "$TMP/ue" "[marble] MARBLE_VISUAL_ACTORS=1  MARBLE_COLLIDER_REFERENCES=1
+[marble] MARBLE_LEVEL_SAVED=1  (/Game/Wonderland/Maps/WonderlandHub)"
+rm -rf "$TMP/out"
+out="$(WONDERLAND_MARBLE_IMPORT="$SLUG" run_build "$TMP/pm")"; rc=$?
+if [ "$rc" -eq 0 ] && has "$out" "Marble visual layer: 1 actor"; then
+  ok "an import that places actors and saves the level is accepted, and counted"
+else
+  bad "the good Marble path was rejected (exit $rc)"
+fi
+has "$out" "step: import-marble-world" && ok "the import runs as its own build step" \
+  || bad "the import step never ran"
+
+# ORDER. Generation rewrites the map from a blank one, so anything imported
+# before it is overwritten without a word.
+gen_at="$(printf '%s\n' "$out" | grep -n "step: generate-hub-level" | head -1 | cut -d: -f1)"
+imp_at="$(printf '%s\n' "$out" | grep -n "step: import-marble-world" | head -1 | cut -d: -f1)"
+if [ -n "$gen_at" ] && [ -n "$imp_at" ] && [ "$gen_at" -lt "$imp_at" ]; then
+  ok "the Marble import runs AFTER level generation, which rewrites the map"
+else
+  bad "import/generation order is wrong (gen=$gen_at import=$imp_at)"
+fi
+
+rm -rf "$TMP/out"
+out="$(run_build "$TMP/pm")"; rc=$?
+if [ "$rc" -eq 0 ] && has "$out" "Marble visual layer: off"; then
+  ok "with no slug the step is off, and says so rather than being invisible"
+else
+  bad "the default (no Marble) path changed (exit $rc)"
+fi
+has "$out" "step: import-marble-world" && bad "the import ran without being asked" \
+  || ok "…and the importer is not run"
+
+echo "== a Marble import that did not really happen fails the build =="
+make_marble_engine "$TMP/ue" "[marble] nothing useful"
+rm -rf "$TMP/out"
+out="$(WONDERLAND_MARBLE_IMPORT="$SLUG" run_build "$TMP/pm")"; rc=$?
+if [ "$rc" -ne 0 ] && has "$out" "no MARBLE_VISUAL_ACTORS line"; then
+  ok "an importer that printed no report fails the build (exit 0 is not evidence)"
+else
+  bad "a silent importer was accepted (exit $rc)"
+fi
+
+make_marble_engine "$TMP/ue" "[marble] MARBLE_VISUAL_ACTORS=0  MARBLE_COLLIDER_REFERENCES=0
+[marble] MARBLE_LEVEL_SAVED=1  (/Game/Wonderland/Maps/WonderlandHub)"
+rm -rf "$TMP/out"
+out="$(WONDERLAND_MARBLE_IMPORT="$SLUG" run_build "$TMP/pm")"; rc=$?
+if [ "$rc" -ne 0 ] && has "$out" "placed 0 visual actors"; then
+  ok "zero placed actors fails the build"
+else
+  bad "an empty Marble layer was cooked (exit $rc)"
+fi
+
+make_marble_engine "$TMP/ue" "[marble] MARBLE_VISUAL_ACTORS=1  MARBLE_COLLIDER_REFERENCES=0
+[marble] MARBLE_LEVEL_SAVED=0  (/Game/Wonderland/Maps/WonderlandHub)"
+rm -rf "$TMP/out"
+out="$(WONDERLAND_MARBLE_IMPORT="$SLUG" run_build "$TMP/pm")"; rc=$?
+if [ "$rc" -ne 0 ] && has "$out" "WITHOUT the backdrop"; then
+  ok "actors placed but the level unsaved fails — that cook would ship no backdrop"
+else
+  bad "an unsaved Marble layer was cooked (exit $rc)"
+fi
+
+echo "== the Marble step refuses before it wastes a build =="
+make_marble_engine "$TMP/ue" "[marble] MARBLE_VISUAL_ACTORS=1
+[marble] MARBLE_LEVEL_SAVED=1"
+make_project "$TMP/pn" no-config
+mkdir -p "$TMP/pn/marble"
+printf '# stub importer\n' > "$TMP/pn/marble/import-marble-world.py"   # importer present, world absent
+rm -rf "$TMP/out"
+out="$(WONDERLAND_MARBLE_IMPORT="$SLUG" run_build "$TMP/pn")"; rc=$?
+if [ "$rc" -ne 0 ] && has "$out" "no Marble manifest for"; then
+  ok "a slug with no manifest refuses, naming the path it looked at"
+else
+  bad "a missing manifest did not refuse (exit $rc)"
+fi
+
+echo "== the slug is part of the build identity =="
+# Two builds that differ only by which world is imported must NOT reuse each
+# other's stamp. This project already shipped two 'different' lighting builds
+# that were the same binary because a generator knob was outside the hash.
+make_marble_engine "$TMP/ue" "[marble] MARBLE_VISUAL_ACTORS=1
+[marble] MARBLE_LEVEL_SAVED=1"
+hash_of() { case "$1" in *"input content hash: "*) echo "${1#*input content hash: }" | head -1 ;; esac; }
+rm -rf "$TMP/out"
+h_off="$(hash_of "$(run_build "$TMP/pm")")"
+rm -rf "$TMP/out"
+h_on="$(hash_of "$(WONDERLAND_MARBLE_IMPORT="$SLUG" run_build "$TMP/pm")")"
+if [ -n "$h_off" ] && [ -n "$h_on" ] && [ "$h_off" != "$h_on" ]; then
+  ok "WONDERLAND_MARBLE_IMPORT changes the input hash, so it cannot reuse a stale package"
+else
+  bad "the Marble slug is outside the build hash (off='$h_off' on='$h_on')"
+fi
+
+make_engine "$TMP/ue"
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" -eq 0 ]

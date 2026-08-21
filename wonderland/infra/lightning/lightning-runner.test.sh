@@ -1508,7 +1508,7 @@ echo "== the generator's knobs cross the container boundary =="
 # editing code. It was never forwarded into the container, so every sweep in
 # container mode silently did nothing — and an override that is ignored is
 # worse than one that is unavailable, because the operator believes it applied.
-for v in WONDERLAND_LOOK WONDERLAND_BATCH WONDERLAND_MARBLE_BACKDROP; do
+for v in WONDERLAND_LOOK WONDERLAND_BATCH WONDERLAND_MARBLE_BACKDROP WONDERLAND_MARBLE_IMPORT; do
   n=$(grep -c -- "-e $v=" "$HERE/build-render.sh" || true)
   [ "${n:-0}" -ge 1 ] && ok "$v is forwarded into the container" \
     || bad "$v never reaches the generator in container mode"
@@ -1516,6 +1516,103 @@ for v in WONDERLAND_LOOK WONDERLAND_BATCH WONDERLAND_MARBLE_BACKDROP; do
     && ok "  and the native path passes it too" \
     || bad "  the native path drops $v"
 done
+
+echo "== the Marble meshes are linked in from persistent storage =="
+# They are 141 MB and 330 MB, they are NOT in git, and $WL_SRC is reset to
+# origin on every prepare. A build that reaches the import step with a manifest
+# pointing at a file that is not there has already spent the compile.
+MT="$TMP/marble"; rm -rf "$MT"; mkdir -p "$MT/root/marble-assets/royal-garden-backdrop"
+mkdir -p "$MT/root/src/wonderland/marble/worlds/royal-garden-backdrop"
+cat > "$MT/root/src/wonderland/marble/worlds/royal-garden-backdrop/manifest.json" <<'MANIFEST'
+{"assets": {"downloaded": {"hq_mesh_url": {"path": "assets/mesh_hq.glb"}}},
+ "transform": {}}
+MANIFEST
+printf 'glTF-ish\n' > "$MT/root/marble-assets/royal-garden-backdrop/mesh_hq.glb"
+# an assets directory with no manifest in the checkout: must be skipped, loudly
+mkdir -p "$MT/root/marble-assets/orphan"
+printf 'x\n' > "$MT/root/marble-assets/orphan/mesh_hq.glb"
+mout="$(WL_ROOT="$MT/root" WL_SRC="$MT/root/src" bash -c '
+  . '"$HERE"'/common.sh >/dev/null 2>&1
+  WL_ROOT='"$MT"'/root WL_SRC='"$MT"'/root/src wl_link_marble_assets' 2>&1 || true)"
+lnk="$MT/root/src/wonderland/marble/worlds/royal-garden-backdrop/assets/mesh_hq.glb"
+if [ -L "$lnk" ] && [ -e "$lnk" ]; then
+  ok "wl_link_marble_assets links the mesh into the checkout, and it resolves"
+else
+  bad "the Marble mesh was not linked ($lnk)"
+fi
+case "$mout" in *orphan*) ok "an asset directory with no manifest is reported, not linked silently" ;;
+  *) bad "the orphan asset directory was passed over without a word" ;; esac
+[ -e "$MT/root/src/wonderland/marble/worlds/orphan" ] \
+  && bad "it invented a world directory for the orphan" \
+  || ok "…and no world directory was invented for it"
+# Idempotent: prepare runs it every time, and a second run must not fail or
+# stack symlinks-to-symlinks.
+WL_ROOT="$MT/root" WL_SRC="$MT/root/src" bash -c '
+  . '"$HERE"'/common.sh >/dev/null 2>&1
+  WL_ROOT='"$MT"'/root WL_SRC='"$MT"'/root/src wl_link_marble_assets' >/dev/null 2>&1 \
+  && ok "…and running it twice is safe" || bad "a second link pass failed"
+grep -q 'wl_link_marble_assets' "$HERE/prepare.sh" \
+  && ok "prepare.sh links them after the checkout is reset" \
+  || bad "prepare.sh never links the Marble assets, so a fresh checkout has none"
+grep -q 'wl_link_marble_assets' "$HERE/build-render.sh" \
+  && ok "build-render.sh links them too, for sessions that skipped prepare" \
+  || bad "SKIP_PREPARE=1 would reach the import with no mesh on disk"
+
+echo "== the build refuses before it compiles if the mesh is missing =="
+grep -q 'resolve-mesh.py' "$HERE/build-render.sh" \
+  && ok "the preflight resolves the mesh through the importer's own chooser" \
+  || bad "build-render.sh does not preflight the Marble mesh"
+if sed 's/#.*//' "$HERE/build-render.sh" | grep -q 'hq_mesh_url'; then
+  bad "build-render.sh re-implements the mesh choice instead of calling the importer"
+else
+  ok "…and does not carry a second copy of the selection rule"
+fi
+rm -f "$lnk"
+if bad_out="$(cd "$MT" && python3 "$HERE/../../marble/resolve-mesh.py" \
+      --slug royal-garden-backdrop \
+      --root "$MT/root/src/wonderland/marble/worlds" 2>&1)"; then
+  bad "resolve-mesh.py reported success with no mesh on disk"
+else
+  case "$bad_out" in *"no visual mesh resolves"*)
+      ok "resolve-mesh.py fails closed and says the mesh does not resolve" ;;
+    *) bad "resolve-mesh.py failed for an unexplained reason: $bad_out" ;;
+  esac
+fi
+
+# A half-written manifest is a real state — an interrupted fetch leaves one —
+# and a preflight that answers it with a traceback is not actionable.
+: > "$MT/root/src/wonderland/marble/worlds/royal-garden-backdrop/manifest.json"
+if bad_out="$(python3 "$HERE/../../marble/resolve-mesh.py" \
+      --slug royal-garden-backdrop \
+      --root "$MT/root/src/wonderland/marble/worlds" 2>&1)"; then
+  bad "an empty manifest was accepted"
+else
+  case "$bad_out" in *"not readable JSON"*)
+      ok "an unreadable manifest gets a sentence, not a stack trace" ;;
+    *) bad "an empty manifest produced: $bad_out" ;;
+  esac
+fi
+
+echo "== the packaged world reports the Marble layer =="
+# The importer's log proves what the EDITOR did. This proves what the COOK
+# shipped — a different fact, and the one that matters when a stream is running.
+PROOF="$HERE/../../Source/Wonderland/WonderlandWorldProof.cpp"
+IMPORTER="$HERE/../../marble/import-marble-world.py"
+py_tag="$(sed -n 's/^MARBLE_TAG = "\(.*\)"$/\1/p' "$IMPORTER")"
+[ -n "$py_tag" ] && ok "the importer names its tag once (MARBLE_TAG=$py_tag)" \
+  || bad "could not find MARBLE_TAG in the importer"
+grep -q "TEXT(\"$py_tag\")" "$PROOF" \
+  && ok "the C++ proof matches that exact tag, so it cannot drift silently" \
+  || bad "WonderlandWorldProof.cpp does not look for '$py_tag' — the proof would report the backdrop absent from a world that has it"
+grep -q 'MARBLE_ACTORS=%d' "$PROOF" \
+  && ok "the packaged world reports how many Marble actors it shipped" \
+  || bad "nothing proves the backdrop survived the cook"
+grep -q 'IsTwoSided' "$PROOF" \
+  && ok "…and whether the shell is two-sided, which is its one silent failure" \
+  || bad "single-sided is the way this import looks like a success and shows nothing"
+grep -q 'ECollisionEnabled::NoCollision' "$PROOF" \
+  && ok "…and that Marble geometry is not blocking anything" \
+  || bad "the collision boundary is trusted from a log instead of checked in the world"
 
 echo "== the opt-in full CPU build =="
 if bash -n "$HERE/cpu-build-all.sh" 2>/dev/null; then ok "cpu-build-all.sh parses"

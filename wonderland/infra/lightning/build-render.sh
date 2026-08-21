@@ -25,6 +25,33 @@ wl_verify_source "build-render"
 
 FORCE="${FORCE_REBUILD:-0}"
 
+# ------------------------------------------------------ the Marble mesh files
+# Only matters when WONDERLAND_MARBLE_IMPORT names a world, but it is cheap and
+# idempotent so it runs unconditionally: prepare.sh links these, and a session
+# that skipped prepare (SKIP_PREPARE=1, a resumed box) would otherwise reach the
+# import step with a manifest pointing at a file that is not there.
+wl_link_marble_assets
+
+MARBLE_SLUG="${WONDERLAND_MARBLE_IMPORT:-}"
+if [ -n "$MARBLE_SLUG" ]; then
+  _mworld="$WL_SRC/wonderland/marble/worlds/$MARBLE_SLUG"
+  [ -f "$_mworld/manifest.json" ] || wl_die \
+    "WONDERLAND_MARBLE_IMPORT=$MARBLE_SLUG but no manifest at $_mworld/manifest.json"
+  # Resolved by the IMPORTER'S OWN choose_mesh, not by a second implementation
+  # here. A preflight that picks a different file from the thing it is
+  # preflighting is worse than no preflight: it passes and the build still dies.
+  if ! _mmesh="$(python3 "$WL_SRC/wonderland/marble/resolve-mesh.py" \
+                   --slug "$MARBLE_SLUG" \
+                   --root "$WL_SRC/wonderland/marble/worlds" 2>&1)"; then
+    wl_die "no Marble visual mesh on disk for '$MARBLE_SLUG':
+$_mmesh
+The meshes live outside the checkout under $(wl_marble_assets_root)/$MARBLE_SLUG
+and are linked in by wl_link_marble_assets. Refusing to start a build that would
+fail at the import step."
+  fi
+  wl_ok "Marble mesh for $MARBLE_SLUG: $(du -h "$_mmesh" | cut -f1) at $_mmesh"
+fi
+
 # ------------------------------------------------- generated-asset preflight
 # The level generator IMPORTS textures and audio from disk. If those
 # directories are empty or invisible it does not fail — it logs a warning and
@@ -72,6 +99,7 @@ run_native() {
     WONDERLAND_LOOK="${WONDERLAND_LOOK:-}" \
     WONDERLAND_BATCH="${WONDERLAND_BATCH:-1}" \
     WONDERLAND_MARBLE_BACKDROP="${WONDERLAND_MARBLE_BACKDROP:-0}" \
+    WONDERLAND_MARBLE_IMPORT="${WONDERLAND_MARBLE_IMPORT:-}" \
     bash "$WL_SRC/$BUILD_SH" 2>&1 | tee "$WL_LOG/build.log"
   return "${PIPESTATUS[0]}"
 }
@@ -118,7 +146,8 @@ run_container() {
   #
   # WONDERLAND_LOOK is the documented way to sweep the art LOOK table without
   # editing code, WONDERLAND_BATCH selects the batched or unbatched world, and
-  # WONDERLAND_MARBLE_BACKDROP hands the far distance to Marble. None of them
+  # WONDERLAND_MARBLE_BACKDROP hands the far distance to Marble, and
+  # WONDERLAND_MARBLE_IMPORT=<slug> adds the World Labs mesh itself. None of them
   # were forwarded, so every one of them silently did nothing in container mode
   # — an override that is ignored is worse than one that is unavailable,
   # because the operator believes the sweep happened.
@@ -132,6 +161,7 @@ run_container() {
     -e WONDERLAND_LOOK="${WONDERLAND_LOOK:-}" \
     -e WONDERLAND_BATCH="${WONDERLAND_BATCH:-1}" \
     -e WONDERLAND_MARBLE_BACKDROP="${WONDERLAND_MARBLE_BACKDROP:-0}" \
+    -e WONDERLAND_MARBLE_IMPORT="${WONDERLAND_MARBLE_IMPORT:-}" \
     -e WONDERLAND_GENERATOR_EXTRA="${WL_GENERATOR_EXTRA:-}" \
     -w "$WL_SRC" \
     "$WL_UE_IMAGE" \

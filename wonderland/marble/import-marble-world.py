@@ -191,9 +191,186 @@ def place(asset_path, location, rotation, scale, label, tags, visible=True):
     return actor
 
 
+# The ratio band. Wide on purpose: it is not a placement check, it is a UNIT
+# check, and the unit errors this project actually makes are factors of 100.
+SCALE_BAND = (0.25, 4.0)
+
+
+def check_scale(measured, transform):
+    """Refuse a backdrop that came in at the wrong ORDER OF MAGNITUDE.
+
+    The trap: glTF counts metres and Unreal counts centimetres, and whether an
+    importer has already applied that 100x before the actor's own scale is not
+    something you can read off the documentation with confidence. Get it wrong
+    and the shell is either a speck at the origin or a kilometre-wide wall
+    through the plaza — and both cook, package and stream perfectly, so the
+    first thing that notices is a person looking at a browser on metered GPU
+    time. The manifest carries the expected extent computed from the mesh's own
+    accessor bounds, so this can be settled here for free.
+    """
+    expected = transform.get("expected_unreal_extent_cm")
+    if not expected:
+        log("no expected_unreal_extent_cm in the manifest — the import scale was "
+            "NOT checked. Add the mesh's measured span to get this gate.")
+        return
+    # SORTED, so the comparison is permutation-invariant. glTF is Y-up and
+    # Unreal is Z-up, node transforms and the importer's own conversion can
+    # land the three extents in a different ORDER than the accessor bounds were
+    # read in, and an axis swap is not a size error. Comparing sorted extents
+    # asks only the question this gate is for: is the thing the right size.
+    ratios = [m / e for m, e in zip(sorted(measured), sorted(expected)) if e]
+    if not ratios:
+        return
+    worst = max(ratios + [1.0 / r for r in ratios if r])
+    log("scale check: measured %s cm vs expected %s cm (worst ratio %.3g)"
+        % ([round(v) for v in measured], [round(v) for v in expected], worst))
+    if not (SCALE_BAND[0] <= min(ratios) and max(ratios) <= SCALE_BAND[1]):
+        raise SystemExit(
+            "the imported layer is the wrong SIZE by a factor of about %.3g.\n"
+            "  measured %s cm\n  expected %s cm\n"
+            "Almost always the metre/centimetre conversion: if the ratio is near "
+            "100, the importer already converted and transform.unreal_uniform_"
+            "scale should not multiply by 100 again; if it is near 0.01, it did "
+            "not. Fix the manifest rather than the frame — the actors are in the "
+            "level but the map has NOT been saved, so nothing was shipped."
+            % (worst, [round(v) for v in measured], [round(v) for v in expected]))
+
+
+def default_level(manifest):
+    return (manifest.get("unreal_destination") or {}).get(
+        "level", "/Game/Wonderland/Maps/WonderlandHub")
+
+
+def load_target_level(level_path):
+    """Open the map the Marble layer is being ADDED TO, and refuse if it is not there.
+
+    THIS IS THE STEP WHOSE ABSENCE MAKES THE WHOLE SCRIPT A LIE. Under
+    `-run=pythonscript` the editor starts on an empty transient world. Importing
+    assets into that succeeds, spawning actors into it succeeds, every log line
+    reads like a success — and then the process exits and every actor is
+    discarded, because they were never in WonderlandHub. The assets survive (the
+    import task saves them), so afterwards the Content Browser shows the Marble
+    mesh sitting there and the level does not contain it, which reads as a
+    placement bug and gets debugged as one.
+
+    So: load first, fail closed, and say which level.
+    """
+    subsystem = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+    if subsystem is None:
+        raise SystemExit(
+            "no LevelEditorSubsystem — cannot open %s, so anything imported "
+            "would land in a transient world and be discarded at exit. "
+            "Nothing was imported." % level_path)
+    if not unreal.EditorAssetLibrary.does_asset_exist(level_path):
+        raise SystemExit(
+            "level %s does not exist. Generate the world first "
+            "(generate-hub-level.py); the Marble layer is added to Wonderland, "
+            "it does not create it. Nothing was imported." % level_path)
+    if not subsystem.load_level(level_path):
+        raise SystemExit(
+            "load_level(%s) returned false. Refusing to import into whatever "
+            "world happens to be open. Nothing was imported." % level_path)
+    log("level opened: %s" % level_path)
+    return subsystem
+
+
+def save_target_level(subsystem, level_path):
+    """Persist the map, and report the outcome as a fact rather than an assumption."""
+    world = None
+    try:
+        world = unreal.get_editor_subsystem(
+            unreal.UnrealEditorSubsystem).get_editor_world()
+    except Exception as exc:
+        log("could not reach the editor world (%s)" % exc)
+    saved = False
+    try:
+        if world is not None:
+            saved = unreal.EditorLoadingAndSavingUtils.save_map(world, level_path)
+        else:
+            saved = subsystem.save_current_level()
+    except Exception as exc:
+        log("save_map failed (%s); trying save_current_level()" % exc)
+        try:
+            saved = subsystem.save_current_level()
+        except Exception as exc2:
+            log("save_current_level also failed: %s" % exc2)
+    log("MARBLE_LEVEL_SAVED=%d  (%s)" % (1 if saved else 0, level_path))
+    return bool(saved)
+
+
+def two_sided_report(asset_paths, want_two_sided, repair):
+    """Answer the shell's one silent failure at IMPORT time, where it is free.
+
+    A single-viewpoint reconstruction is a shell seen FROM THE INSIDE. If the
+    material lands single-sided, every check upstream passes — the actor is
+    placed, the size is right, the level saves, the cook is clean — and the
+    frame is empty. Finding that out from a browser costs a GPU session.
+
+    The source glTF for this world declares `doubleSided: true`, so restoring it
+    is preserving what the file says, not overriding it. Everything here is
+    guarded: this was written without an engine to check against, and a
+    silently-ignored material edit is the failure it exists to prevent.
+
+    Returns (checked, two_sided, repaired).
+    """
+    checked = two_sided = repaired = 0
+    for path in asset_paths:
+        mesh = unreal.load_asset(path)
+        if mesh is None:
+            continue
+        try:
+            materials = mesh.get_editor_property("static_materials") or []
+        except Exception as exc:
+            log("could not read materials on %s (%s) — two-sidedness UNKNOWN"
+                % (path, exc))
+            continue
+        for slot in materials:
+            try:
+                material = slot.get_editor_property("material_interface")
+            except Exception:
+                material = getattr(slot, "material_interface", None)
+            if material is None:
+                continue
+            checked += 1
+            try:
+                is_two = bool(material.get_editor_property("two_sided"))
+            except Exception as exc:
+                log("could not read two_sided on %s (%s)" % (material.get_name(), exc))
+                continue
+            if is_two:
+                two_sided += 1
+                continue
+            log("%s imported SINGLE-SIDED while the source declares doubleSided"
+                % material.get_name())
+            if not (want_two_sided and repair):
+                continue
+            try:
+                material.set_editor_property("two_sided", True)
+                unreal.EditorAssetLibrary.save_loaded_asset(material)
+                repaired += 1
+                two_sided += 1
+                log("  restored two-sided on %s and saved it" % material.get_name())
+            except Exception as exc:
+                log("  COULD NOT restore two-sided (%s). The backdrop will be "
+                    "invisible from inside; set Two Sided on the material by "
+                    "hand before spending GPU time." % exc)
+    log("MARBLE_MATERIALS_CHECKED=%d  MARBLE_TWO_SIDED=%d  MARBLE_TWO_SIDED_REPAIRED=%d"
+        % (checked, two_sided, repaired))
+    if checked and two_sided == 0:
+        log("EVERY Marble material is single-sided. A shell viewed from inside "
+            "renders nothing. This import is placed correctly and will show an "
+            "empty frame.")
+    return checked, two_sided, repaired
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--slug", required=True)
+    # NOT `required=True`, and the reason is the transport. Under
+    # `-run=pythonscript` the arguments ride inside the -script= string, and
+    # this project has no measurement showing that survives on UE 5.8. The
+    # environment variable always survives, so it is the belt and --slug is the
+    # braces; whichever supplied the value is logged.
+    parser.add_argument("--slug", default=None)
     parser.add_argument("--root", default=None)
     parser.add_argument("--allow-collider-as-visual", action="store_true",
                         help="use the collision proxy as scenery when the world has "
@@ -201,6 +378,18 @@ def main(argv=None):
                              "the Royal Garden. Opt-in on purpose.")
     parser.add_argument("--no-nanite", action="store_true",
                         help="import as a normal static mesh")
+    parser.add_argument("--no-two-sided-repair", action="store_true",
+                        help="report single-sided Marble materials but do not fix "
+                             "them. The default restores two-sidedness when the "
+                             "source glTF declared it, because a shell viewed from "
+                             "inside renders nothing without it.")
+    parser.add_argument("--level", default=None,
+                        help="the map to add the Marble layer to. Defaults to the "
+                             "manifest's recorded level.")
+    parser.add_argument("--no-save", action="store_true",
+                        help="import and place but do not save the map. For "
+                             "inspecting a placement by hand; a build that uses "
+                             "this ships a level without the Marble layer in it.")
     parser.add_argument("--import-collider", action="store_true", default=True,
                         help="also import Marble's collider mesh as a hidden reference")
     # Deliberately long and ugly. Promoting Marble geometry to gameplay
@@ -210,6 +399,18 @@ def main(argv=None):
                         action="store_true",
                         help=argparse.SUPPRESS)
     args = parser.parse_args(argv if argv is not None else _script_args())
+    if args.slug:
+        log("slug %s (from --slug)" % args.slug)
+    else:
+        args.slug = os.environ.get("WONDERLAND_MARBLE_SLUG") or None
+        if not args.slug:
+            raise SystemExit(
+                "no world to import: pass --slug or set WONDERLAND_MARBLE_SLUG. "
+                "Nothing was imported.")
+        log("slug %s (from WONDERLAND_MARBLE_SLUG — the -script= arguments did "
+            "not reach argparse)" % args.slug)
+    if not args.root:
+        args.root = os.environ.get("WONDERLAND_MARBLE_ROOT") or None
 
     manifest, manifest_path = read_manifest(args.slug, args.root)
     world_dir = os.path.dirname(manifest_path)
@@ -219,6 +420,9 @@ def main(argv=None):
             "this runs inside the Unreal editor (-run=pythonscript). Outside it "
             "there is no importer, and pretending otherwise would report a "
             "success that never happened.")
+
+    level_path = args.level or default_level(manifest)
+    level_subsystem = load_target_level(level_path)
 
     destination = (manifest.get("unreal_destination") or {}).get(
         "content_path") or ("/Game/Wonderland/Marble/%s" % args.slug)
@@ -232,8 +436,9 @@ def main(argv=None):
     #
     # This is why the field exists rather than a bare unreal_uniform_scale: the
     # honest scale for a backdrop is NOT the world's metric scale.
+    mode = transform.get("placement_mode")
     scale = None
-    if (transform.get("placement_mode") == "backdrop_at_camera"
+    if (mode == "backdrop_at_camera"
             and transform.get("unreal_backdrop_scale")):
         scale = transform["unreal_backdrop_scale"]
         policy = transform.get("backdrop_policy") or {}
@@ -268,12 +473,34 @@ def main(argv=None):
                (transform.get("axis_correction_why") or "").split(".")[0]))
     ground = transform.get("ground_plane_offset_m")
     if isinstance(ground, (int, float)):
-        # Marble reports where IT thinks the ground is. Lifting the layer by the
-        # negative of that puts its floor on Wonderland's z=0 plaza instead of
-        # wherever the generator happened to reconstruct it.
-        origin = [origin[0], origin[1], origin[2] - ground * 100.0]
-        log("ground plane offset %.3f m applied -> z origin %.1f cm"
-            % (ground, origin[2]))
+        if mode == "backdrop_at_camera":
+            # DELIBERATELY NOT APPLIED, and this is the whole reason the backdrop
+            # lever is free. The mesh origin IS the reconstruction viewpoint, so
+            # anchoring the actor origin at the camera makes every ray from that
+            # camera identical no matter what uniform scale is applied — a point
+            # at direction d and distance r moves to 6r in the same direction and
+            # lands on the same pixel. Lifting the shell by its ground offset
+            # translates it, which is NOT a scaling, and it is the one operation
+            # that breaks that identity: the horizon slides and the reference
+            # composition the shell was generated for stops matching.
+            #
+            # The shell's own ground ends up 6x further below the camera than
+            # reality. That is correct and it is invisible, because Wonderland's
+            # authored plaza owns every metre a player can stand on and occludes
+            # the shell's near geometry (backdrop_policy.authored_ownership).
+            log("ground plane offset %.3f m NOT applied: in backdrop_at_camera "
+                "the origin is the reconstruction viewpoint and translating it "
+                "would break the scale-invariance the backdrop depends on."
+                % ground)
+        else:
+            # Marble reports where IT thinks the ground is, in metres, and this
+            # branch runs at metric scale — the only OTHER scale this importer
+            # applies is the backdrop one, which returns above. So the lift is
+            # the plain metre->cm conversion; if a third placement mode ever
+            # lands here at a stretched scale, this has to be stretched with it.
+            origin = [origin[0], origin[1], origin[2] - ground * 100.0]
+            log("ground plane offset %.3f m applied -> z origin %.1f cm"
+                % (ground, origin[2]))
 
     source, key, why = choose_mesh(manifest, world_dir,
                                    allow_collider=args.allow_collider_as_visual)
@@ -306,7 +533,6 @@ def main(argv=None):
                       [MARBLE_TAG, NO_COLLISION_TAG])
         if actor is not None:
             placed.append(actor)
-    mode = transform.get("placement_mode")
     if mode == "backdrop_at_camera":
         log("placed as a BACKDROP anchored to %s at %s. This is a "
             "single-viewpoint shell — it is correct from that camera and smears "
@@ -323,6 +549,13 @@ def main(argv=None):
             "collider_mesh_url")
         if entry:
             collider_source = os.path.join(world_dir, entry["path"])
+            if not os.path.exists(collider_source):
+                # Said out loud. The manifest listing an asset and the file
+                # being on disk are different facts — these live outside the
+                # checkout and are linked in — and a step that quietly does
+                # nothing is indistinguishable from one that worked.
+                log("the manifest lists a collider mesh but %s is not on disk — "
+                    "no reference imported" % collider_source)
             if os.path.exists(collider_source):
                 collider_imported = import_glb(
                     collider_source, destination + "/Collision",
@@ -336,6 +569,50 @@ def main(argv=None):
         else:
             log("no collider mesh was downloaded for this world")
 
+    two_sided_report(
+        imported,
+        want_two_sided=bool((manifest.get("source_mesh") or {}).get("double_sided")),
+        repair=not args.no_two_sided_repair)
+
+    log("MARBLE_VISUAL_ACTORS=%d  MARBLE_COLLIDER_REFERENCES=%d"
+        % (len(placed), len(collider_imported)))
+    if not placed:
+        raise SystemExit(
+            "no Marble visual actor reached the level. The import reported %d "
+            "asset(s); spawning or loading them failed. Reporting this as a "
+            "success is how a build ships an empty backdrop. The map was not "
+            "saved." % len(imported))
+
+    # MEASURE, THEN GATE, THEN SAVE — in that order, so a layer that came in at
+    # the wrong order of magnitude never reaches disk and never reaches a cook.
+    bounds_block = None
+    try:
+        box = placed[0].get_actor_bounds(False)
+        centre, extent = box[0], box[1]
+        bounds_block = {
+            "source": "measured in Unreal after import",
+            "min_cm": [centre.x - extent.x, centre.y - extent.y, centre.z - extent.z],
+            "max_cm": [centre.x + extent.x, centre.y + extent.y, centre.z + extent.z],
+        }
+        measured = [extent.x * 2, extent.y * 2, extent.z * 2]
+        log("bounds %.0f x %.0f x %.0f cm" % tuple(measured))
+        bounds_block["measured_extent_cm"] = [round(v, 1) for v in measured]
+        check_scale(measured, transform)
+    except Exception as exc:
+        log("could not measure bounds (%s) — the scale gate did NOT run" % exc)
+
+    if args.no_save:
+        log("--no-save: the map was NOT written. The Marble actors exist only in "
+            "this editor session and will be gone when it exits.")
+        level_saved = False
+    else:
+        level_saved = save_target_level(level_subsystem, level_path)
+        if not level_saved:
+            raise SystemExit(
+                "the Marble layer was imported and placed but %s could not be "
+                "saved. A cook from here would package a world without it, so "
+                "this is a failure and not a warning." % level_path)
+
     if args.promote_marble_collision_i_have_evidence:
         log("REFUSED: promoting Marble geometry to gameplay collision is not "
             "implemented, because no evidence has been recorded that a "
@@ -346,8 +623,8 @@ def main(argv=None):
     # a hundred times too small with a document swearing it is correct.
     manifest["unreal_destination"] = {
         "content_path": destination,
-        "level": (manifest.get("unreal_destination") or {}).get(
-            "level", "/Game/Wonderland/Maps/WonderlandHub"),
+        "level": level_path,
+        "level_saved": level_saved,
         "actor_label": "MarbleVisualLayer_%s" % args.slug,
         "imported_assets": imported,
         "collider_assets": collider_imported,
@@ -355,25 +632,12 @@ def main(argv=None):
     }
     manifest["transform"]["unreal_uniform_scale"] = scale
     manifest["transform"]["unreal_origin_cm"] = origin
-    if placed:
-        try:
-            box = placed[0].get_actor_bounds(False)
-            centre, extent = box[0], box[1]
-            manifest["bounds"] = {
-                "source": "measured in Unreal after import",
-                "min_cm": [centre.x - extent.x, centre.y - extent.y, centre.z - extent.z],
-                "max_cm": [centre.x + extent.x, centre.y + extent.y, centre.z + extent.z],
-            }
-            log("bounds %.0f x %.0f x %.0f cm"
-                % (extent.x * 2, extent.y * 2, extent.z * 2))
-        except Exception as exc:
-            log("could not measure bounds: %s" % exc)
+    if bounds_block is not None:
+        manifest["bounds"] = bounds_block
     with io.open(manifest_path, "w", encoding="utf8") as handle:
         json.dump(manifest, handle, indent=2, ensure_ascii=False)
         handle.write("\n")
     log("manifest updated: %s" % manifest_path)
-    log("MARBLE_VISUAL_ACTORS=%d  MARBLE_COLLIDER_REFERENCES=%d"
-        % (len(placed), len(collider_imported)))
     return 0
 
 

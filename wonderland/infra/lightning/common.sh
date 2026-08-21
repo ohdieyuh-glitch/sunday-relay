@@ -162,6 +162,51 @@ export WL_TURN_PORT="${WL_TURN_PORT:-3478}"
 export WL_RES_X="${WL_RES_X:-1280}"
 export WL_RES_Y="${WL_RES_Y:-720}"
 
+# --------------------------------------------------------------------------
+# The Marble meshes are hundreds of megabytes and are NOT in git — the HQ
+# export alone is 141 MB and the full-resolution one 330 MB. They live in
+# persistent Studio storage; $WL_SRC is a checkout that gets reset to origin on
+# every prepare, so the link has to be re-made rather than assumed. Symlinks,
+# not copies: the same half-gigabyte does not need a second home per build, and
+# a stale copy that silently differs from the downloaded asset is exactly the
+# kind of thing nobody notices until a frame looks wrong.
+wl_marble_assets_root() {
+  printf '%s\n' "${WL_MARBLE_ASSETS:-$WL_ROOT/marble-assets}"
+}
+
+wl_link_marble_assets() {
+  local root; root="$(wl_marble_assets_root)"
+  if [ ! -d "$root" ]; then
+    wl_say "no Marble assets under $root — nothing to link"
+    return 0
+  fi
+  local linked=0 worlds=0 world slug dest file
+  for world in "$root"/*; do
+    [ -d "$world" ] || continue
+    slug="$(basename "$world")"
+    if [ ! -f "$WL_SRC/wonderland/marble/worlds/$slug/manifest.json" ]; then
+      # An asset directory with no manifest in the checkout cannot be imported,
+      # and linking it anyway would leave a pile nobody can trace to a world.
+      wl_warn "Marble assets for '$slug' have no manifest in the checkout — skipped"
+      continue
+    fi
+    dest="$WL_SRC/wonderland/marble/worlds/$slug/assets"
+    mkdir -p "$dest"
+    for file in "$world"/*; do
+      [ -f "$file" ] || continue
+      ln -sfn "$file" "$dest/$(basename "$file")" && linked=$((linked + 1))
+    done
+    worlds=$((worlds + 1))
+    wl_ok "Marble assets linked for $slug -> $dest"
+  done
+  if [ "$worlds" = "0" ]; then
+    wl_say "no Marble world in $root matched a manifest in the checkout"
+  else
+    wl_say "Marble: $linked file(s) linked across $worlds world(s)"
+  fi
+  return 0
+}
+
 # ---------------------------------------------------------------- logging
 wl_say()  { printf '\033[1;36m[wonderland]\033[0m %s\n' "$*"; }
 wl_ok()   { printf '\033[1;32m[wonderland]\033[0m %s\n' "$*"; }

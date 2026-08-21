@@ -48,6 +48,17 @@ class Recorder(object):
         self.imports = []       # (filename, destination, name, nanite_requested)
         self.actors = []
         self.logs = []
+        # ORDERED, not just counted. The defect this guards against is an
+        # import that happens BEFORE the level is opened: every individual step
+        # still succeeds, and every actor is silently discarded at exit. Only
+        # the order distinguishes that from a working run.
+        self.events = []        # ("open"|"import"|"spawn"|"save", detail)
+        self.bounds_extent = (5000.0, 5000.0, 1200.0)   # HALF extent, as UE reports it
+        self.material_two_sided = False   # what the glTF import produced
+        self.saved_materials = []
+        self.level_exists = True
+        self.load_ok = True
+        self.save_ok = True
 
 
 REC = Recorder()
@@ -100,7 +111,7 @@ def build_stub():
         def set_actor_hidden_in_game(self, v): self.hidden = v
         def get_component_by_class(self, _cls): return self.component
         def get_actor_bounds(self, _only_colliding):
-            return (Vector(0, 0, 0), Vector(5000, 5000, 1200))
+            return (Vector(0, 0, 0), Vector(*REC.bounds_extent))
 
     class AssetImportTask(object):
         def __init__(self): self.props = {"imported_object_paths": []}
@@ -131,6 +142,7 @@ def build_stub():
                 task.props["imported_object_paths"] = [path]
                 REC.imports.append((task.props["filename"],
                                     task.props["destination_path"], name, nanite))
+                REC.events.append(("import", task.props["filename"]))
 
     class AssetToolsHelpers(object):
         @staticmethod
@@ -140,7 +152,74 @@ def build_stub():
         def spawn_actor_from_object(self, mesh, _loc, _rot):
             actor = Actor(mesh)
             REC.actors.append((actor, _loc))
+            REC.events.append(("spawn", mesh))
             return actor
+
+    class LevelEditorSubsystem(object):
+        def load_level(self, path):
+            if not REC.load_ok:
+                return False
+            REC.events.append(("open", path))
+            return True
+
+        def save_current_level(self):
+            return bool(REC.save_ok)
+
+    class World(object):
+        pass
+
+    class UnrealEditorSubsystem(object):
+        def get_editor_world(self):
+            return World()
+
+    class EditorLoadingAndSavingUtils(object):
+        @staticmethod
+        def save_map(_world, path):
+            if not REC.save_ok:
+                return False
+            REC.events.append(("save", path))
+            return True
+
+    class Material(object):
+        def __init__(self, name):
+            self._name = name
+            self._props = {"two_sided": REC.material_two_sided}
+
+        def get_name(self): return self._name
+        def get_editor_property(self, k): return self._props[k]
+        def set_editor_property(self, k, v): self._props[k] = v
+
+    class MaterialSlot(object):
+        def __init__(self, material): self._m = material
+        def get_editor_property(self, k):
+            if k == "material_interface": return self._m
+            raise KeyError(k)
+
+    class StaticMesh(object):
+        def __init__(self, path):
+            self.path = path
+            self._materials = [MaterialSlot(Material("MI_" + path.rsplit("/", 1)[-1]))]
+
+        def get_editor_property(self, k):
+            if k == "static_materials": return self._materials
+            raise KeyError(k)
+
+    class EditorAssetLibrary(object):
+        @staticmethod
+        def does_asset_exist(_path):
+            return bool(REC.level_exists)
+
+        @staticmethod
+        def save_loaded_asset(asset):
+            REC.saved_materials.append(asset.get_name())
+            return True
+
+    def _subsystem(cls):
+        if cls is LevelEditorSubsystem:
+            return LevelEditorSubsystem()
+        if cls is UnrealEditorSubsystem:
+            return UnrealEditorSubsystem()
+        return EditorActorSubsystem()
 
     u.Vector = Vector
     u.Rotator = Rotator
@@ -151,8 +230,12 @@ def build_stub():
     u.InterchangeGenericAssetsPipeline = InterchangeGenericAssetsPipeline
     u.AssetToolsHelpers = AssetToolsHelpers
     u.EditorActorSubsystem = EditorActorSubsystem
-    u.get_editor_subsystem = lambda _cls: EditorActorSubsystem()
-    u.load_asset = lambda path: {"asset": path}
+    u.LevelEditorSubsystem = LevelEditorSubsystem
+    u.UnrealEditorSubsystem = UnrealEditorSubsystem
+    u.EditorLoadingAndSavingUtils = EditorLoadingAndSavingUtils
+    u.EditorAssetLibrary = EditorAssetLibrary
+    u.get_editor_subsystem = _subsystem
+    u.load_asset = lambda path: StaticMesh(path)
     u.log_warning = lambda m: REC.logs.append(m)
     u.log = lambda m: REC.logs.append(m)
     return u
@@ -184,8 +267,6 @@ def make_world(root, slug, hq=False, ground=None, scale_factor=1.25, backdrop=Fa
         "assets": {"downloaded": downloaded},
         "exports": [],
         "transform": {"axis_correction_deg": [180.0, 0.0, 0.0],
-                      "placement_mode": "backdrop_at_camera",
-                      "anchor_camera": "HeroCam0",
                       "metric_scale_factor": scale_factor,
                       "ground_plane_offset_m": ground,
                       "unreal_uniform_scale": (scale_factor * 100.0) if scale_factor else None,
@@ -199,9 +280,11 @@ def make_world(root, slug, hq=False, ground=None, scale_factor=1.25, backdrop=Fa
         "licence": {"commercial_use": "unavailable"},
     }
     if backdrop:
+        manifest["transform"]["placement_mode"] = "backdrop_at_camera"
         # Only the backdrop fixtures carry it. Forcing it onto every world made
         # the metric-scale tests fail, which was the fixture lying rather than
         # the code breaking.
+        manifest["transform"]["anchor_camera"] = "HeroCam0"
         manifest["transform"]["unreal_backdrop_scale"] = 1268.7
         manifest["transform"]["backdrop_scale_multiplier"] = 6.0
         manifest["transform"]["backdrop_policy"] = {
@@ -211,9 +294,13 @@ def make_world(root, slug, hq=False, ground=None, scale_factor=1.25, backdrop=Fa
     return wdir
 
 
-def run_importer(slug, root, extra=()):
+def run_importer(slug, root, extra=(), **knobs):
     global REC
     REC = Recorder()
+    for key, value in knobs.items():
+        if not hasattr(REC, key):
+            raise AssertionError("unknown recorder knob %r" % key)
+        setattr(REC, key, value)
     sys.modules["unreal"] = build_stub()
     for mod in ("import_marble_world",):
         sys.modules.pop(mod, None)
@@ -223,6 +310,20 @@ def run_importer(slug, root, extra=()):
     module.__dict__["__name__"] = "import_marble_world"
     exec(compile(src, module.__file__, "exec"), module.__dict__)
     module.main(["--slug", slug, "--root", root] + list(extra))
+    return module
+
+
+def run_importer_raw(argv, root):
+    """Like run_importer but passes argv verbatim — no --slug, no --root."""
+    global REC
+    REC = Recorder()
+    sys.modules["unreal"] = build_stub()
+    src = io.open(os.path.join(HERE, "import-marble-world.py"), encoding="utf8").read()
+    module = types.ModuleType("import_marble_world")
+    module.__file__ = os.path.join(HERE, "import-marble-world.py")
+    module.__dict__["__name__"] = "import_marble_world"
+    exec(compile(src, module.__file__, "exec"), module.__dict__)
+    module.main(list(argv))
     return module
 
 
@@ -303,7 +404,7 @@ def main():
         # Marble's collider export is Y-DOWN; UE's glTF import assumes Y-UP.
         # Without this the Royal Garden arrives inverted — sky below, plaza
         # overhead — and reads as a lighting bug on a paid GPU.
-        make_world(root, "axis", hq=True)
+        make_world(root, "axis", hq=True, backdrop=True)
         run_importer("axis", root)
         rolls = [a.rotation.props.get("roll") for a, _ in REC.actors]
         check(all(abs((r or 0) - 180.0) < 1e-6 for r in rolls),
@@ -343,6 +444,17 @@ def main():
         check(any("ground plane offset" in m for m in REC.logs),
               "…and said so")
 
+
+        # …and in backdrop mode it is not applied AT ALL, because translating the
+        # shell is the one thing that breaks the scale-invariance it depends on.
+        make_world(root, "groundbackdrop", ground=-0.4, backdrop=True)
+        run_importer("groundbackdrop", root)
+        placed_z = [loc.z for _a, loc in REC.actors]
+        check(placed_z and all(abs(z - 0.0) < 1e-6 for z in placed_z),
+              "in backdrop_at_camera the ground offset is NOT applied")
+        check(any("NOT applied" in m and "scale-invariance" in m for m in REC.logs),
+              "…and the reason is stated, not left as a silent omission")
+
         make_world(root, "noscale", scale_factor=None)
         run_importer("noscale", root)
         visual_actors = [a for a, _ in REC.actors if "VisualLayer" in (a.label or "")]
@@ -377,6 +489,178 @@ def main():
         check(man["bounds"]["max_cm"][0] == 5000.0, "…and carry the real numbers")
         check(man["collision_source"]["authority"] == "unreal",
               "the manifest still says Unreal owns collision")
+
+        print("\n-- the level the layer lands in --")
+        make_world(root, "level", hq=True)
+        mod = run_importer("level", root)
+        order = [kind for kind, _ in REC.events]
+        check("open" in order and "import" in order,
+              "the level is opened and the mesh is imported")
+        check(order.index("open") < order.index("import"),
+              "the level is opened BEFORE anything is imported "
+              "(otherwise every actor is discarded at exit)")
+        check(order.index("open") < order.index("spawn"),
+              "…and before anything is spawned")
+        check(order[-1] == "save", "the map is saved LAST, after placement")
+        opened = [d for k, d in REC.events if k == "open"]
+        saved = [d for k, d in REC.events if k == "save"]
+        check(opened == ["/Game/Wonderland/Maps/WonderlandHub"],
+              "it opens the level the manifest names")
+        check(saved == opened, "…and saves that same level, not another one")
+        check(any("MARBLE_LEVEL_SAVED=1" in m for m in REC.logs),
+              "the save outcome is reported as a fact")
+        man = json.load(io.open(os.path.join(root, "level", "manifest.json"),
+                                encoding="utf8"))
+        check(man["unreal_destination"]["level_saved"] is True,
+              "the manifest records that the map was saved")
+
+        make_world(root, "levelarg", hq=True)
+        run_importer("levelarg", root, extra=["--level", "/Game/Other/Map"])
+        check([d for k, d in REC.events if k == "open"] == ["/Game/Other/Map"],
+              "--level overrides the manifest")
+
+        make_world(root, "nosave", hq=True)
+        run_importer("nosave", root, extra=["--no-save"])
+        check(not [k for k, _ in REC.events if k == "save"],
+              "--no-save really does not save")
+        check(any("NOT written" in m for m in REC.logs),
+              "…and says the actors will be gone when the session exits")
+        man = json.load(io.open(os.path.join(root, "nosave", "manifest.json"),
+                                encoding="utf8"))
+        check(man["unreal_destination"]["level_saved"] is False,
+              "…and the manifest does not claim a save that never happened")
+
+        print("\n-- level failures are fatal, never warnings --")
+        make_world(root, "missinglevel", hq=True)
+        try:
+            run_importer("missinglevel", root, level_exists=False)
+            bad("a missing level must refuse")
+        except SystemExit as exc:
+            check("does not exist" in str(exc) and "Nothing was imported" in str(exc),
+                  "a level that does not exist -> refusal before any import")
+        check(not REC.imports, "…and it imported nothing")
+
+        make_world(root, "loadfail", hq=True)
+        try:
+            run_importer("loadfail", root, load_ok=False)
+            bad("load_level returning false must refuse")
+        except SystemExit as exc:
+            check("load_level" in str(exc) and "Nothing was imported" in str(exc),
+                  "load_level false -> refusal rather than importing into a transient world")
+        check(not REC.imports, "…and it imported nothing")
+
+        make_world(root, "savefail", hq=True)
+        try:
+            run_importer("savefail", root, save_ok=False)
+            bad("a failed save must be fatal")
+        except SystemExit as exc:
+            check("could not be saved" in str(exc) and "failure and not a warning" in str(exc),
+                  "a map that will not save is a FAILURE (a cook from there ships no Marble layer)")
+
+        print("\n-- the shell's one silent failure: single-sided --")
+        # A single-viewpoint reconstruction is a shell seen FROM THE INSIDE. If
+        # the material imports single-sided every gate above still passes and
+        # the frame is empty — which is only discoverable on metered GPU time.
+        def sided(slug, source_double_sided=True, extra=()):
+            make_world(root, slug, hq=True, backdrop=True)
+            mp = os.path.join(root, slug, "manifest.json")
+            mj = json.load(io.open(mp, encoding="utf8"))
+            mj["source_mesh"] = {"double_sided": source_double_sided}
+            json.dump(mj, io.open(mp, "w", encoding="utf8"))
+            return mp
+
+        sided("twosided")
+        run_importer("twosided", root, material_two_sided=True)
+        check(any("MARBLE_TWO_SIDED=1" in m and "REPAIRED=0" in m for m in REC.logs),
+              "a material that imported two-sided is counted and left alone")
+        check(not REC.saved_materials, "…and nothing is written")
+
+        sided("singlesided")
+        run_importer("singlesided", root, material_two_sided=False)
+        check(any("SINGLE-SIDED while the source declares doubleSided" in m
+                  for m in REC.logs),
+              "a single-sided import is named, not passed over")
+        check(any("MARBLE_TWO_SIDED_REPAIRED=1" in m for m in REC.logs),
+              "…and two-sidedness is restored, because the source glTF declared it")
+        check(len(REC.saved_materials) == 1,
+              "…and the repaired material is saved, so the cook sees it")
+
+        sided("noreprepair")
+        run_importer("noreprepair", root, extra=["--no-two-sided-repair"],
+                     material_two_sided=False)
+        check(any("SINGLE-SIDED" in m for m in REC.logs),
+              "--no-two-sided-repair still REPORTS the problem")
+        check(not REC.saved_materials, "…and changes nothing")
+
+        sided("srcsingle", source_double_sided=False)
+        run_importer("srcsingle", root, material_two_sided=False)
+        check(not REC.saved_materials,
+              "a source that is genuinely single-sided is not 'repaired' into "
+              "something it never was")
+
+        print("\n-- the order-of-magnitude gate --")
+        # The failure this exists for cooks, packages and streams perfectly, and
+        # is discovered by a person looking at a browser on metered GPU time.
+        def with_expected(slug, extent_cm):
+            make_world(root, slug, hq=True, backdrop=True)
+            mp = os.path.join(root, slug, "manifest.json")
+            mj = json.load(io.open(mp, encoding="utf8"))
+            if extent_cm is not None:
+                mj["transform"]["expected_unreal_extent_cm"] = extent_cm
+            json.dump(mj, io.open(mp, "w", encoding="utf8"))
+            return mp
+
+        with_expected("scaleok", [10000.0, 10000.0, 2400.0])
+        run_importer("scaleok", root)
+        check(any("scale check" in m and "worst ratio 1" in m for m in REC.logs),
+              "an import at the expected size passes the gate and states the ratio")
+        check([k for k, _ in REC.events if k == "save"],
+              "…and the map is saved")
+        man = json.load(io.open(os.path.join(root, "scaleok", "manifest.json"),
+                                encoding="utf8"))
+        check(man["bounds"]["measured_extent_cm"] == [10000.0, 10000.0, 2400.0],
+              "…and the MEASURED extent is written back, not the requested one")
+
+        with_expected("scale100x", [100.0, 100.0, 24.0])
+        try:
+            run_importer("scale100x", root)
+            bad("a 100x size error must refuse")
+        except SystemExit as exc:
+            check("wrong SIZE" in str(exc) and "metre/centimetre" in str(exc),
+                  "a 100x size error refuses and names the metre/centimetre trap")
+        check(not [k for k, _ in REC.events if k == "save"],
+              "…and the wrong-sized layer never reaches disk")
+
+        # An axis SWAP is not a size error, and the gate must not confuse them:
+        # glTF is Y-up, Unreal is Z-up, and the extents can arrive permuted.
+        with_expected("scaleswapped", [2400.0, 10000.0, 10000.0])
+        run_importer("scaleswapped", root)
+        check([k for k, _ in REC.events if k == "save"],
+              "extents that are merely PERMUTED pass — an axis swap is not a size error")
+
+        with_expected("scaleunknown", None)
+        run_importer("scaleunknown", root)
+        check(any("was NOT checked" in m for m in REC.logs),
+              "with no expected extent the gate says it did not run rather than passing")
+
+        print("\n-- the slug transport --")
+        make_world(root, "envslug", hq=True)
+        os.environ["WONDERLAND_MARBLE_SLUG"] = "envslug"
+        os.environ["WONDERLAND_MARBLE_ROOT"] = root
+        try:
+            run_importer_raw([], root)
+            check(any("from WONDERLAND_MARBLE_SLUG" in m for m in REC.logs),
+                  "the slug arrives by environment when -script= arguments do not")
+            check(len(REC.imports) >= 1, "…and the import really happened")
+        finally:
+            os.environ.pop("WONDERLAND_MARBLE_SLUG", None)
+            os.environ.pop("WONDERLAND_MARBLE_ROOT", None)
+        try:
+            run_importer_raw([], root)
+            bad("with no slug anywhere the importer must refuse")
+        except SystemExit as exc:
+            check("WONDERLAND_MARBLE_SLUG" in str(exc) and "Nothing was imported" in str(exc),
+                  "no slug at all -> refusal naming both ways to supply one")
 
         print("\n-- refusals --")
         empty = os.path.join(root, "nomesh")

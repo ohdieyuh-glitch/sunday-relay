@@ -186,7 +186,7 @@ INPUT_HASH="$(compute_input_hash)"
 # they were the same binary. An override that cannot invalidate the build is an
 # override that silently does nothing, which is the second time today the same
 # shape of bug has cost a rebuild.
-_KNOBS="LOOK=${WONDERLAND_LOOK:-} BATCH=${WONDERLAND_BATCH:-1} BACKDROP=${WONDERLAND_MARBLE_BACKDROP:-0}"
+_KNOBS="LOOK=${WONDERLAND_LOOK:-} BATCH=${WONDERLAND_BATCH:-1} BACKDROP=${WONDERLAND_MARBLE_BACKDROP:-0} MARBLE=${WONDERLAND_MARBLE_IMPORT:-}"
 INPUT_HASH="$(printf '%s|%s' "$INPUT_HASH" "$_KNOBS" | sha256sum | cut -d' ' -f1)"
 [ -n "${WONDERLAND_LOOK:-}" ] && log "generator knobs in the hash: $_KNOBS"
 # The belt to the braces: if anything above still produced something that is not
@@ -323,6 +323,62 @@ Check $GEN_LOG for 'WonderlandInstancedBatch is not in this build'."
   else
     log "no generator batch report in $GEN_LOG — level generation did not really run; piece floor not enforced"
   fi
+fi
+
+# --------------------------------------------------- 3b. the Marble visual layer
+# OFF unless a world slug is named. WONDERLAND_MARBLE_IMPORT=royal-garden-backdrop
+# adds World Labs geometry to the level as SCENERY: collision disabled, tagged,
+# and placed on top of the generated world rather than instead of it. Unreal
+# keeps every consequence — collision, navigation, Relay Dogs, gameplay.
+#
+# It runs AFTER generation because generation rewrites the map from a blank
+# one; anything imported before it is overwritten without a word.
+MARBLE_SLUG="${WONDERLAND_MARBLE_IMPORT:-}"
+if [ -n "$MARBLE_SLUG" ]; then
+  if [ "$LEVEL_OK" != "1" ]; then
+    die "WONDERLAND_MARBLE_IMPORT=$MARBLE_SLUG but level generation did not complete.
+There is no world to add a backdrop to."
+  fi
+  MARBLE_SCRIPT="$PROJECT_ROOT/marble/import-marble-world.py"
+  [ -f "$MARBLE_SCRIPT" ] || die "Marble importer missing: $MARBLE_SCRIPT"
+  MARBLE_MANIFEST="$PROJECT_ROOT/marble/worlds/$MARBLE_SLUG/manifest.json"
+  [ -f "$MARBLE_MANIFEST" ] || die "no Marble manifest for '$MARBLE_SLUG' at $MARBLE_MANIFEST.
+Generate and fetch the world first (wonderland/marble/marble_cli.py); this step
+imports what exists, it does not spend credits."
+  # The slug rides in the environment as well as in -script=, because whether
+  # -script= arguments reach argparse on UE 5.8 has not been measured here and
+  # a silently slug-less import would refuse in the middle of a paid build.
+  # EXPORTED, not prefixed onto the call. `VAR=x some_function` in bash puts the
+  # assignment in the function's environment, and whether it reaches a process
+  # the function then execs is exactly the kind of detail that is easy to
+  # believe and wrong. Exporting it is unambiguous.
+  export WONDERLAND_MARBLE_SLUG="$MARBLE_SLUG"
+  # shellcheck disable=SC2086
+  if ! run_step "import-marble-world" "$UE_EDITOR_CMD" "$PROJECT" -run=pythonscript \
+         -script="$MARBLE_SCRIPT --slug $MARBLE_SLUG" -unattended -nop4 ${WL_GENERATOR_EXTRA:-}; then
+    die "the Marble import step failed — see $LOG_DIR/import-marble-world.log"
+  fi
+  # SAME TRAP AS THE GENERATOR. A python exception under -run=pythonscript does
+  # not reliably fail the process, so the exit code above is not evidence. These
+  # two numbers are: the actors reached the level, and the level reached disk.
+  MARBLE_LOG="$LOG_DIR/import-marble-world.log"
+  MARBLE_ACTORS="$( ( set +o pipefail
+                      grep -ao 'MARBLE_VISUAL_ACTORS=[0-9]*' "$MARBLE_LOG" 2>/dev/null \
+                        | tail -1 | cut -d= -f2 ) || true)"
+  if [ -z "$MARBLE_ACTORS" ]; then
+    die "the Marble importer printed no MARBLE_VISUAL_ACTORS line. It did not run to
+completion, so the cook would package a world with no backdrop in it. See $MARBLE_LOG."
+  fi
+  if [ "$MARBLE_ACTORS" -lt 1 ]; then
+    die "the Marble importer placed 0 visual actors. See $MARBLE_LOG."
+  fi
+  if ! grep -qa 'MARBLE_LEVEL_SAVED=1' "$MARBLE_LOG" 2>/dev/null; then
+    die "the Marble layer was placed but the level was not saved (no MARBLE_LEVEL_SAVED=1
+in $MARBLE_LOG). Cooking from here would ship the world WITHOUT the backdrop."
+  fi
+  log "Marble visual layer: $MARBLE_ACTORS actor(s) placed and saved into the level"
+else
+  log "Marble visual layer: off (set WONDERLAND_MARBLE_IMPORT=<slug> to add one)"
 fi
 
 # --------------------------------------------------- 4. compile client + cook/stage/pak

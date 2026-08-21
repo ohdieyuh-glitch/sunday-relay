@@ -89,6 +89,12 @@ fi
 # for. A short sha is not enough here: this number gets quoted in a report and
 # compared against a commit someone pushed.
 wl_verify_source "prepare"
+
+# The checkout was just reset to origin, so anything that is not in git is gone
+# or was never there. Re-link the Marble meshes from persistent storage now,
+# while this is free, rather than discovering they are missing in the middle of
+# a build.
+wl_link_marble_assets
 wl_source_sha > "$WL_RUN/source.sha"
 
 BUILD_DIR="$WL_SRC/wonderland/infra/build"
