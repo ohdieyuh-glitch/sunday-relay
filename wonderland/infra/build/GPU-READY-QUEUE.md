@@ -1,5 +1,65 @@
 # GPU-ready queue
 
+> **2026-08-21, LAST — THE NEXT SESSION STARTS ON CPU, NOT GPU.**
+>
+> The Lightning Studio is **stopped**. Starting it is a founder action (there
+> is no Lightning CLI or API credential in the agent environment — only an SSH
+> key, and that key only works once the Studio is running). Ask for it to be
+> started **on CPU**.
+>
+> Then, in order:
+>
+> 1. **CPU, no GPU, nothing metered** — build the world with the Marble
+>    backdrop in it for the first time:
+>
+>        WONDERLAND_MARBLE_IMPORT=royal-garden-backdrop \
+>          bash wonderland/infra/lightning/cpu-build-all.sh
+>
+>    `prepare.sh` re-links the 141 MB / 330 MB Marble meshes from
+>    `$WL_ROOT/marble-assets` (they are not in git and the checkout is reset to
+>    origin), `build-render.sh` refuses before the compile if the mesh does not
+>    resolve, and step 3b imports the shell AFTER generation — generation
+>    rewrites the map from blank, so an import before it is discarded.
+>
+>    Watch for, in `$WL_OUT/logs/import-marble-world.log`:
+>
+>        MARBLE_VISUAL_ACTORS=1   MARBLE_LEVEL_SAVED=1
+>        scale check: measured ... vs expected ... (worst ratio ~1)
+>        MARBLE_MATERIALS_CHECKED / MARBLE_TWO_SIDED / ..._REPAIRED
+>
+>    The build fails closed on all three: no report line, zero actors, or an
+>    unsaved level each stop the cook.
+>
+> 2. **GPU ON — and it is minutes, not a session.** Two things need the L4 and
+>    nothing else does:
+>
+>        bash wonderland/rendering/probe-cvars.sh          # seconds
+>        SKIP_PREPARE=1 SKIP_BUILD=1 \
+>          bash wonderland/infra/lightning/launch-wonderland.sh
+>
+>    The probe needs a real RHI — `-nullrhi` registers no renderer CVars and
+>    would report every `r.*` name missing. It now asks twice (raised
+>    `LogConsoleResponse` verbosity, plus `Help` writing the engine's own
+>    console registry to a file), because a previous run came back 44-of-44
+>    silent and left every render profile unconfirmed.
+>
+> 3. **What the capture has to answer.** Two unrendered changes are stacked and
+>    the frame settles both:
+>
+>    * the **cream palette** (`stone` 0.88/0.85/0.80, `spire` 0.94/0.90/0.86) —
+>      measured offline only. The world was authored grey and rendered exactly
+>      as authored.
+>    * the **Marble backdrop** — never in a cook. In the packaged log,
+>      `WonderlandWorldProof` reports `MARBLE_ACTORS`,
+>      `MARBLE_TWO_SIDED_COMPONENTS` and any blocking component.
+>
+>    **If the backdrop is missing from the frame, read
+>    `MARBLE_TWO_SIDED_COMPONENTS` before touching placement.** A
+>    single-viewpoint reconstruction is a shell seen from INSIDE: single-sided,
+>    every gate passes and the frame is empty. Do not debug it as a transform.
+>
+> 4. **GPU OFF** the moment the capture and the probe are done.
+
 > **2026-08-21 — READ THIS FIRST, THE STATE BELOW IS OLDER THAN IT LOOKS.**
 >
 > The bring-up is **closed**: WonderlandHub builds, cooks, packages, launches
