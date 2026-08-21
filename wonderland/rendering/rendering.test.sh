@@ -155,6 +155,20 @@ sys.exit(0 if d.get('warning') else 1)"
 check $? "a probe where NOTHING answered warns instead of declaring everything absent"
 
 echo
+echo "-- the draw-cost audit --"
+python3 -c "import ast,io;ast.parse(io.open('$HERE/audit-draw-cost.py',encoding='utf8').read())"
+check $? "audit-draw-cost.py parses"
+# generate-hub-level.py builds at import time when `unreal` is not None, and the
+# stub makes it not None. Forgetting to clear the recorder between the module
+# exec and the explicit build() doubles every figure the audit reports — which
+# is the most convincing kind of wrong: internally consistent, plausible, 2x.
+# It happened while this file was being written.
+grep -q "preview.records\[:\] = \[\]" "$HERE/audit-draw-cost.py"
+check $? "the audit drops the module-level build before measuring"
+grep -q "hub-layout.json" "$HERE/audit-draw-cost.py"
+check $? "the audit builds from the real layout, not a default one"
+
+echo
 echo "-- the measurement instrument --"
 node --check "$HERE/measure.cjs" >/dev/null 2>&1
 check $? "measure.cjs parses"
