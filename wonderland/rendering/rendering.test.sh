@@ -326,6 +326,42 @@ check $? "the proof reports runtime dog facts separately, after BeginPlay"
 ! grep -q "Stroller->BuiltParts == 0" <(sed -n "1,/SECOND REPORT/p" "$PROOF")
 check $? "...and no longer reads BuiltParts before BeginPlay has built anything"
 
+# THE PALETTE MUST BE RE-APPLIED EVERY RUN.
+# The MATERIAL_SPEC loop used to `continue` on an existing asset, and the
+# content directory is persistent — so the first run's values were frozen and no
+# later palette edit could reach the world. MI_stone, MI_rose, MI_gold and
+# MI_spire all sat at BaseColor (1,1,1) on the live L4 and Wonderland streamed
+# white. Same trap as new_level refusing to overwrite an existing .umap.
+! grep -q 'mats\[name\] = eal.load_asset(ipath)' "$GEN"
+check $? "the material loop no longer skips existing instances"
+python3 - "$GEN" <<'PALETTE'
+import io, sys
+src = io.open(sys.argv[1], encoding="utf8").read()
+# COMMENTS STRIPPED. The block explains that it "used to continue on an
+# existing asset", and a bare search read its own explanation as the offence —
+# the fifth time in this work a check has fired on the prose describing why it
+# should pass. Strip first, then look at the code.
+i = src.index('ipath = pkg + "/MI_" + name')
+raw = src[i:i + 2600]
+block = "\n".join(l.split("#")[0] for l in raw.splitlines())
+problems = []
+if "continue" in block.split("set_material_instance_parent")[0]:
+    problems.append("still short-circuits before applying parameters")
+# The parent and BaseColor must be set on BOTH paths, so they follow the if/else.
+if block.index("set_material_instance_parent") > block.index("does_asset_exist") and    "else:" not in block.split("set_material_instance_parent")[0]:
+    problems.append("no else branch — the existing-asset path skips the setters")
+sys.exit(0 if not problems else (print(problems) or 1))
+PALETTE
+check $? "...and applies parent and parameters on both the new and existing paths"
+
+# A TINT OVER NO TEXTURE IS WHITE. The texture pass sets BaseColor to a
+# near-white tint because "the map carries the colour now" — which turns a
+# coloured material white when the map is missing.
+grep -q 'if texs.get("%s_a" % fam) is not None:' "$GEN"
+check $? "the near-white tint is applied ONLY when an albedo map actually bound"
+grep -q "TEXTURE MISSING for" "$GEN"
+check $? "...and a missing map says so instead of silently whitening the surface"
+
 echo
 echo "-- the visual acceptance target --"
 VT="$HERE/../infra/build/verify-visual-target.py"

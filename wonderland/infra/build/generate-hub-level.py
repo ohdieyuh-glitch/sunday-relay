@@ -1101,10 +1101,22 @@ def build_material_library(texs=None):
     mats = {}
     for name, (rgb, met, rough, emi, es) in MATERIAL_SPEC.items():
         ipath = pkg + "/MI_" + name
+        # RE-APPLY THE PALETTE EVERY RUN, whether the asset is new or not.
+        #
+        # This used to `continue` on an existing asset, and the content
+        # directory lives on persistent storage — so the FIRST run's values were
+        # frozen forever and no later edit to MATERIAL_SPEC could ever reach the
+        # world. It is the same trap this project hit with new_level refusing to
+        # overwrite an existing .umap: a generator that silently declines to
+        # regenerate looks like a generator that ran.
+        #
+        # Measured consequence: MI_stone, MI_rose, MI_gold and MI_spire all sat
+        # at BaseColor (1,1,1) on the live L4 while the palette said otherwise,
+        # and Wonderland streamed white.
         if eal.does_asset_exist(ipath):
-            mats[name] = eal.load_asset(ipath)
-            continue
-        mi = tools.create_asset("MI_" + name, pkg, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
+            mi = eal.load_asset(ipath)
+        else:
+            mi = tools.create_asset("MI_" + name, pkg, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
         mel.set_material_instance_parent(mi, master)
         mel.set_material_instance_vector_parameter_value(mi, "BaseColor", unreal.LinearColor(rgb[0], rgb[1], rgb[2], 1))
         mel.set_material_instance_scalar_parameter_value(mi, "Metallic", met)
@@ -1181,11 +1193,23 @@ def build_material_library(texs=None):
                     if tex is not None:
                         mel.set_material_instance_texture_parameter_value(mi, pname, tex)
                 mel.set_material_instance_scalar_parameter_value(mi, "TexScale", scale)
-                # the map carries the colour now, so the instance tint goes to
-                # roughly white — otherwise base colour and albedo multiply and
-                # every textured surface drops a stop and a half.
-                mel.set_material_instance_vector_parameter_value(
-                    mi, "BaseColor", unreal.LinearColor(tint[0], tint[1], tint[2], 1.0))
+                # THE TINT IS ONLY CORRECT IF A MAP ACTUALLY BOUND.
+                #
+                # "the map carries the colour now, so the instance tint goes to
+                # roughly white" is true — and it turns a coloured material into
+                # a WHITE one when the albedo texture is missing, because the
+                # tint is applied unconditionally and there is then nothing for
+                # it to multiply. That is what rendered the live L4 world white:
+                # the palette colour was replaced by a near-white tint over no
+                # texture at all.
+                if texs.get("%s_a" % fam) is not None:
+                    mel.set_material_instance_vector_parameter_value(
+                        mi, "BaseColor", unreal.LinearColor(tint[0], tint[1], tint[2], 1.0))
+                else:
+                    unreal.log_warning(
+                        "TEXTURE MISSING for %s (family %s): keeping the palette "
+                        "base colour instead of tinting to white over nothing."
+                        % (nm, fam))
                 # authored relief replaces the procedural stand-in on these
                 mel.set_material_instance_scalar_parameter_value(mi, "DetailAmp", 0.06)
                 eal.save_asset(mi.get_path_name())
