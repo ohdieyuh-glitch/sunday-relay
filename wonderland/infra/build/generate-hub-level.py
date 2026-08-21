@@ -3110,7 +3110,18 @@ def build(layout):
                 _part("sphere", x + math.cos(ang) * rr, y + math.sin(ang) * rr, zz + th * 40.0,
                       th * 0.8, th * 0.7, th * 0.3, "moss", "%s_m%d" % (label, k))
 
-    def kit_plaza(x, y):
+    def kit_plaza(x, y, circle=None):
+        # THE CIRCLE IS NOT NECESSARILY THE PLAZA'S CENTRE, and it used not to be
+        # anywhere near the Dog. Measured off this generator: the rings sat at
+        # (0, 0) with an outermost radius of 320 uu and the gold studs at 300,
+        # while HERO_DOG stands at (-260, -260) — 368 uu out. The Dog was
+        # standing 48 uu BEYOND the rim of its own arcane circle, while the
+        # comment beside HERO_DOG said "further back onto its own arcane circle
+        # — which is the beat, the Dog standing on its Relay identity".
+        #
+        # That circle is the single most identifying element of the founder's
+        # reference. It goes under the Dog.
+        ccx, ccy = circle if circle else (x, y)
         # The Dog's Relay-identity stage: a glowing VIOLET arcane circle of concentric
         # emissive rings (each a bright disc capped by a plaza disc to leave a ring)
         # with radiating rune spokes + gold glyph studs — it should genuinely radiate.
@@ -3214,8 +3225,13 @@ def build(layout):
         for _pb in range(72):
             _h = (_pb * 19349663) ^ 0xC0BB1E
             _pa = (_h % 628) / 100.0
-            # a ring of collected petals just outside the arcane circle, its
-            # radius wandering so the drift is uneven the way a real one is
+            # A PLAZA-WIDE DRIFT, and the comment here used to call it "a ring
+            # of collected petals just outside the arcane circle". It is not:
+            # this radius is 980-1280 uu and the circle's outermost ring is 320.
+            # It stays where it is — a wide drift across the paving is a real
+            # thing and looks like one — and it stays on the PLAZA centre rather
+            # than following the circle, because that is what its radius is
+            # tuned for. Only the description was wrong.
             _pr = 980.0 + ((_h >> 5) % 100) / 100.0 * 300.0
             _px, _py = x + math.cos(_pa) * _pr, y + math.sin(_pa) * _pr
             _part("cube", _px, _py, 5.6, 0.12 + (_h % 3) * 0.03,
@@ -3232,16 +3248,16 @@ def build(layout):
                  (16.6, 3.15, "plaza"), (18.0, 2.5, "arcane"), (18.6, 2.25, "plaza"),
                  (20.0, 1.5, "arcane")]
         for j, (rz, rr, mat) in enumerate(rings):
-            _part("cylinder", x, y, rz, rr, rr, 0.10, mat, "ArcaneRing%d" % j)
+            _part("cylinder", ccx, ccy, rz, rr, rr, 0.10, mat, "ArcaneRing%d" % j)
         # radiating rune spokes (thin emissive bars from centre to rim)
         for i in range(12):
             a = (i / 12.0) * 2.0 * math.pi
-            _part("cube", x + math.cos(a) * 190.0, y + math.sin(a) * 190.0, 7.5,
+            _part("cube", ccx + math.cos(a) * 190.0, ccy + math.sin(a) * 190.0, 7.5,
                   3.8, 0.12, 0.06, "arcane", "Rune%d" % i, rot=(0.0, math.degrees(a), 0.0))
         # gold glyph studs around the rim
         for i in range(8):
             a = (i / 8.0) * 2.0 * math.pi + 0.26
-            _part("cylinder", x + math.cos(a) * 300.0, y + math.sin(a) * 300.0, 20.0,
+            _part("cylinder", ccx + math.cos(a) * 300.0, ccy + math.sin(a) * 300.0, 20.0,
                   0.26, 0.26, 0.42, "magic_gold", "Glyph%d" % i)
         # DRIFTING CROSS-SPARKS. Small emissive plus-signs hovering over the
         # ring, on the Bob world-position-offset so they rise and fall. In the
@@ -3250,11 +3266,11 @@ def build(layout):
         for i in range(26):
             a = i * 2.39996
             rr = 90.0 + 240.0 * (((i * 29) % 11) / 11.0)
-            sx, sy = x + math.cos(a) * rr, y + math.sin(a) * rr
+            sx, sy = ccx + math.cos(a) * rr, ccy + math.sin(a) * rr
             sz = 26.0 + 66.0 * (((i * 17) % 7) / 7.0)
             _part("cube", sx, sy, sz, 0.22, 0.05, 0.05, "arcane", "Spark%dH" % i)
             _part("cube", sx, sy, sz, 0.05, 0.05, 0.22, "arcane", "Spark%dV" % i)
-        _part("cylinder", x, y, 8.0, 1.2, 1.2, 0.14, "magic_gold", "ArcaneCore")
+        _part("cylinder", ccx, ccy, 8.0, 1.2, 1.2, 0.14, "magic_gold", "ArcaneCore")
 
     def kit_float_key(x, y, z, label):
         # An ORNATE key, because these hang in open sky where silhouette is the
@@ -4108,8 +4124,11 @@ def build(layout):
     if LOOK["heroLights"]:
         _lum, _rad = LOOK["heroLightLumens"], LOOK["heroLightRadius"]
         for _hx, _hy, _hz, _hcol, _hs, _hlabel in (
-            # the circle the Dog stands on — violet, low, throwing UP onto it
-            (0.0, 0.0, 150.0, (176, 108, 255), 1.00, "HeroLight_Arcane"),
+            # the circle the Dog stands on — violet, low, throwing UP onto it.
+            # HERO_DOG, not (0, 0): the light was at the plaza centre while the
+            # Dog stood 368 uu away, so the one practical whose whole job is to
+            # put violet on the hero was pooling on empty paving.
+            (HERO_DOG[0], HERO_DOG[1], 150.0, (176, 108, 255), 1.00, "HeroLight_Arcane"),
             # the Golden Build Gate — warm gold, at the height of the arch
             (-1050.0, 400.0, 420.0, (255, 206, 138), 0.85, "HeroLight_Gate"),
             # the rose arch on the sight line — a soft warm pink under the span
@@ -4728,7 +4747,7 @@ def build(layout):
 
     # Arrival plaza + glowing arcane circle (the Dog's home / Relay identity) in
     # front of the arrival camera, plus a few floating magical keys for whimsy.
-    kit_plaza(0.0, 0.0)
+    kit_plaza(0.0, 0.0, circle=HERO_DOG)
     # THE NORTH GARDENS. Measured on the hero frame, bare lawn covered 22% of it
     # and paving 1.6% — and extending the boulevard barely moved either, because
     # the lawn is not the corridor, it is the open ground either SIDE of it

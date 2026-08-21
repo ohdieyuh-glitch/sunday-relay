@@ -387,11 +387,16 @@ def main(argv=None):
             # GREEN IS STRUCK OUT OF THE READING, not silently averaged in: the
             # reference's topiary is entirely in shadow, so its 0.0% is a fact
             # about the lighting and not about the palette.
+            caveat = palette_mod.LIGHT_DOMINATED.get(f)
             excluded = (f == "green_foliage")
+            flag = ""
+            if caveat:
+                flag = ('<span class="flag" title="%s">%s</span>'
+                        % (caveat.replace('"', "&quot;"),
+                           "not comparable" if excluded else "mostly light"))
             return ('<tr%s><td>%s%s</td><td>%.1f%%</td><td>%.1f%%</td><td>%s</td></tr>'
                     % (' class="excluded"' if excluded else "",
-                       f.replace("_", " "),
-                       '<span class="flag">not comparable</span>' if excluded else "",
+                       f.replace("_", " "), flag,
                        ours_mix[f], ref_mix[f],
                        "—" if excluded else "%+.1f" % delta))
         mix_rows = "".join(mix_row(f) for f in palette_mod.CHROMATIC)
@@ -417,7 +422,14 @@ def main(argv=None):
                          '<div class="gaps">%s</div>'
                          '<p class="foot">Percentage points of the frame\'s COLOURED '
                          'pixels, ours minus the reference. Green is left out — see '
-                         'the hue-mix table for why.</p></div>' % "".join(cards))
+                         'the hue-mix table for why.</p>'
+            '<p class="foot"><b>Violet is a lighting gap, not a paint gap.</b> '
+            'Sampling the reference&rsquo;s plaza in three places: the same '
+            'flagstone reads violet beside the arcane circle, pink-violet just '
+            'above it, and near-black away from it. The circle floods the scene; '
+            'the stone is not violet. Closing this by painting surfaces violet '
+            'would move the number and make the world worse.</p></div>'
+            % "".join(cards))
         mix_html = (
             '<div class="card"><h2>Hue mix among coloured pixels</h2>'
             '<div class="scroll"><table>'
@@ -426,9 +438,12 @@ def main(argv=None):
             '<p class="foot">Dark, cream and neutral-stone pixels are excluded and the '
             'rest renormalised to 100%%. This is the comparison that mostly survives the '
             'lighting difference, because shadow changes a pixel\'s value and not its hue. '
-            '<b>Green is the exception and should not be read here</b>: the reference\'s '
-            'topiary is entirely in shadow, so it measures 0%% green and the delta on that '
-            'row is an artefact. Pink, violet and gold are not affected that way.</p></div>'
+            '<b>Two rows carry a caveat.</b> Green is not comparable at all: the '
+            'reference\'s topiary is entirely in shadow, so it measures 0%% and that '
+            'says nothing about its palette. Violet is comparable but is mostly '
+            'LIGHT rather than paint — the reference\'s plaza reads violet beside '
+            'the arcane circle and near-black away from it, one stone under two '
+            'lighting conditions. Pink and gold carry no such caveat.</p></div>'
             % mix_rows)
 
     body = HTML.substitute(

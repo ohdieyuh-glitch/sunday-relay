@@ -1674,6 +1674,23 @@ else
   ok "the batch no longer claims a collision authority that does not exist"
 fi
 
+echo "== the Dog stands on its arcane circle =="
+# The founder's art bible calls the violet circle beneath the Dog "the single
+# most identifying element of the shot". Measured off the generator, the rings
+# were at (0,0) with a 320 uu rim while HERO_DOG stood 368 uu away — the Dog was
+# outside its own circle, and the source comment said the opposite.
+MOTIF="$HERE/../build/verify-hero-motif.py"
+if python3 "$MOTIF" >/dev/null 2>&1; then ok "verify-hero-motif passes on the current tree"
+else bad "the Dog is not on its arcane circle: $(python3 "$MOTIF" 2>&1 | tail -3)"; fi
+grep -q 'verify-hero-motif.py' "$HERE/prepare.sh" \
+  && ok "…and prepare.sh runs it before a build" \
+  || bad "the motif gate is not in the pre-build gates"
+if sed 's/#.*//' "$MOTIF" | grep -qE "HERO_DOG\s*=\s*\(-?[0-9]"; then
+  bad "verify-hero-motif hardcodes HERO_DOG instead of parsing it"
+else
+  ok "…and it parses every number out of the generator rather than restating them"
+fi
+
 echo "== a captured frame carries the build that produced it =="
 # This project has already compared two captures that turned out to be the same
 # binary. A PNG that cannot be attributed to a commit is a picture, not evidence.

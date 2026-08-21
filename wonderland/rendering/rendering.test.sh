@@ -413,8 +413,24 @@ JSON
   abs_delta=$(printf '%s' "$page" | sed -n '/Colour families/,/<\/table>/p' | grep -c '[+-][0-9]\+\.[0-9]\+' || true)
   [ "${abs_delta:-0}" -eq 0 ]
   check $? "the preview page shows no delta on the absolute palette table"
-  case "$page" in *"Green is the exception"*) ok "…and names green as the row not to read" ;;
-    *) bad "the hue-mix caveat about green is missing" ;; esac
+  # KEYED ON THE MODULE, not on a sentence. This check has already fired once on
+  # prose that was rewritten while the property it tests stayed true — which is
+  # a check testing its own wording.
+  python3 - "$PB" "$TMP/page.html" <<'CAVEAT'
+import importlib.util as u, io, sys
+spec = u.spec_from_file_location("palette", sys.argv[1] + "/palette.py")
+m = u.module_from_spec(spec); spec.loader.exec_module(m)
+page = io.open(sys.argv[2], encoding="utf8").read()
+missing = [f for f in m.LIGHT_DOMINATED if f.split("_")[0] not in page.lower()]
+if "green_foliage" not in m.LIGHT_DOMINATED or "violet_purple" not in m.LIGHT_DOMINATED:
+    print("the light-dominated set no longer names both green and violet")
+    sys.exit(1)
+if missing:
+    print("the page carries no caveat for:", missing)
+    sys.exit(1)
+sys.exit(0)
+CAVEAT
+  check $? "every light-dominated family is caveated on the page, green and violet both"
 else
   echo "  --   ffmpeg or reference absent; the page test did not run"
 fi

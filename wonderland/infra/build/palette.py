@@ -113,3 +113,31 @@ def chromatic_mix(counts):
 def chromatic_mix_from_pct(pct):
     """Same, from percentages rather than raw counts."""
     return chromatic_mix(dict((f, pct.get(f, 0.0)) for f in FAMILIES))
+
+
+# HUES THE REFERENCE GETS FROM LIGHT RATHER THAN FROM PAINT, and how far to
+# trust a delta on each. Measured on the founder's reference, sampling the SAME
+# flagstone in three places:
+#
+#     inside the arcane circle   rgb(127, 77,145)  chroma 68  hue 284  violet
+#     plaza just above it        rgb(185,147,164)  chroma 38  hue 333  pink
+#     plaza far left             rgb( 43, 33, 29)  chroma 14  hue  17  DARK
+#     plaza far right            rgb( 34, 28, 23)  chroma 11  hue  27  DARK
+#
+# One stone, three readings. The reference's violet is the circle's light
+# flooding the plaza, not violet paint — and its far paving is nearly black
+# because nothing is lighting it. So a violet deficit measured against it must
+# NOT be closed by painting surfaces violet; the lever is the light.
+#
+# Green is worse: the reference's topiary is entirely in shadow and reads 0.0%,
+# which says nothing about the palette at all.
+LIGHT_DOMINATED = {
+    "green_foliage": (
+        "not comparable — the reference's topiary is entirely in shadow and "
+        "measures 0.0%, which is a fact about its lighting and not its palette"),
+    "violet_purple": (
+        "read with care — most of the reference's violet is the arcane circle's "
+        "LIGHT flooding the plaza, not violet surfaces. Measured: the same "
+        "flagstone reads violet beside the circle and near-black away from it. "
+        "Close this gap with light, never with paint"),
+}
