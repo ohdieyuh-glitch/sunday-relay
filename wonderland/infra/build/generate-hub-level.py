@@ -290,6 +290,27 @@ def set_prop(actor, cpp_name, value):
 # look is a tuned solid-PBR instance, cooked from /Game/Wonderland/Materials. This
 # is what turns the engine checker graybox into a warm-gold, jewel-toned world.
 # name -> (baseRGB, metallic, roughness, emissiveRGB, emissiveStrength)
+#
+# THE ARCHITECTURE PALETTE IS CREAM, NOT GREY, AND THAT WAS THE LAST CAUSE OF
+# THE COLOURLESS WORLD.
+#
+# After the material pipeline was fixed the live L4 render was still a
+# white-plastic model. Nothing was losing the colour: `stone` was (0.44,0.42,0.40)
+# — a NEUTRAL GREY — and it is the single largest architecture material in the
+# hero frame at 11.5% of owned pixels, with plaza and cobble brown-grey behind
+# it. Under bright light a 0.44 neutral albedo correctly tonemaps to light grey.
+# The world was authored grey and was rendering exactly as authored.
+#
+# The founder's reference is a PALE CREAM STONE city with pink and lilac roofs.
+# stone, plaza and cobble are cream now — and CREAM MEANS LOW CHROMA, not just
+# warm. The first attempt used (0.82,0.75,0.63), which is a warm TAN: the grey
+# collapsed from 14.5% of the frame to 1.8% and went straight into the
+# warm_timber bucket instead of cream, because chroma 0.19 is far above the 0.10
+# that reads as an off-white. These values sit at chroma ~0.08. cobble2 stays darker so the "pale and
+# dark checkered flagstone" the reference names still reads as a checker; and
+# spire_far leans lilac for the distance. verify-visual-target.py measures the
+# result — palette_cream, palette_pink and palette_violet are the criteria this
+# is answering.
 MATERIAL_SPEC = {
     # Pure metal mirrors its surroundings, and around here the surroundings
     # are grass and sky — so the most golden object in the world rendered
@@ -302,9 +323,9 @@ MATERIAL_SPEC = {
     # rubbed; one flat tone across every face is the "toy" read.
     "brass_deep":  ((0.42, 0.30, 0.13), 0.92, 0.52, (0.05, 0.03, 0.00), 0.10),
     "float_glow":  ((1.00, 0.80, 0.40), 1.0, 0.24, (1.00, 0.72, 0.28), 1.9),
-    "cobble":      ((0.44, 0.37, 0.31), 0.0, 0.80, (0, 0, 0), 0.0),
-    "cobble2":     ((0.50, 0.43, 0.35), 0.0, 0.82, (0, 0, 0), 0.0),
-    "plaza":       ((0.47, 0.40, 0.32), 0.0, 0.76, (0, 0, 0), 0.0),
+    "cobble":      ((0.80, 0.77, 0.72), 0.0, 0.80, (0, 0, 0), 0.0),
+    "cobble2":     ((0.64, 0.62, 0.59), 0.0, 0.82, (0, 0, 0), 0.0),
+    "plaza":       ((0.87, 0.84, 0.79), 0.0, 0.76, (0, 0, 0), 0.0),
     "moss":        ((0.20, 0.40, 0.16), 0.0, 0.72, (0, 0, 0), 0.0),
     "ground":      ((0.17, 0.30, 0.14), 0.0, 0.86, (0, 0, 0), 0.0),
     # A MEADOW IS NOT ONE GREEN. Real turf is patchy: sun-bleached where it is
@@ -313,7 +334,7 @@ MATERIAL_SPEC = {
     # as grass rather than as a coloured plane, and they cost two materials.
     "ground_sun":  ((0.29, 0.40, 0.17), 0.0, 0.88, (0, 0, 0), 0.0),
     "ground_shade":((0.11, 0.23, 0.15), 0.0, 0.84, (0, 0, 0), 0.0),
-    "trunk":       ((0.30, 0.20, 0.13), 0.0, 0.78, (0, 0, 0), 0.0),
+    "trunk":       ((0.38, 0.28, 0.22), 0.0, 0.78, (0, 0, 0), 0.0),
     "foliage":     ((0.23, 0.46, 0.22), 0.0, 0.72, (0, 0, 0), 0.0),
     "foliage_hi":  ((0.38, 0.57, 0.38), 0.0, 0.66, (0, 0, 0), 0.0),
     # THE RANGE THE ADDENDUM ASKS FOR: deep forest for the shadowed core of
@@ -332,7 +353,7 @@ MATERIAL_SPEC = {
     "mush_purple": ((0.44, 0.20, 0.76), 0.0, 0.30, (0.13, 0.02, 0.22), 0.35),
     "spire":       ((0.94, 0.90, 0.86), 0.0, 0.40, (0, 0, 0), 0.0),
     "spire_pink":  ((0.98, 0.74, 0.82), 0.0, 0.34, (0, 0, 0), 0.0),
-    "spire_blue":  ((0.74, 0.82, 0.98), 0.0, 0.34, (0, 0, 0), 0.0),
+    "spire_blue":  ((0.76, 0.68, 0.98), 0.0, 0.34, (0, 0, 0), 0.0),
     "spire_teal":  ((0.66, 0.92, 0.88), 0.0, 0.34, (0, 0, 0), 0.0),
     "porcelain":   ((0.96, 0.95, 0.93), 0.0, 0.10, (0, 0, 0), 0.0),
     "water":       ((0.16, 0.42, 0.56), 0.0, 0.05, (0.01, 0.04, 0.07), 0.15),
@@ -362,7 +383,7 @@ MATERIAL_SPEC = {
     "dog_body":    ((0.985, 0.985, 0.995), 0.0, 0.34, (0.02, 0.02, 0.03), 0.10),
     "dog_visor":   ((0.02, 0.02, 0.03), 0.1, 0.12, (0, 0, 0), 0.0),
     "dog_eye":     ((1.00, 0.80, 0.22), 0.0, 0.28, (1.00, 0.74, 0.18), 5.0),
-    "stone":       ((0.44, 0.42, 0.40), 0.0, 0.90, (0, 0, 0), 0.0),
+    "stone":       ((0.88, 0.85, 0.80), 0.0, 0.90, (0, 0, 0), 0.0),
     "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.35, (0, 0, 0), 0.0),
     "dog_gray":    ((0.55, 0.57, 0.60), 0.0, 0.40, (0, 0, 0), 0.0),
     "dog_tan":     ((0.82, 0.66, 0.42), 0.0, 0.40, (0, 0, 0), 0.0),
@@ -374,7 +395,7 @@ MATERIAL_SPEC = {
     "meadow_far":  ((0.46, 0.53, 0.45), 0.0, 0.94, (0, 0, 0), 0.0),
     # Distant towers, deliberately pale and low-contrast so the skyline recedes
     # behind the hero landmarks instead of competing with them.
-    "spire_far":   ((0.88, 0.86, 0.94), 0.0, 0.62, (0, 0, 0), 0.0),
+    "spire_far":   ((0.82, 0.70, 0.96), 0.0, 0.62, (0, 0, 0), 0.0),
     # Rose and pink rooflines — the reference's skyline is warm, not gold.
     "roof_rose":   ((0.78, 0.38, 0.44), 0.0, 0.46, (0.04, 0.0, 0.01), 0.10),
     "roof_pink":   ((0.92, 0.46, 0.62), 0.0, 0.42, (0, 0, 0), 0.0),
