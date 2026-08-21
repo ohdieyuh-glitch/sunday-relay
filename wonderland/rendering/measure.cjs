@@ -70,6 +70,52 @@ const fs = require('fs');
   try { await page.mouse.click(640, 360); } catch (_) {}
   await page.waitForTimeout(SETTLE_MS);
 
+  // THE VIDEO ELEMENT IS THE ROBUST INSTRUMENT, NOT THE PEER CONNECTION.
+  //
+  // Wrapping RTCPeerConnection depends on winning a race with the page's own
+  // script and on the connection living on the main thread. It lost that race
+  // on the real PS2 frontend and reported "no RTCPeerConnection was created",
+  // on a stream that was demonstrably delivering frames — shot.cjs was
+  // capturing them at the same moment.
+  //
+  // getVideoPlaybackQuality() is on the element the founder actually watches,
+  // needs no interception, and counts exactly what arrived and was decoded.
+  const vq = await page.evaluate(async (seconds) => {
+    const v = document.querySelector('video');
+    if (!v) return { error: 'no <video> element on the player page' };
+    const read = () => {
+      const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null;
+      return {
+        t: performance.now(),
+        total: q ? q.totalVideoFrames : v.webkitDecodedFrameCount,
+        dropped: q ? q.droppedVideoFrames : v.webkitDroppedFrameCount,
+        w: v.videoWidth, h: v.videoHeight,
+      };
+    };
+    const first = read();
+    const series = [first];
+    const deadline = Date.now() + seconds * 1000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 1000));
+      series.push(read());
+    }
+    const last = series[series.length - 1];
+    const secs = (last.t - first.t) / 1000;
+    const perSecond = [];
+    for (let i = 1; i < series.length; i++) {
+      const dt = (series[i].t - series[i - 1].t) / 1000;
+      if (dt > 0) perSecond.push((series[i].total - series[i - 1].total) / dt);
+    }
+    return {
+      seconds: secs,
+      frames: last.total - first.total,
+      dropped: last.dropped - first.dropped,
+      fps_mean: secs > 0 ? (last.total - first.total) / secs : null,
+      per_second: perSecond,
+      resolution: last.w + 'x' + last.h,
+    };
+  }, SECONDS);
+
   const samples = await page.evaluate(async (seconds) => {
     const out = [];
     const pcs = window.__wlPCs || [];
@@ -112,14 +158,19 @@ const fs = require('fs');
 
   await browser.close();
 
-  if (samples.error) {
-    fs.writeFileSync(OUT, JSON.stringify({ error: samples.error }, null, 2));
-    console.error('MEASUREMENT FAILED: ' + samples.error);
+  if (vq.error) {
+    fs.writeFileSync(OUT, JSON.stringify({ error: vq.error }, null, 2));
+    console.error('MEASUREMENT FAILED: ' + vq.error);
     process.exit(4);
   }
+  // The peer-connection stats are a BONUS now. Their absence is a note, not a
+  // failure, because the video element already answered the question.
+  const pcStats = samples && samples.error ? null : samples;
 
-  const video = samples.samples.filter((s) => s.framesPerSecond !== undefined);
-  const codecs = [...new Set(samples.samples.filter((s) => s.codec).map((s) => s.codec))];
+  const video = (pcStats && pcStats.samples ? pcStats.samples : [])
+    .filter((s) => s.framesPerSecond !== undefined);
+  const codecs = [...new Set((pcStats && pcStats.samples ? pcStats.samples : [])
+    .filter((s) => s.codec).map((s) => s.codec))];
   // Bitrate from the byte counter across the window, not from an instantaneous
   // field: bytesReceived is monotonic and the difference over a known interval
   // is the only honest way to state a rate.
@@ -133,9 +184,20 @@ const fs = require('fs');
   fps.sort((x, y) => x - y);
   const pct = (p) => (fps.length ? fps[Math.min(fps.length - 1, Math.floor(fps.length * p))] : null);
 
+  const sorted = (vq.per_second || []).slice().sort((a, b) => a - b);
+  const q = (p) => (sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] : null);
   const summary = {
     url: URL_,
     seconds: SECONDS,
+    // The primary measurement, from the element the founder watches.
+    delivered: {
+      fps_mean: vq.fps_mean, fps_min: sorted[0] ?? null,
+      fps_p50: q(0.5), fps_p95: q(0.95),
+      frames: vq.frames, dropped: vq.dropped,
+      resolution: vq.resolution, window_seconds: vq.seconds,
+      per_second: vq.per_second,
+    },
+    peer_connection_stats_available: !!(pcStats && pcStats.samples),
     samples: video.length,
     codec: codecs,
     resolution: video.length ? `${video[video.length - 1].frameWidth}x${video[video.length - 1].frameHeight}` : null,
@@ -161,10 +223,14 @@ const fs = require('fs');
     raw: video,
   };
   fs.writeFileSync(OUT, JSON.stringify(summary, null, 2));
-  console.log(`fps p50 ${summary.fps_p50}  min ${summary.fps_min}  ` +
-              `${summary.resolution}  ${Math.round(summary.bitrate_kbps || 0)} kbps  ` +
-              `codec ${codecs.join(',') || '?'}`);
-  if (summary.fps_p50 === null) {
+  const d = summary.delivered;
+  console.log(`DELIVERED fps mean ${d.fps_mean === null ? '?' : d.fps_mean.toFixed(1)} ` +
+              `min ${d.fps_min === null ? '?' : d.fps_min.toFixed(1)} ` +
+              `p50 ${d.fps_p50 === null ? '?' : d.fps_p50.toFixed(1)}  ` +
+              `${d.resolution}  frames ${d.frames} dropped ${d.dropped}` +
+              (summary.bitrate_kbps ? `  ${Math.round(summary.bitrate_kbps)} kbps` : '') +
+              (codecs.length ? `  codec ${codecs.join(',')}` : ''));
+  if (!d.frames) {
     console.error('no frames were decoded — the stream delivered nothing to measure');
     process.exit(4);
   }
