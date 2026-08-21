@@ -193,6 +193,80 @@ d=json.load(io.open('$TMP/out2.json',encoding='utf8'))
 sys.exit(0 if d.get('warning') else 1)"
 check $? "a probe where NOTHING answered warns instead of declaring everything absent"
 
+echo "-- the second evidence channel: the engine's own registry --"
+# A real probe run came back 44-of-44 SILENT: the echo a console variable prints
+# goes out under LogConsoleResponse at Display verbosity and never reached the
+# packaged log. So the launcher also asks the engine to write its console
+# registry to a FILE, which no log verbosity can filter, and the parser reads
+# whichever channel actually answered — recording WHICH, because "registered"
+# and "we saw its value" are different strengths of claim.
+cat > "$TMP/registry.html" <<'HTML'
+<html><body><table>
+<tr><td>r.Silent.One</td><td>some help text</td></tr>
+<tr><td>r.Absent.One</td><td>listed here but the engine denied it</td></tr>
+<tr><td>r.Unrelated.Thing</td><td>not asked about</td></tr>
+</table></body></html>
+HTML
+python3 "$HERE/parse-cvar-probe.py" "$TMP/names.txt" "$TMP/probe.log" \
+        "$TMP/out3.json" "$TMP/registry.html" >/dev/null 2>&1
+check $? "the parser accepts a registry file"
+python3 - "$TMP/out3.json" <<'PY'
+import io, json, sys
+d = json.load(io.open(sys.argv[1], encoding="utf8"))
+v, e = d["verdicts"], d["evidence"]
+problems = []
+if v.get("r.Silent.One") != "present" or e.get("r.Silent.One") != "registry":
+    problems.append(("silent name rescued by the registry", v.get("r.Silent.One"), e.get("r.Silent.One")))
+if v.get("r.Present.One") != "present" or e.get("r.Present.One") != "echo":
+    problems.append(("echo keeps its own evidence", v.get("r.Present.One"), e.get("r.Present.One")))
+if v.get("r.Absent.One") != "absent":
+    problems.append(("an explicit denial outranks the registry", v.get("r.Absent.One")))
+if d.get("registry_entries") is None:
+    problems.append(("registry_entries not recorded",))
+sys.exit(0 if not problems else (print(problems) or 1))
+PY
+check $? "the registry rescues SILENT names, and an explicit denial still outranks it"
+python3 - "$TMP/out3.json" <<'PY'
+import io, json, sys
+d = json.load(io.open(sys.argv[1], encoding="utf8"))
+sys.exit(0 if d["evidence_counts"]["registry"] == 1 and d["evidence_counts"]["echo"] == 2 else
+         (print(d["evidence_counts"]) or 1))
+PY
+check $? "...and every verdict records which channel answered it"
+
+# The case that actually happened: the log is useless and the registry carries
+# everything. That is a real answer, but a weaker one, and it must say so.
+python3 "$HERE/parse-cvar-probe.py" "$TMP/names.txt" "$TMP/empty.log" \
+        "$TMP/out4.json" "$TMP/registry.html" >/dev/null 2>&1
+python3 - "$TMP/out4.json" <<'PY'
+import io, json, sys
+d = json.load(io.open(sys.argv[1], encoding="utf8"))
+ok = (d["evidence_counts"]["echo"] == 0
+      and d["counts"]["present"] == 2
+      and "registry" in (d.get("warning") or "")
+      and "no current VALUE" in (d.get("warning") or ""))
+sys.exit(0 if ok else (print(d.get("warning"), d["counts"], d["evidence_counts"]) or 1))
+PY
+check $? "a registry-only probe answers, and says no VALUE was ever observed"
+
+# No registry at all is a THIRD state, and must not be confused with an empty one.
+python3 "$HERE/parse-cvar-probe.py" "$TMP/names.txt" "$TMP/probe.log" \
+        "$TMP/out5.json" "$TMP/does-not-exist.html" >/dev/null 2>&1
+python3 - "$TMP/out5.json" <<'PY'
+import io, json, sys
+d = json.load(io.open(sys.argv[1], encoding="utf8"))
+sys.exit(0 if d.get("registry_entries") is None and d["verdicts"]["r.Silent.One"] == "silent"
+         else (print(d.get("registry_entries"), d["verdicts"]) or 1))
+PY
+check $? "a registry that was never written leaves SILENT as silent"
+
+grep -q 'LogConsoleResponse' "$HERE/probe-cvars.sh"
+check $? "the probe raises the verbosity of the category that carries the answer"
+grep -q 'ConsoleHelp.html' "$HERE/probe-cvars.sh"
+check $? "...and looks for the registry the engine may have written"
+grep -q "newermt" "$HERE/probe-cvars.sh"
+check $? "...only accepting one THIS run wrote, never a stale file"
+
 echo
 echo "-- the draw-cost audit --"
 python3 -c "import ast,io;ast.parse(io.open('$HERE/audit-draw-cost.py',encoding='utf8').read())"

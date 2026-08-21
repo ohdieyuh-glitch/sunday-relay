@@ -61,7 +61,14 @@ if [ ! -x "$APP" ]; then
 fi
 
 LOG="$(mktemp -d)/probe.log"
-EXEC="$(paste -sd, "$NAMES_FILE"),quit"
+# `Help` FIRST. Typing a console variable's name echoes its value through
+# LogConsoleResponse at Display verbosity — and a real probe run came back with
+# 44 of 44 names `silent`, because that never reached the packaged log. `Help`
+# asks the engine to write its own console registry to a FILE instead, which no
+# log verbosity setting can filter. Whether this build writes one is NOT assumed
+# here: the file is searched for afterwards and its absence is reported, not
+# papered over.
+EXEC="Help,$(paste -sd, "$NAMES_FILE"),quit"
 # A HARD CEILING. The exec list ends in `quit`, but a build that dies before it
 # reaches a console, or one that decides to wait for a Pixel Streaming
 # connection that will never come, hangs here forever — on a GPU that is being
@@ -72,8 +79,14 @@ PROBE_TIMEOUT="${WL_PROBE_TIMEOUT:-120}"
 # variables, so a probe under it reports every r.* name as missing. That is a
 # wrong answer delivered quickly, which is worse than a slow right one.
 set +e
+# -LogCmds RAISES THE VERBOSITY OF THE CATEGORY THAT CARRIES THE ANSWER.
+# The echo a console variable prints goes out under LogConsoleResponse, and the
+# previous probe's total silence is consistent with that category being filtered
+# out of the packaged log. Asking for it explicitly costs nothing and is the
+# cheapest possible explanation to eliminate.
 timeout "$PROBE_TIMEOUT" \
   "$APP" -RenderOffscreen -Unattended -stdout -FullStdOutLogOutput \
+         -LogCmds="LogConsoleResponse Verbose, LogConsoleManager Verbose" \
          -ExecCmds="$EXEC" -ResX=320 -ResY=240 >"$LOG" 2>&1
 APP_RC=$?
 set -e
@@ -84,5 +97,23 @@ if [ "$APP_RC" = "124" ]; then
   echo "reading whatever it logged before that; check the verdicts." >&2
 fi
 
-python3 "$HERE/parse-cvar-probe.py" "$NAMES_FILE" "$LOG" "$OUT"
+# THE SECOND CHANNEL. Find the registry the engine may have written, without
+# claiming to know where it lands: search the packaged tree and the newest match
+# wins, so a stale file from an earlier probe cannot be mistaken for this run's.
+APP_DIR="$(dirname "$APP")"
+REGISTRY=""
+for root in "$APP_DIR" "$HOME/.config/Epic" "$HOME/Documents/Unreal Engine"; do
+  [ -d "$root" ] || continue
+  found="$(find "$root" -name 'ConsoleHelp.html' -type f -newermt '-10 minutes' \
+             -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)"
+  if [ -n "$found" ]; then REGISTRY="$found"; break; fi
+done
+if [ -n "$REGISTRY" ]; then
+  echo "console registry written by the engine: $REGISTRY"
+else
+  echo "no ConsoleHelp.html was written by this build — the registry channel is" >&2
+  echo "unavailable and every verdict rests on the log echo alone." >&2
+fi
+
+python3 "$HERE/parse-cvar-probe.py" "$NAMES_FILE" "$LOG" "$OUT" "$REGISTRY"
 echo "wrote $OUT"
