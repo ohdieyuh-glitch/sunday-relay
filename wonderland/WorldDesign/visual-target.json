@@ -1,0 +1,94 @@
+{
+  "schema": "wonderland.visual-target/1",
+  "camera": "HeroCam0 / cam_arrival_hero — the founder's arrival composition",
+  "authority": "HUMAN. Every criterion below is a structural property that can be measured. NONE of them is a claim about how close the frame is to the founder's reference image; that judgement is the founder's and no number here substitutes for it.",
+
+  "_how_targets_were_set": [
+    "From the founder's written description of the reference, decomposed in",
+    "docs/relay/WONDERLAND_ART_DIRECTION.md, and NOT from the image itself —",
+    "the image is not in this repository. The palette bands in particular are a",
+    "FIRST PROPOSAL. They say 'pale stone dominant, pink and violet present,",
+    "gold as an accent, lush but not a forest', which is what the reference is",
+    "described as. If the founder looks at the frame and disagrees, the numbers",
+    "here are what should change — not the measurement."
+  ],
+  "_measured_at_2026_08_21": {
+    "note": "the state when this file was written, so drift in either direction is visible",
+    "objects_pct": 95.9, "sky_pct": 4.1, "bare_ground_pct": 0.04,
+    "actors_drawn": 25829, "distinct_materials_visible": 49,
+    "lone_primitive_pct": 0.81,
+    "depth_near_mid_far": [38.7, 51.0, 6.2],
+    "relay_dogs_readable": 4, "tallest_dog_px": 172,
+    "palette": {"green_foliage": 30.6, "gold_amber": 28.3, "neutral_stone": 14.1,
+                "cream_white": 7.9, "pink_rose_red": 7.6, "violet_purple": 4.3,
+                "blue_teal": 4.2, "dark": 2.9}
+  },
+
+  "criteria": {
+    "environment_density": {
+      "metric": "coverage.objects_pct",
+      "min": 85.0,
+      "why": "The reference has no empty ground. A frame that is mostly floor reads as a level under construction however good the lighting is."
+    },
+    "no_barren_ground": {
+      "metric": "coverage.bare_ground_pct",
+      "max": 1.0,
+      "why": "Bare ground plane with nothing on it is the single clearest tell of procedural placeholder."
+    },
+    "sky_present": {
+      "metric": "coverage.sky_pct",
+      "min": 3.0, "max": 20.0,
+      "why": "The reference names a bright lavender sky as an element. Zero sky means the shot is roofed over by canopy; a third of the frame as sky means the city is missing."
+    },
+    "material_diversity": {
+      "metric": "distinct_materials_visible",
+      "min": 25,
+      "why": "Rich material variation is in the founder's list. One stone and one green is what a graybox looks like."
+    },
+    "layering": {
+      "metric": "depth_pixels",
+      "min_each": 4.0,
+      "why": "Foreground plaza / midground garden / distant city is the reference's whole structure. A frame that is all one depth band reads flat however dense it is."
+    },
+    "placeholder_forms": {
+      "metric": "lone_primitive_pct",
+      "max": 2.0,
+      "why": "Pixels carried by a lone cube, cylinder or sphere with almost no siblings. This is the 'random primitive spam' the founder named, made countable."
+    },
+    "relay_dogs_readable": {
+      "metric": "relay_dogs.readable",
+      "min": 3,
+      "why": "Canonical Relay Dogs must be visibly present at spawn. Readable means owning pixels after occlusion, tall enough to recognise, AND with the visor and gold eyes visible — the face is the identity."
+    },
+    "hero_dog_scale": {
+      "metric": "relay_dogs.tallest_px",
+      "min": 90,
+      "why": "The arrival composition is built around the hero Dog. A Dog too small to read is not a subject."
+    },
+    "palette_cream": {
+      "metric": "palette_pct.cream_white",
+      "min": 15.0,
+      "why": "The reference is pale cream and white stone before it is anything else. Currently 7.9% — this is the largest measured gap to the target look."
+    },
+    "palette_pink": {
+      "metric": "palette_pct.pink_rose_red",
+      "min": 10.0,
+      "why": "Pink and rose roofs, flowers and hearts are named throughout the reference."
+    },
+    "palette_violet": {
+      "metric": "palette_pct.violet_purple",
+      "min": 6.0,
+      "why": "Purple mushrooms, wisteria and the arcane circle. Currently 4.3%."
+    },
+    "palette_gold_is_an_accent": {
+      "metric": "palette_pct.gold_amber",
+      "min": 4.0, "max": 18.0,
+      "why": "Gold gates, keys and filigree are ACCENTS in the reference. Measured at 28.3%, gold is currently the second largest colour in the frame — the world reads more brass than fairy-tale."
+    },
+    "foliage_not_dominant": {
+      "metric": "palette_pct.green_foliage",
+      "max": 25.0,
+      "why": "Lush, not a forest. Measured at 30.6%, green is currently the LARGEST colour in a frame whose reference is a pastel stone city."
+    }
+  }
+}

@@ -169,6 +169,71 @@ grep -q "hub-layout.json" "$HERE/audit-draw-cost.py"
 check $? "the audit builds from the real layout, not a default one"
 
 echo
+echo "-- the visual acceptance target --"
+VT="$HERE/../infra/build/verify-visual-target.py"
+python3 -c "import ast,io;ast.parse(io.open('$VT',encoding='utf8').read())"
+check $? "verify-visual-target.py parses"
+python3 -c "import io,json;json.load(io.open('$HERE/../WorldDesign/visual-target.json',encoding='utf8'))"
+check $? "visual-target.json parses"
+python3 - "$HERE" <<'VTFACTS'
+import io, json, os, sys
+root = sys.argv[1]
+target = json.load(io.open(os.path.join(root, "..", "WorldDesign", "visual-target.json"),
+                           encoding="utf8"))
+# Every criterion must carry a metric AND a reason. A threshold with no stated
+# reason is a number nobody can argue with, which is how a target stops being
+# a target and becomes folklore.
+bad = [n for n, r in target["criteria"].items()
+       if not r.get("metric") or len(r.get("why", "")) < 30]
+# And it must not claim to score the frame against the reference.
+blob = json.dumps(target).lower()
+claims = [w for w in ("similarity", "match score", "ssim", "psnr") if w in blob]
+sys.exit(0 if not bad and not claims else
+         (print("no-reason:", bad, "score-claims:", claims) or 1))
+VTFACTS
+check $? "every criterion has a metric and a stated reason, and none claims a score"
+
+# The gate must FAIL on a frame that misses a target, and must fail on a frame
+# it could not measure. A gate that skips what it cannot read passes as it
+# stops working.
+python3 - "$TMP" <<'MKFACTS'
+import io, json, os, sys
+tmp = sys.argv[1]
+good = {"coverage": {"objects_pct": 95.0, "sky_pct": 5.0, "bare_ground_pct": 0.1},
+        "distinct_materials_visible": 40,
+        "depth_pixels": {"near": 30.0, "mid": 50.0, "far": 10.0},
+        "lone_primitive_pct": 0.5,
+        "relay_dogs": {"readable": 5, "tallest_px": 150},
+        "palette_pct": {"cream_white": 20.0, "pink_rose_red": 14.0,
+                        "violet_purple": 8.0, "gold_amber": 10.0,
+                        "green_foliage": 18.0}}
+json.dump(good, io.open(os.path.join(tmp, "good.json"), "w", encoding="utf8"))
+barren = json.loads(json.dumps(good))
+barren["coverage"]["bare_ground_pct"] = 9.0
+barren["lone_primitive_pct"] = 7.0
+json.dump(barren, io.open(os.path.join(tmp, "barren.json"), "w", encoding="utf8"))
+nodogs = json.loads(json.dumps(good))
+nodogs["relay_dogs"] = {"readable": 0, "tallest_px": 0}
+json.dump(nodogs, io.open(os.path.join(tmp, "nodogs.json"), "w", encoding="utf8"))
+json.dump({"coverage": {}}, io.open(os.path.join(tmp, "empty.json"), "w", encoding="utf8"))
+MKFACTS
+python3 "$VT" --facts "$TMP/good.json" >/dev/null 2>&1
+check $? "a frame meeting every target PASSES"
+python3 "$VT" --facts "$TMP/barren.json" >/dev/null 2>&1
+[ $? -ne 0 ]; check $? "bare ground and primitive spam FAIL the gate"
+python3 "$VT" --facts "$TMP/nodogs.json" >/dev/null 2>&1
+[ $? -ne 0 ]; check $? "a frame with no readable Relay Dog FAILS the gate"
+python3 "$VT" --facts "$TMP/empty.json" >/dev/null 2>&1
+[ $? -ne 0 ]; check $? "facts it cannot read FAIL rather than being skipped"
+# Captured to a file, not piped: this harness runs under `pipefail`, and the
+# gate is SUPPOSED to exit non-zero here — piping it into grep hands grep's
+# success back as the gate's failure, and the check fails for the one reason
+# that has nothing to do with what it is checking.
+python3 "$VT" --facts "$TMP/empty.json" >"$TMP/unmeasured.txt" 2>&1 || true
+grep -q "NOT MEASURED" "$TMP/unmeasured.txt"
+check $? "...and the unmeasured criteria are named"
+
+echo
 echo "-- the before/after report --"
 python3 -c "import ast,io;ast.parse(io.open('$HERE/compare.py',encoding='utf8').read())"
 check $? "compare.py parses"

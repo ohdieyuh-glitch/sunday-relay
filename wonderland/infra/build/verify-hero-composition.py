@@ -693,6 +693,99 @@ def main():
         if shown >= 6:
             break
 
+    # ---- MACHINE-READABLE FACTS -----------------------------------------
+    #
+    # The text above is for a person. This is for the visual-target gate, and
+    # it exists so that gate does not have to PARSE the text: a checker built on
+    # a regex over prose is a checker that silently stops checking the first
+    # time a sentence is reworded, and it reports PASS while doing it.
+    #
+    # Only measured quantities go in here. Nothing derived, nothing scored,
+    # nothing about how close the frame is to the reference — that judgement is
+    # the founder's and no number in this file claims to make it.
+    _facts_path = None
+    for _a in sys.argv:
+        if _a.startswith("--json="):
+            _facts_path = _a[7:]
+    if _facts_path:
+        _mat_px = _cv.Counter()
+        for _i, _n in _vis.items():
+            _mat_px[str(blobs[_i][6])] += _n
+        _depth = {"near": 0, "mid": 0, "far": 0}
+        for _i, _n in _vis.items():
+            _z = blobs[_i][0]
+            _depth["near" if _z < 1800 else ("mid" if _z < 4500 else "far")] += _n
+        # Classify every owned pixel into the reference's colour families.
+        _fam = _cv.Counter()
+        _owned = 0
+        for _k in range(W * H):
+            if owner[_k] < 0:
+                continue
+            _owned += 1
+            _i = _k * 3
+            _r, _g, _b = px[_i], px[_i + 1], px[_i + 2]
+            _mx, _mn = max(_r, _g, _b), min(_r, _g, _b)
+            _chroma = _mx - _mn
+            if _mx < 60:
+                _fam["dark"] += 1
+                continue
+            if _chroma < 26:
+                _fam["cream_white" if _mx > 165 else "neutral_stone"] += 1
+                continue
+            # hue in degrees
+            if _mx == _r:
+                _h = 60.0 * (((_g - _b) / float(_chroma)) % 6)
+            elif _mx == _g:
+                _h = 60.0 * (((_b - _r) / float(_chroma)) + 2)
+            else:
+                _h = 60.0 * (((_r - _g) / float(_chroma)) + 4)
+            if 20 <= _h < 65:
+                _fam["gold_amber"] += 1
+            elif 65 <= _h < 170:
+                _fam["green_foliage"] += 1
+            elif 170 <= _h < 250:
+                _fam["blue_teal"] += 1
+            elif 250 <= _h < 310:
+                _fam["violet_purple"] += 1
+            else:
+                _fam["pink_rose_red"] += 1
+        _palette = {k: 100.0 * v / max(1, _owned) for k, v in _fam.items()}
+
+        _facts = {
+            "frame": {"width": W, "height": H},
+            "actors_placed": len(records),
+            "actors_drawn": drawn,
+            "coverage": {
+                "objects_pct": 100.0 * _seen / _tot,
+                "sky_pct": 100.0 * _sky / _tot,
+                "bare_ground_pct": 100.0 * _grd / _tot,
+            },
+            # Depth layering, by owned pixels. The reference's whole structure
+            # is foreground plaza / midground garden / distant city, and a frame
+            # that is all one band reads flat however dense it is.
+            "depth_pixels": {k: 100.0 * v / _tot for k, v in _depth.items()},
+            "distinct_materials_visible": len([m for m, n in _mat_px.items()
+                                               if n > _tot * 0.0002]),
+            "material_pixels_pct": {m: 100.0 * n / _tot
+                                    for m, n in _mat_px.most_common(40)},
+            "lone_primitive_pct": 100.0 * _lone_px / _tot,
+            # PALETTE, measured off the rendered pixels rather than off material
+            # NAMES. Names drift and a family map built from them quietly stops
+            # classifying the moment someone adds "rose_deep". Hue does not
+            # drift. Owned pixels only — the sky is counted separately above and
+            # would otherwise dominate every bucket it touches.
+            "palette_pct": _palette,
+            "relay_dogs": {
+                "placed": len(_pending_dogs),
+                "in_frame": len(_dogs),
+                "readable": len(_readable),
+                "tallest_px": max([d["y1"] - d["y0"] for d in _dogs.values()] or [0]),
+            },
+        }
+        with io.open(_facts_path, "w", encoding="utf8") as _fh:
+            json.dump(_facts, _fh, indent=2, sort_keys=True)
+        print("  facts written to %s" % _facts_path)
+
     out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/preview.png"
     write_png(out, W, H, px)
     print("preview %s  actors=%d  drawn=%d  planes=%d" % (out, len(records), drawn, len(planes)))
