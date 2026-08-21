@@ -212,9 +212,13 @@ good = {"coverage": {"objects_pct": 95.0, "sky_pct": 5.0, "bare_ground_pct": 0.1
         "depth_pixels": {"near": 30.0, "mid": 50.0, "far": 10.0},
         "lone_primitive_pct": 0.5,
         "relay_dogs": {"readable": 5, "tallest_px": 150},
+        # Every palette family a criterion reads must be here. When
+        # warm_timber_stone was added as a criterion this fixture went stale and
+        # the "passes everything" case started FAILING — which is the gate
+        # working: an unmeasured criterion is not a pass.
         "palette_pct": {"cream_white": 20.0, "pink_rose_red": 14.0,
                         "violet_purple": 8.0, "gold_amber": 10.0,
-                        "green_foliage": 18.0}}
+                        "green_foliage": 18.0, "warm_timber_stone": 12.0}}
 json.dump(good, io.open(os.path.join(tmp, "good.json"), "w", encoding="utf8"))
 barren = json.loads(json.dumps(good))
 barren["coverage"]["bare_ground_pct"] = 9.0
