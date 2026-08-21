@@ -20,6 +20,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 # VERIFY and let 8/8 announce a stream that never rendered anything today.
 RUN_STARTED_EPOCH="$(date +%s)"
 SKIP_BUILD="${SKIP_BUILD:-0}"
+# Set by compile-preflight.sh's suggested follow-up: the CPU machine already
+# fetched the source, installed the packages and generated the textures and
+# audio, so the GPU session does not have to pay for any of it again.
+SKIP_PREPARE="${SKIP_PREPARE:-0}"
 SKIP_SHOT="${SKIP_SHOT:-0}"
 START=$(date +%s)
 
@@ -59,8 +63,22 @@ wl_ensure_ue_image
 
 # ------------------------------------------------- 3. source, gates, assets
 banner "3/8  PREPARE (cpu)"
-bash "$HERE/prepare.sh"
-[ -f "$WL_RUN/prepared.stamp" ] || wl_die "prepare.sh did not complete"
+if [ "$SKIP_PREPARE" = "1" ]; then
+  wl_say "SKIP_PREPARE=1 — using the source and assets already staged"
+  [ -f "$WL_RUN/prepared.stamp" ] || wl_die "SKIP_PREPARE=1 but nothing has been prepared here"
+else
+  bash "$HERE/prepare.sh"
+  [ -f "$WL_RUN/prepared.stamp" ] || wl_die "prepare.sh did not complete"
+fi
+# SAY WHAT IS ABOUT TO BE BUILT, at the top, in full.
+#
+# The regression this closes: prepare.sh silently reset the source to a stale
+# default branch, so an L4 session compiled, packaged, streamed and MEASURED a
+# world whose source did not contain the code under test — and every stage
+# reported success. The number a session produces has to be attributable to a
+# commit, and the only way that holds is if the commit is printed before the
+# work rather than reconstructed afterwards.
+wl_verify_source "launch"
 
 # ------------------------------------------------------------- 3. the build
 banner "4/8  BUILD + COOK"

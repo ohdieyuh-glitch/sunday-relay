@@ -48,8 +48,91 @@ export WL_TOOLS="${WL_TOOLS:-$WL_ROOT/tools}"
 # Where these scripts live, so helpers can reach sibling tools (the Vulkan
 # probe) without every caller passing a path.
 export WL_LIGHTNING_DIR="${WL_LIGHTNING_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
-export WL_BRANCH="${WL_BRANCH:-relay/wonderland-ca-fixes}"
+# WHICH BRANCH GETS COMPILED, AND WHY THIS IS NOT JUST A DEFAULT.
+#
+# prepare.sh fetches, checks out and `reset --hard`s $WL_SRC to $WL_BRANCH.
+# $WL_SRC is a checkout of its OWN, under $WL_ROOT — it is NOT the operator's
+# working directory. So `git checkout <branch>` in a shell has no effect
+# whatsoever on what is built, and a stale default here silently compiled the
+# wrong branch while every log line said "OK". That is exactly what happened:
+# the L4 measured a package with RELAY_DOGS=1 because the source it compiled
+# did not contain AWonderlandStrollingDog, on a run that reported success end
+# to end.
+#
+# The default moved, but the default is not the fix — the next stale default
+# would do the same thing. The fix is wl_require_source_branch below, which
+# REFUSES to silently switch an existing checkout, and wl_verify_source, which
+# prints the full SHA and fails closed unless it is the head of the branch that
+# was asked for.
+export WL_BRANCH="${WL_BRANCH:-relay/wonderland-marble}"
 export WL_REPO="${WL_REPO:-https://github.com/ohdieyuh-glitch/sunday-relay.git}"
+# Optional exact pin. Set it and nothing compiles unless $WL_SRC is at exactly
+# this commit. Belt to wl_verify_source's braces, for a run whose result is
+# going to be quoted.
+export WL_REQUIRE_SHA="${WL_REQUIRE_SHA:-}"
+
+# ---------------------------------------------------- source identity
+wl_source_sha() {
+  git -C "$WL_SRC" rev-parse HEAD 2>/dev/null || echo "unknown"
+}
+
+wl_source_branch() {
+  git -C "$WL_SRC" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown"
+}
+
+# Refuse to move an existing checkout onto a different branch by accident.
+#
+# The old prepare.sh did `checkout` + `reset --hard` unconditionally, so an
+# operator who had deliberately put $WL_SRC on a branch found it silently
+# replaced. Switching is still possible — it just has to be asked for.
+wl_require_source_branch() {
+  [ -d "$WL_SRC/.git" ] || return 0
+  local current; current="$(wl_source_branch)"
+  [ "$current" = "$WL_BRANCH" ] && return 0
+  [ "$current" = "unknown" ] && return 0
+  if [ "${WL_ALLOW_BRANCH_SWITCH:-0}" = "1" ]; then
+    wl_warn "switching $WL_SRC from '$current' to '$WL_BRANCH' (WL_ALLOW_BRANCH_SWITCH=1)"
+    return 0
+  fi
+  wl_die "REFUSING TO SWITCH BRANCHES SILENTLY.
+  $WL_SRC is on '$current'
+  WL_BRANCH asks for '$WL_BRANCH'
+This used to be a hard reset with no message, and it is how a build compiled
+the wrong source while reporting success at every stage. Choose one:
+  WL_BRANCH=$current   bash ...          # build what is checked out
+  WL_ALLOW_BRANCH_SWITCH=1 bash ...      # move the checkout to $WL_BRANCH"
+}
+
+# Print the FULL sha, and fail closed unless it is what was asked for.
+#
+# Called after prepare and again immediately before the compile, because the
+# thing being guarded against is the source changing between those two points.
+wl_verify_source() {
+  local where="${1:-source}"
+  [ -d "$WL_SRC/.git" ] || wl_die "$where: no git checkout at $WL_SRC"
+  local sha branch remote
+  sha="$(wl_source_sha)"
+  branch="$(wl_source_branch)"
+  printf '\033[1;36m  SOURCE  %s\n          branch %s (asked for %s)\033[0m\n' \
+    "$sha" "$branch" "$WL_BRANCH"
+
+  if [ -n "$WL_REQUIRE_SHA" ] && [ "$sha" != "$WL_REQUIRE_SHA" ]; then
+    wl_die "$where: WL_REQUIRE_SHA=$WL_REQUIRE_SHA but the checkout is at $sha"
+  fi
+  if [ "$branch" != "$WL_BRANCH" ]; then
+    wl_die "$where: the checkout is on '$branch' and WL_BRANCH is '$WL_BRANCH'.
+Refusing to compile source that is not the branch that was asked for."
+  fi
+  remote="$(git -C "$WL_SRC" rev-parse "origin/$WL_BRANCH" 2>/dev/null || echo "")"
+  if [ -z "$remote" ]; then
+    wl_warn "$where: no origin/$WL_BRANCH locally — cannot confirm this is the branch head"
+  elif [ "$sha" != "$remote" ]; then
+    wl_die "$where: the checkout is at $sha but origin/$WL_BRANCH is at $remote.
+The source is NOT the head of the branch that was asked for. Re-run prepare.sh,
+or set WL_REQUIRE_SHA=$sha to compile this commit deliberately."
+  fi
+  return 0
+}
 
 # ------------------------------------------------------- the UE engine
 # ONE definition of the image and its persistent archive. These were inlined in

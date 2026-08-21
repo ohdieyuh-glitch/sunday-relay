@@ -59,6 +59,36 @@
 > **Nothing here has been compiled.** There is no Unreal in the development
 > environment. The next build is the first time this C++ meets a compiler.
 >
+> **2026-08-21, later still — THE LAUNCHER COULD COMPILE THE WRONG BRANCH.**
+>
+> `prepare.sh` fetched, checked out and `reset --hard`ed `$WL_SRC` onto
+> `$WL_BRANCH` with no message, and `$WL_BRANCH` still defaulted to
+> `relay/wonderland-ca-fixes`. `$WL_SRC` is a checkout of its **own**, under
+> `$WL_ROOT` — not the operator's working directory — so `git checkout <branch>`
+> in a shell never affected what was compiled at all. That is how an L4 session
+> built, packaged, streamed and measured a package reporting `RELAY_DOGS=1`
+> while every stage said OK.
+>
+> Closed three ways, and the default is not one of them:
+> `wl_require_source_branch` **refuses** to move an existing checkout onto a
+> different branch (`WL_ALLOW_BRANCH_SWITCH=1` to ask for it);
+> `wl_verify_source` prints the **full** SHA and fails closed unless it is the
+> head of the branch that was asked for (`WL_REQUIRE_SHA` pins an exact
+> commit); and `build-wonderland.sh` prints `COMPILING <full sha>` immediately
+> before `BuildEditor` and refuses a branch mismatch there too.
+>
+> **A CPU-only first compile now exists.** `compile-preflight.sh` runs
+> `RunUAT BuildEditor` and stops — no cook, no generation, no stream, no
+> `--gpus`. First-build compiler errors no longer cost GPU time. Epic's UE 5.8
+> container requirements pages carry zero GPU mentions; every GPU sentence they
+> write is about the runtime and Pixel Streaming images. The one honest caveat
+> is that Epic documents `BuildCookRun` in-container and never names
+> `BuildEditor` — that path is reasoned, not sourced, and the script says so
+> about itself.
+>
+> Then, on the GPU box:
+> `SKIP_PREPARE=1 bash wonderland/infra/lightning/launch-wonderland.sh`
+>
 > The p23 comparison advice below still stands and is still the cheapest way to
 > localise a visual regression.
 

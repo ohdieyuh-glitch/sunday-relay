@@ -17,6 +17,12 @@ wl_mkdirs
 PROJECT="$WL_SRC/wonderland/Wonderland.uproject"
 [ -f "$PROJECT" ] || wl_die "no project at $PROJECT — run prepare.sh first"
 
+# VERIFIED AGAIN, HERE. prepare.sh already checked, but the thing being guarded
+# against is the source being different at COMPILE time from what was verified
+# at fetch time — a second prepare, a manual checkout, a resumed session. This
+# is the last point before the compiler runs.
+wl_verify_source "build-render"
+
 FORCE="${FORCE_REBUILD:-0}"
 
 # ------------------------------------------------- generated-asset preflight

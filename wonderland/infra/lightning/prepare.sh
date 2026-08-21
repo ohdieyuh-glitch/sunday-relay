@@ -63,9 +63,20 @@ if ! command -v cloudflared >/dev/null 2>&1 && [ ! -x "$WL_RUN/cloudflared" ]; t
 fi
 
 # ------------------------------------------------------------ 2. source
+#
+# THIS BLOCK USED TO RESET AN EXISTING CHECKOUT ONTO $WL_BRANCH WITHOUT SAYING
+# SO. $WL_SRC is a checkout of its own — not the operator's working directory —
+# so `git checkout <branch>` in a shell never affected what was compiled, and a
+# stale WL_BRANCH default meant the L4 built and measured a package whose source
+# did not contain the code that was being tested. Every stage reported success.
+#
+# Now: a branch change has to be asked for, and the resulting commit is verified
+# against the branch head before anything is compiled.
+wl_require_source_branch
 if [ -d "$WL_SRC/.git" ]; then
   wl_say "updating $WL_BRANCH"
-  git -C "$WL_SRC" fetch --depth 50 origin "$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1
+  git -C "$WL_SRC" fetch --depth 50 origin "$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1 \
+    || wl_die "fetch of origin/$WL_BRANCH failed; see $WL_LOG/git.log"
   git -C "$WL_SRC" checkout -q "$WL_BRANCH" 2>>"$WL_LOG/git.log" || \
     git -C "$WL_SRC" checkout -qb "$WL_BRANCH" "origin/$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1
   git -C "$WL_SRC" reset --hard "origin/$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1
@@ -74,7 +85,11 @@ else
   git clone --depth 50 --branch "$WL_BRANCH" "$WL_REPO" "$WL_SRC" >>"$WL_LOG/git.log" 2>&1 \
     || wl_die "clone failed; see $WL_LOG/git.log (a private repo needs a credential in the Studio)"
 fi
-wl_ok "source at $(git -C "$WL_SRC" rev-parse --short HEAD) on $(git -C "$WL_SRC" rev-parse --abbrev-ref HEAD)"
+# FULL sha, and fail closed unless it is the head of the branch that was asked
+# for. A short sha is not enough here: this number gets quoted in a report and
+# compared against a commit someone pushed.
+wl_verify_source "prepare"
+wl_source_sha > "$WL_RUN/source.sha"
 
 BUILD_DIR="$WL_SRC/wonderland/infra/build"
 [ -d "$BUILD_DIR" ] || wl_die "expected $BUILD_DIR in the checkout"

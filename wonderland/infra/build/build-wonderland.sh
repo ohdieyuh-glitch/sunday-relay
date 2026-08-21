@@ -201,6 +201,34 @@ fi
 # Needed so the Python level generator can load the Wonderland C++ classes (the
 # Dog pawn, etc.). Fail-closed: if the editor will not build, level generation
 # cannot run and there is nothing honest to package.
+# --- WHAT IS ABOUT TO BE COMPILED -----------------------------------------
+#
+# The full SHA, immediately before the compiler runs, from the repository this
+# script is itself part of. Not the short one: this number is quoted in reports
+# and compared against a commit someone pushed, and a seven-character prefix is
+# not an identity.
+#
+# It is printed HERE rather than only in prepare.sh because prepare.sh runs
+# earlier and against a different concern. A build that compiled source nobody
+# can name afterwards is how a measurement gets attributed to the wrong code —
+# which is exactly what happened: an L4 session measured a package built from a
+# branch that did not contain the class being tested, and every stage said OK.
+SRC_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+BUILD_SHA="$(git -C "$SRC_ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
+BUILD_REF="$(git -C "$SRC_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+log "COMPILING $BUILD_SHA  (branch $BUILD_REF)"
+if [ -n "${WL_REQUIRE_SHA:-}" ] && [ "$BUILD_SHA" != "$WL_REQUIRE_SHA" ]; then
+  die "WL_REQUIRE_SHA=$WL_REQUIRE_SHA but this checkout is at $BUILD_SHA.
+Refusing to compile a commit that was not the one asked for."
+fi
+if [ -n "${WL_BRANCH:-}" ] && [ "$BUILD_REF" != "unknown" ] \
+   && [ "$BUILD_REF" != "$WL_BRANCH" ]; then
+  die "WL_BRANCH=$WL_BRANCH but this checkout is on '$BUILD_REF'.
+Refusing to compile a branch that was not the one asked for. This is the exact
+regression that made an L4 session measure the wrong package."
+fi
+printf '%s\n' "$BUILD_SHA" > "$LOG_DIR/compiled.sha"
+
 run_step "build-editor" "$RUNUAT" BuildEditor -project="$PROJECT" -notools
 
 # --------------------------------------------------- 3. generate the starter Hub level

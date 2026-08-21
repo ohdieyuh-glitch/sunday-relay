@@ -1376,6 +1376,124 @@ for v in WL_PS_INFRA WL_PS_VERSION WL_TURN_IMAGE WL_TURN_ARCHIVE WL_TURN_CONTAIN
   done
 done
 
+echo "== the branch that gets compiled =="
+#
+# THE REGRESSION THIS CLOSES. prepare.sh fetched, checked out and `reset --hard`
+# an existing $WL_SRC onto $WL_BRANCH with no message. $WL_SRC is a checkout of
+# its OWN — not the operator's working directory — so `git checkout <branch>` in
+# a shell never affected what was compiled. With a stale default, an L4 session
+# compiled, packaged, streamed and MEASURED a world whose source did not contain
+# the code under test, and every stage reported success.
+out=$(bash -c ". $HERE/common.sh; echo \$WL_BRANCH")
+check "$out" "relay/wonderland-marble" "WL_BRANCH defaults to the branch the work is on"
+grep -q "wl_require_source_branch" "$HERE/prepare.sh" \
+  && ok "prepare.sh asks before switching branches" \
+  || bad "prepare.sh can still switch branches silently"
+if python3 -c "
+import io,sys
+src=io.open('$HERE/prepare.sh',encoding='utf8').read()
+sys.exit(0 if src.index('wl_require_source_branch') < src.index('reset --hard \"origin/\$WL_BRANCH\"') else 1)"; then
+  ok "...and it asks BEFORE the hard reset, not after"
+else bad "the branch guard runs after the reset that it exists to prevent"; fi
+grep -q "wl_verify_source" "$HERE/build-render.sh" \
+  && ok "build-render.sh re-verifies the source before handing off to the compiler" \
+  || bad "build-render.sh compiles without checking what it is compiling"
+grep -q "wl_verify_source" "$HERE/launch-wonderland.sh" \
+  && ok "the launcher states the source up front" \
+  || bad "the launcher never states which commit it is building"
+grep -q 'COMPILING \$BUILD_SHA' "$HERE/../build/build-wonderland.sh" \
+  && ok "the full SHA is printed immediately before BuildEditor" \
+  || bad "nothing prints the SHA at the compile"
+
+GITROOT="$TMP/gitfix"
+mkdir -p "$GITROOT"
+( cd "$GITROOT" && git init -q upstream && cd upstream \
+  && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base \
+  && git branch -M relay/wonderland-marble \
+  && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m more \
+  && git branch relay/wonderland-ca-fixes ) >/dev/null 2>&1
+git clone -q "$GITROOT/upstream" "$GITROOT/src" >/dev/null 2>&1
+SRCSHA="$(git -C "$GITROOT/src" rev-parse HEAD)"
+
+vs() {
+  local br="$1"; shift
+  env WL_ROOT="$TMP/wr" WL_SRC="$GITROOT/src" WL_BRANCH="$br" "$@" \
+    bash -c ". $HERE/common.sh; wl_verify_source test" 2>&1
+}
+out="$(vs relay/wonderland-marble)"; rc=$?
+if [ $rc = 0 ] && has "$out" "$SRCSHA"; then
+  ok "wl_verify_source passes on the right branch and prints the FULL sha"
+else bad "wl_verify_source rejected a correct checkout (rc=$rc)"; fi
+
+out="$(vs relay/wonderland-ca-fixes)"; rc=$?
+if [ $rc != 0 ] && has "$out" "not the branch that was asked for"; then
+  ok "a checkout on the wrong branch is REFUSED, not reset"
+else bad "the wrong branch was accepted (rc=$rc)"; fi
+
+out="$(vs relay/wonderland-marble WL_REQUIRE_SHA=0000000000000000000000000000000000000000)"; rc=$?
+if [ $rc != 0 ] && has "$out" "WL_REQUIRE_SHA"; then
+  ok "an exact SHA pin that does not match is refused"
+else bad "WL_REQUIRE_SHA was ignored (rc=$rc)"; fi
+
+out="$(vs relay/wonderland-marble WL_REQUIRE_SHA="$SRCSHA")"; rc=$?
+[ $rc = 0 ] && ok "...and a matching pin passes" || bad "a matching SHA pin was refused"
+
+( cd "$GITROOT/src" && git reset -q --hard HEAD~1 ) >/dev/null 2>&1
+out="$(vs relay/wonderland-marble)"; rc=$?
+if [ $rc != 0 ] && has "$out" "is NOT the head"; then
+  ok "a checkout behind origin's branch head is refused"
+else bad "stale source was accepted (rc=$rc)"; fi
+( cd "$GITROOT/src" && git reset -q --hard "$SRCSHA" ) >/dev/null 2>&1
+
+rsb() {
+  local br="$1"; shift
+  env WL_ROOT="$TMP/wr" WL_SRC="$GITROOT/src" WL_BRANCH="$br" "$@" \
+    bash -c ". $HERE/common.sh; wl_require_source_branch" 2>&1
+}
+out="$(rsb relay/wonderland-ca-fixes)"; rc=$?
+if [ $rc != 0 ] && has "$out" "REFUSING TO SWITCH BRANCHES SILENTLY"; then
+  ok "wl_require_source_branch refuses an unrequested switch"
+else bad "a silent branch switch is still possible (rc=$rc)"; fi
+out="$(rsb relay/wonderland-ca-fixes WL_ALLOW_BRANCH_SWITCH=1)"; rc=$?
+[ $rc = 0 ] && ok "...and allows it when it is asked for" \
+             || bad "WL_ALLOW_BRANCH_SWITCH=1 did not permit the switch"
+out="$(rsb relay/wonderland-marble)"; rc=$?
+[ $rc = 0 ] && ok "...and says nothing when the branch already matches" \
+             || bad "the matching case was refused"
+
+echo "== the CPU-only compile preflight =="
+if bash -n "$HERE/compile-preflight.sh" 2>/dev/null; then ok "compile-preflight.sh parses"
+else bad "compile-preflight.sh does not parse"; fi
+if grep -qE 'wl_have_gpu[^"]*(\|\||&&)[^"]*(exit [0-9]|wl_die)' "$HERE/compile-preflight.sh"; then
+  bad "the preflight refuses to run without a GPU"
+else ok "the preflight does not require a GPU"; fi
+# COMMENTS STRIPPED FIRST. The script explains at length why it does NOT pass
+# --gpus, and a naive grep read its own explanation as the offence. A check
+# that fails on the prose describing why it should pass is a check that gets
+# deleted rather than fixed.
+if sed 's/#.*//' "$HERE/compile-preflight.sh" | grep -q -- "--gpus"; then
+  bad "the preflight asks docker for a GPU"
+else ok "...and never asks docker for one"; fi
+grep -q "BuildEditor" "$HERE/compile-preflight.sh" \
+  && ok "it runs BuildEditor" || bad "it does not run BuildEditor"
+# COMMENTS STRIPPED, for the same reason as the --gpus check above and for the
+# THIRD time in this session: a grep over a whole file reads the file's own
+# explanation of why it does not do the thing, and reports it as doing it.
+# Checks that fire on their subject's prose get deleted, not fixed.
+PF_CODE="$TMP/preflight-code.sh"
+sed 's/#.*//' "$HERE/compile-preflight.sh" > "$PF_CODE"
+for forbidden in BuildCookRun run-stream.sh pythonscript; do
+  if grep -q "$forbidden" "$PF_CODE"; then
+    bad "the preflight also does $forbidden — that is the GPU half"
+  else ok "it does not $forbidden (that stays on the GPU path)"; fi
+done
+grep -q "AutomationTool exiting with ExitCode" "$HERE/compile-preflight.sh" \
+  && ok "it treats a zero exit with a failed build as a failure" \
+  || bad "it trusts UAT's exit code alone"
+grep -q "SKIP_PREPARE" "$HERE/launch-wonderland.sh" \
+  && ok "the launcher can skip work the CPU machine already did" \
+  || bad "the GPU session has to redo the CPU preparation"
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" = 0 ]
