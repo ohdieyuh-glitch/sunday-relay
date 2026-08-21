@@ -232,7 +232,20 @@ def main(argv=None):
         log("no metric_scale_factor in the manifest — using the bare metre->cm "
             "conversion of 100.0. The layer may be the wrong size; check it.")
     origin = transform.get("unreal_origin_cm") or [0.0, 0.0, 0.0]
-    rotation = transform.get("unreal_rotation_deg") or [0.0, 0.0, 0.0]
+    rotation = list(transform.get("unreal_rotation_deg") or [0.0, 0.0, 0.0])
+    # THE AXIS CORRECTION IS NOT OPTIONAL AND IT IS NOT COSMETIC.
+    #
+    # Marble's collider export is Y-DOWN; UE's glTF import assumes Y-UP and
+    # converts on that basis. Without the correction the world arrives INVERTED
+    # — sky below, plaza overhead — which reads as a lighting or a normals
+    # failure and gets debugged as one, on a paid GPU. It is applied here, from
+    # a measured value in the manifest, rather than left for someone to notice.
+    correction = transform.get("axis_correction_deg") or [0.0, 0.0, 0.0]
+    if any(abs(v) > 1e-6 for v in correction):
+        rotation = [rotation[i] + correction[i] for i in range(3)]
+        log("axis correction applied: roll/pitch/yaw %s -> %s  (%s)"
+            % (correction, rotation,
+               (transform.get("axis_correction_why") or "").split(".")[0]))
     ground = transform.get("ground_plane_offset_m")
     if isinstance(ground, (int, float)):
         # Marble reports where IT thinks the ground is. Lifting the layer by the
@@ -273,6 +286,12 @@ def main(argv=None):
                       [MARBLE_TAG, NO_COLLISION_TAG])
         if actor is not None:
             placed.append(actor)
+    mode = transform.get("placement_mode")
+    if mode == "backdrop_at_camera":
+        log("placed as a BACKDROP anchored to %s at %s. This is a "
+            "single-viewpoint shell — it is correct from that camera and smears "
+            "if a player walks away from it. Not a walkable environment."
+            % (transform.get("anchor_camera"), origin))
     log("placed %d visual actor(s) at scale %.2f" % (len(placed), scale))
 
     collider_imported = []

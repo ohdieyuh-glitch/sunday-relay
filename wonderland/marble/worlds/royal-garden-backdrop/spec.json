@@ -1,0 +1,63 @@
+{
+  "slug": "royal-garden-backdrop",
+  "display_name": "Wonderland Royal Garden Backdrop",
+  "model": "marble-1.1",
+  "seed": 20260822,
+  "tags": [
+    "wonderland",
+    "relay",
+    "royal-garden",
+    "backdrop",
+    "no-dogs"
+  ],
+  "_comment_model": [
+    "marble-1.1, NOT plus, deliberately. The first world used 1.1 and this one",
+    "changes exactly one variable — the input image — so the two are comparable",
+    "as evidence rather than as impressions. `plus` buys a LARGER world, not a",
+    "denser one, and the fidelity lever for a backdrop is the HQ mesh export."
+  ],
+  "reference_image": "reference/wonderland-backdrop-nodogs.jpg",
+  "source_reference": {
+    "kind": "founder-reference-image, cropped above the dog band",
+    "path": "wonderland/marble/reference/wonderland-backdrop-nodogs.jpg",
+    "crop": "ffmpeg crop=1672:428:0:0 from the 1672x941 reference",
+    "why": "The first generation (47928d7e) reproduced the Relay Dogs from the reference despite an explicit NO-DOGS text prompt — image conditioning beat the negative. Cropping above the dog band removes the input that caused it, which is more reliable than asking the model again not to. It also matches the architecture: Marble is the BACKDROP and the plaza the dogs stand on is authored Unreal geometry, so the cropped-away region is exactly the region Marble should not be supplying.",
+    "sha256": "5d8852d6e89db45f1115a2c8b07d0a538a1c018f92863e9b9d68bb7df26aaf5b",
+    "media_asset_id": "c5ec2e8b-a854-4fbd-aed4-9eed92ddd340",
+    "uploaded_at": "2026-08-21T16:19:47Z"
+  },
+  "world_prompt": {
+    "type": "image",
+    "image_prompt": {
+      "source": "media_asset",
+      "media_asset_id": "c5ec2e8b-a854-4fbd-aed4-9eed92ddd340"
+    },
+    "is_pano": "auto",
+    "disable_recaption": false,
+    "text_prompt": "A cinematic fairy-tale royal garden plaza at the gates of an extravagant pastel castle city, rendered at high-end animated-film quality, bright warm daylight. FOREGROUND: a wide plaza of pale cream and soft grey CHECKERED FLAGSTONE, worn and mossy in the joints, scattered with fallen pink and violet petals. LEFT: a tall ornate GOLD gate with dense filigree scrollwork, curled volutes and heart-shaped finials, hung between pale carved stone piers wrapped in ivy and climbing roses; beside it a round red-and-white playing-card sign bearing a heart. RIGHT: an enormous gnarled tree with deeply furrowed bark rising out of frame, an ornate gold-rimmed CLOCK FACE set into its trunk and an oval gilt PORTRAIT FRAME hanging from it, curtains of wisteria and ivy trailing down through it. MIDGROUND: a rose-covered stone ARCHWAY over shallow steps leading deeper into the garden; hedges clipped into a giant HEART shape studded with pink roses; a colossal porcelain TEACUP painted with hearts, sitting on stacked saucers, with a matching teapot nearby; GIANT MUSHROOMS in clusters — scarlet caps with white spots, deep violet caps, and pale cream ones — among dense beds of pink, violet and white flowers, foxgloves and hydrangeas. BACKGROUND: a dense fantasy castle city of slender WHITE AND CREAM STONE towers with conical roofs in ROSE PINK, MAGENTA, LILAC and pale blue, gold finials and small pennants, mushroom-domed turrets, tier upon tier receding into soft lavender atmospheric haze. SKY: bright blue-to-lavender with soft white and pink clouds; ornate GOLD KEYS and a white porcelain TEAPOT float weightlessly in the air. MATERIALS: glossy glazed porcelain, polished gold leaf, carved pale limestone, painted timber, moss, wet stone. Extremely high geometric density, every surface detailed and intentional, strong foreground-to-distance depth, volumetric light through the arch. NO characters, NO people, NO animals, NO dogs, NO creatures of any kind — the garden is empty of living figures. No bare ground, no untextured blocks, no repeated primitive shapes, no modern objects, no lettering or readable text."
+  },
+  "placement": {
+    "origin_cm": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "rotation_deg": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "_comment": "Filled in properly by the import step once the real bounds are known. Origin is the Wonderland arrival plaza centre."
+  },
+  "unreal_destination": {
+    "content_path": "/Game/Wonderland/Marble/RoyalGardenBackdrop",
+    "level": "/Game/Wonderland/Maps/WonderlandHub",
+    "actor_label": "MarbleVisualLayer_RoyalGardenBackdrop"
+  },
+  "_comment_dogs": [
+    "The reference is FULL of Relay Dogs and this prompt excludes them on purpose.",
+    "The founder's instruction: Relay Dogs are canonical authored Unreal assets and are placed",
+    "AFTER the Marble layer, never generated into it. A generated dog would be an uncontrolled",
+    "look-alike of the one thing whose identity is fixed."
+  ]
+}

@@ -183,7 +183,10 @@ def make_world(root, slug, hq=False, ground=None, scale_factor=1.25):
         "cost": {"total_credits": 1580},
         "assets": {"downloaded": downloaded},
         "exports": [],
-        "transform": {"metric_scale_factor": scale_factor,
+        "transform": {"axis_correction_deg": [180.0, 0.0, 0.0],
+                      "placement_mode": "backdrop_at_camera",
+                      "anchor_camera": "HeroCam0",
+                      "metric_scale_factor": scale_factor,
                       "ground_plane_offset_m": ground,
                       "unreal_uniform_scale": (scale_factor * 100.0) if scale_factor else None,
                       "unreal_origin_cm": [0.0, 0.0, 0.0],
@@ -287,6 +290,22 @@ def main():
               "the visual actor is TAGGED as non-colliding, so a later pass can find it")
         check("MarbleColliderReference" in collider_actors[0].tags,
               "the collider reference is tagged as a reference, not as collision")
+
+        print("\n-- the axis correction --")
+        # Marble's collider export is Y-DOWN; UE's glTF import assumes Y-UP.
+        # Without this the Royal Garden arrives inverted — sky below, plaza
+        # overhead — and reads as a lighting bug on a paid GPU.
+        make_world(root, "axis", hq=True)
+        run_importer("axis", root)
+        rolls = [a.rotation.props.get("roll") for a, _ in REC.actors]
+        check(all(abs((r or 0) - 180.0) < 1e-6 for r in rolls),
+              "the 180-degree roll from the manifest reaches every placed actor")
+        check(any("axis correction applied" in m for m in REC.logs),
+              "...and the import says so rather than doing it silently")
+        check(any("BACKDROP anchored to HeroCam0" in m for m in REC.logs),
+              "the single-viewpoint shell is announced as a backdrop, not a world")
+        check(any("smears if a player walks away" in m for m in REC.logs),
+              "...and its one real limitation is stated at import time")
 
         print("\n-- scale and placement --")
         check(abs(visual_actors[0].scale.x - 125.0) < 1e-9,

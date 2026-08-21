@@ -122,15 +122,24 @@
     "unreal_uniform_scale": 190.87772,
     "unreal_origin_cm": [
       0.0,
-      0.0,
-      0.0
+      -1150.0,
+      430.0
     ],
     "unreal_rotation_deg": [
       0.0,
       0.0,
       0.0
     ],
-    "axis_note": "glTF is Y-up right-handed; Unreal is Z-up left-handed. Interchange applies the conversion on import; unreal_rotation_deg is the ARTISTIC yaw on top of it."
+    "axis_note": "glTF is Y-up right-handed; Unreal is Z-up left-handed. Interchange applies the conversion on import; unreal_rotation_deg is the ARTISTIC yaw on top of it.",
+    "axis_correction_deg": [
+      180.0,
+      0.0,
+      0.0
+    ],
+    "axis_correction_why": "ROLL 180. Measured, not assumed: this collider export is Y-DOWN (vertex Y range near the reconstruction origin is -5.02..0.63, dense bands at negative Y, ground_plane_offset 1.075 m matching raw Y +0.63 after metric_scale_factor). UE's glTF import assumes Y-UP and converts on that basis, so without this the Royal Garden arrives INVERTED — sky below, plaza overhead. It would have looked like a lighting failure and been debugged as one, on a paid GPU.",
+    "placement_mode": "backdrop_at_camera",
+    "anchor_camera": "HeroCam0",
+    "placement_why": "This is a SINGLE-VIEWPOINT reconstruction: geometry radiates from an origin at x=0,z=0 and stretches away from it, so it is a shell seen from one place rather than a closed scene. Placing its origin ON the arrival camera is the only placement where the stretching is invisible, because that is the viewpoint it was reconstructed from. Anywhere else and a player walking sideways watches the world smear. It is a backdrop, and treating it as a walkable environment is the mistake this field exists to prevent."
   },
   "bounds": {
     "source": "measured from collider.glb's POSITION accessor, offline. Not a guess and not waiting for UE: the glTF carries its own min/max.",

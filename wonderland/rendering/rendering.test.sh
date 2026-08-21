@@ -272,6 +272,28 @@ check $? "...and prints them so a live run can be read"
 grep -q "DeclaredInstanceCount" "$SRC/WonderlandWorldProof.cpp"
 check $? "...counting DECLARED instances (it runs before BeginPlay builds them)"
 
+# The Marble backdrop hands the far distance to a generated shell. It must be
+# OPT-IN: suppressing the skyline without the Marble layer actually placed
+# leaves a hole where the horizon was.
+grep -q "WONDERLAND_MARBLE_BACKDROP" "$GEN"
+check $? "the Marble backdrop mode exists"
+python3 - "$GEN" <<'BACKDROP'
+import io, sys
+src = io.open(sys.argv[1], encoding="utf8").read()
+i = src.index('_MARBLE_BACKDROP = os.environ.get("WONDERLAND_MARBLE_BACKDROP"')
+line = src[i:src.index("\n", i)]
+problems = []
+# Default must be OFF.
+if '"0")' not in line:
+    problems.append("does not default to off: %s" % line)
+# The NEAREST ring must survive: Marble is a single-viewpoint shell that smears
+# when a player walks, so the midground they move through stays authored.
+if "_rings = _rings[:1]" not in src:
+    problems.append("suppresses more than the far rings")
+sys.exit(0 if not problems else (print(problems) or 1))
+BACKDROP
+check $? "...defaults to OFF and keeps the nearest ring authored"
+
 echo
 echo "-- the visual acceptance target --"
 VT="$HERE/../infra/build/verify-visual-target.py"

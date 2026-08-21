@@ -4410,10 +4410,29 @@ def build(layout):
     # eight spires on one ring; these are the extra rings behind them, placed on
     # an irrational angular step so the towers never line up in a visible lattice.
     import math as _m
-    for ring, (dist, count, hgt, mat) in enumerate((
-            (7200.0, 14, 11.0, "spire"),
-            (12800.0, 18, 15.0, "spire_far" if "spire_far" in MATS else "spire"),
-            (19500.0, 22, 20.0, "spire_far" if "spire_far" in MATS else "spire"))):
+    # WHEN MARBLE SUPPLIES THE DISTANCE, STOP BUILDING IT TWICE.
+    #
+    # The Royal Garden backdrop spans roughly 20,000 x 29,000 uu at its measured
+    # scale, which is exactly where the two far rings live. Drawing both means a
+    # procedural skyline of primitive spires poking through a photographic one —
+    # the "weak castle shells" the founder asked to be overridden, made worse by
+    # having something better behind them.
+    #
+    # OFF BY DEFAULT and opt-in, because suppressing them without the Marble
+    # layer actually placed would leave a hole where the horizon used to be. The
+    # NEAREST ring stays either way: Marble is a single-viewpoint shell that
+    # smears when you walk, so the midground a player moves through has to stay
+    # authored geometry.
+    _MARBLE_BACKDROP = os.environ.get("WONDERLAND_MARBLE_BACKDROP", "0") not in ("0", "", "false", "no")
+    _rings = ((7200.0, 14, 11.0, "spire"),
+              (12800.0, 18, 15.0, "spire_far" if "spire_far" in MATS else "spire"),
+              (19500.0, 22, 20.0, "spire_far" if "spire_far" in MATS else "spire"))
+    if _MARBLE_BACKDROP:
+        _rings = _rings[:1]
+        unreal.log_warning(
+            "MARBLE BACKDROP: the two far skyline rings are suppressed; the "
+            "Marble layer covers that distance. The near ring at 7200 uu stays.")
+    for ring, (dist, count, hgt, mat) in enumerate(_rings):
         for i in range(count):
             a = i * 2.39996 + ring * 0.7
             bx = _m.cos(a) * dist
