@@ -1023,7 +1023,16 @@ check "$LEVEL" "/Game/Wonderland/Maps/WonderlandHub" "the generator's target lev
 CFG="$(cat "$PROJ/Config/DefaultEngine.ini" 2>/dev/null || true)"
 has "$CFG" "GameDefaultMap=" && ok "GameDefaultMap is set" || bad "no GameDefaultMap"
 has "$CFG" "WonderlandHub"   && ok "  and it names WonderlandHub" || bad "  it does not name WonderlandHub"
-has "$CFG" "MapsToCook"      && ok "the map is in MapsToCook" || bad "the map is not explicitly cooked"
+# MapsToCook MOVED TO DefaultGame.ini with the rest of ProjectPackagingSettings,
+# which is a GAME-ini config class. In DefaultEngine.ini it parsed and did
+# nothing — that is what stripped every material and rendered the live L4 world
+# grey. GameDefaultMap above is EngineSettings and correctly stays put.
+GAMECFG="$(cat "$PROJ/Config/DefaultGame.ini" 2>/dev/null || true)"
+has "$GAMECFG" "MapsToCook" && ok "the map is in MapsToCook (DefaultGame.ini)" \
+  || bad "the map is not explicitly cooked"
+has "$GAMECFG" "DirectoriesToAlwaysCook" \
+  && ok "  and runtime-only assets are force-cooked from the game ini" \
+  || bad "  DirectoriesToAlwaysCook is missing from DefaultGame.ini"
 # A setting naming a class that does not exist is a fabricated setting.
 if has "$CFG" "GlobalDefaultGameMode="; then
   gm=$( ( set +o pipefail; printf '%s' "$CFG" | grep -oE 'GlobalDefaultGameMode=[^ ]+' ) || true)
