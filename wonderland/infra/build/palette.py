@@ -79,3 +79,37 @@ def percentages(counts, total):
     """
     total = max(1, total)
     return dict((f, 100.0 * counts.get(f, 0) / total) for f in FAMILIES)
+
+
+# Families that describe LIGHT rather than hue. A lit render pushes pixels into
+# "dark" that an unlit projection leaves coloured, and pushes bright surfaces
+# into "cream_white"; neither move says anything about the palette an artist
+# chose.
+ACHROMATIC = ("dark", "cream_white", "neutral_stone")
+
+CHROMATIC = tuple(f for f in FAMILIES if f not in ACHROMATIC)
+
+
+def chromatic_mix(counts):
+    """The hue mix among COLOURED pixels only, as percentages summing to 100.
+
+    Why this exists: comparing absolute family percentages between a lit render
+    and an unlit projection is meaningless — the reference measures 25.7% dark
+    and the preview 2.6%, and every other family is deflated in proportion.
+    Dropping the three achromatic families and renormalising removes most of
+    that, because shadow mostly changes a pixel's VALUE and not its hue.
+
+    IT DOES NOT REMOVE ALL OF IT, and the honest caveat is specific: a hue whose
+    every instance is in shadow disappears from a lit image entirely. In the
+    founder's reference the green topiary does exactly that — it reads 0.00%
+    green — so green stays unreliable here while pink, violet and gold do not.
+    """
+    total = sum(counts.get(f, 0) for f in CHROMATIC)
+    if not total:
+        return dict((f, 0.0) for f in CHROMATIC)
+    return dict((f, 100.0 * counts.get(f, 0) / total) for f in CHROMATIC)
+
+
+def chromatic_mix_from_pct(pct):
+    """Same, from percentages rather than raw counts."""
+    return chromatic_mix(dict((f, pct.get(f, 0.0)) for f in FAMILIES))

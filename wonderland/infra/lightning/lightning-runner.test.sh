@@ -1674,6 +1674,31 @@ else
   ok "the batch no longer claims a collision authority that does not exist"
 fi
 
+echo "== a captured frame carries the build that produced it =="
+# This project has already compared two captures that turned out to be the same
+# binary. A PNG that cannot be attributed to a commit is a picture, not evidence.
+CAP="$HERE/capture-hero-shots.sh"
+if bash -n "$CAP" 2>/dev/null; then ok "capture-hero-shots.sh parses"
+else bad "capture-hero-shots.sh does not parse"; fi
+grep -q 'compiled.sha' "$CAP" \
+  && ok "it reads the compiled SHA out of the build" \
+  || bad "nothing ties a capture to a commit"
+if sed 's/#.*//' "$CAP" | grep -q 'wl_die.*compiled.sha\|no \$SHA_FILE'; then
+  ok "…and REFUSES to capture without one"
+else bad "a capture with no SHA would still be written"; fi
+grep -q 'stop-wonderland.sh' "$CAP" \
+  && ok "it stops the previous stream before each camera" \
+  || bad "two streamers on one port would capture the PREVIOUS build"
+grep -q 'SKIP_BUILD=1' "$CAP" \
+  && ok "…and never rebuilds mid-capture" \
+  || bad "a capture run could rebuild and change what it is measuring"
+grep -q 'WL_HERO_CAMS:-0' "$CAP" \
+  && ok "one camera by default, because each is a metered relaunch" \
+  || bad "the default would relaunch for every hero camera"
+grep -q 'measure.cjs' "$CAP" \
+  && ok "performance is measured on the same run as the picture" \
+  || bad "FPS and the frame would come from two different states"
+
 echo "== the opt-in full CPU build =="
 if bash -n "$HERE/cpu-build-all.sh" 2>/dev/null; then ok "cpu-build-all.sh parses"
 else bad "cpu-build-all.sh does not parse"; fi

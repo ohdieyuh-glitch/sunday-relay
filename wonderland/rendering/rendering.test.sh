@@ -340,6 +340,85 @@ else
   ok "visual-target.json no longer claims the reference image is absent"
 fi
 
+echo "-- the hue mix, and the founder-facing page --"
+# Absolute family percentages cannot be compared between a lit render and an
+# unlit projection. The mix among COLOURED pixels mostly can, because shadow
+# changes a pixel's value and not its hue — with one exception that has to stay
+# named rather than quietly averaged in.
+python3 - "$PB" <<'MIX'
+import importlib.util as u, sys
+spec = u.spec_from_file_location("palette", sys.argv[1] + "/palette.py")
+m = u.module_from_spec(spec); spec.loader.exec_module(m)
+problems = []
+if set(m.ACHROMATIC) & set(m.CHROMATIC):
+    problems.append("a family is in both the achromatic and chromatic sets")
+for f in ("dark", "cream_white", "neutral_stone"):
+    if f in m.CHROMATIC:
+        problems.append("%s is treated as a hue" % f)
+mix = m.chromatic_mix_from_pct({"pink_rose_red": 20.0, "violet_purple": 20.0,
+                                "dark": 60.0})
+if abs(mix["pink_rose_red"] - 50.0) > 1e-9 or abs(mix["violet_purple"] - 50.0) > 1e-9:
+    problems.append("the mix does not renormalise to 100 across coloured pixels: %s" % mix)
+# A frame that is ENTIRELY shadow has no hue mix, and inventing one would be a
+# division by zero dressed as a measurement.
+flat = m.chromatic_mix_from_pct({"dark": 100.0})
+if any(v != 0.0 for v in flat.values()):
+    problems.append("an all-dark frame produced a hue mix: %s" % flat)
+# Lighting invariance, the actual claim: darkening every colour equally must not
+# move the mix.
+base = {"pink_rose_red": 30.0, "violet_purple": 20.0, "gold_amber": 10.0}
+dim = dict((k, v * 0.4) for k, v in base.items()); dim["dark"] = 36.0
+if any(abs(m.chromatic_mix_from_pct(base)[k] - m.chromatic_mix_from_pct(dim)[k]) > 1e-9
+       for k in base):
+    problems.append("the mix moved when the whole frame was darkened")
+sys.exit(0 if not problems else (print(problems) or 1))
+MIX
+check $? "the hue mix excludes light-driven families and is invariant to dimming"
+
+python3 -c "import ast,io;ast.parse(io.open('$PB/compare-to-reference.py',encoding='utf8').read())"
+check $? "compare-to-reference.py parses"
+if command -v ffmpeg >/dev/null 2>&1 && [ -f "$PB/../../marble/reference/wonderland-reference.jpg" ]; then
+  # A 2x2 PNG is enough: what is being tested is the PAGE, not the picture.
+  ffmpeg -v error -y -f lavfi -i color=c=0x6633AA:s=64x64 -frames:v 1 "$TMP/tiny.png" 2>/dev/null
+  cat > "$TMP/tiny-facts.json" <<'JSON'
+{"palette_pct": {"pink_rose_red": 10.0, "violet_purple": 5.0, "gold_amber": 13.0,
+                 "green_foliage": 25.0, "blue_teal": 6.0, "warm_timber_stone": 9.0,
+                 "dark": 3.0, "cream_white": 25.0, "neutral_stone": 4.0},
+ "coverage": {"objects_pct": 93.4, "sky_pct": 6.5, "bare_ground_pct": 0.04},
+ "relay_dogs": {"in_frame": 8, "readable": 4, "tallest_px": 180.5},
+ "distinct_materials_visible": 49}
+JSON
+  python3 "$PB/compare-to-reference.py" --preview "$TMP/tiny.png" \
+          --facts "$TMP/tiny-facts.json" --out "$TMP/page.html" >/dev/null 2>&1
+  check $? "it builds a page from a preview PNG"
+  page="$(cat "$TMP/page.html" 2>/dev/null || true)"
+  case "$page" in *"not a render"*) ok "…and a preview page says it is not a render" ;;
+    *) bad "the preview page does not disclaim being a render" ;; esac
+  # SELF-CONTAINED, with one documented exception. The artifact CSP admits
+  # Google Fonts and nothing else, so those two hosts are allowed and every
+  # other external reference is a request that will silently fail.
+  foreign=$(printf '%s' "$page" | grep -oE 'https?://[^"'"'"' )]+' \
+            | grep -vE '^https://fonts\.(googleapis|gstatic)\.com' | sort -u || true)
+  [ -z "$foreign" ]
+  check $? "the page loads nothing but Google Fonts${foreign:+ (found: $foreign)}"
+  case "$page" in *fonts.googleapis.com*) ok "…and its typefaces are linked from the one host the CSP admits" ;;
+    *) bad "no font link; the page would fall back silently" ;; esac
+  case "$page" in *"background: var(--ground)"*) ok "…and paints its own background from a token, so it cannot borrow the host theme" ;;
+    *) bad "body has no explicit token background" ;; esac
+  case "$page" in *"<title>"*) ok "…and carries a title" ;; *) bad "no <title> in the page" ;; esac
+  case "$page" in *"Hue mix among coloured pixels"*) ok "…and shows the hue mix, which does survive the lighting difference" ;;
+    *) bad "no hue-mix table on a page that has both palettes" ;; esac
+  # The preview page must NOT print a delta on the absolute table: that is the
+  # comparison the measurement itself refuses.
+  abs_delta=$(printf '%s' "$page" | sed -n '/Colour families/,/<\/table>/p' | grep -c '[+-][0-9]\+\.[0-9]\+' || true)
+  [ "${abs_delta:-0}" -eq 0 ]
+  check $? "the preview page shows no delta on the absolute palette table"
+  case "$page" in *"Green is the exception"*) ok "…and names green as the row not to read" ;;
+    *) bad "the hue-mix caveat about green is missing" ;; esac
+else
+  echo "  --   ffmpeg or reference absent; the page test did not run"
+fi
+
 echo
 echo "-- the draw-cost audit --"
 python3 -c "import ast,io;ast.parse(io.open('$HERE/audit-draw-cost.py',encoding='utf8').read())"
