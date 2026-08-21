@@ -86,8 +86,20 @@ def choose_mesh(manifest, world_dir):
     is in" without saying which mesh is describing two different worlds.
     """
     downloaded = (manifest.get("assets") or {}).get("downloaded") or {}
-    for key, why in (("hq_mesh_url", "high-quality textured mesh (paid export)"),
-                     ("full_res_mesh_url", "full-resolution vertex-coloured mesh (free)")):
+    # Best first. The last entry is the important one and it was nearly missed:
+    # the Royal Garden generation came back with NEITHER mesh url, and the
+    # collider.glb was written off as an untextured collision hull. It is not —
+    # it carries COLOR_0 as a normalized ubyte VEC4, so it renders as a coloured
+    # scene at 69k triangles. With no mesh on the world it is the only real
+    # geometry available without paying 3,500 credits, and refusing to import it
+    # would have meant reporting "Marble cannot reach Unreal for free" when it
+    # can.
+    for key, why in (
+            ("hq_mesh_url", "high-quality textured mesh (paid 3,500-credit export)"),
+            ("full_res_mesh_url", "full-resolution vertex-coloured mesh (free)"),
+            ("collider_mesh_url", "COLLIDER mesh used as the visual layer — "
+                                  "vertex-coloured, no textures, LOW FIDELITY. "
+                                  "This world shipped no mesh url at all.")):
         entry = downloaded.get(key)
         if not entry:
             continue
@@ -221,6 +233,10 @@ def main(argv=None):
             "no mesh has been downloaded for %r. Run `marble_cli.py fetch %s` "
             "(free) first. Nothing was imported." % (args.slug, args.slug))
     log("visual mesh: %s (%s)" % (os.path.basename(source), why))
+    if key == "collider_mesh_url":
+        log("NOTE: this is the collider standing in as scenery. It is honest "
+            "geometry from the real generation and it is free, but it has no "
+            "textures. The 3,500-credit HQ mesh export is what replaces it.")
 
     imported = import_glb(source, destination, "SM_Marble_%s" % args.slug,
                           enable_nanite=not args.no_nanite)
@@ -234,7 +250,10 @@ def main(argv=None):
     log("placed %d visual actor(s) at scale %.2f" % (len(placed), scale))
 
     collider_imported = []
-    if args.import_collider:
+    # If the collider IS the visual layer there is nothing to import a second
+    # time — a hidden duplicate of the same geometry costs memory and confuses
+    # anyone reading the outliner.
+    if args.import_collider and key != "collider_mesh_url":
         entry = ((manifest.get("assets") or {}).get("downloaded") or {}).get(
             "collider_mesh_url")
         if entry:

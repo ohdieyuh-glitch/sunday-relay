@@ -92,7 +92,18 @@
         "fetched_at": "2026-08-21T15:47:32Z"
       }
     },
-    "url_note": "Marble asset URLs are signed and expire. `downloaded` holds the local paths, which do not."
+    "url_note": "Marble asset URLs are signed and expire. `downloaded` holds the local paths, which do not.",
+    "collider_mesh_geometry": {
+      "triangles": 69305,
+      "vertices": 38433,
+      "attributes": [
+        "COLOR_0",
+        "NORMAL",
+        "POSITION"
+      ],
+      "note": "IT HAS VERTEX COLOURS. COLOR_0 is a normalized unsigned-byte VEC4, so this is not an untextured grey collision hull — it renders as a coloured scene. With no full_res_mesh_url and no hq_mesh_url on this world, it is the only real geometry available without paying 3,500 credits, and at 69k triangles it is free to draw.",
+      "generator": "https://github.com/mikedh/trimesh"
+    }
   },
   "exports": [],
   "transform": {
@@ -112,9 +123,38 @@
     "axis_note": "glTF is Y-up right-handed; Unreal is Z-up left-handed. Interchange applies the conversion on import; unreal_rotation_deg is the ARTISTIC yaw on top of it."
   },
   "bounds": {
-    "source": null,
-    "min_cm": null,
-    "max_cm": null
+    "source": "measured from collider.glb's POSITION accessor, offline. Not a guess and not waiting for UE: the glTF carries its own min/max.",
+    "raw_gltf_min": [
+      -23.41082000732422,
+      -72.45449829101562,
+      -82.70989990234375
+    ],
+    "raw_gltf_max": [
+      82.0693588256836,
+      0.6311830878257751,
+      68.6827163696289
+    ],
+    "min_cm": [
+      -4468.6,
+      -13829.9,
+      -15787.5
+    ],
+    "max_cm": [
+      15665.2,
+      120.5,
+      13110.0
+    ],
+    "size_cm": [
+      20133.8,
+      13950.4,
+      28897.5
+    ],
+    "size_m": [
+      201.3,
+      139.5,
+      289.0
+    ],
+    "axis_note": "glTF is Y-up right-handed and Unreal is Z-up left-handed, so the Y extent above is HEIGHT and becomes Z on import. Interchange applies the conversion; these numbers are in glTF axis order deliberately, because that is what the file says and converting twice is how a layer ends up on its side."
   },
   "collision_source": {
     "authority": "unreal",

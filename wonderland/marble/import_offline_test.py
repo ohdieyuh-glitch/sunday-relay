@@ -233,6 +233,31 @@ def main():
         check(visual[0][0].endswith("mesh_hq.glb"),
               "when the 3500-credit HQ mesh is present it is preferred")
 
+        print("\n-- the collider standing in as scenery --")
+        # THE CASE THAT ACTUALLY HAPPENED. The first real Marble generation came
+        # back with neither hq_mesh_url nor full_res_mesh_url — splats, a
+        # panorama and a collider. The collider carries COLOR_0, so it renders,
+        # and refusing to import it would have meant reporting that Marble
+        # cannot reach Unreal for free when it can.
+        wdir = make_world(root, "collider-only")
+        man_path = os.path.join(wdir, "manifest.json")
+        man = json.load(io.open(man_path, encoding="utf8"))
+        man["assets"]["downloaded"].pop("full_res_mesh_url", None)
+        json.dump(man, io.open(man_path, "w", encoding="utf8"))
+        run_importer("collider-only", root)
+        visual = [i for i in REC.imports if "Collider" not in i[2]]
+        check(len(visual) == 1 and visual[0][0].endswith("collider.glb"),
+              "with NO mesh url at all, the collider becomes the visual layer")
+        check(any("LOW FIDELITY" in m for m in REC.logs),
+              "...and the log says LOW FIDELITY rather than implying a textured mesh")
+        check(any("3,500-credit" in m for m in REC.logs),
+              "...and names what would replace it")
+        labels = [a.label for a, _ in REC.actors]
+        check(sum(1 for l in labels if "ColliderReference" in (l or "")) == 0,
+              "...and it is NOT also imported a second time as a hidden reference")
+        check(all(a.component.collision == "NO_COLLISION" for a, _ in REC.actors),
+              "...and it STILL has collision disabled — Unreal keeps the authority")
+
         print("\n-- the collision boundary --")
         make_world(root, "boundary", hq=True)
         run_importer("boundary", root)
