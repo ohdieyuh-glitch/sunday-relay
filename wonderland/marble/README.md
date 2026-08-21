@@ -59,12 +59,29 @@ python3 marble_cli.py export royal-garden --asset-type splats --format ply   # f
 python3 marble_cli.py verify royal-garden
 ```
 
+Then, inside the editor on the GPU box:
+
+```bash
+UnrealEditor Wonderland.uproject -run=pythonscript \
+  -script="wonderland/marble/import-marble-world.py --slug royal-garden"
+```
+
+It imports the best downloaded mesh (the paid HQ one if present, the free
+full-res one otherwise, and it says which), requests Nanite for it, places it
+with collision **off**, imports Marble's collider mesh as a hidden reference
+that is explicitly *not* collision, and writes the measured bounds back into
+the manifest. It deletes nothing: the existing generated world — gameplay
+anchors, portals, the Dogs, the navigable plaza — is untouched.
+
 Exit codes: `0` success, `2` **our** refusal (nothing sent), `3` the vendor said no.
 
 ## Proof
 
 `python3 marble_offline_test.py` runs the whole pipeline against a stub of the
-documented API: 52 checks, ~2 seconds, no network, no credits. It asserts on
+documented API: 52 checks, ~2 seconds, no network, no credits.
+`python3 import_offline_test.py` runs the UE importer against a stubbed engine:
+28 checks, proving among other things that **no path exists** that places a
+Marble mesh with collision enabled. It asserts on
 request counts at a socket rather than on mock call records, because the
 failure being guarded against is *the vendor was billed twice*.
 
@@ -78,5 +95,6 @@ transcribed from the official reference, and only a live call tests that.
    exists in chat, not in this repo, and the image path refuses without it.
    `prompts/royal-garden-text.json` is a text-only fallback and is labelled a
    *different experiment*, not a substitute.
-3. The UE import stage: GLB → `/Game/Wonderland/Marble/...`, NoCollision, scaled
-   by `transform.unreal_uniform_scale`. Not yet written.
+3. A GPU box to run the import on. `import-marble-world.py` is written and
+   tested offline (28 checks), but it runs inside the editor and there is no
+   Unreal here.
