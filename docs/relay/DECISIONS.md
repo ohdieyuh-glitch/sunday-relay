@@ -164,6 +164,26 @@ Consequences: tasks always trace to an accepted blueprint; no phantom
 architect-phase task is needed; the founder may re-order only by amending
 this ADR.
 
+## ADR-021 — Marble supplies the backdrop; Unreal owns everything with consequences
+Context: World Labs Marble can generate the founder's reference world from an
+image, but what it returns is a single-viewpoint reconstruction — a shell whose
+measured parallax tolerance is 1.7 m at native scale, with the lighting baked
+into an unlit texture. Decision: Marble is a VISUAL layer only, imported with
+collision disabled and tagged; it is anchored at the arrival camera and scaled
+x6, which is free because uniform scaling about the reconstruction viewpoint
+leaves every ray from that camera unchanged — and the ground-plane offset is
+deliberately NOT applied with it, because translation is the one operation that
+breaks that invariance. Unreal keeps collision, navigation, Relay Dogs, Compound
+Agents, multiplayer, interactions and GVE. Marble never generates Relay Dogs,
+enforced by an image-attestation gate rather than by a text instruction: a text
+instruction was already tried and cost 1,580 credits when image conditioning
+beat it. Splats are downloaded and not imported — UE 5.8 has no native splat
+renderer here and nothing has measured one. Consequences: the far distance stops
+being authored primitives; the parallax limit is permanent and the answer to it
+is more authored geometry, never a larger shell; the shell is convincing from
+HeroCam0 and less so off-axis. Full record, with the rejected alternatives and
+the measurements behind each: ADR-021-MARBLE-IS-A-BACKDROP.md.
+
 ## Dependency analysis (Decision requirement — no dependencies added this phase)
 
 | Proposed dependency | Why considered | Existing equivalent | Security/maintenance | Verdict |

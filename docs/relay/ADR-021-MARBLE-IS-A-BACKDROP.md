@@ -1,4 +1,4 @@
-# ADR-017 — Marble supplies the backdrop; Unreal owns everything with consequences
+# ADR-021 — Marble supplies the backdrop; Unreal owns everything with consequences
 
 **Status:** Accepted and implemented (2026-08-21) on `relay/wonderland-marble`.
 Not merged: the goal holds every visual change behind founder visual approval.
