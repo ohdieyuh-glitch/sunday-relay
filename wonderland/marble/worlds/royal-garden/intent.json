@@ -1,0 +1,37 @@
+{
+  "slug": "royal-garden",
+  "submitted_at": "2026-08-21T15:40:58Z",
+  "model": "marble-1.1",
+  "prompt_type": "image",
+  "prompt_sha256": "e3ec1c690382228aaf35d77b91df9d9f2643a17e3c04f3d0cee4cf1a05f9eaea",
+  "estimate_credits": [
+    1580,
+    1580
+  ],
+  "confirmed_credits": 1580,
+  "balance_before": 13250,
+  "operation_id": "6379ef66-4a8f-4254-b1c6-e917245bb97a",
+  "outcome": "succeeded",
+  "request_body": {
+    "display_name": "Wonderland Royal Garden",
+    "model": "marble-1.1",
+    "world_prompt": {
+      "type": "image",
+      "image_prompt": {
+        "source": "media_asset",
+        "media_asset_id": "78705723-20d5-421f-bbc6-92767201b265"
+      },
+      "is_pano": "auto",
+      "disable_recaption": false,
+      "text_prompt": "A cinematic fairy-tale royal garden plaza at the gates of an extravagant pastel castle city, rendered at high-end animated-film quality, bright warm daylight. FOREGROUND: a wide plaza of pale cream and soft grey CHECKERED FLAGSTONE, worn and mossy in the joints, scattered with fallen pink and violet petals. LEFT: a tall ornate GOLD gate with dense filigree scrollwork, curled volutes and heart-shaped finials, hung between pale carved stone piers wrapped in ivy and climbing roses; beside it a round red-and-white playing-card sign bearing a heart. RIGHT: an enormous gnarled tree with deeply furrowed bark rising out of frame, an ornate gold-rimmed CLOCK FACE set into its trunk and an oval gilt PORTRAIT FRAME hanging from it, curtains of wisteria and ivy trailing down through it. MIDGROUND: a rose-covered stone ARCHWAY over shallow steps leading deeper into the garden; hedges clipped into a giant HEART shape studded with pink roses; a colossal porcelain TEACUP painted with hearts, sitting on stacked saucers, with a matching teapot nearby; GIANT MUSHROOMS in clusters — scarlet caps with white spots, deep violet caps, and pale cream ones — among dense beds of pink, violet and white flowers, foxgloves and hydrangeas. BACKGROUND: a dense fantasy castle city of slender WHITE AND CREAM STONE towers with conical roofs in ROSE PINK, MAGENTA, LILAC and pale blue, gold finials and small pennants, mushroom-domed turrets, tier upon tier receding into soft lavender atmospheric haze. SKY: bright blue-to-lavender with soft white and pink clouds; ornate GOLD KEYS and a white porcelain TEAPOT float weightlessly in the air. MATERIALS: glossy glazed porcelain, polished gold leaf, carved pale limestone, painted timber, moss, wet stone. Extremely high geometric density, every surface detailed and intentional, strong foreground-to-distance depth, volumetric light through the arch. NO characters, NO people, NO animals, NO dogs, NO creatures of any kind — the garden is empty of living figures. No bare ground, no untextured blocks, no repeated primitive shapes, no modern objects, no lettering or readable text."
+    },
+    "seed": 20260821,
+    "tags": [
+      "wonderland",
+      "relay",
+      "royal-garden",
+      "spawn-plaza"
+    ]
+  },
+  "world_id": "47928d7e-efd4-4dd1-b1a3-dcea717706bf"
+}

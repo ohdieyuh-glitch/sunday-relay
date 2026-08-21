@@ -555,9 +555,16 @@ def upload_reference(spec_path, client=None, log=print):
     prepared = client.prepare_upload(os.path.basename(image_path), "image", extension)
     asset = prepared.get("media_asset") or {}
     upload_info = prepared.get("upload_info") or {}
-    asset_id = asset.get("id")
+    # THE LIVE API DISAGREES WITH THE DOCUMENTATION HERE, and this is the exact
+    # class of gap the offline harness says it cannot cover. The reference
+    # documents `media_asset.id`; the real response carries
+    # `media_asset.media_asset_id`. Both are accepted, real name first, because
+    # a vendor that renamed it once may rename it back.
+    asset_id = asset.get("media_asset_id") or asset.get("id")
     if not asset_id:
-        raise MarbleError("prepare_upload returned no media_asset.id: %r" % (prepared,))
+        raise MarbleError(
+            "prepare_upload returned neither media_asset.media_asset_id nor "
+            "media_asset.id. Keys present: %r" % (sorted(asset),))
     client.upload_media(upload_info, payload)
     log("  uploaded. media_asset_id = %s" % asset_id)
 

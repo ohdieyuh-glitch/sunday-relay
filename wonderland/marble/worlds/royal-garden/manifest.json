@@ -1,0 +1,135 @@
+{
+  "schema_version": "wonderland.marble.manifest/1",
+  "marble_world_id": "47928d7e-efd4-4dd1-b1a3-dcea717706bf",
+  "display_name": "Wonderland Royal Garden",
+  "operation_id": "6379ef66-4a8f-4254-b1c6-e917245bb97a",
+  "prompt": {
+    "type": "image",
+    "image_prompt": {
+      "source": "media_asset",
+      "media_asset_id": "78705723-20d5-421f-bbc6-92767201b265"
+    },
+    "is_pano": "auto",
+    "disable_recaption": false,
+    "text_prompt": "A cinematic fairy-tale royal garden plaza at the gates of an extravagant pastel castle city, rendered at high-end animated-film quality, bright warm daylight. FOREGROUND: a wide plaza of pale cream and soft grey CHECKERED FLAGSTONE, worn and mossy in the joints, scattered with fallen pink and violet petals. LEFT: a tall ornate GOLD gate with dense filigree scrollwork, curled volutes and heart-shaped finials, hung between pale carved stone piers wrapped in ivy and climbing roses; beside it a round red-and-white playing-card sign bearing a heart. RIGHT: an enormous gnarled tree with deeply furrowed bark rising out of frame, an ornate gold-rimmed CLOCK FACE set into its trunk and an oval gilt PORTRAIT FRAME hanging from it, curtains of wisteria and ivy trailing down through it. MIDGROUND: a rose-covered stone ARCHWAY over shallow steps leading deeper into the garden; hedges clipped into a giant HEART shape studded with pink roses; a colossal porcelain TEACUP painted with hearts, sitting on stacked saucers, with a matching teapot nearby; GIANT MUSHROOMS in clusters — scarlet caps with white spots, deep violet caps, and pale cream ones — among dense beds of pink, violet and white flowers, foxgloves and hydrangeas. BACKGROUND: a dense fantasy castle city of slender WHITE AND CREAM STONE towers with conical roofs in ROSE PINK, MAGENTA, LILAC and pale blue, gold finials and small pennants, mushroom-domed turrets, tier upon tier receding into soft lavender atmospheric haze. SKY: bright blue-to-lavender with soft white and pink clouds; ornate GOLD KEYS and a white porcelain TEAPOT float weightlessly in the air. MATERIALS: glossy glazed porcelain, polished gold leaf, carved pale limestone, painted timber, moss, wet stone. Extremely high geometric density, every surface detailed and intentional, strong foreground-to-distance depth, volumetric light through the arch. NO characters, NO people, NO animals, NO dogs, NO creatures of any kind — the garden is empty of living figures. No bare ground, no untextured blocks, no repeated primitive shapes, no modern objects, no lettering or readable text."
+  },
+  "prompt_sha256": "e3ec1c690382228aaf35d77b91df9d9f2643a17e3c04f3d0cee4cf1a05f9eaea",
+  "source_reference": {
+    "kind": "founder-reference-image",
+    "path": "wonderland/marble/reference/wonderland-reference.jpg",
+    "supplied": "the canonical Wonderland image the founder has supplied repeatedly since 2026-08-11, and re-supplied 2026-08-21 in two crops",
+    "decomposition": "docs/relay/WONDERLAND_ART_DIRECTION.md",
+    "sha256": "62d65e80a3523f7ebb5b712238d3919c8a9647d7c28de4a8a1fb18fec31fa4eb",
+    "media_asset_id": "78705723-20d5-421f-bbc6-92767201b265",
+    "prompt_authored_from": "the image itself, viewed directly — not from the prose decomposition. The earlier prompt was written from docs/relay/WONDERLAND_ART_DIRECTION.md and missed specifics the picture actually carries: the clock set INTO the tree trunk, the oval portrait frame hanging from it, the playing-card sign, the stacked saucers under the teacup, the magenta and pale-blue roofs alongside the pink, and the floating teapot as well as the keys.",
+    "recovered_from": "the founder pasted the reference into the Claude Code conversation and the penguin container has no Downloads or ChromeOS mount to fetch it from. The session transcript stores pasted images as base64, so it was extracted from there rather than asking the founder to re-save it. 1672x941 JPEG. Two crops were supplied; this is the wider one. A THIRD image in the same message is a HUD mockup and was explicitly checked and rejected — conditioning on it would have spent 1,580 credits generating a user interface.",
+    "uploaded_at": "2026-08-21T15:40:24Z"
+  },
+  "model": "marble-1.1",
+  "generated_at": "2026-08-21T15:46:31Z",
+  "cost": {
+    "total_credits": 1580,
+    "line_items": [
+      {
+        "name": "Pano generation (image, non-pano)",
+        "credits": 80
+      },
+      {
+        "name": "World generation",
+        "credits": 1500
+      }
+    ],
+    "note": "reported by the API on the completed operation"
+  },
+  "assets": {
+    "caption": "The scene is a cinematic fairy-tale royal garden plaza at the gates of an extravagant pastel castle city, rendered with high-end animated-film quality in bright warm daylight, conveying a whimsical and enchanting tone. The wide plaza in the foreground features pale cream and soft grey checkered flagstone, worn and mossy in its joints, scattered with fallen pink and violet petals. To the left, a tall, ornate gold gate with dense filigree scrollwork, curled volutes, and heart-shaped finials stands between pale carved stone piers wrapped in ivy and climbing roses; beside it rests a round red-and-white playing-card sign bearing a heart. To the right, an enormous gnarled tree with deeply furrowed bark rises, its trunk embedded with an ornate gold-rimmed clock face, and an oval gilt portrait frame hangs from it, with curtains of wisteria and ivy trailing down through its branches. In the midground, a rose-covered stone archway extends over shallow steps leading deeper into the garden; hedges clipped into a giant heart shape are studded with pink roses; a colossal porcelain teacup painted with hearts sits on stacked saucers, with a matching teapot nearby; giant mushrooms in clusters—scarlet caps with white spots, deep violet caps, and pale cream ones—emerge among dense beds of pink, violet, and white flowers, foxgloves, and hydrangeas. The background reveals a dense fantasy castle city composed of slender white and cream stone towers with conical roofs in rose pink, magenta, lilac, and pale blue, adorned with gold finials and small pennants, and mushroom-domed turrets, tier upon tier receding into a soft lavender atmospheric haze. The sky transitions from bright blue to lavender, dotted with soft white and pink clouds; ornate gold keys and a white porcelain teapot float weightlessly in the air. The materials observed throughout the scene include glossy glazed porcelain, polished gold leaf, carved pale limestone, painted timber, moss, and wet stone, all rendered with extremely high geometric density, with every surface detailed and intentional, creating strong foreground-to-distance depth and volumetric light through the arch. The 360 scene is faultless.",
+    "thumbnail_url": "https://cdn.marble.worldlabs.ai/47928d7e-efd4-4dd1-b1a3-dcea717706bf/e7cc7e29-0eee-4f06-9b2a-8a93e9e01ba2_sand_mpi/thumbnail.webp",
+    "pano_url": "https://cdn.marble.worldlabs.ai/47928d7e-efd4-4dd1-b1a3-dcea717706bf/1f4a0420-2f67-4518-bdfb-dfe3c9798098_panos/rgb_0.png",
+    "full_res_mesh_url": null,
+    "hq_mesh_url": null,
+    "collider_mesh_url": "https://cdn.marble.worldlabs.ai/47928d7e-efd4-4dd1-b1a3-dcea717706bf/fe2e8f5b.glb",
+    "splat_spz_urls": {
+      "500k": "https://cdn.marble.worldlabs.ai/47928d7e-efd4-4dd1-b1a3-dcea717706bf/5807a166-0fcf-4985-ab03-3f8fc31ea84c_ceramic_500k.spz",
+      "100k": "https://cdn.marble.worldlabs.ai/47928d7e-efd4-4dd1-b1a3-dcea717706bf/45021966-a056-4b6a-8d44-11f5974eeb3f_dust_100k.spz",
+      "150k": "https://cdn.marble.worldlabs.ai/47928d7e-efd4-4dd1-b1a3-dcea717706bf/4971efb3-b98a-458c-9997-6f48172e7315_ceramic_150k.spz",
+      "full_res": "https://cdn.marble.worldlabs.ai/47928d7e-efd4-4dd1-b1a3-dcea717706bf/d49a721c-dcd7-4b9a-9a57-b90a2409974d_ceramic.spz"
+    },
+    "world_marble_url": "https://marble.worldlabs.ai/world/47928d7e-efd4-4dd1-b1a3-dcea717706bf",
+    "downloaded": {
+      "thumbnail_url": {
+        "path": "assets/thumbnail.jpg",
+        "bytes": 62492,
+        "fetched_at": "2026-08-21T15:47:15Z"
+      },
+      "pano_url": {
+        "path": "assets/panorama.jpg",
+        "bytes": 13959067,
+        "fetched_at": "2026-08-21T15:47:20Z"
+      },
+      "collider_mesh_url": {
+        "path": "assets/collider.glb",
+        "bytes": 1909076,
+        "fetched_at": "2026-08-21T15:47:21Z"
+      },
+      "splat_500k": {
+        "path": "assets/splat_500k.spz",
+        "bytes": 8024454,
+        "fetched_at": "2026-08-21T15:47:23Z"
+      },
+      "splat_100k": {
+        "path": "assets/splat_100k.spz",
+        "bytes": 1410890,
+        "fetched_at": "2026-08-21T15:47:24Z"
+      },
+      "splat_150k": {
+        "path": "assets/splat_150k.spz",
+        "bytes": 2395391,
+        "fetched_at": "2026-08-21T15:47:25Z"
+      },
+      "splat_full_res": {
+        "path": "assets/splat_full_res.spz",
+        "bytes": 30858336,
+        "fetched_at": "2026-08-21T15:47:32Z"
+      }
+    },
+    "url_note": "Marble asset URLs are signed and expire. `downloaded` holds the local paths, which do not."
+  },
+  "exports": [],
+  "transform": {
+    "metric_scale_factor": 1.9087772,
+    "ground_plane_offset_m": 1.075186,
+    "unreal_uniform_scale": 190.87772,
+    "unreal_origin_cm": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "unreal_rotation_deg": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "axis_note": "glTF is Y-up right-handed; Unreal is Z-up left-handed. Interchange applies the conversion on import; unreal_rotation_deg is the ARTISTIC yaw on top of it."
+  },
+  "bounds": {
+    "source": null,
+    "min_cm": null,
+    "max_cm": null
+  },
+  "collision_source": {
+    "authority": "unreal",
+    "detail": "Marble geometry is imported NoCollision. Gameplay collision and navigation stay native Unreal — see MARBLE.md.",
+    "collider_mesh_used_as": "reference only unless explicitly promoted"
+  },
+  "unreal_destination": {
+    "content_path": "/Game/Wonderland/Marble/RoyalGarden",
+    "level": "/Game/Wonderland/Maps/WonderlandHub",
+    "actor_label": "MarbleVisualLayer_RoyalGarden"
+  },
+  "licence": {
+    "commercial_use": "unavailable: the World API does not return this field",
+    "terms_url": "https://www.worldlabs.ai/terms",
+    "checked_at": null,
+    "note": "The World object schema carries no licence fields. Commercial terms must be read from the vendor's terms of service and recorded here by a person."
+  }
+}

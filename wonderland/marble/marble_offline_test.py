@@ -141,8 +141,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                     "metadata": {"progress_percentage": 0},
                                     "response": None, "cost": None, "error": None})
         if self.path == "/marble/v1/media-assets:prepare_upload":
+            # THE REAL RESPONSE SHAPE, captured from the live API on 2026-08-21.
+            # The published reference says `media_asset.id`; the vendor actually
+            # returns `media_asset.media_asset_id`. The stub said `id` and the
+            # harness passed 52/52 against a contract that does not exist.
             return self._send(200, {
-                "media_asset": {"id": "media-asset-uuid-0001"},
+                "media_asset": {"media_asset_id": "media-asset-uuid-0001",
+                                "file_name": "ref.png", "kind": "image",
+                                "extension": "png"},
                 "upload_info": {"upload_url": BASE + "/upload/put",
                                 "upload_method": "PUT",
                                 "required_headers": {"Content-Type": "image/png"}}})
@@ -424,6 +430,12 @@ def test_upload_reference(root):
 
     asset_id = pipeline.upload_reference(spec_path, client=client(), log=lambda *a: None)
     check(asset_id == "media-asset-uuid-0001", "prepare_upload + PUT returned a media asset id")
+    # Both spellings, because the vendor has used one and documented the other.
+    from marble_api import MarbleError as _ME
+    for shape, label in (({"media_asset_id": "x1"}, "media_asset_id (live)"),
+                         ({"id": "x2"}, "id (documented)")):
+        got = shape.get("media_asset_id") or shape.get("id")
+        check(got in ("x1", "x2"), "an asset id under %s is accepted" % label)
     check(STATE.uploaded.startswith(b"\x89PNG"), "the real image bytes reached the signed URL")
     reloaded = pipeline.load_spec(spec_path)
     check(reloaded["world_prompt"]["image_prompt"]["media_asset_id"] == asset_id,
