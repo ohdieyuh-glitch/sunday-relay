@@ -207,7 +207,7 @@ check $? "each colour family names the materials that put it on screen"
 python3 - "$TMP" <<'MKFACTS'
 import io, json, os, sys
 tmp = sys.argv[1]
-good = {"coverage": {"objects_pct": 95.0, "sky_pct": 5.0, "bare_ground_pct": 0.1},
+good = {"coverage": {"objects_pct": 95.0, "sky_pct": 10.0, "bare_ground_pct": 0.1},
         "distinct_materials_visible": 40,
         "depth_pixels": {"near": 30.0, "mid": 50.0, "far": 10.0},
         "lone_primitive_pct": 0.5,
