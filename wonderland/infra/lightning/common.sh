@@ -504,6 +504,59 @@ wl_require_node() {
   printf '%s' "$node"
 }
 
+# INSTALL THE NODE WILBUR NEEDS, ON CPU, ONCE.
+#
+# wl_require_node's own error message says "Install the matching node on CPU; a
+# GPU launch will not download one" — and nothing installed it, so an L4 launch
+# reached stage 5 with a cooked 1.1 GB package and died on a missing runtime.
+# The advice was right and unimplemented, which is the most expensive kind of
+# correct comment.
+#
+# Installs into $WL_PS_INFRA/node, which is exactly where wl_bundled_node
+# already looks, on persistent storage so it survives a Studio stop.
+wl_ensure_node() {
+  local required node url tmp
+  required="$(wl_ps_required_node)"
+  [ -n "$required" ] || { wl_warn "no NODE_VERSION in $WL_PS_INFRA; cannot install node"; return 1; }
+
+  node="$(wl_bundled_node)"
+  if [ -n "$node" ] && [ "$("$node" -v 2>/dev/null)" = "$required" ]; then
+    wl_ok "node $required already bundled at $node"
+    return 0
+  fi
+  node="$(command -v node || true)"
+  if [ -n "$node" ] && [ "$("$node" -v 2>/dev/null)" = "$required" ]; then
+    wl_ok "node $required already on PATH at $node"
+    return 0
+  fi
+
+  url="https://nodejs.org/dist/${required}/node-${required}-linux-x64.tar.xz"
+  wl_say "installing node $required into $WL_PS_INFRA/node"
+  tmp="$(mktemp -d)"
+  if ! curl -fsSL --retry 3 -o "$tmp/node.tar.xz" "$url"; then
+    rm -rf "$tmp"
+    wl_warn "could not download $url"
+    return 1
+  fi
+  mkdir -p "$WL_PS_INFRA/node"
+  # --strip-components=1 so the binary lands at $WL_PS_INFRA/node/bin/node,
+  # the path wl_bundled_node searches for.
+  if ! tar -xJf "$tmp/node.tar.xz" -C "$WL_PS_INFRA/node" --strip-components=1; then
+    rm -rf "$tmp"
+    wl_warn "could not unpack the node tarball"
+    return 1
+  fi
+  rm -rf "$tmp"
+  local got
+  got="$("$WL_PS_INFRA/node/bin/node" -v 2>/dev/null || true)"
+  if [ "$got" != "$required" ]; then
+    wl_warn "installed node reports '$got', expected '$required'"
+    return 1
+  fi
+  wl_ok "node $required installed at $WL_PS_INFRA/node/bin/node"
+  return 0
+}
+
 # READY | WRONG_VERSION | MISSING, for reporting without failing.
 wl_node_status() {
   local required actual node

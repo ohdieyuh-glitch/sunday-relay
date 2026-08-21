@@ -11,7 +11,7 @@
   "confirmed_credits": 1580,
   "balance_before": 11670,
   "operation_id": "0de3c95d-f056-442c-9fcd-8198c9a2d059",
-  "outcome": "submitted",
+  "outcome": "succeeded",
   "request_body": {
     "display_name": "Wonderland Royal Garden Backdrop",
     "model": "marble-1.1",
@@ -33,5 +33,6 @@
       "backdrop",
       "no-dogs"
     ]
-  }
+  },
+  "world_id": "ae83acaa-df79-4e92-b31f-53af690d5deb"
 }

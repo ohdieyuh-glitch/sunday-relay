@@ -223,7 +223,27 @@ def main(argv=None):
     destination = (manifest.get("unreal_destination") or {}).get(
         "content_path") or ("/Game/Wonderland/Marble/%s" % args.slug)
     transform = manifest.get("transform") or {}
-    scale = transform.get("unreal_uniform_scale")
+    # BACKDROP SCALE. A single-viewpoint shell at native scale tolerates 1.7 m
+    # of player movement before its nearest tenth smears — measured, not
+    # guessed. Parallax error falls linearly with distance and the imagery
+    # subtends the same angle, so scaling the shell up and pushing it out costs
+    # nothing visually from the arrival point and buys proportional roam. x6
+    # gives ~10 m, which is a plaza a player can actually walk around.
+    #
+    # This is why the field exists rather than a bare unreal_uniform_scale: the
+    # honest scale for a backdrop is NOT the world's metric scale.
+    scale = None
+    if (transform.get("placement_mode") == "backdrop_at_camera"
+            and transform.get("unreal_backdrop_scale")):
+        scale = transform["unreal_backdrop_scale"]
+        policy = transform.get("backdrop_policy") or {}
+        log("BACKDROP SCALE %.1f (x%s of the world's metric scale). Player roam "
+            "radius about %s m at a %s-degree tolerance; authored geometry owns "
+            "everything inside it and provides all ground."
+            % (scale, transform.get("backdrop_scale_multiplier"),
+               policy.get("recommended_roam_radius_m"), policy.get("tolerance_deg")))
+    if scale is None:
+        scale = transform.get("unreal_uniform_scale")
     if not scale:
         # Marble reports metres; Unreal counts centimetres. With no reported
         # scale factor the honest default is the unit conversion alone, said

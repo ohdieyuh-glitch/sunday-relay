@@ -434,14 +434,47 @@ def export(slug, asset_type, fmt, root=None, client=None, confirm_credits=None,
                 % (asset_type, fmt, already[0]["local_path"], price))
 
     client = client or MarbleClient()
-    operation = client.export(man["marble_world_id"], asset_type, fmt,
-                              resolution=resolution, mesh_variant=mesh_variant)
+    receipt_path = os.path.join(wdir, "export-%s-%s.json" % (asset_type, fmt))
+
+    # RESUME RATHER THAN RE-SPEND. An HQ mesh export is 3,500 credits and is
+    # ASYNC — it outlives the process that started it. The first real one was
+    # started here, the client timed out during the poll, and the operation id
+    # existed only in a local variable that died with it: the credits were gone
+    # and the handle was not written down. Re-running would have spent another
+    # 3,500 to rediscover the same operation.
+    previous = _read_json(receipt_path)
+    if previous and previous.get("operation_id") and not previous.get("done"):
+        log("  resuming the export already paid for: %s" % previous["operation_id"])
+        operation = client.operation(previous["operation_id"])
+    else:
+        operation = client.export(man["marble_world_id"], asset_type, fmt,
+                                  resolution=resolution, mesh_variant=mesh_variant)
+        # BEFORE the poll loop, not after it. This is the line whose absence
+        # cost a handle to 3,500 credits of work.
+        _write_json(receipt_path, {
+            "operation_id": operation.get("operation_id"),
+            "world_id": man["marble_world_id"],
+            "asset_type": asset_type, "format": fmt,
+            "mesh_variant": mesh_variant, "resolution": resolution,
+            "requested_at": utcnow(), "done": False,
+            "note": ("PAID AND IN FLIGHT. Poll it with `export ... --confirm-credits N` "
+                     "again — that RESUMES this operation rather than starting a "
+                     "new one — or watch the world object for the asset url."),
+        })
 
     # PLY splat exports come back done; HQ mesh exports are async.
     while not operation.get("done"):
         log("  export in progress…")
         time.sleep(POLL_INTERVAL_SECONDS)
         operation = client.operation(operation["operation_id"])
+    _write_json(receipt_path, {
+        "operation_id": operation.get("operation_id"),
+        "world_id": man["marble_world_id"],
+        "asset_type": asset_type, "format": fmt,
+        "done": True, "finished_at": utcnow(),
+        "error": operation.get("error"),
+        "cost": operation.get("cost"),
+    })
     if operation.get("error"):
         raise MarbleError("export failed: %s" % json.dumps(operation["error"]))
 

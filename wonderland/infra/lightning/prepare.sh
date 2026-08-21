@@ -219,6 +219,11 @@ case "$NODE_STATE" in
   *)             wl_warn "SIGNALLING NODE MISSING - no NODE_VERSION file or no node at all" ;;
 esac
 # Wilbur's node_modules: the thing that vanished across a CPU->L4 switch.
+# THE NODE WILBUR NEEDS, fetched here on CPU rather than discovered missing at
+# stage 5 on a GPU after a 1.1 GB cook. Best effort: a failure warns and the
+# launch still refuses later with the same clear message it always did.
+wl_ensure_node || wl_warn "node not installed; the stream stage will refuse"
+
 # Settle it here, on CPU, where fetching it is free.
 MODS_STATE="$(wl_wilbur_modules_status)"
 case "$MODS_STATE" in

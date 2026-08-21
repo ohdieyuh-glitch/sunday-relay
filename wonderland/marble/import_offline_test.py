@@ -158,7 +158,7 @@ def build_stub():
     return u
 
 
-def make_world(root, slug, hq=False, ground=None, scale_factor=1.25):
+def make_world(root, slug, hq=False, ground=None, scale_factor=1.25, backdrop=False):
     wdir = os.path.join(root, slug)
     assets = os.path.join(wdir, "assets")
     os.makedirs(assets, exist_ok=True)
@@ -198,6 +198,14 @@ def make_world(root, slug, hq=False, ground=None, scale_factor=1.25):
                                "actor_label": None},
         "licence": {"commercial_use": "unavailable"},
     }
+    if backdrop:
+        # Only the backdrop fixtures carry it. Forcing it onto every world made
+        # the metric-scale tests fail, which was the fixture lying rather than
+        # the code breaking.
+        manifest["transform"]["unreal_backdrop_scale"] = 1268.7
+        manifest["transform"]["backdrop_scale_multiplier"] = 6.0
+        manifest["transform"]["backdrop_policy"] = {
+            "recommended_roam_radius_m": 10.3, "tolerance_deg": 3.0}
     with io.open(os.path.join(wdir, "manifest.json"), "w", encoding="utf8") as h:
         json.dump(manifest, h, indent=2)
     return wdir
@@ -306,6 +314,19 @@ def main():
               "the single-viewpoint shell is announced as a backdrop, not a world")
         check(any("smears if a player walks away" in m for m in REC.logs),
               "...and its one real limitation is stated at import time")
+
+        print("\n-- the backdrop scale --")
+        # A shell at native scale tolerates 1.7 m of movement before smearing.
+        # Scaling it out buys proportional roam at no visual cost from the
+        # arrival camera, so the backdrop scale — not the metric one — is what
+        # must reach the actor.
+        make_world(root, "backdropscale", hq=True, backdrop=True)
+        run_importer("backdropscale", root)
+        va = [a for a, _ in REC.actors if "VisualLayer" in (a.label or "")]
+        check(va and abs(va[0].scale.x - 1268.7) < 1e-6,
+              "the BACKDROP scale is applied, not the raw metric scale")
+        check(any("BACKDROP SCALE" in m and "roam" in m for m in REC.logs),
+              "...and the import states the roam radius it buys")
 
         print("\n-- scale and placement --")
         check(abs(visual_actors[0].scale.x - 125.0) < 1e-9,

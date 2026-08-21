@@ -1,0 +1,9 @@
+{
+  "operation_id": null,
+  "world_id": "ae83acaa-df79-4e92-b31f-53af690d5deb",
+  "asset_type": "mesh",
+  "format": "glb",
+  "mesh_variant": "textured",
+  "done": false,
+  "note": "PAID: credits went 10,090 -> 6,590, so the 3,500-credit HQ mesh export was charged. The client timed out mid-poll BEFORE this receipt existed, so the operation_id was lost with the process. Recovery is to watch the world object for hq_mesh_url, which is free. The code that would have written the id before polling is now in marble_pipeline.export."
+}

@@ -1,0 +1,157 @@
+{
+  "schema_version": "wonderland.marble.manifest/1",
+  "marble_world_id": "ae83acaa-df79-4e92-b31f-53af690d5deb",
+  "display_name": "Wonderland Royal Garden Backdrop",
+  "operation_id": "0de3c95d-f056-442c-9fcd-8198c9a2d059",
+  "prompt": {
+    "type": "image",
+    "image_prompt": {
+      "source": "media_asset",
+      "media_asset_id": "c5ec2e8b-a854-4fbd-aed4-9eed92ddd340"
+    },
+    "is_pano": "auto",
+    "disable_recaption": false,
+    "text_prompt": "A cinematic fairy-tale royal garden plaza at the gates of an extravagant pastel castle city, rendered at high-end animated-film quality, bright warm daylight. FOREGROUND: a wide plaza of pale cream and soft grey CHECKERED FLAGSTONE, worn and mossy in the joints, scattered with fallen pink and violet petals. LEFT: a tall ornate GOLD gate with dense filigree scrollwork, curled volutes and heart-shaped finials, hung between pale carved stone piers wrapped in ivy and climbing roses; beside it a round red-and-white playing-card sign bearing a heart. RIGHT: an enormous gnarled tree with deeply furrowed bark rising out of frame, an ornate gold-rimmed CLOCK FACE set into its trunk and an oval gilt PORTRAIT FRAME hanging from it, curtains of wisteria and ivy trailing down through it. MIDGROUND: a rose-covered stone ARCHWAY over shallow steps leading deeper into the garden; hedges clipped into a giant HEART shape studded with pink roses; a colossal porcelain TEACUP painted with hearts, sitting on stacked saucers, with a matching teapot nearby; GIANT MUSHROOMS in clusters — scarlet caps with white spots, deep violet caps, and pale cream ones — among dense beds of pink, violet and white flowers, foxgloves and hydrangeas. BACKGROUND: a dense fantasy castle city of slender WHITE AND CREAM STONE towers with conical roofs in ROSE PINK, MAGENTA, LILAC and pale blue, gold finials and small pennants, mushroom-domed turrets, tier upon tier receding into soft lavender atmospheric haze. SKY: bright blue-to-lavender with soft white and pink clouds; ornate GOLD KEYS and a white porcelain TEAPOT float weightlessly in the air. MATERIALS: glossy glazed porcelain, polished gold leaf, carved pale limestone, painted timber, moss, wet stone. Extremely high geometric density, every surface detailed and intentional, strong foreground-to-distance depth, volumetric light through the arch. NO characters, NO people, NO animals, NO dogs, NO creatures of any kind — the garden is empty of living figures. No bare ground, no untextured blocks, no repeated primitive shapes, no modern objects, no lettering or readable text."
+  },
+  "prompt_sha256": "b4fdbfb68d320f3d5204bc56ff4a89511dd7586c38e04602c263bf6989701dd4",
+  "source_reference": {
+    "kind": "founder-reference-image, cropped above the dog band",
+    "path": "wonderland/marble/reference/wonderland-backdrop-nodogs.jpg",
+    "crop": "ffmpeg crop=1672:428:0:0 from the 1672x941 reference",
+    "why": "The first generation (47928d7e) reproduced the Relay Dogs from the reference despite an explicit NO-DOGS text prompt — image conditioning beat the negative. Cropping above the dog band removes the input that caused it, which is more reliable than asking the model again not to. It also matches the architecture: Marble is the BACKDROP and the plaza the dogs stand on is authored Unreal geometry, so the cropped-away region is exactly the region Marble should not be supplying.",
+    "sha256": "5d8852d6e89db45f1115a2c8b07d0a538a1c018f92863e9b9d68bb7df26aaf5b",
+    "media_asset_id": "c5ec2e8b-a854-4fbd-aed4-9eed92ddd340",
+    "uploaded_at": "2026-08-21T16:19:47Z"
+  },
+  "model": "marble-1.1",
+  "generated_at": "2026-08-21T16:25:39Z",
+  "cost": {
+    "total_credits": 1580,
+    "line_items": [
+      {
+        "name": "Pano generation (image, non-pano)",
+        "credits": 80
+      },
+      {
+        "name": "World generation",
+        "credits": 1500
+      }
+    ],
+    "note": "reported by the API on the completed operation"
+  },
+  "assets": {
+    "caption": "The scene is a cinematic fairy-tale royal garden plaza at the gates of an extravagant pastel castle city, rendered at high-end animated-film quality, with a bright, warm daylight illuminating the fantastical environment. The overall tone is enchanting and whimsical, inviting exploration into a meticulously crafted dreamscape. The plaza, a wide expanse of pale cream and soft grey checkered flagstone, shows signs of elegant age with worn, mossy joints and scattered pink and violet petals. A tall, ornate gold gate with dense filigree scrollwork, curled volutes, and heart-shaped finials, is hung between pale carved stone piers wrapped in ivy and climbing roses, with a round red-and-white playing-card sign bearing a heart beside it. An enormous gnarled tree with deeply furrowed bark rises from the plaza, an ornate gold-rimmed clock face set into its trunk and an oval gilt portrait frame hanging from it, while curtains of wisteria and ivy trail down its massive form. A rose-covered stone archway extends over shallow steps, leading deeper into the garden, while hedges clipped into a giant heart shape are studded with pink roses. A colossal porcelain teacup, painted with hearts and sitting on stacked saucers, is placed near a matching teapot, creating a playful focal point. Giant mushrooms in clusters—scarlet caps with white spots, deep violet caps, and pale cream ones—emerge from dense beds of pink, violet, and white flowers, including foxgloves and hydrangeas. The backdrop is a dense fantasy castle city of slender white and cream stone towers with conical roofs in rose pink, magenta, lilac, and pale blue, adorned with gold finials and small pennants, and complemented by mushroom-domed turrets, tier upon tier receding into a soft lavender atmospheric haze. The sky is bright blue-to-lavender, featuring soft white and pink clouds, with ornate gold keys and a white porcelain teapot floating weightlessly in the air. The materials used throughout—glossy glazed porcelain, polished gold leaf, carved pale limestone, painted timber, moss, and wet stone—contribute to an extremely high geometric density, where every surface is detailed and intentional, creating a strong foreground-to-distance depth and volumetric light filtering through the arch. The 360 scene is faultless.",
+    "thumbnail_url": "https://cdn.marble.worldlabs.ai/ae83acaa-df79-4e92-b31f-53af690d5deb/f88039da-7a0b-4f22-a599-0a16ab8fa74e_sand_mpi/thumbnail.webp",
+    "pano_url": "https://cdn.marble.worldlabs.ai/ae83acaa-df79-4e92-b31f-53af690d5deb/63660c6e-d83e-47e5-bb1a-0ca8f3b96b37_panos/rgb_0.png",
+    "full_res_mesh_url": null,
+    "hq_mesh_url": null,
+    "collider_mesh_url": "https://cdn.marble.worldlabs.ai/ae83acaa-df79-4e92-b31f-53af690d5deb/a58ba481.glb",
+    "splat_spz_urls": {
+      "500k": "https://cdn.marble.worldlabs.ai/ae83acaa-df79-4e92-b31f-53af690d5deb/e3eda40a-8024-46f3-ab9f-9d5a05c2e882_ceramic_500k.spz",
+      "100k": "https://cdn.marble.worldlabs.ai/ae83acaa-df79-4e92-b31f-53af690d5deb/edcd010f-095b-4f72-a0be-6705e3ae02c5_dust_100k.spz",
+      "150k": "https://cdn.marble.worldlabs.ai/ae83acaa-df79-4e92-b31f-53af690d5deb/4823a230-e7d0-4dce-9620-e67582a458fe_ceramic_150k.spz",
+      "full_res": "https://cdn.marble.worldlabs.ai/ae83acaa-df79-4e92-b31f-53af690d5deb/98e6bb44-238c-439e-9b23-40ebcddac141_ceramic.spz"
+    },
+    "world_marble_url": "https://marble.worldlabs.ai/world/ae83acaa-df79-4e92-b31f-53af690d5deb",
+    "downloaded": {
+      "thumbnail_url": {
+        "path": "assets/thumbnail.jpg",
+        "bytes": 60348,
+        "fetched_at": "2026-08-21T16:26:31Z"
+      },
+      "pano_url": {
+        "path": "assets/panorama.jpg",
+        "bytes": 14150112,
+        "fetched_at": "2026-08-21T16:26:47Z"
+      },
+      "collider_mesh_url": {
+        "path": "assets/collider.glb",
+        "bytes": 5355556,
+        "fetched_at": "2026-08-21T16:26:53Z"
+      },
+      "splat_500k": {
+        "path": "assets/splat_500k.spz",
+        "bytes": 8021476,
+        "fetched_at": "2026-08-21T16:27:03Z"
+      },
+      "splat_100k": {
+        "path": "assets/splat_100k.spz",
+        "bytes": 1410909,
+        "fetched_at": "2026-08-21T16:27:05Z"
+      },
+      "splat_150k": {
+        "path": "assets/splat_150k.spz",
+        "bytes": 2397497,
+        "fetched_at": "2026-08-21T16:27:08Z"
+      },
+      "splat_full_res": {
+        "path": "assets/splat_full_res.spz",
+        "bytes": 30810551,
+        "fetched_at": "2026-08-21T16:27:43Z"
+      }
+    },
+    "url_note": "Marble asset URLs are signed and expire. `downloaded` holds the local paths, which do not."
+  },
+  "exports": [],
+  "transform": {
+    "metric_scale_factor": 2.114534,
+    "ground_plane_offset_m": 1.2398534,
+    "unreal_uniform_scale": 211.4534,
+    "unreal_origin_cm": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "unreal_rotation_deg": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "axis_note": "glTF is Y-up right-handed; Unreal is Z-up left-handed. Interchange applies the conversion on import; unreal_rotation_deg is the ARTISTIC yaw on top of it.",
+    "backdrop_policy": {
+      "measured_depth_m": {
+        "p1": 11.2,
+        "p10": 32.7,
+        "p25": 48.8,
+        "p50": 70.5,
+        "p90": 118.1,
+        "max": 168.8
+      },
+      "parallax_rule": "A player who steps w metres shifts a feature at depth D by atan(w/D). Past about 3 degrees a single-viewpoint shell visibly smears, because it cannot reveal what was hidden from the viewpoint it was reconstructed from. At NATIVE scale that allows only 1.7 m of movement before the nearest tenth of the geometry breaks, which is not an open world.",
+      "the_lever": "SCALE THE SHELL UP AND PUSH IT OUT. Parallax error falls linearly with distance and the imagery subtends the same angle, so a shell scaled by k looks identical from the arrival point and tolerates k times the movement. It stops being a place and becomes a very large dome, which is what a backdrop is.",
+      "roam_radius_for_scale": {
+        "x1": 1.7,
+        "x4": 6.9,
+        "x6": 10.3,
+        "x12": 20.6
+      },
+      "recommended_scale_multiplier": 6.0,
+      "recommended_roam_radius_m": 10.3,
+      "authored_ownership": "Authored Unreal geometry owns everything inside the roam radius and provides ALL ground the player stands on. The shell provides nothing walkable and carries no collision. Where they overlap, the authored plaza occludes the shell's near geometry — which is the cheap alternative to culling it.",
+      "tolerance_deg": 3.0
+    },
+    "backdrop_scale_multiplier": 6.0,
+    "unreal_backdrop_scale": 1268.72
+  },
+  "bounds": {
+    "source": null,
+    "min_cm": null,
+    "max_cm": null
+  },
+  "collision_source": {
+    "authority": "unreal",
+    "detail": "Marble geometry is imported NoCollision. Gameplay collision and navigation stay native Unreal — see MARBLE.md.",
+    "collider_mesh_used_as": "reference only unless explicitly promoted"
+  },
+  "unreal_destination": {
+    "content_path": "/Game/Wonderland/Marble/RoyalGardenBackdrop",
+    "level": "/Game/Wonderland/Maps/WonderlandHub",
+    "actor_label": "MarbleVisualLayer_RoyalGardenBackdrop"
+  },
+  "licence": {
+    "commercial_use": "unavailable: the World API does not return this field",
+    "terms_url": "https://www.worldlabs.ai/terms",
+    "checked_at": null,
+    "note": "The World object schema carries no licence fields. Commercial terms must be read from the vendor's terms of service and recorded here by a person."
+  }
+}
