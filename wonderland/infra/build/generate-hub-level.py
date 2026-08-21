@@ -232,6 +232,43 @@ def look_at_rotation(location, target):
 # line moves — silently, reporting an empty world as a measured one — and this
 # change moves that line. A named hook can be replaced from the namespace and
 # cannot be missed by accident.
+def _marble_shell_reach():
+    """How far the placed Marble shell actually reaches, in uu, or None.
+
+    Read from the world's own manifest — the extent measured off the GLB and the
+    scale the importer will place it at — rather than restated in a comment. The
+    comment version of this number was written against the metric scale while the
+    layer is placed at the backdrop scale, and was wrong by a factor of six.
+
+    Returns the NEAREST half-extent, because that is the distance at which the
+    shell first stands behind something.
+    """
+    slug = (os.environ.get("WONDERLAND_MARBLE_IMPORT")
+            or os.environ.get("WONDERLAND_MARBLE_BACKDROP_SLUG") or "").strip()
+    if not slug:
+        return None
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, "..", "..", "marble", "worlds", slug, "manifest.json")
+    path = os.path.normpath(path)
+    try:
+        with io.open(path, encoding="utf8") as handle:
+            manifest = json.load(handle)
+    except Exception:
+        return None
+    transform = manifest.get("transform") or {}
+    extent = transform.get("expected_unreal_extent_cm")
+    if not extent:
+        span = (manifest.get("source_mesh") or {}).get("span")
+        scale = (transform.get("unreal_backdrop_scale")
+                 or transform.get("unreal_uniform_scale"))
+        if not span or not scale:
+            return None
+        extent = [v * scale for v in span]
+    horizontal = [e for e in extent[:2] if e]
+    if not horizontal:
+        return None
+    return min(horizontal) / 2.0
+
 def _wl_piece_hook(mesh_key, location, scale, label, rotation, mat):
     return None
 
@@ -3139,7 +3176,14 @@ def build(layout):
         # grass plane. Measuring the frame before and after, paving and lawn
         # coverage were unchanged: the gaps are too small to resolve from the
         # hero camera. Cheap insurance for a closer view, not a fix.
-        _part("cylinder", x, y, 1.6, 13.4, 13.4, 0.04,
+        # ONE CONVERSION, STATED ONCE. /Engine/BasicShapes/Cylinder is 100 uu
+        # across, so an actor scale of s gives a RADIUS of 50s — the same
+        # conversion verify-hero-composition.py uses to draw every blob in this
+        # world (abs(sc) * 50.0), which is what every composition measurement
+        # here rests on.
+        _BED_SCALE = 13.4
+        _BED_RADIUS = _BED_SCALE * 50.0        # 670 uu
+        _part("cylinder", x, y, 1.6, _BED_SCALE, _BED_SCALE, 0.04,
               "stone" if "stone" in MATS else "plaza", "PlazaBed")
         # THE BED IS THE MOST VISIBLE SURFACE IN THE HERO FRAME.
         #
@@ -3160,7 +3204,10 @@ def build(layout):
                 ih = ((igx * 2654435761) ^ (igy * 40503)) & 0x7FFFFFFF
                 ix = x + (igx + 0.5) * tile
                 iy = y + (igy + 0.5) * tile
-                if math.hypot(ix - x, iy - y) > 13.4 * 100.0:
+                # The same paving radius as the main course, by name. A second
+                # literal here is a second thing to get wrong: this one and the
+                # main cull were both `13.4 * 100.0`, which is not the bed.
+                if math.hypot(ix - x, iy - y) > _BED_RADIUS * 2.0:
                     continue
                 isz = tile / 100.0 * (0.40 + (ih % 7) * 0.028)
                 _part("cube", ix + ((ih >> 5) % 5 - 2) * 3.0,
@@ -3180,7 +3227,20 @@ def build(layout):
         # visible object in the hero frame at 7.9%. Filling the interstices did
         # nothing about it, because the gap was never between the stones — it
         # was outside them. Widen the field and cull to the disc.
-        _bed_r = 13.4 * 100.0
+        # AND THAT DIAGNOSIS RESTED ON A BAD NUMBER. It opens "the bed is a disc
+        # of radius 1,340 uu"; the bed is drawn at scale 13.4, and 50 x 13.4 is
+        # 670 — the conversion verify-hero-composition.py uses to draw every
+        # blob in this world. The paving field it was widened FROM already
+        # reached 1,140 uu, comfortably past a 670 uu bed, so the ring of bare
+        # mortar it was widened to cover cannot have been outside the stones.
+        #
+        # The paving radius is left EXACTLY where it is. Halving it to match the
+        # bed would halve the visible plaza, and that is an art decision for the
+        # founder rather than an arithmetic correction made in passing. What
+        # changes here is that the number stops calling itself the bed's radius:
+        # the paving deliberately reaches twice as far as the mortar under it.
+        _PAVING_RADIUS = _BED_RADIUS * 2.0        # 1,340 uu — unchanged
+        _bed_r = _PAVING_RADIUS
         for gx in range(-8, 9):
             for gy in range(-8, 9):
                 if math.hypot(gx * tile, gy * tile) > _bed_r + tile * 0.55:
@@ -4544,28 +4604,57 @@ def build(layout):
     # eight spires on one ring; these are the extra rings behind them, placed on
     # an irrational angular step so the towers never line up in a visible lattice.
     import math as _m
-    # WHEN MARBLE SUPPLIES THE DISTANCE, STOP BUILDING IT TWICE.
+    # WHEN MARBLE SUPPLIES THE DISTANCE, STOP BUILDING IT TWICE — BUT ONLY WHERE
+    # IT ACTUALLY SUPPLIES IT.
     #
-    # The Royal Garden backdrop spans roughly 20,000 x 29,000 uu at its measured
-    # scale, which is exactly where the two far rings live. Drawing both means a
-    # procedural skyline of primitive spires poking through a photographic one —
-    # the "weak castle shells" the founder asked to be overridden, made worse by
-    # having something better behind them.
+    # This used to read: "The Royal Garden backdrop spans roughly 20,000 x
+    # 29,000 uu at its measured scale, which is exactly where the two far rings
+    # live", and it dropped both far rings on that basis. The span was right and
+    # the SCALE was wrong. 20,507 x 31,283 uu is the shell at its METRIC scale;
+    # it is not placed at that scale. It is placed as a BACKDROP at x6, where it
+    # measures 123,039 x 187,696 uu — a nearest half-extent of 61,520 uu, which
+    # is 3.2 times further out than the OUTERMOST ring at 19,500.
     #
-    # OFF BY DEFAULT and opt-in, because suppressing them without the Marble
-    # layer actually placed would leave a hole where the horizon used to be. The
-    # NEAREST ring stays either way: Marble is a single-viewpoint shell that
-    # smears when you walk, so the midground a player moves through has to stay
-    # authored geometry.
+    # So the rings are not doubling up with the shell. They are midground in
+    # front of it, and suppressing them opens a hole from 7,200 uu out to
+    # 61,520 uu — the opposite of the intent, and discoverable only by looking
+    # at a frame on a rented GPU.
+    #
+    # The decision is now DERIVED from the manifest rather than asserted here. A
+    # ring is dropped only if the shell actually reaches it; if the manifest
+    # cannot be read, every ring stays, because keeping geometry is the safe
+    # failure and deleting it is not.
     _MARBLE_BACKDROP = os.environ.get("WONDERLAND_MARBLE_BACKDROP", "0") not in ("0", "", "false", "no")
     _rings = ((7200.0, 14, 11.0, "spire"),
               (12800.0, 18, 15.0, "spire_far" if "spire_far" in MATS else "spire"),
               (19500.0, 22, 20.0, "spire_far" if "spire_far" in MATS else "spire"))
     if _MARBLE_BACKDROP:
-        _rings = _rings[:1]
-        unreal.log_warning(
-            "MARBLE BACKDROP: the two far skyline rings are suppressed; the "
-            "Marble layer covers that distance. The near ring at 7200 uu stays.")
+        _shell = _marble_shell_reach()
+        if _shell is None:
+            unreal.log_warning(
+                "MARBLE BACKDROP asked for, but no readable Marble manifest says "
+                "where the shell is. KEEPING every skyline ring: deleting the "
+                "midground on an assumption is how the horizon acquires a hole.")
+        else:
+            # THE NEAREST RING IS NEVER DROPPED, whatever the arithmetic says.
+            # That is not a distance question: Marble is a single-viewpoint
+            # shell and it smears as soon as a player walks, so the midground
+            # they actually move through has to stay authored geometry. The
+            # derived test applies to the rings BEHIND it.
+            _kept = (_rings[0],) + tuple(r for r in _rings[1:] if r[0] < _shell * 0.8)
+            _dropped = len(_rings) - len(_kept)
+            unreal.log_warning(
+                "MARBLE BACKDROP: the shell reaches %.0f uu; rings at %s. "
+                "Dropping %d of %d — a ring is only doubling up if the shell "
+                "actually gets to it."
+                % (_shell, ", ".join("%.0f" % r[0] for r in _rings),
+                   _dropped, len(_rings)))
+            if _dropped == 0:
+                unreal.log_warning(
+                    "  ...which is NONE of them. The shell is far outside every "
+                    "ring, so they are midground in front of it, not a second "
+                    "copy of it. This knob has nothing to remove here.")
+            _rings = _kept
     for ring, (dist, count, hgt, mat) in enumerate(_rings):
         for i in range(count):
             a = i * 2.39996 + ring * 0.7

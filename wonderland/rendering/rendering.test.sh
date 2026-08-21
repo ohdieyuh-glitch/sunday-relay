@@ -435,6 +435,129 @@ else
   echo "  --   ffmpeg or reference absent; the page test did not run"
 fi
 
+echo "-- the backdrop only replaces what it actually reaches --"
+# The comment behind WONDERLAND_MARBLE_BACKDROP said the Marble shell "spans
+# roughly 20,000 x 29,000 uu ... which is exactly where the two far rings live",
+# and dropped both on that basis. The span was right and the SCALE was wrong:
+# that is the shell at METRIC scale, and it is placed at the BACKDROP scale, x6,
+# where its nearest half-extent is 61,520 uu — 3.2x further out than the
+# outermost ring at 19,500. Suppressing the rings opened a hole in the midground.
+python3 - "$PB" <<'REACH'
+import io, json, os, sys, types
+pb = sys.argv[1]
+gen = os.path.join(pb, "generate-hub-level.py")
+src = io.open(gen, encoding="utf8").read()
+problems = []
+# The decision must be derived, not asserted.
+if "_marble_shell_reach" not in src:
+    problems.append("the skyline suppression is not derived from the manifest")
+if "20,000 x 29,000 uu at its measured" in src:
+    problems.append("the wrong-scale claim is still stated as current")
+head = src.split("def rot3(")[0]
+m = types.ModuleType("g"); m.__file__ = gen
+sys.modules["unreal"] = types.ModuleType("unreal")
+exec(compile(head, gen, "exec"), m.__dict__)
+reach = m._marble_shell_reach
+os.environ.pop("WONDERLAND_MARBLE_IMPORT", None)
+os.environ.pop("WONDERLAND_MARBLE_BACKDROP_SLUG", None)
+if reach() is not None:
+    problems.append("a shell distance was produced with no world named")
+os.environ["WONDERLAND_MARBLE_IMPORT"] = "does-not-exist-anywhere"
+if reach() is not None:
+    problems.append("an unknown world produced a distance instead of None")
+os.environ["WONDERLAND_MARBLE_IMPORT"] = "royal-garden-backdrop"
+r = reach()
+if r is None:
+    problems.append("the real world's manifest produced no distance")
+else:
+    # The measured fact this all turns on.
+    if not (60000 < r < 63000):
+        problems.append("shell reach %.0f uu is not the measured 61,520" % r)
+    if r < 19500:
+        problems.append("the shell reads as nearer than the outermost ring")
+sys.exit(0 if not problems else (print(problems) or 1))
+REACH
+check $? "the shell's reach is read from the manifest, and is None when unknown"
+# FAIL SAFE: an unreadable manifest must KEEP the geometry, never drop it.
+python3 - "$PB" <<'SAFE'
+import io, re, sys
+src = io.open(sys.argv[1] + "/generate-hub-level.py", encoding="utf8").read()
+block = src[src.index("_MARBLE_BACKDROP = os.environ.get"):]
+block = block[:2000]
+if "_shell is None" not in block or "KEEPING every skyline ring" not in block:
+    print("no fail-safe branch for an unreadable manifest")
+    sys.exit(1)
+# and the kept set must be computed from the shell, not sliced by index
+if re.search(r"_rings\s*=\s*_rings\[:\d+\]", block):
+    print("rings are still dropped by a hardcoded slice")
+    sys.exit(1)
+sys.exit(0)
+SAFE
+check $? "an unreadable manifest keeps every ring instead of deleting the midground"
+
+echo "-- every constant the plaza reads is one it binds --"
+# 125 grep checks passed on a generator that died with
+# `NameError: _BED_RADIUS` — a constant referenced in kit_plaza and never
+# defined, because the patch that was supposed to define it never applied.
+# Reading source for the RIGHT strings proves nothing about whether the names
+# resolve. Only a four-minute dry run caught it. This is the cheap version.
+python3 - "$PB" <<'BINDS'
+import io, os, re, sys
+src = io.open(os.path.join(sys.argv[1], "generate-hub-level.py"), encoding="utf8").read()
+body = src[src.index("def kit_plaza("):]
+nxt = body.index("\n    def ", 10)
+body = body[:nxt]
+used = sorted(set(re.findall(r"\b(_BED_RADIUS|_BED_SCALE|_PAVING_RADIUS|ccx|ccy)\b", body)))
+if not used:
+    print("kit_plaza reads none of the named constants — the check has drifted")
+    sys.exit(1)
+# A name can be bound anywhere in a left-hand tuple — `ccx, ccy = ...` binds
+# ccy second — so the pattern allows other names on either side of it.
+missing = [n for n in used
+           if not re.search(r"^\s*(?:\w+\s*,\s*)*%s\s*(?:,\s*\w+\s*)*=[^=]" % n,
+                            body, re.M)]
+if missing:
+    print("kit_plaza uses and never binds:", missing)
+    sys.exit(1)
+sys.exit(0)
+BINDS
+check $? "kit_plaza binds every constant it reads"
+
+echo "-- one scale-to-size conversion, used everywhere --"
+# /Engine/BasicShapes/Cylinder is 100 uu across, so a scale of s is a RADIUS of
+# 50s. verify-hero-composition draws every blob with abs(sc) * 50.0, and every
+# composition measurement in this project rests on that. The plaza used
+# `13.4 * 100.0` in two places and called it the bed's radius; the bed is drawn
+# at scale 13.4, so its radius is 670 and the paving reaches 1,340.
+python3 - "$PB" <<'CONV'
+import io, re, sys
+pb = sys.argv[1]
+prev = io.open(pb + "/verify-hero-composition.py", encoding="utf8").read()
+gen = io.open(pb + "/generate-hub-level.py", encoding="utf8").read()
+motif = io.open(pb + "/verify-hero-motif.py", encoding="utf8").read()
+problems = []
+if "* 50.0, abs(" not in prev.replace(" ", " "):
+    if not re.search(r"abs\(sc\[0\]\)\s*\*\s*50\.0", prev):
+        problems.append("the preview no longer converts scale with x50")
+if not re.search(r"CYLINDER_RADIUS_PER_SCALE\s*=\s*50\.0", motif):
+    problems.append("verify-hero-motif uses a different scale conversion")
+# CODE ONLY. This exact check just failed on the COMMENT that explains it —
+# the sixth time in this project that a grep has fired on its own explanatory
+# prose. Strip comments before looking for a literal, always.
+code = re.sub(r"#.*", "", gen)
+if "13.4 * 100.0" in code:
+    problems.append("the plaza still uses `13.4 * 100.0` as if it were the bed radius")
+if "_BED_RADIUS" not in gen or "_PAVING_RADIUS" not in gen:
+    problems.append("the bed and the paving are not named apart")
+# And the paving must still reach exactly where it did — this correction is a
+# renaming, not a visual change.
+m = re.search(r"_PAVING_RADIUS\s*=\s*_BED_RADIUS\s*\*\s*2\.0", gen)
+if not m:
+    problems.append("the paving radius changed; this was supposed to be inert")
+sys.exit(0 if not problems else (print(problems) or 1))
+CONV
+check $? "the bed and the paving are named apart, and the paving is unchanged"
+
 echo
 echo "-- the draw-cost audit --"
 python3 -c "import ast,io;ast.parse(io.open('$HERE/audit-draw-cost.py',encoding='utf8').read())"
@@ -529,9 +652,14 @@ problems = []
 if '"0")' not in line:
     problems.append("does not default to off: %s" % line)
 # The NEAREST ring must survive: Marble is a single-viewpoint shell that smears
-# when a player walks, so the midground they move through stays authored.
-if "_rings = _rings[:1]" not in src:
-    problems.append("suppresses more than the far rings")
+# when a player walks, so the midground they move through stays authored. Tested
+# as the PROPERTY, not as the old `_rings[:1]` slice — that slice was the bug,
+# because it dropped the far rings on a claim about the shell's scale that was
+# wrong by a factor of six.
+if "_rings[0],) + tuple(" not in src:
+    problems.append("the nearest ring is not unconditionally kept")
+if "smears" not in src[src.index("_kept = ") - 900:src.index("_kept = ")]:
+    problems.append("the reason the nearest ring survives is not stated where it is enforced")
 sys.exit(0 if not problems else (print(problems) or 1))
 BACKDROP
 check $? "...defaults to OFF and keeps the nearest ring authored"
