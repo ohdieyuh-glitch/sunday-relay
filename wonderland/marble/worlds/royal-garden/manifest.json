@@ -101,8 +101,18 @@
         "NORMAL",
         "POSITION"
       ],
-      "note": "IT HAS VERTEX COLOURS. COLOR_0 is a normalized unsigned-byte VEC4, so this is not an untextured grey collision hull — it renders as a coloured scene. With no full_res_mesh_url and no hq_mesh_url on this world, it is the only real geometry available without paying 3,500 credits, and at 69k triangles it is free to draw.",
-      "generator": "https://github.com/mikedh/trimesh"
+      "note": "IT IS A COLLISION PROXY AND NOT A VISUAL LAYER. It does carry COLOR_0, so 'untextured grey hull' was wrong — but 1.95 triangles per m2 with a median edge of 1.25 m cannot represent a gate finial, a mushroom cap or a roof tile. A detailed game environment runs 100+ per m2. import-marble-world.py requires --allow-collider-as-visual and says the number out loud.",
+      "generator": "https://github.com/mikedh/trimesh",
+      "triangles_per_m2": 1.95,
+      "surface_area_m2": 35494,
+      "edge_metres": {
+        "median": 1.25,
+        "mean": 1.18,
+        "p90": 1.75,
+        "max": 2.1
+      },
+      "axis": "Y-DOWN in this export. Measured: near the reconstruction origin the vertex Y range is -5.02..0.63, the dense bands are at negative Y, and the reported ground_plane_offset of 1.075 m matches raw Y +0.63 once metric_scale_factor is applied. Rendering it Y-up hangs the world upside down from a point.",
+      "reconstruction": "Single-viewpoint: geometry radiates from an origin at x=0,z=0 with stretch artifacts away from it. It is a shell seen from one place, not a closed walkable scene. Place it centred on the arrival camera or use it as distant scenery; walking far from the origin reveals the stretching."
     }
   },
   "exports": [],

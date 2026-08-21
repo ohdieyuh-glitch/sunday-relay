@@ -77,7 +77,7 @@ def read_manifest(slug, root=None):
         return json.load(handle), path
 
 
-def choose_mesh(manifest, world_dir):
+def choose_mesh(manifest, world_dir, allow_collider=False):
     """The best VISUAL mesh actually on disk, and say which one and why.
 
     hq_mesh is the 3,500-credit textured export. full_res_mesh is vertex-coloured
@@ -86,26 +86,37 @@ def choose_mesh(manifest, world_dir):
     is in" without saying which mesh is describing two different worlds.
     """
     downloaded = (manifest.get("assets") or {}).get("downloaded") or {}
-    # Best first. The last entry is the important one and it was nearly missed:
-    # the Royal Garden generation came back with NEITHER mesh url, and the
-    # collider.glb was written off as an untextured collision hull. It is not —
-    # it carries COLOR_0 as a normalized ubyte VEC4, so it renders as a coloured
-    # scene at 69k triangles. With no mesh on the world it is the only real
-    # geometry available without paying 3,500 credits, and refusing to import it
-    # would have meant reporting "Marble cannot reach Unreal for free" when it
-    # can.
+    # THE COLLIDER IS NOT A VISUAL LAYER, and this comment exists because I
+    # argued both sides of that before measuring it.
+    #
+    # It does carry COLOR_0, so "untextured grey hull" was wrong. But the
+    # geometry is what decides, and the geometry is: 69,305 triangles over
+    # 35,494 m^2 of surface — **1.95 triangles per square metre**, median edge
+    # 1.25 m, longest 2.1 m. A detailed game environment runs 100+ per m^2. A
+    # 1.25-metre triangle cannot represent a gate finial, a mushroom cap or a
+    # roof tile; at any distance a player would stand at, it is a coloured blur.
+    #
+    # So it stays available and stops being automatic. Silently substituting a
+    # collision proxy for the Royal Garden would ship a blob and call it the
+    # founder's reference.
     for key, why in (
             ("hq_mesh_url", "high-quality textured mesh (paid 3,500-credit export)"),
-            ("full_res_mesh_url", "full-resolution vertex-coloured mesh (free)"),
-            ("collider_mesh_url", "COLLIDER mesh used as the visual layer — "
-                                  "vertex-coloured, no textures, LOW FIDELITY. "
-                                  "This world shipped no mesh url at all.")):
+            ("full_res_mesh_url", "full-resolution vertex-coloured mesh (free)")):
         entry = downloaded.get(key)
         if not entry:
             continue
         path = os.path.join(world_dir, entry["path"])
         if os.path.exists(path):
             return path, key, why
+    if allow_collider:
+        entry = downloaded.get("collider_mesh_url")
+        if entry:
+            path = os.path.join(world_dir, entry["path"])
+            if os.path.exists(path):
+                return path, "collider_mesh_url", (
+                    "COLLIDER PROXY standing in as scenery — 1.95 triangles per "
+                    "m^2, median edge 1.25 m. Explicitly requested; it is not a "
+                    "substitute for the HQ mesh and will not read as the reference.")
     return None, None, None
 
 
@@ -184,6 +195,10 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--slug", required=True)
     parser.add_argument("--root", default=None)
+    parser.add_argument("--allow-collider-as-visual", action="store_true",
+                        help="use the collision proxy as scenery when the world has "
+                             "no mesh. 1.95 triangles per m2 — a coloured blur, not "
+                             "the Royal Garden. Opt-in on purpose.")
     parser.add_argument("--no-nanite", action="store_true",
                         help="import as a normal static mesh")
     parser.add_argument("--import-collider", action="store_true", default=True,
@@ -227,16 +242,27 @@ def main(argv=None):
         log("ground plane offset %.3f m applied -> z origin %.1f cm"
             % (ground, origin[2]))
 
-    source, key, why = choose_mesh(manifest, world_dir)
+    source, key, why = choose_mesh(manifest, world_dir,
+                                   allow_collider=args.allow_collider_as_visual)
     if not source:
         raise SystemExit(
-            "no mesh has been downloaded for %r. Run `marble_cli.py fetch %s` "
-            "(free) first. Nothing was imported." % (args.slug, args.slug))
+            "no usable visual mesh for %r.\n"
+            "This world may have shipped splats and a collider only — that is what "
+            "the Royal Garden generation did. Options:\n"
+            "  * export the HQ mesh (3,500 credits):\n"
+            "      marble_cli.py export %s --asset-type mesh --format glb "
+            "--confirm-credits 3500\n"
+            "  * import the collision proxy anyway (free, 1.95 tri/m2, a blur):\n"
+            "      --allow-collider-as-visual\n"
+            "  * run `marble_cli.py fetch %s` if nothing has been downloaded yet.\n"
+            "Nothing was imported." % (args.slug, args.slug, args.slug))
     log("visual mesh: %s (%s)" % (os.path.basename(source), why))
     if key == "collider_mesh_url":
-        log("NOTE: this is the collider standing in as scenery. It is honest "
-            "geometry from the real generation and it is free, but it has no "
-            "textures. The 3,500-credit HQ mesh export is what replaces it.")
+        log("NOTE: this is the COLLISION PROXY standing in as scenery. Measured: "
+            "1.95 triangles per m2, median edge 1.25 m. It is real geometry from "
+            "the real generation and it is free, and it will not read as the "
+            "founder's reference at any distance. The 3,500-credit HQ mesh "
+            "export is what delivers that.")
 
     imported = import_glb(source, destination, "SM_Marble_%s" % args.slug,
                           enable_nanite=not args.no_nanite)

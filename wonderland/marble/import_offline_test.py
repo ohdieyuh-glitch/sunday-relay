@@ -244,12 +244,23 @@ def main():
         man = json.load(io.open(man_path, encoding="utf8"))
         man["assets"]["downloaded"].pop("full_res_mesh_url", None)
         json.dump(man, io.open(man_path, "w", encoding="utf8"))
-        run_importer("collider-only", root)
+        # DEFAULT: REFUSE. The collider is 1.95 triangles per m2 with a median
+        # edge of 1.25 m — a coloured blur. Substituting it for the Royal Garden
+        # automatically would ship a blob and call it the founder's reference.
+        try:
+            run_importer("collider-only", root)
+            bad("with no mesh url, the importer must NOT silently use the collider")
+        except SystemExit as exc:
+            check("3,500 credits" in str(exc) and "allow-collider-as-visual" in str(exc),
+                  "no mesh url -> refusal naming BOTH the paid export and the opt-in")
+        check(not REC.imports, "...and it imported nothing")
+
+        run_importer("collider-only", root, extra=["--allow-collider-as-visual"])
         visual = [i for i in REC.imports if "Collider" not in i[2]]
         check(len(visual) == 1 and visual[0][0].endswith("collider.glb"),
-              "with NO mesh url at all, the collider becomes the visual layer")
-        check(any("LOW FIDELITY" in m for m in REC.logs),
-              "...and the log says LOW FIDELITY rather than implying a textured mesh")
+              "with the opt-in flag, the collider becomes the visual layer")
+        check(any("1.95 triangles per m2" in m for m in REC.logs),
+              "...and the log quotes the MEASURED density, not an adjective")
         check(any("3,500-credit" in m for m in REC.logs),
               "...and names what would replace it")
         labels = [a.label for a, _ in REC.actors]
