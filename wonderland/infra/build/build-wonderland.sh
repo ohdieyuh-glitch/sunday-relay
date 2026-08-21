@@ -230,10 +230,18 @@ fi
 # first time against real UE 5.8 API signatures — expect first-build fixups
 # (docs/relay/WONDERLAND.md §12). It is a BUILD, not a deploy: it uploads and
 # launches nothing.
+# -map= IS EXPLICIT. Without it the cook infers what to include from the maps
+# settings, and with no Config/ at all it inferred the engine default — so the
+# packaged build shipped a template world and the live stream showed a blocky
+# near-empty scene while every other part of the pipeline worked. Stating the
+# map means a cook that omits WonderlandHub fails here instead of being
+# discovered from a browser.
+COOK_MAP="${WL_COOK_MAP:-/Game/Wonderland/Maps/WonderlandHub}"
 run_step "build-cook-run" "$RUNUAT" BuildCookRun \
   -project="$PROJECT" \
   -platform="$PLATFORM" \
   -clientconfig="$CONFIG" \
+  -map="$COOK_MAP" \
   -nop4 -build -cook -stage -pak -archive \
   -archivedirectory="$OUT" \
   -utf8output

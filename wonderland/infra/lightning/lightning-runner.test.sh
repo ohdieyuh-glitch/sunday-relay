@@ -1008,6 +1008,150 @@ out=$(WL_ROOT="$TMP/root" WL_RUN="$TMP/root/run" WL_VULKAN_AUTOGEN_ICD=0 bash -c
 . $HERE/common.sh; _WL_NV_LIB_DIRS='$TMP/nvlib'; wl_vulkan_icd_files" 2>&1)
 check "$out" "" "WL_VULKAN_AUTOGEN_ICD=0 disables generation"
 
+echo "== the packaged build must open the world that was generated =="
+# THE ROOT CAUSE OF THE WRONG WORLD. The generator saves to
+# /Game/Wonderland/Maps/WonderlandHub. The project had NO Config/ directory at
+# all, so no GameDefaultMap was set, and BuildCookRun was invoked with no -map.
+# A packaged Unreal game with no map pinned opens the ENGINE'S OWN default map.
+# The stream was healthy and showed a near-empty template with proxy pawns.
+PROJ="$HERE/../.."
+LEVEL=$(python3 -c "import json,io;print(json.load(io.open('$PROJ/WorldDesign/hub-layout.json',encoding='utf8'))['level'])")
+check "$LEVEL" "/Game/Wonderland/Maps/WonderlandHub" "the generator's target level is known"
+
+[ -f "$PROJ/Config/DefaultEngine.ini" ] && ok "Config/DefaultEngine.ini exists" \
+  || bad "no Config/DefaultEngine.ini - a packaged build would open the engine default map"
+CFG="$(cat "$PROJ/Config/DefaultEngine.ini" 2>/dev/null || true)"
+has "$CFG" "GameDefaultMap=" && ok "GameDefaultMap is set" || bad "no GameDefaultMap"
+has "$CFG" "WonderlandHub"   && ok "  and it names WonderlandHub" || bad "  it does not name WonderlandHub"
+has "$CFG" "MapsToCook"      && ok "the map is in MapsToCook" || bad "the map is not explicitly cooked"
+# A setting naming a class that does not exist is a fabricated setting.
+if has "$CFG" "GlobalDefaultGameMode="; then
+  gm=$( ( set +o pipefail; printf '%s' "$CFG" | grep -oE 'GlobalDefaultGameMode=[^ ]+' ) || true)
+  cls="${gm##*.}"
+  if ls "$PROJ/Source/Wonderland/"*.h >/dev/null 2>&1 && grep -rq "class .*$cls" "$PROJ/Source/Wonderland/" 2>/dev/null; then
+    ok "GlobalDefaultGameMode names a class that exists ($cls)"
+  else
+    bad "GlobalDefaultGameMode names $cls, which does not exist in Source/Wonderland"
+  fi
+else
+  ok "no GlobalDefaultGameMode is set (this project has no GameMode class)"
+fi
+grep -q -- '-map=' "$HERE/../build/build-wonderland.sh" \
+  && ok "the cook names the map explicitly" \
+  || bad "BuildCookRun infers what to cook and can omit the generated world"
+
+echo "== the world audit fails on the pre-fix state =="
+VW="$HERE/../build/verify-packaged-world.py"
+[ -r "$VW" ] && ok "the world audit exists" || bad "no verify-packaged-world.py"
+python3 "$VW" >/dev/null 2>&1
+check "$?" "0" "the audit passes on the current (fixed) source"
+# Reconstruct the exact broken state: no Config at all.
+rm -rf "$TMP/wp"; mkdir -p "$TMP/wp/infra/build" "$TMP/wp/WorldDesign"
+printf '{"level":"/Game/Wonderland/Maps/WonderlandHub"}\n' > "$TMP/wp/WorldDesign/hub-layout.json"
+cp "$VW" "$TMP/wp/infra/build/"
+printf 'run_step BuildCookRun -project=x -nop4 -build -cook\n' > "$TMP/wp/infra/build/build-wonderland.sh"
+out=$(python3 "$TMP/wp/infra/build/verify-packaged-world.py" 2>&1); rc=$?
+check "$rc" "1" "the audit FAILS when Config/ is missing (the real pre-fix state)"
+has "$out" "engine default map" && ok "  and explains that the engine default map would open" \
+  || bad "  the failure does not explain the consequence"
+# and the -map omission is caught on its own
+mkdir -p "$TMP/wp/Config"
+printf 'GameDefaultMap=/Game/Wonderland/Maps/WonderlandHub.WonderlandHub\n' > "$TMP/wp/Config/DefaultEngine.ini"
+out=$(python3 "$TMP/wp/infra/build/verify-packaged-world.py" 2>&1); rc=$?
+check "$rc" "1" "a cook with no -map still fails the audit"
+has "$out" "omit the generated world" && ok "  and says why that matters" \
+  || bad "  the -map failure is not explained"
+# UNVERIFIED is not PASS: with no package and no log it must not claim runtime proof
+out=$(WL_OUT="$TMP/definitely-absent" WL_APP_LOG="$TMP/definitely-absent.log" python3 "$VW" 2>&1)
+has "$out" "UNVERIFIED" && ok "with no package or log it reports UNVERIFIED, not PASS" \
+  || bad "it claimed a runtime result it could not have measured"
+
+echo "== the running build states which world it is in =="
+WP="$PROJ/Source/Wonderland/WonderlandWorldProof.cpp"
+[ -r "$WP" ] && ok "the runtime world proof exists" || bad "no WonderlandWorldProof.cpp"
+for token in "WORLD=" "ACTORS=" "RELAY_DOGS=" "COMPOUND_AGENTS=" "PROXY_ACTORS=" "WORLD_MISMATCH"; do
+  grep -q "$token" "$WP" && ok "runtime logs $token" || bad "runtime does not log $token"
+done
+# Warning level, or the packaged log filters it out and the proof is unreadable.
+grep -q "LogWonderlandProof, Warning, TEXT(\"WORLD=" "$WP" \
+  && ok "the proof logs at Warning (Display is filtered from packaged logs)" \
+  || bad "the proof would be invisible in a packaged build log"
+grep -q "WonderlandWorldProof::Register" "$PROJ/Source/Wonderland/WonderlandModule.cpp" \
+  && ok "the module registers the proof at startup" \
+  || bad "the proof is never registered - it would never run"
+# and the audit must be able to READ those lines back
+rm -rf "$TMP/rt"; mkdir -p "$TMP/rt"
+printf 'LogWonderlandProof: Warning: WORLD=/Game/Wonderland/Maps/WonderlandHub\nACTORS=33048\nRELAY_DOGS=12\nCOMPOUND_AGENTS=4\nPROXY_ACTORS=0\n' > "$TMP/rt/app.log"
+out=$(WL_APP_LOG="$TMP/rt/app.log" python3 "$VW" 2>&1)
+has "$out" "RUNTIME PASS" && ok "a correct runtime log reads as PASS" || bad "a correct runtime log was not accepted"
+printf 'WORLD=/Engine/Maps/Entry\nACTORS=14\nRELAY_DOGS=0\nCOMPOUND_AGENTS=0\nPROXY_ACTORS=1\n' > "$TMP/rt/app.log"
+out=$(WL_APP_LOG="$TMP/rt/app.log" python3 "$VW" 2>&1); rc=$?
+check "$rc" "1" "the engine default map + 14 actors FAILS the audit"
+has "$out" "not WonderlandHub" && ok "  and names the world that actually opened" \
+  || bad "  the failure does not name the wrong world"
+printf 'WORLD=/Game/Wonderland/Maps/WonderlandHub\nACTORS=31\nRELAY_DOGS=0\nCOMPOUND_AGENTS=0\nPROXY_ACTORS=0\n' > "$TMP/rt/app.log"
+out=$(WL_APP_LOG="$TMP/rt/app.log" python3 "$VW" 2>&1); rc=$?
+check "$rc" "1" "the RIGHT map with a template-sized actor count also fails"
+has "$out" "template, not the generated world" && ok "  and says the cooked map is stale/small" \
+  || bad "  a stale cooked map is not distinguished"
+
+echo "== the production region is explicit and US-West =="
+VR="$HERE/../build/verify-region.py"
+python3 "$VR" >/dev/null 2>&1; check "$?" "0" "the default region passes"
+out=$(python3 "$VR" 2>&1)
+has "$out" "us-west4" && ok "the default is us-west4 (Las Vegas)" || bad "the default is not us-west4"
+WL_GCP_REGION=us-east1 python3 "$VR" >/dev/null 2>&1
+check "$?" "1" "an east-coast region is REFUSED, not warned about"
+WL_GCP_REGION=us-central1 python3 "$VR" >/dev/null 2>&1
+check "$?" "1" "a central region is refused too"
+WL_GCP_REGION=us-west2 python3 "$VR" >/dev/null 2>&1
+check "$?" "0" "us-west2 (Los Angeles) is allowed"
+has "$out" "not sufficient" && ok "and it states that region alone is not a quality claim" \
+  || bad "it lets a region be read as proof of quality"
+
+echo "== CONNECTED is distinguished from GOOD ENOUGH TO USE, by measurement =="
+VQ="$HERE/../build/verify-stream-quality.py"
+[ -r "$VQ" ] && ok "the quality gate exists" || bad "no verify-stream-quality.py"
+q() { printf '%s' "$1" | python3 "$VQ" >"$TMP/q.out" 2>&1; printf '%s' "$?"; }
+GOOD='{"inbound":{"packetsReceived":100000,"packetsLost":200,"framesPerSecond":60,"frameWidth":1280,"frameHeight":720},"candidatePair":{"currentRoundTripTime":0.021},"localCandidate":{"candidateType":"srflx","protocol":"udp"},"remoteCandidate":{"candidateType":"srflx","protocol":"udp"},"measuredKbps":6200,"measuredFps":60}'
+check "$(q "$GOOD")" "0" "a direct, low-latency, full-rate session is GOOD_ENOUGH"
+# THE FOUNDER'S ACTUAL SYMPTOM: connects fine, looks bad.
+POOR='{"inbound":{"packetsReceived":9000,"packetsLost":400,"framesPerSecond":18,"frameWidth":1280,"frameHeight":720},"candidatePair":{"currentRoundTripTime":0.140},"localCandidate":{"candidateType":"relay","protocol":"tcp"},"remoteCandidate":{"candidateType":"relay","protocol":"tcp"},"measuredKbps":900,"measuredFps":18}'
+check "$(q "$POOR")" "1" "a connected-but-poor session is NOT good enough"
+out="$(cat "$TMP/q.out")"
+has "$out" "TURN relay" && ok "  and names the relayed media path" || bad "  the relay is not named"
+has "$out" "TCP" && ok "  and names the TCP candidate pair" || bad "  the TCP pair is not named"
+has "$out" "below the" && ok "  and names the bitrate floor" || bad "  the bitrate floor is not named"
+check "$(q '{"inbound":null,"error":"the page created no RTCPeerConnection"}')" "2" \
+  "no video at all is NOT_CONNECTED, a third distinct verdict"
+# A GOOD SESSION THAT IS MERELY RELAYED must still fail: the route is the point.
+RELAYED='{"inbound":{"packetsReceived":100000,"packetsLost":100,"framesPerSecond":60,"frameWidth":1280,"frameHeight":720},"candidatePair":{"currentRoundTripTime":0.020},"localCandidate":{"candidateType":"relay","protocol":"udp"},"remoteCandidate":{"candidateType":"srflx","protocol":"udp"},"measuredKbps":8000,"measuredFps":60}'
+check "$(q "$RELAYED")" "1" "a fast but RELAYED session is still not production-quality"
+# and nothing in the gate may infer quality from geography
+# The gate may EXPLAIN where a threshold came from ("US-West to US-West should
+# beat this"); what it must never do is read a region and let that influence the
+# verdict. Assert on the mechanism, not on the word - the first version of this
+# failed on a comment, which is a test being louder than it is correct.
+if grep -qE 'WL_GCP_REGION|getenv.*REGION|region *=' "$VQ"; then
+  bad "the quality gate reads a region - quality must be measured, not inferred"
+else
+  ok "the quality gate never reads a region; every verdict comes from a measurement"
+fi
+
+echo "== the stats come from a real receiving browser =="
+SS="$HERE/stream-stats.cjs"
+[ -r "$SS" ] && ok "stream-stats.cjs exists" || bad "no stream-stats.cjs"
+node --check "$SS" 2>/dev/null && ok "  and it parses" || bad "  it does not parse"
+grep -q "channel: 'chrome'" "$SS" \
+  && ok "  and uses real Chrome (bundled Chromium has no H264 decoder)" \
+  || bad "  bundled Chromium would decode nothing and read as zero bitrate"
+for f in getStats currentRoundTripTime packetsLost candidateType framesPerSecond; do
+  grep -q "$f" "$SS" && ok "  collects $f" || bad "  does not collect $f"
+done
+# bitrate must be a RATE, from two samples
+grep -q "measuredKbps" "$SS" && ok "  reports a measured bitrate, not a byte total" \
+  || bad "  a single bytesReceived says nothing about throughput"
+
 echo "== prepare.sh reports the two new CPU-settleable facts =="
 grep -q 'WILBUR DEPS' "$HERE/prepare.sh" && ok "prepare.sh reports wilbur dependency state" \
   || bad "prepare.sh does not report wilbur dependencies"
