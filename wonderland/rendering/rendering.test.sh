@@ -343,6 +343,59 @@ check $? "bench-row.py parses"
 grep -q "FAILED: the stream produced no measurable frames" "$HERE/bench-row.py"
 check $? "a run that streamed nothing is recorded as FAILED, not as zero FPS"
 
+# The runtime world proof, captured from the SAME run the numbers came from.
+# A Relay Dog count taken from a different run proves nothing about the frame
+# that was measured.
+BR="$TMP/bench"; mkdir -p "$BR"
+cat > "$BR/app.log" <<'APPLOG'
+LogWonderlandProof: Warning: WORLD=WonderlandHub
+LogWonderlandProof: Warning: ACTORS=33028
+LogWonderlandProof: Warning: RELAY_DOGS=9
+LogWonderlandProof: Warning: COMPOUND_AGENTS=7
+LogContentStreaming: Warning: Texture streaming pool over budget by 412.55 MB
+APPLOG
+printf '{"runs":[]}' > "$BR/report.json"
+printf '{"fps_p50":58.0,"fps_min":54.0,"bitrate_kbps":4100.0,"resolution":"1280x720","freeze_count":0}' > "$BR/stats.json"
+printf 'a,b,c,d,e,f\n2026,61 %%,22 %%,4100 MiB,55,1800\n2026,66 %%,24 %%,4180 MiB,56,1800\n' > "$BR/gpu.csv"
+touch "$BR/shot.png"
+WL_LOG_FILE="$BR/app.log" python3 "$HERE/bench-row.py" "$BR/report.json" 0 \
+  "$BR/stats.json" "$BR/gpu.csv" "$BR/shot.png" 0 0 >/dev/null 2>&1
+check $? "bench-row.py folds a run in"
+python3 - "$BR/report.json" <<'CHECKROW'
+import io, json, sys
+run = json.load(io.open(sys.argv[1], encoding="utf8"))["runs"][0]
+proof = (run.get("runtime") or {}).get("world_proof") or {}
+problems = []
+if proof.get("RELAY_DOGS") != "9":
+    problems.append("RELAY_DOGS not captured: %r" % proof)
+if proof.get("COMPOUND_AGENTS") != "7":
+    problems.append("COMPOUND_AGENTS not captured: %r" % proof)
+# NOTES ARE NOT STATUS. The first version appended notes to `status`, and the
+# summary decides a run failed by testing status != "ok" — so a good run with a
+# streaming warning was reported as having produced no measurement.
+if run.get("status") != "ok":
+    problems.append("a note corrupted status: %r" % run.get("status"))
+if not run.get("notes"):
+    problems.append("the streaming warning did not become a note")
+sys.exit(0 if not problems else (print(problems) or 1))
+CHECKROW
+check $? "the runtime RELAY_DOGS / COMPOUND_AGENTS proof rides on the measured run"
+WL_LOG_FILE="$BR/app.log" python3 "$HERE/bench-row.py" --summary "$BR/report.json" \
+  > "$BR/sum.txt" 2>&1
+grep -q "RUNTIME PROOF" "$BR/sum.txt"
+check $? "the summary prints the runtime proof"
+! grep -q "did NOT produce a measurement" "$BR/sum.txt"
+check $? "a good run carrying a note is NOT counted as a failed run"
+grep -q "TEXTURE STREAMING complained" "$BR/sum.txt"
+check $? "texture streaming pressure is surfaced (a soft frame may be missing mips)"
+
+sed -i 's/RELAY_DOGS=9/RELAY_DOGS=0/' "$BR/app.log"
+printf '{"runs":[]}' > "$BR/report.json"
+WL_LOG_FILE="$BR/app.log" python3 "$HERE/bench-row.py" "$BR/report.json" 0 \
+  "$BR/stats.json" "$BR/gpu.csv" "$BR/shot.png" 0 0 > "$BR/zero.txt" 2>&1
+grep -q "RELAY_DOGS=0" "$BR/zero.txt"
+check $? "a run measuring a world with no Relay Dogs says so on the row"
+
 echo
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
