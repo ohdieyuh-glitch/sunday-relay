@@ -1,0 +1,134 @@
+{
+  "schema": "wonderland.rendering.profiles/1",
+  "engine": "5.8",
+  "default": "BALANCED",
+  "output": { "width": 1280, "height": 720, "target_fps_min": 30, "target_fps_preferred": 60 },
+
+  "_how_to_read_this": [
+    "cvars  are applied through -ExecCmds when the packaged build launches.",
+    "args   are command-line switches. Pixel Streaming settings live here rather",
+    "       than in cvars because the 5.8 reference documents the SWITCH names",
+    "       (-PixelStreamingEncoderMinQuality=...) while the plugin loaded by this",
+    "       project is PixelStreaming2, whose cvar prefix has not been confirmed.",
+    "       A documented switch beats an assumed cvar name.",
+    "source on every entry is the page the value came from. An entry with",
+    "       source 'unprobed' has NOT been confirmed to exist in this engine and",
+    "       render-profile.py refuses to emit it once a probe file exists that",
+    "       says the engine does not have it."
+  ],
+
+  "profiles": {
+    "PERFORMANCE": {
+      "description": "Headroom first. TSR upscales from 67% so the GPU has room for a denser world; edges stay clean because TSR is still doing the anti-aliasing.",
+      "cvars": {
+        "r.AntiAliasingMethod":                     { "value": 4, "source": "dev.epicgames.com/documentation/unreal-engine/anti-aliasing-and-upscaling-in-unreal-engine", "note": "4 = TSR, the UE5 default" },
+        "r.ScreenPercentage":                       { "value": 67, "source": "temporal-super-resolution-in-unreal-engine", "note": "TSR reconstructs to 720p" },
+        "r.TSR.History.ScreenPercentage":           { "value": 100, "source": "temporal-super-resolution-in-unreal-engine", "note": "100-200 supported; 100 is the cheap end" },
+        "r.TSR.History.SampleCount":                { "value": 8, "source": "temporal-super-resolution-in-unreal-engine", "note": "range 8-32" },
+        "r.TSR.ShadingRejection.SampleCount":       { "value": 2.0, "source": "temporal-super-resolution-in-unreal-engine" },
+        "r.TSR.Velocity.WeightClampingSampleCount": { "value": 2.0, "source": "temporal-super-resolution-in-unreal-engine", "note": "lower = less blur in motion" },
+        "r.MotionBlurQuality":                      { "value": 0, "source": "unprobed", "note": "long-standing UE cvar; the probe decides" },
+        "r.AutoExposure.Bias":                      { "value": -3.4, "source": "wonderland/infra/build/generate-hub-level.py LOOK", "note": "the ONE exposure lever proven to reach this packaged render" }
+      },
+      "args": [
+        "-PixelStreamingEncoderMinQuality=40",
+        "-PixelStreamingEncoderMaxQuality=100",
+        "-PixelStreamingH264Profile=HIGH",
+        "-PixelStreamingWebRTCMaxFps=60"
+      ]
+    },
+
+    "BALANCED": {
+      "description": "The L4 default. Native 720p with TSR as the anti-aliaser, motion clamping tightened for readable movement, and a QUALITY FLOOR on the encoder so the stream cannot quietly go soft when the network dips.",
+      "cvars": {
+        "r.AntiAliasingMethod":                     { "value": 4, "source": "anti-aliasing-and-upscaling-in-unreal-engine" },
+        "r.ScreenPercentage":                       { "value": 100, "source": "temporal-super-resolution-in-unreal-engine", "note": "native; TSR is AA here, not an upscaler" },
+        "r.TSR.History.ScreenPercentage":           { "value": 200, "source": "temporal-super-resolution-in-unreal-engine", "note": "Epic/Cinematic default; 'higher values reduce reprojection blur'" },
+        "r.TSR.History.SampleCount":                { "value": 16, "source": "temporal-super-resolution-in-unreal-engine", "note": "the documented default" },
+        "r.TSR.ShadingRejection.SampleCount":       { "value": 2.0, "source": "temporal-super-resolution-in-unreal-engine", "note": "'lower = clearer but less stable'" },
+        "r.TSR.Velocity.WeightClampingSampleCount": { "value": 2.0, "source": "temporal-super-resolution-in-unreal-engine", "note": "default 4.0 'at the expense of additional blur'; 2.0 is the documented sharper setting" },
+        "r.TSR.ShadingRejection.Flickering":        { "value": 1, "source": "temporal-super-resolution-in-unreal-engine", "note": "on at High/Epic/Cinematic; suppresses moire on the checkered flagstone" },
+        "r.TSR.RejectionAntiAliasingQuality":       { "value": 2, "source": "temporal-super-resolution-in-unreal-engine", "note": "spatial AA where history is rejected" },
+        "r.TSR.Resurrection":                       { "value": 1, "source": "temporal-super-resolution-in-unreal-engine", "note": "on at Medium and above" },
+        "r.MotionBlurQuality":                      { "value": 0, "source": "unprobed", "note": "founder: disable unless testing proves it helps" },
+        "r.AutoExposure.Bias":                      { "value": -3.4, "source": "generate-hub-level.py LOOK" }
+      },
+      "args": [
+        "-PixelStreamingEncoderMinQuality=60",
+        "-PixelStreamingEncoderMaxQuality=100",
+        "-PixelStreamingH264Profile=HIGH",
+        "-PixelStreamingWebRTCStartBitrate=10000000",
+        "-PixelStreamingWebRTCMaxBitrate=20000000",
+        "-PixelStreamingWebRTCDegradationPreference=MAINTAIN_RESOLUTION",
+        "-PixelStreamingWebRTCMaxFps=60"
+      ]
+    },
+
+    "CINEMATIC": {
+      "description": "Supersampled. Renders ABOVE 720p and lets TSR resolve down, which is where crisp edges and fine ornament actually come from at this output size. Costs GPU that the L4 may or may not have — that is what the bench is for.",
+      "cvars": {
+        "r.AntiAliasingMethod":                     { "value": 4, "source": "anti-aliasing-and-upscaling-in-unreal-engine" },
+        "r.ScreenPercentage":                       { "value": 150, "source": "temporal-super-resolution-in-unreal-engine", "note": "supersample; MEASURE it — more is not automatically better" },
+        "r.TSR.History.ScreenPercentage":           { "value": 200, "source": "temporal-super-resolution-in-unreal-engine" },
+        "r.TSR.History.SampleCount":                { "value": 32, "source": "temporal-super-resolution-in-unreal-engine", "note": "top of the documented range" },
+        "r.TSR.ShadingRejection.SampleCount":       { "value": 2.0, "source": "temporal-super-resolution-in-unreal-engine" },
+        "r.TSR.Velocity.WeightClampingSampleCount": { "value": 2.0, "source": "temporal-super-resolution-in-unreal-engine" },
+        "r.TSR.ShadingRejection.Flickering":        { "value": 1, "source": "temporal-super-resolution-in-unreal-engine" },
+        "r.TSR.RejectionAntiAliasingQuality":       { "value": 2, "source": "temporal-super-resolution-in-unreal-engine" },
+        "r.TSR.Resurrection":                       { "value": 1, "source": "temporal-super-resolution-in-unreal-engine" },
+        "r.TSR.History.R11G11B10":                  { "value": 0, "source": "temporal-super-resolution-in-unreal-engine", "note": "full-precision history; costs bandwidth, keeps gradients clean" },
+        "r.MotionBlurQuality":                      { "value": 0, "source": "unprobed" },
+        "r.AutoExposure.Bias":                      { "value": -3.4, "source": "generate-hub-level.py LOOK" }
+      },
+      "args": [
+        "-PixelStreamingEncoderMinQuality=80",
+        "-PixelStreamingEncoderMaxQuality=100",
+        "-PixelStreamingH264Profile=HIGH",
+        "-PixelStreamingWebRTCStartBitrate=20000000",
+        "-PixelStreamingWebRTCMaxBitrate=40000000",
+        "-PixelStreamingWebRTCDegradationPreference=MAINTAIN_RESOLUTION",
+        "-PixelStreamingWebRTCMaxFps=60"
+      ]
+    }
+  },
+
+  "candidates": [
+    "r.Tonemapper.Sharpen",
+    "r.TSR.Visualize",
+    "r.TSR.AsyncCompute",
+    "r.TSR.ShadingRejection.Flickering.Period",
+    "r.TSR.Resurrection.PersistentFrameCount",
+    "r.DefaultFeature.MotionBlur",
+    "r.MotionBlur.Max",
+    "r.Streaming.PoolSize",
+    "r.Streaming.LimitPoolSizeToVRAM",
+    "r.ViewDistanceScale",
+    "r.Shadow.DistanceScale",
+    "r.Shadow.Virtual.Enable",
+    "r.Shadow.Virtual.ResolutionLodBiasDirectional",
+    "r.DynamicGlobalIlluminationMethod",
+    "r.ReflectionMethod",
+    "r.Lumen.ScreenProbeGather.DownsampleFactor",
+    "r.MegaLights.Enable",
+    "r.Nanite",
+    "r.Nanite.MaxPixelsPerEdge",
+    "r.DynamicRes.OperationMode",
+    "sg.AntiAliasingQuality",
+    "sg.ShadowQuality",
+    "sg.TextureQuality",
+    "sg.ViewDistanceQuality",
+    "sg.EffectsQuality",
+    "sg.GlobalIlluminationQuality",
+    "sg.ReflectionQuality",
+    "PixelStreaming.Encoder.MinQuality",
+    "PixelStreaming2.Encoder.MinQuality",
+    "CsvProfile"
+  ],
+
+  "rejected": {
+    "r.TemporalAACurrentFrameWeight": "Legacy TAA/TAAU only. UE 5.8's anti-aliasing documentation states the r.TemporalAA* variables 'apply only to legacy TAAU, not to TSR', and this project renders with TSR (r.AntiAliasingMethod=4, the UE5 default). Setting it would change nothing and would read as a knob that had been tried.",
+    "r.TemporalAASamples": "Same reason. It is a TAA sample-count control with no effect on the TSR path. Under TSR the equivalent levers are r.TSR.History.SampleCount and r.TSR.ShadingRejection.SampleCount, which are in the profiles above.",
+    "r.PostProcessAAQuality": "Governs the legacy AA quality tiers. Under TSR the scalability group is sg.AntiAliasingQuality, which drives the r.TSR.* permutations instead.",
+    "PostProcessVolume sharpening/grade": "PROVEN not to reach this render. Both the PostProcessVolume grade and the camera-component PostProcessSettings are silently ignored in the packaged -RenderOffscreen Pixel Streaming build — a 40% ColorGain change was invisible with zero override errors. Only launch cvars reach it. See the wonderland live-render notes."
+  }
+}

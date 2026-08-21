@@ -146,21 +146,76 @@ start_signalling() {
 # --------------------------------------------------------------------- 3. app
 start_app() {
   : > "$WL_LOG/app.log"
+
+  # ---------------------------------------------------- the rendering profile
+  #
+  # THIS BLOCK USED TO BE A COMMENT AND NOTHING ELSE. The note below said the
+  # AutoExposure bias is the only exposure control that reaches the packaged
+  # render and that it is read from the LOOK table — and then the command line
+  # carried no -ExecCmds at all, so the bias was never applied on this host.
+  # The older vast/ and gcp/ launchers do pass it; the Lightning one was
+  # written without it and the comment came along anyway. Every frame streamed
+  # from Lightning has been rendered at the engine's default exposure.
+  #
+  # So the settings are now RESOLVED, from wonderland/rendering/profiles.json,
+  # and the resolver refuses any console variable the engine has been probed
+  # for and does not have. WL_RENDER_PROFILE picks the tier; WL_EXEC_CMDS
+  # overrides the whole payload for a one-off experiment.
+  local render_dir profile exec_cmds profile_args
+  render_dir="$HERE/../../rendering"
+  profile="${WL_RENDER_PROFILE:-BALANCED}"
+  profile_args=()
+  if [ -r "$render_dir/render-profile.py" ]; then
+    if [ -n "${WL_EXEC_CMDS:-}" ]; then
+      exec_cmds="$WL_EXEC_CMDS"
+      wl_say "render: -ExecCmds from WL_EXEC_CMDS (profile bypassed)"
+    else
+      exec_cmds="$(python3 "$render_dir/render-profile.py" emit "$profile")" \
+        || wl_die "rendering profile $profile did not resolve"
+      # Word-split ON PURPOSE and only here: these are separate switches with
+      # no spaces inside them, and an array keeps the -ExecCmds payload — which
+      # DOES contain spaces — a single argument.
+      # shellcheck disable=SC2207
+      profile_args=($(python3 "$render_dir/render-profile.py" args "$profile"))
+      wl_say "render: profile $profile, ${#profile_args[@]} stream args"
+    fi
+  else
+    exec_cmds="${WL_EXEC_CMDS:-}"
+    wl_warn "no rendering profile resolver at $render_dir — launching with engine defaults"
+  fi
+  local exec_arg=()
+  [ -n "${exec_cmds:-}" ] && exec_arg=(-ExecCmds="$exec_cmds")
+
   # -RenderOffscreen because there is no display; the stream IS the display.
-  # The AutoExposure bias is the ONLY exposure control that reaches the
-  # packaged render — the PostProcessVolume and camera grade were both proven
-  # not to. It is read from the LOOK table's documented default.
   # THE VULKAN ENVIRONMENT IS APPLIED HERE AND NOWHERE ELSE. wl_vulkan_env
   # wraps this one process with env(1); nothing is exported into the Studio,
   # because a global VK_DRIVER_FILES on a shared machine would silently
   # redirect every other GPU program on it.
+  # THE HERO CAMERA. -CinematicView pins the view to a placed CameraActor so two
+  # runs of the bench frame the identical shot; without it the capture is
+  # whatever the possessed pawn happened to face and a before/after compares
+  # two different pictures.
+  local cam_args=()
+  if [ -n "${WL_HERO_CAM:-}" ]; then
+    cam_args=(-CinematicView "-HeroCam=$WL_HERO_CAM")
+  fi
+
   setsid nohup env $(wl_vulkan_env_pairs) "$APP" \
     -PixelStreamingURL="ws://127.0.0.1:$WL_STREAMER_PORT" \
     -RenderOffscreen -ForceRes -ResX="$WL_RES_X" -ResY="$WL_RES_Y" \
     -Unattended -stdout -FullStdOutLogOutput \
     -PixelStreamingEncoderCodec=H264 \
+    "${profile_args[@]+"${profile_args[@]}"}" \
+    "${exec_arg[@]+"${exec_arg[@]}"}" \
+    "${cam_args[@]+"${cam_args[@]}"}" \
     ${WL_EXTRA_ARGS:-} \
     >>"$WL_LOG/app.log" 2>&1 </dev/null &
+  # Record exactly what was launched. A rendering result that cannot name the
+  # arguments that produced it is an anecdote.
+  { printf 'profile=%s\n' "$profile"
+    printf 'exec_cmds=%s\n' "${exec_cmds:-}"
+    printf 'stream_args=%s\n' "${profile_args[*]-}"
+    printf 'hero_cam=%s\n' "${WL_HERO_CAM:-none}"; } > "$WL_RUN/render-launch.txt"
   wl_say "waiting for the streamer to join signalling"
   local i=0
   while [ "$i" -lt 60 ]; do
