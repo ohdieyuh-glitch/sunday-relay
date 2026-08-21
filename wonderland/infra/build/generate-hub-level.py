@@ -1124,6 +1124,9 @@ def build_material_library(texs=None):
         mel.set_material_instance_vector_parameter_value(mi, "Emissive", unreal.LinearColor(emi[0], emi[1], emi[2], 1))
         mel.set_material_instance_scalar_parameter_value(mi, "EmissiveStrength", es)
         eal.save_asset(mi.get_path_name())
+        if name in ("stone", "spire", "rose", "gold", "roof_pink"):
+            unreal.log_warning("MATSET palette %s -> (%.2f,%.2f,%.2f)"
+                               % (name, rgb[0], rgb[1], rgb[2]))
         mats[name] = mi
     # ---- AUTHORED SURFACES ------------------------------------------------
     # Only these opt in. TexScale is in 1/uu: 0.0038 puts one 512px sheet across
@@ -1226,6 +1229,12 @@ def build_material_library(texs=None):
                         unreal.LinearColor(_base[0] * tint[0],
                                            _base[1] * tint[1],
                                            _base[2] * tint[2], 1.0))
+                    if nm in ("stone", "spire", "rose", "gold", "roof_pink"):
+                        unreal.log_warning(
+                            "MATSET textured %s base=(%.2f,%.2f,%.2f) tint=(%.2f,%.2f,%.2f)"
+                            " -> (%.2f,%.2f,%.2f)"
+                            % (nm, _base[0], _base[1], _base[2], tint[0], tint[1], tint[2],
+                               _base[0]*tint[0], _base[1]*tint[1], _base[2]*tint[2]))
                 else:
                     unreal.log_warning(
                         "TEXTURE MISSING for %s (family %s): keeping the palette "
