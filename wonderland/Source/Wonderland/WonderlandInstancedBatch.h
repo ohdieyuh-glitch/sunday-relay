@@ -127,6 +127,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Batch")
 	bool bStaticMobility = false;
 
+	/** BLOCK A PAWN. Default false, which is what every batch has always been.
+	 *
+	 *  This world currently has NO gameplay collision at all: every visual piece
+	 *  is an instance in a batch and no other geometry carries a blocking
+	 *  profile, so a player can fly through the castle and nothing can be stood
+	 *  on. That is a decision to make rather than a bug to patch — the pawn
+	 *  floats, so nothing falls — and this is the switch that makes the other
+	 *  choice testable without a code change.
+	 *
+	 *  It is per-batch and OFF by default on purpose. Collision on thirty-three
+	 *  thousand instances is a real cost that nobody has measured; collision on
+	 *  the few thousand that form the ground and the walls may be nothing. The
+	 *  generator picks which batches get it from WONDERLAND_COLLIDE, and
+	 *  WonderlandWorldProof prints RUNTIME_BLOCKING_PRIMITIVES so the result is
+	 *  a number rather than an impression. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Batch")
+	bool bCollides = false;
+
 	/** How many instances were actually created. The world proof reads this. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Batch")
 	int32 BuiltInstances = 0;

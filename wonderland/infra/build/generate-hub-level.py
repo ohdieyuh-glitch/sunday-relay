@@ -1487,19 +1487,38 @@ def build(layout):
     # WONDERLAND_BATCH=0 restores the old one-actor-per-piece world, so the two
     # can be built and measured against each other rather than argued about.
     BATCH_VISUALS = os.environ.get("WONDERLAND_BATCH", "1") not in ("0", "false", "no")
+
+    # WHICH MATERIALS BLOCK A PAWN. Empty by default, which is every build this
+    # project has ever made: this world has NO gameplay collision at all, and a
+    # player can fly through the castle.
+    #
+    # That is deliberately left as a switch rather than a decision made here.
+    # Turning collision on for all 33,000 instances is a cost nobody has
+    # measured; turning it on for the ground and the architecture may be
+    # nothing. Naming materials — WONDERLAND_COLLIDE=plaza,cobble,cobble2,stone
+    # — lets that be tried and measured in one build with no code change, and
+    # WonderlandWorldProof prints RUNTIME_BLOCKING_PRIMITIVES and
+    # RUNTIME_GROUNDED_DOGS so the result is a number.
+    COLLIDE_MATS = set(
+        n.strip() for n in os.environ.get("WONDERLAND_COLLIDE", "").split(",")
+        if n.strip())
+    if COLLIDE_MATS:
+        unreal.log_warning("COLLIDE materials: %s" % ", ".join(sorted(COLLIDE_MATS)))
+
     _BATCHES = {}
     _BATCH_ORDER = []
 
-    def _batch_key(mesh_path, mat_path, cast_shadow):
-        return (mesh_path, mat_path, bool(cast_shadow))
+    def _batch_key(mesh_path, mat_path, cast_shadow, collides):
+        return (mesh_path, mat_path, bool(cast_shadow), bool(collides))
 
     def _batch_add(mesh_path, mat_path, cast_shadow, location, rotation, scale,
-                   mat_obj=None, mesh_obj=None):
-        key = _batch_key(mesh_path, mat_path, cast_shadow)
+                   mat_obj=None, mesh_obj=None, collides=False):
+        key = _batch_key(mesh_path, mat_path, cast_shadow, collides)
         entry = _BATCHES.get(key)
         if entry is None:
             entry = {"mesh": mesh_path, "mat": mat_path,
-                     "shadow": bool(cast_shadow), "xf": [],
+                     "shadow": bool(cast_shadow), "collides": bool(collides),
+                     "xf": [],
                      "mat_obj": mat_obj, "mesh_obj": mesh_obj}
             _BATCHES[key] = entry
             _BATCH_ORDER.append(key)
@@ -1551,7 +1570,8 @@ def build(layout):
             name = "Batch_%s_%s%s" % (
                 entry["mesh"].rsplit("/", 1)[-1].split(".")[0],
                 (entry["mat"].rsplit("/", 1)[-1].split(".")[0] or "default"),
-                "" if entry["shadow"] else "_noshadow")
+                ("" if entry["shadow"] else "_noshadow")
+                + ("_solid" if entry.get("collides") else ""))
             actor = actors.spawn_actor_from_class(cls, unreal.Vector(0.0, 0.0, 0.0),
                                                   unreal.Rotator())
             if actor is None:
@@ -1571,10 +1591,14 @@ def build(layout):
                 set_prop(actor, "Mesh", entry["mesh_obj"])
             set_prop(actor, "BatchName", unreal.Name(name))
             set_prop(actor, "bCastShadow", bool(entry["shadow"]))
+            set_prop(actor, "bCollides", bool(entry.get("collides")))
             _set_float_array(actor, "Transforms", entry["xf"])
             placed += 1
             pieces += count
-        unreal.log_warning("BATCHES=%d  INSTANCED_PIECES=%d" % (placed, pieces))
+        _solid = sum(len(_BATCHES[k]["xf"]) // 9 for k in _BATCH_ORDER
+                     if _BATCHES[k].get("collides"))
+        unreal.log_warning("BATCHES=%d  INSTANCED_PIECES=%d  COLLIDING_PIECES=%d"
+                           % (placed, pieces, _solid))
         return placed
 
     def _set_float_array(actor, cpp_name, values):
@@ -1629,8 +1653,12 @@ def build(layout):
         _wl_piece_hook(mesh_key, location, scale, label, rotation, mat)
 
         if BATCH_VISUALS:
+            # Keyed off the material NAME the caller asked for, not the resolved
+            # asset: the name is what an operator types into WONDERLAND_COLLIDE.
+            _collides = isinstance(mat, str) and mat in COLLIDE_MATS
             _batch_add(path, _asset_path_of(m), _cast_shadow, location, rotation, scale,
-                       mat_obj=m, mesh_obj=asset_lib.load_asset(path))
+                       mat_obj=m, mesh_obj=asset_lib.load_asset(path),
+                       collides=_collides)
             return None
 
         actor = spawn(unreal.StaticMeshActor, location, rotation=rotation, scale=scale, label=label)

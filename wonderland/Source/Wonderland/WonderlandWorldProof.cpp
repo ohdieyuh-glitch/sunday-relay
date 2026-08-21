@@ -10,6 +10,9 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInterface.h"
+#include "Components/PrimitiveComponent.h"
+#include "GameFramework/PlayerStart.h"
+#include "CollisionQueryParams.h"
 
 #include "WonderlandDogPawn.h"
 #include "WonderlandInstancedBatch.h"
@@ -255,6 +258,16 @@ namespace WonderlandWorldProof
 					return;
 				}
 				int32 LiveDogs = 0, LiveAgents = 0, Bodyless = 0, LiveInstances = 0;
+				// COLLISION, MEASURED RATHER THAN ASSERTED. Every decorative
+				// piece in this world is an instance inside a NoCollision batch,
+				// which was the right call for thirty-three thousand of them —
+				// but it means the question "can a Dog stand on anything" has an
+				// answer nobody has ever read. These count what actually BLOCKS a
+				// pawn and whether there is ground under the things that need it.
+				int32 BlockingPrimitives = 0;
+				int32 GroundedDogs = 0;
+				TArray<AActor*> DogActors;
+				TArray<AActor*> PlayerStarts;
 				for (TActorIterator<AActor> It(Live); It; ++It)
 				{
 					AActor* const Actor = *It;
@@ -280,6 +293,102 @@ namespace WonderlandWorldProof
 					{
 						LiveInstances += Batch->BuiltInstances;
 					}
+
+					if (Cast<AWonderlandStrollingDog>(Actor) != nullptr
+						|| Cast<AWonderlandDogPawn>(Actor) != nullptr)
+					{
+						DogActors.Add(Actor);
+					}
+					if (Cast<APlayerStart>(Actor) != nullptr)
+					{
+						PlayerStarts.Add(Actor);
+					}
+
+					TArray<UPrimitiveComponent*> Primitives;
+					Actor->GetComponents<UPrimitiveComponent>(Primitives);
+					for (const UPrimitiveComponent* const Primitive : Primitives)
+					{
+						if (Primitive == nullptr
+							|| Primitive->GetCollisionEnabled() == ECollisionEnabled::NoCollision)
+						{
+							continue;
+						}
+						if (Primitive->GetCollisionResponseToChannel(ECC_Pawn) == ECR_Block)
+						{
+							++BlockingPrimitives;
+						}
+					}
+				}
+
+				// GROUND UNDER THE THINGS THAT STAND ON IT. A trace straight down
+				// on the pawn channel: this is the same question the movement
+				// system asks, so its answer is the gameplay answer and not an
+				// approximation of one.
+				const float ProbeUp = 50.0f;
+				const float ProbeDown = 2000.0f;      // 20 m is generous for a plaza
+				// EVERY Dog is ignored, not just the one being traced. A Dog
+				// standing near another would otherwise report "grounded" by
+				// hitting its neighbour's pawn collider — a false pass on the
+				// exact question being asked.
+				auto HasGroundUnder = [Live, &DogActors](const AActor* Actor) -> bool
+				{
+					if (Actor == nullptr)
+					{
+						return false;
+					}
+					const FVector At = Actor->GetActorLocation();
+					// The plain (tag, complex) constructor rather than
+					// SCENE_QUERY_STAT: the macro's header is not guaranteed here
+					// and a stats tag buys nothing in a once-per-launch proof.
+					FCollisionQueryParams Params(TEXT("WonderlandGroundProof"), false);
+					Params.AddIgnoredActor(Actor);
+					Params.AddIgnoredActors(DogActors);
+					FHitResult Hit;
+					return Live->LineTraceSingleByChannel(
+						Hit, At + FVector(0.0f, 0.0f, ProbeUp),
+						At - FVector(0.0f, 0.0f, ProbeDown), ECC_Pawn, Params);
+				};
+				for (const AActor* const Dog : DogActors)
+				{
+					if (HasGroundUnder(Dog))
+					{
+						++GroundedDogs;
+					}
+				}
+				int32 GroundedStarts = 0;
+				for (const AActor* const Start : PlayerStarts)
+				{
+					if (HasGroundUnder(Start))
+					{
+						++GroundedStarts;
+					}
+				}
+
+				UE_LOG(LogWonderlandProof, Warning,
+					   TEXT("RUNTIME_BLOCKING_PRIMITIVES=%d"), BlockingPrimitives);
+				UE_LOG(LogWonderlandProof, Warning,
+					   TEXT("RUNTIME_GROUNDED_DOGS=%d/%d"), GroundedDogs, DogActors.Num());
+				UE_LOG(LogWonderlandProof, Warning,
+					   TEXT("RUNTIME_GROUNDED_PLAYER_STARTS=%d/%d"),
+					   GroundedStarts, PlayerStarts.Num());
+				if (DogActors.Num() > 0 && GroundedDogs == 0)
+				{
+					// NOT AN ERROR, AND SAYING WHY MATTERS. Nothing is falling:
+					// the ambient Dogs are positioned directly and the player
+					// pawn uses FloatingPawnMovement, which has no gravity. So a
+					// world with no collision under anyone is a DESIGN STATE, not
+					// a crash — and it is also a world a player can fly straight
+					// through the castle in. Whoever reads this should decide
+					// which of those they meant.
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION=1 — nothing "
+								"blocks a pawn anywhere in this world. Every visual "
+								"piece is an instance in a NoCollision batch, and no "
+								"other geometry carries collision. Nothing falls, "
+								"because the Dogs are placed directly and the player "
+								"pawn floats; but nothing can be stood on or bumped "
+								"into either. This is a decision to make, not a bug "
+								"to patch."));
 				}
 				UE_LOG(LogWonderlandProof, Warning, TEXT("RUNTIME_RELAY_DOGS=%d"), LiveDogs);
 				UE_LOG(LogWonderlandProof, Warning, TEXT("RUNTIME_COMPOUND_AGENTS=%d"), LiveAgents);

@@ -1508,7 +1508,7 @@ echo "== the generator's knobs cross the container boundary =="
 # editing code. It was never forwarded into the container, so every sweep in
 # container mode silently did nothing — and an override that is ignored is
 # worse than one that is unavailable, because the operator believes it applied.
-for v in WONDERLAND_LOOK WONDERLAND_BATCH WONDERLAND_MARBLE_BACKDROP WONDERLAND_MARBLE_IMPORT; do
+for v in WONDERLAND_LOOK WONDERLAND_BATCH WONDERLAND_MARBLE_BACKDROP WONDERLAND_MARBLE_IMPORT WONDERLAND_COLLIDE; do
   n=$(grep -c -- "-e $v=" "$HERE/build-render.sh" || true)
   [ "${n:-0}" -ge 1 ] && ok "$v is forwarded into the container" \
     || bad "$v never reaches the generator in container mode"
@@ -1613,6 +1613,66 @@ grep -q 'IsTwoSided' "$PROOF" \
 grep -q 'ECollisionEnabled::NoCollision' "$PROOF" \
   && ok "…and that Marble geometry is not blocking anything" \
   || bad "the collision boundary is trusted from a log instead of checked in the world"
+
+echo "== collision is measured, not asserted =="
+# DONE-WHEN says "collision/gameplay works" and nothing in this repository had
+# ever checked it. Every visual piece is an instance in a NoCollision batch, so
+# the question has a real answer and it had never been read.
+PROOF="$HERE/../../Source/Wonderland/WonderlandWorldProof.cpp"
+BATCH="$HERE/../../Source/Wonderland/WonderlandInstancedBatch.cpp"
+grep -q 'RUNTIME_BLOCKING_PRIMITIVES=%d' "$PROOF" \
+  && ok "the packaged world counts what actually blocks a pawn" \
+  || bad "nothing measures whether this world has any collision at all"
+grep -q 'RUNTIME_GROUNDED_DOGS' "$PROOF" \
+  && ok "…and traces for ground under every Relay Dog" \
+  || bad "no ground check under the Dogs"
+grep -q 'RUNTIME_GROUNDED_PLAYER_STARTS' "$PROOF" \
+  && ok "…and under every PlayerStart" \
+  || bad "no ground check under the spawn"
+grep -q 'ECC_Pawn' "$PROOF" \
+  && ok "…on the PAWN channel, which is the question movement actually asks" \
+  || bad "the trace uses a channel the movement system does not"
+grep -q 'RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION' "$PROOF" \
+  && ok "a world nothing can be stood on says so out loud" \
+  || bad "a collisionless world would report as healthy"
+# THE SWITCH, not a decision made for the founder. Default off = every build
+# this project has made; naming materials makes the other choice measurable in
+# one build with no code change.
+GEN="$HERE/../build/generate-hub-level.py"
+BATCHH="$HERE/../../Source/Wonderland/WonderlandInstancedBatch.h"
+grep -q 'WONDERLAND_COLLIDE' "$GEN" \
+  && ok "the generator takes a collision material list from the environment" \
+  || bad "collision cannot be turned on without editing code"
+grep -q 'bCollides' "$BATCHH" \
+  && ok "the batch carries a per-batch collision switch" \
+  || bad "collision would have to be all-or-nothing across 33,000 instances"
+python3 - "$GEN" <<'PY'
+import io, re, sys
+src = io.open(sys.argv[1], encoding="utf8").read()
+problems = []
+# Default OFF. An empty WONDERLAND_COLLIDE must yield an empty set, so an
+# unset variable can never quietly turn collision on for everything.
+if 'os.environ.get("WONDERLAND_COLLIDE", "")' not in src:
+    problems.append("no empty default for WONDERLAND_COLLIDE")
+# It has to be part of the BATCH KEY, or one colliding piece would make every
+# piece sharing its mesh and material collide too.
+if not re.search(r"def _batch_key\(mesh_path, mat_path, cast_shadow, collides\)", src):
+    problems.append("collides is not part of the batch key")
+if "COLLIDING_PIECES" not in src:
+    problems.append("the generator does not report how many pieces collide")
+sys.exit(0 if not problems else (print(problems) or 1))
+PY
+check_collide=$?
+[ "$check_collide" = 0 ] && ok "…defaulting to OFF, keyed per batch, and counted" \
+  || bad "the collision switch is not safely defaulted or not keyed"
+
+# The stale claim that started this: the batch file said other Unreal geometry
+# was the collision authority. There is none.
+if grep -q "remain the authority" "$BATCH"; then
+  bad "WonderlandInstancedBatch.cpp still claims geometry that does not exist owns collision"
+else
+  ok "the batch no longer claims a collision authority that does not exist"
+fi
 
 echo "== the opt-in full CPU build =="
 if bash -n "$HERE/cpu-build-all.sh" 2>/dev/null; then ok "cpu-build-all.sh parses"

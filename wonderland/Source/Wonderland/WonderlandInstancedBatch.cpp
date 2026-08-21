@@ -13,6 +13,11 @@ AWonderlandInstancedBatch::AWonderlandInstancedBatch()
 	// GameThread, and this actor has nothing to do once its instances exist.
 	PrimaryActorTick.bCanEverTick = false;
 	PrimaryActorTick.bStartWithTickEnabled = false;
+	// NOT bCollides here. This is the constructor: the generator sets bCollides
+	// on the spawned actor afterwards, so reading it now would always see the
+	// default and a colliding batch would be built with actor collision off —
+	// every setting reading correct and nothing being hittable. BuildInstances
+	// applies it, where the value is real.
 	SetActorEnableCollision(false);
 	// Nothing here is replicated. The geometry is identical on every client
 	// because it is generated into the map, and sending it would be paying to
@@ -113,12 +118,39 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 
 	// Decoration blocks nothing, is not walked on, and contributes no
 	// navigation. Collision on 33,000 pieces is a cost with no gameplay behind
-	// it — Unreal's own geometry and the gameplay actors remain the authority
-	// for anything a Dog can bump into.
-	Instances->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Instances->SetCollisionProfileName(TEXT("NoCollision"));
+	// it, and that is still true.
+	//
+	// WHAT IS NOT TRUE, AND USED TO BE CLAIMED HERE: that some other Unreal
+	// geometry owned collision for anything a Dog could bump into. There is no
+	// such geometry. Every visual piece in this world goes
+	// through this batch, nothing else carries a blocking profile, and the
+	// player pawn uses FloatingPawnMovement, so nothing falls and nothing can be
+	// stood on. WonderlandWorldProof measures that at runtime and prints
+	// RUNTIME_BLOCKING_PRIMITIVES and RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION
+	// rather than leaving it to a comment.
+	//
+	// If Wonderland is to be walked rather than flown, the fix is NOT collision
+	// on every instance — it is a small set of STRUCTURAL colliders (the plaza
+	// floor, the gate, the castle walls) authored alongside the decoration.
+	// Applied HERE, in BuildInstances, because this is the first point at which
+	// bCollides holds what the generator asked for.
+	SetActorEnableCollision(bCollides);
+	if (bCollides)
+	{
+		// BlockAll and not a custom channel set: a batch that collides is
+		// ground or architecture, and "everything treats it as solid" is what
+		// that means. Overlap events stay off — this is a wall, not a trigger.
+		Instances->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Instances->SetCollisionProfileName(TEXT("BlockAll"));
+		Instances->SetCanEverAffectNavigation(true);
+	}
+	else
+	{
+		Instances->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Instances->SetCollisionProfileName(TEXT("NoCollision"));
+		Instances->SetCanEverAffectNavigation(false);
+	}
 	Instances->SetGenerateOverlapEvents(false);
-	Instances->SetCanEverAffectNavigation(false);
 	Instances->SetCastShadow(bCastShadow);
 	Instances->RegisterComponent();
 
