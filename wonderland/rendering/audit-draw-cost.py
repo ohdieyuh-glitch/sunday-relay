@@ -17,25 +17,32 @@ meshes by replacing per-triangle work with cluster work; it carries a fixed
 per-mesh cost that a twelve-triangle cube can never earn back. Enabling Nanite
 across this world would be the wrong lever applied confidently.
 
-The lever that matches that shape is INSTANCING — and the engine may already
-be pulling it. `r.MeshDrawCommands.DynamicInstancing` defaults to **1** in UE5:
-compatible visible mesh draw commands are combined into one instanced draw
-automatically, and compatible means the same static mesh and the same material
-bindings, which is precisely what this world is made of.
+WHAT THE L4 THEN MEASURED, and why draw calls were the wrong suspect.
 
-So this audit does NOT conclude "go and implement instancing". It measures the
-CEILING — how few draws the world could possibly need — so that the number the
-engine actually achieves can be compared against it. If they are close, the
-draw calls are already solved and the remaining cost is per-PRIMITIVE work
-(visibility, culling, GPU Scene) that only a real reduction in primitive count
-would address. If they are far apart, something is breaking instancing
-compatibility and that is worth finding.
+Browser-side on a real NVIDIA L4: 1280x720, H264, 18 Mb/s, **12 FPS**, zero
+freezes, **GPU utilisation ~10%**, VRAM 1.6 GB, RenderThread at 55-80% of one
+core, 33,149 actors. A GPU at ten per cent while the frame rate is twelve is
+STARVED. `r.MeshDrawCommands.DynamicInstancing` defaults to 1 and UE5 was very
+likely already collapsing the draws — and it did not help, because the cost was
+never the draws. It was thirty-three thousand ACTORS: an actor, a scene
+component, a scene proxy and a visibility test each, all paid on the CPU before
+the GPU is asked for anything.
+
+So the world is now batched at the source. Every purely visual piece is an
+instance inside one of ~144 `AWonderlandInstancedBatch` actors, keyed by
+(mesh, material, casts-shadow). Same geometry, same materials, same transforms,
+same frame — measured identical by verify-hero-composition.py, down to the
+decimal. Actors per build fell from ~33,000 to ~256.
+
+This audit stays because the arithmetic below is what says whether a future art
+pass has quietly gone back to an actor per flower, and because the piece count
+is what proves the world was not simply emptied to hit an actor ceiling.
+verify-generator-dryrun.py gates on both.
 
     r.MeshDrawCommands.LogDynamicInstancingStats 1
 
-is the command that answers it, on the box, in one line of log. Nothing below
-is believed until it has been run. Cross-check `stat rhi` and
-`stat scenerendering` too.
+still worth running once on the box, alongside `stat rhi` and
+`stat scenerendering`, to see where the cost went.
 """
 import collections
 import importlib.util
@@ -68,17 +75,18 @@ def collect():
     preview = load_preview()
     sys.modules["unreal"] = preview.make_unreal()
     src = io.open(GEN, encoding="utf8").read()
-    anchor = ("        actor = spawn(unreal.StaticMeshActor, location, "
-              "rotation=rotation, scale=scale, label=label)")
-    if anchor not in src:
-        raise SystemExit(
-            "static_mesh's signature changed — this audit's injection anchor "
-            "needs updating. Refusing to report numbers from a partial capture.")
-    src = src.replace(
-        anchor, anchor + "\n        __wl_record__(mesh_key, location, scale, label, rotation, mat)", 1)
-    namespace = {"__name__": "__wl_preview__", "__file__": GEN,
-                 "__wl_record__": preview.record}
+    # Captured through the generator's own hook rather than by splicing a call
+    # into a line of its source — see the same note in
+    # verify-hero-composition.py. The line this used to target now lives inside
+    # a branch that batching does not take, and the injection would have gone on
+    # succeeding while recording nothing.
+    namespace = {"__name__": "__wl_preview__", "__file__": GEN}
     exec(compile(src, GEN, "exec"), namespace)
+    if "_wl_piece_hook" not in namespace:
+        raise SystemExit(
+            "generate-hub-level.py no longer defines _wl_piece_hook — refusing "
+            "to report numbers from a capture that recorded nothing.")
+    namespace["_wl_piece_hook"] = preview.record
     if hasattr(preview, "_wl_leaf_apply"):
         try:
             preview._wl_leaf_apply(namespace)
@@ -172,15 +180,14 @@ def main():
     singles = sum(1 for _k, v in combos.items() if v == 1)
     print("\n    %d of %d combinations appear exactly once — instancing cannot "
           "help those, and they stay individual draws." % (singles, unique))
-    print("\n    THIS IS NOT A TODO. r.MeshDrawCommands.DynamicInstancing is 1 by")
-    print("    default in UE5, so the engine is probably already collapsing most")
-    print("    of these. Run `r.MeshDrawCommands.LogDynamicInstancingStats 1` on")
-    print("    the box and compare its number with the %s above." % f"{unique:,}")
-    print("    Close  -> draw calls are solved; the remaining cost is per-primitive")
-    print("             visibility and GPU Scene work, and HISM is what reduces")
-    print("             the primitive COUNT rather than the draw count.")
-    print("    Far    -> something is breaking instancing compatibility. Find it")
-    print("             before writing any new geometry pipeline.")
+    print("\n    THE WORLD IS NOW BATCHED AT THE SOURCE. These %s pairs become"
+          % f"{unique:,}")
+    print("    ~144 AWonderlandInstancedBatch actors (the extra dimension is")
+    print("    whether the piece casts a shadow), and the ~33,000 actors that")
+    print("    starved the L4's GPU became ~256. The frame is measured identical.")
+    print("    What is left to verify on the box is where the cost WENT:")
+    print("      r.MeshDrawCommands.LogDynamicInstancingStats 1")
+    print("      stat scenerendering / stat rhi / stat unit")
 
     print("\n  NANITE VERDICT FOR THIS WORLD")
     print("    Against: nearly everything here is an engine primitive of 12 to")

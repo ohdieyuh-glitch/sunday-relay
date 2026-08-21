@@ -174,6 +174,78 @@ else
 fi
 make_engine "$TMP/ue"
 
+# ---------------------------------------------------------------------------
+# THE DECORATION MUST REACH THE MAP
+#
+# The world's visual geometry now lives as instances inside
+# AWonderlandInstancedBatch actors. If that class is missing from the editor
+# binary the generator places NOTHING and saves a valid, cookable, streamable
+# map containing lights, markers and Dogs in an empty field — and every later
+# step reports success. These three cases are the only thing between that and a
+# founder finding out by looking at a browser.
+echo
+echo "== a world whose decoration never reached disk is refused =="
+
+stub_editor_says() {   # $1 = engine root, $2... = lines the stub prints
+  local e="$1"; shift
+  {
+    printf '#!/bin/sh\n'
+    for line in "$@"; do printf 'echo "%s"\n' "$line"; done
+    printf 'exit 0\n'
+  } > "$e/Engine/Binaries/Linux/UnrealEditor-Cmd"
+  chmod +x "$e/Engine/Binaries/Linux/UnrealEditor-Cmd"
+}
+
+make_project "$TMP/pb" with-config
+stub_editor_says "$TMP/ue" "BATCHES=144  INSTANCED_PIECES=31996" \
+                           "LIFECYCLE saved=True actors=256 level=/Game/Wonderland/Maps/WonderlandHub"
+rm -rf "$TMP/out"
+out="$(run_build "$TMP/pb")"; rc=$?
+if [ "$rc" -eq 0 ] && has "$out" "31996 instanced pieces"; then
+  ok "a full world passes and the piece count is reported"
+else
+  bad "a full world was refused (exit $rc)"
+fi
+
+stub_editor_says "$TMP/ue" "BATCHES=3  INSTANCED_PIECES=12" \
+                           "LIFECYCLE saved=True actors=20 level=/Game/Wonderland/Maps/WonderlandHub"
+rm -rf "$TMP/out"
+out="$(run_build "$TMP/pb")"; rc=$?
+if [ "$rc" -ne 0 ] && has "$out" "instanced pieces (floor"; then
+  ok "a nearly-empty world is refused before the cook"
+else
+  bad "12 pieces was cooked anyway (exit $rc)"
+fi
+
+stub_editor_says "$TMP/ue" "LIFECYCLE saved=True actors=256 level=/Game/Wonderland/Maps/WonderlandHub"
+rm -rf "$TMP/out"
+out="$(run_build "$TMP/pb")"; rc=$?
+if [ "$rc" -ne 0 ] && has "$out" "reported no INSTANCED_PIECES"; then
+  ok "a generator that finished without batching anything is refused"
+else
+  bad "a run with no batch report was cooked anyway (exit $rc)"
+fi
+
+WONDERLAND_BATCH=0 rm -rf "$TMP/out"
+out="$(WONDERLAND_BATCH=0 run_build "$TMP/pb")"; rc=$?
+if [ "$rc" -eq 0 ] && has "$out" "UNBATCHED"; then
+  ok "WONDERLAND_BATCH=0 is allowed through, and says which architecture it built"
+else
+  bad "the deliberate unbatched build was refused (exit $rc)"
+fi
+
+# A stubbed editor that prints nothing at all is not evidence of an empty world
+# — it is a harness. Treating "no evidence" as "zero pieces" would fail every
+# harnessed build while looking like a safety check.
+make_engine "$TMP/ue"
+rm -rf "$TMP/out"
+out="$(run_build "$TMP/pb")"; rc=$?
+if [ "$rc" -eq 0 ] && has "$out" "did not really run"; then
+  ok "a stubbed editor is not mistaken for an empty world"
+else
+  bad "the silent-stub case was misjudged (exit $rc)"
+fi
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" -eq 0 ]

@@ -29,6 +29,36 @@
 >    solved and the remaining cost is per-primitive.
 > 5. The Relay Dogs exist now. They did not before — see the pre-cook gates.
 >
+> **2026-08-21, later — THE L4 MEASURED THE WORLD AND THE WORLD WAS THE PROBLEM.**
+>
+> Browser-side on the L4: 1280x720, H264, 18 Mb/s, **12 FPS**, zero freezes,
+> **GPU utilisation ~10%**, VRAM 1.6 GB, RenderThread 55-80% of one core,
+> 33,149 actors. A GPU at ten per cent while the frame rate is twelve is
+> starved. The cost was never shading — it was submitting thirty-three thousand
+> actors, one per decorative piece.
+>
+> The world is now **batched**: every purely visual piece is an instance inside
+> one of ~144 `AWonderlandInstancedBatch` actors, keyed by (mesh, material,
+> casts-shadow). Markers, portals, interactables, lights, cameras and the Relay
+> Dogs stay individual actors — semantics are worth their overhead, ornament is
+> not.
+>
+> | | before | after |
+> | --- | --- | --- |
+> | actors per build | ~33,000 | **~256** |
+> | loose StaticMeshActors | 32,512 | **0** |
+> | visible pieces | 31,996 | **31,996** |
+>
+> The composition preview measures the frame **identical to the decimal** —
+> objects 95.855%, sky 4.104%, 49 materials, 4 readable Relay Dogs, hero Dog
+> 171.867px. Nothing was removed to get the actor count down, and the dry run
+> now fails if anyone tries: it caps loose actors AND floors the piece count.
+>
+> `WONDERLAND_BATCH=0` regenerates the old architecture for an A/B.
+>
+> **Nothing here has been compiled.** There is no Unreal in the development
+> environment. The next build is the first time this C++ meets a compiler.
+>
 > The p23 comparison advice below still stands and is still the cheapest way to
 > localise a visual regression.
 

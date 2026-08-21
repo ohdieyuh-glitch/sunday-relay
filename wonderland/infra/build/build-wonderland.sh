@@ -224,6 +224,52 @@ if [ "$LEVEL_OK" != "1" ] && [ "$ALLOW_EMPTY_LEVEL" != "1" ]; then
   die "level generation did not complete and ALLOW_EMPTY_LEVEL != 1; refusing to package a contentless build silently"
 fi
 
+# --- THE DECORATION ACTUALLY REACHED THE MAP -------------------------------
+#
+# The world's visual geometry is now instances inside AWonderlandInstancedBatch
+# actors. If that C++ class is missing from the editor binary — a stale build,
+# a compile that silently reused an old module — the generator logs an error,
+# places NOTHING, and saves a map containing lights, markers and Dogs standing
+# in an empty field. Every later step succeeds: the cook is clean, the package
+# is valid, the stream comes up, and a person has to look at a browser to find
+# out.
+#
+# A python exception inside -run=pythonscript does not reliably fail the
+# process, so this reads the number the generator prints and decides here.
+GEN_LOG="$LOG_DIR/generate-hub-level.log"
+MIN_PIECES="${WONDERLAND_MIN_PIECES:-25000}"
+if [ "$LEVEL_OK" = "1" ] && [ -f "$GEN_LOG" ]; then
+  # THREE CASES, and only one of them is judgeable.
+  #
+  # The generator prints INSTANCED_PIECES=N when it batches and LIFECYCLE when
+  # it finishes. A stubbed editor — which is exactly what build-wonderland.test.sh
+  # runs — prints neither, and a gate that treated "no evidence" as "zero pieces"
+  # would fail every harnessed build while looking like a real safety check.
+  PIECES="$( ( set +o pipefail
+               grep -ao 'INSTANCED_PIECES=[0-9]*' "$GEN_LOG" | tail -1 \
+                 | cut -d= -f2 ) || true)"
+  if [ -n "$PIECES" ]; then
+    log "generated world: $PIECES instanced pieces"
+    if [ "$PIECES" -lt "$MIN_PIECES" ]; then
+      die "the generated world has only $PIECES instanced pieces (floor $MIN_PIECES).
+Refusing to cook a world whose decoration never reached disk. Most likely the
+editor binary has no AWonderlandInstancedBatch in it — check $LOG_DIR/build-editor.log.
+Set WONDERLAND_BATCH=0 to generate the old one-actor-per-piece world, or
+WONDERLAND_MIN_PIECES to lower this floor deliberately."
+    fi
+  elif grep -qa 'LIFECYCLE ' "$GEN_LOG" 2>/dev/null; then
+    if [ "${WONDERLAND_BATCH:-1}" = "0" ]; then
+      log "world generated UNBATCHED (WONDERLAND_BATCH=0) — the L4 measured 12 FPS on that architecture"
+    else
+      die "the generator finished but reported no INSTANCED_PIECES.
+Batching is on and produced nothing, so the saved world has no decoration in it.
+Check $GEN_LOG for 'WonderlandInstancedBatch is not in this build'."
+    fi
+  else
+    log "no generator batch report in $GEN_LOG — level generation did not really run; piece floor not enforced"
+  fi
+fi
+
 # --------------------------------------------------- 4. compile client + cook/stage/pak
 # PixelStreaming2 is enabled in the .uproject, so the packaged build launches
 # with -PixelStreamingURL. This step compiles the Wonderland C++ module for the

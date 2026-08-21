@@ -220,6 +220,22 @@ def look_at_rotation(location, target):
     return (pitch, yaw, 0.0)
 
 
+# ---------------------------------------------------------------- analysis hook
+#
+# Every visual piece the world places passes through here. It does nothing in
+# the editor; the offline harnesses REPLACE it to capture the world without an
+# engine.
+#
+# It exists because those harnesses used to capture by INJECTING a call into a
+# specific line of source text and raising if that exact line was not found. A
+# capture keyed to a line of code is a capture that stops working the day the
+# line moves — silently, reporting an empty world as a measured one — and this
+# change moves that line. A named hook can be replaced from the namespace and
+# cannot be missed by accident.
+def _wl_piece_hook(mesh_key, location, scale, label, rotation, mat):
+    return None
+
+
 def rot3(pitch, yaw, roll=0.0):
     """Build an FRotator via NAMED fields. unreal.Rotator's POSITIONAL constructor
     order is ambiguous in UE 5.8 Python and silently mis-mapped pitch/yaw here — it
@@ -1373,6 +1389,122 @@ def build(layout):
 
     _USED_LABELS = {}
 
+    # ---------------------------------------------------------- BATCHING
+    #
+    # THE MEASUREMENT THAT FORCED THIS. On a real NVIDIA L4: 1280x720, H264,
+    # 18 Mb/s, 12 FPS, zero freezes, GPU utilisation ~10%, VRAM 1.6 GB, and the
+    # RenderThread at 55-80% of one core. A GPU at ten per cent while the frame
+    # rate is twelve is a starved GPU, not a loaded one. The cost was never
+    # shading; it was submitting ~33,000 individual actors.
+    #
+    # So every purely VISUAL piece now becomes an instance in a batch instead of
+    # an actor of its own. Nothing about the frame changes: same mesh, same
+    # material, same transform, same shadow decision. What changes is that the
+    # renderer is handed a hundred-odd components instead of thirty-three
+    # thousand primitives.
+    #
+    # WHAT IS NOT BATCHED, and this is the whole care of it: markers, portals,
+    # interactables, lights, cameras, the Relay Dogs and every gameplay anchor
+    # stay individual actors. Actor count is not the goal. The goal is that
+    # DECORATION stops costing an actor each — semantics are worth their
+    # overhead and ornament is not.
+    #
+    # WONDERLAND_BATCH=0 restores the old one-actor-per-piece world, so the two
+    # can be built and measured against each other rather than argued about.
+    BATCH_VISUALS = os.environ.get("WONDERLAND_BATCH", "1") not in ("0", "false", "no")
+    _BATCHES = {}
+    _BATCH_ORDER = []
+
+    def _batch_key(mesh_path, mat_path, cast_shadow):
+        return (mesh_path, mat_path, bool(cast_shadow))
+
+    def _batch_add(mesh_path, mat_path, cast_shadow, location, rotation, scale):
+        key = _batch_key(mesh_path, mat_path, cast_shadow)
+        entry = _BATCHES.get(key)
+        if entry is None:
+            entry = {"mesh": mesh_path, "mat": mat_path,
+                     "shadow": bool(cast_shadow), "xf": []}
+            _BATCHES[key] = entry
+            _BATCH_ORDER.append(key)
+        # Nine floats, in the order WonderlandInstancedBatch.cpp reads them:
+        # X Y Z, Pitch Yaw Roll, ScaleX ScaleY ScaleZ. Written out rather than
+        # zipped from a tuple because FRotator's field order has already
+        # mis-aimed a camera and the sun in this project.
+        entry["xf"].extend([
+            float(location[0]), float(location[1]), float(location[2]),
+            float(rotation[0]), float(rotation[1]), float(rotation[2]),
+            float(scale[0]), float(scale[1]), float(scale[2]),
+        ])
+        return entry
+
+    def _asset_path_of(obj):
+        """The path a runtime LoadObject will resolve, or '' if unknowable."""
+        if obj is None:
+            return ""
+        for getter in ("get_path_name", "get_full_name"):
+            try:
+                path = getattr(obj, getter)()
+                if path:
+                    return str(path)
+            except Exception:
+                continue
+        return ""
+
+    def emit_batches():
+        """Turn the accumulated pieces into a handful of batch actors."""
+        if not _BATCHES:
+            return 0
+        cls = unreal.load_class(None, "/Script/Wonderland.WonderlandInstancedBatch")
+        if not cls:
+            # LOUD, and it must not silently produce an empty world. Without the
+            # C++ class there is nothing to hold the instances, and every piece
+            # placed this run would simply not exist.
+            unreal.log_error(
+                "WonderlandInstancedBatch is not in this build — %d batches "
+                "holding %d pieces CANNOT be placed. Compile the C++ module, or "
+                "set WONDERLAND_BATCH=0 to generate the unbatched world."
+                % (len(_BATCHES), sum(len(b["xf"]) // 9 for b in _BATCHES.values())))
+            return 0
+        placed = pieces = 0
+        for key in _BATCH_ORDER:
+            entry = _BATCHES[key]
+            count = len(entry["xf"]) // 9
+            if count == 0:
+                continue
+            name = "Batch_%s_%s%s" % (
+                entry["mesh"].rsplit("/", 1)[-1].split(".")[0],
+                (entry["mat"].rsplit("/", 1)[-1].split(".")[0] or "default"),
+                "" if entry["shadow"] else "_noshadow")
+            actor = actors.spawn_actor_from_class(cls, unreal.Vector(0.0, 0.0, 0.0),
+                                                  unreal.Rotator())
+            if actor is None:
+                unreal.log_error("batch %s failed to spawn; %d pieces lost" % (name, count))
+                continue
+            actor.set_actor_label(name)
+            set_prop(actor, "MeshPath", entry["mesh"])
+            set_prop(actor, "MaterialPath", entry["mat"])
+            set_prop(actor, "BatchName", unreal.Name(name))
+            set_prop(actor, "bCastShadow", bool(entry["shadow"]))
+            _set_float_array(actor, "Transforms", entry["xf"])
+            placed += 1
+            pieces += count
+        unreal.log_warning("BATCHES=%d  INSTANCED_PIECES=%d" % (placed, pieces))
+        return placed
+
+    def _set_float_array(actor, cpp_name, values):
+        """TArray<float> from Python, tolerating how a build exposes arrays."""
+        for candidate in (values, None):
+            payload = candidate
+            if payload is None:
+                try:
+                    payload = unreal.Array(float)
+                    payload.extend(values)
+                except Exception:
+                    return False
+            if set_prop(actor, cpp_name, payload):
+                return True
+        return False
+
     def static_mesh(mesh_key, location, scale, label, rotation=(0.0, 0.0, 0.0), mat=None):
         path = PLACEHOLDER_MESH.get(mesh_key, UNKNOWN_MESH)
         if mesh_key not in PLACEHOLDER_MESH:
@@ -1392,18 +1524,38 @@ def build(layout):
             label = "%s__%d" % (label, _USED_LABELS[label])
         else:
             _USED_LABELS[label] = 0
+        # Resolve the material and the shadow decision BEFORE anything is
+        # created: both are part of the batch key, and both used to be applied
+        # to a component after the fact.
+        m = MATS.get(mat) if isinstance(mat, str) else mat
+        if m is None:
+            m = MATS.get(mat_name_for(mesh_key, label))
+
+        _lb = label or ""
+        _cast_shadow = not (mat in NO_SHADOW_MATS
+                            or any(_lb.startswith(_p) for _p in NO_SHADOW_PREFIX))
+
+        # THE ANALYSIS HOOK, on every path. The offline harnesses replace this to
+        # capture the world with no engine; whether the piece then becomes an
+        # instance or an actor is invisible to them, which is what keeps the
+        # composition preview and the draw-cost audit comparable across this
+        # change.
+        _wl_piece_hook(mesh_key, location, scale, label, rotation, mat)
+
+        if BATCH_VISUALS:
+            _batch_add(path, _asset_path_of(m), _cast_shadow, location, rotation, scale)
+            return None
+
         actor = spawn(unreal.StaticMeshActor, location, rotation=rotation, scale=scale, label=label)
         smc = actor.get_component_by_class(unreal.StaticMeshComponent)
         # MOVABLE so the mesh is fully dynamic: with r.AllowStaticLighting=False and
         # no baked lighting, a STATIC-mobility mesh has no lightmap AND is excluded
         # from some dynamic paths -> it renders BLACK. Movable meshes receive the
         # dynamic sun/fill/sky light every frame. This is THE fix for the black Hub.
+        # (The batched path keeps Movable for the same reason — see
+        # WonderlandInstancedBatch.h.)
         smc.set_mobility(unreal.ComponentMobility.MOVABLE)
         smc.set_static_mesh(asset_lib.load_asset(path))
-        # Replace the engine checker with a palette material (by name or auto-mapped).
-        m = MATS.get(mat) if isinstance(mat, str) else mat
-        if m is None:
-            m = MATS.get(mat_name_for(mesh_key, label))
         if m is not None:
             smc.set_material(0, m)
         # ---- SHADOW BUDGET -------------------------------------------------
@@ -1419,9 +1571,7 @@ def build(layout):
         # Everything the player can walk up to still casts normally. This is the
         # first lever to reach for if the streamed frame rate is short, and it is
         # free: none of it changes what the frame looks like.
-        _lb = label or ""
-        if (mat in NO_SHADOW_MATS
-                or any(_lb.startswith(_p) for _p in NO_SHADOW_PREFIX)):
+        if not _cast_shadow:
             try:
                 smc.set_editor_property("cast_shadow", False)
             except Exception:
@@ -5597,6 +5747,33 @@ def build(layout):
         set_prop(hcam, "tags", [unreal.Name("HeroCam%d" % hn)])
     unreal.log("HERO CAMS placed: %d" % len(hero_shots))
 
+    # ---- EMIT THE BATCHES ------------------------------------------------
+    # LAST, and before the save. Every visual piece placed above went into an
+    # accumulator instead of becoming an actor; this is where those become a
+    # handful of AWonderlandInstancedBatch actors. It has to run before
+    # save_map or the world reaches disk with its decoration missing entirely —
+    # which is the one failure mode of this change, so it is stated here rather
+    # than discovered on a GPU.
+    _batches_placed = 0
+    _pieces_placed = 0
+    if BATCH_VISUALS:
+        _batches_placed = emit_batches()
+        _pieces_placed = sum(len(b["xf"]) // 9 for b in _BATCHES.values())
+        if _BATCHES and _batches_placed == 0:
+            unreal.log_error(
+                "BATCHING PRODUCED NOTHING while holding %d pieces. The world "
+                "about to be saved has no decoration in it. Do not cook this."
+                % _pieces_placed)
+            # RAISE, do not continue. Saving here writes a valid, cookable,
+            # streamable map with nothing in it — and every later step reports
+            # success. build-wonderland.sh also checks the printed piece count,
+            # because an exception inside -run=pythonscript does not reliably
+            # fail the process; two gates because one of them is unreliable and
+            # neither of them is expensive.
+            raise RuntimeError(
+                "refusing to save a Wonderland with no decoration in it "
+                "(%d pieces were held and 0 batches were placed)" % _pieces_placed)
+
     # SAVE EXPLICITLY to the target package so a re-run actually overwrites the map
     # (see the new_blank_map note above). Log the result + actor count as evidence
     # the regeneration reached disk — a silent no-op here is what froze the level.
@@ -5634,7 +5811,14 @@ def build(layout):
         unreal.log_warning("world report failed: %s" % _re)
 
     _n = len(actors.get_all_level_actors())
-    unreal.log("LIFECYCLE saved=%s actors=%d level=%s" % (saved, _n, layout["level"]))
+    # AT WARNING LEVEL, and it names both numbers. `actors` alone stopped meaning
+    # "how much world is there" the moment decoration was batched: a healthy
+    # Wonderland now reports a few hundred actors carrying tens of thousands of
+    # pieces, and a log line showing only the first would read as a world that
+    # had collapsed. WonderlandWorldProof gates on PIECES for the same reason.
+    unreal.log_warning(
+        "LIFECYCLE saved=%s actors=%d batches=%d instanced_pieces=%d level=%s"
+        % (saved, _n, _batches_placed, _pieces_placed, layout["level"]))
     unreal.log("WonderlandHub generated from %s (Hub Design 3.0, M1 placeholder composition)." % LAYOUT_PATH)
 
 

@@ -17,6 +17,7 @@ the stream stays usable.
 import collections
 import io
 import os
+import re
 import sys
 import types
 
@@ -203,43 +204,69 @@ def main():
     print("  spawned actors: %d" % total)
     for k, v in spawned.most_common(8):
         print("    %-46s %6d" % (k[:46], v))
-    # ---- THE STREAMING BUDGET ------------------------------------------
-    # PERFORMANCE is a stated requirement — the California stream has to stay
-    # usable — and actor count is the number that creeps. It has gone from
-    # ~24,900 to ~33,700 across this art sprint, one justified pass at a time,
-    # which is exactly how a budget is spent without anyone deciding to.
+    # ---- THE ACTOR BUDGET, REWRITTEN AGAINST REAL EVIDENCE --------------
     #
-    # The one piece of REAL evidence: ~25,000 movable actors streamed at
-    # 1280x720 / 140 fps on an RTX 6000 Ada. Everything above that is
-    # extrapolation, so this does not pretend to know the true ceiling. It
-    # warns where the world has grown a third past the last measured-good
-    # figure, and fails where it has doubled — a tripwire against runaway
-    # growth, not a performance model.
+    # WHAT THIS BLOCK USED TO SAY, and why it was replaced: it treated ~25,000
+    # movable actors as "measured good" because that many had once streamed at
+    # 140 fps on an RTX 6000 Ada, and it warned only when the world grew a
+    # THIRD past that. Then the world was measured on the machine it actually
+    # runs on.
     #
-    # NANITE IS DELIBERATELY NOT USED and this is the place to say why: these
-    # are engine BasicShapes, a dozen triangles each. Nanite's per-instance
-    # overhead exceeds any benefit on geometry that simple, so enabling it
-    # here would cost frame time rather than save it. If the stream ever needs
-    # actors back, the lever is HISM for the repeated small props — tufts,
-    # flowers and leaf cards are about a fifth of the world between them — not
-    # Nanite and not deleting detail.
-    STREAMED_OK = 25000          # measured, on an RTX 6000 Ada
-    WARN_AT = int(STREAMED_OK * 1.35)
-    FAIL_AT = STREAMED_OK * 2
-    per_build = total // 2 if total > FAIL_AT else total
-    print("  streaming budget: %d actors per build (last measured-good: %d)"
-          % (per_build, STREAMED_OK))
-    if per_build > FAIL_AT:
-        print("  BUDGET FAIL: %d actors is more than double the only figure ever "
-              "streamed. Instance the repeated props before adding more."
-              % per_build)
+    # NVIDIA L4, 1280x720, H264, 18 Mb/s, browser-side: **12 FPS**, zero
+    # freezes, **GPU utilisation ~10%**, VRAM 1.6 GB, RenderThread at 55-80% of
+    # one core, with 33,149 actors in the world. A GPU at ten per cent while the
+    # frame rate is twelve is starved, not loaded. The old figure was an
+    # engine-side frame rate on a much stronger machine and it was never
+    # evidence that 25,000 actors were affordable here.
+    #
+    # The world is batched now: decoration is instances inside a handful of
+    # AWonderlandInstancedBatch actors. So the budget guards two things at once,
+    # because either one alone can be satisfied dishonestly —
+    #
+    #   ACTORS must stay low          (or the batching has been undone)
+    #   PIECES must stay high         (or the world has been emptied to hit it)
+    #
+    # A regression that deletes half the world to lower the actor count fails
+    # here, and so does one that quietly goes back to an actor per flower.
+    builds = max(1, len([w for w in warnings if w.startswith("LIFECYCLE ")]))
+    per_build = total // builds
+    loose_meshes = sum(v for k, v in spawned.items() if "StaticMeshActor" in k)
+    loose_per_build = loose_meshes // builds
+
+    pieces = 0
+    for w in warnings:
+        m = re.search(r"INSTANCED_PIECES=(\d+)", w)
+        if m:
+            pieces = max(pieces, int(m.group(1)))
+
+    ACTOR_FAIL_AT = 2000        # measured today: ~256
+    LOOSE_FAIL_AT = 250         # measured today: 0
+    PIECES_FLOOR = 25000        # measured today: ~31,996
+
+    print("  actor budget: %d actors per build across %d build(s)" % (per_build, builds))
+    print("                %d loose StaticMeshActors, %d instanced pieces"
+          % (loose_per_build, pieces))
+    budget_bad = False
+    if per_build > ACTOR_FAIL_AT:
+        print("  BUDGET FAIL: %d actors per build (ceiling %d). The L4 measured "
+              "12 FPS with a GPU at 10%% on an unbatched world; this is the "
+              "number that caused it." % (per_build, ACTOR_FAIL_AT))
         budget_bad = True
-    elif per_build > WARN_AT:
-        print("  budget warning: %d actors is %.0f%% of the last measured-good "
-              "figure; unverified above it." % (per_build, 100.0 * per_build / STREAMED_OK))
-        budget_bad = False
-    else:
-        budget_bad = False
+    if loose_per_build > LOOSE_FAIL_AT:
+        print("  BUDGET FAIL: %d loose StaticMeshActors (ceiling %d). Visual "
+              "geometry belongs in a batch; an actor each is what starved the GPU."
+              % (loose_per_build, LOOSE_FAIL_AT))
+        budget_bad = True
+    if pieces and pieces < PIECES_FLOOR:
+        print("  BUDGET FAIL: only %d instanced pieces (floor %d). The actor "
+              "count must come down by BATCHING, never by emptying the world."
+              % (pieces, PIECES_FLOOR))
+        budget_bad = True
+    if not pieces:
+        print("  BUDGET FAIL: the generator reported no INSTANCED_PIECES at all. "
+              "Either batching is off or it produced nothing — and a world with "
+              "no decoration would pass an actor ceiling perfectly.")
+        budget_bad = True
 
     print("  generator warnings: %d" % len(warnings))
     for w in warnings[:12]:

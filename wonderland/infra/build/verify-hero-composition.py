@@ -222,19 +222,25 @@ from wl_preview_leaf import apply as _wl_leaf_apply  # noqa: E402
 def main():
     sys.modules["unreal"] = make_unreal()
     src = io.open(GEN, encoding="utf8").read()
-    # inject a recorder at the top of static_mesh's body: every primitive in the
-    # world goes through it, including everything _part builds
-    # Inject AFTER the label is made unique, not at the function's first line:
-    # recording the argument records the name the caller asked for, and the
-    # generator may have had to rename it. Attribution has to see what the world
-    # actually contains.
-    anchor = ("        actor = spawn(unreal.StaticMeshActor, location, "
-              "rotation=rotation, scale=scale, label=label)")
-    if anchor not in src:
-        raise SystemExit("static_mesh signature changed; preview needs its anchor updated")
-    src = src.replace(anchor, anchor + "\n        __wl_record__(mesh_key, location, scale, label, rotation, mat)", 1)
-    ns = {"__name__": "__wl_preview__", "__file__": GEN, "__wl_record__": record}
+    # CAPTURE BY HOOK, NOT BY TEXT INJECTION.
+    #
+    # This used to splice a recorder call in after a specific line of the
+    # generator's source. That line has now moved inside a branch — decoration
+    # is batched into instances rather than spawned as actors — and the
+    # injection would have kept succeeding while recording NOTHING, reporting an
+    # empty frame as a measured one. A capture keyed to a line of code is a
+    # capture waiting to stop working silently.
+    #
+    # The generator defines `_wl_piece_hook` as a no-op and calls it for every
+    # piece on every path. Replacing it in the namespace is what captures the
+    # world, and if the name ever disappears this fails loudly instead.
+    ns = {"__name__": "__wl_preview__", "__file__": GEN}
     exec(compile(src, GEN, "exec"), ns)
+    if "_wl_piece_hook" not in ns:
+        raise SystemExit(
+            "generate-hub-level.py no longer defines _wl_piece_hook — this "
+            "preview cannot capture the world and will not pretend to.")
+    ns["_wl_piece_hook"] = record
     # Patch AFTER the module executes and BEFORE build() runs: build() is what
     # calls build_leaf_material and then MATS.update()s the result, so the
     # substitution has to be in place for that call and not before it.

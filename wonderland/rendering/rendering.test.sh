@@ -208,6 +208,71 @@ grep -q "hub-layout.json" "$HERE/audit-draw-cost.py"
 check $? "the audit builds from the real layout, not a default one"
 
 echo
+echo "-- the batched world architecture --"
+SRC="$HERE/../Source/Wonderland"
+GEN="$HERE/../infra/build/generate-hub-level.py"
+DRY="$HERE/../infra/build/verify-generator-dryrun.py"
+
+# THE MEASUREMENT THIS EXISTS FOR: an NVIDIA L4 rendered the unbatched world at
+# 12 FPS with the GPU at 10% and the RenderThread pinned. The cost was 33,149
+# actors, not shading. These checks are what stop it coming back.
+[ -f "$SRC/WonderlandInstancedBatch.h" ] && [ -f "$SRC/WonderlandInstancedBatch.cpp" ]
+check $? "AWonderlandInstancedBatch exists"
+grep -q "bCanEverTick = false" "$SRC/WonderlandInstancedBatch.cpp"
+check $? "batch actors do not tick (a few hundred idle ticks is a real GameThread slice)"
+grep -q "ECollisionEnabled::NoCollision" "$SRC/WonderlandInstancedBatch.cpp"
+check $? "instanced decoration has no collision"
+grep -q "SetCanEverAffectNavigation(false)" "$SRC/WonderlandInstancedBatch.cpp"
+check $? "instanced decoration contributes no navigation"
+grep -q "EComponentMobility::Movable" "$SRC/WonderlandInstancedBatch.cpp"
+check $? "instances default to MOVABLE (Static renders black without baked lighting here)"
+grep -q "bReplicates = false" "$SRC/WonderlandInstancedBatch.cpp"
+check $? "batches are not replicated"
+
+grep -q "BATCH_VISUALS" "$GEN"
+check $? "the generator batches visual pieces"
+grep -q "WONDERLAND_BATCH" "$GEN"
+check $? "...with an escape hatch so batched and unbatched worlds can be compared"
+grep -q "_wl_piece_hook(mesh_key, location, scale, label, rotation, mat)" "$GEN"
+check $? "every piece passes through the analysis hook on every path"
+grep -q "emit_batches()" "$GEN"
+check $? "the batches are emitted before the map is saved"
+python3 - "$GEN" <<'EMITORDER'
+import io, sys
+src = io.open(sys.argv[1], encoding="utf8").read()
+emit = src.index("_batches_placed = emit_batches()")
+save = src.index("SAVE EXPLICITLY to the target package")
+# Emitting AFTER the save writes a world whose decoration never reached disk —
+# the single failure mode of batching, and one that looks like an art bug.
+sys.exit(0 if emit < save else 1)
+EMITORDER
+check $? "...and emitted BEFORE it, not after (or the decoration never reaches disk)"
+
+# Neither harness may go back to splicing a recorder into a line of source: the
+# line it used to target now sits inside a branch that batching does not take,
+# and the injection would keep succeeding while recording nothing.
+! grep -q "__wl_record__(mesh_key" "$HERE/../infra/build/verify-hero-composition.py"
+check $? "the composition preview captures by hook, not by text injection"
+! grep -q "__wl_record__(mesh_key" "$HERE/audit-draw-cost.py"
+check $? "the draw-cost audit captures by hook, not by text injection"
+
+# The budget must guard BOTH directions. An actor ceiling alone is satisfied by
+# deleting half the world.
+grep -q "LOOSE_FAIL_AT" "$DRY"; check $? "the dry run caps loose StaticMeshActors"
+grep -q "PIECES_FLOOR" "$DRY"; check $? "...and floors the instanced piece count"
+grep -q "reported no INSTANCED_PIECES at all" "$DRY"
+check $? "...and fails when batching reported nothing rather than passing an empty world"
+
+# The world proof cannot gate on actor count any more, or it fails the
+# optimised world for being optimised.
+grep -q "GExpectedMinPieces" "$SRC/WonderlandWorldProof.cpp"
+check $? "the world proof gates on PIECES, not actors"
+grep -q "VISIBLE_PIECES=" "$SRC/WonderlandWorldProof.cpp"
+check $? "...and prints them so a live run can be read"
+grep -q "DeclaredInstanceCount" "$SRC/WonderlandWorldProof.cpp"
+check $? "...counting DECLARED instances (it runs before BeginPlay builds them)"
+
+echo
 echo "-- the visual acceptance target --"
 VT="$HERE/../infra/build/verify-visual-target.py"
 python3 -c "import ast,io;ast.parse(io.open('$VT',encoding='utf8').read())"

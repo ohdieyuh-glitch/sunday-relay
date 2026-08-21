@@ -6,19 +6,37 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+
 #include "WonderlandDogPawn.h"
+#include "WonderlandInstancedBatch.h"
 #include "WonderlandStrollingDog.h"
 
 DEFINE_LOG_CATEGORY(LogWonderlandProof);
 
 namespace WonderlandWorldProof
 {
-	// A DELIBERATELY LOW FLOOR. The generated Hub carries tens of thousands of
-	// actors; the engine's default map carries a handful. Anything in between is
-	// still wrong, but this number only has to separate "the world loaded" from
-	// "a template loaded" without becoming a maintenance burden every time the
-	// art changes. Overridable so a deliberately small test map is not a failure.
-	int32 GExpectedMinActors = 500;
+	// WAS 500, AND WAS THE WORLD-LOADED SIGNAL. It is neither any more. Batching
+	// decoration into instances means the same world ships a few hundred actors
+	// instead of thirty-three thousand, and a floor of 500 would have failed the
+	// optimised world for being optimised — the classic way a safety check gets
+	// deleted rather than fixed. This is now only a "there is nothing here at
+	// all" backstop; GExpectedMinPieces is the real gate.
+	int32 GExpectedMinActors = 20;
+
+	// THE FLOOR THAT ACTUALLY MEANS SOMETHING NOW.
+	//
+	// ACTORS used to be the signal that the built world had loaded: tens of
+	// thousands meant Wonderland, a handful meant the engine's default map. That
+	// stopped being true the moment decoration was batched into instances — the
+	// same world now ships a few hundred actors carrying thirty thousand pieces,
+	// and a gate on actor count would have failed the optimised world for being
+	// optimised, which is exactly how a safety check gets deleted.
+	//
+	// What still separates "Wonderland" from "a template" is how many PIECES are
+	// in the map, batched or not. That is what is gated.
+	int32 GExpectedMinPieces = 5000;
 
 	static FDelegateHandle GHandle;
 
@@ -62,11 +80,44 @@ namespace WonderlandWorldProof
 		int32 CompoundAgents = 0;
 		int32 Proxies = 0;
 		int32 BodylessDogs = 0;
+		int32 Batches = 0;
+		int32 InstancedPieces = 0;
+		int32 LoosePieces = 0;
 
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
 			AActor* Actor = *It;
 			++Actors;
+
+			// COUNT WHAT THE MAP SHIPPED, NOT WHAT HAS BEEN BUILT YET. This runs
+			// at OnWorldInitializedActors, which is BEFORE BeginPlay — so a batch
+			// actor's instances do not exist yet and GetInstanceCount() would
+			// report zero for a world that is entirely present. The declared
+			// count is the honest number here, and it is also the one that proves
+			// what the COOK produced rather than what the runtime managed.
+			if (const AWonderlandInstancedBatch* const Batch =
+					Cast<AWonderlandInstancedBatch>(Actor))
+			{
+				++Batches;
+				InstancedPieces += Batch->DeclaredInstanceCount();
+			}
+			else
+			{
+				TArray<UStaticMeshComponent*> Meshes;
+				Actor->GetComponents<UStaticMeshComponent>(Meshes);
+				for (const UStaticMeshComponent* const Mesh : Meshes)
+				{
+					if (const UInstancedStaticMeshComponent* const Instanced =
+							Cast<UInstancedStaticMeshComponent>(Mesh))
+					{
+						InstancedPieces += Instanced->GetInstanceCount();
+					}
+					else if (Mesh != nullptr && Mesh->GetStaticMesh() != nullptr)
+					{
+						++LoosePieces;
+					}
+				}
+			}
 
 			// BOTH KINDS OF DOG. This used to count only AWonderlandDogPawn —
 			// the player's pawn — so the eight ambient Relay Dogs the level
@@ -115,6 +166,11 @@ namespace WonderlandWorldProof
 		UE_LOG(LogWonderlandProof, Warning, TEXT("RELAY_DOGS=%d"), Dogs);
 		UE_LOG(LogWonderlandProof, Warning, TEXT("COMPOUND_AGENTS=%d"), CompoundAgents);
 		UE_LOG(LogWonderlandProof, Warning, TEXT("PROXY_ACTORS=%d"), Proxies);
+		UE_LOG(LogWonderlandProof, Warning, TEXT("BATCHES=%d"), Batches);
+		UE_LOG(LogWonderlandProof, Warning, TEXT("INSTANCED_PIECES=%d"), InstancedPieces);
+		UE_LOG(LogWonderlandProof, Warning, TEXT("LOOSE_PIECES=%d"), LoosePieces);
+		UE_LOG(LogWonderlandProof, Warning, TEXT("VISIBLE_PIECES=%d"),
+			   InstancedPieces + LoosePieces);
 		if (BodylessDogs > 0)
 		{
 			UE_LOG(LogWonderlandProof, Error,
@@ -123,8 +179,15 @@ namespace WonderlandWorldProof
 				   BodylessDogs, Dogs - BodylessDogs);
 		}
 
-		int32 Expected = GExpectedMinActors;
-		FParse::Value(FCommandLine::Get(), TEXT("-WonderlandMinActors="), Expected);
+		// -WonderlandMinActors is still honoured, but it now only guards against a
+		// world with almost no actors AT ALL. It is no longer the world-loaded
+		// signal — see GExpectedMinPieces — and leaving it as a dead variable
+		// would have tripped this project's warnings-as-errors build anyway.
+		int32 ExpectedActors = GExpectedMinActors;
+		FParse::Value(FCommandLine::Get(), TEXT("-WonderlandMinActors="), ExpectedActors);
+		int32 ExpectedPieces = GExpectedMinPieces;
+		FParse::Value(FCommandLine::Get(), TEXT("-WonderlandMinPieces="), ExpectedPieces);
+		const int32 Pieces = InstancedPieces + LoosePieces;
 
 		// STATE THE MISMATCH LOUDLY. This is the exact failure that reached a
 		// founder's browser: the stream was healthy and the world was not the
@@ -136,12 +199,25 @@ namespace WonderlandWorldProof
 				TEXT("has no map pinned, or the cook did not include the generated world."),
 				*MapName);
 		}
-		else if (Actors < Expected)
+		else if (Actors < ExpectedActors)
 		{
 			UE_LOG(LogWonderlandProof, Error,
-				TEXT("WORLD_MISMATCH: WonderlandHub loaded with only %d actors (expected at ")
-				TEXT("least %d). The cooked map is older or smaller than the generated one."),
-				Actors, Expected);
+				TEXT("WORLD_MISMATCH: only %d actors in WonderlandHub (floor %d). Even a fully ")
+				TEXT("batched world keeps its lights, cameras, markers and Dogs."),
+				Actors, ExpectedActors);
+		}
+		else if (Pieces < ExpectedPieces)
+		{
+			// The message names PIECES, because that is what is being tested.
+			// Leaving the old wording would have been a gate reporting one
+			// quantity and explaining a different one, which is worse than no
+			// message: the reader goes and checks the actor count and finds it
+			// fine.
+			UE_LOG(LogWonderlandProof, Error,
+				TEXT("WORLD_MISMATCH: WonderlandHub loaded with only %d visible pieces ")
+				TEXT("(%d instanced + %d loose, across %d actors; expected at least %d). ")
+				TEXT("The cooked map is older or smaller than the generated one."),
+				Pieces, InstancedPieces, LoosePieces, Actors, ExpectedPieces);
 		}
 		else
 		{
