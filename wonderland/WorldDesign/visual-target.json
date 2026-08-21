@@ -2,7 +2,6 @@
   "schema": "wonderland.visual-target/1",
   "camera": "HeroCam0 / cam_arrival_hero — the founder's arrival composition",
   "authority": "HUMAN. Every criterion below is a structural property that can be measured. NONE of them is a claim about how close the frame is to the founder's reference image; that judgement is the founder's and no number here substitutes for it.",
-
   "_how_targets_were_set": [
     "From the founder's written description of the reference, decomposed in",
     "docs/relay/WONDERLAND_ART_DIRECTION.md, and NOT from the image itself —",
@@ -14,16 +13,32 @@
   ],
   "_measured_at_2026_08_21": {
     "note": "the state when this file was written, so drift in either direction is visible",
-    "objects_pct": 95.9, "sky_pct": 4.1, "bare_ground_pct": 0.04,
-    "actors_drawn": 25829, "distinct_materials_visible": 49,
+    "objects_pct": 95.9,
+    "sky_pct": 4.1,
+    "bare_ground_pct": 0.04,
+    "actors_drawn": 25829,
+    "distinct_materials_visible": 49,
     "lone_primitive_pct": 0.81,
-    "depth_near_mid_far": [38.7, 51.0, 6.2],
-    "relay_dogs_readable": 4, "tallest_dog_px": 172,
-    "palette": {"green_foliage": 30.6, "gold_amber": 28.3, "neutral_stone": 14.1,
-                "cream_white": 7.9, "pink_rose_red": 7.6, "violet_purple": 4.3,
-                "blue_teal": 4.2, "dark": 2.9}
+    "depth_near_mid_far": [
+      38.7,
+      51.0,
+      6.2
+    ],
+    "relay_dogs_readable": 4,
+    "tallest_dog_px": 172,
+    "palette": {
+      "green_foliage": 30.6,
+      "warm_timber_stone": 15.4,
+      "neutral_stone": 14.1,
+      "gold_amber": 13.0,
+      "cream_white": 7.9,
+      "pink_rose_red": 7.6,
+      "violet_purple": 4.3,
+      "blue_teal": 4.2,
+      "dark": 2.9
+    },
+    "palette_note": "The warm 20-65 degree hue band was originally one bucket and read 28.3%, which said gold dominates the frame. It does not: splitting bright saturated gold from dull warm timber and paving puts real gold at 13.0% (inside its accent band) and moves 15.4% to bark and flagstone. The first number would have sent someone to de-gold a world that is not over-gold."
   },
-
   "criteria": {
     "environment_density": {
       "metric": "coverage.objects_pct",
@@ -37,7 +52,8 @@
     },
     "sky_present": {
       "metric": "coverage.sky_pct",
-      "min": 3.0, "max": 20.0,
+      "min": 3.0,
+      "max": 20.0,
       "why": "The reference names a bright lavender sky as an element. Zero sky means the shot is roofed over by canopy; a third of the frame as sky means the city is missing."
     },
     "material_diversity": {
@@ -68,7 +84,7 @@
     "palette_cream": {
       "metric": "palette_pct.cream_white",
       "min": 15.0,
-      "why": "The reference is pale cream and white stone before it is anything else. Currently 7.9% — this is the largest measured gap to the target look."
+      "why": "The reference is pale cream and white stone before it is anything else. Measured at 7.9%, and 3.3 of those points are the Relay Dogs' own white coats — actual pale stone is nearer 4.6%. This is the largest measured gap to the target look."
     },
     "palette_pink": {
       "metric": "palette_pct.pink_rose_red",
@@ -82,13 +98,19 @@
     },
     "palette_gold_is_an_accent": {
       "metric": "palette_pct.gold_amber",
-      "min": 4.0, "max": 18.0,
-      "why": "Gold gates, keys and filigree are ACCENTS in the reference. Measured at 28.3%, gold is currently the second largest colour in the frame — the world reads more brass than fairy-tale."
+      "min": 4.0,
+      "max": 18.0,
+      "why": "Gold gates, keys and filigree are ACCENTS in the reference. Measured at 13.0% once bright saturated gold is separated from warm timber and paving — inside the band, so this is currently MET and the band exists to keep it that way."
     },
     "foliage_not_dominant": {
       "metric": "palette_pct.green_foliage",
       "max": 25.0,
-      "why": "Lush, not a forest. Measured at 30.6%, green is currently the LARGEST colour in a frame whose reference is a pastel stone city."
+      "why": "Lush, not a forest. Measured at 30.6% and it is the largest colour in the frame: leafcard 13.0% and leafcard_hi 9.2% together are 22.2%, which is the framing tree's canopy roofing the shot. The reference is a pastel stone city seen THROUGH planting, not planting with a city behind it."
+    },
+    "warm_surfaces_not_dominant": {
+      "metric": "palette_pct.warm_timber_stone",
+      "max": 22.0,
+      "why": "Bark, warm paving and dull brass. Present in the reference but never the subject; a frame that is a fifth timber is reading as a woodland path rather than a palace approach."
     }
   }
 }

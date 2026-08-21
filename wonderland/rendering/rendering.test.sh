@@ -192,6 +192,14 @@ sys.exit(0 if not bad and not claims else
          (print("no-reason:", bad, "score-claims:", claims) or 1))
 VTFACTS
 check $? "every criterion has a metric and a stated reason, and none claims a score"
+# The 20-65 degree hue band covers gold leaf, tree bark AND warm paving. As one
+# bucket it read 28.3% and said "gold dominates the frame"; split, real gold is
+# 13.0% and inside its accent band. Merging them again would resurrect a
+# finding that sends someone to de-gold a world that is not over-gold.
+grep -q "warm_timber_stone" "$HERE/../infra/build/verify-hero-composition.py"
+check $? "the warm hue band separates bright gold from timber and paving"
+grep -q "palette_contributors" "$HERE/../infra/build/verify-hero-composition.py"
+check $? "each colour family names the materials that put it on screen"
 
 # The gate must FAIL on a frame that misses a target, and must fail on a frame
 # it could not measure. A gate that skips what it cannot read passes as it

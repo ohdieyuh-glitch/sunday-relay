@@ -717,20 +717,28 @@ def main():
             _depth["near" if _z < 1800 else ("mid" if _z < 4500 else "far")] += _n
         # Classify every owned pixel into the reference's colour families.
         _fam = _cv.Counter()
+        # WHICH MATERIAL PUTS EACH COLOUR ON THE SCREEN. "green is 30% of the
+        # frame" is a diagnosis nobody can act on; "leafcard is 9% of it" names
+        # the file to open.
+        _fam_by_mat = {}
         _owned = 0
         for _k in range(W * H):
             if owner[_k] < 0:
                 continue
             _owned += 1
+            _mat_of = str(blobs[owner[_k]][6])
             _i = _k * 3
             _r, _g, _b = px[_i], px[_i + 1], px[_i + 2]
             _mx, _mn = max(_r, _g, _b), min(_r, _g, _b)
             _chroma = _mx - _mn
+            def _hit(_family):
+                _fam[_family] += 1
+                _fam_by_mat.setdefault(_family, _cv.Counter())[_mat_of] += 1
             if _mx < 60:
-                _fam["dark"] += 1
+                _hit("dark")
                 continue
             if _chroma < 26:
-                _fam["cream_white" if _mx > 165 else "neutral_stone"] += 1
+                _hit("cream_white" if _mx > 165 else "neutral_stone")
                 continue
             # hue in degrees
             if _mx == _r:
@@ -740,15 +748,24 @@ def main():
             else:
                 _h = 60.0 * (((_r - _g) / float(_chroma)) + 4)
             if 20 <= _h < 65:
-                _fam["gold_amber"] += 1
+                # THE WARM BAND IS TWO DIFFERENT THINGS AND MERGING THEM LIES.
+                # 20-65 degrees covers gold leaf AND tree bark AND warm paving.
+                # Measured as one bucket it read 28% and said "this world is
+                # more brass than fairy-tale" — a finding that would have sent
+                # someone to de-gold a world whose actual gold is a third of
+                # that. Gold is BRIGHT and SATURATED; timber and flagstone are
+                # neither.
+                _sat = _chroma / float(_mx)
+                _hit("gold_amber" if (_mx >= 150 and _sat >= 0.42)
+                     else "warm_timber_stone")
             elif 65 <= _h < 170:
-                _fam["green_foliage"] += 1
+                _hit("green_foliage")
             elif 170 <= _h < 250:
-                _fam["blue_teal"] += 1
+                _hit("blue_teal")
             elif 250 <= _h < 310:
-                _fam["violet_purple"] += 1
+                _hit("violet_purple")
             else:
-                _fam["pink_rose_red"] += 1
+                _hit("pink_rose_red")
         _palette = {k: 100.0 * v / max(1, _owned) for k, v in _fam.items()}
 
         _facts = {
@@ -775,6 +792,10 @@ def main():
             # drift. Owned pixels only — the sky is counted separately above and
             # would otherwise dominate every bucket it touches.
             "palette_pct": _palette,
+            "palette_contributors": {
+                _f: [[_m, 100.0 * _n / max(1, _owned)]
+                     for _m, _n in _c.most_common(6)]
+                for _f, _c in _fam_by_mat.items()},
             "relay_dogs": {
                 "placed": len(_pending_dogs),
                 "in_frame": len(_dogs),
