@@ -59,6 +59,23 @@
 >    every gate passes and the frame is empty. Do not debug it as a transform.
 >
 > 4. **GPU OFF** the moment the capture and the probe are done.
+>
+> **Three things found by audit that change what you should expect:**
+>
+> * The **arcane circle is now under the Dog**. It was centred at (0,0) with a
+>   320 uu rim while HERO_DOG stood 368 uu away — the Dog was outside its own
+>   circle, and the source comment claimed the opposite. `verify-hero-motif.py`
+>   gates it and runs in prepare.sh.
+> * **`WONDERLAND_MARBLE_BACKDROP=1` now removes nothing**, and says so. Its
+>   reasoning measured the shell at metric scale (20,507 uu) when it is placed
+>   at backdrop scale (123,039 uu, half-extent 61,520) — 3.2x beyond the
+>   outermost skyline ring. The rings are midground in FRONT of the shell;
+>   dropping them opened a hole. If you want them gone it is now an art
+>   decision, not a geometric one.
+> * The world still has **no gameplay collision** by default. `WONDERLAND_COLLIDE
+>   =plaza,cobble,cobble2,stone` turns 3,096 of 31,996 pieces solid and is
+>   measured by `RUNTIME_BLOCKING_PRIMITIVES` / `RUNTIME_GROUNDED_DOGS`. Walk
+>   vs fly is the founder's call and the default was not changed.
 
 > **2026-08-21 — READ THIS FIRST, THE STATE BELOW IS OLDER THAN IT LOOKS.**
 >
