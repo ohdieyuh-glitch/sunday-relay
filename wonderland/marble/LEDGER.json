@@ -1,0 +1,34 @@
+{
+  "schema": "wonderland.marble.ledger/1",
+  "why": [
+    "The goal asks every iteration to report the Marble ID and cost. Those",
+    "numbers lived in conversation, which means they were re-derived from",
+    "memory each time and could not be checked by anyone else.",
+    "",
+    "This file holds ONLY what a world manifest cannot know: the opening",
+    "balance, what the founder decided about each world, and any charge that",
+    "did not produce a world. Every credit figure itself is read out of the",
+    "manifests, because a second copy of a number is a second number."
+  ],
+  "opening_balance": 13250,
+  "opening_note": "The founder's stated starting credits when the Marble goal was set.",
+  "last_observed_balance": {
+    "credits": 6590,
+    "observed_at": "2026-08-21",
+    "how": "reported by the API on the completed HQ mesh export and recorded in the royal-garden-backdrop manifest",
+    "note": "Reconciled against the derived total by ledger.py. A mismatch is a REFUSAL, not a rounding note — it means a charge happened that nothing here recorded."
+  },
+  "dispositions": {
+    "royal-garden": {
+      "verdict": "rejected",
+      "why": "Marble reproduced the Relay Dogs out of the reference image despite an explicit NO-DOGS text prompt. Image conditioning beat the negative. Nothing from this world is used.",
+      "decided_by": "the agent, against the goal's explicit rule that Marble must not generate Relay Dogs"
+    },
+    "royal-garden-backdrop": {
+      "verdict": "accepted, awaiting founder visual review",
+      "why": "Generated from the reference cropped above the dog band. Dog-free. The HQ mesh export from this world is what the UE import stages.",
+      "decided_by": "the agent; NO MERGE until founder visual approval"
+    }
+  },
+  "other_charges": []
+}
