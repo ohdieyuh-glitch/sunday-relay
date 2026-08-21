@@ -1079,6 +1079,37 @@ grep -q "LogWonderlandProof, Warning, TEXT(\"WORLD=" "$WP" \
 grep -q "WonderlandWorldProof::Register" "$PROJ/Source/Wonderland/WonderlandModule.cpp" \
   && ok "the module registers the proof at startup" \
   || bad "the proof is never registered - it would never run"
+
+# THE UE 5.8 DELEGATE, exactly. The first version hooked
+# FWorldDelegates::OnWorldBeginPlay, which does not exist in 5.8 — the compile
+# said "no member named 'OnWorldBeginPlay' in 'FWorldDelegates'". UWorld has a
+# per-world OnWorldBeginPlay, which is a different thing; the global hook that
+# fires once per world with actors already initialised is
+# OnWorldInitializedActors, and it passes a params struct rather than a UWorld*.
+WPLIVE="$TMP/wp-live.cpp"
+sed 's|[[:space:]]//.*$||; s|^[[:space:]]*//.*$||' "$WP" > "$WPLIVE"
+if grep -q 'FWorldDelegates::OnWorldBeginPlay' "$WPLIVE"; then
+  bad "still hooks FWorldDelegates::OnWorldBeginPlay - no such member in UE 5.8"
+else
+  ok "the non-existent FWorldDelegates::OnWorldBeginPlay hook is gone"
+fi
+grep -q 'FWorldDelegates::OnWorldInitializedActors.AddStatic' "$WPLIVE" \
+  && ok "registers on FWorldDelegates::OnWorldInitializedActors" \
+  || bad "does not register on the UE 5.8 delegate"
+grep -q 'FWorldDelegates::OnWorldInitializedActors.Remove' "$WPLIVE" \
+  && ok "and unregisters from the same delegate" \
+  || bad "registers on one delegate and unregisters from another"
+# The callback signature has to match, or it fails to compile again.
+grep -q 'const FActorsInitializedParams& Params' "$WPLIVE" \
+  && ok "the callback takes const FActorsInitializedParams&" \
+  || bad "the callback signature does not match the delegate"
+grep -q 'UWorld\* World = Params.World' "$WPLIVE" \
+  && ok "and the world comes from Params.World" \
+  || bad "the world is not taken from the params struct"
+# Engine/World.h declares FActorsInitializedParams; without it this will not build.
+grep -q '#include "Engine/World.h"' "$WP" \
+  && ok "Engine/World.h is included for FActorsInitializedParams" \
+  || bad "FActorsInitializedParams would be undeclared"
 # and the audit must be able to READ those lines back
 rm -rf "$TMP/rt"; mkdir -p "$TMP/rt"
 printf 'LogWonderlandProof: Warning: WORLD=/Game/Wonderland/Maps/WonderlandHub\nACTORS=33048\nRELAY_DOGS=12\nCOMPOUND_AGENTS=4\nPROXY_ACTORS=0\n' > "$TMP/rt/app.log"

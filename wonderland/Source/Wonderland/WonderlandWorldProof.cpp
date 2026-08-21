@@ -35,8 +35,22 @@ namespace WonderlandWorldProof
 			|| ClassName.Contains(TEXT("SpectatorPawn"));
 	}
 
-	static void ReportWorld(UWorld* World)
+	// TAKES FActorsInitializedParams, NOT UWorld*.
+	//
+	// FWorldDelegates::OnWorldBeginPlay does not exist in UE 5.8 — the compile
+	// said so plainly. UWorld has a per-world OnWorldBeginPlay, which would mean
+	// subscribing to each world as it appears; the global hook that fires once
+	// per world with the actors already initialised is OnWorldInitializedActors,
+	// and it hands over a params struct rather than the world directly.
+	//
+	// It fires slightly earlier than BeginPlay — after actor initialisation,
+	// before BeginPlay is dispatched. That is fine and arguably better here:
+	// every actor the cooked map contains is present and counted, and the count
+	// is not affected by anything BeginPlay might spawn afterwards. What is being
+	// proven is what the MAP shipped with.
+	static void ReportWorld(const FActorsInitializedParams& Params)
 	{
+		UWorld* World = Params.World;
 		if (!World)
 		{
 			return;
@@ -114,14 +128,14 @@ namespace WonderlandWorldProof
 		{
 			return;
 		}
-		GHandle = FWorldDelegates::OnWorldBeginPlay.AddStatic(&ReportWorld);
+		GHandle = FWorldDelegates::OnWorldInitializedActors.AddStatic(&ReportWorld);
 	}
 
 	void Unregister()
 	{
 		if (GHandle.IsValid())
 		{
-			FWorldDelegates::OnWorldBeginPlay.Remove(GHandle);
+			FWorldDelegates::OnWorldInitializedActors.Remove(GHandle);
 			GHandle.Reset();
 		}
 	}
