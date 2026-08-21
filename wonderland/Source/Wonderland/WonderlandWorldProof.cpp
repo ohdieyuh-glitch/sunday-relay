@@ -1,6 +1,7 @@
 #include "WonderlandWorldProof.h"
 
 #include "Engine/World.h"
+#include "TimerManager.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "Misc/CommandLine.h"
@@ -10,6 +11,7 @@
 #include "Components/StaticMeshComponent.h"
 
 #include "WonderlandDogPawn.h"
+#include "WonderlandInstancedBatch.h"
 #include "WonderlandInstancedBatch.h"
 #include "WonderlandStrollingDog.h"
 
@@ -79,7 +81,6 @@ namespace WonderlandWorldProof
 		int32 Dogs = 0;
 		int32 CompoundAgents = 0;
 		int32 Proxies = 0;
-		int32 BodylessDogs = 0;
 		int32 Batches = 0;
 		int32 InstancedPieces = 0;
 		int32 LoosePieces = 0;
@@ -140,17 +141,13 @@ namespace WonderlandWorldProof
 				{
 					++CompoundAgents;
 				}
-				// A Dog whose body failed to build is present and INVISIBLE.
-				// Reporting it as a Dog without saying so would make the count
-				// agree with the world while disagreeing with the picture.
-				if (const AWonderlandStrollingDog* const Stroller =
-						Cast<AWonderlandStrollingDog>(Actor))
-				{
-					if (Stroller->BuiltParts == 0)
-					{
-						++BodylessDogs;
-					}
-				}
+				// NOT COUNTED HERE ANY MORE. Body parts and tags are created in
+				// BeginPlay, and this runs at OnWorldInitializedActors — BEFORE
+				// it. Reading them here reported RELAY_DOGS_WITHOUT_A_BODY=8 and
+				// COMPOUND_AGENTS=0 on a live L4 run where both were almost
+				// certainly fine: the instrument was sampling too early and
+				// calling it a defect. The delayed report below is where those
+				// questions can honestly be answered.
 			}
 			else if (IsProxyActor(Actor))
 			{
@@ -171,12 +168,67 @@ namespace WonderlandWorldProof
 		UE_LOG(LogWonderlandProof, Warning, TEXT("LOOSE_PIECES=%d"), LoosePieces);
 		UE_LOG(LogWonderlandProof, Warning, TEXT("VISIBLE_PIECES=%d"),
 			   InstancedPieces + LoosePieces);
-		if (BodylessDogs > 0)
+		// THE SECOND REPORT, AFTER BeginPlay HAS RUN.
+		//
+		// Everything above describes what the MAP shipped, which is knowable at
+		// actor-initialisation time. Whether a Dog actually built a body, and
+		// whether it tagged itself as a Compound Agent, are BeginPlay facts and
+		// cannot be read yet. Asking early produced a false alarm on a live run;
+		// this asks late and prefixes the answers RUNTIME_ so the two reports
+		// can never be confused for one another.
+		if (FTimerManager* const Timers = &World->GetTimerManager())
 		{
-			UE_LOG(LogWonderlandProof, Error,
-				   TEXT("RELAY_DOGS_WITHOUT_A_BODY=%d — these are counted above and "
-						"cannot be seen. Treat RELAY_DOGS as %d visible."),
-				   BodylessDogs, Dogs - BodylessDogs);
+			TWeakObjectPtr<UWorld> WeakWorld(World);
+			FTimerHandle Handle;
+			Timers->SetTimer(Handle, FTimerDelegate::CreateLambda([WeakWorld]()
+			{
+				UWorld* const Live = WeakWorld.Get();
+				if (Live == nullptr)
+				{
+					return;
+				}
+				int32 LiveDogs = 0, LiveAgents = 0, Bodyless = 0, LiveInstances = 0;
+				for (TActorIterator<AActor> It(Live); It; ++It)
+				{
+					AActor* const Actor = *It;
+					if (const AWonderlandStrollingDog* const Stroller =
+							Cast<AWonderlandStrollingDog>(Actor))
+					{
+						++LiveDogs;
+						if (Stroller->BuiltParts == 0)
+						{
+							++Bodyless;
+						}
+					}
+					else if (Cast<AWonderlandDogPawn>(Actor) != nullptr)
+					{
+						++LiveDogs;
+					}
+					if (Actor->ActorHasTag(WonderlandDogTags::CompoundAgent))
+					{
+						++LiveAgents;
+					}
+					if (const AWonderlandInstancedBatch* const Batch =
+							Cast<AWonderlandInstancedBatch>(Actor))
+					{
+						LiveInstances += Batch->BuiltInstances;
+					}
+				}
+				UE_LOG(LogWonderlandProof, Warning, TEXT("RUNTIME_RELAY_DOGS=%d"), LiveDogs);
+				UE_LOG(LogWonderlandProof, Warning, TEXT("RUNTIME_COMPOUND_AGENTS=%d"), LiveAgents);
+				UE_LOG(LogWonderlandProof, Warning, TEXT("RUNTIME_INSTANCES_BUILT=%d"), LiveInstances);
+				if (Bodyless > 0)
+				{
+					UE_LOG(LogWonderlandProof, Error,
+						   TEXT("RUNTIME_RELAY_DOGS_WITHOUT_A_BODY=%d — present and "
+								"INVISIBLE. Treat RUNTIME_RELAY_DOGS as %d visible."),
+						   Bodyless, LiveDogs - Bodyless);
+				}
+				else
+				{
+					UE_LOG(LogWonderlandProof, Warning, TEXT("RUNTIME_DOGS_OK=1"));
+				}
+			}), 4.0f, false);
 		}
 
 		// -WonderlandMinActors is still honoured, but it now only guards against a

@@ -56,8 +56,13 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 		return 0;
 	}
 
-	UStaticMesh* const Mesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
-	if (Mesh == nullptr)
+	// The hard reference first; the path only if nothing was wired.
+	UStaticMesh* MeshAsset = Mesh;
+	if (MeshAsset == nullptr && !MeshPath.IsEmpty())
+	{
+		MeshAsset = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+	}
+	if (MeshAsset == nullptr)
 	{
 		UE_LOG(LogTemp, Error,
 			   TEXT("WONDERLAND BATCH '%s' could not load mesh '%s'. %d pieces of "
@@ -83,13 +88,17 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 	// and ignored at worst.
 	Instances->SetMobility(bStaticMobility ? EComponentMobility::Static
 										   : EComponentMobility::Movable);
-	Instances->SetStaticMesh(Mesh);
-	if (!MaterialPath.IsEmpty())
+	Instances->SetStaticMesh(MeshAsset);
+	UMaterialInterface* MaterialAsset = Material;
+	if (MaterialAsset == nullptr && !MaterialPath.IsEmpty())
 	{
-		if (UMaterialInterface* const Material =
-				LoadObject<UMaterialInterface>(nullptr, *MaterialPath))
+		MaterialAsset = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
+	}
+	if (MaterialAsset != nullptr || !MaterialPath.IsEmpty())
+	{
+		if (MaterialAsset != nullptr)
 		{
-			Instances->SetMaterial(0, Material);
+			Instances->SetMaterial(0, MaterialAsset);
 		}
 		else
 		{

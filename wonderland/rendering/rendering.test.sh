@@ -294,6 +294,38 @@ sys.exit(0 if not problems else (print(problems) or 1))
 BACKDROP
 check $? "...defaults to OFF and keeps the nearest ring authored"
 
+# PROJECT PACKAGING SETTINGS LIVE IN DefaultGame.ini.
+# UnrealEd.ProjectPackagingSettings is a GAME-ini config class. Declared in
+# DefaultEngine.ini it parses cleanly and does nothing, so
+# +DirectoriesToAlwaysCook never applied — and on a live L4 run every one of the
+# 146 instanced batches logged "material did not load" and the world rendered
+# grey. It survived before batching only because each StaticMeshActor held a
+# hard material reference, which the cooker follows.
+CFG="$HERE/../Config"
+# The SECTION HEADER at line start, not the word. DefaultEngine.ini explains in
+# a comment why the settings moved, and a bare word-grep read its own
+# explanation as the offence — the fourth time in this session a check has
+# fired on the prose describing why it should pass.
+grep -qE '^\[/Script/UnrealEd\.ProjectPackagingSettings\]' "$CFG/DefaultGame.ini"
+check $? "ProjectPackagingSettings is in DefaultGame.ini, where UE reads it"
+! grep -qE '^\[/Script/UnrealEd\.ProjectPackagingSettings\]' "$CFG/DefaultEngine.ini"
+check $? "...and NOT in DefaultEngine.ini, where it is silently ignored"
+grep -q "DirectoriesToAlwaysCook" "$CFG/DefaultGame.ini"
+check $? "the runtime-only asset directory is force-cooked"
+# And the batch carries a HARD reference, so cooking does not depend on an ini
+# being read from the right file at all.
+grep -q "TObjectPtr<UMaterialInterface> Material" "$HERE/../Source/Wonderland/WonderlandInstancedBatch.h"
+check $? "batches hold a hard material reference, not only a path string"
+grep -q 'set_prop(actor, "Material", entry\["mat_obj"\])' "$GEN"
+check $? "...and the generator wires the real material object into it"
+
+# The world proof must not read BeginPlay state at actor-initialisation time.
+PROOF="$HERE/../Source/Wonderland/WonderlandWorldProof.cpp"
+grep -q "RUNTIME_RELAY_DOGS" "$PROOF"
+check $? "the proof reports runtime dog facts separately, after BeginPlay"
+! grep -q "Stroller->BuiltParts == 0" <(sed -n "1,/SECOND REPORT/p" "$PROOF")
+check $? "...and no longer reads BuiltParts before BeginPlay has built anything"
+
 echo
 echo "-- the visual acceptance target --"
 VT="$HERE/../infra/build/verify-visual-target.py"

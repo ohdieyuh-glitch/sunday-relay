@@ -52,6 +52,8 @@
 #include "WonderlandInstancedBatch.generated.h"
 
 class UInstancedStaticMeshComponent;
+class UMaterialInterface;
+class UStaticMesh;
 
 /** Nine floats per instance: X Y Z, Pitch Yaw Roll, ScaleX ScaleY ScaleZ. */
 static constexpr int32 WonderlandFloatsPerInstance = 9;
@@ -85,6 +87,26 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Batch")
 	TArray<float> Transforms;
+
+	/**
+	 * HARD REFERENCES, and they exist because the path strings above are not
+	 * enough on their own.
+	 *
+	 * The cooker follows object references. A path held as an FString is not a
+	 * reference, so every material reached only that way was stripped from the
+	 * pak and the live L4 render came up with all 146 batches grey — "material
+	 * did not load", once per batch. Config can fix that (and now does), but a
+	 * hard pointer means the asset cooks because something points at it, which
+	 * does not depend on an ini being read from the right file.
+	 *
+	 * Set by the level generator. The path fields stay as the human-readable
+	 * record and as the fallback.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Batch")
+	TObjectPtr<UMaterialInterface> Material;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Batch")
+	TObjectPtr<UStaticMesh> Mesh;
 
 	/** What this batch is, for logs and for a person reading the outliner. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Batch")

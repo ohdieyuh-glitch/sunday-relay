@@ -1418,12 +1418,14 @@ def build(layout):
     def _batch_key(mesh_path, mat_path, cast_shadow):
         return (mesh_path, mat_path, bool(cast_shadow))
 
-    def _batch_add(mesh_path, mat_path, cast_shadow, location, rotation, scale):
+    def _batch_add(mesh_path, mat_path, cast_shadow, location, rotation, scale,
+                   mat_obj=None, mesh_obj=None):
         key = _batch_key(mesh_path, mat_path, cast_shadow)
         entry = _BATCHES.get(key)
         if entry is None:
             entry = {"mesh": mesh_path, "mat": mat_path,
-                     "shadow": bool(cast_shadow), "xf": []}
+                     "shadow": bool(cast_shadow), "xf": [],
+                     "mat_obj": mat_obj, "mesh_obj": mesh_obj}
             _BATCHES[key] = entry
             _BATCH_ORDER.append(key)
         # Nine floats, in the order WonderlandInstancedBatch.cpp reads them:
@@ -1483,6 +1485,15 @@ def build(layout):
             actor.set_actor_label(name)
             set_prop(actor, "MeshPath", entry["mesh"])
             set_prop(actor, "MaterialPath", entry["mat"])
+            # HARD REFERENCES. The path strings above are a record, not a
+            # reference — the cooker follows OBJECT references, so materials
+            # reached only by a runtime LoadObject path were stripped and the
+            # live L4 render came up with all 146 batches grey. Wiring the real
+            # objects makes them cook because something points at them.
+            if entry.get("mat_obj") is not None:
+                set_prop(actor, "Material", entry["mat_obj"])
+            if entry.get("mesh_obj") is not None:
+                set_prop(actor, "Mesh", entry["mesh_obj"])
             set_prop(actor, "BatchName", unreal.Name(name))
             set_prop(actor, "bCastShadow", bool(entry["shadow"]))
             _set_float_array(actor, "Transforms", entry["xf"])
@@ -1543,7 +1554,8 @@ def build(layout):
         _wl_piece_hook(mesh_key, location, scale, label, rotation, mat)
 
         if BATCH_VISUALS:
-            _batch_add(path, _asset_path_of(m), _cast_shadow, location, rotation, scale)
+            _batch_add(path, _asset_path_of(m), _cast_shadow, location, rotation, scale,
+                       mat_obj=m, mesh_obj=asset_lib.load_asset(path))
             return None
 
         actor = spawn(unreal.StaticMeshActor, location, rotation=rotation, scale=scale, label=label)
