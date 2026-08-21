@@ -177,6 +177,18 @@ compute_input_hash() {
 
 validate_build_inputs
 INPUT_HASH="$(compute_input_hash)"
+# THE GENERATOR'S KNOBS ARE BUILD INPUTS TOO.
+#
+# WONDERLAND_LOOK changes the world the generator produces, and it is not a
+# file — so the content hash could not see it, the stamp matched, the cook was
+# skipped, and the PREVIOUS package was reused. Two consecutive launches with
+# different lighting produced frames identical to within one per cent, because
+# they were the same binary. An override that cannot invalidate the build is an
+# override that silently does nothing, which is the second time today the same
+# shape of bug has cost a rebuild.
+_KNOBS="LOOK=${WONDERLAND_LOOK:-} BATCH=${WONDERLAND_BATCH:-1} BACKDROP=${WONDERLAND_MARBLE_BACKDROP:-0}"
+INPUT_HASH="$(printf '%s|%s' "$INPUT_HASH" "$_KNOBS" | sha256sum | cut -d' ' -f1)"
+[ -n "${WONDERLAND_LOOK:-}" ] && log "generator knobs in the hash: $_KNOBS"
 # The belt to the braces: if anything above still produced something that is not
 # a hash, say so HERE rather than writing a meaningless stamp that makes the
 # next run skip a build it should have done.

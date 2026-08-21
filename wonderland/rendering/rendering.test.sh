@@ -369,6 +369,22 @@ check $? "...and a missing map says so instead of silently whitening the surface
 grep -q "_base\[0\] \* tint\[0\]" "$GEN"
 check $? "a bound map MULTIPLIES the palette colour instead of replacing it"
 
+# The generator's knobs must be part of the BUILD INPUT HASH, or changing them
+# leaves the stamp matching, skips the cook and reuses the previous package.
+# Two launches with different lighting produced identical frames because they
+# were the same binary.
+BW="$HERE/../infra/build/build-wonderland.sh"
+grep -q "_KNOBS=" "$BW"; check $? "the generator knobs are folded into the input hash"
+python3 - "$BW" <<'HASHORDER'
+import io, sys
+src = io.open(sys.argv[1], encoding="utf8").read()
+base = src.index('INPUT_HASH="$(compute_input_hash)"')
+knob = src.index("_KNOBS=")
+stamp = src.index('if [ "$FORCE_REBUILD" != "1" ]')
+sys.exit(0 if base < knob < stamp else 1)
+HASHORDER
+check $? "...before the stamp comparison that decides whether to skip the cook"
+
 echo
 echo "-- the visual acceptance target --"
 VT="$HERE/../infra/build/verify-visual-target.py"
