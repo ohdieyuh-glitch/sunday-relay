@@ -17,14 +17,25 @@ meshes by replacing per-triangle work with cluster work; it carries a fixed
 per-mesh cost that a twelve-triangle cube can never earn back. Enabling Nanite
 across this world would be the wrong lever applied confidently.
 
-The right lever is INSTANCING, and this measures exactly how much of it is
-available: how many (mesh, material) pairs the world actually uses, and how
-many actors collapse into each. That number is the draw-call reduction, and it
-is knowable on a laptop.
+The lever that matches that shape is INSTANCING — and the engine may already
+be pulling it. `r.MeshDrawCommands.DynamicInstancing` defaults to **1** in UE5:
+compatible visible mesh draw commands are combined into one instanced draw
+automatically, and compatible means the same static mesh and the same material
+bindings, which is precisely what this world is made of.
 
-Nothing here is a recommendation to act blindly — it is the arithmetic that
-says which experiment is worth GPU time. Cross-check against a real
-`stat rhi` / `stat scenerendering` on the box before believing any of it.
+So this audit does NOT conclude "go and implement instancing". It measures the
+CEILING — how few draws the world could possibly need — so that the number the
+engine actually achieves can be compared against it. If they are close, the
+draw calls are already solved and the remaining cost is per-PRIMITIVE work
+(visibility, culling, GPU Scene) that only a real reduction in primitive count
+would address. If they are far apart, something is breaking instancing
+compatibility and that is worth finding.
+
+    r.MeshDrawCommands.LogDynamicInstancingStats 1
+
+is the command that answers it, on the box, in one line of log. Nothing below
+is believed until it has been run. Cross-check `stat rhi` and
+`stat scenerendering` too.
 """
 import collections
 import importlib.util
@@ -135,7 +146,7 @@ def main():
         print("  %d components use a mesh with no known triangle count — the "
               "figure above is a FLOOR, not a total." % unknown)
 
-    print("\n  THE ARITHMETIC")
+    print("\n  THE ARITHMETIC  (a ceiling to compare the engine against)")
     print("    one draw call per component      : %s draw calls" % f"{total:,}")
     print("    one per (mesh, material) batch   : %s draw calls" % f"{unique:,}")
     if unique:
@@ -161,6 +172,15 @@ def main():
     singles = sum(1 for _k, v in combos.items() if v == 1)
     print("\n    %d of %d combinations appear exactly once — instancing cannot "
           "help those, and they stay individual draws." % (singles, unique))
+    print("\n    THIS IS NOT A TODO. r.MeshDrawCommands.DynamicInstancing is 1 by")
+    print("    default in UE5, so the engine is probably already collapsing most")
+    print("    of these. Run `r.MeshDrawCommands.LogDynamicInstancingStats 1` on")
+    print("    the box and compare its number with the %s above." % f"{unique:,}")
+    print("    Close  -> draw calls are solved; the remaining cost is per-primitive")
+    print("             visibility and GPU Scene work, and HISM is what reduces")
+    print("             the primitive COUNT rather than the draw count.")
+    print("    Far    -> something is breaking instancing compatibility. Find it")
+    print("             before writing any new geometry pipeline.")
 
     print("\n  NANITE VERDICT FOR THIS WORLD")
     print("    Against: nearly everything here is an engine primitive of 12 to")

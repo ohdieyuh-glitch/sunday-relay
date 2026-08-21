@@ -45,6 +45,23 @@ engine lacks. **Until that file exists, treat every row as documentation only.**
 
 **Codec QP ranges** (for reading the Quality number): H264 0–51, AV1 0–255, VP8/VP9 0–63. Quality 60 ≈ QP 20 on H264. The Quality↔bitrate relationship is logarithmic.
 
+### Instancing — the engine is probably already doing it
+
+| Setting | Default | Evidence |
+| --- | --- | --- |
+| `r.MeshDrawCommands.DynamicInstancing` | **1** | UE5 combines compatible visible mesh draw commands into one instanced draw automatically. Compatible means the same static mesh (index/vertex buffers) and the same material bindings — which is exactly what Wonderland is built from. [Mesh Drawing Pipeline](https://dev.epicgames.com/documentation/en-us/unreal-engine/mesh-drawing-pipeline-in-unreal-engine) |
+| `r.MeshDrawCommands.LogDynamicInstancingStats 1` | — | Logs how efficiently the level is actually instancing. One command, one line of log, settles it. |
+
+This matters because `audit-draw-cost.py` measures 33,028 components resolving
+to only **116** distinct (mesh, material) pairs, none of which appears just
+once. Read naively that says "285× draw-call reduction available" and implies a
+geometry rewrite. It almost certainly says nothing of the kind: the engine
+collapses those by default, and 116 is a **ceiling to compare the engine
+against**, not a task. Run the log command and compare. If the numbers are
+close the draw calls are already solved and the remaining cost is per-primitive
+visibility and GPU Scene work — which is what HISM reduces, and a different job
+from draw-call batching.
+
 ---
 
 ## 2. Rejected
