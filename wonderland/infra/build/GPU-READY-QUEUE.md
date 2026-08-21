@@ -76,6 +76,12 @@
 >   =plaza,cobble,cobble2,stone` turns 3,096 of 31,996 pieces solid and is
 >   measured by `RUNTIME_BLOCKING_PRIMITIVES` / `RUNTIME_GROUNDED_DOGS`. Walk
 >   vs fly is the founder's call and the default was not changed.
+> * **One tuned value is now known to rest on a wrong distance.** The aerial-
+>   perspective stretch (45x) was justified as "the great castle is 420 m out".
+>   Measured: the layout's castle spires are at 31-32 m and the furthest thing in
+>   the world is the outermost skyline ring at 195 m. The value was NOT changed —
+>   it was set by looking at frames and cannot be retuned by arithmetic. Judge
+>   it with the real distances when you have a frame.
 
 > **2026-08-21 — READ THIS FIRST, THE STATE BELOW IS OLDER THAN IT LOOKS.**
 >

@@ -4224,14 +4224,26 @@ def build(layout):
         # SkyAtmosphere's aerial perspective hazes GEOMETRY by depth and leaves
         # the dome alone.
         #
-        # THE SCALE IS THE WHOLE POINT. This world is under a kilometre across —
-        # the great castle is 420 m out, not 42 km — and real air does almost
-        # nothing over 420 m, so the honest setting produced a castle exactly as
-        # crisp as a foreground mushroom. Stretching the optical depth by 45x
-        # makes 420 m behave like 19 km: the near ground stays clear, the town
-        # cools, the castle sits back in the blue. This is the instrument the
-        # previous five attempts were reaching for when they kept reaching for
-        # fog and kept repainting the sky instead.
+        # THE SCALE IS THE WHOLE POINT. This world is a few hundred metres across,
+        # real air does almost nothing over that, and the honest setting produced
+        # a castle exactly as crisp as a foreground mushroom. Stretching the
+        # optical depth is the instrument the previous five attempts were
+        # reaching for when they kept reaching for fog and kept repainting the
+        # sky instead.
+        #
+        # THE DISTANCE IN THIS COMMENT WAS WRONG AND THE VALUE IS NOT BEING
+        # CHANGED FOR IT. It said "the great castle is 420 m out ... 45x makes
+        # 420 m behave like 19 km". Measured against the world that is actually
+        # built: hub-layout.json puts castle_spire_1..3 at 31-32 m, and the
+        # furthest thing in the world at all is the outermost procedural skyline
+        # ring at 195 m. Nothing is at 420 m. So 45x is stretching 195 m to about
+        # 8.8 km, not 420 m to 19 km — roughly half the haze the comment claims.
+        #
+        # The NUMBER stays because it was landed on by looking at frames, and
+        # this session cannot look at a frame. Retuning a value that was set by
+        # eye, using arithmetic, without a render, is how the last five attempts
+        # went. The real distances are written down here so whoever next has a
+        # GPU can judge it with them.
         for _nm in ("AerialPespectiveViewDistanceScale",
                     "AerialPerspectiveViewDistanceScale"):
             set_prop(sac, _nm, 45.0)
