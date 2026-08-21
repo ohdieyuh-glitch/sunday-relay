@@ -1,0 +1,6 @@
+worlds/*/assets/
+reference/*.png
+reference/*.jpg
+reference/*.jpeg
+reference/*.webp
+__pycache__/

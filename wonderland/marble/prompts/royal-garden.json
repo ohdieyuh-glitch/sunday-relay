@@ -1,0 +1,49 @@
+{
+  "slug": "royal-garden",
+  "display_name": "Wonderland Royal Garden",
+  "model": "marble-1.1",
+  "seed": 20260821,
+  "tags": ["wonderland", "relay", "royal-garden", "spawn-plaza"],
+
+  "_comment_model": [
+    "marble-1.1 is the default because it has a FIXED published price (1,580 credits",
+    "for a non-pano image prompt) and this is the first experiment. marble-1.1-plus",
+    "generates larger worlds — better for the deep city skyline the reference wants —",
+    "but costs 1,580-3,080 and the upper bound is what --confirm-credits must cover.",
+    "Switching is a one-word edit and a founder decision, not a default."
+  ],
+
+  "reference_image": "reference/wonderland-reference.png",
+
+  "source_reference": {
+    "kind": "founder-reference-image",
+    "path": "wonderland/marble/reference/wonderland-reference.png",
+    "supplied": "the canonical Wonderland image the founder has supplied repeatedly since 2026-08-11",
+    "decomposition": "docs/relay/WONDERLAND_ART_DIRECTION.md",
+    "sha256": null,
+    "media_asset_id": null
+  },
+
+  "world_prompt": {
+    "type": "image",
+    "image_prompt": {
+      "source": "media_asset",
+      "media_asset_id": null
+    },
+    "is_pano": "auto",
+    "disable_recaption": false,
+    "text_prompt": "A cinematic fairy-tale royal garden plaza at the gates of an extravagant pastel castle city, rendered at animated-film quality. In the foreground: a wide plaza of pale and dark checkered flagstone with worn, physically rich stone, bordered by lush planting. An ornate gold entrance gate with slender filigree bars, heart finials and a crested keystone stands open onto the plaza. Rose-covered floral archways in cream stone lead away between sculpted topiary hedges shaped into hearts and spirals. Enormous whimsical mushrooms — red with white spots, and deep violet ones — cluster among dense beds of purple, rose and white flowers, wisteria hanging in curtains. Oversized tea-party props sit like garden furniture: a giant porcelain teacup with a painted heart pattern, a tilted teapot, stacked saucers. Gold keys and ornate clocks are worked into the ironwork and set into a gnarled old tree. In the midground, elegant cream and white stone terraces, balustrades, planters and fountains step upward. In the far background a dense fantasy castle city rises: tall layered towers with pink, rose and violet conical roofs, gold trim and pennants, spires receding into soft atmospheric haze. Warm cinematic late-morning daylight with long soft shadows, volumetric light through the arches, a bright lavender sky with soft cloud. Extremely high geometric density and material variety — carved stone, gold leaf, glazed porcelain, painted timber, moss, gravel, water. Every surface detailed and intentional. Composition layered clearly into foreground plaza, midground gardens and distant city. NO characters, NO people, NO animals, NO dogs — the garden is empty of living figures. No barren ground, no untextured blocks, no repeated primitive shapes, no empty grass cylinders, no modern objects, no text or signage lettering."
+  },
+
+  "placement": {
+    "origin_cm": [0.0, 0.0, 0.0],
+    "rotation_deg": [0.0, 0.0, 0.0],
+    "_comment": "Filled in properly by the import step once the real bounds are known. Origin is the Wonderland arrival plaza centre."
+  },
+
+  "unreal_destination": {
+    "content_path": "/Game/Wonderland/Marble/RoyalGarden",
+    "level": "/Game/Wonderland/Maps/WonderlandHub",
+    "actor_label": "MarbleVisualLayer_RoyalGarden"
+  }
+}

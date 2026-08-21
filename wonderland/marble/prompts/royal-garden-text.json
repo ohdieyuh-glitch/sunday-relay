@@ -1,0 +1,36 @@
+{
+  "slug": "royal-garden-text",
+  "display_name": "Wonderland Royal Garden (text only)",
+  "model": "marble-1.1",
+  "seed": 20260821,
+  "tags": ["wonderland", "relay", "royal-garden", "text-fallback"],
+
+  "_comment": [
+    "THE FALLBACK, and it is second-best on purpose. The founder's instruction is",
+    "that the reference IMAGE conditions the world. Use this only if the image file",
+    "cannot be supplied, and say so in the manifest — a text-only world is a",
+    "different experiment and must not be reported as the reference-conditioned one.",
+    "Same price as the image path (1,580 credits: 80 pano + 1,500 world)."
+  ],
+
+  "source_reference": {
+    "kind": "text-only-fallback",
+    "path": null,
+    "supplied": "no image was available; prompt derived from docs/relay/WONDERLAND_ART_DIRECTION.md",
+    "decomposition": "docs/relay/WONDERLAND_ART_DIRECTION.md"
+  },
+
+  "world_prompt": {
+    "type": "text",
+    "disable_recaption": false,
+    "text_prompt": "A cinematic fairy-tale royal garden plaza at the gates of an extravagant pastel castle city, rendered at animated-film quality. In the foreground: a wide plaza of pale and dark checkered flagstone with worn, physically rich stone, bordered by lush planting. An ornate gold entrance gate with slender filigree bars, heart finials and a crested keystone stands open onto the plaza. Rose-covered floral archways in cream stone lead away between sculpted topiary hedges shaped into hearts and spirals. Enormous whimsical mushrooms — red with white spots, and deep violet ones — cluster among dense beds of purple, rose and white flowers, wisteria hanging in curtains. Oversized tea-party props sit like garden furniture: a giant porcelain teacup with a painted heart pattern, a tilted teapot, stacked saucers. Gold keys and ornate clocks are worked into the ironwork and set into a gnarled old tree. In the midground, elegant cream and white stone terraces, balustrades, planters and fountains step upward. In the far background a dense fantasy castle city rises: tall layered towers with pink, rose and violet conical roofs, gold trim and pennants, spires receding into soft atmospheric haze. Warm cinematic late-morning daylight with long soft shadows, volumetric light through the arches, a bright lavender sky with soft cloud. Extremely high geometric density and material variety — carved stone, gold leaf, glazed porcelain, painted timber, moss, gravel, water. Every surface detailed and intentional. Composition layered clearly into foreground plaza, midground gardens and distant city. NO characters, NO people, NO animals, NO dogs — the garden is empty of living figures. No barren ground, no untextured blocks, no repeated primitive shapes, no empty grass cylinders, no modern objects, no text or signage lettering."
+  },
+
+  "placement": { "origin_cm": [0.0, 0.0, 0.0], "rotation_deg": [0.0, 0.0, 0.0] },
+
+  "unreal_destination": {
+    "content_path": "/Game/Wonderland/Marble/RoyalGardenText",
+    "level": "/Game/Wonderland/Maps/WonderlandHub",
+    "actor_label": "MarbleVisualLayer_RoyalGardenText"
+  }
+}
