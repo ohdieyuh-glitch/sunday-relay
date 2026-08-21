@@ -278,6 +278,7 @@ def main():
             (118.0 * _S, 0.0, _Hz + 6.0 * _S, 0.18 * _S, 0.86 * _S, 0.30 * _S, "dog_visor"),
             (124.0 * _S, -21.0 * _S, _Hz + 2.0 * _S, 0.1 * _S, 0.22 * _S, 0.13 * _S, "dog_eye"),
             (124.0 * _S,  21.0 * _S, _Hz + 2.0 * _S, 0.1 * _S, 0.22 * _S, 0.13 * _S, "dog_eye"),
+            (60.0 * _S, 0.0, _Bz - 2.0 * _S, 0.12 * _S, 0.26 * _S, 0.26 * _S, "gold_glow"),
             (-74.0 * _S, 0.0, _Bz + 24.0 * _S, 0.44 * _S, 0.18 * _S, 0.20 * _S, _M),
         )):
             records.append(("cube",
@@ -622,6 +623,57 @@ def main():
                  "" if _sib == 1 else "s"))
     if not _lone:
         print("    none above 0.15% of frame")
+
+    # ---- RELAY DOG READABILITY -----------------------------------------
+    #
+    # "Are the Relay Dogs visible" is the founder's acceptance question and it
+    # was never measurable here. It needs asking because the Dogs were absent
+    # from every build for weeks — the generator spawned a C++ class that did
+    # not exist and stroll_dog returned without placing anything — and the
+    # composition report could not have said so: a Dog that is never placed
+    # owns no pixels, and neither does a Dog that is behind a hedge.
+    #
+    # Readable means three things at once, because any one of them alone lies:
+    # the Dog owns pixels after occlusion, its silhouette is tall enough to
+    # recognise, and its FACE is one of the parts that survived — the visor band
+    # and gold eyes ARE the identity, and a white blob with the face occluded is
+    # not a Relay Dog to anyone looking at it.
+    _dogs = {}
+    for _i, _n in _vis.items():
+        _b = blobs[_i]
+        _lb = _b[7]
+        if not _lb.startswith("DOGPROXY_"):
+            continue
+        _bits = _lb.split("_")
+        _slot = _bits[1] if len(_bits) > 1 else "?"
+        _d = _dogs.setdefault(_slot, {"px": 0, "y0": 10 ** 9, "y1": -10 ** 9,
+                                      "x0": 10 ** 9, "x1": -10 ** 9,
+                                      "face": 0, "parts": 0})
+        _d["px"] += _n
+        _d["parts"] += 1
+        _d["y0"] = min(_d["y0"], _b[2]); _d["y1"] = max(_d["y1"], _b[4])
+        _d["x0"] = min(_d["x0"], _b[1]); _d["x1"] = max(_d["x1"], _b[3])
+        if _b[6] in ("dog_visor", "dog_eye"):
+            _d["face"] += _n
+
+    _MIN_TALL = 0.030 * H          # 3% of frame height
+    _MIN_PX = 0.0012 * (W * H)     # a bit over a tenth of a percent of the frame
+    _readable = []
+    print("  RELAY DOGS  %d placed, %d owning any pixel in this frame"
+          % (len(_pending_dogs), len(_dogs)))
+    for _slot, _d in sorted(_dogs.items(), key=lambda kv: -kv[1]["px"]):
+        _tall = _d["y1"] - _d["y0"]
+        _ok = _tall >= _MIN_TALL and _d["px"] >= _MIN_PX and _d["face"] > 0
+        if _ok:
+            _readable.append(_slot)
+        print("    dog %-3s %5.2f%% of frame  %4dpx tall  face %s  %2d parts  %s"
+              % (_slot, 100.0 * _d["px"] / _tot, _tall,
+                 "VISIBLE" if _d["face"] > 0 else "hidden ",
+                 _d["parts"], "readable" if _ok else "-"))
+    if not _dogs:
+        print("    NONE. The founder's arrival frame contains no Relay Dog at all.")
+    print("  RELAY_DOGS_READABLE=%d  (silhouette >= %.0fpx AND face visible)"
+          % (len(_readable), _MIN_TALL))
 
     _unused = sorted(blobs, key=lambda b: -((b[3] - b[1]) * (b[4] - b[2])))
     print("  largest PROJECTED BOXES (extent only - NOT visible area):")

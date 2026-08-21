@@ -3363,16 +3363,38 @@ def build(layout):
         # travels + turns as one unit; the material breathe/WPO keeps it alive on top.
         cls = unreal.load_class(None, "/Script/Wonderland.WonderlandStrollingDog")
         if not cls:
-            unreal.log_warning("WonderlandStrollingDog missing — build C++; Dog stays static.")
+            # THIS BRANCH USED TO `return`, AND THAT IS HOW EIGHT RELAY DOGS
+            # DISAPPEARED. load_class returns None for a class that does not
+            # exist rather than raising, so a missing C++ class produced one
+            # warning in a log nobody reads and a world with no Dogs in it —
+            # including the hero Dog the arrival camera is composed around.
+            #
+            # A Dog that cannot walk is still a Dog. Placing the static body
+            # means the failure is VISIBLE in the frame as a Dog that does not
+            # move, instead of invisible as a Dog that is not there.
+            unreal.log_error(
+                "WonderlandStrollingDog is not in this build — placing %s as "
+                "STATIC geometry. The Dog will be visible and will not move. "
+                "Compile the C++ module; verify-generator-classes.py catches "
+                "this without an engine." % label)
+            kit_dog(x, y, label, s=s * 1.3, body=body)
             return
         stroller = actors.spawn_actor_from_class(cls, unreal.Vector(x, y, 0.0), unreal.Rotator())
+        if stroller is None:
+            unreal.log_error("spawn of %s returned nothing — placing static geometry" % label)
+            kit_dog(x, y, label, s=s * 1.3, body=body)
+            return
         stroller.set_actor_label(label + "_stroll")
         stroller.set_actor_scale3d(unreal.Vector(s, s, s))
         set_prop(stroller, "HomeLocation", unreal.Vector(x, y, 0.0))
         set_prop(stroller, "RoamRadius", float(roam))
         set_prop(stroller, "bIsHero", bool(is_hero))
-        set_prop(stroller, "CoatName", body)
-        set_prop(stroller, "Accessory", accessory)
+        # FName properties, so they are handed unreal.Name rather than str:
+        # set_prop swallows a type mismatch with a warning, and a Dog quietly
+        # wearing the default white coat is exactly the kind of "it looks fine"
+        # failure this file has had too many of.
+        set_prop(stroller, "CoatName", unreal.Name(body))
+        set_prop(stroller, "Accessory", unreal.Name(accessory))
         if is_hero:
             set_prop(stroller, "WalkSpeed", 110.0)
 

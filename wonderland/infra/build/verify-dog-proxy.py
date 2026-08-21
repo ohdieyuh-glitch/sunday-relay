@@ -23,17 +23,25 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# THE TABLE MOVED. It used to live in WonderlandDogPawn.cpp and be copied by
+# hand for the world's Dogs; the copy was never written and eight Relay Dogs
+# went missing. There is now one canonical table in WonderlandDogBody.cpp that
+# every Dog builds from, so that is what this checks the preview against.
 PAWN = os.path.normpath(os.path.join(HERE, "..", "..", "Source", "Wonderland",
-                                     "WonderlandDogPawn.cpp"))
+                                     "WonderlandDogBody.cpp"))
 PREVIEW = os.path.join(HERE, "verify-hero-composition.py")
 
 
 def cpp_parts():
     """Pull S, the derived heights, and the FVector part rows out of the pawn."""
     src = io.open(PAWN, encoding="utf8").read()
-    m = re.search(r"const float S = ([\d.]+)f;", src)
+    # The scale is a PARAMETER now, so the number to check against is the
+    # published reference constant rather than a local literal.
+    m = re.search(r"ReferenceScale = ([\d.]+)f;", src)
     if not m:
-        raise SystemExit("could not find S in %s" % PAWN)
+        m = re.search(r"const float S = ([\d.]+)f;", src)
+    if not m:
+        raise SystemExit("could not find the reference scale in %s" % PAWN)
     S = float(m.group(1))
     LegH = 100.0 * S
     Bz = LegH + 34.0 * S

@@ -4,6 +4,8 @@
 
 #include "WonderlandDogPawn.h"
 
+#include "WonderlandDogBody.h"
+
 #include "Camera/CameraComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Scene.h"
@@ -138,75 +140,25 @@ void AWonderlandDogPawn::BeginPlay()
 
 void AWonderlandDogPawn::BuildVisibleBody()
 {
-	// Give the PLAYER's Dog the same voxel body the world's Dogs wear (the founder
-	// reference): a compact body on FOUR SLENDER LEGS, a cube head with two SQUARE
-	// EARS, a flat face carrying the BLACK VISOR + GOLD GLOWING EYES, and an
-	// up-tail. Until now DogMesh had no mesh, so the player saw the world but not
-	// their own Agent. Built as child components facing +X (the actor's forward),
-	// so the Tick velocity-facing turns the whole Dog toward where it walks.
+	// THE TABLE MOVED, AND THAT IS THE FIX. These proportions used to live here
+	// and the world's ambient Dogs were meant to be built from a copy of them.
+	// The copy was never written — WonderlandStrollingDog did not exist — so the
+	// hero Dog and seven companions were silently absent from every build. Now
+	// there is ONE canonical body in WonderlandDogBody and both callers use it,
+	// which also removes the transcription that verify-dog-proxy.py exists to
+	// police.
 	//
-	// PRESENTATION ONLY. Every part is NoCollision and none touches Relay state;
-	// this is the body the player sees, nothing more. The materials are the shared
-	// MI_dog_* instances so the player's Dog and the world's Dogs are one species.
-	UStaticMesh* const Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
-	if (Cube == nullptr || DogMesh == nullptr)
+	// PRESENTATION ONLY. Every part is NoCollision and none touches Relay state.
+	WonderlandDogBody::FSkin Skin;
+	Skin.Scale = 1.3f;                 // player Dog size
+	Skin.FootOffset = 100.0f;          // PlayerStart sits ~100uu above the ground
+	const int32 Built = WonderlandDogBody::Build(this, DogMesh, Skin);
+	if (Built == 0)
 	{
-		return; // no cube -> no fabricated body; the pawn still plays.
-	}
-
-	const float S = 1.3f;             // player Dog size
-	const float Foot = 100.0f;        // PlayerStart sits ~100uu above the ground
-	const TCHAR* const Body = TEXT("/Game/Wonderland/Materials/MI_dog_body.MI_dog_body");
-	const TCHAR* const Visor = TEXT("/Game/Wonderland/Materials/MI_dog_visor.MI_dog_visor");
-	const TCHAR* const Eye = TEXT("/Game/Wonderland/Materials/MI_dog_eye.MI_dog_eye");
-
-	const float LegH = 100.0f * S;
-	const float Bz = LegH + 34.0f * S;
-	const float Hz = Bz + 50.0f * S;
-
-	struct FPart { FVector Loc; FVector Scale; FRotator Rot; const TCHAR* Mat; };
-	const FPart Parts[] = {
-		// four slender legs, clear gap under the body
-		{ FVector(-48.0f * S, -30.0f * S, LegH * 0.5f), FVector(0.19f * S, 0.19f * S, LegH / 100.0f), FRotator::ZeroRotator, Body },
-		{ FVector(-48.0f * S,  30.0f * S, LegH * 0.5f), FVector(0.19f * S, 0.19f * S, LegH / 100.0f), FRotator::ZeroRotator, Body },
-		{ FVector( 48.0f * S, -30.0f * S, LegH * 0.5f), FVector(0.19f * S, 0.19f * S, LegH / 100.0f), FRotator::ZeroRotator, Body },
-		{ FVector( 48.0f * S,  30.0f * S, LegH * 0.5f), FVector(0.19f * S, 0.19f * S, LegH / 100.0f), FRotator::ZeroRotator, Body },
-		// compact body
-		{ FVector(0.0f, 0.0f, Bz), FVector(1.28f * S, 0.86f * S, 0.66f * S), FRotator::ZeroRotator, Body },
-		// head at the front (+X), flat face, no snout
-		{ FVector(78.0f * S, 0.0f, Hz), FVector(0.80f * S, 0.82f * S, 0.80f * S), FRotator::ZeroRotator, Body },
-		// two square ears
-		{ FVector(6.0f * S, -26.0f * S, Hz + 46.0f * S), FVector(0.24f * S, 0.2f * S, 0.40f * S), FRotator::ZeroRotator, Body },
-		{ FVector(6.0f * S,  26.0f * S, Hz + 46.0f * S), FVector(0.24f * S, 0.2f * S, 0.40f * S), FRotator::ZeroRotator, Body },
-		// black visor band across the flat face
-		{ FVector(118.0f * S, 0.0f, Hz + 6.0f * S), FVector(0.18f * S, 0.86f * S, 0.30f * S), FRotator::ZeroRotator, Visor },
-		// gold glowing eyes
-		{ FVector(124.0f * S, -21.0f * S, Hz + 2.0f * S), FVector(0.1f * S, 0.22f * S, 0.13f * S), FRotator::ZeroRotator, Eye },
-		{ FVector(124.0f * S,  21.0f * S, Hz + 2.0f * S), FVector(0.1f * S, 0.22f * S, 0.13f * S), FRotator::ZeroRotator, Eye },
-		// up-tail at the back
-		{ FVector(-74.0f * S, 0.0f, Bz + 24.0f * S), FVector(0.44f * S, 0.18f * S, 0.20f * S), FRotator(-38.0f, 0.0f, 0.0f), Body },
-	};
-
-	int32 Index = 0;
-	for (const FPart& Part : Parts)
-	{
-		UStaticMeshComponent* const Comp =
-			NewObject<UStaticMeshComponent>(this, FName(*FString::Printf(TEXT("DogBodyPart_%d"), Index++)));
-		if (Comp == nullptr)
-		{
-			continue;
-		}
-		Comp->SetupAttachment(DogMesh);
-		Comp->SetStaticMesh(Cube);
-		Comp->SetRelativeLocation(FVector(Part.Loc.X, Part.Loc.Y, Part.Loc.Z - Foot));
-		Comp->SetRelativeScale3D(Part.Scale);
-		Comp->SetRelativeRotation(Part.Rot);
-		Comp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		if (UMaterialInterface* const M = LoadObject<UMaterialInterface>(nullptr, Part.Mat))
-		{
-			Comp->SetMaterial(0, M);
-		}
-		Comp->RegisterComponent();
+		UE_LOG(LogTemp, Warning,
+			   TEXT("THE PLAYER'S RELAY DOG HAS NO BODY. /Engine/BasicShapes/Cube "
+					"or the MI_dog_* materials did not load; the player will see "
+					"the world and not their own Agent."));
 	}
 }
 

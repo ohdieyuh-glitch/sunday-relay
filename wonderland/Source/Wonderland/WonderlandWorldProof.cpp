@@ -7,6 +7,7 @@
 #include "Misc/Parse.h"
 
 #include "WonderlandDogPawn.h"
+#include "WonderlandStrollingDog.h"
 
 DEFINE_LOG_CATEGORY(LogWonderlandProof);
 
@@ -60,25 +61,44 @@ namespace WonderlandWorldProof
 		int32 Dogs = 0;
 		int32 CompoundAgents = 0;
 		int32 Proxies = 0;
+		int32 BodylessDogs = 0;
 
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
 			AActor* Actor = *It;
 			++Actors;
 
-			if (Cast<AWonderlandDogPawn>(Actor) != nullptr)
+			// BOTH KINDS OF DOG. This used to count only AWonderlandDogPawn —
+			// the player's pawn — so the eight ambient Relay Dogs the level
+			// generator places would not have appeared in RELAY_DOGS even once
+			// they existed, and the proof would have reported 1 while the
+			// founder looked at nine. The ambient Dogs are
+			// AWonderlandStrollingDog and they tag themselves at BeginPlay.
+			const bool bIsDogPawn = Cast<AWonderlandDogPawn>(Actor) != nullptr;
+			const bool bIsStroller = Cast<AWonderlandStrollingDog>(Actor) != nullptr;
+			if (bIsDogPawn || bIsStroller)
 			{
 				++Dogs;
-				// A Compound Agent is a Dog that carries the agent tag. Counted
+				// A Compound Agent is a Dog carrying the agent tag. Counted
 				// separately because "a dog is present" and "an agent is bound to
 				// it" are different claims and the founder asked for both.
-				if (Actor->Tags.ContainsByPredicate([](const FName& Tag)
-					{
-						return Tag.ToString().Contains(TEXT("CompoundAgent"))
-							|| Tag.ToString().Contains(TEXT("Agent"));
-					}))
+				// Matched EXACTLY against the shared tag, not by substring: the
+				// old Contains(TEXT("Agent")) predicate would have counted a tag
+				// like "AgentGarden" or "NoAgent" as a Compound Agent.
+				if (Actor->ActorHasTag(WonderlandDogTags::CompoundAgent))
 				{
 					++CompoundAgents;
+				}
+				// A Dog whose body failed to build is present and INVISIBLE.
+				// Reporting it as a Dog without saying so would make the count
+				// agree with the world while disagreeing with the picture.
+				if (const AWonderlandStrollingDog* const Stroller =
+						Cast<AWonderlandStrollingDog>(Actor))
+				{
+					if (Stroller->BuiltParts == 0)
+					{
+						++BodylessDogs;
+					}
 				}
 			}
 			else if (IsProxyActor(Actor))
@@ -95,6 +115,13 @@ namespace WonderlandWorldProof
 		UE_LOG(LogWonderlandProof, Warning, TEXT("RELAY_DOGS=%d"), Dogs);
 		UE_LOG(LogWonderlandProof, Warning, TEXT("COMPOUND_AGENTS=%d"), CompoundAgents);
 		UE_LOG(LogWonderlandProof, Warning, TEXT("PROXY_ACTORS=%d"), Proxies);
+		if (BodylessDogs > 0)
+		{
+			UE_LOG(LogWonderlandProof, Error,
+				   TEXT("RELAY_DOGS_WITHOUT_A_BODY=%d — these are counted above and "
+						"cannot be seen. Treat RELAY_DOGS as %d visible."),
+				   BodylessDogs, Dogs - BodylessDogs);
+		}
 
 		int32 Expected = GExpectedMinActors;
 		FParse::Value(FCommandLine::Get(), TEXT("-WonderlandMinActors="), Expected);
