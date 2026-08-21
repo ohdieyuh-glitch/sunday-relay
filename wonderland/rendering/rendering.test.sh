@@ -267,6 +267,79 @@ check $? "...and looks for the registry the engine may have written"
 grep -q "newermt" "$HERE/probe-cvars.sh"
 check $? "...only accepting one THIS run wrote, never a stale file"
 
+echo "-- one palette classifier, and the comparison it refuses --"
+PB="$HERE/../infra/build"
+python3 -c "import ast,io;ast.parse(io.open('$PB/palette.py',encoding='utf8').read())"
+check $? "palette.py parses"
+# ONE definition. The composition preview measures OUR frame and
+# measure-reference.py measures the FOUNDER'S image; the whole value is the
+# comparison between them, so a drifted second copy would show up as a
+# difference between the world and the reference and be debugged as one.
+python3 - "$PB" <<'PY'
+import io, os, sys
+pb = sys.argv[1]
+src = io.open(os.path.join(pb, "verify-hero-composition.py"), encoding="utf8").read()
+problems = []
+if "_palette_mod.classify" not in src:
+    problems.append("the composition preview does not use the shared classifier")
+for marker in ('_hit("dark")', '60.0 * (((_g - _b)'):
+    if marker in src:
+        problems.append("a second copy of the classifier is still inline: %s" % marker)
+ref = io.open(os.path.join(pb, "measure-reference.py"), encoding="utf8").read()
+if "palette_mod.classify" not in ref:
+    problems.append("measure-reference.py does not use the shared classifier")
+for banned in ("60.0 * ((", "chroma < 26"):
+    if banned in ref:
+        problems.append("measure-reference.py carries its own hue maths: %s" % banned)
+sys.exit(0 if not problems else (print(problems) or 1))
+PY
+check $? "both measurers call the one classifier and neither keeps a copy"
+
+# A family that is ABSENT must be reported as 0.0, not omitted: otherwise
+# "violet is missing" and "violet was never measured" look identical.
+python3 - "$PB" <<'PY'
+import importlib.util as u, sys
+spec = u.spec_from_file_location("palette", sys.argv[1] + "/palette.py")
+m = u.module_from_spec(spec); spec.loader.exec_module(m)
+pct = m.percentages({"violet_purple": 5}, 10)
+bad = [f for f in m.FAMILIES if f not in pct]
+if bad or abs(pct["violet_purple"] - 50.0) > 1e-9 or pct["green_foliage"] != 0.0:
+    print("missing:", bad, "violet:", pct.get("violet_purple"), "green:", pct.get("green_foliage"))
+    sys.exit(1)
+sys.exit(0)
+PY
+check $? "an absent colour family reports 0.0 rather than vanishing"
+
+# THE REFUSAL. Comparing an unlit albedo projection with a lit render produces
+# a delta table that reads as a finding and is an artefact of the lighting.
+if [ -f "$PB/../../marble/reference/wonderland-reference.jpg" ] && command -v ffmpeg >/dev/null 2>&1; then
+  cat > "$TMP/preview-facts.json" <<'JSON'
+{"palette_pct": {"green_foliage": 25.0, "dark": 2.6}, "actors_drawn": 25731}
+JSON
+  out="$(python3 "$PB/measure-reference.py" --width 200 --compare "$TMP/preview-facts.json" 2>&1)"
+  rc=$?
+  [ "$rc" -ne 0 ]; check $? "comparing the OFFLINE PREVIEW against the lit reference is refused"
+  case "$out" in *"cannot be
+compared"*|*"cannot be compared"*) ok "...and the refusal explains that neither picture is wrong" ;;
+    *) bad "the refusal does not say why: $out" ;; esac
+  cat > "$TMP/render-facts.json" <<'JSON'
+{"palette_pct": {"green_foliage": 12.0, "dark": 20.0}}
+JSON
+  out2="$(python3 "$PB/measure-reference.py" --width 200 --compare "$TMP/render-facts.json" 2>&1)"
+  rc2=$?
+  [ "$rc2" -eq 0 ]; check $? "a facts file with no geometry fields IS compared"
+  case "$out2" in *delta*) ok "...and prints the per-family delta" ;;
+    *) bad "no delta table for a comparable frame" ;; esac
+else
+  echo "  --   reference image or ffmpeg absent; the refusal test did not run"
+fi
+# The stale claim that started this: the target file said the image was not here.
+if grep -q "image is not in this repository" "$PB/../../WorldDesign/visual-target.json"; then
+  bad "visual-target.json still says the reference image is not in the repository"
+else
+  ok "visual-target.json no longer claims the reference image is absent"
+fi
+
 echo
 echo "-- the draw-cost audit --"
 python3 -c "import ast,io;ast.parse(io.open('$HERE/audit-draw-cost.py',encoding='utf8').read())"
@@ -487,7 +560,22 @@ check $? "every criterion has a metric and a stated reason, and none claims a sc
 # bucket it read 28.3% and said "gold dominates the frame"; split, real gold is
 # 13.0% and inside its accent band. Merging them again would resurrect a
 # finding that sends someone to de-gold a world that is not over-gold.
-grep -q "warm_timber_stone" "$HERE/../infra/build/verify-hero-composition.py"
+# Checked in palette.py, which is where the classifier lives now, and checked
+# BEHAVIOURALLY rather than by grep: the string being present proves nothing
+# about which pixels land in which bucket.
+python3 - "$HERE/../infra/build" <<'GOLD'
+import importlib.util as u, sys
+spec = u.spec_from_file_location("palette", sys.argv[1] + "/palette.py")
+m = u.module_from_spec(spec); spec.loader.exec_module(m)
+cases = [
+    ((214, 176, 62), "gold_amber",         "bright saturated gold leaf"),
+    ((96, 68, 44),   "warm_timber_stone",  "dark tree bark"),
+    ((198, 178, 150), "warm_timber_stone", "pale warm paving, not gold"),
+]
+bad = [(rgb, want, got, why) for rgb, want, why in cases
+       for got in [m.classify(*rgb)] if got != want]
+sys.exit(0 if not bad else (print(bad) or 1))
+GOLD
 check $? "the warm hue band separates bright gold from timber and paving"
 grep -q "palette_contributors" "$HERE/../infra/build/verify-hero-composition.py"
 check $? "each colour family names the materials that put it on screen"

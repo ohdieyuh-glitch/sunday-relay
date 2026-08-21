@@ -24,6 +24,11 @@ import json
 import math
 import struct
 import sys
+
+# _HERE, not a fresh os.path call: this file imports os AS _os and has no bare
+# `os` name, so `os.path` here would be a NameError at import time.
+sys.path.insert(0, _HERE)
+import palette as _palette_mod
 import types
 import zlib
 
@@ -740,44 +745,15 @@ def main():
             _mat_of = str(blobs[owner[_k]][6])
             _i = _k * 3
             _r, _g, _b = px[_i], px[_i + 1], px[_i + 2]
-            _mx, _mn = max(_r, _g, _b), min(_r, _g, _b)
-            _chroma = _mx - _mn
-            def _hit(_family):
-                _fam[_family] += 1
-                _fam_by_mat.setdefault(_family, _cv.Counter())[_mat_of] += 1
-            if _mx < 60:
-                _hit("dark")
-                continue
-            if _chroma < 26:
-                _hit("cream_white" if _mx > 165 else "neutral_stone")
-                continue
-            # hue in degrees
-            if _mx == _r:
-                _h = 60.0 * (((_g - _b) / float(_chroma)) % 6)
-            elif _mx == _g:
-                _h = 60.0 * (((_b - _r) / float(_chroma)) + 2)
-            else:
-                _h = 60.0 * (((_r - _g) / float(_chroma)) + 4)
-            if 20 <= _h < 65:
-                # THE WARM BAND IS TWO DIFFERENT THINGS AND MERGING THEM LIES.
-                # 20-65 degrees covers gold leaf AND tree bark AND warm paving.
-                # Measured as one bucket it read 28% and said "this world is
-                # more brass than fairy-tale" — a finding that would have sent
-                # someone to de-gold a world whose actual gold is a third of
-                # that. Gold is BRIGHT and SATURATED; timber and flagstone are
-                # neither.
-                _sat = _chroma / float(_mx)
-                _hit("gold_amber" if (_mx >= 150 and _sat >= 0.42)
-                     else "warm_timber_stone")
-            elif 65 <= _h < 170:
-                _hit("green_foliage")
-            elif 170 <= _h < 250:
-                _hit("blue_teal")
-            elif 250 <= _h < 310:
-                _hit("violet_purple")
-            else:
-                _hit("pink_rose_red")
-        _palette = {k: 100.0 * v / max(1, _owned) for k, v in _fam.items()}
+            # ONE CLASSIFIER, shared with measure-reference.py. It used to be
+            # written out here, and the moment a second thing needed to answer
+            # the same question a copy would have been the easy move — and a
+            # drift between the copies would show up as a difference between
+            # this world and the founder's reference and be debugged as one.
+            _family = _palette_mod.classify(_r, _g, _b)
+            _fam[_family] += 1
+            _fam_by_mat.setdefault(_family, _cv.Counter())[_mat_of] += 1
+        _palette = _palette_mod.percentages(_fam, _owned)
 
         _facts = {
             "frame": {"width": W, "height": H},
