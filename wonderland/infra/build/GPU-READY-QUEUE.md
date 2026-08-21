@@ -86,8 +86,25 @@
 > `BuildEditor` — that path is reasoned, not sourced, and the script says so
 > about itself.
 >
+> **And more than the compile can move off the GPU.** Epic's requirements page
+> for the 5.8 container images lists a 64-bit CPU, virtualisation and 4 GB of
+> RAM — no GPU, no driver, no Vulkan, no display — and their own Quick Start
+> runs `RunUAT.sh BuildCookRun ... -cook -build -stage -pak -archive` in a
+> plain `docker run` with **no `--gpus`**. Shader compilation is CPU work in
+> Shader Compile Workers. `-run=pythonscript` is documented headless.
+> `cpu-build-all.sh` takes that offer up: compile + generate (`-nullrhi`) +
+> cook + package, all on CPU, opt-in and labelled unproven **for this
+> generator**, which creates materials and imports textures through the editor.
+>
+> What cannot move: **Pixel Streaming needs NVENC** ("must have ... NVIDIA GPU
+> hardware that supports Hardware-Accelerated Video Encoding"), and
+> `-RenderOffScreen` is a no-WINDOW mode, not a no-GPU mode.
+>
 > Then, on the GPU box:
 > `SKIP_PREPARE=1 bash wonderland/infra/lightning/launch-wonderland.sh`
+> — or, if `cpu-build-all.sh` already produced the package,
+> `SKIP_PREPARE=1 SKIP_BUILD=1 bash wonderland/infra/lightning/launch-wonderland.sh`,
+> which is minutes of GPU instead of a build.
 >
 > The p23 comparison advice below still stands and is still the cheapest way to
 > localise a visual regression.

@@ -240,8 +240,23 @@ LEVEL_OK=1
 if [ -x "$UE_EDITOR_CMD" ]; then
   GEN_SCRIPT="$(cd "$(dirname "$0")" && pwd)/generate-hub-level.py"
   [ -f "$GEN_SCRIPT" ] || die "level generator missing: $GEN_SCRIPT"
+  # WL_GENERATOR_EXTRA exists for one flag: -nullrhi.
+  #
+  # Epic documents `-run=pythonscript` as headless ("can even run your scripts
+  # in headless mode without opening the Editor UI") and the Unreal Containers
+  # hub documents -nullrhi as what "allows this to work in containers without
+  # GPU access". So a CPU-only level generation is plausible and is worth a try
+  # on a machine that costs nothing.
+  #
+  # It is NOT the default, and the reason is specific to this generator: it
+  # creates materials and imports textures through the editor, and this project
+  # already has a record of editor features behaving differently headless — the
+  # engine screenshot path returns success and writes an empty buffer here, and
+  # Niagara templates cook and place fine while drawing nothing. Unproven is not
+  # the same as broken, but it is not a default either.
+  # shellcheck disable=SC2086
   if ! run_step "generate-hub-level" "$UE_EDITOR_CMD" "$PROJECT" -run=pythonscript \
-        -script="$GEN_SCRIPT" -unattended -nop4; then
+        -script="$GEN_SCRIPT" -unattended -nop4 ${WL_GENERATOR_EXTRA:-}; then
     LEVEL_OK=0
   fi
 else

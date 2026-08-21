@@ -1494,6 +1494,34 @@ grep -q "SKIP_PREPARE" "$HERE/launch-wonderland.sh" \
   && ok "the launcher can skip work the CPU machine already did" \
   || bad "the GPU session has to redo the CPU preparation"
 
+echo "== the opt-in full CPU build =="
+if bash -n "$HERE/cpu-build-all.sh" 2>/dev/null; then ok "cpu-build-all.sh parses"
+else bad "cpu-build-all.sh does not parse"; fi
+CB_CODE="$TMP/cpu-build-code.sh"
+sed 's/#.*//' "$HERE/cpu-build-all.sh" > "$CB_CODE"
+if grep -q -- "--gpus" "$CB_CODE"; then bad "the full CPU build asks docker for a GPU"
+else ok "the full CPU build never asks docker for a GPU"; fi
+grep -q "nullrhi" "$CB_CODE" \
+  && ok "it runs the level generator headless (-nullrhi)" \
+  || bad "it generates the level without disabling rendering"
+# The stream needs NVENC and cannot move. A CPU script that started one would
+# be claiming something Epic's own hardware requirements rule out.
+if grep -q "run-stream.sh" "$CB_CODE"; then
+  bad "the CPU build tries to start the stream, which needs NVENC"
+else ok "it does not try to stream (that needs NVENC and cannot move)"; fi
+grep -q "INSTANCED_PIECES" "$CB_CODE" \
+  && ok "it reports what the headless generation actually produced" \
+  || bad "it does not check whether headless generation made a world"
+# -nullrhi must be OPT-IN in the shared build script, not the default: the
+# generator creates materials and imports textures, and this project has a
+# record of editor features behaving differently headless.
+grep -q 'WL_GENERATOR_EXTRA' "$HERE/../build/build-wonderland.sh" \
+  && ok "build-wonderland.sh takes generator flags from the caller" \
+  || bad "the generator invocation is not parameterised"
+if sed 's/#.*//' "$HERE/../build/build-wonderland.sh" | grep -q 'nullrhi'; then
+  bad "-nullrhi is baked into the shared build path instead of opted into"
+else ok "...and -nullrhi is not the default there"; fi
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" = 0 ]

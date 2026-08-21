@@ -36,15 +36,25 @@
 #   stays on the GPU path here — the generator creates textures and materials
 #   through the editor, and -nullrhi is not a free substitute for a device.
 #
-#   REASONED, NOT SOURCED. The only in-container build command Epic documents
-#   for these images is `RunUAT.sh BuildCookRun`. `BuildEditor` is not named
-#   anywhere. Nothing in the documented requirements implies it needs a GPU —
-#   it invokes a compiler — and the dev images are an Installed Build, which is
-#   exactly the configuration in which a project's own modules are compiled.
-#   But no page says so, and this comment is here rather than a confident claim
-#   in a report. If BuildEditor turns out to be unavailable in the image, the
-#   fallback is the full `launch-wonderland.sh` on the GPU machine, and this
-#   file should record that it was tried and failed.
+#   SOURCED, and it says more than this script needs. Epic's requirements page
+#   lists what is needed to BUILD AND RUN the Linux images: "64-bit CPU with
+#   support for Second Level Address Translation (SLAT) / Hardware
+#   virtualization support enabled in the system BIOS / Minimum of 4 GB of
+#   system RAM". Their Quick Start then runs `RunUAT.sh BuildCookRun ... -cook
+#   -build -stage -pak -archive` in a plain `docker run` with NO `--gpus` — so
+#   COOKING AND PACKAGING are documented CPU work too, not just compiling.
+#   Shader compilation is CPU work in Shader Compile Workers, cached to the
+#   DDC. cpu-build-all.sh in this directory takes that further offer up.
+#
+#   REASONED, NOT SOURCED. `BuildEditor` and `-notools` are not named on any
+#   Epic page reachable for 5.8 — the in-container build command they document
+#   is BuildCookRun. Nothing in the requirements implies BuildEditor needs a
+#   GPU (it is UAT -> UnrealBuildTool -> clang, with no engine loop and so no
+#   RHI init), and the dev images are an Installed Build, which is exactly the
+#   configuration in which a project's own modules are compiled. But no page
+#   says so, and this comment is here rather than a confident claim in a
+#   report. If BuildEditor is unavailable in the image, cpu-build-all.sh runs
+#   Epic's own documented BuildCookRun path instead — also on CPU.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=common.sh
