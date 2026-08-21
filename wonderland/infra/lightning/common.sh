@@ -45,6 +45,9 @@ export WONDERLAND_AUDIO_DIR="${WONDERLAND_AUDIO_DIR:-$WL_ROOT/audio}"
 # PATH. A directory beside the engine survives a Studio stop like everything
 # else here.
 export WL_TOOLS="${WL_TOOLS:-$WL_ROOT/tools}"
+# Where these scripts live, so helpers can reach sibling tools (the Vulkan
+# probe) without every caller passing a path.
+export WL_LIGHTNING_DIR="${WL_LIGHTNING_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 export WL_BRANCH="${WL_BRANCH:-relay/wonderland-ca-fixes}"
 export WL_REPO="${WL_REPO:-https://github.com/ohdieyuh-glitch/sunday-relay.git}"
 
@@ -428,4 +431,352 @@ wl_node_status() {
   [ -n "$node" ] || { echo MISSING; return; }
   actual="$("$node" -v 2>/dev/null || true)"
   [ "$actual" = "$required" ] && echo READY || echo WRONG_VERSION
+}
+
+# ============================================================ GPU / VULKAN
+#
+# NVIDIA-SMI SUCCESS IS NOT VULKAN SUCCESS, and that distinction cost a GPU
+# session: the L4 reported a healthy card and driver, and the packaged client
+# died in RHIInit with
+#
+#   vpCreateInstance(...) failed, VkResult=-9  VK_ERROR_INCOMPATIBLE_DRIVER
+#
+# nvidia-smi talks to the kernel driver. Vulkan needs three more things — a
+# loader, an ICD manifest, and the userspace driver library that manifest names
+# — and any of them can be missing on a machine whose nvidia-smi is perfect.
+# Everything below reports each layer separately so the failure names itself.
+
+export WL_VULKAN_PROBE="${WL_VULKAN_PROBE:-1}"   # set 0 to skip the live probe
+# QUICK OVERRIDE. When the ICD manifest exists but Unreal is not finding it,
+# point at the detected file here. It is applied to the Wonderland process
+# ALONE — never exported into the Studio's own environment, because a global
+# VK_DRIVER_FILES would silently redirect every other GPU program on a shared
+# machine. Empty by default and never guessed: see wl_vulkan_icd_files.
+export WL_VULKAN_ICD="${WL_VULKAN_ICD:-}"
+
+_WL_ICD_DIRS="/usr/share/vulkan/icd.d /etc/vulkan/icd.d /usr/local/share/vulkan/icd.d /usr/local/etc/vulkan/icd.d"
+
+# Every NVIDIA ICD manifest on the box, newline separated. Empty is a real
+# answer and the caller must treat it as one.
+wl_vulkan_icd_json() {
+  local d
+  for d in $_WL_ICD_DIRS; do
+    [ -d "$d" ] || continue
+    ( set +o pipefail; ls "$d"/*nvidia*.json 2>/dev/null ) || true
+  done
+}
+
+# The driver library a manifest points at, and whether it actually resolves.
+# A manifest naming a library that is not installed is the exact shape of
+# VK_ERROR_INCOMPATIBLE_DRIVER, and it is invisible unless you look.
+wl_vulkan_icd_library() {
+  local json="$1" lib
+  [ -r "$json" ] || return 0
+  lib="$( ( set +o pipefail
+            sed -n 's/.*"library_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$json" \
+              | head -1 ) || true)"
+  printf '%s' "$lib"
+}
+
+wl_vulkan_library_resolves() {
+  local lib="$1" json="$2" dir
+  [ -n "$lib" ] || return 1
+  case "$lib" in
+    /*) [ -e "$lib" ] && return 0 ;;
+    *)
+      # A relative library_path is resolved against the manifest's directory
+      # first, then the normal loader search path.
+      dir="$(dirname "$json")"
+      [ -e "$dir/$lib" ] && return 0
+      ( set +o pipefail; ldconfig -p 2>/dev/null | grep -qF "$lib" ) && return 0
+      ;;
+  esac
+  return 1
+}
+
+# WHERE THE LOADER IS, or empty. `ldconfig -p` is the fast answer but it is not
+# always on PATH for a non-root user — and when it was missing here this line
+# printed "NOT FOUND" while the probe on line 10 had just loaded the loader
+# successfully. A report that contradicts itself is worse than a short one, so
+# an actual dlopen is the fallback and the authority.
+wl_vulkan_loader() {
+  local p
+  p="$( ( set +o pipefail
+          ldconfig -p 2>/dev/null | grep -oE '/[^ ]*libvulkan\.so\.1' | head -1 ) || true)"
+  if [ -z "$p" ] && command -v python3 >/dev/null 2>&1; then
+    python3 - <<'PYLOAD' 2>/dev/null || true
+import ctypes
+try:
+    ctypes.CDLL("libvulkan.so.1")
+    print("libvulkan.so.1 (loadable; path not listed by ldconfig)")
+except OSError:
+    pass
+PYLOAD
+    return 0
+  fi
+  printf '%s' "$p"
+}
+
+# WHAT TO HAND THE WONDERLAND PROCESS, or empty. Never a hardcoded path: a
+# guessed ICD is worse than none, because it turns a clear "no driver" into a
+# confusing "wrong driver". WL_VULKAN_ICD is honoured only when the file it
+# names actually exists.
+wl_vulkan_icd_files() {
+  # An explicit override always wins.
+  [ -z "$WL_VULKAN_ICD" ] || { printf '%s' "$WL_VULKAN_ICD"; return 0; }
+  # A manifest the system already ships is used as-is; generating one on top
+  # would override a working configuration for no reason.
+  local existing; existing="$(wl_vulkan_icd_json | head -1)"
+  [ -z "$existing" ] || return 0
+  # No manifest anywhere, but a driver library present: the exact Lightning
+  # case. Generate one, scoped to this process.
+  [ "$WL_VULKAN_AUTOGEN_ICD" = "1" ] || return 0
+  wl_vulkan_generate_icd
+}
+
+# VALIDATED BY THE CALLER, NOT INSIDE A SUBSTITUTION.
+#
+# This check used to live in wl_vulkan_icd_files, which every caller invokes as
+# `$(...)`. wl_die there exits only the substitution subshell — the assignment
+# still succeeds and the function still returns 0, so a WL_VULKAN_ICD naming a
+# file that does not exist was SILENTLY IGNORED and the launch proceeded with
+# no override at all. Found by the test asserting it fails closed.
+wl_vulkan_icd_check() {
+  [ -n "$WL_VULKAN_ICD" ] || return 0
+  [ -r "$WL_VULKAN_ICD" ] || wl_die "WL_VULKAN_ICD=$WL_VULKAN_ICD does not exist or is unreadable. Point it at a manifest this machine actually has (line 4 of the vulkan evidence lists them); it is never guessed."
+}
+
+# THE WHOLE PICTURE, printed. Ten separate facts, each measured, so a failure
+# says which layer broke instead of "GPU failed".
+wl_vulkan_report() {
+  local gpu driver loader icds icd lib probe_rc probe_out vi
+  printf '  --- GPU / VULKAN EVIDENCE ---\n'
+
+  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+    gpu="$( ( set +o pipefail; nvidia-smi --query-gpu=name --format=csv,noheader | head -1 ) || true)"
+    driver="$( ( set +o pipefail; nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1 ) || true)"
+    printf '  1 gpu                 %s\n' "${gpu:-present but unnamed}"
+    printf '  2 nvidia driver       %s\n' "${driver:-unknown}"
+  else
+    printf '  1 gpu                 NONE (nvidia-smi absent or reports no device)\n'
+    printf '  2 nvidia driver       unknown\n'
+  fi
+
+  loader="$(wl_vulkan_loader)"
+  printf '  3 vulkan loader       %s\n' "${loader:-NOT FOUND (libvulkan.so.1)}"
+
+  icds="$(wl_vulkan_icd_json)"
+  if [ -n "$icds" ]; then
+    printf '  4 nvidia ICD json     %s\n' "$(printf '%s' "$icds" | tr '\n' ' ')"
+    icd="$(printf '%s\n' "$icds" | head -1)"
+    lib="$(wl_vulkan_icd_library "$icd")"
+    if wl_vulkan_library_resolves "$lib" "$icd"; then
+      printf '  5 ICD library        %s (resolves)\n' "${lib:-unnamed}"
+    else
+      printf '  5 ICD library        %s (DOES NOT RESOLVE - this is what -9 looks like)\n' "${lib:-unnamed}"
+    fi
+  else
+    printf '  4 nvidia ICD json     NONE in %s\n' "$_WL_ICD_DIRS"
+    printf '  5 ICD library        n/a (no manifest to read)\n'
+  fi
+
+  printf '  6 libvulkan           %s\n' "$([ -n "$loader" ] && echo 'resolves' || echo 'NOT resolvable')"
+  printf '  7 VK_ICD_FILENAMES    %s\n' "${VK_ICD_FILENAMES:-(unset)}"
+  printf '    VK_DRIVER_FILES     %s\n' "${VK_DRIVER_FILES:-(unset)}"
+  printf '    WL_VULKAN_ICD       %s\n' "${WL_VULKAN_ICD:-(unset)}"
+  printf '  8 LD_LIBRARY_PATH     %s\n' "${LD_LIBRARY_PATH:-(unset)}"
+
+  if command -v vulkaninfo >/dev/null 2>&1; then
+    vi="$( ( set +o pipefail; vulkaninfo --summary 2>&1 | grep -iE 'deviceName|driverVersion' | head -4 ) || true)"
+    printf '  9 vulkaninfo          %s\n' "${vi:-installed, but reported no device}"
+  else
+    printf '  9 vulkaninfo          not installed (not required)\n'
+  fi
+
+  if [ "$WL_VULKAN_PROBE" = "1" ] && [ -r "$WL_LIGHTNING_DIR/vulkan-probe.py" ]; then
+    probe_out="$(wl_vulkan_env python3 "$WL_LIGHTNING_DIR/vulkan-probe.py" 2>&1)"; probe_rc=$?
+    if [ "$probe_rc" = 0 ]; then
+      printf ' 10 instance probe      NVIDIA physical device enumerated\n'
+    else
+      printf ' 10 instance probe      FAILED (no NVIDIA device from a real Vulkan instance)\n'
+      printf '%s\n' "$probe_out" | sed 's/^/      /'
+    fi
+  else
+    printf ' 10 instance probe      skipped (WL_VULKAN_PROBE=%s)\n' "$WL_VULKAN_PROBE"
+  fi
+}
+
+# Run a command with the Wonderland-only Vulkan environment applied. Scoped to
+# the child through `env`, so nothing leaks into the Studio.
+wl_vulkan_env() {
+  wl_vulkan_icd_check
+  local icd; icd="$(wl_vulkan_icd_files)"
+  if [ -n "$icd" ]; then
+    # Both names: VK_ICD_FILENAMES is the older loader's, VK_DRIVER_FILES the
+    # current one's, and which is honoured depends on the loader version rather
+    # than on anything we can see here.
+    env VK_ICD_FILENAMES="$icd" VK_DRIVER_FILES="$icd" "$@"
+  else
+    "$@"
+  fi
+}
+
+# Does this machine have a usable Vulkan path? Yes, or a refusal with evidence.
+wl_vulkan_ok() {
+  [ "$WL_VULKAN_PROBE" = "1" ] || return 0
+  [ -r "$WL_LIGHTNING_DIR/vulkan-probe.py" ] || return 0
+  wl_vulkan_env python3 "$WL_LIGHTNING_DIR/vulkan-probe.py" >/dev/null 2>&1
+}
+
+wl_require_vulkan() {
+  if wl_vulkan_ok; then
+    wl_ok "vulkan: an NVIDIA physical device is reachable from a real instance"
+    return 0
+  fi
+  wl_warn "Wonderland will not start: Vulkan cannot reach an NVIDIA device on this machine."
+  wl_warn "The packaged client dies in RHIInit with VK_ERROR_INCOMPATIBLE_DRIVER (-9) when this is true."
+  wl_vulkan_report >&2
+  wl_die "no usable Vulkan/NVIDIA path — refusing to launch Wonderland into a crash. If line 4 shows a manifest and line 5 shows it resolving, set WL_VULKAN_ICD to that manifest and retry; do NOT change system drivers from here."
+}
+
+# ------------------------------- Wilbur's node dependencies, proven up front
+#
+# AFTER A CPU -> L4 MACHINE SWITCH, node_modules was gone and Wilbur died with
+# MODULE_NOT_FOUND on require("express") — discovered only AFTER coturn was
+# already running, which leaves the machine half-up for the next attempt to
+# clean. `npm ci` on the L4 fixed it immediately, but that is a network
+# acquisition on a billing GPU, so it is offered, never performed silently.
+#
+# The two names checked are the ones that actually failed: the web framework
+# Wilbur serves through, and the signalling library that IS Wilbur.
+export WL_WILBUR_MODULES="${WL_WILBUR_MODULES:-express @epicgames-ps/lib-pixelstreamingsignalling-ue5.8}"
+# A saved node_modules, restored like the coturn image so a machine switch does
+# not mean a download. Absent by default; nothing is created behind your back.
+export WL_WILBUR_MODULES_ARCHIVE="${WL_WILBUR_MODULES_ARCHIVE:-$WL_ROOT/wilbur-node-modules.tar}"
+# Opt-in only. A GPU launch never reaches the network unless you say so.
+export WL_ALLOW_NPM_INSTALL="${WL_ALLOW_NPM_INSTALL:-0}"
+
+# Which of the required modules do NOT resolve, newline separated. Empty is
+# the good answer. Resolution is done BY NODE from Wilbur's own directory,
+# because that is exactly how Wilbur will look for them — a directory listing
+# of node_modules would pass on a half-extracted tree that still cannot load.
+wl_wilbur_missing_modules() {
+  local node m
+  node="$(wl_bundled_node)"
+  [ -n "$node" ] || node="$(command -v node || true)"
+  [ -n "$node" ] || { printf '%s\n' $WL_WILBUR_MODULES; return 0; }
+  [ -d "$WL_PS_SIG" ] || { printf '%s\n' $WL_WILBUR_MODULES; return 0; }
+  for m in $WL_WILBUR_MODULES; do
+    ( cd "$WL_PS_SIG" && "$node" -e "require.resolve('$m')" >/dev/null 2>&1 ) || printf '%s\n' "$m"
+  done
+}
+
+# Restore a saved node_modules if one exists. No network, same rule as coturn.
+wl_restore_wilbur_modules() {
+  [ -f "$WL_WILBUR_MODULES_ARCHIVE" ] || return 1
+  wl_say "restoring Wilbur node_modules from $WL_WILBUR_MODULES_ARCHIVE"
+  ( cd "$WL_PS_SIG" && tar -xf "$WL_WILBUR_MODULES_ARCHIVE" ) || return 1
+  [ -z "$(wl_wilbur_missing_modules)" ]
+}
+
+wl_require_wilbur_modules() {
+  local missing
+  missing="$(wl_wilbur_missing_modules)"
+  [ -z "$missing" ] && { wl_ok "wilbur dependencies resolve ($WL_WILBUR_MODULES)"; return 0; }
+
+  wl_warn "Wilbur cannot load: $(printf '%s' "$missing" | tr '\n' ' ')"
+  if wl_restore_wilbur_modules; then
+    wl_ok "wilbur dependencies restored from persistent storage (no download)"
+    return 0
+  fi
+  if [ "$WL_ALLOW_NPM_INSTALL" = "1" ]; then
+    # EXPLICIT OPT-IN ONLY, and `npm ci` rather than `npm install`: ci installs
+    # exactly the lockfile and touches nothing else. No audit fix — that
+    # rewrites dependencies on a machine that is billing by the minute.
+    wl_say "WL_ALLOW_NPM_INSTALL=1 — running npm ci in $WL_PS_SIG"
+    ( cd "$WL_PS_SIG" && npm ci ) || wl_die "npm ci failed in $WL_PS_SIG"
+    missing="$(wl_wilbur_missing_modules)"
+    [ -z "$missing" ] || wl_die "npm ci finished but these still do not resolve: $(printf '%s' "$missing" | tr '\n' ' ')"
+    wl_ok "wilbur dependencies installed"
+    # Save them so the next machine switch is free.
+    ( cd "$WL_PS_SIG" && tar -cf "$WL_WILBUR_MODULES_ARCHIVE" node_modules ) 2>/dev/null \
+      && wl_ok "saved node_modules to $WL_WILBUR_MODULES_ARCHIVE for the next machine switch"
+    return 0
+  fi
+  wl_die "Wilbur's dependencies are missing and there is no archive at $WL_WILBUR_MODULES_ARCHIVE. This happens after a CPU->GPU machine switch. Either re-run with WL_ALLOW_NPM_INSTALL=1 (this downloads on the GPU), or run 'cd $WL_PS_SIG && npm ci' on CPU first."
+}
+
+# READY | RESTORABLE | MISSING, for the CPU readiness report.
+wl_wilbur_modules_status() {
+  [ -z "$(wl_wilbur_missing_modules)" ] && { echo READY; return; }
+  [ -f "$WL_WILBUR_MODULES_ARCHIVE" ] && { echo RESTORABLE; return; }
+  echo MISSING
+}
+
+# The Vulkan overrides as KEY=VALUE words, for composing into a setsid/nohup
+# launch line where a wrapper function cannot go. Empty when nothing was
+# detected — and `env` with no pairs is a no-op, so the launch line is
+# unchanged in the ordinary case.
+wl_vulkan_env_pairs() {
+  wl_vulkan_icd_check
+  local icd; icd="$(wl_vulkan_icd_files)"
+  [ -n "$icd" ] || return 0
+  printf 'VK_ICD_FILENAMES=%s VK_DRIVER_FILES=%s' "$icd" "$icd"
+}
+
+# ------------------------------ the ICD Lightning does not ship, generated
+#
+# PROVEN ON THE REAL L4. There was NO NVIDIA ICD manifest anywhere under
+# /etc/vulkan or /usr/share/vulkan — but the userspace driver libraries were
+# installed:
+#
+#   /usr/lib/x86_64-linux-gnu/libEGL_nvidia.so.0
+#   /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.0
+#
+# The loader therefore had a driver available and no manifest telling it so,
+# which is precisely VK_ERROR_INCOMPATIBLE_DRIVER. Writing a manifest that
+# points at libGLX_nvidia.so.0 got Unreal past RHIInit and kept the process
+# alive on the L4.
+#
+# Generated into $WL_RUN and handed to the Wonderland process alone. Nothing
+# is written under /etc or /usr and no system driver is installed or changed —
+# the Studio's global Vulkan configuration is left exactly as found.
+export WL_VULKAN_ICD_API="${WL_VULKAN_ICD_API:-1.3.277}"
+export WL_VULKAN_AUTOGEN_ICD="${WL_VULKAN_AUTOGEN_ICD:-1}"   # 0 disables
+
+_WL_NV_LIB_DIRS="/usr/lib/x86_64-linux-gnu /usr/lib64 /usr/lib /usr/local/lib/x86_64-linux-gnu"
+
+# The NVIDIA Vulkan-capable driver library, or empty. DETECTED, never assumed:
+# writing a manifest that points at a library which is not there would turn a
+# clear "no driver" into a confusing "wrong driver".
+wl_vulkan_nvidia_lib() {
+  local d c
+  for d in $_WL_NV_LIB_DIRS; do
+    # libGLX_nvidia.so.0 is the one that worked on the real L4. The others are
+    # tried only as fallbacks, in the order most likely to carry the ICD.
+    for c in libGLX_nvidia.so.0 libGLX_nvidia.so libEGL_nvidia.so.0 libnvidia-vulkan-producer.so; do
+      [ -e "$d/$c" ] && { printf '%s' "$d/$c"; return 0; }
+    done
+  done
+  return 0
+}
+
+# Write a Wonderland-scoped ICD manifest for a DETECTED library. Prints its
+# path. Empty (and no file) when there is nothing to point at.
+wl_vulkan_generate_icd() {
+  local lib out
+  lib="$(wl_vulkan_nvidia_lib)"
+  [ -n "$lib" ] || return 0
+  mkdir -p "$WL_RUN"
+  out="$WL_RUN/wonderland_nvidia_icd.json"
+  cat > "$out" <<ICDEOF
+{
+    "file_format_version": "1.0.0",
+    "ICD": {
+        "library_path": "$lib",
+        "api_version": "$WL_VULKAN_ICD_API"
+    }
+}
+ICDEOF
+  printf '%s' "$out"
 }

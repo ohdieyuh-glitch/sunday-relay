@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.4",
+	"EngineAssociation": "5.8",
 	"Category": "Game",
 	"Description": "Wonderland — the multiplayer open-world layer of Relay. Relay is where you build your Compound AI Agent. Wonderland is where it lives.",
 	"Modules": [
@@ -15,6 +15,10 @@
 		}
 	],
 	"Plugins": [
+		{
+			"Name": "PixelStreaming2",
+			"Enabled": true
+		},
 		{
 			"Name": "EnhancedInput",
 			"Enabled": true

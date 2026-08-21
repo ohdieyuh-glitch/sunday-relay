@@ -87,7 +87,11 @@ GATE_FAIL=0
 # verify-target-config.py runs FIRST and cheaply: a legacy target config is the
 # failure that reached UnrealBuildTool on a paid L4 before dying, so catching it
 # here costs a second instead of a compile.
-for g in verify-target-config.py verify-local-includes.py verify-look-table.py verify-docs.py verify-dog-proxy.py verify-generator-dryrun.py; do
+# verify-pixelstreaming-plugin.py is in this list because a project that
+# enables no streamer produces a package that runs perfectly and streams
+# nothing — the "No streamer available" failure, discovered only from a
+# browser after a full cook and launch.
+for g in verify-target-config.py verify-pixelstreaming-plugin.py verify-local-includes.py verify-look-table.py verify-docs.py verify-dog-proxy.py verify-generator-dryrun.py; do
   if [ -f "$BUILD_DIR/$g" ]; then
     if python3 "$BUILD_DIR/$g" >>"$WL_LOG/gates.log" 2>&1; then
       wl_ok "gate $g"
@@ -199,6 +203,15 @@ case "$NODE_STATE" in
   WRONG_VERSION) wl_warn "SIGNALLING NODE WRONG - need $(wl_ps_required_node), stage 5 will fail closed" ;;
   *)             wl_warn "SIGNALLING NODE MISSING - no NODE_VERSION file or no node at all" ;;
 esac
+# Wilbur's node_modules: the thing that vanished across a CPU->L4 switch.
+# Settle it here, on CPU, where fetching it is free.
+MODS_STATE="$(wl_wilbur_modules_status)"
+case "$MODS_STATE" in
+  READY)      wl_ok "WILBUR DEPS READY - $WL_WILBUR_MODULES resolve" ;;
+  RESTORABLE) wl_ok "WILBUR DEPS RESTORABLE - archive at $WL_WILBUR_MODULES_ARCHIVE" ;;
+  *)          wl_warn "WILBUR DEPS MISSING - run 'cd $WL_PS_SIG && npm ci' NOW, on CPU, then re-run prepare.sh"
+              wl_say  "   (this is the MODULE_NOT_FOUND express failure; fixing it on the GPU costs credits)" ;;
+esac
 TURN_STATE="$(wl_turn_status)"
 case "$TURN_STATE" in
   READY)      wl_ok "TURN READY - $WL_TURN_IMAGE is loaded" ;;
@@ -234,11 +247,19 @@ case "$NODE_STATE" in
   WRONG_VERSION) printf '  node         WRONG VERSION - stage 5 will fail closed\n' ;;
   *)             printf '  node         MISSING - stage 5 will fail closed\n' ;;
 esac
+case "$MODS_STATE" in
+  READY)      printf '  wilbur deps  READY\n' ;;
+  RESTORABLE) printf '  wilbur deps  RESTORABLE (archive on persistent storage)\n' ;;
+  *)          printf '  wilbur deps  MISSING - stage 5 will fail closed\n' ;;
+esac
 case "$TURN_STATE" in
   READY)      printf '  turn         READY\n' ;;
   RESTORABLE) printf '  turn         RESTORABLE (archive on persistent storage)\n' ;;
   *)          printf '  turn         NOT READY - the stream would stay black remotely\n' ;;
 esac
+# On CPU there is no GPU and that is expected; the Vulkan evidence matters only
+# once the L4 is attached, so it is offered rather than run.
+printf '  vulkan       %s\n' "$(wl_have_gpu && { wl_vulkan_ok && echo 'NVIDIA device reachable' || echo 'NOT REACHABLE - run: bash run-stream.sh (it will print the evidence)'; } || echo 'n/a while on CPU')"
 printf '  gpu          %s\n' "$(wl_have_gpu && nvidia-smi --query-gpu=name --format=csv,noheader | head -1 || echo 'none (expected while on CPU)')"
 echo
 if [ "$UE_STATE" = "RESTORABLE" ]; then

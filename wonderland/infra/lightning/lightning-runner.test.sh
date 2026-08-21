@@ -653,6 +653,367 @@ else
   ok "no node is downloaded in the launch path"
 fi
 
+echo "== vulkan is proven, and nvidia-smi is not accepted as proof =="
+# THE REAL L4 FAILURE. TURN, Wilbur, 8080, 8888 and the player page were all
+# working; the packaged client started and died in RHIInit:
+#   vpCreateInstance(...) failed, VkResult=-9  VK_ERROR_INCOMPATIBLE_DRIVER
+# nvidia-smi was healthy the whole time. It talks to the kernel driver; Vulkan
+# additionally needs a loader, an ICD manifest, and the userspace library that
+# manifest names. Treating the first as evidence of the rest is the mistake.
+
+# The probe is real: on THIS machine it finds a software llvmpipe device and
+# correctly refuses to call that an NVIDIA GPU.
+if [ -r "$HERE/vulkan-probe.py" ]; then ok "the vulkan probe exists"; else bad "no vulkan-probe.py"; fi
+python3 -c "import ast,io;ast.parse(io.open('$HERE/vulkan-probe.py').read())" 2>/dev/null \
+  && ok "the vulkan probe parses" || bad "vulkan-probe.py does not parse"
+probe_json="$(python3 "$HERE/vulkan-probe.py" 2>/dev/null)"; probe_rc=$?
+if [ "$probe_rc" != "0" ]; then
+  ok "the probe fails on a machine with no NVIDIA GPU (exit $probe_rc)"
+else
+  bad "the probe reported an NVIDIA device on a machine that has none"
+fi
+has "$probe_json" '"nvidiaDeviceEnumerated": false' \
+  && ok "  and says so explicitly rather than by exit code alone" \
+  || bad "  the probe output does not state the verdict"
+# It must not mistake a software rasteriser for a GPU - llvmpipe enumerates
+# happily and would make every check downstream pass on a CPU renderer.
+if has "$probe_json" 'llvmpipe'; then
+  has "$probe_json" '"isNvidia": false' && ok "  and llvmpipe is classified as NOT nvidia" \
+    || bad "  llvmpipe was accepted as an NVIDIA device"
+else
+  ok "  (no llvmpipe on this host to classify)"
+fi
+
+# nvidia-smi lying about Vulkan: a mocked, perfectly healthy nvidia-smi must
+# NOT be enough to let the launch proceed.
+mkdir -p "$TMP/gbin"
+cat > "$TMP/gbin/nvidia-smi" <<'SMIEOF'
+#!/bin/sh
+case "$*" in
+  -L) echo "GPU 0: NVIDIA L4 (UUID: GPU-test)" ;;
+  *name*) echo "NVIDIA L4" ;;
+  *driver_version*) echo "550.54.15" ;;
+  *) echo "NVIDIA L4" ;;
+esac
+exit 0
+SMIEOF
+chmod +x "$TMP/gbin/nvidia-smi"
+out=$(PATH="$TMP/gbin:$PATH" WL_ROOT="$TMP/root" WL_LIGHTNING_DIR="$HERE" \
+      bash -c ". $HERE/common.sh; wl_require_vulkan" 2>&1); rc=$?
+[ "$rc" != "0" ] && ok "a healthy nvidia-smi is NOT accepted as vulkan proof (exit $rc)" \
+                 || bad "nvidia-smi success was treated as vulkan success - the exact L4 mistake"
+has "$out" "VK_ERROR_INCOMPATIBLE_DRIVER" \
+  && ok "  and the refusal names the crash it is preventing" \
+  || bad "  the refusal does not reference the real crash"
+
+echo "== the refusal prints real evidence, not 'GPU failed' =="
+rep=$(PATH="$TMP/gbin:$PATH" WL_ROOT="$TMP/root" WL_LIGHTNING_DIR="$HERE" \
+      bash -c ". $HERE/common.sh; wl_vulkan_report" 2>&1)
+for item in "gpu" "nvidia driver" "vulkan loader" "nvidia ICD json" "ICD library" \
+            "libvulkan" "VK_ICD_FILENAMES" "VK_DRIVER_FILES" "LD_LIBRARY_PATH" \
+            "vulkaninfo" "instance probe"; do
+  has "$rep" "$item" && ok "evidence includes: $item" || bad "evidence omits: $item"
+done
+# the mocked GPU must actually show up in the report, or the report is not reading anything
+has "$rep" "NVIDIA L4"   && ok "the report shows the detected GPU"    || bad "the report ignores nvidia-smi"
+has "$rep" "550.54.15"   && ok "the report shows the driver version"  || bad "the report omits the driver version"
+
+echo "== the ICD override is detected, never guessed =="
+# A hardcoded ICD path is worse than none: it turns a clear "no driver" into a
+# confusing "wrong driver".
+sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$HERE/common.sh" > "$TMP/cs2.sh"
+if grep -qE '(VK_ICD_FILENAMES|VK_DRIVER_FILES)=/usr/share/vulkan' "$TMP/cs2.sh"; then
+  bad "an ICD path is hardcoded in live code"
+else
+  ok "no ICD path is hardcoded"
+fi
+# unset -> no environment pairs at all
+out=$(WL_ROOT="$TMP/root" bash -c ". $HERE/common.sh; wl_vulkan_env_pairs" 2>&1)
+check "$out" "" "with WL_VULKAN_ICD unset, nothing is injected"
+# set to a real file -> both names, that file
+: > "$TMP/nv.json"
+out=$(WL_ROOT="$TMP/root" WL_VULKAN_ICD="$TMP/nv.json" \
+      bash -c ". $HERE/common.sh; wl_vulkan_env_pairs" 2>&1)
+has "$out" "VK_ICD_FILENAMES=$TMP/nv.json" && ok "a detected ICD sets VK_ICD_FILENAMES" \
+  || bad "VK_ICD_FILENAMES not set from WL_VULKAN_ICD"
+has "$out" "VK_DRIVER_FILES=$TMP/nv.json" && ok "and VK_DRIVER_FILES (loader-version dependent)" \
+  || bad "VK_DRIVER_FILES not set from WL_VULKAN_ICD"
+# set to a file that does not exist -> refuse, do not silently ignore
+out=$(WL_ROOT="$TMP/root" WL_VULKAN_ICD="$TMP/definitely-absent.json" \
+      bash -c ". $HERE/common.sh; wl_vulkan_env_pairs" 2>&1); rc=$?
+[ "$rc" != "0" ] && ok "a WL_VULKAN_ICD that does not exist fails closed" \
+                 || bad "a nonexistent ICD override was accepted"
+
+# SCOPED TO THE CHILD. A global export would redirect every other GPU program
+# on a shared Studio.
+grep -q 'setsid nohup env \$(wl_vulkan_env_pairs)' "$TMP/rs-live2.sh" 2>/dev/null \
+  || grep -q 'env \$(wl_vulkan_env_pairs)' "$HERE/run-stream.sh" \
+  && ok "the vulkan environment is applied to the Wonderland process only" \
+  || bad "the vulkan environment is not scoped to the client"
+if grep -qE '^[[:space:]]*export[[:space:]]+VK_(ICD_FILENAMES|DRIVER_FILES)=' "$TMP/cs2.sh"; then
+  bad "VK_* is exported globally - it would affect the whole Studio"
+else
+  ok "VK_* is never exported into the Studio environment"
+fi
+
+echo "== the ICD manifest's library is checked, not just the manifest =="
+# A manifest naming a library that is not installed IS what -9 looks like, and
+# it is invisible unless the library_path is followed.
+mkdir -p "$TMP/icd"
+printf '{"file_format_version":"1.0.0","ICD":{"library_path":"%s/libGLX_nvidia.so.0","api_version":"1.3.277"}}\n' "$TMP/icd" > "$TMP/icd/nvidia_icd.json"
+out=$(WL_ROOT="$TMP/root" bash -c ". $HERE/common.sh; wl_vulkan_icd_library $TMP/icd/nvidia_icd.json")
+check "$out" "$TMP/icd/libGLX_nvidia.so.0" "the library_path is read out of the manifest"
+WL_ROOT="$TMP/root" bash -c ". $HERE/common.sh; wl_vulkan_library_resolves '$TMP/icd/libGLX_nvidia.so.0' '$TMP/icd/nvidia_icd.json'" \
+  && bad "a library that does not exist was reported as resolving" \
+  || ok "a manifest naming an absent library does NOT resolve"
+: > "$TMP/icd/libGLX_nvidia.so.0"
+WL_ROOT="$TMP/root" bash -c ". $HERE/common.sh; wl_vulkan_library_resolves '$TMP/icd/libGLX_nvidia.so.0' '$TMP/icd/nvidia_icd.json'" \
+  && ok "and once the library exists it does resolve" \
+  || bad "an existing library was reported as missing"
+
+echo "== wilbur's dependencies are proven BEFORE turn starts =="
+# MODULE_NOT_FOUND on require("express") after a CPU->L4 machine switch, found
+# only once coturn was already running.
+mkmod() {  # $1 = resolve? (yes/no)
+  rm -rf "$TMP/nbin"; mkdir -p "$TMP/nbin"
+  if [ "$1" = yes ]; then
+    printf '#!/bin/sh\ncase "$1" in -v) echo v22.14.0 ;; -e) exit 0 ;; esac\nexit 0\n' > "$TMP/nbin/node"
+  else
+    printf '#!/bin/sh\ncase "$1" in -v) echo v22.14.0 ;; -e) exit 1 ;; esac\nexit 0\n' > "$TMP/nbin/node"
+  fi
+  chmod +x "$TMP/nbin/node"
+}
+real_ps UE5.8; mkdir -p "$TMP/ps/SignallingWebServer"
+mod_call() { PATH="$TMP/nbin:/usr/bin:/bin" WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/ps" \
+  WL_WILBUR_MODULES_ARCHIVE="$TMP/nomods.tar" bash -c ". $HERE/common.sh; $1" 2>&1; }
+
+mkmod yes
+check "$(mod_call wl_wilbur_modules_status)" "READY" "resolvable modules read READY"
+out="$(mod_call wl_require_wilbur_modules)"; rc=$?
+check "$rc" "0" "  and the preflight passes"
+
+mkmod no
+check "$(mod_call wl_wilbur_modules_status)" "MISSING" "unresolvable modules read MISSING"
+out="$(mod_call wl_require_wilbur_modules)"; rc=$?
+[ "$rc" != "0" ] && ok "  and the preflight FAILS CLOSED (exit $rc)" \
+                 || bad "  it continued with modules that cannot load"
+has "$out" "npm ci" && ok "  and names the exact CPU fix" || bad "  no actionable fix given"
+
+# BOTH names, and express specifically - it is the one that actually failed.
+grep -q 'express' "$TMP/cs2.sh" && ok "express is one of the required modules" \
+  || bad "express is not checked"
+grep -q 'lib-pixelstreamingsignalling-ue5.8' "$TMP/cs2.sh" \
+  && ok "the signalling library is one of the required modules" \
+  || bad "the signalling library is not checked"
+
+# NO SILENT NETWORK on a GPU. npm ci only on explicit opt-in, and never audit fix.
+if grep -qE 'npm[[:space:]]+audit' "$TMP/cs2.sh"; then
+  bad "npm audit appears in live code"
+else
+  ok "npm audit is never run"
+fi
+grep -q 'WL_ALLOW_NPM_INSTALL' "$TMP/cs2.sh" && ok "npm ci is opt-in only" \
+  || bad "dependencies could be downloaded on a GPU without opting in"
+
+# BEHAVIOURALLY, not just by mention. Mutation-testing showed the guard
+# `if [ "$WL_ALLOW_NPM_INSTALL" = "1" ]` could be replaced with `if true` and
+# every assertion still passed, because the variable was still named in the
+# export line above. A mock npm that records being run settles it.
+mkmod no
+printf '#!/bin/sh\necho "$@" >> "$WL_TEST_NPM_LOG"\nexit 0\n' > "$TMP/nbin/npm"
+chmod +x "$TMP/nbin/npm"
+rm -f "$TMP/npmlog"
+PATH="$TMP/nbin:/usr/bin:/bin" WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/ps" \
+  WL_WILBUR_MODULES_ARCHIVE="$TMP/nomods.tar" WL_ALLOW_NPM_INSTALL=0 \
+  WL_TEST_NPM_LOG="$TMP/npmlog" \
+  bash -c ". $HERE/common.sh; wl_require_wilbur_modules" >/dev/null 2>&1
+if [ -s "$TMP/npmlog" ]; then
+  bad "npm ran on a GPU launch without WL_ALLOW_NPM_INSTALL=1"
+else
+  ok "npm is NOT invoked when the opt-in is off"
+fi
+# and WITH the opt-in it must actually run ci (not install, not audit)
+rm -f "$TMP/npmlog"
+PATH="$TMP/nbin:/usr/bin:/bin" WL_ROOT="$TMP/root" WL_PS_INFRA="$TMP/ps" \
+  WL_WILBUR_MODULES_ARCHIVE="$TMP/nomods.tar" WL_ALLOW_NPM_INSTALL=1 \
+  WL_TEST_NPM_LOG="$TMP/npmlog" \
+  bash -c ". $HERE/common.sh; wl_require_wilbur_modules" >/dev/null 2>&1
+npmlog="$(cat "$TMP/npmlog" 2>/dev/null || true)"
+has "$npmlog" "ci" && ok "with the opt-in on, npm ci runs" || bad "the opt-in did not run npm ci"
+if has "$npmlog" "audit"; then bad "npm audit was invoked"; else ok "and npm audit is never invoked"; fi
+out=$(WL_ROOT="$TMP/root" bash -c ". $HERE/common.sh; echo \$WL_ALLOW_NPM_INSTALL")
+check "$out" "0" "and the opt-in defaults to OFF"
+
+echo "== the preflight order is: deps, vulkan, THEN turn and the client =="
+ln_mod=$( ( set +o pipefail; grep -n 'wl_require_wilbur_modules' "$HERE/run-stream.sh" | head -1 | cut -d: -f1 ) || true)
+ln_vk=$(  ( set +o pipefail; grep -n 'wl_require_vulkan'         "$HERE/run-stream.sh" | head -1 | cut -d: -f1 ) || true)
+ln_turn=$(( set +o pipefail; grep -n '^start_turn$'              "$HERE/run-stream.sh" | head -1 | cut -d: -f1 ) || true)
+ln_app=$( ( set +o pipefail; grep -n '^start_app$'               "$HERE/run-stream.sh" | head -1 | cut -d: -f1 ) || true)
+for pair in "deps:$ln_mod:$ln_turn" "vulkan:$ln_vk:$ln_turn" "vulkan:$ln_vk:$ln_app"; do
+  nm="${pair%%:*}"; rest="${pair#*:}"; a="${rest%%:*}"; b="${rest#*:}"
+  if [ -n "$a" ] && [ -n "$b" ] && [ "$a" -lt "$b" ]; then
+    ok "$nm is checked before line $b"
+  else
+    bad "$nm is not checked first (a=$a b=$b)"
+  fi
+done
+
+echo "== the packaged build must contain a Pixel Streaming runtime =="
+# THE LIVE BLOCKER. Wonderland ran on the L4 and used it, Wilbur served 8080
+# and 8888, the public URL worked, and the browser said "No streamer
+# available": Wonderland.uproject enabled NO Pixel Streaming plugin, so there
+# was no streamer in the build. app.log carried the -PixelStreamingURL command
+# line and zero PixelStreaming/WebRTC/encoder lines, because an unrecognised
+# switch is not an error to Unreal and nothing announced it.
+UPJ="$HERE/../../Wonderland.uproject"
+python3 -c "import json,io;json.load(io.open('$UPJ',encoding='utf8'))" 2>/dev/null \
+  && ok "Wonderland.uproject is valid JSON" || bad "Wonderland.uproject does not parse"
+psname=$(python3 - "$UPJ" <<'PYX'
+import json, io, sys
+d = json.load(io.open(sys.argv[1], encoding="utf8"))
+for p in d.get("Plugins", []):
+    if p.get("Enabled") and "pixelstreaming" in p.get("Name", "").lower():
+        print(p["Name"])
+PYX
+)
+[ -n "$psname" ] && ok "the project enables a Pixel Streaming plugin ($psname)" \
+                 || bad "the project enables NO Pixel Streaming plugin - the live blocker"
+# It must not be editor-only, or it never stages into the packaged Linux build.
+allow=$(python3 - "$UPJ" <<'PYX'
+import json, io, sys
+d = json.load(io.open(sys.argv[1], encoding="utf8"))
+for p in d.get("Plugins", []):
+    if p.get("Enabled") and "pixelstreaming" in p.get("Name", "").lower():
+        print(p.get("TargetAllowList") or "")
+PYX
+)
+[ -z "$(printf '%s' "$allow" | tr -d '[:space:]')" ] \
+  && ok "  and it is enabled for all targets, not editor-only" \
+  || bad "  it is restricted to $allow and would not stage into a Linux package"
+
+# The engine-side gate: enabled-but-absent must fail, and no plugin at all must
+# fail with a DIFFERENT code, because the two need different responses.
+VPS="$HERE/../build/verify-pixelstreaming-plugin.py"
+[ -r "$VPS" ] && ok "the plugin gate exists" || bad "no verify-pixelstreaming-plugin.py"
+python3 "$VPS" >/dev/null 2>&1
+rc=$?
+[ "$rc" = 0 ] && ok "the plugin gate passes on the current project (exit 0)" \
+              || bad "the plugin gate fails on the current tree (exit $rc)"
+# a project with no PS plugin must exit 2
+mkdir -p "$TMP/proj/infra/build"
+printf '{"FileVersion":3,"Plugins":[{"Name":"EnhancedInput","Enabled":true}]}\n' > "$TMP/proj/Wonderland.uproject"
+cp "$VPS" "$TMP/proj/infra/build/"
+python3 "$TMP/proj/infra/build/verify-pixelstreaming-plugin.py" >/dev/null 2>&1
+check "$?" "2" "a project enabling no streamer exits 2"
+# an editor-only PS plugin must exit 1
+printf '{"FileVersion":3,"Plugins":[{"Name":"PixelStreaming2","Enabled":true,"TargetAllowList":["Editor"]}]}\n' > "$TMP/proj/Wonderland.uproject"
+python3 "$TMP/proj/infra/build/verify-pixelstreaming-plugin.py" >/dev/null 2>&1
+check "$?" "1" "an editor-only streamer plugin exits 1"
+# and it must NOT invent an engine result when no engine is reachable
+out=$(WL_UE=/definitely/absent WL_ROOT=/definitely/absent python3 "$VPS" 2>&1)
+has "$out" "UNVERIFIED" && ok "with no engine it reports UNVERIFIED, not PASS" \
+  || bad "it claimed a result it could not have checked"
+
+echo "== the package proof catches a streamer-less build =="
+VPK="$HERE/../build/verify-packaged-streamer.py"
+[ -r "$VPK" ] && ok "the package proof exists" || bad "no verify-packaged-streamer.py"
+mkpkg() {  # $1 = dir, $2 = with-streamer? yes/no, $3 = layout mono|modular
+  rm -rf "$1"; mkdir -p "$1/Linux/Wonderland/Binaries/Linux"
+  head -c 6000000 /dev/zero > "$1/Linux/Wonderland/Binaries/Linux/Wonderland"
+  chmod +x "$1/Linux/Wonderland/Binaries/Linux/Wonderland"
+  if [ "$2" = yes ]; then
+    if [ "$3" = modular ]; then
+      mkdir -p "$1/Linux/Engine/Plugins/Media/PixelStreaming2"
+    else
+      printf 'PixelStreaming2Module' >> "$1/Linux/Wonderland/Binaries/Linux/Wonderland"
+    fi
+  fi
+}
+mkpkg "$TMP/pk" yes mono
+WL_OUT="$TMP/pk" python3 "$VPK" >/dev/null 2>&1
+check "$?" "0" "a monolithic build with the runtime linked in PASSES"
+mkpkg "$TMP/pk" yes modular
+WL_OUT="$TMP/pk" python3 "$VPK" >/dev/null 2>&1
+check "$?" "0" "a modular build with a staged plugin dir PASSES"
+mkpkg "$TMP/pk" no mono
+WL_OUT="$TMP/pk" python3 "$VPK" >/dev/null 2>&1
+check "$?" "1" "a build with NO streamer FAILS"
+out=$(WL_OUT="$TMP/pk" python3 "$VPK" 2>&1)
+has "$out" "No streamer available" && ok "  and names the browser symptom it explains" \
+  || bad "  the failure does not connect to the observed symptom"
+# absent package is 'not found', never 'fail' - they are different situations
+WL_OUT="$TMP/definitely-absent" python3 "$VPK" >/dev/null 2>&1
+check "$?" "2" "an absent package reports NOT FOUND rather than failing"
+
+# both gates must be wired in, before anything expensive
+grep -q 'verify-pixelstreaming-plugin.py' "$HERE/prepare.sh" \
+  && ok "prepare.sh runs the plugin gate before the cook" \
+  || bad "a streamer-less project would not be caught until a browser said so"
+grep -q 'verify-packaged-streamer.py' "$HERE/run-stream.sh" \
+  && ok "run-stream.sh proves the package before launching it" \
+  || bad "run-stream.sh launches a package it has not checked"
+
+echo "== zero streamer lines is diagnosed, not shrugged at =="
+sed 's/[[:space:]]#.*$//; s/^[[:space:]]*#.*$//' "$HERE/run-stream.sh" > "$TMP/rs3.sh"
+has "$(cat "$TMP/rs3.sh")" "no streamer in the packaged build" \
+  && ok "run-stream distinguishes 'no streamer in the build' from 'did not join'" \
+  || bad "both failures still read the same to the founder"
+grep -q 'PixelStreaming|WebRTC|Streamer' "$TMP/rs3.sh" \
+  && ok "  by looking for streamer lines of any kind in app.log" \
+  || bad "  it does not inspect app.log for streamer activity"
+
+echo "== the missing NVIDIA ICD is generated, scoped, from a detected library =="
+# PROVEN ON THE L4: no manifest under /etc/vulkan or /usr/share/vulkan, but
+# /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.0 present. A manifest pointing at
+# it got Unreal past VK_ERROR_INCOMPATIBLE_DRIVER.
+mkdir -p "$TMP/nvlib"
+: > "$TMP/nvlib/libGLX_nvidia.so.0"
+gen_call() { WL_ROOT="$TMP/root" WL_RUN="$TMP/root/run" \
+  bash -c "_WL_NV_LIB_DIRS='$TMP/nvlib'; . $HERE/common.sh; _WL_NV_LIB_DIRS='$TMP/nvlib'; $1" 2>&1; }
+out=$(gen_call wl_vulkan_nvidia_lib)
+check "$out" "$TMP/nvlib/libGLX_nvidia.so.0" "the NVIDIA driver library is detected"
+out=$(gen_call wl_vulkan_generate_icd)
+[ -n "$out" ] && [ -r "$out" ] && ok "an ICD manifest is generated at $out" \
+  || bad "no ICD manifest was generated from a detected library"
+python3 -c "import json,io;d=json.load(io.open('$out'));print(d['ICD']['library_path'])" 2>/dev/null | \
+  grep -q "libGLX_nvidia.so.0" && ok "  and it points at the detected library" \
+  || bad "  the generated manifest does not name the detected library"
+python3 -c "import json,io;json.load(io.open('$out'))" 2>/dev/null \
+  && ok "  and is valid JSON the loader can read" || bad "  the generated manifest is not valid JSON"
+# IT MUST BE WRITTEN UNDER $WL_RUN, never into the system.
+case "$out" in
+  "$TMP/root/run"/*) ok "  and lives under WL_RUN, not /etc or /usr" ;;
+  *) bad "  the generated manifest was written outside WL_RUN: $out" ;;
+esac
+if grep -qE '>[[:space:]]*/(etc|usr)/' "$TMP/cs2.sh"; then
+  bad "common.sh writes into /etc or /usr - that mutates the Studio globally"
+else
+  ok "nothing is written into /etc or /usr"
+fi
+# NOTHING IS GENERATED WITHOUT A DETECTED LIBRARY. A manifest naming a library
+# that is not there converts a clear failure into a confusing one.
+rm -f "$TMP/nvlib/libGLX_nvidia.so.0"
+out=$(gen_call wl_vulkan_generate_icd)
+check "$out" "" "with no NVIDIA library present, nothing is generated"
+# and a system manifest, when one exists, is left alone rather than overridden
+mkdir -p "$TMP/nvlib"; : > "$TMP/nvlib/libGLX_nvidia.so.0"
+out=$(WL_ROOT="$TMP/root" WL_RUN="$TMP/root/run" bash -c "
+_WL_ICD_DIRS='$TMP/sysicd'; . $HERE/common.sh
+_WL_ICD_DIRS='$TMP/sysicd'; _WL_NV_LIB_DIRS='$TMP/nvlib'
+mkdir -p '$TMP/sysicd'; : > '$TMP/sysicd/nvidia_icd.json'
+wl_vulkan_icd_files" 2>&1)
+check "$out" "" "an existing system manifest is used as-is, not overridden"
+# the auto-generation can be turned off
+out=$(WL_ROOT="$TMP/root" WL_RUN="$TMP/root/run" WL_VULKAN_AUTOGEN_ICD=0 bash -c "
+. $HERE/common.sh; _WL_NV_LIB_DIRS='$TMP/nvlib'; wl_vulkan_icd_files" 2>&1)
+check "$out" "" "WL_VULKAN_AUTOGEN_ICD=0 disables generation"
+
+echo "== prepare.sh reports the two new CPU-settleable facts =="
+grep -q 'WILBUR DEPS' "$HERE/prepare.sh" && ok "prepare.sh reports wilbur dependency state" \
+  || bad "prepare.sh does not report wilbur dependencies"
+grep -q 'vulkan  ' "$HERE/prepare.sh" && ok "prepare.sh has a vulkan readiness row" \
+  || bad "prepare.sh has no vulkan row"
+
 echo "== prepare.sh reports both signalling facts =="
 grep -q 'SIGNALLING READY - \$WL_PS_VERSION' "$HERE/prepare.sh" \
   && ok "prepare.sh reports SIGNALLING READY - UE5.8" || bad "prepare.sh does not report the signalling version"

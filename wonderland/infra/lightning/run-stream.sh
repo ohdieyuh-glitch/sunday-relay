@@ -150,7 +150,11 @@ start_app() {
   # The AutoExposure bias is the ONLY exposure control that reaches the
   # packaged render — the PostProcessVolume and camera grade were both proven
   # not to. It is read from the LOOK table's documented default.
-  setsid nohup "$APP" \
+  # THE VULKAN ENVIRONMENT IS APPLIED HERE AND NOWHERE ELSE. wl_vulkan_env
+  # wraps this one process with env(1); nothing is exported into the Studio,
+  # because a global VK_DRIVER_FILES on a shared machine would silently
+  # redirect every other GPU program on it.
+  setsid nohup env $(wl_vulkan_env_pairs) "$APP" \
     -PixelStreamingURL="ws://127.0.0.1:$WL_STREAMER_PORT" \
     -RenderOffscreen -ForceRes -ResX="$WL_RES_X" -ResY="$WL_RES_Y" \
     -Unattended -stdout -FullStdOutLogOutput \
@@ -166,7 +170,19 @@ start_app() {
       tail -25 "$WL_LOG/app.log" >&2; wl_die "the client crashed on start"; }
     sleep 3; i=$((i + 1))
   done
-  wl_warn "no explicit join line after 3 min — continuing, but suspect"
+  # NAME THE TWO DIFFERENT FAILURES. "No join line" reads the same whether the
+  # streamer could not reach Wilbur or the build has no streamer in it, and
+  # those need opposite responses. Zero PixelStreaming lines of ANY kind means
+  # the runtime is not in the package — the exact "No streamer available" case.
+  if grep -qaiE "PixelStreaming|WebRTC|Streamer" "$WL_LOG/app.log" 2>/dev/null; then
+    wl_warn "the streamer started but never joined Wilbur after 3 min — check $WL_LOG/sig.log"
+  else
+    wl_warn "app.log contains NO PixelStreaming/WebRTC/Streamer lines at all."
+    wl_warn "That is not a connection problem: this package has no Pixel Streaming"
+    wl_warn "runtime in it, so there is nothing to connect. The browser will say"
+    wl_warn "'No streamer available'. Enable the plugin and repackage."
+    wl_die "no streamer in the packaged build"
+  fi
 }
 
 # ------------------------------------------------------------------ 4. public
@@ -226,6 +242,25 @@ done
 wl_require_ps_infra
 wl_require_node >/dev/null
 wl_ok "node $(wl_ps_required_node) verified for Wilbur"
+# BEFORE TURN, not after. Wilbur's node_modules went missing across a CPU->L4
+# machine switch and MODULE_NOT_FOUND on require("express") surfaced only once
+# coturn was already up — which leaves the machine half-started for the next
+# attempt to clean up.
+wl_require_wilbur_modules
+# AND BEFORE THE CLIENT IS LAUNCHED AT ALL. The packaged Wonderland starts,
+# reaches RHIInit, and dies on VK_ERROR_INCOMPATIBLE_DRIVER when Vulkan cannot
+# see the NVIDIA device. Launching into that costs the whole stack coming up
+# first and reports as a mysterious "streamer never joined".
+wl_require_vulkan
+# THE PACKAGE MUST CONTAIN A STREAMER. Wonderland ran on the L4, Wilbur served,
+# the player page loaded, and the browser said "No streamer available" — the
+# build had no Pixel Streaming runtime in it, and an unknown command-line
+# switch is not an error to Unreal, so nothing said so. app.log held the
+# -PixelStreamingURL line and not one streamer, WebRTC or encoder line.
+if [ -r "$HERE/../build/verify-packaged-streamer.py" ]; then
+  python3 "$HERE/../build/verify-packaged-streamer.py" || {
+    [ "$?" = 2 ] || wl_die "the packaged build contains no Pixel Streaming runtime; repackage after enabling the plugin (see the report above)"; }
+fi
 case "$(wl_turn_status)" in
   READY)      wl_ok "coturn image present: $WL_TURN_IMAGE" ;;
   RESTORABLE) wl_say "coturn image absent; will restore from $WL_TURN_ARCHIVE" ;;
