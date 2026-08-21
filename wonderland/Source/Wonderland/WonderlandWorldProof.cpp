@@ -324,14 +324,21 @@ namespace WonderlandWorldProof
 				// on the pawn channel: this is the same question the movement
 				// system asks, so its answer is the gameplay answer and not an
 				// approximation of one.
-				const float ProbeUp = 50.0f;
-				const float ProbeDown = 2000.0f;      // 20 m is generous for a plaza
 				// EVERY Dog is ignored, not just the one being traced. A Dog
 				// standing near another would otherwise report "grounded" by
 				// hitting its neighbour's pawn collider — a false pass on the
 				// exact question being asked.
+				//
+				// The probe distances live INSIDE the lambda. As enclosing
+				// `const float` locals they were relying on a subtle rule about
+				// which constants a lambda may read without capturing, and this
+				// module builds with warnings as errors on a machine that is not
+				// reachable from here. Moving them in costs nothing and removes
+				// the question.
 				auto HasGroundUnder = [Live, &DogActors](const AActor* Actor) -> bool
 				{
+					const float ProbeUp = 50.0f;
+					const float ProbeDown = 2000.0f;   // 20 m is generous for a plaza
 					if (Actor == nullptr)
 					{
 						return false;

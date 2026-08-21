@@ -1674,6 +1674,75 @@ else
   ok "the batch no longer claims a collision authority that does not exist"
 fi
 
+echo "== the C++ that has never been compiled here is at least self-consistent =="
+# This module is compiled on a machine this session cannot reach, and a compile
+# error costs the whole queued CPU cycle. These are the cheap checks: balanced
+# delimiters outside comments and strings, every UE type used has its header,
+# and no lambda reads an enclosing local it neither captures nor declares —
+# which the ground-trace lambda was doing with two const floats.
+python3 - "$HERE/../../Source/Wonderland" <<'CPP'
+import io, os, re, sys
+root = sys.argv[1]
+problems = []
+for name in sorted(os.listdir(root)):
+    if not name.endswith((".cpp", ".h")):
+        continue
+    src = io.open(os.path.join(root, name), encoding="utf8").read()
+    code = re.sub(r"//[^\n]*", "", src)
+    code = re.sub(r"/\*.*?\*/", "", code, flags=re.S)
+    code = re.sub(r'TEXT\("(?:[^"\\]|\\.)*"\)', "S", code)
+    code = re.sub(r'"(?:[^"\\]|\\.)*"', "S", code)
+    for o, c in (("{", "}"), ("(", ")"), ("[", "]")):
+        if code.count(o) != code.count(c):
+            problems.append("%s: %s%s unbalanced by %+d"
+                            % (name, o, c, code.count(o) - code.count(c)))
+    for hdr in set(re.findall(r'#include "([^"]+)"', src)):
+        if src.count('#include "%s"' % hdr) > 1:
+            problems.append("%s: duplicate include %s" % (name, hdr))
+    needed = {"APlayerStart": "GameFramework/PlayerStart.h",
+              "UPrimitiveComponent": "Components/PrimitiveComponent.h",
+              "FCollisionQueryParams": "CollisionQueryParams.h",
+              "UMaterialInterface": "Materials/MaterialInterface.h"}
+    for sym, hdr in needed.items():
+        if not re.search(r"\b%s\b" % sym, code):
+            continue
+        # A FORWARD DECLARATION IS ENOUGH for a pointer or TObjectPtr member,
+        # and WonderlandInstancedBatch.h does exactly that. Demanding the
+        # include anyway made this fire on correct code the first time it ran —
+        # and a gate that cries wolf is a gate that gets switched off.
+        if ('#include "%s"' % hdr) in src:
+            continue
+        if re.search(r"^\s*(?:class|struct)\s+%s\s*;" % sym, src, re.M):
+            continue
+        problems.append("%s: uses %s with neither %s nor a forward declaration"
+                        % (name, sym, hdr))
+    # A lambda must not read an enclosing local it neither captures nor declares.
+    for m in re.finditer(r"=\s*\[([^\]]*)\]\s*\(([^)]*)\)[^{]*\{", code):
+        cap = m.group(1)
+        if "&" == cap.strip() or "=" == cap.strip():
+            continue                      # a catch-all capture reads everything
+        depth, i = 0, m.end() - 1
+        while i < len(code):
+            if code[i] == "{": depth += 1
+            elif code[i] == "}":
+                depth -= 1
+                if depth == 0: break
+            i += 1
+        body = code[m.end():i]
+        inner = set(re.findall(r"\b(?:const\s+)?\w[\w:<>*&]*\s+(\w+)\s*[=;)]", body))
+        inner |= set(re.findall(r"\b(\w+)\b", m.group(2)))
+        for name_ in re.findall(r"\b(Probe\w+|Expected\w+)\b", body):
+            if name_ not in cap and name_ not in inner:
+                problems.append("%s: lambda reads %s without capturing or declaring it"
+                                % (name, name_))
+sys.exit(0 if not problems else (print(problems) or 1))
+CPP
+if [ "$?" = "0" ]; then
+  ok "the Wonderland C++ balances, includes what it uses, and captures what its lambdas read"
+else
+  bad "the Wonderland C++ has a self-consistency problem (see above)"
+fi
+
 echo "== the Dog stands on its arcane circle =="
 # The founder's art bible calls the violet circle beneath the Dog "the single
 # most identifying element of the shot". Measured off the generator, the rings
