@@ -361,6 +361,13 @@ grep -q 'if texs.get("%s_a" % fam) is not None:' "$GEN"
 check $? "the near-white tint is applied ONLY when an albedo map actually bound"
 grep -q "TEXTURE MISSING for" "$GEN"
 check $? "...and a missing map says so instead of silently whitening the surface"
+# AND WHEN A MAP DOES BIND, the tint must MULTIPLY the palette rather than
+# replace it. The generated maps are neutral detail — grain, crazing, veining —
+# so a near-white tint over one throws the hue away. Measured live: MI_stone and
+# MI_spire at (1,1,1) while MI_rose and MI_gold, whose maps were missing, were
+# the only coloured things in the frame.
+grep -q "_base\[0\] \* tint\[0\]" "$GEN"
+check $? "a bound map MULTIPLIES the palette colour instead of replacing it"
 
 echo
 echo "-- the visual acceptance target --"

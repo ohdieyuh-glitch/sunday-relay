@@ -1203,8 +1203,29 @@ def build_material_library(texs=None):
                 # the palette colour was replaced by a near-white tint over no
                 # texture at all.
                 if texs.get("%s_a" % fam) is not None:
+                    # THE TINT MULTIPLIES THE PALETTE, IT DOES NOT REPLACE IT.
+                    #
+                    # "the map carries the colour now" is only true of a COLOURED
+                    # map. These are procedurally generated DETAIL maps — grain,
+                    # crazing, ripple, petal veining — and they are essentially
+                    # neutral. Setting BaseColor to a near-white tint over a
+                    # neutral map therefore threw the palette away and rendered
+                    # the surface grey.
+                    #
+                    # Measured on the live L4: MI_stone and MI_spire sat at
+                    # (1.00,1.00,1.00) — the bulk of Wonderland's architecture —
+                    # while MI_rose and MI_gold, whose maps happened to be
+                    # MISSING, kept their palette and were the only coloured
+                    # things in the frame. That is the whole grey world.
+                    #
+                    # So the map supplies detail and the palette supplies hue,
+                    # which is what a tint is for.
+                    _base = (MATERIAL_SPEC.get(nm) or ((1.0, 1.0, 1.0),))[0]
                     mel.set_material_instance_vector_parameter_value(
-                        mi, "BaseColor", unreal.LinearColor(tint[0], tint[1], tint[2], 1.0))
+                        mi, "BaseColor",
+                        unreal.LinearColor(_base[0] * tint[0],
+                                           _base[1] * tint[1],
+                                           _base[2] * tint[2], 1.0))
                 else:
                     unreal.log_warning(
                         "TEXTURE MISSING for %s (family %s): keeping the palette "
