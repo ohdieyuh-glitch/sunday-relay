@@ -1,5 +1,37 @@
 # GPU-ready queue
 
+> **2026-08-21 — READ THIS FIRST, THE STATE BELOW IS OLDER THAN IT LOOKS.**
+>
+> The bring-up is **closed**: WonderlandHub builds, cooks, packages, launches
+> on an **NVIDIA L4** with UE 5.8 + PixelStreaming2 and streams the correct
+> world. Two defects got it there — the package had no map pinned, and had no
+> streamer in it. Do not reopen that work.
+>
+> What changed since, and what the next GPU session should actually do:
+>
+> 1. **The launcher passed no `-ExecCmds` at all.** Every Lightning frame so
+>    far rendered at the engine's DEFAULT exposure, while a comment in
+>    `run-stream.sh` said the AutoExposure bias was being applied from the LOOK
+>    table. Settings now come from `wonderland/rendering/profiles.json` via
+>    `WL_RENDER_PROFILE` (default `BALANCED`).
+> 2. **Probe the engine before believing any setting:**
+>    `bash wonderland/rendering/probe-cvars.sh`. Unreal ignores an unknown CVar
+>    without failing, so `render-profile.py --strict` refuses anything the
+>    probe says is absent, and `bench.sh` will not measure without it.
+> 3. **Then measure, don't guess:**
+>    `bash wonderland/rendering/bench.sh --label before --profile BALANCED`,
+>    change one thing, run it again with a new label, and
+>    `python3 wonderland/rendering/compare.py before after`.
+> 4. **Run once, for the draw-call question:**
+>    `r.MeshDrawCommands.LogDynamicInstancingStats 1`. The world is 33,028
+>    components over 116 (mesh, material) pairs; UE5 auto-instancing is on by
+>    default and has probably already collapsed them. If it has, draw calls are
+>    solved and the remaining cost is per-primitive.
+> 5. The Relay Dogs exist now. They did not before — see the pre-cook gates.
+>
+> The p23 comparison advice below still stands and is still the cheapest way to
+> localise a visual regression.
+
 Everything on `relay/wonderland-ca-fixes` after commit `a6bb099` (the sky pass)
 was authored **without a renderer**. The last real streamed frame is `p23`,
 captured from the California host before it stopped. Since then: **55 commits,
@@ -40,13 +72,27 @@ cook until the free checks pass.
 cd wonderland/infra/build
 python3 verify-look-table.py        # LOOK table wired + overrides refused correctly
 python3 verify-docs.py              # these docs still describe code that exists
-python3 verify-dog-proxy.py         # the preview's Dog still matches the C++ pawn
+python3 verify-generator-classes.py # every /Script/Wonderland.X the generator spawns EXISTS
+python3 verify-dog-proxy.py         # the preview's Dog still matches the shared C++ table
 python3 verify-generator-dryrun.py  # the generator EXECUTES; counts actors; surfaces warnings
 python3 verify-hero-composition.py /tmp/hero.png   # per-object frame coverage
 python3 verify-hero-lighting.py     /tmp/lit.png   # CPU value structure
+python3 verify-visual-target.py     # the frame against WorldDesign/visual-target.json
+cd ../../rendering && bash rendering.test.sh       # profiles, probe parser, bench, report
 ```
 
-All six must exit 0. The dry run is the one that has actually saved a cook:
+**`verify-generator-classes.py` is new and it is the cheap one to never skip.**
+It caught the worst defect this project has had: the generator had been
+spawning `WonderlandStrollingDog`, a class nobody ever wrote, and
+`unreal.load_class` returns `None` rather than raising — so the hero Relay Dog
+and seven companions were absent from every build ever made, silently, and the
+dry run could not see it because its stub makes the lookup succeed.
+
+`verify-visual-target.py` will currently report **4 criteria not met**, all
+palette, and that is the truth rather than a regression. See section A.
+
+All of them must exit 0 except verify-visual-target.py, whose misses are the
+open art work. The dry run is the one that has actually saved a cook:
 it caught an art pass silently deleting another pass's kits. `verify-dog-proxy.py`
 is the one that caught the worst error of the sprint — see below.
 

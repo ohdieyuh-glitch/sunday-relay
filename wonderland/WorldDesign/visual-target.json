@@ -52,9 +52,9 @@
     },
     "sky_present": {
       "metric": "coverage.sky_pct",
-      "min": 3.0,
+      "min": 8.0,
       "max": 20.0,
-      "why": "The reference names a bright lavender sky as an element. Zero sky means the shot is roofed over by canopy; a third of the frame as sky means the city is missing."
+      "why": "The reference names a bright lavender sky with soft cloud as an element. Measured at 4.1%, and GPU-READY-QUEUE.md already recorded that as a standing problem — 'four per cent is not a sky' — with the top third of the frame 89.4% covered, roofed by the framing tree's canopy and the golden gate. This threshold was originally set to 3.0, which PASSED the very frame another document in this repo calls broken. Two artifacts disagreeing about the same measurement is how a known issue becomes an unknown one, so the gate now agrees with the queue."
     },
     "material_diversity": {
       "metric": "distinct_materials_visible",
