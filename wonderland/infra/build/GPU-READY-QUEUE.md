@@ -575,3 +575,47 @@ Offline work that remains, in the order I would take it:
   newer in the foundation worktree. This needs a real three-way merge and is
   flagged rather than guessed at, because the only configuration known to build
   Wonderland is the one on the Vast disk.
+
+---
+
+## 2026-08-22 — THE BACKDROP IS PRESENT AND STILL NOT VISIBLE. Read this first.
+
+Everything structural is now settled and gated. The shell imports at exactly the
+right size, exactly the right way up, at the right origin, double-sided, and
+genuinely unlit (`MI_Unlit_Opaque_DS -> M_Unlit`, `MSM_UNLIT`, measured). The
+orientation gate agrees with the engine to the centimetre on all three axes. The
+artistic yaw is 180 and that was decided from a rendered frame.
+
+It still does not appear in a streamed frame, and here is exactly what is known:
+
+| Capture | Sky-band RGB | What it shows |
+|---|---|---|
+| defaults | 18, 46, 78 | dark blue — this is FOG, not Marble |
+| `unlit_gain` 6 | 20, 48, 82 | a 6x gain moved the pixels 5% |
+| `ShowFlag.Fog 0` | 3, 0, 18 | near black: behind the fog, Marble contributes ~0.01 |
+| `ShowFlag.PostProcessing 0` | — | the castle city is PLAINLY VISIBLE, authored world blows out |
+
+Read those four rows together. With post-processing off the shell renders
+correctly, so it is not occluded, not missing, not mis-placed and not being
+re-lit — each of which was suspected and each of which is now ruled out by
+measurement rather than by argument. With post-processing on it is crushed.
+
+The blue at the top of every frame is FOG. That matters because it is what I was
+measuring when the 6x gain "did nothing": the gain was applied and read back
+(the importer confirms by readback now, not by the setter's return value, which
+lies), and it moved fog by 5% because fog is what was in the sample.
+
+WHAT IS NOT YET KNOWN: how large the gain needs to be. Going from ~0.01 to a
+daylight sky is a very large multiplier, and the shell is a large part of the
+frame so it feeds back into auto-exposure. Do NOT guess it in single steps.
+
+BEFORE ITERATING, MAKE ITERATION CHEAP. `unlit_gain` is applied at IMPORT, so
+every candidate value currently costs a full rebuild — twelve minutes to move
+one number. Either expose the gain as a runtime console parameter, or measure
+the required multiplier from a `ShowFlag.PostProcessing 0` capture and a
+defaults capture of the same frame and compute it once.
+
+Also open, found by the browser inspector and unrelated to brightness: the
+VISUAL AND COLLIDER MESHES DO NOT REGISTER. Marble's collider export carries no
+node rotation while the visual mesh does, so the two need different axis
+corrections.
