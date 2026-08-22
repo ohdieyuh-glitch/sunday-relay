@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""Where a Marble mesh lands in Unreal, asserted rather than assumed.
+
+The importer's own scale gate compares SORTED extents on purpose, so that an
+axis swap is not misreported as a size error. The cost of that choice is that
+it cannot see an axis swap AT ALL, and it cannot see a 180-degree flip, because
+neither changes any extent. Both of those have shipped here. These tests make
+the comparison the gate gives up: component by component, in Unreal axis order.
+"""
+import json
+import math
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import placement  # noqa: E402
+
+PASS = [0]
+FAIL = []
+
+
+def check(name, ok, detail=""):
+    if ok:
+        PASS[0] += 1
+        print("  ok   %s" % name)
+    else:
+        FAIL.append(name)
+        print("  FAIL %s%s" % (name, ("\n         " + detail) if detail else ""))
+
+
+def close(a, b, tol=1e-6):
+    return abs(a - b) <= tol * max(1.0, abs(a), abs(b))
+
+
+def load(world="royal-garden-backdrop"):
+    with open(os.path.join(HERE, "worlds", world, "manifest.json")) as fh:
+        return json.load(fh)
+
+
+def full_chain(manifest):
+    node = placement.node_rotation(manifest)
+    place = placement.placement_from(manifest)
+
+    def go(pt):
+        g = tuple(node[i][0] * pt[0] + node[i][1] * pt[1] + node[i][2] * pt[2]
+                  for i in range(3))
+        return place(g)
+    return go
+
+
+print("== the chain reproduces what the engine measured ==")
+m = load()
+pred = placement.predicted_extent(m)
+exp = m["transform"]["expected_unreal_extent_cm"]
+check("predicted extent matches expected_unreal_extent_cm component by component",
+      all(close(p, e, 1e-5) for p, e in zip(pred, exp)),
+      "predicted %s expected %s" % ([round(v, 1) for v in pred], exp))
+check("...and NOT merely as a sorted multiset (the check the gate can make)",
+      all(close(p, e, 1e-5) for p, e in zip(sorted(pred), sorted(exp))))
+
+print("== the shell is the right way up ==")
+go = full_chain(m)
+origin = go((0.0, 0.0, 0.0))
+up = go((0.0, 0.0, 1.0))
+check("the mesh's own up axis (raw +Z) maps to Unreal +Z",
+      (up[2] - origin[2]) > 0,
+      "raw +Z moved %+.1f cm in UE Z" % (up[2] - origin[2]))
+check("...and carries the full scale, so up is not a rounding artefact",
+      close(up[2] - origin[2], m["transform"]["unreal_backdrop_scale"] * 100.0, 1e-6))
+
+print("== a flip is invisible to an extent check, so assert it directly ==")
+flipped = json.loads(json.dumps(m))
+flipped["transform"]["axis_correction_deg"] = [0.0, 0.0, 0.0]
+check("dropping the axis correction leaves every extent identical",
+      all(close(a, b, 1e-5) for a, b in zip(sorted(placement.predicted_extent(flipped)),
+                                            sorted(pred))))
+check("...while actually putting the world upside down",
+      (full_chain(flipped)((0.0, 0.0, 1.0))[2] - full_chain(flipped)((0.0, 0.0, 0.0))[2]) < 0,
+      "this is the bug that shipped, and no extent gate can see it")
+
+print("== the origin is the arrival camera, which is what makes a backdrop free ==")
+check("the mesh origin lands exactly on unreal_origin_cm",
+      all(close(o, e, 1e-9) for o, e in zip(origin, m["transform"]["unreal_origin_cm"])),
+      "origin %s" % ([round(v, 3) for v in origin],))
+scaled = json.loads(json.dumps(m))
+scaled["transform"]["unreal_backdrop_scale"] = m["transform"]["unreal_backdrop_scale"] * 3.0
+big = full_chain(scaled)
+d1 = [go((1.0, 2.0, 3.0))[i] - origin[i] for i in range(3)]
+d3 = [big((1.0, 2.0, 3.0))[i] - origin[i] for i in range(3)]
+cos = (sum(a * b for a, b in zip(d1, d3))
+       / (math.sqrt(sum(a * a for a in d1)) * math.sqrt(sum(b * b for b in d3))))
+check("every ray from that origin is unchanged by the backdrop scale",
+      close(cos, 1.0, 1e-9),
+      "a backdrop can only be scaled for free if scaling moves nothing across the frame")
+
+print("== the scale is the actor scale, not that times a hundred ==")
+check("100 Unreal units per glTF unit, folded in once",
+      close(placement.UNITS_PER_GLTF_UNIT, 100.0))
+place = placement.placement_from(m)
+check("one glTF unit becomes actor_scale * 100 cm",
+      close(place.scale, m["transform"]["unreal_backdrop_scale"] * 100.0))
+hundred = json.loads(json.dumps(m))
+hundred["transform"]["unreal_backdrop_scale"] = m["transform"]["unreal_backdrop_scale"] * 100.0
+check("the 100x manifest that shipped predicts the 123-kilometre shell that was measured",
+      close(placement.predicted_extent(hundred)[0], 12303954.0, 1e-4),
+      "predicted %.0f cm" % placement.predicted_extent(hundred)[0])
+
+print("== a backdrop takes no ground offset; a placed world does ==")
+check("backdrop mode applies no z offset",
+      close(placement.placement_from(m, placement.BACKDROP).z_offset, 0.0))
+metric = placement.placement_from(m, "metric")
+check("metric mode raises the mesh by the ground plane offset",
+      close(metric.z_offset, m["transform"]["ground_plane_offset_m"] * 100.0),
+      "a positive offset means the floor is BELOW the origin")
+check("...and metric mode uses the uniform scale, not the backdrop scale",
+      close(metric.scale, m["transform"]["unreal_uniform_scale"] * 100.0))
+
+print("== the artistic yaw composes on top, and does not disturb the correction ==")
+yawed = json.loads(json.dumps(m))
+yawed["transform"]["unreal_rotation_deg"] = [0.0, 0.0, 180.0]
+ry = full_chain(yawed)
+o2 = ry((0.0, 0.0, 0.0))
+check("a 180 yaw still leaves the world the right way up",
+      (ry((0.0, 0.0, 1.0))[2] - o2[2]) > 0)
+check("...and sends forward geometry behind the camera",
+      close(ry((0.0, 1.0, 0.0))[1] - o2[1], -(go((0.0, 1.0, 0.0))[1] - origin[1]), 1e-6))
+check("...changing no extent, which is exactly why it needs its own test",
+      all(close(a, b, 1e-5) for a, b in zip(sorted(placement.predicted_extent(yawed)),
+                                            sorted(pred))))
+
+print("== rotation is Unreal's, not an arbitrary order ==")
+check("identity", all(close(placement.rotation(0, 0, 0)[i][j], 1.0 if i == j else 0.0)
+                      for i in range(3) for j in range(3)))
+roll = placement.rotation(180, 0, 0)
+check("a 180 roll maps (x,y,z) to (x,-y,-z)",
+      close(roll[0][0], 1.0) and close(roll[1][1], -1.0) and close(roll[2][2], -1.0, 1e-9))
+yaw90 = placement.rotation(0, 0, 90)
+check("a +90 yaw sends +X to +Y, which is left-handed Unreal",
+      close(yaw90[0][0], 0.0, 1e-9) and close(yaw90[1][0], 1.0))
+
+print("== the node rotation belongs to the mesh, and omitting it swaps two axes ==")
+check("this export's node carries R_x(+90)",
+      close(placement.node_rotation(m)[2][1], 1.0, 1e-6)
+      and close(placement.node_rotation(m)[1][2], -1.0, 1e-6),
+      "R_x(+90) sends +Z to -Y, which is why a correction is needed at all")
+without = json.loads(json.dumps(m))
+without["source_mesh"].pop("node_rotation_quat_xyzw", None)
+bad = placement.predicted_extent(without)
+check("dropping it swaps Y and Z in the prediction",
+      close(bad[1], pred[2], 1e-5) and close(bad[2], pred[1], 1e-5),
+      "predicted %s" % ([round(v, 1) for v in bad],))
+check("...which a sorted comparison would have called correct",
+      all(close(a, b, 1e-5) for a, b in zip(sorted(bad), sorted(pred))))
+
+print("== a mesh with no recorded node rotation is not silently mangled ==")
+check("absent quaternion means identity, not a guess",
+      all(close(placement.node_rotation({})[i][j], 1.0 if i == j else 0.0)
+          for i in range(3) for j in range(3)))
+
+print("\npassed %d, failed %d" % (PASS[0], len(FAIL)))
+for f in FAIL:
+    print("  FAILED: %s" % f)
+sys.exit(1 if FAIL else 0)

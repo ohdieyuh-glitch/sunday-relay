@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Every offline Marble check, in one command. No network, no credits, no engine.
 #
-# There are four suites because there are four different things to be wrong
+# There are five suites because there are five different things to be wrong
 # about: the vendor contract (marble_offline_test), what reaches the level
-# (import_offline_test), what must never reach a paid generation
-# (dog_separation_test), and what the paid generations actually cost
-# (ledger_test). Running them separately is how one of them gets forgotten.
+# (import_offline_test), WHERE it lands once it is there (placement_test), what
+# must never reach a paid generation (dog_separation_test), and what the paid
+# generations actually cost (ledger_test). Running them separately is how one of
+# them gets forgotten.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 RC=0
-for suite in marble_offline_test.py import_offline_test.py dog_separation_test.py ledger_test.py; do
+for suite in marble_offline_test.py import_offline_test.py placement_test.py \
+             dog_separation_test.py ledger_test.py; do
   printf '\n=== %s ===\n' "$suite"
   if ! python3 "$HERE/$suite"; then
     RC=1

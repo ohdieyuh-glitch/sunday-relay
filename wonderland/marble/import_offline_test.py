@@ -54,6 +54,7 @@ class Recorder(object):
         # the order distinguishes that from a working run.
         self.events = []        # ("open"|"import"|"spawn"|"save", detail)
         self.bounds_extent = (5000.0, 5000.0, 1200.0)   # HALF extent, as UE reports it
+        self.bounds_centre = (0.0, 0.0, 0.0)            # world centre, the flip tell
         self.material_two_sided = False   # what the glTF import produced
         self.material_override_on = True  # is base_property_overrides authoritative
         self.saved_materials = []
@@ -117,7 +118,7 @@ def build_stub():
         def set_actor_hidden_in_game(self, v): self.hidden = v
         def get_component_by_class(self, _cls): return self.component
         def get_actor_bounds(self, _only_colliding):
-            return (Vector(0, 0, 0), Vector(*REC.bounds_extent))
+            return (Vector(*REC.bounds_centre), Vector(*REC.bounds_extent))
 
     class AssetImportTask(object):
         def __init__(self): self.props = {"imported_object_paths": []}
@@ -878,6 +879,71 @@ def main():
                      extra=["--promote-marble-collision-i-have-evidence"])
         check(any("REFUSED" in m and "evidence" in m for m in REC.logs),
               "promoting Marble geometry to gameplay collision is REFUSED, not implemented")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+    # ---- the flip that no extent check can see --------------------------
+    print("\n== a flipped layer is REFUSED before the map is saved ==")
+    root = tempfile.mkdtemp(prefix="marble-flip-")
+    try:
+        import placement as _pl
+
+        def bounded_world(slug, correction):
+            make_world(root, slug, hq=True, backdrop=True)
+            path = os.path.join(root, slug, "manifest.json")
+            man = json.load(io.open(path, encoding="utf8"))
+            man["source_mesh"].update({
+                "min": [-49.38, -72.215, -0.941],
+                "max": [47.599, 75.726, 80.492],
+                "node_rotation_quat_xyzw": [0.7071068, 0.0, 0.0, 0.7071068],
+            })
+            man["transform"].update({
+                "axis_correction_deg": correction,
+                "unreal_origin_cm": [0.0, -1150.0, 430.0],
+                "unreal_backdrop_scale": 12.687203407287598,
+                "unreal_uniform_scale": 2.1145339012145996,
+                "placement_mode": "backdrop_at_camera",
+                "expected_unreal_extent_cm": [123039.2, 187695.7, 103315.7],
+            })
+            io.open(path, "w", encoding="utf8").write(json.dumps(man))
+            return man
+
+        # Upright: the engine measures the centre where the manifest predicts.
+        man = bounded_world("upright", [180.0, 0.0, 0.0])
+        pred = _pl.predicted_centre_offset_cm(man)
+        org = man["transform"]["unreal_origin_cm"]
+        centre = tuple(org[i] + pred[i] for i in range(3))
+        half = tuple(v / 2.0 for v in _pl.predicted_extent(man))
+        run_importer("upright", root, bounds_centre=centre, bounds_extent=half)
+        check(any("orientation check" in m for m in REC.logs),
+              "the orientation gate RUNS and says so")
+        check(any("MARBLE_LEVEL_SAVED=1" in m for m in REC.logs),
+              "…and an upright layer reaches the save")
+
+        # Flipped: identical extents, opposite centre. This is the real bug.
+        man = bounded_world("flipped", [180.0, 0.0, 0.0])
+        flipped_centre = tuple(org[i] - pred[i] for i in range(3))
+        raised = None
+        try:
+            run_importer("flipped", root, bounds_centre=flipped_centre, bounds_extent=half)
+        except SystemExit as exc:
+            raised = str(exc)
+        check(raised is not None and "FLIPPED" in raised,
+              "an upside-down layer is REFUSED")
+        check(raised is not None and "axis_correction_deg" in raised,
+              "…and the refusal names the field that fixes it")
+        check(raised is not None and "has NOT been saved" in raised,
+              "…and says nothing was shipped")
+        check(not any("MARBLE_LEVEL_SAVED=1" in m for m in REC.logs),
+              "…and the map really was not saved")
+        check(abs(half[0] * 2 - man["transform"]["expected_unreal_extent_cm"][0]) < 1.0,
+              "…while its extents were EXACTLY right, which is why this needs its own gate")
+
+        # No recorded bounds: fail open, but loudly.
+        make_world(root, "nobounds", hq=True, backdrop=True)
+        run_importer("nobounds", root)
+        check(any("orientation" in m and "NOT checked" in m for m in REC.logs),
+              "a manifest with no source bounds says the orientation gate did not run")
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

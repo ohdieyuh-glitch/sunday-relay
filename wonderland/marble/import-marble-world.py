@@ -226,6 +226,65 @@ def place(asset_path, mesh, location, rotation, scale, label, tags, visible=True
 # check, and the unit errors this project actually makes are factors of 100.
 SCALE_BAND = (0.25, 4.0)
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import placement as _placement
+except Exception as _pexc:  # pragma: no cover - only if the file is missing
+    _placement = None
+    log("placement.py unavailable (%s) — the ORIENTATION gate will not run" % _pexc)
+
+
+def check_orientation(centre_cm, transform, manifest):
+    """Refuse a layer that came in FLIPPED, which no extent check can see.
+
+    check_scale below compares SORTED extents on purpose, so that an axis swap
+    is not misreported as a size error. The price of that is that it cannot see
+    orientation at all, and a 180-degree flip changes no extent whatsoever. A
+    flipped shell shipped exactly once that way: one actor placed, right size,
+    level saved, clean cook, every gate green, and a kilometre of castle city
+    hanging underneath the plaza.
+
+    The signed quantity that does see it is where the geometry's bounding-box
+    centre sits relative to the actor origin. This mesh's own accessor bounds
+    run z = -0.94 .. +80.49 — it is overwhelmingly above its pivot, because the
+    pivot is the reconstruction viewpoint standing on the floor. Land it upside
+    down and that offset points down instead. The manifest already carries
+    everything needed to predict it, so this costs nothing but a comparison.
+    """
+    if _placement is None:
+        return
+    try:
+        predicted = _placement.predicted_centre_offset_cm(manifest)
+    except Exception as exc:
+        log("could not predict the centre offset (%s) — orientation NOT checked" % exc)
+        return
+    origin = [float(v) for v in transform.get("unreal_origin_cm", [0.0, 0.0, 0.0])]
+    measured = [centre_cm[i] - origin[i] for i in range(3)]
+    log("orientation check: centre offset measured %s cm vs predicted %s cm"
+        % ([round(v) for v in measured], [round(v) for v in predicted]))
+    scale = max(abs(v) for v in predicted) or 1.0
+    wrong = [i for i in range(3)
+             if abs(predicted[i]) > 0.05 * scale
+             and measured[i] * predicted[i] < 0
+             and abs(measured[i]) > 0.05 * scale]
+    if not wrong:
+        return
+    axis = "XYZ"
+    raise SystemExit(
+        "the imported layer is FLIPPED on %s. The geometry's centre should sit "
+        "%s cm from the actor origin and it sits %s cm.\n"
+        "This is the failure mode that has no symptom until a person looks at a "
+        "frame on metered GPU time: every extent is identical either way, so the "
+        "scale gate passes. Check transform.axis_correction_deg against the GLB's "
+        "node rotation — R_x(+90) sends +Z to MINUS Y, so a node carrying it "
+        "CREATES a Y-down convention rather than cancelling one, and the "
+        "correction that undoes it is a 180-degree ROLL.\n"
+        "The actors are in the level but the map has NOT been saved, so nothing "
+        "was shipped."
+        % ("".join(axis[i] for i in wrong),
+           [round(v) for v in predicted], [round(v) for v in measured]))
+
+
 
 def check_scale(measured, transform):
     """Refuse a backdrop that came in at the wrong ORDER OF MAGNITUDE.
@@ -693,6 +752,9 @@ def main(argv=None):
         measured = [extent.x * 2, extent.y * 2, extent.z * 2]
         log("bounds %.0f x %.0f x %.0f cm" % tuple(measured))
         bounds_block["measured_extent_cm"] = [round(v, 1) for v in measured]
+        bounds_block["measured_centre_cm"] = [round(centre.x, 1), round(centre.y, 1),
+                                              round(centre.z, 1)]
+        check_orientation([centre.x, centre.y, centre.z], transform, manifest)
         check_scale(measured, transform)
     except Exception as exc:
         log("could not measure bounds (%s) — the scale gate did NOT run" % exc)
