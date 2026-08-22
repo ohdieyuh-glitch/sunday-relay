@@ -429,6 +429,18 @@ if [ -n "$h_man2" ] && [ "$h_man2" != "$h_man" ]; then
 else
   bad "manifest contents are not hashed, only their existence"
 fi
+# The IMPORTER is a build input too, and lives one directory over from the
+# generator — which is exactly why the first version of this list missed it.
+mkdir -p "$TMP/hash/marble"
+printf '# stub importer\n' > "$TMP/hash/marble/import-marble-world.py"
+rm -rf "$TMP/out"; h_imp="$(hash_of "$(run_build "$TMP/hash")")"
+printf '# stub importer, edited\n' > "$TMP/hash/marble/import-marble-world.py"
+rm -rf "$TMP/out"; h_imp2="$(hash_of "$(run_build "$TMP/hash")")"
+if [ -n "$h_imp2" ] && [ "$h_imp" != "$h_imp2" ]; then
+  ok "…and editing import-marble-world.py changes the hash"
+else
+  bad "the Marble importer is outside the build hash"
+fi
 rm -rf "$TMP/hash/marble"
 # "unset" and "0" must be different inputs: unset now means DERIVE.
 rm -rf "$TMP/out"; h_unset="$(hash_of "$(run_build "$TMP/hash")")"

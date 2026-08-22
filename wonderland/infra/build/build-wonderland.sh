@@ -167,9 +167,17 @@ OPTIONAL_INPUTS=("$CFG_DIR")
 # resolution that still works when PROJECT_ROOT is a test fixture.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MARBLE_WORLDS="$(cd "$SCRIPT_DIR/../../marble/worlds" 2>/dev/null && pwd || true)"
+MARBLE_DIR="$(cd "$SCRIPT_DIR/../../marble" 2>/dev/null && pwd || true)"
 extra_input_files() {
   ( set +o pipefail
     find "$SCRIPT_DIR" -maxdepth 1 -type f -name '*.py' -print0 2>/dev/null
+    # The MARBLE scripts too. import-marble-world.py places the shell, sets its
+    # material and saves the level — it is as much a build input as the
+    # generator is, and it lives one directory over, which is the entire reason
+    # the first version of this list missed it. A change to it built, reported
+    # BUILT AND PACKAGED against a new SHA, and reused the previous package.
+    [ -n "$MARBLE_DIR" ] && [ -d "$MARBLE_DIR" ] \
+      && find "$MARBLE_DIR" -maxdepth 1 -type f -name '*.py' -print0 2>/dev/null
     [ -n "$MARBLE_WORLDS" ] && [ -d "$MARBLE_WORLDS" ] \
       && find "$MARBLE_WORLDS" -type f -name 'manifest.json' -print0 2>/dev/null
     true )
