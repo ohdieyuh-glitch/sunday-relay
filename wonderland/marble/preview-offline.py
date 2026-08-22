@@ -390,8 +390,17 @@ class Equirect(object):
 
 
 def orientation_report(cam, world, tris):
-    """Numbers behind the picture: where the mass of the shell sits relative to
-    the camera the world opens on."""
+    """Where the shell's SKYLINE is, and whether the hero camera can see it.
+
+    The question this exists to answer is not "is the castle city ahead" in the
+    abstract -- it is whether the 1,580 credits of castle city land inside the
+    frame the world opens on. Those are different questions, and a circular
+    mean answers neither: the towers here ring the viewpoint in two clusters,
+    and the mean of two clusters points at the gap between them.
+
+    So this reports the frustum directly, in both axes. Elevation is the one
+    that gets forgotten, and it is the one that decides this frame.
+    """
     centroid = world[tris].mean(axis=1)
     rel = centroid - cam.pos
     dist = np.linalg.norm(rel, axis=1)
@@ -400,36 +409,63 @@ def orientation_report(cam, world, tris):
     right = np.cross(np.array([0.0, 0.0, 1.0]), fwd)
     az = np.degrees(np.arctan2(rel @ right, rel @ fwd))
     el = np.degrees(np.arcsin(np.clip(rel[:, 2] / np.maximum(dist, 1e-6), -1.0, 1.0)))
-    ahead = float((np.abs(az) <= 90.0).mean())
+
+    half_h = math.degrees(math.atan(cam.tan_h))
+    half_v = math.degrees(math.atan(cam.tan_v))
+    pitch = math.degrees(math.asin(max(-1.0, min(1.0, cam.forward[2]))))
+    lo, hi = pitch - half_v, pitch + half_v
+
     far = dist > np.percentile(dist, 75)
-    high = el > 5.0
-    skyline = far & high
+    sky = far & (el > 5.0)
+    in_az = np.abs(az) <= half_h
+    in_el = (el >= lo) & (el <= hi)
+
     lines = [
-        "TRIANGLES                 %d" % len(tris),
-        "ahead of the camera       %.1f%%   behind %.1f%%" % (ahead * 100.0, (1 - ahead) * 100.0),
-        "inside the %.0f-deg frustum %.1f%%"
-        % (2 * math.degrees(math.atan(cam.tan_h)) if hasattr(cam, "tan_h") else 360.0,
-           float((np.abs(az) <= math.degrees(math.atan(cam.tan_h))).mean() * 100.0)
-           if hasattr(cam, "tan_h") else 100.0),
-        "elevation p50 %+.1f deg   p95 %+.1f deg   max %+.1f deg"
-        % (np.percentile(el, 50), np.percentile(el, 95), el.max()),
+        "TRIANGLES                  %d" % len(tris),
+        "camera pitch               %+.1f deg, frame covers elevation %+.1f .. %+.1f deg"
+        % (pitch, lo, hi),
+        "                           and azimuth %+.1f .. %+.1f deg" % (-half_h, half_h),
+        "geometry elevation         p50 %+.1f  p90 %+.1f  p99 %+.1f deg"
+        % (np.percentile(el, 50), np.percentile(el, 90), np.percentile(el, 99)),
+        "SKYLINE (far + above the horizon): %d triangles, %.1f%% of the mesh"
+        % (int(sky.sum()), 100.0 * sky.mean()),
     ]
-    if skyline.any():
-        sky_az = az[skyline]
-        mean_az = math.degrees(math.atan2(np.sin(np.radians(sky_az)).mean(),
-                                          np.cos(np.radians(sky_az)).mean()))
-        lines.append("SKYLINE (far + above horizon): %d tris, mean azimuth %+.1f deg from the "
-                     "camera's forward" % (int(skyline.sum()), mean_az))
-        lines.append("  -> the towers are %s"
-                     % ("AHEAD of HeroCam0 -- no artistic yaw is needed"
-                        if abs(mean_az) <= 90.0 else
-                        "BEHIND HeroCam0 -- set transform.unreal_rotation_deg = [0,0,180]"))
+    if sky.any():
+        lines += [
+            "  of the skyline, inside the frame's AZIMUTH   %.1f%%"
+            % (100.0 * in_az[sky].mean()),
+            "  of the skyline, inside the frame's ELEVATION %.1f%%"
+            % (100.0 * in_el[sky].mean()),
+            "  ACTUALLY IN FRAME                            %.1f%%"
+            % (100.0 * (in_az & in_el)[sky].mean()),
+            "  skyline elevation p50 %+.1f  p90 %+.1f deg"
+            % (np.percentile(el[sky], 50), np.percentile(el[sky], 90)),
+        ]
+        # Which yaw would put the most skyline in frame. Reported as a fact
+        # about the mesh, not applied: the hero camera also frames authored
+        # gameplay geometry, and that is not this script's call to make.
+        best, scores = None, []
+        for yaw in range(-180, 180, 15):
+            shifted = (az[sky] - yaw + 180.0) % 360.0 - 180.0
+            score = float(((np.abs(shifted) <= half_h) & in_el[sky]).mean())
+            scores.append((score, yaw))
+            if best is None or score > best[0]:
+                best = (score, yaw)
+        lines.append("  best artistic yaw for the skyline: %+d deg -> %.1f%% in frame "
+                     "(currently %.1f%%)"
+                     % (best[1], 100.0 * best[0], 100.0 * (in_az & in_el)[sky].mean()))
+        if best[0] < 0.10:
+            lines.append("  NO yaw brings the skyline into this frame. The limit is "
+                         "ELEVATION, not rotation -- the camera is pitched %+.1f deg "
+                         "and the towers sit around %+.1f deg."
+                         % (pitch, np.percentile(el[sky], 50)))
     hist, edges = np.histogram(az, bins=12, range=(-180, 180))
-    lines.append("azimuth histogram (12 x 30 deg, from forward):")
+    lines.append("azimuth histogram of ALL geometry (12 x 30 deg, from forward):")
     peak = hist.max() or 1
-    for h, lo in zip(hist, edges[:-1]):
+    for h, edge in zip(hist, edges[:-1]):
         lines.append("  %+4.0f..%+4.0f  %-30s %5.1f%%"
-                     % (lo, lo + 30, "#" * int(round(30.0 * h / peak)), 100.0 * h / len(tris)))
+                     % (edge, edge + 30, "#" * int(round(30.0 * h / peak)),
+                        100.0 * h / len(tris)))
     return "\n".join(lines)
 
 
