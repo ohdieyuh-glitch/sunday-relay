@@ -482,7 +482,9 @@ check $? "the shell's reach is read from the manifest, and is None when unknown"
 python3 - "$PB" <<'SAFE'
 import io, re, sys
 src = io.open(sys.argv[1] + "/generate-hub-level.py", encoding="utf8").read()
-block = src[src.index("_MARBLE_BACKDROP = os.environ.get"):]
+# The switch is now DERIVED from the manifest when the variable is unset, so
+# the anchor is the derivation, not the old os.environ.get line.
+block = src[src.index("_backdrop_env = os.environ.get"):]
 block = block[:2000]
 if "_shell is None" not in block or "KEEPING every skyline ring" not in block:
     print("no fail-safe branch for an unreadable manifest")
@@ -673,12 +675,20 @@ check $? "the Marble backdrop mode exists"
 python3 - "$GEN" <<'BACKDROP'
 import io, sys
 src = io.open(sys.argv[1], encoding="utf8").read()
-i = src.index('_MARBLE_BACKDROP = os.environ.get("WONDERLAND_MARBLE_BACKDROP"')
-line = src[i:src.index("\n", i)]
+# THE DEFAULT CHANGED, DELIBERATELY, AND THIS TEST NOW ASSERTS THE NEW CONTRACT.
+# It used to require a hardcoded default of OFF. That default was the bug: the
+# build imported a backdrop and then kept three authored skyline rings in front
+# of it, so a 1,580-credit castle city sat behind authored spires with every
+# gate green. A world whose manifest says placement_mode = backdrop_at_camera IS
+# a backdrop; the switch is derived from that, and the environment variable
+# still overrides in both directions.
+i = src.index('_backdrop_env = os.environ.get("WONDERLAND_MARBLE_BACKDROP"')
+block2 = src[i:i + 1400]
 problems = []
-# Default must be OFF.
-if '"0")' not in line:
-    problems.append("does not default to off: %s" % line)
+if "_marble_placement_mode() == \"backdrop_at_camera\"" not in block2:
+    problems.append("the backdrop switch is not derived from the world's placement_mode")
+if "_backdrop_env not in" not in block2:
+    problems.append("the environment variable no longer overrides the derived default")
 # The NEAREST ring must survive: Marble is a single-viewpoint shell that smears
 # when a player walks, so the midground they move through stays authored. Tested
 # as the PROPERTY, not as the old `_rings[:1]` slice — that slice was the bug,
@@ -690,7 +700,7 @@ if "smears" not in src[src.index("_kept = ") - 900:src.index("_kept = ")]:
     problems.append("the reason the nearest ring survives is not stated where it is enforced")
 sys.exit(0 if not problems else (print(problems) or 1))
 BACKDROP
-check $? "...defaults to OFF and keeps the nearest ring authored"
+check $? "...is DERIVED from the manifest, overridable, and keeps the nearest ring authored"
 
 # PROJECT PACKAGING SETTINGS LIVE IN DefaultGame.ini.
 # UnrealEd.ProjectPackagingSettings is a GAME-ini config class. Declared in
