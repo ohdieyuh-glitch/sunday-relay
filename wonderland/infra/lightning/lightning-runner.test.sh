@@ -1965,9 +1965,22 @@ if [ -s "$SLICE_TMP/helpers.sh" ] && grep -q 'run_slice' "$SLICE_TMP/helpers.sh"
     step "cam6 stale" 'LogTemp: HERO_CAM_REQUESTED=6 HERO_CAM_SERVED=HeroCam0_1 HERO_CAM_FELL_BACK=1 HERO_CAM_FOV=62.00' 1 62.00
     step "cam6 rebuilt" 'LogTemp: HERO_CAM_REQUESTED=6 HERO_CAM_SERVED=HeroCam6_1 HERO_CAM_FELL_BACK=0 HERO_CAM_FOV=75.00' 0 75.00
     step "cam0 again" 'LogTemp: HERO_CAM_REQUESTED=0 HERO_CAM_SERVED=HeroCam0_1 HERO_CAM_FELL_BACK=0 HERO_CAM_FOV=62.00' 0 62.00
+    # THE CASE THAT ACTUALLY HAPPENED. run-stream.sh truncates app.log at every
+    # launch, so the offset recorded from the previous, larger file points past
+    # the end of the new one and the slice comes back EMPTY -- which does not
+    # bound the evidence to one run, it deletes it. Both sidecars were filed
+    # with no proof block at all and the comparison refused two good frames.
+    head -c 4000 /dev/zero | tr '\0' 'x' >> "$L"; echo >> "$L"
+    big_off="$(log_offset "$L")"
+    : > "$L"                                    # <- the truncation
+    printf 'LogTemp: HERO_CAM_SERVED=HeroCam6_1 HERO_CAM_FELL_BACK=0 HERO_CAM_FOV=75.00 MARBLE_ACTORS=1\n' >> "$L"
+    after="$(proof_lines "$L" "$big_off" | tr '\n' ' ')"
+    case "$after" in *"MARBLE_ACTORS=1"*) : ;; *) rc=1 ;; esac
+    case "$after" in *"HERO_CAM_FOV=75.00"*) : ;; *) rc=1 ;; esac
+    fell_back "$L" "$big_off" && rc=1           # truncation removed the old fallback
     exit $rc )
   if [ $? -eq 0 ]; then
-    ok "a run reads only its own HERO_CAM lines, and a stale fallback does not leak forward"
+    ok "a run reads only its own HERO_CAM lines, survives app.log being TRUNCATED, and no stale fallback leaks forward"
   else
     bad "one capture's evidence bleeds into another's — the sidecars cannot be attributed"
   fi

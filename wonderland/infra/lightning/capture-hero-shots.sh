@@ -84,9 +84,23 @@ log_offset() {
 }
 
 run_slice() {
-  # $1 log, $2 byte offset recorded before the launch
-  [ -f "$1" ] || return 0
-  tail -c "+$(( ${2:-0} + 1 ))" "$1" 2>/dev/null || true
+  # $1 log, $2 byte offset recorded before the launch.
+  #
+  # AND THE OFFSET IS ONLY VALID IF THE FILE STILL GREW FROM IT. run-stream.sh
+  # TRUNCATES app.log at each launch (`: > "$WL_LOG/app.log"`), so an offset
+  # taken from the previous, larger file points past the end of the new one and
+  # `tail -c` returns NOTHING. That does not bound the slice to one run, it
+  # deletes the run entirely -- both sidecars came back with an empty proof
+  # block and the comparison correctly refused two perfectly good frames.
+  #
+  # A file smaller than the offset can only mean it was truncated, and a
+  # truncated log already contains exactly one run, so the whole file IS the
+  # slice.
+  local log="$1" from="${2:-0}" size
+  [ -f "$log" ] || return 0
+  size="$(wc -c < "$log" 2>/dev/null | tr -d '[:space:]')"
+  [ "${size:-0}" -lt "$from" ] && from=0
+  tail -c "+$(( from + 1 ))" "$log" 2>/dev/null || true
 }
 
 proof_lines() {
