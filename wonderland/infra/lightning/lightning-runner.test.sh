@@ -1920,6 +1920,40 @@ grep -q '_kept = (_rings\[0\],)' "$GEN_STRIPPED" \
   || bad "the midground a player walks through can be deleted"
 rm -f "$GEN_STRIPPED"
 
+echo "== the founder's two decisions are gated, not just written down =="
+# HeroCam6 is the primary opening composition and the canonical spawn Dog is the
+# quadruped CLASSIC form. Both are decisions a future edit can undo by accident
+# with no compiler error and no failing test — the arrival camera is a JSON
+# transform, and a leg is four lines in a C++ array. A decision that cannot be
+# checked is a decision that gets undone.
+CDOG="$HERE/../build/verify-canonical-dog.py"
+if python3 "$CDOG" >/dev/null 2>&1; then ok "the canonical spawn Dog is the quadruped CLASSIC form"
+else bad "the spawn Dog is not the canonical quadruped: $(python3 "$CDOG" 2>&1 | tail -2)"; fi
+grep -q 'verify-canonical-dog.py' "$HERE/prepare.sh" \
+  && ok "…and prepare.sh runs it before a build" \
+  || bad "the canonical-Dog gate is not in the pre-build gates"
+DOG_TMP="$(mktemp -d)"
+mkdir -p "$DOG_TMP/w/Source/Wonderland" "$DOG_TMP/w/infra/build"
+cp "$HERE/../../Source/Wonderland/WonderlandDogBody.cpp" "$DOG_TMP/w/Source/Wonderland/" 2>/dev/null
+cp "$CDOG" "$DOG_TMP/w/infra/build/" 2>/dev/null
+if [ -f "$DOG_TMP/w/Source/Wonderland/WonderlandDogBody.cpp" ]; then
+  grep -v 'FVector( 46.0f \* S.*LegH \* 0.5f' "$DOG_TMP/w/Source/Wonderland/WonderlandDogBody.cpp" \
+    > "$DOG_TMP/biped.cpp" && mv "$DOG_TMP/biped.cpp" "$DOG_TMP/w/Source/Wonderland/WonderlandDogBody.cpp"
+  if python3 "$DOG_TMP/w/infra/build/verify-canonical-dog.py" >/dev/null 2>&1; then
+    bad "removing two legs still passes — the quadruped gate is inert"
+  else
+    ok "…and a two-legged spawn Dog FAILS it, which is the decision being enforced"
+  fi
+else
+  bad "could not stage the Dog body to prove the gate bites"
+fi
+rm -rf "$DOG_TMP"
+if python3 "$HERE/../build/verify-hero-skyline.py" 2>&1 | grep -q "ok"; then
+  ok "cam_arrival_hero carries HeroCam6's composition (the auto-activated opening view)"
+else
+  bad "the arrival camera does not match HeroCam6: $(python3 "$HERE/../build/verify-hero-skyline.py" 2>&1 | tail -2)"
+fi
+
 echo "== the C++ that is supposed to run can actually be reached =="
 # AWonderlandPlayerController was written, compiled and SHIPPED — its log format
 # strings are in the packaged binary verbatim — and never executed once. With no

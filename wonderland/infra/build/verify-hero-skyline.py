@@ -124,6 +124,30 @@ def main():
             "gate's premise has changed and the wide camera may be redundant.\n"
             % (ARRIVAL, a_top, SKYLINE_ELEVATION_DEG))
 
+    # FOUNDER DECISION: HeroCam6 is the PRIMARY opening composition. The actor
+    # that actually auto-activates for player 0 is cam_arrival_hero in
+    # hub-layout.json, not HeroCam6 itself — so if those two drift apart, the
+    # world opens on a composition nobody chose, and every hero capture would
+    # still look right.
+    layout = os.path.join(WL, "WorldDesign", "hub-layout.json")
+    if os.path.exists(layout):
+        design = json.load(io.open(layout, encoding="utf8"))
+        arrival = next((c for c in design.get("heroCameras", [])
+                        if c.get("id") == "cam_arrival_hero"), None)
+        if arrival is None:
+            fail("hub-layout.json has no cam_arrival_hero, so nothing auto-activates "
+                 "for player 0 and the opening frame is whatever the engine picks.")
+        checks = (("location", arrival.get("location"), list(w_pos)),
+                  ("lookAt", arrival.get("lookAt"), list(w_look)),
+                  ("fovDeg", [arrival.get("fovDeg")], [w_fov]))
+        for name, got, want in checks:
+            if [float(v) for v in (got or [])] != [float(v) for v in want]:
+                fail("cam_arrival_hero.%s is %s but HeroCam%d is %s. The founder chose "
+                     "HeroCam%d as the primary opening composition; the auto-activated "
+                     "arrival camera has to BE that composition, or the world opens on "
+                     "something else while every hero capture looks correct."
+                     % (name, got, WIDE, want, WIDE))
+
     print("verify-hero-skyline: ok — HeroCam%d %+.1f..%+.1f deg (fov %.0f) holds the "
           "Dog at %+.1f; HeroCam%d %+.1f..%+.1f deg (fov %.0f) also reaches the "
           "skyline at %+.1f, sharing the backdrop anchor at %s."
