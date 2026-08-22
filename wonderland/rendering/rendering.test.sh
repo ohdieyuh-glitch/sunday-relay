@@ -523,6 +523,34 @@ sys.exit(0)
 BINDS
 check $? "kit_plaza binds every constant it reads"
 
+echo "-- light colours are the type the property actually is --"
+# FOUND BY RUNNING IT ON THE BOX. UE 5.8 answered four times per build:
+#   TypeError: NativizeProperty: Cannot nativize 'Color' as 'NewLightColor'
+# The call sat inside a try/except that logged and continued, so every practical
+# was built at DEFAULT WHITE — including HeroLight_Arcane, the one light whose
+# whole job is putting the reference's violet in the frame.
+python3 - "$PB" <<'LIGHT'
+import io, re, sys
+src = io.open(sys.argv[1] + "/generate-hub-level.py", encoding="utf8").read()
+code = re.sub(r"#.*", "", src)
+code = re.sub(r'"""(?:.|\n)*?"""', "", code)          # and docstrings: this check
+                                                       # already matched its own
+problems = []
+if re.search(r"set_light_color\(\s*unreal\.Color\(", code):
+    problems.append("a light colour is still being set from unreal.Color, which "
+                    "UE rejects as a StructProperty type error")
+if "def srgb_light_color" not in src:
+    problems.append("no srgb_light_color helper")
+# The de-gamma must be the real sRGB transfer, not a bare /255.
+if "12.92" not in src or "1.055" not in src:
+    problems.append("the conversion is not the sRGB transfer")
+for call in re.findall(r"set_light_color\(([^)]*)", code):
+    if "srgb_light_color" not in call and "LinearColor" not in call:
+        problems.append("set_light_color(%s...) is neither helper nor LinearColor" % call[:40])
+sys.exit(0 if not problems else (print(problems) or 1))
+LIGHT
+check $? "every light colour is a LinearColor, converted with the sRGB transfer"
+
 echo "-- one scale-to-size conversion, used everywhere --"
 # /Engine/BasicShapes/Cylinder is 100 uu across, so a scale of s is a RADIUS of
 # 50s. verify-hero-composition draws every blob with abs(sc) * 50.0, and every

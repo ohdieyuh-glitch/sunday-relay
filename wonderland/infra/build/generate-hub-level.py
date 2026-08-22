@@ -269,6 +269,35 @@ def _marble_shell_reach():
         return None
     return min(horizontal) / 2.0
 
+def srgb_light_color(r, g, b):
+    """An 0-255 colour pick as the LINEAR colour UE's light actually wants.
+
+    FOUND BY RUNNING IT. Every practical in this world was created with
+    `set_light_color(unreal.Color(...))`, and UE 5.8 answered, four times per
+    build:
+
+        TypeError: NativizeProperty: Cannot nativize 'Color' as 'NewLightColor'
+          TypeError: NativizeStructInstance: Cannot nativize 'Color' as 'LinearColor'
+
+    The property is an FLinearColor and an FColor does not convert. The call
+    threw inside a try/except that logged and continued, so every lantern and
+    every hero practical was built at its DEFAULT WHITE — including
+    HeroLight_Arcane, the violet key on the hero Dog, which is the one light
+    whose entire job is to put the reference's violet into the frame. Nothing
+    downstream noticed because a light that exists and is the wrong colour looks
+    exactly like a light that exists.
+
+    The de-gamma is not decoration. A 0-255 triple is what a person picks in a
+    colour picker, which is sRGB; FLinearColor is linear. Dividing by 255 alone
+    would light the plaza with a noticeably different, flatter colour than the
+    number names. This is the exact sRGB transfer, the one UE uses itself.
+    """
+    def _lin(c):
+        c = max(0.0, min(1.0, c / 255.0))
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    return unreal.LinearColor(_lin(r), _lin(g), _lin(b), 1.0)
+
+
 def _wl_piece_hook(mesh_key, location, scale, label, rotation, mat):
     return None
 
@@ -3549,7 +3578,7 @@ def build(layout):
             pl = spawn(unreal.PointLight, (x, y, lz), label="%s_light" % label)
             plc = pl.get_component_by_class(unreal.PointLightComponent)
             plc.set_intensity(14000.0)
-            plc.set_light_color(unreal.Color(255, 208, 140))
+            plc.set_light_color(srgb_light_color(255, 208, 140))
             set_prop(plc, "AttenuationRadius", 1100.0)
             set_prop(plc, "SourceRadius", 18.0)
             set_prop(plc, "CastShadows", False)
@@ -4213,7 +4242,7 @@ def build(layout):
                 _hc = _hl.get_component_by_class(unreal.PointLightComponent)
                 _hc.set_mobility(unreal.ComponentMobility.MOVABLE)
                 _hc.set_intensity(_lum * _hs)
-                _hc.set_light_color(unreal.Color(*_hcol))
+                _hc.set_light_color(srgb_light_color(*_hcol))
                 set_prop(_hc, "AttenuationRadius", _rad)
                 set_prop(_hc, "SourceRadius", 40.0)
                 set_prop(_hc, "CastShadows", False)

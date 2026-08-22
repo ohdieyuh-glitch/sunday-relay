@@ -156,18 +156,51 @@ def import_glb(source, destination, label, enable_nanite):
     return imported
 
 
-def place(asset_path, location, rotation, scale, label, tags, visible=True):
+def static_meshes(paths):
+    """The subset of an import's assets that can actually be placed.
+
+    MEASURED ON THE BOX. `imported_object_paths` returns EVERYTHING the import
+    created — for this GLB that is a Texture2D, a MaterialInstanceConstant and
+    one StaticMesh — and the first version of this file tried to spawn an actor
+    from each. UE answered "SpawnActorFromObject. No actor was spawned." for the
+    texture, which is correct: a texture is not a placeable.
+    """
+    out = []
+    for path in paths:
+        asset = unreal.load_asset(path)
+        if asset is None:
+            log("could not load %s after import" % path)
+            continue
+        if isinstance(asset, unreal.StaticMesh):
+            out.append((path, asset))
+        else:
+            log("not placeable, skipping: %s (%s)"
+                % (path, type(asset).__name__))
+    return out
+
+
+def place(asset_path, mesh, location, rotation, scale, label, tags, visible=True):
     """Spawn one static-mesh actor with collision OFF."""
-    mesh = unreal.load_asset(asset_path)
-    if mesh is None:
-        log("could not load %s after import" % asset_path)
-        return None
+    # SPAWN FROM CLASS, THEN ASSIGN THE MESH. spawn_actor_from_object returned
+    # None here for a StaticMesh that had loaded fine — and
+    # generate-hub-level.py, which spawns tens of thousands of actors in this
+    # exact commandlet, has always used spawn_actor_from_class. Use the path
+    # that is proven in this context rather than the one that reads better.
     subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
-    actor = subsystem.spawn_actor_from_object(
-        mesh, unreal.Vector(*location), unreal.Rotator())
+    actor = subsystem.spawn_actor_from_class(
+        unreal.StaticMeshActor, unreal.Vector(*location), unreal.Rotator())
     if actor is None:
         log("spawn failed for %s" % asset_path)
         return None
+    component = actor.get_component_by_class(unreal.StaticMeshComponent)
+    if component is None:
+        log("spawned actor has no StaticMeshComponent for %s" % asset_path)
+        return None
+    # MOVABLE before the mesh is assigned: a StaticMeshActor's component is
+    # Static by default and refuses the change, which is the same trap that
+    # rendered this world black once already.
+    component.set_mobility(unreal.ComponentMobility.MOVABLE)
+    component.set_static_mesh(mesh)
     actor.set_actor_label(label)
     actor.set_actor_scale3d(unreal.Vector(scale, scale, scale))
     rot = unreal.Rotator()
@@ -179,13 +212,11 @@ def place(asset_path, location, rotation, scale, label, tags, visible=True):
     rot.set_editor_property("yaw", float(rotation[2]))
     actor.set_actor_rotation(rot, False)
 
-    component = actor.get_component_by_class(unreal.StaticMeshComponent)
-    if component is not None:
-        # THE BOUNDARY, ENFORCED IN THE LEVEL. Marble geometry never blocks a
-        # Dog, never carries navigation, and never decides where a player can
-        # stand. Unreal's own geometry does all of that.
-        component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
-        component.set_collision_profile_name("NoCollision")
+    # THE BOUNDARY, ENFORCED IN THE LEVEL. Marble geometry never blocks a Dog,
+    # never carries navigation, and never decides where a player can stand.
+    # Unreal's own geometry does all of that.
+    component.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+    component.set_collision_profile_name("NoCollision")
     actor.set_actor_hidden_in_game(not visible)
     actor.tags = [unreal.Name(t) for t in tags]
     return actor
@@ -298,7 +329,58 @@ def save_target_level(subsystem, level_path):
     return bool(saved)
 
 
-def two_sided_report(asset_paths, want_two_sided, repair):
+def read_two_sided(material):
+    """True / False / None. None means NOT KNOWN, and it is never False.
+
+    MEASURED. The first version called get_editor_property("two_sided") and got
+    "Failed to find property 'two_sided' ... on 'MaterialInstanceConstant'". A
+    glTF import produces a material INSTANCE, and an instance does not carry
+    two_sided directly — it carries base_property_overrides, and only when the
+    matching override flag is on. When it is off the value is INHERITED and the
+    honest answer comes from the parent.
+
+    The reason this matters more than the API detail: the old code turned an
+    unreadable property into "single-sided" and printed EVERY MARBLE MATERIAL IS
+    SINGLE-SIDED, which is a claim about the asset made from a failure to look
+    at it.
+    """
+    try:
+        return bool(material.get_editor_property("two_sided"))
+    except Exception:
+        pass
+    try:
+        overrides = material.get_editor_property("base_property_overrides")
+        if bool(overrides.get_editor_property("override_two_sided")):
+            return bool(overrides.get_editor_property("two_sided"))
+    except Exception:
+        return None
+    # Not overridden: inherited from the parent, so ask the parent.
+    try:
+        parent = material.get_editor_property("parent")
+        if parent is not None:
+            return read_two_sided(parent)
+    except Exception:
+        pass
+    return None
+
+
+def set_two_sided(material):
+    """Turn two-sidedness on, handling an instance's override struct."""
+    try:
+        material.set_editor_property("two_sided", True)
+        unreal.EditorAssetLibrary.save_loaded_asset(material)
+        return True
+    except Exception:
+        pass
+    overrides = material.get_editor_property("base_property_overrides")
+    overrides.set_editor_property("override_two_sided", True)
+    overrides.set_editor_property("two_sided", True)
+    material.set_editor_property("base_property_overrides", overrides)
+    unreal.EditorAssetLibrary.save_loaded_asset(material)
+    return True
+
+
+def two_sided_report(meshes, want_two_sided, repair):
     """Answer the shell's one silent failure at IMPORT time, where it is free.
 
     A single-viewpoint reconstruction is a shell seen FROM THE INSIDE. If the
@@ -307,24 +389,19 @@ def two_sided_report(asset_paths, want_two_sided, repair):
     frame is empty. Finding that out from a browser costs a GPU session.
 
     The source glTF for this world declares `doubleSided: true`, so restoring it
-    is preserving what the file says, not overriding it. Everything here is
-    guarded: this was written without an engine to check against, and a
-    silently-ignored material edit is the failure it exists to prevent.
+    is preserving what the file says, not overriding it.
 
-    Returns (checked, two_sided, repaired).
+    Returns (checked, two_sided, repaired, unknown).
     """
-    checked = two_sided = repaired = 0
-    for path in asset_paths:
-        mesh = unreal.load_asset(path)
-        if mesh is None:
-            continue
+    checked = two_sided = repaired = unknown = 0
+    for path, mesh in meshes:
         try:
-            materials = mesh.get_editor_property("static_materials") or []
+            slots = mesh.get_editor_property("static_materials") or []
         except Exception as exc:
-            log("could not read materials on %s (%s) — two-sidedness UNKNOWN"
-                % (path, exc))
+            log("could not read materials on %s (%s)" % (path, exc))
+            unknown += 1
             continue
-        for slot in materials:
+        for slot in slots:
             try:
                 material = slot.get_editor_property("material_interface")
             except Exception:
@@ -332,35 +409,41 @@ def two_sided_report(asset_paths, want_two_sided, repair):
             if material is None:
                 continue
             checked += 1
-            try:
-                is_two = bool(material.get_editor_property("two_sided"))
-            except Exception as exc:
-                log("could not read two_sided on %s (%s)" % (material.get_name(), exc))
-                continue
-            if is_two:
+            state = read_two_sided(material)
+            if state is True:
                 two_sided += 1
+                continue
+            if state is None:
+                unknown += 1
+                log("two-sidedness of %s is UNKNOWN — the property could not be "
+                    "read. That is not the same as single-sided and is not "
+                    "reported as one." % material.get_name())
                 continue
             log("%s imported SINGLE-SIDED while the source declares doubleSided"
                 % material.get_name())
             if not (want_two_sided and repair):
                 continue
             try:
-                material.set_editor_property("two_sided", True)
-                unreal.EditorAssetLibrary.save_loaded_asset(material)
+                set_two_sided(material)
                 repaired += 1
                 two_sided += 1
                 log("  restored two-sided on %s and saved it" % material.get_name())
             except Exception as exc:
-                log("  COULD NOT restore two-sided (%s). The backdrop will be "
+                log("  COULD NOT restore two-sided (%s). The backdrop may be "
                     "invisible from inside; set Two Sided on the material by "
                     "hand before spending GPU time." % exc)
-    log("MARBLE_MATERIALS_CHECKED=%d  MARBLE_TWO_SIDED=%d  MARBLE_TWO_SIDED_REPAIRED=%d"
-        % (checked, two_sided, repaired))
-    if checked and two_sided == 0:
+    log("MARBLE_MATERIALS_CHECKED=%d  MARBLE_TWO_SIDED=%d  "
+        "MARBLE_TWO_SIDED_REPAIRED=%d  MARBLE_TWO_SIDED_UNKNOWN=%d"
+        % (checked, two_sided, repaired, unknown))
+    if checked and two_sided == 0 and unknown == 0:
         log("EVERY Marble material is single-sided. A shell viewed from inside "
             "renders nothing. This import is placed correctly and will show an "
             "empty frame.")
-    return checked, two_sided, repaired
+    elif unknown:
+        log("two-sidedness could not be established for %d material(s). The "
+            "frame is the only remaining evidence — if the backdrop is missing, "
+            "this is the first thing to check by hand." % unknown)
+    return checked, two_sided, repaired, unknown
 
 
 def main(argv=None):
@@ -526,9 +609,12 @@ def main(argv=None):
 
     imported = import_glb(source, destination, "SM_Marble_%s" % args.slug,
                           enable_nanite=not args.no_nanite)
+    placeable = static_meshes(imported)
+    log("imported %d asset(s), %d of them placeable static mesh(es)"
+        % (len(imported), len(placeable)))
     placed = []
-    for path in imported:
-        actor = place(path, origin, rotation, scale,
+    for path, mesh in placeable:
+        actor = place(path, mesh, origin, rotation, scale,
                       "MarbleVisualLayer_%s" % args.slug,
                       [MARBLE_TAG, NO_COLLISION_TAG])
         if actor is not None:
@@ -560,8 +646,8 @@ def main(argv=None):
                 collider_imported = import_glb(
                     collider_source, destination + "/Collision",
                     "SM_MarbleCollider_%s" % args.slug, enable_nanite=False)
-                for path in collider_imported:
-                    place(path, origin, rotation, scale,
+                for path, mesh in static_meshes(collider_imported):
+                    place(path, mesh, origin, rotation, scale,
                           "MarbleColliderReference_%s" % args.slug,
                           [MARBLE_TAG, REFERENCE_TAG], visible=False)
                 log("collider mesh imported as a HIDDEN REFERENCE. It is not "
@@ -570,7 +656,7 @@ def main(argv=None):
             log("no collider mesh was downloaded for this world")
 
     two_sided_report(
-        imported,
+        placeable,
         want_two_sided=bool((manifest.get("source_mesh") or {}).get("double_sided")),
         repair=not args.no_two_sided_repair)
 

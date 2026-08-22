@@ -55,6 +55,7 @@ class Recorder(object):
         self.events = []        # ("open"|"import"|"spawn"|"save", detail)
         self.bounds_extent = (5000.0, 5000.0, 1200.0)   # HALF extent, as UE reports it
         self.material_two_sided = False   # what the glTF import produced
+        self.material_override_on = True  # is base_property_overrides authoritative
         self.saved_materials = []
         self.level_exists = True
         self.load_ok = True
@@ -84,10 +85,15 @@ def build_stub():
     class CollisionEnabled(object):
         NO_COLLISION = "NO_COLLISION"
 
+    class ComponentMobility(object):
+        MOVABLE = "Movable"
+
     class StaticMeshComponent(object):
         def __init__(self):
             self.collision = "default"
             self.profile = None
+        def set_mobility(self, v): self.mobility = v
+        def set_static_mesh(self, m): self.static_mesh = m
 
         def set_collision_enabled(self, value):
             self.collision = value
@@ -138,8 +144,19 @@ def build_stub():
                 options = task.props.get("options")
                 nanite = bool(options and options._mesh.build_nanite)
                 name = task.props["destination_name"]
-                path = "%s/%s.%s" % (task.props["destination_path"], name, name)
-                task.props["imported_object_paths"] = [path]
+                base = task.props["destination_path"]
+                # WHAT THE REAL IMPORT RETURNS. Measured on UE 5.8: a glTF
+                # import creates a Texture2D, a MaterialInstanceConstant AND a
+                # StaticMesh, and imported_object_paths lists all three. The
+                # first version of this stub returned one path, so the offline
+                # suite never saw the case where the importer tried to spawn an
+                # actor from a texture — which is what actually happened.
+                path = "%s/StaticMeshes/%s.%s" % (base, name, name)
+                task.props["imported_object_paths"] = [
+                    "%s/Textures/texture_image.texture_image" % base,
+                    "%s/Materials/mat_coarse.mat_coarse" % base,
+                    path,
+                ]
                 REC.imports.append((task.props["filename"],
                                     task.props["destination_path"], name, nanite))
                 REC.events.append(("import", task.props["filename"]))
@@ -150,9 +167,17 @@ def build_stub():
 
     class EditorActorSubsystem(object):
         def spawn_actor_from_object(self, mesh, _loc, _rot):
-            actor = Actor(mesh)
+            # THE REAL ENGINE RETURNED None HERE for a StaticMesh that had
+            # loaded fine — "SpawnActorFromObject. No actor was spawned." The
+            # stub reproduces that so the suite cannot pass on the path that
+            # failed on hardware.
+            REC.events.append(("spawn_from_object", mesh))
+            return None
+
+        def spawn_actor_from_class(self, cls, _loc, _rot):
+            actor = Actor(cls)
             REC.actors.append((actor, _loc))
-            REC.events.append(("spawn", mesh))
+            REC.events.append(("spawn", cls))
             return actor
 
     class LevelEditorSubsystem(object):
@@ -180,14 +205,45 @@ def build_stub():
             REC.events.append(("save", path))
             return True
 
+    class Overrides(object):
+        def __init__(self, owner): self._o = owner
+        def get_editor_property(self, k):
+            if k == "override_two_sided": return self._o._override
+            if k == "two_sided": return self._o._two
+            raise Exception("no property %r" % k)
+        def set_editor_property(self, k, v):
+            if k == "override_two_sided": self._o._override = v
+            elif k == "two_sided": self._o._two = v
+            else: raise Exception("no property %r" % k)
+
     class Material(object):
+        """A MaterialInstanceConstant, which is what a glTF import produces.
+
+        It does NOT answer to `two_sided` — the real one raises "Failed to find
+        property 'two_sided' ... on 'MaterialInstanceConstant'" — it answers
+        through base_property_overrides, and only when the override flag is on.
+        """
         def __init__(self, name):
             self._name = name
-            self._props = {"two_sided": REC.material_two_sided}
+            self._two = REC.material_two_sided
+            self._override = REC.material_override_on
 
         def get_name(self): return self._name
-        def get_editor_property(self, k): return self._props[k]
-        def set_editor_property(self, k, v): self._props[k] = v
+        def get_editor_property(self, k):
+            if k == "base_property_overrides": return Overrides(self)
+            if k == "parent": return None
+            raise Exception("Failed to find property %r for attribute %r on "
+                            "'MaterialInstanceConstant'" % (k, k))
+        def set_editor_property(self, k, v):
+            if k == "base_property_overrides": return
+            raise Exception("Failed to find property %r" % k)
+
+    class Texture2D(object):
+        def __init__(self, path): self.path = path
+        def get_name(self): return "texture_image"
+        def get_editor_property(self, k):
+            raise Exception("Failed to find property %r for attribute %r on "
+                            "'Texture2D'" % (k, k))
 
     class MaterialSlot(object):
         def __init__(self, material): self._m = material
@@ -203,6 +259,9 @@ def build_stub():
         def get_editor_property(self, k):
             if k == "static_materials": return self._materials
             raise KeyError(k)
+
+    class StaticMeshActor(object):
+        pass
 
     class EditorAssetLibrary(object):
         @staticmethod
@@ -226,6 +285,7 @@ def build_stub():
     u.Name = Name
     u.CollisionEnabled = CollisionEnabled
     u.StaticMeshComponent = StaticMeshComponent
+    u.ComponentMobility = ComponentMobility
     u.AssetImportTask = AssetImportTask
     u.InterchangeGenericAssetsPipeline = InterchangeGenericAssetsPipeline
     u.AssetToolsHelpers = AssetToolsHelpers
@@ -235,7 +295,14 @@ def build_stub():
     u.EditorLoadingAndSavingUtils = EditorLoadingAndSavingUtils
     u.EditorAssetLibrary = EditorAssetLibrary
     u.get_editor_subsystem = _subsystem
-    u.load_asset = lambda path: StaticMesh(path)
+    def _load(path):
+        if "/Textures/" in path: return Texture2D(path)
+        if "/Materials/" in path: return Material("MI_coarse")
+        return StaticMesh(path)
+    u.load_asset = _load
+    u.StaticMesh = StaticMesh
+    u.StaticMeshActor = StaticMeshActor
+    u.Texture2D = Texture2D
     u.log_warning = lambda m: REC.logs.append(m)
     u.log = lambda m: REC.logs.append(m)
     return u
@@ -273,6 +340,9 @@ def make_world(root, slug, hq=False, ground=None, scale_factor=1.25, backdrop=Fa
                       "unreal_origin_cm": [0.0, 0.0, 0.0],
                       "unreal_rotation_deg": [0.0, 0.0, 0.0]},
         "bounds": {"source": None, "min_cm": None, "max_cm": None},
+        # The real manifest records what the GLB header said, and the two-sided
+        # repair is gated on it — a fixture without it silently disables repair.
+        "source_mesh": {"double_sided": True},
         "collision_source": {"authority": "unreal"},
         "unreal_destination": {"content_path": "/Game/Wonderland/Marble/%s" % slug,
                                "level": "/Game/Wonderland/Maps/WonderlandHub",
@@ -556,6 +626,62 @@ def main():
         except SystemExit as exc:
             check("could not be saved" in str(exc) and "failure and not a warning" in str(exc),
                   "a map that will not save is a FAILURE (a cook from there ships no Marble layer)")
+
+        print("\n-- what the engine actually did, on the box --")
+        # Every case below is a defect that a clean compile, a clean cook and a
+        # green offline suite all failed to catch. They were found by running it.
+        make_world(root, "hw", hq=True, backdrop=True)
+        run_importer("hw", root, material_two_sided=True)
+        # 1. imported_object_paths returns a Texture2D, a MaterialInstance AND a
+        #    StaticMesh. Only one of those is placeable.
+        visual = [a for a, _ in REC.actors if "VisualLayer" in (a.label or "")]
+        check(len(visual) == 1,
+              "exactly ONE visual actor from a three-asset import, not three")
+        check(any("not placeable, skipping" in m and "Texture2D" in m for m in REC.logs),
+              "…and the texture is named and skipped rather than silently failing")
+        check(any("3 asset(s), 1 of them placeable" in m for m in REC.logs),
+              "…and the counts are reported")
+        # 2. spawn_actor_from_object returned None on hardware for a StaticMesh
+        #    that had loaded fine. The generator has always used from_class.
+        check(not [k for k, _ in REC.events if k == "spawn_from_object"],
+              "placement never uses spawn_actor_from_object, which returned None on the box")
+        check([k for k, _ in REC.events if k == "spawn"],
+              "…it spawns from CLASS, the path the generator proves in this commandlet")
+        placed_actor = REC.actors[0][0]
+        check(getattr(placed_actor.component, "mobility", None) == "Movable",
+              "…and sets MOVABLE before assigning the mesh")
+        check(getattr(placed_actor.component, "static_mesh", None) is not None,
+              "…and actually assigns the mesh")
+
+        print("\n-- unknown is not single-sided --")
+        # THE TRUTHFULNESS BUG. The first version read get_editor_property
+        # ('two_sided'), which a MaterialInstanceConstant does not answer, and
+        # printed "EVERY Marble material is single-sided" — a claim about the
+        # asset made from a failure to look at it.
+        make_world(root, "twosided-inst", hq=True, backdrop=True)
+        run_importer("twosided-inst", root, material_two_sided=True,
+                     material_override_on=True)
+        check(any("MARBLE_TWO_SIDED=1" in m for m in REC.logs),
+              "a material INSTANCE's two-sidedness is read through its overrides")
+        check(not any("EVERY Marble material is single-sided" in m for m in REC.logs),
+              "…and a two-sided instance is not called single-sided")
+
+        make_world(root, "twosided-unknown", hq=True, backdrop=True)
+        run_importer("twosided-unknown", root, material_two_sided=False,
+                     material_override_on=False)
+        check(any("UNKNOWN" in m and "not the same as single-sided" in m
+                  for m in REC.logs),
+              "an unreadable two_sided reports UNKNOWN, in those words")
+        check(any("MARBLE_TWO_SIDED_UNKNOWN=1" in m for m in REC.logs),
+              "…and is counted separately")
+        check(not any("EVERY Marble material is single-sided" in m for m in REC.logs),
+              "…and is NEVER reported as single-sided")
+
+        make_world(root, "twosided-single", hq=True, backdrop=True)
+        run_importer("twosided-single", root, material_two_sided=False,
+                     material_override_on=True)
+        check(any("MARBLE_TWO_SIDED_REPAIRED=1" in m for m in REC.logs),
+              "a genuinely single-sided instance IS repaired, through the override struct")
 
         print("\n-- the shell's one silent failure: single-sided --")
         # A single-viewpoint reconstruction is a shell seen FROM THE INSIDE. If
