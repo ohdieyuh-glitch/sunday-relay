@@ -60,8 +60,34 @@ wl_say "build $BUILD_SHA"
 proof_lines() {
   local log="$1"
   [ -f "$log" ] || return 0
-  grep -aoE '(WORLD|ACTORS|RELAY_DOGS|COMPOUND_AGENTS|BATCHES|INSTANCED_PIECES|LOOSE_PIECES|VISIBLE_PIECES|MARBLE_ACTORS|MARBLE_TWO_SIDED_COMPONENTS|MARBLE_COLLIDING_COMPONENTS|RUNTIME_RELAY_DOGS|RUNTIME_COMPOUND_AGENTS|RUNTIME_INSTANCES_BUILT|RUNTIME_BLOCKING_PRIMITIVES|RUNTIME_GROUNDED_DOGS|RUNTIME_GROUNDED_PLAYER_STARTS|RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION|RUNTIME_DOGS_OK|WORLD_OK)=[^ ]*' "$log" \
+  grep -aoE '(WORLD|ACTORS|RELAY_DOGS|COMPOUND_AGENTS|BATCHES|INSTANCED_PIECES|LOOSE_PIECES|VISIBLE_PIECES|MARBLE_ACTORS|MARBLE_TWO_SIDED_COMPONENTS|MARBLE_COLLIDING_COMPONENTS|RUNTIME_RELAY_DOGS|RUNTIME_COMPOUND_AGENTS|RUNTIME_INSTANCES_BUILT|RUNTIME_BLOCKING_PRIMITIVES|RUNTIME_GROUNDED_DOGS|RUNTIME_GROUNDED_PLAYER_STARTS|RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION|RUNTIME_DOGS_OK|WORLD_OK|HERO_CAM_REQUESTED|HERO_CAM_SERVED|HERO_CAM_FELL_BACK|HERO_CAM_MISSING|HERO_CAM_LOC|HERO_CAM_ROT|HERO_CAM_FOV)=[^ ]*' "$log" \
     | sort -u || true
+}
+
+# GPU alongside the picture, from the same run. Sampled WHILE the app is up and
+# rendering, because a reading taken after it exits is a reading of an idle
+# card. Best effort: no nvidia-smi means the fields are absent, never zero.
+gpu_sample() {
+  command -v nvidia-smi >/dev/null 2>&1 || { echo '{}'; return 0; }
+  nvidia-smi --query-gpu=name,utilization.gpu,utilization.memory,memory.used,memory.total,temperature.gpu,clocks.sm \
+             --format=csv,noheader,nounits 2>/dev/null \
+  | head -1 \
+  | awk -F', *' '{printf "{\"name\":\"%s\",\"gpu_util_pct\":%s,\"mem_util_pct\":%s,\"vram_used_mib\":%s,\"vram_total_mib\":%s,\"temp_c\":%s,\"sm_clock_mhz\":%s}", $1,$2,$3,$4,$5,$6,$7}' \
+  || echo '{}'
+}
+
+# What the GPU is doing with no Wonderland on it. Without this baseline a
+# 3 GB reading proves nothing: the card may have been holding that before the
+# app started.
+GPU_IDLE="$(gpu_sample)"
+
+# THE FALLBACK IS A LIE DETECTOR, NOT A CONVENIENCE. The player controller falls
+# back to the legacy arrival camera when the requested HeroCamN is not in the
+# level -- which is exactly what happens when the package is older than the
+# camera. The run succeeds, the PNG is named for the camera that was asked for,
+# and it is a picture of a different one.
+fell_back() {
+  grep -aq 'HERO_CAM_FELL_BACK=1\|HERO_CAM_MISSING=' "$1" 2>/dev/null
 }
 
 CAPTURED=0
@@ -89,6 +115,16 @@ for cam in $CAMS; do
   fi
   [ -s "$base.png" ] || { wl_warn "hero camera $cam produced an empty PNG"; continue; }
 
+  if fell_back "$WL_LOG/app.log"; then
+    wl_warn "hero camera $cam DID NOT EXIST in this level — the view fell back to the
+legacy arrival camera, so $base.png is a picture of a DIFFERENT camera. Deleting it
+rather than filing it as evidence. The package is older than the camera; rebuild."
+    rm -f "$base.png"
+    continue
+  fi
+
+  GPU_LOADED="$(gpu_sample)"
+
   # Performance alongside the picture, from the same run — the goal asks for
   # both and measuring them separately means measuring two different states.
   STATS="{}"
@@ -103,6 +139,8 @@ for cam in $CAMS; do
   # to get subtly wrong on a machine that costs money per minute.
   WL_PROOF_LINES="$(proof_lines "$WL_LOG/app.log")" \
   WL_STREAM_STATS="$STATS" \
+  WL_GPU_IDLE="$GPU_IDLE" \
+  WL_GPU_LOADED="$GPU_LOADED" \
   python3 - "$base.json" "$cam" "$BUILD_SHA" "$stamp" "$base.png" <<PYEOF
 import io, json, os, subprocess, sys
 out, cam, sha, stamp, png = sys.argv[1:6]
@@ -129,6 +167,14 @@ payload = {
     },
     "world_proof": [l for l in os.environ.get("WL_PROOF_LINES", "").split("\n") if l],
     "stream": json.loads(os.environ.get("WL_STREAM_STATS", "{}") or "{}"),
+    "gpu": {
+        "idle_before_launch": json.loads(os.environ.get("WL_GPU_IDLE", "{}") or "{}"),
+        "while_rendering": json.loads(os.environ.get("WL_GPU_LOADED", "{}") or "{}"),
+        "note": ("Sampled with nvidia-smi while the packaged app was up and "
+                 "streaming, against a baseline taken before it launched. An "
+                 "absent field means nvidia-smi did not answer -- it is never "
+                 "reported as zero."),
+    },
     "what_this_is": (
         "A fixed-camera frame and the build that produced it. The world_proof "
         "lines are what the PACKAGED build printed on this run — read the frame "

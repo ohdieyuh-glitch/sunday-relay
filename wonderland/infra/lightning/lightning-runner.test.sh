@@ -1813,6 +1813,40 @@ grep -q 'WL_HERO_CAMS="0 6"' "$HERE/capture-hero-shots.sh" 2>/dev/null \
   && ok "…and the capture script names the pair worth spending GPU time on" \
   || bad "the capture script does not mention capturing 0 and 6 together"
 
+echo "== a capture cannot pass off the wrong camera as evidence =="
+# The player controller falls back to the legacy arrival camera when the level
+# has no CameraActor tagged HeroCamN -- which is precisely what a package built
+# before HeroCam6 existed does. The launch succeeds, the PNG is named for the
+# camera that was asked for, and it is a picture of a different one. Two
+# "compositions" come back nearly identical and nothing says why.
+PC="$HERE/../../Source/Wonderland/WonderlandPlayerController.cpp"
+grep -q 'HERO_CAM_SERVED' "$PC" \
+  && ok "the controller reports which camera actually answered" \
+  || bad "the controller does not say which camera it rendered from"
+grep -q 'HERO_CAM_FELL_BACK' "$PC" \
+  && ok "…and whether that was a fallback" \
+  || bad "a silent fallback is indistinguishable from a hit"
+grep -q 'HERO_CAM_FOV' "$PC" \
+  && ok "…and the transform and FOV the frame must be read with" \
+  || bad "the frame carries no camera transform"
+CAPS="$HERE/capture-hero-shots.sh"
+grep -q 'HERO_CAM_FELL_BACK' "$CAPS" \
+  && ok "the capture collects the fallback marker into its proof block" \
+  || bad "the capture does not collect the fallback marker"
+if sed 's/#.*//' "$CAPS" | grep -q 'rm -f "\$base.png"'; then
+  ok "…and DELETES a frame captured from the wrong camera rather than filing it"
+else
+  bad "a frame from the wrong camera is still written as evidence"
+fi
+grep -q 'nvidia-smi' "$CAPS" \
+  && ok "GPU utilisation and VRAM are sampled with the picture, from the same run" \
+  || bad "the capture records no GPU measurement"
+if sed 's/#.*//' "$CAPS" | grep -q 'GPU_IDLE='; then
+  ok "…against an idle baseline, so a VRAM number means something"
+else
+  bad "VRAM is reported with no baseline to read it against"
+fi
+
 echo "== a captured frame carries the build that produced it =="
 # This project has already compared two captures that turned out to be the same
 # binary. A PNG that cannot be attributed to a commit is a picture, not evidence.
