@@ -30,12 +30,30 @@
 >    The build fails closed on all three: no report line, zero actors, or an
 >    unsaved level each stop the cook.
 >
+> **2026-08-22 — THE CPU STEP ABOVE IS DONE.** Built and packaged from
+> `f8a99b0`: 32,995 pieces, 1.2 GB staged, 207 MB paks, `MARBLE_VISUAL_ACTORS=1`,
+> `MARBLE_LEVEL_SAVED=1`, scale ratio 1, axis correction `[180,0,0]`, zero
+> `NativizeProperty` colour errors. The queue resumes at step 2.
+>
+> **Capture BOTH HeroCam0 and HeroCam6.** The Marble backdrop was rendered on
+> CPU (`wonderland/marble/preview-offline.py`, no engine, no GPU — the export is
+> `KHR_materials_unlit`, so an unlit rasterisation of it is faithful) and the
+> arrival camera cannot see it: HeroCam0 is pitched −11.6° to hold the hero Dog,
+> its frame stops at +7.1°, and the castle city sits at +21.3°. **0.9% of the
+> skyline is in the arrival frame.** No yaw fixes it; the limit is elevation.
+> HeroCam6 is the same POINT aimed 17° higher at 75° and holds both the Dog and
+> 29.9% of the skyline. `verify-hero-skyline.py` gates the relationship, and
+> `WL_HERO_CAMS="0 6"` captures the pair. HeroCam0 was NOT changed — the
+> founder decides the composition.
+>
 > 2. **GPU ON — and it is minutes, not a session.** Two things need the L4 and
 >    nothing else does:
 >
 >        bash wonderland/rendering/probe-cvars.sh          # seconds
->        SKIP_PREPARE=1 SKIP_BUILD=1 \
->          bash wonderland/infra/lightning/launch-wonderland.sh
+>        WL_HERO_CAMS="0 6" bash wonderland/infra/lightning/capture-hero-shots.sh
+>
+>    (or, for an interactive stream rather than captures,
+>    `SKIP_PREPARE=1 SKIP_BUILD=1 bash wonderland/infra/lightning/launch-wonderland.sh`)
 >
 >    The probe needs a real RHI — `-nullrhi` registers no renderer CVars and
 >    would report every `r.*` name missing. It now asks twice (raised
