@@ -159,9 +159,21 @@ wl_say "on disk: $_ntex textures, $_naud wavs"
 #
 # Installed here because here is CPU. Downloading a browser on a GPU machine is
 # the same waste as downloading the engine on one.
+# A DIRECTORY IS NOT A TOOLCHAIN. This used to be `[ -d node_modules/playwright ]`
+# and reported "already present" for four runs in a row; the directory was gone
+# by the time a capture needed it, while package.json and package-lock.json were
+# still sitting there looking like a healthy install. Ask node whether it can
+# actually load the module, which is the only question shot.cjs and measure.cjs
+# will ask later.
+wl_playwright_loads() {
+  local node_bin; node_bin="$(wl_bundled_node 2>/dev/null || command -v node || true)"
+  [ -n "$node_bin" ] || return 1
+  "$node_bin" -e "require('$WL_TOOLS/node_modules/playwright').chromium" >/dev/null 2>&1
+}
+
 CAPTURE_READY=0
-if [ -d "$WL_TOOLS/node_modules/playwright" ]; then
-  wl_ok "capture toolchain already present at $WL_TOOLS"
+if wl_playwright_loads; then
+  wl_ok "capture toolchain present and loadable at $WL_TOOLS"
   CAPTURE_READY=1
 elif command -v npm >/dev/null 2>&1; then
   wl_say "installing the hero-frame capture toolchain (CPU, one time)"
@@ -171,7 +183,7 @@ elif command -v npm >/dev/null 2>&1; then
   # decoder, so the page loads, the stream negotiates and the video stays
   # black with nothing reporting an error.
   ( cd "$WL_TOOLS" && npx --yes playwright install --with-deps chrome       >>"$WL_LOG/capture.log" 2>&1 )     && wl_ok "chrome installed (H264 capable)"     || wl_warn "chrome install failed; see $WL_LOG/capture.log"
-  [ -d "$WL_TOOLS/node_modules/playwright" ] && CAPTURE_READY=1
+  wl_playwright_loads && CAPTURE_READY=1
 else
   wl_warn "no npm; the hero frame cannot be captured on this Studio"
 fi

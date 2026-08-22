@@ -1863,6 +1863,44 @@ else
   bad "VRAM is reported with no baseline to read it against"
 fi
 
+echo "== a directory is not a toolchain =="
+# prepare.sh reported "capture toolchain already present" for four runs in a
+# row on the strength of `[ -d node_modules/playwright ]`. The directory was
+# gone by the time a capture needed it, while package.json and package-lock.json
+# sat there looking like a healthy install. Both places now ask node whether the
+# module actually LOADS, which is the only question shot.cjs will ask later.
+if sed 's/#.*//' "$HERE/prepare.sh" | grep -q 'wl_playwright_loads'; then
+  ok "prepare.sh proves playwright loads rather than that a directory exists"
+else
+  bad "prepare.sh still calls a directory a toolchain"
+fi
+if sed 's/#.*//' "$HERE/prepare.sh" | grep -qE '\[ -d "\$WL_TOOLS/node_modules/playwright" \]'; then
+  bad "the directory test is still there"
+else
+  ok "…and the directory test is gone, not merely supplemented"
+fi
+if sed 's/#.*//' "$HERE/capture-hero-shots.sh" | grep -q "require.*playwright"; then
+  ok "the capture checks for a browser BEFORE the first metered launch"
+else
+  bad "the capture discovers a missing browser only after paying for a launch"
+fi
+# The predicate itself: a present-but-broken install must fail it.
+PW_TMP="$(mktemp -d)"
+mkdir -p "$PW_TMP/node_modules/playwright"
+printf '{"name":"playwright","main":"index.js"}\n' > "$PW_TMP/node_modules/playwright/package.json"
+NODE_BIN="$(command -v node || true)"
+if [ -n "$NODE_BIN" ]; then
+  if "$NODE_BIN" -e "require('$PW_TMP/node_modules/playwright').chromium" >/dev/null 2>&1; then
+    bad "an empty playwright directory passes the load test"
+  else
+    ok "…and an empty playwright directory FAILS it, where -d would have passed"
+  fi
+else
+  skip_note=1
+  ok "(no node here to exercise the load predicate; the wiring above is checked)"
+fi
+rm -rf "$PW_TMP"
+
 echo "== two restores of a 69 GB archive cannot share one disk =="
 # This happened. A build was interrupted and its `docker load` child survived
 # the kill; the replacement build started a second load of the same archive, and

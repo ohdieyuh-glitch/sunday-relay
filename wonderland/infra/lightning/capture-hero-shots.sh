@@ -51,6 +51,21 @@ BUILD_SHA="$(tr -d '[:space:]' < "$SHA_FILE")"
 APP="$(wl_find_first "$WL_OUT/Linux" -maxdepth 3 -name 'Wonderland.sh' -type f)"
 [ -n "${APP:-}" ] || wl_die "no packaged Wonderland.sh under $WL_OUT/Linux. Nothing was captured."
 
+# CHECKED HERE, BEFORE THE FIRST LAUNCH. prepare.sh installs the capture
+# toolchain, but that ran on a different day and possibly a different machine
+# type, and this project has already had node_modules disappear from
+# /teamspace while package.json stayed behind looking healthy. Every launch
+# below costs metered GPU time; discovering there is no browser AFTER the app
+# is up wastes all of it.
+CAPTURE_NODE="$(wl_bundled_node 2>/dev/null || command -v node || true)"
+if [ -z "$CAPTURE_NODE" ] \
+   || ! "$CAPTURE_NODE" -e "require('$WL_TOOLS/node_modules/playwright').chromium" >/dev/null 2>&1; then
+  wl_die "playwright will not load from $WL_TOOLS/node_modules — there is no browser to
+capture with, and every hero launch after this line costs GPU time. Install it first:
+  cd $WL_TOOLS && npm install playwright && npx playwright install --with-deps chrome
+Nothing was captured."
+fi
+
 wl_say "capturing hero cameras: $CAMS"
 wl_say "build $BUILD_SHA"
 
