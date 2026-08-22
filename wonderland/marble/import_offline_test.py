@@ -681,6 +681,38 @@ def main():
               and 'transform"]["unreal_uniform_scale"] = scale' not in src_txt,
               "the applied scale is written to its own field, not over the metric one")
 
+        # 6. THE INVERSION. A gate designed to be permutation-invariant cannot
+        #    see a 180-degree flip, because a flip changes no extent. The
+        #    manifest must therefore DECLARE the correction, and the declaration
+        #    has to survive.
+        check(rt.get("axis_correction_deg") == [180.0, 0.0, 0.0],
+              "the shipped world declares the 180 roll its export convention needs")
+        check("R_x(+90) maps +Z to MINUS Y" in (rt.get("axis_correction_why") or "")
+              or "MINUS Y" in (rt.get("axis_correction_why") or ""),
+              "…and records the arithmetic, since the previous note had it backwards")
+        check("CORRECTED" in (real["source_mesh"].get("axis_note") or ""),
+              "…and the note that concluded the opposite is marked corrected, not deleted")
+        # The collider in this repo is the physical evidence; assert its shape so
+        # a re-exported asset that changes convention fails here rather than in a
+        # frame.
+        import struct as _struct
+        _cp = os.path.join(HERE, "worlds", "royal-garden-backdrop", "assets", "collider.glb")
+        if os.path.exists(_cp):
+            _f = io.open(_cp, "rb"); _f.read(12)
+            _jl = _struct.unpack("<II", _f.read(8))[0]
+            _js = json.loads(_f.read(_jl).decode("utf8"))
+            _lo = [1e30] * 3; _hi = [-1e30] * 3
+            for _m in _js["meshes"]:
+                for _pr in _m["primitives"]:
+                    _a = _js["accessors"][_pr["attributes"]["POSITION"]]
+                    for _i in range(3):
+                        _lo[_i] = min(_lo[_i], _a["min"][_i]); _hi[_i] = max(_hi[_i], _a["max"][_i])
+            check(_hi[1] < 5.0 and _lo[1] < -20.0,
+                  "the collider is still Y-DOWN (y %.1f..%.1f), which is what the "
+                  "correction is for" % (_lo[1], _hi[1]))
+        else:
+            print("  --   collider.glb absent; the physical check did not run")
+
         print("\n-- unknown is not single-sided --")
         # THE TRUTHFULNESS BUG. The first version read get_editor_property
         # ('two_sided'), which a MaterialInstanceConstant does not answer, and

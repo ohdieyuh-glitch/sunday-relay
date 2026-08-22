@@ -187,7 +187,14 @@
       103315.7
     ],
     "scale_convention": "MEASURED IN THE ENGINE, not assumed. UE 5.8's glTF import already applies the metre-to-centimetre conversion: the mesh arrives at 100 uu per glTF unit. The first import proved it — a 96.979-unit span came in at 9,697.9 uu. So the ACTOR scale is the metric factor itself (2.1145), times the backdrop multiplier (6) for a backdrop; it is NOT that times 100. Both scales here were 100x too large and the import measured 12,303,954 cm against an expected 123,039 — a 123-kilometre shell.",
-    "scale_measured_at": "2026-08-22, first live import, UE 5.8 container dev-5.8"
+    "scale_measured_at": "2026-08-22, first live import, UE 5.8 container dev-5.8",
+    "axis_correction_deg": [
+      180.0,
+      0.0,
+      0.0
+    ],
+    "axis_correction_why": "ROLL 180, and the note that used to sit in source_mesh.axis_note said the opposite. That note reasoned: the raw vertex data is Z-up, the single node carries a +90-degree X rotation presenting it as glTF Y-up, so no manual correction is needed. The premise is right and the conclusion is backwards. R_x(+90) maps +Z to MINUS Y — the canonical Z-up-to-Y-up export rotation is R_x(MINUS 90) — so the node rotation CREATES the Y-down convention instead of cancelling it, and UE's Y-up-to-Z-up conversion then lands the world's up on UE -Z.\nThree independent confirmations. (1) The quaternion, recomputed: raw +Z goes to glTF (0,-1,0). (2) This world's OWN collider export carries no node rotation and its Y runs -58.200..+0.716 — the huge-negative, tiny-positive signature of Y-down, the same one the sibling royal-garden world measured and corrected with this same [180,0,0]. (3) The first live import measured extents in RAW axis order (x,y,z), which only happens if the node rotation was applied, giving UE Z = -raw Z.\nWithout this the shell imports UPSIDE DOWN: ground plane above the camera and a kilometre of castle city hanging below the plaza. Every gate stays green — one actor placed, level saved, clean cook — because check_scale compares SORTED extents on purpose, so that an axis swap is not mistaken for a size error, and a 180-degree flip changes no extent.",
+    "axis_correction_open_question": "A 180-degree roll restores UP and also negates UE Y, which swaps what is in front of the arrival camera with what is behind it. That is a proper rotation, not a mirror, and it is what the sibling world measured — but whether the castle city ends up ahead of HeroCam0 or behind it CANNOT be settled from the file. The first capture settles it. If the city is behind, add transform.unreal_rotation_deg = [0,0,180]; that field already exists for exactly this and needs no import-logic change."
   },
   "bounds": {
     "source": null,
@@ -242,7 +249,7 @@
       0.0,
       0.7071068286895752
     ],
-    "axis_note": "The raw vertex data is Z-UP (Z runs -0.94 to +80.5 while X and Y spread horizontally) and the single node carries a +90-degree X rotation that presents it as glTF's Y-up. UE's importer applies node transforms and then its own Y-up to Z-up conversion, so NO manual axis correction is declared here. That is a prediction from the file's own header, not a measurement in the engine — the first import's measured bounds and a look at the frame settle it.",
+    "axis_note": "CORRECTED 2026-08-22. The raw vertex data is Z-UP (Z runs -0.94 to +80.5 while X and Y spread horizontally) and the single node carries a +90-degree X rotation. The earlier note concluded from this that no axis correction was needed. That was wrong: R_x(+90) sends +Z to -Y, so the node rotation puts the world's up on glTF -Y and UE lands it on -Z. See transform.axis_correction_why.",
     "vertices": 1777213,
     "texture": {
       "count": 1,
