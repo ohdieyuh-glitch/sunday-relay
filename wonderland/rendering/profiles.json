@@ -125,7 +125,8 @@
         },
         "r.AutoExposure.Bias": {
           "value": -3.4,
-          "source": "generate-hub-level.py LOOK"
+          "source": "generate-hub-level.py LOOK",
+          "note": "\nRE-MEASURED 2026-08-22 and it is INERT in this packaged render, which confirms an earlier finding independently. A sweep of -3.4 / -2.0 / -1.0 / 0.0 at 1080p moved frame luma only 47.0 -> 46.5 -> 48.7 -> 52.3 \u2014 3.4 stops of bias for an 11% change, when a working bias would be about 10x. Whatever holds this frame down, it is not the bias, so do not reach for it to fix darkness. The colour GRADE is the lever."
         },
         "r.Tonemapper.Sharpen": {
           "value": 2.0,
