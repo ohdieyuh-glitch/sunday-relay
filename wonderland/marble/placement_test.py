@@ -60,6 +60,32 @@ check("predicted extent matches expected_unreal_extent_cm component by component
 check("...and NOT merely as a sorted multiset (the check the gate can make)",
       all(close(p, e, 1e-5) for p, e in zip(sorted(pred), sorted(exp))))
 
+print("== the conversion must FLIP handedness, and its determinant says so ==")
+# The basis was (1,0,0),(0,0,-1),(0,1,0) — determinant +1 — for as long as this
+# file has existed. glTF is right-handed, Unreal is left-handed, so a conversion
+# between them cannot preserve handedness. This is checkable from first
+# principles, needs no engine, and would have caught it before the L4 did.
+check("glTF-to-Unreal has determinant -1",
+      close(placement.determinant(placement.GLTF_TO_UNREAL), -1.0),
+      "a determinant of +1 preserves handedness and therefore cannot be the "
+      "right-handed to left-handed conversion, whatever else it gets right")
+check("...and it is a pure axis map, so every extent survives it",
+      sorted(abs(v) for row in placement.GLTF_TO_UNREAL for v in row) == [0.0] * 6 + [1.0] * 3)
+check("a rotation, by contrast, must have determinant +1",
+      close(placement.determinant(placement.rotation(180.0, 0.0, 0.0)), 1.0, 1e-9),
+      "roll/pitch/yaw can never fix a handedness error; only the conversion can")
+
+print("== the prediction matches what the ENGINE measured, not just its own arithmetic ==")
+# Printed by import-marble-world.py on the real L4 import at 2026-08-22 15:26.
+ENGINE_CENTRE_OFFSET_CM = (-1130.0, -2227.0, 50464.0)
+offset = placement.predicted_centre_offset_cm(m)
+check("centre offset agrees with the engine on every axis INCLUDING sign",
+      all(abs(a - b) < 1.0 for a, b in zip(offset, ENGINE_CENTRE_OFFSET_CM)),
+      "predicted %s vs engine %s" % ([round(v) for v in offset],
+                                     list(ENGINE_CENTRE_OFFSET_CM)))
+check("...and the Y sign in particular, which is the axis that was mirrored",
+      offset[1] < 0)
+
 print("== the shell is the right way up ==")
 go = full_chain(m)
 origin = go((0.0, 0.0, 0.0))

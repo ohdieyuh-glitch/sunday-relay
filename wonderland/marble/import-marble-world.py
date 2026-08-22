@@ -234,7 +234,7 @@ except Exception as _pexc:  # pragma: no cover - only if the file is missing
     log("placement.py unavailable (%s) — the ORIENTATION gate will not run" % _pexc)
 
 
-def check_orientation(centre_cm, transform, manifest):
+def check_orientation(centre_cm, transform, manifest, extent_cm=None):
     """Refuse a layer that came in FLIPPED, which no extent check can see.
 
     check_scale below compares SORTED extents on purpose, so that an axis swap
@@ -262,11 +262,24 @@ def check_orientation(centre_cm, transform, manifest):
     measured = [centre_cm[i] - origin[i] for i in range(3)]
     log("orientation check: centre offset measured %s cm vs predicted %s cm"
         % ([round(v) for v in measured], [round(v) for v in predicted]))
-    scale = max(abs(v) for v in predicted) or 1.0
-    wrong = [i for i in range(3)
-             if abs(predicted[i]) > 0.05 * scale
-             and measured[i] * predicted[i] < 0
-             and abs(measured[i]) > 0.05 * scale]
+    # PER AXIS, AGAINST ITS OWN SIZE. This used to compare every axis against
+    # 5% of the LARGEST one, and that is exactly how a mirrored axis got through:
+    # Y disagreed by 2,227 cm, in sign, and 2,227 is under 5% of Z's 50,464. The
+    # gate printed the disagreement on its own report line and then declined to
+    # act on it.
+    #
+    # An axis is checkable when the prediction is far enough from zero that a
+    # sign means something at all — judged against that axis's own extent, with
+    # an absolute floor so a thin axis cannot make noise significant.
+    wrong = []
+    for i in range(3):
+        p_i, m_i = predicted[i], measured[i]
+        span = abs(extent_cm[i]) if extent_cm and i < len(extent_cm) else abs(p_i)
+        floor = max(100.0, 0.01 * span)
+        if abs(p_i) < floor or abs(m_i) < floor:
+            continue
+        if p_i * m_i < 0:
+            wrong.append(i)
     if not wrong:
         return
     axis = "XYZ"
@@ -754,7 +767,7 @@ def main(argv=None):
         bounds_block["measured_extent_cm"] = [round(v, 1) for v in measured]
         bounds_block["measured_centre_cm"] = [round(centre.x, 1), round(centre.y, 1),
                                               round(centre.z, 1)]
-        check_orientation([centre.x, centre.y, centre.z], transform, manifest)
+        check_orientation([centre.x, centre.y, centre.z], transform, manifest, measured)
         check_scale(measured, transform)
     except Exception as exc:
         log("could not measure bounds (%s) — the scale gate did NOT run" % exc)

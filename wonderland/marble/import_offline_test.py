@@ -952,6 +952,28 @@ def main():
         check(abs(half[0] * 2 - man["transform"]["expected_unreal_extent_cm"][0]) < 1.0,
               "…while its extents were EXACTLY right, which is why this needs its own gate")
 
+        # THE MIRROR THE GATE SAW AND LET THROUGH. On the real L4 import the
+        # engine measured a centre offset of [-1130, -2227, 50464] against a
+        # prediction of [-1130, +2227, 50464]: Y opposite in sign. The old rule
+        # compared every axis against 5% of the LARGEST, and 2,227 is under 5%
+        # of 50,464, so it printed the disagreement on its report line and
+        # declined to act.
+        man = bounded_world("mirrored", [180.0, 0.0, 0.0])
+        pred = _pl.predicted_centre_offset_cm(man)
+        org = man["transform"]["unreal_origin_cm"]
+        half = tuple(v / 2.0 for v in _pl.predicted_extent(man))
+        mirrored = tuple(org[i] + (-pred[i] if i == 1 else pred[i]) for i in range(3))
+        raised = None
+        try:
+            run_importer("mirrored", root, bounds_centre=mirrored, bounds_extent=half)
+        except SystemExit as exc:
+            raised = str(exc)
+        check(raised is not None and "FLIPPED on Y" in raised,
+              "a single MIRRORED axis is refused, even when it is the small one")
+        check(abs(pred[1]) < 0.05 * max(abs(v) for v in pred),
+              "…and that axis really is under 5% of the largest, which is why the "
+              "old tolerance ate it")
+
         # No recorded bounds: fail open, but loudly.
         make_world(root, "nobounds", hq=True, backdrop=True)
         run_importer("nobounds", root)

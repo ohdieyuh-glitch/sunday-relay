@@ -69,11 +69,16 @@ function flipVerdict(contract, visual) {
       'this is the only check that can see a flip, because a flip changes no extent');
   }
   const measured = visual.centre.map((v, i) => v - origin[i]);
-  const scale = Math.max(...predicted.map(Math.abs)) || 1;
-  const wrong = [0, 1, 2].filter((i) =>
-    Math.abs(predicted[i]) > 0.05 * scale &&
-    Math.abs(measured[i]) > 0.05 * scale &&
-    predicted[i] * measured[i] < 0);
+  // Per axis, against its OWN size. Comparing every axis against 5% of the
+  // largest is how a mirrored Y — 2,227 cm, sign reversed — passed under a
+  // 50,464 cm Z. The engine printed the disagreement and the tolerance ate it.
+  const wrong = [0, 1, 2].filter((i) => {
+    const span = Math.abs(visual.extent?.[i] ?? predicted[i]);
+    const floor = Math.max(100, 0.01 * span);
+    return Math.abs(predicted[i]) >= floor &&
+           Math.abs(measured[i]) >= floor &&
+           predicted[i] * measured[i] < 0;
+  });
   if (!wrong.length) {
     return row(OK, 'Right way up — the geometry sits where the contract predicts',
       `centre offset ${fmt(measured)} cm vs predicted ${fmt(predicted)} cm`);

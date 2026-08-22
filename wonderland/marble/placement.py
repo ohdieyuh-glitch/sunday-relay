@@ -52,9 +52,31 @@ def rotation(roll, pitch, yaw):
 
 # UE's glTF import: right-handed Y-up to left-handed Z-up. The 100 uu per glTF
 # unit that comes with it is folded into the scale below, because it is a scale.
+#
+# THE SIGN WAS WRONG, AND ITS DETERMINANT SAID SO BEFORE ANY MEASUREMENT DID.
+#
+# This was (1,0,0),(0,0,-1),(0,1,0) — determinant +1. glTF is RIGHT-handed and
+# Unreal is LEFT-handed, so the conversion MUST flip handedness, and a
+# determinant of +1 preserves it. No amount of getting the axes right rescues a
+# matrix that cannot do the one thing the conversion is for.
+#
+# The engine agreed, in a line the importer had been printing all along:
+#     centre offset measured [-1130, -2227, 50464] cm
+#                   predicted [-1130, +2227, 50464] cm
+# X matched, Z matched, Y was exactly opposite — the signature of a single
+# mirrored axis. Extents are sign-invariant, so the scale gate passed; the
+# ORIENTATION gate caught it and its own tolerance suppressed it, because 2,227
+# cm is under 5% of the 50,464 cm largest axis.
 GLTF_TO_UNREAL = ((1.0, 0.0, 0.0),
-                  (0.0, 0.0, -1.0),
+                  (0.0, 0.0, 1.0),
                   (0.0, 1.0, 0.0))
+
+
+def determinant(m):
+    """A 3x3 determinant, for asserting handedness rather than assuming it."""
+    return (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]))
 
 UNITS_PER_GLTF_UNIT = 100.0
 
