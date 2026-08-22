@@ -39,7 +39,9 @@ export function evaluate(input) {
 
   out.push(cameraVerdict(contract, camera, frustumFraction));
 
-  if (collider && visual) out.push(registrationVerdict(visual, collider));
+  if (collider && visual) {
+    out.push(registrationVerdict(visual, collider, contract.placement?.origin_cm));
+  }
   return out.filter(Boolean);
 }
 
@@ -121,18 +123,55 @@ function cameraVerdict(contract, camera, frustumFraction) {
     `${skyline}°. The limit is ELEVATION, not rotation — no yaw fixes this.`);
 }
 
-function registrationVerdict(visual, collider) {
+function registrationVerdict(visual, collider, contractOrigin) {
+  // WHAT THIS IS LOOKING FOR IS A TRANSFORM ERROR, not a difference.
+  //
+  // The first version compared bounding-box centres against 5% of the visual
+  // span and reported the real world as misregistered. Measured afterwards: the
+  // collider is a decimated PROXY with 0.89 / 0.72 / 0.77 of the visual's
+  // extent, every axis agrees in sign, and the centres sit 6.5% apart. A
+  // coarser mesh covering less of the shell has a different centre for reasons
+  // that have nothing to do with placement, and a check that calls that a fault
+  // trains people to ignore it.
+  //
+  // A real transform error looks different: an axis lands on the wrong SIDE of
+  // the origin (a flip), or the centres are separated by a distance comparable
+  // to the object itself (a swap or a bad rotation). Those are what this tests.
   const delta = Math.hypot(...collider.centre.map((v, i) => v - visual.centre[i]));
   const span = Math.hypot(...visual.extent) || 1;
   const rel = delta / span;
-  if (rel <= 0.05) {
-    return row(OK, 'Visual and collider register',
-      `centres ${delta.toFixed(0)} cm apart, ${(100 * rel).toFixed(1)}% of the visual span`);
+  // Signs are compared on the offset FROM THE ORIGIN, not on absolute world
+  // position, and against 1% of that axis's extent — the same rule the
+  // importer's orientation gate settled on. Absolute centres sit near the
+  // origin here (the shell is roughly centred on the viewpoint), so a
+  // percentage-of-extent floor applied to them swallows the very disagreement
+  // this is looking for. My first attempt did exactly that and let a flipped
+  // collider through.
+  const org = contractOrigin || [0, 0, 0];
+  const vOff = visual.centre.map((v, i) => v - org[i]);
+  const cOff = collider.centre.map((v, i) => v - org[i]);
+  const floors = visual.extent.map((e) => Math.max(100, 0.01 * Math.abs(e)));
+  const flipped = [0, 1, 2].filter((i) =>
+    Math.abs(vOff[i]) > floors[i] &&
+    Math.abs(cOff[i]) > floors[i] &&
+    vOff[i] * cOff[i] < 0);
+
+  if (flipped.length) {
+    return row(BAD, `Collider is FLIPPED on ${flipped.map((i) => 'XYZ'[i]).join('')} ` +
+      'relative to the visual mesh',
+      'Marble’s collider export carries no node rotation while the visual mesh ' +
+      'does, so the two can need different axis corrections. Centres on opposite ' +
+      'sides of the origin is that fault, and it is not a proxy difference.');
   }
-  return row(BAD, 'Visual and collider DO NOT register',
-    `centres ${delta.toFixed(0)} cm apart (${(100 * rel).toFixed(1)}% of the span). ` +
-    'Marble’s collider export carries no node rotation while the visual mesh does, ' +
-    'so the two need different axis corrections.');
+  if (rel > 0.25) {
+    return row(BAD, 'Visual and collider DO NOT register',
+      `centres ${delta.toFixed(0)} cm apart, ${(100 * rel).toFixed(1)}% of the ` +
+      'visual span — too far to be explained by the collider being a coarser mesh.');
+  }
+  return row(OK, 'Visual and collider register',
+    `centres ${delta.toFixed(0)} cm apart, ${(100 * rel).toFixed(1)}% of the visual ` +
+    'span, every axis on the same side of the origin. The collider is a decimated ' +
+    'proxy, so some difference is expected and is not a placement fault.');
 }
 
 export const KINDS = { OK, BAD, WARN, PENDING };

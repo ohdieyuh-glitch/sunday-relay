@@ -267,5 +267,19 @@
     "double_sided": true,
     "double_sided_risk": "THE MOST LIKELY WAY THIS IMPORT LOOKS LIKE A FAILURE WHILE REPORTING SUCCESS. The material is doubleSided, which matters because a single-viewpoint reconstruction is a shell VIEWED FROM INSIDE: if UE imports it single-sided and the winding faces outward, every gate here passes — one actor placed, right size, level saved, cook clean — and the frame shows nothing. If the backdrop is missing from the capture, check the material's Two Sided flag before touching placement.",
     "unlit_measured": "MEASURED IN THE ENGINE 2026-08-22, and it REFUTES the risk this field used to warn about. UE 5.8's Interchange glTF importer DOES honour KHR_materials_unlit: the imported MaterialInstanceConstant's parent chain is /InterchangeAssets/gltf/MaterialInstances/MI_Unlit_Opaque_DS -> /InterchangeAssets/gltf/M_Unlit, its base_property_overrides report shading_model=MSM_UNLIT and two_sided=True. So the backdrop is NOT being re-lit by Wonderland's sun, and 'the shell imports lit' is no longer a live explanation for anything. Probed read-only by wonderland/infra/build/probe-marble-material.py."
+  },
+  "collider_registration_measured": {
+    "verdict": "registers; the collider is a decimated PROXY, not a mis-transformed mesh",
+    "measured_at": "2026-08-22, from the GLB accessor bounds with no engine",
+    "collider_node_rotation": null,
+    "note": "The browser inspector first reported visual/collider misregistration, and the manifest's own note suggested the cause: the collider export carries no node rotation while the visual mesh does. Measuring settled it the other way. The collider's axes ALREADY match the visual mesh AFTER that mesh's node rotation - its Y runs -58.2..+0.716 where the visual's raw Z runs -0.941..+80.492, which is R_x(+90) already applied. So both meshes reach the loader in the same space and take the same actor transform; no separate correction is needed.",
+    "centres_apart_cm": 16180,
+    "centres_apart_fraction_of_visual_span": 0.065,
+    "span_ratio_collider_over_visual": [
+      0.888,
+      0.723,
+      0.774
+    ],
+    "why_not_a_fault": "Every axis agrees in sign. The collider covers 72-89% of the visual's extent, so a coarser mesh over less of the shell has a different centre for reasons that have nothing to do with placement. The inspector's 5% threshold was arbitrary and has been replaced by a test for what a transform error actually looks like: an axis on the wrong side of the origin, or a separation comparable to the object."
   }
 }

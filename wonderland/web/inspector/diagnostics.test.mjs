@@ -80,11 +80,35 @@ check('…and HeroCam6 at the same point is accepted',
   find(evaluate({ contract, visual: good, originPlaced: origin.slice(), camera: cam(6) }),
        'reaches the castle skyline')?.kind === 'ok');
 
-console.log('== visual and collider that do not register ==');
+console.log('== the collider check must find a TRANSFORM ERROR, not a difference ==');
+// Measured from the real assets: the collider is a decimated proxy with
+// 0.89 / 0.72 / 0.77 of the visual's extent, every axis agrees in sign, and the
+// centres sit 6.5% apart. The first version of this check called that
+// misregistration, which is a false alarm that trains people to ignore it.
+const proxyCentre = good.centre.map((v, i) => v + [5721, 13998, 5756][i]);
+const proxyExtent = good.extent.map((v, i) => v * [0.888, 0.723, 0.774][i]);
 rows = evaluate({ contract, visual: good, originPlaced: origin.slice(), camera: null,
-  collider: { extent: good.extent.slice(), centre: good.centre.map((v, i) => v + (i === 1 ? 90000 : 0)) } });
-check('a displaced collider is REFUSED', find(rows, 'DO NOT register')?.kind === 'bad');
-check('…and one that matches is accepted',
+  collider: { extent: proxyExtent, centre: proxyCentre } });
+check('the REAL collider — a coarser proxy 6.5% off centre — is accepted',
+  find(rows, 'Visual and collider register')?.kind === 'ok',
+  JSON.stringify(rows.map((r) => `${r.kind}:${r.text}`)));
+check('…and the verdict says a proxy difference is not a placement fault',
+  /decimated\s+proxy/.test(find(rows, 'Visual and collider register')?.why || ''));
+
+// A flip IS a transform error, and is what the check exists for.
+const originV = contract.placement.origin_cm;
+const flippedCentre = good.centre.map((v, i) => (i === 1 ? originV[i] - (v - originV[i]) : v));
+rows = evaluate({ contract, visual: good, originPlaced: origin.slice(), camera: null,
+  collider: { extent: proxyExtent, centre: flippedCentre } });
+check('a collider FLIPPED on an axis is refused',
+  find(rows, 'FLIPPED on')?.kind === 'bad', JSON.stringify(rows.map((r) => r.text)));
+
+// So is a separation comparable to the object itself.
+rows = evaluate({ contract, visual: good, originPlaced: origin.slice(), camera: null,
+  collider: { extent: proxyExtent, centre: good.centre.map((v, i) => v + (i === 0 ? 150000 : 0)) } });
+check('a collider a third of the world away is refused',
+  find(rows, 'DO NOT register')?.kind === 'bad');
+check('…and an exactly matching collider is accepted',
   find(evaluate({ contract, visual: good, originPlaced: origin.slice(), camera: null,
        collider: { extent: good.extent.slice(), centre: good.centre.slice() } }),
        'Visual and collider register')?.kind === 'ok');
