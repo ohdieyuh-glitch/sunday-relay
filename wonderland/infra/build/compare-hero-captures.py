@@ -98,6 +98,64 @@ ROWS = [
 ]
 
 
+
+def load_camera_table():
+    """The generator's hero-shot table, via the same parser the contract uses."""
+    build = os.path.join(os.path.dirname(os.path.abspath(__file__)))
+    if build not in sys.path:
+        sys.path.insert(0, build)
+    try:
+        import hero_shots
+        return {c["index"]: c for c in hero_shots.described()}
+    except Exception:
+        return {}
+
+
+def _floats(text):
+    try:
+        return [float(v) for v in (text or "").split(",")]
+    except ValueError:
+        return None
+
+
+def transform_mismatch(entry, requested, cameras):
+    """Did the engine render from the camera the run asked for?
+
+    Answered from the LOCATION, ROTATION and FOV the packaged build printed,
+    against what the generator authored for that index. A frame is attributable
+    when the numbers agree; a label is not needed and is not trustworthy.
+    """
+    cam = e_index = None
+    try:
+        e_index = int(requested)
+        cam = cameras.get(e_index)
+    except (TypeError, ValueError):
+        pass
+    if cam is None:
+        return []                      # nothing to compare against; not a claim
+    loc = _floats(proof(entry, "HERO_CAM_LOC"))
+    rot = _floats(proof(entry, "HERO_CAM_ROT"))
+    fov = _floats(proof(entry, "HERO_CAM_FOV"))
+    if not loc or not rot or not fov:
+        return ["hero %s reported no camera transform, so the frame cannot be "
+                "attributed" % entry.get("hero_camera")]
+    problems = []
+    want_loc = cam["location_cm"]
+    if max(abs(a - b) for a, b in zip(loc, want_loc)) > 1.0:
+        problems.append("hero %s rendered from %s, but HeroCam%d is authored at %s"
+                        % (entry.get("hero_camera"), loc, e_index, want_loc))
+    if abs(rot[0] - cam["pitch_deg"]) > 0.05 or abs(rot[1] - cam["yaw_deg"]) > 0.05:
+        problems.append("hero %s rendered at pitch/yaw %.2f/%.2f, but HeroCam%d is "
+                        "authored at %.2f/%.2f"
+                        % (entry.get("hero_camera"), rot[0], rot[1], e_index,
+                           cam["pitch_deg"], cam["yaw_deg"]))
+    if abs(fov[0] - cam["fov_horizontal_deg"]) > 0.01:
+        problems.append("hero %s rendered at %.2f deg FOV, but HeroCam%d is authored "
+                        "at %.2f" % (entry.get("hero_camera"), fov[0], e_index,
+                                     cam["fov_horizontal_deg"]))
+    return problems
+
+
 def main(argv):
     paths = argv[1:]
     if len(paths) < 1:
@@ -131,6 +189,7 @@ def main(argv):
     for e in entries:
         print("hero %s frame: %s" % (e.get("hero_camera"), e.get("png")))
 
+    cameras = load_camera_table()
     bad = []
     for e in entries:
         served = proof(e, "HERO_CAM_SERVED")
@@ -138,9 +197,17 @@ def main(argv):
         if proof(e, "HERO_CAM_FELL_BACK") == "1":
             bad.append("hero %s FELL BACK — the frame is of a different camera"
                        % e.get("hero_camera"))
-        elif served and requested and ("HeroCam%s" % requested) not in served:
-            bad.append("hero %s asked for HeroCam%s and got %s"
-                       % (e.get("hero_camera"), requested, served))
+        else:
+            # NOT the actor's name. UE's GetName() returns "CameraActor_12";
+            # the identity that matters is the TAG the level generator set, and
+            # the actor name never carries it. Checking the name against
+            # "HeroCam6" condemns a perfectly good capture.
+            #
+            # The transform is better evidence than any label anyway: if the
+            #位置, rotation and FOV the engine reported are the ones the
+            # generator authored for that index, then that is the camera that
+            # rendered, whatever the object happens to be called.
+            bad.extend(transform_mismatch(e, requested, cameras))
         if not served:
             bad.append("hero %s did not report which camera answered — the frame "
                        "cannot be attributed to any camera at all"
