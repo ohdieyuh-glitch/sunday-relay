@@ -57,10 +57,29 @@ wl_say "build $BUILD_SHA"
 # Pull the packaged build's own report out of the app log. These are the facts
 # the frame has to be read WITH: a beautiful frame with MARBLE_ACTORS=0 is a
 # frame of a different world than the one being discussed.
+# ONLY THIS RUN'S LINES. run-stream.sh APPENDS to app.log, so a file that has
+# already held a HeroCam0 launch still holds it when HeroCam6 launches. Reading
+# the whole file put both runs' HERO_CAM_SERVED lines into both sidecars, and a
+# proof block that describes two cameras describes neither. Worse, the fallback
+# detector below would keep reporting a fallback that happened three captures
+# ago. Each capture records the byte offset before it launches and reads only
+# from there.
+log_offset() {
+  [ -f "$1" ] && wc -c < "$1" | tr -d '[:space:]' || echo 0
+}
+
+run_slice() {
+  # $1 log, $2 byte offset recorded before the launch
+  [ -f "$1" ] || return 0
+  tail -c "+$(( ${2:-0} + 1 ))" "$1" 2>/dev/null || true
+}
+
 proof_lines() {
   local log="$1"
   [ -f "$log" ] || return 0
-  grep -aoE '(WORLD|ACTORS|RELAY_DOGS|COMPOUND_AGENTS|BATCHES|INSTANCED_PIECES|LOOSE_PIECES|VISIBLE_PIECES|MARBLE_ACTORS|MARBLE_TWO_SIDED_COMPONENTS|MARBLE_COLLIDING_COMPONENTS|RUNTIME_RELAY_DOGS|RUNTIME_COMPOUND_AGENTS|RUNTIME_INSTANCES_BUILT|RUNTIME_BLOCKING_PRIMITIVES|RUNTIME_GROUNDED_DOGS|RUNTIME_GROUNDED_PLAYER_STARTS|RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION|RUNTIME_DOGS_OK|WORLD_OK|HERO_CAM_REQUESTED|HERO_CAM_SERVED|HERO_CAM_FELL_BACK|HERO_CAM_MISSING|HERO_CAM_LOC|HERO_CAM_ROT|HERO_CAM_FOV)=[^ ]*' "$log" \
+  local from="${2:-0}"
+  run_slice "$log" "$from" \
+  | grep -aoE '(WORLD|ACTORS|RELAY_DOGS|COMPOUND_AGENTS|BATCHES|INSTANCED_PIECES|LOOSE_PIECES|VISIBLE_PIECES|MARBLE_ACTORS|MARBLE_TWO_SIDED_COMPONENTS|MARBLE_COLLIDING_COMPONENTS|RUNTIME_RELAY_DOGS|RUNTIME_COMPOUND_AGENTS|RUNTIME_INSTANCES_BUILT|RUNTIME_BLOCKING_PRIMITIVES|RUNTIME_GROUNDED_DOGS|RUNTIME_GROUNDED_PLAYER_STARTS|RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION|RUNTIME_DOGS_OK|WORLD_OK|HERO_CAM_REQUESTED|HERO_CAM_SERVED|HERO_CAM_FELL_BACK|HERO_CAM_MISSING|HERO_CAM_LOC|HERO_CAM_ROT|HERO_CAM_FOV)=[^ ]*' \
     | sort -u || true
 }
 
@@ -87,7 +106,8 @@ GPU_IDLE="$(gpu_sample)"
 # camera. The run succeeds, the PNG is named for the camera that was asked for,
 # and it is a picture of a different one.
 fell_back() {
-  grep -aq 'HERO_CAM_FELL_BACK=1\|HERO_CAM_MISSING=' "$1" 2>/dev/null
+  # $1 log, $2 offset. Bounded to this run for the reason above.
+  run_slice "$1" "$2" | grep -aq 'HERO_CAM_FELL_BACK=1\|HERO_CAM_MISSING='
 }
 
 CAPTURED=0
@@ -99,6 +119,10 @@ for cam in $CAMS; do
   # Stop anything already streaming: two streamers on one port is how a capture
   # ends up showing the PREVIOUS build.
   bash "$HERE/stop-wonderland.sh" >/dev/null 2>&1 || true
+
+  # Where this run's log begins. Taken AFTER the stop, so a shutdown line from
+  # the previous camera cannot land inside this camera's slice.
+  APP_LOG_FROM="$(log_offset "$WL_LOG/app.log")"
 
   if ! WL_HERO_CAM="$cam" SKIP_PREPARE=1 SKIP_BUILD=1 SKIP_SHOT=1 \
        bash "$HERE/launch-wonderland.sh" >"$WL_LOG/capture-$cam.log" 2>&1; then
@@ -115,7 +139,7 @@ for cam in $CAMS; do
   fi
   [ -s "$base.png" ] || { wl_warn "hero camera $cam produced an empty PNG"; continue; }
 
-  if fell_back "$WL_LOG/app.log"; then
+  if fell_back "$WL_LOG/app.log" "$APP_LOG_FROM"; then
     wl_warn "hero camera $cam DID NOT EXIST in this level — the view fell back to the
 legacy arrival camera, so $base.png is a picture of a DIFFERENT camera. Deleting it
 rather than filing it as evidence. The package is older than the camera; rebuild."
@@ -155,7 +179,7 @@ See $WL_LOG/capture-$cam.log"
   # Passed through the environment rather than as arguments: the proof block is
   # multi-line and the stats are JSON, and both would need quoting that is easy
   # to get subtly wrong on a machine that costs money per minute.
-  WL_PROOF_LINES="$(proof_lines "$WL_LOG/app.log")" \
+  WL_PROOF_LINES="$(proof_lines "$WL_LOG/app.log" "$APP_LOG_FROM")" \
   WL_STREAM_STATS="$STATS" \
   WL_GPU_IDLE="$GPU_IDLE" \
   WL_GPU_LOADED="$GPU_LOADED" \

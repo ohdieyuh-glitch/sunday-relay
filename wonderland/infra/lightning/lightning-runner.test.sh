@@ -1863,6 +1863,45 @@ else
   bad "VRAM is reported with no baseline to read it against"
 fi
 
+echo "== each capture's evidence is bounded to its own run =="
+# run-stream.sh APPENDS to app.log, so a file that already held a HeroCam0
+# launch still holds it when HeroCam6 launches. Reading the whole file put both
+# runs' HERO_CAM_SERVED lines into both sidecars -- a proof block describing two
+# cameras describes neither -- and made the fallback detector keep reporting a
+# fallback from three captures ago. This exercises the real helpers in the real
+# order (record offset, append, read) rather than grepping for their names.
+SLICE_TMP="$(mktemp -d)"
+sed -n '/^log_offset() {/,/^}/p;/^run_slice() {/,/^}/p;/^proof_lines() {/,/^}/p;/^fell_back() {/,/^}/p' \
+  "$HERE/capture-hero-shots.sh" > "$SLICE_TMP/helpers.sh"
+if [ -s "$SLICE_TMP/helpers.sh" ] && grep -q 'run_slice' "$SLICE_TMP/helpers.sh"; then
+  ( set +e
+    . "$SLICE_TMP/helpers.sh"
+    L="$SLICE_TMP/app.log"; : > "$L"; rc=0
+    step() { # label, line, expect_fallback, expect_fov
+      local off; off="$(log_offset "$L")"
+      printf '%s\n' "$2" >> "$L"
+      local seen; seen="$(proof_lines "$L" "$off" | tr '\n' ' ')"
+      local fb=0; fell_back "$L" "$off" && fb=1
+      local others; others="$(printf '%s' "$seen" | grep -o 'HERO_CAM_FOV=[0-9.]*' | grep -vc "HERO_CAM_FOV=$4")"
+      case "$seen" in *"HERO_CAM_FOV=$4"*) : ;; *) rc=1 ;; esac
+      [ "$fb" = "$3" ] || rc=1
+      [ "$others" = "0" ] || rc=1
+    }
+    step "cam0" 'LogTemp: HERO_CAM_REQUESTED=0 HERO_CAM_SERVED=HeroCam0_1 HERO_CAM_FELL_BACK=0 HERO_CAM_FOV=62.00' 0 62.00
+    step "cam6 stale" 'LogTemp: HERO_CAM_REQUESTED=6 HERO_CAM_SERVED=HeroCam0_1 HERO_CAM_FELL_BACK=1 HERO_CAM_FOV=62.00' 1 62.00
+    step "cam6 rebuilt" 'LogTemp: HERO_CAM_REQUESTED=6 HERO_CAM_SERVED=HeroCam6_1 HERO_CAM_FELL_BACK=0 HERO_CAM_FOV=75.00' 0 75.00
+    step "cam0 again" 'LogTemp: HERO_CAM_REQUESTED=0 HERO_CAM_SERVED=HeroCam0_1 HERO_CAM_FELL_BACK=0 HERO_CAM_FOV=62.00' 0 62.00
+    exit $rc )
+  if [ $? -eq 0 ]; then
+    ok "a run reads only its own HERO_CAM lines, and a stale fallback does not leak forward"
+  else
+    bad "one capture's evidence bleeds into another's — the sidecars cannot be attributed"
+  fi
+else
+  bad "could not extract the log-slicing helpers from capture-hero-shots.sh"
+fi
+rm -rf "$SLICE_TMP"
+
 echo "== a captured frame carries the build that produced it =="
 # This project has already compared two captures that turned out to be the same
 # binary. A PNG that cannot be attributed to a commit is a picture, not evidence.
