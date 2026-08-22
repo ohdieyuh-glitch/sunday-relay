@@ -210,10 +210,15 @@ else
 fi
 
 echo "== the container is given, and shown, the asset dirs =="
+# Both paths now emit knobs through wl_knob_pairs, so the assertion is that the
+# name is IN that list rather than that a literal -e appears twice. The intent
+# is unchanged: the container must be given these, and be seen to be.
 for var in WONDERLAND_TEXTURE_DIR WONDERLAND_AUDIO_DIR; do
-  n=$(grep -c -- "-e $var=" "$HERE/build-render.sh" 2>/dev/null || echo 0)
-  [ "$n" -ge 2 ] && ok "build-render.sh passes $var into the container ($n sites)" \
-                 || bad "build-render.sh passes $var into the container only $n time(s)"
+  if sed -n '/^wl_knob_pairs()/,/^}/p' "$HERE/build-render.sh" | grep -q "$var"; then
+    ok "build-render.sh passes $var to the build (via wl_knob_pairs)"
+  else
+    bad "build-render.sh does not pass $var to the build"
+  fi
   grep -q "$var" "$HERE/build-render.sh" || bad "build-render.sh never mentions $var"
 done
 # and it must PROVE visibility rather than assume it
@@ -1529,14 +1534,20 @@ echo "== the generator's knobs cross the container boundary =="
 # editing code. It was never forwarded into the container, so every sweep in
 # container mode silently did nothing — and an override that is ignored is
 # worse than one that is unavailable, because the operator believes it applied.
+KNOB_FN="$(sed -n '/^wl_knob_pairs()/,/^}/p' "$HERE/build-render.sh")"
 for v in WONDERLAND_LOOK WONDERLAND_BATCH WONDERLAND_MARBLE_BACKDROP WONDERLAND_MARBLE_IMPORT WONDERLAND_COLLIDE; do
-  n=$(grep -c -- "-e $v=" "$HERE/build-render.sh" || true)
-  [ "${n:-0}" -ge 1 ] && ok "$v is forwarded into the container" \
-    || bad "$v never reaches the generator in container mode"
-  grep -q "$v=\"\${$v" "$HERE/build-render.sh" \
-    && ok "  and the native path passes it too" \
-    || bad "  the native path drops $v"
+  if printf '%s' "$KNOB_FN" | grep -q "$v"; then
+    ok "$v is forwarded to the build"
+  else
+    bad "$v never reaches the generator"
+  fi
 done
+# ...and through ONE helper, so the native and container paths cannot disagree
+# about which knobs exist — which is how WONDERLAND_COLLIDE came to be flattened
+# on one path and not the other.
+grep -c 'wl_knob_pairs' "$HERE/build-render.sh" | { read -r n; [ "${n:-0}" -ge 3 ]; } \
+  && ok "both build paths read the same knob list" \
+  || bad "the knob list is duplicated between the native and container paths"
 
 echo "== the Marble meshes are linked in from persistent storage =="
 # They are 141 MB and 330 MB, they are NOT in git, and $WL_SRC is reset to
@@ -1809,6 +1820,49 @@ if code_has "$MOTIF" "HERO_DOG\s*=\s*\(-?[0-9]" -E; then
 else
   ok "…and it parses every number out of the generator rather than restating them"
 fi
+
+echo "== a knob that means something when UNSET must cross the boundary unset =="
+# generate-hub-level.py documents its own contract: "An UNSET variable gets the
+# default; an empty one is a choice." build-render.sh passed
+# WONDERLAND_COLLIDE="${WONDERLAND_COLLIDE:-}", so inside the container it was
+# ALWAYS set and ALWAYS empty — read as the choice to disable. Every build
+# shipped a world with NO gameplay collision: COLLIDING_PIECES=0,
+# RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION=1, 0 of 9 Relay Dogs standing on
+# anything. Same shape as the MARBLE_BACKDROP bug, whose fix did not check
+# whether the siblings had it too.
+BR_STRIPPED="$(mktemp)"
+sed 's/#.*//' "$HERE/build-render.sh" > "$BR_STRIPPED"
+if grep -qE 'WONDERLAND_COLLIDE="\$\{WONDERLAND_COLLIDE:-\}"' "$BR_STRIPPED"; then
+  bad "WONDERLAND_COLLIDE is still flattened to empty on the way in"
+else
+  ok "WONDERLAND_COLLIDE is no longer flattened to empty"
+fi
+grep -q 'wl_knob_pairs' "$BR_STRIPPED" \
+  && ok "…both call sites emit knobs through one helper, so they cannot drift" \
+  || bad "the native and container paths build their knob lists separately"
+rm -f "$BR_STRIPPED"
+KNOB_T="$(mktemp)"
+cat > "$KNOB_T" <<'KNOBS'
+set -uo pipefail
+wl_knob_pairs() {
+  local name
+  for name in WONDERLAND_LOOK WONDERLAND_COLLIDE WONDERLAND_BATCH; do
+    if [ -n "${!name+set}" ]; then printf '%s=%s\n' "$name" "${!name}"; fi
+  done
+  return 0
+}
+printf 'A[%s]' "$(wl_knob_pairs | tr '\n' ',')"
+WONDERLAND_COLLIDE="plaza,stone"; printf 'B[%s]' "$(wl_knob_pairs | tr '\n' ',')"
+WONDERLAND_COLLIDE=""; printf 'C[%s]' "$(wl_knob_pairs | tr '\n' ',')"
+KNOBS
+KNOB_OUT="$(bash "$KNOB_T" 2>/dev/null)"
+rm -f "$KNOB_T"
+case "$KNOB_OUT" in
+  "A[]B[WONDERLAND_COLLIDE=plaza,stone,]C[WONDERLAND_COLLIDE=,]")
+    ok "…an UNSET knob is omitted, so the generator's default survives"
+    ok "…and an explicitly EMPTY one is still passed, because that is a choice" ;;
+  *) bad "the knob helper does not distinguish unset from empty: $KNOB_OUT" ;;
+esac
 
 echo "== importing a backdrop and USING one were two switches =="
 # The L4 build ran WONDERLAND_MARBLE_IMPORT=royal-garden-backdrop. The shell

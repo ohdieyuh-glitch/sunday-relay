@@ -92,16 +92,37 @@ wl_say "engine mode: $MODE"
 BUILD_SH="wonderland/infra/build/build-wonderland.sh"
 [ -f "$WL_SRC/$BUILD_SH" ] || wl_die "missing $BUILD_SH in the checkout"
 
+# KNOBS THAT DISTINGUISH "UNSET" FROM "EMPTY" HAVE TO CROSS THE BOUNDARY INTACT.
+#
+# generate-hub-level.py documents its own contract for WONDERLAND_COLLIDE: "An
+# UNSET variable gets the default; an empty one is a choice." This file then
+# passed WONDERLAND_COLLIDE="${WONDERLAND_COLLIDE:-}", so inside the container it
+# was ALWAYS set and ALWAYS empty — read as the choice to disable — and every
+# build shipped a world with no gameplay collision at all. COLLIDING_PIECES=0,
+# RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION=1, no Relay Dog standing on anything.
+#
+# Same shape as the WONDERLAND_MARBLE_BACKDROP bug, which was fixed without
+# checking whether its siblings had it too. They did.
+#
+# So: emit a knob ONLY when it is actually set. Both call sites use this, so
+# they cannot drift apart.
+wl_knob_pairs() {
+  local name
+  for name in WONDERLAND_TEXTURE_DIR WONDERLAND_AUDIO_DIR WONDERLAND_LOOK \
+              WONDERLAND_BATCH WONDERLAND_MARBLE_BACKDROP WONDERLAND_MARBLE_IMPORT \
+              WONDERLAND_COLLIDE; do
+    if [ -n "${!name+set}" ]; then
+      printf '%s=%s\n' "$name" "${!name}"
+    fi
+  done
+}
+
 run_native() {
-  UE_ROOT="$WL_UE" OUT="$WL_OUT" FORCE_REBUILD="$FORCE" \
-    WONDERLAND_TEXTURE_DIR="$WONDERLAND_TEXTURE_DIR" \
-    WONDERLAND_AUDIO_DIR="$WONDERLAND_AUDIO_DIR" \
-    WONDERLAND_LOOK="${WONDERLAND_LOOK:-}" \
-    WONDERLAND_BATCH="${WONDERLAND_BATCH:-1}" \
-    WONDERLAND_MARBLE_BACKDROP="${WONDERLAND_MARBLE_BACKDROP-}" \
-    WONDERLAND_MARBLE_IMPORT="${WONDERLAND_MARBLE_IMPORT:-}" \
-    WONDERLAND_COLLIDE="${WONDERLAND_COLLIDE:-}" \
-    bash "$WL_SRC/$BUILD_SH" 2>&1 | tee "$WL_LOG/build.log"
+  local -a knobs=()
+  while IFS= read -r pair; do knobs+=("$pair"); done < <(wl_knob_pairs)
+  env UE_ROOT="$WL_UE" OUT="$WL_OUT" FORCE_REBUILD="$FORCE" \
+      "${knobs[@]+"${knobs[@]}"}" \
+      bash "$WL_SRC/$BUILD_SH" 2>&1 | tee "$WL_LOG/build.log"
   return "${PIPESTATUS[0]}"
 }
 
@@ -152,18 +173,14 @@ run_container() {
   # were forwarded, so every one of them silently did nothing in container mode
   # — an override that is ignored is worse than one that is unavailable,
   # because the operator believes the sweep happened.
+  local -a knob_args=()
+  while IFS= read -r pair; do knob_args+=(-e "$pair"); done < <(wl_knob_pairs)
   docker run --rm $gpuflag $extra \
     -v "$WL_ROOT:$WL_ROOT" \
     -e UE_ROOT=/home/ue4/UnrealEngine \
     -e OUT="$WL_OUT" \
     -e FORCE_REBUILD="$FORCE" \
-    -e WONDERLAND_TEXTURE_DIR="$WONDERLAND_TEXTURE_DIR" \
-    -e WONDERLAND_AUDIO_DIR="$WONDERLAND_AUDIO_DIR" \
-    -e WONDERLAND_LOOK="${WONDERLAND_LOOK:-}" \
-    -e WONDERLAND_BATCH="${WONDERLAND_BATCH:-1}" \
-    -e WONDERLAND_MARBLE_BACKDROP="${WONDERLAND_MARBLE_BACKDROP-}" \
-    -e WONDERLAND_MARBLE_IMPORT="${WONDERLAND_MARBLE_IMPORT:-}" \
-    -e WONDERLAND_COLLIDE="${WONDERLAND_COLLIDE:-}" \
+    "${knob_args[@]+"${knob_args[@]}"}" \
     -e WONDERLAND_GENERATOR_EXTRA="${WL_GENERATOR_EXTRA:-}" \
     -w "$WL_SRC" \
     "$WL_UE_IMAGE" \
