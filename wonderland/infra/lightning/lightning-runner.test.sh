@@ -2026,6 +2026,37 @@ grep -q 'needs about .* GB free' "$CM" \
   || bad "the restore does not check for room before writing 69 GB"
 # The predicate itself, exercised: pgrep -f matches whole command lines, so a
 # shell that merely NAMES the archive must not be mistaken for a running load.
+# UNDER THE REAL SHELL OPTIONS. The first version of this ran the predicate
+# inside `set +e`, so it proved the pattern matching worked and proved nothing
+# about the thing that actually broke: pgrep exits 1 when nothing matches, and
+# under `set -euo pipefail` — which is what common.sh runs with — that non-zero
+# pipeline kills the script at the assignment, with no message. The guard
+# aborted every legitimate restore and the build log showed the stage header
+# and nothing after it.
+GUARD_STRICT="$(mktemp)"
+cat > "$GUARD_STRICT" <<'STRICT'
+set -euo pipefail
+ARCH="/definitely/not/here-$$.tar"
+wl_running_ue_loads() { pgrep -a -f "docker load .*$ARCH" 2>/dev/null | awk '$2 ~ /(^|\/)docker$/ { print $1 }'; }
+busy=""
+busy="$(wl_running_ue_loads | tr '\n' ' ')" || busy=""
+printf 'SURVIVED[%s]' "$busy"
+STRICT
+if [ "$(bash "$GUARD_STRICT" 2>/dev/null)" = "SURVIVED[]" ]; then
+  ok "the concurrent-restore check SURVIVES no match under set -euo pipefail"
+else
+  bad "the restore guard dies silently when no load is running — which is every legitimate restore"
+fi
+rm -f "$GUARD_STRICT"
+COMMON_STRIPPED="$(mktemp)"
+sed 's/#.*//' "$HERE/common.sh" > "$COMMON_STRIPPED"
+if grep -q 'wl_running_ue_loads' "$COMMON_STRIPPED" && grep -q '|| busy=""' "$COMMON_STRIPPED"; then
+  ok "…because the assignment tolerates pgrep's non-zero exit"
+else
+  bad "the assignment does not tolerate pgrep exiting 1"
+fi
+rm -f "$COMMON_STRIPPED"
+
 GUARD_TMP="$(mktemp -d)"
 ( set +e
   A="$GUARD_TMP/ue.tar"; B="$GUARD_TMP/other.tar"; rc=0

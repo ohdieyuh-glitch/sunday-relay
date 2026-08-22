@@ -383,8 +383,16 @@ wl_ensure_ue_image() {
     pgrep -a -f "docker load .*$WL_UE_ARCHIVE" 2>/dev/null \
       | awk '$2 ~ /(^|\/)docker$/ { print $1 }'
   }
-  local busy
-  busy="$(wl_running_ue_loads | tr '\n' ' ')"
+  # `|| busy=""`, and it is not decoration. pgrep exits 1 when nothing matches
+  # — the NORMAL case — and under `set -euo pipefail` that non-zero pipeline
+  # kills the script at the assignment, silently, with no message at all. This
+  # guard therefore aborted every restore where no load was running, which is
+  # every legitimate restore. It went unnoticed for hours because the image was
+  # already present and the function returns before reaching this line; it only
+  # fired once a machine-type switch wiped the image, and then the build log
+  # showed the ENGINE header and nothing after it.
+  local busy=""
+  busy="$(wl_running_ue_loads | tr '\n' ' ')" || busy=""
   if [ -n "${busy// /}" ]; then
     wl_die "another 'docker load' of $WL_UE_ARCHIVE is ALREADY RUNNING (pid(s): $busy).
 Two concurrent restores of a 69 GB archive filled this disk to 92% once already.
