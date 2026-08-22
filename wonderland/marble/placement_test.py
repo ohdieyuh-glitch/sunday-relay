@@ -241,6 +241,59 @@ check("straight up is +Z", close(placement.forward_from_rotator(90.0, 0.0)[2], 1
 check("yaw +90 from level is +Y, which is left-handed Unreal",
       close(placement.forward_from_rotator(0.0, 90.0)[1], 1.0, 1e-9))
 
+print("== the fix and the yaw compose to a mirror in X, so the COVERAGE did not move ==")
+# Two true things that look contradictory until this is stated. The basis fix
+# mirrored Y; the artistic yaw then rotated 180 about Z. Composed, that is
+# exactly a mirror in X — which flips WHICH SIDE of the world the arrival camera
+# faces, and cannot change HOW MUCH of the skyline is in frame, because the
+# camera looks along +Y with an azimuth-symmetric frustum and neither operation
+# touches elevation.
+#
+# So the original measurements survived the correction unchanged: HeroCam0 0.9%,
+# HeroCam6 29.9%, skyline p50 +21.3 deg — re-measured through the corrected
+# chain on 2026-08-22 and identical to the figure. The elevation finding was
+# right all along; the handedness bug was real too; they are about different
+# things.
+OLD_BASIS = ((1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0))   # determinant +1
+
+
+def chain_with(manifest, basis=None, yaw=None):
+    manifest = json.loads(json.dumps(manifest))
+    if yaw is not None:
+        manifest["transform"]["unreal_rotation_deg"] = [0.0, 0.0, yaw]
+    saved = placement.GLTF_TO_UNREAL
+    if basis:
+        placement.GLTF_TO_UNREAL = basis
+    node = placement.node_rotation(manifest)
+    place = placement.placement_from(manifest)
+    placement.GLTF_TO_UNREAL = saved
+
+    def go(point):
+        g = tuple(node[i][0] * point[0] + node[i][1] * point[1] + node[i][2] * point[2]
+                  for i in range(3))
+        return place(g)
+    return go
+
+
+before = chain_with(m, basis=OLD_BASIS, yaw=0.0)
+after = chain_with(m, yaw=180.0)
+base = m["transform"]["unreal_origin_cm"]
+worst = 0.0
+for point in ((1, 0, 0), (0, 1, 0), (0, 0, 1), (3.5, -2.25, 11.75),
+              (-49.38, -72.215, -0.941), (47.599, 75.726, 80.492)):
+    va = [before(point)[i] - base[i] for i in range(3)]
+    vb = [after(point)[i] - base[i] for i in range(3)]
+    worst = max(worst, max(abs((-va[0]) - vb[0]), abs(va[1] - vb[1]), abs(va[2] - vb[2])))
+check("the shipped chain differs from the original by EXACTLY a mirror in X",
+      worst < 1e-6, "worst deviation %.3e cm" % worst)
+check("...so elevation is untouched, and the skyline sits where it always did",
+      close(after((0.0, 0.0, 1.0))[2] - after((0.0, 0.0, 0.0))[2],
+            before((0.0, 0.0, 1.0))[2] - before((0.0, 0.0, 0.0))[2], 1e-9))
+check("...and forward, along the camera's +Y, is unmoved",
+      close(after((0.0, 1.0, 0.0))[1] - after((0.0, 0.0, 0.0))[1],
+            before((0.0, 1.0, 0.0))[1] - before((0.0, 0.0, 0.0))[1], 1e-9),
+      "an azimuth-symmetric frustum sees the same FRACTION either way")
+
 print("== the contract handed to the browser says the same thing ==")
 # The browser inspector must not compute placement; it applies what this emits.
 # If the contract disagreed with placement.py, the tool built to catch a flipped
