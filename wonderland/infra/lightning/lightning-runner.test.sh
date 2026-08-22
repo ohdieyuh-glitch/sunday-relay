@@ -27,6 +27,27 @@ check(){ if [ "$1" = "$2" ]; then ok "$3"; else bad "$3 (wanted '$2', got '$1')"
 # bash pattern matching has no pipe and no subprocess, so it cannot do it.
 has(){ case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac; }
 
+# THE SAME TRAP, ONE LAYER OUT — and it bit again on 2026-08-22.
+#
+# `sed 's/#.*//' "$file" | grep -q P` has exactly the shape the note above
+# describes: grep leaves on the first match, sed takes SIGPIPE, and under
+# `pipefail` the PIPELINE reports failure while the pattern was found. It is
+# flaky by FILE SIZE and by scheduling, so it moves between assertions from run
+# to run: three consecutive runs of this suite failed "a capture with no SHA
+# would still be written", then "prepare.sh still calls a directory a
+# toolchain", then nothing at all — all with an unchanged tree.
+#
+# Strip to a temp file and grep THAT. No pipeline, nothing to SIGPIPE.
+code_has(){                     # file, pattern, [extra grep flags...]
+  local file="$1" pattern="$2"; shift 2
+  local tmp rc=0
+  tmp="$(mktemp)"
+  sed 's/#.*//' "$file" > "$tmp"
+  grep -q "$@" -- "$pattern" "$tmp" || rc=$?
+  rm -f "$tmp"
+  return "$rc"
+}
+
 echo "== syntax =="
 for f in common.sh prepare.sh build-render.sh run-stream.sh launch-wonderland.sh stop-wonderland.sh; do
   if bash -n "$HERE/$f" 2>/dev/null; then ok "$f parses"; else bad "$f does not parse"; fi
@@ -1480,7 +1501,7 @@ else ok "the preflight does not require a GPU"; fi
 # --gpus, and a naive grep read its own explanation as the offence. A check
 # that fails on the prose describing why it should pass is a check that gets
 # deleted rather than fixed.
-if sed 's/#.*//' "$HERE/compile-preflight.sh" | grep -q -- "--gpus"; then
+if code_has "$HERE/compile-preflight.sh" "--gpus"; then
   bad "the preflight asks docker for a GPU"
 else ok "...and never asks docker for one"; fi
 grep -q "BuildEditor" "$HERE/compile-preflight.sh" \
@@ -1562,7 +1583,7 @@ echo "== the build refuses before it compiles if the mesh is missing =="
 grep -q 'resolve-mesh.py' "$HERE/build-render.sh" \
   && ok "the preflight resolves the mesh through the importer's own chooser" \
   || bad "build-render.sh does not preflight the Marble mesh"
-if sed 's/#.*//' "$HERE/build-render.sh" | grep -q 'hq_mesh_url'; then
+if code_has "$HERE/build-render.sh" 'hq_mesh_url'; then
   bad "build-render.sh re-implements the mesh choice instead of calling the importer"
 else
   ok "…and does not carry a second copy of the selection rule"
@@ -1783,7 +1804,7 @@ else bad "the Dog is not on its arcane circle: $(python3 "$MOTIF" 2>&1 | tail -3
 grep -q 'verify-hero-motif.py' "$HERE/prepare.sh" \
   && ok "…and prepare.sh runs it before a build" \
   || bad "the motif gate is not in the pre-build gates"
-if sed 's/#.*//' "$MOTIF" | grep -qE "HERO_DOG\s*=\s*\(-?[0-9]"; then
+if code_has "$MOTIF" "HERO_DOG\s*=\s*\(-?[0-9]" -E; then
   bad "verify-hero-motif hardcodes HERO_DOG instead of parsing it"
 else
   ok "…and it parses every number out of the generator rather than restating them"
@@ -1890,7 +1911,7 @@ else bad "the arrival cameras cannot see the backdrop: $(python3 "$SKY" 2>&1 | t
 grep -q 'verify-hero-skyline.py' "$HERE/prepare.sh" \
   && ok "…and prepare.sh runs it before a build" \
   || bad "the skyline gate is not in the pre-build gates"
-if sed 's/#.*//' "$SKY" | grep -qE "^\s*(a_pos|w_pos)\s*=\s*\("; then
+if code_has "$SKY" "^\s*(a_pos|w_pos)\s*=\s*\(" -E; then
   bad "verify-hero-skyline hardcodes camera positions instead of parsing them"
 else
   ok "…and it reads the hero-shot table out of the generator rather than restating it"
@@ -1922,12 +1943,12 @@ CAPS="$HERE/capture-hero-shots.sh"
 grep -q 'HERO_CAM_FELL_BACK' "$CAPS" \
   && ok "the capture collects the fallback marker into its proof block" \
   || bad "the capture does not collect the fallback marker"
-if sed 's/#.*//' "$CAPS" | grep -q 'rm -f "\$base.png"'; then
+if code_has "$CAPS" 'rm -f "\$base.png"'; then
   ok "…and DELETES a frame captured from the wrong camera rather than filing it"
 else
   bad "a frame from the wrong camera is still written as evidence"
 fi
-if sed 's/#.*//' "$CAPS" | grep -q 'STATS="\$(cat "\$STATS_FILE")"'; then
+if code_has "$CAPS" 'STATS="\$(cat "\$STATS_FILE")"'; then
   ok "the stream measurement is read from measure.cjs's FILE, not its stdout"
 else
   bad "the capture parses stdout for JSON that measure.cjs prints to a file — every FPS number silently becomes {}"
@@ -1938,7 +1959,7 @@ if grep -q 'fs.writeFileSync(OUT' "$HERE/../../rendering/measure.cjs" \
 else
   bad "measure.cjs no longer matches the assumption the capture is built on"
 fi
-if sed 's/#.*//' "$CAPS" | grep -q 'could not be measured'; then
+if code_has "$CAPS" 'could not be measured'; then
   ok "…and an unmeasurable stream is SAID, not filed as absent numbers"
 else
   bad "a failed measurement is indistinguishable from one that was never attempted"
@@ -1946,7 +1967,7 @@ fi
 grep -q 'nvidia-smi' "$CAPS" \
   && ok "GPU utilisation and VRAM are sampled with the picture, from the same run" \
   || bad "the capture records no GPU measurement"
-if sed 's/#.*//' "$CAPS" | grep -q 'GPU_IDLE='; then
+if code_has "$CAPS" 'GPU_IDLE='; then
   ok "…against an idle baseline, so a VRAM number means something"
 else
   bad "VRAM is reported with no baseline to read it against"
@@ -1958,17 +1979,17 @@ echo "== a directory is not a toolchain =="
 # gone by the time a capture needed it, while package.json and package-lock.json
 # sat there looking like a healthy install. Both places now ask node whether the
 # module actually LOADS, which is the only question shot.cjs will ask later.
-if sed 's/#.*//' "$HERE/prepare.sh" | grep -q 'wl_playwright_loads'; then
+if code_has "$HERE/prepare.sh" 'wl_playwright_loads'; then
   ok "prepare.sh proves playwright loads rather than that a directory exists"
 else
   bad "prepare.sh still calls a directory a toolchain"
 fi
-if sed 's/#.*//' "$HERE/prepare.sh" | grep -qE '\[ -d "\$WL_TOOLS/node_modules/playwright" \]'; then
+if code_has "$HERE/prepare.sh" '\[ -d "\$WL_TOOLS/node_modules/playwright" \]' -E; then
   bad "the directory test is still there"
 else
   ok "…and the directory test is gone, not merely supplemented"
 fi
-if sed 's/#.*//' "$HERE/capture-hero-shots.sh" | grep -q "require.*playwright"; then
+if code_has "$HERE/capture-hero-shots.sh" "require.*playwright"; then
   ok "the capture checks for a browser BEFORE the first metered launch"
 else
   bad "the capture discovers a missing browser only after paying for a launch"
@@ -2087,7 +2108,7 @@ else bad "capture-hero-shots.sh does not parse"; fi
 grep -q 'compiled.sha' "$CAP" \
   && ok "it reads the compiled SHA out of the build" \
   || bad "nothing ties a capture to a commit"
-if sed 's/#.*//' "$CAP" | grep -q 'wl_die.*compiled.sha\|no \$SHA_FILE'; then
+if code_has "$CAP" 'wl_die.*compiled.sha\|no \$SHA_FILE'; then
   ok "…and REFUSES to capture without one"
 else bad "a capture with no SHA would still be written"; fi
 grep -q 'stop-wonderland.sh' "$CAP" \
@@ -2127,7 +2148,7 @@ grep -q "INSTANCED_PIECES" "$CB_CODE" \
 grep -q 'WL_GENERATOR_EXTRA' "$HERE/../build/build-wonderland.sh" \
   && ok "build-wonderland.sh takes generator flags from the caller" \
   || bad "the generator invocation is not parameterised"
-if sed 's/#.*//' "$HERE/../build/build-wonderland.sh" | grep -q 'nullrhi'; then
+if code_has "$HERE/../build/build-wonderland.sh" 'nullrhi'; then
   bad "-nullrhi is baked into the shared build path instead of opted into"
 else ok "...and -nullrhi is not the default there"; fi
 
