@@ -378,5 +378,19 @@ fi
 make_engine "$TMP/ue"
 
 echo
+echo "== a hero capture cannot report a result it does not have =="
+# The comparison tool is what turns two sidecars into a recommendation, so a
+# version of it that always prints a nice table would make every run look like
+# a result. Its own suite covers the three ways a capture can be a lie.
+CMP_OUT="$(python3 "$HERE/compare-hero-captures.test.py" 2>&1)"
+if printf '%s' "$CMP_OUT" | grep -q 'failed 0'; then
+  while IFS= read -r line; do
+    case "$line" in "  ok   "*) ok "${line#  ok   }" ;; esac
+  done <<< "$CMP_OUT"
+else
+  bad "compare-hero-captures refuses nothing: $(printf '%s' "$CMP_OUT" | tail -3)"
+fi
+
+echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" -eq 0 ]
