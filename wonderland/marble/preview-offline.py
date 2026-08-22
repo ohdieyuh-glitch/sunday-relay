@@ -389,7 +389,7 @@ class Equirect(object):
         return sx, sy, dist
 
 
-def orientation_report(cam, world, tris):
+def orientation_report(cam, world, tris, colors=None):
     """Where the shell's SKYLINE is, and whether the hero camera can see it.
 
     The question this exists to answer is not "is the castle city ahead" in the
@@ -416,7 +416,19 @@ def orientation_report(cam, world, tris):
     lo, hi = pitch - half_v, pitch + half_v
 
     far = dist > np.percentile(dist, 75)
-    sky = far & (el > 5.0)
+    # Separate SKY from ARCHITECTURE. Most of a reconstructed shell's far, high
+    # geometry is the sky dome, and including it drags the "skyline" elevation
+    # upward until the recommendation it produces is about the wrong thing.
+    # This world's sky is blue-to-lavender and its towers are cream, rose and
+    # gold, so the channel order separates them: sky is the only large surface
+    # where blue leads red. Crude, and checkable against the panorama, which is
+    # why the panorama is rendered.
+    if colors is not None:
+        tri_col = colors[tris].mean(axis=1)
+        is_sky = (tri_col[:, 2] > tri_col[:, 0] + 0.06) & (tri_col.mean(axis=1) > 0.35)
+    else:
+        is_sky = np.zeros(len(tris), dtype=bool)
+    sky = far & (el > 5.0) & ~is_sky
     in_az = np.abs(az) <= half_h
     in_el = (el >= lo) & (el <= hi)
 
@@ -427,7 +439,9 @@ def orientation_report(cam, world, tris):
         "                           and azimuth %+.1f .. %+.1f deg" % (-half_h, half_h),
         "geometry elevation         p50 %+.1f  p90 %+.1f  p99 %+.1f deg"
         % (np.percentile(el, 50), np.percentile(el, 90), np.percentile(el, 99)),
-        "SKYLINE (far + above the horizon): %d triangles, %.1f%% of the mesh"
+        "sky dome                   %d triangles, %.1f%% of the mesh"
+        % (int(is_sky.sum()), 100.0 * is_sky.mean()),
+        "SKYLINE (far, above the horizon, NOT sky): %d triangles, %.1f%% of the mesh"
         % (int(sky.sum()), 100.0 * sky.mean()),
     ]
     if sky.any():
@@ -539,7 +553,7 @@ def main():
     cam = Camera([float(v) for v in args.camera.split(",")],
                  [float(v) for v in args.look.split(",")],
                  args.fov, args.width, args.height)
-    report = orientation_report(cam, world, tris)
+    report = orientation_report(cam, world, tris, colors)
     print(report)
     with open(os.path.join(args.out, "orientation.txt"), "w") as fh:
         fh.write(report + "\n")
