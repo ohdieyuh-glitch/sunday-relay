@@ -159,8 +159,22 @@ export WL_MIN_RAM_GB="${WL_MIN_RAM_GB:-16}"
 export WL_HTTP_PORT="${WL_HTTP_PORT:-8080}"
 export WL_STREAMER_PORT="${WL_STREAMER_PORT:-8888}"
 export WL_TURN_PORT="${WL_TURN_PORT:-3478}"
-export WL_RES_X="${WL_RES_X:-1280}"
-export WL_RES_Y="${WL_RES_Y:-720}"
+# 1080p, not 720p, and not 4K — measured on the L4 2026-08-22.
+#
+# Compared at ONE display size, which is the only fair comparison because
+# acutance is scale-dependent, detail is FLAT across 720p/1080p/1440p/2160p
+# (4.237 / 4.188 / 4.105 / 4.347) while FPS falls 113 -> 12. Rendering at 4K
+# buys about 2.6% more detail for ten times the frame cost: the softness is in
+# the SOURCE, a photogrammetric shell and primitive authored geometry, not in
+# the output resolution.
+#
+# So resolution is chosen for the VIEWER's screen rather than for detail. 1080p
+# is what a browser shows without upscaling on an ordinary display, and it holds
+# 58 FPS on HeroCam6 and 40 on HeroCam0 — both above the 30 floor. 720p is
+# faster and measurably no less detailed, but arrives upscaled and soft on
+# anything larger than a laptop.
+export WL_RES_X="${WL_RES_X:-1920}"
+export WL_RES_Y="${WL_RES_Y:-1080}"
 
 # --------------------------------------------------------------------------
 # The Marble meshes are hundreds of megabytes and are NOT in git — the HQ
