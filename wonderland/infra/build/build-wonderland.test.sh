@@ -545,6 +545,42 @@ fi
 rm -rf "$MFR_TMP"
 
 echo
+echo "== the Relay Dog's paws do not skate =="
+# The founder's words were "sliding, teleporting, jittering, snapping" and "a
+# model being translated through space while its legs twitch". That was literal:
+# four static cubes welded to a root that SetActorLocation moved, with no gait
+# at all. Foot lock - a planted paw not moving in WORLD space - decides whether
+# a walk reads as walking, and it is arithmetic, so it is compiled and proven
+# here rather than judged from a stream on a rented GPU.
+GAIT_DIR="$HERE/../../Source/Wonderland"
+if command -v g++ >/dev/null 2>&1 && [ -f "$GAIT_DIR/WonderlandDogGait.test.cpp" ]; then
+  GAIT_BIN="$(mktemp -u)"
+  if g++ -std=c++17 -O1 -o "$GAIT_BIN" \
+       "$GAIT_DIR/WonderlandDogGait.cpp" "$GAIT_DIR/WonderlandDogGait.test.cpp" 2>/dev/null; then
+    GAIT_OUT="$("$GAIT_BIN" 2>&1)"; rm -f "$GAIT_BIN"
+    if printf '%s' "$GAIT_OUT" | grep -q 'failed 0'; then
+      while IFS= read -r line; do
+        case "$line" in "  ok   "*) ok "${line#  ok   }" ;; esac
+      done <<< "$GAIT_OUT"
+    else
+      bad "the gait math fails: $(printf '%s' "$GAIT_OUT" | grep FAIL | head -3)"
+    fi
+  else
+    bad "the gait math does not compile"
+  fi
+fi
+SD="$GAIT_DIR/WonderlandStrollingDog.cpp"
+if sed 's|//.*||' "$SD" | grep -q 'DistanceWalked += StepLength'; then
+  ok "the stroller advances its gait by distance travelled, not by a clock"
+else
+  bad "the gait is not driven by distance, so it can drift from the body"
+fi
+if sed 's|//.*||' "$SD" | grep -q 'LineTraceSingleByChannel'; then
+  ok "...and traces for the ground instead of holding its spawn height"
+else
+  bad "the Dog never looks for the floor, so it floats on any slope"
+fi
+
 echo "== "sharper" is a number, not an impression =="
 # The founder's note is "too blurry, too soft, too smeared, not crisp enough for
 # 4K". Those all describe one measurable thing — how much neighbouring pixels

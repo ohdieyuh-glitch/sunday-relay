@@ -2,6 +2,10 @@
 
 #include "Components/SceneComponent.h"
 #include "WonderlandDogBody.h"
+#include "WonderlandDogGait.h"
+#include "Components/StaticMeshComponent.h"
+#include "CollisionQueryParams.h"
+#include "Engine/World.h"
 
 namespace WonderlandDogTags
 {
@@ -48,7 +52,18 @@ void AWonderlandStrollingDog::BeginPlay()
 	// the one thing the identity rule forbids.
 	Skin.Scale = WonderlandDogBody::ReferenceScale;
 	Skin.FootOffset = 0.0f;
-	BuiltParts = WonderlandDogBody::Build(this, Body, Skin);
+	BuiltParts = WonderlandDogBody::Build(this, Body, Skin, &Rig);
+	if (Rig.Torso != nullptr)
+	{
+		TorsoBaseScale = Rig.Torso->GetRelativeScale3D();
+	}
+	// Stride scales with the Dog. Quoted against the reference skin scale so a
+	// larger Dog takes proportionally longer steps instead of scurrying.
+	const float SizeRatio = (WonderlandDogBody::ReferenceScale > 0.0f)
+		? (Skin.Scale / WonderlandDogBody::ReferenceScale) : 1.0f;
+	StrideLength *= SizeRatio;
+	StrideLift *= SizeRatio;
+	StrideBob *= SizeRatio;
 
 	if (BuiltParts == 0)
 	{
@@ -86,18 +101,28 @@ void AWonderlandStrollingDog::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	LifeSeconds += DeltaSeconds;
 
+	// A frame that took no time, or an absurd one after a hitch, must not be
+	// integrated: it produces a zero-length step or a teleport, and both read
+	// as the snapping the founder saw.
+	const float Dt = FMath::Clamp(DeltaSeconds, 0.0f, 0.1f);
+
 	// THE BREATH. Ambient life, never state: it depends on LifeSeconds and the
-	// placed position and on nothing Relay has ever said. ~4.5 second cycle,
-	// about 2% of the body — visible as life, never readable as information.
-	if (Body != nullptr)
+	// placed position and on nothing Relay has ever said. Applied to the TORSO
+	// now rather than to the root — scaling the root scaled the legs and their
+	// stride with it, so the whole Dog pulsed instead of breathing.
+	if (Rig.Torso != nullptr)
 	{
 		const float Breath = 1.0f + 0.02f * FMath::Sin(LifeSeconds * 1.4f + BreathPhase);
-		Body->SetRelativeScale3D(FVector(Breath, Breath, Breath));
+		Rig.Torso->SetRelativeScale3D(TorsoBaseScale * Breath);
 	}
 
 	if (PauseSeconds > 0.0f)
 	{
-		PauseSeconds -= DeltaSeconds;
+		PauseSeconds -= Dt;
+		// Settle to a stand: the paws ease back to rest rather than freezing
+		// mid-stride, which is what made a stopping Dog look like a dropped
+		// prop.
+		PoseLegs(0.0f, FMath::Clamp(PauseSeconds * 2.0f, 0.0f, 1.0f));
 		return;
 	}
 
@@ -115,12 +140,78 @@ void AWonderlandStrollingDog::Tick(float DeltaSeconds)
 		return;
 	}
 
-	const FVector Step = ToTarget / Distance * WalkSpeed * DeltaSeconds;
-	SetActorLocation(Here + Step);
+	const FVector Direction = ToTarget / Distance;
+	const float StepLength = WalkSpeed * Dt;
+	FVector Next = Here + Direction * StepLength;
+
+	// GROUND. The old step forced Z to zero and left the Dog at its spawn
+	// height forever, so on anything but flat ground it floated or sank. Trace
+	// down for the floor and ease onto it — eased, because a hard snap to a
+	// traced height is itself a jitter.
+	if (const UWorld* const W = GetWorld())
+	{
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(WonderlandDogGround), false, this);
+		const FVector From = Next + FVector(0.0f, 0.0f, 220.0f);
+		const FVector To = Next - FVector(0.0f, 0.0f, 600.0f);
+		if (W->LineTraceSingleByChannel(Hit, From, To, ECC_WorldStatic, Params))
+		{
+			GroundZ = bHaveGround ? FMath::FInterpTo(GroundZ, Hit.Location.Z, Dt, 12.0f)
+			                      : Hit.Location.Z;
+			bHaveGround = true;
+		}
+	}
+	if (bHaveGround)
+	{
+		Next.Z = GroundZ;
+	}
+	SetActorLocation(Next);
+
+	// The gait advances with the DISTANCE covered, so the paws and the body are
+	// the same quantity and cannot disagree at any speed.
+	DistanceWalked += StepLength;
+	PoseLegs(DistanceWalked, 0.0f);
 
 	// Turn toward travel. The body faces +X, so the yaw of the step is the yaw
 	// the whole Dog wants — interpolated so it banks into a turn rather than
 	// snapping, which is what made the earlier Dogs read as sliding props.
-	const FRotator Want(0.0f, FMath::RadiansToDegrees(FMath::Atan2(Step.Y, Step.X)), 0.0f);
-	SetActorRotation(FMath::RInterpTo(GetActorRotation(), Want, DeltaSeconds, 3.0f));
+	const FRotator Want(0.0f, FMath::RadiansToDegrees(FMath::Atan2(Direction.Y, Direction.X)), 0.0f);
+	SetActorRotation(FMath::RInterpTo(GetActorRotation(), Want, Dt, 3.0f));
+}
+
+void AWonderlandStrollingDog::PoseLegs(float Travelled, float SettleAlpha)
+{
+	// SettleAlpha 1 means "stand": the paws blend back to their rest pose. A
+	// Dog that stops mid-stride and freezes is the snapping the founder saw.
+	const float Blend = 1.0f - FMath::Clamp(SettleAlpha, 0.0f, 1.0f);
+	for (int32 i = 0; i < 4; ++i)
+	{
+		UStaticMeshComponent* const Leg = Rig.Legs[i];
+		if (Leg == nullptr)
+		{
+			continue;
+		}
+		const float Phase = Travelled / StrideLength + WonderlandGait::LegPhaseOffset(i);
+		const WonderlandGait::FLegPose Pose =
+			WonderlandGait::LegPose(Phase, StrideLength, StrideLift);
+		const FVector Rest = Rig.LegRest[i];
+		Leg->SetRelativeLocation(FVector(Rest.X + Pose.Forward * Blend,
+		                                 Rest.Y,
+		                                 Rest.Z + Pose.Lift * Blend));
+	}
+
+	const WonderlandGait::FBodyPose BodyPose =
+		WonderlandGait::BodyPose(Travelled / StrideLength, StrideBob);
+	if (Rig.Torso != nullptr)
+	{
+		Rig.Torso->SetRelativeLocation(FVector(Rig.TorsoRest.X, Rig.TorsoRest.Y,
+		                                       Rig.TorsoRest.Z + BodyPose.Bob * Blend));
+	}
+	if (Rig.Head != nullptr)
+	{
+		// The head counter-bobs: a walking dog holds its head steadier than its
+		// shoulders, and without this the whole Dog pogos.
+		Rig.Head->SetRelativeLocation(FVector(Rig.HeadRest.X, Rig.HeadRest.Y,
+		                                       Rig.HeadRest.Z + BodyPose.Bob * 0.35f * Blend));
+	}
 }

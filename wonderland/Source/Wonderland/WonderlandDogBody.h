@@ -24,6 +24,8 @@
 
 #pragma once
 
+class UStaticMeshComponent;
+
 #include "CoreMinimal.h"
 
 class AActor;
@@ -58,7 +60,29 @@ namespace WonderlandDogBody
 	 * not load and NO body was made — the caller must treat that as a visible
 	 * failure rather than a Dog that happens to be invisible.
 	 */
-	int32 Build(AActor* Owner, USceneComponent* Parent, const FSkin& Skin);
+	/** The parts a gait needs to move, handed back by Build.
+	 *
+	 *  Build used to return only a COUNT, so nothing downstream could reach a
+	 *  leg — which is the mechanical reason the Dogs slid: four cubes welded to
+	 *  a root that SetActorLocation translated. Legs are indexed to match
+	 *  WonderlandGait::LegPhaseOffset: 0 left-hind, 1 right-hind, 2 left-fore,
+	 *  3 right-fore. Any of these may be null if that part failed to build; a
+	 *  caller must check rather than assume a complete Dog. */
+	struct FRig
+	{
+		UStaticMeshComponent* Legs[4] = { nullptr, nullptr, nullptr, nullptr };
+		UStaticMeshComponent* Torso = nullptr;
+		UStaticMeshComponent* Head = nullptr;
+		/** Resting local offsets, so animation is relative to the pose the
+		 *  canonical proportions put each part at rather than to the origin. */
+		FVector LegRest[4] = { FVector::ZeroVector, FVector::ZeroVector,
+		                       FVector::ZeroVector, FVector::ZeroVector };
+		FVector TorsoRest = FVector::ZeroVector;
+		FVector HeadRest = FVector::ZeroVector;
+	};
+
+	int32 Build(AActor* Owner, USceneComponent* Parent, const FSkin& Skin,
+	            FRig* OutRig = nullptr);
 
 	/** The head's local offset, so an accessory or an animation can find it. */
 	FVector HeadLocation(const FSkin& Skin);

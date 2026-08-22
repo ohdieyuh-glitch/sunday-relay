@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include "WonderlandDogBody.h"
+
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "WonderlandStrollingDog.generated.h"
@@ -99,6 +101,34 @@ private:
 
 	FVector Destination = FVector::ZeroVector;
 	float LifeSeconds = 0.0f;
+
+	/** DISTANCE TRAVELLED, which is what drives the gait. Not a clock: a gait
+	 *  advanced by time drifts out of step with the body the moment speed
+	 *  changes, and legs that twitch while the body glides is exactly the
+	 *  failure this replaced. */
+	float DistanceWalked = 0.0f;
+
+	/** The legs, torso and head, so they can actually be moved. */
+	WonderlandDogBody::FRig Rig;
+
+	/** Ground height under the Dog, traced and smoothed. */
+	float GroundZ = 0.0f;
+	bool bHaveGround = false;
+
+	/** The torso's scale as built, so the breath multiplies it rather than
+	 *  replacing it. The breath used to scale the ROOT, which scaled the legs
+	 *  and their stride with it — the whole Dog pulsed instead of breathing. */
+	FVector TorsoBaseScale = FVector(1.0f, 1.0f, 1.0f);
+
+	/** Stride geometry, in Unreal units at the Dog's own scale. A stride a
+	 *  little longer than the leg is tall reads as an unhurried walk. */
+	float StrideLength = 132.0f;
+	float StrideLift = 15.0f;
+	float StrideBob = 3.0f;
+
+	/** Place the four paws, the torso and the head for a distance travelled.
+	 *  SettleAlpha 1 blends everything back to the standing pose. */
+	void PoseLegs(float Travelled, float SettleAlpha);
 	/** Per-Dog phase so a crowd does not breathe in lockstep. Derived from the
 	 *  actor's placed position, so it is stable across runs — a deterministic
 	 *  hero frame must not depend on a random number. */

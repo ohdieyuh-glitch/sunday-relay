@@ -36,7 +36,7 @@ namespace WonderlandDogBody
 		return FVector(84.0f * S, 0.0f, Bz + 50.0f * S - Skin.FootOffset);
 	}
 
-	int32 Build(AActor* Owner, USceneComponent* Parent, const FSkin& Skin)
+	int32 Build(AActor* Owner, USceneComponent* Parent, const FSkin& Skin, FRig* OutRig)
 	{
 		UStaticMesh* const Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 		if (Cube == nullptr || Owner == nullptr || Parent == nullptr)
@@ -124,6 +124,18 @@ namespace WonderlandDogBody
 				Comp->SetMaterial(0, M);
 			}
 			Comp->RegisterComponent();
+
+			// HAND BACK THE PARTS A GAIT NEEDS. The table's order is the
+			// contract: the first four entries are the legs, in the order
+			// WonderlandGait indexes them, and the fifth is the torso. Indices
+			// rather than names because the names are generated.
+			if (OutRig != nullptr)
+			{
+				const FVector Rest = Comp->GetRelativeLocation();
+				if (Built < 4) { OutRig->Legs[Built] = Comp; OutRig->LegRest[Built] = Rest; }
+				else if (Built == 4) { OutRig->Torso = Comp; OutRig->TorsoRest = Rest; }
+				else if (Built == 5) { OutRig->Head = Comp; OutRig->HeadRest = Rest; }
+			}
 			++Built;
 		}
 
