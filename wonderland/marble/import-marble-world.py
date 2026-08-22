@@ -452,6 +452,51 @@ def set_two_sided(material):
     return True
 
 
+def apply_unlit_gain(material, gain):
+    """Multiply the unlit base colour so the backdrop sits in the LIT world's range.
+
+    THE PROBLEM THIS SOLVES, measured on the L4 2026-08-22. The shell is placed
+    correctly, oriented correctly, is double-sided and is genuinely unlit -- and
+    renders near-black in a streamed frame. Three captures located it:
+
+        ShowFlag.PostProcessing 0   the castle city is RIGHT THERE, and the
+                                    authored world blows out to white
+        ShowFlag.EyeAdaptation 0    everything blows out; Marble washes to grey
+        (default)                   authored world correct, Marble dark navy
+
+    So it is neither occluded nor missing. Marble's texture is an already-
+    exposed photograph, roughly 0..1, while the authored world is lit with
+    values far above that. Auto-exposure can satisfy one scale or the other and
+    it satisfies the world, which is most of the frame. Nothing is broken; two
+    things are simply measured in different units.
+
+    BaseColorFactor is the lever, and it is the engine's own: a vector parameter
+    on /InterchangeAssets/gltf/M_Unlit, which the imported instance parents to.
+    Asked for by name rather than assumed -- probe-marble-material.py lists it.
+
+    A gain of 1.0 changes nothing, and that is the default, so a world whose
+    manifest says nothing about this imports exactly as it did before.
+    """
+    if gain is None or abs(float(gain) - 1.0) < 1e-6:
+        return None
+    value = float(gain)
+    try:
+        applied = unreal.MaterialEditingLibrary.set_material_instance_vector_parameter_value(
+            material, "BaseColorFactor", unreal.LinearColor(value, value, value, 1.0))
+    except Exception as exc:
+        log("unlit gain %.3g could NOT be applied (%s). The backdrop keeps the "
+            "brightness the exporter gave it." % (value, exc))
+        return False
+    if not applied:
+        log("BaseColorFactor is not a parameter on this material's parent, so the "
+            "unlit gain did nothing. Nothing was faked: the backdrop keeps the "
+            "brightness the exporter gave it.")
+        return False
+    unreal.EditorAssetLibrary.save_loaded_asset(material)
+    log("MARBLE_UNLIT_GAIN=%.4g applied to BaseColorFactor" % value)
+    return True
+
+
 def two_sided_report(meshes, want_two_sided, repair):
     """Answer the shell's one silent failure at IMPORT time, where it is free.
 
@@ -741,6 +786,37 @@ def main(argv=None):
         placeable,
         want_two_sided=bool((manifest.get("source_mesh") or {}).get("double_sided")),
         repair=not args.no_two_sided_repair)
+
+    # Brightness, on the same pass as two-sidedness and for the same reason:
+    # both are material facts that decide whether the backdrop is VISIBLE, and
+    # both are free to settle here and expensive to settle from a frame.
+    gain = transform.get("unlit_gain")
+    if gain is None:
+        log("MARBLE_UNLIT_GAIN=1 (none requested) — the backdrop keeps the "
+            "brightness the exporter gave it")
+    else:
+        applied_any = False
+        for _path, mesh in placeable:
+            try:
+                slots = mesh.get_editor_property("static_materials") or []
+            except Exception:
+                continue
+            for slot in slots:
+                # Same two-step the two-sided pass uses: the editor property
+                # first, the attribute as a fallback. A MaterialSlot does not
+                # always expose one of them.
+                try:
+                    material = slot.get_editor_property("material_interface")
+                except Exception:
+                    material = getattr(slot, "material_interface", None)
+                if material is None:
+                    continue
+                if apply_unlit_gain(material, gain):
+                    applied_any = True
+        if not applied_any:
+            log("MARBLE_UNLIT_GAIN_APPLIED=0 — the gain was asked for and did "
+                "NOT take. Read the frame as unchanged brightness, not as a "
+                "tuned one.")
 
     log("MARBLE_VISUAL_ACTORS=%d  MARBLE_COLLIDER_REFERENCES=%d"
         % (len(placed), len(collider_imported)))

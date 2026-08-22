@@ -67,6 +67,8 @@ class Recorder(object):
         self.events = []        # ("open"|"import"|"spawn"|"save", detail)
         self.bounds_extent = (5000.0, 5000.0, 1200.0)   # HALF extent, as UE reports it
         self.bounds_centre = (0.0, 0.0, 0.0)            # world centre, the flip tell
+        self.vector_params = []                         # (material, name, value)
+        self.vector_param_applies = True                # does the parent HAVE it?
         self.material_two_sided = False   # what the glTF import produced
         self.material_override_on = True  # is base_property_overrides authoritative
         self.saved_materials = []
@@ -137,6 +139,16 @@ def build_stub():
 
         def set_editor_property(self, k, v): self.props[k] = v
         def get_editor_property(self, k): return self.props.get(k)
+
+    class MaterialEditingLibrary(object):
+        @staticmethod
+        def set_material_instance_vector_parameter_value(material, name, value):
+            REC.vector_params.append((getattr(material, "name", "?"), str(name), value))
+            return REC.vector_param_applies
+
+    class LinearColor(object):
+        def __init__(self, r, g, b, a=1.0): self.rgba = (r, g, b, a)
+        def __repr__(self): return "LinearColor%s" % (self.rgba,)
 
     class MeshPipeline(object):
         def __init__(self): self.build_nanite = False
@@ -318,6 +330,8 @@ def build_stub():
     u.Texture2D = Texture2D
     u.log_warning = lambda m: REC.logs.append(m)
     u.log = lambda m: REC.logs.append(m)
+    u.MaterialEditingLibrary = MaterialEditingLibrary
+    u.LinearColor = LinearColor
     return u
 
 
@@ -973,6 +987,43 @@ def main():
         check(abs(pred[1]) < 0.05 * max(abs(v) for v in pred),
               "…and that axis really is under 5% of the largest, which is why the "
               "old tolerance ate it")
+
+        # BRIGHTNESS. The shell renders near-black in a streamed frame while
+        # being correctly placed, oriented, double-sided and genuinely unlit —
+        # because its texture is an exposed photograph and the authored world is
+        # lit far above that scale.
+        man = bounded_world("gain", [180.0, 0.0, 0.0])
+        path = os.path.join(root, "gain", "manifest.json")
+        man = json.load(io.open(path, encoding="utf8"))
+        man["transform"]["unlit_gain"] = 6.0
+        io.open(path, "w", encoding="utf8").write(json.dumps(man))
+        pred = _pl.predicted_centre_offset_cm(man)
+        org = man["transform"]["unreal_origin_cm"]
+        centre = tuple(org[i] + pred[i] for i in range(3))
+        half = tuple(v / 2.0 for v in _pl.predicted_extent(man))
+        run_importer("gain", root, bounds_centre=centre, bounds_extent=half)
+        check(any("MARBLE_UNLIT_GAIN=6" in m for m in REC.logs),
+              "a requested unlit gain is applied and reported")
+        check(any(n == "BaseColorFactor" for _m, n, _v in REC.vector_params),
+              "…on BaseColorFactor, the parameter the engine's glTF unlit master exposes")
+        check(bool(REC.vector_params)
+              and all(v.rgba[:3] == (6.0, 6.0, 6.0) for _m, _n, v in REC.vector_params),
+              "…as a neutral multiplier, so it brightens without tinting")
+
+        # A gain the material cannot take must SAY so, not be assumed.
+        REC_APPLIES = False
+        run_importer("gain", root, bounds_centre=centre, bounds_extent=half,
+                     vector_param_applies=False)
+        check(any("MARBLE_UNLIT_GAIN_APPLIED=0" in m for m in REC.logs),
+              "a gain the material will not take is reported as NOT applied")
+        check(any("not as a tuned one" in m for m in REC.logs),
+              "…and says the frame shows unchanged brightness")
+
+        # Absent means absent: no gain, no silent default.
+        make_world(root, "nogain", hq=True, backdrop=True)
+        run_importer("nogain", root)
+        check(any("MARBLE_UNLIT_GAIN=1 (none requested)" in m for m in REC.logs),
+              "a world that asks for no gain imports exactly as before")
 
         # No recorded bounds: fail open, but loudly.
         make_world(root, "nobounds", hq=True, backdrop=True)
