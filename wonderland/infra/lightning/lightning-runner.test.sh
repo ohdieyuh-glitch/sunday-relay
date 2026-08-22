@@ -1635,6 +1635,21 @@ grep -q 'ECC_Pawn' "$PROOF" \
 grep -q 'RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION' "$PROOF" \
   && ok "a world nothing can be stood on says so out loud" \
   || bad "a collisionless world would report as healthy"
+# CONFIGURED IS NOT WORKING. Counting BlockAll primitives proves the profiles
+# were set; movement asks whether a BODY is stopped, and those differ at every
+# edge and gap. DONE WHEN says "collision / gameplay works", not "is declared".
+grep -q 'SweepSingleByChannel' "$PROOF" \
+  && ok "a body-sized sweep asks whether a pawn is actually stopped" \
+  || bad "only line traces — nothing proves a body is blocked"
+grep -q 'FCollisionShape::MakeSphere' "$PROOF" \
+  && ok "…with a shape, not a zero-width ray" \
+  || bad "the sweep has no shape"
+grep -q 'RUNTIME_PAWN_SWEEP_LANDS=%d' "$PROOF" \
+  && ok "…and the packaged build reports whether it landed and whether a wall stopped it" \
+  || bad "the sweep result is not reported"
+grep -q 'RUNTIME_COLLISION_CONFIGURED_BUT_NOT_WORKING' "$PROOF" \
+  && ok "…and collision that is declared but does not work is an ERROR, not silence" \
+  || bad "a world with BlockAll profiles that still falls through would look healthy"
 # THE SWITCH. It defaulted OFF, and that left every build this project ever made
 # with no collision anywhere. Ground and architecture now block; decoration
 # never does; an explicitly empty WONDERLAND_COLLIDE restores the old world.

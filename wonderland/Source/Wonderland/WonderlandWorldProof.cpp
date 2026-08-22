@@ -13,6 +13,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/PlayerStart.h"
 #include "CollisionQueryParams.h"
+#include "CollisionShape.h"
 
 #include "WonderlandDogPawn.h"
 #include "WonderlandInstancedBatch.h"
@@ -371,8 +372,63 @@ namespace WonderlandWorldProof
 					}
 				}
 
+				// A SHAPE SWEEP, NOT A LINE. The traces above prove a surface
+				// EXISTS under something. Movement asks a different question —
+				// whether a BODY is stopped — and the two answers differ at
+				// every edge, gap and thin sliver. "Collision works" is the
+				// second question, so it gets asked with a body-sized probe on
+				// the channel movement uses.
+				//
+				// The radius is deliberately modest: the point is to prove a
+				// pawn-sized query is BLOCKED, not to model this pawn exactly,
+				// and an over-large probe would report success by clipping
+				// scenery a real pawn would pass beside.
+				int32 SweepLands = 0;
+				int32 SweepBlockedSideways = 0;
+				if (DogActors.Num() > 0)
+				{
+					const float ProbeRadius = 40.0f;
+					const FCollisionShape Body = FCollisionShape::MakeSphere(ProbeRadius);
+					FCollisionQueryParams SweepParams(TEXT("WonderlandBodySweep"), false);
+					SweepParams.AddIgnoredActors(DogActors);
+					const FVector Where = DogActors[0]->GetActorLocation();
+					FHitResult SweepHit;
+					if (Live->SweepSingleByChannel(
+							SweepHit, Where + FVector(0.0f, 0.0f, 400.0f),
+							Where - FVector(0.0f, 0.0f, 2000.0f), FQuat::Identity,
+							ECC_Pawn, Body, SweepParams))
+					{
+						SweepLands = 1;
+					}
+					// Sideways, far enough to reach the architecture. If nothing
+					// stops a body crossing the whole plaza, the world is open
+					// air however many primitives claim to block.
+					if (Live->SweepSingleByChannel(
+							SweepHit, Where + FVector(0.0f, 0.0f, 60.0f),
+							Where + FVector(6000.0f, 0.0f, 60.0f), FQuat::Identity,
+							ECC_Pawn, Body, SweepParams))
+					{
+						SweepBlockedSideways = 1;
+					}
+				}
+
 				UE_LOG(LogWonderlandProof, Warning,
 					   TEXT("RUNTIME_BLOCKING_PRIMITIVES=%d"), BlockingPrimitives);
+				UE_LOG(LogWonderlandProof, Warning,
+					   TEXT("RUNTIME_PAWN_SWEEP_LANDS=%d  RUNTIME_PAWN_SWEEP_BLOCKED_SIDEWAYS=%d"),
+					   SweepLands, SweepBlockedSideways);
+				if (BlockingPrimitives > 0 && SweepLands == 0)
+				{
+					// The gap this exists for: collision CONFIGURED and collision
+					// WORKING are different claims, and counting profiles proves
+					// only the first.
+					UE_LOG(LogWonderlandProof, Error,
+						   TEXT("RUNTIME_COLLISION_CONFIGURED_BUT_NOT_WORKING=1 — %d "
+								"primitives report BlockAll and a body-sized sweep "
+								"still falls through. Counting profiles is not proof "
+								"that anything is solid."),
+						   BlockingPrimitives);
+				}
 				UE_LOG(LogWonderlandProof, Warning,
 					   TEXT("RUNTIME_GROUNDED_DOGS=%d/%d"), GroundedDogs, DogActors.Num());
 				UE_LOG(LogWonderlandProof, Warning,

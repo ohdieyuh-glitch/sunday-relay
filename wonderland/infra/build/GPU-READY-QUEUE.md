@@ -80,6 +80,12 @@
 >   falls. **Read `RUNTIME_BLOCKING_PRIMITIVES` and `RUNTIME_GROUNDED_DOGS` on
 >   the first run** — if the cost is real, `WONDERLAND_COLLIDE=` (explicitly
 >   empty) restores the old collisionless world in one build.
+>   The first run also reports `RUNTIME_PAWN_SWEEP_LANDS` and
+>   `RUNTIME_PAWN_SWEEP_BLOCKED_SIDEWAYS` — a body-sized sweep, not a line
+>   trace, because counting `BlockAll` profiles proves collision is CONFIGURED
+>   and movement asks whether a body is STOPPED. If profiles are set and the
+>   sweep still falls through, the log says
+>   `RUNTIME_COLLISION_CONFIGURED_BUT_NOT_WORKING` at Error.
 > * **One tuned value is now known to rest on a wrong distance.** The aerial-
 >   perspective stretch (45x) was justified as "the great castle is 420 m out".
 >   Measured: the layout's castle spires are at 31-32 m and the furthest thing in
