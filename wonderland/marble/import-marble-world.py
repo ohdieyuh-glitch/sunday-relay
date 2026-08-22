@@ -716,7 +716,11 @@ def main(argv=None):
         "collider_assets": collider_imported,
         "nanite_requested": not args.no_nanite,
     }
-    manifest["transform"]["unreal_uniform_scale"] = scale
+    # WRITE THE APPLIED SCALE TO ITS OWN FIELD. This used to overwrite
+    # unreal_uniform_scale — the METRIC scale — with whatever was applied, so a
+    # backdrop import silently replaced the metric figure with the backdrop one
+    # and the next run's arithmetic started from the wrong number.
+    manifest["transform"]["unreal_applied_scale"] = scale
     manifest["transform"]["unreal_origin_cm"] = origin
     if bounds_block is not None:
         manifest["bounds"] = bounds_block

@@ -653,6 +653,34 @@ def main():
         check(getattr(placed_actor.component, "static_mesh", None) is not None,
               "…and actually assigns the mesh")
 
+        # 5. THE SCALE CONVENTION, measured in the engine. UE's glTF import
+        #    already converts metres to centimetres — 100 uu per glTF unit —
+        #    so the actor scale is the metric factor, NOT that times 100. The
+        #    shipped manifest was 100x out and produced a 123-km shell.
+        real = json.load(io.open(os.path.join(HERE, "worlds",
+                                              "royal-garden-backdrop",
+                                              "manifest.json"), encoding="utf8"))
+        rt = real["transform"]
+        span = real["source_mesh"]["span"]
+        got = [round(s * 100.0 * rt["unreal_backdrop_scale"]) for s in span]
+        want = [round(v) for v in rt["expected_unreal_extent_cm"]]
+        check(got == want,
+              "the shipped scale x 100 uu-per-unit lands on the expected extent "
+              "(%s vs %s)" % (got, want))
+        check(abs(rt["unreal_backdrop_scale"]
+                  - rt["unreal_uniform_scale"] * rt["backdrop_scale_multiplier"]) < 1e-6,
+              "…and the backdrop scale is exactly the metric scale times the multiplier")
+        check(rt["unreal_uniform_scale"] < 100,
+              "…and the metric scale is not the 100x-inflated kind that shipped once")
+        check("MEASURED IN THE ENGINE" in (rt.get("scale_convention") or ""),
+              "…and the convention is recorded as measured, not assumed")
+        # The importer must not clobber the metric scale with the applied one.
+        src_txt = io.open(os.path.join(HERE, "import-marble-world.py"),
+                          encoding="utf8").read()
+        check('transform"]["unreal_applied_scale"] = scale' in src_txt
+              and 'transform"]["unreal_uniform_scale"] = scale' not in src_txt,
+              "the applied scale is written to its own field, not over the metric one")
+
         print("\n-- unknown is not single-sided --")
         # THE TRUTHFULNESS BUG. The first version read get_editor_property
         # ('two_sided'), which a MaterialInstanceConstant does not answer, and

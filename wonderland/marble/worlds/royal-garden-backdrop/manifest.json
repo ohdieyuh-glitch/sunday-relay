@@ -141,7 +141,7 @@
   "transform": {
     "metric_scale_factor": 2.1145339012145996,
     "ground_plane_offset_m": 1.2398533821105957,
-    "unreal_uniform_scale": 211.45339012145996,
+    "unreal_uniform_scale": 2.1145339012145996,
     "unreal_origin_cm": [
       0.0,
       -1150.0,
@@ -176,7 +176,7 @@
       "tolerance_deg": 3.0
     },
     "backdrop_scale_multiplier": 6.0,
-    "unreal_backdrop_scale": 1268.72,
+    "unreal_backdrop_scale": 12.687203407287598,
     "placement_mode": "backdrop_at_camera",
     "anchor_camera": "HeroCam0",
     "anchor_camera_source": "hero_shots[0] in wonderland/infra/build/generate-hub-level.py — ARRIVAL_HERO, the shot the world opens on",
@@ -185,7 +185,9 @@
       123039.2,
       187695.7,
       103315.7
-    ]
+    ],
+    "scale_convention": "MEASURED IN THE ENGINE, not assumed. UE 5.8's glTF import already applies the metre-to-centimetre conversion: the mesh arrives at 100 uu per glTF unit. The first import proved it — a 96.979-unit span came in at 9,697.9 uu. So the ACTOR scale is the metric factor itself (2.1145), times the backdrop multiplier (6) for a backdrop; it is NOT that times 100. Both scales here were 100x too large and the import measured 12,303,954 cm against an expected 123,039 — a 123-kilometre shell.",
+    "scale_measured_at": "2026-08-22, first live import, UE 5.8 container dev-5.8"
   },
   "bounds": {
     "source": null,
