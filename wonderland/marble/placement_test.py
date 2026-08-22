@@ -186,6 +186,48 @@ check("straight up is +Z", close(placement.forward_from_rotator(90.0, 0.0)[2], 1
 check("yaw +90 from level is +Y, which is left-handed Unreal",
       close(placement.forward_from_rotator(0.0, 90.0)[1], 1.0, 1e-9))
 
+print("== the contract handed to the browser says the same thing ==")
+# The browser inspector must not compute placement; it applies what this emits.
+# If the contract disagreed with placement.py, the tool built to catch a flipped
+# import would happily reproduce one.
+import placement_contract  # noqa: E402
+
+world = os.path.join(HERE, "worlds", "royal-garden-backdrop")
+contract = placement_contract.build(world)
+p = contract["placement"]
+check("the contract carries the basis placement.py composed",
+      all(close(p["basis_rows"][i][j], place.basis[i][j], 1e-12)
+          for i in range(3) for j in range(3)))
+check("...the same scale", close(p["unreal_units_per_gltf_unit"], place.scale))
+check("...the same origin", all(close(a, b) for a, b in zip(p["origin_cm"], place.origin)))
+check("...and the node rotation, which belongs to the mesh and must not be reapplied",
+      all(close(p["node_rotation_rows"][i][j], placement.node_rotation(m)[i][j], 1e-12)
+          for i in range(3) for j in range(3)))
+check("the predicted extent matches what the engine measured",
+      all(close(a, b, 1e-5) for a, b in
+          zip(contract["extent"]["predicted_extent_cm"],
+              m["transform"]["expected_unreal_extent_cm"])))
+check("the signed centre offset is carried, since it is the only flip detector",
+      contract["extent"]["centre_offset_from_origin_cm"][2] > 0)
+
+hand = contract["handedness"]["ue_to_three_rows"]
+check("the handedness conversion flips exactly one axis",
+      [hand[0][0], hand[1][1], hand[2][2]] == [1.0, -1.0, 1.0],
+      "Unreal is left-handed, three.js is right-handed; negating Y is the whole conversion")
+
+cams = {c["index"]: c for c in contract["cameras"]}
+check("every hero camera reaches the browser", len(cams) == 7, sorted(cams))
+check("HeroCam6 shares HeroCam0's point, so the backdrop anchor holds",
+      cams[6]["location_cm"] == cams[0]["location_cm"])
+check("HeroCam0's frame stops below the measured skyline",
+      cams[0]["frame_elevation_deg"][1] < contract["skyline_elevation_deg"],
+      "this is the fault the inspector exists to show without an L4")
+check("...and HeroCam6's does not",
+      cams[6]["frame_elevation_deg"][1] > contract["skyline_elevation_deg"])
+check("an asset that is not on disk is marked absent rather than omitted",
+      all("present" in a for a in contract["assets"].values()),
+      "an entry for a missing file is how a tool reports 'loaded' for nothing")
+
 print("\npassed %d, failed %d" % (PASS[0], len(FAIL)))
 for f in FAIL:
     print("  FAILED: %s" % f)

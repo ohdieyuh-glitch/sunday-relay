@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Wonderland Marble Inspector</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!--
+  A browser inspector for Marble worlds. It is NOT authoritative for anything:
+  gameplay physics, multiplayer state, navigation, Unreal collision, final
+  rendering and Relay mission execution all stay with Relay and Unreal 5.8.
+  What it is for is catching, on a laptop and without a GPU, the class of fault
+  that has repeatedly cost this project a metered L4 session -- an upside-down
+  import, a 180-degree flip, the wrong scale, the wrong origin, a camera whose
+  frame cannot reach the backdrop.
+
+  No bundler on purpose. An import map plus the copy of three in node_modules
+  means this runs from any static server, including `python3 -m http.server`
+  at the repo root, which is what "usable without Lightning" has to mean.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "three": "/node_modules/three/build/three.module.js",
+    "three/addons/": "/node_modules/three/examples/jsm/"
+  }
+}
+</script>
+<link rel="stylesheet" href="./inspector.css">
+<div id="app">
+  <canvas id="view"></canvas>
+
+  <aside id="panel">
+    <header>
+      <h1>Marble Inspector</h1>
+      <p class="sub" id="world-name">loading contract…</p>
+    </header>
+
+    <section>
+      <h2>Camera</h2>
+      <div class="row"><select id="camera"></select></div>
+      <div class="row">
+        <label for="fov">FOV <span id="fov-value" class="mono"></span></label>
+        <input type="range" id="fov" min="30" max="120" step="1">
+      </div>
+      <div class="row btns">
+        <button id="cam-0" class="cam">HeroCam0</button>
+        <button id="cam-6" class="cam">HeroCam6</button>
+        <button id="cam-free">Free orbit</button>
+      </div>
+      <dl id="camera-facts" class="facts"></dl>
+    </section>
+
+    <section>
+      <h2>Layers</h2>
+      <div class="row toggles">
+        <label><input type="checkbox" id="show-visual" checked> Visual mesh</label>
+        <label><input type="checkbox" id="show-collider"> Collider</label>
+        <label><input type="checkbox" id="show-bounds"> Bounding boxes</label>
+        <label><input type="checkbox" id="show-grid"> Grid + axes</label>
+        <label><input type="checkbox" id="show-wire"> Wireframe</label>
+        <label><input type="checkbox" id="show-frustum"> Camera frustum</label>
+      </div>
+      <div class="row"><select id="representation"></select></div>
+    </section>
+
+    <section>
+      <h2>Diagnostics</h2>
+      <ul id="checks" class="checks"><li class="pending">waiting for a mesh…</li></ul>
+    </section>
+
+    <section>
+      <h2>Provenance</h2>
+      <dl id="provenance" class="facts"></dl>
+    </section>
+
+    <footer>
+      <p>Not authoritative. Unreal 5.8 owns collision, navigation, the Relay
+         Dogs, multiplayer and the final render; Relay owns mission execution.
+         This shows where geometry lands and whether a camera can see it.</p>
+    </footer>
+  </aside>
+
+  <div id="status" role="status"></div>
+</div>
+<script type="module" src="./inspector.js"></script>

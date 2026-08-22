@@ -1,0 +1,4 @@
+# Generated from the manifest by placement_contract.py. Committing it would
+# create a second copy of numbers that already have one authority, and the
+# second copy is the one that goes stale.
+placement-contract.json

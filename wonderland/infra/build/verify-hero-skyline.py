@@ -36,6 +36,12 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WL = os.path.dirname(os.path.dirname(HERE))
+sys.path.insert(0, HERE)
+
+# One parser of the generator's camera literal, shared with the browser
+# inspector's placement contract. Two would be two chances to disagree about
+# what the world contains.
+from hero_shots import hero_shots  # noqa: E402
 
 GENERATOR = os.path.join(HERE, "generate-hub-level.py")
 MANIFEST = os.path.join(WL, "marble", "worlds", "royal-garden-backdrop", "manifest.json")
@@ -51,24 +57,6 @@ ASPECT = 9.0 / 16.0
 def fail(msg):
     sys.stderr.write("verify-hero-skyline: %s\n" % msg)
     sys.exit(1)
-
-
-def hero_shots():
-    """Read the generator's hero-shot table without importing it -- it imports
-    `unreal`, which does not exist outside the editor."""
-    tree = ast.parse(io.open(GENERATOR, encoding="utf8").read(), GENERATOR)
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
-        if "hero_shots" not in targets:
-            continue
-        shots = {}
-        for element in node.value.elts:
-            index, pos, look, fov = ast.literal_eval(element)
-            shots[index] = (pos, look, fov)
-        return shots
-    fail("no hero_shots table in %s" % GENERATOR)
 
 
 def frame(pos, look, fov_deg):

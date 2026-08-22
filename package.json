@@ -2,7 +2,7 @@
   "name": "sunday-relay",
   "version": "0.1.0",
   "private": true,
-  "description": "Sunday Relay — compound AI mission coordination and agent operations",
+  "description": "Sunday Relay \u2014 compound AI mission coordination and agent operations",
   "license": "MIT",
   "bin": {
     "relay": "dist-relay/cli.cjs"
@@ -52,7 +52,10 @@
     "relay:hermes:start": "node dist-relay-hermes/main.cjs",
     "relay:hermes:dev": "npm run relay:hermes:build --silent && node dist-relay-hermes/main.cjs",
     "relay:hermes:typecheck": "tsc -p relay-hermes-service/tsconfig.json --noEmit",
-    "relay:hermes:test": "vitest run relay-hermes-service relay-bridge/reviewer-harness/hermes"
+    "relay:hermes:test": "vitest run relay-hermes-service relay-bridge/reviewer-harness/hermes",
+    "wonderland:contract": "python3 wonderland/marble/placement_contract.py --out wonderland/web/inspector/placement-contract.json",
+    "wonderland:inspector": "npm run wonderland:contract && python3 -m http.server 8000",
+    "wonderland:inspector:test": "bash wonderland/web/inspector/test.sh"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
@@ -63,6 +66,7 @@
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "three": "^0.185.1",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
