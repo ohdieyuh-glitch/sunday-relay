@@ -6055,6 +6055,22 @@ def build(layout):
         (3, (1300.0, -360.0, 540.0), (1300.0, 470.0, 680.0), 64.0),   # GIANT_TREE — the great framing tree
         (4, (560.0, -980.0, 380.0), (540.0, -250.0, 150.0), 58.0),    # MISSION_OVERLOOK — overlook terrace
         (5, (760.0, -180.0, 340.0), (795.0, 410.0, 150.0), 56.0),     # AGENT_GARDEN — agent_config + pergola + flowers
+        # ARRIVAL_WIDE. Same POSITION as HeroCam0 on purpose: the Marble
+        # backdrop is anchored at that exact point, so every ray from it is
+        # unchanged by the shell's 6x scale, and a second camera there gets the
+        # backdrop for free. Only the AIM differs.
+        #
+        # Measured, not guessed. HeroCam0 is pitched -11.6 deg to frame the hero
+        # Dog on its arcane circle, so its frame spans elevation -30.2..+7.1 --
+        # and the Marble castle city sits around +21 deg. 0.9% of the skyline
+        # reaches that frame: essentially none of the 1,580 credits of castle
+        # city is visible in the shot the world opens on. No yaw fixes it; the
+        # limit is elevation. (wonderland/marble/preview-offline.py, on CPU.)
+        #
+        # 75 deg at +5 deg pitch spans -18.4..+28.3, which holds the Dog at
+        # -11.6 AND 29.9% of the skyline. Wider gains little: 80 deg buys 0.8
+        # more points and 90 deg starts to read as a fisheye.
+        (6, (0.0, -1150.0, 430.0), (0.0, 120.0, 541.0), 75.0),        # ARRIVAL_WIDE — Dog, plaza AND the Marble skyline
     ]
     for hn, hpos, hlook, hfov in hero_shots:
         hrot = look_at_rotation(hpos, hlook)

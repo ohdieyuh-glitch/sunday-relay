@@ -1789,6 +1789,30 @@ else
   ok "…and it parses every number out of the generator rather than restating them"
 fi
 
+echo "== the arrival can SEE what the backdrop cost 1,580 credits =="
+# HeroCam0 is pitched -11.6 degrees to hold the hero Dog on its arcane circle,
+# so its frame stops at +7.1 — and the Marble castle city sits around +21,
+# because the reference was cropped above the dog band and the surviving content
+# reconstructed high. 0.9% of the skyline reached the arrival frame. Nothing in
+# the build noticed: right size, right way up, clean cook, live stream.
+SKY="$HERE/../build/verify-hero-skyline.py"
+if python3 "$SKY" >/dev/null 2>&1; then ok "verify-hero-skyline passes on the current tree"
+else bad "the arrival cameras cannot see the backdrop: $(python3 "$SKY" 2>&1 | tail -3)"; fi
+grep -q 'verify-hero-skyline.py' "$HERE/prepare.sh" \
+  && ok "…and prepare.sh runs it before a build" \
+  || bad "the skyline gate is not in the pre-build gates"
+if sed 's/#.*//' "$SKY" | grep -qE "^\s*(a_pos|w_pos)\s*=\s*\("; then
+  bad "verify-hero-skyline hardcodes camera positions instead of parsing them"
+else
+  ok "…and it reads the hero-shot table out of the generator rather than restating it"
+fi
+grep -qE '\(6, \(0\.0, -1150\.0, 430\.0\)' "$HERE/../build/generate-hub-level.py" \
+  && ok "HeroCam6 shares HeroCam0's point, so the backdrop anchor still holds" \
+  || bad "HeroCam6 is not at the backdrop anchor"
+grep -q 'WL_HERO_CAMS="0 6"' "$HERE/capture-hero-shots.sh" 2>/dev/null \
+  && ok "…and the capture script names the pair worth spending GPU time on" \
+  || bad "the capture script does not mention capturing 0 and 6 together"
+
 echo "== a captured frame carries the build that produced it =="
 # This project has already compared two captures that turned out to be the same
 # binary. A PNG that cannot be attributed to a commit is a picture, not evidence.

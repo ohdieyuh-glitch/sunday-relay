@@ -26,8 +26,9 @@ void AWonderlandPlayerController::BeginPlay()
 	{
 		// Pick a specific hero camera by index for the named hero-shot captures:
 		// `-HeroCam=N` renders from the CameraActor tagged "HeroCamN" (the level
-		// generator places HeroCam0..HeroCam5 at the arrival, dog, gate, tree,
-		// overlook and garden). Defaults to HeroCam0, then the legacy arrival tag.
+		// generator places HeroCam0..HeroCam6 at the arrival, dog, gate, tree,
+		// overlook, garden and the wide arrival that also holds the Marble
+		// skyline). Defaults to HeroCam0, then the legacy arrival tag.
 		int32 HeroIndex = 0;
 		FParse::Value(FCommandLine::Get(), TEXT("HeroCam="), HeroIndex);
 		const FName HeroTag(*FString::Printf(TEXT("HeroCam%d"), HeroIndex));

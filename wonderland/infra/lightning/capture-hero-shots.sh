@@ -16,8 +16,16 @@
 #   WL_HERO_CAMS="0 3" ... (each camera is a RELAUNCH — that is metered GPU time)
 #
 # ONE CAMERA BY DEFAULT, and that is deliberate. -CinematicView pins the view at
-# launch, so six hero shots are six relaunches. HeroCam0 is the arrival
+# launch, so seven hero shots are seven relaunches. HeroCam0 is the arrival
 # composition and the only one WorldDesign/visual-target.json judges.
+#
+# WL_HERO_CAMS="0 6" is the pair worth spending GPU time on. HeroCam6 is the
+# same POINT as HeroCam0 aimed wider and 17 degrees higher, and offline
+# measurement says that is the difference between 0.9% and 29.9% of the Marble
+# castle city being inside the frame -- HeroCam0 is pitched down to hold the
+# hero Dog, and the skyline sits above it. Capturing both is how the founder
+# compares the arrival they have against the arrival the backdrop was bought
+# for, in one session.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=common.sh
