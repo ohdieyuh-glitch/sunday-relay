@@ -576,13 +576,23 @@ def main(argv=None):
                 "would break the scale-invariance the backdrop depends on."
                 % ground)
         else:
-            # Marble reports where IT thinks the ground is, in metres, and this
-            # branch runs at metric scale — the only OTHER scale this importer
-            # applies is the backdrop one, which returns above. So the lift is
-            # the plain metre->cm conversion; if a third placement mode ever
-            # lands here at a stretched scale, this has to be stretched with it.
-            origin = [origin[0], origin[1], origin[2] - ground * 100.0]
-            log("ground plane offset %.3f m applied -> z origin %.1f cm"
+            # THE SIGN, DERIVED FROM THE DATA RATHER THAN GUESSED. A POSITIVE
+            # ground_plane_offset_m means the ground plane lies that far BELOW
+            # the mesh origin. Checked against this world: 1.2399 m over a
+            # metric_scale_factor of 2.1145 is 0.586 raw units, the raw z range
+            # is -0.941..80.492, so the ground sits at raw z = -0.586 with 0.355
+            # units of skirt beneath it — a reconstruction viewpoint at eye
+            # height above its own floor.
+            #
+            # To seat that floor on Wonderland's z=0 the mesh must be RAISED by
+            # the offset. This subtracted it, pushing the layer further down and
+            # doubling the error it was there to remove. It is latent — the only
+            # world in the repo is a backdrop, and the backdrop branch returns
+            # above without applying any offset — which is exactly why nothing
+            # caught it.
+            origin = [origin[0], origin[1], origin[2] + ground * 100.0]
+            log("ground plane offset %.3f m: the floor is that far BELOW the "
+                "mesh origin, so the layer is RAISED -> z origin %.1f cm"
                 % (ground, origin[2]))
 
     source, key, why = choose_mesh(manifest, world_dir,

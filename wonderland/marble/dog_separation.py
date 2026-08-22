@@ -43,6 +43,9 @@ import hashlib
 import io
 import json
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ATTESTATION = os.path.join(HERE, "reference", "ATTESTED.json")
@@ -59,7 +62,18 @@ CREATURE_WORDS = (
 )
 
 
-class DogSeparationRefusal(Exception):
+# A MarbleRefusal, not a bare Exception. The CLI catches MarbleRefusal and turns
+# it into a clean refusal with the right exit code; a sibling exception type
+# escapes that handler as an unhandled traceback, so the one guard that stands
+# between a bad reference image and 1,580 credits would have reported itself as
+# a crash.
+try:
+    from marble_api import MarbleRefusal as _Base
+except Exception:                        # importable without the client present
+    _Base = Exception
+
+
+class DogSeparationRefusal(_Base):
     """Raised INSTEAD of spending credits."""
 
 

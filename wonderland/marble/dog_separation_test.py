@@ -176,6 +176,21 @@ def main():
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
+    print("\n-- the refusal reaches the CLI's handler --")
+    # A sibling exception type escapes `except MarbleRefusal` as an unhandled
+    # traceback with the wrong exit code, so the one guard standing between a
+    # bad reference image and 1,580 credits would report itself as a crash.
+    try:
+        sys.path.insert(0, HERE)
+        import marble_api
+        check(issubclass(sep.DogSeparationRefusal, marble_api.MarbleRefusal),
+              "DogSeparationRefusal IS a MarbleRefusal, so the CLI refuses cleanly")
+    except ImportError:
+        bad("could not import marble_api to check the exception hierarchy")
+    cli = io.open(os.path.join(HERE, "marble_cli.py"), encoding="utf8").read()
+    check("except MarbleRefusal" in cli,
+          "…and the CLI does catch MarbleRefusal")
+
     print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
     if FAIL:
         return 1

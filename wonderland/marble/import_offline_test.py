@@ -506,13 +506,23 @@ def main():
               and "pitch" in visual_actors[0].rotation.props,
               "rotation is built with NAMED fields, not the positional constructor")
 
-        make_world(root, "grounded", ground=-0.4)
+        # THE SIGN. A POSITIVE ground_plane_offset_m means the floor lies that
+        # far BELOW the mesh origin, so seating it on z=0 RAISES the layer. The
+        # old assertion here encoded the opposite and locked in a sign error:
+        # it passed for a NEGATIVE offset producing a positive z, which is the
+        # same arithmetic read backwards.
+        make_world(root, "grounded", ground=1.24)
         run_importer("grounded", root)
         placed_z = [loc.z for _a, loc in REC.actors]
-        check(all(abs(z - 40.0) < 1e-6 for z in placed_z),
-              "ground_plane_offset -0.4 m lifted the layer to z=+40cm")
-        check(any("ground plane offset" in m for m in REC.logs),
-              "…and said so")
+        check(placed_z and all(abs(z - 124.0) < 1e-6 for z in placed_z),
+              "a positive ground offset RAISES the layer (floor below the origin)")
+        check(any("RAISED" in m and "BELOW the mesh origin" in m for m in REC.logs),
+              "…and the log says which way and why")
+        make_world(root, "grounded-neg", ground=-0.4)
+        run_importer("grounded-neg", root)
+        placed_z = [loc.z for _a, loc in REC.actors]
+        check(placed_z and all(abs(z + 40.0) < 1e-6 for z in placed_z),
+              "…and a negative offset lowers it, symmetrically")
 
 
         # …and in backdrop mode it is not applied AT ALL, because translating the
