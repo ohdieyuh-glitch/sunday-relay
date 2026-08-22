@@ -76,15 +76,38 @@ check("a rotation, by contrast, must have determinant +1",
       "roll/pitch/yaw can never fix a handedness error; only the conversion can")
 
 print("== the prediction matches what the ENGINE measured, not just its own arithmetic ==")
-# Printed by import-marble-world.py on the real L4 import at 2026-08-22 15:26.
+# Printed by import-marble-world.py on the real L4 import at 2026-08-22 15:26,
+# when the manifest carried NO artistic yaw. The shipped manifest carries 180 now,
+# so the comparison is made against the manifest as the engine saw it — pinning
+# the measurement and then quietly changing what it is compared to would turn a
+# regression test into a tautology.
 ENGINE_CENTRE_OFFSET_CM = (-1130.0, -2227.0, 50464.0)
-offset = placement.predicted_centre_offset_cm(m)
+ENGINE_MEASURED_WITH_YAW = [0.0, 0.0, 0.0]
+as_measured = json.loads(json.dumps(m))
+as_measured["transform"]["unreal_rotation_deg"] = ENGINE_MEASURED_WITH_YAW
+offset = placement.predicted_centre_offset_cm(as_measured)
 check("centre offset agrees with the engine on every axis INCLUDING sign",
       all(abs(a - b) < 1.0 for a, b in zip(offset, ENGINE_CENTRE_OFFSET_CM)),
       "predicted %s vs engine %s" % ([round(v) for v in offset],
                                      list(ENGINE_CENTRE_OFFSET_CM)))
 check("...and the Y sign in particular, which is the axis that was mirrored",
       offset[1] < 0)
+
+print("== the shipped world carries the artistic yaw, with a reason ==")
+shipped = m["transform"].get("unreal_rotation_deg")
+check("the manifest asks for a 180-degree yaw", shipped == [0.0, 0.0, 180.0],
+      "at yaw 0 HeroCam6 faces the shell's gate side; at 180 it frames the "
+      "reference composition")
+check("...and says why, naming the frames it was decided from",
+      "07-herocam6-yaw180" in (m["transform"].get("unreal_rotation_why") or ""),
+      "a rotation chosen from arithmetic was already wrong once here")
+yawed_offset = placement.predicted_centre_offset_cm(m)
+check("...which puts the reconstruction's front on the camera's side",
+      yawed_offset[0] > 0 and yawed_offset[1] > 0)
+check("...and changes no extent, which is why it needed a picture to settle",
+      all(close(a, b, 1e-5) for a, b in
+          zip(sorted(placement.predicted_extent(m)),
+              sorted(placement.predicted_extent(as_measured)))))
 
 print("== the shell is the right way up ==")
 go = full_chain(m)
@@ -144,7 +167,13 @@ check("...and metric mode uses the uniform scale, not the backdrop scale",
       close(metric.scale, m["transform"]["unreal_uniform_scale"] * 100.0))
 
 print("== the artistic yaw composes on top, and does not disturb the correction ==")
-yawed = json.loads(json.dumps(m))
+# From a manifest with NO artistic yaw, because the shipped one already has 180
+# and adding another would be a 360 that tests nothing.
+unyawed = json.loads(json.dumps(m))
+unyawed["transform"]["unreal_rotation_deg"] = [0.0, 0.0, 0.0]
+go = full_chain(unyawed)
+origin = go((0.0, 0.0, 0.0))
+yawed = json.loads(json.dumps(unyawed))
 yawed["transform"]["unreal_rotation_deg"] = [0.0, 0.0, 180.0]
 ry = full_chain(yawed)
 o2 = ry((0.0, 0.0, 0.0))
