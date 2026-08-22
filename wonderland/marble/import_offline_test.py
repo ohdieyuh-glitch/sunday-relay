@@ -37,6 +37,18 @@ def bad(msg):
     print("  FAIL %s" % msg)
 
 
+SKIP = []
+
+
+def skip(msg):
+    """A check that could not run HERE. Counted separately and printed in the
+    summary, because a check that quietly vanishes on one host is a check that
+    stops being run -- and the count silently differing between two machines is
+    how nobody notices."""
+    SKIP.append(msg)
+    print("  SKIP %s" % msg)
+
+
 def check(cond, msg):
     ok(msg) if cond else bad(msg)
 
@@ -722,7 +734,8 @@ def main():
                   "the collider is still Y-DOWN (y %.1f..%.1f), which is what the "
                   "correction is for" % (_lo[1], _hi[1]))
         else:
-            print("  --   collider.glb absent; the physical check did not run")
+            skip("collider.glb is not in this checkout (marble assets are fetched, "
+                 "not committed) -- the physical Y-DOWN evidence was NOT checked here")
 
         print("\n-- unknown is not single-sided --")
         # THE TRUTHFULNESS BUG. The first version read get_editor_property
@@ -947,7 +960,11 @@ def main():
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
-    print("\n%d passed, %d failed" % (len(PASS), len(FAIL)))
+    print("\n%d passed, %d failed, %d skipped" % (len(PASS), len(FAIL), len(SKIP)))
+    if SKIP:
+        print("SKIPPED (not verified here, NOT passed):")
+        for item in SKIP:
+            print("  - %s" % item)
     if FAIL:
         for item in FAIL:
             print("  - %s" % item)
