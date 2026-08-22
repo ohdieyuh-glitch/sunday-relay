@@ -378,6 +378,44 @@ fi
 make_engine "$TMP/ue"
 
 echo
+echo "== Unreal Build Accelerator is off, and provably off in BOTH steps =="
+# UBA turned the L4 editor build into a crash loop: 143,340 SIGSEGV traces from
+# its filesystem interception, 0 compiler errors, 3 of 13 actions in 35 minutes.
+# Nothing failed — it just never finished, which on a metered GPU is worse. The
+# flag has to reach BOTH UAT commands; disabling it for the editor build only
+# would look fixed right up until the cook.
+make_project "$TMP/uba" plain 2>/dev/null || make_project "$TMP/uba"
+rm -rf "$TMP/out"
+uba_out="$(run_build "$TMP/uba")"
+editor_line="$(printf '%s' "$uba_out" | grep -a 'stub UAT:' | grep -a 'BuildEditor' | head -1)"
+cook_line="$(printf '%s' "$uba_out" | grep -a 'stub UAT:' | grep -a 'BuildCookRun' | head -1)"
+case "$editor_line" in *-ubtargs=-NoUBA*) ok "BuildEditor is handed -NoUBA" ;;
+  *) bad "BuildEditor runs with UBA: $editor_line" ;; esac
+case "$cook_line" in *-ubtargs=-NoUBA*) ok "BuildCookRun is handed -NoUBA" ;;
+  *) bad "BuildCookRun runs with UBA: $cook_line" ;; esac
+# And it must be possible to turn back on, or this is a hardcode rather than a
+# decision.
+rm -rf "$TMP/out"
+uba_on="$(WL_UBT_ARGS="" run_build "$TMP/uba")"
+if printf '%s' "$uba_on" | grep -a 'stub UAT:' | grep -aq 'ubtargs'; then
+  bad "WL_UBT_ARGS=\"\" still passes ubtargs — UBA cannot be re-enabled"
+else
+  ok "…and WL_UBT_ARGS=\"\" passes nothing, so UBA can be turned back on"
+fi
+# The flag itself must be the one THIS engine documents. bAllowUBALocalExecutor
+# is Obsolete in 5.8 and reads like the right answer.
+# Comments stripped before matching: the script EXPLAINS that
+# bAllowUBALocalExecutor is the obsolete name, and a check that reads its own
+# prose is a check that reports on the wrong thing.
+UBA_CODE="$(sed 's/#.*//' "$HERE/build-wonderland.sh")"
+if printf '%s' "$UBA_CODE" | grep -q 'NoUBA' \
+   && ! printf '%s' "$UBA_CODE" | grep -q 'bAllowUBALocalExecutor'; then
+  ok "…using -NoUBA, the switch UE 5.8's BuildConfiguration.cs actually declares"
+else
+  bad "the build uses a UBA switch this engine does not declare"
+fi
+
+echo
 echo "== a hero capture cannot report a result it does not have =="
 # The comparison tool is what turns two sidecars into a recommendation, so a
 # version of it that always prints a nice table would make every run look like

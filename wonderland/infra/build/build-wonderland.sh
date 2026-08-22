@@ -241,7 +241,41 @@ regression that made an L4 session measure the wrong package."
 fi
 printf '%s\n' "$BUILD_SHA" > "$LOG_DIR/compiled.sha"
 
-run_step "build-editor" "$RUNUAT" BuildEditor -project="$PROJECT" -notools
+# UNREAL BUILD ACCELERATOR IS OFF BY DEFAULT HERE, AND IT IS NOT A PREFERENCE.
+#
+# On the L4, 2026-08-22, UBA's local executor turned the editor build into a
+# crash loop: 143,340 CHAINED-SIGNAL 11 traces, every one of them faulting in
+# opendir inside llvm::sys::fs::directory_iterator_construct — UBA detours the
+# compiler's filesystem calls and that interception was the thing dying. Zero
+# compiler errors, 3 of 13 actions completed in 35 minutes, a 70 MB log growing
+# at 28 KB/s of pure stack trace, and UBT's own log parser reporting it was
+# spending 88% of a core parsing the spew. Nothing FAILED; it simply never
+# finished, which on a metered GPU is worse.
+#
+# This is the second time UBA has cost this project a session: the California
+# export died on a 261 GiB UBA sparse file.
+#
+# VERIFIED IN THIS ENGINE, NOT ASSUMED. UnrealBuildTool/Configuration/
+# BuildConfiguration.cs carries [CommandLine("-NoUBA", Value = "false")] on
+# bAllowUBAExecutor, and both entry points used below parse -ubtargs and hand it
+# to UBT: BuildTarget.Automation.cs:80 for BuildEditor, ProjectParams.cs:1057
+# for BuildCookRun. (bAllowUBALocalExecutor, the name that reads like the right
+# one, is marked Obsolete in 5.8 — which is exactly why this was checked against
+# the engine rather than written from memory.)
+#
+# Set WL_UBT_ARGS="" to build with UBA again once it is understood. Note the
+# single dash: ${VAR-default} substitutes only when VAR is UNSET, where
+# ${VAR:-default} would also substitute when it is set-but-empty — which would
+# have made the documented escape hatch silently do nothing.
+WL_UBT_ARGS="${WL_UBT_ARGS--NoUBA}"
+UBT_PASSTHROUGH=()
+if [ -n "$WL_UBT_ARGS" ]; then
+  UBT_PASSTHROUGH=(-ubtargs="$WL_UBT_ARGS")
+  log "passing to UnrealBuildTool: $WL_UBT_ARGS"
+fi
+
+run_step "build-editor" "$RUNUAT" BuildEditor -project="$PROJECT" -notools \
+  "${UBT_PASSTHROUGH[@]+"${UBT_PASSTHROUGH[@]}"}"
 
 # --------------------------------------------------- 3. generate the starter Hub level
 # Milestone-1 placeholder content via Editor Python, so the packaged build
@@ -401,6 +435,7 @@ run_step "build-cook-run" "$RUNUAT" BuildCookRun \
   -map="$COOK_MAP" \
   -nop4 -build -cook -stage -pak -archive \
   -archivedirectory="$OUT" \
+  "${UBT_PASSTHROUGH[@]+"${UBT_PASSTHROUGH[@]}"}" \
   -utf8output
 
 # --------------------------------------------------- 5. verify the artifact + stamp
