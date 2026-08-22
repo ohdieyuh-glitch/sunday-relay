@@ -1789,6 +1789,62 @@ else
   ok "…and it parses every number out of the generator rather than restating them"
 fi
 
+echo "== importing a backdrop and USING one were two switches =="
+# The L4 build ran WONDERLAND_MARBLE_IMPORT=royal-garden-backdrop. The shell
+# imported at exactly the right size and the right way up, MARBLE_ACTORS=1 in
+# the packaged world -- and it was invisible from both arrival cameras, because
+# WONDERLAND_MARBLE_BACKDROP defaulted to 0 and the generator kept all three
+# authored skyline rings at 7,200 / 12,800 / 19,500 uu standing in front of it.
+GEN="$HERE/../build/generate-hub-level.py"
+# Comment-stripped into a TEMP FILE, and grepped from there.
+#
+# Two traps, both already documented in this repo and both hit again here.
+# Holding a quarter-megabyte file in a shell variable and printf-ing it truncates,
+# so the check reports on a file it did not read. And `sed ... | grep -q` gives
+# sed a SIGPIPE it cannot survive under `pipefail`, so the pipeline reports
+# failure even when grep MATCHED -- the same shape as the `find | head -1` bug
+# common.sh already carries a note about. Both produced a red line next to a
+# behavioural check that proved the opposite.
+GEN_STRIPPED="$(mktemp)"
+sed 's/#.*//' "$GEN" > "$GEN_STRIPPED"
+grep -q '_marble_placement_mode' "$GEN_STRIPPED" \
+  && ok "the generator reads the world's placement_mode" \
+  || bad "nothing derives whether the imported world is a backdrop"
+if grep -qE 'WONDERLAND_MARBLE_BACKDROP", *"0"\) not in' "$GEN_STRIPPED"; then
+  bad "the backdrop switch still defaults to OFF regardless of the manifest"
+else
+  ok "…and no longer defaults to off while a backdrop world is being imported"
+fi
+BD_TMP="$(mktemp -d)"
+python3 - "$GEN" "$BD_TMP" <<'PYBD'
+import io, json, os, sys
+src = io.open(sys.argv[1], encoding='utf8').read()
+start = src.index('def _marble_placement_mode():')
+end = src.index('def _marble_shell_reach():')
+ns = {'os': os, 'io': io, 'json': json, '__file__': os.path.abspath(sys.argv[1])}
+exec(compile(src[start:end], 'gen', 'exec'), ns)
+f = ns['_marble_placement_mode']
+os.environ['WONDERLAND_MARBLE_IMPORT'] = 'royal-garden-backdrop'
+a = f()
+os.environ['WONDERLAND_MARBLE_IMPORT'] = 'not-a-world'
+b = f()
+del os.environ['WONDERLAND_MARBLE_IMPORT']
+c = f()
+open(os.path.join(sys.argv[2], 'r.json'), 'w').write(json.dumps([a, b, c]))
+PYBD
+RES="$(cat "$BD_TMP/r.json" 2>/dev/null)"
+case "$RES" in
+  '["backdrop_at_camera", null, null]')
+    ok "…a backdrop world reports backdrop_at_camera, and an unknown one reports nothing"
+    ok "…so an unreadable manifest KEEPS every ring, which is the safe failure" ;;
+  *) bad "the placement-mode helper answered $RES" ;;
+esac
+rm -rf "$BD_TMP"
+grep -q '_kept = (_rings\[0\],)' "$GEN_STRIPPED" \
+  && ok "the nearest ring is kept whatever the arithmetic says" \
+  || bad "the midground a player walks through can be deleted"
+rm -f "$GEN_STRIPPED"
+
 echo "== the C++ that is supposed to run can actually be reached =="
 # AWonderlandPlayerController was written, compiled and SHIPPED — its log format
 # strings are in the packaged binary verbatim — and never executed once. With no

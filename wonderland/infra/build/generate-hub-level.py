@@ -232,6 +232,29 @@ def look_at_rotation(location, target):
 # line moves — silently, reporting an empty world as a measured one — and this
 # change moves that line. A named hook can be replaced from the namespace and
 # cannot be missed by accident.
+def _marble_placement_mode():
+    """The placement_mode of the world being imported, or None.
+
+    Separate from _marble_shell_reach because they answer different questions:
+    that one asks HOW FAR the shell reaches, this asks WHETHER it is a backdrop
+    at all. Conflating them is how a metric-placed world would silently delete
+    the skyline it was never meant to replace.
+    """
+    slug = (os.environ.get("WONDERLAND_MARBLE_IMPORT")
+            or os.environ.get("WONDERLAND_MARBLE_BACKDROP_SLUG") or "").strip()
+    if not slug:
+        return None
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.normpath(os.path.join(here, "..", "..", "marble", "worlds", slug,
+                                         "manifest.json"))
+    try:
+        with io.open(path, encoding="utf8") as handle:
+            manifest = json.load(handle)
+    except Exception:
+        return None
+    return ((manifest.get("transform") or {}).get("placement_mode") or "").strip() or None
+
+
 def _marble_shell_reach():
     """How far the placed Marble shell actually reaches, in uu, or None.
 
@@ -4679,7 +4702,35 @@ def build(layout):
     # ring is dropped only if the shell actually reaches it; if the manifest
     # cannot be read, every ring stays, because keeping geometry is the safe
     # failure and deleting it is not.
-    _MARBLE_BACKDROP = os.environ.get("WONDERLAND_MARBLE_BACKDROP", "0") not in ("0", "", "false", "no")
+    # DEFAULTED FROM THE MANIFEST, because importing a backdrop and USING one
+    # were two separate switches and only the first was ever thrown.
+    #
+    # Measured on the L4 2026-08-22. The build ran with
+    # WONDERLAND_MARBLE_IMPORT=royal-garden-backdrop, the shell imported at
+    # exactly the right size and the right way up, MARBLE_ACTORS=1 in the
+    # packaged world — and it was invisible from both arrival cameras, because
+    # WONDERLAND_MARBLE_BACKDROP defaulted to 0 and the generator therefore kept
+    # all three authored skyline rings at 7,200 / 12,800 / 19,500 uu standing in
+    # front of it. A 1,580-credit castle city behind three rings of authored
+    # spires.
+    #
+    # A world whose manifest says placement_mode = backdrop_at_camera IS a
+    # backdrop; that is what the field means. So it now defaults to on for those
+    # worlds, the environment variable still overrides in both directions, and
+    # the nearest ring is kept regardless — the midground a player walks through
+    # has to stay authored geometry because a single-viewpoint shell smears the
+    # moment they move.
+    _backdrop_env = os.environ.get("WONDERLAND_MARBLE_BACKDROP")
+    if _backdrop_env is None or _backdrop_env == "":
+        _MARBLE_BACKDROP = _marble_placement_mode() == "backdrop_at_camera"
+        if _MARBLE_BACKDROP:
+            unreal.log_warning(
+                "MARBLE BACKDROP derived from the manifest: this world's "
+                "placement_mode is backdrop_at_camera, so the far skyline rings "
+                "defer to the shell. Set WONDERLAND_MARBLE_BACKDROP=0 to keep "
+                "them.")
+    else:
+        _MARBLE_BACKDROP = _backdrop_env not in ("0", "false", "no")
     _rings = ((7200.0, 14, 11.0, "spire"),
               (12800.0, 18, 15.0, "spire_far" if "spire_far" in MATS else "spire"),
               (19500.0, 22, 20.0, "spire_far" if "spire_far" in MATS else "spire"))
