@@ -1863,6 +1863,42 @@ else
   bad "VRAM is reported with no baseline to read it against"
 fi
 
+echo "== two restores of a 69 GB archive cannot share one disk =="
+# This happened. A build was interrupted and its `docker load` child survived
+# the kill; the replacement build started a second load of the same archive, and
+# together they took /var/lib/docker to 222 GB on a 369 GB volume shared with
+# /teamspace — 29 GB from full, both still writing. docker load has no opinion
+# about either condition: it starts a second copy happily and runs to ENOSPC.
+CM="$HERE/common.sh"
+grep -q 'wl_running_ue_loads' "$CM" \
+  && ok "the restore refuses to start while another one is running" \
+  || bad "nothing stops a second concurrent restore of the UE archive"
+grep -q 'needs about .* GB free' "$CM" \
+  && ok "…and refuses when the disk cannot hold it" \
+  || bad "the restore does not check for room before writing 69 GB"
+# The predicate itself, exercised: pgrep -f matches whole command lines, so a
+# shell that merely NAMES the archive must not be mistaken for a running load.
+GUARD_TMP="$(mktemp -d)"
+( set +e
+  A="$GUARD_TMP/ue.tar"; B="$GUARD_TMP/other.tar"; rc=0
+  loads(){ pgrep -a -f "docker load .*$1" 2>/dev/null | awk '$2 ~ /(^|\/)docker$/ { print $1 }'; }
+  [ -z "$(loads "$A")" ] || rc=1
+  setsid bash -c "exec -a 'bash -lc docker load -i $A' sleep 20" >/dev/null 2>&1 & D1=$!
+  sleep 1
+  [ -z "$(loads "$A")" ] || rc=1          # a non-docker process naming it: ignored
+  setsid bash -c "exec -a 'docker load -i $A' sleep 20" >/dev/null 2>&1 & D2=$!
+  sleep 1
+  [ -n "$(loads "$A")" ] || rc=1          # a real one: caught
+  [ -z "$(loads "$B")" ] || rc=1          # a different archive: ignored
+  kill -9 $D1 $D2 >/dev/null 2>&1
+  exit $rc )
+if [ $? -eq 0 ]; then
+  ok "…and the predicate catches a real docker load without firing on a shell that names the file"
+else
+  bad "the concurrent-restore predicate does not distinguish docker from any process naming the archive"
+fi
+rm -rf "$GUARD_TMP"
+
 echo "== each capture's evidence is bounded to its own run =="
 # run-stream.sh APPENDS to app.log, so a file that already held a HeroCam0
 # launch still holds it when HeroCam6 launches. Reading the whole file put both

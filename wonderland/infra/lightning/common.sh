@@ -362,9 +362,48 @@ wl_ensure_ue_image() {
   command -v docker >/dev/null 2>&1 || {
     wl_die "no docker and no native engine; cannot obtain Unreal 5.8"
   }
+  # ONE RESTORE AT A TIME, AND ONLY WITH ROOM FOR IT.
+  #
+  # Both of these were learned the same afternoon on the L4. A build was
+  # interrupted and its `docker load` child SURVIVED the kill; the replacement
+  # build started a second load of the same 69 GB archive, and the two of them
+  # took /var/lib/docker to 222 GB on a 369 GB volume shared with /teamspace --
+  # 29 GB from full, with both loads still writing. Neither would have finished,
+  # and the disk they filled is the one the packaged build lands on.
+  #
+  # docker load itself has no opinion about either: it will happily start a
+  # second copy, and it will happily run until ENOSPC.
+  # Match the DOCKER PROCESS, not any process whose command line mentions the
+  # archive. `pgrep -f` scans whole command lines, so a shell one-liner that
+  # merely names the tar -- an ssh command, this very check written inline --
+  # matches it, and the guard would refuse a build for a restore that is not
+  # running. `pgrep -a` prints "pid cmdline"; keeping only rows whose first word
+  # is the docker binary narrows it to the real thing.
+  wl_running_ue_loads() {
+    pgrep -a -f "docker load .*$WL_UE_ARCHIVE" 2>/dev/null \
+      | awk '$2 ~ /(^|\/)docker$/ { print $1 }'
+  }
+  local busy
+  busy="$(wl_running_ue_loads | tr '\n' ' ')"
+  if [ -n "${busy// /}" ]; then
+    wl_die "another 'docker load' of $WL_UE_ARCHIVE is ALREADY RUNNING (pid(s): $busy).
+Two concurrent restores of a 69 GB archive filled this disk to 92% once already.
+Wait for it, or kill it — but do not start a second. Nothing was restored."
+  fi
   if wl_archive_looks_valid; then
+    local need_gb avail_gb
+    # Roughly twice the archive: docker writes the uncompressed layers while the
+    # archive is still on the same volume.
+    need_gb=$(( $(du -BG "$WL_UE_ARCHIVE" 2>/dev/null | cut -dG -f1 | tr -dc '0-9') * 2 ))
+    avail_gb=$(df -BG --output=avail /var/lib/docker 2>/dev/null | tail -1 | tr -dc '0-9')
+    if [ -n "${avail_gb:-}" ] && [ -n "${need_gb:-}" ] && [ "$avail_gb" -lt "$need_gb" ]; then
+      wl_die "restoring $WL_UE_ARCHIVE needs about ${need_gb} GB free on /var/lib/docker and there is ${avail_gb} GB.
+A load that runs out of space leaves orphaned layers behind and no image, which looks
+exactly like a corrupt archive. Reclaim first: 'docker system prune -af' returned
+118 GB here when the image list was already empty. Nothing was restored."
+    fi
     wl_say "UE image absent; restoring from persistent archive"
-    wl_say "  $WL_UE_ARCHIVE  ($(du -h "$WL_UE_ARCHIVE" 2>/dev/null | cut -f1))"
+    wl_say "  $WL_UE_ARCHIVE  ($(du -h "$WL_UE_ARCHIVE" 2>/dev/null | cut -f1)), ${avail_gb:-?} GB free"
     if ! docker load -i "$WL_UE_ARCHIVE"; then
       wl_die "docker load failed from $WL_UE_ARCHIVE"
     fi
