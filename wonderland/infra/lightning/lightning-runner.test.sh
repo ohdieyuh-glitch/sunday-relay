@@ -1789,6 +1789,39 @@ else
   ok "…and it parses every number out of the generator rather than restating them"
 fi
 
+echo "== the C++ that is supposed to run can actually be reached =="
+# AWonderlandPlayerController was written, compiled and SHIPPED — its log format
+# strings are in the packaged binary verbatim — and never executed once. With no
+# AGameModeBase subclass and no GlobalDefaultGameMode, a packaged build uses
+# stock APlayerController. -CinematicView and -HeroCam=N were never parsed, and
+# HeroCam0, HeroCam3 (1,300 uu away) and HeroCam6 returned three frames of the
+# identical composition. Compiled and reachable are different facts.
+GP="$HERE/../build/verify-gameplay-classes.py"
+if python3 "$GP" >/dev/null 2>&1; then ok "verify-gameplay-classes passes on the current tree"
+else bad "the player controller is unreachable: $(python3 "$GP" 2>&1 | tail -2)"; fi
+grep -q 'verify-gameplay-classes.py' "$HERE/prepare.sh" \
+  && ok "…and prepare.sh runs it before a build" \
+  || bad "the reachability gate is not in the pre-build gates"
+# Only the three directories the gate reads. Copying the whole wonderland tree
+# drags several hundred MB of Marble meshes through /tmp for no reason, and a
+# slow, disk-hungry check is a check that becomes flaky and then gets deleted.
+GP_TMP="$(mktemp -d)"
+mkdir -p "$GP_TMP/w/Config" "$GP_TMP/w/Source" "$GP_TMP/w/infra/build"
+cp -r "$HERE/../../Config/." "$GP_TMP/w/Config/" 2>/dev/null
+cp -r "$HERE/../../Source/." "$GP_TMP/w/Source/" 2>/dev/null
+cp "$HERE/../build/verify-gameplay-classes.py" "$GP_TMP/w/infra/build/" 2>/dev/null
+if [ -f "$GP_TMP/w/Config/DefaultEngine.ini" ]; then
+  sed -i '/^GlobalDefaultGameMode=/d' "$GP_TMP/w/Config/DefaultEngine.ini"
+  if python3 "$GP_TMP/w/infra/build/verify-gameplay-classes.py" >/dev/null 2>&1; then
+    bad "removing GlobalDefaultGameMode still passes — the gate is inert"
+  else
+    ok "…and removing GlobalDefaultGameMode FAILS it, which is the bug that shipped"
+  fi
+else
+  bad "could not stage a copy to prove the gate bites"
+fi
+rm -rf "$GP_TMP"
+
 echo "== the arrival can SEE what the backdrop cost 1,580 credits =="
 # HeroCam0 is pitched -11.6 degrees to hold the hero Dog on its arcane circle,
 # so its frame stops at +7.1 — and the Marble castle city sits around +21,

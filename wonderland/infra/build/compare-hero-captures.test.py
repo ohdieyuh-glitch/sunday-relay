@@ -86,6 +86,19 @@ def main():
               "not measured" in out and "0.0" not in out.split("delivered FPS mean")[1][:24],
               out[out.find("delivered FPS mean"):][:80])
 
+        # The case that actually happened: nothing identified itself.
+        silent = sidecar(root, "silent", 6, "HeroCam6_1", 0, 75.0)
+        with io.open(silent, encoding="utf8") as handle:
+            payload = json.load(handle)
+        payload["world_proof"] = [l for l in payload["world_proof"]
+                                  if not l.startswith("HERO_CAM_")]
+        with io.open(silent, "w", encoding="utf8") as handle:
+            json.dump(payload, handle)
+        code, out = run(silent)
+        check("a frame whose camera never identified itself is REFUSED",
+              code == 1 and "did not report which camera" in out,
+              "three -HeroCam values returned the same frame and nothing said so")
+
         other = sidecar(root, "other", 0, "HeroCam0_1", 0, 62.0)
         with io.open(other, encoding="utf8") as handle:
             payload = json.load(handle)

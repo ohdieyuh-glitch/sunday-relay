@@ -16,7 +16,11 @@ Three things it will not do:
     already compared two captures that turned out to be the same binary.
   * let a frame stand as evidence for a camera that did not render it. The
     packaged build prints HERO_CAM_REQUESTED and HERO_CAM_SERVED; if they
-    disagree the row is marked and the exit code is non-zero.
+    disagree, OR IF THE BUILD DID NOT SAY AT ALL, the row is marked and the exit
+    code is non-zero. Silence is the case that actually happened: the player
+    controller was never reached, so no camera identified itself, three
+    different -HeroCam values returned the identical frame, and a blank row
+    would have read as a working comparison.
 """
 import io
 import json
@@ -137,6 +141,10 @@ def main(argv):
         elif served and requested and ("HeroCam%s" % requested) not in served:
             bad.append("hero %s asked for HeroCam%s and got %s"
                        % (e.get("hero_camera"), requested, served))
+        if not served:
+            bad.append("hero %s did not report which camera answered — the frame "
+                       "cannot be attributed to any camera at all"
+                       % e.get("hero_camera"))
         if proof(e, "MARBLE_ACTORS") in (None, "0"):
             bad.append("hero %s rendered a world with NO Marble backdrop in it"
                        % e.get("hero_camera"))
