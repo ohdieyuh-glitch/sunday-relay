@@ -1838,6 +1838,22 @@ if sed 's/#.*//' "$CAPS" | grep -q 'rm -f "\$base.png"'; then
 else
   bad "a frame from the wrong camera is still written as evidence"
 fi
+if sed 's/#.*//' "$CAPS" | grep -q 'STATS="\$(cat "\$STATS_FILE")"'; then
+  ok "the stream measurement is read from measure.cjs's FILE, not its stdout"
+else
+  bad "the capture parses stdout for JSON that measure.cjs prints to a file — every FPS number silently becomes {}"
+fi
+if grep -q 'fs.writeFileSync(OUT' "$HERE/../../rendering/measure.cjs" \
+   && grep -q "console.log(\`DELIVERED" "$HERE/../../rendering/measure.cjs"; then
+  ok "…and measure.cjs really does write the file and print prose, which is why"
+else
+  bad "measure.cjs no longer matches the assumption the capture is built on"
+fi
+if sed 's/#.*//' "$CAPS" | grep -q 'could not be measured'; then
+  ok "…and an unmeasurable stream is SAID, not filed as absent numbers"
+else
+  bad "a failed measurement is indistinguishable from one that was never attempted"
+fi
 grep -q 'nvidia-smi' "$CAPS" \
   && ok "GPU utilisation and VRAM are sampled with the picture, from the same run" \
   || bad "the capture records no GPU measurement"

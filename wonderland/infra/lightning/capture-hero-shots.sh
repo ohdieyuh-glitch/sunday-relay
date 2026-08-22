@@ -127,11 +127,29 @@ rather than filing it as evidence. The package is older than the camera; rebuild
 
   # Performance alongside the picture, from the same run — the goal asks for
   # both and measuring them separately means measuring two different states.
+  #
+  # READ THE FILE, NOT STDOUT. measure.cjs writes its JSON to the path given as
+  # its SECOND argument and prints a one-line human summary to stdout. Capturing
+  # stdout and testing it for a leading brace therefore discarded every
+  # measurement it ever took: the guard rewrote a perfectly good run to "{}" and
+  # the capture filed a frame with no FPS in it, silently, every time.
   STATS="{}"
-  if [ -f "$HERE/../../rendering/measure.cjs" ]; then
-    STATS="$( ( cd "$HERE" && "$NODE" "$HERE/../../rendering/measure.cjs" \
-                 "http://127.0.0.1:$WL_HTTP_PORT/" ) 2>>"$WL_LOG/capture-$cam.log" || echo '{}')"
-    case "$STATS" in '{'*) : ;; *) STATS='{}' ;; esac
+  MEASURE="$HERE/../../rendering/measure.cjs"
+  STATS_FILE="$base.stream.json"
+  if [ -f "$MEASURE" ]; then
+    if ( cd "$HERE" && "$NODE" "$MEASURE" "http://127.0.0.1:$WL_HTTP_PORT/" \
+           "$STATS_FILE" ) >>"$WL_LOG/capture-$cam.log" 2>&1 && [ -s "$STATS_FILE" ]; then
+      STATS="$(cat "$STATS_FILE")"
+      case "$STATS" in '{'*) : ;; *) STATS='{}' ;; esac
+    else
+      # Loud, because "no FPS" and "0 FPS" are different claims and only one of
+      # them is true here.
+      wl_warn "hero camera $cam: the stream could not be measured — the frame is
+filed WITHOUT performance numbers rather than with invented ones.
+See $WL_LOG/capture-$cam.log"
+    fi
+  else
+    wl_warn "no measure.cjs at $MEASURE — no FPS was recorded for hero camera $cam"
   fi
 
   # Passed through the environment rather than as arguments: the proof block is
