@@ -490,6 +490,79 @@ else
 fi
 
 echo
+echo "== a picture can be measured without ffmpeg or PIL =="
+# The Lightning box has neither, and adding a dependency to read four numbers
+# out of a frame is how a measurement stops being taken. The gain sweep decides
+# what the backdrop's brightness should be from these numbers, so a reader that
+# is quietly wrong would tune the world to the wrong value.
+MFR="$HERE/measure-frame-region.py"
+MFR_TMP="$(mktemp -d)"
+python3 - "$MFR_TMP" <<'PYPNG'
+import os, struct, sys, zlib
+D = sys.argv[1]
+def write(path, w, h, rgb, ftype):
+    raw, prev = b'', bytearray(w * 3)
+    for _ in range(h):
+        line = bytearray(bytes(rgb) * w)
+        if ftype == 0:
+            enc = bytes(line)
+        elif ftype == 1:
+            enc = bytes((line[i] - (line[i-3] if i >= 3 else 0)) & 0xFF for i in range(len(line)))
+        else:
+            enc = bytes((line[i] - prev[i]) & 0xFF for i in range(len(line)))
+        raw += bytes([ftype]) + enc
+        prev = line
+    def chunk(k, b):
+        c = struct.pack('>I', len(b)) + k + b
+        return c + struct.pack('>I', zlib.crc32(k + b) & 0xffffffff)
+    out = b'\x89PNG\r\n\x1a\x0a'[:8]
+    out = b'\x89PNG\r\n\x1a\n'
+    out += chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
+    out += chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+    open(path, 'wb').write(out)
+for ft, name in ((0, 'none'), (1, 'sub'), (2, 'up')):
+    write(os.path.join(D, 'f%s.png' % name), 40, 30, (200, 100, 50), ft)
+def chunk(k, b):
+    c = struct.pack('>I', len(b)) + k + b
+    return c + struct.pack('>I', zlib.crc32(k + b) & 0xffffffff)
+deep = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 4, 4, 16, 2, 0, 0, 0))
+deep += chunk(b'IDAT', zlib.compress(b'\x00' * 100)) + chunk(b'IEND', b'')
+open(os.path.join(D, 'deep.png'), 'wb').write(deep)
+PYPNG
+mfr_ok=1
+for n in none sub up; do
+  got="$(python3 "$MFR" "$MFR_TMP/f$n.png" 0 0 40 30 2>/dev/null)"
+  case "$got" in *"mean_rgb=200.0,100.0,50.0"*) : ;; *) mfr_ok=0 ;; esac
+done
+[ "$mfr_ok" = 1 ] \
+  && ok "a known flat colour reads back exactly, through every PNG filter the encoder uses" \
+  || bad "the frame reader does not reproduce a known colour"
+if python3 "$MFR" "$MFR_TMP/deep.png" 0 0 4 4 >/dev/null 2>&1; then
+  bad "a 16-bit PNG is decoded as if it were 8-bit"
+else
+  ok "…and an unsupported PNG is REFUSED by name, not decoded into a wrong number"
+fi
+rm -rf "$MFR_TMP"
+
+echo
+echo "== the gain sweep decides from frames, and says when the answer is not gain =="
+SWEEP="$HERE/../lightning/tune-marble-gain.sh"
+bash -n "$SWEEP" 2>/dev/null && ok "tune-marble-gain.sh parses" || bad "tune-marble-gain.sh does not parse"
+SWEEP_CODE="$(mktemp)"; sed 's/#.*//' "$SWEEP" > "$SWEEP_CODE"
+grep -q 'MARBLE_RUNTIME_GAIN_FAILED' "$SWEEP_CODE" \
+  && ok "…and refuses to record a sample where the gain did not take" \
+  || bad "a run where the gain failed would be recorded as a brightness data point"
+grep -q 'ShowFlag.Fog 0' "$SWEEP_CODE" \
+  && ok "…and captures each gain with fog OFF too, to isolate the shell from the fog" \
+  || bad "the sweep measures the sky band without separating fog from the backdrop"
+if grep -q 'FOG is painting over' "$SWEEP_CODE"; then
+  ok "…and concludes FOG, not brightness, when the shell brightens and the frame does not"
+else
+  bad "the sweep can only conclude 'turn the gain up'"
+fi
+rm -f "$SWEEP_CODE"
+
+echo
 echo "== a hero capture cannot report a result it does not have =="
 # The comparison tool is what turns two sidecars into a recommendation, so a
 # version of it that always prints a nice table would make every run look like
