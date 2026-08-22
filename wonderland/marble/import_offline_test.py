@@ -141,13 +141,28 @@ def build_stub():
         def get_editor_property(self, k): return self.props.get(k)
 
     class MaterialEditingLibrary(object):
+        # Models the REAL behaviour measured in UE 5.8: the setter returns
+        # False and sets the value anyway. A stub that returned True would let
+        # the importer's old return-value check pass and hide the bug.
+        _store = {}
+
         @staticmethod
         def set_material_instance_vector_parameter_value(material, name, value):
             REC.vector_params.append((getattr(material, "name", "?"), str(name), value))
-            return REC.vector_param_applies
+            if REC.vector_param_applies:
+                MaterialEditingLibrary._store[str(name)] = value
+            return False
+
+        @staticmethod
+        def get_material_instance_vector_parameter_value(material, name):
+            return MaterialEditingLibrary._store.get(
+                str(name), LinearColor(1.0, 1.0, 1.0, 1.0))
 
     class LinearColor(object):
-        def __init__(self, r, g, b, a=1.0): self.rgba = (r, g, b, a)
+        def __init__(self, r, g, b, a=1.0):
+            self.rgba = (r, g, b, a)
+            self.r, self.g, self.b, self.a = r, g, b, a
+
         def __repr__(self): return "LinearColor%s" % (self.rgba,)
 
     class MeshPipeline(object):
@@ -1002,8 +1017,10 @@ def main():
         centre = tuple(org[i] + pred[i] for i in range(3))
         half = tuple(v / 2.0 for v in _pl.predicted_extent(man))
         run_importer("gain", root, bounds_centre=centre, bounds_extent=half)
-        check(any("MARBLE_UNLIT_GAIN=6" in m for m in REC.logs),
-              "a requested unlit gain is applied and reported")
+        check(any("MARBLE_UNLIT_GAIN=6" in m and "read back" in m for m in REC.logs),
+              "a requested unlit gain is applied and CONFIRMED BY READBACK")
+        check(not any("MARBLE_UNLIT_GAIN_APPLIED=0" in m for m in REC.logs),
+              "…and a False return from the setter no longer reads as failure")
         check(any(n == "BaseColorFactor" for _m, n, _v in REC.vector_params),
               "…on BaseColorFactor, the parameter the engine's glTF unlit master exposes")
         check(bool(REC.vector_params)

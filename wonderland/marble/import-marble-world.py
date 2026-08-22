@@ -480,20 +480,35 @@ def apply_unlit_gain(material, gain):
     if gain is None or abs(float(gain) - 1.0) < 1e-6:
         return None
     value = float(gain)
+    lib = unreal.MaterialEditingLibrary
     try:
-        applied = unreal.MaterialEditingLibrary.set_material_instance_vector_parameter_value(
+        # THE RETURN VALUE IS NOT THE ANSWER, and trusting it cost a build.
+        # set_material_instance_vector_parameter_value returns False here while
+        # setting the parameter perfectly well — readback after a False return
+        # shows 6.0. Whatever that boolean means, it is not "did this work", so
+        # the check is a READBACK: set it, read it, compare. An API contract
+        # nobody has verified is a guess with a type signature.
+        lib.set_material_instance_vector_parameter_value(
             material, "BaseColorFactor", unreal.LinearColor(value, value, value, 1.0))
     except Exception as exc:
         log("unlit gain %.3g could NOT be applied (%s). The backdrop keeps the "
             "brightness the exporter gave it." % (value, exc))
         return False
-    if not applied:
-        log("BaseColorFactor is not a parameter on this material's parent, so the "
-            "unlit gain did nothing. Nothing was faked: the backdrop keeps the "
-            "brightness the exporter gave it.")
+    try:
+        back = lib.get_material_instance_vector_parameter_value(material, "BaseColorFactor")
+        got = (back.r, back.g, back.b)
+    except Exception as exc:
+        log("unlit gain %.3g was written and could NOT be read back (%s). Read the "
+            "frame as unverified brightness." % (value, exc))
+        return False
+    if max(abs(c - value) for c in got) > 1e-3:
+        log("BaseColorFactor did not take: asked for %.4g, reads back %s. Nothing "
+            "was faked — the backdrop keeps the brightness the exporter gave it."
+            % (value, [round(c, 4) for c in got]))
         return False
     unreal.EditorAssetLibrary.save_loaded_asset(material)
-    log("MARBLE_UNLIT_GAIN=%.4g applied to BaseColorFactor" % value)
+    log("MARBLE_UNLIT_GAIN=%.4g applied to BaseColorFactor and read back as %.4g"
+        % (value, got[0]))
     return True
 
 
