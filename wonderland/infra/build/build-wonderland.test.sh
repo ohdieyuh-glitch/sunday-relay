@@ -378,6 +378,68 @@ fi
 make_engine "$TMP/ue"
 
 echo
+echo "== editing the generator has to invalidate the build =="
+# The hash covered Wonderland.uproject, Source/, Config/ and WorldDesign/ -- and
+# not generate-hub-level.py, the program that decides what is IN the world. A
+# change to it reported "inputs unchanged since the last successful package",
+# reused the previous package, and printed BUILT AND PACKAGED against the new
+# SHA while every stage log still carried the previous build's timestamps.
+make_project "$TMP/hash" plain 2>/dev/null || make_project "$TMP/hash"
+rm -rf "$TMP/out"
+h_before="$(hash_of "$(run_build "$TMP/hash")")"
+# The generator INSIDE the fixture, because run_build executes the fixture's own
+# copy of build-wonderland.sh and it resolves its inputs relative to itself. My
+# first version of this probe edited the repo's real generator, which that build
+# never reads — so it measured nothing and reported the code broken.
+GEN_REAL="$TMP/hash/infra/build/generate-hub-level.py"
+cp "$GEN_REAL" "$TMP/gen.bak"
+printf '\n# hash-invalidation probe %s\n' "$$" >> "$GEN_REAL"
+rm -rf "$TMP/out"
+h_after="$(hash_of "$(run_build "$TMP/hash")")"
+cp "$TMP/gen.bak" "$GEN_REAL"
+if [ -n "$h_before" ] && [ -n "$h_after" ] && [ "$h_before" != "$h_after" ]; then
+  ok "editing generate-hub-level.py changes the input hash"
+else
+  bad "the generator is outside the build hash (before='$h_before' after='$h_after')"
+fi
+rm -rf "$TMP/out"
+h_restored="$(hash_of "$(run_build "$TMP/hash")")"
+if [ "$h_restored" = "$h_before" ]; then
+  ok "…and restoring it returns the original hash, so the probe measured the file"
+else
+  bad "the hash did not return after restoring the generator"
+fi
+# The Marble manifest is an input too: the importer places from it and the
+# generator derives the backdrop switch from it.
+MAN_DIR="$TMP/hash/marble/worlds/probe-world"
+mkdir -p "$MAN_DIR"
+printf '{"marble_world_id":"probe"}\n' > "$MAN_DIR/manifest.json"
+rm -rf "$TMP/out"
+h_man="$(hash_of "$(run_build "$TMP/hash")")"
+if [ -n "$h_man" ] && [ "$h_man" != "$h_before" ]; then
+  ok "…and adding a Marble world manifest changes it too"
+else
+  bad "the Marble manifests are outside the build hash"
+fi
+printf '{"marble_world_id":"probe","edited":true}\n' > "$MAN_DIR/manifest.json"
+rm -rf "$TMP/out"
+h_man2="$(hash_of "$(run_build "$TMP/hash")")"
+if [ -n "$h_man2" ] && [ "$h_man2" != "$h_man" ]; then
+  ok "…and EDITING one changes it again, so content is hashed and not just presence"
+else
+  bad "manifest contents are not hashed, only their existence"
+fi
+rm -rf "$TMP/hash/marble"
+# "unset" and "0" must be different inputs: unset now means DERIVE.
+rm -rf "$TMP/out"; h_unset="$(hash_of "$(run_build "$TMP/hash")")"
+rm -rf "$TMP/out"; h_zero="$(hash_of "$(WONDERLAND_MARBLE_BACKDROP=0 run_build "$TMP/hash")")"
+if [ -n "$h_zero" ] && [ "$h_unset" != "$h_zero" ]; then
+  ok "an unset backdrop knob hashes differently from an explicit 0"
+else
+  bad "unset and 0 collapse to the same hash, so one build can be reused for the other"
+fi
+
+echo
 echo "== Unreal Build Accelerator is off, and provably off in BOTH steps =="
 # UBA turned the L4 editor build into a crash loop: 143,340 SIGSEGV traces from
 # its filesystem interception, 0 compiler errors, 3 of 13 actions in 35 minutes.

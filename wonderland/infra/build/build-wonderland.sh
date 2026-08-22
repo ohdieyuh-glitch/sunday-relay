@@ -140,6 +140,41 @@ REQUIRED_INPUTS=("$PROJECT" "$SRC_DIR" "$WORLD_DIR")
 # Optional: Config/ is included when present and simply skipped when not.
 OPTIONAL_INPUTS=("$CFG_DIR")
 
+# THE SCRIPTS THAT AUTHOR THE LEVEL ARE BUILD INPUTS, AND WERE NOT HASHED.
+#
+# The hash covered Wonderland.uproject, Source/, Config/ and WorldDesign/ —
+# every C++ file and every ini — and not generate-hub-level.py, which is the
+# program that decides what is IN the world. So editing the generator changed
+# nothing: "inputs unchanged since the last successful package", stamp matched,
+# cook skipped, previous package reused.
+#
+# That happened on 2026-08-22. A change deriving the Marble backdrop switch from
+# the manifest was committed, built, and reported BUILT AND PACKAGED against the
+# new SHA — while every log under packaged/logs still carried the timestamps of
+# the build twenty minutes earlier. The comment fifty lines below already
+# describes this exact failure for WONDERLAND_LOOK and says an override that
+# cannot invalidate the build silently does nothing. The generator itself was
+# never added to the list it warns about.
+#
+# The world MANIFESTS are inputs too: the importer places from them and the
+# generator now derives from them. Their meshes are NOT — they are hundreds of
+# megabytes, they are content-addressed by the manifest that describes them, and
+# hashing them would put a minute on every build to detect a change that cannot
+# happen without the manifest changing too.
+# $0, the way the rest of this file already resolves itself (see GEN_SCRIPT
+# below), and the worlds are found relative to the SCRIPT rather than to
+# PROJECT_ROOT — which is how import-marble-world.py resolves them, and the only
+# resolution that still works when PROJECT_ROOT is a test fixture.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MARBLE_WORLDS="$(cd "$SCRIPT_DIR/../../marble/worlds" 2>/dev/null && pwd || true)"
+extra_input_files() {
+  ( set +o pipefail
+    find "$SCRIPT_DIR" -maxdepth 1 -type f -name '*.py' -print0 2>/dev/null
+    [ -n "$MARBLE_WORLDS" ] && [ -d "$MARBLE_WORLDS" ] \
+      && find "$MARBLE_WORLDS" -type f -name 'manifest.json' -print0 2>/dev/null
+    true )
+}
+
 validate_build_inputs() {
   # Deliberately NOT inside the command substitution. A `die` from within
   # $( ) exits the subshell and leaves the caller to fail on its own terms,
@@ -169,7 +204,7 @@ compute_input_hash() {
   # no arguments — where it would read STDIN and hash the wrong thing rather
   # than fail.
   ( set +o pipefail
-    find "${paths[@]}" -type f -print0 2>/dev/null \
+    { find "${paths[@]}" -type f -print0 2>/dev/null; extra_input_files; } \
       | sort -z \
       | xargs -0 -r sha256sum 2>/dev/null \
       | sha256sum | cut -d' ' -f1 )
@@ -186,7 +221,10 @@ INPUT_HASH="$(compute_input_hash)"
 # they were the same binary. An override that cannot invalidate the build is an
 # override that silently does nothing, which is the second time today the same
 # shape of bug has cost a rebuild.
-_KNOBS="LOOK=${WONDERLAND_LOOK:-} BATCH=${WONDERLAND_BATCH:-1} BACKDROP=${WONDERLAND_MARBLE_BACKDROP:-0} MARBLE=${WONDERLAND_MARBLE_IMPORT:-} COLLIDE=${WONDERLAND_COLLIDE:-}"
+# BACKDROP records the RAW value, not a defaulted one: unset now means "derive
+# it from the world's manifest" and "0" means "keep the rings", and collapsing
+# those two into the same hash input would let one be reused for the other.
+_KNOBS="LOOK=${WONDERLAND_LOOK:-} BATCH=${WONDERLAND_BATCH:-1} BACKDROP=${WONDERLAND_MARBLE_BACKDROP-<unset>} MARBLE=${WONDERLAND_MARBLE_IMPORT:-} COLLIDE=${WONDERLAND_COLLIDE:-}"
 INPUT_HASH="$(printf '%s|%s' "$INPUT_HASH" "$_KNOBS" | sha256sum | cut -d' ' -f1)"
 [ -n "${WONDERLAND_LOOK:-}" ] && log "generator knobs in the hash: $_KNOBS"
 # The belt to the braces: if anything above still produced something that is not
