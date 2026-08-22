@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mean colour of a rectangle in a PNG, with no PIL and no ffmpeg.
+"""Mean colour AND acutance of a rectangle in a PNG, with no PIL and no ffmpeg.
 
     python3 measure-frame-region.py frame.png X Y W H
 
@@ -106,10 +106,31 @@ def main(argv):
             totals[2] += pixels[i + 2]
             count += 1
     means = [t / float(count) for t in totals]
-    print("%s %dx%d region=%d,%d,%dx%d mean_rgb=%.1f,%.1f,%.1f luma=%.1f"
+
+    # ACUTANCE, because "sharper" has to be a number or it is an opinion.
+    #
+    # Mean absolute luma gradient over the region: the average difference between
+    # neighbouring pixels. Blur, softness and over-smoothed upscaling all reduce
+    # it; real edges, readable geometry and texture detail all raise it. It is
+    # scale-dependent, so it compares frames of the SAME region at the same size
+    # and says nothing across different crops — which is exactly the comparison a
+    # sharpening sweep makes.
+    grad_total = 0.0
+    grad_count = 0
+    def luma_at(row, col):
+        i = row * stride + col * channels
+        return 0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2]
+    for row in range(y0, y1 - 1):
+        for col in range(x0, x1 - 1):
+            here = luma_at(row, col)
+            grad_total += abs(luma_at(row, col + 1) - here) + abs(luma_at(row + 1, col) - here)
+            grad_count += 2
+    acutance = (grad_total / grad_count) if grad_count else 0.0
+
+    print("%s %dx%d region=%d,%d,%dx%d mean_rgb=%.1f,%.1f,%.1f luma=%.1f acutance=%.3f"
           % (path.split("/")[-1], width, height, x0, y0, x1 - x0, y1 - y0,
              means[0], means[1], means[2],
-             0.2126 * means[0] + 0.7152 * means[1] + 0.0722 * means[2]))
+             0.2126 * means[0] + 0.7152 * means[1] + 0.0722 * means[2], acutance))
     return 0
 
 

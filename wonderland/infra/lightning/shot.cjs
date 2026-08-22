@@ -43,8 +43,16 @@ const SETTLE_MS = parseInt(process.env.WL_SETTLE_MS || '12000', 10);
       '--disable-dev-shm-usage',
     ],
   });
+  // THE VIEWPORT HAS TO MATCH THE STREAM, or the evidence throws away the very
+  // thing being measured. This was hardcoded to 1280x720 and the screenshot is
+  // of the PAGE — so a 4K stream would be scaled down into a 720p PNG, the
+  // sharpness gain would be invisible, and the honest conclusion from that
+  // evidence would be "4K does not help". It does; the capture did.
+  const RES_X = parseInt(process.env.WL_RES_X || '1280', 10);
+  const RES_Y = parseInt(process.env.WL_RES_Y || '720', 10);
   const page = await browser.newPage({
-    viewport: { width: 1280, height: 720 },
+    viewport: { width: RES_X, height: RES_Y },
+    deviceScaleFactor: 1,
   });
 
   page.on('console', (m) => {
@@ -81,6 +89,20 @@ const SETTLE_MS = parseInt(process.env.WL_SETTLE_MS || '12000', 10);
   // washed or black image that then gets compared against the reference and
   // sends everyone chasing a lighting bug that does not exist.
   await page.waitForTimeout(SETTLE_MS);
+
+  // Report the stream's OWN resolution next to the viewport. If they disagree,
+  // the PNG is a resampled picture of the stream and any sharpness read off it
+  // is a measurement of the resampler.
+  const vid = await page.evaluate(() => {
+    const v = document.querySelector('video');
+    return v ? { w: v.videoWidth, h: v.videoHeight } : null;
+  });
+  if (vid && (vid.w !== RES_X || vid.h !== RES_Y)) {
+    console.log(`  [shot] STREAM ${vid.w}x${vid.h} but viewport ${RES_X}x${RES_Y} — ` +
+                `this PNG is RESAMPLED; do not read sharpness off it.`);
+  } else if (vid) {
+    console.log(`  [shot] stream ${vid.w}x${vid.h} matches the viewport, 1:1`);
+  }
   await page.screenshot({ path: OUT });
   console.log(playing ? `captured ${OUT}` : `captured ${OUT} (NO VIDEO - suspect)`);
 

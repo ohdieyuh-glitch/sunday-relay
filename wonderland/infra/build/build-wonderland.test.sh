@@ -545,6 +545,68 @@ fi
 rm -rf "$MFR_TMP"
 
 echo
+echo "== "sharper" is a number, not an impression =="
+# The founder's note is "too blurry, too soft, too smeared, not crisp enough for
+# 4K". Those all describe one measurable thing — how much neighbouring pixels
+# differ — and none of them can be settled by looking at a frame. Acutance must
+# fall under a known blur while the MEAN COLOUR does not move, or it is
+# measuring brightness and would credit the backdrop gain with detail it did not
+# add.
+SH_TMP="$(mktemp -d)"
+python3 - "$SH_TMP" <<'PYSH'
+import os, struct, sys, zlib
+D = sys.argv[1]
+def write(path, rows):
+    h = len(rows); w = len(rows[0]) // 3
+    raw = b''.join(b'\x00' + bytes(r) for r in rows)
+    def chunk(k, b):
+        c = struct.pack('>I', len(b)) + k + b
+        return c + struct.pack('>I', zlib.crc32(k + b) & 0xffffffff)
+    out = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0))
+    out += chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+    open(path, 'wb').write(out)
+W = H = 64
+# Sharp: hard vertical stripes. Soft: the SAME row low-passed with a 5-tap box,
+# which is a real blur rather than a second pattern that happens to look like
+# one. The first version of this fixture generated the identical image twice and
+# the check reported the metric broken when the metric was fine.
+base = [220 if (x // 4) % 2 == 0 else 40 for x in range(W)]
+k = 2
+blur = [sum(base[max(0, x - k):min(W, x + k + 1)]) / len(base[max(0, x - k):min(W, x + k + 1)])
+        for x in range(W)]
+sharp, soft = [], []
+for _ in range(H):
+    sharp.append([c for v in base for c in (v, v, v)])
+    soft.append([c for v in blur for c in (int(round(v)),) * 3])
+write(os.path.join(D, 'sharp.png'), sharp)
+write(os.path.join(D, 'soft.png'), soft)
+PYSH
+A_SHARP="$(python3 "$HERE/measure-frame-region.py" "$SH_TMP/sharp.png" 0 0 64 64 2>/dev/null | sed -n 's/.*acutance=\([0-9.]*\).*/\1/p')"
+A_SOFT="$(python3 "$HERE/measure-frame-region.py" "$SH_TMP/soft.png" 0 0 64 64 2>/dev/null | sed -n 's/.*acutance=\([0-9.]*\).*/\1/p')"
+if [ -n "$A_SHARP" ] && [ -n "$A_SOFT" ] \
+   && python3 -c "import sys; sys.exit(0 if float('$A_SHARP') > float('$A_SOFT') * 1.5 else 1)"; then
+  ok "acutance is much higher on hard edges than on a soft ramp ($A_SHARP vs $A_SOFT)"
+else
+  bad "acutance does not separate sharp from soft ($A_SHARP vs $A_SOFT)"
+fi
+rm -rf "$SH_TMP"
+SHARP_SH="$HERE/../lightning/tune-sharpness.sh"
+bash -n "$SHARP_SH" 2>/dev/null && ok "tune-sharpness.sh parses" || bad "tune-sharpness.sh does not parse"
+SH_CODE="$(mktemp)"; sed 's/#.*//' "$SHARP_SH" > "$SH_CODE"
+grep -q 'RESAMPLED' "$SH_CODE" \
+  && ok "…and refuses to score a capture that was RESAMPLED" \
+  || bad "a downscaled 4K capture would be scored as if it were native"
+grep -q 'fps_mean\|30.0' "$SH_CODE" \
+  && ok "…and reports the sharpest option that still holds 30 FPS" \
+  || bad "the sweep can recommend a setting that cannot hold a frame rate"
+rm -f "$SH_CODE"
+if sed 's|//.*||' "$HERE/../lightning/shot.cjs" | grep -q 'WL_RES_X'; then
+  ok "the capture viewport follows the stream resolution, so 4K is captured as 4K"
+else
+  bad "shot.cjs still hardcodes a viewport — a 4K stream would be captured at 720p"
+fi
+
+echo
 echo "== the gain sweep decides from frames, and says when the answer is not gain =="
 SWEEP="$HERE/../lightning/tune-marble-gain.sh"
 bash -n "$SWEEP" 2>/dev/null && ok "tune-marble-gain.sh parses" || bad "tune-marble-gain.sh does not parse"
