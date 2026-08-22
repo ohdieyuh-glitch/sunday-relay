@@ -176,3 +176,27 @@ def place_inverse_origin():
     """The mesh point that lands on unreal_origin_cm. It is the mesh origin:
     every rotation here fixes it and the scale is uniform."""
     return (0.0, 0.0, 0.0)
+
+
+def forward_from_rotator(pitch, yaw, _roll=0.0):
+    """Unreal rotator -> unit forward vector.
+
+    Lives here, next to the rest of Unreal's conventions, and not in the
+    renderer, so it can be asserted without numpy or an engine. It exists so a
+    frame's reported composition can be recomputed from the rotator the PACKAGED
+    BUILD printed, rather than from the look-at target the source table asked
+    for -- those are the same number only when the level is the one you think.
+
+    Roll is ignored deliberately: it spins the frame about the view axis and
+    changes nothing about WHICH geometry is inside it.
+    """
+    p, y = math.radians(float(pitch)), math.radians(float(yaw))
+    return (math.cos(p) * math.cos(y), math.cos(p) * math.sin(y), math.sin(p))
+
+
+def rotator_from_look(pos, look):
+    """The rotator Unreal's look-at produces, so the two paths can be compared."""
+    dx, dy, dz = (look[i] - pos[i] for i in range(3))
+    flat = math.hypot(dx, dy)
+    pitch = math.degrees(math.atan2(dz, flat)) if flat else (90.0 if dz > 0 else -90.0)
+    return (pitch, math.degrees(math.atan2(dy, dx)), 0.0)

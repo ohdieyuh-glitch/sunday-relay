@@ -235,9 +235,12 @@ def verify_extent(world, manifest):
 class Camera(object):
     """Unreal conventions: left-handed, +X forward, +Y right, +Z up, horizontal FOV."""
 
-    def __init__(self, pos, look, fov_deg, width, height):
+    def __init__(self, pos, look, fov_deg, width, height, forward=None):
         self.pos = np.array(pos, dtype=np.float64)
-        f = np.array(look, dtype=np.float64) - self.pos
+        if forward is not None:
+            f = np.array(forward, dtype=np.float64)
+        else:
+            f = np.array(look, dtype=np.float64) - self.pos
         n = np.linalg.norm(f)
         if n == 0:
             raise SystemExit("camera position and target are the same point")
@@ -501,6 +504,11 @@ def main():
     ap.add_argument("--camera", default="0,-1150,430")
     ap.add_argument("--look", default="0,120,170")
     ap.add_argument("--fov", type=float, default=62.0)
+    ap.add_argument("--rotation", default=None,
+                    help="pitch,yaw,roll in degrees, as the engine reported it. Use this "
+                         "with the HERO_CAM_LOC/ROT/FOV line a packaged run prints, so the "
+                         "reported skyline percentage describes the camera that ACTUALLY "
+                         "rendered rather than the one the source table asked for.")
     ap.add_argument("--yaw", type=float, default=0.0,
                     help="extra artistic yaw to preview, degrees")
     ap.add_argument("--pano", action="store_true", help="also render a 360 equirectangular")
@@ -550,9 +558,15 @@ def main():
     verify_extent(world, manifest)
 
     os.makedirs(args.out, exist_ok=True)
+    fwd = None
+    if args.rotation:
+        pitch, yaw, roll = [float(v) for v in args.rotation.split(",")]
+        fwd = np.array(placement.forward_from_rotator(pitch, yaw, roll))
+        log("camera forward from the engine's own rotator "
+            "(pitch %+.2f yaw %+.2f roll %+.2f)" % (pitch, yaw, roll))
     cam = Camera([float(v) for v in args.camera.split(",")],
                  [float(v) for v in args.look.split(",")],
-                 args.fov, args.width, args.height)
+                 args.fov, args.width, args.height, forward=fwd)
     report = orientation_report(cam, world, tris, colors)
     print(report)
     with open(os.path.join(args.out, "orientation.txt"), "w") as fh:
@@ -564,7 +578,7 @@ def main():
     save_png(os.path.join(args.out, "herocam0-%s.png" % tag), fill_holes(rgb, depth))
 
     if args.pano:
-        pano = Equirect(cam.pos, [float(v) for v in args.look.split(",")], 2048, 1024)
+        pano = Equirect(cam.pos, cam.pos + cam.forward * 1000.0, 2048, 1024)
         prgb, pdepth, pcov = rasterise(pano, world, tris, colors)
         log("panorama coverage %.1f%%" % (pcov * 100.0))
         save_png(os.path.join(args.out, "panorama-%s.png" % tag), fill_holes(prgb, pdepth))

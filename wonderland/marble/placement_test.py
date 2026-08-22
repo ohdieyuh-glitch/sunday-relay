@@ -159,6 +159,33 @@ check("absent quaternion means identity, not a guess",
       all(close(placement.node_rotation({})[i][j], 1.0 if i == j else 0.0)
           for i in range(3) for j in range(3)))
 
+print("== a frame is recomputed from the rotator the ENGINE printed ==")
+# The packaged build prints HERO_CAM_LOC/ROT/FOV for the camera that actually
+# answered. Recomputing composition from that, rather than from the look-at in
+# the source table, is the difference between describing the frame you have and
+# describing the frame you asked for -- and those diverge exactly when a level
+# is older than the camera, which is the case this whole path exists for.
+for pos, look in ((( 0.0, -1150.0, 430.0), (0.0, 120.0, 541.0)),
+                  ((300.0, -430.0, 205.0), (0.0, 60.0, 190.0)),
+                  ((760.0, -180.0, 340.0), (795.0, 410.0, 150.0))):
+    rot = placement.rotator_from_look(pos, look)
+    f = placement.forward_from_rotator(*rot)
+    d = [look[i] - pos[i] for i in range(3)]
+    n = math.sqrt(sum(v * v for v in d))
+    g = [v / n for v in d]
+    check("rotator and look-at agree from %s" % (list(pos),),
+          all(close(a, b, 1e-9) for a, b in zip(f, g)),
+          "rotator %s -> %s vs %s" % ([round(v, 3) for v in rot],
+                                      [round(v, 6) for v in f],
+                                      [round(v, 6) for v in g]))
+check("roll does not change which geometry is in frame",
+      all(close(a, b, 1e-12) for a, b in
+          zip(placement.forward_from_rotator(5.0, 90.0, 0.0),
+              placement.forward_from_rotator(5.0, 90.0, 37.0))))
+check("straight up is +Z", close(placement.forward_from_rotator(90.0, 0.0)[2], 1.0, 1e-9))
+check("yaw +90 from level is +Y, which is left-handed Unreal",
+      close(placement.forward_from_rotator(0.0, 90.0)[1], 1.0, 1e-9))
+
 print("\npassed %d, failed %d" % (PASS[0], len(FAIL)))
 for f in FAIL:
     print("  FAILED: %s" % f)
