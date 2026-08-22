@@ -72,10 +72,14 @@
 >   outermost skyline ring. The rings are midground in FRONT of the shell;
 >   dropping them opened a hole. If you want them gone it is now an art
 >   decision, not a geometric one.
-> * The world still has **no gameplay collision** by default. `WONDERLAND_COLLIDE
->   =plaza,cobble,cobble2,stone` turns 3,096 of 31,996 pieces solid and is
->   measured by `RUNTIME_BLOCKING_PRIMITIVES` / `RUNTIME_GROUNDED_DOGS`. Walk
->   vs fly is the founder's call and the default was not changed.
+> * **The ground and the architecture are solid now, by default** — 3,096 of
+>   31,996 pieces. The goal says Unreal owns collision and that collision must
+>   work, and a world you fly through the castle in met neither. Decoration
+>   still does not collide. The pawn still uses `FloatingPawnMovement`: this
+>   does NOT add gravity, so walk-vs-fly remains the founder's call and nothing
+>   falls. **Read `RUNTIME_BLOCKING_PRIMITIVES` and `RUNTIME_GROUNDED_DOGS` on
+>   the first run** — if the cost is real, `WONDERLAND_COLLIDE=` (explicitly
+>   empty) restores the old collisionless world in one build.
 > * **One tuned value is now known to rest on a wrong distance.** The aerial-
 >   perspective stretch (45x) was justified as "the great castle is 420 m out".
 >   Measured: the layout's castle spires are at 31-32 m and the furthest thing in

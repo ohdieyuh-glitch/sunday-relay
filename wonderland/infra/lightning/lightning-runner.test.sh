@@ -1635,9 +1635,10 @@ grep -q 'ECC_Pawn' "$PROOF" \
 grep -q 'RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION' "$PROOF" \
   && ok "a world nothing can be stood on says so out loud" \
   || bad "a collisionless world would report as healthy"
-# THE SWITCH, not a decision made for the founder. Default off = every build
-# this project has made; naming materials makes the other choice measurable in
-# one build with no code change.
+# THE SWITCH. It defaulted OFF, and that left every build this project ever made
+# with no collision anywhere. Ground and architecture now block; decoration
+# never does; an explicitly empty WONDERLAND_COLLIDE restores the old world.
+# Gravity is untouched — walk vs fly is still the founder's.
 GEN="$HERE/../build/generate-hub-level.py"
 BATCHH="$HERE/../../Source/Wonderland/WonderlandInstancedBatch.h"
 grep -q 'WONDERLAND_COLLIDE' "$GEN" \
@@ -1650,10 +1651,23 @@ python3 - "$GEN" <<'PY'
 import io, re, sys
 src = io.open(sys.argv[1], encoding="utf8").read()
 problems = []
-# Default OFF. An empty WONDERLAND_COLLIDE must yield an empty set, so an
-# unset variable can never quietly turn collision on for everything.
-if 'os.environ.get("WONDERLAND_COLLIDE", "")' not in src:
-    problems.append("no empty default for WONDERLAND_COLLIDE")
+# GROUND AND ARCHITECTURE BLOCK BY DEFAULT. The goal says "keep Unreal
+# authoritative for collision" and lists "collision / gameplay works", and a
+# world with nothing to bump into meets neither. This used to assert an EMPTY
+# default, which is what left the world collisionless.
+if 'COLLIDE_DEFAULT = "plaza,cobble,cobble2,stone"' not in src:
+    problems.append("the structural collision set is not the default")
+if 'os.environ.get("WONDERLAND_COLLIDE", COLLIDE_DEFAULT)' not in src:
+    problems.append("an unset WONDERLAND_COLLIDE does not get the default")
+# ...and an EXPLICITLY empty one still turns it all off, so the old world is one
+# build away if the L4 says the cost is real.
+if '!= "none"' not in src:
+    problems.append("no way to disable collision explicitly")
+# Decoration must never be in the set: collision on 33,000 instances is a cost
+# nobody has measured, and petals have no business stopping anyone.
+for _leaf in ("leafcard", "petal_pink", "foliage", "moss"):
+    if '"%s"' % _leaf in src[src.index("COLLIDE_DEFAULT"):src.index("COLLIDE_DEFAULT") + 200]:
+        problems.append("decoration material %s is in the collision default" % _leaf)
 # It has to be part of the BATCH KEY, or one colliding piece would make every
 # piece sharing its mesh and material collide too.
 if not re.search(r"def _batch_key\(mesh_path, mat_path, cast_shadow, collides\)", src):
@@ -1663,8 +1677,8 @@ if "COLLIDING_PIECES" not in src:
 sys.exit(0 if not problems else (print(problems) or 1))
 PY
 check_collide=$?
-[ "$check_collide" = 0 ] && ok "…defaulting to OFF, keyed per batch, and counted" \
-  || bad "the collision switch is not safely defaulted or not keyed"
+[ "$check_collide" = 0 ] && ok "…ground and architecture solid by default, decoration never, keyed per batch and counted" \
+  || bad "the collision default is wrong, unkeyed, or lets decoration block"
 
 # The stale claim that started this: the batch file said other Unreal geometry
 # was the collision authority. There is none.

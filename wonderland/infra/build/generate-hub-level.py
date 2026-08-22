@@ -1525,20 +1525,34 @@ def build(layout):
     # can be built and measured against each other rather than argued about.
     BATCH_VISUALS = os.environ.get("WONDERLAND_BATCH", "1") not in ("0", "false", "no")
 
-    # WHICH MATERIALS BLOCK A PAWN. Empty by default, which is every build this
-    # project has ever made: this world has NO gameplay collision at all, and a
-    # player can fly through the castle.
+    # WHICH MATERIALS BLOCK A PAWN.
     #
-    # That is deliberately left as a switch rather than a decision made here.
-    # Turning collision on for all 33,000 instances is a cost nobody has
-    # measured; turning it on for the ground and the architecture may be
-    # nothing. Naming materials — WONDERLAND_COLLIDE=plaza,cobble,cobble2,stone
-    # — lets that be tried and measured in one build with no code change, and
+    # This was empty by default, and every build this project has ever made had
+    # NO gameplay collision at all: a player flew through the castle. That was
+    # left as a switch on the reasoning that it is a product decision.
+    #
+    # It is two decisions and only one of them is. Whether GRAVITY applies —
+    # whether Wonderland is walked or flown — changes the game and belongs to
+    # the founder; the pawn still uses FloatingPawnMovement and this does not
+    # touch it. Whether a solid object is SOLID is not a preference: the goal
+    # says "keep Unreal authoritative for collision" and lists "collision /
+    # gameplay works", and a world with nothing to bump into meets neither.
+    #
+    # So the ground and the architecture block by default. Decoration does not:
+    # collision on thirty-three thousand instances is a cost nobody has
+    # measured, and petals and motes have no business stopping anyone. This set
+    # is about 3,100 of 31,996 pieces — under a tenth — and
     # WonderlandWorldProof prints RUNTIME_BLOCKING_PRIMITIVES and
-    # RUNTIME_GROUNDED_DOGS so the result is a number.
+    # RUNTIME_GROUNDED_DOGS so the next run reports the result as a number
+    # rather than an impression.
+    #
+    # WONDERLAND_COLLIDE= (explicitly empty) restores the old collisionless
+    # world in one build, which is the escape hatch if the L4 says the cost is
+    # real. An UNSET variable gets the default; an empty one is a choice.
+    COLLIDE_DEFAULT = "plaza,cobble,cobble2,stone"
     COLLIDE_MATS = set(
-        n.strip() for n in os.environ.get("WONDERLAND_COLLIDE", "").split(",")
-        if n.strip())
+        n.strip() for n in os.environ.get("WONDERLAND_COLLIDE", COLLIDE_DEFAULT).split(",")
+        if n.strip() and n.strip().lower() != "none")
     if COLLIDE_MATS:
         unreal.log_warning("COLLIDE materials: %s" % ", ".join(sorted(COLLIDE_MATS)))
 
