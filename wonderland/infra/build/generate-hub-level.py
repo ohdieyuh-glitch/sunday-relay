@@ -2302,6 +2302,64 @@ def build(layout):
                   (0.20 - 0.07 * rr) * s, (0.20 - 0.07 * rr) * s, (0.11 - 0.03 * rr) * s,
                   "mush_white", "%s_dot%d" % (label, i))
 
+    def kit_portrait(x, y, z, s, label):
+        """An ornate framed card, not a gold slab.
+
+        THE PRIMITIVE AUDIT NAMED THIS ONE. portrait_frame was a single
+        /Engine/BasicShapes/Cube in gold — 1.25% of the arrival frame carried by
+        one bare box, which is exactly the "exposed blockout geometry" the
+        reference has none of. The reference's equivalent is a heart-suit card
+        in a moulded frame: a mount, a bevel, corner bosses and a device.
+        """
+        w, h, d = 1.20 * s, 1.60 * s, 0.16 * s
+        # the canvas, set back inside the frame
+        _part("cube", x, y, z, d * 0.5, w, h, "porcelain" if "porcelain" in MATS else "spire",
+              "%s_canvas" % label)
+        # moulded frame: outer, bevel, inner lip
+        _part("cube", x - d * 0.30, y, z, d * 0.30, w * 1.16, h * 1.12, "gold", "%s_frame" % label)
+        _part("cube", x - d * 0.52, y, z, d * 0.18, w * 1.05, h * 1.02, "gold_glow" if "gold_glow" in MATS else "gold",
+              "%s_bevel" % label)
+        # corner bosses — what stops a frame reading as an outline
+        for _cx in (-1, 1):
+            for _cy in (-1, 1):
+                _part("sphere", x - d * 0.55, y + _cx * w * 0.56, z + _cy * h * 0.54,
+                      0.16 * s, 0.16 * s, 0.16 * s, "gold", "%s_boss%d%d" % (label, _cx, _cy))
+        # the device: a heart, which is the motif the reference repeats
+        _part("cube", x - d * 0.62, y, z + h * 0.02, 0.10 * s, w * 0.34, h * 0.30,
+              "rose" if "rose" in MATS else "gold", "%s_heart" % label,
+              rot=(0.0, 0.0, 45.0))
+        _part("sphere", x - d * 0.62, y - w * 0.16, z + h * 0.20,
+              0.30 * s, 0.30 * s, 0.30 * s, "rose" if "rose" in MATS else "gold",
+              "%s_heartl" % label)
+        _part("sphere", x - d * 0.62, y + w * 0.16, z + h * 0.20,
+              0.30 * s, 0.30 * s, 0.30 * s, "rose" if "rose" in MATS else "gold",
+              "%s_heartr" % label)
+
+    def kit_standing_stone(x, y, s, label):
+        """A carved stone with a rune, not a gold cuboid.
+
+        Also named by the primitive audit: project_standing_stones was one bare
+        box at 0.78% of the frame. A standing stone reads from its TAPER and its
+        cap; a cuboid reads as a crate.
+        """
+        hgt = 260.0 * s
+        _part("cube", x, y, hgt * 0.10, 1.30 * s, 1.30 * s, 0.20 * s, "stone", "%s_base" % label)
+        _part("cube", x, y, hgt * 0.48, 1.00 * s, 0.86 * s, hgt * 0.78 / 100.0, "stone",
+              "%s_shaft" % label, rot=(0.0, 0.0, 6.0))
+        # taper: a narrower block above, so the silhouette is not parallel-sided
+        _part("cube", x, y, hgt * 0.86, 0.74 * s, 0.66 * s, hgt * 0.22 / 100.0, "stone",
+              "%s_taper" % label, rot=(0.0, 0.0, -4.0))
+        _part("sphere", x, y, hgt * 1.00, 0.40 * s, 0.36 * s, 0.30 * s, "stone", "%s_cap" % label)
+        # the rune, which is what makes it a standing STONE rather than a post
+        _part("cube", x - 0.44 * s * 100.0 * 0.01 * 50.0, y, hgt * 0.56,
+              0.06 * s, 0.34 * s, 0.34 * s,
+              "magic_gold" if "magic_gold" in MATS else "gold", "%s_rune" % label)
+        for _k in range(3):
+            _part("sphere", x, y + (_k - 1) * 46.0 * s, hgt * (0.30 + 0.16 * _k),
+                  0.11 * s, 0.11 * s, 0.11 * s,
+                  "magic_gold" if "magic_gold" in MATS else "gold",
+                  "%s_spark%d" % (label, _k))
+
     def kit_gate(x, y, s, label):
         # An ORNATE wrought-gold gate (the reference): two pillars with ball finials,
         # a grille of slender vertical bars between them, curling scrollwork, and a
@@ -4211,7 +4269,11 @@ def build(layout):
         # third, where it owns 10.2% of it. At the DECLARED 640 uu it tops out
         # at +9.4 degrees, the exact bottom edge of the top third. The layout
         # was right and nothing was reading it.
-        if mesh == "gate" or "gate" in mid:
+        if mesh == "portrait" or "portrait" in mid:
+            kit_portrait(x, y, z, norm * 1.15, mid)
+        elif mesh == "standing_stone" or "standing_stone" in mid:
+            kit_standing_stone(x, y, norm * 1.1, mid)
+        elif mesh == "gate" or "gate" in mid:
             _dims = m.get("dimensionsUu") or []
             _target_h = float(_dims[2]) if len(_dims) >= 3 else 640.0
             _gs = max(0.4, min(2.0, _target_h / 710.0))
