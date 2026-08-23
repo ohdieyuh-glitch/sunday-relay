@@ -252,6 +252,14 @@ def main():
     _wl_leaf_apply(ns)
     records[:] = []                                   # drop the module-level build
     ns["build"](json.load(io.open(LAYOUT, encoding="utf8")))
+    # The actor list is the input to every other offline check, not just this
+    # rasteriser. Dumping it costs nothing and saves each new gate from having
+    # to re-stub the whole engine to see the same geometry.
+    _dump = _os.environ.get("WL_DUMP_ACTORS", "").strip()
+    if _dump:
+        with io.open(_dump, "w", encoding="utf8") as _fh:
+            json.dump([{"mesh": r[0], "loc": r[1], "scale": r[2],
+                        "mat": r[3], "label": r[4], "rot": r[5]} for r in records], _fh)
     # STAND-INS FOR THE DOGS, transcribed from the C++ pawn.
     #
     # The Dog is the focal subject of the hero frame and it is NOT built by the

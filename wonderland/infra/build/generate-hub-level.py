@@ -4034,7 +4034,7 @@ def build(layout):
     def _hero_ground_band():
         cams = [c for c in layout.get("heroCameras", []) if c.get("id") == "cam_arrival_hero"]
         if not cams:
-            return (-980.0, 60.0, -760.0)
+            return (-980.0, 60.0, -760.0, 66.0)
         c = cams[0]
         ex, ey, ez = [float(v) for v in c["location"]]
         tx, ty, tz = [float(v) for v in c["lookAt"]]
@@ -4047,9 +4047,9 @@ def build(layout):
         near = ez / math.tan(drop) if drop > 1e-4 else 1e6
         unreal.log_warning("HERO GROUND BAND starts %.0f uu ahead (world y >= %.0f)"
                            % (near, ey + near))
-        return (ey + near, ex, ey)
+        return (ey + near, ex, ey, math.degrees(fov_h))
 
-    NEAR_Y, _CAM_X, _CAM_Y = _hero_ground_band()
+    NEAR_Y, _CAM_X, _CAM_Y, _FOV_H = _hero_ground_band()
 
     def in_camera_lap(px, py, margin=250.0):
         """True if something TALL placed here would sit inside the hero camera's
@@ -4064,8 +4064,29 @@ def build(layout):
         So it lives here once and the tall kits ask it. NEAR_Y is derived from
         the camera, so if the camera moves the rule moves with it. Short things
         are exempt: ground cover nearer than this is simply not in shot, which
-        costs a few draws and misleads nobody."""
-        return py < NEAR_Y + margin
+        costs a few draws and misleads nobody.
+
+        LATERAL POSITION DECIDES AS MUCH AS DEPTH, and testing only `py` cost
+        the frame its authored right-edge repoussoir. The Great Framing Tree
+        is a PRIMARY, sightlineHero landmark at (1300, 470) -- but 470 is
+        inside NEAR_Y + 600, so a Y-only test suppressed it and the layout's
+        declared "giant-tree composition" was never built at all. At its own
+        depth the frame is 1052 uu wide to each side and the tree stands at
+        1300: it is OUTSIDE the frame edge, which is exactly where a
+        repoussoir belongs and the one place a tall object cannot block the
+        view.
+
+        So the blind foreground is now what the words mean -- close in depth
+        AND in front of the lens. Anything past the frame's own half-width at
+        its depth can only intrude with its canopy, which is the framing the
+        composition asks for."""
+        if py >= NEAR_Y + margin:
+            return False
+        depth = py - _CAM_Y
+        if depth <= 1.0:
+            return True                      # at or behind the lens
+        half_w = depth * math.tan(math.radians(_FOV_H * 0.5))
+        return abs(px - _CAM_X) < half_w
 
     # WHERE THE HERO DOG STANDS, AND THE GROUND IT STANDS ON. Nothing that
     # grows gets planted here: a subject knee-deep in blossom is not staged, it
@@ -4244,6 +4265,41 @@ def build(layout):
         _part("sphere", x, y, top_z - drop, 0.3, 0.3, 0.3,
               "rose" if i % 2 else "petal_pink", "%s_bloom" % label)
 
+    # ---- THE LAYOUT DECLARES A HEIGHT. HONOUR IT. ------------------------
+    # All 19 landmarks carry dimensionsUu and the generator consulted it in
+    # exactly one place (golden_gate, after that gate was measured at 1.55x its
+    # spec). Measuring the other eighteen the same way found the same bug
+    # everywhere: rose_arch built 2.61x its declared height, overlook_terrace
+    # 2.56x, clock_tower 2.00x, the Great Framing Tree 2.54x -- while the
+    # teacups came out at 0.42x and the portrait at 0.48x. Oversized props
+    # crowd the frame's top third; undersized ones read as clutter instead of
+    # the tea-party landmarks the reference is full of.
+    #
+    # Each kit has a fixed height at s=1.0. Those numbers are MEASURED from the
+    # offline actor dump, not guessed, and verify-landmark-scale.py re-measures
+    # every one of them on each run -- so if a kit's proportions change, the
+    # gate fails instead of the frame quietly going wrong again.
+    _KIT_INTRINSIC_H = {
+        "arch": 621.0, "clock_tower": 1940.0, "tree_giant": 2103.0,
+        "pergola": 366.0, "overlook": 205.0, "topiary": 480.0,
+        "teacup": 146.0, "mushroom": 237.0, "portrait": 179.0,
+        "standing_stone": 259.0,
+    }
+
+    def _kit_scale(m, kit, fallback, lo=0.3, hi=3.0):
+        """Scale that makes `kit` reach the height the layout declares for `m`."""
+        intrinsic = _KIT_INTRINSIC_H.get(kit, 0.0)
+        dims = m.get("dimensionsUu")
+        if not intrinsic or not dims or len(dims) < 3:
+            return fallback
+        try:
+            target = float(dims[2])
+        except (TypeError, ValueError):
+            return fallback
+        if target <= 0.0:
+            return fallback
+        return max(lo, min(hi, target / intrinsic))
+
     def kit_dispatch(m):
         # The kitbash builders already produce sensibly-sized forms (in uu) at s=1;
         # the layout's authored scales (3-5x, tuned for a single 100uu primitive)
@@ -4270,9 +4326,9 @@ def build(layout):
         # at +9.4 degrees, the exact bottom edge of the top third. The layout
         # was right and nothing was reading it.
         if mesh == "portrait" or "portrait" in mid:
-            kit_portrait(x, y, z, norm * 1.15, mid)
+            kit_portrait(x, y, z, _kit_scale(m, "portrait", norm * 1.15), mid)
         elif mesh == "standing_stone" or "standing_stone" in mid:
-            kit_standing_stone(x, y, norm * 1.1, mid)
+            kit_standing_stone(x, y, _kit_scale(m, "standing_stone", norm * 1.1), mid)
         elif mesh == "gate" or "gate" in mid:
             _dims = m.get("dimensionsUu") or []
             _target_h = float(_dims[2]) if len(_dims) >= 3 else 640.0
@@ -4283,26 +4339,27 @@ def build(layout):
             kit_gate(x, y, _gs, mid)
         elif "framing_tree" in mid:
             if not in_camera_lap(x, y, 600.0):
-                kit_tree(x, y, 1.7, mid, giant=True)
+                kit_tree(x, y, _kit_scale(m, "tree_giant", 1.7), mid, giant=True)
         elif mesh == "tree" or "tree" in mid or "topiary" in mid:
             kit_tree(x, y, norm, mid)
         elif mesh == "mushroom" or "mushroom" in mid:
-            kit_mushroom(x, y, min(1.4, max(0.9, norm)), mid, "mush_purple" if "purple" in mid else "mush_red")
+            kit_mushroom(x, y, _kit_scale(m, "mushroom", min(1.4, max(0.9, norm))), mid,
+                         "mush_purple" if "purple" in mid else "mush_red")
         elif mesh == "spire" or "spire" in mid or "castle" in mid:
             kit_spire(x, y, min(1.5, max(0.9, norm)), mid)
         elif "teacup" in mid:
-            kit_teacup(x, y, norm, mid)
+            kit_teacup(x, y, _kit_scale(m, "teacup", norm), mid)
         elif mid == "brain_landmark" or mesh == "brain":
             kit_observatory(x, y, z, mid)
         elif mesh == "arch" or "arch" in mid:
             # WIDER, so its posts stand on the verges rather than in the way.
             # An arch frames by being something you look THROUGH; at the old
             # span its uprights were exactly where the eye wanted to travel.
-            kit_arch(x, y, 1.85, mid)
+            kit_arch(x, y, _kit_scale(m, "arch", 1.85), mid)
         elif "overlook" in mid or "terrace" in mid:
-            kit_overlook(x, y, min(1.5, max(0.9, norm)), mid)
+            kit_overlook(x, y, _kit_scale(m, "overlook", min(1.5, max(0.9, norm))), mid)
         elif "pergola" in mid:
-            kit_pergola(x, y, min(1.5, max(0.9, norm)), mid)
+            kit_pergola(x, y, _kit_scale(m, "pergola", min(1.5, max(0.9, norm))), mid)
         elif "teapot" in mid:
             kit_teapot(x, y, max(400.0, z), mid)
         elif "sign" in mid or "card" in mid:
@@ -4311,7 +4368,7 @@ def build(layout):
             # 1.6 ran it out of the top of the hero frame and put it shoulder to
             # shoulder with the Golden Build Gate. A landmark that leaves the
             # frame stops being a landmark and becomes a wall.
-            kit_clock_tower(x, y, 0.62, mid)
+            kit_clock_tower(x, y, _kit_scale(m, "clock_tower", 0.62), mid)
         elif "clock" in mid:
             kit_clock(x, y, max(240.0, z), mid)
         else:
