@@ -141,7 +141,20 @@ void AWonderlandStrollingDog::Tick(float DeltaSeconds)
 	}
 
 	const FVector Direction = ToTarget / Distance;
-	const float StepLength = WalkSpeed * Dt;
+
+	// TURN FIRST, THEN WALK. The heading is interpolated toward the target, so
+	// a Dog that has just picked a waypoint behind it spends the best part of a
+	// second travelling in a direction it is not facing — which is sideways
+	// motion with a walk cycle playing over it, and it is exactly what "sliding"
+	// looks like. Gating the step on alignment turns it on the spot instead.
+	//
+	// This costs nothing to get right elsewhere: the gait advances with
+	// DistanceWalked, so a step of zero holds the paws planted by construction.
+	// A Dog pivoting on four planted paws is a small lie; a Dog gliding
+	// sideways at full stride is a large one.
+	const float Align = FVector::DotProduct(GetActorForwardVector(), Direction);
+	const float Gate = FMath::Clamp((Align - 0.25f) / 0.55f, 0.0f, 1.0f);
+	const float StepLength = WalkSpeed * Dt * Gate;
 	FVector Next = Here + Direction * StepLength;
 
 	// GROUND. The old step forced Z to zero and left the Dog at its spawn
@@ -176,7 +189,10 @@ void AWonderlandStrollingDog::Tick(float DeltaSeconds)
 	// the whole Dog wants — interpolated so it banks into a turn rather than
 	// snapping, which is what made the earlier Dogs read as sliding props.
 	const FRotator Want(0.0f, FMath::RadiansToDegrees(FMath::Atan2(Direction.Y, Direction.X)), 0.0f);
-	SetActorRotation(FMath::RInterpTo(GetActorRotation(), Want, Dt, 3.0f));
+	// Faster than it was. At 3.0 a half-turn took most of a second, and the
+	// alignment gate above now holds the Dog still for all of it — a long pause
+	// facing the wrong way is its own kind of wrong.
+	SetActorRotation(FMath::RInterpTo(GetActorRotation(), Want, Dt, 6.0f));
 }
 
 void AWonderlandStrollingDog::PoseLegs(float Travelled, float SettleAlpha)

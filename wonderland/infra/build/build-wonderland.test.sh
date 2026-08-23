@@ -580,12 +580,20 @@ elif command -v g++ >/dev/null 2>&1; then
   fi
 fi
 SD="$GAIT_DIR/WonderlandStrollingDog.cpp"
-if sed 's|//.*||' "$SD" | grep -q 'DistanceWalked += StepLength'; then
+# READ IT ONCE, MATCH WITHOUT A PIPE. Every check below used
+#     sed 's|//.*||' "$SD" | grep -q '<thing>'
+# which is precisely what has() exists to avoid: grep -q exits at the first
+# match, sed takes SIGPIPE, and `set -o pipefail` turns that into a failed
+# assertion. It is a RACE — whether sed has finished writing before grep leaves
+# — so it failed a different check on each run and passed entirely on some. The
+# comment warning about this shape sits twenty lines above the code using it.
+SD_SRC="$(sed 's|//.*||' "$SD")"
+if has "$SD_SRC" 'DistanceWalked += StepLength'; then
   ok "the stroller advances its gait by distance travelled, not by a clock"
 else
   bad "the gait is not driven by distance, so it can drift from the body"
 fi
-if sed 's|//.*||' "$SD" | grep -q 'LineTraceSingleByChannel'; then
+if has "$SD_SRC" 'LineTraceSingleByChannel'; then
   ok "...and traces for the ground instead of holding its spawn height"
 else
   bad "the Dog never looks for the floor, so it floats on any slope"
@@ -593,12 +601,12 @@ fi
 # A LIMB THAT SLIDES IS NOT A LIMB. The first gait moved each leg with
 # SetRelativeLocation alone: the paw went to the right place and nothing
 # pivoted, which reads as a box on a rail. The engine has to swing it.
-if sed 's|//.*||' "$SD" | grep -q 'SetRelativeRotation'; then
+if has "$SD_SRC" 'SetRelativeRotation'; then
   ok "...and swings each limb from the hip rather than sliding it"
 else
   bad "the legs are translated, never rotated — they will read as boxes on a rail"
 fi
-if sed 's|//.*||' "$SD" | grep -q 'LegSwing'; then
+if has "$SD_SRC" 'LegSwing'; then
   ok "...using the shared swing solve, not a second one"
 else
   bad "the stroller rotates legs by some other arithmetic than WonderlandGait::LegSwing"
@@ -606,10 +614,17 @@ fi
 # The stretch has to be measured from a RECORDED rest scale. Reading the
 # component's current scale back would compound last frame's stretch into this
 # frame's and the legs would grow without bound.
-if sed 's|//.*||' "$SD" | grep -q 'LegRestScale'; then
+if has "$SD_SRC" 'LegRestScale'; then
   ok "...and stretches from a recorded rest length, so it cannot compound"
 else
   bad "the leg stretch has no recorded rest length to measure from"
+fi
+# A Dog whose heading interpolates while it walks at full speed travels in a
+# direction it is not facing. That IS sliding, whatever the legs are doing.
+if has "$SD_SRC" 'GetActorForwardVector'; then
+  ok "...and gates its step on where it is actually FACING, so it turns on the spot"
+else
+  bad "the step is not gated on heading — the Dog will crab sideways out of every turn"
 fi
 
 echo "== "sharper" is a number, not an impression =="
