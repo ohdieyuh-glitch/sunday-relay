@@ -112,6 +112,23 @@ LOOK = {
     # LOOK table like every other value here, and 0.0 reproduces today's sky
     # exactly. skyLavender blends the default toward an equal-R-and-G lavender.
     "skyLavender": 0.55,
+    # NEUTRALISE THE FILL. LightColor tints the SkyLight's whole captured-scene
+    # contribution, and this world's captured sky is blue, so every surface the
+    # sun misses was being painted with blue light and nothing else. That is the
+    # lamp defect over again with the opposite colour: one dominant coloured
+    # light deciding the hue of a huge share of the frame. Measured, the whole
+    # world came back blue-dominant IN SHADOW regardless of albedo --
+    #
+    #     petal_pink   albedo (0.94, 0.40, 0.66)   shadowed rgb( 29,  30,  45)
+    #     foliage      albedo (0.23, 0.46, 0.22)   shadowed rgb( 32,  28,  41)
+    #
+    # A shadow should be a DIMMER version of a surface, not a different colour
+    # from it, and that is what the founder's reference does: the same 62.7% of
+    # its pixels sit below luma 0.40 as mine, and they still carry 0.104-0.203
+    # chroma where mine carried 0.063-0.093. Same darkness, different colour.
+    # Warm-neutral, a touch under the key, so the shade stays cooler than the
+    # sun without being made OF blue.
+    "skyWarm": (1.00, 0.96, 0.93),
     # RAISED 340 -> 780 AFTER TAMING THE LANTERNS, and the two are the same
     # decision. Eighteen practicals at 14,000 lumens were not decoration, they
     # were a third of this world's lighting -- so removing their gold removed
@@ -266,7 +283,17 @@ LOOK = {
     # (64.6% of mine below luma 0.40 vs 62.7% of the reference), the shadows are
     # differently COLOURED. Halved, and the difference handed to bounceRatio,
     # which is warm and carries the ground's own colour instead of the sky's.
-    "skyIntensity": 3.40,
+    # 3.40 -> 6.80, and see skyWarm. Halving it was the right diagnosis and the
+    # wrong instrument: the blue lift in shadow DID drop (gold B-R +9 -> +4,
+    # roof_rose +7 -> +4), which confirms the sky was choosing the hue -- but the
+    # frame went DARKER (16.6% of pixels under luma 0.10, up from 10.8%) and the
+    # chroma did not move, 0.112 -> 0.108. The reason is structural: the SkyLight
+    # is the only OMNIDIRECTIONAL light in this world. The ground bounce is a
+    # directional pointing up, so it fills down-facing surfaces and nothing else,
+    # and it cannot take over the job. Turning the sky down therefore does not
+    # trade blue shadow for warm shadow -- it trades blue shadow for BLACK.
+    # So the amount goes back, and the COLOUR is what gets fixed instead.
+    "skyIntensity": 6.80,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -5107,6 +5134,20 @@ def build(layout):
             sky_comp.set_intensity(float(LOOK["skyIntensity"]))
         except Exception:
             pass
+        # See LOOK["skyWarm"]. Without this the fill is whatever colour the
+        # captured dome happens to be -- blue -- and since it is the only
+        # omnidirectional light here, that colour lands on every shadowed
+        # surface in Wonderland and overrides its albedo.
+        try:
+            _sw = LOOK["skyWarm"]
+            sky_comp.set_light_color(srgb_light_color(
+                int(round(255 * _sw[0])), int(round(255 * _sw[1])),
+                int(round(255 * _sw[2]))))
+            unreal.log_warning(
+                "SKY FILL neutralised to (%.2f, %.2f, %.2f) at intensity %.2f"
+                % (_sw[0], _sw[1], _sw[2], float(LOOK["skyIntensity"])))
+        except Exception as _e:
+            unreal.log_warning("sky light colour skipped: %s" % _e)
         # Real-time captured sky ambient — needs no lighting build.
         set_prop(sky_comp, "bRealTimeCapture", True)
         try:
