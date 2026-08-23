@@ -2024,9 +2024,24 @@ if code_has "$SKY" "^\s*(a_pos|w_pos)\s*=\s*\(" -E; then
 else
   ok "…and it reads the hero-shot table out of the generator rather than restating it"
 fi
-grep -qE '\(6, \(0\.0, -1150\.0, 430\.0\)' "$HERE/../build/generate-hub-level.py" \
-  && ok "HeroCam6 shares HeroCam0's point, so the backdrop anchor still holds" \
-  || bad "HeroCam6 is not at the backdrop anchor"
+ANCHOR_OUT="$(python3 - "$HERE/../build" <<'PYEOF'
+import importlib.util, os, sys
+mod = os.path.join(sys.argv[1], "hero_shots.py")
+spec = importlib.util.spec_from_file_location("hero_shots", mod)
+hs = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(hs)
+shots = hs.hero_shots()
+a, w = shots.get(hs.ARRIVAL), shots.get(hs.WIDE)
+if a is None or w is None:
+    print("MISSING"); raise SystemExit
+print("SAME" if tuple(a[0]) == tuple(w[0]) else "DIFF %s vs %s" % (a[0], w[0]))
+PYEOF
+)"
+if [ "$ANCHOR_OUT" = "SAME" ]; then
+  ok "HeroCam6 shares HeroCam0's point, so the backdrop anchor still holds"
+else
+  bad "HeroCam6 is not at the backdrop anchor: $ANCHOR_OUT"
+fi
 grep -q 'WL_HERO_CAMS="0 6"' "$HERE/capture-hero-shots.sh" 2>/dev/null \
   && ok "…and the capture script names the pair worth spending GPU time on" \
   || bad "the capture script does not mention capturing 0 and 6 together"
