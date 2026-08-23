@@ -173,12 +173,86 @@ def render_upright(args, body):
           % (args.out, W, H, ",".join(w["name"] for w in works)))
 
 
+def render_footlock(args, body):
+    """One long panel: the Dog ADVANCES, and planted paws leave fixed marks.
+
+    The strip shows which paws are down. This shows the property that actually
+    decides whether a walk reads as walking — a planted paw does not move in
+    WORLD space. Drawn as a track: every frame, each planted paw stamps a dot at
+    its world position. Foot lock makes those dots pile into tight clusters. A
+    skate smears them into lines, and the smear is visible instantly at a glance
+    in a way that "worst drift 8e-06 uu" is not.
+    """
+    golden = json.load(io.open(GOLDEN_JSON, encoding="utf8"))
+    check_parity(golden)
+    gaits = golden.get("gaits") or []
+    rows = []
+    for want in ("walk", "trot", "run"):
+        c = [g for g in gaits if g["gait"] == want]
+        if c:
+            rows.append(c[len(c) // 2])
+
+    legs = body["legRows"]
+    parts = body["parts"]
+    W, H = 1500, 200 * len(rows)
+    px = bytearray([18, 16, 26] * (W * H))
+
+    def put(x, y, rgb):
+        if 0 <= x < W and 0 <= y < H:
+            i = (y * W + x) * 3
+            px[i], px[i + 1], px[i + 2] = rgb
+
+    def box(cx, cy, hw, hh, rgb):
+        for y in range(int(cy - hh), int(cy + hh) + 1):
+            for x in range(int(cx - hw), int(cx + hw) + 1):
+                put(x, y, rgb)
+
+    COAT = (150, 148, 165)
+    GROUND = (58, 48, 82)
+    LEG_COLS = [(255, 110, 140), (110, 200, 255), (255, 210, 90), (140, 255, 160)]
+
+    for r, g in enumerate(rows):
+        stride, duty, lift = g["stride"], g["duty"], g["lift"]
+        oy = r * 200
+        gy = oy + 150
+        for x in range(W):
+            put(x, gy, GROUND)
+        dog_h = max(pt["loc"][2] + pt["scale"][2] * 50.0 for pt in parts)
+        SCALE = (200 * 0.62) / dog_h
+        travel = (W - 260) / SCALE
+        # Ghost the body every few frames so the advance is legible, and stamp
+        # every planted paw at its WORLD position on every frame.
+        for f in range(240):
+            dist = (f / 239.0) * travel
+            bx = 130 + dist * SCALE
+            if f % 26 == 0:
+                for i, pt in enumerate(parts):
+                    if i in legs or pt["mat"] != "Body":
+                        continue
+                    box(bx + pt["loc"][0] * SCALE, gy - pt["loc"][2] * SCALE,
+                        max(1.0, pt["scale"][0] * 50.0 * SCALE),
+                        max(1.0, pt["scale"][2] * 50.0 * SCALE), COAT)
+            for li in range(4):
+                fwd, lft, stance = leg_pose(dist / stride + g["offsets"][li],
+                                            stride, lift, duty)
+                if not stance:
+                    continue
+                # WORLD position of the paw: body distance plus its local offset.
+                wx = 130 + (dist + fwd) * SCALE
+                box(wx, gy + 6 + li * 5, 1.6, 1.6, LEG_COLS[li])
+
+    write_png(args.out, W, H, px)
+    print("render-gait-strip: %s  %dx%d  footlock rows=%s "
+          "(each dot is a planted paw at its WORLD position)"
+          % (args.out, W, H, ",".join(g["gait"] for g in rows)))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="/tmp/gait-strip.png")
     ap.add_argument("--frames", type=int, default=8)
     ap.add_argument("--cell", type=int, default=210)
-    ap.add_argument("--mode", choices=("gait", "upright"), default="gait")
+    ap.add_argument("--mode", choices=("gait", "upright", "footlock"), default="gait")
     args = ap.parse_args()
 
     for path in (BODY_JSON, GOLDEN_JSON):
@@ -187,6 +261,8 @@ def main():
     body = json.load(io.open(BODY_JSON, encoding="utf8"))
     if args.mode == "upright":
         return render_upright(args, body)
+    if args.mode == "footlock":
+        return render_footlock(args, body)
     golden = json.load(io.open(GOLDEN_JSON, encoding="utf8"))
     worst = check_parity(golden)
 
