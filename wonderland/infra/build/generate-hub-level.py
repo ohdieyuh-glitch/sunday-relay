@@ -5009,7 +5009,7 @@ def build(layout):
     # verify-visual-target.py measures the result; these are the numbers to
     # move if the founder wants the canopy heavier or lighter.
     BOUGH1_LIFT = 320.0        # uu
-    BOUGH1_CARDS = 4           # was 7
+    BOUGH1_CARDS = 9           # was 4, at 3.10 -> now 9 at 1.85
     for _k in range(14):
         _t = (_k + 0.5) / 14.0
         _bx = _TX - _t * 1500.0
@@ -5034,9 +5034,15 @@ def build(layout):
             # holed silhouette no arrangement of spheres can produce.
             for _c in range(BOUGH1_CARDS):
                 _ca = _c * 0.898 + _k
-                _part("cube", _bx + math.cos(_ca) * 250.0, _by + math.sin(_ca) * 205.0,
+                # RADIUS JITTER IS WHAT MAKES A CANOPY A MASS. Cards all placed
+                # at one radius sit on a ring and read as separate planes; a
+                # varying radius makes them overlap in depth, which is the only
+                # way a flat card stops looking flat.
+                _cr = 0.62 + 0.38 * abs(math.sin(_ca * 2.3))
+                _part("cube", _bx + math.cos(_ca) * 250.0 * _cr,
+                      _by + math.sin(_ca) * 205.0 * _cr,
                       _bz + 20.0 + math.sin(_ca * 1.7) * 95.0,
-                      3.1, 0.03, 3.1,
+                      1.85, 0.03, 1.85,
                       "leafcard_hi" if _c % 2 else "leafcard",
                       "TreeBranchCard%d_%d" % (_k, _c),
                       rot=(float((_c * 29) % 60) - 30.0, float((_c * 47) % 360),
@@ -5063,7 +5069,7 @@ def build(layout):
     # Every value they touch is measured by verify-visual-target.py, so the
     # effect is a number rather than an opinion.
     BOUGH2_LIFT = 260.0        # uu the top bough is raised out of the frame
-    BOUGH2_CARDS = 3           # leaf cards per canopy node, was 5
+    BOUGH2_CARDS = 8           # per node: was 3 at 2.70, now 8 at 1.62
     for _k in range(11):
         _t = (_k + 0.5) / 11.0
         # ACROSS the top, toward screen-right (which is world -X when the camera
@@ -5087,8 +5093,10 @@ def build(layout):
             if "leafcard" in MATS:
                 for _c in range(BOUGH2_CARDS):
                     _ca = _c * 1.257 + _k
-                    _part("cube", _bx + math.cos(_ca) * 215.0, _by + math.sin(_ca) * 180.0,
-                          _bz + 12.0 + math.sin(_ca * 1.6) * 80.0, 2.7, 0.03, 2.7,
+                    _cr = 0.60 + 0.40 * abs(math.sin(_ca * 2.1))
+                    _part("cube", _bx + math.cos(_ca) * 215.0 * _cr,
+                          _by + math.sin(_ca) * 180.0 * _cr,
+                          _bz + 12.0 + math.sin(_ca * 1.6) * 80.0, 1.62, 0.03, 1.62,
                           "leafcard_hi" if _c % 2 else "leafcard",
                           "TreeBough2Card%d_%d" % (_k, _c),
                           rot=(float((_c * 31) % 56) - 28.0, float((_c * 53) % 360),
