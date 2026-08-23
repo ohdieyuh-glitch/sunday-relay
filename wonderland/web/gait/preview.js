@@ -25,12 +25,21 @@ const BOB = 3;            // uu, body bob
 
 const body = await (await fetch('./dog-body.json')).json();
 
+// A CAPTURE HAS TO BE REPRODUCIBLE. Clicking three buttons before recording is
+// not a procedure anyone can repeat, and "the view I happened to have" is how
+// two captures get compared that were never the same shot. Everything the
+// controls do is also a query parameter, so a screencast command line IS the
+// configuration:  ?view=side&slow=1&speed=130&stride=120&trails=0
+const Q = new URLSearchParams(location.search);
+const qnum = (k, d) => (Q.has(k) && Number.isFinite(+Q.get(k)) ? +Q.get(k) : d);
+const qbool = (k, d) => (Q.has(k) ? Q.get(k) !== '0' && Q.get(k) !== 'false' : d);
+
 // ---------------------------------------------------------------- scene
 const app = document.getElementById('app');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;   // PCFSoft is deprecated in this three build
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 app.appendChild(renderer.domElement);
@@ -152,12 +161,20 @@ ui.trails.onclick = () => {
 };
 ui.slow.onclick = () => ui.slow.setAttribute('aria-pressed',
   String(ui.slow.getAttribute('aria-pressed') !== 'true'));
-ui.side.onclick = () => {
-  const on = ui.side.getAttribute('aria-pressed') !== 'true';
+function setSide(on) {
   ui.side.setAttribute('aria-pressed', String(on));
-  if (on) { camera.position.set(0.4, 1.9, 8.2); controls.target.set(0, 1.5, 0); }
-  else { camera.position.set(6.2, 2.6, 6.6); controls.target.set(0, 1.5, 0); }
-};
+  if (on) { camera.position.set(0.4, 1.9, 8.2); }
+  else { camera.position.set(6.2, 2.6, 6.6); }
+  controls.target.set(0, 1.5, 0);
+}
+ui.side.onclick = () => setSide(ui.side.getAttribute('aria-pressed') !== 'true');
+
+// Apply the query parameters, then let the buttons take over.
+ui.speed.value = String(qnum('speed', 130));
+ui.stride.value = String(qnum('stride', 120));
+if (qbool('slow', false)) ui.slow.setAttribute('aria-pressed', 'true');
+if (!qbool('trails', true)) { ui.trails.setAttribute('aria-pressed', 'false'); trails.visible = false; }
+setSide(Q.get('view') === 'side');
 
 // ---------------------------------------------------------------- the walk
 let distance = 0;            // uu travelled — the ONLY thing driving the gait
