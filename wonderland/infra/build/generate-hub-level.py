@@ -773,7 +773,21 @@ def build_leaf_material(texs):
     eal = unreal.EditorAssetLibrary
     pkg = "/Game/Wonderland/Materials"
     path = pkg + "/M_WLLeaf"
+    _want_sm = getattr(unreal.MaterialShadingModel, "MSM_TWO_SIDED_FOLIAGE", None)
     try:
+        # A CACHED ASSET MUST NOT OUTLIVE ITS RECIPE. The build box keeps its
+        # Content directory between runs, so does_asset_exist() is True on
+        # every rebuild and an edit to the graph below would never reach the
+        # world -- the change would look applied and measure as if it had not.
+        # If the cached material predates the current shading model, drop it.
+        if eal.does_asset_exist(path) and _want_sm is not None:
+            try:
+                if eal.load_asset(path).get_editor_property("shading_model") != _want_sm:
+                    unreal.log_warning("LEAF MATERIAL: cached M_WLLeaf predates the "
+                                       "two-sided-foliage recipe - rebuilding it")
+                    eal.delete_asset(path)
+            except Exception:
+                pass
         if eal.does_asset_exist(path):
             master = eal.load_asset(path)
         else:
@@ -782,6 +796,25 @@ def build_leaf_material(texs):
             # MASKED + TWO SIDED is the entire reason this material exists
             master.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
             master.set_editor_property("two_sided", True)
+            # WHY THE CANOPY IS BLACK. attribute-dark.py joined the delivered
+            # frame to the offline owner buffer and named the cause: foliage
+            # materials carry 12.8% of the whole frame as dark pixels, and
+            # individual canopy blobs measure 83-100% dark. The leaves are
+            # MASKED and two-sided but lit with the default model, so a leaf
+            # between the sun and the camera -- which is every leaf in a
+            # backlit canopy -- has no transmission and resolves to its own
+            # shadow. Real foliage glows when you look through it.
+            #
+            # MSM_TWO_SIDED_FOLIAGE is the correct layer for that, and it is
+            # the layer the founder asked for: not fog, not exposure, not
+            # bloom, not saturation. The subsurface colour below is what the
+            # light becomes on its way through the leaf.
+            if _want_sm is not None:
+                try:
+                    master.set_editor_property("shading_model", _want_sm)
+                except Exception:
+                    unreal.log_warning("LEAF MATERIAL: engine refused "
+                                       "MSM_TWO_SIDED_FOLIAGE; canopy stays opaque")
             try:
                 master.set_editor_property("opacity_mask_clip_value", 0.33)
             except Exception:
@@ -826,6 +859,25 @@ def build_leaf_material(texs):
             rg.set_editor_property("default_value", 0.70)
             mel.connect_material_property(rg, "", unreal.MaterialProperty.MP_ROUGHNESS)
 
+            # TRANSMITTED light, derived from the albedo so each leaf variant
+            # keeps its own hue instead of every tree glowing the same green.
+            # Scaled well below 1 because subsurface ADDS to the lit result:
+            # at full strength a backlit canopy stops reading as leaves at all.
+            try:
+                sss = mel.create_material_expression(
+                    master, unreal.MaterialExpressionVectorParameter, -700, 900)
+                sss.set_editor_property("parameter_name", "SubsurfaceColor")
+                sss.set_editor_property("default_value",
+                                        unreal.LinearColor(0.42, 0.72, 0.26, 1.0))
+                smul = mel.create_material_expression(
+                    master, unreal.MaterialExpressionMultiply, -420, 900)
+                mel.connect_material_expressions(sss, "", smul, "A")
+                mel.connect_material_expressions(alb, "", smul, "B")
+                mel.connect_material_property(
+                    smul, "", unreal.MaterialProperty.MP_SUBSURFACE_COLOR)
+            except Exception:
+                unreal.log_warning("LEAF MATERIAL: no subsurface input; "
+                                   "backlit canopy will stay dark")
             # sunlit edge, same instrument as the opaque palette
             try:
                 fres = mel.create_material_expression(master, unreal.MaterialExpressionFresnel, -700, 540)

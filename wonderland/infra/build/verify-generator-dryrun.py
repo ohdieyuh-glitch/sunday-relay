@@ -127,6 +127,18 @@ def make_unreal():
             return Any("asset:" + name)
 
         def import_asset_tasks(self, tasks):
+            # A REAL IMPORT MAKES THE ASSET EXIST. This returned [] and
+            # registered nothing, so does_asset_exist() stayed False for
+            # every texture, build_textures() returned {}, and
+            # build_leaf_material() bailed at its first line --
+            # "no leaf mask texture; foliage stays opaque". ~120 lines of
+            # material graph therefore had NO offline coverage at all,
+            # which is how a Color/LinearColor nativize error reached a
+            # real build earlier in this sprint and killed it.
+            for t in tasks:
+                d = getattr(t, "_dest", "")
+                if d:
+                    _imported.add(d)
             return []
 
     class _MEL(object):
@@ -145,6 +157,11 @@ def make_unreal():
     u.load_class = lambda outer, p: Any("class:" + p)
     u.load_object = lambda outer, p: Any("obj")
     u.MaterialProperty = Enum()
+    # The generator asks getattr(unreal.MaterialShadingModel,
+    # "MSM_TWO_SIDED_FOLIAGE", None) and skips the whole subsurface branch when
+    # it is absent -- so without this the dry run PASSES while proving nothing
+    # about the leaf material, which is exactly how that code got here untested.
+    u.MaterialShadingModel = Enum()
     u.MaterialSamplerType = Enum()
     u.TextureCompressionSettings = Enum()
     u.SkyLightSourceType = Enum()

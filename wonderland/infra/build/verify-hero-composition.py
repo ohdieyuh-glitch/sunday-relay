@@ -177,8 +177,13 @@ def make_unreal():
     u.MaterialEditingLibrary = _MEL()
     u.load_class = lambda o, p: Any("class:" + str(p))
     u.load_asset = lambda p: Any("as")
+    # MaterialShadingModel is in this list because the generator asks for it
+    # with getattr(..., None) and silently skips the leaf subsurface branch
+    # when it is missing -- an omission that makes every offline check pass
+    # while never touching the code under test.
     for e in ("MaterialProperty", "MaterialSamplerType", "TextureCompressionSettings",
-              "SkyLightSourceType", "AutoExposureMethod", "VectorNoiseFunction", "TextureAddress"):
+              "SkyLightSourceType", "AutoExposureMethod", "VectorNoiseFunction",
+              "TextureAddress", "MaterialShadingModel"):
         setattr(u, e, Enum())
     class _Task(Any):
         def __init__(self):
@@ -512,6 +517,17 @@ def main():
                 i = k * 3
                 px[i], px[i + 1], px[i + 2] = cr, cg, cb
         drawn += 1
+
+    # WHO OWNS EACH PIXEL, for tools that ask a question this file does not.
+    # attribute-dark.py needs it to answer the founder's first complaint --
+    # which OBJECTS are the black regions -- and that answer only exists where
+    # the geometry and the delivered frame can be compared pixel for pixel.
+    _ow = _os.environ.get("WL_DUMP_OWNER", "").strip()
+    if _ow:
+        with io.open(_ow, "w", encoding="utf8") as _fh:
+            json.dump({"w": W, "h": H, "owner": owner,
+                       "blobs": [{"label": b[7], "mat": str(b[6]),
+                                  "mesh": str(b[5]), "z": b[0]} for b in blobs]}, _fh)
 
     # tally the pixels each object still owns after everything in front of it
     # has been drawn: that is what the viewer sees
