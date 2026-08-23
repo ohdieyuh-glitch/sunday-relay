@@ -101,26 +101,11 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 	}
 	if (MaterialAsset != nullptr || !MaterialPath.IsEmpty())
 	{
-		if (MaterialAsset != nullptr)
+		if (MaterialAsset == nullptr)
 		{
-			Instances->SetMaterial(0, MaterialAsset);
-			// READ IT BACK. "We called SetMaterial" and "this component is
-			// rendering that material" are different claims, and only the
-			// second one explains a frame. A whole session went into a grey
-			// world whose material INSTANCES all probed correct on disk --
-			// right parent, right BaseColor, right AlbedoTex -- because
-			// nothing in the pipeline ever stated what the RUNTIME ended up
-			// bound to. Cheap: one line per batch, ~147 lines a run.
-			const UMaterialInterface* Bound = Instances->GetMaterial(0);
-			UE_LOG(LogTemp, Warning,
-				   TEXT("WONDERLAND BATCH '%s': asked for '%s', bound '%s', %d pieces."),
-				   *BatchName.ToString(), *MaterialAsset->GetName(),
-				   Bound ? *Bound->GetName() : TEXT("NONE"), Declared);
-		}
-		else
-		{
-			// The generator chose this material deliberately; falling back to the
-			// mesh's default silently is how a world turns up in engine grey.
+			// The generator chose this material deliberately; falling back to
+			// the mesh's default silently is how a world turns up in engine
+			// grey.
 			UE_LOG(LogTemp, Warning,
 				   TEXT("WONDERLAND BATCH '%s': material '%s' did not load; %d "
 						"pieces will use the mesh default."),
@@ -165,6 +150,33 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 	Instances->SetGenerateOverlapEvents(false);
 	Instances->SetCastShadow(bCastShadow);
 	Instances->RegisterComponent();
+
+	// THE MATERIAL GOES ON AFTER REGISTRATION, and this is the whole reason
+	// Wonderland rendered as a grey world for a session and a half.
+	//
+	// SetMaterial on an unregistered component writes OverrideMaterials and
+	// nothing else. Registration then builds the render state from the static
+	// mesh, and the override does not survive it -- so all 40,986 batched
+	// pieces drew with the MESH's default material, which is engine grey with
+	// a checkerboard, while every non-batched actor in the same frame kept its
+	// palette. That split -- grey instances, coloured actors -- was visible in
+	// every capture and I read it as a lighting problem for eight builds.
+	//
+	// It also made a proof line lie. Reading GetMaterial(0) immediately after
+	// SetMaterial only reads the override array back, so it agreed 147 times
+	// out of 147 and proved nothing. Read AFTER registration and the claim has
+	// teeth: this is what the component will actually draw with.
+	if (MaterialAsset != nullptr)
+	{
+		Instances->SetMaterial(0, MaterialAsset);
+		const UMaterialInterface* Bound = Instances->GetMaterial(0);
+		const bool bAgrees = (Bound == MaterialAsset);
+		UE_LOG(LogTemp, Warning,
+			   TEXT("WONDERLAND BATCH '%s': asked '%s', renders '%s'%s, %d pieces."),
+			   *BatchName.ToString(), *MaterialAsset->GetName(),
+			   Bound ? *Bound->GetName() : TEXT("NONE"),
+			   bAgrees ? TEXT("") : TEXT("  <-- MISMATCH"), Declared);
+	}
 
 	Instances->PreAllocateInstancesMemory(Declared);
 	for (int32 Index = 0; Index < Declared; ++Index)
