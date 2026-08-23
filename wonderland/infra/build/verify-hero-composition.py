@@ -255,8 +255,37 @@ def main():
     # calls build_leaf_material and then MATS.update()s the result, so the
     # substitution has to be in place for that call and not before it.
     _wl_leaf_apply(ns)
-    records[:] = []                                   # drop the module-level build
+    # DROP THE MODULE-LEVEL BUILD -- ALL OF IT. generate-hub-level.py calls
+    # build() at module scope when `unreal` is not None, so exec()ing it above
+    # already built the world once; this reset is what stops that first pass
+    # being counted. It cleared `records` and nothing else, and the Dogs do
+    # not go through the piece hook -- they are registered by the stub's
+    # spawn_actor_from_class, which was live during BOTH passes. So every Dog
+    # was counted twice: the report said "18 placed" for a world whose own
+    # runtime proof reads RELAY_DOGS=9, and each proxy was drawn on top of
+    # itself. A partial reset is worse than none, because the number it
+    # produces looks like a measurement.
+    records[:] = []
+    _pending_dogs[:] = []
+    _dog_scale.clear()
     ns["build"](json.load(io.open(LAYOUT, encoding="utf8")))
+    # NO TWO DOGS STAND IN THE SAME SPOT. This is how the double-registration
+    # above announces itself if the reset is ever broken again: identical
+    # positions are not a plausible world, they are a counting error, and the
+    # last one produced a "18 placed" line that read exactly like a
+    # measurement for as long as nobody compared it to RELAY_DOGS.
+    _seen_dog = {}
+    for _d in _pending_dogs:
+        _k = (round(_d[0], 1), round(_d[1], 1), round(_d[2], 1))
+        _seen_dog[_k] = _seen_dog.get(_k, 0) + 1
+    _dupe = {k: n for k, n in _seen_dog.items() if n > 1}
+    if _dupe:
+        raise SystemExit(
+            "%d Dog position(s) registered more than once (e.g. %s). Either the\n"
+            "module-level build() is being counted as well as the explicit one, or\n"
+            "the world really does stack Dogs. Both are defects; this preview will\n"
+            "not report a Dog count it cannot stand behind."
+            % (len(_dupe), sorted(_dupe)[:3]))
     # The actor list is the input to every other offline check, not just this
     # rasteriser. Dumping it costs nothing and saves each new gate from having
     # to re-stub the whole engine to see the same geometry.
