@@ -58,6 +58,25 @@ def main():
         return real_call(self, *a, **kw)
 
     Any.__call__ = spy
+
+    # NAME THE ACTOR AFTER ITS CLASS, or nothing downstream can be told apart:
+    # every light in the stub reaches set_intensity as the identical string
+    # "actor.get_component_by_class().set_intensity", so a gate that reads names
+    # alone sees eight anonymous numbers. Tagging the spawn is what makes
+    # "which of these is a PointLight" answerable at all.
+    real_sub = stub.get_editor_subsystem
+
+    class _Tagging(object):
+        def __init__(self, inner):
+            self._inner = inner
+
+        def spawn_actor_from_class(self, cls, *a, **kw):
+            return Any(str(getattr(cls, "_name", cls)))
+
+        def __getattr__(self, k):
+            return getattr(self._inner, k)
+
+    stub.get_editor_subsystem = lambda c: _Tagging(real_sub(c))
     sys.modules["unreal"] = stub
     ns = {"__name__": "__wl_lightbudget__", "__file__": GEN}
     try:

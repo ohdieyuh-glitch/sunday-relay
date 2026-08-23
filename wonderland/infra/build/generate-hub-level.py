@@ -282,7 +282,16 @@ LOOK = {
     # These are tightly attenuated so they stay pools rather than a
     # second ambient. Set heroLights=0 to A/B them in one cook.
     "heroLights": 1,
-    "heroLightLumens": 9000.0,
+        # 9000 -> 5200. verify-light-budget.py refuses a practical above 6,000
+    # lumens, and it was right to: the hero gate light was 7,650 GOLD and
+    # shadowless, the same instrument and the same colour as the eighteen
+    # lanterns that turned this whole world tan. One is not eighteen, but it is
+    # the brightest gold thing left in the frame.
+    #
+    # It can afford to come down because the KEY went up -- sunLux 340 -> 780 --
+    # so the hero practicals no longer have to carry the scene to be seen. At
+    # 5200 the per-light scales give 5200 / 4420 / 2860, all under the ceiling.
+    "heroLightLumens": 5200.0,
     "heroLightRadius": 900.0,
 }
 
