@@ -22,13 +22,14 @@ function frac(v) {
   return f < 0 ? f + 1 : f;
 }
 
-/** 0 LH, 1 RH, 2 LF, 3 RF -> footfall order LH, LF, RH, RF. */
+/** 0 LH, 1 RH, 2 LF, 3 RF -> footfall order LH, LF, RH, RF.
+ *  A LARGER OFFSET LANDS THE PAW SOONER — see the C++ note. */
 export function legPhaseOffset(legIndex) {
   switch (legIndex) {
-    case 0: return 0.0;    // left hind  — first down
-    case 2: return 0.25;   // left fore
-    case 1: return 0.5;    // right hind
-    case 3: return 0.75;   // right fore
+    case 0: return 0.0;    // left hind  — first down, at phase 0.00
+    case 2: return 0.75;   // left fore  — a quarter stride later
+    case 1: return 0.5;    // right hind — half a stride
+    case 3: return 0.25;   // right fore — three quarters
     default: return 0.0;
   }
 }

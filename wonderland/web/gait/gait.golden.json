@@ -2,7 +2,7 @@
   "note": "emitted by WonderlandDogGait.test.cpp --golden; do not hand-edit",
   "stride": 120.0, "lift": 18.0, "bob": 3.0,
   "dutyFactor": 0.650000,
-  "legPhaseOffset": [0.000000, 0.500000, 0.250000, 0.750000],
+  "legPhaseOffset": [0.000000, 0.500000, 0.750000, 0.250000],
   "samples": [
     {"p": 0.000000, "fwd": 39.000000, "lift": 0.000000, "stance": true, "bob": 0.000000, "pitch": -1.200000, "roll": 0.000000},
     {"p": 0.015625, "fwd": 37.125000, "lift": 0.000000, "stance": true, "bob": 0.585271, "pitch": -1.176942, "roll": 0.176431},

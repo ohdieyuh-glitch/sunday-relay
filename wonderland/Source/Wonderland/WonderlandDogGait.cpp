@@ -16,12 +16,27 @@ namespace WonderlandGait
 	float LegPhaseOffset(int LegIndex)
 	{
 		// 0 LH, 1 RH, 2 LF, 3 RF -> footfall order LH, LF, RH, RF.
+		//
+		// A LARGER OFFSET LANDS THE PAW SOONER, NOT LATER, and the first
+		// version of this table read as though the opposite were true. Stance
+		// begins where the phase fraction wraps, so a leg carrying +0.75 gets
+		// there after only a quarter of a stride, while one at 0.00 waits a
+		// full one. Ascending offsets therefore produce a DESCENDING footfall
+		// order: the Dogs walked RF, RH, LF, LH — each fore paw landing before
+		// the hind paw on the same side, which is a lateral-sequence walk run
+		// backwards, and it puts the two SAME-SIDE legs on the ground together
+		// instead of a diagonal pair.
+		//
+		// The unit test agreed with it, because it checked that the four
+		// CONSTANTS were in ascending order — a restatement of the table below,
+		// not a claim about what the Dog does. It now simulates touchdowns.
+		// The browser preview is what showed it: the HUD read "RF RH LF LH".
 		switch (LegIndex)
 		{
-		case 0: return 0.00f;   // left hind  — first down
-		case 2: return 0.25f;   // left fore
-		case 1: return 0.50f;   // right hind
-		case 3: return 0.75f;   // right fore
+		case 0: return 0.00f;   // left hind  — first down, at phase 0.00
+		case 2: return 0.75f;   // left fore  — a quarter stride later
+		case 1: return 0.50f;   // right hind — half a stride
+		case 3: return 0.25f;   // right fore — three quarters
 		default: return 0.0f;
 		}
 	}

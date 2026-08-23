@@ -129,10 +129,81 @@ int main(int argc, char** argv)
 			for (int j = i + 1; j < 4; ++j)
 				if (std::fabs(Offsets[i] - Offsets[j]) < 1e-6f) bAllDistinct = false;
 		Check("every leg has its own phase", bAllDistinct);
+		// SIMULATE THE TOUCHDOWNS. This check used to assert
+		//     Offsets[0] < Offsets[2] < Offsets[1] < Offsets[3]
+		// which is a restatement of the table three lines above it, not a claim
+		// about the Dog. A larger offset lands the paw SOONER, so ascending
+		// constants produced the exact reverse of the intended order and the
+		// test passed on it. The browser preview's HUD is what caught it.
+		//
+		// Walk the gait and record which paw goes down next, the way an eye
+		// watching the Dog would.
+		const char* const Name[4] = { "LH", "RH", "LF", "RF" };
+		bool WasDown[4];
+		for (int L = 0; L < 4; ++L)
+			WasDown[L] = LegPose(LegPhaseOffset(L), Stride, Lift).bStance;
+		std::vector<int> Seq;
+		for (int i = 1; i <= 8000 && Seq.size() < 9; ++i)
+		{
+			const float D = (i / 8000.0f) * 4.0f * Stride;
+			for (int L = 0; L < 4; ++L)
+			{
+				const bool Down = LegPose(D / Stride + LegPhaseOffset(L), Stride, Lift).bStance;
+				if (Down && !WasDown[L]) Seq.push_back(L);
+				WasDown[L] = Down;
+			}
+		}
+		std::string SeqText;
+		for (const int L : Seq) { SeqText += Name[L]; SeqText += " "; }
+		// Lateral sequence: each HIND paw lands before the FORE paw on the same
+		// side. Expressed as the cycle LH -> LF -> RH -> RF, checked from
+		// wherever the recording happened to start.
+		const int Cycle[4] = { 0, 2, 1, 3 };   // LH, LF, RH, RF
+		bool bLateral = Seq.size() >= 5;
+		if (bLateral)
+		{
+			int At = 0;
+			while (At < 4 && Cycle[At] != Seq[0]) ++At;
+			for (std::size_t k = 0; k < Seq.size(); ++k)
+				if (Seq[k] != Cycle[(At + k) % 4]) bLateral = false;
+		}
 		Check("the footfall order is LH, LF, RH, RF — a lateral-sequence walk",
-		      Offsets[0] < Offsets[2] && Offsets[2] < Offsets[1] && Offsets[1] < Offsets[3],
-		      "LH " + std::to_string(Offsets[0]) + " LF " + std::to_string(Offsets[2])
-		      + " RH " + std::to_string(Offsets[1]) + " RF " + std::to_string(Offsets[3]));
+		      bLateral, "observed: " + SeqText);
+
+		// AND THE HIND PAW LEADS THE FORE PAW ON THE SAME SIDE, BY A QUARTER
+		// CYCLE. That IS the definition of a lateral sequence, and it is
+		// precisely what the reversed table broke.
+		//
+		// A support-pattern check was written here first and deleted: it
+		// asserted that two-paw support is always a DIAGONAL pair, which is
+		// false — an even walk at duty 0.65 spends 20% of the cycle on two
+		// same-side paws, by construction. Worse, it had no teeth. The correct
+		// and reversed tables produce IDENTICAL support statistics (60% three
+		// down, 20% diagonal, 20% ipsilateral), so no test of which paws are
+		// down can tell them apart. Only the ORDER can.
+		auto Touchdown = [](int Leg) {
+			// Stance starts where the phase fraction wraps, so a leg carrying
+			// offset o lands at distance-phase (1 - o) mod 1.
+			const float O = LegPhaseOffset(Leg);
+			float T = 1.0f - O;
+			while (T >= 1.0f) T -= 1.0f;
+			while (T < 0.0f) T += 1.0f;
+			return T;
+		};
+		auto Lag = [&](int Hind, int Fore) {   // fore relative to hind, forward in time
+			float L = Touchdown(Fore) - Touchdown(Hind);
+			while (L < 0.0f) L += 1.0f;
+			while (L >= 1.0f) L -= 1.0f;
+			return L;
+		};
+		const float LeftLag = Lag(0, 2);    // LH -> LF
+		const float RightLag = Lag(1, 3);   // RH -> RF
+		Check("the left hind paw lands a quarter cycle BEFORE the left fore",
+		      std::fabs(LeftLag - 0.25f) < 1e-4f,
+		      "lag " + std::to_string(LeftLag) + " (0.75 means the fore leads — reversed)");
+		Check("...and the same on the right",
+		      std::fabs(RightLag - 0.25f) < 1e-4f,
+		      "lag " + std::to_string(RightLag));
 		// At any instant a walk keeps at least two paws down, which is what
 		// stops it reading as a trot or a stumble.
 		int WorstDown = 4;

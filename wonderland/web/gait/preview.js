@@ -49,9 +49,14 @@ scene.background = new THREE.Color('#131020');
 scene.fog = new THREE.Fog('#131020', 14, 46);
 
 const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 400);
-camera.position.set(6.2, 2.6, 6.6);
+// THE AXES, ONCE, SO THE CAMERAS ARE NOT GUESSES. toThree below maps
+// (x,y,z)_UE -> (y, z, -x), so the Dog's NOSE (+X) points down -Z and its RIGHT
+// (+Y) is +X. A camera parked on +Z therefore looks the Dog in the face — which
+// is what the first "side view" did, and a head-on shot is the one angle from
+// which a gait is invisible. A profile is a camera on +X.
+camera.position.set(7.4, 1.9, 0);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 1.5, 0);
+controls.target.set(0, 1.7, 0);
 controls.enableDamping = true;
 
 // Light it so the SILHOUETTE reads and the ground contact is visible — a
@@ -138,7 +143,7 @@ const LEG_COLOR = [[1, .42, .55], [.42, .82, 1], [1, .82, .35], [.55, 1, .62]];
 
 function dropTrail(x, z, leg) {
   const i = (trailAt % TRAIL) * 3;
-  trailPos[i] = x; trailPos[i + 1] = 0.012; trailPos[i + 2] = z;
+  trailPos[i] = x; trailPos[i + 1] = 0.015; trailPos[i + 2] = z;
   trailCol[i] = LEG_COLOR[leg][0]; trailCol[i + 1] = LEG_COLOR[leg][1];
   trailCol[i + 2] = LEG_COLOR[leg][2];
   trailAt++;
@@ -163,9 +168,12 @@ ui.slow.onclick = () => ui.slow.setAttribute('aria-pressed',
   String(ui.slow.getAttribute('aria-pressed') !== 'true'));
 function setSide(on) {
   ui.side.setAttribute('aria-pressed', String(on));
-  if (on) { camera.position.set(0.4, 1.9, 8.2); }
-  else { camera.position.set(6.2, 2.6, 6.6); }
-  controls.target.set(0, 1.5, 0);
+  // Profile: straight down the lateral axis, so all four legs are separable and
+  // a stride is a horizontal distance the eye can measure against the trails.
+  // Three-quarter: swung round toward the nose, which reads as a Dog.
+  if (on) { camera.position.set(7.4, 1.9, 0); }
+  else { camera.position.set(5.4, 2.4, -5.4); }
+  controls.target.set(0, 1.7, 0);
 }
 ui.side.onclick = () => setSide(ui.side.getAttribute('aria-pressed') !== 'true');
 
@@ -216,7 +224,16 @@ function frame(now) {
       const world = (distance + pose.forward) * UU;
       if (!prevStance[leg]) { anchor[leg] = world; order.push(leg); if (order.length > 8) order.shift(); }
       else if (anchor[leg] !== null) worstSlip = Math.max(worstSlip, Math.abs(world - anchor[leg]));
-      if (trails.visible) dropTrail(mesh.position.x, -(world - distance * UU), leg);
+      // WHERE THE PAW ACTUALLY IS, not a second derivation of it. The first
+      // version recomputed the marker's position from distance and forward
+      // offset and got it wrong by a whole `distance` — the trails sat in a
+      // line at the bottom of frame, nowhere near a paw, which makes the one
+      // thing they exist to show unreadable. The mesh has already been placed;
+      // subtracting the group's own offset converts that to group-local space
+      // and cannot disagree with what is on screen.
+      if (trails.visible) {
+        dropTrail(mesh.position.x, mesh.position.z - trails.position.z, leg);
+      }
     } else {
       anchor[leg] = null;
     }
