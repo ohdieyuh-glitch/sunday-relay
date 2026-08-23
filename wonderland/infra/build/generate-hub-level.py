@@ -873,9 +873,9 @@ MATERIAL_SPEC = {
     # rubbed; one flat tone across every face is the "toy" read.
     "brass_deep":  ((0.42, 0.30, 0.13), 0.55, 0.52, (0.05, 0.03, 0.00), 0.10),
     "float_glow":  ((1.00, 0.80, 0.40), 0.45, 0.24, (1.00, 0.72, 0.28), 1.9),
-    "cobble":      ((0.80, 0.77, 0.72), 0.0, 0.80, (0, 0, 0), 0.0),
-    "cobble2":     ((0.64, 0.62, 0.59), 0.0, 0.82, (0, 0, 0), 0.0),
-    "plaza":       ((0.87, 0.84, 0.79), 0.0, 0.76, (0, 0, 0), 0.0),
+    "cobble":      ((0.84, 0.74, 0.75), 0.0, 0.80, (0, 0, 0), 0.0),
+    "cobble2":     ((0.68, 0.58, 0.62), 0.0, 0.82, (0, 0, 0), 0.0),
+    "plaza":       ((0.90, 0.82, 0.84), 0.0, 0.76, (0, 0, 0), 0.0),
     "moss":        ((0.20, 0.40, 0.16), 0.0, 0.72, (0, 0, 0), 0.0),
     "ground":      ((0.17, 0.30, 0.14), 0.0, 0.86, (0, 0, 0), 0.0),
     # A MEADOW IS NOT ONE GREEN. Real turf is patchy: sun-bleached where it is
@@ -901,14 +901,14 @@ MATERIAL_SPEC = {
     "mush_red":    ((0.74, 0.16, 0.26), 0.0, 0.62, (0.14, 0, 0), 0.3),
     "mush_white":  ((0.96, 0.94, 0.90), 0.0, 0.42, (0, 0, 0), 0.0),
     "mush_purple": ((0.44, 0.20, 0.76), 0.0, 0.62, (0.13, 0.02, 0.22), 0.35),
-    "spire":       ((0.94, 0.90, 0.86), 0.0, 0.40, (0, 0, 0), 0.0),
+    "spire":       ((0.97, 0.86, 0.87), 0.0, 0.40, (0, 0, 0), 0.0),
     "spire_pink":  ((0.98, 0.74, 0.82), 0.0, 0.62, (0, 0, 0), 0.0),
     "spire_blue":  ((0.76, 0.68, 0.98), 0.0, 0.62, (0, 0, 0), 0.0),
     "spire_teal":  ((0.66, 0.92, 0.88), 0.0, 0.62, (0, 0, 0), 0.0),
     # Roughness 0.10 is a mirror, and a mirror reflecting a dark scene is
     # dark: attribute-dark.py measured porcelain at 1.47% of the frame in
     # shadow. Real glaze has a broad highlight, not a point one.
-    "porcelain":   ((0.96, 0.95, 0.93), 0.0, 0.26, (0, 0, 0), 0.0),
+    "porcelain":   ((0.98, 0.93, 0.92), 0.0, 0.26, (0, 0, 0), 0.0),
     "water":       ((0.16, 0.42, 0.56), 0.0, 0.05, (0.01, 0.04, 0.07), 0.15),
     # Spray and foam: near-white, barely self-lit so it stays bright against
     # the dark of a basin, and it BOBS — a jet of beads that does not move is
@@ -936,7 +936,20 @@ MATERIAL_SPEC = {
     "dog_body":    ((0.985, 0.985, 0.995), 0.0, 0.34, (0.02, 0.02, 0.03), 0.10),
     "dog_visor":   ((0.02, 0.02, 0.03), 0.1, 0.12, (0, 0, 0), 0.0),
     "dog_eye":     ((1.00, 0.80, 0.22), 0.0, 0.62, (1.00, 0.74, 0.18), 5.0),
-    "stone":       ((0.88, 0.85, 0.80), 0.0, 0.90, (0, 0, 0), 0.0),
+    # THE CITY IS PASTEL, NOT GREY -- and a third of this frame was specified
+    # neutral. Measured by area over what the arrival camera can see, 31.9% of
+    # Wonderland is owned by materials whose own albedo has saturation under
+    # 0.15: stone 6.0%, porcelain 5.8%, spire 2.5%, plaza, cobble, mush_white.
+    # The reference has no grey stone anywhere in it -- the castle city is
+    # PINK, CREAM and LILAC, which is exactly the "pastel stone city seen
+    # THROUGH planting" the visual-target file already describes.
+    #
+    # So this is not a lighting fix and it is not chasing the rendering defect
+    # that remains open. It is the part of the greyness that was simply
+    # AUTHORED, and it is the one part that can be fixed with certainty.
+    # (cloud and dog_body stay white on purpose: clouds are white and the
+    # canonical Relay Dog's coat is its identity.)
+    "stone":       ((0.92, 0.82, 0.81), 0.0, 0.90, (0, 0, 0), 0.0),
     "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
     # SKELETON FLAME, the founder's legendary variant. It is a SKIN: the same
     # canonical body, the same proportions, the same visor band. What changes is
