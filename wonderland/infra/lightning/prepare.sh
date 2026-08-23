@@ -112,7 +112,7 @@ GATE_FAIL=0
 # enables no streamer produces a package that runs perfectly and streams
 # nothing — the "No streamer available" failure, discovered only from a
 # browser after a full cook and launch.
-for g in verify-target-config.py verify-pixelstreaming-plugin.py verify-local-includes.py verify-look-table.py verify-docs.py verify-dog-proxy.py verify-hero-motif.py verify-hero-skyline.py verify-canonical-dog.py verify-gameplay-classes.py verify-generator-classes.py verify-texture-families.py verify-blueprint-parents.py verify-uproperty-access.py verify-generator-dryrun.py verify-landmark-scale.py verify-leaf-material.py verify-light-budget.py verify-sky-fill.py; do
+for g in verify-target-config.py verify-pixelstreaming-plugin.py verify-local-includes.py verify-look-table.py verify-docs.py verify-dog-proxy.py verify-hero-motif.py verify-hero-skyline.py verify-canonical-dog.py verify-gameplay-classes.py verify-generator-classes.py verify-texture-families.py verify-blueprint-parents.py verify-uproperty-access.py verify-generator-dryrun.py verify-landmark-scale.py verify-leaf-material.py verify-light-budget.py verify-sky-fill.py verify-base-colour-wired.py; do
   if [ -f "$BUILD_DIR/$g" ]; then
     if python3 "$BUILD_DIR/$g" >>"$WL_LOG/gates.log" 2>&1; then
       wl_ok "gate $g"
