@@ -4225,8 +4225,20 @@ def build(layout):
     # x=-40 lands it at 48.3%: centred, with the hint of leftward offset the
     # reference itself has. The arcane circle follows automatically -- kit_plaza
     # takes HERO_DOG as its circle centre -- and so does the ground clearing.
-    HERO_DOG = (-40.0, -260.0)
-    HERO_DOG_SCALE = 1.75
+    # AND BACK OFF THE LENS. Centring it exposed the other half of the problem:
+    # at y=-260 (890 uu from the camera) at scale 1.75 the Dog stood 350 px tall
+    # in a 450 px frame -- 78% of frame height, against roughly 30% in the
+    # founder's reference -- so once it was centred it stopped being the subject
+    # of the composition and became a wall across the middle of it. The measured
+    # palette said the same thing from the other side: cream_white went 0.9% ->
+    # 2.2% against the reference's 0.4%, and that is the Dog.
+    #
+    # In the reference the Dog stands mid-ground ON the circle with PAVING
+    # visible in front of it. Depth 1600 and scale 1.40 put it at about 35% of
+    # frame height and open the plaza between the camera and the Dog, which is
+    # the ground the frame has never had -- 0.1% of it was bare.
+    HERO_DOG = (-40.0, 450.0)
+    HERO_DOG_SCALE = 1.40
     # WHERE THE WORLD OPENS FROM. HeroCam0 and HeroCam6 both stand here — the
     # Marble backdrop is anchored at this exact point, which is why the wide
     # arrival shares the position and changes only the aim. Named once because
@@ -4419,6 +4431,42 @@ def build(layout):
             return fallback
         return max(lo, min(hi, target / intrinsic))
 
+    def _push_out_of_lens(px, py, what=""):
+        """Move a point out of the arrival camera's blind foreground.
+
+        ONE RULE, because it kept being written per-call-site and then not
+        written at all. It was fixed for the drifting keys, and four LANDMARKS
+        were sitting inside the same keep-out unfixed:
+
+            playing_card_sign        624 uu from the lens
+            mushroom_red_a           736
+            overlook_terrace        1035
+            project_standing_stones 1057
+
+        mushroom_red_a is the one that showed. At 736 uu, built to its declared
+        360 uu, it stood 1.57x the frame HEIGHT and measured 16.1% of the bottom
+        38% of the frame on its own -- more than every ground material together.
+        The founder's reference does have a big cap cropped by the right edge;
+        it does not have one filling the plaza.
+
+        Lateral position decides, exactly as in_camera_lap decides it: something
+        past the frame's own half-width at its depth is beside the shot, not in
+        front of it, and is left alone. Everything else is pushed out along its
+        own bearing, so the authored arrangement survives and only the distance
+        changes.
+        """
+        dx, dy = px - ARRIVAL_CAM[0], py - ARRIVAL_CAM[1]
+        r = math.hypot(dx, dy)
+        if r >= ARRIVAL_KEEP_OUT or r < 1.0:
+            return px, py, False
+        depth = py - ARRIVAL_CAM[1]
+        if depth > 1.0:
+            half_w = depth * math.tan(math.radians(_FOV_H * 0.5))
+            if abs(px - ARRIVAL_CAM[0]) >= half_w:
+                return px, py, False
+        f = ARRIVAL_KEEP_OUT / r
+        return ARRIVAL_CAM[0] + dx * f, ARRIVAL_CAM[1] + dy * f, True
+
     def kit_dispatch(m):
         # The kitbash builders already produce sensibly-sized forms (in uu) at s=1;
         # the layout's authored scales (3-5x, tuned for a single 100uu primitive)
@@ -4429,6 +4477,11 @@ def build(layout):
         mesh = m.get("mesh", "")
         loc = m["location"]
         x, y, z = float(loc[0]), float(loc[1]), float(loc[2])
+        x, y, _moved = _push_out_of_lens(x, y, mid)
+        if _moved:
+            unreal.log_warning(
+                "LANDMARK KEEP-OUT: %s was inside the %.0f uu arrival keep-out "
+                "and was pushed out along its own bearing" % (mid, ARRIVAL_KEEP_OUT))
         sc = m.get("scale", [1, 1, 1])
         raw = max(0.6, (float(sc[0]) + float(sc[1])) / 2.0) if isinstance(sc, list) else 1.0
         norm = min(1.6, max(0.75, raw / 3.2))
@@ -5587,11 +5640,8 @@ def build(layout):
                                       (-880, 40, 610), (-1180, 250, 700), (-380, -180, 480),
                                       (760, -320, 560), (120, -560, 640), (980, 640, 690),
                                       (-160, 1150, 720)]):
-        _dx, _dy = kx - ARRIVAL_CAM[0], ky - ARRIVAL_CAM[1]
-        _r = math.hypot(_dx, _dy)
-        if 1.0 < _r < ARRIVAL_KEEP_OUT:
-            _f = ARRIVAL_KEEP_OUT / _r
-            kx, ky = ARRIVAL_CAM[0] + _dx * _f, ARRIVAL_CAM[1] + _dy * _f
+        kx, ky, _mv = _push_out_of_lens(kx, ky, "FloatKey%d" % i)
+        if _mv:
             _keys_moved += 1
         kit_float_key(kx, ky, kz, "FloatKey%d" % i)
     if _keys_moved:
@@ -5754,7 +5804,16 @@ def build(layout):
         # never in shot. Derived from the camera rather than guessed again.
         _fy = _FG_START + 90.0 + 900.0 * _t
         _half_w = (_fy - ARRIVAL_CAM[1]) * math.tan(math.radians(75.0 * 0.5)) * 0.86
-        _fx = -_half_w + 2.0 * _half_w * (((_h >> 3) % 1000) / 1000.0)
+        _u = -1.0 + 2.0 * (((_h >> 3) % 1000) / 1000.0)
+        # TO THE VERGES. Spread evenly across the full width, 96 beds carpet the
+        # throat of the shot and the ground never reads -- the frame measured
+        # 0.1% bare ground where the reference is roughly a third open paving,
+        # with its flowers banked at the left and right edges. Remapping rather
+        # than rejecting keeps all 96 beds and simply moves them outward, so the
+        # near field stays dense where it is visible and opens where the eye
+        # travels to the Dog.
+        _u = math.copysign(0.52 + 0.48 * abs(_u), _u if _u else 1.0)
+        _fx = _u * _half_w
         # Never on the arcane circle, and never on top of the hero Dog.
         if math.hypot(_fx - HERO_DOG[0], _fy - HERO_DOG[1]) < 420.0:
             continue
@@ -5794,12 +5853,22 @@ def build(layout):
     # reads and the near band had none. Placed OUTSIDE the boulevard so they
     # frame the view instead of blocking it, and kept short enough to stay
     # under the skyline.
+    #
+    # THINNED AND PUSHED OUT, because "flanking" became "carpeting". Measured on
+    # the offline owner buffer, mush_red owned 23.2% of the bottom 38% of the
+    # frame -- twice the share of the GROUND itself, at 11.3% -- and the nearest
+    # row stood about 43% of frame height. The reference has three or four big
+    # caps, banked at the edges and cropped by them, over open paving. Five rows
+    # a side at 60% of half-width is a hedge of mushrooms across the plaza.
+    #
+    # Three rows, starting at 78% of half-width: same framing device, and the
+    # ground the founder's reference is a third made of can be seen again.
     _HERO_CAPS = 0
     for _side in (-1.0, 1.0):
-        for _r in range(5):
+        for _r in range(3):
             _my = _FG_START + 220.0 + 620.0 * _r
             _half = (_my - ARRIVAL_CAM[1]) * math.tan(math.radians(75.0 * 0.5))
-            _mx = _side * (_half * (0.60 + 0.07 * _r))
+            _mx = _side * (_half * (0.78 + 0.06 * _r))
             if math.hypot(_mx - HERO_DOG[0], _my - HERO_DOG[1]) < 420.0:
                 continue
             kit_mushroom(_mx, _my, 1.5 + 0.5 * ((_r * 3) % 3) / 2.0,
