@@ -119,6 +119,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Life")
 	float BreathElapsedSeconds() const { return LifeSeconds; }
 
+	// STATUS, READ BY THE WORLD PROOF FROM ANOTHER TRANSLATION UNIT.
+	// These were private with meta=(AllowPrivateAccess="true"), which opens
+	// BLUEPRINT access and nothing else — C++ in another file still cannot
+	// touch a private member, and WonderlandWorldProof.cpp does exactly that.
+	/** What the world proof reports, so the gait in a captured frame is a
+	 *  recorded fact rather than an inference from how fast something looked. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
+	FName CurrentGaitName = FName(TEXT("idle"));
+	/** Reported by the world proof: how many paws are actually being corrected,
+	 *  so "grounding works" is a recorded number rather than an impression. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
+	int32 PawsGrounded = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
+	FName CurrentWorkName = FName(TEXT("none"));
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -135,6 +150,7 @@ private:
 	/** What Relay says the attended Avatar is doing — EWork::None when there
 	 *  is no Avatar, or when Relay is not doing anything. */
 	WonderlandPose::EWork DesiredWork() const;
+
 
 	FVector Destination = FVector::ZeroVector;
 	float LifeSeconds = 0.0f;
@@ -185,10 +201,6 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
 	float DecelUUPerSec2 = 420.0f;
 
-	/** What the world proof reports, so the gait in a captured frame is a
-	 *  recorded fact rather than an inference from how fast something looked. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
-	FName CurrentGaitName = FName(TEXT("idle"));
 
 	/** The Project Avatar this Dog attends, if any. Set by the generator.
 	 *
@@ -213,13 +225,7 @@ private:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
 	float MaxPawGroundOffset = 38.0f;
 
-	/** Reported by the world proof: how many paws are actually being corrected,
-	 *  so "grounding works" is a recorded number rather than an impression. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
-	int32 PawsGrounded = 0;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
-	FName CurrentWorkName = FName(TEXT("none"));
 
 	/** Place the four paws, the torso and the head for a distance travelled.
 	 *  SettleAlpha 1 blends everything back to the standing pose. */
