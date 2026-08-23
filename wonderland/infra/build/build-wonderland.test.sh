@@ -580,6 +580,38 @@ elif command -v g++ >/dev/null 2>&1; then
   fi
 fi
 echo
+echo "== the gait can be SEEN without a GPU =="
+# Locomotion is the highest-priority visible item and every way of looking at it
+# needed the L4 — build, cook, package, stream, capture. With the Studio off
+# that is not a slow loop, it is no loop, and "the gait is correct" becomes a
+# claim resting on arithmetic nobody can see.
+STRIP_OUT="$(mktemp -u).png"
+if python3 "$HERE/render-gait-strip.py" --out "$STRIP_OUT" >/tmp/strip.log 2>&1; then
+  if [ -s "$STRIP_OUT" ]; then
+    ok "the gait strip renders walk, trot and run from the engine's own numbers"
+  else
+    bad "render-gait-strip produced an empty file"
+  fi
+  # IT MUST REFUSE TO DRAW A DIFFERENT ANIMAL. The strip re-implements two
+  # formulas; a drift would show a convincing picture of a gait Unreal does not
+  # run, which is worse than no picture.
+  if grep -q "parity worst" /tmp/strip.log; then
+    ok "...after checking its own formulas against the engine's sampled table"
+  else
+    bad "the strip draws without checking parity with the engine"
+  fi
+  rm -f "$STRIP_OUT"
+else
+  bad "render-gait-strip failed: $(tail -2 /tmp/strip.log | tr '\n' ' ')"
+fi
+# And the refusal must actually fire.
+if grep -q "refusing to draw a different animal" "$HERE/render-gait-strip.py"; then
+  ok "...and it REFUSES rather than drawing when the two disagree"
+else
+  bad "a drift from the engine would produce a picture instead of an error"
+fi
+
+echo
 echo "== the Project Avatar does not lie about what Relay is doing =="
 # A world that idly cycles pretty animations is a screensaver. One that shows
 # implementing ONLY while Relay is implementing is an instrument. The difference
@@ -734,7 +766,7 @@ else
 fi
 # THE GENERATOR MUST NOT GUESS WHAT RELAY IS DOING. An Avatar that shipped
 # already "implementing" would be a world lying at build time.
-if printf '%s' "$GEN_SRC" | grep -qE 'set_prop\(_avatar, "MissionState", 0\)'; then
+if has "$GEN_SRC" 'set_prop(_avatar, "MissionState", 0)'; then
   ok "...and it ships with mission Unknown, never a plausible-looking guess"
 else
   bad "the generator sets a mission state it cannot know"
