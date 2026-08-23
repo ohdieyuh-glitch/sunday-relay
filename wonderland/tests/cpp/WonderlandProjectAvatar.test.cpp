@@ -23,8 +23,45 @@ static void Check(const std::string& Name, bool Ok, const std::string& Detail = 
 	          Detail.empty() ? "" : "\n         ", Detail.c_str()); }
 }
 
-int main()
+static int EmitGolden()
 {
+	using namespace WonderlandAvatar;
+	const EStage Stages[] = { EStage::Dormant, EStage::Egg, EStage::Baby,
+	                          EStage::Growing, EStage::Advanced, EStage::Final };
+	const EMission Missions[] = { EMission::Unknown, EMission::Idle,
+	                              EMission::Researching, EMission::Implementing,
+	                              EMission::Reviewing, EMission::Repairing,
+	                              EMission::Complete };
+	std::printf("{\n  \"note\": \"emitted by WonderlandProjectAvatar.test.cpp --golden\",\n");
+	std::printf("  \"stages\": [\n");
+	for (int i = 0; i < 6; ++i)
+	{
+		const FAvatarLook L = LookFor(Stages[i], EMission::Idle, 0.0f);
+		std::printf("    {\"name\": \"%s\", \"scale\": %.4f, \"segments\": %d}%s\n",
+		            StageName(Stages[i]), L.Scale, L.Segments, (i < 5) ? "," : "");
+	}
+	std::printf("  ],\n  \"missions\": [\n");
+	for (int m = 0; m < 7; ++m)
+	{
+		std::printf("    {\"name\": \"%s\", \"work\": \"%s\", \"attends\": %s, \"glow\": [",
+		            MissionName(Missions[m]),
+		            WonderlandPose::WorkName(WorkForMission(Missions[m])),
+		            MissionWantsAttendance(Missions[m]) ? "true" : "false");
+		for (int k = 0; k < 24; ++k)
+		{
+			std::printf("%.4f%s",
+			            LookFor(EStage::Growing, Missions[m], k / 24.0f).Glow,
+			            (k < 23) ? ", " : "");
+		}
+		std::printf("]}%s\n", (m < 6) ? "," : "");
+	}
+	std::printf("  ]\n}\n");
+	return 0;
+}
+
+int main(int argc, char** argv)
+{
+	if (argc > 1 && std::string(argv[1]) == "--golden") { return EmitGolden(); }
 	using namespace WonderlandAvatar;
 	using WonderlandPose::EWork;
 

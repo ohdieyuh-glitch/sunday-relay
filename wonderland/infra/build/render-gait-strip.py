@@ -90,6 +90,7 @@ def check_parity(golden):
 
 
 POSE_JSON = os.path.join(WEB, "pose.golden.json")
+AVATAR_JSON = os.path.join(WEB, "avatar.golden.json")
 
 
 def render_upright(args, body):
@@ -247,12 +248,95 @@ def render_footlock(args, body):
           % (args.out, W, H, ",".join(g["gait"] for g in rows)))
 
 
+def render_avatar(args):
+    """The Project Avatar's stages across the top, its mission glow below.
+
+    Two claims are drawn, and both are the ones that decide whether the Avatar
+    is an instrument or a screensaver:
+
+      * a later stage is VISIBLY bigger and carries more shell — growth the
+        founder can see, not bookkeeping;
+      * an unreachable Bridge leaves it COMPLETELY DARK, implementing is the
+        brightest it ever gets, and repairing GUTTERS rather than pulsing.
+
+    Read from the engine's own emitted table, so nothing here can disagree
+    with what Unreal does.
+    """
+    if not os.path.isfile(AVATAR_JSON):
+        raise SystemExit("render-gait-strip: missing %s — regenerate it with "
+                         "WonderlandProjectAvatar.test.cpp --golden" % AVATAR_JSON)
+    av = json.load(io.open(AVATAR_JSON, encoding="utf8"))
+    stages, missions = av["stages"], av["missions"]
+
+    CELL = 190
+    W = CELL * max(len(stages), 7)
+    ROWS = 1 + len(missions)
+    RH = 74          # room for a gap, or the traces merge into bands
+    H = CELL + ROWS * RH + 16
+    px = bytearray([18, 16, 26] * (W * H))
+
+    def put(x, y, rgb):
+        if 0 <= x < W and 0 <= y < H:
+            i = (y * W + x) * 3
+            px[i], px[i + 1], px[i + 2] = rgb
+
+    def disc(cx, cy, r, rgb):
+        rr = r * r
+        for y in range(int(cy - r), int(cy + r) + 1):
+            dy = y - cy
+            for x in range(int(cx - r), int(cx + r) + 1):
+                if (x - cx) ** 2 + dy * dy <= rr:
+                    put(x, y, rgb)
+
+    # --- stages: a shell of plates around a core, growing left to right
+    for i, st in enumerate(stages):
+        cx, cy = i * CELL + CELL // 2, CELL // 2 + 6
+        r = 20.0 * st["scale"]
+        # the core
+        disc(cx, cy, max(3.0, r * 0.34), (255, 205, 90))
+        # one ring of plates per earned segment, plus the base shell
+        for ring in range(st["segments"] + 1):
+            rr = r * (1.0 + 0.34 * ring)
+            n = 10 + ring * 4
+            for k in range(n):
+                a = k * 2.39996 + ring * 0.7
+                disc(cx + math.cos(a) * rr, cy + math.sin(a) * rr,
+                     max(1.5, r * 0.13), (222, 218, 232))
+
+    # --- missions: a glow trace per state, one row each
+    for m, mi in enumerate(missions):
+        oy = CELL + 8 + m * RH
+        g = mi["glow"]
+        # A baseline and a ceiling per row, so each trace is read against its
+        # own scale instead of against its neighbour.
+        for x in range(W):
+            put(x, oy + RH - 14, (64, 56, 88))
+            if x % 6 < 3:
+                put(x, oy + RH - 14 - (RH - 26), (40, 36, 56))
+        for k, v in enumerate(g):
+            x0 = int(k / len(g) * (W - 8))
+            x1 = int((k + 1) / len(g) * (W - 8))
+            h = int(v * (RH - 26))
+            # ATTENDANCE IS THE TRUTHFULNESS BIT: a state that draws no Dog is
+            # drawn cold, so "nothing is happening" cannot look like work.
+            col = (255, 190, 70) if mi["attends"] else (90, 96, 130)
+            for x in range(x0, max(x0 + 1, x1)):
+                for y in range(oy + RH - 14 - h, oy + RH - 14):
+                    put(x, y, col)
+
+    write_png(args.out, W, H, px)
+    print("render-gait-strip: %s  %dx%d  avatar stages=%s  missions=%s"
+          % (args.out, W, H, ",".join(s["name"] for s in stages),
+             ",".join(m["name"] for m in missions)))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="/tmp/gait-strip.png")
     ap.add_argument("--frames", type=int, default=8)
     ap.add_argument("--cell", type=int, default=210)
-    ap.add_argument("--mode", choices=("gait", "upright", "footlock"), default="gait")
+    ap.add_argument("--mode", choices=("gait", "upright", "footlock", "avatar"),
+                    default="gait")
     args = ap.parse_args()
 
     for path in (BODY_JSON, GOLDEN_JSON):
@@ -263,6 +347,8 @@ def main():
         return render_upright(args, body)
     if args.mode == "footlock":
         return render_footlock(args, body)
+    if args.mode == "avatar":
+        return render_avatar(args)
     golden = json.load(io.open(GOLDEN_JSON, encoding="utf8"))
     worst = check_parity(golden)
 
