@@ -132,7 +132,12 @@ namespace WonderlandDogBody
 			if (OutRig != nullptr)
 			{
 				const FVector Rest = Comp->GetRelativeLocation();
-				if (Built < 4) { OutRig->Legs[Built] = Comp; OutRig->LegRest[Built] = Rest; }
+				if (Built < 4)
+				{
+					OutRig->Legs[Built] = Comp;
+					OutRig->LegRest[Built] = Rest;
+					OutRig->LegRestScale[Built] = Comp->GetRelativeScale3D();
+				}
 				else if (Built == 4) { OutRig->Torso = Comp; OutRig->TorsoRest = Rest; }
 				else if (Built == 5) { OutRig->Head = Comp; OutRig->HeadRest = Rest; }
 			}

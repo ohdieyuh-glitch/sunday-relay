@@ -77,6 +77,13 @@ namespace WonderlandDogBody
 		 *  canonical proportions put each part at rather than to the origin. */
 		FVector LegRest[4] = { FVector::ZeroVector, FVector::ZeroVector,
 		                       FVector::ZeroVector, FVector::ZeroVector };
+		/** Rest scale of each leg. A limb that swings from the hip needs to know
+		 *  where the hip IS — it is half a leg above the rest centre — and it
+		 *  stretches, so the length it stretches FROM has to be recorded before
+		 *  anything writes to the component. Reading the scale back at pose time
+		 *  would compound last frame's stretch into this frame's. */
+		FVector LegRestScale[4] = { FVector::OneVector, FVector::OneVector,
+		                            FVector::OneVector, FVector::OneVector };
 		FVector TorsoRest = FVector::ZeroVector;
 		FVector HeadRest = FVector::ZeroVector;
 	};

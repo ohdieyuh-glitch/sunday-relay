@@ -184,6 +184,11 @@ void AWonderlandStrollingDog::PoseLegs(float Travelled, float SettleAlpha)
 	// SettleAlpha 1 means "stand": the paws blend back to their rest pose. A
 	// Dog that stops mid-stride and freezes is the snapping the founder saw.
 	const float Blend = 1.0f - FMath::Clamp(SettleAlpha, 0.0f, 1.0f);
+	// The body's carriage is needed BEFORE the legs, because the hip rides it.
+	// A hip that stays put while the torso rises opens a gap at the shoulder.
+	const WonderlandGait::FBodyPose BodyPose =
+		WonderlandGait::BodyPose(Travelled / StrideLength, StrideBob);
+
 	for (int32 i = 0; i < 4; ++i)
 	{
 		UStaticMeshComponent* const Leg = Rig.Legs[i];
@@ -192,16 +197,42 @@ void AWonderlandStrollingDog::PoseLegs(float Travelled, float SettleAlpha)
 			continue;
 		}
 		const float Phase = Travelled / StrideLength + WonderlandGait::LegPhaseOffset(i);
-		const WonderlandGait::FLegPose Pose =
+		WonderlandGait::FLegPose Pose =
 			WonderlandGait::LegPose(Phase, StrideLength, StrideLift);
+		// Settling blends the TARGET, not the result, so the swing angle and
+		// the stretch both fall to rest with it rather than being faded on top
+		// of a limb still held at an angle.
+		Pose.Forward *= Blend;
+		Pose.Lift *= Blend;
+
+		// THE LIMB SWINGS FROM THE HIP RATHER THAN SLIDING. This used to set a
+		// relative location and nothing else: the leg cube was translated
+		// forward and back with the paw in the right place and nothing about it
+		// pivoting, which reads as a box on a rail. See WonderlandDogGait.h for
+		// why the answer is a stretching limb and not a knee.
 		const FVector Rest = Rig.LegRest[i];
-		Leg->SetRelativeLocation(FVector(Rest.X + Pose.Forward * Blend,
+		const float LegLen = Rig.LegRestScale[i].Z * 100.0f;   // Cube is 100 uu at scale 1
+		if (LegLen <= KINDA_SMALL_NUMBER)
+		{
+			Leg->SetRelativeLocation(FVector(Rest.X + Pose.Forward, Rest.Y, Rest.Z + Pose.Lift));
+			continue;
+		}
+		const float HipZ = Rest.Z + LegLen * 0.5f + BodyPose.Bob * Blend;
+		const float HipUU = LegLen + BodyPose.Bob * Blend;
+		const WonderlandGait::FLegSwing Swing = WonderlandGait::LegSwing(Pose, HipUU);
+		const float Reach = HipUU * Swing.Stretch;
+		// UE pitch rotates +X toward +Z, so a component's local -Z — the
+		// direction the leg hangs — maps to (sin p, 0, -cos p). Positive pitch
+		// therefore carries the paw forward, which is what LegSwing means by it.
+		const float Rad = FMath::DegreesToRadians(Swing.PitchDeg);
+		Leg->SetRelativeRotation(FRotator(Swing.PitchDeg, 0.0f, 0.0f));
+		Leg->SetRelativeScale3D(FVector(Rig.LegRestScale[i].X, Rig.LegRestScale[i].Y,
+		                                Rig.LegRestScale[i].Z * (Reach / LegLen)));
+		Leg->SetRelativeLocation(FVector(Rest.X + Reach * 0.5f * FMath::Sin(Rad),
 		                                 Rest.Y,
-		                                 Rest.Z + Pose.Lift * Blend));
+		                                 HipZ - Reach * 0.5f * FMath::Cos(Rad)));
 	}
 
-	const WonderlandGait::FBodyPose BodyPose =
-		WonderlandGait::BodyPose(Travelled / StrideLength, StrideBob);
 	if (Rig.Torso != nullptr)
 	{
 		Rig.Torso->SetRelativeLocation(FVector(Rig.TorsoRest.X, Rig.TorsoRest.Y,

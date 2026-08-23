@@ -590,6 +590,27 @@ if sed 's|//.*||' "$SD" | grep -q 'LineTraceSingleByChannel'; then
 else
   bad "the Dog never looks for the floor, so it floats on any slope"
 fi
+# A LIMB THAT SLIDES IS NOT A LIMB. The first gait moved each leg with
+# SetRelativeLocation alone: the paw went to the right place and nothing
+# pivoted, which reads as a box on a rail. The engine has to swing it.
+if sed 's|//.*||' "$SD" | grep -q 'SetRelativeRotation'; then
+  ok "...and swings each limb from the hip rather than sliding it"
+else
+  bad "the legs are translated, never rotated — they will read as boxes on a rail"
+fi
+if sed 's|//.*||' "$SD" | grep -q 'LegSwing'; then
+  ok "...using the shared swing solve, not a second one"
+else
+  bad "the stroller rotates legs by some other arithmetic than WonderlandGait::LegSwing"
+fi
+# The stretch has to be measured from a RECORDED rest scale. Reading the
+# component's current scale back would compound last frame's stretch into this
+# frame's and the legs would grow without bound.
+if sed 's|//.*||' "$SD" | grep -q 'LegRestScale'; then
+  ok "...and stretches from a recorded rest length, so it cannot compound"
+else
+  bad "the leg stretch has no recorded rest length to measure from"
+fi
 
 echo "== "sharper" is a number, not an impression =="
 # The founder's note is "too blurry, too soft, too smeared, not crisp enough for
