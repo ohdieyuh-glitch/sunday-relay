@@ -74,7 +74,30 @@ fi
 if [ "$GIT_SHA" = "unknown" ]; then
   item UNVERIFIED "git sha" "no git checkout found"
 else
-  item PASS "git sha" "$GIT_SHA"
+  item PASS "checkout sha" "$GIT_SHA"
+fi
+
+# THE CHECKOUT IS NOT THE BUILD, and printing one line called "git sha" beside
+# "packaged build ... 1.2G" invites the reader to believe it is. It is not even
+# unusual for them to differ: every fix pulled onto the box between a build and
+# a proof run moves the checkout and leaves the package where it was. This run
+# reported f3c1619 next to a package compiled from 1b823a6, and the difference
+# was the whole point of the session — the footfall order.
+#
+# build-wonderland.sh writes compiled.sha next to its logs precisely so this
+# question has an answer. So: report both, and say plainly when they disagree.
+COMPILED_SHA_FILE="$WL_OUT/logs/compiled.sha"
+if [ -f "$COMPILED_SHA_FILE" ]; then
+  COMPILED_SHA="$(tr -d '[:space:]' < "$COMPILED_SHA_FILE")"
+  if [ "$COMPILED_SHA" = "$GIT_SHA" ]; then
+    item PASS "compiled sha" "$COMPILED_SHA (the checkout and the package agree)"
+  else
+    item UNVERIFIED "compiled sha" \
+      "$COMPILED_SHA — the PACKAGE is this; the checkout is $GIT_SHA. Everything measured below came from the package, NOT from the checkout."
+  fi
+else
+  item UNVERIFIED "compiled sha" \
+    "no $COMPILED_SHA_FILE — nothing here can be attributed to a commit"
 fi
 
 # ------------------------------------------------------------ the engine

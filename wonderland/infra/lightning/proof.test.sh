@@ -211,6 +211,41 @@ out6="$(run_proof "$TMP/w6")"
 has "$out6" "PASS        fatal scan: build.log" && ok "ordinary chatter is not a fatal" \
   || bad "routine log noise was reported as fatal"
 
+echo "== the checkout is not the build =="
+# A proof run printed "git sha f3c1619" beside "packaged build 1.2G" while the
+# package had been compiled from 1b823a6. Every number under that line came
+# from the older binary. The report has to distinguish them or it invites the
+# reader to attribute measurements to code that never ran.
+make_world "$TMP/wsha" built real url
+( cd "$TMP/wsha/src" && git init -q . >/dev/null 2>&1 \
+  && git config user.email t@t && git config user.name t \
+  && git commit -q --allow-empty -m x ) >/dev/null 2>&1
+HEADSHA="$( ( cd "$TMP/wsha/src" && git rev-parse HEAD ) 2>/dev/null || echo "" )"
+if [ -z "$HEADSHA" ]; then
+  echo "  ..   git unavailable here; the sha-provenance checks cannot run"
+else
+  mkdir -p "$TMP/wsha/packaged/logs"
+  # 1. package compiled from a DIFFERENT commit
+  printf '%s\n' "0000000000000000000000000000000000000000" > "$TMP/wsha/packaged/logs/compiled.sha"
+  outs="$(run_proof "$TMP/wsha")"
+  has "$outs" "UNVERIFIED  compiled sha" \
+    && ok "a package built from another commit is NOT reported as verified" \
+    || bad "a mismatched compiled sha passed silently"
+  has "$outs" "$HEADSHA" && ok "  and the report names the checkout it differs from" \
+    || bad "  the report does not say what the checkout was"
+  # 2. package and checkout agree
+  printf '%s\n' "$HEADSHA" > "$TMP/wsha/packaged/logs/compiled.sha"
+  outs2="$(run_proof "$TMP/wsha")"
+  has "$outs2" "PASS        compiled sha" && ok "matching shas read PASS" \
+    || bad "a matching compiled sha did not pass"
+  # 3. no compiled.sha at all — unattributable, never a pass
+  rm -f "$TMP/wsha/packaged/logs/compiled.sha"
+  outs3="$(run_proof "$TMP/wsha")"
+  has "$outs3" "UNVERIFIED  compiled sha" \
+    && ok "a package with no compiled.sha is unattributable, not passing" \
+    || bad "a package with no recorded sha was treated as attributable"
+fi
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" -eq 0 ]
