@@ -201,7 +201,12 @@ LOOK = {
     # The bracket also proved the thing worth keeping: at the SAME luma the
     # brighter build carried three times the chroma (0.231 against 0.077 at
     # luma 0.30-0.40). The darkness really was crushing the colour.
-    "sunLux": 1950.0,
+    # 1950 -> 3400, taking over the level that skyIntensity is giving up, but
+    # as a KEY: directional, shadow-casting, one direction. At bounceRatio 0.72
+    # this also puts 2,448 lux of WARM bounce into the shade, which is what the
+    # earlier sky-cut attempt could not do -- at sunLux 1150 the bounce was only
+    # 828 lux and cutting the sky just made the world black.
+    "sunLux": 3400.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -335,7 +340,23 @@ LOOK = {
     # the shadow end is where most of Wonderland lives -- 59% of the foliage and
     # 73% of the leaf cards are in it. Lifting fill faster than key narrows the
     # ratio, which is the actual shape of the defect.
-    "skyIntensity": 14.0,
+    # 14.0 -> 3.0. THE WORLD HAD NO SHADOW LEFT IN IT. Per material, the share
+    # of pixels below the shadow threshold, on a delivered frame:
+    #
+    #     mush_red  1%     stone  4%     gold  4%     roof_rose  4%
+    #
+    # against 59-73% two builds earlier. An omnidirectional fill this strong
+    # reaches every face of every object equally, so nothing turns away from
+    # the light and nothing casts. That removes FORM, and form is most of what
+    # makes a render read as a place rather than a pile of shapes -- the
+    # reference has hard sun, real cast shadows and lit/shade sides on every
+    # mushroom.
+    #
+    # It is also the last standing candidate for the colour. Everything else
+    # has been refuted by the frame that tested it: specular, fog, the sky's
+    # hue, bloom, the ACES shoulder, and the materials themselves (which a
+    # runtime line now proves are bound correctly on all 147 batches).
+    "skyIntensity": 3.0,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -419,7 +440,10 @@ LOOK = {
     # the fix is to keep lighting the world and stop pushing the RESULT into
     # the shoulder. Gain runs before the tonemap curve, which is what makes it
     # the instrument here rather than exposure bias.
-    "gain": (0.46, 0.46, 0.48),
+    # 0.46 -> 0.60, holding the frame near the reference distribution now that
+    # the fill is coming down with it. 0.46 was measured against a frame lit by
+    # a 14.0 sky; it is not the same frame any more.
+    "gain": (0.60, 0.60, 0.62),
     # RAISED 1.52 -> 1.78. Saturation was tuned while the frame carried a
     # false gold cast, and in that state it multiplied the CAST rather than the
     # palette -- which is why it was correct to be suspicious of it. The cast is
