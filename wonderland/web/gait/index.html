@@ -1,0 +1,72 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Relay Dog — gait preview</title>
+<!--
+  WATCH THE WALK BEFORE CLAIMING IT WALKS.
+
+  The founder's note was that the Dogs "slide, teleport, jitter, snap". The fix
+  is arithmetic and is proven as arithmetic by WonderlandDogGait.test.cpp — but
+  "the maths says the paw is stationary" and "it reads as walking" are different
+  claims, and only the second one is what was complained about. Confirming the
+  second on the L4 costs a build, a cook, a package and a stream. It costs
+  nothing here.
+
+  This is not a substitute for Unreal. It runs the SAME numbers — gait.js is
+  checked sample-for-sample against the engine's own table, and the Dog is built
+  from a part list generated out of WonderlandDogBody.cpp rather than retyped —
+  so what it cannot show is materials, lighting and Marble. What it can show is
+  whether the legs move independently and whether a planted paw stays put.
+
+  No bundler, no build step: an import map and the copy of three in node_modules.
+  Serve the repo root and open /wonderland/web/gait/.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "three": "/node_modules/three/build/three.module.js",
+    "three/addons/": "/node_modules/three/examples/jsm/"
+  }
+}
+</script>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0d0b14; color: #e8e4f0;
+               font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #app { position: fixed; inset: 0; }
+  #hud { position: fixed; top: 12px; left: 12px; z-index: 2; max-width: 340px;
+         background: rgba(14,12,22,.82); border: 1px solid #2e2740;
+         border-radius: 8px; padding: 10px 12px; }
+  #hud h1 { margin: 0 0 6px; font-size: 13px; letter-spacing: .04em; color: #c9b6ff; }
+  #hud dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0 0; }
+  #hud dt { color: #8f86a8; } #hud dd { margin: 0; }
+  .bad { color: #ff6b8a; } .good { color: #6bffa8; }
+  #ctl { position: fixed; bottom: 12px; left: 12px; z-index: 2; display: flex;
+         gap: 8px; flex-wrap: wrap; align-items: center;
+         background: rgba(14,12,22,.82); border: 1px solid #2e2740;
+         border-radius: 8px; padding: 8px 12px; }
+  label { color: #8f86a8; }
+  input[type=range] { width: 110px; vertical-align: middle; }
+  button { background: #241d38; color: #e8e4f0; border: 1px solid #4a3d6b;
+           border-radius: 5px; padding: 3px 9px; cursor: pointer; font: inherit; }
+  button[aria-pressed=true] { background: #4a3d6b; border-color: #8f7ac4; }
+</style>
+<div id="app"></div>
+<div id="hud">
+  <h1>RELAY DOG · CLASSIC QUADRUPED</h1>
+  <dl>
+    <dt>speed</dt><dd id="h-speed">—</dd>
+    <dt>stride</dt><dd id="h-stride">—</dd>
+    <dt>paws down</dt><dd id="h-down">—</dd>
+    <dt>footfall</dt><dd id="h-order">—</dd>
+    <dt>paw slip</dt><dd id="h-slip">—</dd>
+    <dt>fps</dt><dd id="h-fps">—</dd>
+  </dl>
+</div>
+<div id="ctl">
+  <label>speed <input id="c-speed" type="range" min="0" max="320" value="130"></label>
+  <label>stride <input id="c-stride" type="range" min="60" max="220" value="120"></label>
+  <button id="c-trails" aria-pressed="true">paw trails</button>
+  <button id="c-slow" aria-pressed="false">¼ speed</button>
+  <button id="c-side" aria-pressed="false">side view</button>
+</div>
+<script type="module" src="./preview.js"></script>

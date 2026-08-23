@@ -24,8 +24,41 @@ static void Check(const std::string& Name, bool Ok, const std::string& Detail = 
 	          Detail.empty() ? "" : "\n         ", Detail.c_str()); }
 }
 
-int main()
+// THE C++ IS THE SOURCE OF TRUTH FOR THE GAIT, and the browser preview is a
+// second implementation of it. Two implementations of the same arithmetic drift
+// — the placement math already taught that, which is why the inspector consumes
+// a contract rather than re-deriving a basis. Same answer here: this binary
+// emits the table, the JS is checked against it, and the JS is never the
+// authority. `--golden` prints it; nothing else changes.
+static int EmitGolden()
 {
+	using namespace WonderlandGait;
+	const float Stride = 120.0f, Lift = 18.0f, Bob = 3.0f;
+	std::printf("{\n");
+	std::printf("  \"note\": \"emitted by WonderlandDogGait.test.cpp --golden; do not hand-edit\",\n");
+	std::printf("  \"stride\": %.1f, \"lift\": %.1f, \"bob\": %.1f,\n", Stride, Lift, Bob);
+	std::printf("  \"dutyFactor\": %.6f,\n", WalkDutyFactor);
+	std::printf("  \"legPhaseOffset\": [%.6f, %.6f, %.6f, %.6f],\n",
+	            LegPhaseOffset(0), LegPhaseOffset(1), LegPhaseOffset(2), LegPhaseOffset(3));
+	std::printf("  \"samples\": [\n");
+	const int N = 64;
+	for (int i = 0; i < N; ++i)
+	{
+		const float P = i / float(N);
+		const FLegPose L = LegPose(P, Stride, Lift);
+		const FBodyPose B = BodyPose(P, Bob);
+		std::printf("    {\"p\": %.6f, \"fwd\": %.6f, \"lift\": %.6f, \"stance\": %s, "
+		            "\"bob\": %.6f, \"pitch\": %.6f, \"roll\": %.6f}%s\n",
+		            P, L.Forward, L.Lift, L.bStance ? "true" : "false",
+		            B.Bob, B.Pitch, B.Roll, (i + 1 < N) ? "," : "");
+	}
+	std::printf("  ]\n}\n");
+	return 0;
+}
+
+int main(int argc, char** argv)
+{
+	if (argc > 1 && std::string(argv[1]) == "--golden") { return EmitGolden(); }
 	using namespace WonderlandGait;
 	const float Stride = 120.0f;
 	const float Lift = 14.0f;

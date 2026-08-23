@@ -591,6 +591,32 @@ wl_turn_container_running() {
 # engine and coturn.
 #
 # Prints the node binary to use on success. Fails closed otherwise.
+# A NODE INSTALL IS node AND npm, because Wilbur is started with `npm start`.
+#
+# This distinction is not pedantry, it is a bill that has already been paid.
+# The bundled install lost its lib/node_modules across a machine switch — the
+# 120 MB binary survived, npm's symlink was left dangling — and BOTH checks
+# below passed, because both looked only at `node -v`. The launch then died at
+# `command -v npm` in stage 5 of 8, after a full cook and a 1.2 GB package, on
+# a metered L4.
+#
+# So "is there a node" is answered here, once, by asking the question the
+# caller actually has: can Wilbur be started with this.
+#
+# Prints nothing; returns 0 when the install is usable.
+wl_node_install_usable() {
+  local node="$1" required="${2:-}"
+  [ -n "$node" ] && [ -x "$node" ] || return 1
+  if [ -n "$required" ]; then
+    [ "$("$node" -v 2>/dev/null || true)" = "$required" ] || return 1
+  fi
+  # -x follows symlinks, so a dangling npm link fails here exactly as it fails
+  # for `command -v npm` — which is the failure being prevented.
+  local dir; dir="$(dirname "$node")"
+  [ -x "$dir/npm" ] || return 1
+  return 0
+}
+
 wl_require_node() {
   local required actual node
   required="$(wl_ps_required_node)"
@@ -600,6 +626,11 @@ wl_require_node() {
     actual="$("$node" -v 2>/dev/null || true)"
     [ "$actual" = "$required" ] || wl_die \
       "the bundled node at $node is $actual, but this checkout requires $required. Install the matching node on CPU; a GPU launch will not download one."
+    # THE VERSION IS RIGHT AND THE INSTALL CAN STILL BE UNUSABLE. Named here
+    # rather than eight lines later in run-stream.sh, where "no npm alongside
+    # node" reads as a packaging mystery instead of a stripped directory.
+    wl_node_install_usable "$node" "$required" || wl_die \
+      "the bundled node at $node is $actual but has no working npm beside it — $(dirname "$node")/npm is missing or dangling, so lib/node_modules was stripped. Repair it by re-running prepare.sh (wl_ensure_node reinstalls over a node with no npm)."
   else
     node="$(command -v node || true)"
     [ -n "$node" ] || wl_die "no bundled node and no node on PATH; Wilbur cannot start (requires $required)"
@@ -626,13 +657,19 @@ wl_ensure_node() {
   [ -n "$required" ] || { wl_warn "no NODE_VERSION in $WL_PS_INFRA; cannot install node"; return 1; }
 
   node="$(wl_bundled_node)"
-  if [ -n "$node" ] && [ "$("$node" -v 2>/dev/null)" = "$required" ]; then
-    wl_ok "node $required already bundled at $node"
+  if wl_node_install_usable "$node" "$required"; then
+    wl_ok "node $required already bundled at $node (with npm)"
     return 0
   fi
-  node="$(command -v node || true)"
+  # A node of the RIGHT VERSION with no npm is not "already installed" — it is
+  # a broken install, and returning 0 here is what let a stripped directory
+  # travel all the way to a metered launch. Say so and reinstall over it.
   if [ -n "$node" ] && [ "$("$node" -v 2>/dev/null)" = "$required" ]; then
-    wl_ok "node $required already on PATH at $node"
+    wl_warn "the bundled node $required at $node has no npm — reinstalling over it"
+  fi
+  node="$(command -v node || true)"
+  if wl_node_install_usable "$node" "$required"; then
+    wl_ok "node $required already on PATH at $node (with npm)"
     return 0
   fi
 
@@ -659,7 +696,13 @@ wl_ensure_node() {
     wl_warn "installed node reports '$got', expected '$required'"
     return 1
   fi
-  wl_ok "node $required installed at $WL_PS_INFRA/node/bin/node"
+  # Check what was actually asked for. An unpack that dropped lib/node_modules
+  # leaves a working `node -v` and no npm at all.
+  if ! wl_node_install_usable "$WL_PS_INFRA/node/bin/node" "$required"; then
+    wl_warn "node $required unpacked but npm is not beside it at $WL_PS_INFRA/node/bin/npm"
+    return 1
+  fi
+  wl_ok "node $required installed at $WL_PS_INFRA/node/bin/node (with npm)"
   return 0
 }
 
