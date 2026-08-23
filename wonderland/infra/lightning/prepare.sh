@@ -234,6 +234,7 @@ NODE_STATE="$(wl_node_status)"
 case "$NODE_STATE" in
   READY)         wl_ok "SIGNALLING NODE READY - $(wl_ps_required_node)" ;;
   WRONG_VERSION) wl_warn "SIGNALLING NODE WRONG - need $(wl_ps_required_node), stage 5 will fail closed" ;;
+  NO_NPM)        wl_warn "SIGNALLING NODE INCOMPLETE - right version, no npm beside it; wl_ensure_node below reinstalls over it" ;;
   *)             wl_warn "SIGNALLING NODE MISSING - no NODE_VERSION file or no node at all" ;;
 esac
 # Wilbur's node_modules: the thing that vanished across a CPU->L4 switch.

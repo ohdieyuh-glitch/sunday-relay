@@ -654,6 +654,26 @@ out="$(node_call wl_require_node)"; rc=$?
 [ "$rc" != "0" ] && ok "a near-miss node version is still refused" \
                  || bad "v22.14.1 was accepted for a v22.14.0 requirement"
 
+# A NODE WITH NO npm. This is not hypothetical: the bundled install lost its
+# lib/node_modules across a machine switch, leaving a working 120 MB binary and
+# a DANGLING npm symlink. Every check passed and the launch died at stage 5 of
+# 8, after a full cook, on a metered L4. Both shapes are covered — npm absent,
+# and npm present but pointing at nothing, which is what `-x` has to catch.
+real_ps UE5.8; mknode v22.14.0; rm -f "$TMP/nbin/npm"
+out="$(node_call wl_require_node)"; rc=$?
+[ "$rc" != "0" ] && ok "a node with NO npm is refused" \
+                 || bad "a node with no npm was accepted - Wilbur is started with npm start"
+has "$out" "npm" && ok "  and the message names npm as the missing piece" \
+  || bad "  the failure does not mention npm"
+check "$(node_call wl_node_status)" "NO_NPM" "  and reads NO_NPM, not READY"
+
+ln -sf "$TMP/nbin/does-not-exist" "$TMP/nbin/npm"
+out="$(node_call wl_require_node)"; rc=$?
+[ "$rc" != "0" ] && ok "a DANGLING npm symlink is refused too - the real failure" \
+                 || bad "a dangling npm symlink was accepted"
+check "$(node_call wl_node_status)" "NO_NPM" "  and also reads NO_NPM"
+mknode v22.14.0   # restore a complete install for what follows
+
 # no NODE_VERSION file at all is a failure, never an assumption
 real_ps UE5.8; rm -f "$TMP/ps/NODE_VERSION"; mknode v22.14.0
 out="$(node_call wl_require_node)"; rc=$?

@@ -715,7 +715,12 @@ wl_node_status() {
   [ -n "$node" ] || node="$(command -v node || true)"
   [ -n "$node" ] || { echo MISSING; return; }
   actual="$("$node" -v 2>/dev/null || true)"
-  [ "$actual" = "$required" ] && echo READY || echo WRONG_VERSION
+  [ "$actual" = "$required" ] || { echo WRONG_VERSION; return; }
+  # NO_NPM IS ITS OWN STATE. This used to print READY for an install with the
+  # right node and no npm — the readiness block an operator reads before
+  # switching to a metered GPU said the node was fine, and stage 5 then died on
+  # it. A report that cannot express a failure will not report one.
+  wl_node_install_usable "$node" "$required" && echo READY || echo NO_NPM
 }
 
 # ============================================================ GPU / VULKAN
