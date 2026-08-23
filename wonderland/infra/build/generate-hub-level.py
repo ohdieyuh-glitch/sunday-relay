@@ -116,7 +116,13 @@ LOOK = {
     # the sun already reaches, which is what makes it different from lifting
     # exposure and washing the whole frame.
     "bouncePitch": 62.0,             # AIMED UP. Positive pitch, unlike key/fill.
-    "bounceRatio": 0.22,             # of sunLux. Dim: a hint, never a second key.
+    # RAISED 0.22 -> 0.55 AFTER MEASURING. At 0.22 the bounce was 75 lux against
+    # a 340-lux key and the streamed frame was still 40.7% below the shadow
+    # threshold. Manual exposure moved that by 0.4 points — nothing — which
+    # rules metering out: the black is surfaces receiving no light, and the fix
+    # is the RATIO of fill to key, not the level. A ratio change is also the one
+    # thing auto-exposure cannot undo, because re-metering scales both together.
+    "bounceRatio": 0.55,
     "bounceWarm": (1.00, 0.93, 0.82),  # tinted by warm stone paving
     "bounceEnabled": 1,
     # --- foreground planting ---------------------------------------
@@ -4475,7 +4481,13 @@ def build(layout):
         # Still the first value to revisit against a real streamed frame: the
         # trace has no Lumen, so it can bound this decision and cannot settle it.
         try:
-            sky_comp.set_intensity(0.90)
+            # 0.90 was chosen from a CPU trace that found the 0.42-1.15 range
+            # "flat, not a cliff". That trace measured luma spread, not the
+            # COUNT of pixels below the shadow threshold — and the streamed
+            # frame is 40.7% below it. Ambient is what reaches surfaces the
+            # sun and fill never touch, which is precisely what those pixels
+            # are, so it goes up with the ground bounce.
+            sky_comp.set_intensity(1.60)
         except Exception:
             pass
         # Real-time captured sky ambient — needs no lighting build.
@@ -5469,9 +5481,9 @@ def build(layout):
     _FG_BEDS = 0
     _FG_CAPS = 0
     _FG_SHRUBS = 0
-    for _i in range(34 if int(LOOK["foregroundPlanting"]) else 0):
+    for _i in range(96 if int(LOOK["foregroundPlanting"]) else 0):
         _h = (_i * 2654435761) & 0xFFFFFFFF
-        _t = _i / 33.0
+        _t = (_i % 32) / 31.0
         # INSIDE THE FRAME. The first version spanned 3,062 uu where the frame is
         # about 2,170 uu wide at this distance, so a third of the planting was
         # never in shot. Derived from the camera rather than guessed again.
@@ -5511,6 +5523,25 @@ def build(layout):
                 _FG_CAPS += 1
     unreal.log_warning("FOREGROUND PLANTING placed %d beds, %d shrubs, %d mushroom caps"
                        % (_FG_BEDS, _FG_SHRUBS, _FG_CAPS))
+
+    # HERO MUSHROOMS, LEFT AND RIGHT. The reference opens on big red-and-white
+    # caps flanking the frame at eye height; they are the first thing the eye
+    # reads and the near band had none. Placed OUTSIDE the boulevard so they
+    # frame the view instead of blocking it, and kept short enough to stay
+    # under the skyline.
+    _HERO_CAPS = 0
+    for _side in (-1.0, 1.0):
+        for _r in range(5):
+            _my = _FG_START + 220.0 + 620.0 * _r
+            _half = (_my - ARRIVAL_CAM[1]) * math.tan(math.radians(75.0 * 0.5))
+            _mx = _side * (_half * (0.60 + 0.07 * _r))
+            if math.hypot(_mx - HERO_DOG[0], _my - HERO_DOG[1]) < 420.0:
+                continue
+            kit_mushroom(_mx, _my, 1.5 + 0.5 * ((_r * 3) % 3) / 2.0,
+                         "HeroCap%d_%d" % (int(_side), _r),
+                         ("mush_red", "mush_purple", "mush_red")[_r % 3])
+            _HERO_CAPS += 1
+    unreal.log_warning("HERO MUSHROOMS placed %d flanking caps" % _HERO_CAPS)
 
     # ---- MIDGROUND VERTICALS ------------------------------------------
     # WHERE THE FRAME ACTUALLY HAS ROOM, measured rather than assumed.
