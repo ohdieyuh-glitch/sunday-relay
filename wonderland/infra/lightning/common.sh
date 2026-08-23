@@ -124,7 +124,19 @@ wl_verify_source() {
 Refusing to compile source that is not the branch that was asked for."
   fi
   remote="$(git -C "$WL_SRC" rev-parse "origin/$WL_BRANCH" 2>/dev/null || echo "")"
-  if [ -z "$remote" ]; then
+  # THE ESCAPE HATCH HAS TO ACTUALLY OPEN. This block's own message says "or set
+  # WL_REQUIRE_SHA=$sha to compile this commit deliberately" -- and setting it
+  # did nothing, because WL_REQUIRE_SHA is only checked ABOVE, against the
+  # checkout it already matches. The advice satisfied a different condition than
+  # the one it was advising about, so the die fired anyway and the operator is
+  # told to do something that cannot work. That cost a full build cycle.
+  #
+  # Naming this exact commit IS the deliberate act the message describes, so it
+  # stands in for the origin-head check. A WRONG WL_REQUIRE_SHA still dies above,
+  # which is the case the runner test covers.
+  if [ -n "$WL_REQUIRE_SHA" ] && [ "$sha" = "$WL_REQUIRE_SHA" ]; then
+    wl_warn "$where: compiling $sha deliberately (WL_REQUIRE_SHA); not checking it against origin/$WL_BRANCH"
+  elif [ -z "$remote" ]; then
     wl_warn "$where: no origin/$WL_BRANCH locally — cannot confirm this is the branch head"
   elif [ "$sha" != "$remote" ]; then
     wl_die "$where: the checkout is at $sha but origin/$WL_BRANCH is at $remote.
