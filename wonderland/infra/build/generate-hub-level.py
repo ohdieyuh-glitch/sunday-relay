@@ -4453,7 +4453,7 @@ def build(layout):
         return parts
 
     def stroll_dog(x, y, label, s=1.2, body="dog_body", roam=800.0, is_hero=False, accessory="none",
-                   keep_out=None, attends=None):
+                   keep_out=None, attends=None, upright=0):
         # Spawn the LOCOMOTION actor. The Dog's BODY is now built in C++ (BuildBody),
         # NOT attached here — that is what lets the Head and Tail be animated (idle
         # look-around + walk nod on the head, a wagging tail). The generator only
@@ -4521,6 +4521,12 @@ def build(layout):
         # failure this file has had too many of.
         set_prop(stroller, "CoatName", unreal.Name(body))
         set_prop(stroller, "Accessory", unreal.Name(accessory))
+        # WHICH DOGS STAND. WonderlandStance::EUprightRole -- 0 none, 1 hero,
+        # 2 working, 3 ceremonial, 4 special skin. Zero is the default and the
+        # founder's rule: quadruped CLASSIC / RELAY OG stays the canonical spawn
+        # identity, so a Dog stands only where something asks for it.
+        if int(upright):
+            set_prop(stroller, "UprightRole", int(upright))
         if keep_out is not None:
             # The HERO Dog is exempt on purpose: it is the arrival composition's
             # SUBJECT and stands 927 uu from the lens by design. Excluding it
@@ -6146,8 +6152,13 @@ def build(layout):
     # southern arc of the arcane circle it is about 13 m out, a quarter of the
     # frame's height, and standing on the violet ring that is its Relay identity
     # — which is exactly the foreground the brief describes.
+    # THE HERO DOG STANDS. The founder's spec sheet draws the Relay Dog upright
+    # and asks for the featured Dog of the arrival frame to be presented that
+    # way -- so the one Dog the camera is aimed at is the one carrying the
+    # standing body plan. Everything about its identity is unchanged: same
+    # white blocky body, same black visor, same gold eyes, same tail.
     stroll_dog(HERO_DOG[0], HERO_DOG[1], "RelayDog", s=HERO_DOG_SCALE,
-               is_hero=True, roam=230.0)
+               is_hero=True, roam=230.0, upright=1)
     # (The travelling arrival ring is gone: with the camera fixed the Dog stands
     # on the real arcane circle, so a second one would only sit inside the first.)
     # A DRIFT OF KEYS, not three of them. They read as a current of magic moving
@@ -6282,9 +6293,16 @@ def build(layout):
             _ba = math.atan2(_dyh, _dxh) if _dh > 1.0 else (i * 1.7)
             cx = HERO_DOG[0] + math.cos(_ba) * 1150.0
             cy = HERO_DOG[1] + math.sin(_ba) * 1150.0
+        # NOT EVERY DOG STANDS -- that is the rule, not an omission. The two
+        # that ATTEND an Avatar stand, because attending is work and the sheet's
+        # upright form is what a working Dog is drawn in; one more stands
+        # ceremonially so the plaza reads as a place where both forms live. The
+        # rest stay quadruped CLASSIC, which is the canonical identity.
+        _upright = 2 if i in (0, 3) else (3 if i == 5 else 0)
         stroll_dog(cx, cy, "Companion%d" % i, s=1.05, body=coat, roam=1100.0, accessory=acc,
                    keep_out=(ARRIVAL_CAM, ARRIVAL_KEEP_OUT),
-                   attends=(_avatar if i in (0, 3) else None))
+                   attends=(_avatar if i in (0, 3) else None),
+                   upright=_upright)
     # ---- FOREGROUND PLANTING ------------------------------------------
     # THE MEASUREMENT THIS ANSWERS. The last streamed arrival frame classified
     # 0.1% green and 2.1% pink, against 25% and 7.7% in the offline preview of

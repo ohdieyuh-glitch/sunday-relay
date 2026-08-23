@@ -134,6 +134,11 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
 	FName CurrentWorkName = FName(TEXT("none"));
 
+	/** Reported by the world proof so "some Dogs stand upright" is a recorded
+	 *  number rather than an impression, the same way PawsGrounded is. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
+	FName CurrentStanceName = FName(TEXT("quadruped"));
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -146,6 +151,11 @@ private:
 
 	/** Apply the upright work pose on top of whatever the gait left. */
 	void PoseUpright(float Blend, WonderlandPose::EWork Work);
+
+	/** Carry this Dog in the STANDING body plan from the founder's spec sheet:
+	 *  vertical torso, forelegs hanging as arms, hind legs walking as a biped.
+	 *  Layered on top of the rest pose, exactly as PoseUpright is. */
+	void PoseStanding(float Blend, float Travelled, float DeltaSeconds);
 
 	/** What Relay says the attended Avatar is doing — EWork::None when there
 	 *  is no Avatar, or when Relay is not doing anything. */
@@ -210,6 +220,22 @@ private:
 
 	/** 0 quadruped .. 1 upright. Eased every tick; never assigned. */
 	float UprightBlend = 0.0f;
+
+	/** WHICH DOGS STAND. 0 none (the canonical quadruped spawn), 1 hero,
+	 *  2 working, 3 ceremonial, 4 special skin -- WonderlandStance::EUprightRole.
+	 *  An int rather than the enum so the level generator can set it through
+	 *  the same plain property path it uses for everything else.
+	 *
+	 *  DEFAULT ZERO IS THE POINT. The founder's rule is that quadruped CLASSIC
+	 *  / RELAY OG remains the canonical spawn identity, so a Dog stands only
+	 *  when something deliberately asks it to. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
+	int32 UprightRole = 0;
+
+	/** 0 quadruped .. 1 fully standing. Eased by half-life, never assigned:
+	 *  a Dog that arrives in the standing pose in one frame is the "teleporting
+	 *  into the pose" defect. */
+	float StanceBlend = 0.0f;
 
 	/** Cycles while a work pose is held, so a held pose stays alive. */
 	float WorkPhase = 0.0f;

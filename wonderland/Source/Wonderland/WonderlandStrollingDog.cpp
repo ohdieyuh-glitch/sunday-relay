@@ -5,6 +5,7 @@
 #include "Components/SceneComponent.h"
 #include "WonderlandDogBody.h"
 #include "WonderlandDogGait.h"
+#include "WonderlandDogStance.h"
 #include "Components/StaticMeshComponent.h"
 #include "CollisionQueryParams.h"
 #include "Engine/World.h"
@@ -161,6 +162,105 @@ void AWonderlandStrollingDog::PoseUpright(float Blend, WonderlandPose::EWork Wor
 		Rig.Head->SetRelativeLocation(Rig.Head->GetRelativeLocation()
 			+ FVector(0.0f, 0.0f, Up.HeadRise + Up.TorsoRise));
 		Rig.Head->SetRelativeRotation(FRotator(Up.HeadPitchDeg, 0.0f, 0.0f));
+	}
+}
+
+void AWonderlandStrollingDog::PoseStanding(float Blend, float Travelled,
+                                           float DeltaSeconds)
+{
+	if (Blend <= 0.0f)
+	{
+		return;   // the quadruped, untouched -- the canonical default
+	}
+	const float LegLen = (Rig.Legs[0] != nullptr)
+		? Rig.LegRestScale[0].Z * 100.0f : 119.6f;
+	const float TorsoLen = (Rig.Torso != nullptr)
+		? Rig.Torso->GetRelativeScale3D().X * 100.0f : LegLen * 1.6f;
+
+	const WonderlandStance::FStandingPose Stand =
+		WonderlandStance::StandingPose(Blend, LegLen, TorsoLen);
+
+	// THE BIPED WALK RIDES ON TOP OF THE STANDING POSE, scaled by how far into
+	// it the Dog is -- so a Dog rising mid-stride keeps walking through the
+	// transition instead of stopping to stand and starting again.
+	const WonderlandGait::FGaitParams Gait =
+		WonderlandGait::GaitForSpeed(CurrentSpeed, HipHeightWorld);
+	const float Stride = (Gait.StrideLength > 1.0f) ? Gait.StrideLength : StrideLength;
+	const float Phase = Travelled / Stride;
+	const float Moving = FMath::Clamp(CurrentSpeed / FMath::Max(1.0f, HipHeightWorld), 0.0f, 1.0f);
+	const float Walk = Blend * Moving;
+
+	const WonderlandStance::FCarriage Carry =
+		WonderlandStance::Carriage(Phase, Gait.BobHeight * 1.6f * Walk,
+		                           LegLen * 0.06f * Walk);
+	const WonderlandStance::FIdleSway Idle =
+		WonderlandStance::IdleSway(LifeSeconds + BreathPhase, LegLen);
+	const float ArmAmp = WonderlandStance::ArmAmplitudeFor(CurrentSpeed, LegLen) * Walk;
+
+	for (int32 i = 0; i < 4; ++i)
+	{
+		UStaticMeshComponent* const Limb = Rig.Legs[i];
+		if (Limb == nullptr) { continue; }
+
+		FVector Loc = Limb->GetRelativeLocation()
+			+ FVector(0.0f, Stand.LegSpread[i], Stand.LegRise[i]);
+		FRotator Rot = Limb->GetRelativeRotation()
+			+ FRotator(Stand.LegPitchDeg[i], 0.0f, 0.0f);
+
+		if (i < 2)
+		{
+			// A STANDING LEG. Same foot-lock contract as the quadruped gait:
+			// while planted its world position does not change, which is the
+			// one thing that has to be exact for a walk not to slide.
+			const WonderlandStance::FStepPose Step =
+				WonderlandStance::StepPose(Phase + WonderlandStance::LegPhaseOffset(i),
+				                           Stride, Gait.LiftHeight);
+			const float HipUU = LegLen * Stand.LegStretch;
+			const WonderlandStance::FLimbSwing Swing =
+				WonderlandStance::LimbSwing(Step, HipUU);
+			Loc.X += Step.Forward * Walk;
+			Loc.Z += Step.Lift * Walk + Carry.PelvisRise;
+			Loc.Y += Carry.PelvisSway;
+			Rot.Pitch += Swing.PitchDeg * Walk;
+			const FVector RestScale = Rig.LegRestScale[i];
+			Limb->SetRelativeScale3D(FVector(RestScale.X, RestScale.Y,
+				RestScale.Z * FMath::Lerp(1.0f, Stand.LegStretch * Swing.Stretch, Blend)));
+		}
+		else
+		{
+			// AN ARM. Contralateral to its own-side leg and trailing it, both
+			// proven in WonderlandDogStance.test.cpp -- getting either wrong is
+			// instantly readable as "concentrating on not falling over".
+			const int32 Side = i - 2;
+			const WonderlandStance::FArmSwing Arm =
+				WonderlandStance::ArmSwing(Phase + WonderlandStance::LegPhaseOffset(Side),
+				                           ArmAmp);
+			Loc.Z += Carry.PelvisRise * 0.9f;
+			Loc.Y += Carry.PelvisSway * 0.7f;
+			Rot.Pitch += Arm.PitchDeg;
+			Rot.Roll += (Stand.ArmOutDeg[Side] + Arm.OutDeg * ((Side == 0) ? -1.0f : 1.0f));
+		}
+		Limb->SetRelativeLocation(Loc);
+		Limb->SetRelativeRotation(Rot);
+	}
+
+	if (Rig.Torso != nullptr)
+	{
+		Rig.Torso->SetRelativeLocation(Rig.Torso->GetRelativeLocation()
+			+ FVector(0.0f, Carry.PelvisSway, Stand.TorsoRise + Carry.PelvisRise + Idle.Breath * Blend));
+		Rig.Torso->SetRelativeRotation(FRotator(Stand.TorsoPitchDeg,
+			Carry.TorsoYawDeg, Carry.TorsoRollDeg + Idle.SwayDeg * Blend));
+	}
+	if (Rig.Head != nullptr)
+	{
+		// THE HEAD HOLDS ITS GAZE. It rides the standing torso but counters the
+		// pelvis, because the visor and the gold eyes ARE the identity and a
+		// head that bobs with the hips throws them around the frame.
+		Rig.Head->SetRelativeLocation(Rig.Head->GetRelativeLocation()
+			+ FVector(0.0f, Carry.PelvisSway * 0.4f,
+			          Stand.HeadRise + Carry.PelvisRise + Carry.HeadRise));
+		Rig.Head->SetRelativeRotation(FRotator(Stand.HeadPitchDeg,
+			Carry.HeadYawDeg + Idle.HeadYawDeg * Blend, Carry.HeadRollDeg));
 	}
 }
 
@@ -364,6 +464,25 @@ void AWonderlandStrollingDog::Tick(float DeltaSeconds)
 	// The gait advances with the DISTANCE covered, so the paws and the body are
 	// the same quantity and cannot disagree at any speed.
 	DistanceWalked += StepLength;
+	// WHICH BODY PLAN. Quadruped unless this Dog was given a standing role;
+	// blended by half-life either way, so the change of plan is a movement and
+	// never a swap.
+	const WonderlandStance::EUprightRole Role =
+		static_cast<WonderlandStance::EUprightRole>(UprightRole);
+	const bool bStands = WonderlandStance::RoleStandsUpright(Role);
+	StanceBlend = WonderlandStance::Approach(StanceBlend, bStands ? 1.0f : 0.0f,
+	                                         Dt, 0.45f);
+	CurrentStanceName = FName(bStands ? ANSI_TO_TCHAR(WonderlandStance::RoleName(Role))
+	                                  : TEXT("quadruped"));
+
+	if (StanceBlend > 0.001f)
+	{
+		// A standing Dog's legs are not doing the quadruped gait, so the gait
+		// is settled to rest and the biped walk is applied over it.
+		PoseLegs(DistanceWalked, StanceBlend);
+		PoseStanding(StanceBlend, DistanceWalked, Dt);
+		return;
+	}
 	PoseLegs(DistanceWalked, 0.0f);
 
 	// Turn toward travel. The body faces +X, so the yaw of the step is the yaw
