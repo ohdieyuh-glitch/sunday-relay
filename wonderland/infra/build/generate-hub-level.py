@@ -447,13 +447,37 @@ MATERIAL_SPEC = {
     # are grass and sky — so the most golden object in the world rendered
     # olive. Slightly less metallic, slightly rougher, with a warm emissive
     # floor so it reads gold in any environment.
-    "gold":        ((1.00, 0.80, 0.38), 0.86, 0.31, (0.30, 0.21, 0.06), 0.60),
-    "gold_glow":   ((1.00, 0.80, 0.38), 1.0, 0.24, (1.00, 0.70, 0.25), 1.7),
+    # WHY THE GOLD IS DARK, AND WHY IT IS NOT A LIGHTING PROBLEM.
+    #
+    # attribute-dark.py measured the gold family carrying 2.01% of the arrival
+    # frame as pixels below the shadow threshold -- the most prominent
+    # decorative material in Wonderland, rendering black. The cause is here,
+    # not in the lights: gold was metallic 0.86 and gold_glow/float_glow were
+    # metallic 1.00. A metal has NO diffuse response. It shows only what its
+    # environment reflects, and this world has ZERO reflection captures; the
+    # only indirect specular is a real-time-capture SkyLight, which captures
+    # THIS scene. A dark scene reflects darkness into the metal, which makes
+    # the scene darker. Adding reflection captures would capture the same dark
+    # scene, so it does not break the loop either.
+    #
+    # The reference image's gold is bright, saturated and reads its FORM in
+    # shadow -- gilding, not polished bullion. Gilding has a diffuse response.
+    # Dropping metallic to ~0.4 gives these materials one, so the key light and
+    # the sky reach them directly, while low roughness keeps the sheen that
+    # makes them read as metal at all.
+    #
+    # HONEST LIMIT: the offline rasteriser shades from base colour and emissive
+    # only -- it ignores metallic and roughness entirely -- so this change
+    # cannot be measured without a GPU. It is argued from the capture above and
+    # from how UE lights metal, and it is listed in GPU-READY-QUEUE.md as
+    # unverified.
+    "gold":        ((1.00, 0.80, 0.38), 0.40, 0.31, (0.30, 0.21, 0.06), 0.60),
+    "gold_glow":   ((1.00, 0.80, 0.38), 0.45, 0.24, (1.00, 0.70, 0.25), 1.7),
     # Aged brass for crevices, undersides and the deep parts of ornament.
     # Real gilding is dark where it is sheltered and bright where it is
     # rubbed; one flat tone across every face is the "toy" read.
-    "brass_deep":  ((0.42, 0.30, 0.13), 0.92, 0.52, (0.05, 0.03, 0.00), 0.10),
-    "float_glow":  ((1.00, 0.80, 0.40), 1.0, 0.24, (1.00, 0.72, 0.28), 1.9),
+    "brass_deep":  ((0.42, 0.30, 0.13), 0.55, 0.52, (0.05, 0.03, 0.00), 0.10),
+    "float_glow":  ((1.00, 0.80, 0.40), 0.45, 0.24, (1.00, 0.72, 0.28), 1.9),
     "cobble":      ((0.80, 0.77, 0.72), 0.0, 0.80, (0, 0, 0), 0.0),
     "cobble2":     ((0.64, 0.62, 0.59), 0.0, 0.82, (0, 0, 0), 0.0),
     "plaza":       ((0.87, 0.84, 0.79), 0.0, 0.76, (0, 0, 0), 0.0),
@@ -486,7 +510,10 @@ MATERIAL_SPEC = {
     "spire_pink":  ((0.98, 0.74, 0.82), 0.0, 0.34, (0, 0, 0), 0.0),
     "spire_blue":  ((0.76, 0.68, 0.98), 0.0, 0.34, (0, 0, 0), 0.0),
     "spire_teal":  ((0.66, 0.92, 0.88), 0.0, 0.34, (0, 0, 0), 0.0),
-    "porcelain":   ((0.96, 0.95, 0.93), 0.0, 0.10, (0, 0, 0), 0.0),
+    # Roughness 0.10 is a mirror, and a mirror reflecting a dark scene is
+    # dark: attribute-dark.py measured porcelain at 1.47% of the frame in
+    # shadow. Real glaze has a broad highlight, not a point one.
+    "porcelain":   ((0.96, 0.95, 0.93), 0.0, 0.26, (0, 0, 0), 0.0),
     "water":       ((0.16, 0.42, 0.56), 0.0, 0.05, (0.01, 0.04, 0.07), 0.15),
     # Spray and foam: near-white, barely self-lit so it stays bright against
     # the dark of a basin, and it BOBS — a jet of beads that does not move is
