@@ -88,6 +88,30 @@ LOOK = {
     # MEASURED. Physical lux. The layout's legacy unitless sunIntensity
     # (7.0) is ~moonlight in UE 5.8 units and rendered a black frame
     # under Lumen; the old build hid that behind static lighting.
+    # --- sky colour ------------------------------------------------
+    # MEASURED AGAINST THE FOUNDER'S REFERENCE, on the bright pixels of the top
+    # strip of each frame:
+    #
+    #     reference    RGB(143, 135, 188)     R - G = +8    lavender
+    #     wonderland   RGB( 94, 140, 194)     R - G = -46   cyan blue
+    #
+    # Both are cooler than neutral and both peak in blue; the difference is 49
+    # points of RED. The reference is a periwinkle where ours is a seaside blue,
+    # and the comment beside the SkyAtmosphere has claimed "reads as bright
+    # lavender sky" the whole time.
+    #
+    # Rayleigh scattering is the layer that decides this -- it is the sky's own
+    # colour, not a grade laid over the frame. UE's physical default is roughly
+    # (0.0058, 0.0136, 0.0331) per km, a ratio of 0.18 : 0.41 : 1.00, which is
+    # why the sky comes out cyan.
+    #
+    # A KNOB, NOT A GUESS. An earlier attempt at a violet Rayleigh is recorded
+    # below as having produced "a dark twilight", and that is the real risk:
+    # this instrument changes brightness as well as hue, and no offline harness
+    # can measure it -- the rasteriser has no atmosphere. So it sweeps from the
+    # LOOK table like every other value here, and 0.0 reproduces today's sky
+    # exactly. skyLavender blends the default toward an equal-R-and-G lavender.
+    "skyLavender": 0.55,
     "sunLux": 340.0,
     "sunWarm": (1.0, 0.94, 0.84),          # CHOSEN. Warm daylight key.
     "sunPitchMin": 25.0,                   # PROVEN. Flatter than this and
@@ -4709,6 +4733,30 @@ def build(layout):
         # Wonderland lives in the DISTANCE fog, the flowers and the castles — NOT the
         # whole sky. (An earlier violet Rayleigh made it a dark twilight.)
         set_prop(sac, "RayleighScatteringScale", 0.0331)
+        # LAVENDER, BY BLEND. See LOOK["skyLavender"]. The physical default is
+        # kept as one end of the blend so 0.0 is exactly today's sky, and the
+        # TOTAL is held near the default's sum so the sky changes hue without
+        # changing how much light the atmosphere scatters -- which is what
+        # turned the previous attempt into a twilight.
+        try:
+            _sl = max(0.0, min(1.0, float(LOOK.get("skyLavender", 0.0))))
+        except (TypeError, ValueError):
+            _sl = 0.0
+        if _sl > 0.0:
+            _def = (0.0058, 0.0136, 0.0331)
+            _lav = (0.0225, 0.0205, 0.0331)      # R and G lifted to near-parity
+            _mix = tuple(_def[i] * (1.0 - _sl) + _lav[i] * _sl for i in range(3))
+            _norm = sum(_def) / max(1e-6, sum(_mix))
+            _mix = tuple(c * _norm for c in _mix)
+            if set_prop(sac, "RayleighScattering",
+                        unreal.LinearColor(_mix[0], _mix[1], _mix[2], 1.0)):
+                unreal.log_warning(
+                    "SKY LAVENDER %.2f: Rayleigh (%.4f, %.4f, %.4f), total held "
+                    "at the physical default" % ((_sl,) + _mix))
+            else:
+                unreal.log_warning(
+                    "SKY LAVENDER asked for %.2f but RayleighScattering did not "
+                    "take - the sky is unchanged, read it as the old blue" % _sl)
         set_prop(sac, "MieAnisotropy", 0.80)
         # ATMOSPHERIC PERSPECTIVE. Distance only reads as distance when the air
         # between takes something out of it. Height fog cannot do this job here:
