@@ -146,9 +146,45 @@ LOOK = {
     # rules metering out: the black is surfaces receiving no light, and the fix
     # is the RATIO of fill to key, not the level. A ratio change is also the one
     # thing auto-exposure cannot undo, because re-metering scales both together.
-    "bounceRatio": 0.55,
-    "bounceWarm": (1.00, 0.93, 0.82),  # tinted by warm stone paving
+    #
+    # AND THEN MEASURED AGAIN, WHICH FOUND WHAT THE RATIO COST. With the bounce
+    # at 0.55 the shadows stopped being black and started being BROWN. Sampling
+    # the streamed frame per material, against each material's own base colour:
+    #
+    #     porcelain  base (244,242,237)  ->  rendered ( 80, 59, 30)
+    #     stone      base (224,216,204)  ->  rendered (108, 85, 52)
+    #     mush_red   base (188, 40, 66)  ->  rendered (117, 89, 42)
+    #     foliage    base ( 58,117, 56)  ->  rendered ( 65, 55, 49)
+    #
+    # A near-WHITE material rendering dark brown is not a material problem, and
+    # neither is a pink one and a green one landing on the same hue. Every one
+    # of them converges on R:G:B of about 1.00 : 0.78 : 0.48 -- and when outputs
+    # converge regardless of input, the cause is downstream of all of them.
+    #
+    # It is this light. Most surfaces in this frame face away from the key, so
+    # what lights them is the bounce -- and the bounce is warm, at 55% of key,
+    # while ColorSaturation is 1.52. Saturation cannot tint neutral, but it
+    # multiplies a MILD warm cast into a decisive one: warm fill at 1.00/0.85/
+    # 0.65 in linear, pushed 1.52x, lands almost exactly on the 1.00/0.78/0.48
+    # that was measured.
+    #
+    # Real outdoor shadow is lit by the SKY and is COOL. The founder's reference
+    # is built on that contrast -- warm sunlit faces against cool violet shade --
+    # and it is why its whites stay white and its pinks stay pink in shadow.
+    # Ours had warm light on both sides, so there was no contrast to carry hue.
+    #
+    # So the fill moves from the ground to the sky: the bounce drops back toward
+    # neutral and to 0.42, and skyIntensity carries the difference. That is a
+    # RATIO change, which is the one thing auto-exposure cannot undo -- the same
+    # reasoning that raised the bounce in the first place, applied to its colour.
+    "bounceRatio": 0.42,
+    "bounceWarm": (1.00, 0.97, 0.94),  # near-neutral: the SKY tints the shade now
     "bounceEnabled": 1,
+    # Was hardcoded at 1.60 beside the SkyLight. It is the instrument that
+    # decides what colour this world's shadows are, so it belongs here where it
+    # can be swept: WONDERLAND_LOOK=skyIntensity=1.6 restores the warm-shadow
+    # frame this replaces.
+    "skyIntensity": 3.10,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -4826,7 +4862,10 @@ def build(layout):
             # frame is 40.7% below it. Ambient is what reaches surfaces the
             # sun and fill never touch, which is precisely what those pixels
             # are, so it goes up with the ground bounce.
-            sky_comp.set_intensity(1.60)
+            # See LOOK["skyIntensity"]. The sky is what makes a shadow cool,
+            # and cool shadow is what lets a white stay white and a pink stay
+            # pink where the sun does not reach.
+            sky_comp.set_intensity(float(LOOK.get("skyIntensity", 1.60)))
         except Exception:
             pass
         # Real-time captured sky ambient — needs no lighting build.
