@@ -4193,8 +4193,26 @@ def build(layout):
         sc = m.get("scale", [1, 1, 1])
         raw = max(0.6, (float(sc[0]) + float(sc[1])) / 2.0) if isinstance(sc, list) else 1.0
         norm = min(1.6, max(0.75, raw / 3.2))
+        # THE LAYOUT DECLARES A HEIGHT AND THE BUILDER IGNORED IT.
+        #
+        # hub-layout.json gives golden_gate dimensionsUu [700, 220, 640] and a
+        # note calling it "~6.4 m tall, left repoussoir of the arrival frame".
+        # This call site passed a hardcoded 1.4, which builds it 994 uu — 1.55x
+        # its own spec — and that difference is the top of the frame.
+        #
+        # kit_gate's keystone tops out near 710*s. At s=1.4 the gate reaches
+        # +20.8 degrees of elevation from the arrival camera, inside the top
+        # third, where it owns 10.2% of it. At the DECLARED 640 uu it tops out
+        # at +9.4 degrees, the exact bottom edge of the top third. The layout
+        # was right and nothing was reading it.
         if mesh == "gate" or "gate" in mid:
-            kit_gate(x, y, 1.4, mid)
+            _dims = m.get("dimensionsUu") or []
+            _target_h = float(_dims[2]) if len(_dims) >= 3 else 640.0
+            _gs = max(0.4, min(2.0, _target_h / 710.0))
+            unreal.log_warning(
+                "GATE %s: declared %.0f uu -> scale %.2f (hardcoded 1.4 built %.0f uu)"
+                % (mid, _target_h, _gs, 710.0 * 1.4))
+            kit_gate(x, y, _gs, mid)
         elif "framing_tree" in mid:
             if not in_camera_lap(x, y, 600.0):
                 kit_tree(x, y, 1.7, mid, giant=True)
@@ -5606,10 +5624,10 @@ def build(layout):
     # and is exactly the "giant object blocking view" the brief rules out, and
     # another entirely outside the frustum. Nothing of canopy scale belongs
     # inside the near band; these sit 20-35 m out, flanking.
-    for _i, (_gx, _gy, _gs) in enumerate(((-1950.0, 1250.0, 0.95),
-                                          (-2750.0, 2300.0, 1.10),
-                                          (1650.0, 1850.0, 1.05),
-                                          (2250.0, 2750.0, 1.00))):
+    for _i, (_gx, _gy, _gs) in enumerate(((-3100.0, 2450.0, 1.05),
+                                          (-4200.0, 3600.0, 1.20),
+                                          (2900.0, 3400.0, 1.15),
+                                          (3600.0, 4400.0, 1.10))):
         if _in_corridor(_gx, _gy) or _on_stage(_gx, _gy):
             continue
         if in_camera_lap(_gx, _gy, 600.0):
