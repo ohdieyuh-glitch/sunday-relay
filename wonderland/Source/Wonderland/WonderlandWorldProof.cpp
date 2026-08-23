@@ -12,6 +12,7 @@
 #include "Materials/MaterialInterface.h"
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/PlayerStart.h"
+#include "GameFramework/PlayerController.h"
 #include "CollisionQueryParams.h"
 #include "CollisionShape.h"
 
@@ -431,6 +432,85 @@ namespace WonderlandWorldProof
 				}
 				UE_LOG(LogWonderlandProof, Warning,
 					   TEXT("RUNTIME_GROUNDED_DOGS=%d/%d"), GroundedDogs, DogActors.Num());
+
+				// HOW MUCH OF THE FRAME A RELAY DOG ACTUALLY OWNS.
+				//
+				// The hero-shot goal asks for "Relay Dog framing" per camera and
+				// there was no number for it. It can be worked out on paper from
+				// the placed positions and the canonical body table — and that
+				// answer is WRONG, because every Dog here wanders. Where they
+				// stood when the shutter opened is knowable only in the engine,
+				// at that moment, which is here.
+				//
+				// Angular rather than projected: the share is computed from the
+				// camera's own FOV and each Dog's bounds, so it needs no viewport
+				// and is identical whether the frame is 1080p or 4K. A Dog at 74%
+				// is a wall across the shot; one at 40% is a subject.
+				if (const APlayerController* const PC = Live->GetFirstPlayerController())
+				{
+					FVector ViewLoc = FVector::ZeroVector;
+					FRotator ViewRot = FRotator::ZeroRotator;
+					PC->GetPlayerViewPoint(ViewLoc, ViewRot);
+					float HorizFovDeg = 90.0f;
+					if (PC->PlayerCameraManager != nullptr)
+					{
+						HorizFovDeg = PC->PlayerCameraManager->GetFOVAngle();
+					}
+					// Unreal's FOV is HORIZONTAL. 16:9 is what every capture in
+					// this project uses; deriving the vertical from it is what
+					// makes the share comparable between a 62 and a 75 degree cam.
+					const float Aspect = 16.0f / 9.0f;
+					const float HalfH = FMath::DegreesToRadians(HorizFovDeg * 0.5f);
+					const float HalfV = FMath::Atan(FMath::Tan(HalfH) / Aspect);
+					const float VertFovDeg = FMath::RadiansToDegrees(HalfV * 2.0f);
+					const FVector Forward = ViewRot.Vector();
+
+					int32 DogsInFrame = 0;
+					float BiggestSharePct = 0.0f;
+					float NearestUU = -1.0f;
+					for (const AActor* const Dog : DogActors)
+					{
+						if (Dog == nullptr) { continue; }
+						FVector Origin = FVector::ZeroVector, Extent = FVector::ZeroVector;
+						Dog->GetActorBounds(true, Origin, Extent);
+						const FVector ToDog = Origin - ViewLoc;
+						const float Dist = ToDog.Size();
+						if (Dist <= KINDA_SMALL_NUMBER) { continue; }
+						const FVector Dir = ToDog / Dist;
+						// In frame when its CENTRE is inside the cone. Crude at
+						// the edges and deliberately so: a Dog half out of frame
+						// is still half in it, and the number that matters is the
+						// one that walls the shot.
+						const float OffAxisDeg =
+							FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(
+								FVector::DotProduct(Forward, Dir), -1.0f, 1.0f)));
+						if (OffAxisDeg > HorizFovDeg * 0.5f) { continue; }
+						++DogsInFrame;
+						if (NearestUU < 0.0f || Dist < NearestUU) { NearestUU = Dist; }
+						const float AngularHeightDeg = FMath::RadiansToDegrees(
+							2.0f * FMath::Atan(Extent.Z / Dist));
+						const float SharePct = (VertFovDeg > 0.0f)
+							? (AngularHeightDeg / VertFovDeg) * 100.0f : 0.0f;
+						BiggestSharePct = FMath::Max(BiggestSharePct, SharePct);
+					}
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("RUNTIME_DOGS_IN_FRAME=%d/%d"), DogsInFrame, DogActors.Num());
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("RUNTIME_DOG_FRAME_SHARE_MAX_PCT=%.1f"), BiggestSharePct);
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("RUNTIME_DOG_NEAREST_UU=%.0f"), NearestUU);
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("RUNTIME_VIEW_FOV_H=%.2f  RUNTIME_VIEW_FOV_V=%.2f"),
+						   HorizFovDeg, VertFovDeg);
+				}
+				else
+				{
+					// Never a zero. No controller means the measurement did not
+					// happen, and a 0.0% Dog share reads as "the Dog is not in
+					// the shot", which is a different and false claim.
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("RUNTIME_DOG_FRAME_SHARE_MAX_PCT=unmeasured (no player controller)"));
+				}
 				UE_LOG(LogWonderlandProof, Warning,
 					   TEXT("RUNTIME_GROUNDED_PLAYER_STARTS=%d/%d"),
 					   GroundedStarts, PlayerStarts.Num());
