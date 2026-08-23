@@ -138,7 +138,12 @@ LOOK = {
     # it is SHAPED.
     #
     # So the level moves from the ambient into the key.
-    "sunLux": 1150.0,
+    # 1150 -> 1420, splitting two rendered frames. Trading ambient for key
+    # fixed the wash (neutral_stone 32.8% -> 24.0%) and cost the shadows
+    # (dark 28.3% -> 35.2%), because a hard key with a small ambient is
+    # contrasty by construction. The reference is 25.0% dark and 7.5%
+    # neutral_stone, so it wants both -- which means more KEY, not more ambient.
+    "sunLux": 1420.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -224,7 +229,7 @@ LOOK = {
     # violet went 3.2% -> 7.2% and blue 22.4% -> 15.0%. The colour move was
     # right and the level move was not. A NEUTRAL fill can be strong without
     # tinting anything, which is the whole point of having neutralised it.
-    "bounceRatio": 0.34,
+    "bounceRatio": 0.40,
     "bounceWarm": (1.00, 0.97, 0.94),  # near-neutral: the SKY tints the shade now
     "bounceEnabled": 1,
     # Was hardcoded at 1.60 beside the SkyLight. It is the instrument that
@@ -239,7 +244,7 @@ LOOK = {
     # 5.20 -> 9.40 for the same reason as sunLux, and preferentially: the sky
     # is lavender now, so it is the source that brightens shadows and pushes
     # them violet at once. violet_purple is 8.3% against the reference's 22.4%.
-    "skyIntensity": 4.60,
+    "skyIntensity": 6.20,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
