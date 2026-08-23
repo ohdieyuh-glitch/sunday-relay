@@ -177,14 +177,24 @@ LOOK = {
     # neutral and to 0.42, and skyIntensity carries the difference. That is a
     # RATIO change, which is the one thing auto-exposure cannot undo -- the same
     # reasoning that raised the bounce in the first place, applied to its colour.
-    "bounceRatio": 0.42,
+    # AND BACK UP, NOW THAT IT IS NOT WARM. Dropping the bounce to 0.42 cooled
+    # the shade and cost brightness with it: dark went 29.7% -> 36.7% while
+    # violet went 3.2% -> 7.2% and blue 22.4% -> 15.0%. The colour move was
+    # right and the level move was not. A NEUTRAL fill can be strong without
+    # tinting anything, which is the whole point of having neutralised it.
+    "bounceRatio": 0.58,
     "bounceWarm": (1.00, 0.97, 0.94),  # near-neutral: the SKY tints the shade now
     "bounceEnabled": 1,
     # Was hardcoded at 1.60 beside the SkyLight. It is the instrument that
     # decides what colour this world's shadows are, so it belongs here where it
     # can be swept: WONDERLAND_LOOK=skyIntensity=1.6 restores the warm-shadow
     # frame this replaces.
-    "skyIntensity": 3.10,
+    # 1.60 -> 3.10 cooled the shadows; 3.10 -> 5.20 is what lifts them. The sky
+    # is now lavender (see skyLavender), so skylight is the one instrument that
+    # makes shadows BRIGHTER and MORE VIOLET at the same time -- the two moves
+    # the reference is furthest away on (dark 36.7% vs 25.0%, violet 7.2% vs
+    # 22.4%).
+    "skyIntensity": 5.20,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -3695,22 +3705,27 @@ def build(layout):
             _part("cube", sx, sy, sz, 0.05, 0.05, 0.22, "arcane", "Spark%dV" % i)
         _part("cylinder", ccx, ccy, 8.0, 1.2, 1.2, 0.14, "magic_gold", "ArcaneCore")
 
-    def kit_float_key(x, y, z, label):
+    def kit_float_key(x, y, z, label, ks=1.0):
+        # ks SCALES THE WHOLE KEY. Measured on the arrival frame, the ten
+        # drifting keys owned 2.94% of it in the gold family -- more than the
+        # golden_gate itself, and against a reference whose gold_amber is 1.9%
+        # of the ENTIRE image. A key is an accent. At that share it was set
+        # dressing competing with the landmark it points at.
         # An ORNATE key, because these hang in open sky where silhouette is the
         # whole read: a ring bow with a heart at its centre, a collar, a tapered
         # shaft, and a bit with real teeth. Tilted so it never reads as a post.
         tilt = (0.0, 0.0, 22.0)
-        _part("cylinder", x, y, z, 0.17, 0.17, 1.45, "gold", "%s_shaft" % label, rot=tilt)
+        _part("cylinder", x, y, z, 0.17 * ks, 0.17 * ks, 1.45 * ks, "gold", "%s_shaft" % label, rot=tilt)
         # bow: a ring of small spheres rather than one ball
         import math as _m
         for i in range(8):
             a = i * (2.0 * _m.pi / 8.0)
-            _part("sphere", x + _m.cos(a) * 34.0, y, z + 86.0 + _m.sin(a) * 34.0,
-                  0.22, 0.20, 0.22, "gold", "%s_bow%d" % (label, i))
+            _part("sphere", x + _m.cos(a) * 34.0 * ks, y, z + 86.0 * ks + _m.sin(a) * 34.0 * ks,
+                  0.22 * ks, 0.20 * ks, 0.22 * ks, "gold", "%s_bow%d" % (label, i))
         # heart at the centre of the bow — the Wonderland motif, in gold
-        _part("sphere", x - 9.0, y, z + 92.0, 0.24, 0.20, 0.24, "gold_glow", "%s_heartL" % label)
-        _part("sphere", x + 9.0, y, z + 92.0, 0.24, 0.20, 0.24, "gold_glow", "%s_heartR" % label)
-        _part("cone", x, y, z + 74.0, 0.34, 0.28, 0.42, "gold_glow", "%s_heartT" % label,
+        _part("sphere", x - 9.0 * ks, y, z + 92.0 * ks, 0.24 * ks, 0.20 * ks, 0.24 * ks, "gold_glow", "%s_heartL" % label)
+        _part("sphere", x + 9.0 * ks, y, z + 92.0 * ks, 0.24 * ks, 0.20 * ks, 0.24 * ks, "gold_glow", "%s_heartR" % label)
+        _part("cone", x, y, z + 74.0 * ks, 0.34 * ks, 0.28 * ks, 0.42 * ks, "gold_glow", "%s_heartT" % label,
               rot=(180.0, 0.0, 0.0))
         # collar
         _part("cylinder", x, y, z + 34.0, 0.30, 0.30, 0.10, "gold", "%s_collar" % label, rot=tilt)
@@ -5761,7 +5776,7 @@ def build(layout):
         kx, ky, _mv = _push_out_of_lens(kx, ky, "FloatKey%d" % i)
         if _mv:
             _keys_moved += 1
-        kit_float_key(kx, ky, kz, "FloatKey%d" % i)
+        kit_float_key(kx, ky, kz, "FloatKey%d" % i, ks=0.62)
     if _keys_moved:
         unreal.log_warning("FLOAT KEYS  %d of 10 were inside the %.0f uu arrival keep-out "
               "and were pushed out along their own bearing"
