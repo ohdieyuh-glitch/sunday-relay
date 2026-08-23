@@ -76,6 +76,17 @@ if [ -n "${NATIVE:-}" ] && [ -n "${STREAMED:-}" ]; then
     | tee "$WL_ANSWERS/sharpness-$SHORT.txt" || true
 fi
 
+# ----------------------------------- 4b. did the frame keep its colour?
+# The regression this catches took forty commits to notice, because every
+# metric being watched was a palette-family percentage and those record a cast
+# LEAVING -- they cannot see colourfulness leaving with it.
+if [ -n "${STREAMED:-}" ]; then
+  python3 "$HERE/../build/verify-colourfulness.py" "$STREAMED" \
+    | tee "$WL_ANSWERS/colourfulness-$SHORT.txt" \
+    && wl_ok "the frame carries its colour" \
+    || wl_warn "COLOURFULNESS REGRESSION - see $WL_ANSWERS/colourfulness-$SHORT.txt"
+fi
+
 # ------------------------------------- 5. what colour did the COOK ship?
 # The one link in the chain nobody has read. Two lines settle it.
 RUNLOG="$(wl_find_first "$WL_OUT/Linux/Wonderland/Saved/Logs" -name "Wonderland*.log" | head -1 || true)"
