@@ -123,7 +123,22 @@ LOOK = {
     # level is not, so the level comes back from the KEY and the SKY, which are
     # neutral, instead of from eighteen gold lamps that were never meant to
     # light a garden.
-    "sunLux": 780.0,
+    # 780 -> 1150. The relit frame came back at mean luma 0.346 against the
+    # reference's 0.327 -- brightness solved -- and mean CHROMA 0.112 against
+    # 0.177. It is bright and grey: neutral_stone went 9.5% -> 32.8% of the
+    # frame, which is the classifier saying "this pixel has almost no colour
+    # left". Pink materials cover 12.9% of the frame and only 2.8% of it reads
+    # as pink.
+    #
+    # That is what a big ambient does. Sky at 9.40 and bounce at 0.58 is a lot
+    # of flat light arriving from everywhere at once, and light with no
+    # direction has no shading -- so a saturated surface is lit evenly, washes
+    # toward its own tint of white, and loses its hue. The reference is the
+    # opposite: a hard sun, deep cool shade, and colour that survives because
+    # it is SHAPED.
+    #
+    # So the level moves from the ambient into the key.
+    "sunLux": 1150.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -209,7 +224,7 @@ LOOK = {
     # violet went 3.2% -> 7.2% and blue 22.4% -> 15.0%. The colour move was
     # right and the level move was not. A NEUTRAL fill can be strong without
     # tinting anything, which is the whole point of having neutralised it.
-    "bounceRatio": 0.58,
+    "bounceRatio": 0.34,
     "bounceWarm": (1.00, 0.97, 0.94),  # near-neutral: the SKY tints the shade now
     "bounceEnabled": 1,
     # Was hardcoded at 1.60 beside the SkyLight. It is the instrument that
@@ -224,7 +239,7 @@ LOOK = {
     # 5.20 -> 9.40 for the same reason as sunLux, and preferentially: the sky
     # is lavender now, so it is the source that brightens shadows and pushes
     # them violet at once. violet_purple is 8.3% against the reference's 22.4%.
-    "skyIntensity": 9.40,
+    "skyIntensity": 4.60,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -259,7 +274,13 @@ LOOK = {
     # not a palette problem, and saturating materials to fix it would have been
     # work in the wrong place.
     "gain":            (0.74, 0.74, 0.78),
-    "saturation":      (1.52, 1.48, 1.60),  # CHOSEN. Jewel tones.
+    # RAISED 1.52 -> 1.78. Saturation was tuned while the frame carried a
+    # false gold cast, and in that state it multiplied the CAST rather than the
+    # palette -- which is why it was correct to be suspicious of it. The cast is
+    # gone (gold_amber 10.1% -> 0.6%, warm_timber_stone 23.6% -> 3.1%), so what
+    # it amplifies now is the world's own colour. This is not covering a defect;
+    # the defect was found and fixed at the light.
+    "saturation": (1.78, 1.78, 1.78),  # CHOSEN. Jewel tones.
     "contrast":        (1.18, 1.17, 1.16),  # CHOSEN.
     "gainHighlights":  (0.82, 0.78, 0.68),  # MEASURED. Holds the white Dog,
                                             # spires and porcelain off pure
