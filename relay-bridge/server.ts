@@ -849,6 +849,16 @@ export function createBridgeServer(
           missionCaller = decision;
         }
 
+        /**
+         * THE OWNERSHIP SCOPE OF THIS CALLER, for every mission-level read and
+         * mutation below. `undefined` is the operator: unscoped. A browser is
+         * scoped to the participant bound into its session, so a mission id it
+         * did not start reads as "not found" — mission ids are caller-chosen and
+         * therefore guessable, and the auth gate above only proves the caller
+         * holds A session, not that this mission is theirs.
+         */
+        const missionScope = missionCaller?.kind === 'browser' ? missionCaller.participantId : undefined;
+
         if (method === 'POST' && path === '/relay-api/mission/start') {
           const body = (await readBody(req)) as { missionId?: unknown; objective?: unknown } | undefined;
           const missionId = typeof body?.missionId === 'string' ? body.missionId : '';
@@ -989,8 +999,14 @@ export function createBridgeServer(
             missionId, objective, repositoryTarget, intendedWritePaths, config: configResult.value,
             // WHO started it — the verified session, never the body — so it lands
             // in this participant's history and only theirs. Operator: null.
-            startedBy: missionCaller?.kind === 'browser' ? missionCaller.participantId : null,
+            startedBy: missionScope,
           });
+          // A live mission id belonging to another participant. Refused without
+          // saying whose it is, so start cannot be used to read their mission.
+          if (view === null) {
+            send(res, 409, { error: { kind: 'mission_id_unavailable', message: 'That mission id is already in use.' } }, cors);
+            return;
+          }
           send(res, 200, { missionId, view }, cors);
           return;
         }
@@ -1018,12 +1034,12 @@ export function createBridgeServer(
           if (id === null) return send(res, 404, { error: 'mission not found' }, cors);
           const action = missionMatch[2];
           if (method === 'GET' && !action) {
-            const view = registry.get(id);
+            const view = registry.get(id, missionScope);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }
           if (method === 'POST' && action === 'cancel') {
-            const view = registry.cancel(id);
+            const view = registry.cancel(id, missionScope);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }
@@ -1048,7 +1064,7 @@ export function createBridgeServer(
               send(res, retryRefusal.status, retryRefusal.body, cors);
               return;
             }
-            const view = registry.retry(id);
+            const view = registry.retry(id, missionScope);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }

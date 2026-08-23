@@ -430,8 +430,16 @@ export interface MissionRegistry {
      * role selections, mode, review policy, requested permissions and limits.
      */
     config?: RelayMissionConfig;
-  }): LiveMissionUpdate;
-  get(missionId: string): LiveMissionUpdate | null;
+  }): LiveMissionUpdate | null;
+  /**
+   * ONE MISSION, or null when this caller may not see it.
+   *
+   * `asParticipant` is the scope of the caller: `undefined` is the operator and
+   * sees everything, a participant id sees only Missions it started. An id that
+   * belongs to someone else is indistinguishable from one that does not exist,
+   * so a caller cannot probe for another participant's Mission ids.
+   */
+  get(missionId: string, asParticipant?: string | null): LiveMissionUpdate | null;
   /**
    * THIS PARTICIPANT'S MISSIONS, newest first — their history list.
    *
@@ -473,8 +481,10 @@ export interface MissionRegistry {
    */
   beginShip(missionId: string): boolean;
   endShip(missionId: string): void;
-  cancel(missionId: string): LiveMissionUpdate | null;
-  retry(missionId: string): LiveMissionUpdate | null;
+  /** Scoped exactly like `get`: a participant can only cancel what it started. */
+  cancel(missionId: string, asParticipant?: string | null): LiveMissionUpdate | null;
+  /** Scoped exactly like `get`: a participant can only retry what it started. */
+  retry(missionId: string, asParticipant?: string | null): LiveMissionUpdate | null;
 }
 
 /** Explicit path selection. Live execution is NEVER inferred from a credential
@@ -511,6 +521,19 @@ function defaultRelayPreflight(): { ready: boolean; missing: string[] } {
     missing.push('relay write scope isolated from the founder repository');
   }
   return { ready: missing.length === 0, missing };
+}
+
+/**
+ * WHETHER A CALLER SCOPED TO `asParticipant` MAY SEE THIS MISSION.
+ *
+ * `undefined` is the operator credential: unscoped, sees everything. Anything
+ * else is a browser session's identity, and it sees only what that identity
+ * started — a mission id is caller-chosen and therefore guessable, so ownership,
+ * not the id, is what authorizes a read or a mutation.
+ */
+function visibleTo(rec: MissionRecord, asParticipant: string | null | undefined): boolean {
+  if (asParticipant === undefined) return true;
+  return rec.startedByParticipant === (asParticipant ?? null);
 }
 
 export function createMissionRegistry(config: MissionRegistryConfig): MissionRegistry {
@@ -2443,7 +2466,12 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   return {
     start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths, config, startedBy }) {
       const existing = records.get(missionId);
-      if (existing) return toView(existing); // idempotent — one dispatch per mission id
+      if (existing) {
+        // Idempotent — one dispatch per mission id — but only for the owner. A
+        // participant reusing someone else's id gets null, never their view.
+        if (!visibleTo(existing, startedBy)) return null;
+        return toView(existing);
+      }
       const request = safeText(objective) || 'Implement the controlled demo task.';
       const rec: MissionRecord = {
         missionId,
@@ -2500,9 +2528,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       return mine.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
     },
 
-    get(missionId) {
+    get(missionId, asParticipant) {
       const rec = records.get(missionId);
-      return rec ? toView(rec) : null;
+      return rec && visibleTo(rec, asParticipant) ? toView(rec) : null;
     },
 
     shipContext(missionId) {
@@ -2541,9 +2569,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       inFlightShips.delete(missionId);
     },
 
-    cancel(missionId) {
+    cancel(missionId, asParticipant) {
       const rec = records.get(missionId);
-      if (!rec) return null;
+      if (!rec || !visibleTo(rec, asParticipant)) return null;
       if (rec.running) {
         rec.cancelRequested = true;
         try {
@@ -2557,9 +2585,9 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       return toView(rec);
     },
 
-    retry(missionId) {
+    retry(missionId, asParticipant) {
       const rec = records.get(missionId);
-      if (!rec) return null;
+      if (!rec || !visibleTo(rec, asParticipant)) return null;
       if (rec.running) return toView(rec);
       if (rec.state !== 'failed') return toView(rec);
       if (rec.error && rec.error.retryable === false) return toView(rec);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createMissionRegistry } from './mission';
+import type { LiveMissionUpdate } from './types';
 import { FOUNDER_MISSIONS } from '../src/relay/mission/founder-pack/founder-missions';
 
 /**
@@ -39,6 +40,13 @@ const registry = () => createMissionRegistry({
   now: () => '2026-08-10T12:00:00.000Z',
 });
 
+/** `start` answers null only when the id belongs to ANOTHER participant. These
+    calls name no participant, so a null here would be a fixture fault. */
+function started(view: LiveMissionUpdate | null): LiveMissionUpdate {
+  if (view === null) throw new Error('unscoped start unexpectedly refused the mission id');
+  return view;
+}
+
 describe('the pack says idempotency is keyed on the mission id', () => {
   const mission = FOUNDER_MISSIONS.find((m) => m.id === 'fm-5-the-same-mission-twice');
 
@@ -63,8 +71,8 @@ describe('the pack says idempotency is keyed on the mission id', () => {
      * this can never pass by comparing two absences again.
      */
     const reg = registry();
-    const first = reg.start({ missionId: 'fm-5-probe', objective: 'Add the guard.' });
-    const second = reg.start({ missionId: 'fm-5-probe', objective: 'Something else entirely.' });
+    const first = started(reg.start({ missionId: 'fm-5-probe', objective: 'Add the guard.' }));
+    const second = started(reg.start({ missionId: 'fm-5-probe', objective: 'Something else entirely.' }));
 
     expect(first.missionRevision).toBeDefined();
     expect(second.missionRevision).toBeDefined();
@@ -84,8 +92,8 @@ describe('the pack says idempotency is keyed on the mission id', () => {
     // The other direction: idempotency that swallowed distinct missions would
     // be worse than none.
     const reg = registry();
-    const a = reg.start({ missionId: 'fm-5-a', objective: 'Add the guard.' });
-    const b = reg.start({ missionId: 'fm-5-b', objective: 'Add the guard.' });
+    const a = started(reg.start({ missionId: 'fm-5-a', objective: 'Add the guard.' }));
+    const b = started(reg.start({ missionId: 'fm-5-b', objective: 'Add the guard.' }));
     expect(a.missionRevision).toBeDefined();
     expect(b.missionRevision).toBeDefined();
     // Same objective, different id — so the revision must still differ, which

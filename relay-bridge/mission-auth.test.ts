@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createBridgeServer } from './server';
 import { loadBridgeConfig } from './config';
+import { createMissionRegistry } from './mission';
+import type { MissionRegistry } from './mission';
 import { browserSessionMayCall } from './browser-session/grants';
 import { createRepositoryRegistration } from '../src/relay/mission/repository-target';
 import type { RepositoryRegistration } from '../src/relay/mission/repository-target';
@@ -85,6 +87,36 @@ async function bootWithRepo(reg: RepositoryRegistration): Promise<string> {
   const port = typeof address === 'object' && address !== null ? address.port : 0;
   return `http://127.0.0.1:${port}`;
 }
+
+/**
+ * Boots the bridge on the REAL registry, so ownership is decided by the record
+ * a mission actually carries. `architectEnv: {}` configures no provider, which
+ * blocks every live role before dispatch — the pipeline contacts nothing.
+ */
+async function bootWithRealRegistry(): Promise<{ base: string; registry: MissionRegistry }> {
+  vi.stubEnv('RELAY_BRIDGE_API_TOKEN', OPERATOR);
+  vi.stubEnv('RELAY_ALLOWED_ORIGINS', ORIGIN);
+  const registry = createMissionRegistry({
+    fusionBaseUrl: null,
+    sundayMode: 'fast',
+    claudeMode: 'fake',
+    confirmLive: false,
+    architectEnv: {},
+    now: () => '2026-08-23T00:00:00.000Z',
+  });
+  const server = createBridgeServer(loadBridgeConfig(process.env), registry);
+  servers.push(server);
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const address = server.address();
+  const port = typeof address === 'object' && address !== null ? address.port : 0;
+  return { base: `http://127.0.0.1:${port}`, registry };
+}
+
+const asSession = (base: string, path: string, token: string, method = 'GET') =>
+  fetch(`${base}/relay-api/mission/${path}`, {
+    method,
+    headers: { Authorization: `Relay-Session ${token}`, Origin: ORIGIN },
+  });
 
 const startMission = (base: string, headers: Record<string, string> = {}) =>
   fetch(`${base}/relay-api/mission/start`, {
@@ -236,6 +268,45 @@ describe('a browser session may read a mission, never run one', () => {
       expect(browserSessionMayCall(method, path), `${method} ${path}`).toBe(false);
     }
   });
+});
+
+/**
+ * A MISSION BELONGS TO THE PARTICIPANT THAT STARTED IT.
+ *
+ * The mission-family gate proves a caller holds A session; it does not prove
+ * the mission named in the path is theirs. Mission ids are chosen by the caller
+ * (`missionId` in the body), so they are guessable — without an ownership check
+ * any paired browser could read, cancel or retry another participant's mission,
+ * and a `start` that collided with someone else's id returned THEIR view.
+ */
+describe('one participant cannot reach another participant\'s mission', () => {
+  it('refuses reading, cancelling, retrying and colliding — while the owner keeps access', async () => {
+    const { base } = await bootWithRealRegistry();
+    const owner = await pairControl(base, 'beta-participant-1');
+    const other = await pairControl(base, 'beta-participant-2');
+
+    expect((await startAs(base, owner, { missionId: 'm-owned' })).status).toBe(200);
+
+    // Indistinguishable from a mission that does not exist: no probing.
+    expect((await asSession(base, 'm-owned', other)).status).toBe(404);
+    expect((await asSession(base, 'm-owned/cancel', other, 'POST')).status).toBe(404);
+    expect((await asSession(base, 'm-owned/retry', other, 'POST')).status).toBe(404);
+
+    // Reusing the id must not hand back the owner's view.
+    const collided = await startAs(base, other, { missionId: 'm-owned' });
+    expect(collided.status).toBe(409);
+    const body = await collided.json();
+    expect(body.error).toMatchObject({ kind: 'mission_id_unavailable' });
+    expect(JSON.stringify(body)).not.toContain('beta-participant-1');
+
+    // The refusals above are scoping, not absence: the owner still reads it,
+    // and the operator credential stays unscoped.
+    expect((await asSession(base, 'm-owned', owner)).status).toBe(200);
+    const operatorRead = await fetch(`${base}/relay-api/mission/m-owned`, {
+      headers: { Authorization: `Bearer ${OPERATOR}` },
+    });
+    expect(operatorRead.status).toBe(200);
+  }, 30_000);
 });
 
 describe('the public liveness probe is still public', () => {
