@@ -1533,7 +1533,12 @@ def build_material_library(texs=None):
         # the graph exactly as it was.
         _nrm_flat = _nrm_vscaled = None
         try:
-            damp = param(unreal.MaterialExpressionScalarParameter, "DetailAmp", 560, 0.30)
+            # 0.30 -> 0.05. This is the DEFAULT, so it governs every material
+            # the relief table does not name -- which is most of them. See the
+            # relief table for why: this noise is added to the shading NORMAL,
+            # and a randomised normal scatters light everywhere and averages to
+            # the ambient, which is how a correct albedo renders grey.
+            damp = param(unreal.MaterialExpressionScalarParameter, "DetailAmp", 560, 0.05)
             vn = mel.create_material_expression(master, unreal.MaterialExpressionVectorNoise, -820, 340)
             vscaled = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -600, 360)
             mel.connect_material_expressions(vn, "", vscaled, "A")
@@ -1979,13 +1984,37 @@ def build_material_library(texs=None):
 
     # PER-SURFACE RELIEF. One global strength would make porcelain look
     # sandblasted and bark look shrink-wrapped.
-    relief = {"porcelain": 0.04, "gold": 0.06, "gold_glow": 0.06, "dog_body": 0.05,
-              "dog_visor": 0.03, "water": 0.02, "spire": 0.20, "spire_pink": 0.20,
-              "spire_blue": 0.20, "spire_teal": 0.20, "spire_far": 0.10,
-              "roof_rose": 0.16, "roof_pink": 0.16, "stone": 0.80, "meadow_far": 0.50,
-              "trunk": 0.85, "foliage": 0.50, "foliage_hi": 0.50, "mush_red": 0.26,
-              "mush_purple": 0.26, "mush_white": 0.30, "mush_gill": 0.40,
-              "rose": 0.28, "rose_pink": 0.28, "petal_pink": 0.20, "petal_violet": 0.20}
+    # THIS IS THE GREY, AND IT IS THE NORMALS.
+    #
+    # DetailAmp drives a VECTOR NOISE added to the shading normal. At 0.80 the
+    # normal is effectively randomised per pixel, so the surface scatters light
+    # in every direction at once and averages to whatever the ambient happens
+    # to be -- which is grey. The albedo is still correct underneath and never
+    # gets to matter.
+    #
+    # The correlation is exact, and it was sitting in a table I had already
+    # measured. Every material that RENDERS CORRECTLY has a near-zero DetailAmp;
+    # every material that renders grey has a large one:
+    #
+    #     gold       0.06  ->  renders sat 0.22   CORRECT
+    #     dog_body   0.05  ->  renders white      CORRECT
+    #     porcelain  0.04  ->                     CORRECT
+    #     foliage    0.50  ->  renders sat 0.04   GREY
+    #     stone      0.80  ->  renders sat 0.02   GREY
+    #     trunk      0.85  ->                     GREY
+    #
+    # Relief was added to stop surfaces looking like flat plastic. It does that
+    # by destroying the one thing that carries colour. A stylised voxel world
+    # does not need 0.8 of normal noise on its architecture -- it needs almost
+    # none, and the little that is wanted is for silhouette breakup, not for
+    # scattering.
+    relief = {"porcelain": 0.02, "gold": 0.04, "gold_glow": 0.04, "dog_body": 0.03,
+              "dog_visor": 0.02, "water": 0.02, "spire": 0.05, "spire_pink": 0.05,
+              "spire_blue": 0.05, "spire_teal": 0.05, "spire_far": 0.04,
+              "roof_rose": 0.05, "roof_pink": 0.05, "stone": 0.07, "meadow_far": 0.06,
+              "trunk": 0.09, "foliage": 0.06, "foliage_hi": 0.06, "mush_red": 0.05,
+              "mush_purple": 0.05, "mush_white": 0.05, "mush_gill": 0.05,
+              "rose": 0.05, "rose_pink": 0.05, "petal_pink": 0.04, "petal_violet": 0.04}
     # How much each family's roughness is allowed to WANDER. Manufactured
     # surfaces are even by definition — a sandblasted teacup is a wrong teacup —
     # while stone and bark are duller where worn and cleaner where not, and it is
@@ -5872,8 +5901,21 @@ def build(layout):
     # thinned until sky reads through the arch instead of being shut out by it.
     # verify-visual-target.py measures the result; these are the numbers to
     # move if the founder wants the canopy heavier or lighter.
-    BOUGH1_LIFT = 320.0        # uu
-    BOUGH1_CARDS = 9           # was 4, at 3.10 -> now 9 at 1.85
+    # OPEN THE SKY. THE FOUNDER'S INSTRUCTION IS EXPLICIT: "No giant geometry
+    # hanging above the camera", "no world shell visibly enclosing the scene",
+    # and the composition must read foreground -> path -> gates -> gardens ->
+    # midground -> towers -> enormous fantasy city skyline.
+    #
+    # These two boughs are the geometry doing the enclosing. They were tuned to
+    # be a repoussoir arch and they became a ROOF: 22.2% of the frame in leaf
+    # cards, and in the founder's own screenshot they are the dark masses across
+    # the entire top edge with the city shut out behind them.
+    #
+    # A repoussoir frames a CORNER. It does not span the frame. So the bough is
+    # lifted far out of the view and thinned hard -- it still reads as a canopy
+    # edge at the top-left, and the city behind it is no longer roofed over.
+    BOUGH1_LIFT = 1150.0       # 320 -> 1150: out of the frame's top edge
+    BOUGH1_CARDS = 3           # 9 -> 3: an edge, not a ceiling
     for _k in range(14):
         _t = (_k + 0.5) / 14.0
         _bx = _TX - _t * 1500.0
@@ -5932,8 +5974,11 @@ def build(layout):
     # These are the two numbers to move if the founder wants more or less sky.
     # Every value they touch is measured by verify-visual-target.py, so the
     # effect is a number rather than an opinion.
-    BOUGH2_LIFT = 260.0        # uu the top bough is raised out of the frame
-    BOUGH2_CARDS = 8           # per node: was 3 at 2.70, now 8 at 1.62
+    # Same as bough 1, and for the same reason: this one crosses the TOP of the
+    # frame, which is precisely where the founder wants to see a fantasy city
+    # skyline. Raised clear and thinned to an edge.
+    BOUGH2_LIFT = 1400.0       # 260 -> 1400: fully above the hero view
+    BOUGH2_CARDS = 2           # 8 -> 2
     for _k in range(11):
         _t = (_k + 0.5) / 11.0
         # ACROSS the top, toward screen-right (which is world -X when the camera
@@ -6803,6 +6848,101 @@ def build(layout):
     # architecture rather than another turret.
     kit_castle(9000.0, 66000.0, 12.0, "GreatCastle")
     kit_castle(-30000.0, 36000.0, 8.5, "WestCastle")
+
+    # ---- THE ENORMOUS FANTASY CITY SKYLINE --------------------------------
+    #
+    # THE FOUNDER'S WORDS: "enormous fantasy city skyline", "towers", "layered
+    # skyline", and the composition must read all the way out to it. Two
+    # castles were closing the north axis and nothing else was; lifting the
+    # framing boughs out of the frame opened the top third to 24% SKY, and an
+    # empty sky is not the reference -- the reference's sky is FULL of spires.
+    #
+    # So the horizon gets a real city: three depth bands of castles and towers
+    # spread across the whole arc the camera can see, each band smaller, paler
+    # and further, which is what makes a skyline read as DEPTH rather than as a
+    # row of props. All of it is instanced through the same batching path, so
+    # the piece count costs draw calls it does not have.
+    _SKY_CITY = 0
+    for _band, (_dist, _scale, _n, _spread) in enumerate((
+            (34000.0, 7.0, 11, 2.35),     # near band: full castles
+            (56000.0, 5.2, 15, 2.65),     # mid band
+            (82000.0, 3.6, 19, 2.95))):   # far band, a serrated horizon
+        for _i in range(_n):
+            _a = (_i / float(_n - 1) - 0.5) * _spread + 1.5708
+            # jitter so the band is not an arc of evenly spaced identical towers
+            _h = (_band * 7919 + _i * 104729) & 0xFFFF
+            _r = _dist * (0.88 + 0.24 * ((_h >> 3) % 100) / 100.0)
+            _cx = math.cos(_a) * _r
+            _cy = math.sin(_a) * _r
+            # never in front of the great castle, which is the subject
+            if abs(_cx - 9000.0) < 6000.0 and abs(_cy - 66000.0) < 9000.0:
+                continue
+            _cs = _scale * (0.78 + 0.44 * ((_h >> 9) % 100) / 100.0)
+            kit_castle(_cx, _cy, _cs, "SkyCity%d_%d" % (_band, _i))
+            _SKY_CITY += 1
+    # ---- THE ORNAMENTAL MIDGROUND -----------------------------------------
+    #
+    # THE FOUNDER'S LIST, VERBATIM: flowers, roses, mushrooms, ornamental gates,
+    # arches, hedges, clocks, lamps, fountains, tea-party props, towers. "The
+    # world should be visually DENSE. Every major part of the frame should feel
+    # authored."
+    #
+    # The storey between the flower beds at the camera's feet and the city on
+    # the horizon was mostly empty ground -- coverage.objects_pct reads 81.5
+    # against a target of 85, and an empty middle distance is exactly what makes
+    # a world read as a blockout however good its edges are.
+    #
+    # So the midground gets furnished, on arcs at three depths, with the props
+    # the reference actually contains. Everything routes through the same
+    # instanced batching path, so the piece count costs draw calls it does not
+    # have.
+    _ORN = 0
+    for _ring, (_rad, _count, _sc) in enumerate(((2050.0, 16, 1.00),
+                                                 (3100.0, 20, 1.35),
+                                                 (4400.0, 24, 1.75))):
+        for _i in range(_count):
+            _a = (_i / float(_count)) * 2.0 * math.pi + _ring * 0.31
+            _ox = math.cos(_a) * _rad
+            _oy = NEAR_Y + 500.0 + math.sin(_a) * _rad * 0.72
+            if in_camera_lap(_ox, _oy, 300.0):
+                continue
+            if math.hypot(_ox - HERO_DOG[0], _oy - HERO_DOG[1]) < 620.0:
+                continue
+            _kind = (_i + _ring) % 7
+            _lb = "Orn%d_%d" % (_ring, _i)
+            if _kind == 0:
+                kit_arch(_ox, _oy, 0.80 * _sc, _lb)
+            elif _kind == 1:
+                kit_heart_topiary(_ox, _oy, 0.0, 0.85 * _sc, _lb)
+            elif _kind == 2:
+                kit_teacup(_ox, _oy, 0.75 * _sc, _lb)
+            elif _kind == 3:
+                kit_topiary_form(_ox, _oy, 0.95 * _sc, _lb,
+                                 form=("cone", "ball", "spiral")[_i % 3])
+            elif _kind == 4:
+                kit_lantern(_ox, _oy, 0.90 * _sc, _lb)
+            elif _kind == 5:
+                kit_bed(_ox, _oy, 150.0 * _sc, _lb,
+                        palette=("petal_violet", "rose_pink", "petal_pink"))
+            else:
+                kit_gate(_ox, _oy, 0.62 * _sc, _lb)
+            _ORN += 1
+            # a cluster of caps at the foot of every ornament, so nothing stands
+            # on bare ground
+            for _c in range(5):
+                _ca = _c * 1.257 + _i
+                kit_mushroom(_ox + math.cos(_ca) * 150.0 * _sc,
+                             _oy + math.sin(_ca) * 150.0 * _sc,
+                             0.34 + 0.20 * (_c % 3) / 2.0,
+                             "%s_cap%d" % (_lb, _c),
+                             ("mush_red", "mush_purple", "mush_white")[(_i + _c) % 3])
+    unreal.log_warning("ORNAMENTAL MIDGROUND: %d gates, arches, teacups, "
+                       "topiary, lanterns and beds on three rings - the storey "
+                       "between the flowers and the skyline was empty" % _ORN)
+
+    unreal.log_warning("SKYLINE CITY: %d castles across three depth bands - the "
+                       "founder asked for an enormous fantasy city skyline and the "
+                       "horizon held two" % _SKY_CITY)
     # Gentle rolling terrain: large low ground mounds sunk into the plane so only
     # their crowns show, breaking the dead-flat floor at the district edges.
     for i, (mx, my, mr) in enumerate([(-1650, -650, 8.0), (1750, -450, 7.0), (-2050, 1500, 9.0),
