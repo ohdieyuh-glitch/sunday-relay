@@ -412,6 +412,18 @@ LOOK = {
     # walls, which is the property that made 14,000 a cast rather than the
     # brightness.
     "lampLumens": 4600.0,
+    # How close to the arrival camera a lantern has to be to earn its shadows.
+    #
+    # AT 2600 THIS CURRENTLY EXCLUDES NOTHING -- all twelve lanterns are inside
+    # it, so the frame pays 12 x 6 = 72 cubemap faces rather than the 150 it
+    # would at 25. That is deliberate and it is not a reduction: every lantern
+    # is in the plaza, every one of them can light through a wall into the
+    # arrival frame, and excluding any of them re-opens the defect for that
+    # lamp. The knob is a SAFETY VALVE, not an active saving -- if the next
+    # rendered frame says 72 shadow passes cost more than the frame rate can
+    # afford, this is where the trade gets made, explicitly, against a measured
+    # number rather than a guess.
+    "lampShadowRadius": 2600.0,
     # 0.5 -> 0.0, AS A TEST WITH A REASON. Bloom is ADDITIVE and screen-wide,
     # and the arithmetic on a delivered frame says an additive WHITE term is
     # exactly what is wrong. Solving mush_red's darkest half for out = a*E + S,
@@ -4250,6 +4262,8 @@ def build(layout):
             _part("cube", gx, gy, gz, 0.05 * s, 0.05 * s, 0.20 * s, "arcane",
                   "%s_glyphB%d" % (label, i))
 
+    _LAMP_STATS = [0, 0]        # [shadowed, dimmed-and-shadowless]
+
     def kit_lantern(x, y, s, label, yaw=0.0):
         """An ornate street lantern. A boulevard without lamp posts reads as a
         path across a field; with them it reads as a street in a city, and the
@@ -4340,11 +4354,34 @@ def build(layout):
             #   MANY AND MODERATE. Well under the 6,000-lumen ceiling
             #     verify-light-budget.py enforces -- that gate exists because of
             #     these lamps and it is not being widened for them.
-            plc.set_intensity(float(LOOK["lampLumens"]))
+            # SHADOWS ARE THE FIX AND THEY ARE NOT FREE. A shadow-casting point
+            # light renders SIX cubemap faces, and this world has 25 of them --
+            # up to 150 shadow passes a frame, against a frame rate that is
+            # currently 58.7 fps and is one of the goal's own acceptance
+            # criteria. Turning them all on would have protected the colour by
+            # spending the performance, which is trading one criterion for
+            # another rather than meeting both.
+            #
+            # So shadows go where they DO something. The defect was lamps
+            # lighting through walls into the arrival frame; a lamp forty metres
+            # behind the camera cannot commit it. The near ones cast; the far
+            # ones stay shadowless and are dimmed to a third, which is well
+            # below the level at which a shadowless lamp can decide a hue --
+            # that was 14,000 lumens over an 1,100 uu reach, and this is 1,500
+            # over 620.
+            _lamp_d = math.hypot(x - ARRIVAL_CAM[0], y - ARRIVAL_CAM[1])
+            _lamp_near = _lamp_d < LOOK["lampShadowRadius"]
+            plc.set_intensity(float(LOOK["lampLumens"])
+                              * (1.0 if _lamp_near else 0.33))
             plc.set_light_color(srgb_light_color(255, 214, 158))
             set_prop(plc, "AttenuationRadius", 620.0)
             set_prop(plc, "SourceRadius", 18.0)
-            set_prop(plc, "CastShadows", True)
+            set_prop(plc, "CastShadows", bool(_lamp_near))
+            if _lamp_near:
+                # Half-resolution shadows: these are soft warm pools on a
+                # blocky world, not a place anyone reads a shadow's edge.
+                set_prop(plc, "ShadowResolutionScale", 0.5)
+            _LAMP_STATS[0 if _lamp_near else 1] += 1
         except Exception as _e:
             unreal.log_warning("lantern light skipped: %s" % _e)
 
@@ -6514,6 +6551,10 @@ def build(layout):
         else:
             kit_lantern(_ax, _ay, 0.86 + 0.14 * ((_a * 5) % 3) / 2.0, "MgLamp%d" % _a)
         _ARCH += 1
+    unreal.log_warning("LANTERNS: %d shadow-casting (near the arrival camera), "
+                       "%d shadowless at a third intensity - shadows cost six "
+                       "cubemap faces each and there are 25 lamps"
+                       % (_LAMP_STATS[0], _LAMP_STATS[1]))
     unreal.log_warning("MIDGROUND ARCHITECTURE placed %d pieces "
                        "(benches, pedestals, lanterns) - coverage, not planting"
                        % _ARCH)
