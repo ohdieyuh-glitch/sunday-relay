@@ -153,6 +153,38 @@ namespace WonderlandGait
 	/** @param LegLength  hip-to-paw distance at rest, uu. */
 	FLegSwing LegSwing(const FLegPose& Pose, float LegLength);
 
+	/** How far a paw must move VERTICALLY to sit on the ground it is over.
+	 *
+	 *  The Dog already traces for the ground under its ROOT and eases onto it,
+	 *  which keeps the whole body at the right height on a slope — and leaves
+	 *  every paw at the same height as every other. On anything but flat ground
+	 *  the uphill paws sink and the downhill ones hang, which is the "hovering
+	 *  and sinking" the brief names.
+	 *
+	 *  Per-paw ground tracing is what fixes it, and the TRACE needs the engine.
+	 *  What does not, and is where this goes wrong, is the arithmetic around it:
+	 *
+	 *   - ONLY A PLANTED PAW is placed on the ground. Gluing a swinging paw to
+	 *     the terrain cancels the swing and the Dog shuffles.
+	 *   - ONLY VERTICALLY. Moving a paw horizontally to meet a slope would
+	 *     fight the foot lock the whole gait rests on.
+	 *   - CLAMPED, so one bad trace — a gap in the collision, a prop the ray
+	 *     caught — cannot stretch a leg to the horizon.
+	 *   - EASED, so a paw crossing a step does not pop; and eased by HALF-LIFE
+	 *     so it behaves the same at 20 fps and 60.
+	 *
+	 *  @param CurrentOffset  the offset applied last frame, uu.
+	 *  @param GroundDelta    traced ground height minus the paw's height, uu.
+	 *                        Positive means the ground is ABOVE the paw.
+	 *  @param bStance        is this paw planted right now.
+	 *  @param MaxOffset      furthest a paw may be moved, uu.
+	 *  @param DeltaSeconds   frame time.
+	 *  @return the offset to apply this frame.
+	 */
+	float PawGroundOffset(float CurrentOffset, float GroundDelta, bool bStance,
+	                      float MaxOffset, float DeltaSeconds,
+	                      float HalfLifeSeconds = 0.09f);
+
 	/** Where a Dog may not walk — staging, not gait, but the same kind of thing
 	 *  and testable for the same reason: it is arithmetic, so it lives in plain
 	 *  floats here rather than inside an actor where only a GPU could check it.

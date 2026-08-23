@@ -757,6 +757,19 @@ if has "$SD_SRC" 'Up.HindStretch'; then
 else
   bad "the hind stretch never reaches the components — the body detaches while rearing"
 fi
+# THE ROOT TRACE IS NOT GROUNDING. It puts the BODY at the right height on a
+# slope and leaves every paw at the same height as every other, so uphill paws
+# sink and downhill ones hang — the "hovering and sinking" the brief names.
+if has "$SD_SRC" 'PawGroundOffset'; then
+  ok "...and every paw traces for its OWN ground, not just the body"
+else
+  bad "only the root is traced — on a slope the paws sink and hang"
+fi
+if has "$SD_SRC" 'SCENE_QUERY_STAT(WonderlandPaw)'; then
+  ok "...with a per-paw trace from the paw's own world position"
+else
+  bad "the per-paw grounding has no trace behind it"
+fi
 
 echo
 echo "== the Project Avatar is placed, and its absence is loud =="

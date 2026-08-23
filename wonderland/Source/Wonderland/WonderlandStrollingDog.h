@@ -202,6 +202,22 @@ private:
 	/** Cycles while a work pose is held, so a held pose stays alive. */
 	float WorkPhase = 0.0f;
 
+	/** Per-paw ground offset, eased. The Dog already traces under its ROOT,
+	 *  which keeps the BODY at the right height on a slope and leaves every paw
+	 *  at the same height as every other — uphill paws sink, downhill ones
+	 *  hang. This is the per-paw correction. */
+	float PawGroundOffsets[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+	/** Furthest a paw may be moved to meet the ground, uu. Bounds one bad
+	 *  trace; a gap in the collision must not stretch a leg to the horizon. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	float MaxPawGroundOffset = 38.0f;
+
+	/** Reported by the world proof: how many paws are actually being corrected,
+	 *  so "grounding works" is a recorded number rather than an impression. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
+	int32 PawsGrounded = 0;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
 	FName CurrentWorkName = FName(TEXT("none"));
 

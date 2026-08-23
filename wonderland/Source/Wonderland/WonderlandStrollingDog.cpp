@@ -378,6 +378,12 @@ void AWonderlandStrollingDog::Tick(float DeltaSeconds)
 
 void AWonderlandStrollingDog::PoseLegs(float Travelled, float SettleAlpha)
 {
+	// Frame time for the paw easing. Taken from the world rather than passed,
+	// because every caller of PoseLegs already has a clamped Dt and threading a
+	// fourth argument through them all to say the same thing invites two of them
+	// to say different things.
+	const float PawDt = (GetWorld() != nullptr)
+		? FMath::Clamp(GetWorld()->GetDeltaSeconds(), 0.0f, 0.1f) : (1.0f / 60.0f);
 	// SettleAlpha 1 means "stand": the paws blend back to their rest pose. A
 	// Dog that stops mid-stride and freezes is the snapping the founder saw.
 	const float Blend = 1.0f - FMath::Clamp(SettleAlpha, 0.0f, 1.0f);
@@ -400,6 +406,7 @@ void AWonderlandStrollingDog::PoseLegs(float Travelled, float SettleAlpha)
 	const WonderlandGait::FBodyPose BodyPose =
 		WonderlandGait::BodyPose(Travelled / Stride, Bob);
 
+	int32 Grounded = 0;
 	for (int32 i = 0; i < 4; ++i)
 	{
 		UStaticMeshComponent* const Leg = Rig.Legs[i];
@@ -436,12 +443,42 @@ void AWonderlandStrollingDog::PoseLegs(float Travelled, float SettleAlpha)
 		// direction the leg hangs — maps to (sin p, 0, -cos p). Positive pitch
 		// therefore carries the paw forward, which is what LegSwing means by it.
 		const float Rad = FMath::DegreesToRadians(Swing.PitchDeg);
+		// PER-PAW GROUNDING. Trace from the paw's own world position, so on a
+		// slope the uphill paws rise and the downhill ones reach down, instead
+		// of every paw sitting at the height the ROOT trace chose for the body.
+		//
+		// Only the planted ones are placed: gluing a swinging paw to the terrain
+		// cancels its arc and the Dog shuffles. WonderlandGait::PawGroundOffset
+		// holds that rule, the clamp and the easing — all of it proven with g++.
+		float Grounding = 0.0f;
+		{
+			const FVector PawLocal(Rest.X + Reach * FMath::Sin(Rad), Rest.Y,
+			                       HipZ - Reach * FMath::Cos(Rad));
+			const FVector PawWorld = GetActorTransform().TransformPosition(PawLocal);
+			float Delta = 0.0f;
+			if (const UWorld* const W = GetWorld())
+			{
+				FHitResult Hit;
+				FCollisionQueryParams Params(SCENE_QUERY_STAT(WonderlandPaw), false, this);
+				if (W->LineTraceSingleByChannel(Hit, PawWorld + FVector(0, 0, 120.0f),
+				                                PawWorld - FVector(0, 0, 260.0f),
+				                                ECC_WorldStatic, Params))
+				{
+					Delta = Hit.Location.Z - PawWorld.Z;
+				}
+			}
+			PawGroundOffsets[i] = WonderlandGait::PawGroundOffset(
+				PawGroundOffsets[i], Delta, Pose.bStance, MaxPawGroundOffset, PawDt);
+			Grounding = PawGroundOffsets[i] * Blend;
+			if (Pose.bStance && FMath::Abs(PawGroundOffsets[i]) > 0.5f) { ++Grounded; }
+		}
+
 		Leg->SetRelativeRotation(FRotator(Swing.PitchDeg, 0.0f, 0.0f));
 		Leg->SetRelativeScale3D(FVector(Rig.LegRestScale[i].X, Rig.LegRestScale[i].Y,
 		                                Rig.LegRestScale[i].Z * (Reach / LegLen)));
 		Leg->SetRelativeLocation(FVector(Rest.X + Reach * 0.5f * FMath::Sin(Rad),
 		                                 Rest.Y,
-		                                 HipZ - Reach * 0.5f * FMath::Cos(Rad)));
+		                                 HipZ - Reach * 0.5f * FMath::Cos(Rad) + Grounding));
 	}
 
 	if (Rig.Torso != nullptr)
@@ -449,6 +486,7 @@ void AWonderlandStrollingDog::PoseLegs(float Travelled, float SettleAlpha)
 		Rig.Torso->SetRelativeLocation(FVector(Rig.TorsoRest.X, Rig.TorsoRest.Y,
 		                                       Rig.TorsoRest.Z + BodyPose.Bob * Blend));
 	}
+	PawsGrounded = Grounded;
 	if (Rig.Head != nullptr)
 	{
 		// The head counter-bobs: a walking dog holds its head steadier than its

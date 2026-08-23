@@ -458,6 +458,19 @@ namespace WonderlandWorldProof
 						   Idling, Walking, Trotting, Running);
 					UE_LOG(LogWonderlandProof, Warning,
 						   TEXT("RUNTIME_DOGS_WORKING=%d"), Working);
+					int32 PawsOnSlope = 0;
+					for (const AActor* const Dog : DogActors)
+					{
+						if (const AWonderlandStrollingDog* const S =
+								Cast<AWonderlandStrollingDog>(Dog))
+						{
+							PawsOnSlope += S->PawsGrounded;
+						}
+					}
+					// A number, not an impression. "Grounding works" is otherwise
+					// only checkable by looking at a paw and deciding.
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("RUNTIME_PAWS_GROUND_CORRECTED=%d"), PawsOnSlope);
 				}
 
 				// THE PROJECT AVATAR. Its absence is as important as its state:

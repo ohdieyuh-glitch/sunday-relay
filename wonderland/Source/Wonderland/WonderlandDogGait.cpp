@@ -213,6 +213,33 @@ namespace WonderlandGait
 		return Swing;
 	}
 
+	float PawGroundOffset(float CurrentOffset, float GroundDelta, bool bStance,
+	                      float MaxOffset, float DeltaSeconds, float HalfLifeSeconds)
+	{
+		// A SWINGING PAW IS NOT PLACED. It returns to zero instead, so the arc
+		// the gait drew survives; gluing it to the terrain cancels the swing and
+		// the Dog shuffles along with its feet on the floor.
+		float Target = bStance ? GroundDelta : 0.0f;
+
+		// CLAMPED BEFORE ANYTHING ELSE. One bad trace — a hole in the collision,
+		// a prop the ray caught, a Dog momentarily over a rooftop — would
+		// otherwise stretch a leg to wherever that ray ended.
+		const float Limit = (MaxOffset > 0.0f) ? MaxOffset : 0.0f;
+		if (Target > Limit) { Target = Limit; }
+		if (Target < -Limit) { Target = -Limit; }
+
+		if (HalfLifeSeconds <= 0.0f || DeltaSeconds <= 0.0f)
+		{
+			return Target;
+		}
+		// Halving the remaining distance every half-life, so a paw crossing a
+		// step eases onto it and does so identically at 20 fps and 60. A plain
+		// `Current += Rate * Dt` does neither.
+		const float K = std::pow(0.5f, DeltaSeconds / HalfLifeSeconds);
+		const float Next = Target + (CurrentOffset - Target) * K;
+		return (std::fabs(Next - Target) < 1e-3f) ? Target : Next;
+	}
+
 	void PushOutOfColumn(float X, float Y, float CentreX, float CentreY,
 	                     float Radius, float& OutX, float& OutY)
 	{

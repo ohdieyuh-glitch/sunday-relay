@@ -497,6 +497,85 @@ int main(int argc, char** argv)
 		      "pitch " + std::to_string(Rest.PitchDeg) + " stretch " + std::to_string(Rest.Stretch));
 	}
 
+	std::printf("== paws sit on the ground they are actually over ==\n");
+	{
+		const float Dt = 1.0f / 60.0f, Max = 40.0f;
+		// A PLANTED PAW REACHES ITS GROUND. Run it to convergence.
+		float O = 0.0f;
+		for (int i = 0; i < 400; ++i) { O = PawGroundOffset(O, 18.0f, true, Max, Dt); }
+		Check("a planted paw settles onto ground 18 uu above it",
+		      std::fabs(O - 18.0f) < 0.05f, std::to_string(O) + " uu");
+		// ...and below it, for a downhill paw that would otherwise hang.
+		O = 0.0f;
+		for (int i = 0; i < 400; ++i) { O = PawGroundOffset(O, -22.0f, true, Max, Dt); }
+		Check("...and reaches DOWN to ground below it, instead of hanging",
+		      std::fabs(O + 22.0f) < 0.05f, std::to_string(O) + " uu");
+
+		// A SWINGING PAW IS NOT GLUED DOWN. If it were, the swing arc would be
+		// cancelled and the Dog would shuffle with its feet on the floor.
+		O = 30.0f;
+		for (int i = 0; i < 400; ++i) { O = PawGroundOffset(O, 30.0f, false, Max, Dt); }
+		Check("a SWINGING paw returns to zero, so its arc survives",
+		      std::fabs(O) < 0.05f, std::to_string(O) + " uu");
+
+		// CLAMPED. One bad trace must not stretch a leg to the horizon.
+		O = 0.0f;
+		for (int i = 0; i < 400; ++i) { O = PawGroundOffset(O, 5000.0f, true, Max, Dt); }
+		Check("a wild trace is clamped to the limit, not followed",
+		      std::fabs(O - Max) < 0.05f, std::to_string(O) + " uu");
+		O = 0.0f;
+		for (int i = 0; i < 400; ++i) { O = PawGroundOffset(O, -5000.0f, true, Max, Dt); }
+		Check("...in both directions", std::fabs(O + Max) < 0.05f, std::to_string(O) + " uu");
+
+		// EASED, NOT SNAPPED. A paw crossing a step must not pop.
+		O = 0.0f;
+		const float First = PawGroundOffset(O, 40.0f, true, Max, Dt);
+		Check("one frame does not jump the whole way onto a step",
+		      First < 40.0f * 0.35f, "first frame moved " + std::to_string(First) + " uu");
+
+		// FRAME-RATE INDEPENDENT. The same step must take the same wall time at
+		// 20 fps and 60, or the grounding behaves differently as the stream's
+		// frame rate moves — and this world has streamed between 13 and 21.
+		auto TimeTo = [&](float Fps) {
+			float V = 0.0f, T = 0.0f; const float D = 1.0f / Fps;
+			for (int i = 0; i < 100000 && V < 35.0f; ++i) { V = PawGroundOffset(V, 40.0f, true, Max, D); T += D; }
+			return T;
+		};
+		const float A = TimeTo(20.0f), B = TimeTo(60.0f), C = TimeTo(144.0f);
+		Check("a paw settles in the same wall time at 20, 60 and 144 fps",
+		      std::fabs(A - B) < 0.04f && std::fabs(B - C) < 0.04f,
+		      std::to_string(A) + "s / " + std::to_string(B) + "s / " + std::to_string(C) + "s");
+
+		// FOOT IK MUST NOT DISTURB FOOT LOCK. Run a leg through strides over
+		// sloping ground with the grounding active, and check the planted paw's
+		// world position along the TRAVEL axis never moves — the correction is
+		// vertical, so the lock the whole gait rests on is untouched.
+		{
+			const float Stride = 120.0f, Lift = 18.0f;
+			float Off = 0.0f, WorstDrift = 0.0f, Anchor = 0.0f, PrevPhase = -1.0f;
+			bool bHave = false;
+			int Planted = 0;
+			for (int i = 0; i <= 6000; ++i)
+			{
+				const float D = i * 0.15f;
+				const float Phase = D / Stride;
+				const FLegPose Pose = LegPose(Phase, Stride, Lift);
+				// A slope the Dog is walking up, plus a step partway along.
+				const float Ground = D * 0.12f + ((D > 400.0f) ? 25.0f : 0.0f);
+				Off = PawGroundOffset(Off, Ground - D * 0.12f, Pose.bStance, 40.0f, 1.0f / 60.0f);
+				if (!Pose.bStance) { bHave = false; PrevPhase = Phase; continue; }
+				const float World = D + Pose.Forward;      // horizontal only
+				if (!bHave || Phase < PrevPhase) { Anchor = World; bHave = true; }
+				else { WorstDrift = std::fmax(WorstDrift, std::fabs(World - Anchor)); ++Planted; }
+				PrevPhase = Phase;
+			}
+			Check("grounding a paw on a slope does not move it horizontally",
+			      WorstDrift < 1e-2f && Planted > 2000,
+			      "worst drift " + std::to_string(WorstDrift) + " uu over "
+			      + std::to_string(Planted) + " planted samples on a slope with a step");
+		}
+	}
+
 	std::printf("== a Dog will not walk through the opening shot ==\n");
 	{
 		const float CX = 0.0f, CY = -1150.0f, R = 1150.0f;
