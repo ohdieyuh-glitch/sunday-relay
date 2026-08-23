@@ -34,10 +34,12 @@ static int EmitGolden()
 {
 	using namespace WonderlandGait;
 	const float Stride = 120.0f, Lift = 18.0f, Bob = 3.0f;
+	const float LegLen = 119.6f;   // the canonical Dog at scale 1.3
 	std::printf("{\n");
 	std::printf("  \"note\": \"emitted by WonderlandDogGait.test.cpp --golden; do not hand-edit\",\n");
 	std::printf("  \"stride\": %.1f, \"lift\": %.1f, \"bob\": %.1f,\n", Stride, Lift, Bob);
 	std::printf("  \"dutyFactor\": %.6f,\n", WalkDutyFactor);
+	std::printf("  \"legLength\": %.1f,\n", LegLen);
 	std::printf("  \"legPhaseOffset\": [%.6f, %.6f, %.6f, %.6f],\n",
 	            LegPhaseOffset(0), LegPhaseOffset(1), LegPhaseOffset(2), LegPhaseOffset(3));
 	std::printf("  \"samples\": [\n");
@@ -47,10 +49,12 @@ static int EmitGolden()
 		const float P = i / float(N);
 		const FLegPose L = LegPose(P, Stride, Lift);
 		const FBodyPose B = BodyPose(P, Bob);
+		const FLegSwing W = LegSwing(L, LegLen);
 		std::printf("    {\"p\": %.6f, \"fwd\": %.6f, \"lift\": %.6f, \"stance\": %s, "
-		            "\"bob\": %.6f, \"pitch\": %.6f, \"roll\": %.6f}%s\n",
+		            "\"bob\": %.6f, \"pitch\": %.6f, \"roll\": %.6f, "
+		            "\"swingPitch\": %.6f, \"stretch\": %.6f}%s\n",
 		            P, L.Forward, L.Lift, L.bStance ? "true" : "false",
-		            B.Bob, B.Pitch, B.Roll, (i + 1 < N) ? "," : "");
+		            B.Bob, B.Pitch, B.Roll, W.PitchDeg, W.Stretch, (i + 1 < N) ? "," : "");
 	}
 	std::printf("  ]\n}\n");
 	return 0;
@@ -235,6 +239,80 @@ int main(int argc, char** argv)
 		Check("one stride of travel returns the paw to the same pose",
 		      std::fabs(Start.Forward - OneStrideLater.Forward) < 1e-4f
 		      && std::fabs(Start.Lift - OneStrideLater.Lift) < 1e-4f);
+	}
+
+	std::printf("== the leg PIVOTS at the hip, and still lands where it should ==\n");
+	{
+		const float LegLen = 119.6f;   // the canonical Dog: 92 uu at scale 1.3
+		float MaxStretch = 1.0f, MinStretch = 2.0f, MaxPitch = 0.0f;
+		float WorstPaw = 0.0f;
+		for (int i = 0; i <= 4000; ++i)
+		{
+			const float P = i / 4000.0f;
+			const FLegPose L = LegPose(P, Stride, Lift);
+			const FLegSwing W = LegSwing(L, LegLen);
+			MaxStretch = std::fmax(MaxStretch, W.Stretch);
+			MinStretch = std::fmin(MinStretch, W.Stretch);
+			MaxPitch = std::fmax(MaxPitch, std::fabs(W.PitchDeg));
+			// THE WHOLE POINT: rotating the limb by PitchDeg and stretching it
+			// by Stretch must put the paw exactly where LegPose asked. If this
+			// drifts, the pivot has quietly reintroduced the skate that the
+			// translation was there to prevent.
+			const float Rad = W.PitchDeg * (3.14159265358979323846f / 180.0f);
+			const float PawF = LegLen * W.Stretch * std::sin(Rad);
+			const float PawUp = LegLen - LegLen * W.Stretch * std::cos(Rad);
+			WorstPaw = std::fmax(WorstPaw, std::fabs(PawF - L.Forward));
+			WorstPaw = std::fmax(WorstPaw, std::fabs(PawUp - L.Lift));
+		}
+		Check("the pivoted leg puts its paw exactly where LegPose asked",
+		      WorstPaw < 1e-3f, "worst " + std::to_string(WorstPaw) + " uu");
+		Check("...so a planted paw is still locked, not merely near",
+		      WorstPaw < 1e-3f);
+		Check("the limb actually swings, rather than staying vertical",
+		      MaxPitch > 12.0f, "max pitch " + std::to_string(MaxPitch) + " deg");
+		// TWO DIFFERENT THINGS, BOUNDED SEPARATELY. The first version of this
+		// check asked for the whole range to sit inside six percent and failed
+		// at 0.88 — and the correct response was not to widen it to 0.88,
+		// which would have been a guard relaxed until the code passed. The
+		// range covers two phenomena that want opposite bounds:
+		//
+		//   STANCE. The paw is planted and the limb reaches forward or back
+		//   from a fixed hip. It can only ever be LONGER than rest, and only
+		//   by the small amount an arc is short by. A planted leg that visibly
+		//   grows is wrong.
+		//
+		//   SWING. The limb retracts to carry the paw over the ground. Without
+		//   a knee that IS the lift — it is the mechanism, not an error — and
+		//   bounding it tightly would forbid the paw from leaving the floor.
+		float StanceMax = 1.0f, StanceMin = 2.0f, SwingMin = 2.0f;
+		for (int i = 0; i <= 4000; ++i)
+		{
+			const float P = i / 4000.0f;
+			const FLegPose L = LegPose(P, Stride, Lift);
+			const float St = LegSwing(L, LegLen).Stretch;
+			if (L.bStance) { StanceMax = std::fmax(StanceMax, St); StanceMin = std::fmin(StanceMin, St); }
+			else { SwingMin = std::fmin(SwingMin, St); }
+		}
+		Check("a PLANTED leg never shortens, and lengthens by under 6 percent",
+		      StanceMin > 0.9999f && StanceMax < 1.06f,
+		      "stance " + std::to_string(StanceMin) + " to " + std::to_string(StanceMax));
+		Check("a SWINGING leg retracts — that retraction IS the paw lift",
+		      SwingMin < 0.93f,
+		      "swing shortest " + std::to_string(SwingMin));
+		// And it must come back. A limb still short at touchdown puts the paw
+		// through the floor on the next frame, which reads as a snap.
+		const FLegSwing Touchdown = LegSwing(LegPose(0.0f, Stride, Lift), LegLen);
+		const FLegSwing Liftoff = LegSwing(LegPose(WalkDutyFactor - 1e-4f, Stride, Lift), LegLen);
+		Check("...and is back to full length at touchdown and at lift-off",
+		      Touchdown.Stretch > 0.9999f && Liftoff.Stretch > 0.9999f,
+		      "touchdown " + std::to_string(Touchdown.Stretch)
+		      + " liftoff " + std::to_string(Liftoff.Stretch));
+		// A leg at rest must be exactly its rest length; a Dog standing still
+		// with a 3% longer leg is a Dog standing on tiptoe.
+		const FLegSwing Rest = LegSwing(LegPose(WalkDutyFactor * 0.5f, Stride, Lift), LegLen);
+		Check("mid-stance is upright and unstretched",
+		      std::fabs(Rest.PitchDeg) < 1e-3f && std::fabs(Rest.Stretch - 1.0f) < 1e-4f,
+		      "pitch " + std::to_string(Rest.PitchDeg) + " stretch " + std::to_string(Rest.Stretch));
 	}
 
 	std::printf("== the body carries the gait rather than gliding ==\n");

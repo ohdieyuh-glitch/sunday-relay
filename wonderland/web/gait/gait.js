@@ -74,6 +74,20 @@ export function bodyPose(stridePhase, bobHeight) {
   };
 }
 
+/** How a rigid, blocky leg is carried so the paw reaches legPose's target.
+ *  Mirrors WonderlandGait::LegSwing — see that header for why a stretching
+ *  limb, and not a knee, is the right answer for this Dog.
+ *  @returns {{pitchDeg:number, stretch:number}} */
+export function legSwing(pose, legLength) {
+  if (!(legLength > 0)) return { pitchDeg: 0, stretch: 1 };
+  const rise = legLength - pose.lift;
+  const reach = Math.sqrt(pose.forward * pose.forward + rise * rise);
+  return {
+    pitchDeg: Math.atan2(pose.forward, rise) * (180 / Math.PI),
+    stretch: reach / legLength,
+  };
+}
+
 /** Where the paw is in WORLD terms along the travel axis. Constant through
  *  stance is the whole point. */
 export function worldPawForward(distanceTravelled, legOffset, strideLength, liftHeight) {

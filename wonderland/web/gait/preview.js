@@ -120,6 +120,10 @@ body.parts.forEach((p, i) => {
   m.position.copy(toThree(p.loc));
   m.castShadow = true; m.receiveShadow = true;
   m.userData.rest = m.position.clone();
+  m.userData.restScaleY = m.scale.y;
+  // The hip is the TOP of the leg cube. A limb swings from there, not from its
+  // own centre, so the pivot has to be reconstructed from the rest pose.
+  m.userData.hipY = m.position.y + m.scale.y * 0.5;
   partMeshes.push(m);
   // Legs hang off the root so the torso's bob does not carry them; everything
   // else rides the torso pivot, which is what makes the body breathe over the
@@ -211,13 +215,35 @@ function frame(now) {
   grid.position.z = groundShift;
   trails.position.z = distance * UU;
 
+  const bpNow = gait.bodyPose(distance / stride, BOB);
+
   let down = 0;
   legMeshes.forEach((mesh, leg) => {
     const phase = distance / stride + gait.legPhaseOffset(leg);
     const pose = gait.legPose(phase, stride, LIFT);
-    // +X forward in UE is -Z in three, so a positive forward offset moves -Z.
-    mesh.position.z = mesh.userData.rest.z - pose.forward * UU;
-    mesh.position.y = mesh.userData.rest.y + pose.lift * UU;
+
+    // THE LIMB SWINGS FROM THE HIP. It used to be translated: the cube slid
+    // forward and back with the paw in the right place and nothing pivoting,
+    // which reads as a box on a rail rather than a leg.
+    //
+    // The hip is carried by the BODY, so its height includes the bob — a hip
+    // that stays put while the torso rises opens a gap at the shoulder. The
+    // limb then stretches to whatever reach that reduces to, which is why the
+    // paw stays exactly planted through all of it.
+    const legLen = mesh.userData.hipY / UU;                 // uu, rest hip height
+    const hipUU = legLen + bpNow.bob;
+    const swing = gait.legSwing(pose, hipUU);
+    const reachUU = hipUU * swing.stretch;
+    const phi = swing.pitchDeg * Math.PI / 180;
+
+    // Rotation about three's +X (the lateral axis) by +phi carries the paw to
+    // -Z, which is UE +X — forward. Scale along the limb, then hang its centre
+    // half a length down the rotated axis from the hip.
+    mesh.rotation.x = phi;
+    mesh.scale.y = mesh.userData.restScaleY * (reachUU / legLen);
+    const half = reachUU * UU * 0.5;
+    mesh.position.z = mesh.userData.rest.z - half * Math.sin(phi);
+    mesh.position.y = mesh.userData.hipY + bpNow.bob * UU - half * Math.cos(phi);
     if (pose.stance) {
       down++;
       // World position along the travel axis, in the ground's frame.
@@ -240,7 +266,7 @@ function frame(now) {
     prevStance[leg] = pose.stance;
   });
 
-  const bp = gait.bodyPose(distance / stride, BOB);
+  const bp = bpNow;
   torsoPivot.position.y = bp.bob * UU;
   torsoPivot.rotation.x = THREE.MathUtils.degToRad(bp.pitch);
   torsoPivot.rotation.z = THREE.MathUtils.degToRad(bp.roll);

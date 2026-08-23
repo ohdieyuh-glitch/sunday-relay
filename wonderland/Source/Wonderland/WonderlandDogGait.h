@@ -67,6 +67,34 @@ namespace WonderlandGait
 	/** Body carriage for the same phase. Bob peaks twice per stride. */
 	FBodyPose BodyPose(float StridePhase, float BobHeight);
 
+	/** How a rigid, blocky leg is carried so the paw reaches LegPose's target.
+	 *
+	 *  A LEG THAT SLIDES IS NOT A LEG. Translating the leg cube forward and
+	 *  back puts the paw in the right place and still reads as a box being
+	 *  shunted along a rail, because nothing about it PIVOTS. Every walking
+	 *  animal, and every blocky character in the voxel idiom this Dog belongs
+	 *  to, swings the whole limb from the hip.
+	 *
+	 *  A rigid limb rotated about the hip traces an ARC, so its paw lifts off
+	 *  the ground exactly when it should be planted — which is why translation
+	 *  was reached for. The way out is not to add a knee: a knee is a different
+	 *  silhouette and this Dog's proportions are its identity. It is to let the
+	 *  limb stretch by the small amount the arc is short by. Over the whole
+	 *  gait that is at most about five percent, invisible on a blocky leg, and
+	 *  the paw lands exactly where LegPose says — so foot lock is preserved
+	 *  EXACTLY rather than approximately.
+	 */
+	struct FLegSwing
+	{
+		/** Degrees about the lateral axis. Positive carries the paw FORWARD. */
+		float PitchDeg = 0.0f;
+		/** Length multiplier along the limb so the paw reaches. ~1.00-1.05. */
+		float Stretch = 1.0f;
+	};
+
+	/** @param LegLength  hip-to-paw distance at rest, uu. */
+	FLegSwing LegSwing(const FLegPose& Pose, float LegLength);
+
 	/** Where the paw is in WORLD terms along the travel axis, given how far the
 	 *  body has gone. Constant through stance is the whole point, and the test
 	 *  asserts exactly that. */

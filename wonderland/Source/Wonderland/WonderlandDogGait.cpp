@@ -85,6 +85,23 @@ namespace WonderlandGait
 		return Pose;
 	}
 
+	FLegSwing LegSwing(const FLegPose& Pose, float LegLength)
+	{
+		FLegSwing Swing;
+		if (LegLength <= 0.0f)
+		{
+			return Swing;   // nothing to pivot about; caller gets the rest pose
+		}
+		// The leg's own plane: the hip sits at (0, LegLength) above the paw's
+		// resting spot, and the paw is being asked for at (Forward, Lift).
+		const float Rise = LegLength - Pose.Lift;
+		const float Reach = std::sqrt(Pose.Forward * Pose.Forward + Rise * Rise);
+		// Straight down is zero; positive swings the paw forward.
+		Swing.PitchDeg = std::atan2(Pose.Forward, Rise) * (180.0f / 3.14159265358979323846f);
+		Swing.Stretch = Reach / LegLength;
+		return Swing;
+	}
+
 	float WorldPawForward(float DistanceTravelled, float LegOffset,
 	                      float StrideLength, float LiftHeight)
 	{

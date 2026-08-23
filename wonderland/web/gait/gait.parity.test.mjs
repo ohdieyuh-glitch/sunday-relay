@@ -62,9 +62,13 @@ try {
 // --- 2. does gait.js agree with it, sample for sample?
 const { stride, lift, bob } = golden;
 let worstFwd = 0, worstLift = 0, worstBob = 0, worstPitch = 0, worstRoll = 0, stanceMismatch = 0;
+let worstSwing = 0, worstStretch = 0;
 for (const s of golden.samples) {
   const L = gait.legPose(s.p, stride, lift);
   const B = gait.bodyPose(s.p, bob);
+  const W = gait.legSwing(L, golden.legLength);
+  worstSwing = Math.max(worstSwing, Math.abs(W.pitchDeg - s.swingPitch));
+  worstStretch = Math.max(worstStretch, Math.abs(W.stretch - s.stretch));
   worstFwd = Math.max(worstFwd, Math.abs(L.forward - s.fwd));
   worstLift = Math.max(worstLift, Math.abs(L.lift - s.lift));
   worstBob = Math.max(worstBob, Math.abs(B.bob - s.bob));
@@ -80,6 +84,8 @@ check('paw lift matches the engine', worstLift < TOL, `worst ${worstLift.toExpon
 check('body bob matches the engine', worstBob < TOL, `worst ${worstBob.toExponential(2)}`);
 check('body pitch matches the engine', worstPitch < TOL, `worst ${worstPitch.toExponential(2)}`);
 check('body roll matches the engine', worstRoll < TOL, `worst ${worstRoll.toExponential(2)}`);
+check('the limb swing angle matches the engine', worstSwing < TOL, `worst ${worstSwing.toExponential(2)}`);
+check('the limb stretch matches the engine', worstStretch < TOL, `worst ${worstStretch.toExponential(2)}`);
 check('every sample agrees on whether the paw is planted', stanceMismatch === 0,
       `${stanceMismatch} of ${golden.samples.length} disagree`);
 
