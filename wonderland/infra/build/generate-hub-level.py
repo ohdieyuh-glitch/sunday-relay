@@ -6440,6 +6440,47 @@ def build(layout):
     unreal.log_warning("FOREGROUND PLANTING placed %d beds, %d shrubs, %d mushroom caps"
                        % (_FG_BEDS, _FG_SHRUBS, _FG_CAPS))
 
+    # ---- MIDGROUND ARCHITECTURE ---------------------------------------
+    # THE METRIC THIS ANSWERS, and why planting could not.
+    #
+    # visual-target asks for coverage.objects_pct >= 85 and the frame reads
+    # 77.9: about seven points of it is bare ground. Nine purple caps per bed
+    # moved that by NOTHING, and the reason is geometric rather than a matter of
+    # taste -- a 40 uu cap forty metres out subtends almost no frame area from a
+    # camera at eye height. Coverage is won by things that are BIG or NEAR, and
+    # the beds already own the near field.
+    #
+    # So this is the storey between: waist-to-head architecture standing on the
+    # ground the camera can see across. Benches, pedestals and lanterns, in
+    # STONE and ROSE -- the founder's list names arches, lamps and architecture,
+    # and none of them are green, which matters because foliage is already the
+    # largest colour in the frame and over its own ceiling.
+    #
+    # Placed on an arc rather than a grid, outside the arrival keep-out and
+    # clear of the hero Dog, so it reads as a garden that was laid out rather
+    # than as scatter.
+    _ARCH = 0
+    for _a in range(14):
+        _ang = -1.45 + _a * (2.9 / 13.0)
+        _rad = 1180.0 + 210.0 * ((_a * 7) % 5) / 4.0
+        _ax = math.cos(_ang + math.pi * 0.5) * _rad
+        _ay = NEAR_Y + math.sin(_ang + math.pi * 0.5) * _rad * 0.55 + 420.0
+        if math.hypot(_ax - HERO_DOG[0], _ay - HERO_DOG[1]) < 520.0:
+            continue
+        if in_camera_lap(_ax, _ay, 260.0):
+            continue
+        _kind = _a % 3
+        if _kind == 0:
+            kit_bench(_ax, _ay, math.degrees(_ang) + 90.0, "MgBench%d" % _a)
+        elif _kind == 1:
+            kit_card_pedestal(_ax, _ay, 0.62 + 0.10 * ((_a * 3) % 3), "MgPedestal%d" % _a)
+        else:
+            kit_lantern(_ax, _ay, 0.86 + 0.14 * ((_a * 5) % 3) / 2.0, "MgLamp%d" % _a)
+        _ARCH += 1
+    unreal.log_warning("MIDGROUND ARCHITECTURE placed %d pieces "
+                       "(benches, pedestals, lanterns) - coverage, not planting"
+                       % _ARCH)
+
     # HERO MUSHROOMS, LEFT AND RIGHT. The reference opens on big red-and-white
     # caps flanking the frame at eye height; they are the first thing the eye
     # reads and the near band had none. Placed OUTSIDE the boulevard so they
