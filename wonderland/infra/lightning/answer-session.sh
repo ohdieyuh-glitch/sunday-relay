@@ -57,13 +57,19 @@ wl_ok "built $SHORT"
 WL_HERO_CAMS="${WL_HERO_CAMS:-6}" SKIP_PREPARE=1 SKIP_BUILD=1 \
   WL_ALLOW_NPM_INSTALL=1 bash "$HERE/capture-hero-shots.sh"
 
-STREAMED="$(wl_find_first "$WL_PROOF/captures" -name "hero6-$SHORT-*.png" | head -1 || true)"
+# NO PIPE TO head. wl_find_first already uses -print -quit, so it returns one
+# line -- and under the `set -euo pipefail` this file inherits, head exiting
+# early sends SIGPIPE to find and pipefail turns that into a failed command.
+# common.sh carries a comment about this exact hazard, twenty lines above code
+# that had it. Adding it back here would have failed the session on its first
+# GPU minute.
+STREAMED="$(wl_find_first "$WL_PROOF/captures" -name "hero6-$SHORT-*.png")"
 [ -n "${STREAMED:-}" ] && wl_ok "streamed frame: $STREAMED" \
   || wl_warn "no streamed frame for $SHORT"
 
 # ----------------------------------------- 3. the same frame with NO encoder
 if WL_HERO_CAM=6 bash "$HERE/native-shot.sh"; then
-  NATIVE="$(wl_find_first "$WL_PROOF/native" -name "*$SHORT*.png" | head -1 || true)"
+  NATIVE="$(wl_find_first "$WL_PROOF/native" -name "*$SHORT*.png")"
   [ -n "${NATIVE:-}" ] && wl_ok "native frame: $NATIVE" || wl_warn "native shot produced nothing"
 else
   wl_warn "native shot failed; the blur question stays open"
@@ -89,7 +95,17 @@ fi
 
 # ------------------------------------- 5. what colour did the COOK ship?
 # The one link in the chain nobody has read. Two lines settle it.
-RUNLOG="$(wl_find_first "$WL_OUT/Linux/Wonderland/Saved/Logs" -name "Wonderland*.log" | head -1 || true)"
+# THE NEWEST LOG, NOT THE FIRST ONE FOUND. wl_find_first stops at the first
+# match, and that directory fills with Wonderland-backup-<timestamp>.log files
+# from every previous run -- so it would have read an OLD run's palette and
+# reported it as this build's. That is the same class of mistake as attributing
+# a capture to the wrong build, which has already cost this project a
+# diagnosis.
+RUNLOG=""
+_logdir="$WL_OUT/Linux/Wonderland/Saved/Logs"
+if [ -d "$_logdir" ]; then
+  RUNLOG="$(ls -t "$_logdir"/Wonderland*.log 2>/dev/null | head -1 || true)"
+fi
 if [ -n "${RUNLOG:-}" ]; then
   grep -E "MATERIAL_RUNTIME|WONDERLAND BATCH" "$RUNLOG" \
     > "$WL_ANSWERS/materials-$SHORT.txt" 2>/dev/null || true
