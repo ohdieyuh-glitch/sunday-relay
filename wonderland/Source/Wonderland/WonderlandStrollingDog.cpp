@@ -1,5 +1,7 @@
 #include "WonderlandStrollingDog.h"
 
+#include "WonderlandProjectAvatarActor.h"
+
 #include "Components/SceneComponent.h"
 #include "WonderlandDogBody.h"
 #include "WonderlandDogGait.h"
@@ -103,6 +105,56 @@ void AWonderlandStrollingDog::BeginPlay()
 	PickDestination();
 }
 
+WonderlandPose::EWork AWonderlandStrollingDog::DesiredWork() const
+{
+	// NO AVATAR MEANS NO WORK. A Dog does not invent a job to look busy, and
+	// the Avatar's own state module already refuses to turn "we have not heard
+	// from Relay" into something plausible — so this is a single hop with no
+	// place for a default to creep in.
+	const AWonderlandProjectAvatarActor* const Avatar =
+		Cast<AWonderlandProjectAvatarActor>(AttendTarget);
+	if (Avatar == nullptr)
+	{
+		return WonderlandPose::EWork::None;
+	}
+	return WonderlandAvatar::WorkForMission(Avatar->Mission());
+}
+
+void AWonderlandStrollingDog::PoseUpright(float Blend, WonderlandPose::EWork Work)
+{
+	if (Blend <= 0.0f)
+	{
+		return;   // the gait's pose stands, untouched
+	}
+	const float LegLen = (Rig.Legs[0] != nullptr) ? Rig.LegRestScale[0].Z * 100.0f : 119.6f;
+	const WonderlandPose::FUprightPose Up =
+		WonderlandPose::UprightPose(Blend, LegLen, WorkPhase, Work);
+
+	for (int32 i = 0; i < 4; ++i)
+	{
+		UStaticMeshComponent* const Leg = Rig.Legs[i];
+		if (Leg == nullptr) { continue; }
+		// ADDED to whatever the gait left, not replacing it — so a Dog that
+		// rises mid-stride rises FROM where its legs actually were.
+		Leg->SetRelativeLocation(Leg->GetRelativeLocation()
+			+ FVector(0.0f, Up.LegSpread[i], Up.LegRise[i]));
+		Leg->SetRelativeRotation(Leg->GetRelativeRotation()
+			+ FRotator(Up.LegPitchDeg[i], 0.0f, 0.0f));
+	}
+	if (Rig.Torso != nullptr)
+	{
+		Rig.Torso->SetRelativeLocation(Rig.Torso->GetRelativeLocation()
+			+ FVector(0.0f, 0.0f, Up.TorsoRise));
+		Rig.Torso->SetRelativeRotation(FRotator(Up.TorsoPitchDeg, 0.0f, 0.0f));
+	}
+	if (Rig.Head != nullptr)
+	{
+		Rig.Head->SetRelativeLocation(Rig.Head->GetRelativeLocation()
+			+ FVector(0.0f, 0.0f, Up.HeadRise + Up.TorsoRise));
+		Rig.Head->SetRelativeRotation(FRotator(Up.HeadPitchDeg, 0.0f, 0.0f));
+	}
+}
+
 void AWonderlandStrollingDog::PickDestination()
 {
 	// Deterministic wander: the destination is a function of the Dog's home and
@@ -177,7 +229,57 @@ void AWonderlandStrollingDog::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// WHAT RELAY IS ACTUALLY DOING decides whether this Dog works at all. No
+	// Avatar, or an Avatar with nothing happening, and it simply wanders — the
+	// world must not stage a performance for work that is not occurring.
+	const WonderlandPose::EWork Work = DesiredWork();
+	CurrentWorkName = FName(ANSI_TO_TCHAR(WonderlandPose::WorkName(Work)));
+	const bool bWantsWork = (Work != WonderlandPose::EWork::None);
+
 	const FVector Here = GetActorLocation();
+
+	if (bWantsWork)
+	{
+		// Walk to the Avatar's attendance point, then rise. The Dog only stands
+		// once it has ARRIVED: rising while still crossing the plaza is a Dog
+		// hopping along on its hind legs.
+		const AWonderlandProjectAvatarActor* const Avatar =
+			Cast<AWonderlandProjectAvatarActor>(AttendTarget);
+		const FVector Post = Avatar->AttendancePoint();
+		FVector ToPost = Post - Here;
+		ToPost.Z = 0.0f;
+		const float PostDist = ToPost.Size();
+
+		if (PostDist < 90.0f)
+		{
+			// AT THE POST. Settle the gait, rise, and work.
+			CurrentSpeed = FMath::FInterpConstantTo(CurrentSpeed, 0.0f, Dt, DecelUUPerSec2);
+			const float Target = WonderlandPose::UprightTargetFor(Work);
+			UprightBlend = WonderlandPose::ApproachBlend(UprightBlend, Target, Dt);
+			WorkPhase = FMath::Fmod(WorkPhase + Dt * 0.55f, 1.0f);
+			PoseLegs(DistanceWalked, 1.0f);
+			PoseUpright(UprightBlend, Work);
+			// Face the Avatar while working, or the performance is aimed at
+			// nothing.
+			const FVector ToAvatar = Avatar->GetActorLocation() - Here;
+			const FRotator Face(0.0f,
+				FMath::RadiansToDegrees(FMath::Atan2(ToAvatar.Y, ToAvatar.X)), 0.0f);
+			SetActorRotation(FMath::RInterpTo(GetActorRotation(), Face, Dt, 5.0f));
+			return;
+		}
+		Destination = Post;
+	}
+	else if (UprightBlend > 0.0f)
+	{
+		// WORK ENDED. Come back down before walking off — dropping to all fours
+		// in one frame is the same teleport as rising in one.
+		UprightBlend = WonderlandPose::ApproachBlend(UprightBlend, 0.0f, Dt);
+		CurrentSpeed = FMath::FInterpConstantTo(CurrentSpeed, 0.0f, Dt, DecelUUPerSec2);
+		PoseLegs(DistanceWalked, 1.0f);
+		PoseUpright(UprightBlend, WonderlandPose::EWork::None);
+		return;
+	}
+
 	FVector ToTarget = Destination - Here;
 	ToTarget.Z = 0.0f;
 	const float Distance = ToTarget.Size();

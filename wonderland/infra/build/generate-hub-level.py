@@ -3800,7 +3800,7 @@ def build(layout):
         return parts
 
     def stroll_dog(x, y, label, s=1.2, body="dog_body", roam=800.0, is_hero=False, accessory="none",
-                   keep_out=None):
+                   keep_out=None, attends=None):
         # Spawn the LOCOMOTION actor. The Dog's BODY is now built in C++ (BuildBody),
         # NOT attached here — that is what lets the Head and Tail be animated (idle
         # look-around + walk nod on the head, a wagging tail). The generator only
@@ -3847,6 +3847,11 @@ def build(layout):
             _kc, _kr = keep_out
             set_prop(stroller, "KeepOutCentre", unreal.Vector(_kc[0], _kc[1], 0.0))
             set_prop(stroller, "KeepOutRadius", float(_kr))
+        if attends is not None:
+            # WHICH Dogs work is decided here; WHETHER they work is decided by
+            # Relay. A Dog with an Avatar still does nothing until the Avatar's
+            # mission state says something is happening.
+            set_prop(stroller, "AttendTarget", attends)
         if is_hero:
             set_prop(stroller, "WalkSpeed", 110.0)
 
@@ -5302,6 +5307,31 @@ def build(layout):
                      _fy + _k * 420.0, _fz + (_k % 4) * 210.0, _f * 7 + _k)
     # Restrained magical motes: static emissive sparkles (gold/cyan/violet) drifting
     # over the district — the bloom pass gives them a firefly glow.
+    # THE PROJECT AVATAR — the user's project, as an object in the plaza.
+    #
+    # Placed off the arcane circle (which is the hero Dog's) and clear of the
+    # arrival keep-out, so it reads as a second subject in the arrival shot
+    # rather than another thing standing in front of the city.
+    _avatar = None
+    _avatar_cls = unreal.load_class(None, "/Script/Wonderland.WonderlandProjectAvatarActor")
+    if _avatar_cls:
+        _avatar = spawn(_avatar_cls, (340.0, 210.0, 0.0), label="ProjectAvatar")
+        if _avatar is not None:
+            # MissionState stays 0 (Unknown) here. The generator does not know
+            # what Relay is doing and must not guess: an Avatar that shipped
+            # already "implementing" would be a world lying at build time.
+            set_prop(_avatar, "MissionState", 0)
+            set_prop(_avatar, "CompletedRuns", 0)
+            set_prop(_avatar, "BaseRadius", 96.0)
+            unreal.log_warning("AVATAR placed at (340,210) stage-driven, mission Unknown")
+    else:
+        # Same failure shape that once lost eight Relay Dogs: load_class returns
+        # None rather than raising, so say it loudly.
+        unreal.log_error(
+            "WonderlandProjectAvatarActor is not in this build — the Project "
+            "Avatar will be ABSENT. Compile the C++ module; "
+            "verify-generator-classes.py catches this without an engine.")
+
     # Ambient companions: voxel dogs of varied coats gathered AROUND the plaza (never
     # on the arcane circle — that is the hero Dog's). Matches the reference's plaza
     # full of creatures; a real wander behaviour animates them in a later pass.
@@ -5331,7 +5361,8 @@ def build(layout):
             cx = HERO_DOG[0] + math.cos(_ba) * 1150.0
             cy = HERO_DOG[1] + math.sin(_ba) * 1150.0
         stroll_dog(cx, cy, "Companion%d" % i, s=1.05, body=coat, roam=1100.0, accessory=acc,
-                   keep_out=(ARRIVAL_CAM, ARRIVAL_KEEP_OUT))
+                   keep_out=(ARRIVAL_CAM, ARRIVAL_KEEP_OUT),
+                   attends=(_avatar if i in (0, 3) else None))
     # THE DISTANCE LADDER. Four bands, each further, larger and paler than the
     # last, so the eye can measure the world by comparing them. The previous
     # skyline put every tower between 2 km and 3.6 km at a uniform 14 m — one

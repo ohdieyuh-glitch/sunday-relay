@@ -700,6 +700,45 @@ if has "$SD_SRC" 'HipHeightWorld'; then
 else
   bad "no world-space hip height — a Dog at actor scale 1.75 breaks gait at the wrong speed"
 fi
+# A DOG DOES NOT INVENT A JOB TO LOOK BUSY. No Avatar means no work, and the
+# Avatar's own state module refuses to turn "we have not heard from Relay" into
+# something plausible — so there must be no second path that does.
+if has "$SD_SRC" 'DesiredWork'; then
+  ok "...and its work comes from the attended Avatar's REAL mission state"
+else
+  bad "the Dog decides its own work — the world would stage performances Relay is not doing"
+fi
+if has "$SD_SRC" 'PostDist < 90.0f'; then
+  ok "...and it only rises once it has ARRIVED, not while crossing the plaza"
+else
+  bad "nothing gates the rise on arrival — the Dog will hop along on its hind legs"
+fi
+if has "$SD_SRC" 'ApproachBlend(UprightBlend, 0.0f'; then
+  ok "...and comes back down by blending, not by dropping in one frame"
+else
+  bad "the Dog drops to all fours instantly when work ends"
+fi
+
+echo
+echo "== the Project Avatar is placed, and its absence is loud =="
+GEN_SRC="$(sed 's|#.*||' "$HERE/generate-hub-level.py")"
+if has "$GEN_SRC" 'WonderlandProjectAvatarActor'; then
+  ok "the generator places a Project Avatar"
+else
+  bad "no Project Avatar is placed — the system exists and nothing shows it"
+fi
+if has "$GEN_SRC" 'log_error'; then
+  ok "...and a missing Avatar class is an ERROR, not a silent absence"
+else
+  bad "a missing Avatar class would vanish the way eight Relay Dogs once did"
+fi
+# THE GENERATOR MUST NOT GUESS WHAT RELAY IS DOING. An Avatar that shipped
+# already "implementing" would be a world lying at build time.
+if printf '%s' "$GEN_SRC" | grep -qE 'set_prop\(_avatar, "MissionState", 0\)'; then
+  ok "...and it ships with mission Unknown, never a plausible-looking guess"
+else
+  bad "the generator sets a mission state it cannot know"
+fi
 
 echo "== "sharper" is a number, not an impression =="
 # The founder's note is "too blurry, too soft, too smeared, not crisp enough for

@@ -31,6 +31,7 @@
 #pragma once
 
 #include "WonderlandDogBody.h"
+#include "WonderlandDogPose.h"
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
@@ -128,6 +129,13 @@ private:
 	/** Nudge a point out of the keep-out column, along its own bearing. */
 	FVector PushOutOfKeepOut(const FVector& Where) const;
 
+	/** Apply the upright work pose on top of whatever the gait left. */
+	void PoseUpright(float Blend, WonderlandPose::EWork Work);
+
+	/** What Relay says the attended Avatar is doing — EWork::None when there
+	 *  is no Avatar, or when Relay is not doing anything. */
+	WonderlandPose::EWork DesiredWork() const;
+
 	FVector Destination = FVector::ZeroVector;
 	float LifeSeconds = 0.0f;
 
@@ -181,6 +189,21 @@ private:
 	 *  recorded fact rather than an inference from how fast something looked. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
 	FName CurrentGaitName = FName(TEXT("idle"));
+
+	/** The Project Avatar this Dog attends, if any. Set by the generator.
+	 *
+	 *  A Dog with no Avatar simply wanders — it does NOT invent work. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	TObjectPtr<AActor> AttendTarget = nullptr;
+
+	/** 0 quadruped .. 1 upright. Eased every tick; never assigned. */
+	float UprightBlend = 0.0f;
+
+	/** Cycles while a work pose is held, so a held pose stays alive. */
+	float WorkPhase = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
+	FName CurrentWorkName = FName(TEXT("none"));
 
 	/** Place the four paws, the torso and the head for a distance travelled.
 	 *  SettleAlpha 1 blends everything back to the standing pose. */
