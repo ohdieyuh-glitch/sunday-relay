@@ -740,6 +740,50 @@ else
   bad "the generator sets a mission state it cannot know"
 fi
 
+echo
+echo "== the near field carries the colour the frame was missing =="
+# The last streamed arrival classified 0.1% green and 2.1% pink against 25% and
+# 7.7% in the offline preview of the same world. The palette existed; almost
+# none of it was in the near field, which is where a frame gets its colour.
+if has "$GEN_SRC" 'FOREGROUND PLANTING'; then
+  ok "a foreground planting band is authored"
+else
+  bad "nothing plants the near field — colour stays in the distance"
+fi
+# It must be placed beyond where the frame ACTUALLY touches the ground, for
+# BOTH arrival cameras: HeroCam6 is pitched higher, so its bottom ray meets the
+# ground further out, and planting at HeroCam0's band puts flowers under
+# HeroCam6's frame edge — invisible in the shot they were added for.
+if has "$GEN_SRC" '_FG_START = max(NEAR_Y'; then
+  ok "...beyond the ground band of BOTH arrival cameras, not just HeroCam0"
+else
+  bad "the planting band ignores HeroCam6, which is the primary arrival camera"
+fi
+if has "$GEN_SRC" 'kit_bed(_fx'; then
+  ok "...and it goes through the instanced kit, so batching is preserved"
+else
+  bad "foreground planting does not use the instanced kit"
+fi
+
+echo
+echo "== a captured frame records what the Dogs were DOING =="
+WP_SRC="$(sed 's|//.*||' "$GAIT_DIR/WonderlandWorldProof.cpp")"
+if has "$WP_SRC" 'RUNTIME_GAITS'; then
+  ok "the world proof reports the gait mix, so 'they trot now' is checkable"
+else
+  bad "nothing records the gait — it could only be guessed from a screenshot"
+fi
+if has "$WP_SRC" 'RUNTIME_PROJECT_AVATARS'; then
+  ok "...and whether a Project Avatar is present at all"
+else
+  bad "an absent Avatar would look exactly like a dormant one in a still"
+fi
+if has "$WP_SRC" 'RUNTIME_AVATAR_MISSION'; then
+  ok "...and the mission state it was showing when the shutter opened"
+else
+  bad "the Avatar's mission is not recorded, so its glow cannot be attributed"
+fi
+
 echo "== "sharper" is a number, not an impression =="
 # The founder's note is "too blurry, too soft, too smeared, not crisp enough for
 # 4K". Those all describe one measurable thing — how much neighbouring pixels

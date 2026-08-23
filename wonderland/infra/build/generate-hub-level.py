@@ -99,6 +99,26 @@ LOOK = {
     "fillRatio": 0.50,
     "fillYawOffset": 160.0,
     "fillPitch": -45.0,
+    # --- ground bounce ---------------------------------------------
+    # THE BLACK IS UNDERSIDES, AND IT IS A LIGHTING PROBLEM.
+    #
+    # Key and fill both come from ABOVE — pitch -45 and lower — so every
+    # downward-facing surface in the world receives nothing from either.
+    # Lumen's bounce and the skylight do not reliably contribute in headless
+    # -RenderOffscreen, which is exactly how Wonderland renders. The result is
+    # that the canopy, the boughs, the arch soffits and the undersides of every
+    # floating island read as pure black holes, and in the last measured frame
+    # 37.7% of the pixels had no colour left to classify.
+    #
+    # In daylight those surfaces are lit by GROUND BOUNCE. So: one more
+    # shadowless directional, aimed UP, dim and warmed by the paving it is
+    # standing in for. This raises undersides only — it cannot touch anything
+    # the sun already reaches, which is what makes it different from lifting
+    # exposure and washing the whole frame.
+    "bouncePitch": 62.0,             # AIMED UP. Positive pitch, unlike key/fill.
+    "bounceRatio": 0.22,             # of sunLux. Dim: a hint, never a second key.
+    "bounceWarm": (1.00, 0.93, 0.82),  # tinted by warm stone paving
+    "bounceEnabled": 1,
     # --- exposure --------------------------------------------------
     # MEASURED, and the single most expensive lesson in this file:
     # histogram auto-exposure RE-METERS the packaged frame to mid-grey,
@@ -4293,6 +4313,32 @@ def build(layout):
     set_prop(fill_comp, "bCastShadows", False)
     set_prop(fill_comp, "CastShadows", False)
 
+    # --- GROUND BOUNCE ---------------------------------------------------
+    # See LOOK["bouncePitch"]. Aimed UP so it reaches only what the key and fill
+    # cannot: downward-facing surfaces. Shadowless and dim — a hint of the light
+    # a paved plaza throws back, not a second key. Lifting exposure instead
+    # would have brightened everything the sun already reaches too, which is the
+    # wash the grade spent three commits climbing out of.
+    if int(LOOK["bounceEnabled"]):
+        bounce = spawn(unreal.DirectionalLight, (0, 0, 400), label="GroundBounce")
+        _b_rot = unreal.Rotator()
+        _b_rot.set_editor_property("pitch", LOOK["bouncePitch"])
+        _b_rot.set_editor_property("yaw", float(atm["sunAzimuthDeg"]) + 30.0)
+        _b_rot.set_editor_property("roll", 0.0)
+        bounce.set_actor_rotation(_b_rot, False)
+        b_comp = bounce.get_component_by_class(unreal.DirectionalLightComponent)
+        b_comp.set_mobility(unreal.ComponentMobility.MOVABLE)
+        b_comp.set_intensity(_lux * float(LOOK["bounceRatio"]))
+        _bw = LOOK["bounceWarm"]
+        b_comp.set_light_color(unreal.Color(
+            int(_bw[0] * 255), int(_bw[1] * 255), int(_bw[2] * 255), 255))
+        set_prop(b_comp, "bCastShadows", False)
+        set_prop(b_comp, "CastShadows", False)
+        unreal.log_warning(
+            "GROUND BOUNCE on: pitch %+.0f, %.0f lux (%.0f%% of key), warm %s"
+            % (LOOK["bouncePitch"], _lux * float(LOOK["bounceRatio"]),
+               float(LOOK["bounceRatio"]) * 100.0, str(_bw)))
+
     # --- HERO PRACTICALS -------------------------------------------------
     # Every glowing thing in this world glows and throws NOTHING. The arcane
     # circle, the gate's gold, the fountain — all emissive geometry, which
@@ -5363,6 +5409,71 @@ def build(layout):
         stroll_dog(cx, cy, "Companion%d" % i, s=1.05, body=coat, roam=1100.0, accessory=acc,
                    keep_out=(ARRIVAL_CAM, ARRIVAL_KEEP_OUT),
                    attends=(_avatar if i in (0, 3) else None))
+    # ---- FOREGROUND PLANTING ------------------------------------------
+    # THE MEASUREMENT THIS ANSWERS. The last streamed arrival frame classified
+    # 0.1% green and 2.1% pink, against 25% and 7.7% in the offline preview of
+    # the same world. The palette exists; almost none of it was in the near
+    # field, where a frame gets its colour and its depth.
+    #
+    # So: a band of LOW planting across the bottom of the arrival frame. Low is
+    # the whole discipline — in_camera_lap exists because tall foreground has
+    # vanished off the bottom edge or walled the shot three times already, and
+    # nothing here is more than a metre.
+    #
+    # PLACED BEYOND WHERE THE FRAME ACTUALLY TOUCHES THE GROUND, and beyond it
+    # for BOTH arrival cameras. HeroCam6 is pitched 16 degrees higher than
+    # HeroCam0, so its bottom ray meets the ground further out; planting at
+    # HeroCam0's band would put flowers under HeroCam6's frame edge — invisible
+    # in the very shot they were added for.
+    def _band_for(cam_pos, cam_look, fov_deg):
+        ex, ey, ez = cam_pos
+        tx, ty, tz = cam_look
+        half_v = math.atan(math.tan(math.radians(fov_deg) * 0.5) * (9.0 / 16.0))
+        run = math.hypot(tx - ex, ty - ey)
+        pitch = math.atan2(tz - ez, run) if run else 0.0
+        drop = half_v - pitch
+        return ey + (ez / math.tan(drop) if drop > 1e-4 else 1e6)
+
+    _FG_START = max(NEAR_Y,
+                    _band_for(ARRIVAL_CAM, (0.0, 120.0, 541.0), 75.0))
+    unreal.log_warning("FOREGROUND PLANTING starts at world y >= %.0f "
+                       "(HeroCam0 band %.0f, HeroCam6 band %.0f)"
+                       % (_FG_START, NEAR_Y, _band_for(ARRIVAL_CAM, (0.0, 120.0, 541.0), 75.0)))
+
+    # Deterministic, like everything else placed here: a hero frame captured
+    # twice must show the same flowers. Integer hashes, no RNG.
+    _FG_BEDS = 0
+    _FG_CAPS = 0
+    for _i in range(26):
+        _h = (_i * 2654435761) & 0xFFFFFFFF
+        # Spread across the frame's width, densest toward the middle distance.
+        _t = _i / 25.0
+        _fx = -1650.0 + 3300.0 * (((_h >> 3) % 1000) / 1000.0)
+        _fy = _FG_START + 120.0 + 1150.0 * _t
+        # Never on the arcane circle, and never on top of the hero Dog.
+        if math.hypot(_fx - HERO_DOG[0], _fy - HERO_DOG[1]) < 420.0:
+            continue
+        if math.hypot(_fx, _fy) < 560.0:
+            continue
+        # THE COLOURS THAT WERE MISSING. Violet, rose and pink beds, so the
+        # near field carries the families the classifier could not find.
+        _pal = (("petal_violet", "rose_pink", "petal_pink"),
+                ("rose_pink", "petal_pink", "petal_air"),
+                ("petal_pink", "petal_violet", "rose"))[_i % 3]
+        kit_bed(_fx, _fy, 96.0 + 46.0 * ((_h >> 7) % 4) / 3.0, "FgBed%d" % _i, palette=_pal)
+        _FG_BEDS += 1
+        # A cluster of small caps beside most beds — mushroom red is a family
+        # the reference has and this frame did not.
+        if _i % 3 != 2:
+            _cap = ("mush_red", "mush_purple", "mush_white")[(_h >> 11) % 3]
+            for _k in range(3):
+                kit_mushroom(_fx + 70.0 + _k * 52.0 - 26.0,
+                             _fy - 44.0 + ((_h >> (13 + _k)) % 60) - 30.0,
+                             0.26 + 0.11 * (_k % 3), "FgCap%d_%d" % (_i, _k), _cap)
+                _FG_CAPS += 1
+    unreal.log_warning("FOREGROUND PLANTING placed %d beds and %d mushroom caps"
+                       % (_FG_BEDS, _FG_CAPS))
+
     # THE DISTANCE LADDER. Four bands, each further, larger and paler than the
     # last, so the eye can measure the world by comparing them. The previous
     # skyline put every tower between 2 km and 3.6 km at a uniform 14 m — one

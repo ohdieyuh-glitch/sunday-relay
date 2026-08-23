@@ -19,6 +19,7 @@
 #include "WonderlandDogPawn.h"
 #include "WonderlandInstancedBatch.h"
 #include "WonderlandStrollingDog.h"
+#include "WonderlandProjectAvatarActor.h"
 
 DEFINE_LOG_CATEGORY(LogWonderlandProof);
 
@@ -432,6 +433,54 @@ namespace WonderlandWorldProof
 				}
 				UE_LOG(LogWonderlandProof, Warning,
 					   TEXT("RUNTIME_GROUNDED_DOGS=%d/%d"), GroundedDogs, DogActors.Num());
+
+				// WHAT THE DOGS ARE ACTUALLY DOING, in the frame that was
+				// captured. A gait or a work pose inferred from how something
+				// looked in a screenshot is a guess; this makes it a record, and
+				// it is what lets "the Dogs trot now" be checked rather than
+				// asserted.
+				{
+					int32 Walking = 0, Trotting = 0, Running = 0, Idling = 0, Working = 0;
+					for (const AActor* const Dog : DogActors)
+					{
+						const AWonderlandStrollingDog* const S =
+							Cast<AWonderlandStrollingDog>(Dog);
+						if (S == nullptr) { continue; }
+						const FString G = S->CurrentGaitName.ToString();
+						if (G == TEXT("walk")) { ++Walking; }
+						else if (G == TEXT("trot")) { ++Trotting; }
+						else if (G == TEXT("run")) { ++Running; }
+						else { ++Idling; }
+						if (S->CurrentWorkName != FName(TEXT("none"))) { ++Working; }
+					}
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("RUNTIME_GAITS=idle:%d,walk:%d,trot:%d,run:%d"),
+						   Idling, Walking, Trotting, Running);
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("RUNTIME_DOGS_WORKING=%d"), Working);
+				}
+
+				// THE PROJECT AVATAR. Its absence is as important as its state:
+				// a world that shipped without one looks, in a still, exactly
+				// like one whose Avatar is dormant.
+				{
+					int32 Avatars = 0, AvatarParts = 0;
+					FString AvStage = TEXT("absent"), AvMission = TEXT("absent");
+					for (TActorIterator<AWonderlandProjectAvatarActor> It(Live); It; ++It)
+					{
+						++Avatars;
+						AvatarParts += It->BuiltParts;
+						AvStage = It->StageName.ToString();
+						AvMission = ANSI_TO_TCHAR(
+							WonderlandAvatar::MissionName(It->Mission()));
+					}
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("RUNTIME_PROJECT_AVATARS=%d RUNTIME_AVATAR_PARTS=%d"),
+						   Avatars, AvatarParts);
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("RUNTIME_AVATAR_STAGE=%s RUNTIME_AVATAR_MISSION=%s"),
+						   *AvStage, *AvMission);
+				}
 
 				// HOW MUCH OF THE FRAME A RELAY DOG ACTUALLY OWNS.
 				//
