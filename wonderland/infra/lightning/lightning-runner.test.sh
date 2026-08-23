@@ -2344,7 +2344,8 @@ if [ -s "$SLICE_TMP/helpers.sh" ] && grep -q 'run_slice' "$SLICE_TMP/helpers.sh"
     head -c 4000 /dev/zero | tr '\0' 'x' >> "$L"; echo >> "$L"
     big_off="$(log_offset "$L")"
     : > "$L"                                    # <- the truncation
-    printf 'LogTemp: HERO_CAM_SERVED=HeroCam6_1 HERO_CAM_FELL_BACK=0 HERO_CAM_FOV=75.00 MARBLE_ACTORS=1\n' >> "$L"
+    printf 'LogTemp: HERO_CAM_SERVED=HeroCam6_1 HERO_CAM_FELL_BACK=0 HERO_CAM_FOV=75.00\n' >> "$L"
+    printf 'LogWonderlandProof: Warning: MARBLE_ACTORS=1\n' >> "$L"
     after="$(proof_lines "$L" "$big_off" | tr '\n' ' ')"
     case "$after" in *"MARBLE_ACTORS=1"*) : ;; *) rc=1 ;; esac
     case "$after" in *"HERO_CAM_FOV=75.00"*) : ;; *) rc=1 ;; esac

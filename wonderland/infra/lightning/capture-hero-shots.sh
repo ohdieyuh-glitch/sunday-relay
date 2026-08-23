@@ -140,13 +140,20 @@ proof_lines() {
   # where forward-compatibility is needed, PLUS the HERO_CAM_* keys wherever
   # they appear. LogTemp is not scraped wholesale — it carries engine chatter,
   # and that is what the original allow-list was really guarding against.
-  {
-    run_slice "$log" "$from" \
-      | grep -a 'LogWonderlandProof' \
-      | grep -aoE '[A-Z][A-Z0-9_]*=[^ ]*' || true
-    run_slice "$log" "$from" \
-      | grep -aoE 'HERO_CAM_[A-Z_]*=[^ ]*' || true
-  } | sort -u || true
+  run_slice "$log" "$from" \
+  | awk '
+      /LogWonderlandProof/ {
+        n = split($0, tok, /[ \t]+/)
+        for (i = 1; i <= n; i++)
+          if (tok[i] ~ /^[A-Z][A-Z0-9_]*=/) print tok[i]
+        next
+      }
+      /HERO_CAM_/ {
+        n = split($0, tok, /[ \t]+/)
+        for (i = 1; i <= n; i++)
+          if (tok[i] ~ /^HERO_CAM_[A-Z_]*=/) print tok[i]
+      }' \
+    | sort -u || true
 }
 
 # GPU alongside the picture, from the same run. Sampled WHILE the app is up and
