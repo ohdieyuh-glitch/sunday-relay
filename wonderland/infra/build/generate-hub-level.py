@@ -143,7 +143,14 @@ LOOK = {
     # (dark 28.3% -> 35.2%), because a hard key with a small ambient is
     # contrasty by construction. The reference is 25.0% dark and 7.5%
     # neutral_stone, so it wants both -- which means more KEY, not more ambient.
-    "sunLux": 1420.0,
+    # 1420 -> 960. The matte build came back at mean luma 0.394 against the
+    # reference's 0.327, with 21.1% of its pixels above 0.62 luma against the
+    # reference's 9.9%. That is over-exposed, and over-exposure is why the
+    # colour keeps vanishing: ACES desaturates as values approach white, so a
+    # fifth of the frame sitting in the highlight roll-off loses its hue by
+    # construction, whatever the material underneath says. It is also why every
+    # attempt to fix the grey by ADDING light made it greyer.
+    "sunLux": 960.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -278,7 +285,7 @@ LOOK = {
     # 25.7% for the founder's own reference image. Colour crushed to black is
     # not a palette problem, and saturating materials to fix it would have been
     # work in the wrong place.
-    "gain":            (0.74, 0.74, 0.78),
+    "gain": (0.60, 0.60, 0.63),
     # RAISED 1.52 -> 1.78. Saturation was tuned while the frame carried a
     # false gold cast, and in that state it multiplied the CAST rather than the
     # palette -- which is why it was correct to be suspicious of it. The cast is
