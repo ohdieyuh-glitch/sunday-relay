@@ -526,6 +526,7 @@ def main():
     if _ow:
         with io.open(_ow, "w", encoding="utf8") as _fh:
             json.dump({"w": W, "h": H, "owner": owner,
+                       "dogs": [list(d) for d in _pending_dogs],
                        "blobs": [{"label": b[7], "mat": str(b[6]),
                                   "mesh": str(b[5]), "z": b[0]} for b in blobs]}, _fh)
 

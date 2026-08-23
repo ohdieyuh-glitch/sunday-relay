@@ -3975,6 +3975,34 @@ def build(layout):
         # look-around + walk nod on the head, a wagging tail). The generator only
         # spawns, sizes (actor scale = s) and colours (CoatName) it. The whole Dog
         # travels + turns as one unit; the material breathe/WPO keeps it alive on top.
+        # THE KEEP-OUT HAS TO MOVE THE DOG, NOT JUST DESCRIBE IT.
+        #
+        # keep_out was passed down and set as KeepOutCentre/KeepOutRadius on the
+        # C++ actor -- runtime properties that constrain where a Dog ROAMS to.
+        # The SPAWN point was never touched. So a companion authored inside the
+        # arrival keep-out was still built there, and the composition report
+        # measured exactly that: a companion at 350 px tall owning 7.75% of the
+        # hero frame, against the hero Dog's 1.4%. The arrival shot had two
+        # subjects and the larger one was not the Dog it is composed around.
+        #
+        # Pushed out along its own bearing from the camera, so the authored
+        # arrangement -- which Dog is on which side -- survives and only the
+        # distance changes. The hero passes keep_out=None and is exempt by
+        # design: it is the subject, and standing it outside its own shot would
+        # be the cure killing the patient.
+        if keep_out is not None:
+            _kc, _kr = keep_out
+            _dx, _dy = x - _kc[0], y - _kc[1]
+            _d = math.hypot(_dx, _dy)
+            if _d < 1.0:
+                _dx, _dy, _d = 0.0, 1.0, 1.0
+            if _d < _kr:
+                _f = _kr / _d
+                x, y = _kc[0] + _dx * _f, _kc[1] + _dy * _f
+                unreal.log_warning(
+                    "DOG KEEP-OUT: %s was %.0f uu from the arrival camera "
+                    "(minimum %.0f) - moved out along its own bearing"
+                    % (label, _d, _kr))
         cls = unreal.load_class(None, "/Script/Wonderland.WonderlandStrollingDog")
         if not cls:
             # THIS BRANCH USED TO `return`, AND THAT IS HOW EIGHT RELAY DOGS
@@ -4183,9 +4211,21 @@ def build(layout):
     # a way three sessions of measurement had not.
     #
     # Now: further back onto its own arcane circle — which is the beat, the Dog
-    # standing on its Relay identity — and off dead centre so the boulevard
-    # still leads the eye past it to the gate.
-    HERO_DOG = (-260.0, -260.0)
+    # standing on its Relay identity.
+    #
+    # AND ON THE CAMERA AXIS. This said "off dead centre so the boulevard still
+    # leads the eye past it to the gate", and that reasoning is superseded by
+    # the founder's reference image, which is the arbiter here: in it the white
+    # voxel Dog stands DEAD CENTRE on the violet circle and the path runs
+    # BEHIND it to the arch. Measured against the arrival camera, x=-260 put the
+    # Dog at 27.5% of frame width -- far enough off-axis that a companion Dog at
+    # 73% read as the subject instead, at 9.9% of the frame against the hero's
+    # 1.4%. The composition had two subjects and neither was the hero.
+    #
+    # x=-40 lands it at 48.3%: centred, with the hint of leftward offset the
+    # reference itself has. The arcane circle follows automatically -- kit_plaza
+    # takes HERO_DOG as its circle centre -- and so does the ground clearing.
+    HERO_DOG = (-40.0, -260.0)
     HERO_DOG_SCALE = 1.75
     # WHERE THE WORLD OPENS FROM. HeroCam0 and HeroCam6 both stand here — the
     # Marble backdrop is anchored at this exact point, which is why the wide
