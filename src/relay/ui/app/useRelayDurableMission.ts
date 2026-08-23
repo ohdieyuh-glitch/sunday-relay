@@ -141,57 +141,69 @@ export function useRelayDurableMission(input: UseDurableMissionInput): DurableMi
   useEffect(() => {
     let cancelled = false;
     const discover = async (): Promise<void> => {
-      const ids = await store.list();
-      // The localStorage index is only a hint; the record decides.
-      const hinted = readDurableIndex().map((entry) => entry.missionId);
-      const candidates = ids.length > 0 ? ids : hinted;
-      if (candidates.length === 0) {
-        if (!cancelled) setDiscovering(false);
-        return;
-      }
-      const read = await store.read(candidates[0]);
-      if (cancelled) return;
-      const assessment = assessRecovery(read, {
-        runtimeAvailable,
-        budgetSufficient: true,
-        sessionId,
-        now: now(),
-      });
-      setDiscovered(assessment);
-      setDiscovering(false);
+      try {
+        const ids = await store.list();
+        // The localStorage index is only a hint; the record decides.
+        const hinted = readDurableIndex().map((entry) => entry.missionId);
+        const candidates = ids.length > 0 ? ids : hinted;
+        if (candidates.length === 0) {
+          if (!cancelled) setDiscovering(false);
+          return;
+        }
+        const read = await store.read(candidates[0]);
+        if (cancelled) return;
+        const assessment = assessRecovery(read, {
+          runtimeAvailable,
+          budgetSufficient: true,
+          sessionId,
+          now: now(),
+        });
+        setDiscovered(assessment);
+        setDiscovering(false);
 
-      // A record that was never found is not an event worth announcing.
-      if (!read.ok && read.reason === 'not_found') return;
-      const key = `recovery:${candidates[0]}:${assessment.classification}`;
-      if (announced.current.has(key)) return;
-      announced.current.add(key);
+        // A record that was never found is not an event worth announcing.
+        if (!read.ok && read.reason === 'not_found') return;
+        const key = `recovery:${candidates[0]}:${assessment.classification}`;
+        if (announced.current.has(key)) return;
+        announced.current.add(key);
 
-      if (assessment.blocking) {
+        if (assessment.blocking) {
+          publish({
+            dedupeKey: key,
+            kind: 'critical',
+            title: 'Recovery blocked',
+            body: assessment.summary,
+            actions: buildViewActions(),
+          });
+          return;
+        }
+        if (assessment.classification === 'completed') return;
         publish({
           dedupeKey: key,
-          kind: 'critical',
-          title: 'Recovery blocked',
-          body: assessment.summary,
+          kind: 'info',
+          title: 'Mission recovered',
+          body: 'Relay restored the latest safe checkpoint.',
+          simulated: assessment.record?.provenance === 'simulated',
           actions: buildViewActions(),
         });
-        return;
-      }
-      if (assessment.classification === 'completed') return;
-      publish({
-        dedupeKey: key,
-        kind: 'info',
-        title: 'Mission recovered',
-        body: 'Relay restored the latest safe checkpoint.',
-        simulated: assessment.record?.provenance === 'simulated',
-        actions: buildViewActions(),
-      });
-      if (assessment.canResume) {
+        if (assessment.canResume) {
+          publish({
+            dedupeKey: `${key}:ready`,
+            kind: 'info',
+            title: 'Ready to resume',
+            body: assessment.summary,
+            simulated: assessment.record?.provenance === 'simulated',
+            actions: buildViewActions(),
+          });
+        }
+      } catch {
+        if (cancelled) return;
+        setDiscovering(false);
         publish({
-          dedupeKey: `${key}:ready`,
-          kind: 'info',
-          title: 'Ready to resume',
-          body: assessment.summary,
-          simulated: assessment.record?.provenance === 'simulated',
+          dedupeKey: 'recovery-storage-unavailable',
+          kind: 'critical',
+          title: 'Recovery blocked',
+          body: 'Relay could not inspect durable mission storage. No recovery state was assumed.',
           actions: buildViewActions(),
         });
       }
@@ -222,7 +234,19 @@ export function useRelayDurableMission(input: UseDurableMissionInput): DurableMi
       });
       if (!decision.write) return false;
 
-      const written = await store.write(draft);
+      let written: Awaited<ReturnType<DurableMissionStorePort['write']>>;
+      try {
+        written = await store.write(draft);
+      } catch {
+        publish({
+          dedupeKey: `save-delayed:${draft.missionId}`,
+          kind: 'warning',
+          title: 'Save delayed',
+          body: 'Relay could not confirm the latest durable checkpoint.',
+          actions: buildViewActions(),
+        });
+        return false;
+      }
       if (!written.ok) {
         // A failed write NEVER displays success.
         publish({
@@ -259,7 +283,18 @@ export function useRelayDurableMission(input: UseDurableMissionInput): DurableMi
 
   const resume = useCallback(
     async (missionId: string): Promise<boolean> => {
-      const outcome = await resumeCoordinator.resume({ missionId, sessionId, now: now() });
+      let outcome: Awaited<ReturnType<typeof resumeCoordinator.resume>>;
+      try {
+        outcome = await resumeCoordinator.resume({ missionId, sessionId, now: now() });
+      } catch {
+        publish({
+          dedupeKey: `recovery-blocked:${missionId}`,
+          kind: 'critical',
+          title: 'Recovery blocked',
+          body: 'Relay could not read or update the durable mission record.',
+        });
+        return false;
+      }
       if (!outcome.ok) {
         publish({
           dedupeKey: `recovery-blocked:${missionId}`,
@@ -278,12 +313,23 @@ export function useRelayDurableMission(input: UseDurableMissionInput): DurableMi
 
   const stop = useCallback(
     async (missionId: string): Promise<void> => {
-      await store.remove(missionId);
+      try {
+        await store.remove(missionId);
+      } catch {
+        publish({
+          dedupeKey: `stop-blocked:${missionId}`,
+          kind: 'critical',
+          title: 'Stop blocked',
+          body: 'Relay could not remove the durable mission record. The mission remains available for recovery.',
+          actions: buildViewActions(),
+        });
+        return;
+      }
       writeDurableIndex([]);
       setDiscovered(null);
       setLastSaved(null);
     },
-    [store],
+    [store, publish, buildViewActions],
   );
 
   const dismissDiscovered = useCallback(() => setDiscovered(null), []);

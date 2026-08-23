@@ -129,7 +129,10 @@ function Harness({
 }
 
 async function mountWith(backing: DurableKeyValueBacking) {
-  const store = createDurableMissionStore(backing);
+  return mountStore(createDurableMissionStore(backing));
+}
+
+async function mountStore(store: DurableMissionStorePort) {
   const apiRef: MutableRefObject<DurableMissionApi | null> = { current: null };
   const view = render(createElement(Harness, { store, apiRef }));
   await waitFor(() => expect(apiRef.current?.discovering).toBe(false));
@@ -170,6 +173,55 @@ describe('persistence notifications are truthful', () => {
     expect(screen.queryByText('Mission saved')).toBeNull();
     // …and nothing was recorded as the last saved checkpoint.
     expect(apiRef.current?.lastSaved).toBeNull();
+  });
+
+  it('an unexpected write rejection produces Save delayed without leaking the error', async () => {
+    const base = createDurableMissionStore(createInMemoryDurableBacking());
+    const store: DurableMissionStorePort = {
+      ...base,
+      async write() { throw new Error('private storage details'); },
+    };
+    const { apiRef } = await mountStore(store);
+    await act(async () => {
+      await apiRef.current?.checkpoint(checkpointInput());
+    });
+    expect(screen.getByText('Save delayed')).toBeTruthy();
+    expect(screen.queryByText(/private storage details/)).toBeNull();
+    expect(apiRef.current?.lastSaved).toBeNull();
+  });
+
+  it('a discovery rejection blocks recovery instead of reporting no missions', async () => {
+    const base = createDurableMissionStore(createInMemoryDurableBacking());
+    const store: DurableMissionStorePort = {
+      ...base,
+      async list() { throw new Error('private listing details'); },
+    };
+    const { apiRef } = await mountStore(store);
+    expect(apiRef.current?.discovering).toBe(false);
+    expect(screen.getByText('Recovery blocked')).toBeTruthy();
+    expect(screen.getByText(/No recovery state was assumed/)).toBeTruthy();
+    expect(screen.queryByText(/private listing details/)).toBeNull();
+  });
+
+  it('an unexpected resume rejection is reported without clearing recovery state', async () => {
+    const base = createDurableMissionStore(seededBacking());
+    let failReads = false;
+    const store: DurableMissionStorePort = {
+      ...base,
+      async read(missionId) {
+        if (failReads) throw new Error('private read details');
+        return base.read(missionId);
+      },
+    };
+    const { apiRef } = await mountStore(store);
+    failReads = true;
+    await act(async () => {
+      expect(await apiRef.current?.resume('mission-i1')).toBe(false);
+    });
+    expect(screen.getByText('Recovery blocked')).toBeTruthy();
+    expect(screen.getByText(/could not read or update/)).toBeTruthy();
+    expect(apiRef.current?.discovered).not.toBeNull();
+    expect(screen.queryByText(/private read details/)).toBeNull();
   });
 
   it('a paused checkpoint says Mission paused', async () => {
@@ -263,6 +315,22 @@ describe('the recovery surface', () => {
     fireEvent.click(screen.getByRole('button', { name: 'STOP MISSION' }));
     await waitFor(() => expect(apiRef.current?.discovered).toBeNull());
     expect(await store.list()).toEqual([]);
+  });
+
+  it('a failed Stop keeps the record and recovery state visible', async () => {
+    const base = createDurableMissionStore(seededBacking());
+    const store: DurableMissionStorePort = {
+      ...base,
+      async remove() { throw new Error('private deletion details'); },
+    };
+    const { apiRef } = await mountStore(store);
+    await act(async () => {
+      await apiRef.current?.stop('mission-i1');
+    });
+    expect(screen.getByText('Stop blocked')).toBeTruthy();
+    expect(apiRef.current?.discovered).not.toBeNull();
+    expect((await base.read('mission-i1')).ok).toBe(true);
+    expect(screen.queryByText(/private deletion details/)).toBeNull();
   });
 });
 

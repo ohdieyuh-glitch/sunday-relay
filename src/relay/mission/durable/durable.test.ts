@@ -14,6 +14,7 @@ import {
 import {
   createDurableMissionStore,
   createInMemoryDurableBacking,
+  type DurableKeyValueBacking,
 } from './durable-store';
 import {
   claimLease,
@@ -468,5 +469,19 @@ describe('durable write failures', () => {
     const store = createDurableMissionStore(createInMemoryDurableBacking());
     expect(store.durability).toBe('volatile-test-only');
     expect(store.locationLabel).toContain('not durable');
+  });
+
+  it('list and remove propagate backing failures instead of reporting empty or removed', async () => {
+    const backing: DurableKeyValueBacking = {
+      durability: 'durable',
+      locationLabel: 'failing store',
+      async getText() { return null; },
+      async putText() { /* no-op */ },
+      async deleteKey() { throw new Error('delete denied'); },
+      async listKeys() { throw new Error('listing denied'); },
+    };
+    const store = createDurableMissionStore(backing);
+    await expect(store.list()).rejects.toThrow('listing denied');
+    await expect(store.remove('mission-1')).rejects.toThrow('delete denied');
   });
 });

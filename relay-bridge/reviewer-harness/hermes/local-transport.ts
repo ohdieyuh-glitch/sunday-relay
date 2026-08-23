@@ -3,7 +3,9 @@ import type { HarnessRuntimeEvidence } from '../../../src/relay/mission/reviewer
 import { createProbe } from './discovery';
 import { createIsolatedProfile } from './isolated-profile';
 import { localReadiness, verifiedReadiness } from './readiness';
-import { DEFAULT_RUN_LIMITS, runHermesReviewer, type HermesRunOutcome } from './runner';
+import {
+  DEFAULT_RUN_LIMITS, UNKNOWN_USAGE, runHermesReviewer, type HermesRunOutcome,
+} from './runner';
 import { loadXaiConfig } from './xai-models';
 import {
   HERMES_SERVICE_PROTOCOL,
@@ -81,6 +83,8 @@ export interface LocalTransportConfig {
   readonly now?: () => string;
   /** Injected in tests so the whole pipeline runs against a fake executable. */
   readonly spawnImpl?: Parameters<typeof runHermesReviewer>[0]['spawnImpl'];
+  /** Injected only to prove unexpected runner rejections stay observable. */
+  readonly runImpl?: typeof runHermesReviewer;
   /**
    * Aggregate ceilings. Overridable ONLY for tests — nothing reads these from
    * a request or from the environment, because a caller that could raise the
@@ -128,6 +132,7 @@ export function createLocalHermesTransport(
   config: LocalTransportConfig,
 ): HermesReviewerTransport {
   const now = config.now ?? (() => new Date().toISOString());
+  const runReviewer = config.runImpl ?? runHermesReviewer;
   const env = config.env ?? process.env;
   const ceilings = config.ceilings ?? ADMISSION_CEILINGS;
   // Volatile by construction. A restart loses these, and `getReview` says so.
@@ -360,7 +365,7 @@ export function createLocalHermesTransport(
       };
 
       // A fresh isolated profile per run — never a persistent personal one.
-      void runHermesReviewer({
+      void runReviewer({
         executable: config.executable,
         prompt: input.prompt,
         model: config.provider.requestedModel,
@@ -380,7 +385,15 @@ export function createLocalHermesTransport(
           outcome,
         );
       }).catch(() => {
-        settle('failed', null);
+        const failedAt = now();
+        settle('failed', {
+          kind: 'failed',
+          safeMessage: 'The Hermes Reviewer stopped without reporting an outcome.',
+          startedAt: failedAt,
+          completedAt: failedAt,
+          exitCode: null,
+          usage: UNKNOWN_USAGE,
+        });
       });
 
       return { accepted: true, runId, duplicate: false, failureKind: null, safeMessage: null };

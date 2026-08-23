@@ -59,7 +59,9 @@ export function main(): void {
 
     // 2. Ask every live run to stop. `cancelAll` reaches the child process
     //    groups through the same termination path a user cancel uses.
-    void engine.cancelAll?.().catch(() => { /* best effort */ });
+    void engine.cancelAll?.().catch(() => {
+      console.error('Hermes Reviewer cancellation did not settle cleanly during shutdown.');
+    });
 
     // 3. Close the listener, then exit once connections drain.
     server.close(() => process.exit(0));

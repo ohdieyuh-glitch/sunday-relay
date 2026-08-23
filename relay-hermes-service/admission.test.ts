@@ -276,18 +276,9 @@ describe('capacity is released exactly once', () => {
 
   it('a run whose child emits ERROR after spawn frees its slot too', async () => {
     /*
-     * NAMED FOR WHAT IT COVERS. An earlier version of this test was called
-     * "the .catch branch" and did not reach it: `runner.ts` handles
-     * `child.on('error')` by calling `finish({kind:'launch_failed'})`, which
-     * RESOLVES, so this settles through `.then` exactly as the synchronous
-     * throw above does. Shipping that mislabel in the same commit that fixed
-     * another one is how the habit survives.
-     *
-     * The distinct thing this covers is the ASYNCHRONOUS failure — a child
-     * that spawned and then died — which the synchronous-throw test cannot
-     * reach. The `.catch` at the call site remains a belt-and-braces guard
-     * that no fixture through this seam can trigger, because the runner is
-     * written never to reject; that is stated rather than pretended.
+     * `runner.ts` handles `child.on('error')` by resolving a launch failure.
+     * This covers the asynchronous failure path, distinct from the
+     * synchronous spawn throw above.
      */
     const rejectingSpawn = (() => {
       const child = fakeChild();
@@ -300,6 +291,28 @@ describe('capacity is released exactly once', () => {
     expect(
       (await engine.startReview(input(2))).accepted,
       'a run whose child died after spawning must still return its slot',
+    ).toBe(true);
+  });
+
+  it('an unexpected runner rejection records a safe failure and frees its slot', async () => {
+    const engine = createLocalHermesTransport({
+      executable: '/nonexistent/hermes',
+      provider: providerConfig(),
+      apiKey: 'sk-ant-FAKE-NEVER-USED',
+      ceilings: { ...ADMISSION_CEILINGS, maxActiveReviews: 1 },
+      runImpl: async () => { throw new Error('credential-shaped private failure'); },
+    });
+    expect((await engine.startReview(input(1))).accepted).toBe(true);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const state = await engine.getReview(input(1).runId);
+    expect(state.status).toBe('failed');
+    expect(state.safeMessage).toContain('without reporting an outcome');
+    expect(state.safeMessage).not.toContain('credential-shaped');
+    expect(state.usage.source).toBe('unavailable');
+    expect(
+      (await engine.startReview(input(2))).accepted,
+      'a rejected runner promise must return its slot',
     ).toBe(true);
   });
 
