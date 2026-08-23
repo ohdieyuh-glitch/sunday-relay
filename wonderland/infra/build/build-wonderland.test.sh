@@ -35,7 +35,7 @@ make_project() {   # $1 = root; $2 = "with-config" | "no-config"
   mkdir -p "$r/infra/build" "$r/Source/Wonderland" "$r/WorldDesign"
   cp "$HERE/build-wonderland.sh" "$r/infra/build/"
   printf '{}\n'            > "$r/Wonderland.uproject"
-  printf 'int main(){}\n'  > "$r/Source/Wonderland/a.cpp"
+  printf 'void WonderlandFixture(){}\n' > "$r/Source/Wonderland/a.cpp"
   printf '{"a":1}\n'       > "$r/WorldDesign/hub-layout.json"
   printf '# stub\n'        > "$r/infra/build/generate-hub-level.py"
   if [ "$2" = "with-config" ]; then
@@ -553,10 +553,20 @@ echo "== the Relay Dog's paws do not skate =="
 # a walk reads as walking, and it is arithmetic, so it is compiled and proven
 # here rather than judged from a stream on a rented GPU.
 GAIT_DIR="$HERE/../../Source/Wonderland"
-if command -v g++ >/dev/null 2>&1 && [ -f "$GAIT_DIR/WonderlandDogGait.test.cpp" ]; then
+# OUTSIDE Source/, because UnrealBuildTool compiles everything under Source/ and
+# a second main() collides with the engine's at link time. build-wonderland.sh
+# refuses to start a build that would hit it; this is the other half.
+GAIT_TEST="$HERE/../../tests/cpp/WonderlandDogGait.test.cpp"
+# A MISSING TEST FILE IS A FAILURE, NOT A SKIP. This block used to be guarded by
+# `[ -f ... ]`, so moving the file would have silently deleted fourteen checks
+# and left the suite green — the same vacuous-pass shape as an all() over an
+# empty list.
+if [ ! -f "$GAIT_TEST" ]; then
+  bad "the gait proof is missing from $GAIT_TEST"
+elif command -v g++ >/dev/null 2>&1; then
   GAIT_BIN="$(mktemp -u)"
-  if g++ -std=c++17 -O1 -o "$GAIT_BIN" \
-       "$GAIT_DIR/WonderlandDogGait.cpp" "$GAIT_DIR/WonderlandDogGait.test.cpp" 2>/dev/null; then
+  if g++ -std=c++17 -O1 -I "$GAIT_DIR" -o "$GAIT_BIN" \
+       "$GAIT_DIR/WonderlandDogGait.cpp" "$GAIT_TEST" 2>/dev/null; then
     GAIT_OUT="$("$GAIT_BIN" 2>&1)"; rm -f "$GAIT_BIN"
     if printf '%s' "$GAIT_OUT" | grep -q 'failed 0'; then
       while IFS= read -r line; do

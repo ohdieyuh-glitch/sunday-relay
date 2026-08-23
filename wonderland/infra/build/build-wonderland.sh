@@ -92,6 +92,30 @@ run_step() {
 [ -d "$SRC_DIR" ]  || die "Source/ not found: $SRC_DIR"
 command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required for the idempotence stamp"
 
+# NOTHING UNDER Source/ MAY DEFINE main().
+#
+# UnrealBuildTool compiles EVERY .cpp under Source/<Module>/ — there is no
+# opt-out by filename convention. A standalone test with its own main(), parked
+# next to the code it tests, therefore links into the game target and collides
+# with Module.Launch.cpp:
+#
+#     ld.lld: error: duplicate symbol: main
+#
+# That is one line in a several-thousand-line log, arriving at step 9 of 10
+# after every translation unit has already compiled. It cost a full L4 build
+# (2026-08-22, WonderlandDogGait.test.cpp). Offline tests live in
+# wonderland/tests/cpp/ and are compiled by build-wonderland.test.sh with -I
+# pointing back here; this refuses to start a build that would die at link.
+_mains="$(grep -rlE '^[[:space:]]*int[[:space:]]+main[[:space:]]*\(' \
+            --include='*.cpp' --include='*.cc' --include='*.h' \
+            "$SRC_DIR" 2>/dev/null || true)"
+if [ -n "$_mains" ]; then
+  echo "These files under Source/ define main(), which UnrealBuildTool will compile" >&2
+  echo "into the game target and link against the engine's own main():" >&2
+  printf '  %s\n' $_mains >&2
+  die "a file under Source/ defines main() — move it to wonderland/tests/cpp/"
+fi
+
 if [ ! -x "$RUNUAT" ]; then
   echo "Unreal Engine $UE_MAJOR_EXPECTED.$UE_MINOR_EXPECTED not found at UE_ROOT=$UE_ROOT." >&2
   echo "See wonderland/infra/build/README.md — obtaining UE requires an Epic<->GitHub link." >&2
