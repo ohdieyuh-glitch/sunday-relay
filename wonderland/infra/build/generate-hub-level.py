@@ -360,7 +360,23 @@ LOOK = {
     # rather than gold, a practical can carry a little more light without
     # deciding the frame's hue -- which was the actual defect, not brightness.
     "lampLumens": 3000.0,
-    "bloomIntensity": 0.5,
+    # 0.5 -> 0.0, AS A TEST WITH A REASON. Bloom is ADDITIVE and screen-wide,
+    # and the arithmetic on a delivered frame says an additive WHITE term is
+    # exactly what is wrong. Solving mush_red's darkest half for out = a*E + S,
+    # with its probed albedo (0.74, 0.16, 0.26) and its own texture:
+    #
+    #     E = 0.089   diffuse contribution 0.063
+    #     S = 0.258   FOUR TIMES the diffuse
+    #
+    # and the trend across three rendered frames points the same way: as the
+    # world got brighter, mean chroma FELL, 0.108 -> 0.086 -> 0.068. A veil
+    # that scales with scene brightness does that; a palette problem does not.
+    #
+    # The materials themselves are now RULED OUT by a direct probe of the
+    # cooked assets: MI_mush_red is parent M_WLMaster, BaseColor
+    # (0.740,0.160,0.260), AlbedoTex T_cap_a, Specular 0.12. Every one checked
+    # was correct. The defect is downstream of the material.
+    "bloomIntensity": 0.0,
     "bloomThreshold": 1.5,
     # --- grade (runs AFTER metering; this is the real brightness lever)
     # MEASURED AGAIN, ON A DELIVERED FRAME. 0.60/0.60/0.64 was measured against

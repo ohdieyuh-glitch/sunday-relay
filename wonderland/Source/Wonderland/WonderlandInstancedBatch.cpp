@@ -104,6 +104,18 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 		if (MaterialAsset != nullptr)
 		{
 			Instances->SetMaterial(0, MaterialAsset);
+			// READ IT BACK. "We called SetMaterial" and "this component is
+			// rendering that material" are different claims, and only the
+			// second one explains a frame. A whole session went into a grey
+			// world whose material INSTANCES all probed correct on disk --
+			// right parent, right BaseColor, right AlbedoTex -- because
+			// nothing in the pipeline ever stated what the RUNTIME ended up
+			// bound to. Cheap: one line per batch, ~147 lines a run.
+			const UMaterialInterface* Bound = Instances->GetMaterial(0);
+			UE_LOG(LogTemp, Warning,
+				   TEXT("WONDERLAND BATCH '%s': asked for '%s', bound '%s', %d pieces."),
+				   *BatchName.ToString(), *MaterialAsset->GetName(),
+				   Bound ? *Bound->GetName() : TEXT("NONE"), Declared);
 		}
 		else
 		{
