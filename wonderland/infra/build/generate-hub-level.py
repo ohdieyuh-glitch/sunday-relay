@@ -617,11 +617,15 @@ def build_textures():
     # host leaves it unset and writes where the packager expects.
     outdir = os.environ.get("WONDERLAND_TEXTURE_DIR", _DEFAULT_TEX_DIR)
     gen = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gen-textures.py")
+    # LOADED UNCONDITIONALLY, because its FAMILIES tuple is needed whether or
+    # not the PNGs have to be written. Executing it only defines functions and
+    # constants; generate() is what costs anything, and that stays behind the
+    # up-to-date check.
+    ns = {"__name__": "wl_gen_textures", "__file__": gen}
     try:
+        with io.open(gen, encoding="utf8") as fh:
+            exec(compile(fh.read(), gen, "exec"), ns)
         if not os.path.isfile(os.path.join(outdir, "T_cobble_a.png")):
-            ns = {"__name__": "wl_gen_textures", "__file__": gen}
-            with io.open(gen, encoding="utf8") as fh:
-                exec(compile(fh.read(), gen, "exec"), ns)
             ns["generate"](outdir)
     except Exception as e:
         unreal.log_warning("texture synthesis failed (%s); world keeps flat surfaces" % e)
@@ -631,8 +635,31 @@ def build_textures():
     eal = unreal.EditorAssetLibrary
     names = ["flat_white", "flat_normal", "flat_grey",
              "leafcard_a", "leafcard_n", "leafcard_m"]
-    for fam in ("cobble", "ashlar", "sward", "bark", "plaster", "roof"):
+    # EVERY FAMILY gen-textures.py PRODUCES, not a list retyped beside it.
+    #
+    # This was six names — cobble, ashlar, sward, bark, plaster, roof — while
+    # gen-textures.py has generated eleven for some time. metal, glaze, cap,
+    # ripple and petal were synthesised to disk on every build and never
+    # imported, so FOURTEEN materials silently rendered with no map at all:
+    # gold, gold_glow, brass_deep, porcelain, dog_body (the Relay Dogs' own
+    # coat), all three mushrooms, water, and every petal — the last of which
+    # this file's own comment calls the carrier of "most of the world's pink
+    # and violet".
+    #
+    # It cost nothing visible in a log: the failure prints as "TEXTURE MISSING
+    # for <name> (family <fam>): keeping the palette base colour", which reads
+    # like a deliberate fallback rather than five whole families going missing.
+    # Three of those lines have been in every build log this session.
+    _families = [f[0] for f in ns.get("FAMILIES", ())]
+    if not _families:
+        unreal.log_warning(
+            "gen-textures.py exposed no FAMILIES tuple — falling back to the "
+            "six families that were hardcoded here. If new families exist they "
+            "will not be imported.")
+        _families = ["cobble", "ashlar", "sward", "bark", "plaster", "roof"]
+    for fam in _families:
         names += ["%s_a" % fam, "%s_n" % fam, "%s_r" % fam]
+    unreal.log("TEXTURE FAMILIES to import: %s" % ",".join(_families))
 
     out, pending = {}, []
     for nm in names:
