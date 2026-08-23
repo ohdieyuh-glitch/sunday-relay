@@ -219,6 +219,50 @@ namespace WonderlandWorldProof
 		UE_LOG(LogWonderlandProof, Warning, TEXT("VISIBLE_PIECES=%d"),
 			   InstancedPieces + LoosePieces);
 		UE_LOG(LogWonderlandProof, Warning, TEXT("MARBLE_ACTORS=%d"), MarbleActors);
+
+		// WHAT THE RUNTIME THINKS A COLOUR IS.
+		//
+		// Wonderland renders grey and nine explanations have now been refuted.
+		// The material INSTANCES were probed in a live editor and are correct;
+		// the batches bind them; the BaseColor parameter is wired to
+		// MP_BASE_COLOR. And pushing every albedo 44% further from its own luma
+		// moved the delivered frame by about two values per channel.
+		//
+		// There is exactly one link in that chain nobody has ever read: what
+		// the PACKAGED BUILD holds. Every check so far has interrogated the
+		// editor's Content directory or the generator's own intent, and a cook
+		// sits between those and the pixels. If the pak carries a stale palette
+		// then every upstream check is true and the world is still grey.
+		//
+		// So the runtime is asked directly, once, at load. Two lines in a log,
+		// and they distinguish "the cook shipped the wrong colours" from "the
+		// colours shipped and something downstream eats them" -- which is the
+		// fork the whole investigation is stuck on.
+		{
+			static const TCHAR* const Probe[] = {
+				TEXT("/Game/Wonderland/Materials/MI_mush_red"),
+				TEXT("/Game/Wonderland/Materials/MI_foliage"),
+				TEXT("/Game/Wonderland/Materials/MI_petal_pink"),
+			};
+			for (const TCHAR* Path : Probe)
+			{
+				UMaterialInterface* const MI =
+					LoadObject<UMaterialInterface>(nullptr, Path);
+				if (MI == nullptr)
+				{
+					UE_LOG(LogWonderlandProof, Warning,
+						   TEXT("MATERIAL_RUNTIME %s NOT_IN_PACKAGE"), Path);
+					continue;
+				}
+				FLinearColor Base = FLinearColor::White;
+				const bool bGot = MI->GetVectorParameterValue(
+					FMaterialParameterInfo(TEXT("BaseColor")), Base);
+				UE_LOG(LogWonderlandProof, Warning,
+					   TEXT("MATERIAL_RUNTIME %s base=%s (%.3f, %.3f, %.3f)"),
+					   *MI->GetName(), bGot ? TEXT("set") : TEXT("DEFAULT"),
+					   Base.R, Base.G, Base.B);
+			}
+		}
 		if (MarbleActors > 0)
 		{
 			UE_LOG(LogWonderlandProof, Warning,

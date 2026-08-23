@@ -6388,6 +6388,32 @@ def build(layout):
                              _fy - 44.0 + ((_h >> (13 + _k)) % 60) - 30.0,
                              0.26 + 0.11 * (_k % 3), "FgCap%d_%d" % (_i, _k), _cap)
                 _FG_CAPS += 1
+        # DENSITY WITHOUT MORE GREEN, which is the awkward part of this.
+        #
+        # verify-visual-target reads environment_density at 77.9 against a
+        # target of 85, and in the same breath reads foliage as the LARGEST
+        # colour in the frame at 27.5 against a ceiling of 25. So the obvious
+        # move -- plant more -- makes one number better by making the other
+        # worse. The reference is a pastel stone city seen THROUGH planting,
+        # not a forest.
+        #
+        # What it is short of is the third thing: violet. palette_violet reads
+        # 4.8 against 6.0, and the reference is full of purple mushrooms,
+        # wisteria and the arcane circle. So the fill is deliberately PURPLE
+        # CAPS -- they add occupied ground and violet at once, and no green.
+        _vh = (_h >> 5) & 0xFFFF
+        for _v in range(9):
+            _va = (_vh % 360 + _v * 83) * math.pi / 180.0
+            _vr = 108.0 + ((_vh >> (3 + _v)) % 150)
+            _vx, _vy = _fx + math.cos(_va) * _vr, _fy + math.sin(_va) * _vr
+            if math.hypot(_vx - HERO_DOG[0], _vy - HERO_DOG[1]) < 400.0:
+                continue
+            if math.hypot(_vx, _vy) < 540.0:
+                continue
+            kit_mushroom(_vx, _vy, 0.30 + 0.16 * ((_vh >> (7 + _v)) % 3) / 2.0,
+                         "FgViolet%d_%d" % (_i, _v),
+                         "mush_purple" if _v % 2 else "petal_violet")
+            _FG_CAPS += 1
     unreal.log_warning("FOREGROUND PLANTING placed %d beds, %d shrubs, %d mushroom caps"
                        % (_FG_BEDS, _FG_SHRUBS, _FG_CAPS))
 
