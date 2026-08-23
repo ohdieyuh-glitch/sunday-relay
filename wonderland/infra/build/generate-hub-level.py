@@ -187,7 +187,21 @@ LOOK = {
     # with itself about, which is why it is the right lever: the Marble does
     # not scale with the lighting, so raising the lighting improves the RATIO
     # whether or not auto-exposure then re-meters both.
-    "sunLux": 2600.0,
+    # 2600 OVERSHOT and 1150 undershot; this is the interpolation between two
+    # RENDERED frames rather than a third guess. Measured against the unlit
+    # Marble ruler, which does not move when the lighting does:
+    #
+    #     sunLux 1150   lit median luma  71/255   +0.91 stops UNDER the backdrop
+    #     sunLux 2600   lit median luma 189/255   -0.37 stops OVER  it
+    #
+    # and 52.6% of the 2600 frame landed in luma 0.70-0.85, where chroma falls
+    # to 0.063 because a blown pixel has no hue left. Solving in log space for
+    # a lit median near 0.50 puts the key here.
+    #
+    # The bracket also proved the thing worth keeping: at the SAME luma the
+    # brighter build carried three times the chroma (0.231 against 0.077 at
+    # luma 0.30-0.40). The darkness really was crushing the colour.
+    "sunLux": 1950.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -321,7 +335,7 @@ LOOK = {
     # the shadow end is where most of Wonderland lives -- 59% of the foliage and
     # 73% of the leaf cards are in it. Lifting fill faster than key narrows the
     # ratio, which is the actual shape of the defect.
-    "skyIntensity": 20.0,
+    "skyIntensity": 14.0,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -362,7 +376,7 @@ LOOK = {
     # stopped being a correction and become part of the problem. Lifted, not
     # removed: the highlight end still needs holding, and gainHighlights is the
     # instrument for that, not this.
-    "gain": (0.82, 0.82, 0.85),
+    "gain": (0.75, 0.75, 0.78),
     # RAISED 1.52 -> 1.78. Saturation was tuned while the frame carried a
     # false gold cast, and in that state it multiplied the CAST rather than the
     # palette -- which is why it was correct to be suspicious of it. The cast is
