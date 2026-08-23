@@ -112,17 +112,27 @@ LOOK = {
     "bloomIntensity": 0.5,
     "bloomThreshold": 1.5,
     # --- grade (runs AFTER metering; this is the real brightness lever)
-    "gain":            (0.60, 0.60, 0.64),  # MEASURED. <1 to stop the wash.
+    # MEASURED AGAIN, ON A DELIVERED FRAME. 0.60/0.60/0.64 was measured against
+    # a wash, and it does stop one — but the streamed frame came back with 46.2%
+    # of its pixels below the palette classifier's shadow threshold, against
+    # 25.7% for the founder's own reference image. Colour crushed to black is
+    # not a palette problem, and saturating materials to fix it would have been
+    # work in the wrong place.
+    "gain":            (0.74, 0.74, 0.78),
     "saturation":      (1.52, 1.48, 1.60),  # CHOSEN. Jewel tones.
     "contrast":        (1.18, 1.17, 1.16),  # CHOSEN.
     "gainHighlights":  (0.82, 0.78, 0.68),  # MEASURED. Holds the white Dog,
                                             # spires and porcelain off pure
                                             # white so they keep hue and form.
-    "gainShadows":     (0.88, 0.91, 1.20),  # CHOSEN. Cool-violet shadows for
-                                            # the warm-near / cool-far split.
+    # Lifted out of the crush, keeping the blue so the warm-near / cool-far
+    # split survives. R and G below 1.0 were pulling the shadow end down twice.
+    "gainShadows":     (1.06, 1.06, 1.26),
     "gamma":           (1.0, 1.0, 1.02),    # CHOSEN.
     "whiteTemp": 6000.0,                    # CHOSEN.
-    "vignette": 0.44,                       # CHOSEN.
+    # 0.44 was CHOSEN, never measured, and a vignette that strong is pure
+    # subtraction at the frame edge — the corners of every hero capture this
+    # session were near-black.
+    "vignette": 0.18,
     # --- local light -----------------------------------------------
     # UNTESTED. The world has exactly one kind of light actor (lantern
     # points) and otherwise relies on emissive geometry, which Lumen
