@@ -119,6 +119,12 @@ LOOK = {
     "bounceRatio": 0.22,             # of sunLux. Dim: a hint, never a second key.
     "bounceWarm": (1.00, 0.93, 0.82),  # tinted by warm stone paving
     "bounceEnabled": 1,
+    # --- foreground planting ---------------------------------------
+    # Sweepable for the same reason the bounce is: an art change nobody can A/B
+    # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
+    # renders the same world without it, which is how the before/after below was
+    # measured on CPU with no GPU in the loop.
+    "foregroundPlanting": 1,
     # --- exposure --------------------------------------------------
     # MEASURED, and the single most expensive lesson in this file:
     # histogram auto-exposure RE-METERS the packaged frame to mid-grey,
@@ -5444,12 +5450,16 @@ def build(layout):
     # twice must show the same flowers. Integer hashes, no RNG.
     _FG_BEDS = 0
     _FG_CAPS = 0
-    for _i in range(26):
+    _FG_SHRUBS = 0
+    for _i in range(34 if int(LOOK["foregroundPlanting"]) else 0):
         _h = (_i * 2654435761) & 0xFFFFFFFF
-        # Spread across the frame's width, densest toward the middle distance.
-        _t = _i / 25.0
-        _fx = -1650.0 + 3300.0 * (((_h >> 3) % 1000) / 1000.0)
-        _fy = _FG_START + 120.0 + 1150.0 * _t
+        _t = _i / 33.0
+        # INSIDE THE FRAME. The first version spanned 3,062 uu where the frame is
+        # about 2,170 uu wide at this distance, so a third of the planting was
+        # never in shot. Derived from the camera rather than guessed again.
+        _fy = _FG_START + 90.0 + 900.0 * _t
+        _half_w = (_fy - ARRIVAL_CAM[1]) * math.tan(math.radians(75.0 * 0.5)) * 0.86
+        _fx = -_half_w + 2.0 * _half_w * (((_h >> 3) % 1000) / 1000.0)
         # Never on the arcane circle, and never on top of the hero Dog.
         if math.hypot(_fx - HERO_DOG[0], _fy - HERO_DOG[1]) < 420.0:
             continue
@@ -5462,6 +5472,16 @@ def build(layout):
                 ("petal_pink", "petal_violet", "rose"))[_i % 3]
         kit_bed(_fx, _fy, 96.0 + 46.0 * ((_h >> 7) % 4) / 3.0, "FgBed%d" % _i, palette=_pal)
         _FG_BEDS += 1
+        # VERTICAL MASS. A flat bed contributes almost no frame area from a
+        # camera this low; a shrub beside it does, and it is the storey this
+        # world jumps straight over — ankle-high ground cover to trees with
+        # nothing between. kit_shrub declines placements inside the camera's
+        # blind foreground on its own.
+        if _i % 4 != 3:
+            kit_shrub(_fx + 118.0, _fy + 34.0,
+                      0.52 + 0.26 * ((_h >> 17) % 3) / 2.0, "FgShrub%d" % _i,
+                      bloom=("rose_pink" if _i % 2 else "petal_violet"))
+            _FG_SHRUBS += 1
         # A cluster of small caps beside most beds — mushroom red is a family
         # the reference has and this frame did not.
         if _i % 3 != 2:
@@ -5471,8 +5491,57 @@ def build(layout):
                              _fy - 44.0 + ((_h >> (13 + _k)) % 60) - 30.0,
                              0.26 + 0.11 * (_k % 3), "FgCap%d_%d" % (_i, _k), _cap)
                 _FG_CAPS += 1
-    unreal.log_warning("FOREGROUND PLANTING placed %d beds and %d mushroom caps"
-                       % (_FG_BEDS, _FG_CAPS))
+    unreal.log_warning("FOREGROUND PLANTING placed %d beds, %d shrubs, %d mushroom caps"
+                       % (_FG_BEDS, _FG_SHRUBS, _FG_CAPS))
+
+    # ---- MIDGROUND VERTICALS ------------------------------------------
+    # WHERE THE FRAME ACTUALLY HAS ROOM, measured rather than assumed.
+    #
+    # The ground planting above came out at 0.78% of the arrival frame, all of
+    # it in the bottom third, and the geometry says why: HeroCam6 sits 430 uu up
+    # and pitches +5 degrees, so the visible ground begins 1,296 uu out and
+    # anything lying ON it can only ever occupy a bottom sliver. More beds would
+    # have bought more of almost nothing.
+    #
+    # The room is at MID HEIGHT — objects 300-900 uu tall standing 1,400-2,800
+    # uu away, which is above the ground band and below the skyline. That is
+    # also the storey this world skips: paving, then castle, with the middle
+    # distance carried by nothing. Lanterns and tall flowering stalks fill it
+    # without entering in_camera_lap's blind foreground, so they add depth
+    # instead of walling the shot.
+    _MG_LAMPS = 0
+    _MG_STALKS = 0
+    for _i in range(22 if int(LOOK["foregroundPlanting"]) else 0):
+        _h = (_i * 40503 + 12345) & 0xFFFFFFFF
+        _t = _i / 21.0
+        _my = _FG_START + 1150.0 + 1500.0 * _t
+        _half = (_my - ARRIVAL_CAM[1]) * math.tan(math.radians(75.0 * 0.5)) * 0.80
+        _mx = -_half + 2.0 * _half * (((_h >> 5) % 1000) / 1000.0)
+        # Keep the boulevard and the arcane circle clear — the eye needs a path
+        # THROUGH the middle distance, not a hedge across it.
+        if abs(_mx) < 190.0:
+            continue
+        if math.hypot(_mx - HERO_DOG[0], _my - HERO_DOG[1]) < 380.0:
+            continue
+        if _i % 3 == 0:
+            kit_lantern(_mx, _my, 0.85 + 0.35 * ((_h >> 9) % 3) / 2.0,
+                        "MgLamp%d" % _i, yaw=float((_h >> 12) % 360))
+            _MG_LAMPS += 1
+        else:
+            # A tall flowering stalk: a stem with a bloom head, so it reads as
+            # colour at eye level rather than colour on the floor.
+            _sh = 250.0 + 210.0 * ((_h >> 15) % 4) / 3.0
+            _sm = ("rose_pink", "petal_violet", "petal_pink")[_i % 3]
+            _part("cylinder", _mx, _my, _sh * 0.5, 0.10, 0.10, _sh / 100.0,
+                  "foliage_deep", "MgStalk%d_stem" % _i)
+            for _b in range(3):
+                _ba = _b * 2.0944 + _i * 0.7
+                _part("sphere", _mx + math.cos(_ba) * 26.0, _my + math.sin(_ba) * 26.0,
+                      _sh + 18.0 + _b * 12.0, 0.40, 0.40, 0.34, _sm,
+                      "MgStalk%d_bloom%d" % (_i, _b))
+            _MG_STALKS += 1
+    unreal.log_warning("MIDGROUND VERTICALS placed %d lanterns and %d flowering stalks"
+                       % (_MG_LAMPS, _MG_STALKS))
 
     # THE DISTANCE LADDER. Four bands, each further, larger and paler than the
     # last, so the eye can measure the world by comparing them. The previous

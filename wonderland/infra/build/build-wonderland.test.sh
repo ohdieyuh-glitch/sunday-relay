@@ -764,6 +764,28 @@ if has "$GEN_SRC" 'kit_bed(_fx'; then
 else
   bad "foreground planting does not use the instanced kit"
 fi
+# THE ROOM IS AT MID HEIGHT, and that was measured, not assumed. Ground planting
+# alone came out at 0.78% of the arrival frame with ZERO pixels in the middle
+# third: HeroCam6 sits 430 uu up and pitches +5 degrees, so anything lying on
+# the ground can only occupy a bottom sliver however much of it there is.
+if has "$GEN_SRC" 'MIDGROUND VERTICALS'; then
+  ok "...and a midground band fills the storey between paving and castle"
+else
+  bad "nothing occupies the middle distance — more ground beds buy more of almost nothing"
+fi
+# A hedge across the middle distance is worse than an empty one: the eye needs a
+# path THROUGH it.
+if has "$GEN_SRC" 'if abs(_mx) < 190.0:'; then
+  ok "...while leaving the boulevard clear, so the eye still has a path in"
+else
+  bad "the midground band has no gap — it would wall the view instead of deepening it"
+fi
+# Both bands must be sweepable or the art change cannot be A/B'd without a GPU.
+if has "$GEN_SRC" 'LOOK["foregroundPlanting"]'; then
+  ok "...and both bands are sweepable from WONDERLAND_LOOK, so they can be A/B'd on CPU"
+else
+  bad "the planting cannot be turned off — no before/after without a rebuild"
+fi
 
 echo
 echo "== a captured frame records what the Dogs were DOING =="
