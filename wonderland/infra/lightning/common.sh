@@ -637,6 +637,11 @@ wl_require_node() {
     actual="$("$node" -v 2>/dev/null || true)"
     [ "$actual" = "$required" ] || wl_die \
       "no bundled node, and the host node is $actual but this checkout requires $required. Install the matching node on CPU; a GPU launch will not download one."
+    # THE HOST NODE NEEDS npm JUST AS MUCH. The first version of this fix added
+    # the check to the bundled branch only, and the suite caught it: a host node
+    # with a dangling npm was still accepted. Both paths lead to `npm start`.
+    wl_node_install_usable "$node" "$required" || wl_die \
+      "the host node at $node is $actual but has no working npm beside it — $(dirname "$node")/npm is missing or dangling. Install a complete node on CPU; a GPU launch will not download one."
   fi
   printf '%s' "$node"
 }
