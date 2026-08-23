@@ -236,7 +236,10 @@ LOOK = {
     # violet went 3.2% -> 7.2% and blue 22.4% -> 15.0%. The colour move was
     # right and the level move was not. A NEUTRAL fill can be strong without
     # tinting anything, which is the whole point of having neutralised it.
-    "bounceRatio": 0.40,
+    # 0.40 -> 0.72. Replaces, in warm light, the ambient taken off skyIntensity
+    # above, so the frame keeps its level while its shade stops being blue. At
+    # sunLux 1150 that is 460 -> 828 lux.
+    "bounceRatio": 0.72,
     "bounceWarm": (1.00, 0.97, 0.94),  # near-neutral: the SKY tints the shade now
     "bounceEnabled": 1,
     # Was hardcoded at 1.60 beside the SkyLight. It is the instrument that
@@ -251,7 +254,19 @@ LOOK = {
     # 5.20 -> 9.40 for the same reason as sunLux, and preferentially: the sky
     # is lavender now, so it is the source that brightens shadows and pushes
     # them violet at once. violet_purple is 8.3% against the reference's 22.4%.
-    "skyIntensity": 6.20,
+    # 6.20 -> 3.40. MEASURED, and this is the shadow defect. In the delivered
+    # frame every shadowed surface rendered BLUE-DOMINANT regardless of its own
+    # albedo -- petal_pink, base (0.94, 0.40, 0.66), came back rgb(29, 30, 45).
+    # A multiplicative light cannot invert a hue like that on its own; what does
+    # it is a shadow lit by ONLY ONE source. The sun reaches none of these
+    # pixels, the upward bounce reaches only down-facing ones, so a blue sky was
+    # the entire light budget of 64.6% of the frame, and it decided the colour of
+    # all of it. Chroma there measured 0.063-0.093 against the reference's
+    # 0.104-0.203 at the SAME luma -- the frames are not differently exposed
+    # (64.6% of mine below luma 0.40 vs 62.7% of the reference), the shadows are
+    # differently COLOURED. Halved, and the difference handed to bounceRatio,
+    # which is warm and carries the ground's own colour instead of the sky's.
+    "skyIntensity": 3.40,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -299,7 +314,14 @@ LOOK = {
                                             # white so they keep hue and form.
     # Lifted out of the crush, keeping the blue so the warm-near / cool-far
     # split survives. R and G below 1.0 were pulling the shadow end down twice.
-    "gainShadows":     (1.06, 1.06, 1.26),
+    # (1.06, 1.06, 1.26) -> (1.12, 1.10, 1.10). The +0.20 on BLUE was a grade
+    # deciding the hue of the frame's shadows, and it was amplifying the sky
+    # cast above rather than balancing it: dividing the measured shadow pixels
+    # back through it leaves them still blue-dominant, so it is the amplifier,
+    # not the source. The LIFT is kept -- it is there to keep shadows out of the
+    # crush, which is real -- and the tint is dropped, because a shadow's colour
+    # should come from what lights it.
+    "gainShadows":     (1.12, 1.10, 1.10),
     "gamma":           (1.0, 1.0, 1.02),    # CHOSEN.
     "whiteTemp": 6000.0,                    # CHOSEN.
     # 0.44 was CHOSEN, never measured, and a vignette that strong is pure
@@ -1211,6 +1233,13 @@ def build_material_library(texs=None):
         # Same tonemapper, same grade, same exposure, same frame. Whatever is
         # eating the colour is in the LIT path, and specular is the one term in
         # it that is white by definition.
+        #
+        # REFUTED, by the frame this change produced. At 0.12 on 33 dielectrics
+        # the gap did not close -- it measured 3.99x / 1.94x / 1.53x / 1.41x
+        # across four luma bands, no better than before. Specular is wired
+        # because it SHOULD be (UE's silent 0.5 default is not a decision
+        # anybody made here), but it was not the cause. The cause was the
+        # shadow fill: see LOOK["skyIntensity"].
         sp = param(unreal.MaterialExpressionScalarParameter, "Specular", 75, 0.5)
         mel.connect_material_property(sp, "", unreal.MaterialProperty.MP_SPECULAR)
         mt = param(unreal.MaterialExpressionScalarParameter, "Metallic", 0, 0.0)
