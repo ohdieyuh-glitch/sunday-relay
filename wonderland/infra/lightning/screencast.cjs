@@ -58,12 +58,37 @@ const RES_Y = parseInt(process.env.WL_RES_Y || '720', 10);
   await page.waitForTimeout(1500);
   try { await page.mouse.click(RES_X / 2, RES_Y / 2); } catch (_) {}
 
-  const playing = await page.waitForFunction(() => {
-    const v = document.querySelector('video');
-    return !!v && v.videoWidth > 0 && v.videoHeight > 0 && v.currentTime > 0;
-  }, { timeout: 90000 }).then(() => true).catch(() => false);
-  if (!playing) {
-    console.error('NO VIDEO: the page loaded but no frame ever decoded.');
+  // TWO KINDS OF PAGE, and waiting for the wrong readiness signal reports the
+  // healthy one as dead. The Pixel Streaming player paints a <video> and is
+  // ready when a frame has DECODED; the Three.js gait preview paints a <canvas>
+  // and is ready when it has a backing size. This tool is worth having for both
+  // — the same motion question is asked of the engine and of the preview — so
+  // it asks the page which one it is rather than assuming.
+  const kind = await page.evaluate(() =>
+    document.querySelector('video') ? 'video'
+      : document.querySelector('canvas') ? 'canvas' : 'none');
+  let playing = false;
+  if (kind === 'video') {
+    playing = await page.waitForFunction(() => {
+      const v = document.querySelector('video');
+      return !!v && v.videoWidth > 0 && v.videoHeight > 0 && v.currentTime > 0;
+    }, { timeout: 90000 }).then(() => true).catch(() => false);
+    if (!playing) {
+      console.error('NO VIDEO: the page loaded but no frame ever decoded.');
+      await browser.close(); process.exit(4);
+    }
+  } else if (kind === 'canvas') {
+    playing = await page.waitForFunction(() => {
+      const c = document.querySelector('canvas');
+      return !!c && c.width > 0 && c.height > 0;
+    }, { timeout: 30000 }).then(() => true).catch(() => false);
+    if (!playing) {
+      console.error('NO CANVAS: the page has a canvas that never got a size.');
+      await browser.close(); process.exit(4);
+    }
+    console.log('  [screencast] canvas page (no video element) — WebGL capture');
+  } else {
+    console.error('NEITHER: the page has no <video> and no <canvas> to capture.');
     await browser.close(); process.exit(4);
   }
   await page.waitForTimeout(SETTLE_MS);
@@ -88,10 +113,19 @@ const RES_Y = parseInt(process.env.WL_RES_Y || '720', 10);
 
   const probe = () => page.evaluate(() => {
     const v = document.querySelector('video');
-    const q = v && v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null;
-    return v ? { t: v.currentTime, w: v.videoWidth, h: v.videoHeight,
-                 decoded: q ? q.totalVideoFrames : null,
-                 dropped: q ? q.droppedVideoFrames : null } : null;
+    if (v) {
+      const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null;
+      return { t: v.currentTime, w: v.videoWidth, h: v.videoHeight,
+               decoded: q ? q.totalVideoFrames : null,
+               dropped: q ? q.droppedVideoFrames : null };
+    }
+    // A canvas page has no stream to account for; report the surface size and
+    // wall time so the same metadata block works, with nulls where a stream
+    // number would be a fabrication.
+    const c = document.querySelector('canvas');
+    return { t: performance.now() / 1000,
+             w: c ? c.width : 0, h: c ? c.height : 0,
+             decoded: null, dropped: null };
   });
   const before = await probe();
 
@@ -120,16 +154,20 @@ const RES_Y = parseInt(process.env.WL_RES_Y || '720', 10);
     resampled: !(before.w === RES_X && before.h === RES_Y),
     capturedFrames: frames.length,
     captureFps: +(frames.length / SECONDS).toFixed(1),
-    streamDecoded: after.decoded - before.decoded,
-    streamDropped: after.dropped - before.dropped,
-    streamFps: +((after.decoded - before.decoded) / (after.t - before.t)).toFixed(1),
+    surface: kind,
+    streamDecoded: after.decoded != null ? after.decoded - before.decoded : null,
+    streamDropped: after.dropped != null ? after.dropped - before.dropped : null,
+    streamFps: after.decoded != null
+      ? +((after.decoded - before.decoded) / (after.t - before.t)).toFixed(1) : null,
     gapMs: { p50: pct(0.5), p90: pct(0.9), max: gaps.length ? gaps[gaps.length - 1] : null },
     frames,
   };
   fs.writeFileSync(path.join(OUTDIR, 'screencast.json'), JSON.stringify(meta, null, 2));
   console.log(`  [screencast] ${frames.length} frames in ${SECONDS}s ` +
-              `(${meta.captureFps} fps captured, stream ${meta.streamFps} fps, ` +
-              `${meta.streamDropped} dropped)`);
+              `(${meta.captureFps} fps captured` +
+              (meta.streamFps != null
+                ? `, stream ${meta.streamFps} fps, ${meta.streamDropped} dropped)`
+                : ', canvas surface — no stream counters)'));
   console.log(`  [screencast] frame gaps p50 ${meta.gapMs.p50}ms p90 ${meta.gapMs.p90}ms max ${meta.gapMs.max}ms`);
   console.log(`captured -> ${OUTDIR}`);
   await browser.close();
