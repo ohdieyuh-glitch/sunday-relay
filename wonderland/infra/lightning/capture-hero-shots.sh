@@ -236,6 +236,26 @@ def sh(cmd):
                               stderr=subprocess.DEVNULL).stdout.decode().strip()
     except Exception:
         return ""
+def _knobs():
+    """The BUILD's knobs, as a mapping, from compiled.knobs via WL_BUILD_KNOBS.
+
+    A mapping and not a string: compare-to-reference.py iterates this to build
+    the founder-review page, so the type is part of the contract even though
+    only the values were meant to change.
+    """
+    raw = os.environ.get("WL_BUILD_KNOBS", "").strip()
+    if not raw:
+        return {"UNRECORDED": ("this package predates compiled.knobs, so what it "
+                               "was built with cannot be established from the "
+                               "artifact — read world_proof MARBLE_ACTORS, which "
+                               "is the ground truth for whether the Marble world "
+                               "is in this frame")}
+    out = {}
+    for item in raw.split():
+        k, _, v = item.partition("=")
+        if k:
+            out["WONDERLAND_" + k] = v
+    return out or {"UNPARSED": raw}
 payload = {
     "hero_camera": int(cam),
     "build_sha": sha,
@@ -244,11 +264,7 @@ payload = {
     "png": os.path.abspath(png),
     "png_bytes": os.path.getsize(png) if os.path.exists(png) else 0,
     "render_profile": os.environ.get("WL_RENDER_PROFILE", ""),
-    "generator_knobs": os.environ.get("WL_BUILD_KNOBS", "").strip()
-        or "UNRECORDED — this package predates compiled.knobs, so what it was "
-           "built with cannot be established from the artifact. Read "
-           "world_proof: MARBLE_ACTORS is the ground truth for whether the "
-           "Marble world is in this frame.",
+    "generator_knobs": _knobs(),
     "world_proof": [l for l in os.environ.get("WL_PROOF_LINES", "").split("\n") if l],
     "stream": json.loads(os.environ.get("WL_STREAM_STATS", "{}") or "{}"),
     "gpu": {

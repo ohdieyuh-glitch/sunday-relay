@@ -2028,6 +2028,32 @@ if code_has "$CHS" 'UNRECORDED'; then
 else
   bad "a package with no knobs record would be reported with invented values"
 fi
+# AND IT IS STILL A MAPPING. The first version of the knobs fix made
+# generator_knobs a plain string. That is a schema change, not a value change,
+# and compare-to-reference.py iterates the field with .items() to build the
+# founder-review page — so the page died with an AttributeError on the first
+# capture that used it. Reading a field is a contract; its TYPE is part of that
+# contract even when only the values were meant to move.
+KN_TMP="$(mktemp -d)"
+sed -n '/^def _knobs():/,/^    return out or/p' "$CHS" > "$KN_TMP/k.py"
+printf '\n    return out or {"UNPARSED": raw}\n' >> "$KN_TMP/k.py"
+if [ -s "$KN_TMP/k.py" ] && python3 - "$KN_TMP/k.py" <<'PYEOF'
+import os, sys
+ns = {}
+exec("import os\n" + open(sys.argv[1]).read(), ns)
+for raw in ("", "LOOK= BATCH=1 BACKDROP=<unset> MARBLE=royal-garden-backdrop COLLIDE="):
+    os.environ["WL_BUILD_KNOBS"] = raw
+    v = ns["_knobs"]()
+    assert isinstance(v, dict), "generator_knobs is %s, not a mapping" % type(v).__name__
+    list(v.items())          # exactly what compare-to-reference.py does
+    assert v, "empty mapping"
+PYEOF
+then
+  ok "…and generator_knobs is a MAPPING in both branches, so the review page can iterate it"
+else
+  bad "generator_knobs is not an iterable mapping — compare-to-reference.py will die on it"
+fi
+rm -rf "$KN_TMP"
 if code_has "$HERE/../build/build-wonderland.sh" 'compiled.knobs'; then
   ok "build-wonderland writes compiled.knobs beside compiled.sha"
 else
