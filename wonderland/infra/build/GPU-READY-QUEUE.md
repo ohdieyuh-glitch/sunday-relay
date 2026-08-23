@@ -1,5 +1,65 @@
 # GPU-ready queue
 
+> **2026-08-23 — THE DARK-REGION PASS IS QUEUED AND UNVERIFIED.**
+>
+> Everything in this block was authored on CPU while the Studio was stopped.
+> The composition changes are MEASURED offline; the lighting-model changes
+> **cannot be** and are argued from a capture. Head: `a246e46`.
+>
+> Run this first, then compare against the founder's reference:
+>
+>     SKIP_PREPARE=1 FORCE_REBUILD=1 \
+>       WONDERLAND_MARBLE_IMPORT=royal-garden-backdrop \
+>       bash wonderland/infra/lightning/cpu-build-all.sh
+>     WL_HERO_CAMS="6" bash wonderland/infra/lightning/capture-hero-shots.sh
+>     python3 wonderland/infra/build/attribute-dark.py <the new capture>
+>     python3 wonderland/infra/build/measure-palette.py <the new capture>
+>
+> `attribute-dark.py` is the scoreboard for this pass. On build `a203547` it
+> read **39.8% dark**, attributed as:
+>
+>     leafcard 4.25%  foliage 4.07%  leafcard_hi 3.73%  gold 2.01%
+>     porcelain 1.47%  roof_rose 1.47%  foliage_deep 1.38%
+>     dark SKY 9.4% of the frame (no geometry owns it)
+>
+> **MEASURED OFFLINE (composition — these are real numbers, not predictions):**
+>
+> | change | before | after |
+> |---|---|---|
+> | lone-primitive share | 4.36% | **0.00%** |
+> | landmarks off their declared size | 8 of 19 | **0 of 19** |
+> | whole-frame sky | 19.7% | **21.2%** |
+> | top-third sky | 24.7% (session start) | **47.2%** |
+> | actors | 40132 | **40923** |
+>
+> **NOT MEASURABLE OFFLINE — verify these on the GPU, in this order:**
+>
+> 1. **Foliage transmission.** `MSM_TWO_SIDED_FOLIAGE` + subsurface on
+>    `M_WLLeaf`. Expect the biggest single move: foliage owns 12.8% of the
+>    frame as dark pixels. **If the canopy is still black, check the build log
+>    for `LEAF MATERIAL: cached M_WLLeaf predates the two-sided-foliage
+>    recipe`** — that line means the stale asset was found and dropped, and its
+>    ABSENCE on a box with an existing Content dir is the thing to suspect
+>    first.
+> 2. **The gold family.** metallic 0.86-1.00 -> 0.40-0.55, porcelain roughness
+>    0.10 -> 0.26. The offline rasteriser ignores metallic and roughness
+>    entirely, so this is unverified in every sense. Watch gold's dark share.
+> 3. **TSR history at 100/8** (was 200/16). Measured +45% acutance offline on
+>    a decoded capture; still unproven in motion.
+> 4. **Ground bounce 0.55 / skylight 1.60 / 96 planting slots / hero
+>    mushrooms** — all committed earlier this session, none rendered.
+>
+> **STILL OPEN, with no fix committed:**
+>
+> - **Dark SKY is 9.4% of the frame.** No geometry owns those pixels, so it is
+>   the Marble shell's own upper region. The shell is anchored AT the camera,
+>   so scaling cannot move its horizon — the smear is inherent to a
+>   single-viewpoint reconstruction and the honest fix is to stop using the
+>   mesh above some elevation and put the world's own sky there. The world
+>   already ships `panorama.jpg` from the same Marble capture.
+> - FPS was 18.3 against a 20.5 baseline and a 30 target, and this pass ADDS
+>   791 actors and a more expensive leaf shading model. Measure before tuning.
+
 > **2026-08-21, LAST — THE NEXT SESSION STARTS ON CPU, NOT GPU.**
 >
 > The Lightning Studio is **stopped**. Starting it is a founder action (there
