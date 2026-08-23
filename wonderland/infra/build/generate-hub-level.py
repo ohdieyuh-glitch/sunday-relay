@@ -227,6 +227,11 @@ LOOK = {
     # --- bloom -----------------------------------------------------
     # CHOSEN. Thresholded high so only gold, emissive and true highlights
     # glow. Lower the threshold and the midtones haze into milk.
+    # --- practicals ------------------------------------------------
+    # MEASURED. At 14000 the lantern practicals were 41x the sun's 340 and
+    # shadowless, and they made every material in the midground render gold.
+    # Sweep with WONDERLAND_LOOK=lampLumens=14000 to see the frame they made.
+    "lampLumens": 2200.0,
     "bloomIntensity": 0.5,
     "bloomThreshold": 1.5,
     # --- grade (runs AFTER metering; this is the real brightness lever)
@@ -3928,9 +3933,34 @@ def build(layout):
         try:
             pl = spawn(unreal.PointLight, (x, y, lz), label="%s_light" % label)
             plc = pl.get_component_by_class(unreal.PointLightComponent)
-            plc.set_intensity(14000.0)
-            plc.set_light_color(srgb_light_color(255, 208, 140))
-            set_prop(plc, "AttenuationRadius", 1100.0)
+            # THE LANTERNS WERE LIGHTING THE WHOLE WORLD GOLD.
+            #
+            # This is how the "one tan material" complaint actually happened,
+            # and it took measuring the BRIGHTEST decile of each material to
+            # see it. Every material's brightest pixels rendered as saturated
+            # gold, whatever its own colour:
+            #
+            #     porcelain  base (244,242,237)  ->  top decile (213,176, 69)
+            #     foliage    base ( 58,117, 56)  ->  top decile (195,169,113)
+            #     mush_red   base (188, 40, 66)  ->  top decile (236,190,112)
+            #
+            # all converging on about 1.00 : 0.83 : 0.32 -- and the one
+            # exception was dog_body at (235,215,204), near-neutral, which is
+            # the surface with its own practical light on it. So the cast was
+            # not the key, the grade, the textures or the tints: the world was
+            # being lit by something gold that did not reach the Dog.
+            #
+            # It was these. 14,000 lumens each, gold, CastShadows FALSE, over an
+            # 1,100 uu radius -- against a SUN of 340 lux. A dozen of them, each
+            # passing straight through every wall and every canopy, so nothing
+            # within eleven metres of a lamp post could be any colour but theirs.
+            # Neutralising the key (tried, rendered) moved the frame by 0.1
+            # points, which is what finally ruled the sun out.
+            #
+            # A practical lights its own surroundings. It is not the key light.
+            plc.set_intensity(float(LOOK["lampLumens"]))
+            plc.set_light_color(srgb_light_color(255, 226, 190))
+            set_prop(plc, "AttenuationRadius", 620.0)
             set_prop(plc, "SourceRadius", 18.0)
             set_prop(plc, "CastShadows", False)
         except Exception as _e:
@@ -4837,7 +4867,7 @@ def build(layout):
         # changing how much light the atmosphere scatters -- which is what
         # turned the previous attempt into a twilight.
         try:
-            _sl = max(0.0, min(1.0, float(LOOK.get("skyLavender", 0.0))))
+            _sl = max(0.0, min(1.0, float(LOOK["skyLavender"])))
         except (TypeError, ValueError):
             _sl = 0.0
         if _sl > 0.0:
@@ -4927,7 +4957,7 @@ def build(layout):
             # See LOOK["skyIntensity"]. The sky is what makes a shadow cool,
             # and cool shadow is what lets a white stay white and a pink stay
             # pink where the sun does not reach.
-            sky_comp.set_intensity(float(LOOK.get("skyIntensity", 1.60)))
+            sky_comp.set_intensity(float(LOOK["skyIntensity"]))
         except Exception:
             pass
         # Real-time captured sky ambient — needs no lighting build.
