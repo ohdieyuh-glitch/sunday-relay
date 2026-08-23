@@ -113,7 +113,23 @@ LOOK = {
     # exactly. skyLavender blends the default toward an equal-R-and-G lavender.
     "skyLavender": 0.55,
     "sunLux": 340.0,
-    "sunWarm": (1.0, 0.94, 0.84),          # CHOSEN. Warm daylight key.
+    # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
+    # and on the streamed frame it renders (188,165,129): a ratio of
+    # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
+    # should read as a white. That cast is on EVERYTHING the sun touches, which
+    # is why the offline preview measures the geometry at 2.7% warm_timber_stone
+    # while the RENDER measures 25.3% of it -- the tan is not in the world, it is
+    # applied to the world.
+    #
+    # The reference keeps its whites white and its pinks pink in the sun and
+    # puts its colour contrast in the SHADE (cool violet), rather than washing
+    # the whole frame warm. With ColorSaturation at 1.52 a warm key is not a
+    # subtle choice: saturation multiplies the cast rather than the palette.
+    #
+    # Near-neutral key. The warmth that remains comes from the atmosphere and
+    # the practicals, which is where it belongs. Sweep with
+    # WONDERLAND_LOOK=sunWarm=1.0/0.94/0.84 to get the old cast back.
+    "sunWarm": (1.00, 0.985, 0.955),
     "sunPitchMin": 25.0,                   # PROVEN. Flatter than this and
                                            # the long shadows swallow the plaza.
     # --- fill ------------------------------------------------------
