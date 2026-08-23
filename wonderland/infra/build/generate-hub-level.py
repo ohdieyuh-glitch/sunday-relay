@@ -5398,11 +5398,30 @@ def build(layout):
     # on the real arcane circle, so a second one would only sit inside the first.)
     # A DRIFT OF KEYS, not three of them. They read as a current of magic moving
     # toward the Build Gate, which is where the brief wants the eye to go next.
+    #
+    # THE KEEP-OUT WAS NEVER APPLIED HERE. Four of these ten sit inside
+    # ARRIVAL_KEEP_OUT, and FloatKey7 at (120,-560) is 6.4 m from the lens --
+    # a gold prop hanging in front of the camera, measured at 5.0% of the whole
+    # TOP THIRD of the frame. A key is a small object; anything that reads that
+    # large is not far away, it is close. Push each one out along its own
+    # horizontal bearing so the authored drift toward the Build Gate is
+    # preserved and only the distance changes.
+    _keys_moved = 0
     for i, (kx, ky, kz) in enumerate([(-640, 240, 430), (540, 120, 520), (240, 780, 560),
                                       (-880, 40, 610), (-1180, 250, 700), (-380, -180, 480),
                                       (760, -320, 560), (120, -560, 640), (980, 640, 690),
                                       (-160, 1150, 720)]):
+        _dx, _dy = kx - ARRIVAL_CAM[0], ky - ARRIVAL_CAM[1]
+        _r = math.hypot(_dx, _dy)
+        if 1.0 < _r < ARRIVAL_KEEP_OUT:
+            _f = ARRIVAL_KEEP_OUT / _r
+            kx, ky = ARRIVAL_CAM[0] + _dx * _f, ARRIVAL_CAM[1] + _dy * _f
+            _keys_moved += 1
         kit_float_key(kx, ky, kz, "FloatKey%d" % i)
+    if _keys_moved:
+        unreal.log_warning("FLOAT KEYS  %d of 10 were inside the %.0f uu arrival keep-out "
+              "and were pushed out along their own bearing"
+              % (_keys_moved, ARRIVAL_KEEP_OUT))
     # LAMP POSTS + GARLANDS down the boulevard. Vertical rhythm, warm light in
     # the middle distance, and the card motif at a readable size.
     # OUT OF THE FRAME'S THROAT. At x = +/-430 these sat fifteen degrees off the
