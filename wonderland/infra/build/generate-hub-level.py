@@ -585,6 +585,25 @@ def set_prop(actor, cpp_name, value):
 # spire_far leans lilac for the distance. verify-visual-target.py measures the
 # result — palette_cream, palette_pink and palette_violet are the criteria this
 # is answering.
+# WHY THE COLOURED MATERIALS ARE MATTE.
+#
+# The world rendered GREY once its false gold light was removed, and the
+# measurement that explains it is this: of every material in the frame, the
+# only ones still delivering real chroma were the METALS -- gold at
+# (165,137,71), spire_far at (109,70,22) -- while mush_red, whose base colour
+# is (188,40,66), came back at chroma 37 out of a possible 148, and arcane,
+# an EMISSIVE violet at strength 11, came back at chroma 9.
+#
+# A metal tints its specular reflection. A dielectric's specular is white. So
+# a glossy dielectric under a strong sky reflects white sky ON TOP of its own
+# diffuse colour, and the colour is what loses. Every material carrying this
+# world's pink and violet was between 0.28 and 0.46 roughness -- glossy enough
+# to mirror the sky -- which is why adding more pink geometry moved rendered
+# pink 4.5% -> 3.9%: the new blossom washed out exactly like the old.
+#
+# 22 of them are now floored at 0.62. The reference's surfaces are matte voxel
+# toys, so this is also what they should have been. Gloss is kept where it
+# means something: a pond, glass, a gem, the Dog's visor.
 MATERIAL_SPEC = {
     # Pure metal mirrors its surroundings, and around here the surroundings
     # are grass and sky — so the most golden object in the world rendered
@@ -641,18 +660,18 @@ MATERIAL_SPEC = {
     # inside and an outside, which is what makes it read as leaves.
     "foliage_deep":((0.09, 0.21, 0.11), 0.0, 0.80, (0, 0, 0), 0.0),
     "foliage_spr": ((0.50, 0.72, 0.34), 0.0, 0.62, (0, 0, 0), 0.0),
-    "rose":        ((0.72, 0.13, 0.28), 0.0, 0.40, (0.20, 0, 0.03), 0.45),
-    "rose_pink":   ((0.96, 0.42, 0.62), 0.0, 0.40, (0.10, 0.0, 0.04), 0.3),
-    "petal_pink":  ((0.94, 0.40, 0.66), 0.0, 0.38, (0, 0, 0), 0.0),
-    "petal_violet":((0.52, 0.28, 0.86), 0.0, 0.40, (0.09, 0.02, 0.20), 0.35),
-    "petal_air":   ((0.98, 0.62, 0.82), 0.0, 0.36, (0.10, 0.02, 0.06), 0.2),
-    "mush_red":    ((0.74, 0.16, 0.26), 0.0, 0.28, (0.14, 0, 0), 0.3),
+    "rose":        ((0.72, 0.13, 0.28), 0.0, 0.62, (0.20, 0, 0.03), 0.45),
+    "rose_pink":   ((0.96, 0.42, 0.62), 0.0, 0.62, (0.10, 0.0, 0.04), 0.3),
+    "petal_pink":  ((0.94, 0.40, 0.66), 0.0, 0.62, (0, 0, 0), 0.0),
+    "petal_violet":((0.52, 0.28, 0.86), 0.0, 0.62, (0.09, 0.02, 0.20), 0.35),
+    "petal_air":   ((0.98, 0.62, 0.82), 0.0, 0.62, (0.10, 0.02, 0.06), 0.2),
+    "mush_red":    ((0.74, 0.16, 0.26), 0.0, 0.62, (0.14, 0, 0), 0.3),
     "mush_white":  ((0.96, 0.94, 0.90), 0.0, 0.42, (0, 0, 0), 0.0),
-    "mush_purple": ((0.44, 0.20, 0.76), 0.0, 0.30, (0.13, 0.02, 0.22), 0.35),
+    "mush_purple": ((0.44, 0.20, 0.76), 0.0, 0.62, (0.13, 0.02, 0.22), 0.35),
     "spire":       ((0.94, 0.90, 0.86), 0.0, 0.40, (0, 0, 0), 0.0),
-    "spire_pink":  ((0.98, 0.74, 0.82), 0.0, 0.34, (0, 0, 0), 0.0),
-    "spire_blue":  ((0.76, 0.68, 0.98), 0.0, 0.34, (0, 0, 0), 0.0),
-    "spire_teal":  ((0.66, 0.92, 0.88), 0.0, 0.34, (0, 0, 0), 0.0),
+    "spire_pink":  ((0.98, 0.74, 0.82), 0.0, 0.62, (0, 0, 0), 0.0),
+    "spire_blue":  ((0.76, 0.68, 0.98), 0.0, 0.62, (0, 0, 0), 0.0),
+    "spire_teal":  ((0.66, 0.92, 0.88), 0.0, 0.62, (0, 0, 0), 0.0),
     # Roughness 0.10 is a mirror, and a mirror reflecting a dark scene is
     # dark: attribute-dark.py measured porcelain at 1.47% of the frame in
     # shadow. Real glaze has a broad highlight, not a point one.
@@ -662,33 +681,33 @@ MATERIAL_SPEC = {
     # the dark of a basin, and it BOBS — a jet of beads that does not move is
     # a string of pearls.
     "spray":       ((0.96, 0.98, 1.00), 0.0, 0.14, (0.30, 0.40, 0.48), 0.55),
-    "magic_cyan":  ((0.20, 0.85, 1.00), 0.0, 0.30, (0.20, 0.85, 1.00), 2.2),
+    "magic_cyan":  ((0.20, 0.85, 1.00), 0.0, 0.62, (0.20, 0.85, 1.00), 2.2),
     # The Brain is now 72 folded lobes where it used to be 5 spheres. At the
     # bright value that is fourteen times the glowing area, and a structure
     # whose whole point is that you can read its folds becomes one cyan blob.
     # Most of it takes this; the crowns of the folds keep the bright one.
-    "magic_cyan_d":((0.16, 0.62, 0.78), 0.0, 0.36, (0.14, 0.52, 0.68), 0.85),
-    "magic_gold":  ((1.00, 0.84, 0.42), 0.0, 0.28, (1.00, 0.74, 0.30), 4.5),
+    "magic_cyan_d":((0.16, 0.62, 0.78), 0.0, 0.62, (0.14, 0.52, 0.68), 0.85),
+    "magic_gold":  ((1.00, 0.84, 0.42), 0.0, 0.62, (1.00, 0.74, 0.30), 4.5),
     # Lamp glass, separately: magic_gold at 4.5 is right for a threshold disc
     # and far too hot for a lantern that also carries a real point light — at
     # eight of them down the boulevard that reads as flare, and the brief asks
     # for restrained bloom.
     "lamp_glass":  ((1.00, 0.88, 0.58), 0.0, 0.22, (1.00, 0.80, 0.42), 2.0),
-    "arcane":      ((0.66, 0.36, 1.00), 0.0, 0.30, (0.62, 0.28, 1.00), 11.0),
+    "arcane":      ((0.66, 0.36, 1.00), 0.0, 0.62, (0.62, 0.28, 1.00), 11.0),
     # The SPILL, not the source. Light leaking out of the arcane circle into
     # the paving has to fall off; at the ring's own radiance it stops reading
     # as a spill and becomes 78 more light sources in the near foreground.
-    "arcane_dim":  ((0.60, 0.34, 0.92), 0.0, 0.34, (0.52, 0.24, 0.90), 3.2),
-    "arcane_faint":((0.44, 0.30, 0.62), 0.0, 0.42, (0.20, 0.09, 0.34), 1.1),
+    "arcane_dim":  ((0.60, 0.34, 0.92), 0.0, 0.62, (0.52, 0.24, 0.90), 3.2),
+    "arcane_faint":((0.44, 0.30, 0.62), 0.0, 0.62, (0.20, 0.09, 0.34), 1.1),
     "crystal":     ((0.65, 0.40, 0.95), 0.1, 0.20, (0.40, 0.20, 0.80), 1.5),
     "dog_body":    ((0.985, 0.985, 0.995), 0.0, 0.34, (0.02, 0.02, 0.03), 0.10),
     "dog_visor":   ((0.02, 0.02, 0.03), 0.1, 0.12, (0, 0, 0), 0.0),
-    "dog_eye":     ((1.00, 0.80, 0.22), 0.0, 0.28, (1.00, 0.74, 0.18), 5.0),
+    "dog_eye":     ((1.00, 0.80, 0.22), 0.0, 0.62, (1.00, 0.74, 0.18), 5.0),
     "stone":       ((0.88, 0.85, 0.80), 0.0, 0.90, (0, 0, 0), 0.0),
-    "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.35, (0, 0, 0), 0.0),
+    "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
     "dog_gray":    ((0.55, 0.57, 0.60), 0.0, 0.40, (0, 0, 0), 0.0),
-    "dog_tan":     ((0.82, 0.66, 0.42), 0.0, 0.40, (0, 0, 0), 0.0),
-    "dog_brown":   ((0.50, 0.33, 0.21), 0.0, 0.50, (0, 0, 0), 0.0),
+    "dog_tan":     ((0.82, 0.66, 0.42), 0.0, 0.62, (0, 0, 0), 0.0),
+    "dog_brown":   ((0.50, 0.33, 0.21), 0.0, 0.62, (0, 0, 0), 0.0),
     # --- horizon + skyline (visual pass 1) -------------------------------
     # The far meadow that closes the horizon. Soft lilac-green rather than
     # grass-green: at this distance the height fog tints toward the sky, and a
@@ -698,8 +717,8 @@ MATERIAL_SPEC = {
     # behind the hero landmarks instead of competing with them.
     "spire_far":   ((0.82, 0.70, 0.96), 0.0, 0.62, (0, 0, 0), 0.0),
     # Rose and pink rooflines — the reference's skyline is warm, not gold.
-    "roof_rose":   ((0.78, 0.38, 0.44), 0.0, 0.46, (0.04, 0.0, 0.01), 0.10),
-    "roof_pink":   ((0.92, 0.46, 0.62), 0.0, 0.42, (0, 0, 0), 0.0),
+    "roof_rose":   ((0.78, 0.38, 0.44), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
+    "roof_pink":   ((0.92, 0.46, 0.62), 0.0, 0.62, (0, 0, 0), 0.0),
     # Gills under a mushroom cap: warm shadow, never black.
     "mush_gill":   ((0.80, 0.66, 0.58), 0.0, 0.70, (0, 0, 0), 0.0),
     # Cumulus. Slightly self-lit so the shaded undersides stay soft and
