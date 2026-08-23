@@ -3762,7 +3762,8 @@ def build(layout):
         P("cube", x, y - fy * 74.0 * s, bz + 24.0 * s, 0.18 * s, 0.44 * s, 0.20 * s, body, "%s_tail" % label, rot=(38, 0, 0))
         return parts
 
-    def stroll_dog(x, y, label, s=1.2, body="dog_body", roam=800.0, is_hero=False, accessory="none"):
+    def stroll_dog(x, y, label, s=1.2, body="dog_body", roam=800.0, is_hero=False, accessory="none",
+                   keep_out=None):
         # Spawn the LOCOMOTION actor. The Dog's BODY is now built in C++ (BuildBody),
         # NOT attached here — that is what lets the Head and Tail be animated (idle
         # look-around + walk nod on the head, a wagging tail). The generator only
@@ -3802,6 +3803,13 @@ def build(layout):
         # failure this file has had too many of.
         set_prop(stroller, "CoatName", unreal.Name(body))
         set_prop(stroller, "Accessory", unreal.Name(accessory))
+        if keep_out is not None:
+            # The HERO Dog is exempt on purpose: it is the arrival composition's
+            # SUBJECT and stands 927 uu from the lens by design. Excluding it
+            # from its own shot would be the cure killing the patient.
+            _kc, _kr = keep_out
+            set_prop(stroller, "KeepOutCentre", unreal.Vector(_kc[0], _kc[1], 0.0))
+            set_prop(stroller, "KeepOutRadius", float(_kr))
         if is_hero:
             set_prop(stroller, "WalkSpeed", 110.0)
 
@@ -3947,6 +3955,18 @@ def build(layout):
     # still leads the eye past it to the gate.
     HERO_DOG = (-260.0, -260.0)
     HERO_DOG_SCALE = 1.75
+    # WHERE THE WORLD OPENS FROM. HeroCam0 and HeroCam6 both stand here — the
+    # Marble backdrop is anchored at this exact point, which is why the wide
+    # arrival shares the position and changes only the aim. Named once because
+    # two things now need it: the cameras, and the companions' keep-out.
+    ARRIVAL_CAM = (0.0, -1150.0, 430.0)
+    # Companions roam 1,100 uu around homes that can sit 1,350 uu from that
+    # camera, so one can stand 250 uu from the lens. At that range a Relay Dog
+    # is a white wall across the frame and the castle city the shot exists to
+    # present is behind it — which is what every hero capture in this session
+    # came back as. The hero Dog is 927 uu out and fills a healthy 42% of frame
+    # height; nothing else should come closer than the plaza itself.
+    ARRIVAL_KEEP_OUT = 1150.0
     DOG_STAGE = (HERO_DOG[0], HERO_DOG[1], 560.0)
 
     def _on_stage(gx, gy):
@@ -5273,7 +5293,8 @@ def build(layout):
             _ba = math.atan2(_dyh, _dxh) if _dh > 1.0 else (i * 1.7)
             cx = HERO_DOG[0] + math.cos(_ba) * 1150.0
             cy = HERO_DOG[1] + math.sin(_ba) * 1150.0
-        stroll_dog(cx, cy, "Companion%d" % i, s=1.05, body=coat, roam=1100.0, accessory=acc)
+        stroll_dog(cx, cy, "Companion%d" % i, s=1.05, body=coat, roam=1100.0, accessory=acc,
+                   keep_out=(ARRIVAL_CAM, ARRIVAL_KEEP_OUT))
     # THE DISTANCE LADDER. Four bands, each further, larger and paler than the
     # last, so the eye can measure the world by comparing them. The previous
     # skyline put every tower between 2 km and 3.6 km at a uniform 14 m — one
@@ -6100,7 +6121,7 @@ def build(layout):
     # controller under -CinematicView -HeroCam=N (relaunch per shot; no re-cook).
     # Positions/targets derive from the real landmark coordinates in this layout.
     hero_shots = [
-        (0, (0.0, -1150.0, 430.0), (0.0, 120.0, 170.0), 62.0),        # ARRIVAL_HERO — plaza onto circle + tree
+        (0, ARRIVAL_CAM, (0.0, 120.0, 170.0), 62.0),                  # ARRIVAL_HERO — plaza onto circle + tree
         (1, (300.0, -430.0, 205.0), (0.0, 60.0, 190.0), 52.0),        # DOG_CLOSEUP — the hero Dog's visor + gold eyes
         (2, (-250.0, -380.0, 430.0), (-1010.0, 360.0, 300.0), 52.0),  # GOLDEN_GATE — ornate heart-crest gate
         (3, (1300.0, -360.0, 540.0), (1300.0, 470.0, 680.0), 64.0),   # GIANT_TREE — the great framing tree
@@ -6121,7 +6142,7 @@ def build(layout):
         # 75 deg at +5 deg pitch spans -18.4..+28.3, which holds the Dog at
         # -11.6 AND 29.9% of the skyline. Wider gains little: 80 deg buys 0.8
         # more points and 90 deg starts to read as a fisheye.
-        (6, (0.0, -1150.0, 430.0), (0.0, 120.0, 541.0), 75.0),        # ARRIVAL_WIDE — Dog, plaza AND the Marble skyline
+        (6, ARRIVAL_CAM, (0.0, 120.0, 541.0), 75.0),                  # ARRIVAL_WIDE — Dog, plaza AND the Marble skyline
     ]
     for hn, hpos, hlook, hfov in hero_shots:
         hrot = look_at_rotation(hpos, hlook)

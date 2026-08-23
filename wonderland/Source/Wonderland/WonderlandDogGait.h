@@ -95,6 +95,17 @@ namespace WonderlandGait
 	/** @param LegLength  hip-to-paw distance at rest, uu. */
 	FLegSwing LegSwing(const FLegPose& Pose, float LegLength);
 
+	/** Where a Dog may not walk — staging, not gait, but the same kind of thing
+	 *  and testable for the same reason: it is arithmetic, so it lives in plain
+	 *  floats here rather than inside an actor where only a GPU could check it.
+	 *
+	 *  Pushes (X,Y) out to the rim of a circle it has strayed inside, along its
+	 *  own bearing. Radius <= 0 is no exclusion at all. A point exactly at the
+	 *  centre has no bearing, so it leaves along +X — arbitrary, but defined,
+	 *  because the alternative is a NaN that propagates into a transform. */
+	void PushOutOfColumn(float X, float Y, float CentreX, float CentreY,
+	                     float Radius, float& OutX, float& OutY);
+
 	/** Where the paw is in WORLD terms along the travel axis, given how far the
 	 *  body has gone. Constant through stance is the whole point, and the test
 	 *  asserts exactly that. */

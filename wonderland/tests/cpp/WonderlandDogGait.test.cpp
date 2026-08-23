@@ -315,6 +315,48 @@ int main(int argc, char** argv)
 		      "pitch " + std::to_string(Rest.PitchDeg) + " stretch " + std::to_string(Rest.Stretch));
 	}
 
+	std::printf("== a Dog will not walk through the opening shot ==\n");
+	{
+		const float CX = 0.0f, CY = -1150.0f, R = 1150.0f;
+		float X = 0.0f, Y = 0.0f;
+		// Outside is untouched.
+		PushOutOfColumn(0.0f, 500.0f, CX, CY, R, X, Y);
+		Check("a point outside the column is left exactly where it was",
+		      std::fabs(X - 0.0f) < 1e-4f && std::fabs(Y - 500.0f) < 1e-4f);
+		// Inside is pushed to the rim, keeping its bearing.
+		PushOutOfColumn(0.0f, -600.0f, CX, CY, R, X, Y);
+		const float D = std::sqrt((X - CX) * (X - CX) + (Y - CY) * (Y - CY));
+		Check("a point inside is pushed exactly to the rim", std::fabs(D - R) < 1e-2f,
+		      "distance " + std::to_string(D));
+		Check("...along its own bearing, not toward an arbitrary axis",
+		      std::fabs(X - CX) < 1e-3f && Y > CY,
+		      "landed at " + std::to_string(X) + "," + std::to_string(Y));
+		// THE CENTRE. A Dog standing exactly on the camera has no bearing to
+		// push along, and dividing by that zero puts a NaN into a transform,
+		// which is an actor that vanishes rather than an actor that moves.
+		PushOutOfColumn(CX, CY, CX, CY, R, X, Y);
+		Check("a point AT the centre leaves along a defined bearing, not a NaN",
+		      X == X && Y == Y && std::fabs(std::sqrt((X - CX) * (X - CX) + (Y - CY) * (Y - CY)) - R) < 1e-2f,
+		      "landed at " + std::to_string(X) + "," + std::to_string(Y));
+		// Disabled means disabled.
+		PushOutOfColumn(0.0f, -600.0f, CX, CY, 0.0f, X, Y);
+		Check("radius 0 is no exclusion at all",
+		      std::fabs(X) < 1e-4f && std::fabs(Y + 600.0f) < 1e-4f);
+		// The rule has to hold for a Dog CROSSING, not just for its target: walk
+		// a chord straight through the column and check every step is outside.
+		int Inside = 0;
+		for (int i = 0; i <= 500; ++i)
+		{
+			const float T = i / 500.0f;
+			const float PX = -1600.0f + 3200.0f * T;
+			const float PY = -1150.0f;
+			PushOutOfColumn(PX, PY, CX, CY, R, X, Y);
+			if (std::sqrt((X - CX) * (X - CX) + (Y - CY) * (Y - CY)) < R - 1e-2f) ++Inside;
+		}
+		Check("a Dog walking a chord straight through it never gets inside",
+		      Inside == 0, std::to_string(Inside) + " of 501 steps landed inside");
+	}
+
 	std::printf("== the body carries the gait rather than gliding ==\n");
 	{
 		float MinBob = 1e9f, MaxBob = -1e9f;

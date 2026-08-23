@@ -80,6 +80,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
 	float WalkSpeed = 90.0f;
 
+	/** A place the Dog will not walk into: the ARRIVAL CAMERA'S NEAR FIELD.
+	 *
+	 *  Companions roam 800 uu around a home that can sit 1,350 uu from the
+	 *  arrival camera, so one can legitimately end up 550 uu from the lens —
+	 *  where a 338 uu Dog fills seventy percent of the frame height and the
+	 *  Marble castle city the shot exists to present is behind it. Every hero
+	 *  capture this session took had a Dog standing in it like a wall, and the
+	 *  first three readings of those frames blamed the camera.
+	 *
+	 *  Not a hack to tidy a screenshot: the arrival composition is the first
+	 *  thing a player sees, and "a Dog may wander anywhere except through the
+	 *  opening shot" is a staging rule, the same kind as the hero Dog owning
+	 *  its own patch of frame. Radius 0 disables it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	FVector KeepOutCentre = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	float KeepOutRadius = 0.0f;
+
 	/** How many body parts were actually built. 0 means the body failed and the
 	 *  Dog is invisible — the world proof reports that rather than hiding it. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
@@ -98,6 +117,9 @@ protected:
 
 private:
 	void PickDestination();
+
+	/** Nudge a point out of the keep-out column, along its own bearing. */
+	FVector PushOutOfKeepOut(const FVector& Where) const;
 
 	FVector Destination = FVector::ZeroVector;
 	float LifeSeconds = 0.0f;

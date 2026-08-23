@@ -94,6 +94,26 @@ void AWonderlandStrollingDog::PickDestination()
 	const float Radius = RoamRadius * (0.35f + 0.5f * FMath::Abs(FMath::Sin(LifeSeconds * 0.11f + BreathPhase)));
 	Destination = HomeLocation + FVector(FMath::Cos(Angle) * Radius,
 										 FMath::Sin(Angle) * Radius, 0.0f);
+	Destination = PushOutOfKeepOut(Destination);
+}
+
+FVector AWonderlandStrollingDog::PushOutOfKeepOut(const FVector& Where) const
+{
+	if (KeepOutRadius <= 0.0f)
+	{
+		return Where;
+	}
+	// Flat: the exclusion is a COLUMN, not a sphere. A Dog on a terrace above
+	// the camera is still in the shot. Pushed OUT along its own bearing rather
+	// than reflected or clamped home, so the world still reads as populated
+	// instead of as a ring with a hole punched in it.
+	//
+	// The arithmetic lives in WonderlandGait so it can be proven with g++ on a
+	// laptop. A second copy here is how the leg table drifted.
+	float OutX = 0.0f, OutY = 0.0f;
+	WonderlandGait::PushOutOfColumn(Where.X, Where.Y, KeepOutCentre.X, KeepOutCentre.Y,
+	                                KeepOutRadius, OutX, OutY);
+	return FVector(OutX, OutY, Where.Z);
 }
 
 void AWonderlandStrollingDog::Tick(float DeltaSeconds)
@@ -178,6 +198,10 @@ void AWonderlandStrollingDog::Tick(float DeltaSeconds)
 	{
 		Next.Z = GroundZ;
 	}
+	// THE DESTINATION BEING OUTSIDE IS NOT ENOUGH. A Dog whose home and target
+	// both sit outside the zone can still walk a chord straight through it, and
+	// a Dog placed inside one would never leave. Every step is checked.
+	Next = PushOutOfKeepOut(Next);
 	SetActorLocation(Next);
 
 	// The gait advances with the DISTANCE covered, so the paws and the body are

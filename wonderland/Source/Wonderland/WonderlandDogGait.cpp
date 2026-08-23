@@ -102,6 +102,34 @@ namespace WonderlandGait
 		return Swing;
 	}
 
+	void PushOutOfColumn(float X, float Y, float CentreX, float CentreY,
+	                     float Radius, float& OutX, float& OutY)
+	{
+		OutX = X; OutY = Y;
+		if (Radius <= 0.0f)
+		{
+			return;
+		}
+		const float DX = X - CentreX;
+		const float DY = Y - CentreY;
+		const float D = std::sqrt(DX * DX + DY * DY);
+		if (D >= Radius)
+		{
+			return;
+		}
+		if (D > 1.0f)
+		{
+			OutX = CentreX + (DX / D) * Radius;
+			OutY = CentreY + (DY / D) * Radius;
+		}
+		else
+		{
+			// No bearing to push along. Defined rather than divided by zero.
+			OutX = CentreX + Radius;
+			OutY = CentreY;
+		}
+	}
+
 	float WorldPawForward(float DistanceTravelled, float LegOffset,
 	                      float StrideLength, float LiftHeight)
 	{

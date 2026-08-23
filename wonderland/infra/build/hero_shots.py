@@ -37,6 +37,34 @@ def hero_shots():
     """Read the generator's hero-shot table without importing it -- it imports
     `unreal`, which does not exist outside the editor."""
     tree = ast.parse(io.open(GENERATOR, encoding="utf8").read(), GENERATOR)
+
+    # NAMED CONSTANTS IN THE TABLE, RESOLVED. The arrival position used to be
+    # typed out twice — once for HeroCam0 and once for HeroCam6 — and the
+    # companions' keep-out needed it a third time, so it became ARRIVAL_CAM.
+    # ast.literal_eval cannot see a Name and this gate died on it, which is the
+    # gate doing its job: the table it reads is the table the world is built
+    # from, and it must keep reading the same one.
+    consts = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        for t in node.targets:
+            if isinstance(t, ast.Name) and t.id.isupper():
+                try:
+                    consts[t.id] = ast.literal_eval(node.value)
+                except (ValueError, SyntaxError):
+                    pass   # not a literal; nothing this gate can use
+
+    def resolve(element):
+        """literal_eval, but a bare NAME resolves to the constant it names."""
+        if isinstance(element, ast.Name):
+            if element.id not in consts:
+                fail("hero_shots references %s, which is not a literal constant "
+                     "in %s — this gate reads the table statically and cannot "
+                     "evaluate it" % (element.id, GENERATOR))
+            return consts[element.id]
+        return ast.literal_eval(element)
+
     for node in ast.walk(tree):
         if not isinstance(node, ast.Assign):
             continue
@@ -45,7 +73,7 @@ def hero_shots():
             continue
         shots = {}
         for element in node.value.elts:
-            index, pos, look, fov = ast.literal_eval(element)
+            index, pos, look, fov = (resolve(e) for e in element.elts)
             shots[index] = (pos, look, fov)
         return shots
     fail("no hero_shots table in %s" % GENERATOR)
