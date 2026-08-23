@@ -44,6 +44,19 @@ namespace WonderlandDogBody
 		FName Coat = FName(TEXT("dog_body"));
 		/** "none", "tophat", "crown". Rides on the head; never resizes it. */
 		FName Accessory = FName(TEXT("none"));
+		/** THE EYES ARE PART OF THE SKIN, and they were the one part of the
+		 *  identity hard-coded to a single material.
+		 *
+		 *  The OG Relay Dog's eyes are GOLD and that is canonical. The founder's
+		 *  Skeleton Flame variant is the same Dog with blue ghostfire and
+		 *  GLOWING BLUE EYES -- a skin, explicitly not a separate species. With
+		 *  the eye material fixed at MI_dog_eye there was no way to say that
+		 *  without editing the shared body, which is the file whose entire
+		 *  purpose is that nobody edits it per-Dog.
+		 *
+		 *  Changing a COLOUR is a skin. Changing a PROPORTION is not, and this
+		 *  cannot: it names a material and nothing else. */
+		FName Eyes = FName(TEXT("dog_eye"));
 		/** Uniform. There is deliberately no per-axis scale: independent axis
 		 *  scaling distorts the body, and that is the rule this whole file is
 		 *  protecting. */

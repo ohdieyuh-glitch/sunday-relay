@@ -49,6 +49,7 @@ void AWonderlandStrollingDog::BeginPlay()
 	WonderlandDogBody::FSkin Skin;
 	Skin.Coat = CoatName;
 	Skin.Accessory = Accessory;
+	Skin.Eyes = EyeName;
 	// The actor's own scale carries the size the generator asked for, so the
 	// body is built at the canonical reference scale and scaled as a whole.
 	// Scaling the parts instead would let a skin change proportions, which is

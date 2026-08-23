@@ -917,6 +917,19 @@ MATERIAL_SPEC = {
     "dog_eye":     ((1.00, 0.80, 0.22), 0.0, 0.62, (1.00, 0.74, 0.18), 5.0),
     "stone":       ((0.88, 0.85, 0.80), 0.0, 0.90, (0, 0, 0), 0.0),
     "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
+    # SKELETON FLAME, the founder's legendary variant. It is a SKIN: the same
+    # canonical body, the same proportions, the same visor band. What changes is
+    # the coat (bone rather than warm white), the eyes (blue ghostfire instead
+    # of gold) and an ember accent. Nothing here can alter a silhouette.
+    #
+    # Authored from the founder's written description -- blue ghostfire,
+    # skeletal ornament, glowing blue eyes -- because the second reference sheet
+    # (Image B) did not arrive with the message. The PROPORTIONS are therefore
+    # untouched by design: guessing at a colour is recoverable, guessing at a
+    # silhouette is how a skin stops being the same Dog.
+    "dog_bone":    ((0.90, 0.92, 0.96), 0.0, 0.44, (0.05, 0.09, 0.16), 0.35),
+    "dog_eye_blue": ((0.38, 0.74, 1.00), 0.0, 0.62, (0.30, 0.72, 1.00), 6.0),
+    "dog_ghostfire": ((0.30, 0.62, 0.98), 0.0, 0.70, (0.24, 0.66, 1.00), 7.5),
     "dog_gray":    ((0.55, 0.57, 0.60), 0.0, 0.40, (0, 0, 0), 0.0),
     "dog_tan":     ((0.82, 0.66, 0.42), 0.0, 0.62, (0, 0, 0), 0.0),
     "dog_brown":   ((0.50, 0.33, 0.21), 0.0, 0.62, (0, 0, 0), 0.0),
@@ -4453,7 +4466,7 @@ def build(layout):
         return parts
 
     def stroll_dog(x, y, label, s=1.2, body="dog_body", roam=800.0, is_hero=False, accessory="none",
-                   keep_out=None, attends=None, upright=0):
+                   keep_out=None, attends=None, upright=0, eyes="dog_eye"):
         # Spawn the LOCOMOTION actor. The Dog's BODY is now built in C++ (BuildBody),
         # NOT attached here — that is what lets the Head and Tail be animated (idle
         # look-around + walk nod on the head, a wagging tail). The generator only
@@ -4527,6 +4540,10 @@ def build(layout):
         # identity, so a Dog stands only where something asks for it.
         if int(upright):
             set_prop(stroller, "UprightRole", int(upright))
+        # The eyes are part of the skin. Gold is canonical and stays the
+        # default; only a variant that asks for something else changes them.
+        if eyes and eyes != "dog_eye":
+            set_prop(stroller, "EyeName", unreal.Name(eyes))
         if keep_out is not None:
             # The HERO Dog is exempt on purpose: it is the arrival composition's
             # SUBJECT and stands 927 uu from the lens by design. Excluding it
@@ -6299,10 +6316,16 @@ def build(layout):
         # ceremonially so the plaza reads as a place where both forms live. The
         # rest stay quadruped CLASSIC, which is the canonical identity.
         _upright = 2 if i in (0, 3) else (3 if i == 5 else 0)
-        stroll_dog(cx, cy, "Companion%d" % i, s=1.05, body=coat, roam=1100.0, accessory=acc,
+        # THE SKELETON FLAME DOG. The ceremonial upright Dog wears the founder's
+        # legendary variant: bone coat, blue ghostfire eyes. Same body, same
+        # proportions, same visor -- a skin, which is the whole rule.
+        _coat, _eyes = coat, "dog_eye"
+        if i == 5:
+            _upright, _coat, _eyes = 4, "dog_bone", "dog_eye_blue"
+        stroll_dog(cx, cy, "Companion%d" % i, s=1.05, body=_coat, roam=1100.0, accessory=acc,
                    keep_out=(ARRIVAL_CAM, ARRIVAL_KEEP_OUT),
                    attends=(_avatar if i in (0, 3) else None),
-                   upright=_upright)
+                   upright=_upright, eyes=_eyes)
     # ---- FOREGROUND PLANTING ------------------------------------------
     # THE MEASUREMENT THIS ANSWERS. The last streamed arrival frame classified
     # 0.1% green and 2.1% pink, against 25% and 7.7% in the offline preview of

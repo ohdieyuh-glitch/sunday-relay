@@ -49,7 +49,13 @@ namespace WonderlandDogBody
 		const FString Coat = CoatPath(Skin.Coat);
 		const TCHAR* const Body = *Coat;
 		const TCHAR* const Visor = VisorMat;
-		const TCHAR* const Eye = EyeMat;
+		// The skin names its own eyes; the canonical gold remains the default,
+		// so every Dog that does not ask for something else is unchanged.
+		const FString EyePath = (Skin.Eyes.IsNone() || Skin.Eyes == FName(TEXT("dog_eye")))
+			? FString(EyeMat)
+			: FString::Printf(TEXT("/Game/Wonderland/Materials/MI_%s.MI_%s"),
+			                  *Skin.Eyes.ToString(), *Skin.Eyes.ToString());
+		const TCHAR* const Eye = *EyePath;
 		const TCHAR* const Gold = GoldMat;
 
 		const float LegH = 92.0f * S;

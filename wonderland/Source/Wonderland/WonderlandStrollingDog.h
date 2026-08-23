@@ -78,6 +78,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
 	FName Accessory = FName(TEXT("none"));
 
+	/** Eye material for this Dog's skin. "dog_eye" is the canonical gold; the
+	 *  Skeleton Flame variant asks for "dog_eye_blue". Set by the generator. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	FName EyeName = FName(TEXT("dog_eye"));
+
 	/** The CURRENT leg's cruise speed. PickDestination varies it per leg of the
 	 *  wander so the plaza shows strollers and trotters at once; the gait is
 	 *  derived from speed, so this is the only knob that needs to move. */
