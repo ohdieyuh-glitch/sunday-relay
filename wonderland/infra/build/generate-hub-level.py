@@ -245,7 +245,12 @@ LOOK = {
     # Near-neutral key. The warmth that remains comes from the atmosphere and
     # the practicals, which is where it belongs. Sweep with
     # WONDERLAND_LOOK=sunWarm=1.0/0.94/0.84 to get the old cast back.
-    "sunWarm": (1.00, 0.985, 0.955),
+    # A WARM KEY IS NOT A CAST. The sun is directional and SHADOWED: it lights
+    # what faces it and nothing else, so it cannot do what the lanterns did.
+    # Neutralising it was tried and rendered and moved the frame 0.1 points,
+    # which is how it was ruled out as the cause -- but that also means warming
+    # it is cheap and safe. Late-afternoon garden light, not gold.
+    "sunWarm": (1.00, 0.952, 0.882),
     "sunPitchMin": 25.0,                   # PROVEN. Flatter than this and
                                            # the long shadows swallow the plaza.
     # --- fill ------------------------------------------------------
@@ -402,7 +407,11 @@ LOOK = {
     # 2200 -> 3000. Now that the lamp colour is near-neutral (255,226,190)
     # rather than gold, a practical can carry a little more light without
     # deciding the frame's hue -- which was the actual defect, not brightness.
-    "lampLumens": 3000.0,
+    # 3000 -> 4600. Still well under the 6,000 the light-budget gate refuses,
+    # and now SHADOWING -- so it can carry warmth without carrying hue through
+    # walls, which is the property that made 14,000 a cast rather than the
+    # brightness.
+    "lampLumens": 4600.0,
     # 0.5 -> 0.0, AS A TEST WITH A REASON. Bloom is ADDITIVE and screen-wide,
     # and the arithmetic on a delivered frame says an additive WHITE term is
     # exactly what is wrong. Solving mush_red's darkest half for out = a*E + S,
@@ -4303,11 +4312,39 @@ def build(layout):
             # points, which is what finally ruled the sun out.
             #
             # A practical lights its own surroundings. It is not the key light.
+            # WHAT CUTTING THESE ACTUALLY COST, measured across the session's
+            # own captures rather than argued:
+            #
+            #     a203547  base                  frame chroma 0.1826
+            #     9bdb61e                        frame chroma 0.1655
+            #     f80c8c6  lamps 14000 -> 2200   frame chroma 0.0907  <-- HALVED
+            #     84a66fd  head                  frame chroma 0.0835
+            #
+            # These lamps were carrying HALF the frame's colour. Cutting them was
+            # right and stays right -- eighteen shadowless gold lights at 14,000
+            # lumens against a 340-lux sun decided the hue of every material, and
+            # that was measurable per material. But they were also a third of the
+            # world's light, and what replaced them was a NEUTRAL sun and sky.
+            # The level came back. The colour did not, and nothing measured that
+            # until a whole-frame colourfulness reading was taken.
+            #
+            # So the warmth comes back and the CAST does not, and the difference
+            # between those two is three properties, not the brightness:
+            #
+            #   SHADOWED. This is the one that mattered. CastShadows FALSE let
+            #     every lamp light through walls and canopies, so a surface the
+            #     lamp could not see was still lit by it. A shadowing lamp lights
+            #     what it faces and leaves the rest to the key, which is what
+            #     makes it a practical instead of a second sun.
+            #   SMALL. 620 uu of reach, not 1,100. Warmth in pools.
+            #   MANY AND MODERATE. Well under the 6,000-lumen ceiling
+            #     verify-light-budget.py enforces -- that gate exists because of
+            #     these lamps and it is not being widened for them.
             plc.set_intensity(float(LOOK["lampLumens"]))
-            plc.set_light_color(srgb_light_color(255, 226, 190))
+            plc.set_light_color(srgb_light_color(255, 214, 158))
             set_prop(plc, "AttenuationRadius", 620.0)
             set_prop(plc, "SourceRadius", 18.0)
-            set_prop(plc, "CastShadows", False)
+            set_prop(plc, "CastShadows", True)
         except Exception as _e:
             unreal.log_warning("lantern light skipped: %s" % _e)
 
