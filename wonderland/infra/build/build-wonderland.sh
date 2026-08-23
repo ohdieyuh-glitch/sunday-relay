@@ -394,6 +394,28 @@ if [ "$LEVEL_OK" != "1" ] && [ "$ALLOW_EMPTY_LEVEL" != "1" ]; then
   die "level generation did not complete and ALLOW_EMPTY_LEVEL != 1; refusing to package a contentless build silently"
 fi
 
+# --- THE BLUEPRINT LAYER ---------------------------------------------------
+#
+# Blueprint SUBCLASSES of the tested C++ actors, so content decisions — a coat,
+# a roam radius, which Avatar a Dog attends, an archetype's look — become
+# editable without a forty-minute cook, while the arithmetic that has to be
+# provable with g++ stays in C++.
+#
+# IDEMPOTENT, and that is the whole reason it can live in the build at all: an
+# existing Blueprint is left alone. Regenerating one every build would discard
+# whatever was authored in its graph, and a Blueprint layer you cannot edit
+# between builds is not a Blueprint layer.
+#
+# NOT fatal. A missing Blueprint does not make the world contentless the way a
+# missing level does, and the script itself logs BLUEPRINTS_INCOMPLETE loudly.
+BP_SCRIPT="$(cd "$(dirname "$0")" && pwd)/make-blueprints.py"
+if [ "$LEVEL_OK" = "1" ] && [ -x "$UE_EDITOR_CMD" ] && [ -f "$BP_SCRIPT" ]; then
+  # shellcheck disable=SC2086
+  run_step "make-blueprints" "$UE_EDITOR_CMD" "$PROJECT" -run=pythonscript \
+      -script="$BP_SCRIPT" -unattended -nop4 ${WL_GENERATOR_EXTRA:-} \
+    || log "WARNING: Blueprint generation did not complete; see make-blueprints.log"
+fi
+
 # --- THE DECORATION ACTUALLY REACHED THE MAP -------------------------------
 #
 # The world's visual geometry is now instances inside AWonderlandInstancedBatch
