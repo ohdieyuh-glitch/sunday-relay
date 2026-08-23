@@ -122,9 +122,31 @@ proof_lines() {
   local log="$1"
   [ -f "$log" ] || return 0
   local from="${2:-0}"
-  run_slice "$log" "$from" \
-  | grep -aoE '(WORLD|ACTORS|RELAY_DOGS|COMPOUND_AGENTS|BATCHES|INSTANCED_PIECES|LOOSE_PIECES|VISIBLE_PIECES|MARBLE_ACTORS|MARBLE_TWO_SIDED_COMPONENTS|MARBLE_COLLIDING_COMPONENTS|RUNTIME_RELAY_DOGS|RUNTIME_COMPOUND_AGENTS|RUNTIME_INSTANCES_BUILT|RUNTIME_BLOCKING_PRIMITIVES|RUNTIME_GROUNDED_DOGS|RUNTIME_GROUNDED_PLAYER_STARTS|RUNTIME_WORLD_HAS_NO_GAMEPLAY_COLLISION|RUNTIME_DOGS_OK|WORLD_OK|HERO_CAM_REQUESTED|HERO_CAM_SERVED|HERO_CAM_FELL_BACK|HERO_CAM_MISSING|HERO_CAM_LOC|HERO_CAM_ROT|HERO_CAM_FOV)=[^ ]*' \
-    | sort -u || true
+  # TWO SOURCES, BECAUSE THE ENGINE USES TWO CATEGORIES.
+  #
+  # This was an allow-list of twenty-odd key names. WonderlandWorldProof gained
+  # RUNTIME_DOG_FRAME_SHARE_MAX_PCT — the one number the hero-shot goal asks for
+  # by name, "Relay Dog framing" — the packaged build printed it, and this threw
+  # it away. Silently: a dropped key looks exactly like a key the engine never
+  # emitted, so the sidecar came back complete and wrong at once.
+  #
+  # The first repair scraped every KEY=VALUE from LogWonderlandProof lines and
+  # was WORSE, because AWonderlandPlayerController logs HERO_CAM_* under
+  # LogTemp. That would have deleted the camera provenance — requested, served,
+  # fell-back, loc, rot, fov — which is the thing that makes a capture
+  # attributable at all. The suite caught it.
+  #
+  # So: everything from the proof category, which is where new keys land and
+  # where forward-compatibility is needed, PLUS the HERO_CAM_* keys wherever
+  # they appear. LogTemp is not scraped wholesale — it carries engine chatter,
+  # and that is what the original allow-list was really guarding against.
+  {
+    run_slice "$log" "$from" \
+      | grep -a 'LogWonderlandProof' \
+      | grep -aoE '[A-Z][A-Z0-9_]*=[^ ]*' || true
+    run_slice "$log" "$from" \
+      | grep -aoE 'HERO_CAM_[A-Z_]*=[^ ]*' || true
+  } | sort -u || true
 }
 
 # GPU alongside the picture, from the same run. Sampled WHILE the app is up and
@@ -223,7 +245,21 @@ See $WL_LOG/capture-$cam.log"
   # Passed through the environment rather than as arguments: the proof block is
   # multi-line and the stats are JSON, and both would need quoting that is easy
   # to get subtly wrong on a machine that costs money per minute.
-  WL_PROOF_LINES="$(proof_lines "$WL_LOG/app.log" "$APP_LOG_FROM")" \
+  # ONE LAUNCH PER RECORD. run_slice takes the log from an offset, and if that
+  # offset does not advance across a relaunch the slice spans two of them —
+  # `sort -u` then hands back BOTH launches' HERO_CAM_* lines and the reader
+  # keeps whichever it saw last. That is how a file named hero0 came back
+  # carrying HERO_CAM_REQUESTED=6 and fov 75: a HeroCam6 measurement filed under
+  # HeroCam0, which is worse than a missing capture because it looks like one.
+  _PL="$(proof_lines "$WL_LOG/app.log" "$APP_LOG_FROM")"
+  _NREQ="$( ( set +o pipefail; printf '%s\n' "$_PL" | grep -c '^HERO_CAM_REQUESTED=' ) || echo 0)"
+  if [ "${_NREQ:-0}" -gt 1 ]; then
+    wl_warn "hero camera $cam: the log slice spans $_NREQ launches —
+$(printf '%s\n' "$_PL" | grep '^HERO_CAM_')
+Refusing to file a sidecar stitched from more than one run. Nothing was written for this camera."
+    return 1
+  fi
+  WL_PROOF_LINES="$_PL" \
   WL_STREAM_STATS="$STATS" \
   WL_GPU_IDLE="$GPU_IDLE" \
   WL_GPU_LOADED="$GPU_LOADED" \

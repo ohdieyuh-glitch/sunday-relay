@@ -2007,6 +2007,60 @@ else
 fi
 rm -rf "$GP_TMP"
 
+echo "== the proof harvester keeps every key the ENGINE reports =="
+# It was an allow-list of twenty-odd names. WonderlandWorldProof gained
+# RUNTIME_DOG_FRAME_SHARE_MAX_PCT — the one number the hero-shot goal asks for
+# by name — the packaged build printed it, and this dropped it. SILENTLY: an
+# absent key looks exactly like a key the engine never emitted, so the sidecar
+# came back complete and wrong at once.
+PH_TMP="$(mktemp -d)"
+cat > "$PH_TMP/app.log" <<'PHEOF'
+[t] LogWonderlandProof: Warning: WORLD=WonderlandHub
+[t] LogWonderlandProof: Warning: RUNTIME_DOG_FRAME_SHARE_MAX_PCT=41.7
+[t] LogWonderlandProof: Warning: RUNTIME_A_KEY_NOBODY_HAS_WRITTEN_YET=7
+[t] LogTemp: Display: HERO_CAM_REQUESTED=6 HERO_CAM_SERVED=HeroCam6_1 HERO_CAM_FOV=75.00
+[t] LogTemp: Warning: NOT_A_PROOF_KEY=99
+PHEOF
+PH_OUT="$(bash -c '
+run_slice(){ cat "$1"; }
+'"$(sed -n '/^proof_lines() {/,/^}/p' "$HERE/capture-hero-shots.sh")"'
+proof_lines '"$PH_TMP"'/app.log 0')"
+has "$PH_OUT" "RUNTIME_DOG_FRAME_SHARE_MAX_PCT=41.7" \
+  && ok "the Dog-framing key survives the harvester" \
+  || bad "RUNTIME_DOG_FRAME_SHARE_MAX_PCT is dropped — the goal's 'Relay Dog framing' number never reaches a sidecar"
+has "$PH_OUT" "RUNTIME_A_KEY_NOBODY_HAS_WRITTEN_YET=7" \
+  && ok "…and so does a key this script has never heard of" \
+  || bad "the harvester is still an allow-list; a new engine key will vanish silently"
+if has "$PH_OUT" "NOT_A_PROOF_KEY"; then
+  bad "it scrapes non-proof log lines too — world_proof would carry engine chatter"
+else
+  ok "…while ordinary LogTemp chatter is still excluded"
+fi
+# The camera provenance lives under LogTemp, not the proof category. A harvester
+# scraping only LogWonderlandProof deletes requested/served/fell-back/fov and
+# every capture becomes unattributable.
+has "$PH_OUT" "HERO_CAM_SERVED=HeroCam6_1" \
+  && ok "…and HERO_CAM_* survives even though it is logged under LogTemp" \
+  || bad "HERO_CAM_* is dropped — captures cannot be attributed to a camera"
+rm -rf "$PH_TMP"
+
+echo "== a sidecar is never stitched from two launches =="
+# A file named hero0 came back carrying HERO_CAM_REQUESTED=6 and fov 75 — a
+# HeroCam6 measurement filed under HeroCam0. run_slice takes the log from an
+# offset; when that offset does not advance across a relaunch the slice spans
+# both, `sort -u` returns both launches' HERO_CAM_* lines, and the reader keeps
+# whichever it saw last. Worse than a missing capture: it looks like one.
+if code_has "$HERE/capture-hero-shots.sh" 'spans .*launches' -E; then
+  ok "the capture refuses a proof slice covering more than one launch"
+else
+  bad "nothing detects a sidecar stitched from two runs"
+fi
+if code_has "$HERE/capture-hero-shots.sh" 'HERO_CAM_REQUESTED=' ; then
+  ok "…and it counts HERO_CAM_REQUESTED to decide, which is one per launch"
+else
+  bad "the stitched-record guard has nothing to count"
+fi
+
 echo "== a capture records the BUILD's knobs, never the capture shell's =="
 # A sidecar asserted WONDERLAND_MARBLE_IMPORT="" and MARBLE_BACKDROP="0" for a
 # build whose knobs it had never seen — it was reading its own os.environ, which
