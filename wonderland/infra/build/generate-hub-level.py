@@ -150,7 +150,7 @@ LOOK = {
     # fifth of the frame sitting in the highlight roll-off loses its hue by
     # construction, whatever the material underneath says. It is also why every
     # attempt to fix the grey by ADDING light made it greyer.
-    "sunLux": 960.0,
+    "sunLux": 1150.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -285,7 +285,7 @@ LOOK = {
     # 25.7% for the founder's own reference image. Colour crushed to black is
     # not a palette problem, and saturating materials to fix it would have been
     # work in the wrong place.
-    "gain": (0.60, 0.60, 0.63),
+    "gain": (0.67, 0.67, 0.70),
     # RAISED 1.52 -> 1.78. Saturation was tuned while the frame carried a
     # false gold cast, and in that state it multiplied the CAST rather than the
     # palette -- which is why it was correct to be suspicious of it. The cast is
@@ -1194,6 +1194,25 @@ def build_material_library(texs=None):
         except Exception as _e:
             unreal.log_warning("material noise skipped (%s); flat base colour" % _e)
             mel.connect_material_property(bc, "", unreal.MaterialProperty.MP_BASE_COLOR)
+        # SPECULAR, WIRED AT LAST. This graph never touched MP_SPECULAR, so every
+        # dielectric in Wonderland sat at UE's default 0.5 -- a white sheen laid
+        # over its own colour from every direction the sky reaches.
+        #
+        # It matters here more than it would in most worlds, because the frame is
+        # almost entirely SPHERES: on a sphere a large share of the visible
+        # surface is at a grazing angle, where that white specular is strongest.
+        # The measurement that points at it is a like-for-like one -- in a single
+        # frame, at matched luma, the LIT authored geometry carries 2.4-2.7x less
+        # chroma than the UNLIT Marble backdrop beside it:
+        #
+        #     luma 0.15-0.30   lit 0.066   unlit 0.178
+        #     luma 0.30-0.45   lit 0.074   unlit 0.180
+        #
+        # Same tonemapper, same grade, same exposure, same frame. Whatever is
+        # eating the colour is in the LIT path, and specular is the one term in
+        # it that is white by definition.
+        sp = param(unreal.MaterialExpressionScalarParameter, "Specular", 75, 0.5)
+        mel.connect_material_property(sp, "", unreal.MaterialProperty.MP_SPECULAR)
         mt = param(unreal.MaterialExpressionScalarParameter, "Metallic", 0, 0.0)
         mel.connect_material_property(mt, "", unreal.MaterialProperty.MP_METALLIC)
         rg = param(unreal.MaterialExpressionScalarParameter, "Roughness", 150, 0.6)
@@ -1725,6 +1744,27 @@ def build_material_library(texs=None):
                 eal.save_asset(mats[_nm].get_path_name())
             except Exception as _e:
                 unreal.log_warning("relief on %s skipped: %s" % (_nm, _e))
+    # Coloured dielectrics get a LOW specular so their own colour is what
+    # reaches the camera. Left at the 0.5 default where a white sheen is the
+    # point: water, glass, gems, the Dog's visor, and anything metallic (whose
+    # specular is tinted by its own base colour and is supposed to dominate).
+    _SPEC_KEEP = {"water", "crystal", "lamp_glass", "spray", "dog_visor",
+                  "gold", "gold_glow", "brass_deep", "float_glow"}
+    _spec_set = 0
+    for _nm, _sp in MATERIAL_SPEC.items():
+        if _nm in _SPEC_KEEP or _nm not in mats:
+            continue
+        try:
+            _rgb = _sp[0]
+            if max(_rgb) - min(_rgb) <= 0.15:      # near-neutral: leave alone
+                continue
+            mel.set_material_instance_scalar_parameter_value(mats[_nm], "Specular", 0.12)
+            eal.save_asset(mats[_nm].get_path_name())
+            _spec_set += 1
+        except Exception as _e:
+            unreal.log_warning("specular on %s skipped: %s" % (_nm, _e))
+    unreal.log_warning("SPECULAR lowered to 0.12 on %d coloured dielectrics" % _spec_set)
+
     for _nm, _rv in rough_vary.items():
         if _nm in mats:
             try:
