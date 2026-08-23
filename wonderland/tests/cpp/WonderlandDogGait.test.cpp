@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+static float Frac01(float V) { const float F = V - std::floor(V); return (F < 0.0f) ? F + 1.0f : F; }
+
 static int gPass = 0;
 static std::vector<std::string> gFail;
 
@@ -55,6 +57,24 @@ static int EmitGolden()
 		            "\"swingPitch\": %.6f, \"stretch\": %.6f}%s\n",
 		            P, L.Forward, L.Lift, L.bStance ? "true" : "false",
 		            B.Bob, B.Pitch, B.Roll, W.PitchDeg, W.Stretch, (i + 1 < N) ? "," : "");
+	}
+	std::printf("  ],\n");
+	// THE GAIT MODEL, SAMPLED. The browser preview mirrors GaitForSpeed, and
+	// two implementations of the same arithmetic drift; this is what stops it.
+	std::printf("  \"gaits\": [\n");
+	const float Speeds[] = { 0.0f, 40.0f, 120.0f, 203.0f, 276.0f, 350.0f,
+	                         496.0f, 583.0f, 800.0f, 1100.0f };
+	const int NS = int(sizeof(Speeds) / sizeof(Speeds[0]));
+	for (int i = 0; i < NS; ++i)
+	{
+		const FGaitParams G = GaitForSpeed(Speeds[i], LegLen);
+		std::printf("    {\"speed\": %.1f, \"gait\": \"%s\", \"duty\": %.6f, "
+		            "\"stride\": %.6f, \"lift\": %.6f, \"bob\": %.6f, "
+		            "\"offsets\": [%.6f, %.6f, %.6f, %.6f]}%s\n",
+		            Speeds[i], GaitName(G.Gait), G.DutyFactor, G.StrideLength,
+		            G.LiftHeight, G.BobHeight,
+		            G.LegOffset[0], G.LegOffset[1], G.LegOffset[2], G.LegOffset[3],
+		            (i + 1 < NS) ? "," : "");
 	}
 	std::printf("  ]\n}\n");
 	return 0;
@@ -239,6 +259,168 @@ int main(int argc, char** argv)
 		Check("one stride of travel returns the paw to the same pose",
 		      std::fabs(Start.Forward - OneStrideLater.Forward) < 1e-4f
 		      && std::fabs(Start.Lift - OneStrideLater.Lift) < 1e-4f);
+	}
+
+	std::printf("== speed picks the gait, and the stride grows with it ==\n");
+	{
+		const float Hip = 119.6f;
+		// The stride was a CONSTANT. A Dog told to move faster cycled its legs
+		// faster over the same ground, which is the speed/animation mismatch by
+		// construction. It must now grow.
+		const FGaitParams Slow = GaitForSpeed(60.0f, Hip);    // Fr 0.03 — walk
+		const FGaitParams Mid  = GaitForSpeed(350.0f, Hip);   // Fr 1.05 — trot
+		const FGaitParams Fast = GaitForSpeed(800.0f, Hip);   // Fr 5.46 — run
+		Check("the stride LENGTHENS with speed rather than replaying faster",
+		      Slow.StrideLength < Mid.StrideLength && Mid.StrideLength < Fast.StrideLength,
+		      std::to_string(Slow.StrideLength) + " -> " + std::to_string(Mid.StrideLength)
+		      + " -> " + std::to_string(Fast.StrideLength));
+		Check("...and the duty factor FALLS, so paws spend less time planted",
+		      Slow.DutyFactor > Mid.DutyFactor && Mid.DutyFactor > Fast.DutyFactor,
+		      std::to_string(Slow.DutyFactor) + " -> " + std::to_string(Mid.DutyFactor)
+		      + " -> " + std::to_string(Fast.DutyFactor));
+		Check("the three gaits are actually reached",
+		      Slow.Gait == EGait::Walk && Mid.Gait == EGait::Trot && Fast.Gait == EGait::Run,
+		      std::string(GaitName(Slow.Gait)) + "/" + GaitName(Mid.Gait) + "/" + GaitName(Fast.Gait));
+		Check("a stopped Dog reads as idle, not as a walk at zero speed",
+		      GaitForSpeed(0.0f, Hip).Gait == EGait::Idle);
+
+		// SCALE INVARIANCE. This is why the thresholds are Froude numbers and
+		// not uu/s: the hero Dog at actor scale 1.75 and a companion at 1.05
+		// must break into a trot at DIFFERENT speeds and the SAME Froude
+		// number, with no per-Dog tuning to keep in sync.
+		auto TrotSpeed = [](float H) {
+			// The first TROT, not the first non-walk: below 1 uu/s the Dog is
+			// idle, which is also not a walk, and the old form returned 0.5 for
+			// every size and compared two identical numbers.
+			for (int i = 1; i < 8000; ++i)
+			{
+				const float V = i * 0.5f;
+				if (GaitForSpeed(V, H).Gait == EGait::Trot) { return V; }
+			}
+			return -1.0f;
+		};
+		const float SmallH = 119.6f, BigH = 119.6f * 1.75f;
+		const float VSmall = TrotSpeed(SmallH), VBig = TrotSpeed(BigH);
+		Check("a bigger Dog breaks into a trot at a HIGHER speed",
+		      VBig > VSmall * 1.2f,
+		      "small " + std::to_string(VSmall) + " uu/s, big " + std::to_string(VBig));
+		const float FrSmall = (VSmall * VSmall) / (980.0f * SmallH);
+		const float FrBig = (VBig * VBig) / (980.0f * BigH);
+		Check("...at the SAME Froude number, which is what makes it scale-free",
+		      std::fabs(FrSmall - FrBig) < 0.05f,
+		      "Fr " + std::to_string(FrSmall) + " vs " + std::to_string(FrBig));
+
+		// The walk table here and LegPhaseOffset are two spellings of one fact.
+		const FGaitParams W = GaitForSpeed(50.0f, Hip);
+		bool bAgree = true;
+		for (int i = 0; i < 4; ++i)
+			if (std::fabs(W.LegOffset[i] - LegPhaseOffset(i)) > 1e-4f) bAgree = false;
+		Check("the walk's offsets agree with LegPhaseOffset", bAgree);
+	}
+
+	std::printf("== a gait CHANGE is blended, never snapped ==\n");
+	{
+		const float Hip = 119.6f;
+		// Four phases swapped in one frame is a visible kick. Sweep the whole
+		// speed range and assert nothing jumps between adjacent samples.
+		float WorstStride = 0.0f, WorstDuty = 0.0f, WorstPhase = 0.0f;
+		FGaitParams Prev = GaitForSpeed(0.5f, Hip);
+		for (int i = 1; i <= 4000; ++i)
+		{
+			const float V = 0.5f + i * 0.2f;
+			const FGaitParams Cur = GaitForSpeed(V, Hip);
+			WorstStride = std::fmax(WorstStride, std::fabs(Cur.StrideLength - Prev.StrideLength));
+			WorstDuty = std::fmax(WorstDuty, std::fabs(Cur.DutyFactor - Prev.DutyFactor));
+			for (int L = 0; L < 4; ++L)
+			{
+				float D = std::fabs(Cur.LegOffset[L] - Prev.LegOffset[L]);
+				if (D > 0.5f) { D = 1.0f - D; }      // the wrap is not a jump
+				WorstPhase = std::fmax(WorstPhase, D);
+			}
+			Prev = Cur;
+		}
+		Check("stride never jumps between adjacent speeds", WorstStride < 1.0f,
+		      "worst " + std::to_string(WorstStride) + " uu");
+		Check("duty never jumps", WorstDuty < 0.01f, "worst " + std::to_string(WorstDuty));
+		Check("no leg's phase jumps across a transition",
+		      WorstPhase < 0.01f, "worst " + std::to_string(WorstPhase) + " of a cycle");
+	}
+
+	std::printf("== each gait is a DIFFERENT gait, not the walk played faster ==\n");
+	{
+		const float Hip = 119.6f;
+		auto DownAt = [&](const FGaitParams& G, float P) {
+			int N = 0;
+			for (int L = 0; L < 4; ++L)
+				if (LegPose(P + G.LegOffset[L], G.StrideLength, G.LiftHeight, G.DutyFactor).bStance) ++N;
+			return N;
+		};
+		const FGaitParams Wk = GaitForSpeed(60.0f, Hip);    // Fr 0.03
+		const FGaitParams Tr = GaitForSpeed(350.0f, Hip);   // Fr 1.05, trot saturated
+		const FGaitParams Rn = GaitForSpeed(800.0f, Hip);   // Fr 5.46, run saturated
+
+		int WorstWalk = 4, WorstRun = 4, SuspensionRun = 0;
+		for (int i = 0; i < 2000; ++i)
+		{
+			const float P = i / 2000.0f;
+			WorstWalk = std::min(WorstWalk, DownAt(Wk, P));
+			const int R = DownAt(Rn, P);
+			WorstRun = std::min(WorstRun, R);
+			if (R == 0) ++SuspensionRun;
+		}
+		Check("a WALK always keeps at least two paws down", WorstWalk >= 2,
+		      "worst " + std::to_string(WorstWalk));
+		Check("a RUN has a suspension phase — moments with NO paw down",
+		      SuspensionRun > 0,
+		      std::to_string(SuspensionRun) + " of 2000 samples airborne");
+
+		// A trot is DIAGONAL PAIRS. LH+RF together, RH+LF together. This is the
+		// one an eye reads instantly as "that is not a walk".
+		const float LH = Tr.LegOffset[0], RH = Tr.LegOffset[1];
+		const float LF = Tr.LegOffset[2], RF = Tr.LegOffset[3];
+		auto Near = [](float A, float B) {
+			float D = std::fabs(A - B);
+			if (D > 0.5f) { D = 1.0f - D; }
+			return D < 0.06f;
+		};
+		Check("a TROT moves the diagonal pairs together (LH+RF, RH+LF)",
+		      Near(LH, RF) && Near(RH, LF) && !Near(LH, RH),
+		      "LH " + std::to_string(LH) + " RH " + std::to_string(RH)
+		      + " LF " + std::to_string(LF) + " RF " + std::to_string(RF));
+	}
+
+	std::printf("== FOOT LOCK SURVIVES EVERY GAIT ==\n");
+	{
+		// The whole fix rests on this one property, and it was only ever proven
+		// for the walk at a fixed duty. Every gait now has its own duty and its
+		// own stride; a planted paw must still be stationary in all of them, or
+		// the Dog skates the moment it speeds up.
+		const float Hip = 119.6f;
+		float WorstDrift = 0.0f;
+		int Samples = 0;
+		for (const float V : { 40.0f, 120.0f, 230.0f, 380.0f, 560.0f, 720.0f })
+		{
+			const FGaitParams G = GaitForSpeed(V, Hip);
+			for (int L = 0; L < 4; ++L)
+			{
+				float Anchor = 0.0f, PrevPhase = -1.0f;
+				bool bHave = false;
+				for (float D = 0.0f; D <= 2000.0f; D += 0.25f)
+				{
+					const float Phase = Frac01(D / G.StrideLength + G.LegOffset[L]);
+					const FLegPose Pose = LegPose(Phase, G.StrideLength, G.LiftHeight, G.DutyFactor);
+					if (!Pose.bStance) { bHave = false; PrevPhase = Phase; continue; }
+					const float World = D + Pose.Forward;
+					if (!bHave || Phase < PrevPhase) { Anchor = World; bHave = true; }
+					else { WorstDrift = std::fmax(WorstDrift, std::fabs(World - Anchor)); ++Samples; }
+					PrevPhase = Phase;
+				}
+			}
+		}
+		Check("a planted paw is stationary in walk, trot AND run",
+		      WorstDrift < 1e-2f && Samples > 5000,
+		      "worst " + std::to_string(WorstDrift) + " uu over "
+		      + std::to_string(Samples) + " planted samples across 6 speeds");
 	}
 
 	std::printf("== the leg PIVOTS at the hip, and still lands where it should ==\n");

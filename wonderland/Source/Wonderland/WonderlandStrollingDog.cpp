@@ -53,6 +53,24 @@ void AWonderlandStrollingDog::BeginPlay()
 	Skin.Scale = WonderlandDogBody::ReferenceScale;
 	Skin.FootOffset = 0.0f;
 	BuiltParts = WonderlandDogBody::Build(this, Body, Skin, &Rig);
+
+	// The configured speed IS the base to vary around. Without this a hero Dog
+	// set to 110 by the generator would have PickDestination vary around the
+	// class default of 90 instead, and the one Dog whose speed was deliberately
+	// chosen would be the one ignoring it.
+	BaseWalkSpeed = WalkSpeed;
+
+	// HIP HEIGHT IN WORLD UNITS, ONCE. The Froude number that chooses the gait
+	// is v^2/(g*h), and v is a world-space speed — so h must be too, or a Dog
+	// at actor scale 1.75 breaks into a trot at the speed that suits a Dog of
+	// scale 1. Taken from the rig rather than a constant, because the leg
+	// length is the canonical table's to decide.
+	if (Rig.Legs[0] != nullptr)
+	{
+		const float LocalLeg = Rig.LegRestScale[0].Z * 100.0f;
+		const float ScaleZ = GetActorScale3D().Z;
+		HipHeightWorld = LocalLeg * ((ScaleZ > KINDA_SMALL_NUMBER) ? ScaleZ : 1.0f);
+	}
 	if (Rig.Torso != nullptr)
 	{
 		TorsoBaseScale = Rig.Torso->GetRelativeScale3D();
@@ -95,6 +113,15 @@ void AWonderlandStrollingDog::PickDestination()
 	Destination = HomeLocation + FVector(FMath::Cos(Angle) * Radius,
 										 FMath::Sin(Angle) * Radius, 0.0f);
 	Destination = PushOutOfKeepOut(Destination);
+
+	// A DISTRICT WHERE EVERY DOG MOVES AT EXACTLY ONE SPEED READS AS A CAROUSEL.
+	// The gait is derived from speed, so varying the speed per leg of the wander
+	// is all it takes to have some Dogs strolling and others trotting across the
+	// same plaza — which is what makes the walk/trot distinction visible at all
+	// rather than merely implemented. Deterministic, like the destination: a
+	// hero frame captured twice must frame the same Dogs doing the same thing.
+	const float Pick = FMath::Abs(FMath::Sin(BreathPhase * 2.7f + LifeSeconds * 0.13f));
+	WalkSpeed = FMath::Lerp(BaseWalkSpeed, BaseWalkSpeed * 3.4f, Pick * Pick);
 }
 
 FVector AWonderlandStrollingDog::PushOutOfKeepOut(const FVector& Where) const
@@ -142,7 +169,11 @@ void AWonderlandStrollingDog::Tick(float DeltaSeconds)
 		// Settle to a stand: the paws ease back to rest rather than freezing
 		// mid-stride, which is what made a stopping Dog look like a dropped
 		// prop.
-		PoseLegs(0.0f, FMath::Clamp(PauseSeconds * 2.0f, 0.0f, 1.0f));
+		// Bleed the speed off rather than zeroing it, so the gait relaxes down
+		// through its bands instead of the Dog stopping dead and the legs
+		// jumping to a walk pattern from a trot one.
+		CurrentSpeed = FMath::FInterpConstantTo(CurrentSpeed, 0.0f, Dt, DecelUUPerSec2);
+		PoseLegs(DistanceWalked, FMath::Clamp(PauseSeconds * 2.0f, 0.0f, 1.0f));
 		return;
 	}
 
@@ -174,7 +205,22 @@ void AWonderlandStrollingDog::Tick(float DeltaSeconds)
 	// sideways at full stride is a large one.
 	const float Align = FVector::DotProduct(GetActorForwardVector(), Direction);
 	const float Gate = FMath::Clamp((Align - 0.25f) / 0.55f, 0.0f, 1.0f);
-	const float StepLength = WalkSpeed * Dt * Gate;
+
+	// ACCELERATE, NEVER ASSIGN. The step used to be WalkSpeed * Dt outright, so
+	// a Dog leaving a waypoint went from nothing to full stride in one frame
+	// and back to nothing in one more. Easing the SPEED eases everything
+	// downstream, because the gait is derived from it: stride, duty, lift, bob
+	// and the footfall pattern all ramp with the Dog instead of snapping on.
+	//
+	// Also eased DOWN as the target nears, so arriving is a deceleration rather
+	// than a stop, and decel is brisker than accel — animals stop faster than
+	// they start.
+	const float Approach = FMath::Clamp(Distance / 260.0f, 0.0f, 1.0f);
+	const float TargetSpeed = WalkSpeed * Gate * Approach;
+	const float Rate = (TargetSpeed > CurrentSpeed) ? AccelUUPerSec2 : DecelUUPerSec2;
+	CurrentSpeed = FMath::FInterpConstantTo(CurrentSpeed, TargetSpeed, Dt, Rate);
+
+	const float StepLength = CurrentSpeed * Dt;
 	FVector Next = Here + Direction * StepLength;
 
 	// GROUND. The old step forced Z to zero and left the Dog at its spawn
@@ -224,10 +270,24 @@ void AWonderlandStrollingDog::PoseLegs(float Travelled, float SettleAlpha)
 	// SettleAlpha 1 means "stand": the paws blend back to their rest pose. A
 	// Dog that stops mid-stride and freezes is the snapping the founder saw.
 	const float Blend = 1.0f - FMath::Clamp(SettleAlpha, 0.0f, 1.0f);
+
+	// THE GAIT IS DERIVED FROM THE SPEED, EVERY TICK. Stride, duty, lift, bob
+	// and the footfall pattern all come from here, so they cannot disagree with
+	// how fast the Dog is actually travelling — which is what "the animation
+	// does not match the movement" means, and it used to be guaranteed by three
+	// constants that never changed.
+	const WonderlandGait::FGaitParams Gait =
+		WonderlandGait::GaitForSpeed(CurrentSpeed, HipHeightWorld);
+	CurrentGaitName = FName(WonderlandGait::GaitName(Gait.Gait));
+
+	const float Stride = (Gait.StrideLength > 1.0f) ? Gait.StrideLength : StrideLength;
+	const float Lift = Gait.LiftHeight;
+	const float Bob = Gait.BobHeight;
+
 	// The body's carriage is needed BEFORE the legs, because the hip rides it.
 	// A hip that stays put while the torso rises opens a gap at the shoulder.
 	const WonderlandGait::FBodyPose BodyPose =
-		WonderlandGait::BodyPose(Travelled / StrideLength, StrideBob);
+		WonderlandGait::BodyPose(Travelled / Stride, Bob);
 
 	for (int32 i = 0; i < 4; ++i)
 	{
@@ -236,9 +296,9 @@ void AWonderlandStrollingDog::PoseLegs(float Travelled, float SettleAlpha)
 		{
 			continue;
 		}
-		const float Phase = Travelled / StrideLength + WonderlandGait::LegPhaseOffset(i);
+		const float Phase = Travelled / Stride + Gait.LegOffset[i];
 		WonderlandGait::FLegPose Pose =
-			WonderlandGait::LegPose(Phase, StrideLength, StrideLift);
+			WonderlandGait::LegPose(Phase, Stride, Lift, Gait.DutyFactor);
 		// Settling blends the TARGET, not the result, so the swing angle and
 		// the stretch both fall to rest with it rather than being faded on top
 		// of a limb still held at an angle.

@@ -626,6 +626,24 @@ if has "$SD_SRC" 'GetActorForwardVector'; then
 else
   bad "the step is not gated on heading — the Dog will crab sideways out of every turn"
 fi
+# THE STRIDE WAS A CONSTANT. 132 uu whatever the Dog was doing, so "faster"
+# only ever meant the same walk replayed more quickly — the speed/animation
+# mismatch by construction rather than by accident.
+if has "$SD_SRC" 'GaitForSpeed'; then
+  ok "...and derives stride, duty, lift and footfall from its CURRENT SPEED"
+else
+  bad "the gait is not derived from speed — a faster Dog just replays the walk"
+fi
+if has "$SD_SRC" 'FInterpConstantTo(CurrentSpeed'; then
+  ok "...reaching that speed by acceleration, not by assignment"
+else
+  bad "speed is assigned outright, so the Dog snaps from nothing to full stride"
+fi
+if has "$SD_SRC" 'HipHeightWorld'; then
+  ok "...and the gait threshold is a Froude number in WORLD units, so scale is free"
+else
+  bad "no world-space hip height — a Dog at actor scale 1.75 breaks gait at the wrong speed"
+fi
 
 echo "== "sharper" is a number, not an impression =="
 # The founder's note is "too blurry, too soft, too smeared, not crisp enough for

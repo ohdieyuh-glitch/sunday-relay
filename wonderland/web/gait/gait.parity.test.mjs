@@ -89,6 +89,34 @@ check('the limb stretch matches the engine', worstStretch < TOL, `worst ${worstS
 check('every sample agrees on whether the paw is planted', stanceMismatch === 0,
       `${stanceMismatch} of ${golden.samples.length} disagree`);
 
+// --- 2b. the GAIT MODEL, sample for sample. gait.js mirrors GaitForSpeed, and
+// the preview picks stride/duty/footfall from it — so a drift here shows the
+// browser a different animal from the one Unreal renders.
+{
+  let worstDuty = 0, worstStride = 0, worstLift = 0, worstBob = 0, worstOff = 0;
+  let gaitMismatch = [];
+  for (const g of golden.gaits || []) {
+    const j = gait.gaitForSpeed(g.speed, golden.legLength);
+    worstDuty = Math.max(worstDuty, Math.abs(j.dutyFactor - g.duty));
+    worstStride = Math.max(worstStride, Math.abs(j.strideLength - g.stride));
+    worstLift = Math.max(worstLift, Math.abs(j.liftHeight - g.lift));
+    worstBob = Math.max(worstBob, Math.abs(j.bobHeight - g.bob));
+    for (let i = 0; i < 4; i++) {
+      worstOff = Math.max(worstOff, Math.abs(j.legOffset[i] - g.offsets[i]));
+    }
+    if (j.gait !== g.gait) gaitMismatch.push(`${g.speed}: js ${j.gait} vs ${g.gait}`);
+  }
+  check('the golden carries a gait table', (golden.gaits || []).length >= 8,
+        `${(golden.gaits || []).length} samples`);
+  check('the chosen GAIT matches the engine at every speed', gaitMismatch.length === 0,
+        gaitMismatch.join('; '));
+  check('duty factor matches across all gaits', worstDuty < TOL, `worst ${worstDuty.toExponential(2)}`);
+  check('stride length matches across all gaits', worstStride < 1e-4, `worst ${worstStride.toExponential(2)}`);
+  check('paw lift and body bob match', worstLift < 1e-4 && worstBob < 1e-4,
+        `lift ${worstLift.toExponential(2)} bob ${worstBob.toExponential(2)}`);
+  check('the blended footfall offsets match', worstOff < TOL, `worst ${worstOff.toExponential(2)}`);
+}
+
 // --- 3. the constants the preview reads directly
 check('the duty factor matches', Math.abs(gait.WALK_DUTY_FACTOR - golden.dutyFactor) < TOL);
 check('the footfall order matches',

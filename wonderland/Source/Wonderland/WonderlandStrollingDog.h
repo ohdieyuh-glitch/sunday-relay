@@ -77,8 +77,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
 	FName Accessory = FName(TEXT("none"));
 
+	/** The CURRENT leg's cruise speed. PickDestination varies it per leg of the
+	 *  wander so the plaza shows strollers and trotters at once; the gait is
+	 *  derived from speed, so this is the only knob that needs to move. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
 	float WalkSpeed = 90.0f;
+
+	/** What WalkSpeed is varied AROUND. Set by the generator per Dog. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	float BaseWalkSpeed = 90.0f;
 
 	/** A place the Dog will not walk into: the ARRIVAL CAMERA'S NEAR FIELD.
 	 *
@@ -142,11 +149,38 @@ private:
 	 *  and their stride with it — the whole Dog pulsed instead of breathing. */
 	FVector TorsoBaseScale = FVector(1.0f, 1.0f, 1.0f);
 
-	/** Stride geometry, in Unreal units at the Dog's own scale. A stride a
-	 *  little longer than the leg is tall reads as an unhurried walk. */
+	/** Stride geometry is NO LONGER FIXED. It used to be three constants, so a
+	 *  Dog told to move faster cycled the same 132 uu stride more quickly —
+	 *  legs spinning over unchanged ground, which is the speed/animation
+	 *  mismatch by construction. WonderlandGait::GaitForSpeed derives all of
+	 *  it from the current speed and the Dog's own hip height each tick.
+	 *  These remain as the FALLBACK for a Dog whose rig failed to build. */
 	float StrideLength = 132.0f;
 	float StrideLift = 15.0f;
 	float StrideBob = 3.0f;
+
+	/** Hip height in WORLD units, cached once: leg length at build time times
+	 *  the actor scale. The Froude number that picks the gait is
+	 *  v^2/(g*h) and both v and h have to be world-space or a Dog at actor
+	 *  scale 1.75 breaks gait at the wrong speed. */
+	float HipHeightWorld = 119.6f;
+
+	/** Speed is ACCELERATED toward its target, never assigned. A Dog that goes
+	 *  from 0 to full stride in one frame is the "snapping from zero velocity
+	 *  to full walk" the brief calls out; and because the gait is derived from
+	 *  the speed, easing the speed eases the whole gait with it. */
+	float CurrentSpeed = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	float AccelUUPerSec2 = 260.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	float DecelUUPerSec2 = 420.0f;
+
+	/** What the world proof reports, so the gait in a captured frame is a
+	 *  recorded fact rather than an inference from how fast something looked. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
+	FName CurrentGaitName = FName(TEXT("idle"));
 
 	/** Place the four paws, the torso and the head for a distance travelled.
 	 *  SettleAlpha 1 blends everything back to the standing pose. */

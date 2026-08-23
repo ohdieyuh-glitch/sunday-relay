@@ -17,6 +17,59 @@
 /** Fraction of the stride a paw spends on the ground. Mirrors WalkDutyFactor. */
 export const WALK_DUTY_FACTOR = 0.65;
 
+// ---------------------------------------------------------------- gait model
+// Mirrors WonderlandGait::GaitForSpeed. See that header for why the thresholds
+// are Froude numbers rather than uu/s. Checked sample-for-sample against the
+// engine's own table by gait.parity.test.mjs.
+const GRAVITY_UU = 980;
+const WALK_OFFSETS = [0.00, 0.50, 0.75, 0.25];
+const TROT_OFFSETS = [0.00, 0.50, 0.50, 0.00];
+const RUN_OFFSETS  = [0.00, 0.12, 0.55, 0.67];
+
+const lerp = (a, b, t) => a + (b - a) * t;
+
+/** Blend two phases the SHORT way round the circle — a plain lerp from 0.9 to
+ *  0.1 sweeps backwards through 0.5, which is a visible kick mid-transition. */
+function blendPhase(a, b, t) {
+  let d = b - a;
+  while (d > 0.5) d -= 1;
+  while (d < -0.5) d += 1;
+  return frac(a + d * t);
+}
+
+/** 0 below lo, 1 above hi, smoothstep between — so the gait does not change
+ *  RATE abruptly at either end of a band, which is its own kind of snap. */
+function band(v, lo, hi) {
+  if (hi <= lo) return v >= hi ? 1 : 0;
+  let t = (v - lo) / (hi - lo);
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return t * t * (3 - 2 * t);
+}
+
+export function gaitForSpeed(speedUU, hipHeightUU) {
+  const hip = hipHeightUU > 1 ? hipHeightUU : 1;
+  const speed = speedUU > 0 ? speedUU : 0;
+  const fr = (speed * speed) / (GRAVITY_UU * hip);
+  const trotBlend = band(fr, 0.35, 0.65);
+  const runBlend = band(fr, 2.10, 2.90);
+
+  const relStride = 1.05 + 1.35 * Math.sqrt(fr);
+  const strideLength = hip * (relStride < 1.05 ? 1.05 : relStride > 3.6 ? 3.6 : relStride);
+  const dutyFactor = lerp(lerp(WALK_DUTY_FACTOR, 0.45, trotBlend), 0.34, runBlend);
+  const liftHeight = hip * lerp(lerp(0.125, 0.185, trotBlend), 0.26, runBlend);
+  const bobHeight = hip * lerp(lerp(0.025, 0.045, trotBlend), 0.07, runBlend);
+
+  const legOffset = [0, 1, 2, 3].map(i =>
+    blendPhase(blendPhase(WALK_OFFSETS[i], TROT_OFFSETS[i], trotBlend),
+               RUN_OFFSETS[i], runBlend));
+
+  let gait = 'walk', blend = trotBlend;
+  if (speed < 1) { gait = 'idle'; blend = 0; }
+  else if (runBlend > 0.5) { gait = 'run'; blend = runBlend; }
+  else if (trotBlend > 0.5) { gait = 'trot'; blend = trotBlend; }
+  return { gait, dutyFactor, strideLength, liftHeight, bobHeight, legOffset, blend };
+}
+
 function frac(v) {
   const f = v - Math.floor(v);
   return f < 0 ? f + 1 : f;
@@ -40,19 +93,21 @@ export function legPhaseOffset(legIndex) {
  *   lift    — height above the paw's resting position; zero during stance
  *   stance  — true while planted, when the paw must not move in WORLD space
  */
-export function legPose(stridePhase, strideLength, liftHeight) {
+export function legPose(stridePhase, strideLength, liftHeight, dutyFactor = WALK_DUTY_FACTOR) {
   const p = frac(stridePhase);
-  const reach = strideLength * WALK_DUTY_FACTOR * 0.5;
+  // Clamped, not trusted: duty 0 floats the Dog, duty 1 skates it, silently.
+  const duty = dutyFactor < 0.15 ? 0.15 : dutyFactor > 0.95 ? 0.95 : dutyFactor;
+  const reach = strideLength * duty * 0.5;
 
-  if (p < WALK_DUTY_FACTOR) {
+  if (p < duty) {
     // STANCE. Planted, so relative to a forward-moving body the paw travels
     // BACKWARD at exactly the body's speed. +reach -> -reach over the stance is
     // strideLength * duty, precisely what the body covers. That is the foot lock.
-    return { forward: reach - (p / WALK_DUTY_FACTOR) * (2 * reach), lift: 0, stance: true };
+    return { forward: reach - (p / duty) * (2 * reach), lift: 0, stance: true };
   }
   // SWING. A sine arch, so the paw leaves and meets the ground with zero
   // vertical speed instead of stabbing at it.
-  const w = (p - WALK_DUTY_FACTOR) / (1 - WALK_DUTY_FACTOR);
+  const w = (p - duty) / (1 - duty);
   return {
     forward: -reach + w * (2 * reach),
     lift: liftHeight * Math.sin(Math.PI * w),

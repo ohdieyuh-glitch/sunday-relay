@@ -31,6 +31,63 @@ namespace WonderlandGait
 	 *  always down, which is what keeps a walk looking unhurried. */
 	inline constexpr float WalkDutyFactor = 0.65f;
 
+	/** WHICH GAIT, AND ITS SHAPE, FOR A GIVEN SPEED.
+	 *
+	 *  The stride used to be a CONSTANT — 132 uu whatever the Dog was doing —
+	 *  so a Dog told to move faster cycled its legs faster over the same
+	 *  ground. That is the "movement speed and animation speed disagree"
+	 *  failure by construction: the only thing speed changed was how quickly
+	 *  the same walk replayed.
+	 *
+	 *  Animals do not do that. They lengthen the stride, shorten the fraction
+	 *  of it each paw spends planted, and at thresholds they change the ORDER
+	 *  the paws fall in altogether. The thresholds are not arbitrary either:
+	 *  they sit at roughly fixed FROUDE NUMBERS, Fr = v^2 / (g*h) with h the
+	 *  hip height — which is why a big dog and a small dog break into a trot
+	 *  at different speeds but the same Fr. Walk->trot is near Fr 0.5,
+	 *  trot->gallop near Fr 2.5 (Alexander). Deriving the thresholds from hip
+	 *  height rather than hard-coding uu/s means the hero Dog at scale 1.75
+	 *  and a companion at 1.05 both break gait at the speed that looks right
+	 *  for their size, with no per-Dog tuning.
+	 */
+	enum class EGait : int
+	{
+		Idle = 0,
+		Walk = 1,
+		Trot = 2,
+		Run  = 3,
+	};
+
+	struct FGaitParams
+	{
+		EGait Gait = EGait::Walk;
+		/** Fraction of the stride each paw is planted. Falls with speed. */
+		float DutyFactor = 0.65f;
+		/** How far the body travels in one full cycle, uu. Rises with speed. */
+		float StrideLength = 132.0f;
+		/** Peak paw lift during swing, uu. Rises with speed. */
+		float LiftHeight = 15.0f;
+		/** Vertical body travel, uu. Rises with speed. */
+		float BobHeight = 3.0f;
+		/** Phase offset per leg: 0 LH, 1 RH, 2 LF, 3 RF. BLENDED through a
+		 *  transition rather than switched, because swapping four phases in one
+		 *  frame is a snap and snapping is the thing being fixed. */
+		float LegOffset[4] = { 0.0f, 0.5f, 0.25f, 0.75f };
+		/** 0 at the start of a gait's band, 1 at the end. Only meaningful for
+		 *  diagnostics; the blend is already applied to LegOffset. */
+		float Blend = 0.0f;
+	};
+
+	/**
+	 * @param SpeedUU      current ground speed, uu/s.
+	 * @param HipHeightUU  hip height, uu — the canonical Dog is 119.6 at
+	 *                     skin scale 1.3, and an actor scale multiplies it.
+	 */
+	FGaitParams GaitForSpeed(float SpeedUU, float HipHeightUU);
+
+	/** Human-readable, for the world proof and for tests that print. */
+	const char* GaitName(EGait Gait);
+
 	/** Lateral-sequence walk — the order a real dog puts paws down:
 	 *  left hind, left fore, right hind, right fore, evenly spaced.
 	 *  Index order matches the body's part table: 0 LH, 1 RH, 2 LF, 3 RF. */
@@ -62,7 +119,8 @@ namespace WonderlandGait
 	 * @param StrideLength  how far the body moves in one full cycle, uu.
 	 * @param LiftHeight    peak paw lift during swing, uu.
 	 */
-	FLegPose LegPose(float StridePhase, float StrideLength, float LiftHeight);
+	FLegPose LegPose(float StridePhase, float StrideLength, float LiftHeight,
+	                 float DutyFactor = WalkDutyFactor);
 
 	/** Body carriage for the same phase. Bob peaks twice per stride. */
 	FBodyPose BodyPose(float StridePhase, float BobHeight);
