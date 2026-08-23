@@ -2295,6 +2295,37 @@ def build(layout):
                       d * 0.72 / 100.0, "foliage_deep", "%s_dark%d" % (label, i))
             _part("sphere", bx_, by_, bz_,
                   d / 100.0, d / 100.0, d / 100.0, mat, "%s_canopy%d" % (label, i))
+            # BLOSSOM, BECAUSE THE REFERENCE'S TREES FLOWER.
+            #
+            # Measured against the founder's reference, pink_rose_red is 26.7%
+            # of its frame and violet_purple 22.4% -- together very nearly HALF
+            # of it -- while ours runs 2.1% and 3.2%. At the same time green
+            # measures 0.0% in the reference against a Wonderland geometry that
+            # is 12% leaf. The reference is not a green garden with pink in it;
+            # its canopies are blossom and its greens are dark supporting mass.
+            #
+            # Pink cannot come from the leaf cards: their albedo has a real
+            # green baked in, so a pink tint over it only makes mud. It comes
+            # from clusters ON the canopy, in the petal materials the world
+            # already has -- which is also how a cherry or a wisteria actually
+            # reads, as colour sitting on top of foliage rather than replacing
+            # it.
+            #
+            # On the OUTER blobs only (i > 0): the inner mass is what gives the
+            # canopy its shadow, and flowering it flattens the tree.
+            if i > 0 and "petal_pink" in MATS:
+                _nb = 6 if giant else 4
+                for _q in range(_nb):
+                    _qa = _q * (2.0 * math.pi / _nb) + i * 0.7
+                    _qr = d * 0.42
+                    _part("sphere",
+                          bx_ + math.cos(_qa) * _qr,
+                          by_ + math.sin(_qa) * _qr,
+                          bz_ + d * (0.10 + 0.16 * ((_q + i) % 3) / 2.0),
+                          d * 0.30 / 100.0, d * 0.30 / 100.0, d * 0.26 / 100.0,
+                          ("petal_pink", "rose_pink", "petal_violet",
+                           "petal_pink")[(_q + i) % 4],
+                          "%s_bloom%d_%d" % (label, i, _q))
             if "leafcard" in MATS:
                 ncards = (6 if giant else 4)
                 for k in range(ncards):
