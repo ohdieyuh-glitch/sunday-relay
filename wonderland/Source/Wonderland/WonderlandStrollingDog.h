@@ -179,21 +179,21 @@ private:
 	 *  the speed, easing the speed eases the whole gait with it. */
 	float CurrentSpeed = 0.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
 	float AccelUUPerSec2 = 260.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
 	float DecelUUPerSec2 = 420.0f;
 
 	/** What the world proof reports, so the gait in a captured frame is a
 	 *  recorded fact rather than an inference from how fast something looked. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
 	FName CurrentGaitName = FName(TEXT("idle"));
 
 	/** The Project Avatar this Dog attends, if any. Set by the generator.
 	 *
 	 *  A Dog with no Avatar simply wanders — it does NOT invent work. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<AActor> AttendTarget = nullptr;
 
 	/** 0 quadruped .. 1 upright. Eased every tick; never assigned. */
@@ -210,15 +210,15 @@ private:
 
 	/** Furthest a paw may be moved to meet the ground, uu. Bounds one bad
 	 *  trace; a gap in the collision must not stretch a leg to the horizon. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
 	float MaxPawGroundOffset = 38.0f;
 
 	/** Reported by the world proof: how many paws are actually being corrected,
 	 *  so "grounding works" is a recorded number rather than an impression. */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
 	int32 PawsGrounded = 0;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Dog", meta = (AllowPrivateAccess = "true"))
 	FName CurrentWorkName = FName(TEXT("none"));
 
 	/** Place the four paws, the torso and the head for a distance travelled.
