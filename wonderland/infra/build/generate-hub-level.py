@@ -376,7 +376,11 @@ LOOK = {
     # cooked assets: MI_mush_red is parent M_WLMaster, BaseColor
     # (0.740,0.160,0.260), AlbedoTex T_cap_a, Specular 0.12. Every one checked
     # was correct. The defect is downstream of the material.
-    "bloomIntensity": 0.0,
+    # REFUTED and restored. Turning it off moved mean chroma 0.086 -> 0.089,
+    # which is nothing. Bloom was not the additive white term. It goes back
+    # because a thresholded glow on gold and emissive is wanted for its own
+    # sake, and it is now known to cost no colour.
+    "bloomIntensity": 0.5,
     "bloomThreshold": 1.5,
     # --- grade (runs AFTER metering; this is the real brightness lever)
     # MEASURED AGAIN, ON A DELIVERED FRAME. 0.60/0.60/0.64 was measured against
@@ -392,7 +396,30 @@ LOOK = {
     # stopped being a correction and become part of the problem. Lifted, not
     # removed: the highlight end still needs holding, and gainHighlights is the
     # instrument for that, not this.
-    "gain": (0.75, 0.75, 0.78),
+    # 0.75 -> 0.46. THE FRAME IS RIDING THE TOP OF THE TONEMAPPER, which is
+    # where ACES trades saturation for headroom. Per material, on a delivered
+    # frame, the DARKEST HALF of the pixels:
+    #
+    #     mush_red   darkest half rgb(155,144,149)  luma 0.58  sat 0.07
+    #     stone      darkest half rgb(126,117,127)  luma 0.47  sat 0.08
+    #
+    # mush_red has literally NO pixel below luma 70. A material whose albedo
+    # is (0.74,0.16,0.26) cannot show that albedo when its darkest pixel is
+    # already brighter than mid-grey.
+    #
+    # Against the founder's reference, which is the target: 77% of ITS pixels
+    # sit below luma 0.50, against 33% of this frame's. Matching the unlit
+    # Marble backdrop was the right instrument for the LIGHT and the wrong
+    # target for the GRADE -- that ruler includes the bright sky.
+    #
+    # The light stays UP, deliberately. Like-for-like at the SAME output luma,
+    # the brighter build carries two to three times the chroma of the dark one
+    # (0.166 against 0.047 at luma 0.10-0.20), because shadows that get a
+    # coloured bounce keep their hue and shadows that get nothing do not. So
+    # the fix is to keep lighting the world and stop pushing the RESULT into
+    # the shoulder. Gain runs before the tonemap curve, which is what makes it
+    # the instrument here rather than exposure bias.
+    "gain": (0.46, 0.46, 0.48),
     # RAISED 1.52 -> 1.78. Saturation was tuned while the frame carried a
     # false gold cast, and in that state it multiplied the CAST rather than the
     # palette -- which is why it was correct to be suspicious of it. The cast is
