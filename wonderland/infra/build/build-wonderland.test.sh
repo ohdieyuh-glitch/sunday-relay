@@ -801,10 +801,28 @@ echo "== no light is created with an FColor =="
 # wrong-coloured light looked exactly like a working one; then FATALLY, when I
 # added a ground bounce with the same mistake forty lines below the helper whose
 # docstring describes it.
-if has "$GEN_SRC" 'set_light_color(unreal.Color('; then
-  bad "a light is created with unreal.Color — UE wants an FLinearColor and will refuse it"
-else
+if python3 - "$HERE/generate-hub-level.py" <<'LCEOF'
+import ast, io, sys
+tree = ast.parse(io.open(sys.argv[1], encoding="utf8").read())
+bad = []
+for node in ast.walk(tree):
+    if not isinstance(node, ast.Call): continue
+    f = node.func
+    if not (isinstance(f, ast.Attribute) and f.attr == "set_light_color"): continue
+    for a in node.args:
+        if isinstance(a, ast.Call) and isinstance(a.func, ast.Attribute) \
+           and a.func.attr == "Color" and isinstance(a.func.value, ast.Name) \
+           and a.func.value.id == "unreal":
+            bad.append(node.lineno)
+if bad:
+    sys.stderr.write("set_light_color(unreal.Color(...)) at line(s) %s\n"
+                     % ", ".join(map(str, bad)))
+    raise SystemExit(1)
+LCEOF
+then
   ok "every light colour goes through srgb_light_color or a LinearColor"
+else
+  bad "a light is created with unreal.Color — UE wants an FLinearColor and will refuse it"
 fi
 
 echo
