@@ -4336,8 +4336,8 @@ def build(layout):
         b_comp.set_mobility(unreal.ComponentMobility.MOVABLE)
         b_comp.set_intensity(_lux * float(LOOK["bounceRatio"]))
         _bw = LOOK["bounceWarm"]
-        b_comp.set_light_color(unreal.Color(
-            int(_bw[0] * 255), int(_bw[1] * 255), int(_bw[2] * 255), 255))
+        b_comp.set_light_color(srgb_light_color(
+            _bw[0] * 255.0, _bw[1] * 255.0, _bw[2] * 255.0))
         set_prop(b_comp, "bCastShadows", False)
         set_prop(b_comp, "CastShadows", False)
         unreal.log_warning(

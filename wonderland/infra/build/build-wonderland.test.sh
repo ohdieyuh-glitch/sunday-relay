@@ -793,6 +793,21 @@ else
 fi
 
 echo
+echo "== no light is created with an FColor =="
+# set_light_color takes an FLinearColor. Passing unreal.Color throws
+#   TypeError: NativizeStructInstance: Cannot nativize 'Color' as 'LinearColor'
+# and it has cost this project twice: first SILENTLY, inside a try/except, so
+# every lantern and the hero Dog's violet key were built at default white and a
+# wrong-coloured light looked exactly like a working one; then FATALLY, when I
+# added a ground bounce with the same mistake forty lines below the helper whose
+# docstring describes it.
+if has "$GEN_SRC" 'set_light_color(unreal.Color('; then
+  bad "a light is created with unreal.Color — UE wants an FLinearColor and will refuse it"
+else
+  ok "every light colour goes through srgb_light_color or a LinearColor"
+fi
+
+echo
 echo "== the near field carries the colour the frame was missing =="
 # The last streamed arrival classified 0.1% green and 2.1% pink against 25% and
 # 7.7% in the offline preview of the same world. The palette existed; almost
