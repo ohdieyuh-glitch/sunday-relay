@@ -111,6 +111,28 @@ LOOK = {
     # can measure it -- the rasteriser has no atmosphere. So it sweeps from the
     # LOOK table like every other value here, and 0.0 reproduces today's sky
     # exactly. skyLavender blends the default toward an equal-R-and-G lavender.
+    # AUTHOR THE PALETTE FOR A RENDERER, NOT FOR AN EYE.
+    #
+    # Measured, area-weighted over the visible frame, this world's own albedo
+    # carries saturation 0.245 and its materials average 0.401 each. The
+    # DELIVERED frame carries about 0.09. That ratio is not a defect hiding
+    # somewhere -- it is what physically-based shading does: ambient arrives
+    # from every direction at once, indirect light comes back off neighbours,
+    # specular is white on a dielectric, and the tonemapper compresses. Every
+    # one of those steps moves a surface toward the light's colour and none
+    # move it back.
+    #
+    # The reference is an ILLUSTRATION. Its saturation is authorial: nothing
+    # shaded it down, so what was drawn is what is seen. A renderer aimed at
+    # that target has to be given a palette that survives being lit, which
+    # means authoring PAST the target rather than at it.
+    #
+    # This is not the grade and it is not a cast being covered. It multiplies
+    # each material's distance from its own luma, at the ALBEDO, before a
+    # single light touches it -- the same move as painting the set brighter.
+    # Sweep it with WONDERLAND_LOOK=paletteSaturation=1.0 to see the frame it
+    # replaces.
+    "paletteSaturation": 1.85,
     "skyLavender": 0.55,
     # NEUTRALISE THE FILL. LightColor tints the SkyLight's whole captured-scene
     # contribution, and this world's captured sky is blue, so every surface the
@@ -648,6 +670,24 @@ def _marble_shell_reach():
     if not horizontal:
         return None
     return min(horizontal) / 2.0
+
+def palette_saturate(rgb):
+    """Push a palette colour away from its own luma by LOOK["paletteSaturation"].
+
+    Applied at the ALBEDO, before any light. See the LOOK entry: a rendered
+    world delivers roughly a third of the saturation its materials carry, so a
+    palette authored to look right on paper renders washed. Clamped, so a
+    colour cannot leave the gamut and come back as something else.
+    """
+    try:
+        k = float(LOOK["paletteSaturation"])
+    except (TypeError, ValueError, KeyError):
+        return tuple(rgb[:3])
+    if k == 1.0:
+        return tuple(rgb[:3])
+    lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+    return tuple(max(0.0, min(1.0, lum + (c - lum) * k)) for c in rgb[:3])
+
 
 def srgb_light_color(r, g, b):
     """An 0-255 colour pick as the LINEAR colour UE's light actually wants.
@@ -1736,7 +1776,8 @@ def build_material_library(texs=None):
         else:
             mi = tools.create_asset("MI_" + name, pkg, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
         mel.set_material_instance_parent(mi, master)
-        mel.set_material_instance_vector_parameter_value(mi, "BaseColor", unreal.LinearColor(rgb[0], rgb[1], rgb[2], 1))
+        _sr = palette_saturate(rgb)
+        mel.set_material_instance_vector_parameter_value(mi, "BaseColor", unreal.LinearColor(_sr[0], _sr[1], _sr[2], 1))
         mel.set_material_instance_scalar_parameter_value(mi, "Metallic", met)
         mel.set_material_instance_scalar_parameter_value(mi, "Roughness", rough)
         mel.set_material_instance_vector_parameter_value(mi, "Emissive", unreal.LinearColor(emi[0], emi[1], emi[2], 1))
@@ -1841,7 +1882,8 @@ def build_material_library(texs=None):
                     #
                     # So the map supplies detail and the palette supplies hue,
                     # which is what a tint is for.
-                    _base = (MATERIAL_SPEC.get(nm) or ((1.0, 1.0, 1.0),))[0]
+                    _base = palette_saturate(
+                        (MATERIAL_SPEC.get(nm) or ((1.0, 1.0, 1.0),))[0])
                     mel.set_material_instance_vector_parameter_value(
                         mi, "BaseColor",
                         unreal.LinearColor(_base[0] * tint[0],
