@@ -6027,9 +6027,9 @@ def build(layout):
     # instead of walling the shot.
     _MG_LAMPS = 0
     _MG_STALKS = 0
-    for _i in range(22 if int(LOOK["foregroundPlanting"]) else 0):
+    for _i in range(30 if int(LOOK["foregroundPlanting"]) else 0):
         _h = (_i * 40503 + 12345) & 0xFFFFFFFF
-        _t = _i / 21.0
+        _t = _i / 29.0
         _my = _FG_START + 1150.0 + 1500.0 * _t
         _half = (_my - ARRIVAL_CAM[1]) * math.tan(math.radians(75.0 * 0.5)) * 0.80
         _mx = -_half + 2.0 * _half * (((_h >> 5) % 1000) / 1000.0)
@@ -6044,17 +6044,33 @@ def build(layout):
                         "MgLamp%d" % _i, yaw=float((_h >> 12) % 360))
             _MG_LAMPS += 1
         else:
-            # A tall flowering stalk: a stem with a bloom head, so it reads as
-            # colour at eye level rather than colour on the floor.
-            _sh = 250.0 + 210.0 * ((_h >> 15) % 4) / 3.0
+            # A FLOWERING SHRUB, not a stalk with three beads on it.
+            #
+            # This built a 0.10-wide stem carrying three 40 uu blooms, and at
+            # midground distance that is worth almost no frame area at all --
+            # which is why pink measured 3.8% against the reference's 26.7%
+            # while the world was, on paper, full of flowers. The reference's
+            # pink is carried by BIG fluffy masses banked along the midground:
+            # blossom the size of a person, not the size of a fist.
+            #
+            # A squat foliage base with a cluster of blossom lobes over it, ~300
+            # uu across. Same slot, same keep-clear rules, two orders of
+            # magnitude more colour.
             _sm = ("rose_pink", "petal_violet", "petal_pink")[_i % 3]
-            _part("cylinder", _mx, _my, _sh * 0.5, 0.10, 0.10, _sh / 100.0,
-                  "foliage_deep", "MgStalk%d_stem" % _i)
-            for _b in range(3):
-                _ba = _b * 2.0944 + _i * 0.7
-                _part("sphere", _mx + math.cos(_ba) * 26.0, _my + math.sin(_ba) * 26.0,
-                      _sh + 18.0 + _b * 12.0, 0.40, 0.40, 0.34, _sm,
-                      "MgStalk%d_bloom%d" % (_i, _b))
+            _sm2 = ("petal_pink", "rose_pink", "petal_violet")[(_i + 1) % 3]
+            _sw = 1.30 + 0.55 * ((_h >> 15) % 4) / 3.0
+            _part("sphere", _mx, _my, 46.0 * _sw, 0.86 * _sw, 0.86 * _sw, 0.52 * _sw,
+                  "foliage_deep", "MgShrub%d_base" % _i)
+            for _b in range(9):
+                _ba = _b * 0.698 + _i * 0.7
+                _br = (0.30 + 0.62 * ((_b * 7) % 5) / 4.0) * 78.0 * _sw
+                _part("sphere",
+                      _mx + math.cos(_ba) * _br,
+                      _my + math.sin(_ba) * _br * 0.82,
+                      (72.0 + 46.0 * ((_b * 3) % 4) / 3.0) * _sw,
+                      0.60 * _sw, 0.58 * _sw, 0.50 * _sw,
+                      _sm if _b % 2 else _sm2,
+                      "MgShrub%d_bloom%d" % (_i, _b))
             _MG_STALKS += 1
     unreal.log_warning("MIDGROUND VERTICALS placed %d lanterns and %d flowering stalks"
                        % (_MG_LAMPS, _MG_STALKS))
