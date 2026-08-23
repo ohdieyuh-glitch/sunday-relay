@@ -310,6 +310,17 @@ Refusing to compile a branch that was not the one asked for. This is the exact
 regression that made an L4 session measure the wrong package."
 fi
 printf '%s\n' "$BUILD_SHA" > "$LOG_DIR/compiled.sha"
+# AND WHAT IT WAS BUILT WITH. The knobs are already computed and folded into
+# the input hash, but they were never written anywhere, so nothing downstream
+# could answer "was there Marble in this build".
+#
+# capture-hero-shots.sh filled that gap by reading its OWN environment, which
+# is a different question with the same shape of answer: a sidecar recorded
+# WONDERLAND_MARBLE_IMPORT="" and WONDERLAND_MARBLE_BACKDROP="0" for a build
+# whose knobs it had never seen. The frame's own world_proof said
+# MARBLE_ACTORS=0 and that WAS true — but it was true by accident of the two
+# agreeing, and they need not.
+printf '%s\n' "$_KNOBS" > "$LOG_DIR/compiled.knobs"
 
 # UNREAL BUILD ACCELERATOR IS OFF BY DEFAULT HERE, AND IT IS NOT A PREFERENCE.
 #

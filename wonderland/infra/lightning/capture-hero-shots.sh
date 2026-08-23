@@ -48,6 +48,21 @@ fi
 BUILD_SHA="$(tr -d '[:space:]' < "$SHA_FILE")"
 [ -n "$BUILD_SHA" ] || wl_die "$SHA_FILE is empty. Nothing was captured."
 
+# WHAT THE BUILD WAS MADE WITH, from the build. Not fatal the way the SHA is —
+# a package from before this file existed is still attributable — but never
+# substituted from this shell's environment, which is what it used to do and
+# which produced a sidecar asserting WONDERLAND_MARBLE_IMPORT="" about a build
+# it had never inspected.
+KNOBS_FILE="$WL_OUT/logs/compiled.knobs"
+WL_BUILD_KNOBS=""
+if [ -f "$KNOBS_FILE" ]; then
+  WL_BUILD_KNOBS="$(cat "$KNOBS_FILE")"
+  wl_say "build knobs: $WL_BUILD_KNOBS"
+else
+  wl_warn "no $KNOBS_FILE — this package predates the knobs record; the sidecar will say so rather than guess"
+fi
+export WL_BUILD_KNOBS
+
 APP="$(wl_find_first "$WL_OUT/Linux" -maxdepth 3 -name 'Wonderland.sh' -type f)"
 [ -n "${APP:-}" ] || wl_die "no packaged Wonderland.sh under $WL_OUT/Linux. Nothing was captured."
 
@@ -229,13 +244,11 @@ payload = {
     "png": os.path.abspath(png),
     "png_bytes": os.path.getsize(png) if os.path.exists(png) else 0,
     "render_profile": os.environ.get("WL_RENDER_PROFILE", ""),
-    "generator_knobs": {
-        "WONDERLAND_LOOK": os.environ.get("WONDERLAND_LOOK", ""),
-        "WONDERLAND_BATCH": os.environ.get("WONDERLAND_BATCH", "1"),
-        "WONDERLAND_MARBLE_IMPORT": os.environ.get("WONDERLAND_MARBLE_IMPORT", ""),
-        "WONDERLAND_MARBLE_BACKDROP": os.environ.get("WONDERLAND_MARBLE_BACKDROP", "0"),
-        "WONDERLAND_COLLIDE": os.environ.get("WONDERLAND_COLLIDE", ""),
-    },
+    "generator_knobs": os.environ.get("WL_BUILD_KNOBS", "").strip()
+        or "UNRECORDED — this package predates compiled.knobs, so what it was "
+           "built with cannot be established from the artifact. Read "
+           "world_proof: MARBLE_ACTORS is the ground truth for whether the "
+           "Marble world is in this frame.",
     "world_proof": [l for l in os.environ.get("WL_PROOF_LINES", "").split("\n") if l],
     "stream": json.loads(os.environ.get("WL_STREAM_STATS", "{}") or "{}"),
     "gpu": {

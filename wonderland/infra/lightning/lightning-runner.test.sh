@@ -2007,6 +2007,33 @@ else
 fi
 rm -rf "$GP_TMP"
 
+echo "== a capture records the BUILD's knobs, never the capture shell's =="
+# A sidecar asserted WONDERLAND_MARBLE_IMPORT="" and MARBLE_BACKDROP="0" for a
+# build whose knobs it had never seen — it was reading its own os.environ, which
+# answers a different question with the same shape of answer. Every build this
+# session genuinely had no Marble in it, so the two agreed; they need not.
+CHS="$HERE/capture-hero-shots.sh"
+if code_has "$CHS" 'compiled.knobs'; then
+  ok "capture-hero-shots reads compiled.knobs from the package"
+else
+  bad "capture-hero-shots does not read the build's knobs file"
+fi
+if code_has "$CHS" 'os.environ.get\("WONDERLAND_MARBLE' -E; then
+  bad "the sidecar still fills generator_knobs from the capture shell's environment"
+else
+  ok "…and never fills generator_knobs from its own environment"
+fi
+if code_has "$CHS" 'UNRECORDED'; then
+  ok "…and says UNRECORDED for a package that predates the record, rather than guessing"
+else
+  bad "a package with no knobs record would be reported with invented values"
+fi
+if code_has "$HERE/../build/build-wonderland.sh" 'compiled.knobs'; then
+  ok "build-wonderland writes compiled.knobs beside compiled.sha"
+else
+  bad "nothing writes the knobs, so no capture can ever report them"
+fi
+
 echo "== the arrival can SEE what the backdrop cost 1,580 credits =="
 # HeroCam0 is pitched -11.6 degrees to hold the hero Dog on its arcane circle,
 # so its frame stops at +7.1 — and the Marble castle city sits around +21,
