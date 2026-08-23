@@ -112,7 +112,18 @@ LOOK = {
     # LOOK table like every other value here, and 0.0 reproduces today's sky
     # exactly. skyLavender blends the default toward an equal-R-and-G lavender.
     "skyLavender": 0.55,
-    "sunLux": 340.0,
+    # RAISED 340 -> 780 AFTER TAMING THE LANTERNS, and the two are the same
+    # decision. Eighteen practicals at 14,000 lumens were not decoration, they
+    # were a third of this world's lighting -- so removing their gold removed
+    # the light with it: mean frame luma fell 0.321 -> 0.224 against the
+    # reference's 0.327, and dark went 32.8% -> 56.2% while gold_amber fell
+    # 10.2% -> 0.6% and warm_timber_stone 25.4% -> 3.2%.
+    #
+    # That is the right trade taken half way. The hue is now correct and the
+    # level is not, so the level comes back from the KEY and the SKY, which are
+    # neutral, instead of from eighteen gold lamps that were never meant to
+    # light a garden.
+    "sunLux": 780.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -210,7 +221,10 @@ LOOK = {
     # makes shadows BRIGHTER and MORE VIOLET at the same time -- the two moves
     # the reference is furthest away on (dark 36.7% vs 25.0%, violet 7.2% vs
     # 22.4%).
-    "skyIntensity": 5.20,
+    # 5.20 -> 9.40 for the same reason as sunLux, and preferentially: the sky
+    # is lavender now, so it is the source that brightens shadows and pushes
+    # them violet at once. violet_purple is 8.3% against the reference's 22.4%.
+    "skyIntensity": 9.40,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -231,7 +245,10 @@ LOOK = {
     # MEASURED. At 14000 the lantern practicals were 41x the sun's 340 and
     # shadowless, and they made every material in the midground render gold.
     # Sweep with WONDERLAND_LOOK=lampLumens=14000 to see the frame they made.
-    "lampLumens": 2200.0,
+    # 2200 -> 3000. Now that the lamp colour is near-neutral (255,226,190)
+    # rather than gold, a practical can carry a little more light without
+    # deciding the frame's hue -- which was the actual defect, not brightness.
+    "lampLumens": 3000.0,
     "bloomIntensity": 0.5,
     "bloomThreshold": 1.5,
     # --- grade (runs AFTER metering; this is the real brightness lever)
