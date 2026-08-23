@@ -580,6 +580,34 @@ elif command -v g++ >/dev/null 2>&1; then
   fi
 fi
 echo
+echo "== the Project Avatar does not lie about what Relay is doing =="
+# A world that idly cycles pretty animations is a screensaver. One that shows
+# implementing ONLY while Relay is implementing is an instrument. The difference
+# is invisible in a screenshot and total in what the thing is for.
+AV_TEST="$HERE/../../tests/cpp/WonderlandProjectAvatar.test.cpp"
+if [ ! -f "$AV_TEST" ]; then
+  bad "the Project Avatar proof is missing from $AV_TEST"
+elif command -v g++ >/dev/null 2>&1; then
+  AV_BIN="$(mktemp -u)"
+  if g++ -std=c++17 -O1 -I "$GAIT_DIR" -o "$AV_BIN" \
+       "$GAIT_DIR/WonderlandProjectAvatar.cpp" "$GAIT_DIR/WonderlandDogPose.cpp" \
+       "$AV_TEST" 2>/dev/null; then
+    AV_OUT="$("$AV_BIN" 2>&1)"; rm -f "$AV_BIN"
+    if printf '%s' "$AV_OUT" | grep -q 'failed 0'; then
+      while IFS= read -r line; do
+        case "$line" in "  ok   "*) ok "${line#  ok   }" ;; esac
+      done <<< "$AV_OUT"
+    else
+      bad "the Project Avatar fails: $(printf '%s' "$AV_OUT" | grep FAIL | head -3)"
+    fi
+  else
+    bad "the Project Avatar state module does not compile"
+  fi
+else
+  bad "g++ is unavailable, so the Project Avatar proof did not run"
+fi
+
+echo
 echo "== a Relay Dog stands up without teleporting into the pose =="
 # "No instant pose swap" is a claim about CONTINUITY, and continuity is
 # arithmetic — so it is compiled and proven here rather than judged from a
