@@ -2,7 +2,7 @@
   "name": "sunday-relay",
   "version": "0.1.0",
   "private": true,
-  "description": "Sunday Relay \u2014 compound AI mission coordination and agent operations",
+  "description": "Sunday Relay — compound AI mission coordination and agent operations",
   "license": "MIT",
   "bin": {
     "relay": "dist-relay/cli.cjs"
@@ -61,6 +61,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
     "@fontsource/fira-code": "^5.2.7",
     "@modelcontextprotocol/sdk": "1.30.0",
+    "cannon-es": "^0.20.0",
     "openai": "^7.3.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

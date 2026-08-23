@@ -10,13 +10,15 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../../.." && pwd)"
 RC=0
 
-if [ ! -d "$ROOT/node_modules/three" ]; then
-  echo "three is not installed — run 'npm install three' at the repo root." >&2
-  echo "INSPECTOR SUITES: NOT RUN (dependency missing, which is not a pass)" >&2
-  exit 1
-fi
+for dep in three cannon-es; do
+  if [ ! -d "$ROOT/node_modules/$dep" ]; then
+    echo "$dep is not installed — run 'npm install $dep' at the repo root." >&2
+    echo "INSPECTOR SUITES: NOT RUN (dependency missing, which is not a pass)" >&2
+    exit 1
+  fi
+done
 
-for suite in parity.test.mjs diagnostics.test.mjs; do
+for suite in parity.test.mjs diagnostics.test.mjs physics.test.mjs; do
   printf '\n=== %s ===\n' "$suite"
   if ! node "$HERE/$suite"; then RC=1; printf 'FAILED: %s\n' "$suite" >&2; fi
 done
