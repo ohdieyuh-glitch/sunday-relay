@@ -750,6 +750,13 @@ if has "$SD_SRC" 'ApproachBlend(UprightBlend, 0.0f'; then
 else
   bad "the Dog drops to all fours instantly when work ends"
 fi
+# The pose struct carrying a stretch is only half a fix; the components have to
+# receive it or the body still leaves its legs on screen.
+if has "$SD_SRC" 'Up.HindStretch'; then
+  ok "...and its hind legs SPAN the raised hip, so the body stays on its legs"
+else
+  bad "the hind stretch never reaches the components — the body detaches while rearing"
+fi
 
 echo
 echo "== the Project Avatar is placed, and its absence is loud =="

@@ -79,11 +79,20 @@ namespace WonderlandPose
 		const float L = (LegLength > 1.0f) ? LegLength : 1.0f;
 		const float Cycle = std::sin(WorkPhase * 2.0f * Pi);
 
-		// THE CHEST RISES AND THE BODY PITCHES BACK ONTO THE HAUNCHES. Rising
-		// without pitching is a Dog levitating; pitching without rising is a Dog
-		// falling over backwards.
-		Pose.TorsoRise = 0.62f * L * B;
+		// THE CHEST RISES BY PITCHING ABOUT THE HIP, not by lifting the whole
+		// body. That distinction is the difference between a Dog rearing and a
+		// Dog levitating, and getting it wrong is invisible in numbers.
+		//
+		// The first version lifted the torso 0.62 of a leg outright. A planted
+		// hind leg is rigid and its paw does not move, so the hip cannot rise
+		// that far — the body simply detached from its own legs, measured at 52%
+		// of a leg length. The pitch already raises the chest by
+		// TorsoLength*sin(pitch), which is most of a leg on its own; the rise
+		// only has to be the modest gather of the haunches.
+		Pose.TorsoRise = 0.14f * L * B;
 		Pose.TorsoPitchDeg = 52.0f * B;
+
+
 
 		// The head stays roughly level. A standing animal looks ahead, not at
 		// the sky, so the head takes back most of what the torso just added.
@@ -155,6 +164,19 @@ namespace WonderlandPose
 		default:
 			break;
 		}
+
+		// THE HIND LEGS MUST REACH, AND THIS IS DERIVED LAST ON PURPOSE.
+		//
+		// Whatever the hip rises by, a planted hind leg has to span it — the
+		// same solve LegSwing does for the gait, for the same reason: a planted
+		// paw stays planted, so the limb is what gives.
+		//
+		// It was computed BEFORE the work switch first, and meditating adds its
+		// own 0.02L of breathing to TorsoRise afterwards — so the stretch was
+		// derived from a rise that then changed underneath it and the leg came
+		// up 2.3 uu short. Anything that moves the hip must happen before this
+		// line, and now everything does.
+		Pose.HindStretch = 1.0f + (Pose.TorsoRise / L);
 		return Pose;
 	}
 }

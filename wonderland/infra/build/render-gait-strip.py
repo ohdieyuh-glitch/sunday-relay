@@ -89,17 +89,104 @@ def check_parity(golden):
     return worst
 
 
+POSE_JSON = os.path.join(WEB, "pose.golden.json")
+
+
+def render_upright(args, body):
+    """The upright work states, from poses the ENGINE emitted.
+
+    No parity check here and none needed: the gait strip mirrors two formulas in
+    Python and has to prove it did not drift. The upright pose has a dozen, and
+    at that size the right answer is to hand the numbers over instead of writing
+    them twice — a renderer that READS the engine's own output cannot disagree
+    with it at all.
+    """
+    if not os.path.isfile(POSE_JSON):
+        raise SystemExit("render-gait-strip: missing %s — regenerate it with "
+                         "WonderlandDogPose.test.cpp --golden" % POSE_JSON)
+    pose = json.load(io.open(POSE_JSON, encoding="utf8"))
+    works = pose["works"]
+    legs = body["legRows"]
+    parts = body["parts"]
+
+    nf = len(works[0]["frames"])
+    W = args.cell * nf
+    H = args.cell * len(works)
+    px = bytearray([18, 16, 26] * (W * H))
+
+    def put(x, y, rgb):
+        if 0 <= x < W and 0 <= y < H:
+            i = (y * W + x) * 3
+            px[i], px[i + 1], px[i + 2] = rgb
+
+    def box(cx, cy, hw, hh, rgb):
+        for y in range(int(cy - hh), int(cy + hh) + 1):
+            for x in range(int(cx - hw), int(cx + hw) + 1):
+                put(x, y, rgb)
+
+    COAT = (232, 230, 240)
+    VISOR = (12, 12, 18)
+    EYE = (255, 198, 60)
+    GROUND = (58, 48, 82)
+    HIND = (150, 235, 175)     # takes the weight — must stay on the floor
+    FORE = (255, 150, 120)     # leaves the ground — that is the point
+    SCALE = args.cell / 780.0
+
+    for r, w in enumerate(works):
+        hind = parts[legs[0]]
+        hip_x = hind["loc"][0]
+        hip_z = hind["loc"][2] + hind["scale"][2] * 50.0   # top of the hind leg
+        for f, fr in enumerate(w["frames"]):
+            ox, oy = f * args.cell, r * args.cell
+            gy = oy + int(args.cell * 0.90)
+            for x in range(ox, ox + args.cell):
+                put(x, gy, GROUND)
+            cx = ox + args.cell // 2
+            pitch = math.radians(fr["torsoPitch"])
+            for i, p in enumerate(parts):
+                loc, sc = p["loc"], p["scale"]
+                col = COAT
+                if p["mat"] == "Visor":
+                    col = VISOR
+                elif p["mat"] == "Eye":
+                    col = EYE
+                x_uu, z_uu = loc[0], loc[2]
+                if i in legs:
+                    li = legs.index(i)
+                    z_uu += fr["legRise"][li]
+                    # The pitch is drawn as a lean on the limb, which is what
+                    # reads at this size; the exact hip solve is the engine's.
+                    x_uu += math.sin(math.radians(fr["legPitch"][li])) * 40.0
+                    col = HIND if li < 2 else FORE
+                else:
+                    # Everything above the hips rides the torso: rise, then
+                    # rotate about the haunch so the chest comes UP and BACK.
+                    z_uu += fr["torsoRise"]
+                    dx, dz = x_uu - hip_x, z_uu - hip_z
+                    x_uu = hip_x + dx * math.cos(pitch) - dz * math.sin(pitch)
+                    z_uu = hip_z + dx * math.sin(pitch) + dz * math.cos(pitch)
+                box(cx + x_uu * SCALE, gy - z_uu * SCALE,
+                    max(1.0, sc[0] * 50.0 * SCALE), max(1.0, sc[2] * 50.0 * SCALE), col)
+
+    write_png(args.out, W, H, px)
+    print("render-gait-strip: %s  %dx%d  upright rows=%s (poses read from the engine)"
+          % (args.out, W, H, ",".join(w["name"] for w in works)))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="/tmp/gait-strip.png")
     ap.add_argument("--frames", type=int, default=8)
     ap.add_argument("--cell", type=int, default=210)
+    ap.add_argument("--mode", choices=("gait", "upright"), default="gait")
     args = ap.parse_args()
 
     for path in (BODY_JSON, GOLDEN_JSON):
         if not os.path.isfile(path):
             raise SystemExit("render-gait-strip: missing %s" % path)
     body = json.load(io.open(BODY_JSON, encoding="utf8"))
+    if args.mode == "upright":
+        return render_upright(args, body)
     golden = json.load(io.open(GOLDEN_JSON, encoding="utf8"))
     worst = check_parity(golden)
 

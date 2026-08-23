@@ -140,6 +140,15 @@ void AWonderlandStrollingDog::PoseUpright(float Blend, WonderlandPose::EWork Wor
 			+ FVector(0.0f, Up.LegSpread[i], Up.LegRise[i]));
 		Leg->SetRelativeRotation(Leg->GetRelativeRotation()
 			+ FRotator(Up.LegPitchDeg[i], 0.0f, 0.0f));
+		// THE HIND LEGS SPAN THE RAISED HIP. Without this the body leaves its
+		// own legs as it rears — measured at 52% of a leg length before the
+		// pose was corrected, and the stretch is the half of the fix that has
+		// to reach the actual components.
+		if (i < 2 && Up.HindStretch != 1.0f)
+		{
+			const FVector Rest = Rig.LegRestScale[i];
+			Leg->SetRelativeScale3D(FVector(Rest.X, Rest.Y, Rest.Z * Up.HindStretch));
+		}
 	}
 	if (Rig.Torso != nullptr)
 	{

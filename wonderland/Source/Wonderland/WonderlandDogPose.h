@@ -76,6 +76,15 @@ namespace WonderlandPose
 		float LegSpread[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		/** Tail counterbalances backwards as the chest comes up. */
 		float TailPitchDeg = 0.0f;
+		/** Length multiplier for the HIND legs while rearing.
+		 *
+		 *  A planted hind leg is rigid and its paw does not move, so if the hip
+		 *  rises the leg has to span further — exactly the problem LegSwing
+		 *  solves for the gait, and it was missed here. The first version raised
+		 *  the torso 0.62 of a leg while the hind legs stayed at rest length,
+		 *  which detaches the body from its own legs by 52% of a leg. Found by
+		 *  drawing it: the strip put the body visibly above its own haunches. */
+		float HindStretch = 1.0f;
 	};
 
 	/**

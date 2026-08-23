@@ -23,8 +23,51 @@ static void Check(const std::string& Name, bool Ok, const std::string& Detail = 
 	          Detail.empty() ? "" : "\n         ", Detail.c_str()); }
 }
 
-int main()
+static int EmitGolden()
 {
+	using namespace WonderlandPose;
+	const float Leg = 119.6f;
+	const EWork Works[] = { EWork::Meditating, EWork::Channelling, EWork::Placing,
+	                        EWork::Inspecting, EWork::Repairing, EWork::Approving };
+	const int NW = int(sizeof(Works) / sizeof(Works[0]));
+	std::printf("{\n  \"note\": \"emitted by WonderlandDogPose.test.cpp --golden; do not hand-edit\",\n");
+	std::printf("  \"legLength\": %.1f,\n  \"works\": [\n", Leg);
+	for (int w = 0; w < NW; ++w)
+	{
+		const EWork W = Works[w];
+		std::printf("    {\"name\": \"%s\", \"uprightTarget\": %.4f, \"frames\": [\n",
+		            WorkName(W), UprightTargetFor(W));
+		const int NF = 8;
+		for (int f = 0; f < NF; ++f)
+		{
+			// Frames 0..3 rise; 4..7 hold the pose and cycle the work phase.
+			const float T = f / float(NF - 1);
+			const float Blend = (f < 4) ? (UprightTargetFor(W) * (f / 3.0f))
+			                            : UprightTargetFor(W);
+			const float Phase = (f < 4) ? 0.0f : ((f - 4) / 4.0f);
+			const FUprightPose P = UprightPose(Blend, Leg, Phase, W);
+			std::printf("      {\"blend\": %.4f, \"phase\": %.4f, \"torsoRise\": %.4f, "
+			            "\"torsoPitch\": %.4f, \"headPitch\": %.4f, \"headRise\": %.4f, "
+			            "\"tailPitch\": %.4f, \"legRise\": [%.4f,%.4f,%.4f,%.4f], "
+			            "\"legPitch\": [%.4f,%.4f,%.4f,%.4f], "
+			            "\"legSpread\": [%.4f,%.4f,%.4f,%.4f]}%s\n",
+			            Blend, Phase, P.TorsoRise, P.TorsoPitchDeg, P.HeadPitchDeg,
+			            P.HeadRise, P.TailPitchDeg,
+			            P.LegRise[0], P.LegRise[1], P.LegRise[2], P.LegRise[3],
+			            P.LegPitchDeg[0], P.LegPitchDeg[1], P.LegPitchDeg[2], P.LegPitchDeg[3],
+			            P.LegSpread[0], P.LegSpread[1], P.LegSpread[2], P.LegSpread[3],
+			            (f + 1 < NF) ? "," : "");
+			(void)T;
+		}
+		std::printf("    ]}%s\n", (w + 1 < NW) ? "," : "");
+	}
+	std::printf("  ]\n}\n");
+	return 0;
+}
+
+int main(int argc, char** argv)
+{
+	if (argc > 1 && std::string(argv[1]) == "--golden") { return EmitGolden(); }
 	using namespace WonderlandPose;
 	const float Leg = 119.6f;
 
@@ -104,8 +147,39 @@ int main()
 		Check("the forepaws DO leave the ground",
 		      Up.LegRise[2] > Leg * 0.4f && Up.LegRise[3] > Leg * 0.4f,
 		      std::to_string(Up.LegRise[2]) + " uu");
-		Check("the chest rises by over half a leg", Up.TorsoRise > Leg * 0.5f,
-		      std::to_string(Up.TorsoRise) + " uu");
+		{
+			// Where the chest actually ends up, pitching about the hind hip.
+			const float HipZ = Leg;                  // top of a rest-length hind leg
+			const float ChestX = 84.0f, ChestZ = 164.0f;   // canonical torso front
+			const float Rad = Up.TorsoPitchDeg * 3.14159265f / 180.0f;
+			const float Dx = ChestX - (-59.8f), Dz = (ChestZ + Up.TorsoRise) - HipZ;
+			const float ChestUp = HipZ + Dx * std::sin(Rad) + Dz * std::cos(Rad);
+			Check("the chest ends up over half a leg above its resting height",
+			      (ChestUp - ChestZ) > Leg * 0.5f,
+			      "chest " + std::to_string(ChestZ) + " -> " + std::to_string(ChestUp) + " uu");
+		}
+		// THE BODY MUST NOT LEAVE ITS OWN LEGS. A planted hind paw does not
+		// move, so whatever the hip rises by, the leg has to span. The first
+		// version lifted the torso 0.62 of a leg with the hind legs at rest
+		// length and the body detached by 52% of one — found by DRAWING it,
+		// after every numeric check had passed.
+		{
+			float WorstGap = 0.0f;
+			for (const EWork W : { EWork::Meditating, EWork::Channelling, EWork::Placing,
+			                       EWork::Inspecting, EWork::Repairing, EWork::Approving })
+			{
+				for (int i = 0; i <= 200; ++i)
+				{
+					const FUprightPose P = UprightPose(i / 200.0f, Leg, 0.3f, W);
+					// The hip rises with the torso; the leg reaches Leg*HindStretch.
+					const float HipRise = P.TorsoRise;
+					const float Reach = Leg * P.HindStretch;
+					WorstGap = std::fmax(WorstGap, std::fabs((Leg + HipRise) - Reach));
+				}
+			}
+			Check("a planted hind leg always spans from paw to raised hip",
+			      WorstGap < 0.05f, "worst gap " + std::to_string(WorstGap) + " uu");
+		}
 		Check("...and the body pitches back rather than levitating",
 		      Up.TorsoPitchDeg > 35.0f, std::to_string(Up.TorsoPitchDeg) + " deg");
 		// The head must NOT end up staring at the sky.
