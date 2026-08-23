@@ -84,24 +84,24 @@
           "note": "native; TSR is AA here, not an upscaler"
         },
         "r.TSR.History.ScreenPercentage": {
-          "value": 200,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "Epic/Cinematic default; 'higher values reduce reprojection blur'"
+          "value": 100,
+          "source": "measured",
+          "note": "MEASURED ON THE STREAM 2026-08-23. BALANCED's TSR history was costing 31% of the DELIVERED detail: acutance 4.760 with it, 6.921 with TSR at engine defaults, same build, same camera, same sharpen, same exposure. The earlier note that TSR history was 'ruled out by measurement' was measured on the wrong axis - history accumulation smears a scene whose camera is static and whose Dogs move, which is exactly this scene."
         },
         "r.TSR.History.SampleCount": {
-          "value": 16,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "the documented default"
+          "value": 8,
+          "source": "measured",
+          "note": "Halved with the history screen percentage; see that note."
         },
         "r.TSR.ShadingRejection.SampleCount": {
           "value": 2.0,
           "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "'lower = clearer but less stable'"
+          "note": "Left at its value; the history size was the lever, measured separately."
         },
         "r.TSR.Velocity.WeightClampingSampleCount": {
           "value": 2.0,
           "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "default 4.0 'at the expense of additional blur'; 2.0 is the documented sharper setting"
+          "note": "Left at its value; the history size was the lever, measured separately."
         },
         "r.TSR.ShadingRejection.Flickering": {
           "value": 1,
@@ -111,12 +111,12 @@
         "r.TSR.RejectionAntiAliasingQuality": {
           "value": 2,
           "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "spatial AA where history is rejected"
+          "note": "Left at its value; the history size was the lever, measured separately."
         },
         "r.TSR.Resurrection": {
           "value": 1,
           "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "on at Medium and above"
+          "note": "Left at its value; the history size was the lever, measured separately."
         },
         "r.MotionBlurQuality": {
           "value": 0,

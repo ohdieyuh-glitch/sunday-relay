@@ -2151,7 +2151,7 @@ def build(layout):
             _part("sphere", bx_, by_, bz_,
                   d / 100.0, d / 100.0, d / 100.0, mat, "%s_canopy%d" % (label, i))
             if "leafcard" in MATS:
-                ncards = (11 if giant else 4)
+                ncards = (6 if giant else 4)
                 for k in range(ncards):
                     # golden-angle spiral, biased to the upper hemisphere where
                     # the light is and where the outline is actually read
@@ -2163,7 +2163,7 @@ def build(layout):
                     px_ = bx_ + math.cos(aa) * rr * d * 0.475
                     py_ = by_ + math.sin(aa) * rr * d * 0.475
                     pz_ = bz_ + zc * d * 0.475
-                    cw = d * 0.0052 * (0.8 + ((k * 7 + i * 3) % 5) * 0.1)
+                    cw = d * (0.0034 if giant else 0.0052) * (0.8 + ((k * 7 + i * 3) % 5) * 0.1)
                     _part("cube", px_, py_, pz_, cw, 0.02, cw * 1.15,
                           "leafcard_hi" if (k + i) % 2 else "leafcard",
                           "%s_lc%d_%d" % (label, i, k),
@@ -5622,12 +5622,16 @@ def build(layout):
                      (0.62 + 0.20 * ((_r * 3) % 2)) * _gs, "GreatRoot%d_%d" % (_i, _r))
         # a ring of alpha-cut cards around the crown, so its edge is ragged
         if "leafcard" in MATS:
-            for _c in range(9):
-                _ca = _c * 0.698 + _i
-                _part("cube", _gx + math.cos(_ca) * 330.0 * _gs,
-                      _gy + math.sin(_ca) * 300.0 * _gs,
-                      (980.0 * _gs) + math.sin(_ca * 1.4) * 120.0 * _gs,
-                      3.4 * _gs, 0.03, 3.4 * _gs,
+            # SIX, NOT NINE, AND SMALLER. Measured: GreatTree2's cards alone
+            # owned 18.8% of the arrival frame's top third, and the top third
+            # was 76.7% covered against a reference that is roughly half sky.
+            # A canopy that roofs the shot is not a frame, it is a lid.
+            for _c in range(6):
+                _ca = _c * 1.047 + _i
+                _part("cube", _gx + math.cos(_ca) * 430.0 * _gs,
+                      _gy + math.sin(_ca) * 390.0 * _gs,
+                      (1180.0 * _gs) + math.sin(_ca * 1.4) * 120.0 * _gs,
+                      2.0 * _gs, 0.03, 2.0 * _gs,
                       "leafcard_hi" if _c % 2 else "leafcard",
                       "GreatTreeCard%d_%d" % (_i, _c),
                       rot=(float((_c * 37) % 60) - 30.0, float((_c * 61) % 360),
