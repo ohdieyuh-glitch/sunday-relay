@@ -113,9 +113,30 @@ namespace WonderlandStance
 		 *  a quadruped torso is carried long and low, a standing one is tall. */
 		float TorsoRise = 0.0f;
 		/** The head stays LEVEL and forward-facing however the torso moves --
-		 *  the visor is the identity and it must read. */
+		 *  the visor is the identity and it must read.
+		 *
+		 *  LEVEL MEANS NEAR ZERO, NOT "COUNTER-ROTATED". Every part of this Dog
+		 *  is a SIBLING hanging off the actor root, not a child of the torso,
+		 *  so nothing the torso does propagates to the head. The first version
+		 *  set this to +80 to cancel the torso's -82 and drew a Dog looking
+		 *  straight up -- caught by render-stance-strip.py before a GPU minute
+		 *  was spent on it. */
 		float HeadRise = 0.0f;
 		float HeadPitchDeg = 0.0f;
+		/** ALONG THE FACING AXIS, and this is the half that was missing.
+		 *
+		 *  Standing is not just a rise. The canonical head sits well FORWARD of
+		 *  the torso centre, because a quadruped carries it out over its
+		 *  shoulders; standing, it has to come BACK over the body or the Dog
+		 *  reads as lunging rather than standing. Same for the limbs: the hind
+		 *  legs gather under the hips and the forelegs come back to the
+		 *  shoulders to hang as arms.
+		 *
+		 *  Raising everything in Z and leaving X alone was the first version's
+		 *  mistake, and it drew a Dog leaning forty degrees into the wind. */
+		float HeadForward = 0.0f;
+		float LegForward[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		float TailForward = 0.0f;
 		/** Standing legs: straighten, and spread slightly for a stable base. */
 		float LegRise[4]     = { 0.0f, 0.0f, 0.0f, 0.0f };
 		float LegPitchDeg[4] = { 0.0f, 0.0f, 0.0f, 0.0f };

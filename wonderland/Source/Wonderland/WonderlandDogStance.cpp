@@ -78,18 +78,33 @@ FStandingPose StandingPose(float Blend, float LegLength, float TorsoLength)
 	// The torso comes vertical. Negative pitch lifts the chest.
 	Out.TorsoPitchDeg = -82.0f * B;
 
-	// Standing, the body's own LENGTH becomes its height, and its centre
-	// therefore rises by about half of it. This is the single measurement that
-	// makes the silhouette match the sheet: too little and the Dog is a
-	// begging dog, too much and it is a humanoid wearing a dog's head.
-	Out.TorsoRise = (0.42f * TorsoLength + 0.10f * LegLength) * B;
+	// STANDING HEIGHT IS NOT A TASTE, IT IS A STACK. The body has to sit ON
+	// the legs, and where that is follows from the canonical numbers rather
+	// than from how it looks:
+	//
+	//     the legs span   0 .. LegLength          so the hip is at LegLength
+	//     the torso is    TorsoLength tall once it is vertical
+	//     its centre must therefore be at  LegLength + TorsoLength/2
+	//
+	// and the rise is the difference between that and where the torso rests in
+	// the quadruped -- roughly 0.24 of a body length for this Dog's
+	// proportions. The first version used 0.42 and left a visible GAP between
+	// the torso and its own legs, which the offline strip showed at a glance
+	// and no amount of reading the code would have.
+	Out.TorsoRise = 0.24f * TorsoLength * B;
 
-	// THE HEAD STAYS LEVEL. The torso pitches 82 degrees; if the head rode it
-	// the Dog would face the sky and the visor -- the identity -- would be
-	// invisible from the arrival camera. So the head counter-rotates almost
-	// exactly, and rises to sit on top of the standing torso.
-	Out.HeadPitchDeg = 80.0f * B;
-	Out.HeadRise = (0.52f * TorsoLength + 0.10f * LegLength) * B;
+	// THE HEAD STAYS LEVEL -- which for this rig means it barely rotates at
+	// all. Every part is a SIBLING on the actor root, so the torso's -82
+	// degrees does not reach the head; counter-rotating it by +80 to "cancel"
+	// that was cancelling something that was never applied, and it drew a Dog
+	// staring at the sky. A few degrees of lift is all a standing animal does.
+	Out.HeadPitchDeg = -5.0f * B;
+	// The head then sits on TOP of that torso, by the same stack.
+	Out.HeadRise = 0.58f * TorsoLength * B;
+	// ...AND COMES BACK OVER THE BODY. The canonical head sits 0.65 of a body
+	// length forward, carried out over the shoulders the way a quadruped does.
+	// Standing, that has to come back or the silhouette leans.
+	Out.HeadForward = -0.62f * TorsoLength * B;
 
 	// STANDING LEGS (0 left-hind, 1 right-hind). They straighten under the
 	// body and spread a little, because a narrow base reads as unstable and
@@ -100,6 +115,10 @@ FStandingPose StandingPose(float Blend, float LegLength, float TorsoLength)
 		Out.LegRise[i] = 0.0f;                      // feet stay on the ground
 		Out.LegPitchDeg[i] = -6.0f * B;             // shins come under the hips
 		Out.LegSpread[i] = Side * 0.10f * LegLength * B;
+		// The hind legs GATHER UNDER THE HIPS. At rest they are set back
+		// behind the body; a standing figure's feet are beneath its mass or it
+		// falls over backwards.
+		Out.LegForward[i] = 0.30f * TorsoLength * B;
 	}
 
 	// ARMS (2 left-fore, 3 right-fore). These are the forelegs, re-carried.
@@ -110,7 +129,17 @@ FStandingPose StandingPose(float Blend, float LegLength, float TorsoLength)
 	{
 		const int Limb = 2 + i;
 		const float Side = (i == 0) ? -1.0f : 1.0f;
-		Out.LegRise[Limb] = (0.72f * TorsoLength + 0.10f * LegLength) * B;
+		// AN ARM HANGS FROM THE SHOULDER, IT DOES NOT STRADDLE IT. This places
+		// the limb's CENTRE half a limb BELOW the shoulder, so the whole arm is
+		// below the joint the way the sheet draws it. The first version put the
+		// centre AT shoulder height, which left half of each forelimb sticking
+		// up past the Dog's own shoulders -- visible immediately in the offline
+		// strip, invisible in any amount of reasoning about it.
+		//
+		//   standing torso top  ~= TorsoRise + torso half-height
+		//   shoulder            ~= just below that
+		//   arm centre          == shoulder - half the arm's length
+		Out.LegRise[Limb] = 0.88f * TorsoLength * B;
 		Out.ArmRise[i] = Out.LegRise[Limb];
 		// The foreleg's rest orientation points DOWN-and-forward under the
 		// chest; hanging at the side is a small correction from that, not a
@@ -119,11 +148,17 @@ FStandingPose StandingPose(float Blend, float LegLength, float TorsoLength)
 		Out.LegPitchDeg[Limb] = Out.ArmPitchDeg[i];
 		Out.ArmOutDeg[i] = Side * 7.0f * B;
 		Out.LegSpread[Limb] = Side * 0.16f * LegLength * B;
+		// The forelegs come BACK to the shoulders. At rest they are out under
+		// the chest; hanging arms belong just forward of the body's centre.
+		Out.LegForward[Limb] = -0.30f * TorsoLength * B;
 	}
 
 	// The tail curls out and back, as drawn. It also counterweights the chest
-	// coming up, which is what a real animal does with it.
+	// coming up, which is what a real animal does with it -- and it comes
+	// FORWARD toward the body, because standing gathers the whole animal into
+	// a column instead of spreading it along the ground.
 	Out.TailPitchDeg = -34.0f * B;
+	Out.TailForward = 0.34f * TorsoLength * B;
 
 	// A PLANTED FOOT DOES NOT MOVE, so a rising hip has to be reached FROM.
 	// Without this the body detaches from its own legs -- the exact defect

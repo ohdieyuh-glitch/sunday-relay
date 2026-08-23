@@ -244,8 +244,18 @@ int main()
 	{
 		const FStandingPose S = StandingPose(1.0f, LegLength, TorsoLength);
 		Check(S.TorsoPitchDeg < -60.0f, "standing, the torso is vertical, not pitched back");
-		Check(std::fabs(S.TorsoPitchDeg + S.HeadPitchDeg) < 12.0f,
+		// LEVEL IS AN ABSOLUTE CLAIM, not a relative one. Every part hangs off
+		// the actor root, so "level" means the head's own pitch is near zero --
+		// NOT that it cancels the torso's. The first version asserted the
+		// cancellation and passed happily while drawing a Dog looking at the
+		// sky, which is a test agreeing with a bug because both shared a wrong
+		// model of the rig.
+		Check(std::fabs(S.HeadPitchDeg) < 12.0f,
 		      "the head stays LEVEL so the visor and gold eyes face the camera");
+		Check(S.HeadForward < -0.4f * TorsoLength,
+		      "the head comes BACK over the body instead of leading it");
+		Check(S.LegForward[0] > 0.0f && S.LegForward[2] < 0.0f,
+		      "the legs gather under the hips and the arms come back to the shoulders");
 		Check(S.HeadRise > S.TorsoRise,
 		      "the head sits ON TOP of the standing torso");
 		Check(S.ArmRise[0] > 0.5f * TorsoLength,
