@@ -579,6 +579,34 @@ elif command -v g++ >/dev/null 2>&1; then
     bad "the gait math does not compile"
   fi
 fi
+echo
+echo "== a Relay Dog stands up without teleporting into the pose =="
+# "No instant pose swap" is a claim about CONTINUITY, and continuity is
+# arithmetic — so it is compiled and proven here rather than judged from a
+# stream. So is "the hind paws stay planted", which is the difference between
+# a Dog standing up and a Dog hovering.
+POSE_TEST="$HERE/../../tests/cpp/WonderlandDogPose.test.cpp"
+POSE_SRC="$GAIT_DIR/WonderlandDogPose.cpp"
+if [ ! -f "$POSE_TEST" ]; then
+  bad "the upright-pose proof is missing from $POSE_TEST"
+elif command -v g++ >/dev/null 2>&1; then
+  POSE_BIN="$(mktemp -u)"
+  if g++ -std=c++17 -O1 -I "$GAIT_DIR" -o "$POSE_BIN" "$POSE_SRC" "$POSE_TEST" 2>/dev/null; then
+    POSE_OUT="$("$POSE_BIN" 2>&1)"; rm -f "$POSE_BIN"
+    if printf '%s' "$POSE_OUT" | grep -q 'failed 0'; then
+      while IFS= read -r line; do
+        case "$line" in "  ok   "*) ok "${line#  ok   }" ;; esac
+      done <<< "$POSE_OUT"
+    else
+      bad "the upright pose fails: $(printf '%s' "$POSE_OUT" | grep FAIL | head -3)"
+    fi
+  else
+    bad "the upright pose does not compile"
+  fi
+else
+  bad "g++ is unavailable, so the upright-pose proof did not run"
+fi
+
 SD="$GAIT_DIR/WonderlandStrollingDog.cpp"
 # READ IT ONCE, MATCH WITHOUT A PIPE. Every check below used
 #     sed 's|//.*||' "$SD" | grep -q '<thing>'
