@@ -667,6 +667,36 @@ else
   bad "g++ is unavailable, so the upright-pose proof did not run"
 fi
 
+echo
+echo "== the UPRIGHT Relay Dog walks like a being, not like a block =="
+# The founder's bar for the upright form is "must not look like a Minecraft
+# character": no jitter, no snapping, no sliding, no pose stepping, no
+# whole-body-as-one-block. Every one of those is a property of the ARITHMETIC,
+# so every one is decided here rather than judged from a stream -- which is the
+# same reason the quadruped gait is a separate file, and it is why that walk
+# stopped sliding.
+STANCE_TEST="$HERE/../../tests/cpp/WonderlandDogStance.test.cpp"
+STANCE_SRC="$GAIT_DIR/WonderlandDogStance.cpp"
+if [ ! -f "$STANCE_TEST" ]; then
+  bad "the upright-stance proof is missing from $STANCE_TEST"
+elif command -v g++ >/dev/null 2>&1; then
+  STANCE_BIN="$(mktemp -u)"
+  if g++ -std=c++17 -O1 -I "$GAIT_DIR" -o "$STANCE_BIN" "$STANCE_SRC" "$STANCE_TEST" 2>/dev/null; then
+    STANCE_OUT="$("$STANCE_BIN" 2>&1)"; rm -f "$STANCE_BIN"
+    if printf '%s' "$STANCE_OUT" | grep -q 'failed 0'; then
+      while IFS= read -r line; do
+        case "$line" in "  ok   "*) ok "${line#  ok   }" ;; esac
+      done <<< "$STANCE_OUT"
+    else
+      bad "the upright stance fails: $(printf '%s' "$STANCE_OUT" | grep FAIL | head -3)"
+    fi
+  else
+    bad "the upright stance does not compile"
+  fi
+else
+  bad "g++ is unavailable, so the upright-stance proof did not run"
+fi
+
 SD="$GAIT_DIR/WonderlandStrollingDog.cpp"
 # READ IT ONCE, MATCH WITHOUT A PIPE. Every check below used
 #     sed 's|//.*||' "$SD" | grep -q '<thing>'
