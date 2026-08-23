@@ -167,7 +167,27 @@ LOOK = {
     # fifth of the frame sitting in the highlight roll-off loses its hue by
     # construction, whatever the material underneath says. It is also why every
     # attempt to fix the grey by ADDING light made it greyer.
-    "sunLux": 1150.0,
+    # 1150 -> 2600. MEASURED AGAINST THE ONE THING IN THE FRAME THAT IS NOT
+    # LIT AT ALL. The Marble backdrop is an unlit painted skyline: its
+    # brightness is fixed by its texture and does not move when the world's
+    # lighting does. So it is a RULER. Against it, the entire lit world was
+    # 1.14 stops down -- median luma 59/255 against the backdrop's 135, a 2.2x
+    # gap in linear luminance.
+    #
+    # That single fact explains every measurement this session, including the
+    # ones I read wrongly. "The lit path carries 2.4x less chroma than the
+    # unlit Marble at matched luma" was true and was not a material defect:
+    # the lit world was simply sitting a stop and a bit below the exposure the
+    # frame was graded for, where sRGB has little room left to hold a hue. The
+    # frame's own chroma curve says so -- 0.316 at luma 0.50-0.60, which BEATS
+    # the founder's reference at 0.273, and 0.063 at luma 0.10-0.20 where two
+    # thirds of the world was sitting.
+    #
+    # This holds under either answer to the metering question the file argues
+    # with itself about, which is why it is the right lever: the Marble does
+    # not scale with the lighting, so raising the lighting improves the RATIO
+    # whether or not auto-exposure then re-meters both.
+    "sunLux": 2600.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -293,7 +313,15 @@ LOOK = {
     # and it cannot take over the job. Turning the sky down therefore does not
     # trade blue shadow for warm shadow -- it trades blue shadow for BLACK.
     # So the amount goes back, and the COLOUR is what gets fixed instead.
-    "skyIntensity": 6.80,
+    # 6.80 -> 20.0, raised HARDER than the key (2.9x against the sun's 2.3x).
+    # Both ends of this frame were crushed, not one: 64.6% of it sat below luma
+    # 0.40 carrying half the reference's chroma, while the brightest decile of
+    # every single material had converged on near-white at saturation 0.01-0.17.
+    # A wider key would deepen that. The sky is what lifts the SHADOW end, and
+    # the shadow end is where most of Wonderland lives -- 59% of the foliage and
+    # 73% of the leaf cards are in it. Lifting fill faster than key narrows the
+    # ratio, which is the actual shape of the defect.
+    "skyIntensity": 20.0,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -327,7 +355,14 @@ LOOK = {
     # 25.7% for the founder's own reference image. Colour crushed to black is
     # not a palette problem, and saturating materials to fix it would have been
     # work in the wrong place.
-    "gain": (0.67, 0.67, 0.70),
+    # 0.67 -> 0.82. This was set to stop a wash, and it did -- but the wash it
+    # was set against was the 14,000-lumen gold lantern cast, and that was
+    # found and fixed at the light. What is left for it to darken is a frame
+    # that is already more than a stop under its own backdrop, so it had
+    # stopped being a correction and become part of the problem. Lifted, not
+    # removed: the highlight end still needs holding, and gainHighlights is the
+    # instrument for that, not this.
+    "gain": (0.82, 0.82, 0.85),
     # RAISED 1.52 -> 1.78. Saturation was tuned while the frame carried a
     # false gold cast, and in that state it multiplied the CAST rather than the
     # palette -- which is why it was correct to be suspicious of it. The cast is
