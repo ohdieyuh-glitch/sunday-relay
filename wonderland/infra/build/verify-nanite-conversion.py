@@ -23,6 +23,7 @@ walked with the offline stub -- on a laptop, in seconds.
 import importlib.util
 import io
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -56,15 +57,30 @@ def main():
     exec(compile(src, GEN, "exec"), ns)
     got = ns["_WL_NAN"]
 
-    off = os.environ.get("WONDERLAND_NANITE", "1") == "0"
+    # READ THE DEFAULT FROM THE CODE, never assume it. This validator asserted
+    # a default of "1" and started failing the moment the default was flipped
+    # to "0" on measurement -- a check that encodes a policy it does not own
+    # will fail honest changes and get switched off.
+    m = re.search(r'os\.environ\.get\(\s*"WONDERLAND_NANITE"\s*,\s*"([01])"\s*\)', src)
+    if not m:
+        print("FAIL: cannot find the WONDERLAND_NANITE default in the generator; "
+              "this validator has drifted from the code it checks.")
+        return 1
+    default_on = m.group(1) != "0"
+    off = os.environ.get("WONDERLAND_NANITE", m.group(1)) == "0"
     conv = got.get("converted")
     err = got.get("error")
 
     if off:
         if conv:
-            print("FAIL: WONDERLAND_NANITE=0 but the conversion still ran.")
+            print("FAIL: Nanite is OFF but the conversion still ran.")
             return 1
-        print("PASS: WONDERLAND_NANITE=0 — conversion correctly skipped.")
+        print("PASS: Nanite is OFF (default %s) — conversion correctly skipped."
+              % ("on" if default_on else "off"))
+        print("      MEASURED: Nanite halves the frame rate in this world "
+              "(5/7/8 fps against 14/15/10) for an identical frame. It is built "
+              "for high-poly meshes; this world is 137,816 primitives of 12-1,900 "
+              "triangles. WONDERLAND_NANITE=1 re-enables it.")
         return 0
 
     if err:

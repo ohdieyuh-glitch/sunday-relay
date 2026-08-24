@@ -2707,7 +2707,25 @@ def build(layout):
     # r.ScreenPercentage 70, half the pixel work, changed the frame rate by
     # nothing. WONDERLAND_NANITE=0 puts the engine primitives back in one cook.
     _NANITE_MESH = {}
-    if os.environ.get("WONDERLAND_NANITE", "1") != "0":
+    # DEFAULT OFF, BY MEASUREMENT. Nanite was the right hypothesis for a
+    # geometry-bound world and it is the WRONG TOOL FOR THIS ONE. With SM6
+    # confirmed active (SF_VULKAN_SM6 in the runtime log) and five primitives
+    # converted, the stream delivered 5, 7 and 8 fps against 14, 15 and 10
+    # without it -- half the frame rate -- and the frame was visually identical
+    # (mean |delta| 7.5 / 255).
+    #
+    # The reason is in the numbers this world is made of: Nanite is built for
+    # high-polygon meshes, and Wonderland is 137,816 instances of primitives
+    # between 12 and 1,900 triangles. Its per-cluster overhead costs more than
+    # the triangles it saves at that size. GPU utilisation FELL from 99% to 42%
+    # while the frame rate halved, which is the signature of the bottleneck
+    # leaving the GPU rather than the work getting cheaper.
+    #
+    # Kept, not deleted, and switchable with WONDERLAND_NANITE=1: the mechanism
+    # is correct and gated, and if Wonderland ever carries real high-poly
+    # geometry this becomes the right answer. The measurement above is what
+    # stops it being retried blind.
+    if os.environ.get("WONDERLAND_NANITE", "0") != "0":
         try:
             _NANITE_MESH = wl_naniteise_primitives()
         except Exception as _nse:
