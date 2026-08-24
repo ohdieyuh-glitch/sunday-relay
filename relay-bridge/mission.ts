@@ -367,6 +367,8 @@ export interface MissionRegistryConfig {
   /** Environment the Hermes reviewer configuration is read from. */
   hermesEnv?: NodeJS.ProcessEnv;
   deps?: MissionRoleDeps;
+  /** Authoritative persistence notification, fired after every event/phase mutation. */
+  onUpdate?: (missionId: string, view: LiveMissionUpdate, context: { projectId: string; playerId: string | null }) => void;
 }
 
 /**
@@ -573,6 +575,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     events: [],
   }));
   const evidenceProbes = deps.evidenceProbes ?? [];
+  const notify = (rec: MissionRecord): void => { if (config.onUpdate !== undefined) { const view = toView(rec); const context = { projectId: rec.repositoryTarget?.repositoryKey ?? rec.missionId, playerId: rec.startedByParticipant }; queueMicrotask(() => config.onUpdate?.(rec.missionId, view, context)); } };
 
   const append = (rec: MissionRecord, e: BridgeEventInput): void => {
     rec.events.push({
@@ -594,6 +597,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       attestationRef: e.attestationRef === undefined ? undefined : safeText(e.attestationRef),
       artifactRef: e.artifactRef === undefined ? undefined : safeText(e.artifactRef),
     });
+    notify(rec);
   };
 
   /** Persist a phase transition. Called BEFORE the next role begins — the
@@ -602,6 +606,7 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
     rec.phase = phase;
     rec.state = PHASE_STATE[phase];
     rec.currentRole = role ?? PHASE_ROLE[phase] ?? 'relay';
+    notify(rec);
   };
 
   const toAttestationSummaries = (rec: MissionRecord): MissionAttestationSummary[] =>

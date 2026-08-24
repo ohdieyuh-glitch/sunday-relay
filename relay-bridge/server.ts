@@ -68,6 +68,11 @@ import { githubAppConfigFromEnv } from './repository-credential';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute, sessionTokenFrom,
 } from './browser-session/routes';
+import { handleWonderlandRequest, type WonderlandHost, type WonderlandPrincipal } from './wonderland-host';
+import { createWonderlandHost } from './wonderland-host';
+import { createFileWonderlandStore, WonderlandService } from '../src/relay/wonderland';
+import { RelayWonderlandPublisher } from '../src/relay/wonderland';
+import { createPresenceScheduler } from '../src/relay/wonderland';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -222,6 +227,8 @@ export function createBridgeServer(
   /** The durable Project Brain store. Absent on a bridge with no mounted state
    *  root — a verified/shipped run's episode is then not written durably. */
   brainStore: BrainMemoryStore | null = null,
+  /** Hosted Wonderland command/SSE runtime. Null keeps the surface unmounted. */
+  wonderlandHost: WonderlandHost | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -299,6 +306,34 @@ export function createBridgeServer(
 
     void (async () => {
       try {
+        if (wonderlandHost !== null && path.startsWith('/relay-api/wonderland')) {
+          let wonderlandPrincipal: WonderlandPrincipal | undefined;
+          const sessionToken = sessionTokenFrom(typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined);
+          if (sessionToken !== null) {
+            const verified = browserSessions.verifySession({ token: sessionToken, origin, now: Date.now() });
+            if (verified.ok && verified.participantId !== null) {
+              const playerId = verified.participantId;
+              const state = wonderlandHost.service.state();
+              wonderlandPrincipal = {
+                playerId,
+                projectRoles: new Proxy({}, { get: (_target, projectId) => {
+                  if (typeof projectId !== 'string') return undefined;
+                  const registration = repositoryStore?.get(projectId) ?? null;
+                  return registration?.ownerParticipant === playerId ? 'OWNER' : undefined;
+                } }) as Readonly<Record<string, 'OWNER'>>,
+                cardIds: Object.values(state.cards).flat().filter((card) => card.runtimeConfiguration.ownerPlayerId === playerId).map((card) => card.id),
+                agentIds: Object.values(state.cards).flat().filter((card) => card.runtimeConfiguration.ownerPlayerId === playerId && typeof card.runtimeConfiguration.agentId === 'string').map((card) => String(card.runtimeConfiguration.agentId)),
+              };
+            }
+          }
+          const handled = await handleWonderlandRequest({
+            req, res, method,
+            url: new URL(req.url ?? '/', 'http://relay.invalid'),
+            ...(method === 'POST' ? { body: await readBody(req) } : {}),
+            ...(origin !== undefined ? { origin } : {}), ...(wonderlandPrincipal !== undefined ? { principal: wonderlandPrincipal } : {}), cors, host: wonderlandHost,
+          });
+          if (handled) return;
+        }
         if (method === 'GET' && path === '/relay-api/health') {
           // Configuration PRESENCE only — never a value, never a key.
           const architect = architectPreflight(loadArchitectConfig(process.env));
@@ -1131,6 +1166,11 @@ export function main(): void {
     nextEvidenceId: () => `ev-${randomUUID()}`,
   });
 
+  const wonderlandService = config.stateRoot === null
+    ? null
+    : new WonderlandService(createFileWonderlandStore(join(config.stateRoot, 'wonderland', 'state.json')));
+  const wonderlandPublisher = wonderlandService === null ? null : new RelayWonderlandPublisher(wonderlandService);
+
   const registry = createMissionRegistry({
     fusionBaseUrl: config.fusionBaseUrl,
     sundayMode: config.sundayMode,
@@ -1138,6 +1178,10 @@ export function main(): void {
     confirmLive: config.confirmLive,
     baseEnv: process.env,
     architectEnv: process.env,
+    onUpdate: (missionId, view, context) => {
+      if (wonderlandPublisher === null) return;
+      wonderlandPublisher.publishMission(context.projectId, missionId, view, context.playerId ?? undefined);
+    },
     deps: {
       gatherEvidence: liveReach.retrieve,
       /**
@@ -1275,6 +1319,24 @@ export function main(): void {
   const brainStore = config.stateRoot === null
     ? null
     : createBrainMemoryStore({ root: config.stateRoot });
+  /**
+   * WONDERLAND IS HOSTED ONLY WITH DURABLE STATE. The operator principal is
+   * resolved from the bridge credential, never request fields. Participant
+   * sessions are mounted by deployments through the injectable host boundary;
+   * this default gives operators a production-safe administration surface.
+   */
+  const wonderlandHost = wonderlandService === null ? null : createWonderlandHost(
+    wonderlandService,
+    { authenticate(authorization) {
+      if (!bearerMatches(authorization, process.env.RELAY_BRIDGE_TOKEN)) return null;
+      return {
+        playerId: 'relay-operator',
+        projectRoles: new Proxy({}, { get: () => 'OWNER' }) as Readonly<Record<string, 'OWNER'>>,
+        agentIds: [], cardIds: [],
+      };
+    } },
+  );
+  const presenceScheduler = wonderlandService === null ? null : createPresenceScheduler(wonderlandService);
   // One limiter for the process, so its windows are shared across requests.
   const betaLimiter = createBetaRateLimiter();
   const betaWaves: readonly BetaWaveConfig[] = Object.freeze([
@@ -1324,6 +1386,7 @@ export function main(): void {
     liveReach,
     repositoryStore,
     brainStore,
+    wonderlandHost,
   );
 
   /**
@@ -1338,6 +1401,7 @@ export function main(): void {
     shuttingDown = true;
     console.log(`Relay bridge received ${signal} — closing.`);
     scheduler?.stop();
+    presenceScheduler?.stop();
     server.close(() => process.exit(0));
     // A caller that never finishes must not hold the deploy open forever.
     const forced = setTimeout(() => process.exit(0), 10_000);
