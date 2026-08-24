@@ -108,8 +108,22 @@ BUILD_SH="wonderland/infra/build/build-wonderland.sh"
 # they cannot drift apart.
 wl_knob_pairs() {
   local name
+  # EVERY KNOB THE GENERATOR READS MUST BE LISTED HERE. The generator runs
+  # inside the UE container, and docker forwards nothing it is not told to:
+  # a knob missing from this list is not an error, it is SILENTLY INERT. The
+  # frame comes back looking exactly as if the knob had been set and had no
+  # effect, which is indistinguishable from the feature not working.
+  #
+  # That cost a build: WONDERLAND_TEST_STRIP=1 was set, the packaged world came
+  # back with INSTANCED_PIECES=137804 -- byte-identical to the run before it --
+  # and the strip simply was not there. WONDERLAND_MARBLE_BACKDROP_SLUG had
+  # been inert the same way for longer, unnoticed.
+  #
+  # verify-knobs-forwarded.py now fails when the generator reads a WONDERLAND_*
+  # knob this list does not carry, so the next one cannot go quiet.
   for name in WONDERLAND_TEXTURE_DIR WONDERLAND_AUDIO_DIR WONDERLAND_LOOK \
               WONDERLAND_BATCH WONDERLAND_MARBLE_BACKDROP WONDERLAND_MARBLE_IMPORT \
+              WONDERLAND_MARBLE_BACKDROP_SLUG WONDERLAND_TEST_STRIP \
               WONDERLAND_COLLIDE; do
     if [ -n "${!name+set}" ]; then
       printf '%s=%s\n' "$name" "${!name}"
