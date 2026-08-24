@@ -149,6 +149,23 @@ LOOK = {
     #
     # No value in this palette had ever been seen through a working renderer.
     # This is the first honest look at it.
+    # PER-PIXEL PROCEDURAL NOISE, now OFF by default.
+    #
+    # The node below it was added, in its own words, as "the single biggest step
+    # away from a solid-colour graybox WITHOUT EXTERNAL TEXTURES". There are 39
+    # external textures now, and the material test strip proved they draw --
+    # cobblestone, gold leaf and fabric are all legible on the panels. The noise
+    # is doing again, per pixel and at multi-octave cost, what the albedo map
+    # already does from a texture fetch.
+    #
+    # It matters because the usage-flag fix moved the whole world off the
+    # engine's DEFAULT material and onto this one. The old 20.5 FPS baseline was
+    # measured while 38 materials drew a trivial default shader, so it was never
+    # a measurement of this graph. Measured after the fix: 15/16/11 fps, GPU
+    # pinned at 99%.
+    #
+    # >0 restores it at that strength.
+    "baseNoise": 0.0,
     "paletteSaturation": 1.00,
     # How much of its OWN colour every surface emits. See the material loop:
     # thirteen refuted explanations for a correct albedo rendering grey, so the
@@ -1537,6 +1554,8 @@ def build_material_library(texs=None):
         # surface has organic variation instead of dead-flat plastic — the single
         # biggest step away from a solid-colour graybox without external textures.
         try:
+            if float(LOOK["baseNoise"]) <= 0.0:
+                raise RuntimeError("baseNoise=0: the albedo map carries the detail")
             noise = mel.create_material_expression(master, unreal.MaterialExpressionNoise, -460, -360)
             noise.set_editor_property("scale", 0.010)
             noise.set_editor_property("output_min", 0.80)
