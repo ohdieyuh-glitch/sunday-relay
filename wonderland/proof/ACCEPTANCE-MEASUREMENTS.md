@@ -94,3 +94,65 @@ regression from 20.5 or as a win over it.
 
 Both changes had been made together and separated only afterwards. One
 measurement across two changes attributes to the more interesting one.
+
+
+---
+
+# Addendum — the two criteria that were open at the first report
+
+## Sharpness: MET, and it costs nothing
+
+Five levers swept on the real build, acutance measured on the delivered frame:
+
+    r.Tonemapper.Sharpen 0      13.665   (base)
+    r.Tonemapper.Sharpen 0.5    14.064   +2.9%
+    r.Tonemapper.Sharpen 1.0    14.515   +6.2%
+    r.ScreenPercentage 125      14.127   +3.4%
+    r.MipMapLODBias -1          13.682   +0.1%
+
+Sharpen 1.0 taken; ScreenPercentage refused (56% more pixels for half the gain,
+in a world already short of its frame target). MipMapLODBias doing nothing says
+the softness is NOT mip selection, so the reflexive "sharpen the textures"
+would have been wasted work.
+
+Delivered, whole frame:
+
+    goal-start grey   3c61625    acutance 14.279   detail 22.9%
+    colour fixed      b135de3    acutance 13.627   detail 22.3%
+    SHARPENED         0ec5098    acutance 14.626   detail 23.6%
+
+Above the goal-start baseline on both metrics. And ISOLATED on the stream, it
+is free:
+
+    Sharpen 1.0    11, 10, 10, 8 fps
+    Sharpen 0      11, 11,  9, 8 fps
+
+## Frame rate: NOT MET, with the cause narrowed to one thing
+
+Every lever measured. None of them is the answer:
+
+    screen percentage 70 and 125   no change   -> NOT pixel-bound
+    Lumen / shadows / SSR / AO     no change
+    per-pixel material noise       no change
+    Nanite on the primitives       -50%        rejected
+    SM6                            -50%        reverted
+    reduction LODs + HISM          no change
+    r.ForceLOD 2 and 3             no change   -> NOT triangle-bound
+    Marble mesh LODs               no change   -> it is a SHELL: screen size
+                                                  is always ~1.0, so LOD0 is
+                                                  always selected
+    Marble texture capped to 4096  VRAM -44 MiB, no FPS change
+    MARBLE REMOVED ENTIRELY        +40%        13.3 -> 18.7 fps
+
+So the backdrop costs ~40% of the frame and it is not its geometry, not its
+triangle count, and not its texture resolution. What is left is what it IS: a
+592,580-triangle shell wrapped around the camera, so every pixel of sky and
+every gap between spires draws it. That is OVERDRAW, and no LOD or mip setting
+reaches it.
+
+THE FIX, NOT TAKEN HERE: render the panorama as a skybox instead of a mesh
+shell. It is a design change to an asset the founder paid 6,660 credits for,
+and it belongs to them rather than to a late-night guess.
+
+The ~20.5 fps baseline in the goal remains incomparable: it was measured while
+38 materials drew the engine default.
