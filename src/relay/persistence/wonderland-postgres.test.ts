@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
-import { TransactionalWonderlandDatabase, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003 } from './wonderland-postgres';
+import { TransactionalWonderlandDatabase, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004 } from './wonderland-postgres';
 import type { WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
 
 class FakePool {
@@ -23,7 +23,8 @@ describe('Wonderland PostgreSQL migration', () => {
     expect(WONDERLAND_MIGRATION_001).toMatch(/BEGIN;[\s\S]*COMMIT;/);
   });
   it('defines a concurrent reservation ledger with durable idempotency and nonnegative dimensions',()=>{expect(WONDERLAND_MIGRATION_003).toContain('relay_wonderland.budget_reservations');expect(WONDERLAND_MIGRATION_003).toContain('UNIQUE(execution_id,idempotency_key)');expect(WONDERLAND_MIGRATION_003).toContain("state IN('RESERVED','COMMITTED','RELEASED','EXPIRED','DENIED')");expect(WONDERLAND_MIGRATION_003).toContain('CHECK(usd_micros>=0)');expect(WONDERLAND_MIGRATION_003).toContain('committed_amounts jsonb');});
-  it('runs every checked-in migration through the configured PostgreSQL pool', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands).toEqual([WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003]); });
+  it('enforces separate durable Goal/Eval rating history once per battle and Agent',()=>{expect(WONDERLAND_MIGRATION_004).toContain('relay_wonderland.agent_ratings');expect(WONDERLAND_MIGRATION_004).toContain('relay_wonderland.rating_history');expect(WONDERLAND_MIGRATION_004).toContain('PRIMARY KEY(battle_id,agent_id,mode)');});
+  it('runs every checked-in migration through the configured PostgreSQL pool', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands).toEqual([WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004]); });
 });
 
 describe('TransactionalWonderlandDatabase', () => {
@@ -31,5 +32,6 @@ describe('TransactionalWonderlandDatabase', () => {
   it('rolls back every failed transaction and exposes none of its effects', async () => { const pool = new FakePool(); await expect(database(pool).transaction(async () => { throw new Error('event append failed'); })).rejects.toThrow('event append failed'); expect(pool.commands).toEqual(['BEGIN ISOLATION LEVEL SERIALIZABLE','ROLLBACK']); expect(pool.released).toBe(1); });
   it('retries serialization conflicts with a new transaction', async () => { const pool = new FakePool(); let attempts = 0; const value = await database(pool).transaction(async () => { attempts += 1; if (attempts === 1) throw Object.assign(new Error('serialization'), { code: '40001' }); return 42; }); expect(value).toBe(42); expect(attempts).toBe(2); expect(pool.commands).toEqual(['BEGIN ISOLATION LEVEL SERIALIZABLE','ROLLBACK','BEGIN ISOLATION LEVEL SERIALIZABLE','COMMIT']); expect(pool.released).toBe(2); });
   it('restores execution snapshots after a new database facade/process', async () => { const pool = new FakePool(); pool.rows = [{ snapshot: JSON.stringify(session) }]; const restored = await database(pool).transaction(tx => tx.loadExecution('exec-1')); expect(restored).toEqual(session); });
+  it('persists an authoritative rating snapshot and immutable battle history atomically',async()=>{const pool=new FakePool();const stored=await database(pool).transaction(tx=>tx.persistRating({agentId:'agent',mode:'GOAL',rating:1510,deviation:300,volatility:.06,period:1,battleCount:1,provisional:true,updatedAt:'2026-08-24T00:00:00Z',sourceBattleId:'battle'}));expect(stored).toBe(true);expect(pool.commands.some(command=>command.includes('INSERT INTO relay_wonderland.rating_history'))).toBe(true);expect(pool.commands.some(command=>command.includes('INSERT INTO relay_wonderland.agent_ratings'))).toBe(true);});
   it('closes the underlying production pool', async () => { const pool = new FakePool(); await database(pool).close(); expect(pool.ended).toBe(true); });
 });

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { Pool, type PoolConfig, type QueryResultRow } from 'pg';
 import type { ProviderUsageReceipt, WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
 import type { Battle, WonderlandEvent } from '../mission/wonderland/wonderland-backend';
+import type { WonderlandRating } from '../mission/wonderland/wonderland-ratings';
 
 const migration = (name: string): string => {
   const candidates = [join(__dirname, 'wonderland-migrations', name), join(process.cwd(), 'src', 'relay', 'persistence', 'wonderland-migrations', name)];
@@ -13,7 +14,8 @@ const migration = (name: string): string => {
 export const WONDERLAND_MIGRATION_001 = migration('001_wonderland_runtime.sql');
 export const WONDERLAND_MIGRATION_002 = migration('002_wonderland_outbox.sql');
 export const WONDERLAND_MIGRATION_003 = migration('003_wonderland_budget_reservations.sql');
-export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003] as const;
+export const WONDERLAND_MIGRATION_004 = migration('004_wonderland_ratings.sql');
+export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004] as const;
 export interface ClaimedOutbox { outboxId: string; eventId: string; projectId: string; attempts: number; }
 export interface BudgetAmounts { inputTokens: number; cachedTokens: number; outputTokens: number; usdMicros: number; toolCalls: number; computeMs: number; runtimeMs: number; swarmWorkers: number; }
 export interface BudgetReservation { reservationId: string; executionId: string; state: 'RESERVED' | 'COMMITTED' | 'RELEASED' | 'EXPIRED' | 'DENIED'; requested: BudgetAmounts; committed: BudgetAmounts | null; expiresAt: string; receiptId: string | null; denialReason: string | null; }
@@ -28,6 +30,7 @@ export interface WonderlandTransaction {
   reserveBudget(input: { reservationId: string; executionId: string; workerId?: string; operationKey: string; idempotencyKey: string; requested: BudgetAmounts; expiresAt: string; now: string }): Promise<BudgetReservation>;
   commitBudget(reservationId: string, actual: BudgetAmounts, receiptId: string | null, now: string): Promise<BudgetReservation>;
   releaseBudget(reservationId: string, now: string): Promise<BudgetReservation>;
+  persistRating(rating: WonderlandRating): Promise<boolean>;
   insertProviderReceipt(receipt: ProviderUsageReceipt): Promise<boolean>;
   appendEvent(event: Omit<WonderlandEvent, 'sequence'>, streamId: string): Promise<WonderlandEvent>;
   enqueueEvent(event: WonderlandEvent): Promise<void>;
@@ -107,6 +110,13 @@ class PostgresWonderlandTransaction implements WonderlandTransaction {
     if (reservation.state !== 'RESERVED') throw new Error(`budget_reservation_not_releasable:${reservation.state}`);
     const updated = await this.client.query<Record<string, unknown>>(`UPDATE relay_wonderland.budget_reservations SET state='RELEASED',updated_at=$2 WHERE reservation_id=$1 RETURNING *`, [reservationId,now]);
     return this.mapReservation(updated.rows[0]);
+  }
+  async persistRating(rating: WonderlandRating): Promise<boolean> {
+    if (rating.sourceBattleId === null) throw new Error('rating_source_battle_required');
+    const history = await this.client.query(`INSERT INTO relay_wonderland.rating_history(battle_id,agent_id,mode,snapshot) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING`, [rating.sourceBattleId,rating.agentId,rating.mode,json(rating)]);
+    if (history.rowCount !== 1) return false;
+    await this.client.query(`INSERT INTO relay_wonderland.agent_ratings(agent_id,mode,rating,deviation,volatility,period,battle_count,provisional,source_battle_id,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(agent_id,mode) DO UPDATE SET rating=EXCLUDED.rating,deviation=EXCLUDED.deviation,volatility=EXCLUDED.volatility,period=EXCLUDED.period,battle_count=EXCLUDED.battle_count,provisional=EXCLUDED.provisional,source_battle_id=EXCLUDED.source_battle_id,updated_at=EXCLUDED.updated_at,version=relay_wonderland.agent_ratings.version+1 WHERE relay_wonderland.agent_ratings.period<EXCLUDED.period`, [rating.agentId,rating.mode,rating.rating,rating.deviation,rating.volatility,rating.period,rating.battleCount,rating.provisional,rating.sourceBattleId,rating.updatedAt]);
+    return true;
   }
   private mapReservation(row: Record<string, unknown>): BudgetReservation {
     const requested = Object.fromEntries(budgetKeys.map((key,index)=>[key,Number(row[budgetColumns[index]] ?? 0)])) as unknown as BudgetAmounts;
