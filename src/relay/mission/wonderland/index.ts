@@ -154,3 +154,5 @@ export type {
   WonderlandClassInput,
   WonderlandClassProjection,
 } from './wonderland-classes';
+
+export * from './wonderland-execution';
