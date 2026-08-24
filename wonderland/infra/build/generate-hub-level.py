@@ -137,7 +137,12 @@ LOOK = {
     # thirteen refuted explanations for a correct albedo rendering grey, so the
     # palette stops depending on the lit path alone. A SHARE, not a replacement
     # -- light and shadow still read on top of it.
-    "selfColour": 0.30,
+    # AN ACCENT, NOT A FLOOD. The founder's rule: "Emissive may accent
+    # magic/gold, not flatten the whole world" and "do not use heavy
+    # fog/emissive to hide bad surfaces". 0.22 gives every surface a colour
+    # FLOOR so nothing reads as grey plastic, while leaving the lit response --
+    # shadow, form, local light -- doing the visible work on top.
+    "selfColour": 0.22,
     "skyLavender": 0.55,
     # NEUTRALISE THE FILL. LightColor tints the SkyLight's whole captured-scene
     # contribution, and this world's captured sky is blue, so every surface the
@@ -233,7 +238,9 @@ LOOK = {
     # this also puts 2,448 lux of WARM bounce into the shade, which is what the
     # earlier sky-cut attempt could not do -- at sunLux 1150 the bounce was only
     # 828 lux and cutting the sky just made the world black.
-    "sunLux": 3400.0,
+    # BRIGHT PASTEL DAYLIGHT, which is what the reference is lit by. A garden
+    # at midday under a high sun: strong key, readable shadows, no dusk.
+    "sunLux": 5200.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -255,7 +262,9 @@ LOOK = {
     # Neutralising it was tried and rendered and moved the frame 0.1 points,
     # which is how it was ruled out as the cause -- but that also means warming
     # it is cheap and safe. Late-afternoon garden light, not gold.
-    "sunWarm": (1.00, 0.952, 0.882),
+    # Warm gold highlights on a daylight key -- the reference's sun is warm
+    # without being amber.
+    "sunWarm": (1.00, 0.962, 0.905),
     "sunPitchMin": 25.0,                   # PROVEN. Flatter than this and
                                            # the long shadows swallow the plaza.
     # --- fill ------------------------------------------------------
@@ -388,7 +397,9 @@ LOOK = {
     # has been refuted by the frame that tested it: specular, fog, the sky's
     # hue, bloom, the ACES shoulder, and the materials themselves (which a
     # runtime line now proves are bound correctly on all 147 batches).
-    "skyIntensity": 3.0,
+    # A bright sky fills the shade with pastel rather than leaving it black,
+    # which is how the reference's shadows stay colourful instead of dead.
+    "skyIntensity": 6.0,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -491,7 +502,9 @@ LOOK = {
     # 0.46 -> 0.60, holding the frame near the reference distribution now that
     # the fill is coming down with it. 0.46 was measured against a frame lit by
     # a 14.0 sky; it is not the same frame any more.
-    "gain": (0.60, 0.60, 0.62),
+    # Pulled down to hold a bright key out of the tonemapper's shoulder, so
+    # the extra light lands as COLOUR rather than as white.
+    "gain": (0.52, 0.52, 0.54),
     # RAISED 1.52 -> 1.78. Saturation was tuned while the frame carried a
     # false gold cast, and in that state it multiplied the CAST rather than the
     # palette -- which is why it was correct to be suspicious of it. The cast is
@@ -1859,18 +1872,40 @@ def build_material_library(texs=None):
         # hue when the lit path gives it nothing.
         #
         # If the lit path is ever fixed, this is one number to turn down.
-        _emi_base = MATERIAL_SPEC[name][3] if len(MATERIAL_SPEC[name]) > 3 else (0.0, 0.0, 0.0)
-        _emi_str = MATERIAL_SPEC[name][4] if len(MATERIAL_SPEC[name]) > 4 else 0.0
-        if _emi_str <= 0.0 and name not in ("cloud", "cloud_warm", "water", "lamp_glass"):
+        mel.set_material_instance_scalar_parameter_value(mi, "Metallic", met)
+        mel.set_material_instance_scalar_parameter_value(mi, "Roughness", rough)
+        mel.set_material_instance_vector_parameter_value(mi, "Emissive", unreal.LinearColor(emi[0], emi[1], emi[2], 1))
+        mel.set_material_instance_scalar_parameter_value(mi, "EmissiveStrength", es)
+
+        # SELF-COLOUR GOES ON LAST, AND THAT IS THE WHOLE FIX.
+        #
+        # It was written four lines EARLIER than the generic Emissive write
+        # above, which then overwrote it with the material's authored emissive
+        # -- (0,0,0) for almost everything. So the only materials that kept any
+        # emission were the ones that already had some authored: gold,
+        # gold_glow, magic_gold. The runtime forensic log showed it exactly:
+        #
+        #   MI_gold       Emissive=set(0.300,0.210,0.060) EmisStr=0.600   COLOURED
+        #   MI_stone      Emissive=set(0.000,0.000,0.000) EmisStr=0.000   GREY
+        #   MI_foliage    Emissive=set(0.000,0.000,0.000) EmisStr=0.000   GREY
+        #   MI_petal_pink Emissive=set(0.000,0.000,0.000) EmisStr=0.000   GREY
+        #
+        # Every coloured thing in the delivered frame was a material with
+        # authored emissive, and every grey thing was one without. The counter
+        # said "31 materials" and was telling the truth about a write that was
+        # immediately undone.
+        #
+        # An ACCENT, not a flood. The founder's rule: emissive may accent magic
+        # and gold, it may not flatten the world. Materials that author their
+        # own emission keep it untouched; everything else gets a modest share of
+        # its own palette so a surface has a colour floor, and the lit response
+        # still sits on top.
+        if es <= 0.0 and name not in ("cloud", "cloud_warm", "water", "lamp_glass"):
             mel.set_material_instance_vector_parameter_value(
                 mi, "Emissive", unreal.LinearColor(_sr[0], _sr[1], _sr[2], 1))
             mel.set_material_instance_scalar_parameter_value(
                 mi, "EmissiveStrength", float(LOOK["selfColour"]))
             _SELFCOLOUR[0] += 1
-        mel.set_material_instance_scalar_parameter_value(mi, "Metallic", met)
-        mel.set_material_instance_scalar_parameter_value(mi, "Roughness", rough)
-        mel.set_material_instance_vector_parameter_value(mi, "Emissive", unreal.LinearColor(emi[0], emi[1], emi[2], 1))
-        mel.set_material_instance_scalar_parameter_value(mi, "EmissiveStrength", es)
         eal.save_asset(mi.get_path_name())
         if name in ("stone", "spire", "rose", "gold", "roof_pink"):
             unreal.log_warning("MATSET palette %s -> (%.2f,%.2f,%.2f)"
@@ -5524,7 +5559,9 @@ def build(layout):
         # dome read as dusk while the ground read as midday. Thinner, starting
         # further out, and tinted a light lilac rather than a deep violet: distance
         # still recedes, the sky stays sky.
-        set_prop(fog_comp, "FogDensity", 0.0011)
+        # MINIMAL HAZE, by the founder's instruction. Fog is not allowed to be
+        # the thing that hides a bad surface, and the reference's air is clear.
+        set_prop(fog_comp, "FogDensity", 0.0004)
         set_prop(fog_comp, "FogHeightFalloff", 0.09)
         set_prop(fog_comp, "StartDistance", 3200.0)
         # UE5 renamed both of these to *Luminance; the old names silently do
