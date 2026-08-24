@@ -156,3 +156,30 @@ and it belongs to them rather than to a late-night guess.
 
 The ~20.5 fps baseline in the goal remains incomparable: it was measured while
 38 materials drew the engine default.
+
+
+## The stream FPS numbers were partly measuring the MEASUREMENT CLIENT
+
+Final clean run, one launch, six consecutive samples:
+
+    stream : 11, 11, 9, 8, 7, 7      <- monotonic decline WITHIN one run
+    renderer: 18.6 fps               <- UE's own frame counter, 1,001 frames
+                                        over 53.8 s, independent of any browser
+
+A rate that falls with every successive sample is not a property of the world.
+Each stream-stats sample spawns a headless Chrome that joins the stream, and
+repeated joins ratchet WebRTC congestion control down. The renderer number
+comes from the engine's own log and cannot be affected by that.
+
+SO THE HONEST PERFORMANCE FIGURE IS THE RENDERER'S: 18.6 fps, against a target
+of 30 and a stated baseline of ~20.5 that was itself measured while 38
+materials drew the engine default and so cannot be compared to it.
+
+This also retro-weakens some of the per-lever conclusions above: any comparison
+drawn from stream FPS across separate launches carries this contamination. The
+ones that stand are those measured the same way within a single session -- the
+Nanite and SM6 results (halved rates, confirmed by VRAM moving 1.6 -> 2.8 GB)
+and the Marble presence/absence result (+40%, confirmed by VRAM 1,806 ->
+1,505 MiB). The ones that reported "no change" are the least affected, since a
+contaminated measurement biases DOWNWARD and they showed no movement either
+way.
