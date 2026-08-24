@@ -897,9 +897,9 @@ MATERIAL_SPEC = {
     # rubbed; one flat tone across every face is the "toy" read.
     "brass_deep":  ((0.42, 0.30, 0.13), 0.55, 0.52, (0.05, 0.03, 0.00), 0.10),
     "float_glow":  ((1.00, 0.80, 0.40), 0.45, 0.24, (1.00, 0.72, 0.28), 1.9),
-    "cobble":      ((0.84, 0.74, 0.75), 0.0, 0.80, (0, 0, 0), 0.0),
-    "cobble2":     ((0.68, 0.58, 0.62), 0.0, 0.82, (0, 0, 0), 0.0),
-    "plaza":       ((0.90, 0.82, 0.84), 0.0, 0.76, (0, 0, 0), 0.0),
+    "cobble":      ((0.80, 0.58, 0.66), 0.0, 0.80, (0, 0, 0), 0.0),
+    "cobble2":     ((0.62, 0.44, 0.62), 0.0, 0.82, (0, 0, 0), 0.0),
+    "plaza":       ((0.88, 0.66, 0.76), 0.0, 0.76, (0, 0, 0), 0.0),
     "moss":        ((0.20, 0.40, 0.16), 0.0, 0.72, (0, 0, 0), 0.0),
     "ground":      ((0.17, 0.30, 0.14), 0.0, 0.86, (0, 0, 0), 0.0),
     # A MEADOW IS NOT ONE GREEN. Real turf is patchy: sun-bleached where it is
@@ -923,16 +923,16 @@ MATERIAL_SPEC = {
     "petal_violet":((0.52, 0.28, 0.86), 0.0, 0.62, (0.09, 0.02, 0.20), 0.35),
     "petal_air":   ((0.98, 0.62, 0.82), 0.0, 0.62, (0.10, 0.02, 0.06), 0.2),
     "mush_red":    ((0.74, 0.16, 0.26), 0.0, 0.62, (0.14, 0, 0), 0.3),
-    "mush_white":  ((0.96, 0.94, 0.90), 0.0, 0.42, (0, 0, 0), 0.0),
+    "mush_white":  ((0.98, 0.90, 0.80), 0.0, 0.42, (0, 0, 0), 0.0),
     "mush_purple": ((0.44, 0.20, 0.76), 0.0, 0.62, (0.13, 0.02, 0.22), 0.35),
-    "spire":       ((0.97, 0.86, 0.87), 0.0, 0.40, (0, 0, 0), 0.0),
+    "spire":       ((0.86, 0.58, 0.90), 0.0, 0.40, (0, 0, 0), 0.0),
     "spire_pink":  ((0.98, 0.74, 0.82), 0.0, 0.62, (0, 0, 0), 0.0),
     "spire_blue":  ((0.76, 0.68, 0.98), 0.0, 0.62, (0, 0, 0), 0.0),
     "spire_teal":  ((0.66, 0.92, 0.88), 0.0, 0.62, (0, 0, 0), 0.0),
     # Roughness 0.10 is a mirror, and a mirror reflecting a dark scene is
     # dark: attribute-dark.py measured porcelain at 1.47% of the frame in
     # shadow. Real glaze has a broad highlight, not a point one.
-    "porcelain":   ((0.98, 0.93, 0.92), 0.0, 0.26, (0, 0, 0), 0.0),
+    "porcelain":   ((0.99, 0.84, 0.70), 0.0, 0.26, (0, 0, 0), 0.0),
     "water":       ((0.16, 0.42, 0.56), 0.0, 0.05, (0.01, 0.04, 0.07), 0.15),
     # Spray and foam: near-white, barely self-lit so it stays bright against
     # the dark of a basin, and it BOBS — a jet of beads that does not move is
@@ -973,7 +973,7 @@ MATERIAL_SPEC = {
     # AUTHORED, and it is the one part that can be fixed with certainty.
     # (cloud and dog_body stay white on purpose: clouds are white and the
     # canonical Relay Dog's coat is its identity.)
-    "stone":       ((0.92, 0.82, 0.81), 0.0, 0.90, (0, 0, 0), 0.0),
+    "stone":       ((0.93, 0.56, 0.62), 0.0, 0.90, (0, 0, 0), 0.0),
     "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
     # SKELETON FLAME, the founder's legendary variant. It is a SKIN: the same
     # canonical body, the same proportions, the same visor band. What changes is
@@ -998,7 +998,7 @@ MATERIAL_SPEC = {
     "meadow_far":  ((0.46, 0.53, 0.45), 0.0, 0.94, (0, 0, 0), 0.0),
     # Distant towers, deliberately pale and low-contrast so the skyline recedes
     # behind the hero landmarks instead of competing with them.
-    "spire_far":   ((0.82, 0.70, 0.96), 0.0, 0.62, (0, 0, 0), 0.0),
+    "spire_far":   ((0.68, 0.50, 0.95), 0.0, 0.62, (0, 0, 0), 0.0),
     # Rose and pink rooflines — the reference's skyline is warm, not gold.
     "roof_rose":   ((0.78, 0.38, 0.44), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
     "roof_pink":   ((0.92, 0.46, 0.62), 0.0, 0.62, (0, 0, 0), 0.0),
