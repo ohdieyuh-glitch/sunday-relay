@@ -142,10 +142,17 @@ LOOK = {
     # fog/emissive to hide bad surfaces". 0.22 gives every surface a colour
     # FLOOR so nothing reads as grey plastic, while leaving the lit response --
     # shadow, form, local light -- doing the visible work on top.
-    "selfColour": 0.22,
+    # A colour FLOOR, kept: it costs nothing and it guarantees a surface can
+    # never fall to grey even if some other path fails. Not a flood -- the lit
+    # response still does the visible work.
+    "selfColour": 0.25,
     # 1 = the master renders UNLIT, so a surface shows exactly its palette and
     # no lighting path can grey it. 0 restores DefaultLit in one cook.
-    "unlit": 1,
+    # 0. UNLIT was reached for when the grey looked like a shading failure. It
+    # was not: the towers were hazed, not mis-shaded, and unlit cost the Marble
+    # backdrop (it rendered black) and every shadow in the world while fixing
+    # nothing. Lit shading comes back now the real cause is known.
+    "unlit": 0,
     "skyLavender": 0.55,
     # NEUTRALISE THE FILL. LightColor tints the SkyLight's whole captured-scene
     # contribution, and this world's captured sky is blue, so every surface the
@@ -5568,9 +5575,28 @@ def build(layout):
         # eye, using arithmetic, without a render, is how the last five attempts
         # went. The real distances are written down here so whoever next has a
         # GPU can judge it with them.
+        # 45 -> 4. MEASURED ON A FRAME, which is what the note above says this
+        # number was waiting for.
+        #
+        # Attributing the hero frame's tower band pixel-by-pixel to the object
+        # that owns each one:
+        #
+        #     roof_rose   27.6% of the band   renders (155,155,170)  sat 0.09
+        #     roof_pink   13.1%               renders (118,110,117)  sat 0.07
+        #     spire_far    5.6%               renders (125,120,120)  sat 0.04
+        #
+        # roof_rose is authored (0.78, 0.38, 0.44) -- a rose, saturation 0.51 --
+        # and it renders a blue-grey whose hue is the SKY's. That is not a
+        # material defect. It is AERIAL PERSPECTIVE, and it applies to the scene
+        # after shading, which is why making the master unlit did not rescue it
+        # and why fourteen material theories could not find it.
+        #
+        # At 45x the skyline at 310 m behaves like roughly 14 km of atmosphere,
+        # so the towers are fully faded into the sky. At 4x it is about 1.2 km:
+        # distance still recedes and colour still survives the journey.
         for _nm in ("AerialPespectiveViewDistanceScale",
                     "AerialPerspectiveViewDistanceScale"):
-            set_prop(sac, _nm, 45.0)
+            set_prop(sac, _nm, 4.0)
         # a little more Mie puts warm haze along the horizon where the land meets
         # the sky, which is what softens the join
         set_prop(sac, "MieScatteringScale", 0.0075)
