@@ -168,3 +168,5 @@ export * from './wonderland-agent-statistics';
 export * from './wonderland-provider-ledger';
 
 export * from './wonderland-provider-adapters';
+
+export * from './wonderland-swarm-policy';
