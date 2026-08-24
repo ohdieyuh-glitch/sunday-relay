@@ -57,4 +57,4 @@ export {
   type PspConfigStore,
   type SavedPsp,
 } from './psp-config-node';
-export { TransactionalWonderlandDatabase, postgresWonderlandDatabaseFromEnv, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATIONS, type WonderlandTransaction, type ClaimedOutbox } from './wonderland-postgres';
+export { TransactionalWonderlandDatabase, postgresWonderlandDatabaseFromEnv, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATIONS, type WonderlandTransaction, type ClaimedOutbox, type BudgetAmounts, type BudgetReservation } from './wonderland-postgres';
