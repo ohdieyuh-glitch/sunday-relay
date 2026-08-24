@@ -4622,6 +4622,8 @@ def build(layout):
         P("cube", x, y - fy * 74.0 * s, bz + 24.0 * s, 0.18 * s, 0.44 * s, 0.20 * s, body, "%s_tail" % label, rot=(38, 0, 0))
         return parts
 
+    _DOG_POS = []
+
     def stroll_dog(x, y, label, s=1.2, body="dog_body", roam=800.0, is_hero=False, accessory="none",
                    keep_out=None, attends=None, upright=0, eyes="dog_eye"):
         # Spawn the LOCOMOTION actor. The Dog's BODY is now built in C++ (BuildBody),
@@ -4682,6 +4684,13 @@ def build(layout):
             return
         stroller.set_actor_label(label + "_stroll")
         stroller.set_actor_scale3d(unreal.Vector(s, s, s))
+        # EVERY DOG'S POSITION, RECORDED. The founder cannot see the upright
+        # Dogs, and verify-visual-target agrees: relay_dogs_readable reads 2
+        # against a required 3. The cause is the density that was just added --
+        # 560 carpet pieces and six ornament rings went in around them and
+        # buried them. A Dog the camera cannot pick out is not in the world as
+        # far as anyone looking at it is concerned.
+        _DOG_POS.append((float(x), float(y)))
         set_prop(stroller, "HomeLocation", unreal.Vector(x, y, 0.0))
         set_prop(stroller, "RoamRadius", float(roam))
         set_prop(stroller, "bIsHero", bool(is_hero))
@@ -6349,6 +6358,28 @@ def build(layout):
     # white blocky body, same black visor, same gold eyes, same tail.
     stroll_dog(HERO_DOG[0], HERO_DOG[1], "RelayDog", s=HERO_DOG_SCALE,
                is_hero=True, roam=230.0, upright=1)
+    # ---- THE UPRIGHT DOGS, WHERE THE CAMERA CAN SEE THEM ----------------
+    #
+    # The founder looked at the live build and said: "I see no relay dogs that
+    # is standing up on 2 feet I don't see it". verify-visual-target agrees --
+    # relay_dogs_readable reads 2 against a required 3, where readable means
+    # owning pixels after occlusion, tall enough to recognise, AND with the
+    # visor and gold eyes visible.
+    #
+    # The upright companions were at roam radius 1100 out among six rings of
+    # ornaments. Standing form or not, at that distance a Dog is a pale shape.
+    # The featured Dogs of this world belong in the near-middle of the hero
+    # frame, at a size that reads, flanking the hero rather than lost behind it.
+    #
+    # These are placed by hand rather than scattered, because "the founder can
+    # see them" is a composition requirement and composition is not a scatter.
+    stroll_dog(-980.0, 1180.0, "UprightReviewer", s=1.95, roam=140.0,
+               upright=2, accessory="none")
+    stroll_dog(980.0, 1240.0, "UprightBuilder", s=1.95, roam=140.0,
+               upright=2, accessory="none")
+    stroll_dog(-1560.0, 1760.0, "UprightFlame", s=2.05, roam=120.0,
+               upright=4, body="dog_bone", eyes="dog_eye_blue")
+
     # (The travelling arrival ring is gone: with the camera fixed the Dog stands
     # on the real arcane circle, so a second one would only sit inside the first.)
     # A DRIFT OF KEYS, not three of them. They read as a current of magic moving
@@ -6495,7 +6526,13 @@ def build(layout):
         _coat, _eyes = coat, "dog_eye"
         if i == 5:
             _upright, _coat, _eyes = 4, "dog_bone", "dog_eye_blue"
-        stroll_dog(cx, cy, "Companion%d" % i, s=1.05, body=_coat, roam=1100.0, accessory=acc,
+        # AN UPRIGHT DOG HAS TO BE BIG ENOUGH TO READ AS ONE. At 1.05 the
+        # standing form is a pale shape among a thousand props; the founder
+        # looked at the live build and could not find one. The standing Dogs
+        # are the featured objects of this world, so they are scaled to be
+        # findable in a wide vista.
+        _dsc = 1.75 if _upright else 1.05
+        stroll_dog(cx, cy, "Companion%d" % i, s=_dsc, body=_coat, roam=1100.0, accessory=acc,
                    keep_out=(ARRIVAL_CAM, ARRIVAL_KEEP_OUT),
                    attends=(_avatar if i in (0, 3) else None),
                    upright=_upright, eyes=_eyes)
@@ -6904,10 +6941,24 @@ def build(layout):
     # row of props. All of it is instanced through the same batching path, so
     # the piece count costs draw calls it does not have.
     _SKY_CITY = 0
+    # THE SKYLINE HAS TO OCCUPY THE SKY, not sit under it.
+    #
+    # environment_density is coverage.objects_pct and it stalled at 81.9 while
+    # sky_present read 18.3 -- the two sum to 100, so the metric is capped by
+    # how much empty sky the frame has. Adding six ornament rings and 560
+    # carpet pieces moved it 0.17 points, because none of that is where the
+    # empty space IS.
+    #
+    # The empty space is the upper third, and the reference fills it with
+    # TOWERS -- spires rising past the horizon line, layered front to back.
+    # So the near band gets much taller and closer, and a fourth band goes in
+    # behind everything. This serves the metric and the founder's "deeper
+    # skyline" with the same geometry.
     for _band, (_dist, _scale, _n, _spread) in enumerate((
-            (34000.0, 7.0, 11, 2.35),     # near band: full castles
-            (56000.0, 5.2, 15, 2.65),     # mid band
-            (82000.0, 3.6, 19, 2.95))):   # far band, a serrated horizon
+            (31000.0, 8.0, 13, 2.10),     # NEAR band: tall enough to rise into the frame
+            (42000.0, 7.0, 17, 2.45),
+            (56000.0, 6.5, 21, 2.75),
+            (82000.0, 4.6, 25, 3.05))):   # far band, a serrated horizon
         for _i in range(_n):
             _a = (_i / float(_n - 1) - 0.5) * _spread + 1.5708
             # jitter so the band is not an arc of evenly spaced identical towers
@@ -6937,17 +6988,34 @@ def build(layout):
     # the reference actually contains. Everything routes through the same
     # instanced batching path, so the piece count costs draw calls it does not
     # have.
+    def _clear_of_dogs(px, py, radius=560.0):
+        """Nothing may be planted close enough to bury a Relay Dog."""
+        for _dx, _dy in _DOG_POS:
+            if math.hypot(px - _dx, py - _dy) < radius:
+                return False
+        return True
+
     _ORN = 0
-    for _ring, (_rad, _count, _sc) in enumerate(((2050.0, 16, 1.00),
-                                                 (3100.0, 20, 1.35),
-                                                 (4400.0, 24, 1.75))):
+    # DENSITY, PUSHED. coverage.objects_pct read 81.8 against a target of 85
+    # and the founder's instruction is explicit: "The world should be visually
+    # DENSE. Every major part of the frame should feel authored." Three rings
+    # became six, and each ring carries half again as many pieces -- gates,
+    # arches, teacups, topiary, lanterns and beds all the way out to the
+    # skyline, so there is no band of empty ground between the flowers at the
+    # camera's feet and the city on the horizon.
+    for _ring, (_rad, _count, _sc) in enumerate(((1750.0, 22, 0.85),
+                                                 (2450.0, 26, 1.05),
+                                                 (3200.0, 30, 1.30),
+                                                 (4100.0, 34, 1.60),
+                                                 (5200.0, 38, 1.95),
+                                                 (6600.0, 42, 2.40))):
         for _i in range(_count):
             _a = (_i / float(_count)) * 2.0 * math.pi + _ring * 0.31
             _ox = math.cos(_a) * _rad
             _oy = NEAR_Y + 500.0 + math.sin(_a) * _rad * 0.72
             if in_camera_lap(_ox, _oy, 300.0):
                 continue
-            if math.hypot(_ox - HERO_DOG[0], _oy - HERO_DOG[1]) < 620.0:
+            if not _clear_of_dogs(_ox, _oy, 700.0):
                 continue
             _kind = (_i + _ring) % 7
             _lb = "Orn%d_%d" % (_ring, _i)
@@ -6977,6 +7045,44 @@ def build(layout):
                              0.34 + 0.20 * (_c % 3) / 2.0,
                              "%s_cap%d" % (_lb, _c),
                              ("mush_red", "mush_purple", "mush_white")[(_i + _c) % 3])
+    # ---- FLOWER CARPET -------------------------------------------------
+    # The reference has NO bare ground anywhere -- every square metre carries
+    # planting. Between the ornament rings there was still open floor, and open
+    # floor is what makes a world read as a level under construction. This is a
+    # deterministic scatter of small beds and caps across the whole visible
+    # plate, thinning with distance so the near field stays richest.
+    _CARPET = 0
+    for _c in range(560):
+        _h = (_c * 2654435761) & 0xFFFFFFFF
+        _ca = (_h % 3600) / 3600.0 * 2.0 * math.pi
+        _cr = 620.0 + ((_h >> 12) % 6200)
+        _cx = math.cos(_ca) * _cr
+        _cy = NEAR_Y + 300.0 + math.sin(_ca) * _cr * 0.78
+        if in_camera_lap(_cx, _cy, 220.0):
+            continue
+        if not _clear_of_dogs(_cx, _cy, 520.0):
+            continue
+        _pick = (_h >> 5) % 10
+        _lb = "Carpet%d" % _c
+        if _pick < 4:
+            kit_mushroom(_cx, _cy, 0.26 + 0.22 * ((_h >> 9) % 3) / 2.0, _lb,
+                         ("mush_red", "mush_purple", "mush_white")[(_h >> 7) % 3])
+        elif _pick < 7:
+            kit_bed(_cx, _cy, 86.0 + 54.0 * ((_h >> 11) % 3) / 2.0, _lb,
+                    palette=(("petal_violet", "rose_pink", "petal_pink"),
+                             ("rose_pink", "petal_pink", "rose"),
+                             ("petal_pink", "petal_violet", "rose_pink"))[(_h >> 13) % 3])
+        elif _pick < 9:
+            kit_shrub(_cx, _cy, 0.42 + 0.28 * ((_h >> 15) % 3) / 2.0, _lb,
+                      bloom=("rose_pink" if _pick % 2 else "petal_violet"))
+        else:
+            kit_topiary_form(_cx, _cy, 0.55 + 0.30 * ((_h >> 17) % 3) / 2.0, _lb,
+                             form=("cone", "ball", "spiral")[(_h >> 19) % 3])
+        _CARPET += 1
+    unreal.log_warning("FLOWER CARPET: %d beds, caps, shrubs and topiary across "
+                       "the whole visible plate - the reference has no bare "
+                       "ground anywhere" % _CARPET)
+
     unreal.log_warning("ORNAMENTAL MIDGROUND: %d gates, arches, teacups, "
                        "topiary, lanterns and beds on three rings - the storey "
                        "between the flowers and the skyline was empty" % _ORN)

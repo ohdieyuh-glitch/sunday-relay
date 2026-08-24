@@ -5,6 +5,7 @@
 #include "Components/SceneComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstance.h"
 
 AWonderlandInstancedBatch::AWonderlandInstancedBatch()
 {
@@ -176,6 +177,81 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 			   *BatchName.ToString(), *MaterialAsset->GetName(),
 			   Bound ? *Bound->GetName() : TEXT("NONE"),
 			   bAgrees ? TEXT("") : TEXT("  <-- MISMATCH"), Declared);
+
+		// ---- FORENSIC TRACE, FROM THE COMPONENT THAT ACTUALLY RENDERS ----
+		//
+		// Thirteen hypotheses have been tested and refuted, and every one of
+		// them was checked against the ASSET. That the pak contains
+		// MI_mush_red with a pure red proves the asset exists correctly. It
+		// does NOT prove the visibly grey mushroom is rendering that material,
+		// and that gap is where this investigation has been living.
+		//
+		// So this asks the COMPONENT, not the disk: how many slots does the
+		// mesh actually have, what material object sits in each one, what is
+		// that object's parent, and -- the question never asked -- what does
+		// THAT OBJECT report when asked for its own BaseColor and Emissive at
+		// runtime. If a component's bound material answers grey, the search is
+		// over and it was never the lighting.
+		//
+		// Deliberately verbose and deliberately limited to a handful of named
+		// batches: 148 batches x 10 lines is a log nobody reads.
+		const FString BN = BatchName.ToString();
+		const bool bTraceThis = BN.Contains(TEXT("mush_red"))
+							 || BN.Contains(TEXT("petal_pink"))
+							 || BN.Contains(TEXT("foliage"))
+							 || BN.Contains(TEXT("gold"))
+							 || BN.Contains(TEXT("stone"));
+		if (bTraceThis)
+		{
+			const int32 NumSlots = Instances->GetNumMaterials();
+			const UStaticMesh* SM = Instances->GetStaticMesh();
+			UE_LOG(LogTemp, Warning,
+				   TEXT("FORENSIC [%s] mesh='%s' slots=%d overrides=%d customdata=%d"),
+				   *BN, SM ? *SM->GetName() : TEXT("NONE"), NumSlots,
+				   Instances->OverrideMaterials.Num(),
+				   Instances->NumCustomDataFloats);
+
+			for (int32 Slot = 0; Slot < NumSlots; ++Slot)
+			{
+				UMaterialInterface* const M = Instances->GetMaterial(Slot);
+				if (M == nullptr)
+				{
+					UE_LOG(LogTemp, Warning,
+						   TEXT("FORENSIC [%s]   slot %d -> NULL (renders the engine default)"),
+						   *BN, Slot);
+					continue;
+				}
+				const UMaterialInterface* Par =
+					Cast<UMaterialInstance>(M) ? Cast<UMaterialInstance>(M)->Parent : nullptr;
+
+				// ASK THE BOUND OBJECT ITSELF. Not the asset on disk -- this
+				// pointer, the one the renderer will use.
+				FLinearColor BaseCol = FLinearColor::White;
+				FLinearColor EmisCol = FLinearColor::Black;
+				float EmisStr = -1.0f;
+				float DetailAmp = -1.0f;
+				const bool bGotBase = M->GetVectorParameterValue(
+					FMaterialParameterInfo(TEXT("BaseColor")), BaseCol);
+				const bool bGotEmis = M->GetVectorParameterValue(
+					FMaterialParameterInfo(TEXT("Emissive")), EmisCol);
+				M->GetScalarParameterValue(
+					FMaterialParameterInfo(TEXT("EmissiveStrength")), EmisStr);
+				M->GetScalarParameterValue(
+					FMaterialParameterInfo(TEXT("DetailAmp")), DetailAmp);
+
+				UE_LOG(LogTemp, Warning,
+					   TEXT("FORENSIC [%s]   slot %d -> '%s' parent='%s' "
+							"BaseColor=%s(%.3f,%.3f,%.3f) Emissive=%s(%.3f,%.3f,%.3f) "
+							"EmisStr=%.3f DetailAmp=%.3f"),
+					   *BN, Slot, *M->GetName(),
+					   Par ? *Par->GetName() : TEXT("none"),
+					   bGotBase ? TEXT("set") : TEXT("DEFAULT"),
+					   BaseCol.R, BaseCol.G, BaseCol.B,
+					   bGotEmis ? TEXT("set") : TEXT("DEFAULT"),
+					   EmisCol.R, EmisCol.G, EmisCol.B,
+					   EmisStr, DetailAmp);
+			}
+		}
 	}
 
 	Instances->PreAllocateInstancesMemory(Declared);
