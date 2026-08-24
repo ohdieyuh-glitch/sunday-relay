@@ -164,3 +164,5 @@ export * from './wonderland-ratings';
 export * from './wonderland-inventory';
 
 export * from './wonderland-agent-statistics';
+
+export * from './wonderland-provider-ledger';
