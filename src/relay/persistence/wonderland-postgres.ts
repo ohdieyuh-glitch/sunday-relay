@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool, type PoolConfig, type QueryResultRow } from 'pg';
 import type { ProviderUsageReceipt, WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
-import type { WonderlandEvent } from '../mission/wonderland/wonderland-backend';
+import type { Battle, WonderlandEvent } from '../mission/wonderland/wonderland-backend';
 
 const migration = (name: string): string => {
   const candidates = [join(__dirname, 'wonderland-migrations', name), join(process.cwd(), 'src', 'relay', 'persistence', 'wonderland-migrations', name)];
@@ -17,7 +17,11 @@ export interface ClaimedOutbox { outboxId: string; eventId: string; projectId: s
 export interface SqlQuery { query<R extends QueryResultRow = QueryResultRow>(text: string, values?: readonly unknown[]): Promise<{ rows: R[]; rowCount: number | null }> }
 export interface WonderlandTransaction {
   loadExecution(executionId: string): Promise<WonderlandExecutionSession | null>;
+  loadBattleVersion(battleId: string): Promise<number | null>;
   saveExecution(session: WonderlandExecutionSession, expectedVersion: number | null): Promise<void>;
+  saveBattle(battle: Battle, expectedVersion: number): Promise<void>;
+  saveEntity(input: { kind: 'GOAL_RESULT' | 'GVE_EVIDENCE' | 'CARD_RECOMMENDATION' | 'PROJECT_BRAIN' | 'PROJECT_AVATAR'; recordId: string; projectId: string; battleId: string | null; ownerId: string | null; data: unknown }): Promise<void>;
+  grantReward(input: { grantId: string; rewardKey: string; battleId: string; playerId: string; data: unknown }): Promise<boolean>;
   insertProviderReceipt(receipt: ProviderUsageReceipt): Promise<boolean>;
   appendEvent(event: Omit<WonderlandEvent, 'sequence'>, streamId: string): Promise<WonderlandEvent>;
   enqueueEvent(event: WonderlandEvent): Promise<void>;
@@ -35,6 +39,10 @@ class PostgresWonderlandTransaction implements WonderlandTransaction {
     const result = await this.client.query<{ snapshot: unknown }>('SELECT snapshot FROM relay_wonderland.execution_sessions WHERE execution_id=$1', [executionId]);
     return result.rows[0] ? parsed<WonderlandExecutionSession>(result.rows[0].snapshot) : null;
   }
+  async loadBattleVersion(battleId: string): Promise<number | null> {
+    const result = await this.client.query<{ version: string }>('SELECT version FROM relay_wonderland.battles WHERE battle_id=$1 FOR UPDATE', [battleId]);
+    return result.rows[0] ? Number(result.rows[0].version) : null;
+  }
   async saveExecution(session: WonderlandExecutionSession, expectedVersion: number | null): Promise<void> {
     if (expectedVersion === null) {
       await this.client.query(`INSERT INTO relay_wonderland.execution_sessions(execution_id,battle_id,mission_id,project_id,player_id,agent_id,card_version_id,state,workspace_isolation_ref,snapshot,checkpoint,version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12)`, [session.executionId, session.battleId, session.missionId, session.projectId, session.playerId, session.agentId, session.cardSnapshot.cardVersionId, session.state, session.workspaceIsolationRef, json(session), json(session.checkpoint), session.version]);
@@ -42,6 +50,17 @@ class PostgresWonderlandTransaction implements WonderlandTransaction {
     }
     const result = await this.client.query(`UPDATE relay_wonderland.execution_sessions SET state=$2,snapshot=$3::jsonb,checkpoint=$4::jsonb,version=$5,updated_at=now() WHERE execution_id=$1 AND version=$6`, [session.executionId, session.state, json(session), json(session.checkpoint), session.version, expectedVersion]);
     if (result.rowCount !== 1) throw Object.assign(new Error('optimistic_concurrency_conflict'), { code: '40001' });
+  }
+  async saveBattle(battle: Battle, expectedVersion: number): Promise<void> {
+    const result = await this.client.query(`UPDATE relay_wonderland.battles SET state=$2,snapshot=$3::jsonb,result=$4::jsonb,version=version+1,updated_at=now() WHERE battle_id=$1 AND version=$5`, [battle.battleId, battle.state, json(battle), battle.result === null ? null : json(battle.result), expectedVersion]);
+    if (result.rowCount !== 1) throw Object.assign(new Error('optimistic_concurrency_conflict'), { code: '40001' });
+  }
+  async saveEntity(input: { kind: 'GOAL_RESULT' | 'GVE_EVIDENCE' | 'CARD_RECOMMENDATION' | 'PROJECT_BRAIN' | 'PROJECT_AVATAR'; recordId: string; projectId: string; battleId: string | null; ownerId: string | null; data: unknown }): Promise<void> {
+    await this.client.query(`INSERT INTO relay_wonderland.entity_records(kind,record_id,project_id,battle_id,owner_id,data) VALUES($1,$2,$3,$4,$5,$6::jsonb) ON CONFLICT(kind,record_id) DO UPDATE SET data=EXCLUDED.data,version=relay_wonderland.entity_records.version+1,updated_at=now()`, [input.kind, input.recordId, input.projectId, input.battleId, input.ownerId, json(input.data)]);
+  }
+  async grantReward(input: { grantId: string; rewardKey: string; battleId: string; playerId: string; data: unknown }): Promise<boolean> {
+    const result = await this.client.query(`INSERT INTO relay_wonderland.rewards(grant_id,reward_key,battle_id,player_id,data) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT(reward_key) DO NOTHING`, [input.grantId, input.rewardKey, input.battleId, input.playerId, json(input.data)]);
+    return result.rowCount === 1;
   }
   async insertProviderReceipt(receipt: ProviderUsageReceipt): Promise<boolean> {
     const result = await this.client.query(`INSERT INTO relay_wonderland.provider_receipts(receipt_id,execution_id,provider_request_id,receipt,occurred_at) VALUES($1,$2,$3,$4::jsonb,$5) ON CONFLICT(receipt_id) DO NOTHING`, [receipt.receiptId, receipt.executionId, receipt.receiptId, json(receipt), receipt.occurredAt]);
