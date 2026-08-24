@@ -174,20 +174,43 @@ def import_glb(source, destination, label, enable_nanite):
     # sets the cap (0 disables it entirely and restores the full texture).
     _tex_cap = int(os.environ.get("WONDERLAND_MARBLE_TEX", "4096") or 0)
     if _tex_cap > 0:
-        for _path in imported:
+        # SCAN THE PACKAGE, DO NOT FILTER THE IMPORT LIST.
+        #
+        # The first version of this walked `imported` and skipped anything that
+        # was not a Texture2D. `imported` holds only the STATIC MESH paths --
+        # Interchange puts textures in a sibling folder -- so the guard filtered
+        # every entry, the loop did nothing, and it said NOTHING, because a bare
+        # `continue` is silent. The build came back with the texture uncapped
+        # and no line in the log to say why.
+        #
+        # That is the third silent-skip of this session, after the material
+        # usage flag and the docker knob. The rule they all teach: a loop that
+        # can legitimately find nothing must SAY it found nothing, or a
+        # no-op is indistinguishable from a success.
+        _roots = set()
+        for _p in imported:
+            _base = _p.split(".")[0]
+            _roots.add("/".join(_base.split("/")[:-2]))
+        _seen = 0
+        for _root in sorted(_roots):
             try:
-                _t = unreal.EditorAssetLibrary.load_asset(_path)
-                if _t is None or not isinstance(_t, unreal.Texture2D):
-                    continue
-                _t.set_editor_property("max_texture_size", _tex_cap)
-                unreal.EditorAssetLibrary.save_asset(_path, only_if_is_dirty=False)
-                log("MARBLE TEXTURE capped to %d on %s (the backdrop's texture "
-                    "is ~120 MB and is the measured cost, not its 592k "
-                    "triangles)" % (_tex_cap, _path))
+                for _asset in unreal.EditorAssetLibrary.list_assets(_root, recursive=True):
+                    _t = unreal.EditorAssetLibrary.load_asset(_asset)
+                    if _t is None or not isinstance(_t, unreal.Texture2D):
+                        continue
+                    _t.set_editor_property("max_texture_size", _tex_cap)
+                    unreal.EditorAssetLibrary.save_asset(_asset, only_if_is_dirty=False)
+                    _seen += 1
+                    log("MARBLE TEXTURE capped to %d: %s" % (_tex_cap, _asset))
             except Exception as _texc:
-                log("MARBLE TEXTURE not capped on %s (%s) — it keeps full "
-                    "resolution and stays the most expensive thing in the "
-                    "frame." % (_path, _texc))
+                log("MARBLE TEXTURE scan failed under %s (%s)" % (_root, _texc))
+        if _seen == 0:
+            log("MARBLE TEXTURE: NO Texture2D found under %s — the backdrop "
+                "keeps its full-resolution texture, which is the ~120 MB that "
+                "MEASURED as the most expensive thing in the frame. This line "
+                "exists because the previous version skipped silently and the "
+                "cap looked applied when it was not."
+                % (", ".join(sorted(_roots)) or "(no roots)"))
 
     # LODs, BECAUSE NANITE IS INERT ON THIS TARGET.
     #
