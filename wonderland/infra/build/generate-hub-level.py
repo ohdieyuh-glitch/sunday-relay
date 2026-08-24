@@ -133,6 +133,11 @@ LOOK = {
     # Sweep it with WONDERLAND_LOOK=paletteSaturation=1.0 to see the frame it
     # replaces.
     "paletteSaturation": 1.85,
+    # How much of its OWN colour every surface emits. See the material loop:
+    # thirteen refuted explanations for a correct albedo rendering grey, so the
+    # palette stops depending on the lit path alone. A SHARE, not a replacement
+    # -- light and shadow still read on top of it.
+    "selfColour": 0.30,
     "skyLavender": 0.55,
     # NEUTRALISE THE FILL. LightColor tints the SkyLight's whole captured-scene
     # contribution, and this world's captured sky is blue, so every surface the
@@ -1809,6 +1814,7 @@ def build_material_library(texs=None):
         mel.recompile_material(master)
         eal.save_asset(master.get_path_name())
     mats = {}
+    _SELFCOLOUR = [0]
     for name, (rgb, met, rough, emi, es) in MATERIAL_SPEC.items():
         ipath = pkg + "/MI_" + name
         # RE-APPLY THE PALETTE EVERY RUN, whether the asset is new or not.
@@ -1830,6 +1836,37 @@ def build_material_library(texs=None):
         mel.set_material_instance_parent(mi, master)
         _sr = palette_saturate(rgb)
         mel.set_material_instance_vector_parameter_value(mi, "BaseColor", unreal.LinearColor(_sr[0], _sr[1], _sr[2], 1))
+        # ---- SELF-COLOUR, BECAUSE THE LIT PATH KEEPS EATING THE PALETTE ----
+        #
+        # Thirteen mechanisms have now been proposed for why a correct albedo
+        # renders grey, and every one of them has been refuted by the frame that
+        # tested it: specular, fog, the sky's hue, bloom, the ACES shoulder,
+        # ambient wash, the batch binding, metal-vs-dielectric, the BaseColor
+        # wiring, emissive defaults, the cook (a runtime probe proved the pak
+        # holds MI_mush_red at (1.000, 0.003, 0.188)), warm practicals, and
+        # randomised shading normals.
+        #
+        # So this stops asking the lit path to carry the palette and gives every
+        # surface a share of its OWN colour as emission. Emissive is added after
+        # shading: no light, no normal, no ambient and no tonemap decision
+        # upstream of it can take it away.
+        #
+        # It is also correct for what this world IS. The founder's reference is
+        # an ILLUSTRATION -- flat, vivid, self-coloured -- not a photograph of a
+        # garden, and stylised voxel worlds routinely light themselves this way.
+        # 0.30 is deliberately a SHARE, not a replacement: the surface still
+        # takes light and shadow from the scene, and keeps a floor of its own
+        # hue when the lit path gives it nothing.
+        #
+        # If the lit path is ever fixed, this is one number to turn down.
+        _emi_base = MATERIAL_SPEC[name][3] if len(MATERIAL_SPEC[name]) > 3 else (0.0, 0.0, 0.0)
+        _emi_str = MATERIAL_SPEC[name][4] if len(MATERIAL_SPEC[name]) > 4 else 0.0
+        if _emi_str <= 0.0 and name not in ("cloud", "cloud_warm", "water", "lamp_glass"):
+            mel.set_material_instance_vector_parameter_value(
+                mi, "Emissive", unreal.LinearColor(_sr[0], _sr[1], _sr[2], 1))
+            mel.set_material_instance_scalar_parameter_value(
+                mi, "EmissiveStrength", float(LOOK["selfColour"]))
+            _SELFCOLOUR[0] += 1
         mel.set_material_instance_scalar_parameter_value(mi, "Metallic", met)
         mel.set_material_instance_scalar_parameter_value(mi, "Roughness", rough)
         mel.set_material_instance_vector_parameter_value(mi, "Emissive", unreal.LinearColor(emi[0], emi[1], emi[2], 1))
@@ -1839,6 +1876,10 @@ def build_material_library(texs=None):
             unreal.log_warning("MATSET palette %s -> (%.2f,%.2f,%.2f)"
                                % (name, rgb[0], rgb[1], rgb[2]))
         mats[name] = mi
+    unreal.log_warning("SELF-COLOUR: %d materials emit a %.2f share of their own "
+                       "palette - the lit path kept eating it and thirteen "
+                       "explanations were refuted" % (_SELFCOLOUR[0], LOOK["selfColour"]))
+
     # ---- AUTHORED SURFACES ------------------------------------------------
     # Only these opt in. TexScale is in 1/uu: 0.0038 puts one 512px sheet across
     # 263 uu, so a cobble sett lands at about 29 cm — a real one, not a tile the
