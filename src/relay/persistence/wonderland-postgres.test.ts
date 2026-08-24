@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
-import { TransactionalWonderlandDatabase, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007 } from './wonderland-postgres';
+import { TransactionalWonderlandDatabase, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008 } from './wonderland-postgres';
 import type { WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
 
 class FakePool {
@@ -27,7 +27,8 @@ describe('Wonderland PostgreSQL migration', () => {
   it('defines versioned inventory catalog, equipment, and active unique ownership constraints',()=>{expect(WONDERLAND_MIGRATION_005).toContain('relay_wonderland.inventory_definitions');expect(WONDERLAND_MIGRATION_005).toContain('relay_wonderland.inventory_equipment');expect(WONDERLAND_MIGRATION_005).toContain('wonderland_inventory_unique_active');});
   it('defines durable Eval checkpoints and exactly-once effect linkage',()=>{expect(WONDERLAND_MIGRATION_006).toContain('relay_wonderland.eval_runtimes');expect(WONDERLAND_MIGRATION_006).toContain('relay_wonderland.eval_effects');expect(WONDERLAND_MIGRATION_006).toContain('PRIMARY KEY(battle_id,effect_kind,effect_key)');});
   it('defines auditable provider operations with request and local idempotency uniqueness',()=>{expect(WONDERLAND_MIGRATION_007).toContain('relay_wonderland.provider_operations');expect(WONDERLAND_MIGRATION_007).toContain('UNIQUE(execution_id,idempotency_key)');expect(WONDERLAND_MIGRATION_007).toContain('UNIQUE(provider,provider_request_id)');});
-  it('runs every checked-in migration through the configured PostgreSQL pool', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands).toEqual([WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007]); });
+  it('defines lease-safe swarm runs and workers with recovery indexes',()=>{expect(WONDERLAND_MIGRATION_008).toContain('relay_wonderland.swarm_runs');expect(WONDERLAND_MIGRATION_008).toContain('relay_wonderland.swarm_workers');expect(WONDERLAND_MIGRATION_008).toContain('lease_generation');expect(WONDERLAND_MIGRATION_008).toContain('wonderland_swarm_worker_claim');});
+  it('runs every checked-in migration through the configured PostgreSQL pool', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands).toEqual([WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008]); });
 });
 
 describe('TransactionalWonderlandDatabase', () => {
