@@ -162,3 +162,5 @@ export * from './wonderland-eval-adjudication';
 export * from './wonderland-ratings';
 
 export * from './wonderland-inventory';
+
+export * from './wonderland-agent-statistics';
