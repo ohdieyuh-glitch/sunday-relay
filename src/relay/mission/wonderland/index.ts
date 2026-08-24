@@ -170,3 +170,5 @@ export * from './wonderland-provider-ledger';
 export * from './wonderland-provider-adapters';
 
 export * from './wonderland-swarm-policy';
+
+export * from './wonderland-swarm-aggregation';
