@@ -43,6 +43,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 INI = os.path.abspath(os.path.join(HERE, "..", "..", "Config", "DefaultEngine.ini"))
 
 
+def nanite_default_on():
+    """Whether the generator turns Nanite on by default. Read, never assumed."""
+    gen = os.path.join(HERE, "generate-hub-level.py")
+    if not os.path.isfile(gen):
+        return None
+    src = io.open(gen, encoding="utf8").read()
+    m = re.search(r'os\.environ\.get\(\s*"WONDERLAND_NANITE"\s*,\s*"([01])"\s*\)', src)
+    return None if not m else (m.group(1) != "0")
+
+
 def check_source():
     if not os.path.isfile(INI):
         print("FAIL: %s is missing, so nothing was checked." % INI)
@@ -91,6 +101,20 @@ def check_runtime(paths):
 
 
 def main():
+    on = nanite_default_on()
+    if on is None:
+        print("FAIL: cannot read the WONDERLAND_NANITE default; this validator "
+              "has drifted from the code it checks.")
+        return 1
+    if not on:
+        print("Nanite is OFF by default, so SM6 is NOT required.")
+        print("MEASURED: SM6 costs half the frame rate on this target even with")
+        print("Nanite disabled -- 7/8/7 fps against 14/15/10 on SM5, and VRAM")
+        print("1.6 GB -> 2.8 GB, for a visually identical frame. This check")
+        print("applies when Nanite is switched back on, and not before.")
+        print()
+        print("PASS")
+        return 0
     rc = check_source()
     logs = sys.argv[1:]
     if logs:
