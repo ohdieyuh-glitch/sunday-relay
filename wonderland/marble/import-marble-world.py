@@ -150,6 +150,51 @@ def import_glb(source, destination, label, enable_nanite):
 
     unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
     imported = list(task.get_editor_property("imported_object_paths") or [])
+
+    # LODs, BECAUSE NANITE IS INERT ON THIS TARGET.
+    #
+    # The Nanite request above is the right idea and it does nothing here: the
+    # packaged build runs SF_VULKAN_SM5, and a Nanite mesh without SM6 silently
+    # renders its FALLBACK at full resolution. mesh_hq.glb builds at 1,014 MB,
+    # and it is the single most expensive thing in the frame -- MEASURED, by
+    # building the world without it:
+    #
+    #     with the Marble backdrop     16, 13, 11 fps    VRAM 1,806 MiB
+    #     without it                   22, 20, 14 fps    VRAM 1,505 MiB
+    #
+    # Targeting SM6 to make Nanite work is not the answer either; it was tried
+    # and costs half the frame rate globally on this Vulkan/L4 target whether
+    # or not anything uses it (7/8/7 fps).
+    #
+    # So the backdrop gets reduction LODs. It is a BACKDROP -- it is never
+    # close to the camera, which is exactly the case where a cheaper LOD is
+    # free. Guarded and non-fatal: a mesh that will not take LODs keeps the one
+    # it has and says so, because losing the backdrop entirely is worse than
+    # rendering it expensively.
+    for _path in imported:
+        try:
+            _m = unreal.EditorAssetLibrary.load_asset(_path)
+            if _m is None or not isinstance(_m, unreal.StaticMesh):
+                continue
+            _lib = getattr(unreal, "EditorStaticMeshLibrary", None)
+            if _lib is None:
+                _lib = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+            _opts = unreal.EditorScriptingMeshReductionOptions()
+            _settings = []
+            for _pct, _ss in ((1.0, 1.0), (0.35, 0.5), (0.12, 0.2), (0.04, 0.06)):
+                _r = unreal.EditorScriptingMeshReductionSettings()
+                _r.set_editor_property("percent_triangles", _pct)
+                _r.set_editor_property("screen_size", _ss)
+                _settings.append(_r)
+            _opts.set_editor_property("reduction_settings", _settings)
+            _opts.set_editor_property("auto_compute_lod_screen_size", False)
+            _lib.set_lods(_m, _opts)
+            unreal.EditorAssetLibrary.save_asset(_path, only_if_is_dirty=False)
+            log("MARBLE LODs: %d levels on %s (Nanite is inert on SM5; this is "
+                "what actually reduces it)" % (len(_settings), _path))
+        except Exception as _lexc:
+            log("MARBLE LODs NOT APPLIED to %s (%s) — it keeps a single LOD and "
+                "stays the most expensive thing in the frame." % (_path, _lexc))
     if not imported:
         log("IMPORT PRODUCED NOTHING for %s. This is a failure, not an empty "
             "world." % source)
