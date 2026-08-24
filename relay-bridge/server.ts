@@ -68,6 +68,8 @@ import { githubAppConfigFromEnv } from './repository-credential';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute, sessionTokenFrom,
 } from './browser-session/routes';
+import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
+import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -222,6 +224,8 @@ export function createBridgeServer(
   /** The durable Project Brain store. Absent on a bridge with no mounted state
    *  root — a verified/shipped run's episode is then not written durably. */
   brainStore: BrainMemoryStore | null = null,
+  /** Authoritative Wonderland state. Inject a durable restored instance in production. */
+  wonderlandBackend: WonderlandBackend | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -229,6 +233,7 @@ export function createBridgeServer(
    * browser credential is ever written to the mounted volume.
    */
   const browserSessions = createBrowserSessionStore();
+  const wonderland = wonderlandBackend ?? WonderlandBackend.empty();
   /**
    * SIGN IN WITH GITHUB. The CSRF state store lives in memory beside the
    * sessions — a restart forgets an in-flight sign-in, which is fail-closed. The
@@ -497,6 +502,20 @@ export function createBridgeServer(
             send(res, githubAuthResult.status, githubAuthResult.body, cors);
             return;
           }
+        }
+
+        if (isWonderlandRoute(path.replace('/relay-api', ''))) {
+          const wonderlandResult = await handleWonderlandRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            url: (req.url ?? '/').replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            now: Date.now(),
+          }, { backend: wonderland, sessions: browserSessions, response: res, request: req });
+          if (wonderlandResult !== null) send(res, wonderlandResult.status, wonderlandResult.body, cors);
+          return;
         }
 
         if (isReviewerRoute(path.replace('/relay-api', ''))) {

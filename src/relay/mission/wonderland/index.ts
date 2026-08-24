@@ -13,6 +13,8 @@
  * gets reviewed then.
  */
 
+export * from './wonderland-backend';
+
 export {
   SUPPORTED_WONDERLAND_WORLD_SCHEMA_VERSIONS,
   WONDERLAND_AGENT_FIELDS,
