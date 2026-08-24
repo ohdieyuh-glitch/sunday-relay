@@ -240,7 +240,10 @@ LOOK = {
     # 828 lux and cutting the sky just made the world black.
     # BRIGHT PASTEL DAYLIGHT, which is what the reference is lit by. A garden
     # at midday under a high sun: strong key, readable shadows, no dusk.
-    "sunLux": 5200.0,
+    # 5200 -> 3600. Raising the key BEFORE the colour worked pushed the whole
+    # frame toward white and made the grey worse, not better. That was my error
+    # and it comes back down: colour first, then brightness.
+    "sunLux": 3600.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -399,7 +402,7 @@ LOOK = {
     # runtime line now proves are bound correctly on all 147 batches).
     # A bright sky fills the shade with pastel rather than leaving it black,
     # which is how the reference's shadows stay colourful instead of dead.
-    "skyIntensity": 6.0,
+    "skyIntensity": 4.2,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -504,7 +507,7 @@ LOOK = {
     # a 14.0 sky; it is not the same frame any more.
     # Pulled down to hold a bright key out of the tonemapper's shoulder, so
     # the extra light lands as COLOUR rather than as white.
-    "gain": (0.52, 0.52, 0.54),
+    "gain": (0.58, 0.58, 0.60),
     # RAISED 1.52 -> 1.78. Saturation was tuned while the frame carried a
     # false gold cast, and in that state it multiplied the CAST rather than the
     # palette -- which is why it was correct to be suspicious of it. The cast is
@@ -1431,6 +1434,7 @@ def build_material_library(texs=None):
             eal.delete_directory(pkg)
     except Exception as _e:
         unreal.log_warning("material rebuild wipe skipped: %s" % _e)
+    _BASE_OUT = [None]
     master_path = pkg + "/M_WLMaster"
     if eal.does_asset_exist(master_path):
         master = eal.load_asset(master_path)
@@ -1707,6 +1711,9 @@ def build_material_library(texs=None):
                 mel.connect_material_expressions(_bc_out, "", _bt, "A")
                 mel.connect_material_expressions(_alb_s, "", _bt, "B")
                 mel.connect_material_property(_bt, "", unreal.MaterialProperty.MP_BASE_COLOR)
+                # Keep the FINAL base-colour node so emissive can be driven from
+                # the one chain in this graph that is PROVEN to reach the pixel.
+                _BASE_OUT[0] = _bt
             except Exception as _e:
                 unreal.log_warning("albedo map not applied: %s" % _e)
 
@@ -1778,6 +1785,51 @@ def build_material_library(texs=None):
             mel.connect_material_expressions(r2, "", rsum, "B")
             mel.connect_material_property(rsum, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
             unreal.log("RIM LIGHT wired")
+
+            # ---- NO MORE GREY -------------------------------------------
+            #
+            # PROVEN, from the packaged build's own runtime log: the material
+            # instances carry the right emissive and it does not reach the
+            # screen.
+            #
+            #   MI_foliage  Emissive=set(0.116,0.542,0.098) EmisStr=0.220
+            #
+            # Correct values, at runtime, on the component that renders -- and
+            # the frame is still grey. So the parameters are fine and this
+            # graph's EMISSIVE ROUTING is not. Meanwhile MP_BASE_COLOR is
+            # proven to route: verify-base-colour-wired.py walks the graph and
+            # finds the BaseColor parameter 21 nodes upstream of it.
+            #
+            # So emissive stops being driven by a chain that does not work and
+            # is driven by the chain that does. _BASE_OUT is the exact node
+            # feeding MP_BASE_COLOR -- palette x noise x albedo map, everything
+            # a surface's colour already is -- scaled and added on top of the
+            # rim/emissive sum. A surface can now be no darker than a share of
+            # its own colour, whatever the lit path does or fails to do.
+            if _BASE_OUT[0] is not None:
+                _sc = mel.create_material_expression(
+                    master, unreal.MaterialExpressionScalarParameter, -600, 700)
+                _sc.set_editor_property("parameter_name", "SelfColour")
+                _sc.set_editor_property("default_value", 0.55)
+                _scm = mel.create_material_expression(
+                    master, unreal.MaterialExpressionMultiply, -400, 700)
+                mel.connect_material_expressions(_BASE_OUT[0], "", _scm, "A")
+                mel.connect_material_expressions(_sc, "", _scm, "B")
+                _esum = mel.create_material_expression(
+                    master, unreal.MaterialExpressionAdd, -140, 560)
+                mel.connect_material_expressions(rsum, "", _esum, "A")
+                mel.connect_material_expressions(_scm, "", _esum, "B")
+                mel.connect_material_property(
+                    _esum, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+                unreal.log_warning(
+                    "NO-GREY: emissive is now driven from the PROVEN base-colour "
+                    "chain at 0.55 - the Emissive parameter route reaches the "
+                    "material and not the pixel, so it is no longer relied on")
+            else:
+                unreal.log_error(
+                    "NO-GREY FAILED: the base-colour output was never captured, "
+                    "so emissive still depends on the route that does not work "
+                    "and the world will render grey again.")
         except Exception as _e:
             unreal.log_warning("rim light skipped (%s); no edge response" % _e)
         # BREATHING via World-Position-Offset: vertices pulse along their normal on a
