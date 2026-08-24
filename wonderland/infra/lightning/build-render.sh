@@ -130,6 +130,7 @@ wl_knob_pairs() {
               WONDERLAND_MARBLE_BACKDROP \
               WONDERLAND_MARBLE_BACKDROP_SLUG \
               WONDERLAND_MARBLE_IMPORT \
+              WONDERLAND_MARBLE_TEX \
               WONDERLAND_NANITE \
               WONDERLAND_TEST_STRIP \
               WONDERLAND_TEST_STRIPWONDERLAND_NANITE \

@@ -151,6 +151,44 @@ def import_glb(source, destination, label, enable_nanite):
     unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
     imported = list(task.get_editor_property("imported_object_paths") or [])
 
+    # THE BACKDROP'S TEXTURE IS THE COST, NOT ITS GEOMETRY.
+    #
+    # MEASURED, and it corrected a wrong diagnosis of my own. Removing the
+    # backdrop entirely buys ~40% of the frame rate (13.3 -> 18.7 fps, VRAM
+    # 1,806 -> 1,505 MiB), so it is the most expensive thing in the frame. But
+    # it is NOT geometry, and three measurements say so:
+    #
+    #     r.ScreenPercentage 70   no change   -> not pixel-bound
+    #     r.ForceLOD 2 and 3      no change   -> not triangle-bound
+    #     its own reduction LODs  no change   -> and it is a SHELL, so its
+    #                                            screen size is always ~1.0 and
+    #                                            LOD0 is always selected
+    #
+    # The GLB says what it actually is: ONE mesh, ONE primitive, ONE material,
+    # 592,580 triangles -- trivial next to the ~95 million this world already
+    # submits -- inside a 141.5 MB file with ONE image. The geometry is roughly
+    # 19 MB of that. The texture is the other ~120 MB.
+    #
+    # So the lever is texture resolution. A backdrop is far away by definition;
+    # capping it keeps the skyline and drops the bandwidth. WONDERLAND_MARBLE_TEX
+    # sets the cap (0 disables it entirely and restores the full texture).
+    _tex_cap = int(os.environ.get("WONDERLAND_MARBLE_TEX", "4096") or 0)
+    if _tex_cap > 0:
+        for _path in imported:
+            try:
+                _t = unreal.EditorAssetLibrary.load_asset(_path)
+                if _t is None or not isinstance(_t, unreal.Texture2D):
+                    continue
+                _t.set_editor_property("max_texture_size", _tex_cap)
+                unreal.EditorAssetLibrary.save_asset(_path, only_if_is_dirty=False)
+                log("MARBLE TEXTURE capped to %d on %s (the backdrop's texture "
+                    "is ~120 MB and is the measured cost, not its 592k "
+                    "triangles)" % (_tex_cap, _path))
+            except Exception as _texc:
+                log("MARBLE TEXTURE not capped on %s (%s) — it keeps full "
+                    "resolution and stays the most expensive thing in the "
+                    "frame." % (_path, _texc))
+
     # LODs, BECAUSE NANITE IS INERT ON THIS TARGET.
     #
     # The Nanite request above is the right idea and it does nothing here: the
