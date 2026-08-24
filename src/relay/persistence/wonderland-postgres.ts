@@ -89,6 +89,9 @@ export class TransactionalWonderlandDatabase {
       return { response, event };
     }));
   }
+  async replayEvents(projectId: string, afterSequence: number, limit = 1000): Promise<WonderlandEvent[]> {
+    return this.transaction(transaction => transaction.replay(projectId, afterSequence, limit));
+  }
   async claimOutbox(workerId: string, now: string, claimedUntil: string, limit = 100): Promise<ClaimedOutbox[]> {
     if (!workerId.trim() || !Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error('invalid_outbox_claim');
     const result = await this.pool.query<{ outbox_id: string; event_id: string; project_id: string; attempts: number }>(`WITH candidates AS (SELECT outbox_id FROM relay_wonderland.outbox WHERE (status='PENDING' OR (status='CLAIMED' AND claimed_until<$2)) AND next_attempt_at<=$2 ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $4) UPDATE relay_wonderland.outbox o SET status='CLAIMED',claimed_by=$1,claimed_until=$3,attempts=o.attempts+1 FROM candidates c WHERE o.outbox_id=c.outbox_id RETURNING o.outbox_id,o.event_id,o.project_id,o.attempts`, [workerId, now, claimedUntil, limit]);
