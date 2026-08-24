@@ -156,3 +156,5 @@ export type {
 } from './wonderland-classes';
 
 export * from './wonderland-execution';
+
+export * from './wonderland-eval-adjudication';
