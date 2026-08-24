@@ -19,7 +19,8 @@ export const WONDERLAND_MIGRATION_005 = migration('005_wonderland_inventory.sql'
 export const WONDERLAND_MIGRATION_006 = migration('006_wonderland_eval_runtime.sql');
 export const WONDERLAND_MIGRATION_007 = migration('007_wonderland_provider_operations.sql');
 export const WONDERLAND_MIGRATION_008 = migration('008_wonderland_swarm_scheduler.sql');
-export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008] as const;
+export const WONDERLAND_MIGRATION_009 = migration('009_wonderland_gve_runs.sql');
+export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009] as const;
 export interface ClaimedOutbox { outboxId: string; eventId: string; projectId: string; attempts: number; }
 export interface BudgetAmounts { inputTokens: number; cachedTokens: number; outputTokens: number; usdMicros: number; toolCalls: number; computeMs: number; runtimeMs: number; swarmWorkers: number; }
 export interface BudgetReservation { reservationId: string; executionId: string; state: 'RESERVED' | 'COMMITTED' | 'RELEASED' | 'EXPIRED' | 'DENIED'; requested: BudgetAmounts; committed: BudgetAmounts | null; expiresAt: string; receiptId: string | null; denialReason: string | null; }
