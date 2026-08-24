@@ -172,6 +172,51 @@ def import_glb(source, destination, label, enable_nanite):
     # So the lever is texture resolution. A backdrop is far away by definition;
     # capping it keeps the skyline and drops the bandwidth. WONDERLAND_MARBLE_TEX
     # sets the cap (0 disables it entirely and restores the full texture).
+    # SINGLE-SIDED, WHICH IS THE ONE FIXABLE PROPERTY LEFT.
+    #
+    # The GLB declares `doubleSided: true`. On a 592,580-triangle SHELL wrapped
+    # around the camera that means backface culling is off, so both faces of
+    # every triangle rasterise and nothing can cull any of it. Removing the
+    # backdrop entirely buys ~40% of the frame, and none of the usual suspects
+    # explains that: not triangle count (r.ForceLOD 2 and 3 changed nothing),
+    # not screen-size LOD (it is a shell, its screen size is always ~1.0), not
+    # texture resolution (capping to 4,096 moved VRAM 44 MiB and no frames),
+    # and not overdraw shading (a full Z-prepass changed nothing).
+    #
+    # Two-sidedness is what is left, and it is a property rather than a trait:
+    # it can simply be turned off.
+    #
+    # THE RISK, STATED: a shell is only visible from inside if its normals face
+    # inward. If they face out, single-sided rendering makes the backdrop
+    # DISAPPEAR. That is why this is a knob and not a silent default --
+    # WONDERLAND_MARBLE_ONESIDED=0 restores two-sided in one cook, and the next
+    # frame after this change has to be LOOKED at, not just measured.
+    if os.environ.get("WONDERLAND_MARBLE_ONESIDED", "1") != "0":
+        _flipped = 0
+        for _p in imported:
+            try:
+                _root = "/".join(_p.split(".")[0].split("/")[:-2])
+                for _asset in unreal.EditorAssetLibrary.list_assets(_root, recursive=True):
+                    _m = unreal.EditorAssetLibrary.load_asset(_asset)
+                    if _m is None or not isinstance(_m, unreal.MaterialInterface):
+                        continue
+                    _base = _m.get_base_material() if hasattr(_m, "get_base_material") else _m
+                    if _base is None:
+                        continue
+                    _base.set_editor_property("two_sided", False)
+                    unreal.EditorAssetLibrary.save_asset(_base.get_path_name().split(".")[0],
+                                                         only_if_is_dirty=False)
+                    _flipped += 1
+                    log("MARBLE ONE-SIDED: %s (a double-sided shell rasterises "
+                        "both faces of 592,580 triangles and cannot be culled)"
+                        % _base.get_path_name())
+            except Exception as _osexc:
+                log("MARBLE ONE-SIDED not applied under %s (%s)" % (_p, _osexc))
+        if _flipped == 0:
+            log("MARBLE ONE-SIDED: no material found to flip — the backdrop "
+                "stays double-sided and keeps rasterising both faces. Said "
+                "out loud because a silent no-op here looks exactly like a fix.")
+
     _tex_cap = int(os.environ.get("WONDERLAND_MARBLE_TEX", "4096") or 0)
     if _tex_cap > 0:
         # SCAN THE PACKAGE, DO NOT FILTER THE IMPORT LIST.
