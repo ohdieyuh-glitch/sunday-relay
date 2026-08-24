@@ -64,3 +64,9 @@ A production execution adapter publishes observed Relay transitions, never timer
 ## Operational signals
 
 Instrument active subscriptions, reconnect/replay counts, lifecycle transitions, GVE, provider usage, permission/budget denials, reward grants, worker failures, and backpressure. Carry `correlationId` into OpenTelemetry-compatible spans and structured logs. Never log secrets or unredacted payloads.
+
+## Eval runtime and competitive representation
+
+Hosted Eval orchestration uses `relay-competitive-agent.v1`. The representation is a server-built allowlist containing public Agent identity, a competition-safe C.A.R.D. subset, public statistics/verification metrics, competition-scoped telemetry, and battle evidence. Prompt bodies, model routing, runtime configuration, credentials, Project Brain, private source, and hidden reasoning are never copied.
+
+Eval runtime proceeds through `CREATED → PREPARING → EVALUATING → REBUTTAL_WINDOW → ADJUDICATING → FINALIZING → COMPLETE`. Findings are proposals until GVE adjudicates claim and rebuttal evidence. Only verified, unrebutted findings affect the authoritative result. Provider-backed evaluator launch remains unavailable when no execution adapter is configured; clients must not synthesize evaluator activity.

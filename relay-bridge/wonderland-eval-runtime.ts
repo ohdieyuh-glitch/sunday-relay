@@ -1,0 +1,51 @@
+import type { CardVersion, Evidence, Finding, WonderlandExecutor } from '../src/relay/mission/wonderland/wonderland-backend';
+import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
+import { WonderlandExecutionRuntime } from '../src/relay/mission/wonderland/wonderland-execution';
+
+export const COMPETITIVE_REPRESENTATION_VERSION = 'relay-competitive-agent.v1' as const;
+export interface CompetitiveAgentRepresentation {
+  readonly schemaVersion: typeof COMPETITIVE_REPRESENTATION_VERSION;
+  readonly agent: Readonly<{ agentId: string; displayName: string }>;
+  readonly card: Readonly<{ cardVersionId: string; version: number; capabilities: readonly string[]; tools: readonly string[]; autonomy: string; verificationPolicy: readonly string[] }>;
+  readonly publicStatistics: Readonly<Record<string, number>>;
+  readonly publicVerificationMetrics: Readonly<Record<string, number | null>>;
+  readonly competitionTelemetry: readonly Readonly<Record<string, unknown>>[];
+  readonly battleEvidence: readonly Readonly<{ evidenceId: string; category: Evidence['category']; passed: boolean | null; score: number | null }>[];
+}
+export interface CompetitiveRepresentationSource {
+  readonly agentId: string; readonly displayName: string; readonly card: CardVersion;
+  readonly publicStatistics?: Readonly<Record<string, number>>;
+  readonly publicVerificationMetrics?: Readonly<Record<string, number | null>>;
+  readonly competitionTelemetry?: readonly Readonly<Record<string, unknown>>[];
+  readonly battleEvidence?: readonly Evidence[];
+}
+/** Explicit allowlist. Additional source/C.A.R.D. fields are ignored by construction. */
+export function buildCompetitiveAgentRepresentation(source: CompetitiveRepresentationSource): CompetitiveAgentRepresentation {
+  return { schemaVersion:COMPETITIVE_REPRESENTATION_VERSION,agent:{agentId:source.agentId,displayName:source.displayName},card:{cardVersionId:source.card.cardVersionId,version:source.card.version,capabilities:[...source.card.capabilities],tools:[...source.card.tools],autonomy:source.card.autonomy,verificationPolicy:[...source.card.verificationPolicy]},publicStatistics:{...(source.publicStatistics??{})},publicVerificationMetrics:{...(source.publicVerificationMetrics??{})},competitionTelemetry:(source.competitionTelemetry??[]).map(item=>structuredClone(item)),battleEvidence:(source.battleEvidence??[]).map(item=>({evidenceId:item.evidenceId,category:item.category,passed:item.passed,score:item.score})) };
+}
+
+export type EvalRuntimeState = 'CREATED'|'PREPARING'|'EVALUATING'|'REBUTTAL_WINDOW'|'ADJUDICATING'|'FINALIZING'|'COMPLETE'|'FAILED'|'CANCELLED';
+export interface EvalRuntimeSnapshot { readonly battleId:string; state:EvalRuntimeState; readonly executionIds:readonly [string,string]; readonly representations:readonly [CompetitiveAgentRepresentation,CompetitiveAgentRepresentation]; startedAt:string|null; completedAt:string|null; version:number; }
+export interface EvalWorkspaceProvisioner { provision(input:{battleId:string;projectId:string;playerId:string;agentId:string}):Promise<{isolationRef:string}>; }
+export interface EvalExecutionPort {
+  evaluate(input:{executionId:string;battleId:string;evaluatorPlayerId:string;evaluatorAgentId:string;target:CompetitiveAgentRepresentation;isolationRef:string}):Promise<{evidence:readonly Evidence[];findings:readonly Omit<Finding,'findingId'|'battleId'|'verificationState'|'rebuttalState'|'rebuttalEvidenceIds'>[]}>;
+}
+export interface EvalAdjudicationPort { adjudicate(input:{finding:Finding;claimEvidence:readonly Evidence[];rebuttalEvidence:readonly Evidence[]}):Promise<'VERIFIED'|'REBUTTED'|'INSUFFICIENT'>; }
+
+const transitions:Readonly<Record<EvalRuntimeState,readonly EvalRuntimeState[]>>={CREATED:['PREPARING','CANCELLED'],PREPARING:['EVALUATING','FAILED','CANCELLED'],EVALUATING:['REBUTTAL_WINDOW','FAILED','CANCELLED'],REBUTTAL_WINDOW:['ADJUDICATING','CANCELLED'],ADJUDICATING:['FINALIZING','FAILED'],FINALIZING:['COMPLETE','FAILED'],COMPLETE:[],FAILED:[],CANCELLED:[]};
+export class WonderlandEvalRuntime {
+  private readonly runs=new Map<string,EvalRuntimeSnapshot>();
+  constructor(private readonly backend:WonderlandBackend,private readonly executions:WonderlandExecutionRuntime,private readonly provisioner:EvalWorkspaceProvisioner,private readonly evaluator:EvalExecutionPort,private readonly adjudicator:EvalAdjudicationPort,private readonly now:()=>string,private readonly newId:()=>string){}
+  async start(actorId:string,commandId:string,battleId:string,nowMs:number,sources:readonly [CompetitiveRepresentationSource,CompetitiveRepresentationSource]):Promise<EvalRuntimeSnapshot>{
+    if(this.runs.has(battleId))return structuredClone(this.runs.get(battleId)!);const battle=this.backend.snapshot().battles[battleId];if(!battle||battle.mode!=='EVAL'||!battle.participantIds.includes(actorId))throw new Error('eval_battle_not_authorized');if(battle.state!=='READY')throw new Error('eval_battle_not_ready');const world=this.backend.snapshot();for(const playerId of battle.participantIds)if(!Object.values(world.presence).some(value=>value.playerId===playerId&&value.projectId===battle.projectId&&value.expiresAt>nowMs))throw new Error('eval_participant_not_present');if(sources.some((source,index)=>source.agentId!==battle.agentIds[index]||source.card.cardVersionId!==battle.cardSnapshots[index].cardVersionId))throw new Error('eval_representation_identity_mismatch');
+    const representations=sources.map(buildCompetitiveAgentRepresentation) as unknown as [CompetitiveAgentRepresentation,CompetitiveAgentRepresentation];const executionIds=[this.newId(),this.newId()] as [string,string];const run:EvalRuntimeSnapshot={battleId,state:'CREATED',executionIds,representations,startedAt:null,completedAt:null,version:1};this.runs.set(battleId,run);this.move(run,'PREPARING');
+    const scopes=await Promise.all(battle.participantIds.map((playerId,index)=>this.provisioner.provision({battleId,projectId:battle.projectId,playerId,agentId:battle.agentIds[index]})));if(scopes.some(scope=>!scope.isolationRef.trim())||new Set(scopes.map(scope=>scope.isolationRef)).size!==2){this.move(run,'FAILED');throw new Error('eval_execution_isolation_failed');}
+    for(let index=0;index<2;index++){const card=battle.cardSnapshots[index];this.executions.create(`${commandId}:execution:${index}`,{executionId:executionIds[index],battleId,missionId:battle.missionId,projectId:battle.projectId,playerId:battle.participantIds[index],agentId:battle.agentIds[index],cardSnapshot:card,workspaceIsolationRef:scopes[index].isolationRef,permissions:card.permissions,budget:{inputTokens:card.budgets.tokens,cachedTokens:card.budgets.tokens,outputTokens:card.budgets.tokens,toolCalls:card.budgets.toolCalls,usdMicros:Math.round(card.budgets.costUsd*1e6),computeMs:card.budgets.runtimeMs,runtimeMs:card.budgets.runtimeMs,swarmConcurrency:Number(card.runtimeConfiguration.concurrency??1)}});this.executions.transition(executionIds[index],'PROVISIONING');}
+    this.move(run,'EVALUATING');run.startedAt=this.now();for(const id of executionIds)this.executions.transition(id,'RUNNING');const executor:WonderlandExecutor={run:async input=>{const index=battle.participantIds.indexOf(input.playerId);const result=await this.evaluator.evaluate({executionId:executionIds[index],battleId,evaluatorPlayerId:input.playerId,evaluatorAgentId:input.agentId,target:representations[index===0?1:0],isolationRef:scopes[index].isolationRef});for(const finding of result.findings)this.backend.addFinding(input.playerId,battleId,finding);for(const evidence of result.evidence)this.executions.attachEvidence(executionIds[index],evidence.evidenceId);this.executions.transition(executionIds[index],'VERIFYING');return result.evidence;},runSubagent:async()=>({telemetry:[],evidence:[],artifactIds:[]})};await this.backend.startBattle(actorId,`${commandId}:start`,battleId,executor);this.move(run,'REBUTTAL_WINDOW');return structuredClone(run);
+  }
+  rebut(actorId:string,battleId:string,findingId:string,evidenceIds:readonly string[]):Finding{const run=this.require(battleId);if(run.state!=='REBUTTAL_WINDOW')throw new Error('eval_rebuttal_window_closed');return this.backend.rebutFinding(actorId,battleId,findingId,evidenceIds);}
+  async adjudicateAndFinalize(actorId:string,commandId:string,battleId:string):Promise<ReturnType<WonderlandBackend['finalize']>>{const run=this.require(battleId);if(run.state!=='REBUTTAL_WINDOW')throw new Error('eval_not_ready_for_adjudication');this.move(run,'ADJUDICATING');const battle=this.backend.snapshot().battles[battleId];for(const finding of battle.findings){const claim=battle.evidence.filter(value=>finding.evidenceIds.includes(value.evidenceId));const rebuttal=battle.evidence.filter(value=>finding.rebuttalEvidenceIds.includes(value.evidenceId));const outcome=await this.adjudicator.adjudicate({finding,claimEvidence:claim,rebuttalEvidence:rebuttal});this.backend.verifyFinding(battleId,finding.findingId,outcome==='VERIFIED',outcome==='REBUTTED');}this.move(run,'FINALIZING');const result=this.backend.finalize(actorId,`${commandId}:finalize`,battleId);for(const id of run.executionIds)this.executions.transition(id,'COMPLETE');this.move(run,'COMPLETE');run.completedAt=this.now();return result;}
+  snapshot(battleId:string):EvalRuntimeSnapshot|null{return this.runs.has(battleId)?structuredClone(this.runs.get(battleId)!):null;}
+  private require(id:string){const value=this.runs.get(id);if(!value)throw new Error('eval_runtime_not_found');return value;}
+  private move(run:EvalRuntimeSnapshot,next:EvalRuntimeState){if(!transitions[run.state].includes(next))throw new Error(`invalid_eval_transition:${run.state}->${next}`);run.state=next;run.version++;}
+}
