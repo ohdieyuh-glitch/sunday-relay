@@ -176,3 +176,5 @@ export * from './wonderland-swarm-aggregation';
 export * from './wonderland-gve-runtime';
 
 export * from './wonderland-gve-visible';
+
+export * from './wonderland-gve-hidden';
