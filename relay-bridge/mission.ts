@@ -360,6 +360,8 @@ export interface MissionRegistryConfig {
   claudeMode: 'live' | 'fake';
   confirmLive: boolean;
   now?: () => string;
+  /** Automatic observation seam; failures cannot interrupt Relay execution. */
+  onPhaseTransition?: (transition: { missionId: string; phase: MissionPhase; previousPhase: MissionPhase }) => void;
   baseEnv?: Record<string, string | undefined>;
   /** Environment the Prompt Architect configuration is read from (values are
       never read into a mission view — only presence is ever checked). */
@@ -599,9 +601,13 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   /** Persist a phase transition. Called BEFORE the next role begins — the
       record, not an in-memory promise, is what advances the mission. */
   const setPhase = (rec: MissionRecord, phase: MissionPhase, role?: MissionRole): void => {
+    const previousPhase = rec.phase;
     rec.phase = phase;
     rec.state = PHASE_STATE[phase];
     rec.currentRole = role ?? PHASE_ROLE[phase] ?? 'relay';
+    if (phase !== previousPhase) {
+      try { config.onPhaseTransition?.({ missionId: rec.missionId, phase, previousPhase }); } catch { /* observation never controls Mission truth */ }
+    }
   };
 
   const toAttestationSummaries = (rec: MissionRecord): MissionAttestationSummary[] =>

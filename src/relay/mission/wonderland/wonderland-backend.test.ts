@@ -32,6 +32,17 @@ const executor: WonderlandExecutor = {
 };
 
 describe('authoritative Goal Mode vertical slice', () => {
+  it('maps real Relay Mission transitions automatically without timers or caller mirroring', () => {
+    const { backend, battle } = fixture();
+    const phases = ['prompt_architect_working', 'coding', 'reviewer_working', 'relay_verifying', 'verification_failed', 'verified_complete', 'budget_exhausted'] as const;
+    for (const phase of phases) backend.observeRelayTransition(battle.missionId, phase);
+    expect(backend.eventsFor({ projectId: 'project-1', playerId: 'alice', battleId: battle.battleId }).map(event => event.eventType)).toEqual(expect.arrayContaining([
+      'agent.planning', 'agent.implementing', 'agent.reviewing', 'agent.verifying', 'verification.started',
+      'verification.failed', 'agent.repairing', 'mission.completed', 'agent.error',
+    ]));
+    expect(backend.observeRelayTransition('unknown-mission', 'coding')).toEqual([]);
+  });
+
   it('locks identical rules and immutable C.A.R.D. snapshots server-side', () => {
     const { backend, battle } = fixture();
     const snapshot = backend.snapshot();

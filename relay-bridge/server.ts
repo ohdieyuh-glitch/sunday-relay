@@ -1150,6 +1150,8 @@ export function main(): void {
     nextEvidenceId: () => `ev-${randomUUID()}`,
   });
 
+  const wonderland = WonderlandBackend.empty();
+
   const registry = createMissionRegistry({
     fusionBaseUrl: config.fusionBaseUrl,
     sundayMode: config.sundayMode,
@@ -1157,6 +1159,11 @@ export function main(): void {
     confirmLive: config.confirmLive,
     baseEnv: process.env,
     architectEnv: process.env,
+    onPhaseTransition: ({ missionId, phase }) => {
+      if (phase === 'prompt_architect_working' || phase === 'coding_agent_starting' || phase === 'coding' || phase === 'reviewer_starting' || phase === 'reviewer_working' || phase === 'relay_verifying' || phase === 'verification_failed' || phase === 'verified_complete' || phase === 'budget_exhausted') {
+        wonderland.observeRelayTransition(missionId, phase);
+      }
+    },
     deps: {
       gatherEvidence: liveReach.retrieve,
       /**
@@ -1343,6 +1350,7 @@ export function main(): void {
     liveReach,
     repositoryStore,
     brainStore,
+    wonderland,
   );
 
   /**

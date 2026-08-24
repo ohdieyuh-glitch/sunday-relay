@@ -13,6 +13,7 @@ export const WONDERLAND_EVENT_TYPES = [
 export type WonderlandEventType = typeof WONDERLAND_EVENT_TYPES[number];
 export type WonderlandVisibility = 'OWNER' | 'PARTICIPANTS' | 'PUBLIC';
 export type BattleMode = 'GOAL' | 'EVAL';
+export type RelayMissionPhase = 'prompt_architect_working' | 'coding_agent_starting' | 'coding' | 'reviewer_starting' | 'reviewer_working' | 'relay_verifying' | 'verification_failed' | 'verified_complete' | 'budget_exhausted';
 
 export interface WonderlandEvent {
   readonly eventId: string;
@@ -233,6 +234,19 @@ export class WonderlandBackend {
   private append(input: Omit<WonderlandEvent, 'eventId' | 'schemaVersion' | 'timestamp' | 'sequence' | 'payload'> & { payload: unknown }): WonderlandEvent {
     const event: WonderlandEvent = { ...input, eventId: this.newId(), schemaVersion: WONDERLAND_EVENT_SCHEMA_VERSION, timestamp: this.now(), sequence: ++this.state.sequence, payload: safePayload(input.payload) };
     this.state.events.push(event); for (const listener of this.listeners) listener(event); return event;
+  }
+  /** The automatic Relay→Wonderland seam. Unknown Missions are ignored rather than fabricated. */
+  observeRelayTransition(missionId: string, phase: RelayMissionPhase): readonly WonderlandEvent[] {
+    const battle = Object.values(this.state.battles).find(candidate => candidate.missionId === missionId);
+    if (!battle) return [];
+    const types: readonly WonderlandEventType[] = phase === 'prompt_architect_working' ? ['agent.planning']
+      : phase === 'coding_agent_starting' || phase === 'coding' ? ['agent.implementing']
+        : phase === 'reviewer_starting' || phase === 'reviewer_working' ? ['agent.reviewing']
+          : phase === 'relay_verifying' ? ['agent.verifying', 'verification.started']
+            : phase === 'verification_failed' ? ['verification.failed', 'agent.repairing']
+              : phase === 'verified_complete' ? ['mission.completed']
+                : ['agent.error'];
+    return types.map(eventType => this.append({ projectId: battle.projectId, sessionId: null, playerId: null, agentId: null, missionId, battleId: battle.battleId, eventType, payload: { relayPhase: phase }, visibility: 'PARTICIPANTS', correlationId: battle.battleId, causationId: null }));
   }
   private once<T>(commandId: string, action: () => T): T { if (commandId in this.state.commandResults) return clone(this.state.commandResults[commandId] as T); const before = clone(this.state); try { const result = action(); this.state.commandResults[commandId] = clone(result); return result; } catch (error) { this.state = before; throw error; } }
   createChallenge(actorId: string, commandId: string, input: Omit<Challenge, 'challengeId' | 'challengerId' | 'status'>): Challenge {
