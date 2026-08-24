@@ -22,6 +22,7 @@ function harness(failOperation?: string) {
     saveEntity:async value=>{operations.push(`entity:${value.kind}`);}, grantReward:async()=>{operations.push('reward');return true;}, insertProviderReceipt:async()=>true,
     reserveBudget:async()=>{throw new Error('not used');},commitBudget:async()=>{throw new Error('not used');},releaseBudget:async()=>{throw new Error('not used');},
     persistRating:async()=>{throw new Error('not used');},
+    loadEvalRuntime:async()=>null,saveEvalRuntime:async()=>{throw new Error('not used');},recordEvalEffect:async()=>{throw new Error('not used');},
     appendEvent:async value=>({...value,sequence:1}),enqueueEvent:async()=>undefined,replay:async()=>[],idempotent:async(_s,_c,_h,effect)=>effect(),
   };
   const database = { commitCommand: async <T>(input:{commandId:string}, effect:(tx:WonderlandTransaction)=>Promise<T>) => { if(committed.has(input.commandId))return committed.get(input.commandId); const response=await effect(transaction); const result={response,event:{}}; committed.set(input.commandId,result); return result; } } as unknown as TransactionalWonderlandDatabase;

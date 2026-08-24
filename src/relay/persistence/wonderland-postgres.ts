@@ -16,10 +16,12 @@ export const WONDERLAND_MIGRATION_002 = migration('002_wonderland_outbox.sql');
 export const WONDERLAND_MIGRATION_003 = migration('003_wonderland_budget_reservations.sql');
 export const WONDERLAND_MIGRATION_004 = migration('004_wonderland_ratings.sql');
 export const WONDERLAND_MIGRATION_005 = migration('005_wonderland_inventory.sql');
-export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005] as const;
+export const WONDERLAND_MIGRATION_006 = migration('006_wonderland_eval_runtime.sql');
+export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006] as const;
 export interface ClaimedOutbox { outboxId: string; eventId: string; projectId: string; attempts: number; }
 export interface BudgetAmounts { inputTokens: number; cachedTokens: number; outputTokens: number; usdMicros: number; toolCalls: number; computeMs: number; runtimeMs: number; swarmWorkers: number; }
 export interface BudgetReservation { reservationId: string; executionId: string; state: 'RESERVED' | 'COMMITTED' | 'RELEASED' | 'EXPIRED' | 'DENIED'; requested: BudgetAmounts; committed: BudgetAmounts | null; expiresAt: string; receiptId: string | null; denialReason: string | null; }
+export interface DurableEvalRuntime { battleId: string; projectId: string; state: string; representationVersion: string; rebuttalDeadline: string | null; snapshot: unknown; version: number; }
 export interface SqlQuery { query<R extends QueryResultRow = QueryResultRow>(text: string, values?: readonly unknown[]): Promise<{ rows: R[]; rowCount: number | null }> }
 export interface WonderlandTransaction {
   loadExecution(executionId: string): Promise<WonderlandExecutionSession | null>;
@@ -32,6 +34,9 @@ export interface WonderlandTransaction {
   commitBudget(reservationId: string, actual: BudgetAmounts, receiptId: string | null, now: string): Promise<BudgetReservation>;
   releaseBudget(reservationId: string, now: string): Promise<BudgetReservation>;
   persistRating(rating: WonderlandRating): Promise<boolean>;
+  loadEvalRuntime(battleId: string): Promise<DurableEvalRuntime | null>;
+  saveEvalRuntime(runtime: DurableEvalRuntime, expectedVersion: number | null): Promise<void>;
+  recordEvalEffect(input: { battleId: string; kind: 'EVALUATOR_EXECUTION'|'FINDING'|'REBUTTAL'|'ADJUDICATION'|'RESULT'|'RATING'|'STATISTICS'|'RECOMMENDATION'|'REWARD'; effectKey: string; data: unknown }): Promise<boolean>;
   insertProviderReceipt(receipt: ProviderUsageReceipt): Promise<boolean>;
   appendEvent(event: Omit<WonderlandEvent, 'sequence'>, streamId: string): Promise<WonderlandEvent>;
   enqueueEvent(event: WonderlandEvent): Promise<void>;
@@ -119,6 +124,15 @@ class PostgresWonderlandTransaction implements WonderlandTransaction {
     await this.client.query(`INSERT INTO relay_wonderland.agent_ratings(agent_id,mode,rating,deviation,volatility,period,battle_count,provisional,source_battle_id,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(agent_id,mode) DO UPDATE SET rating=EXCLUDED.rating,deviation=EXCLUDED.deviation,volatility=EXCLUDED.volatility,period=EXCLUDED.period,battle_count=EXCLUDED.battle_count,provisional=EXCLUDED.provisional,source_battle_id=EXCLUDED.source_battle_id,updated_at=EXCLUDED.updated_at,version=relay_wonderland.agent_ratings.version+1 WHERE relay_wonderland.agent_ratings.period<EXCLUDED.period`, [rating.agentId,rating.mode,rating.rating,rating.deviation,rating.volatility,rating.period,rating.battleCount,rating.provisional,rating.sourceBattleId,rating.updatedAt]);
     return true;
   }
+  async loadEvalRuntime(battleId: string): Promise<DurableEvalRuntime | null> {
+    const result = await this.client.query<{ battle_id:string;project_id:string;state:string;representation_version:string;rebuttal_deadline:string|null;snapshot:unknown;version:string }>('SELECT battle_id,project_id,state,representation_version,rebuttal_deadline,snapshot,version FROM relay_wonderland.eval_runtimes WHERE battle_id=$1 FOR UPDATE',[battleId]);
+    const row=result.rows[0];return row?{battleId:row.battle_id,projectId:row.project_id,state:row.state,representationVersion:row.representation_version,rebuttalDeadline:row.rebuttal_deadline,snapshot:parsed(row.snapshot),version:Number(row.version)}:null;
+  }
+  async saveEvalRuntime(runtime: DurableEvalRuntime, expectedVersion: number | null): Promise<void> {
+    if(expectedVersion===null){await this.client.query('INSERT INTO relay_wonderland.eval_runtimes(battle_id,project_id,state,representation_version,rebuttal_deadline,snapshot,version) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)',[runtime.battleId,runtime.projectId,runtime.state,runtime.representationVersion,runtime.rebuttalDeadline,json(runtime.snapshot),runtime.version]);return;}
+    const result=await this.client.query('UPDATE relay_wonderland.eval_runtimes SET state=$2,representation_version=$3,rebuttal_deadline=$4,snapshot=$5::jsonb,version=$6,updated_at=now() WHERE battle_id=$1 AND version=$7',[runtime.battleId,runtime.state,runtime.representationVersion,runtime.rebuttalDeadline,json(runtime.snapshot),runtime.version,expectedVersion]);if(result.rowCount!==1)throw Object.assign(new Error('optimistic_concurrency_conflict'),{code:'40001'});
+  }
+  async recordEvalEffect(input: { battleId:string;kind:'EVALUATOR_EXECUTION'|'FINDING'|'REBUTTAL'|'ADJUDICATION'|'RESULT'|'RATING'|'STATISTICS'|'RECOMMENDATION'|'REWARD';effectKey:string;data:unknown }): Promise<boolean> { const result=await this.client.query('INSERT INTO relay_wonderland.eval_effects(battle_id,effect_kind,effect_key,data) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING',[input.battleId,input.kind,input.effectKey,json(input.data)]);return result.rowCount===1; }
   private mapReservation(row: Record<string, unknown>): BudgetReservation {
     const requested = Object.fromEntries(budgetKeys.map((key,index)=>[key,Number(row[budgetColumns[index]] ?? 0)])) as unknown as BudgetAmounts;
     return { reservationId:String(row.reservation_id),executionId:String(row.execution_id),state:String(row.state) as BudgetReservation['state'],requested,committed:row.committed_amounts?parsed<BudgetAmounts>(row.committed_amounts):null,expiresAt:String(row.expires_at),receiptId:row.receipt_id?String(row.receipt_id):null,denialReason:row.denial_reason?String(row.denial_reason):null };
