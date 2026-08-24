@@ -160,3 +160,5 @@ export * from './wonderland-execution';
 export * from './wonderland-eval-adjudication';
 
 export * from './wonderland-ratings';
+
+export * from './wonderland-inventory';
