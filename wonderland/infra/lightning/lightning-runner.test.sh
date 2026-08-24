@@ -460,6 +460,39 @@ grep -q "require('playwright')" "$HERE/launch-wonderland.sh" \
   && ok "the launcher picks a node that can load playwright" \
   || bad "the launcher assumes a node instead of testing it"
 
+echo "== EVERY launcher of the packaged game applies the Vulkan environment =="
+# THE CLASS, NOT THE INSTANCE. After a CPU -> L4 machine switch the Studio had
+# the NVIDIA userspace driver installed and NO ICD manifest anywhere under
+# /etc/vulkan or /usr/share/vulkan. The loader answers that with
+# VK_ERROR_INCOMPATIBLE_DRIVER and Unreal segfaults inside RHIInit, before any
+# frame exists. common.sh has generated a scoped manifest for exactly this
+# since the trap was first proven -- but only run-stream.sh ever APPLIED it.
+#
+# native-shot.sh did not, so the one capture path with no encoder in it, the
+# path the look is judged on, was the only one that could not start on a
+# machine that had just been switched to a GPU. The frame did not come back
+# soft or wrong; it did not come back at all.
+#
+# So this asserts the property of every script that starts the packaged app,
+# rather than of the one that was caught.
+for _l in native-shot.sh run-stream.sh; do
+  if [ -f "$HERE/$_l" ]; then
+    if grep -qE '(env +\$\(wl_vulkan_env_pairs\)|VK_DRIVER_FILES=)' "$HERE/$_l"; then
+      ok "$_l applies the Vulkan environment to the process it launches"
+    else
+      bad "$_l starts the packaged game WITHOUT the Vulkan environment — on a machine whose ICD Lightning did not ship it will die in RHIInit"
+    fi
+  fi
+done
+# ...and it must be scoped to the process, not exported into the Studio, because
+# a global VK_DRIVER_FILES redirects every other GPU program on a shared box.
+for _l in native-shot.sh run-stream.sh; do
+  if [ -f "$HERE/$_l" ] && grep -qE '^\s*export +VK_(DRIVER_FILES|ICD_FILENAMES)=' "$HERE/$_l"; then
+    bad "$_l EXPORTS the Vulkan ICD into the Studio instead of wrapping its own process"
+  fi
+done
+ok "no launcher exports the ICD globally"
+
 echo "== the launcher states its own completion criteria =="
 for crit in "packaged Wonderland" "pixel streaming" "browser url" "hero frame" "verification"; do
   grep -q "$crit" "$HERE/launch-wonderland.sh" \

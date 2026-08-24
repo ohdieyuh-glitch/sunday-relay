@@ -35,6 +35,18 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 CAM="${WL_HERO_CAM:-6}"
 RES_X="${WL_RES_X:-1920}"
 RES_Y="${WL_RES_Y:-1080}"
+# WL_EXTRA_EXEC prepends console commands to the capture. It exists for ONE
+# purpose nothing else in this project can serve: separating "the material is
+# wrong" from "the material is right and the lighting or post is eating it".
+#
+# The runtime probe in WonderlandInstancedBatch.cpp can prove what BaseColor the
+# component's bound material reports. It cannot prove what the renderer did with
+# it afterwards. `ShowFlag.Lighting 0` renders BaseColor with no lighting at all,
+# so a frame captured that way is the albedo the renderer actually holds -- and
+# comparing it against the lit frame turns a fourteenth hypothesis into
+# arithmetic.
+#
+#   WL_EXTRA_EXEC="ShowFlag.Lighting 0, ShowFlag.Fog 0, ShowFlag.Bloom 0"
 OUT_DIR="${WL_NATIVE_DIR:-$WL_PROOF/native}"
 mkdir -p "$OUT_DIR"
 
@@ -54,11 +66,23 @@ wl_say "native capture: HeroCam$CAM at ${RES_X}x${RES_Y}, build $SHORT, NO strea
 
 # -RenderOffscreen so it runs headless; NO PixelStreamingURL, so nothing is
 # encoded. HighResShot fires after a settle, then the app is told to quit.
-setsid nohup "$APP" \
+# THE VULKAN ENVIRONMENT MUST BE APPLIED HERE TOO. It was not, and that is a
+# real defect this path hit on a real machine: after a CPU -> L4 switch the
+# Studio had the NVIDIA userspace driver but no ICD manifest anywhere, so the
+# loader reported VK_ERROR_INCOMPATIBLE_DRIVER and Unreal segfaulted inside
+# RHIInit before a single frame existed. run-stream.sh survived it because it
+# wraps its launch in wl_vulkan_env_pairs; this script did not, so the ONE
+# capture path with no encoder in it -- the path the look is actually judged
+# on -- was the only one that could not start.
+#
+# Wrapped with env(1) around this process alone, never exported, for the same
+# reason run-stream.sh gives: a global VK_DRIVER_FILES on a shared machine
+# redirects every other GPU program on it.
+setsid nohup env $(wl_vulkan_env_pairs) "$APP" \
   -RenderOffscreen -ForceRes "-ResX=$RES_X" "-ResY=$RES_Y" \
   -Unattended -stdout -FullStdOutLogOutput \
   -CinematicView "-HeroCam=$CAM" \
-  "-ExecCmds=r.HighResScreenshotDelay 180, HighResShot ${RES_X}x${RES_Y}" \
+  "-ExecCmds=${WL_EXTRA_EXEC:+$WL_EXTRA_EXEC, }r.HighResScreenshotDelay 180, HighResShot ${RES_X}x${RES_Y}" \
   >"$WL_LOG/native-$CAM.log" 2>&1 </dev/null &
 APP_PID=$!
 
