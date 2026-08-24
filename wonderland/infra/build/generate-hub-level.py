@@ -741,6 +741,55 @@ def palette_saturate(rgb):
     return tuple(max(0.0, min(1.0, lum + (c - lum) * k)) for c in rgb[:3])
 
 
+def wl_allow_instanced_use(mat, what):
+    """Declare that a material may be drawn on INSTANCED static meshes.
+
+    THE BUG THIS EXISTS FOR, and it was the whole grey.
+
+    UE requires a material to declare every usage domain it will be drawn in.
+    A material applied to an instanced-static-mesh component without
+    bUsedWithInstancedStaticMeshes is not an error and does not fail to bind --
+    the engine silently SUBSTITUTES THE DEFAULT MATERIAL at draw time and logs
+
+        Material MI_gold missing usage flag InstancedStaticMeshes!
+        Default Material will be used in game.
+
+    Wonderland draws 137,816 of its pieces as instances, so 38 materials -- the
+    entire visible world -- were being replaced by the engine's grey checker
+    while every check this project had said the materials were perfect:
+    SetMaterial/GetMaterial agreed on 150 of 150 batches, zero mismatches, zero
+    NULL slots, and the bound objects reported vivid BaseColor. All of that was
+    true. The engine simply refused to USE what was correctly bound.
+
+    That is why nothing could move it: not fourteen material hypotheses, not
+    re-authoring the palette (MI_stone raised 0.54 -> 0.71 at runtime moved the
+    frame 1.4%), and not nine show-flag sweeps of bloom, fog, aerial
+    perspective, AO, SSR, specular, indirect, the tonemapper or the grade.
+
+    It hides in the editor, which adds missing usage flags on demand and saves
+    them. A COOKED build cannot compile a new usage variant at runtime, so the
+    fallback only ever appears in the packaged game -- the one place no offline
+    validator was looking.
+
+    Set on the MASTER: instances inherit usage from their parent.
+    """
+    for _prop in ("used_with_instanced_static_meshes",
+                  "b_used_with_instanced_static_meshes"):
+        try:
+            mat.set_editor_property(_prop, True)
+            unreal.log_warning("USAGE FLAG: %s may now draw on instanced static "
+                               "meshes (%s)" % (what, _prop))
+            return True
+        except Exception:
+            continue
+    # Never silent. A material that cannot declare this renders the engine's
+    # grey checker in the packaged build and nothing else in this file can tell.
+    unreal.log_warning("USAGE FLAG FAILED on %s -- it will be replaced by the "
+                       "DEFAULT MATERIAL wherever it is drawn on instances, and "
+                       "that is exactly the grey this was written to end." % what)
+    return False
+
+
 def srgb_light_color(r, g, b):
     """An 0-255 colour pick as the LINEAR colour UE's light actually wants.
 
@@ -1269,9 +1318,11 @@ def build_leaf_material(texs):
                 pass
         if eal.does_asset_exist(path):
             master = eal.load_asset(path)
+            wl_allow_instanced_use(master, "M_WLLeaf (cached)")
         else:
             master = tools.create_asset("M_WLLeaf", pkg, unreal.Material,
                                         unreal.MaterialFactoryNew())
+            wl_allow_instanced_use(master, "M_WLLeaf")
             # MASKED + TWO SIDED is the entire reason this material exists
             master.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
             master.set_editor_property("two_sided", True)
@@ -1448,8 +1499,12 @@ def build_material_library(texs=None):
     master_path = pkg + "/M_WLMaster"
     if eal.does_asset_exist(master_path):
         master = eal.load_asset(master_path)
+        # ON THE CACHED PATH TOO. A master rebuilt with the flag and a master
+        # loaded without it render differently and look identical in the source.
+        wl_allow_instanced_use(master, "M_WLMaster (cached)")
     else:
         master = tools.create_asset("M_WLMaster", pkg, unreal.Material, unreal.MaterialFactoryNew())
+        wl_allow_instanced_use(master, "M_WLMaster")
 
         def param(cls, name, y, val):
             e = mel.create_material_expression(master, cls, -600, y)
