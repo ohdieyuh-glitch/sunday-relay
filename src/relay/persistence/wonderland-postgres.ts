@@ -4,20 +4,24 @@ import { Pool, type PoolConfig, type QueryResultRow } from 'pg';
 import type { ProviderUsageReceipt, WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
 import type { WonderlandEvent } from '../mission/wonderland/wonderland-backend';
 
-const migrationCandidates = [
-  join(__dirname, 'wonderland-migrations', '001_wonderland_runtime.sql'),
-  join(process.cwd(), 'src', 'relay', 'persistence', 'wonderland-migrations', '001_wonderland_runtime.sql'),
-];
+const migration = (name: string): string => {
+  const candidates = [join(__dirname, 'wonderland-migrations', name), join(process.cwd(), 'src', 'relay', 'persistence', 'wonderland-migrations', name)];
+  const path = candidates.find(existsSync);
+  return path === undefined ? '' : readFileSync(path, 'utf8');
+};
 /** Loading is fail-closed but non-eager so unrelated bundled CLI commands still run. */
-export const WONDERLAND_MIGRATION_001 = migrationCandidates.find(existsSync) === undefined
-  ? ''
-  : readFileSync(migrationCandidates.find(existsSync) as string, 'utf8');
+export const WONDERLAND_MIGRATION_001 = migration('001_wonderland_runtime.sql');
+export const WONDERLAND_MIGRATION_002 = migration('002_wonderland_outbox.sql');
+export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002] as const;
+export interface ClaimedOutbox { outboxId: string; eventId: string; projectId: string; attempts: number; }
 export interface SqlQuery { query<R extends QueryResultRow = QueryResultRow>(text: string, values?: readonly unknown[]): Promise<{ rows: R[]; rowCount: number | null }> }
 export interface WonderlandTransaction {
   loadExecution(executionId: string): Promise<WonderlandExecutionSession | null>;
   saveExecution(session: WonderlandExecutionSession, expectedVersion: number | null): Promise<void>;
   insertProviderReceipt(receipt: ProviderUsageReceipt): Promise<boolean>;
   appendEvent(event: Omit<WonderlandEvent, 'sequence'>, streamId: string): Promise<WonderlandEvent>;
+  enqueueEvent(event: WonderlandEvent): Promise<void>;
+  replay(projectId: string, afterSequence: number, limit: number): Promise<WonderlandEvent[]>;
   idempotent<T>(scope: string, commandId: string, requestHash: string, effect: () => Promise<T>): Promise<T>;
 }
 
@@ -50,6 +54,14 @@ class PostgresWonderlandTransaction implements WonderlandTransaction {
     await this.client.query(`INSERT INTO relay_wonderland.events(event_id,stream_id,project_id,sequence,event_type,visibility,battle_id,payload,occurred_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)`, [event.eventId, streamId, event.projectId, sequence, event.eventType, event.visibility, event.battleId, json(complete), event.timestamp]);
     return complete;
   }
+  async enqueueEvent(event: WonderlandEvent): Promise<void> {
+    await this.client.query(`INSERT INTO relay_wonderland.outbox(outbox_id,event_id,project_id) VALUES($1,$2,$3)`, [`outbox:${event.eventId}`, event.eventId, event.projectId]);
+  }
+  async replay(projectId: string, afterSequence: number, limit: number): Promise<WonderlandEvent[]> {
+    if (!Number.isSafeInteger(afterSequence) || afterSequence < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error('invalid_replay_cursor');
+    const result = await this.client.query<{ payload: unknown }>(`SELECT payload FROM relay_wonderland.events WHERE project_id=$1 AND sequence>$2 ORDER BY sequence ASC LIMIT $3`, [projectId, afterSequence, limit]);
+    return result.rows.map(row => parsed<WonderlandEvent>(row.payload));
+  }
   async idempotent<T>(scope: string, commandId: string, requestHash: string, effect: () => Promise<T>): Promise<T> {
     const existing = await this.client.query<{ request_hash: string; response: unknown }>('SELECT request_hash,response FROM relay_wonderland.idempotency WHERE scope=$1 AND command_id=$2 FOR UPDATE', [scope, commandId]);
     if (existing.rows[0]) {
@@ -66,8 +78,29 @@ export class TransactionalWonderlandDatabase {
   readonly pool: Pool;
   constructor(config: PoolConfig | Pool) { this.pool = typeof (config as Pool).connect === 'function' ? config as Pool : new Pool(config as PoolConfig); }
   async migrate(): Promise<void> {
-    if (WONDERLAND_MIGRATION_001 === '') throw new Error('wonderland_migration_not_packaged');
-    await this.pool.query(WONDERLAND_MIGRATION_001);
+    if (WONDERLAND_MIGRATIONS.some(sql => sql === '')) throw new Error('wonderland_migration_not_packaged');
+    for (const sql of WONDERLAND_MIGRATIONS) await this.pool.query(sql);
+  }
+  async commitCommand<T>(input: { scope: string; commandId: string; requestHash: string; streamId: string; event: Omit<WonderlandEvent, 'sequence'> }, effect: (transaction: WonderlandTransaction) => Promise<T>): Promise<{ response: T; event: WonderlandEvent }> {
+    return this.transaction(transaction => transaction.idempotent(input.scope, input.commandId, input.requestHash, async () => {
+      const response = await effect(transaction);
+      const event = await transaction.appendEvent(input.event, input.streamId);
+      await transaction.enqueueEvent(event);
+      return { response, event };
+    }));
+  }
+  async claimOutbox(workerId: string, now: string, claimedUntil: string, limit = 100): Promise<ClaimedOutbox[]> {
+    if (!workerId.trim() || !Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error('invalid_outbox_claim');
+    const result = await this.pool.query<{ outbox_id: string; event_id: string; project_id: string; attempts: number }>(`WITH candidates AS (SELECT outbox_id FROM relay_wonderland.outbox WHERE (status='PENDING' OR (status='CLAIMED' AND claimed_until<$2)) AND next_attempt_at<=$2 ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $4) UPDATE relay_wonderland.outbox o SET status='CLAIMED',claimed_by=$1,claimed_until=$3,attempts=o.attempts+1 FROM candidates c WHERE o.outbox_id=c.outbox_id RETURNING o.outbox_id,o.event_id,o.project_id,o.attempts`, [workerId, now, claimedUntil, limit]);
+    return result.rows.map(row => ({ outboxId: row.outbox_id, eventId: row.event_id, projectId: row.project_id, attempts: row.attempts }));
+  }
+  async completeOutbox(workerId: string, outboxId: string, deliveredAt: string): Promise<boolean> {
+    const result = await this.pool.query(`UPDATE relay_wonderland.outbox SET status='DELIVERED',claimed_by=NULL,claimed_until=NULL,delivered_at=$3 WHERE outbox_id=$1 AND status='CLAIMED' AND claimed_by=$2`, [outboxId, workerId, deliveredAt]);
+    return result.rowCount === 1;
+  }
+  async failOutbox(workerId: string, outboxId: string, error: string, nextAttemptAt: string, maxAttempts = 8): Promise<boolean> {
+    const result = await this.pool.query(`UPDATE relay_wonderland.outbox SET status=CASE WHEN attempts>=$5 THEN 'DEAD' ELSE 'PENDING' END,claimed_by=NULL,claimed_until=NULL,last_error=$3,next_attempt_at=$4 WHERE outbox_id=$1 AND status='CLAIMED' AND claimed_by=$2`, [outboxId, workerId, error.slice(0, 500), nextAttemptAt, maxAttempts]);
+    return result.rowCount === 1;
   }
   async transaction<T>(effect: (transaction: WonderlandTransaction) => Promise<T>, maxAttempts = 3): Promise<T> {
     let attempt = 0;

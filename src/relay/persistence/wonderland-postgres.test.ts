@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
-import { TransactionalWonderlandDatabase, WONDERLAND_MIGRATION_001 } from './wonderland-postgres';
+import { TransactionalWonderlandDatabase, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002 } from './wonderland-postgres';
 import type { WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
 
 class FakePool {
-  commands: string[] = []; released = 0; ended = false; rows: unknown[] = [];
-  async query(text: string) { this.commands.push(text); return { rows: [], rowCount: 0 }; }
-  async connect() { const pool = this; return { async query(text: string) { pool.commands.push(text); if (text.startsWith('SELECT snapshot')) return { rows: pool.rows, rowCount: pool.rows.length }; return { rows: [], rowCount: text.startsWith('UPDATE') ? 1 : 0 }; }, release() { pool.released += 1; } }; }
+  commands: string[] = []; released = 0; ended = false; rows: unknown[] = []; topRows: unknown[] = [];
+  async query(text: string) { this.commands.push(text); return { rows: this.topRows, rowCount: text.startsWith('UPDATE') ? 1 : this.topRows.length }; }
+  async connect() { const pool = this; return { async query(text: string) { pool.commands.push(text); if (text.startsWith('SELECT snapshot')) return { rows: pool.rows, rowCount: pool.rows.length }; if (text.includes('RETURNING next_sequence-1')) return { rows: [{ sequence: '1' }], rowCount: 1 }; return { rows: [], rowCount: text.startsWith('UPDATE') || text.startsWith('INSERT') ? 1 : 0 }; }, release() { pool.released += 1; } }; }
   async end() { this.ended = true; }
 }
 const database = (pool: FakePool) => new TransactionalWonderlandDatabase(pool as unknown as Pool);
@@ -22,7 +22,7 @@ describe('Wonderland PostgreSQL migration', () => {
     expect(WONDERLAND_MIGRATION_001).toContain('receipt_id text PRIMARY KEY');
     expect(WONDERLAND_MIGRATION_001).toMatch(/BEGIN;[\s\S]*COMMIT;/);
   });
-  it('runs the checked-in migration through the configured PostgreSQL pool', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands).toEqual([WONDERLAND_MIGRATION_001]); });
+  it('runs every checked-in migration through the configured PostgreSQL pool', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands).toEqual([WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002]); });
 });
 
 describe('TransactionalWonderlandDatabase', () => {
