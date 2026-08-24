@@ -1,55 +1,34 @@
 #!/usr/bin/env python3
-"""No frame-filling material may be authored pale.
+"""Nothing in the visible palette may be authored neutral.
 
-WHY THIS EXISTS -- and it is the answer to a question that cost most of a week.
+WHAT THIS FILE USED TO CLAIM, AND WHY THAT WAS WRONG
 
-Wonderland kept rendering grey. Fourteen explanations were proposed and refuted
-against real frames: the batch binding, the material overwrite, specular, fog,
-sky hue, bloom, the ACES shoulder, ambient wash, metal-vs-dielectric, the
-BaseColor wiring, emissive defaults, aerial perspective, a stale cached master,
-a dead BaseColor parameter. Every one was checked. Every one was innocent.
+This gate was written on the theory that physically-based shading delivers only
+about a THIRD of a material's authored saturation, so the palette had to be
+authored past the target to survive being lit. It even carried arithmetic that
+appeared to close: mush_white authored 0.184, delivered 0.095.
 
-The runtime probe in WonderlandInstancedBatch.cpp settled the binding question
-for good: every batch resolves its intended material, `overrides=1`, zero
-mismatches, and the bound object reports a vivid BaseColor -- MI_stone at
-(1.000, 0.460, 0.571), MI_mush_red at (1.000, 0.003, 0.188). The materials were
-never wrong.
+That theory is REFUTED, by the frame that fixed the real defect. 38 materials
+were being replaced by the engine's DEFAULT GREY at draw time, because the
+master material never declared bUsedWithInstancedStaticMeshes and Wonderland
+draws 137,816 of its pieces as instances (see verify-material-usage-flags.py).
+The 0.095 was not shading loss. It was the engine's grey.
 
-WHAT WAS ACTUALLY WRONG
+MEASURED on the first frame after the fix, across twelve large single-material
+panels: delivered saturation is 103% of authored. Shading costs essentially
+nothing here. Every material re-authored "past the target" has been reverted,
+along with the three knobs raised to compensate.
 
-This file's own LOOK table already recorded the mechanism, measured:
+WHAT IT CHECKS NOW, on a claim that is actually true
 
-    "ambient arrives from every direction at once, indirect light comes back
-     off neighbours, specular is white on a dielectric, and the tonemapper
-     compresses. Every one of those steps moves a surface toward the light's
-     colour and none move it back."
+The founder's direction is explicit -- "I better not see a single grey
+anywhere" -- and that is a statement about the PALETTE, not about the renderer.
+So this fails when a material that is not achromatic BY DESIGN is authored at a
+saturation low enough to read as grey no matter how well it is drawn.
 
-Physically-based shading delivers roughly a THIRD of a material's authored
-saturation. That is not a defect; it is what the renderer does. It means the
-palette has to be authored PAST the target, which the LOOK table argues for at
-length -- and which had been applied to the accents and never to the materials
-that actually cover the screen.
-
-Measured on the delivered frame at 1d4a1a8, over the mushroom field, a region
-large enough to identify by eye and impossible to misattribute:
-
-    authored mush_white   saturation 0.184
-    delivered             saturation 0.095
-
-0.184 x ~0.35 = 0.09. The arithmetic closes. There was nothing left to find.
-The ground, the plazas, the tower band, the mushroom caps and the porcelain --
-the materials that fill the frame -- were authored between 0.18 and 0.40, so
-the frame could only ever come back grey however the lighting was tuned.
-
-WHAT THIS CHECKS
-
-Every material in the palette carries at least FLOOR saturation, unless it is
-on the allow-list below. The allow-list is short and every entry states why it
-is achromatic on purpose -- a material is exempt because of what it IS, never
-because it happens to fail.
-
-It is offline and it runs in a second on a laptop, which matters: the frame
-that proves it costs a 35-minute package and a GPU.
+The floor is deliberately low. It is a floor against neutral, not a lever for
+vividness: pushing saturation to make a frame colourful is exactly the mistake
+recorded above, and it is the renderer's job now that the renderer works.
 """
 import io
 import os
@@ -59,7 +38,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 GEN = os.path.join(HERE, "generate-hub-level.py")
 
-FLOOR = 0.35
+FLOOR = 0.12
 
 # ACHROMATIC ON PURPOSE. Each of these is exempt because of what the thing is,
 # not because it failed. Anything added here needs a reason of the same kind.
@@ -111,20 +90,21 @@ def main():
     if pale:
         print("FAIL: %d material(s) are authored too pale to survive being lit." % len(pale))
         print()
-        print("      Physically-based shading delivers about a THIRD of authored")
-        print("      saturation. A material authored at %.2f arrives at roughly" % FLOOR)
-        print("      %.2f, which is the point at which a surface reads as grey." % (FLOOR / 3.0))
-        print("      This is not fixed by lighting, by the grade, or by emissive:")
-        print("      all three were tried, measured and refuted. It is fixed by")
-        print("      authoring the palette past the target.")
+        print("      A material this close to neutral reads as grey however well")
+        print("      it is drawn, and the founder's direction is that nothing in")
+        print("      Wonderland should. Give it a hue, or add it to ALLOW with a")
+        print("      reason for being achromatic on purpose.")
+        print()
+        print("      Do NOT raise saturation here to make the frame more")
+        print("      colourful. That was tried against a renderer that was")
+        print("      silently drawing engine grey, and it changed nothing.")
         print()
         for n, c, s in sorted(pale, key=lambda t: t[2]):
-            print("   %-14s (%.2f, %.2f, %.2f)   saturation %.3f   -> delivers ~%.3f"
-                  % (n, c[0], c[1], c[2], s, s / 3.0))
+            print("   %-14s (%.2f, %.2f, %.2f)   saturation %.3f"
+                  % (n, c[0], c[1], c[2], s))
         return 1
 
-    print("PASS: every material that is not achromatic by design is authored "
-          "to survive being lit.")
+    print("PASS: nothing in the visible palette is authored neutral.")
     return 0
 
 

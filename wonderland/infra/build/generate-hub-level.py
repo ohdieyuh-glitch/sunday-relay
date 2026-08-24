@@ -132,7 +132,24 @@ LOOK = {
     # single light touches it -- the same move as painting the set brighter.
     # Sweep it with WONDERLAND_LOOK=paletteSaturation=1.0 to see the frame it
     # replaces.
-    "paletteSaturation": 1.85,
+    # CALIBRATED AFTER THE REAL CAUSE WAS FIXED, 90e8de8.
+    #
+    # These three were all raised to fight the same defect: 38 materials were
+    # being replaced by the engine's DEFAULT GREY at draw time because the
+    # master never declared bUsedWithInstancedStaticMeshes. Authoring past the
+    # target, emitting a share of each surface's own colour, and pushing the
+    # grade were compensations for colour that was never being drawn at all.
+    #
+    # MEASURED on the first frame after the fix: delivered saturation is 103%
+    # of authored, not the ~33% this table asserted for weeks. The frame came
+    # back 35.5% clipped, the ground at 60%. So the compensation comes off:
+    # paletteSaturation 1.85 -> 1.00, selfColour 0.25 -> 0.06, grade saturation
+    # 1.78 -> 1.25, and the fifteen materials re-authored "past the target"
+    # revert to what they were authored as.
+    #
+    # No value in this palette had ever been seen through a working renderer.
+    # This is the first honest look at it.
+    "paletteSaturation": 1.00,
     # How much of its OWN colour every surface emits. See the material loop:
     # thirteen refuted explanations for a correct albedo rendering grey, so the
     # palette stops depending on the lit path alone. A SHARE, not a replacement
@@ -145,7 +162,7 @@ LOOK = {
     # A colour FLOOR, kept: it costs nothing and it guarantees a surface can
     # never fall to grey even if some other path fails. Not a flood -- the lit
     # response still does the visible work.
-    "selfColour": 0.25,
+    "selfColour": 0.06,
     # 1 = the master renders UNLIT, so a surface shows exactly its palette and
     # no lighting path can grey it. 0 restores DefaultLit in one cook.
     # 0. UNLIT was reached for when the grey looked like a shading failure. It
@@ -524,7 +541,7 @@ LOOK = {
     # gone (gold_amber 10.1% -> 0.6%, warm_timber_stone 23.6% -> 3.1%), so what
     # it amplifies now is the world's own colour. This is not covering a defect;
     # the defect was found and fixed at the light.
-    "saturation": (1.78, 1.78, 1.78),  # CHOSEN. Jewel tones.
+    "saturation": (1.25, 1.25, 1.25),  # CHOSEN. Jewel tones.
     "contrast":        (1.18, 1.17, 1.16),  # CHOSEN.
     "gainHighlights":  (0.82, 0.78, 0.68),  # MEASURED. Holds the white Dog,
                                             # spires and porcelain off pure
@@ -953,9 +970,9 @@ MATERIAL_SPEC = {
     # rubbed; one flat tone across every face is the "toy" read.
     "brass_deep":  ((0.42, 0.30, 0.13), 0.55, 0.52, (0.05, 0.03, 0.00), 0.10),
     "float_glow":  ((1.00, 0.80, 0.40), 0.45, 0.24, (1.00, 0.72, 0.28), 1.9),
-    "cobble":      ((0.86, 0.46, 0.62), 0.0, 0.80, (0, 0, 0), 0.0),
-    "cobble2":     ((0.64, 0.30, 0.70), 0.0, 0.82, (0, 0, 0), 0.0),
-    "plaza":       ((0.96, 0.54, 0.72), 0.0, 0.76, (0, 0, 0), 0.0),
+    "cobble":      ((0.80, 0.58, 0.66), 0.0, 0.80, (0, 0, 0), 0.0),
+    "cobble2":     ((0.62, 0.44, 0.62), 0.0, 0.82, (0, 0, 0), 0.0),
+    "plaza":       ((0.88, 0.66, 0.76), 0.0, 0.76, (0, 0, 0), 0.0),
     "moss":        ((0.20, 0.40, 0.16), 0.0, 0.72, (0, 0, 0), 0.0),
     "ground":      ((0.17, 0.30, 0.14), 0.0, 0.86, (0, 0, 0), 0.0),
     # A MEADOW IS NOT ONE GREEN. Real turf is patchy: sun-bleached where it is
@@ -966,7 +983,7 @@ MATERIAL_SPEC = {
     "ground_shade":((0.11, 0.23, 0.15), 0.0, 0.84, (0, 0, 0), 0.0),
     "trunk":       ((0.38, 0.28, 0.22), 0.0, 0.78, (0, 0, 0), 0.0),
     "foliage":     ((0.23, 0.46, 0.22), 0.0, 0.72, (0, 0, 0), 0.0),
-    "foliage_hi":  ((0.32, 0.64, 0.30), 0.0, 0.66, (0, 0, 0), 0.0),
+    "foliage_hi":  ((0.38, 0.57, 0.38), 0.0, 0.66, (0, 0, 0), 0.0),
     # THE RANGE THE ADDENDUM ASKS FOR: deep forest for the shadowed core of
     # a canopy, spring for the sunlit outside. A cluster built from one green
     # is a blob however many spheres it has; built from three it has an
@@ -977,18 +994,18 @@ MATERIAL_SPEC = {
     "rose_pink":   ((0.96, 0.42, 0.62), 0.0, 0.62, (0.10, 0.0, 0.04), 0.3),
     "petal_pink":  ((0.94, 0.40, 0.66), 0.0, 0.62, (0, 0, 0), 0.0),
     "petal_violet":((0.52, 0.28, 0.86), 0.0, 0.62, (0.09, 0.02, 0.20), 0.35),
-    "petal_air":   ((1.00, 0.52, 0.78), 0.0, 0.62, (0.10, 0.02, 0.06), 0.2),
+    "petal_air":   ((0.98, 0.62, 0.82), 0.0, 0.62, (0.10, 0.02, 0.06), 0.2),
     "mush_red":    ((0.74, 0.16, 0.26), 0.0, 0.62, (0.14, 0, 0), 0.3),
-    "mush_white":  ((1.00, 0.74, 0.62), 0.0, 0.42, (0, 0, 0), 0.0),
+    "mush_white":  ((0.98, 0.90, 0.80), 0.0, 0.42, (0, 0, 0), 0.0),
     "mush_purple": ((0.44, 0.20, 0.76), 0.0, 0.62, (0.13, 0.02, 0.22), 0.35),
-    "spire":       ((0.82, 0.40, 0.96), 0.0, 0.40, (0, 0, 0), 0.0),
-    "spire_pink":  ((1.00, 0.54, 0.74), 0.0, 0.62, (0, 0, 0), 0.0),
-    "spire_blue":  ((0.58, 0.48, 1.00), 0.0, 0.62, (0, 0, 0), 0.0),
-    "spire_teal":  ((0.42, 0.94, 0.84), 0.0, 0.62, (0, 0, 0), 0.0),
+    "spire":       ((0.86, 0.58, 0.90), 0.0, 0.40, (0, 0, 0), 0.0),
+    "spire_pink":  ((0.98, 0.74, 0.82), 0.0, 0.62, (0, 0, 0), 0.0),
+    "spire_blue":  ((0.76, 0.68, 0.98), 0.0, 0.62, (0, 0, 0), 0.0),
+    "spire_teal":  ((0.66, 0.92, 0.88), 0.0, 0.62, (0, 0, 0), 0.0),
     # Roughness 0.10 is a mirror, and a mirror reflecting a dark scene is
     # dark: attribute-dark.py measured porcelain at 1.47% of the frame in
     # shadow. Real glaze has a broad highlight, not a point one.
-    "porcelain":   ((1.00, 0.72, 0.54), 0.0, 0.26, (0, 0, 0), 0.0),
+    "porcelain":   ((0.99, 0.84, 0.70), 0.0, 0.26, (0, 0, 0), 0.0),
     "water":       ((0.16, 0.42, 0.56), 0.0, 0.05, (0.01, 0.04, 0.07), 0.15),
     # Spray and foam: near-white, barely self-lit so it stays bright against
     # the dark of a basin, and it BOBS — a jet of beads that does not move is
@@ -1029,8 +1046,8 @@ MATERIAL_SPEC = {
     # AUTHORED, and it is the one part that can be fixed with certainty.
     # (cloud and dog_body stay white on purpose: clouds are white and the
     # canonical Relay Dog's coat is its identity.)
-    "stone":       ((0.98, 0.44, 0.56), 0.0, 0.90, (0, 0, 0), 0.0),
-    "dog_pink":    ((1.00, 0.52, 0.74), 0.0, 0.62, (0, 0, 0), 0.0),
+    "stone":       ((0.93, 0.56, 0.62), 0.0, 0.90, (0, 0, 0), 0.0),
+    "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
     # SKELETON FLAME, the founder's legendary variant. It is a SKIN: the same
     # canonical body, the same proportions, the same visor band. What changes is
     # the coat (bone rather than warm white), the eyes (blue ghostfire instead
@@ -1051,7 +1068,7 @@ MATERIAL_SPEC = {
     # The far meadow that closes the horizon. Soft lilac-green rather than
     # grass-green: at this distance the height fog tints toward the sky, and a
     # saturated green read as a hard band instead of receding.
-    "meadow_far":  ((0.34, 0.56, 0.32), 0.0, 0.94, (0, 0, 0), 0.0),
+    "meadow_far":  ((0.46, 0.53, 0.45), 0.0, 0.94, (0, 0, 0), 0.0),
     # Distant towers, deliberately pale and low-contrast so the skyline recedes
     # behind the hero landmarks instead of competing with them.
     "spire_far":   ((0.68, 0.50, 0.95), 0.0, 0.62, (0, 0, 0), 0.0),
@@ -1059,7 +1076,7 @@ MATERIAL_SPEC = {
     "roof_rose":   ((0.78, 0.38, 0.44), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
     "roof_pink":   ((0.92, 0.46, 0.62), 0.0, 0.62, (0, 0, 0), 0.0),
     # Gills under a mushroom cap: warm shadow, never black.
-    "mush_gill":   ((0.94, 0.52, 0.46), 0.0, 0.70, (0, 0, 0), 0.0),
+    "mush_gill":   ((0.80, 0.66, 0.58), 0.0, 0.70, (0, 0, 0), 0.0),
     # Cumulus. Slightly self-lit so the shaded undersides stay soft and
     # bright rather than going grey — stylised cloud, not storm cloud.
     # 2.6 is the value that was PROVEN on a streamed frame. It went to 3.6
