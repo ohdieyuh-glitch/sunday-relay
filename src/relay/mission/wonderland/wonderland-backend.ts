@@ -1,6 +1,3 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { EventEmitter } from 'node:events';
-
 export const WONDERLAND_EVENT_SCHEMA_VERSION = 'relay-wonderland-event.v1' as const;
 
 export const WONDERLAND_EVENT_TYPES = [
@@ -184,7 +181,18 @@ export interface WonderlandExecutor {
 
 const emptyUsage = (): Usage => ({ inputTokens: 0, outputTokens: 0, costUsd: 0, toolCalls: 0, computeMs: 0, sandboxRuntimeMs: 0, subagentUsage: 0 });
 const clone = <T>(value: T): T => structuredClone(value);
-const canonical = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+/** Stable pure-domain fingerprint. It detects snapshot drift; it is not an authentication MAC. */
+const canonical = (value: unknown): string => {
+  const text = JSON.stringify(value);
+  const words = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35, 0x27d4eb2f, 0x165667b1, 0xd3a2646c, 0xfd7046c5];
+  for (let i = 0; i < text.length; i += 1) {
+    for (let j = 0; j < words.length; j += 1) {
+      words[j] ^= text.charCodeAt(i) + j;
+      words[j] = Math.imul(words[j], 0x01000193) >>> 0;
+    }
+  }
+  return words.map(word => word.toString(16).padStart(8, '0')).join('');
+};
 const safePayload = (input: unknown): Readonly<Record<string, unknown>> => redact(input) as Readonly<Record<string, unknown>>;
 
 export function redact(input: unknown): unknown {
@@ -201,8 +209,8 @@ export function redact(input: unknown): unknown {
 }
 
 export class WonderlandBackend {
-  private readonly bus = new EventEmitter();
-  constructor(private state: WonderlandSnapshot, private readonly now: () => string = () => new Date().toISOString(), private readonly newId: () => string = () => randomUUID()) {}
+  private readonly listeners = new Set<(event: WonderlandEvent) => void>();
+  constructor(private state: WonderlandSnapshot, private readonly now: () => string = () => new Date().toISOString(), private readonly newId: () => string = () => globalThis.crypto.randomUUID()) {}
   static empty(now?: () => string, newId?: () => string): WonderlandBackend {
     return new WonderlandBackend({ sequence: 0, events: [], members: {}, cards: {}, brains: {}, avatars: {}, challenges: {}, contracts: {}, battles: {}, rewards: {}, presence: {}, commandResults: {} }, now, newId);
   }
@@ -224,7 +232,7 @@ export class WonderlandBackend {
   }
   private append(input: Omit<WonderlandEvent, 'eventId' | 'schemaVersion' | 'timestamp' | 'sequence' | 'payload'> & { payload: unknown }): WonderlandEvent {
     const event: WonderlandEvent = { ...input, eventId: this.newId(), schemaVersion: WONDERLAND_EVENT_SCHEMA_VERSION, timestamp: this.now(), sequence: ++this.state.sequence, payload: safePayload(input.payload) };
-    this.state.events.push(event); this.bus.emit('event', event); return event;
+    this.state.events.push(event); for (const listener of this.listeners) listener(event); return event;
   }
   private once<T>(commandId: string, action: () => T): T { if (commandId in this.state.commandResults) return clone(this.state.commandResults[commandId] as T); const before = clone(this.state); try { const result = action(); this.state.commandResults[commandId] = clone(result); return result; } catch (error) { this.state = before; throw error; } }
   createChallenge(actorId: string, commandId: string, input: Omit<Challenge, 'challengeId' | 'challengerId' | 'status'>): Challenge {
@@ -263,5 +271,5 @@ export class WonderlandBackend {
       for (const player of battle.participantIds) { const rewardKey = `${battleId}:${player}:completion`; this.state.rewards[rewardKey] ??= { grantId: this.newId(), battleId, playerId: player, kind: 'XP', value: winnerId === player ? '100' : '40' }; brain.battleLessons.push(...explanations[player]); const avatar = Object.values(this.state.avatars).find(x => x.projectId === battle.projectId && x.ownerId === player); if (avatar) { const xp = Number(this.state.rewards[rewardKey].value); avatar.xp += xp; avatar.evolutionEvidence.push(...battle.evidence.filter(x => x.ownerId === player && x.supported && x.passed).map(x => x.evidenceId)); const stages: AvatarStage[] = ['SEED_EGG', 'BABY', 'GROWING', 'ADVANCED', 'FINAL']; avatar.stage = stages[Math.min(4, Math.floor(avatar.xp / 100))]; } }
       this.append({ projectId: battle.projectId, sessionId: null, playerId: actorId, agentId: null, missionId: battle.missionId, battleId, eventType: 'battle.completed', payload: { winnerId, scores }, visibility: 'PUBLIC', correlationId: battleId, causationId: null }); return clone(result); }); }
   eventsFor(input: { projectId: string; playerId: string; cursor?: number; battleId?: string }): WonderlandEvent[] { this.member(input.projectId, input.playerId); if (input.cursor !== undefined && (!Number.isSafeInteger(input.cursor) || input.cursor < 0)) throw new Error('malformed_cursor'); return this.state.events.filter(event => event.projectId === input.projectId && event.sequence > (input.cursor ?? 0) && (!input.battleId || event.battleId === input.battleId) && (event.visibility === 'PUBLIC' || event.playerId === input.playerId || (event.visibility === 'PARTICIPANTS' && event.battleId !== null && this.state.battles[event.battleId]?.participantIds.includes(input.playerId)))); }
-  subscribe(input: { projectId: string; playerId: string; cursor?: number; battleId?: string }, listener: (event: WonderlandEvent) => void): () => void { for (const event of this.eventsFor(input)) listener(event); const live = (event: WonderlandEvent) => { if (this.eventsFor({ ...input, cursor: event.sequence - 1 }).some(x => x.eventId === event.eventId)) listener(event); }; this.bus.on('event', live); return () => this.bus.off('event', live); }
+  subscribe(input: { projectId: string; playerId: string; cursor?: number; battleId?: string }, listener: (event: WonderlandEvent) => void): () => void { for (const event of this.eventsFor(input)) listener(event); const live = (event: WonderlandEvent) => { if (this.eventsFor({ ...input, cursor: event.sequence - 1 }).some(x => x.eventId === event.eventId)) listener(event); }; this.listeners.add(live); return () => { this.listeners.delete(live); }; }
 }
