@@ -824,7 +824,7 @@ def wl_allow_instanced_use(mat, what):
     return False
 
 
-def wl_naniteise_primitives(eal, tools):
+def wl_naniteise_primitives():
     """Give the batched primitives Nanite, because this world is GEOMETRY-bound.
 
     MEASURED, not assumed. On the fixed build the stream delivers 13-16 fps with
@@ -856,6 +856,7 @@ def wl_naniteise_primitives(eal, tools):
     for whatever actually converted; anything that fails keeps its original mesh
     rather than vanishing from the world.
     """
+    eal = unreal.EditorAssetLibrary
     out = {}
     pkg = "/Game/Wonderland/Meshes"
     for key, src in sorted(set(PLACEHOLDER_MESH.items())):
@@ -2708,7 +2709,7 @@ def build(layout):
     _NANITE_MESH = {}
     if os.environ.get("WONDERLAND_NANITE", "1") != "0":
         try:
-            _NANITE_MESH = wl_naniteise_primitives(eal, tools)
+            _NANITE_MESH = wl_naniteise_primitives()
         except Exception as _nse:
             unreal.log_warning("NANITE: conversion step failed (%s); the world "
                                "keeps the engine primitives" % _nse)

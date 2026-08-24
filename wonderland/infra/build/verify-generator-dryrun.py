@@ -119,8 +119,22 @@ def make_unreal():
         def load_asset(self, p):
             return Any("asset:" + str(p))
 
-        def save_asset(self, p):
+        # The real signature is save_asset(asset_to_save, only_if_is_dirty=True).
+        # Omitting the keyword made the stub reject a call the engine accepts,
+        # which is a stub that is WRONG rather than merely incomplete.
+        def save_asset(self, p, only_if_is_dirty=True):
             return True
+
+        # A REAL DUPLICATE MAKES THE COPY EXIST. Without this the stub raised
+        # AttributeError inside the Nanite conversion's per-primitive try, the
+        # conversion silently produced nothing, and the offline run still
+        # passed -- which is exactly how a scope bug in that conversion reached
+        # a ten-minute package before anyone noticed. The same lesson as
+        # import_asset_tasks below: a stub that cannot perform the operation
+        # must not let the caller believe it did.
+        def duplicate_asset(self, src, dst):
+            _imported.add(str(dst))
+            return Any("asset:" + str(dst))
 
     class _Tools(object):
         def create_asset(self, name, pkg, cls, factory):
