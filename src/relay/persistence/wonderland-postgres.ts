@@ -1,10 +1,17 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool, type PoolConfig, type QueryResultRow } from 'pg';
 import type { ProviderUsageReceipt, WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
 import type { WonderlandEvent } from '../mission/wonderland/wonderland-backend';
 
-export const WONDERLAND_MIGRATION_001 = readFileSync(join(__dirname, 'wonderland-migrations', '001_wonderland_runtime.sql'), 'utf8');
+const migrationCandidates = [
+  join(__dirname, 'wonderland-migrations', '001_wonderland_runtime.sql'),
+  join(process.cwd(), 'src', 'relay', 'persistence', 'wonderland-migrations', '001_wonderland_runtime.sql'),
+];
+/** Loading is fail-closed but non-eager so unrelated bundled CLI commands still run. */
+export const WONDERLAND_MIGRATION_001 = migrationCandidates.find(existsSync) === undefined
+  ? ''
+  : readFileSync(migrationCandidates.find(existsSync) as string, 'utf8');
 export interface SqlQuery { query<R extends QueryResultRow = QueryResultRow>(text: string, values?: readonly unknown[]): Promise<{ rows: R[]; rowCount: number | null }> }
 export interface WonderlandTransaction {
   loadExecution(executionId: string): Promise<WonderlandExecutionSession | null>;
@@ -58,7 +65,10 @@ class PostgresWonderlandTransaction implements WonderlandTransaction {
 export class TransactionalWonderlandDatabase {
   readonly pool: Pool;
   constructor(config: PoolConfig | Pool) { this.pool = typeof (config as Pool).connect === 'function' ? config as Pool : new Pool(config as PoolConfig); }
-  async migrate(): Promise<void> { await this.pool.query(WONDERLAND_MIGRATION_001); }
+  async migrate(): Promise<void> {
+    if (WONDERLAND_MIGRATION_001 === '') throw new Error('wonderland_migration_not_packaged');
+    await this.pool.query(WONDERLAND_MIGRATION_001);
+  }
   async transaction<T>(effect: (transaction: WonderlandTransaction) => Promise<T>, maxAttempts = 3): Promise<T> {
     let attempt = 0;
     while (true) {
