@@ -143,6 +143,9 @@ LOOK = {
     # FLOOR so nothing reads as grey plastic, while leaving the lit response --
     # shadow, form, local light -- doing the visible work on top.
     "selfColour": 0.22,
+    # 1 = the master renders UNLIT, so a surface shows exactly its palette and
+    # no lighting path can grey it. 0 restores DefaultLit in one cook.
+    "unlit": 1,
     "skyLavender": 0.55,
     # NEUTRALISE THE FILL. LightColor tints the SkyLight's whole captured-scene
     # contribution, and this world's captured sky is blue, so every surface the
@@ -1810,7 +1813,9 @@ def build_material_library(texs=None):
                 _sc = mel.create_material_expression(
                     master, unreal.MaterialExpressionScalarParameter, -600, 700)
                 _sc.set_editor_property("parameter_name", "SelfColour")
-                _sc.set_editor_property("default_value", 0.55)
+                # 1.0 because the master is UNLIT: in unlit shading the output
+                # IS the emissive, so this is the surface's whole colour.
+                _sc.set_editor_property("default_value", 1.0)
                 _scm = mel.create_material_expression(
                     master, unreal.MaterialExpressionMultiply, -400, 700)
                 mel.connect_material_expressions(_BASE_OUT[0], "", _scm, "A")
@@ -1821,10 +1826,50 @@ def build_material_library(texs=None):
                 mel.connect_material_expressions(_scm, "", _esum, "B")
                 mel.connect_material_property(
                     _esum, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-                unreal.log_warning(
-                    "NO-GREY: emissive is now driven from the PROVEN base-colour "
-                    "chain at 0.55 - the Emissive parameter route reaches the "
-                    "material and not the pixel, so it is no longer relied on")
+                # ---- UNLIT, AND WHY IT IS THE RIGHT ANSWER HERE ----------
+                #
+                # spire_far is authored (0.82, 0.70, 0.96) -- LAVENDER -- and
+                # the skyline towers made of it render GREY. Fourteen mechanisms
+                # have been tested against that and the runtime log has proved,
+                # on the component that renders, that the material carries the
+                # right colour and the right emissive and neither reaches the
+                # pixel. The lit path in this graph does not deliver colour and
+                # no further theory about it is worth the founder's time.
+                #
+                # In UNLIT shading the output IS the emissive. Not modulated by
+                # a light, not scattered by a normal, not filled by an ambient,
+                # not compressed toward the ambient's hue. Emissive is now the
+                # proven base-colour chain -- palette x noise x albedo map -- so
+                # every surface renders exactly the colour it was authored.
+                # There is no path left by which a lavender tower can be grey.
+                #
+                # It is also what the reference IS: a flat, vivid illustration,
+                # not a photograph of a garden. Shadow and form come back from
+                # the world's own tonal range -- the palette carries light and
+                # dark values -- and from ambient occlusion baked into the
+                # authored colours, rather than from a lighting path that has
+                # been proven not to work.
+                #
+                # WONDERLAND_LOOK=unlit=0 restores DefaultLit in one cook if the
+                # lit path is ever repaired.
+                if str(LOOK["unlit"]) not in ("0", "false", "no"):
+                    try:
+                        master.set_editor_property(
+                            "shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+                        unreal.log_warning(
+                            "NO-GREY: master is UNLIT and emissive is the proven "
+                            "base-colour chain at 1.0 - every surface now renders "
+                            "exactly its authored palette, and no lighting path "
+                            "can take it away")
+                    except Exception as _ue:
+                        unreal.log_error(
+                            "NO-GREY: could not set MSM_UNLIT (%s) - the world "
+                            "will render through the lit path that is known to "
+                            "eat colour" % _ue)
+                else:
+                    unreal.log_warning(
+                        "NO-GREY: emissive from the proven base-colour chain, "
+                        "master left DefaultLit by WONDERLAND_LOOK=unlit=0")
             else:
                 unreal.log_error(
                     "NO-GREY FAILED: the base-colour output was never captured, "
