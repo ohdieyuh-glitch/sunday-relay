@@ -7976,6 +7976,58 @@ def build(layout):
         set_prop(hcam, "tags", [unreal.Name("HeroCam%d" % hn)])
     unreal.log("HERO CAMS placed: %d" % len(hero_shots))
 
+    # ---- THE MATERIAL TEST STRIP -----------------------------------------
+    #
+    # WHY THIS EXISTS. The grey has now survived: a runtime probe proving every
+    # batch binds its intended material with zero mismatches; an offline dump
+    # proving all 59 instances are written albedo at saturation 0.49-1.00; a
+    # controlled rebuild that raised MI_stone from 0.54 to 0.71 and moved the
+    # frame 1.4%; and nine separate show-flag sweeps -- bloom, fog, aerial
+    # perspective, AO, SSR, specular, Lumen indirect, the tonemapper and the
+    # colour grade -- none of which moved delivered saturation by more than
+    # 0.022. Inside a single mushroom cap NO pixel exceeds saturation 0.135
+    # against an albedo of 0.536, so it is not an averaging artifact either.
+    #
+    # Every one of those measurements had to be ATTRIBUTED to a material, and
+    # attribution is where this investigation has repeatedly gone wrong: the
+    # offline owner buffer reads thin geometry as its background, and the
+    # forensic trace filtered on five material names while the two that
+    # actually cover the frame -- spire_far at 35,650 pieces and mush_white at
+    # 27,488 -- were not among them.
+    #
+    # So this stops inferring. A row of large flat quads stands directly in
+    # front of the hero camera, one per material, each filling hundreds of
+    # pixels of a SINGLE known material. One frame then reads the delivered
+    # colour of each material directly, with nothing to attribute and nothing
+    # averaged across neighbours.
+    #
+    # OFF BY DEFAULT. It is an instrument, not scenery: WONDERLAND_TEST_STRIP=1
+    # puts it in the world and nothing else does.
+    if os.environ.get("WONDERLAND_TEST_STRIP", "") == "1":
+        # Ordered so the two materials that dominate the frame come first.
+        _strip = ["mush_white", "spire_far", "stone", "spire", "porcelain",
+                  "cobble", "plaza", "mush_red", "foliage", "petal_pink",
+                  "gold", "roof_rose"]
+        # HeroCam6 stands at ARRIVAL_CAM looking at (0, 120, 541) -- essentially
+        # straight down +Y. The strip is laid across that view at a distance
+        # near enough to fill the frame and far enough not to clip the near
+        # plane, low enough to sit under the skyline rather than hide it.
+        _sd   = 620.0                 # uu in front of the camera
+        _sy   = ARRIVAL_CAM[1] + _sd
+        _sz   = ARRIVAL_CAM[2] - 96.0
+        _sw   = 132.0                 # width of each panel, uu
+        _n    = len(_strip)
+        _x0   = -0.5 * (_n - 1) * _sw
+        for _i, _mn in enumerate(_strip):
+            static_mesh("cube",
+                        (_x0 + _i * _sw, _sy, _sz),
+                        (_sw / 105.0, 0.06, 1.05),
+                        "teststrip_%02d_%s" % (_i, _mn),
+                        mat=_mn)
+        unreal.log_warning("TEST STRIP: %d material panels in front of HeroCam6 "
+                           "(WONDERLAND_TEST_STRIP=1)" % _n)
+
+
     # ---- EMIT THE BATCHES ------------------------------------------------
     # LAST, and before the save. Every visual piece placed above went into an
     # accumulator instead of becoming an actor; this is where those become a
