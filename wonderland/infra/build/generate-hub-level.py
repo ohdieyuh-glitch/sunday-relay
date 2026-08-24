@@ -824,6 +824,69 @@ def wl_allow_instanced_use(mat, what):
     return False
 
 
+def wl_naniteise_primitives(eal, tools):
+    """Give the batched primitives Nanite, because this world is GEOMETRY-bound.
+
+    MEASURED, not assumed. On the fixed build the stream delivers 13-16 fps with
+    the GPU pinned at 99%, and an isolated sweep through the real stream showed
+    the cost is NOT where anyone would look first:
+
+        baseline                 15, 16, 11 / 16, 14, 12
+        Lumen off                15, 13
+        virtual shadow maps off  15, 14
+        r.ScreenPercentage 70    13, 14      <-- HALF the pixels, no change
+
+    Halving the pixel work changing nothing is decisive: the frame is not
+    pixel-shading bound. Counting what is actually submitted says why --
+
+        Sphere    50,285 instances
+        Cube      65,833
+        Cylinder  19,307
+        Cone       2,374
+
+    and /Engine/BasicShapes/Sphere is roughly 1,900 triangles. That is on the
+    order of 100 MILLION triangles per frame, at LOD0, every frame. The engine
+    primitives ship with a single LOD, so neither ISM culling nor HISM's cluster
+    tree can reduce it -- there is no cheaper LOD to select.
+
+    Nanite is exactly the tool for that: it is a different geometry pipeline,
+    not an LOD setting, and it does its own cluster-level detail selection. The
+    engine assets cannot be edited in place, so each primitive is duplicated
+    into the project and Nanite enabled on the copy. Returns {key: new path}
+    for whatever actually converted; anything that fails keeps its original mesh
+    rather than vanishing from the world.
+    """
+    out = {}
+    pkg = "/Game/Wonderland/Meshes"
+    for key, src in sorted(set(PLACEHOLDER_MESH.items())):
+        name = "SM_N_" + src.rsplit("/", 1)[-1]
+        dst = pkg + "/" + name
+        try:
+            if not eal.does_asset_exist(dst):
+                if not eal.duplicate_asset(src, dst):
+                    continue
+            mesh = eal.load_asset(dst)
+            if mesh is None:
+                continue
+            ns = mesh.get_editor_property("nanite_settings")
+            ns.set_editor_property("enabled", True)
+            mesh.set_editor_property("nanite_settings", ns)
+            eal.save_asset(dst, only_if_is_dirty=False)
+            out[key] = dst
+        except Exception as _ne:
+            unreal.log_warning("NANITE: %s not converted (%s); it keeps %s"
+                               % (key, _ne, src))
+    if out:
+        unreal.log_warning("NANITE: %d primitive mesh(es) converted -- this world "
+                           "submits ~100M triangles a frame and is geometry-bound, "
+                           "proven by r.ScreenPercentage 70 changing nothing"
+                           % len(set(out.values())))
+    else:
+        unreal.log_warning("NANITE: nothing converted; the world keeps the engine "
+                           "primitives and stays geometry-bound")
+    return out
+
+
 def srgb_light_color(r, g, b):
     """An 0-255 colour pick as the LINEAR colour UE's light actually wants.
 
@@ -2636,8 +2699,25 @@ def build(layout):
                 return True
         return False
 
+    # NANITE, ONCE, BEFORE THE FIRST PIECE IS PLACED. See
+    # wl_naniteise_primitives: this world submits on the order of 100 million
+    # triangles a frame from 137,816 instances of engine primitives that have
+    # exactly one LOD, and an isolated sweep proved it is geometry-bound --
+    # r.ScreenPercentage 70, half the pixel work, changed the frame rate by
+    # nothing. WONDERLAND_NANITE=0 puts the engine primitives back in one cook.
+    _NANITE_MESH = {}
+    if os.environ.get("WONDERLAND_NANITE", "1") != "0":
+        try:
+            _NANITE_MESH = wl_naniteise_primitives(eal, tools)
+        except Exception as _nse:
+            unreal.log_warning("NANITE: conversion step failed (%s); the world "
+                               "keeps the engine primitives" % _nse)
+
     def static_mesh(mesh_key, location, scale, label, rotation=(0.0, 0.0, 0.0), mat=None):
-        path = PLACEHOLDER_MESH.get(mesh_key, UNKNOWN_MESH)
+        # A converted mesh if there is one, the original otherwise. Falling back
+        # to the original is deliberate: a missing mesh removes the piece from
+        # the world, and a slow Wonderland beats an empty one.
+        path = _NANITE_MESH.get(mesh_key) or PLACEHOLDER_MESH.get(mesh_key, UNKNOWN_MESH)
         if mesh_key not in PLACEHOLDER_MESH:
             unreal.log_warning("No placeholder mesh for '%s' (%s); using fallback." % (mesh_key, label))
         # UNIQUE LABELS. Scattered kits key their label off the per-call index,

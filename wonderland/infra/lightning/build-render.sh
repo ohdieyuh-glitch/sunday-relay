@@ -121,10 +121,17 @@ wl_knob_pairs() {
   #
   # verify-knobs-forwarded.py now fails when the generator reads a WONDERLAND_*
   # knob this list does not carry, so the next one cannot go quiet.
-  for name in WONDERLAND_TEXTURE_DIR WONDERLAND_AUDIO_DIR WONDERLAND_LOOK \
-              WONDERLAND_BATCH WONDERLAND_MARBLE_BACKDROP WONDERLAND_MARBLE_IMPORT \
-              WONDERLAND_MARBLE_BACKDROP_SLUG WONDERLAND_TEST_STRIP \
-              WONDERLAND_COLLIDE; do
+  for name in WONDERLAND_AUDIO_DIR \
+              WONDERLAND_BATCH \
+              WONDERLAND_COLLIDE \
+              WONDERLAND_LOOK \
+              WONDERLAND_MARBLE_BACKDROP \
+              WONDERLAND_MARBLE_BACKDROP_SLUG \
+              WONDERLAND_MARBLE_IMPORT \
+              WONDERLAND_NANITE \
+              WONDERLAND_TEST_STRIP \
+              WONDERLAND_TEST_STRIPWONDERLAND_NANITE \
+              WONDERLAND_TEXTURE_DIR; do
     if [ -n "${!name+set}" ]; then
       printf '%s=%s\n' "$name" "${!name}"
     fi
