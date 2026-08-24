@@ -824,6 +824,105 @@ def wl_allow_instanced_use(mat, what):
     return False
 
 
+def wl_lod_primitives():
+    """Give the batched primitives real LODs, which is what this world needs.
+
+    THE MEASUREMENT THAT LEADS HERE. Isolating each subsystem through the real
+    stream showed the frame is GEOMETRY-bound and nothing else:
+
+        baseline                 15, 16, 11 fps
+        Lumen off                15, 13
+        virtual shadow maps off  15, 14
+        r.ScreenPercentage 70    13, 14      <- HALF the pixels, no change
+
+    ~50,285 Sphere instances at roughly 1,900 triangles each is on the order of
+    95 million triangles a frame. Every one of them is drawn at LOD0 because
+    /Engine/BasicShapes ships a single LOD -- there is no cheaper version to
+    pick, however far away the piece is.
+
+    WHY NOT NANITE. It was tried and measured: 5/7/8 fps against 14/15/10, for
+    a visually identical frame. Nanite is built for high-poly meshes and this
+    world is 137,816 instances of 12-to-1,900-triangle primitives, where its
+    per-cluster overhead costs more than the triangles it saves.
+
+    REDUCTION LODs are the right tool at this size, and they are free at
+    distance: a mushroom cap 200 m away does not need 1,900 triangles. The
+    engine assets cannot be edited in place, so each primitive is duplicated
+    into the project and LODs are built on the copy.
+
+    LODs ALONE DO NOTHING HERE, and that is the part worth stating: a plain
+    InstancedStaticMeshComponent selects ONE LOD for the whole component, so a
+    batch that spans the entire world draws every instance at LOD0 no matter
+    what LODs the mesh has. Per-instance LOD selection is what
+    HierarchicalInstancedStaticMeshComponent's cluster tree is FOR, so this is
+    only half the fix -- see bHierarchical on the batch actor.
+
+    Returns {key: new path} for whatever converted. Anything that fails keeps
+    its original mesh: a missing mesh deletes the piece from the world, and a
+    slow Wonderland beats an empty one.
+    """
+    eal = unreal.EditorAssetLibrary
+    out = {}
+    pkg = "/Game/Wonderland/Meshes"
+    # Screen sizes chosen so the cheap LODs do the work: by the time a piece is
+    # a few percent of the screen it is a blob, and 1,900 triangles of blob is
+    # the entire problem being solved here.
+    screen_sizes = [1.0, 0.28, 0.09, 0.03]
+    for key, src in sorted(set(PLACEHOLDER_MESH.items())):
+        name = "SM_L_" + src.rsplit("/", 1)[-1]
+        dst = pkg + "/" + name
+        try:
+            if not eal.does_asset_exist(dst):
+                if not eal.duplicate_asset(src, dst):
+                    continue
+            mesh = eal.load_asset(dst)
+            if mesh is None:
+                continue
+            built = False
+            # The library moved between engine versions; try each spelling
+            # rather than assuming one, because guessing wrong here silently
+            # leaves the mesh at a single LOD and the world unchanged.
+            for libname in ("EditorStaticMeshLibrary", "StaticMeshEditorSubsystem"):
+                lib = getattr(unreal, libname, None)
+                if lib is None:
+                    continue
+                try:
+                    if libname == "StaticMeshEditorSubsystem":
+                        lib = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+                    opts = unreal.EditorScriptingMeshReductionOptions()
+                    settings = []
+                    for lvl, ss in enumerate(screen_sizes):
+                        r = unreal.EditorScriptingMeshReductionSettings()
+                        r.set_editor_property("percent_triangles",
+                                              [1.0, 0.45, 0.18, 0.06][lvl])
+                        r.set_editor_property("screen_size", ss)
+                        settings.append(r)
+                    opts.set_editor_property("reduction_settings", settings)
+                    opts.set_editor_property("auto_compute_lod_screen_size", False)
+                    lib.set_lods(mesh, opts)
+                    built = True
+                    break
+                except Exception:
+                    continue
+            if not built:
+                unreal.log_warning("LOD: %s could not build LODs; it keeps a "
+                                   "single LOD and stays expensive at distance" % name)
+                continue
+            eal.save_asset(dst, only_if_is_dirty=False)
+            out[key] = dst
+        except Exception as _le:
+            unreal.log_warning("LOD: %s not converted (%s); it keeps %s"
+                               % (key, _le, src))
+    if out:
+        unreal.log_warning("LOD: %d primitive mesh(es) given %d LODs -- this world "
+                           "is geometry-bound, proven by r.ScreenPercentage 70 "
+                           "changing nothing" % (len(set(out.values())), len(screen_sizes)))
+    else:
+        unreal.log_warning("LOD: nothing converted; every piece still draws at "
+                           "LOD0 and the world stays geometry-bound")
+    return out
+
+
 def wl_naniteise_primitives():
     """Give the batched primitives Nanite, because this world is GEOMETRY-bound.
 
@@ -2675,6 +2774,21 @@ def build(layout):
             if entry.get("mesh_obj") is not None:
                 set_prop(actor, "Mesh", entry["mesh_obj"])
             set_prop(actor, "BatchName", unreal.Name(name))
+            # HIERARCHICAL, SO THE LODs ABOVE ACTUALLY DO SOMETHING.
+            #
+            # A plain InstancedStaticMeshComponent picks ONE LOD for the entire
+            # component. These batches span the whole world, so with ISM every
+            # instance draws at LOD0 however far away it is and the reduction
+            # LODs are inert. HierarchicalInstancedStaticMeshComponent's cluster
+            # tree exists precisely to select LOD per instance.
+            #
+            # WonderlandInstancedBatch.h says bHierarchical "exists on this
+            # actor so the choice can be MEASURED rather than argued about" and
+            # notes the tree costs a rebuild per AddInstance. It has never been
+            # measured. It is being measured now, against a world that is
+            # geometry-bound with 137,816 instances at LOD0.
+            set_prop(actor, "bHierarchical",
+                     os.environ.get("WONDERLAND_HISM", "1") != "0")
             set_prop(actor, "bCastShadow", bool(entry["shadow"]))
             set_prop(actor, "bCollides", bool(entry.get("collides")))
             _set_float_array(actor, "Transforms", entry["xf"])
@@ -2706,6 +2820,17 @@ def build(layout):
     # exactly one LOD, and an isolated sweep proved it is geometry-bound --
     # r.ScreenPercentage 70, half the pixel work, changed the frame rate by
     # nothing. WONDERLAND_NANITE=0 puts the engine primitives back in one cook.
+    # REDUCTION LODs, ON BY DEFAULT. See wl_lod_primitives: this world is
+    # geometry-bound and every piece draws at LOD0 because the engine
+    # primitives ship one LOD. WONDERLAND_LODS=0 restores them in one cook.
+    _LOD_MESH = {}
+    if os.environ.get("WONDERLAND_LODS", "1") != "0":
+        try:
+            _LOD_MESH = wl_lod_primitives()
+        except Exception as _le:
+            unreal.log_warning("LOD: step failed (%s); the world keeps the "
+                               "engine primitives and stays geometry-bound" % _le)
+
     _NANITE_MESH = {}
     # DEFAULT OFF, BY MEASUREMENT. Nanite was the right hypothesis for a
     # geometry-bound world and it is the WRONG TOOL FOR THIS ONE. With SM6
@@ -2736,7 +2861,8 @@ def build(layout):
         # A converted mesh if there is one, the original otherwise. Falling back
         # to the original is deliberate: a missing mesh removes the piece from
         # the world, and a slow Wonderland beats an empty one.
-        path = _NANITE_MESH.get(mesh_key) or PLACEHOLDER_MESH.get(mesh_key, UNKNOWN_MESH)
+        path = (_NANITE_MESH.get(mesh_key) or _LOD_MESH.get(mesh_key)
+                or PLACEHOLDER_MESH.get(mesh_key, UNKNOWN_MESH))
         if mesh_key not in PLACEHOLDER_MESH:
             unreal.log_warning("No placeholder mesh for '%s' (%s); using fallback." % (mesh_key, label))
         # UNIQUE LABELS. Scattered kits key their label off the per-call index,
