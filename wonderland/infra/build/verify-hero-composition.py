@@ -944,6 +944,25 @@ def main():
             _grd += 1
     print("  frame is %.1f%% objects, %.1f%% SKY, %.1f%% bare ground plane"
           % (100.0 * _seen / _tot, 100.0 * _sky / _tot, 100.0 * _grd / _tot))
+
+    # ---- WHICH MATERIAL ACTUALLY COVERS THE FRAME -----------------------
+    #
+    # WHY: chasing "16.6% of the frame is bright pale ivory" I picked the
+    # culprit off the MATERIAL_SPEC table by eye -- porcelain, 30 references,
+    # albedo luma 0.85 -- darkened it, and the measured number moved 0.6 of a
+    # point. Reference count in the source says nothing about pixels covered.
+    # This asks the frame.
+    if "--materials" in sys.argv:
+        _tal = {}
+        for _k in range(W * H):
+            _o = owner[_k]
+            if _o >= 0:
+                _m = blobs[_o][6] or "?"
+                _tal[_m] = _tal.get(_m, 0) + 1
+        _tot = float(W * H)
+        print("  MATERIALS BY PIXELS OWNED (after occlusion):")
+        for _m, _n in sorted(_tal.items(), key=lambda kv: -kv[1])[:22]:
+            print("    %-16s %5.2f%% of frame" % (_m, 100.0 * _n / _tot))
     # ---- WHAT ROOFS THE SHOT --------------------------------------------
     # "The frame is 4.1% sky" says there is a problem; it does not say who is
     # causing it. Opening a window in the framing branch's canopy changed the

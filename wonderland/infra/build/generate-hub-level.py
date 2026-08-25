@@ -1575,7 +1575,28 @@ MATERIAL_SPEC = {
     # Same treatment, same reason: a violet cap in violet light does not need to
     # emit violet as well.
     "mush_purple": ((0.34, 0.19, 0.56), 0.0, 0.62, (0.0, 0.0, 0.0), 0.0),
-    "spire":       ((0.86, 0.58, 0.90), 0.0, 0.40, (0, 0, 0), 0.0),
+    # ---- THE DOG SHOULD BE THE ONLY BRIGHT PALE THING DOWN HERE ------------
+    #
+    # Tallying materials by PIXELS OWNED rather than by references in the source
+    # (verify-hero-composition --materials, added because guessing from the spec
+    # table cost a build: porcelain has 30 references and covers 2.17%):
+    #
+    #     dog_body   3.19%      porcelain  2.17%
+    #     spire      2.18%      stone      2.05%
+    #
+    # Those four are what the 16.8% "bright and nearly colourless" below the
+    # horizon is made of, in roughly equal parts, against the reference's 3.3%.
+    #
+    # And the reference's 3.3% is very nearly just ITS WHITE DOG. That is the
+    # whole finding: in the founder's picture the subject is the brightest pale
+    # thing in the lower frame and nothing competes with it, while ours has
+    # three architectural materials sitting at the same value as the Dog.
+    # "Staged clearly" is a contrast relationship, not a size.
+    #
+    # So the architecture comes down and dog_body stays at 0.88. Each of these
+    # keeps its hue and its relationships -- spire stays the violet masonry,
+    # stone stays the neutral ashlar, porcelain stays the pink-leaning ivory.
+    "spire":       ((0.60, 0.41, 0.64), 0.0, 0.40, (0, 0, 0), 0.0),
     # Down with porcelain, same measurement: a tower body at 0.98 red is the
     # brightest thing in the midground and the reference has nothing that loud.
     "spire_pink":  ((0.78, 0.58, 0.70), 0.0, 0.62, (0, 0, 0), 0.0),
@@ -1604,7 +1625,7 @@ MATERIAL_SPEC = {
     # porcelain carries 30 references, more than any other bright pale material
     # here, so it is the lever. Darker and pink-leaning: still ivory, no longer
     # the loudest value in the shot.
-    "porcelain":   ((0.70, 0.60, 0.65), 0.0, 0.26, (0, 0, 0), 0.0),
+    "porcelain":   ((0.55, 0.47, 0.52), 0.0, 0.26, (0, 0, 0), 0.0),
     "water":       ((0.16, 0.42, 0.56), 0.0, 0.05, (0.01, 0.04, 0.07), 0.15),
     # Spray and foam: near-white, barely self-lit so it stays bright against
     # the dark of a basin, and it BOBS — a jet of beads that does not move is
@@ -1668,7 +1689,7 @@ MATERIAL_SPEC = {
     # AUTHORED, and it is the one part that can be fixed with certainty.
     # (cloud and dog_body stay white on purpose: clouds are white and the
     # canonical Relay Dog's coat is its identity.)
-    "stone":       ((0.52, 0.50, 0.47), 0.0, 0.90, (0, 0, 0), 0.0),
+    "stone":       ((0.39, 0.37, 0.36), 0.0, 0.90, (0, 0, 0), 0.0),
     "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
     # SKELETON FLAME, the founder's legendary variant. It is a SKIN: the same
     # canonical body, the same proportions, the same visor band. What changes is
