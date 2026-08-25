@@ -36,7 +36,17 @@ REPO = _os.path.dirname(_WL)
 GEN = _os.path.join(_HERE, "generate-hub-level.py")
 LAYOUT = _os.path.join(_WL, "WorldDesign", "hub-layout.json")
 
+# 800x450 is the fast default. WL_PREVIEW_SIZE=1600x900 when the question is
+# "what IS all that stuff in the near field" rather than "where is the mass" —
+# at 800px the foreground reads as confetti whether it is confetti or not, and
+# that is the difference between a measurement and an impression.
 W, H = 800, 450
+_size = _os.environ.get("WL_PREVIEW_SIZE", "")
+if _size:
+    try:
+        W, H = (int(v) for v in _size.lower().split("x"))
+    except ValueError:
+        raise SystemExit("WL_PREVIEW_SIZE must look like 1600x900, not %r" % _size)
 records = []
 _pending_dogs = []
 _dog_scale = {}
@@ -446,8 +456,25 @@ def main():
     # fill its screen bounding box (boxes) or the inscribed ellipse (round
     # primitives). Far more faithful than one radius from the largest axis,
     # which drew a 3 km plane and a 20 cm flagstone with the same rule.
-    ROUND = ("sphere", "cylinder", "cone", "tree", "teacup", "clock", "pool_rim",
-             "island", "mushroom", "spire", "brain", "teapot")
+    ROUND = ("sphere", "cylinder", "tree", "teacup", "clock", "pool_rim",
+             "island", "mushroom", "brain", "teapot")
+    # A CONE IS A TRIANGLE ON SCREEN, AND DRAWING IT AS AN ELLIPSE CHANGED WHAT
+    # THE SKYLINE LOOKED LIKE.
+    #
+    # `cone` and `spire` were in ROUND, so every conical roof in Wonderland --
+    # which is most of the skyline, since a fantasy tower is a drum with a cone
+    # on it -- was filled as the inscribed ellipse of its bounding box. The
+    # preview therefore showed the castle city as a field of identical pale
+    # EGGS, and it was read as evidence that the skyline had no silhouette
+    # variety. A cone tapers to a point; an ellipse is widest at half height.
+    # Those are opposite silhouettes, and the one the tool drew is the one that
+    # does not exist in the world.
+    #
+    # This is the third time a harness here has been confidently wrong about
+    # geometry it never built (planes given thickness, the Dog proxy, now
+    # this), and each time the output still looked plausible. Filling the
+    # triangle costs one extra comparison per pixel.
+    CONE = ("cone", "spire")
     drawn = 0
     blobs = []
     for mesh, loc, sc, mat, lb, _rt in records:
@@ -523,13 +550,23 @@ def main():
         col = shade(mat, z, mesh, lb)
         cr, cg, cb = int(col[0] * 255), int(col[1] * 255), int(col[2] * 255)
         rnd = mesh in ROUND
+        cone = mesh in CONE
         ex, ey = (x1 - x0) * 0.5, (y1 - y0) * 0.5
         mx, my = (x0 + x1) * 0.5, (y0 + y1) * 0.5
         ex = max(ex, 0.5); ey = max(ey, 0.5)
+        _hh = max(y1 - y0, 1e-6)
         for yy in range(max(0, int(y0)), min(H, int(y1) + 1)):
             dy = (yy + 0.5 - my) / ey
+            if cone:
+                # Unreal's cone points +Z, so the apex is the TOP of the
+                # projected box and the half-width grows linearly downward.
+                _t = (yy + 0.5 - y0) / _hh
+                _cx0, _cx1 = mx - ex * _t, mx + ex * _t
             for xx in range(max(0, int(x0)), min(W, int(x1) + 1)):
-                if rnd:
+                if cone:
+                    if xx + 0.5 < _cx0 or xx + 0.5 > _cx1:
+                        continue
+                elif rnd:
                     dx = (xx + 0.5 - mx) / ex
                     if dx * dx + dy * dy > 1.0:
                         continue
@@ -694,6 +731,74 @@ def main():
         if _mv["ROOTED"][0]:
             print("    ---- HEARTBEAT: %d ROOTED instances move. Static "
                   "environment must stay static." % _mv["ROOTED"][0])
+
+    _nf = [a for a in sys.argv if a.startswith("--nearfield")]
+    if _nf:
+        # THE FIRST FEW METRES ARE WORTH THE MOST, AND THEY ARE THE HARDEST TO
+        # READ FROM A WIDE SHOT. "The foreground looks like confetti" is an
+        # impression; "417 pieces from six passes own 22% of the bottom third,
+        # and the paving owns 0%" is something you can act on.
+        #
+        # Grouped by the LABEL STEM rather than by material, because the
+        # question is which generator pass to change, and a pass writes labels.
+        _cut = 1800.0
+        if "=" in _nf[0]:
+            _cut = float(_nf[0].split("=", 1)[1])
+        _band = H - H // 3          # the bottom third, in rows
+        _own = _cv.Counter()
+        _cnt = _cv.Counter()
+        _bandpix = 0
+        for _k in range(_band * W, W * H):
+            if owner[_k] >= 0:
+                _bandpix += 1
+        for _i, _n in _vis.items():
+            _b = blobs[_i]
+            if _b[0] > _cut:
+                continue
+            _stem = _b[7].rstrip("0123456789_")
+            _stem = _stem.split("_")[0][:20] if "_" in _b[7] else _stem[:20]
+            _own[_stem] += _n
+            _cnt[_stem] += 1
+        _nfpix = sum(_own.values())
+        print("  NEAR FIELD  (within %.0f uu of the eye)  %d pieces own %.1f%% of the frame"
+              % (_cut, sum(_cnt.values()), 100.0 * _nfpix / float(W * H)))
+        for _k, _v in _own.most_common(20):
+            print("    %-22s %5d pieces  %5.2f%% of frame  (%5.2f%% of near-field cover)"
+                  % (_k, _cnt[_k], 100.0 * _v / float(W * H),
+                     100.0 * _v / float(_nfpix or 1)))
+        # How much of the bottom third is GROUND the viewer can actually see.
+        # The reference's strongest production signal is an authored plaza
+        # filling that band; a band that is 0% paving is a band of clutter
+        # however many pieces are in it.
+        _paving = 0
+        for _k in range(_band * W, W * H):
+            _o = owner[_k]
+            if _o >= 0 and blobs[_o][6] in ("cobble", "stone", "paving", "ground", "path"):
+                _paving += 1
+        _bt = float(W * (H - _band))
+        print("    BOTTOM THIRD  %.1f%% covered by objects, %.1f%% is walkable "
+              "surface (cobble/stone/ground)" % (100.0 * _bandpix / _bt,
+                                                 100.0 * _paving / _bt))
+        # WHO IS STANDING ON THE PLAZA. The whole-frame tally above answers
+        # "what is near"; this answers "what is covering the floor", and they
+        # are different questions with different answers — the framing tree is
+        # the largest near object and owns almost none of this band.
+        _bown = _cv.Counter()
+        _bcnt = _cv.Counter()
+        for _k in range(_band * W, W * H):
+            _o = owner[_k]
+            if _o < 0:
+                continue
+            _stem = blobs[_o][7].rstrip("0123456789_")
+            _stem = _stem.split("_")[0][:20] if "_" in blobs[_o][7] else _stem[:20]
+            _bown[_stem] += 1
+        for _i, _n in _vis.items():
+            _stem = blobs[_i][7].rstrip("0123456789_")
+            _stem = _stem.split("_")[0][:20] if "_" in blobs[_i][7] else _stem[:20]
+            _bcnt[_stem] += 1
+        print("    WHAT COVERS THE BOTTOM THIRD:")
+        for _k, _v in _bown.most_common(16):
+            print("      %-22s %6.2f%% of the band" % (_k, 100.0 * _v / _bt))
 
     big = [(blobs[_i], _n) for _i, _n in _vis.most_common(18)]
     print("  MOST VISIBLE (pixels actually owned after occlusion, %% of frame):")

@@ -1090,11 +1090,33 @@ def set_prop(actor, cpp_name, value):
 # warm. The first attempt used (0.82,0.75,0.63), which is a warm TAN: the grey
 # collapsed from 14.5% of the frame to 1.8% and went straight into the
 # warm_timber bucket instead of cream, because chroma 0.19 is far above the 0.10
-# that reads as an off-white. These values sit at chroma ~0.08. cobble2 stays darker so the "pale and
-# dark checkered flagstone" the reference names still reads as a checker; and
-# spire_far leans lilac for the distance. verify-visual-target.py measures the
-# result — palette_cream, palette_pink and palette_violet are the criteria this
-# is answering.
+# that reads as an off-white.
+#
+# THE NEXT SENTENCE USED TO SAY "these values sit at chroma ~0.08", AND IT WAS
+# NOT TRUE OF A SINGLE ONE OF THEM. Measured from the tuples immediately below,
+# as shipped:
+#
+#     stone      0.398        plaza      0.250
+#     cobble     0.275        cobble2    0.290
+#     spire_far  0.474        porcelain  0.293
+#
+# Three to six times the figure the prose claimed, and every one of them past
+# the 0.19 the same paragraph names as "far above" off-white. So the world was
+# not built of cream stone. It was built of PINK stone under a LAVENDER
+# skyline, which is why the founder's material note asks for "ivory/cream
+# fantasy stone" and "no giant flat pink slabs" about a world that had just
+# been declared cream. The prose was right and the numbers never followed it.
+#
+# They do now, and the colour does not leave with the cast: in the reference
+# the masonry is the QUIET part and every saturated thing in the frame is a
+# roof, a rose, a mushroom or the arcane circle. That is the correct place for
+# chroma to live, and those materials are untouched. spire_far keeps a faint
+# blue rather than a lilac, which is what distance actually does to a pale
+# wall. cobble2 stays darker so the "pale and dark checkered flagstone" the
+# reference names still reads as a checker.
+#
+# verify-masonry-chroma.py measures the tuples directly, so this paragraph
+# cannot drift away from them again.
 # WHY THE COLOURED MATERIALS ARE MATTE.
 #
 # The world rendered GREY once its false gold light was removed, and the
@@ -1150,9 +1172,9 @@ MATERIAL_SPEC = {
     # rubbed; one flat tone across every face is the "toy" read.
     "brass_deep":  ((0.42, 0.30, 0.13), 0.55, 0.52, (0.05, 0.03, 0.00), 0.10),
     "float_glow":  ((1.00, 0.80, 0.40), 0.45, 0.24, (1.00, 0.72, 0.28), 1.9),
-    "cobble":      ((0.80, 0.58, 0.66), 0.0, 0.80, (0, 0, 0), 0.0),
-    "cobble2":     ((0.62, 0.44, 0.62), 0.0, 0.82, (0, 0, 0), 0.0),
-    "plaza":       ((0.88, 0.66, 0.76), 0.0, 0.76, (0, 0, 0), 0.0),
+    "cobble":      ((0.79, 0.75, 0.71), 0.0, 0.80, (0, 0, 0), 0.0),
+    "cobble2":     ((0.58, 0.55, 0.52), 0.0, 0.82, (0, 0, 0), 0.0),
+    "plaza":       ((0.87, 0.83, 0.78), 0.0, 0.76, (0, 0, 0), 0.0),
     "moss":        ((0.20, 0.40, 0.16), 0.0, 0.72, (0, 0, 0), 0.0),
     "ground":      ((0.17, 0.30, 0.14), 0.0, 0.86, (0, 0, 0), 0.0),
     # A MEADOW IS NOT ONE GREEN. Real turf is patchy: sun-bleached where it is
@@ -1185,7 +1207,7 @@ MATERIAL_SPEC = {
     # Roughness 0.10 is a mirror, and a mirror reflecting a dark scene is
     # dark: attribute-dark.py measured porcelain at 1.47% of the frame in
     # shadow. Real glaze has a broad highlight, not a point one.
-    "porcelain":   ((0.99, 0.84, 0.70), 0.0, 0.26, (0, 0, 0), 0.0),
+    "porcelain":   ((0.97, 0.93, 0.88), 0.0, 0.26, (0, 0, 0), 0.0),
     "water":       ((0.16, 0.42, 0.56), 0.0, 0.05, (0.01, 0.04, 0.07), 0.15),
     # Spray and foam: near-white, barely self-lit so it stays bright against
     # the dark of a basin, and it BOBS — a jet of beads that does not move is
@@ -1226,7 +1248,7 @@ MATERIAL_SPEC = {
     # AUTHORED, and it is the one part that can be fixed with certainty.
     # (cloud and dog_body stay white on purpose: clouds are white and the
     # canonical Relay Dog's coat is its identity.)
-    "stone":       ((0.93, 0.56, 0.62), 0.0, 0.90, (0, 0, 0), 0.0),
+    "stone":       ((0.91, 0.87, 0.82), 0.0, 0.90, (0, 0, 0), 0.0),
     "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
     # SKELETON FLAME, the founder's legendary variant. It is a SKIN: the same
     # canonical body, the same proportions, the same visor band. What changes is
@@ -1251,7 +1273,7 @@ MATERIAL_SPEC = {
     "meadow_far":  ((0.46, 0.53, 0.45), 0.0, 0.94, (0, 0, 0), 0.0),
     # Distant towers, deliberately pale and low-contrast so the skyline recedes
     # behind the hero landmarks instead of competing with them.
-    "spire_far":   ((0.68, 0.50, 0.95), 0.0, 0.62, (0, 0, 0), 0.0),
+    "spire_far":   ((0.80, 0.80, 0.86), 0.0, 0.62, (0, 0, 0), 0.0),
     # Rose and pink rooflines — the reference's skyline is warm, not gold.
     "roof_rose":   ((0.78, 0.38, 0.44), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
     "roof_pink":   ((0.92, 0.46, 0.62), 0.0, 0.62, (0, 0, 0), 0.0),
@@ -5550,9 +5572,27 @@ def build(layout):
     # camera, so one can stand 250 uu from the lens. At that range a Relay Dog
     # is a white wall across the frame and the castle city the shot exists to
     # present is behind it — which is what every hero capture in this session
-    # came back as. The hero Dog is 927 uu out and fills a healthy 42% of frame
-    # height; nothing else should come closer than the plaza itself.
-    ARRIVAL_KEEP_OUT = 1150.0
+    # came back as.
+    #
+    # THE LAST CLAUSE OF THAT SENTENCE WAS THE BUG. It read "nothing else
+    # should come closer than the plaza itself", and then set a radius of 1,150
+    # — INSIDE the plaza, whose paving reaches 1,340 uu. So the rule pushed
+    # every offender to a circle drawn across the middle of the courtyard and
+    # called the courtyard cleared. Measured on the hero frame with the four
+    # landmarks parked on that circle: the bottom third of the shot was 100.0%
+    # covered by objects and 11.6% of it was walkable surface. The founder's
+    # reference is a plaza; this was a hedge maze at knee height.
+    #
+    # Four landmarks were inside the old keep-out and all four were pushed onto
+    # the same circle, which is its own failure — a ring of props at one radius
+    # reads as a barricade, not as a garden. Pushing along each object's OWN
+    # bearing is what stops that, and it is why the rule moves distance only.
+    #
+    # 2,050 uu clears the paving with room for the setts to read, and lands the
+    # pushed landmarks at the plaza RIM, which is exactly where the reference
+    # puts its planting: flowers and caps gathered at the edge of the stone,
+    # open floor in the middle with the Dog standing on it.
+    ARRIVAL_KEEP_OUT = 2050.0
     DOG_STAGE = (HERO_DOG[0], HERO_DOG[1], 560.0)
 
     def _on_stage(gx, gy):
@@ -5744,6 +5784,13 @@ def build(layout):
             mushroom_red_a           736
             overlook_terrace        1035
             project_standing_stones 1057
+
+        Those distances are as authored, and all four are still inside the
+        keep-out — it is now 2,050 uu rather than 1,150, because 1,150 was
+        inside the plaza it was supposed to clear. The belvedere over the
+        overlook terrace was ALSO in the lens at 960 uu and was not asking this
+        rule at all, which is the per-call-site failure the docstring opens by
+        naming, committed again.
 
         mushroom_red_a is the one that showed. At 736 uu, built to its declared
         360 uu, it stood 1.57x the frame HEIGHT and measured 16.1% of the bottom
@@ -7262,41 +7309,54 @@ def build(layout):
                       0.52 + 0.26 * ((_h >> 17) % 3) / 2.0, "FgShrub%d" % _i,
                       bloom=("rose_pink" if _i % 2 else "petal_violet"))
             _FG_SHRUBS += 1
-        # A cluster of small caps beside most beds — mushroom red is a family
-        # the reference has and this frame did not.
-        if _i % 3 != 2:
+        # MUSHROOMS GATHER. THEY DO NOT CARPET.
+        #
+        # What was here: three caps beside two beds in three, plus a NINE-cap
+        # ring around every one of the 96. Roughly 1,056 caps at scale 0.26-0.46
+        # in the near band. Looking at the projected frame rather than at the
+        # numbers, it is a continuous mat of overlapping domes across the whole
+        # foreground — the "random clutter" and "confetti" the art direction
+        # forbids by name, and it is what made the plaza disappear.
+        #
+        # THE COMMENT IT REPLACES SAID WHY, AND THE REASON WAS THE DEFECT. It
+        # opened "verify-visual-target reads environment_density at 77.9 against
+        # a target of 85" and "palette_violet reads 4.8 against 6.0", and the
+        # nine caps existed to move those two numbers. They did. The founder's
+        # answer to that method is worth keeping in the file:
+        #
+        #     "A screenshot can score better numerically and still look
+        #      artistically wrong. The actual highest-level metric is visual
+        #      convergence against the target."
+        #
+        # The reference has perhaps two dozen mushrooms in the whole frame and
+        # every one of them is READABLE: a dominant cap with smaller ones at its
+        # foot, gathered at the base of something, with open ground between the
+        # groups. That is a grammar, not a density. So: one clump per four beds,
+        # each with a real size hierarchy, placed OUTBOARD of its bed so the
+        # groups bank toward the frame edges and the middle stays open for the
+        # Dog. About 90 caps where there were 1,056, and each one is an object
+        # instead of a pixel.
+        if _i % 4 == 1:
             _cap = ("mush_red", "mush_purple", "mush_white")[(_h >> 11) % 3]
-            for _k in range(3):
-                kit_mushroom(_fx + 70.0 + _k * 52.0 - 26.0,
-                             _fy - 44.0 + ((_h >> (13 + _k)) % 60) - 30.0,
-                             0.26 + 0.11 * (_k % 3), "FgCap%d_%d" % (_i, _k), _cap)
+            _alt = ("mush_purple", "mush_white", "mush_red")[(_h >> 15) % 3]
+            # outboard: away from the camera axis, so clumps gather at the verges
+            _cx = _fx + math.copysign(160.0, _fx if _fx else 1.0)
+            _cy = _fy - 40.0
+            # One dominant cap and two to four subordinates. The hierarchy is
+            # the whole read: five equal caps is a mat again at any count.
+            _sizes = (1.05, 0.62, 0.50, 0.36, 0.29)[: 3 + ((_h >> 19) % 3)]
+            for _k, _sz in enumerate(_sizes):
+                _ca = (((_h >> (5 + _k)) % 360) + _k * 97) * math.pi / 180.0
+                _cr = 0.0 if _k == 0 else 74.0 + _k * 30.0
+                _mx = _cx + math.cos(_ca) * _cr
+                _my = _cy + math.sin(_ca) * _cr
+                if math.hypot(_mx - HERO_DOG[0], _my - HERO_DOG[1]) < 420.0:
+                    continue
+                if math.hypot(_mx, _my) < 560.0:
+                    continue
+                kit_mushroom(_mx, _my, _sz, "FgClump%d_%d" % (_i, _k),
+                             _cap if _k % 2 == 0 else _alt)
                 _FG_CAPS += 1
-        # DENSITY WITHOUT MORE GREEN, which is the awkward part of this.
-        #
-        # verify-visual-target reads environment_density at 77.9 against a
-        # target of 85, and in the same breath reads foliage as the LARGEST
-        # colour in the frame at 27.5 against a ceiling of 25. So the obvious
-        # move -- plant more -- makes one number better by making the other
-        # worse. The reference is a pastel stone city seen THROUGH planting,
-        # not a forest.
-        #
-        # What it is short of is the third thing: violet. palette_violet reads
-        # 4.8 against 6.0, and the reference is full of purple mushrooms,
-        # wisteria and the arcane circle. So the fill is deliberately PURPLE
-        # CAPS -- they add occupied ground and violet at once, and no green.
-        _vh = (_h >> 5) & 0xFFFF
-        for _v in range(9):
-            _va = (_vh % 360 + _v * 83) * math.pi / 180.0
-            _vr = 108.0 + ((_vh >> (3 + _v)) % 150)
-            _vx, _vy = _fx + math.cos(_va) * _vr, _fy + math.sin(_va) * _vr
-            if math.hypot(_vx - HERO_DOG[0], _vy - HERO_DOG[1]) < 400.0:
-                continue
-            if math.hypot(_vx, _vy) < 540.0:
-                continue
-            kit_mushroom(_vx, _vy, 0.30 + 0.16 * ((_vh >> (7 + _v)) % 3) / 2.0,
-                         "FgViolet%d_%d" % (_i, _v),
-                         "mush_purple" if _v % 2 else "petal_violet")
-            _FG_CAPS += 1
     unreal.log_warning("FOREGROUND PLANTING placed %d beds, %d shrubs, %d mushroom caps"
                        % (_FG_BEDS, _FG_SHRUBS, _FG_CAPS))
 
@@ -7789,7 +7849,19 @@ def build(layout):
     kit_heart_topiary(_GX - 300.0, _GY + 430.0, 40.0, 0.85, "GardenTopiaryA")
     kit_heart_topiary(_GX + 300.0, _GY + 430.0, 40.0, 0.85, "GardenTopiaryB")
     # THE MISSION OVERLOOK'S OWN SILHOUETTE, over the terrace it already has.
-    kit_belvedere(620.0, -190.0, 0.72, "OverlookBelvedere")
+    #
+    # AND IT MUST ASK THE KEEP-OUT. At (620, -190) it stands 960 uu from the
+    # arrival lens, where the frame is 736 uu wide to each side — so it was
+    # inside the blind foreground, in front of the camera, and it owned 12.11%
+    # of the bottom third of the hero frame as a pale slab lying across the
+    # plaza. Its terrace asks the rule through kit_dispatch; the belvedere on
+    # top of the terrace was placed by hand here and never did, so the two
+    # halves of one landmark ended up in different places.
+    _bx, _by, _bmoved = _push_out_of_lens(620.0, -190.0, "OverlookBelvedere")
+    if _bmoved:
+        unreal.log_warning("BELVEDERE pushed out of the arrival lens to (%.0f, %.0f)"
+                           % (_bx, _by))
+    kit_belvedere(_bx, _by, 0.72, "OverlookBelvedere")
 
     kit_heart_topiary(1180, 1150, 70.0, 1.5, "HeartTopiaryR")
     kit_heart_topiary(-1240, 1200, 70.0, 1.35, "HeartTopiaryL")
