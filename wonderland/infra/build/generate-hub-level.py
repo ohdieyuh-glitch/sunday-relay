@@ -1576,13 +1576,35 @@ MATERIAL_SPEC = {
     # emit violet as well.
     "mush_purple": ((0.34, 0.19, 0.56), 0.0, 0.62, (0.0, 0.0, 0.0), 0.0),
     "spire":       ((0.86, 0.58, 0.90), 0.0, 0.40, (0, 0, 0), 0.0),
-    "spire_pink":  ((0.98, 0.74, 0.82), 0.0, 0.62, (0, 0, 0), 0.0),
+    # Down with porcelain, same measurement: a tower body at 0.98 red is the
+    # brightest thing in the midground and the reference has nothing that loud.
+    "spire_pink":  ((0.78, 0.58, 0.70), 0.0, 0.62, (0, 0, 0), 0.0),
     "spire_blue":  ((0.76, 0.68, 0.98), 0.0, 0.62, (0, 0, 0), 0.0),
-    "spire_teal":  ((0.66, 0.92, 0.88), 0.0, 0.62, (0, 0, 0), 0.0),
+    # The teal cluster reads as a neon sign in the delivered frame, and the
+    # reference has no teal in it at all. Keeps the hue, stops it shouting.
+    "spire_teal":  ((0.44, 0.62, 0.60), 0.0, 0.62, (0, 0, 0), 0.0),
     # Roughness 0.10 is a mirror, and a mirror reflecting a dark scene is
     # dark: attribute-dark.py measured porcelain at 1.47% of the frame in
     # shadow. Real glaze has a broad highlight, not a point one.
-    "porcelain":   ((0.88, 0.85, 0.80), 0.0, 0.26, (0, 0, 0), 0.0),
+    # ---- FIVE TIMES TOO MUCH BRIGHT IVORY, AND THE WRONG IVORY ------------
+    #
+    # Counting pixels that are bright AND nearly colourless -- luma over 170 at
+    # saturation under 0.22, which is what "ivory masonry" delivers -- below the
+    # horizon, where the architecture is:
+    #
+    #                    share of the band     colour            hue
+    #     ours                 17.41%       rgb(221,205,203)     6.4
+    #     reference             3.30%       rgb(232,198,213)   333.1
+    #
+    # Five times the area, and neutral where the reference's is PINK: its pale
+    # surfaces run R > B > G, ours run flat. The brief does ask for "ivory/cream
+    # fantasy masonry" and the reference does have it -- as an accent covering a
+    # thirtieth of the frame, not as the ground note covering a fifth.
+    #
+    # porcelain carries 30 references, more than any other bright pale material
+    # here, so it is the lever. Darker and pink-leaning: still ivory, no longer
+    # the loudest value in the shot.
+    "porcelain":   ((0.70, 0.60, 0.65), 0.0, 0.26, (0, 0, 0), 0.0),
     "water":       ((0.16, 0.42, 0.56), 0.0, 0.05, (0.01, 0.04, 0.07), 0.15),
     # Spray and foam: near-white, barely self-lit so it stays bright against
     # the dark of a basin, and it BOBS — a jet of beads that does not move is
