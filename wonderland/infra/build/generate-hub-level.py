@@ -1474,9 +1474,31 @@ MATERIAL_SPEC = {
     # leaving every chromatic material alone should also close the saturation
     # gap (0.31 against the reference's 0.43) rather than widen it, because a
     # near-white surface has no chroma to contribute in the first place.
-    "cobble":      ((0.62, 0.59, 0.55), 0.0, 0.80, (0, 0, 0), 0.0),
-    "cobble2":     ((0.44, 0.42, 0.40), 0.0, 0.82, (0, 0, 0), 0.0),
-    "plaza":       ((0.68, 0.65, 0.61), 0.0, 0.76, (0, 0, 0), 0.0),
+    # ---- THE PAVING WAS TWICE THE ALBEDO THE REFERENCE SHOWS ---------------
+    #
+    # Sampled off the founder's own picture, median half of each patch so a
+    # bright fleck or a dark joint does not decide it:
+    #
+    #     paving left of the circle    rgb( 85,  58,  60)   luma  63.9
+    #     paving right of the circle   rgb( 59,  44,  36)   luma  46.6
+    #     paving under the circle      rgb(162, 100, 153)   luma 116.9  <- LIT
+    #
+    # Its plaza is DARK, and the one bright patch is the stone the arcane circle
+    # is throwing violet onto. That is the whole mechanism the note beside
+    # heroLightLumens describes from the other side: the circle reads because
+    # the surround is dim, not because the glyphs are loud.
+    #
+    # Our delivered frame is mean luma 113 against the reference's 83.5, with
+    # 3.5% of it below luma 18 against 8.6% -- HALF the dark. The ground band is
+    # BRIGHTER than the sky band by 3.6 where the reference's sky leads by 9.2.
+    # Every one of those says the same thing about the same surfaces.
+    #
+    # Halved rather than matched exactly: these are albedos, the render applies
+    # its own light on top, and the far more common failure in this file has
+    # been overshooting a value in one move.
+    "cobble":      ((0.31, 0.29, 0.28), 0.0, 0.80, (0, 0, 0), 0.0),
+    "cobble2":     ((0.22, 0.21, 0.21), 0.0, 0.82, (0, 0, 0), 0.0),
+    "plaza":       ((0.34, 0.33, 0.32), 0.0, 0.76, (0, 0, 0), 0.0),
     "moss":        ((0.20, 0.40, 0.16), 0.0, 0.72, (0, 0, 0), 0.0),
     "ground":      ((0.17, 0.30, 0.14), 0.0, 0.86, (0, 0, 0), 0.0),
     # A MEADOW IS NOT ONE GREEN. Real turf is patchy: sun-bleached where it is
@@ -1573,7 +1595,7 @@ MATERIAL_SPEC = {
     # AUTHORED, and it is the one part that can be fixed with certainty.
     # (cloud and dog_body stay white on purpose: clouds are white and the
     # canonical Relay Dog's coat is its identity.)
-    "stone":       ((0.74, 0.70, 0.65), 0.0, 0.90, (0, 0, 0), 0.0),
+    "stone":       ((0.52, 0.50, 0.47), 0.0, 0.90, (0, 0, 0), 0.0),
     "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
     # SKELETON FLAME, the founder's legendary variant. It is a SKIN: the same
     # canonical body, the same proportions, the same visor band. What changes is
@@ -2839,7 +2861,14 @@ def build_material_library(texs=None):
         #
         # 0.0069 puts eight cubes across 144 uu, so each reads about 18 uu —
         # the reference's cube size against a Dog of this height.
-        "dog_body":   ("voxel",   0.0069, (1.00, 1.00, 1.00)),
+        # 0.0069 -> 0.0045. THE CUBES WERE TOO SMALL TO READ AS CUBES. The
+        # scale is UV per uu, so a tile spans 1/scale and the voxel map is 8x8:
+        # at 0.0069 each cube is 18 uu, and the hero Dog stands about 280 uu, so
+        # its body was fifteen cubes tall and rendered as a fine grid -- masonry,
+        # not voxels, and indistinguishable at this distance from the ashlar on
+        # the buildings behind it. The founder's Dog reads at roughly ten cubes.
+        # 0.0045 gives 28 uu cubes, so about ten.
+        "dog_body":   ("voxel",   0.0045, (1.00, 1.00, 1.00)),
         # The companions were bound to NOTHING and rendered as flat coats. Same
         # grid, tinted by their own palette entry.
         "dog_pink":   ("voxel",   0.0069, (1.00, 1.00, 1.00)),
@@ -4146,20 +4175,38 @@ def build(layout):
             # On the OUTER blobs only (i > 0): the inner mass is what gives the
             # canopy its shadow, and flowering it flattens the tree.
             if i > 0 and "petal_pink" in MATS:
-                _nb = 6 if giant else 4
+                # SIX BLOSSOMS AT 0.30 OF THE CANOPY'S OWN DIAMETER IS NOT
+                # BLOSSOM, IT IS A PINK BALL. The reasoning above is right --
+                # the reference's canopies really are flower rather than leaf --
+                # and the SIZE turned it into candy: a cluster three tenths as
+                # wide as the whole blob it sits on is the second-largest form
+                # in the tree, and the trace bore it out with framing_tree_bloom
+                # entries at 0.66-0.76% of frame EACH, several of them in the
+                # ten most visible objects in the shot.
+                #
+                # A flowering tree is MANY SMALL clusters over the outer surface.
+                # Same colour, same coverage, a fifth the size and three times
+                # the count, distributed over two rings so they wrap the blob
+                # instead of ringing its equator.
+                _nb = 18 if giant else 11
                 for _q in range(_nb):
-                    _qa = _q * (2.0 * math.pi / _nb) + i * 0.7
-                    _qr = d * 0.42
+                    _qa = _q * 2.39996 + i * 0.7          # golden angle, no ring
+                    _tilt = -0.25 + 1.05 * ((_q + 0.5) / _nb)
+                    _qr = d * 0.46 * math.sqrt(max(0.04, 1.0 - _tilt * _tilt))
                     _part("sphere",
                           bx_ + math.cos(_qa) * _qr,
                           by_ + math.sin(_qa) * _qr,
-                          bz_ + d * (0.10 + 0.16 * ((_q + i) % 3) / 2.0),
-                          d * 0.30 / 100.0, d * 0.30 / 100.0, d * 0.26 / 100.0,
+                          bz_ + d * 0.46 * _tilt,
+                          d * 0.105 / 100.0, d * 0.105 / 100.0, d * 0.092 / 100.0,
                           ("petal_pink", "rose_pink", "petal_violet",
                            "petal_pink")[(_q + i) % 4],
                           "%s_bloom%d_%d" % (label, i, _q))
             if "leafcard" in MATS:
-                ncards = (6 if giant else 4)
+                # 6 CARDS ON A BLOB THIS SIZE LEAVES THE SPHERE SHOWING. The
+                # cards are the only one of the three layers that changes the
+                # OUTLINE, and at six the smooth ball reads straight through
+                # them -- which is the "giant smooth primitive" the brief names.
+                ncards = (16 if giant else 9)
                 for k in range(ncards):
                     # golden-angle spiral, biased to the upper hemisphere where
                     # the light is and where the outline is actually read
@@ -8049,8 +8096,22 @@ def build(layout):
         _ny = NEAR_Y + 120.0 + ((_h % 100) / 100.0) * 1750.0
         _side = -1.0 if _n % 2 else 1.0
         _nx = _CAM_X + _side * (330.0 + ((_h >> 7) % 100) / 100.0 * 1250.0)
-        if math.hypot(_nx, _ny) < 1450.0:      # not on the paved plaza
-            continue
+        # 1450 WAS A THIRD COPY OF THE PAVING RADIUS AND IT DISAGREED WITH THE
+        # OTHER TWO. The course reaches 2,412 uu and `_on_paving` guards it at
+        # 2,300; this pass carried its own 1,450, so a 962 uu ANNULUS of stone
+        # -- the widest, nearest ring of it, and the part the hero camera looks
+        # straight down at -- was fair game for planting.
+        #
+        # Probed on the delivered frame, the three places the reference shows
+        # open cobble are owned by tuft8_leaf1, GardenBed3_stem2 and
+        # tuft29_leaf6. Grass, growing on the plaza. That is why the bottom
+        # third measures 2.6% floor, and why every attempt to make the plaza
+        # read has failed: the plaza was never the thing in the way.
+        #
+        # _off_paving_lateral rather than `continue`, for the reason its own
+        # docstring gives -- rejecting empties the near field, and the reference
+        # banks its planting to the verges rather than deleting it.
+        _nx, _ny = _off_paving_lateral(_nx, _ny, _h)
         if _in_corridor(_nx, _ny):             # and not in the sight line
             continue
         _sz = 2.2 + ((_h >> 11) % 9) * 0.95
@@ -8062,8 +8123,16 @@ def build(layout):
         for _t in range(2 + ((_h >> 13) % 3)):
             _ta = ((_h >> (_t + 2)) % 628) / 100.0
             _td = ((_h >> (_t + 9)) % 100) / 100.0 * _sz * 82.0
-            tuft(_nx + math.cos(_ta) * _td, _ny + math.sin(_ta) * _td,
-                 (_h + _t * 17) % 97)
+            # EACH TUFT ASKS FOR ITSELF. The patch centre being off the stone
+            # does not put its tufts off the stone: _td reaches 82 * _sz, which
+            # is up to about 800 uu, so a patch cleared at the edge still sows
+            # the paving. Checking the parent and placing the child is how the
+            # rule was satisfied and the plaza still ended up planted.
+            _tx = _nx + math.cos(_ta) * _td
+            _ty = _ny + math.sin(_ta) * _td
+            if _on_paving(_tx, _ty) or _on_stage(_tx, _ty):
+                continue
+            tuft(_tx, _ty, (_h + _t * 17) % 97)
 
     # DISTANT HILLS. A flat plane meeting the sky in a dead-straight line reads
     # as a backdrop, not a world. A ring of very wide, very shallow domes gives
