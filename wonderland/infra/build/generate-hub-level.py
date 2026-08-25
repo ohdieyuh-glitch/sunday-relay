@@ -207,7 +207,22 @@ LOOK = {
     # block. CHOSEN at 11.0 — roughly 3.4 km of air on the skyline by that
     # block's arithmetic — after 4.0 was measured to leave 80 km of distance as
     # crisp as 2 km. Sweepable with WONDERLAND_LOOK=aerialScale=.
-    "aerialScale": 11.0,
+    # 11.0 -> 26.0, MEASURED. Cropped at two depths, the skyline at 25-80 km is
+    # as sharp, as saturated and as contrasty as the gate at 2 km — there is no
+    # distance cue in this frame at all. 11.0 was a guess made against a sky
+    # that had just stopped being black, and it moved nothing visible.
+    #
+    # This is the lever that still WORKS. The level PostProcessVolume does not
+    # reach this render (depth of field set on it left the skyline razor sharp),
+    # and neither does r.AutoExposure.Bias. SkyAtmosphere is a COMPONENT, in the
+    # same family as the fog and the sun — and those are the three things from
+    # the cinematic-depth pass that visibly landed.
+    #
+    # By this block's own arithmetic 26x puts about 8 km of air on the skyline,
+    # which is the range where a tower keeps its silhouette and loses its
+    # contrast. That is what "background reduced contrast through atmosphere"
+    # means, and it is the only atmospheric depth this path can be given.
+    "aerialScale": 26.0,
     # ---- TASK 1: CINEMATIC DEPTH -------------------------------------------
     # The founder's brief, verbatim where it is a number: "Cinematic Bokeh DoF
     # focused on the foreground character", "Bloom (Intensity 1.5, threshold
