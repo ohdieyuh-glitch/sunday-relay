@@ -1317,6 +1317,27 @@ def srgb_light_color(r, g, b):
     return unreal.LinearColor(_lin(r), _lin(g), _lin(b), 1.0)
 
 
+# ---- HOW HIGH THE PLAZA ACTUALLY IS -----------------------------------------
+#
+# THREE SEPARATE THINGS MEANT TO LIE ON THE PLAZA WERE BURIED IN IT, all in one
+# day, because this height was a DERIVED quantity that lived nowhere: the setts'
+# z came out of two expressions inside kit_plaza and every author who put
+# something "on the plaza" guessed a z, and three guessed low.
+#
+#   the rune PLANE          authored z  6.0   -- invisible all sprint
+#   the arcane RINGS        innermost z 9.0   -- partly buried
+#   (and the moss and the ripple rings sit right on the boundary)
+#
+# So it is named here, once, and derived from the same literals the setts are
+# built from. Anything that lies on the courtyard should clear _PAVING_TOP_Z.
+# verify-hero-corridor.py measures the same thing off the placed world and will
+# disagree loudly if these ever drift apart.
+_SETT_Z_MIN, _SETT_Z_STEP = 3.0, 0.6          # centre z: min + (0..4) * step
+_SETT_H_MIN, _SETT_H_STEP = 0.055, 0.012      # cube scale: min + (0..2) * step
+_PAVING_TOP_Z = ((_SETT_Z_MIN + 4 * _SETT_Z_STEP)
+                 + (_SETT_H_MIN + 2 * _SETT_H_STEP) * 100.0 * 0.5)   # = 9.35 uu
+
+
 def _wl_piece_hook(mesh_key, location, scale, label, rotation, mat):
     return None
 
@@ -6042,13 +6063,16 @@ def build(layout):
                 # all three — and letting the gaps widen unevenly — is what makes
                 # it laid stone. The offsets are hash-derived so a rebuild lays
                 # the exact same courtyard.
-                jz = 3.0 + (hsh % 5) * 0.6
+                # z DERIVED FROM _SETT_Z_MAX / _SETT_H_MAX so the constant and
+                # the geometry cannot drift. See the note beside them.
+                jz = _SETT_Z_MIN + (hsh % 5) * _SETT_Z_STEP
                 shrink = 0.86 + ((hsh >> 3) % 9) * 0.014
                 yaw = ((hsh >> 7) % 9) - 4.0
                 ox = (((hsh >> 11) % 7) - 3) * 2.6
                 oy = (((hsh >> 15) % 7) - 3) * 2.6
                 _part("cube", x + gx * tile + ox, y + gy * tile + oy, jz,
-                      tile / 100.0 * shrink, tile / 100.0 * shrink, 0.055 + (hsh % 3) * 0.012,
+                      tile / 100.0 * shrink, tile / 100.0 * shrink,
+                      _SETT_H_MIN + (hsh % 3) * _SETT_H_STEP,
                       mat, "Tile%d_%d" % (gx, gy), rot=(0.0, yaw, 0.0))
                 # moss in roughly half the joints, in clumps rather than dots
                 # Moss in a QUARTER of the joints rather than half, and one
@@ -6153,7 +6177,7 @@ def build(layout):
             # 12.0 clears the tallest sett by 2.65 uu and the plaza moss at 7.0,
             # and 12 cm above the stone reads as light lying ON it rather than
             # as a floating decal.
-            _part("plane", ccx, ccy, 12.0,
+            _part("plane", ccx, ccy, _PAVING_TOP_Z + 2.65,
                   _rr * 2.0 / 100.0, _rr * 2.0 / 100.0, 1.0,
                   "runes", "RuneCircle")
         # SKIPPED WITH AN `if`, NOT WITH A ZERO COUNT.
@@ -6218,7 +6242,8 @@ def build(layout):
                 _a = _k * (2.0 * math.pi / _ARC_SEGS)
                 _part("cube",
                       ccx + math.cos(_a) * _radius,
-                      ccy + math.sin(_a) * _radius, rz + 5.0,
+                      ccy + math.sin(_a) * _radius,
+                      max(rz, _PAVING_TOP_Z + 3.0),
                       _seglen / 100.0, 0.24, 0.030,
                       "arcane", "ArcaneRing%d_%d" % (j, _k),
                       rot=(0.0, math.degrees(_a) + 90.0, 0.0))
