@@ -4368,11 +4368,38 @@ def build(layout):
             bx_ = x + ox * cr
             by_ = y + oy * cr
             bz_ = th + cr * 0.30 + i * cr * 0.12
-            if giant and i < 4:
-                _part("sphere", bx_, by_, bz_, d * 0.72 / 100.0, d * 0.72 / 100.0,
-                      d * 0.72 / 100.0, "foliage_deep", "%s_dark%d" % (label, i))
-            _part("sphere", bx_, by_, bz_,
-                  d / 100.0, d / 100.0, d / 100.0, mat, "%s_canopy%d" % (label, i))
+            # ---- THE CANOPY IS A VOXEL SHELL, NOT A SMOOTH BALL -----------------
+            #
+            # The reference is a VOXEL world: its dogs, its buildings and its
+            # foliage are all built from small cubes and rendered beautifully.
+            # A smooth sphere is the one shape that world never contains, and
+            # our trees were eleven of them, 34% of the hero frame, the largest
+            # smooth primitives in the picture. Every earlier pass dressed the
+            # sphere -- cards, blossom, rims -- and the sphere read through all
+            # of it. This replaces it.
+            #
+            # A dark core keeps the mass and hides the interior. The visible
+            # surface is a shell of cubes on a fibonacci spiral, three greens,
+            # each turned a little, so the outline is lumpy and the surface is
+            # faceted the way a voxel canopy is. The leaf cards still sit on top
+            # for the fine silhouette.
+            _part("sphere", bx_, by_, bz_, d * 0.80 / 100.0, d * 0.80 / 100.0,
+                  d * 0.80 / 100.0, "foliage_deep", "%s_dark%d" % (label, i))
+            _nvox = 48 if giant else 26
+            _vsz = d * (0.115 if giant else 0.15)
+            _greens = ("foliage", "foliage_hi", "foliage_deep", "foliage", "foliage_hi")
+            for _v in range(_nvox):
+                _u = (_v + 0.5) / _nvox
+                _zc = 1.0 - 2.0 * _u
+                _rr = math.sqrt(max(0.0, 1.0 - _zc * _zc))
+                _va_ = _v * 2.39996 + i * 1.3 + (sum(ord(c) for c in label) % 11) * 0.37
+                _part("cube",
+                      bx_ + math.cos(_va_) * _rr * d * 0.44,
+                      by_ + math.sin(_va_) * _rr * d * 0.44,
+                      bz_ + _zc * d * 0.40,
+                      _vsz / 100.0, _vsz / 100.0, _vsz / 100.0,
+                      _greens[(_v + i) % 5], "%s_vox%d_%d" % (label, i, _v),
+                      rot=(float((_v * 23) % 30) - 15.0, float((_v * 41) % 90), 0.0))
             # BLOSSOM, BECAUSE THE REFERENCE'S TREES FLOWER.
             #
             # Measured against the founder's reference, pink_rose_red is 26.7%
@@ -4410,11 +4437,11 @@ def build(layout):
                     _qa = _q * 2.39996 + i * 0.7          # golden angle, no ring
                     _tilt = -0.25 + 1.05 * ((_q + 0.5) / _nb)
                     _qr = d * 0.46 * math.sqrt(max(0.04, 1.0 - _tilt * _tilt))
-                    _part("sphere",
+                    _part("cube",
                           bx_ + math.cos(_qa) * _qr,
                           by_ + math.sin(_qa) * _qr,
                           bz_ + d * 0.46 * _tilt,
-                          d * 0.105 / 100.0, d * 0.105 / 100.0, d * 0.092 / 100.0,
+                          d * 0.09 / 100.0, d * 0.09 / 100.0, d * 0.08 / 100.0,
                           ("petal_pink", "rose_pink", "petal_violet",
                            "petal_pink")[(_q + i) % 4],
                           "%s_bloom%d_%d" % (label, i, _q))
@@ -7243,6 +7270,21 @@ def build(layout):
     # own way of putting something on the axis without closing it, and the path
     # is the axis. Everything else that lands in the sight line gets moved.
     _CORRIDOR_EXEMPT = frozenset(("rose_arch",))
+    # ---- DELETED FROM THE HERO ZONE ------------------------------------------
+    #
+    # The founder's courtyard has, in its midground, a garden: hedges, the
+    # heart topiary, teacups, mushrooms, the gate and the arch. It has NO
+    # white building and NO pool. Ours had the Project Brain -- an 8x8x14
+    # white grid box -- standing beside the avenue with a cyan reflecting pool
+    # in front of it, and a brown pergola frame where the reference puts its
+    # heart. Every earlier pass moved these AROUND the frame; the founder's
+    # brief for this pass is that environment art is not protected and sunk
+    # cost is irrelevant. They go.
+    #
+    # Functional systems survive: the Brain's ZONE marker and interaction
+    # anchor are placed by a different loop and untouched, so gameplay that
+    # looks for the Brain still finds its location. Only the ART is gone.
+    _HERO_EXCLUDE = frozenset(("brain_landmark", "brain_pool_rim", "agent_pergola"))
 
     def _on_paving(gx, gy):
         """The plaza and the boulevard are STONE. Nothing that grows out of soil
@@ -7342,10 +7384,14 @@ def build(layout):
         if i % 6 == 2:
             for k, (ox, oy, oz) in enumerate([(0, 0, 0.0), (0.16, 0.05, -0.04), (-0.13, 0.10, -0.03),
                                               (0.05, -0.16, -0.02)]):
-                _part("sphere", x + ox * 40.0, y + oy * 40.0, h + 7.0 + oz * 40.0,
-                      0.19, 0.19, 0.18, "rose" if k % 2 else "rose_pink", "rose_%d_%d" % (i, k))
+                _part("sphere", x + ox * 24.0, y + oy * 24.0, h + 5.0 + oz * 24.0,
+                      0.09, 0.09, 0.08, "rose" if k % 2 else "rose_pink", "rose_%d_%d" % (i, k))
         else:
-            _part("sphere", x, y, h + 7.0, 0.28, 0.28, 0.26, col, "flw_%d" % i)
+            # 0.28 -> 0.11. A 28 uu sphere on a 30 uu stem is a ball on a
+            # stick, and the foreground was full of them; the reference's
+            # flowers are a tenth of that, in drifts. Same count, a third the
+            # size, so the beds read as planting rather than as confetti.
+            _part("sphere", x, y, h + 5.0, 0.11, 0.11, 0.10, col, "flw_%d" % i)
 
     def tuft(x, y, i):
         # LEAF CARDS, not a blob. One squashed sphere per plant is the single
@@ -7720,6 +7766,10 @@ def build(layout):
         # authored scale into a gentle [0.75, 1.6] size factor, and give the two
         # heroes fixed sizes.
         mid = m.get("id", "")
+        if mid in _HERO_EXCLUDE:
+            unreal.log_warning("HERO ZONE: %s deleted from the arrival courtyard "
+                               "(see _HERO_EXCLUDE)" % mid)
+            return
         mesh = m.get("mesh", "")
         loc = m["location"]
         x, y, z = float(loc[0]), float(loc[1]), float(loc[2])
@@ -10446,10 +10496,12 @@ def build(layout):
     _va = landmark_xy("rose_arch", (0.0, 820.0))
     _vp = landmark_xy("agent_pergola", (820.0, 460.0))
     _vt = landmark_xy("framing_tree", (1300.0, 470.0))
+    # NINE -> FIVE. The reference hangs vegetation from exactly two things: the
+    # gate's pillars (ivy) and the great tree's branch (the wisteria cascade on
+    # the right). The four strands on the arch and the pergola were what made
+    # the midground read as a bead curtain, and the pergola is gone anyway.
     for i, (vx, vy, vt, vd) in enumerate([
             (_vg[0] - _MSX * 240, _vg[1], 740, 520), (_vg[0] + _MSX * 240, _vg[1], 740, 520),
-            (_va[0] - _MSX * 230, _va[1], 430, 330), (_va[0] + _MSX * 230, _va[1], 430, 330),
-            (_vp[0] - _MSX * 150, _vp[1], 610, 420), (_vp[0] + _MSX * 150, _vp[1], 610, 420),
             (_vt[0] - _MSX * 140, _vt[1] + 90, 980, 600), (_vt[0] + _MSX * 130, _vt[1] - 50, 940, 560),
             (_vt[0], _vt[1] + 190, 1010, 640)]):
         kit_vine(vx, vy, vt, vd, "Vine%d" % i, i)
@@ -10763,6 +10815,9 @@ def build(layout):
 
     # --- Water features ---------------------------------------------------
     for w in layout.get("waterFeatures", []):
+        if "brain" in w.get("id", ""):
+            unreal.log_warning("HERO ZONE: %s deleted with its landmark" % w["id"])
+            continue
         s = scale_for_radius(w.get("radiusUu", 100))
         # THE RIM MOVED AND THE WATER DID NOT. brain_pool_rim is a LANDMARK and
         # went through _off_sight_line, which took it off the hero axis;

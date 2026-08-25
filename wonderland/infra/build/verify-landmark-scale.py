@@ -69,12 +69,26 @@ def main():
                 buckets[i].append(a)
                 break
 
+    # DELETED ON PURPOSE IS NOT MISSING. The generator carries a _HERO_EXCLUDE
+    # set: landmarks whose ART is removed from the arrival courtyard because the
+    # founder's reference has no white building and no pool in its midground.
+    # Their zone markers and anchors still place. This gate reads the set from
+    # the source rather than carrying its own copy, so the two cannot drift.
+    import re as _re
+    _gen = os.path.join(os.path.dirname(os.path.abspath(__file__)), "generate-hub-level.py")
+    _src = open(_gen, encoding="utf8").read()
+    _m = _re.search(r'_HERO_EXCLUDE\s*=\s*frozenset\(\((.*?)\)\)', _src, _re.S)
+    excluded = set(_re.findall(r'"([^"]+)"', _m.group(1))) if _m else set()
+
     failures = []
     print("%-28s %8s %8s %7s" % ("landmark", "declared", "built", "ratio"))
     for m in landmarks:
         mid = m.get("id", "")
         dims = m.get("dimensionsUu")
         parts = buckets.get(mid, [])
+        if mid in excluded:
+            print("%-28s %8s %8s %7s" % (mid, "-", "-", "DELETED (hero zone)"))
+            continue
         if not dims or len(dims) < 3:
             print("%-28s %8s %8s %7s" % (mid, "-", "-", "no dims"))
             continue
