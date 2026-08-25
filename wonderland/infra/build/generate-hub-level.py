@@ -10937,7 +10937,9 @@ def build(layout):
         (0.66, 2900.0, 1.25, ("bed", "bed", "topiary")),
         (2.44, 3150.0, 1.30, ("teacup", "lantern", "topiary", "bed")),
         (1.02, 4050.0, 1.55, ("arch", "topiary", "heart")),
-        (2.08, 4400.0, 1.60, ("arch", "lantern", "topiary")),
+        # Pocket 5's arch was the last "second hoop" -- probed by name in the
+        # trace at 43 m, right of the arrival arch at the same apparent size.
+        (2.08, 4400.0, 1.60, ("bed", "lantern", "topiary")),
         (0.34, 5350.0, 1.95, ("topiary", "topiary", "bed")),
         (2.76, 5700.0, 2.00, ("teacup", "topiary", "lantern")),
         # POCKET 8 SITS ON THE AXIS (1.57 rad) 67 m out. It carried two arches
