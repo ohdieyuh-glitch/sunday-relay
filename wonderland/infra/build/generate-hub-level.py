@@ -3670,7 +3670,7 @@ def build(layout):
         bottom is six parts, and it is the cheapest possible purchase of the
         thing the brief calls "bevels, trim"."""
         t = trim or mat
-        _part("cube", cx, cy, cz, sx, sy, sz, mat, label, rot=(0.0, 0.0, yaw))
+        _part("cube", cx, cy, cz, sx, sy, sz, mat, label, rot=(0.0, yaw, 0.0))
         ch = min(sx, sy) * 0.13
         for ox, oy in ((-1, -1), (-1, 1), (1, -1), (1, 1)):
             wx = cx + (ox * sx * 50.0 * math.cos(math.radians(yaw))
@@ -3678,11 +3678,11 @@ def build(layout):
             wy = cy + (ox * sx * 50.0 * math.sin(math.radians(yaw))
                        + oy * sy * 50.0 * math.cos(math.radians(yaw)))
             _part("cube", wx, wy, cz, ch, ch, sz * 0.99, t,
-                  "%s_arris%d%d" % (label, ox, oy), rot=(0.0, 0.0, yaw + 45.0))
+                  "%s_arris%d%d" % (label, ox, oy), rot=(0.0, yaw + 45.0, 0.0))
         if band:
             for e, zz in ((-1, cz - sz * 49.0), (1, cz + sz * 49.0)):
                 _part("cube", cx, cy, zz, sx * 1.06, sy * 1.06, sz * 0.045, t,
-                      "%s_band%d" % (label, e), rot=(0.0, 0.0, yaw))
+                      "%s_band%d" % (label, e), rot=(0.0, yaw, 0.0))
 
     def cornice(cx, cy, cz, sx, sy, mat, label, yaw=0.0, dentils=0):
         """A projecting moulded band: three courses, each wider than the last.
@@ -3690,12 +3690,12 @@ def build(layout):
         real building never has."""
         for i, (w, h) in enumerate(((1.00, 0.055), (1.10, 0.075), (1.20, 0.045))):
             _part("cube", cx, cy, cz + i * (sx * 5.0), sx * w, sy * w, h, mat,
-                  "%s_c%d" % (label, i), rot=(0.0, 0.0, yaw))
+                  "%s_c%d" % (label, i), rot=(0.0, yaw, 0.0))
         for d in range(dentils):
             a = math.radians(yaw) + d * (2.0 * math.pi / max(dentils, 1))
             _part("cube", cx + math.cos(a) * sx * 48.0, cy + math.sin(a) * sy * 48.0,
                   cz - sx * 3.0, sx * 0.09, sy * 0.09, 0.09, mat,
-                  "%s_d%d" % (label, d), rot=(0.0, 0.0, yaw))
+                  "%s_d%d" % (label, d), rot=(0.0, yaw, 0.0))
 
     def railing(x0, y0, x1, y1, z, mat, label, n=7, h=64.0, rail_mat=None):
         """Cap rail, bottom rail, turned balusters. Balconies in this world
@@ -3710,7 +3710,7 @@ def build(layout):
         mx, my = (x0 + x1) * 0.5, (y0 + y1) * 0.5
         for zz, th in ((z + h, 0.075), (z + h * 0.12, 0.05)):
             _part("cube", mx, my, zz, ln / 100.0, 0.12, th, rm,
-                  "%s_rail%d" % (label, int(zz)), rot=(0.0, 0.0, yaw))
+                  "%s_rail%d" % (label, int(zz)), rot=(0.0, yaw, 0.0))
         for i in range(n):
             t = (i + 0.5) / n
             _part("cylinder", x0 + dx * t, y0 + dy * t, z + h * 0.55,
@@ -3725,7 +3725,7 @@ def build(layout):
         ca, sa = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
         def P(ox, oz, sxx, syy, szz, m, sfx, rr=0.0):
             _part("cube", cx + ox * -sa, cy + ox * ca, cz + oz, sxx, syy, szz, m,
-                  "%s_%s" % (label, sfx), rot=(0.0, 0.0, yaw + rr))
+                  "%s_%s" % (label, sfx), rot=(0.0, yaw + rr, 0.0))
         P(0.0, 0.0, w, 0.06, h, glass, "glass")
         for e in (-1, 1):                                    # jambs
             P(e * w * 52.0, 0.0, w * 0.16, 0.11, h * 1.04, mat, "jamb%d" % e)
@@ -3834,7 +3834,7 @@ def build(layout):
                           (0.09 + ((_rg * 3 + i) % 3) * 0.04) * s,
                           sh_ * 1.02 / 100.0, "trunk",
                           "%s_ridge%d_%d" % (label, i, _rg),
-                          rot=(0.0, 0.0, math.degrees(_ra)))
+                          rot=(0.0, math.degrees(_ra), 0.0))
                 # KNOTS AND BROKEN STUBS. "avoid smooth cylinders" — a bole reads
                 # as bark because of where branches used to be, not because of
                 # its taper.
@@ -4158,7 +4158,7 @@ def build(layout):
         # the device: a heart, which is the motif the reference repeats
         _part("cube", x - d * 0.62, y, z + h * 0.02, 0.10 * s, w * 0.34, h * 0.30,
               "rose" if "rose" in MATS else "gold", "%s_heart" % label,
-              rot=(0.0, 0.0, 45.0))
+              rot=(0.0, 45.0, 0.0))
         _part("sphere", x - d * 0.62, y - w * 0.16, z + h * 0.20,
               0.30 * s, 0.30 * s, 0.30 * s, "rose" if "rose" in MATS else "gold",
               "%s_heartl" % label)
@@ -4176,10 +4176,10 @@ def build(layout):
         hgt = 260.0 * s
         _part("cube", x, y, hgt * 0.10, 1.30 * s, 1.30 * s, 0.20 * s, "stone", "%s_base" % label)
         _part("cube", x, y, hgt * 0.48, 1.00 * s, 0.86 * s, hgt * 0.78 / 100.0, "stone",
-              "%s_shaft" % label, rot=(0.0, 0.0, 6.0))
+              "%s_shaft" % label, rot=(0.0, 6.0, 0.0))
         # taper: a narrower block above, so the silhouette is not parallel-sided
         _part("cube", x, y, hgt * 0.86, 0.74 * s, 0.66 * s, hgt * 0.22 / 100.0, "stone",
-              "%s_taper" % label, rot=(0.0, 0.0, -4.0))
+              "%s_taper" % label, rot=(0.0, -4.0, 0.0))
         _part("sphere", x, y, hgt * 1.00, 0.40 * s, 0.36 * s, 0.30 * s, "stone", "%s_cap" % label)
         # the rune, which is what makes it a standing STONE rather than a post
         _part("cube", x - 0.44 * s * 100.0 * 0.01 * 50.0, y, hgt * 0.56,
@@ -4335,7 +4335,7 @@ def build(layout):
             _part("sphere", x + sx * 44.0 * s, y, ph + 150.0 * s, 0.5 * s, 0.3 * s, 0.5 * s,
                   "rose", "%s_heartlobe%d" % (label, sx))
         _part("cube", x, y, ph + 108.0 * s, 0.62 * s, 0.3 * s, 0.62 * s, "rose", "%s_heartpt" % label,
-              rot=(0.0, 0.0, 45.0))
+              rot=(0.0, 45.0, 0.0))
         _part("cube", x, y, ph + 120.0 * s, 1.4 * s, 1.35 * s, 1.0 * s, "gold_glow", "%s_keystone" % label)
 
     def kit_spire(x, y, s, label, body_mat="spire", roof_mat="gold", flag=True,
@@ -4525,9 +4525,9 @@ def build(layout):
             a = i * (2.0 * math.pi / 20.0)
             wx, wy = x + math.cos(a) * wall_r, y + math.sin(a) * wall_r
             _part("cube", wx, wy, 150.0 * s, 2.1 * s, 0.62 * s, 3.0 * s, "spire_far",
-                  "%s_wall%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
+                  "%s_wall%d" % (label, i), rot=(0.0, math.degrees(a) + 90.0, 0.0))
             _part("cube", wx, wy, 320.0 * s, 2.1 * s, 0.74 * s, 0.34 * s, "spire_far",
-                  "%s_walk%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
+                  "%s_walk%d" % (label, i), rot=(0.0, math.degrees(a) + 90.0, 0.0))
             for k in ((-1, 1) if not far else ()):
                 _part("cube", wx + math.cos(a + 1.5708) * 46.0 * s * k,
                       wy + math.sin(a + 1.5708) * 46.0 * s * k, 360.0 * s,
@@ -4610,11 +4610,11 @@ def build(layout):
                 seg_len = span * s / 100.0 / segs * 1.25
                 _part("cube", px_, py_, pz_, seg_len, 0.62 * s,
                       0.20 * s, "spire_far", "%s_span%d_%d" % (label, i, j),
-                      rot=(0.0, 0.0, yaw))
+                      rot=(0.0, yaw, 0.0))
                 # parapet, so the bridge has a top edge against the sky
                 _part("cube", px_, py_, pz_ + 26.0 * s, seg_len,
                       0.70 * s, 0.09 * s, "spire_far",
-                      "%s_spanrail%d_%d" % (label, i, j), rot=(0.0, 0.0, yaw))
+                      "%s_spanrail%d_%d" % (label, i, j), rot=(0.0, yaw, 0.0))
                 # a pier from the GROUND to the span. The first version centred
                 # it at half the span height with a quarter-height box, so it
                 # floated with daylight under it — a pier that touches nothing
@@ -4632,7 +4632,7 @@ def build(layout):
             a = i * (2.0 * math.pi / (10.0 if not far else 5.0))
             _part("cube", x + math.cos(a) * 350.0 * s, y + math.sin(a) * 350.0 * s,
                   200.0 * s, 0.46 * s, 0.92 * s, 4.0 * s, "spire_far",
-                  "%s_butt%d" % (label, i), rot=(0.0, 0.0, math.degrees(a)))
+                  "%s_butt%d" % (label, i), rot=(0.0, math.degrees(a), 0.0))
             _part("cone", x + math.cos(a) * 350.0 * s, y + math.sin(a) * 350.0 * s,
                   420.0 * s, 0.52 * s, 0.52 * s, 0.7 * s,
                   "roof_pink" if i % 2 else "roof_rose", "%s_buttcap%d" % (label, i))
@@ -4671,7 +4671,7 @@ def build(layout):
                   "rose_pink" if _k % 2 else "petal_violet", "%s_sprig%d" % (label, _k))
             _part("cube", x + math.cos(_a) * 74.0 * s, y + math.sin(_a) * 74.0 * s,
                   50.0 * s, 0.10 * s, 0.03 * s, 0.05 * s, "foliage",
-                  "%s_sprigleaf%d" % (label, _k), rot=(0.0, 0.0, math.degrees(_a)))
+                  "%s_sprigleaf%d" % (label, _k), rot=(0.0, math.degrees(_a), 0.0))
         # A HANDLE IS A LOOP, and the hole in the middle is the whole read: a
         # solid slab against the cup is a lug, and reads as one from any angle.
         # Short segments around an arc, each rotated tangent, leave real negative
@@ -4718,7 +4718,7 @@ def build(layout):
                 if ring == 0 and i % 5 == 0:
                     _part("cube", px, cy - 14.0 * s, pz, 0.26 * s, 0.05 * s, 0.30 * s,
                           "leaf" if "leaf" in MATS else "foliage", "%s_lf%d" % (label, i),
-                          rot=(0.0, 0.0, float((i * 37) % 90)))
+                          rot=(0.0, float((i * 37) % 90), 0.0))
         for k, (fx, fz) in enumerate([(0.0, 0.2), (0.32, 0.42), (-0.32, 0.42), (0.0, 0.72)]):
             _part("sphere", cx + fx * 60.0 * s, cy + 8.0 * s, base_z + 170.0 * s + fz * 60.0 * s,
                   0.72 * s, 0.34 * s, 0.72 * s, "foliage_hi", "%s_fill%d" % (label, k))
@@ -4794,9 +4794,9 @@ def build(layout):
             a = (i + 0.5) * (2.0 * math.pi / 16.0)
             ax, ay = x + math.cos(a) * col_r, y + math.sin(a) * col_r
             _p("cube", ax, ay, arch_z, 2.15, 0.78, 0.42, "stone",
-                  "%s_arch%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
+                  "%s_arch%d" % (label, i), rot=(0.0, math.degrees(a) + 90.0, 0.0))
             _p("cube", ax, ay, arch_z + 54.0, 2.05, 0.66, 0.34, "gold",
-                  "%s_frieze%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
+                  "%s_frieze%d" % (label, i), rot=(0.0, math.degrees(a) + 90.0, 0.0))
         # a moulded cornice where the architrave meets the dome
         _p_corn(x, y, arch_z + 66.0, col_r * 1.10, "%s_cornice" % label)
         dome_z = arch_z + 88.0
@@ -4822,14 +4822,14 @@ def build(layout):
                 _p("cube", x + math.cos(a) * rr, y + math.sin(a) * rr, zz,
                       rr / 300.0, 0.42, 0.44, "spire_pink" if b == 1 else "spire",
                       "%s_shell%d_%d" % (label, b, i),
-                      rot=(0.0, 0.0, math.degrees(a) + 90.0))
+                      rot=(0.0, math.degrees(a) + 90.0, 0.0))
         oc_z = dome_z + R * 0.86
         # --- gold oculus ring -------------------------------------------
         for i in range(18):
             a = i * (2.0 * math.pi / 18.0)
             _p("cube", x + math.cos(a) * 190.0, y + math.sin(a) * 190.0, oc_z,
                   0.72, 0.30, 0.26, "gold", "%s_oc%d" % (label, i),
-                  rot=(0.0, 0.0, math.degrees(a) + 90.0))
+                  rot=(0.0, math.degrees(a) + 90.0, 0.0))
         # --- THE BRAIN: folded lobes, not a bag of balls ------------------
         bz = oc_z + 230.0
         for hemi in (-1, 1):
@@ -4978,7 +4978,7 @@ def build(layout):
                       zc + 40.0 * s + t * 420.0 * s,
                       rr / 90.0 + 0.06, 0.20 * s, 1.0 * s,
                       "roof_rose" if f % 2 else "roof_pink",
-                      "%s_sp%d_%d" % (label, f, k), rot=(0.0, 0.0, math.degrees(fa)))
+                      "%s_sp%d_%d" % (label, f, k), rot=(0.0, math.degrees(fa), 0.0))
         _part("cylinder", x, y, zc + 500.0 * s, 0.18 * s, 0.18 * s, 0.9 * s, "gold",
               "%s_finpole" % label)
         finial(x, y, zc + 545.0 * s, s * 1.4, "gold", "%s_fin" % label, glow="gold_glow")
@@ -4991,7 +4991,7 @@ def build(layout):
                     zc - 34.0 * s, "stone", "%s_gallery%d" % (label, _q), n=4, h=42.0 * s)
         # weathervane
         _part("cube", x, y, zc + 610.0 * s, 1.05 * s, 0.05 * s, 0.05 * s, "gold",
-              "%s_vane" % label, rot=(0.0, 0.0, 34.0))
+              "%s_vane" % label, rot=(0.0, 34.0, 0.0))
         _part("cone", x + 46.0 * s, y + 31.0 * s, zc + 610.0 * s, 0.22 * s, 0.22 * s, 0.34 * s,
               "gold", "%s_vanetip" % label, rot=(0.0, 90.0, 34.0))
         # ivy and a door at the foot, so it is planted rather than dropped
@@ -5019,16 +5019,16 @@ def build(layout):
                 _part("cube", ex + fx * lo * 60.0, ey + fy * lo * 60.0, lz,
                       0.13, 0.13, 0.42, "trunk", "%s_leg%d_%d" % (label, e, int(lo * 10)))
             _part("cube", ex, ey, 45.0, 0.62, 0.14, 0.10, "trunk",
-                  "%s_rail%d" % (label, e), rot=(0.0, 0.0, yaw))
+                  "%s_rail%d" % (label, e), rot=(0.0, yaw, 0.0))
             # arm rest
             _part("cube", ex, ey, 62.0, 0.66, 0.11, 0.09, "trunk",
-                  "%s_arm%d" % (label, e), rot=(0.0, 0.0, yaw))
+                  "%s_arm%d" % (label, e), rot=(0.0, yaw, 0.0))
             _part("cube", ex + fx * 26.0, ey + fy * 26.0, 54.0, 0.10, 0.10, 0.28, "trunk",
-                  "%s_armpost%d" % (label, e), rot=(0.0, 0.0, yaw))
+                  "%s_armpost%d" % (label, e), rot=(0.0, yaw, 0.0))
         for k in range(4):                            # seat slats
             off = (k - 1.5) * 17.0
             _part("cube", x + fx * off, y + fy * off, 50.0, 1.62, 0.14, 0.055, "trunk",
-                  "%s_seat%d" % (label, k), rot=(0.0, 0.0, yaw))
+                  "%s_seat%d" % (label, k), rot=(0.0, yaw, 0.0))
         for k in range(3):                            # back slats, leaning back
             _part("cube", x - fx * 32.0, y - fy * 32.0, 74.0 + k * 20.0, 1.62, 0.10, 0.10,
                   "trunk", "%s_back%d" % (label, k), rot=(0.0, -12.0, yaw))
@@ -5051,14 +5051,14 @@ def build(layout):
         _part("cylinder", x, y, 232.0 * s, 0.95 * s, 0.95 * s, 0.22 * s, "gold", "%s_cap" % label)
         # the card itself, standing on edge above the plinth, haloed
         _part("cube", x, y, 330.0 * s, 0.66 * s, 0.07 * s, 0.96 * s, "porcelain", "%s_card" % label,
-              rot=(0.0, 0.0, 22.0))
+              rot=(0.0, 22.0, 0.0))
         _part("cube", x, y, 330.0 * s, 0.72 * s, 0.05 * s, 1.02 * s, "gold", "%s_cardtrim" % label,
-              rot=(0.0, 0.0, 22.0))
+              rot=(0.0, 22.0, 0.0))
         for e in (-1, 1):
             _part("sphere", x + e * 13.0 * s, y - 6.0 * s, 348.0 * s, 0.17 * s, 0.05 * s, 0.17 * s,
                   "rose", "%s_pip%d" % (label, e))
         _part("cube", x, y - 6.0 * s, 322.0 * s, 0.22 * s, 0.05 * s, 0.22 * s, "rose",
-              "%s_pippt" % label, rot=(0.0, 0.0, 45.0))
+              "%s_pippt" % label, rot=(0.0, 45.0, 0.0))
         for k in range(16):                                  # halo of glyphs
             a = k * (2.0 * math.pi / 16.0)
             _part("sphere", x + math.cos(a) * 118.0 * s, y + math.sin(a) * 118.0 * s,
@@ -5080,7 +5080,7 @@ def build(layout):
             ea = e * (math.pi / 2.0)
             _part("cube", x + math.cos(ea) * 150.0 * s, y + math.sin(ea) * 150.0 * s, 396.0 * s,
                   3.1 * s, 0.36 * s, 0.30 * s, "stone", "%s_arch%d" % (label, e),
-                  rot=(0.0, 0.0, math.degrees(ea) + 90.0))
+                  rot=(0.0, math.degrees(ea) + 90.0, 0.0))
         # warm stone and a rose roof, so it is not a second white building
         # standing next to the Observatory and merging with it
         kit_dome(x, y, 410.0 * s, 178.0 * s, "%s_dome" % label, mat="roof_rose", rib="gold")
@@ -5212,7 +5212,7 @@ def build(layout):
         roofs at different heights, walls and bridges tying the mass together."""
         # podium the whole block stands on
         _part("cube", x, y, 90.0 * s, 5.4 * s, 4.4 * s, 1.8 * s, body, "%s_pod" % label,
-              rot=(0.0, 0.0, float((int(x) * 7) % 40) - 20.0))
+              rot=(0.0, float((int(x) * 7) % 40) - 20.0, 0.0))
         placed = []
         n = 4 + (int(abs(x) + abs(y)) % 3)
         for i in range(n):
@@ -5242,7 +5242,7 @@ def build(layout):
             yaw = math.degrees(math.atan2(dy, dx))
             bz = 300.0 * min(asz, bsz)
             _part("cube", mx, my, bz, ln / 200.0, 0.30 * s, 0.22 * s, body,
-                  "%s_br%d" % (label, i), rot=(0.0, 0.0, yaw))
+                  "%s_br%d" % (label, i), rot=(0.0, yaw, 0.0))
             for k in range(5):                       # bridge arcade
                 t = (k + 0.5) / 5.0
                 _part("cube", ax + dx * t, ay + dy * t, bz + 34.0 * s,
@@ -5253,10 +5253,10 @@ def build(layout):
             rx, ry = x + math.cos(a) * 210.0 * s, y + math.sin(a) * 210.0 * s
             hh = (60.0 + 40.0 * ((k * 5) % 3)) * s
             _part("cube", rx, ry, hh * 0.5 + 90.0 * s, 1.5 * s, 1.1 * s, hh / 100.0, body,
-                  "%s_low%d" % (label, k), rot=(0.0, 0.0, math.degrees(a)))
+                  "%s_low%d" % (label, k), rot=(0.0, math.degrees(a), 0.0))
             _part("cone", rx, ry, hh + 130.0 * s, 1.8 * s, 1.35 * s, 1.0 * s,
                   "roof_rose" if k % 2 else roof, "%s_lowr%d" % (label, k),
-                  rot=(0.0, 0.0, math.degrees(a)))
+                  rot=(0.0, math.degrees(a), 0.0))
 
     def kit_bed(cx, cy, r, label, palette=("petal_violet", "rose_pink", "petal_pink")):
         """A landscaped garden bed with a RAISED STONE BORDER. The addendum asks
@@ -5267,7 +5267,7 @@ def build(layout):
             a = i * (2.0 * math.pi / n)
             _part("cube", cx + math.cos(a) * r, cy + math.sin(a) * r, 17.0,
                   (2.0 * math.pi * r / n) / 88.0, 0.30, 0.34, "stone",
-                  "%s_kerb%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
+                  "%s_kerb%d" % (label, i), rot=(0.0, math.degrees(a) + 90.0, 0.0))
             if i % 3 == 0:                            # moss where kerb meets soil
                 _part("sphere", cx + math.cos(a) * (r - 22.0), cy + math.sin(a) * (r - 22.0),
                       8.0, 0.22, 0.22, 0.07, "moss", "%s_moss%d" % (label, i))
@@ -5299,7 +5299,7 @@ def build(layout):
             th = thick * (1.0 - 0.62 * t)
             _part("sphere", x + math.cos(ang) * rr, y + math.sin(ang) * rr, zz,
                   th * 1.5, th, th * 1.1, "trunk", "%s_r%d" % (label, k),
-                  rot=(0.0, 0.0, math.degrees(ang)))
+                  rot=(0.0, math.degrees(ang), 0.0))
             if k % 3 == 1:                             # moss on the shaded side
                 _part("sphere", x + math.cos(ang) * rr, y + math.sin(ang) * rr, zz + th * 40.0,
                       th * 0.8, th * 0.7, th * 0.3, "moss", "%s_m%d" % (label, k))
@@ -5382,7 +5382,7 @@ def build(layout):
                       isz, isz * (0.78 + (ih % 5) * 0.05), 0.048,
                       ("cobble2", "plaza", "cobble")[ih % 3],
                       "PlazaFill%d_%d" % (igx, igy),
-                      rot=(0.0, 0.0, float((ih >> 13) % 25) - 12.0))
+                      rot=(0.0, float((ih >> 13) % 25) - 12.0, 0.0))
                 if ih % 4 == 0:
                     _part("sphere", ix + 14.0, iy - 11.0, 5.0, 0.13, 0.13, 0.05,
                           "moss", "PlazaFillMoss%d_%d" % (igx, igy))
@@ -5452,7 +5452,7 @@ def build(layout):
                 oy = (((hsh >> 15) % 7) - 3) * 2.6
                 _part("cube", x + gx * tile + ox, y + gy * tile + oy, jz,
                       tile / 100.0 * shrink, tile / 100.0 * shrink, 0.055 + (hsh % 3) * 0.012,
-                      mat, "Tile%d_%d" % (gx, gy), rot=(0.0, 0.0, yaw))
+                      mat, "Tile%d_%d" % (gx, gy), rot=(0.0, yaw, 0.0))
                 # moss in roughly half the joints, in clumps rather than dots
                 if hsh % 2 == 0:
                     for m in range(2 + (hsh % 3)):
@@ -5491,7 +5491,7 @@ def build(layout):
                   0.10 + (_h % 3) * 0.03, 0.010,
                   ("petal_pink", "rose_pink", "petal_violet", "petal_air",
                    "leaf")[_h % 5], "PlazaPetal%d" % _pb,
-                  rot=(0.0, 0.0, float((_h >> 3) % 180)))
+                  rot=(0.0, float((_h >> 3) % 180), 0.0))
         # Many THIN concentric rings rather than six fat bands: the reference's
         # circle reads as engraved light, and thickness is what made ours read
         # as painted vinyl.
@@ -5701,10 +5701,10 @@ def build(layout):
             a = i * (2.0 * math.pi / 16.0)
             _part("cube", x + math.cos(a) * 385.0, y + math.sin(a) * 385.0, 34.0,
                   1.60, 0.62, 0.68, "stone", "%s_wall%d" % (label, i),
-                  rot=(0.0, 0.0, math.degrees(a) + 90.0))
+                  rot=(0.0, math.degrees(a) + 90.0, 0.0))
             _part("cube", x + math.cos(a) * 385.0, y + math.sin(a) * 385.0, 72.0,
                   1.66, 0.80, 0.16, "stone", "%s_rim%d" % (label, i),
-                  rot=(0.0, 0.0, math.degrees(a) + 90.0))
+                  rot=(0.0, math.degrees(a) + 90.0, 0.0))
             if i % 2 == 0:                                  # carved rosettes
                 _part("sphere", x + math.cos(a) * 400.0, y + math.sin(a) * 400.0, 50.0,
                       0.20, 0.12, 0.20, "gold", "%s_ros%d" % (label, i))
@@ -5766,7 +5766,7 @@ def build(layout):
             a = i * (2.0 * math.pi / 12.0)
             _part("cube", x + math.cos(a) * 265.0 * s, y + math.sin(a) * 265.0 * s, 8.0,
                   0.62 * s, 0.10 * s, 0.03, "arcane", "%s_spoke%d" % (label, i),
-                  rot=(0.0, 0.0, math.degrees(a)))
+                  rot=(0.0, math.degrees(a), 0.0))
             _part("sphere", x + math.cos(a) * 330.0 * s, y + math.sin(a) * 330.0 * s, 11.0,
                   0.13 * s, 0.13 * s, 0.05, "gold_glow", "%s_stud%d" % (label, i))
         # rising glyphs: crosses that hang over the ring
@@ -5919,7 +5919,7 @@ def build(layout):
             if k < n:
                 _part("cube", px, py, z0 - dip - 34.0, 0.30, 0.04, 0.44, "porcelain",
                       "%s_card%d" % (label, k),
-                      rot=(0.0, 0.0, math.degrees(math.atan2(y1 - y0, x1 - x0))))
+                      rot=(0.0, math.degrees(math.atan2(y1 - y0, x1 - x0)), 0.0))
                 _part("sphere", px, py - 4.0, z0 - dip - 30.0, 0.10, 0.03, 0.10,
                       suits[k % 4], "%s_pip%d" % (label, k))
 
@@ -5928,7 +5928,7 @@ def build(layout):
         col = ("petal_air", "petal_violet", "petal_pink", "rose_pink")[i % 4]
         yaw = float((i * 53) % 360)
         _part("cube", x, y, z, 0.045, 0.11, 0.012, "dog_visor", "Bfly%d_b" % i,
-              rot=(0.0, 0.0, yaw))
+              rot=(0.0, yaw, 0.0))
         for w in (-1, 1):
             _part("sphere", x + math.cos(math.radians(yaw + 90 * w)) * 9.0,
                   y + math.sin(math.radians(yaw + 90 * w)) * 9.0, z + 3.0,
@@ -5964,7 +5964,7 @@ def build(layout):
             _part("sphere", x + 34.0 + e * 9.0, y - 9.0, 160.0, 0.15, 0.05, 0.15,
                   "rose", "%s_lobe%d" % (label, e))
         _part("cube", x + 34.0, y - 9.0, 146.0, 0.19, 0.05, 0.19, "rose",
-              "%s_pt" % label, rot=(0.0, 0.0, 45.0))
+              "%s_pt" % label, rot=(0.0, 45.0, 0.0))
         finial(x, y, 178.0, 0.72, "gold", "%s_fin" % label, glow="gold_glow")
 
     def kit_arch(x, y, s, label):
@@ -7463,7 +7463,7 @@ def build(layout):
             _sz = 2.6 + ((_h >> 11) % 9) * 1.15
             _part("cylinder", _px, _py, 2.2, _sz, _sz * (0.66 + ((_h >> 17) % 5) * 0.10),
                   0.012, "ground_sun" if (_h >> 7) % 2 else "ground_shade",
-                  "MeadowPatch%d" % _mp, rot=(0.0, 0.0, float((_h >> 3) % 180)))
+                  "MeadowPatch%d" % _mp, rot=(0.0, float((_h >> 3) % 180), 0.0))
             _mp += 1
             # a drift of wildflower riding the same clump, never on its own
             if (_h >> 19) % 3 == 0:
@@ -7560,7 +7560,7 @@ def build(layout):
                       5.0, 0.13, 0.11, 0.012,
                       ("leaf", "leaf_hi", "petal_pink", "rose_pink")[(_h + _d) % 4],
                       "FG_drift%d_%d" % (_fg, _d),
-                      rot=(0.0, 0.0, float((_h >> _d) % 180)))
+                      rot=(0.0, float((_h >> _d) % 180), 0.0))
 
     # NEAR-FIELD TURF. The radial pass above lands its patches by distance from
     # the world origin, which put every one of them near the horizon: measured,
@@ -7584,7 +7584,7 @@ def build(layout):
         _sz = 2.2 + ((_h >> 11) % 9) * 0.95
         _part("cylinder", _nx, _ny, 2.2, _sz, _sz * (0.62 + ((_h >> 17) % 5) * 0.11),
               0.012, "ground_sun" if (_h >> 5) % 2 else "ground_shade",
-              "MeadowNear%d" % _n, rot=(0.0, 0.0, float((_h >> 3) % 180)))
+              "MeadowNear%d" % _n, rot=(0.0, float((_h >> 3) % 180), 0.0))
         # a few tufts riding each near patch — close enough to the camera that
         # silhouette matters, so these are real leaf cards, not flat colour
         for _t in range(2 + ((_h >> 13) % 3)):
@@ -7762,7 +7762,7 @@ def build(layout):
         _bz = 1180.0 + BOUGH1_LIFT + math.sin(_t * 2.1) * 190.0 - _t * _t * 260.0
         _th = 1.15 * (1.0 - 0.62 * _t)
         _part("sphere", _bx, _by, _bz, _th * 2.2, _th * 1.3, _th * 1.2, "trunk",
-              "TreeBranch%d" % _k, rot=(0.0, 0.0, float(_k * 9)))
+              "TreeBranch%d" % _k, rot=(0.0, float(_k * 9), 0.0))
         # canopy on the branch: deep interior, spring-green outside
         if _k % 2 == 0:
             _part("sphere", _bx, _by, _bz - 40.0, 2.9, 2.5, 1.5, "foliage_deep",
@@ -7828,7 +7828,7 @@ def build(layout):
         _bz = 1300.0 + BOUGH2_LIFT + math.sin(_t * 1.9) * 90.0 - _t * _t * 140.0
         _th = 0.92 * (1.0 - 0.58 * _t)
         _part("sphere", _bx, _by, _bz, _th * 2.0, _th * 1.25, _th * 1.1, "trunk",
-              "TreeBough2_%d" % _k, rot=(0.0, 0.0, float(_k * 11)))
+              "TreeBough2_%d" % _k, rot=(0.0, float(_k * 11), 0.0))
         if _k % 2 == 0:
             _part("sphere", _bx, _by, _bz - 34.0, 2.5, 2.2, 1.35, "foliage_deep",
                   "TreeBough2Core%d" % _k)
@@ -7936,9 +7936,9 @@ def build(layout):
             if _in_corridor(_ox, _oy):
                 continue
             _part("cube", _ox, _oy, 74.0, 1.02, 0.68, 1.46, "foliage_deep",
-                  "NorthHedge%d_%d" % (_h, _k), rot=(0.0, 0.0, _ang))
+                  "NorthHedge%d_%d" % (_h, _k), rot=(0.0, _ang, 0.0))
             _part("cube", _ox, _oy, 142.0, 1.06, 0.74, 0.22, "foliage_spr",
-                  "NorthHedgeTop%d_%d" % (_h, _k), rot=(0.0, 0.0, _ang))
+                  "NorthHedgeTop%d_%d" % (_h, _k), rot=(0.0, _ang, 0.0))
             if _k % 3 == 0:
                 _part("sphere", _ox, _oy - 40.0, 130.0, 0.20, 0.20, 0.20,
                       "rose" if _k % 2 else "rose_pink", "NorthHedgeRose%d_%d" % (_h, _k))
@@ -7973,14 +7973,14 @@ def build(layout):
             _part("cube", _fx, _fy, 4.0,
                   (2.0 * math.pi * _rr / _n) / 92.0, 0.62, 0.04,
                   ("plaza", "cobble", "cobble2")[_h % 3], "Forecourt%d_%d" % (_r, _i),
-                  rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+                  rot=(0.0, math.degrees(_a) + 90.0, 0.0))
         if _r == 8:                                  # a kerb closing it
             for _i in range(_n):
                 _a = _i * (2.0 * math.pi / _n)
                 _part("cube", math.cos(_a) * (_rr + 40.0),
                       1560.0 + math.sin(_a) * (_rr + 40.0) * 0.78, 14.0,
                       (2.0 * math.pi * _rr / _n) / 90.0, 0.34, 0.28, "stone",
-                      "ForecourtKerb%d" % _i, rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+                      "ForecourtKerb%d" % _i, rot=(0.0, math.degrees(_a) + 90.0, 0.0))
 
     # A CEREMONIAL EDGE. The plaza was a paved disc lying on grass with a hard
     # boundary; the reference's arrival space is HELD — a raised kerb all the way
@@ -7990,9 +7990,9 @@ def build(layout):
         a = i * (2.0 * math.pi / 64.0)
         kx, ky = math.cos(a) * _PR, math.sin(a) * _PR
         _part("cube", kx, ky, 16.0, 1.30, 0.44, 0.34, "stone", "PlazaKerb%d" % i,
-              rot=(0.0, 0.0, math.degrees(a) + 90.0))
+              rot=(0.0, math.degrees(a) + 90.0, 0.0))
         _part("cube", kx, ky, 34.0, 1.34, 0.52, 0.10, "plaza", "PlazaCap%d" % i,
-              rot=(0.0, 0.0, math.degrees(a) + 90.0))
+              rot=(0.0, math.degrees(a) + 90.0, 0.0))
         if i % 8 == 0:                                  # piers with lanterns' scale
             # a trimmed pier with a terminated cap, and a balustrade running to
             # the next one — "ceremonial and expensive" is a continuous edge, not
@@ -8066,7 +8066,7 @@ def build(layout):
             _a = _i * (2.0 * math.pi / _n)
             _part("cube", math.cos(_a) * _br, math.sin(_a) * _br, 7.2,
                   (2.0 * math.pi * _br / _n) / 92.0, _bw, 0.03, _bm,
-                  "PaveBand%d_%d" % (_b, _i), rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+                  "PaveBand%d_%d" % (_b, _i), rot=(0.0, math.degrees(_a) + 90.0, 0.0))
     # gold inlay radiating out of the circle to the border
     for _i in range(24):
         _a = _i * (2.0 * math.pi / 24.0)
@@ -8076,11 +8076,11 @@ def build(layout):
             _part("cube", math.cos(_a) * _rr, math.sin(_a) * _rr, 7.3,
                   0.42, 0.045 + 0.03 * (1.0 - _t), 0.028,
                   "gold" if _i % 2 else "brass_deep", "PaveRay%d_%d" % (_i, _k),
-                  rot=(0.0, 0.0, math.degrees(_a)))
+                  rot=(0.0, math.degrees(_a), 0.0))
         # a lozenge where each ray meets the border
         _part("cube", math.cos(_a) * 1005.0, math.sin(_a) * 1005.0, 7.4,
               0.26, 0.26, 0.03, "porcelain" if _i % 3 else "rose",
-              "PaveStud%d" % _i, rot=(0.0, 0.0, math.degrees(_a) + 45.0))
+              "PaveStud%d" % _i, rot=(0.0, math.degrees(_a) + 45.0, 0.0))
     # contrasting stone marking the four ways in
     for _q, (_dx, _dy) in enumerate(((0.0, 1.0), (0.0, -1.0), (1.0, 0.0), (-1.0, 0.0))):
         for _k in range(7):
@@ -8110,7 +8110,7 @@ def build(layout):
                    "arcane_dim" if (t < 0.34 and "arcane_dim" in MATS) else
                    "arcane_faint" if (t < 0.55 and "arcane_faint" in MATS) else
                    "dog_visor"), "Crack%d_%d" % (i, k),
-                  rot=(0.0, 0.0, math.degrees(a + wob) + 4.0))
+                  rot=(0.0, math.degrees(a + wob) + 4.0, 0.0))
     # flowers and mushrooms taking hold at the path edges
     for i in range(40):
         a = i * 2.39996
@@ -9106,10 +9106,10 @@ def build(layout):
             continue
         _part("cube", _GX + math.cos(_a) * 560.0, _GY + math.sin(_a) * 560.0, 92.0,
               0.95, 0.62, 1.80, "foliage_deep", "GardenHedge%d" % _i,
-              rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+              rot=(0.0, math.degrees(_a) + 90.0, 0.0))
         _part("cube", _GX + math.cos(_a) * 560.0, _GY + math.sin(_a) * 560.0, 176.0,
               0.99, 0.68, 0.28, "foliage_spr", "GardenHedgeTop%d" % _i,
-              rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+              rot=(0.0, math.degrees(_a) + 90.0, 0.0))
         if _i % 4 == 0:
             _part("sphere", _GX + math.cos(_a) * 585.0, _GY + math.sin(_a) * 585.0, 150.0,
                   0.20, 0.20, 0.20, "rose" if _i % 8 else "rose_pink", "GardenHedgeRose%d" % _i)
@@ -9265,7 +9265,7 @@ def build(layout):
         d = 0.34 + (i % 4) * 0.11
         _part("sphere", x, y, 5.0, d * 1.7, d * 1.5, 0.14,
               "foliage_deep" if i % 3 else "moss", "mat_%d" % i,
-              rot=(0.0, 0.0, float((i * 47) % 360)))
+              rot=(0.0, float((i * 47) % 360), 0.0))
         for k in range(3):
             a = (i * 37 + k * 120) % 360
             _part("cube", x + math.cos(math.radians(a)) * 13.0 * d,
@@ -9506,7 +9506,7 @@ def build(layout):
         col = ("petal_pink", "petal_air", "rose_pink", "leaf", "leaf_hi",
                "petal_violet")[i % 6]
         _part("sphere", px, py, 3.4, 0.15, 0.09, 0.012, col, "Litter%d" % i,
-              rot=(0.0, 0.0, float((i * 53) % 360)))
+              rot=(0.0, float((i * 53) % 360), 0.0))
 
     scatter(0.0, NEAR_Y + 420.0, 210, 1350.0, litter)
     _near += 190
@@ -9574,7 +9574,7 @@ def build(layout):
             _a = _i * (2.0 * math.pi / 30.0)
             _part("cube", _wc[0] + math.cos(_a) * _wr, _wc[1] + math.sin(_a) * _wr,
                   float(_wc[2]) + 16.0, (2.0 * math.pi * _wr / 30.0) / 92.0, 0.44, 0.36,
-                  "stone", "%s_rim%d" % (w["id"], _i), rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+                  "stone", "%s_rim%d" % (w["id"], _i), rot=(0.0, math.degrees(_a) + 90.0, 0.0))
             _part("sphere", _wc[0] + math.cos(_a) * (_wr - 26.0),
                   _wc[1] + math.sin(_a) * (_wr - 26.0), float(_wc[2]) + 6.0,
                   0.34, 0.28, 0.05, "spray" if "spray" in MATS else "porcelain",
@@ -9587,7 +9587,7 @@ def build(layout):
                       float(_wc[2]) + 3.0, (2.0 * math.pi * _rr / 24.0) / 105.0, 0.10, 0.012,
                       "spray" if "spray" in MATS else "porcelain",
                       "%s_ripple%d_%d" % (w["id"], _r, _i),
-                      rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+                      rot=(0.0, math.degrees(_a) + 90.0, 0.0))
         for _i in range(11):                       # lilies on the reflecting pool
             _a = _i * 2.39996
             _lr = _wr * 0.78 * math.sqrt((_i + 0.5) / 11.0)
@@ -9717,14 +9717,14 @@ def build(layout):
                 jitter = 0.90 + ((hsh >> 4) % 7) * 0.018
                 _part("cube", px, py, 4.5, width / 100.0 * jitter,
                       width * 0.60 / 100.0 * jitter, 0.05, mat,
-                      "%s_flag_%d_%d" % (prefix, i, k), rot=(0.0, 0.0, yaw + ((hsh >> 9) % 7) - 3.0))
+                      "%s_flag_%d_%d" % (prefix, i, k), rot=(0.0, yaw + ((hsh >> 9) % 7) - 3.0, 0.0))
                 # kerb stones either side, and moss where they meet
                 for sgn in (-1, 1):
                     kx = px + math.cos(math.radians(yaw + 90.0)) * width * 0.60 * sgn
                     ky = py + math.sin(math.radians(yaw + 90.0)) * width * 0.60 * sgn
                     _part("cube", kx, ky, 6.5, 0.30, 0.22, 0.09,
                           "stone" if "stone" in MATS else mat,
-                          "%s_kerb_%d_%d_%d" % (prefix, i, k, sgn), rot=(0.0, 0.0, yaw))
+                          "%s_kerb_%d_%d_%d" % (prefix, i, k, sgn), rot=(0.0, yaw, 0.0))
                     if hsh % 3 == 0:
                         _part("sphere", kx, ky, 7.0, 0.16, 0.16, 0.06, "moss",
                               "%s_kmoss_%d_%d_%d" % (prefix, i, k, sgn))
@@ -9762,7 +9762,7 @@ def build(layout):
                         _part("cube", _px, _py, 5.0 + (_d % 2) * 0.6,
                               0.12 + (_d % 3) * 0.03, 0.10 + (_d % 3) * 0.03, 0.012,
                               _m, "%s_drift_%d_%d_%d_%d" % (prefix, i, k, sgn, _d),
-                              rot=(0.0, 0.0, float(((hsh >> _d) * 37) % 180)))
+                              rot=(0.0, float(((hsh >> _d) * 37) % 180), 0.0))
 
                 # grass thickening where a mower cannot reach — hard against
                 # the stone, never out in the open where it would read as spam
