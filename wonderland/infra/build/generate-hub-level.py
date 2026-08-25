@@ -3049,8 +3049,16 @@ def build_material_library(texs=None):
                 # If this fails the material keeps the FALSE branch, so it goes
                 # still rather than staying stuck in motion. Wrong, but wrong in
                 # the safe direction, and said out loud.
-                unreal.log_error("ANIMATED switch on %s failed (%s): it will be "
-                                 "STATIC in this build" % (nm, _e))
+                # A WARNING, because this degrades in the SAFE direction: the
+                # material keeps the switch's false branch and goes still. It is
+                # wrong, and it is wrong the harmless way. log_error would abort
+                # the commandlet and ship no world at all — which is what
+                # happened to the rune material before that distinction was
+                # understood. The two WPO GATE failures above stay errors
+                # because they leave a world that silently pays motion cost on
+                # every primitive while looking correct.
+                unreal.log_warning("ANIMATED switch on %s failed (%s): it will be "
+                                   "STATIC in this build" % (nm, _e))
     for nm in mats:
         try:
             eal.save_asset(mats[nm].get_path_name())
@@ -3127,25 +3135,28 @@ def build_rune_material(texs):
             mel.connect_material_expressions(rot, "", smp, "UVs")
             samples.append(smp)
 
-        # ---- radial mask: outer sample outside, inner sample inside -----
-        sub = node(unreal.MaterialExpressionSubtract, -1000, 560)
-        mel.connect_material_expressions(tc, "", sub, "A")
-        half = node(unreal.MaterialExpressionConstant2Vector, -1160, 620)
-        half.set_editor_property("constant", unreal.LinearColor(0.5, 0.5, 0.0, 0.0))
-        mel.connect_material_expressions(half, "", sub, "B")
-        ln = node(unreal.MaterialExpressionDistance, -860, 560)
-        zero2 = node(unreal.MaterialExpressionConstant2Vector, -1000, 700)
-        zero2.set_editor_property("constant", unreal.LinearColor(0.0, 0.0, 0.0, 0.0))
-        mel.connect_material_expressions(sub, "", ln, "A")
-        mel.connect_material_expressions(zero2, "", ln, "B")
-        edge = node(unreal.MaterialExpressionSmoothStep, -700, 560)
-        set_prop(edge, "ConstMin", 0.28)
-        set_prop(edge, "ConstMax", 0.36)
-        mel.connect_material_expressions(ln, "", edge, "Value")
-        blend = node(unreal.MaterialExpressionLinearInterpolate, -520, 130)
-        mel.connect_material_expressions(samples[1], "", blend, "A")
-        mel.connect_material_expressions(samples[0], "", blend, "B")
-        mel.connect_material_expressions(edge, "", blend, "Alpha")
+        # ---- the two layers, ADDED ---------------------------------------
+        #
+        # The first version masked between them by radius, which needed a
+        # Constant2Vector, a Distance and a SmoothStep — and the first of those
+        # does not take a `constant` property at all (it is R and G), so the
+        # whole material failed on a real build. Two counter-rotating layers at
+        # half weight each give the same read with three nodes instead of nine
+        # and nothing exotic to get wrong: the eye sees rings turning against
+        # each other, which is what the brief asks for.
+        half_a = node(unreal.MaterialExpressionMultiply, -560, 40)
+        wa = node(unreal.MaterialExpressionConstant, -700, 120)
+        wa.set_editor_property("r", 0.62)
+        mel.connect_material_expressions(samples[0], "", half_a, "A")
+        mel.connect_material_expressions(wa, "", half_a, "B")
+        half_b = node(unreal.MaterialExpressionMultiply, -560, 300)
+        wb = node(unreal.MaterialExpressionConstant, -700, 380)
+        wb.set_editor_property("r", 0.52)
+        mel.connect_material_expressions(samples[1], "", half_b, "A")
+        mel.connect_material_expressions(wb, "", half_b, "B")
+        blend = node(unreal.MaterialExpressionAdd, -420, 160)
+        mel.connect_material_expressions(half_a, "", blend, "A")
+        mel.connect_material_expressions(half_b, "", blend, "B")
 
         # ---- the pulse: 0.72 + 0.28 * sin(Time * speed) ------------------
         pspd = node(unreal.MaterialExpressionScalarParameter, -1000, 900)
@@ -3189,8 +3200,19 @@ def build_rune_material(texs):
         mel.recompile_material(mat)
         eal.save_asset(mat.get_path_name())
     except Exception as _e:
-        unreal.log_error("RUNE CIRCLE MATERIAL FAILED (%s): the circle falls back "
-                         "to its geometry rings" % _e)
+        # log_WARNING, NOT log_error, AND THAT DISTINCTION COST A BUILD.
+        #
+        # unreal.log_error makes the commandlet exit ABNORMALLY: the run ends
+        # "Failure - 1 error(s)" and build-wonderland.sh reports "generate-hub-
+        # level failed (exit 1)". So a fallback that was written to keep going
+        # aborted the entire generation instead, and the world never built at
+        # all — over a material that has a working fallback three lines below.
+        #
+        # log_error is for conditions where continuing produces a WRONG world
+        # that looks right (the WPO gate, the missing base-colour chain). A
+        # graceful degrade is a warning.
+        unreal.log_warning("RUNE CIRCLE MATERIAL FAILED (%s): the circle falls "
+                           "back to its geometry rings" % _e)
         return None
 
     unreal.log_warning("RUNE MATERIAL built: additive, unlit, two counter-"
@@ -3978,18 +4000,46 @@ def build(layout):
         if in_camera_lap(x, y, 120.0):
             return
 
-        _part("sphere", x, y, 26.0 * s, 1.05 * s, 0.95 * s, 0.80 * s,
+        # ---- TASK 4: LEAF CARDS, NOT A CLUSTER OF BALLS -------------------
+        #
+        # This was ten spheres, and the docstring above is already an argument
+        # against nine of them: it says "one sphere of one green is the blob
+        # this replaces" and then replaces it with ten spheres of three greens,
+        # which is a bigger blob with a gradient. The founder's verdict on the
+        # whole world is that the SHAPES are wrong, and a shrub made of spheres
+        # is the clearest case of it in the near field.
+        #
+        # A plant's silhouette is BROKEN. It is hundreds of flat leaves at
+        # hundreds of angles, and the eye reads the interruptions rather than
+        # the mass. The leaf materials are alpha-masked, so a thin card is a
+        # leaf-shaped hole in a rectangle — the same move that turned the
+        # hanging cascades from a string of beads into foliage.
+        #
+        # Two dark spheres stay INSIDE as occluding mass, so the shrub is not
+        # hollow when a card turns edge-on to the camera. Everything the eye
+        # actually reads is cards.
+        _lm = (("leafcard", "leafcard_hi", "leafcard_deep") if "leafcard" in MATS
+               else ("foliage", "foliage_hi", "foliage_deep"))
+        _part("sphere", x, y, 30.0 * s, 0.78 * s, 0.72 * s, 0.62 * s,
               "foliage_deep", "%s_core" % label)
-        for k in range(5):
-            a = k * 2.39996 + (x + y) * 0.01
-            r = 34.0 * s
-            _part("sphere", x + math.cos(a) * r, y + math.sin(a) * r, 40.0 * s + (k % 2) * 14.0 * s,
-                  0.82 * s, 0.74 * s, 0.66 * s,
-                  "foliage" if k % 2 else "foliage_hi", "%s_mass%d" % (label, k))
-        for k in range(4):
-            a = k * 1.9 + 0.6
-            _part("sphere", x + math.cos(a) * 26.0 * s, y + math.sin(a) * 26.0 * s, 66.0 * s,
-                  0.56 * s, 0.52 * s, 0.44 * s, "foliage_spr", "%s_lit%d" % (label, k))
+        _part("sphere", x, y, 54.0 * s, 0.58 * s, 0.54 * s, 0.46 * s,
+              "foliage_deep", "%s_core2" % label)
+        for k in range(26):
+            # phyllotaxis over a squashed dome: dense at the shoulders, thinner
+            # at the crown, which is how a shrub actually carries its leaves.
+            _t = (k + 0.5) / 26.0
+            _a = k * 2.39996 + (x + y) * 0.013
+            _rise = 0.20 + 0.80 * _t
+            _rad = 40.0 * s * math.sqrt(1.0 - (_rise - 0.55) ** 2 * 1.7)
+            _lx = x + math.cos(_a) * _rad
+            _ly = y + math.sin(_a) * _rad
+            _lz = (16.0 + 62.0 * _rise) * s
+            _part("cube", _lx, _ly, _lz,
+                  (0.40 + 0.13 * (k % 3)) * s, 0.035 * s,
+                  (0.30 + 0.10 * ((k + 1) % 3)) * s,
+                  _lm[k % 3], "%s_leaf%d" % (label, k),
+                  rot=(22.0 + 26.0 * ((k % 4) / 3.0), math.degrees(_a),
+                       -14.0 + 28.0 * ((k % 5) / 4.0)))
         if "leafcard" in MATS:
             for k in range(6):
                 a = k * 1.047 + (x * 0.003)
