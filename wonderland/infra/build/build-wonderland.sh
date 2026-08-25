@@ -365,7 +365,12 @@ run_step "build-editor" "$RUNUAT" BuildEditor -project="$PROJECT" -notools \
 # (do not inline it here).
 LEVEL_OK=1
 if [ -x "$UE_EDITOR_CMD" ]; then
-  GEN_SCRIPT="$(cd "$(dirname "$0")" && pwd)/generate-hub-level.py"
+  # WL_GENERATOR: which editor script builds the world. V1 = the hub
+  # generator beside this file; V2 = wonderland/v2/build_v2.py, which creates
+  # a NEW map under /Game/WonderlandV2 and never touches V1's. A path relative
+  # to the repository root or absolute.
+  GEN_SCRIPT="${WL_GENERATOR:-$(cd "$(dirname "$0")" && pwd)/generate-hub-level.py}"
+  case "$GEN_SCRIPT" in /*) ;; *) GEN_SCRIPT="$(cd "$(dirname "$0")/../../.." && pwd)/$GEN_SCRIPT" ;; esac
   [ -f "$GEN_SCRIPT" ] || die "level generator missing: $GEN_SCRIPT"
   # WL_GENERATOR_EXTRA exists for one flag: -nullrhi.
   #

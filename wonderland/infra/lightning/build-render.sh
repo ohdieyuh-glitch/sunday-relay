@@ -126,6 +126,13 @@ wl_knob_pairs() {
               WONDERLAND_COLLIDE \
               WONDERLAND_HD \
               WONDERLAND_HD_ASSUME \
+              WONDERLAND_V2_LOOK \
+              WLV2_MARBLE_GLB \
+              WLV2_MARBLE_PANO \
+              WLV2_MANIFEST \
+              WLV2_FORCE_FALLBACK \
+              WL_GENERATOR \
+              WL_COOK_MAP \
               WONDERLAND_HISM \
               WONDERLAND_LODS \
               WONDERLAND_LOOK \
