@@ -8842,8 +8842,26 @@ def build(layout):
     # ornament is still legible and the far bands are silhouette.
     _bodies = ("spire", "spire_pink", "spire_blue", "spire_teal", "spire")
     _roofs = ("roof_rose", "roof_pink", "roof_rose", "gold", "roof_pink")
+    # ---- THE TOWN IS NOT IN THE FOUNDER'S EYE PATH --------------------
+    #
+    # The note above argues for a depth ladder: "the eye steps garden -> street
+    # -> town -> skyline instead of jumping from planting to a horizon". That is
+    # sound composition in general and it is not the composition that was asked
+    # for. The brief states the path in four words — "Dog -> gate/garden ->
+    # central castle" — and lists the midground as "ornate gold gate/arch +
+    # dense garden/topiary + clocks/whimsy + layered stairs/paths/trees". No
+    # town. The reference has garden in that band and then the city.
+    #
+    # Twenty-three townhouses stood there, and five of them were a PARADE
+    # closing the boulevard on the camera axis at 6,100 uu — directly across the
+    # sight-line the eye path runs down. Their pale gable walls are the flat
+    # slabs that kept turning up in every frame sample at luma 218.
+    #
+    # kit_townhouse is untouched and still builds a good townhouse. It simply
+    # has no business in the hero district, and the depth it was providing is
+    # the garden's job here.
     _quarter = 0
-    for _side in (-1, 1):
+    for _side in ():
         for _i in range(9):
             _hx = _side * (2050.0 + 250.0 * ((_i * 5) % 3))
             _hy = 900.0 + _i * 640.0
@@ -8855,8 +8873,9 @@ def build(layout):
                           body=_bodies[(_i + (_side > 0)) % len(_bodies)],
                           roof=_roofs[_i % len(_roofs)])
             _quarter += 1
-    # a short parade facing the boulevard at the far end, closing the street
-    for _i in range(5):
+    # The parade is gone with them: it closed the street, and the street is the
+    # sight-line to the castle.
+    for _i in range(0):
         kit_townhouse((_i - 2) * 700.0, 6100.0, 180.0 + ((_i * 23) % 11) - 5.0,
                       1.25 + 0.18 * (_i % 3),
                       "Parade%d" % _i, body=_bodies[_i % len(_bodies)],
