@@ -548,6 +548,25 @@ if [ ! -d "$STAGED_DIR" ] || [ -z "$(ls -A "$STAGED_DIR" 2>/dev/null || true)" ]
   die "packaging reported success but no staged output at $STAGED_DIR"
 fi
 printf '%s\n' "$INPUT_HASH" > "$STAMP"
+# THE SHA OF WHAT IS ON DISK, WRITTEN ONLY NOW.
+#
+# compiled.sha is written near the top of this script, immediately after the
+# branch check, because that is where "what am I about to compile" is known.
+# The capture scripts read it to label their frames — and a capture taken WHILE
+# a build is running therefore gets the new sha stamped onto the OLD package.
+# That happened today: a diagnostic frame came back named d81f5f5 from a
+# package that was still 95bc0d7, and the only reason it was caught is that the
+# build log was open in another window.
+#
+# native-shot.sh's own docstring says a frame that cannot be attributed to a
+# build is a picture and not evidence, and capture-hero-shots.sh opens by
+# saying this project "has already compared two captures that turned out to be
+# the same binary". Both were reading the intent rather than the fact.
+#
+# packaged.sha is written after the staged directory has been verified to exist
+# and be non-empty, so it means what its name says: this is the commit the
+# thing on disk was built from.
+printf '%s\n' "$BUILD_SHA" > "$LOG_DIR/packaged.sha"
 log "packaged Wonderland -> $STAGED_DIR (stamp written)"
 
 # --------------------------------------------------- 6. the MANUAL next steps

@@ -287,7 +287,34 @@ LOOK = {
     # 5200 -> 3600. Raising the key BEFORE the colour worked pushed the whole
     # frame toward white and made the grey worse, not better. That was my error
     # and it comes back down: colour first, then brightness.
-    "sunLux": 3600.0,
+    # MEASURED 2026-08-24, 3600 -> 1150, and this is the number the whole
+    # exposure problem was hiding behind.
+    #
+    # The experiment: capture the same package twice, once normally and once
+    # with ShowFlag.DirectionalLights 0. Everything that survives the second
+    # capture is emissive, skylight and atmosphere; the difference between them
+    # is what the sun, fill and bounce contribute. Measured on HeroCam6:
+    #
+    #                       lit    no directional   reference
+    #     mean luma       154.8            91.3         83.5
+    #     saturation       0.32            0.47         0.43
+    #     below luma 18    1.2%            6.7%         8.6%
+    #     sky - ground    -19.7           +40.4         +9.2
+    #
+    # The frame with NO SUN AT ALL is closer to the founder reference on every
+    # single axis than the lit one. The directional budget is not lighting this
+    # world, it is washing it: 63 luma of flat brightness, and it takes the
+    # saturation and the shadows and the sky/ground relationship with it.
+    #
+    # fillRatio and bounceRatio are fractions of this, so cutting here cuts all
+    # three and holds the 8:1 key ratio that was just established. 1,150 lux
+    # should leave the directional contribution near 20 luma instead of 63.
+    #
+    # It also fixes the sky the right way round. The no-directional capture kept
+    # its sky band at 112 luma, so most of the sky's brightness does not come
+    # from this light — taking light OFF the ground is what inverts the
+    # relationship, exactly as the practicals cut predicted and did not finish.
+    "sunLux": 1150.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -480,7 +507,7 @@ LOOK = {
     # and 44% of itself above luma 224 despite -3.4 stops of exposure bias.
     # Cut with the fill and the bounce, as one change to one thing — the total
     # shadowless budget — rather than four separate tweaks.
-    "skyIntensity": 1.5,
+    "skyIntensity": 0.85,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0

@@ -50,8 +50,18 @@ RES_Y="${WL_RES_Y:-1080}"
 OUT_DIR="${WL_NATIVE_DIR:-$WL_PROOF/native}"
 mkdir -p "$OUT_DIR"
 
-SHA_FILE="$WL_OUT/logs/compiled.sha"
-[ -f "$SHA_FILE" ] || wl_die "no $SHA_FILE — a native frame that cannot be attributed to a build is a picture, not evidence."
+# PREFER packaged.sha, WHICH IS WRITTEN AFTER THE PACKAGE EXISTS.
+#
+# compiled.sha is written at the START of a build, so a capture taken while one
+# is running labels the OLD package with the NEW commit. That happened today.
+# packaged.sha is written only once the staged directory has been verified, so
+# it describes the binary this script is about to run.
+SHA_FILE="$WL_OUT/logs/packaged.sha"
+if [ ! -f "$SHA_FILE" ]; then
+  SHA_FILE="$WL_OUT/logs/compiled.sha"
+  [ -f "$SHA_FILE" ] || wl_die "no packaged.sha or compiled.sha — a native frame that cannot be attributed to a build is a picture, not evidence."
+  wl_warn "no packaged.sha (an older build wrote only compiled.sha); this frame is labelled with the commit that was COMPILED, which is not necessarily the one on disk"
+fi
 BUILD_SHA="$(tr -d '[:space:]' < "$SHA_FILE")"
 SHORT="${BUILD_SHA:0:7}"
 
