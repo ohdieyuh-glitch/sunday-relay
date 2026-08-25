@@ -68,12 +68,27 @@ wl_ok "csv: $CSV"
 python3 - "$CSV" "$SHORT" <<'PY'
 import csv, statistics, sys
 path, sha = sys.argv[1], sys.argv[2]
-rows = list(csv.DictReader(open(path)))
+# UE APPENDS A METADATA ROW WHOSE SINGLE FIELD IS ENORMOUS — the whole command
+# line, every cvar and the build config in one cell. Python's csv module
+# refuses anything past 131,072 characters, so the first attempt at this died
+# with "field larger than field limit" AFTER the profiler had done its job.
+csv.field_size_limit(1 << 24)
+rows = [r for r in csv.DictReader(open(path, newline="")) if r]
 key = next((k for k in (rows[0] if rows else {}) if k.strip().lower() == "frametime"), None)
 if not key:
     raise SystemExit("no FrameTime column in %s; columns: %s"
                      % (path, ", ".join(list(rows[0])[:12]) if rows else "none"))
-ms = [float(r[key]) for r in rows if r.get(key) not in (None, "")]
+ms = []
+for r in rows:
+    v = r.get(key)
+    if v in (None, ""):
+        continue
+    try:
+        ms.append(float(v))
+    except ValueError:
+        continue          # the metadata row: not a frame
+if not ms:
+    raise SystemExit("no numeric FrameTime values in %s" % path)
 # DROP THE WARM-UP. The first frames of an offscreen run carry level load and
 # shader compilation, and a mean over them describes the loader, not the world.
 warm = ms[max(1, len(ms)//10):]
