@@ -1338,7 +1338,20 @@ MATERIAL_SPEC = {
     # eight of them down the boulevard that reads as flare, and the brief asks
     # for restrained bloom.
     "lamp_glass":  ((1.00, 0.88, 0.58), 0.0, 0.22, (1.00, 0.80, 0.42), 2.0),
-    "arcane":      ((0.66, 0.36, 1.00), 0.0, 0.62, (0.62, 0.28, 1.00), 11.0),
+    # EMISSIVE STRENGTH 11 IS WHY THE CIRCLE IS WHITE.
+    #
+    # The founder reference's arcane circle is unmistakably VIOLET, and it is
+    # the most striking thing in its foreground. Ours renders as a pale ring.
+    # The colour is right — (0.62, 0.28, 1.00) — and the strength destroys it:
+    # 11 x that is 6.8, 3.1, 11.0 in linear light, and everything past about
+    # 1.0 climbs the ACES shoulder, where the three channels converge. A hue
+    # pushed hard enough stops being a hue and becomes white.
+    #
+    # This is the same class as the masonry authored at the brightness of paper:
+    # a value set when the scene around it was twice as bright, never revisited
+    # when the scene came down. At 2.6 the ring is still clearly the brightest
+    # thing on the plaza and it is still violet.
+    "arcane":      ((0.66, 0.36, 1.00), 0.0, 0.62, (0.62, 0.28, 1.00), 2.6),
     # The SPILL, not the source. Light leaking out of the arcane circle into
     # the paving has to fall off; at the ring's own radiance it stops reading
     # as a spill and becomes 78 more light sources in the near foreground.
@@ -1354,7 +1367,10 @@ MATERIAL_SPEC = {
     # the brightest thing in the frame and leaves the facets somewhere to go.
     "dog_body":    ((0.88, 0.88, 0.89), 0.0, 0.34, (0.0, 0.0, 0.0), 0.0),
     "dog_visor":   ((0.02, 0.02, 0.03), 0.1, 0.12, (0, 0, 0), 0.0),
-    "dog_eye":     ((1.00, 0.80, 0.22), 0.0, 0.62, (1.00, 0.74, 0.18), 5.0),
+    # Same shoulder, and this one is IDENTITY. The canonical Relay Dog has GOLD
+    # eyes; at strength 5 they clip to white and the Dog looks like it has two
+    # blank lamps in its visor. 2.2 keeps them lit and keeps them gold.
+    "dog_eye":     ((1.00, 0.80, 0.22), 0.0, 0.62, (1.00, 0.74, 0.18), 2.2),
     # THE CITY IS PASTEL, NOT GREY -- and a third of this frame was specified
     # neutral. Measured by area over what the arrival camera can see, 31.9% of
     # Wonderland is owned by materials whose own albedo has saturation under
@@ -1381,7 +1397,7 @@ MATERIAL_SPEC = {
     # untouched by design: guessing at a colour is recoverable, guessing at a
     # silhouette is how a skin stops being the same Dog.
     "dog_bone":    ((0.90, 0.92, 0.96), 0.0, 0.44, (0.05, 0.09, 0.16), 0.35),
-    "dog_eye_blue": ((0.38, 0.74, 1.00), 0.0, 0.62, (0.30, 0.72, 1.00), 6.0),
+    "dog_eye_blue": ((0.38, 0.74, 1.00), 0.0, 0.62, (0.30, 0.72, 1.00), 2.4),
     "dog_ghostfire": ((0.30, 0.62, 0.98), 0.0, 0.70, (0.24, 0.66, 1.00), 7.5),
     "dog_gray":    ((0.56, 0.48, 0.74), 0.0, 0.40, (0, 0, 0), 0.0),
     "dog_tan":     ((0.82, 0.66, 0.42), 0.0, 0.62, (0, 0, 0), 0.0),
@@ -1407,8 +1423,14 @@ MATERIAL_SPEC = {
     # histogram auto-exposure meters against exactly that, which is what
     # crushed the foreground to mud once already this sprint. Back to the
     # proven radiance, spread over more sky rather than concentrated.
-    "cloud":       ((1.00, 1.00, 1.00), 0.0, 1.00, (0.94, 0.96, 1.00), 2.6),
-    "cloud_warm":  ((1.00, 0.99, 0.99), 0.0, 1.00, (1.00, 0.95, 0.96), 2.6),
+    # 2.6 WAS PROVEN — on a frame whose ground was mean luma 193. The scene is
+    # 115 now and falling, and a self-lit cloud does not come down with it: in
+    # the current render the cumulus is the brightest thing in the sky by a
+    # wide margin, which is backwards for a cloud lit by a sun that is barely
+    # lighting anything else. The provenance is kept because the number was
+    # honestly measured; what changed is the world under it.
+    "cloud":       ((1.00, 1.00, 1.00), 0.0, 1.00, (0.94, 0.96, 1.00), 1.30),
+    "cloud_warm":  ((1.00, 0.99, 0.99), 0.0, 1.00, (1.00, 0.95, 0.96), 1.30),
     # A leaf card: thin, matte, and a touch deeper than the blob green so
     # the fanned cards read as separate leaves rather than one mass.
     "leaf":        ((0.30, 0.52, 0.30), 0.0, 0.74, (0, 0, 0), 0.0),
