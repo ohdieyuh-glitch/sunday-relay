@@ -6198,14 +6198,28 @@ def build(layout):
                                      ((9.0, 10.4), (10.4, 9.0), (11.8, 7.6),
                                       (13.2, 6.2), (14.6, 4.8), (16.0, 3.4),
                                       (17.4, 2.0))):
+            # WIDER AND HIGHER, for two measured reasons.
+            #
+            # WIDER: the band was 0.09, which is 9 uu, and at the 1,930 uu the
+            # circle now stands from the lens that is 6.9 px. The founder's
+            # circle is bold line work, not a hairline. 0.24 is 18 px, which is
+            # what "reads across the plaza" costs at this distance. Area rather
+            # than intensity on purpose -- arcaneGlow is already 3.1 and past
+            # about 1.0 linear the three channels converge on the ACES shoulder,
+            # which is how this ring rendered WHITE at 11 and pale at 5.
+            #
+            # HIGHER: rz runs 9.0 to 17.4 and the plaza's tallest sett tops out
+            # at 9.35, so the innermost band was inside the cobbles -- the same
+            # defect that hid the rune PLANE, in the fallback that replaced it.
+            # +5 clears it.
             _radius = rr * 50.0
             _seglen = (2.0 * math.pi * _radius) / _ARC_SEGS * 1.28
             for _k in range(_ARC_SEGS):
                 _a = _k * (2.0 * math.pi / _ARC_SEGS)
                 _part("cube",
                       ccx + math.cos(_a) * _radius,
-                      ccy + math.sin(_a) * _radius, rz,
-                      _seglen / 100.0, 0.09, 0.030,
+                      ccy + math.sin(_a) * _radius, rz + 5.0,
+                      _seglen / 100.0, 0.24, 0.030,
                       "arcane", "ArcaneRing%d_%d" % (j, _k),
                       rot=(0.0, math.degrees(_a) + 90.0, 0.0))
         # The spokes and the glyph studs are IN the texture now; keeping the
