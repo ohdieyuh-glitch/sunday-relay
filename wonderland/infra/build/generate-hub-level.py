@@ -337,7 +337,21 @@ LOOK = {
     # its sky band at 112 luma, so most of the sky's brightness does not come
     # from this light — taking light OFF the ground is what inverts the
     # relationship, exactly as the practicals cut predicted and did not finish.
-    "sunLux": 1150.0,
+    # 1150 -> 980, MEASURED, and this is the last lighting nudge rather than a
+    # fourth guess. Sampled directly off the cycle-11 render at 1920x1080:
+    #
+    #     sunlit stone face   rgb (224, 217, 212)   luma 218   sat 0.05
+    #     plaza stone         rgb (128, 116, 110)   luma 118   sat 0.14
+    #     gold gate           rgb (181, 126,  25)   luma 130   sat 0.86
+    #
+    # The gold is excellent and the paving is right. What still reads as the
+    # "simple white walls" the art direction names is not a material and not a
+    # blockout — it is ORDINARY STONE at 218, the brightest thing in the frame,
+    # desaturated to 0.05 by the tonemapper on the way up. The frame-wide
+    # numbers agree from the other side: mean luma 116 against the reference's
+    # 83, and only 4.6% of the frame in shadow against its 8.6%. Every one of
+    # those wants the same thing.
+    "sunLux": 980.0,
     # MEASURED, NOT CHOSEN. dog_body's base colour is (249,249,252) -- a white --
     # and on the streamed frame it renders (188,165,129): a ratio of
     # 1.00 : 0.88 : 0.69 on a surface facing the key. A directly-lit white
@@ -537,7 +551,11 @@ LOOK = {
     # the sun gone the ground band sits at 18 luma, so anything the key does not
     # reach is nearly black. A shadow in the reference is a colour, not a hole.
     # This is the term that fills them, and it is the one that was cut furthest.
-    "skyIntensity": 1.70,
+    # 1.70 -> 1.45 with it. The ambient was raised to rescue a 23% shadow crush
+    # and it overshot the other way: shadows are now shallower than the
+    # reference's, which is the half of "cinematic lighting" that reads as
+    # depth. Taking a little back deepens them without touching the key.
+    "skyIntensity": 1.45,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
