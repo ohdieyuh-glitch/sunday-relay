@@ -309,6 +309,12 @@ LOOK = {
     # reference's arrangement and the opposite of what this world has always
     # built. WONDERLAND_LOOK=mirrorX=0 restores it.
     "mirrorX": 1,
+    # Standing seams on every spire roof -- see kit_spire. 0 removes them.
+    # They exist because the cone is the largest shape in the skyline and one
+    # flat colour over it is what makes the whole band read as "cylinder+cone",
+    # which the brief names first. The first attempt at them drew a drum around
+    # each apex instead; the arithmetic is written out beside the code now.
+    "roofRibs": 1,
     "lensFlare": 0.35,
     # ---- TASK 2.2: the arcane circle as line work --------------------------
     # radius in uu; the rune texture reads to its own edge, so this is the
@@ -4845,15 +4851,41 @@ def build(layout):
         # Both scale with the roof, so a squat roof gets short ribs and a tall
         # one gets long ones, and neither can outgrow the cone the way the
         # finial literals once did.
-        _rib_n = 8
-        _rib_mid = bh + 210.0 * s + roof_h * 22.0 * s          # halfway up the cone
+        # A STRAIGHT BOX CANNOT RIB A CONE, AND THE FIRST VERSION OF THIS TURNED
+        # EVERY SPIRE INTO A TOWER BLOCK. Two arithmetic errors, both mine:
+        #
+        #   The rib sat at ONE radius over the whole cone height. A cone tapers,
+        #   so near the apex -- where its own radius falls to a few uu -- the rib
+        #   still stood out at mid-cone radius, and eight of them drew a drum
+        #   around the top. The skyline came back as pink skyscrapers.
+        #
+        #   The tangential width was roof_w * 0.30, which is 52 uu on a cone of
+        #   base radius 87. Eight of those cover 416 uu of a 546 uu
+        #   circumference -- 76%, so the "ribs" were very nearly a solid shell.
+        #
+        # Fixed by SEGMENTING: three short pieces up each rib line, each one
+        # placed at the radius the cone actually has at ITS height. The taper
+        # comes from the placement rather than from the shape, which is the only
+        # way a box can follow a cone. Width down to a real seam.
+        #
+        # Cone geometry, stated once so the segments cannot drift from it: the
+        # part is centred at zc with half-height H and base radius R, and at a
+        # fraction f of the way from base to apex the radius is R * (1 - f).
+        # A KNOB, BECAUSE THE FIRST VERSION OF THIS COST A BUILD AND MADE THE
+        # FRAME WORSE. WONDERLAND_LOOK=roofRibs=0 takes them out in one cook.
+        _rib_n = int(LOOK["roofRibs"]) and 8
+        _cz = bh + 210.0 * s                       # cone centre
+        _ch = roof_h * 50.0 * s                    # cone half-height
+        _cr = roof_w * 50.0 * s                    # cone base radius
         for _r in range(_rib_n):
             _ra = _r * (2.0 * math.pi / _rib_n) + 0.19
-            _rr = roof_w * 26.0 * s                             # mid-cone radius
-            _part("cube", x + math.cos(_ra) * _rr, y + math.sin(_ra) * _rr, _rib_mid,
-                  0.05 * s, roof_w * 0.30 * s, roof_h * 0.52 * s,
-                  roof_mat, "%s_rib%d" % (label, _r),
-                  rot=(0.0, math.degrees(_ra), 0.0))
+            for _f, _seg in ((0.12, 0.20), (0.42, 0.18), (0.70, 0.14)):
+                _rz = _cz - _ch + _f * 2.0 * _ch
+                _rr = _cr * (1.0 - _f)
+                _part("cube", x + math.cos(_ra) * _rr, y + math.sin(_ra) * _rr, _rz,
+                      0.055 * s, 0.10 * s, _seg * _ch / 50.0,
+                      roof_mat, "%s_rib%d_%d" % (label, _r, int(_f * 100)),
+                      rot=(0.0, math.degrees(_ra), 0.0))
         # Dormers only where there is roof enough to carry them, and only on the
         # detailed towers -- sixty far silhouettes do not each need two more
         # boxes to be a cone with bumps on it.
