@@ -4172,13 +4172,20 @@ def build(layout):
               cap_mat, "%s_rim" % label)
         # white flecks, drifting so they never look stamped on
         import math as _m
-        for i in range(11):
+        # FEWER, BIGGER, FLATTER — an amanita's spots, not a speckle.
+        #
+        # Eleven dots at a tenth of the cap's radius reads as freckling; the
+        # founder's reference has SEVEN or eight bold white discs across a cap,
+        # each nearly a fifth of it, and they are the single cue that says
+        # "toadstool" from across the frame. They also sit ON the dome rather
+        # than in it, so they are flatter than they are wide.
+        for i in range(8):
             a = i * 2.39996 + (x + y) * 0.01
-            rr = (0.22 + 0.62 * ((i * 37) % 11) / 11.0)
+            rr = (0.20 + 0.58 * ((i * 37) % 8) / 8.0)
             _part("sphere",
                   x + _m.cos(a) * cap * rr, y + _m.sin(a) * cap * rr,
                   sh + cap * 0.46 - (rr * rr) * cap * 0.20,
-                  (0.20 - 0.07 * rr) * s, (0.20 - 0.07 * rr) * s, (0.11 - 0.03 * rr) * s,
+                  (0.34 - 0.11 * rr) * s, (0.34 - 0.11 * rr) * s, (0.09 - 0.025 * rr) * s,
                   "mush_white", "%s_dot%d" % (label, i))
 
     def kit_portrait(x, y, z, s, label):
