@@ -3518,6 +3518,24 @@ def build_rune_material(texs):
                            "back to its geometry rings" % _e)
         return None
 
+    # ---- AND IT DRAWS ON AN INSTANCE, SO IT NEEDS THE USAGE FLAG ----------
+    #
+    # THIS is why the circle has never appeared, and the z fix alone did not
+    # bring it back. The rune plane goes through `_part`, so it is drawn on an
+    # INSTANCED static mesh, and a material without
+    # bUsedWithInstancedStaticMeshes is silently replaced by the engine's
+    # DEFAULT GREY at draw time -- while every check this project has reports
+    # success, because the binding really is correct. A grey plane lying on grey
+    # cobbles is invisible.
+    #
+    # M_WLMaster and M_WLLeaf both call this. M_WLRunes was written later and
+    # never did, which is the same shape as everything else found today: a rule
+    # applied to the materials that existed when it was written, and not to the
+    # sibling added afterwards.
+    #
+    # The packaged log is where this shows: M_WLMaster and M_WLLeaf log "USAGE
+    # FLAG ... may now draw on instanced static meshes" and M_WLRunes did not.
+    wl_allow_instanced_use(mat, "M_WLRunes")
     unreal.log_warning("RUNE MATERIAL built: additive, unlit, two counter-"
                        "rotating layers, pulsing 0.72 +/- 0.28")
     return mat
