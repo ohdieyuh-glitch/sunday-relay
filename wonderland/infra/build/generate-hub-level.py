@@ -202,7 +202,26 @@ LOOK = {
     # channels together. The most violet pixel measurable anywhere in the plaza
     # band was (105, 0, 173), so the hue IS in there; it survives only where the
     # ring is dimmest. 2.0 keeps the whole ring in that range.
-    "arcaneGlow": 2.0,
+    # 2.0 -> 3.1, AND THE REASON IS THE GROUND UNDER IT, NOT THE RING.
+    #
+    # 2.0 was chosen against a plaza whose albedo was 0.68 and a stone at 0.74.
+    # Those are 0.34 and 0.39 now, measured off the founder's own paving
+    # (rgb(85,58,60) and rgb(59,44,36)), so the surround the ring is read
+    # against is roughly HALF the brightness it was when this number was set.
+    # This file already records the rule for exactly that situation -- "when the
+    # exposure moves, re-read every number that was chosen under it" -- and this
+    # is the number.
+    #
+    # It matters because the circle is the reference's most identifying element
+    # and it is not carrying. Counting violet-dominant pixels in the lower
+    # frame: the founder's picture has 90,642 and ours has 25,699.
+    #
+    # 3.1, not 5: at 5 the ring measured "still pale" and at 11 it rendered as a
+    # white band, because past about 1.0 linear the three channels converge on
+    # the ACES shoulder. The note above is right that the hue survives only
+    # where the ring is dimmest; what changed is that the ring no longer has to
+    # out-shout a plaza twice this bright.
+    "arcaneGlow": 3.1,
     # Aerial perspective, the atmosphere's depth cue. See the SkyAtmosphere
     # block. CHOSEN at 11.0 — roughly 3.4 km of air on the skyline by that
     # block's arithmetic — after 4.0 was measured to leave 80 km of distance as
