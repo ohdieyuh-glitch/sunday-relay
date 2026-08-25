@@ -1218,7 +1218,21 @@ MATERIAL_SPEC = {
     # cannot be measured without a GPU. It is argued from the capture above and
     # from how UE lights metal, and it is listed in GPU-READY-QUEUE.md as
     # unverified.
-    "gold":        ((1.00, 0.80, 0.38), 0.40, 0.31, (0.30, 0.21, 0.06), 0.60),
+    # MEASURED 2026-08-24 from the first native render. metallic 0.40 is the
+    # canonical PLASTIC value — neither a dielectric nor a metal — and on top of
+    # it this carried an authored emissive at strength 0.60, so every gold
+    # surface in Wonderland was partly self-lit and could not take a highlight.
+    # The founder's note names the result exactly: "gold = metallic ornamental
+    # gold, not yellow plastic/emissive", and "the gold should become luminous
+    # mainly because of lighting + material response, not because everything
+    # glows".
+    #
+    # 0.90 rather than a full 1.0: a pure metal has NO diffuse at all, so its
+    # entire appearance comes from reflections, and this scene's only specular
+    # environment is one real-time SkyLight whose intensity was just cut. 0.90
+    # is metal enough to travel a highlight across a hammered face while keeping
+    # a floor of albedo if the capture is thin. The emissive goes to zero.
+    "gold":        ((1.00, 0.80, 0.38), 0.90, 0.28, (0.0, 0.0, 0.0), 0.0),
     "gold_glow":   ((1.00, 0.80, 0.38), 0.45, 0.24, (1.00, 0.70, 0.25), 1.7),
     # Aged brass for crevices, undersides and the deep parts of ornament.
     # Real gilding is dark where it is sheltered and bright where it is
@@ -2458,7 +2472,20 @@ def build_material_library(texs=None):
         # own emission keep it untouched; everything else gets a modest share of
         # its own palette so a surface has a colour floor, and the lit response
         # still sits on top.
-        if es <= 0.0 and name not in ("cloud", "cloud_warm", "water", "lamp_glass"):
+        # METALS ARE EXCLUDED, and they were only excluded by accident before.
+        #
+        # The test is `es <= 0.0`, so a material was spared self-colour by
+        # HAVING authored emissive. gold qualified because it carried 0.60 —
+        # and the moment that emissive was removed for being wrong, gold would
+        # have fallen straight into this branch and started emitting 0.06 of its
+        # own palette instead. A metal has no diffuse term at all, so emissive
+        # on one is not a colour floor, it is a glow; the founder's rule is that
+        # gold reads as gold through lighting and material response.
+        #
+        # `met < 0.5` states the exclusion the old condition was accidentally
+        # achieving, so removing an authored emissive cannot silently install a
+        # replacement.
+        if es <= 0.0 and met < 0.5 and name not in ("cloud", "cloud_warm", "water", "lamp_glass"):
             mel.set_material_instance_vector_parameter_value(
                 mi, "Emissive", unreal.LinearColor(_sr[0], _sr[1], _sr[2], 1))
             mel.set_material_instance_scalar_parameter_value(
@@ -5070,17 +5097,34 @@ def build(layout):
         """Floating ornate clock. The case was one gold disc behind the face; a
         real clock case has a bezel that PROJECTS, a moulded surround and a
         crown, which is what makes it read as an object rather than a decal."""
+        # THE CLOCKS WERE RECTANGLES, AND THE RENDER IS WHERE THAT SHOWED.
+        #
+        # Every disc in this kit carried rot=(90, 0, 0). WonderlandInstancedBatch
+        # reads those three floats as (pitch, yaw, roll) — it says so in a
+        # comment written after FRotator's positional constructor mis-aimed a
+        # camera and the sun in this project — and a cylinder's axis is +Z.
+        # PITCH turns about Y, so pitch 90 lays the axis along X and the disc
+        # faces east-west. The arrival camera looks up +Y, so it was seeing
+        # every clock face EDGE-ON: a filled rectangle where the reference has
+        # an ornate round clock, twice in the hero frame, at a size nobody could
+        # miss. ROLL turns about X, which lays the axis along Y and points the
+        # face at the camera.
+        #
+        # The kit's own markers agree and always did: they are placed at
+        # (x + sin*R, z + cos*R), a ring in the X-Z plane, which is the plane of
+        # a face pointing along Y. The dial was built for roll and the case was
+        # given pitch.
         for _b, (_r, _d) in enumerate(((1.62, 0.10), (1.54, 0.14), (1.44, 0.18))):
             _part("cylinder", x, y + _b * 4.0, z, _r, _d, _r,
                   "gold" if _b % 2 == 0 else ("brass_deep" if "brass_deep" in MATS else "gold"),
-                  "%s_bezel%d" % (label, _b), rot=(90, 0, 0))
+                  "%s_bezel%d" % (label, _b), rot=(0, 0, 90))
         for _k in range(12):
             _a = _k * (2.0 * math.pi / 12.0)
             _part("sphere", x + math.sin(_a) * 148.0, y + 6.0, z + math.cos(_a) * 148.0,
                   0.10, 0.06, 0.10, "gold", "%s_stud%d" % (label, _k))
         finial(x, y - 4.0, z + 158.0, 0.66, "gold", "%s_crown" % label, glow="gold_glow")
-        _part("cylinder", x, y, z, 1.5, 0.16, 1.5, "gold", "%s_case" % label, rot=(90, 0, 0))
-        _part("cylinder", x, y - 10, z, 1.2, 0.10, 1.2, "porcelain", "%s_face" % label, rot=(90, 0, 0))
+        _part("cylinder", x, y, z, 1.5, 0.16, 1.5, "gold", "%s_case" % label, rot=(0, 0, 90))
+        _part("cylinder", x, y - 10, z, 1.2, 0.10, 1.2, "porcelain", "%s_face" % label, rot=(0, 0, 90))
         _part("cube", x, y - 18, z + 34, 0.07, 0.07, 0.66, "dog_visor", "%s_min" % label)
         _part("cube", x + 26, y - 18, z + 4, 0.5, 0.07, 0.07, "dog_visor", "%s_hr" % label)
         _part("sphere", x, y - 20, z, 0.14, 0.1, 0.14, "gold_glow", "%s_hub" % label)
