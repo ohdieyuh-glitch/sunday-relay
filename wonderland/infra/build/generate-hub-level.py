@@ -6607,6 +6607,10 @@ def build(layout):
         return parts
 
     _DOG_POS = []
+    # Filled by the hero's own stroll_dog call, read by every later one. A list
+    # because stroll_dog closes over it and Python 2-style rebinding inside a
+    # nested function would shadow rather than assign.
+    _HERO_APPARENT = [0.0]
 
     def stroll_dog(x, y, label, s=1.2, body="dog_body", roam=800.0, is_hero=False, accessory="none",
                    keep_out=None, attends=None, upright=0, eyes="dog_eye"):
@@ -6643,6 +6647,43 @@ def build(layout):
                     "DOG KEEP-OUT: %s was %.0f uu from the arrival camera "
                     "(minimum %.0f) - moved out along its own bearing"
                     % (label, _d, _kr))
+        # ---- NO DOG MAY OUT-READ THE HERO IN THE ARRIVAL FRAME -------------
+        #
+        # The note beside the upright scale is right that a standing Dog at 1.05
+        # was a pale shape among a thousand props and could not be found. It was
+        # answered with 1.95 and 2.05, which are LARGER THAN THE HERO'S 1.40,
+        # and the composition trace shows what that costs:
+        #
+        #     dog 00 (hero)         142 px tall   1.37% of frame
+        #     dog 01 (upright)      140 px        1.08%
+        #     dog 02 (upright)      133 px        1.16%
+        #
+        # Three Dogs the same size, all with a visible visor. The brief asks for
+        # the canonical Relay Dog "staged clearly", and staging is not scale --
+        # it is being the largest and least ambiguous thing of its kind in the
+        # shot. At 86-88% of the hero's apparent size these read as equals.
+        #
+        # APPARENT size, not authored scale: what the lens sees is s / distance,
+        # so a big Dog far away is fine and this only bites the ones that would
+        # actually compete. Capped at 65% of the hero, which leaves them plainly
+        # findable -- the problem the 1.95 was solving -- without doubling the
+        # subject.
+        if is_hero:
+            _hd = math.hypot(x - ARRIVAL_CAM[0], y - ARRIVAL_CAM[1])
+            _HERO_APPARENT[0] = (s / _hd) if _hd > 1.0 else 0.0
+        if not is_hero and _HERO_APPARENT[0] > 0.0:
+            _cd = math.hypot(x - ARRIVAL_CAM[0], y - ARRIVAL_CAM[1])
+            if _cd > 1.0:
+                _app = s / _cd
+                _cap = 0.65 * _HERO_APPARENT[0]
+                if _app > _cap:
+                    _was = s
+                    s = _cap * _cd
+                    unreal.log_warning(
+                        "DOG SCALE: %s read at %.0f%% of the hero Dog's apparent "
+                        "size (s %.2f at %.0f uu); scaled to %.2f so the arrival "
+                        "frame has ONE subject"
+                        % (label, 100.0 * _app / _HERO_APPARENT[0], _was, _cd, s))
         cls = unreal.load_class(None, "/Script/Wonderland.WonderlandStrollingDog")
         if not cls:
             # THIS BRANCH USED TO `return`, AND THAT IS HOW EIGHT RELAY DOGS
@@ -9069,6 +9110,32 @@ def build(layout):
             _ba = math.atan2(_dyh, _dxh) if _dh > 1.0 else (i * 1.7)
             cx = HERO_DOG[0] + math.cos(_ba) * 1150.0
             cy = HERO_DOG[1] + math.sin(_ba) * 1150.0
+        # 1,150 uu OF WORLD SEPARATION IS NOT SEPARATION IN THE PICTURE.
+        #
+        # The rule above is right about the defect -- a second white Dog with a
+        # black visor standing against the subject -- and states it in the wrong
+        # space. A companion pushed 1,150 uu along the camera's own axis is
+        # 1,150 uu away in the world and lands at very nearly the SAME SCREEN X
+        # as the hero, just higher up the frame. Cropping the delivered frame on
+        # the Dog shows exactly that: two visors, overlapping, one silhouette
+        # made of two animals.
+        #
+        # What matters is the ANGLE OFF THE LENS. The hero subtends about 4.3
+        # degrees at its distance, so ten degrees of clear air either side is
+        # unambiguous. Pushed sideways along the arc until it has that, keeping
+        # its distance from the camera so the ring still reads as a ring.
+        _hb = math.atan2(HERO_DOG[0] - ARRIVAL_CAM[0], HERO_DOG[1] - ARRIVAL_CAM[1])
+        _cb = math.atan2(cx - ARRIVAL_CAM[0], cy - ARRIVAL_CAM[1])
+        _sep = math.degrees(math.atan2(math.sin(_cb - _hb), math.cos(_cb - _hb)))
+        if abs(_sep) < 10.0:
+            _rad = math.hypot(cx - ARRIVAL_CAM[0], cy - ARRIVAL_CAM[1])
+            _want = _hb + math.radians(10.0 if _sep >= 0.0 else -10.0)
+            cx = ARRIVAL_CAM[0] + math.sin(_want) * _rad
+            cy = ARRIVAL_CAM[1] + math.cos(_want) * _rad
+            unreal.log_warning(
+                "COMPANION %d was %.1f deg off the hero Dog's own bearing -- two "
+                "visors in one silhouette -- and was swung to 10.0 deg, keeping "
+                "its %.0f uu from the lens" % (i, _sep, _rad))
         # NOT EVERY DOG STANDS -- that is the rule, not an omission. The two
         # that ATTEND an Avatar stand, because attending is work and the sheet's
         # upright form is what a working Dog is drawn in; one more stands
@@ -10391,7 +10458,20 @@ def build(layout):
     # --- Water features ---------------------------------------------------
     for w in layout.get("waterFeatures", []):
         s = scale_for_radius(w.get("radiusUu", 100))
-        static_mesh(w.get("mesh", "water_plane"), w["center"], [s, s, 1.0], "WATER_%s" % w["id"])
+        # THE RIM MOVED AND THE WATER DID NOT. brain_pool_rim is a LANDMARK and
+        # went through _off_sight_line, which took it off the hero axis;
+        # brain_reflecting_pool is a WATERFEATURE, a different collection, and
+        # was never asked. So the stone edge went to one side and the turquoise
+        # surface stayed at x = 0, directly behind the Dog, cutting across it at
+        # the waist in every frame of this sprint.
+        #
+        # Same shape as the corridor rule guarding nine scatter passes and no
+        # landmarks: a rule applied to one collection and not its sibling.
+        _wc = list(w["center"])
+        _wc[0], _wc[1] = _off_sight_line("brain_pool_rim" if "brain" in w["id"] else w["id"],
+                                         float(_wc[0]), float(_wc[1]),
+                                         (float(w.get("radiusUu", 100)) * 2.0,) * 2)
+        static_mesh(w.get("mesh", "water_plane"), _wc, [s, s, 1.0], "WATER_%s" % w["id"])
         # STILL WATER IS A MIRROR. What makes a pool read as water is the
         # disturbance at its edge: a stone rim, foam where it meets the stone,
         # and ripple rings spreading across the surface.
