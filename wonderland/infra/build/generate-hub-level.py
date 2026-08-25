@@ -9980,9 +9980,49 @@ def build(layout):
         hrot = look_at_rotation(hpos, hlook)
         hcam = spawn(unreal.CameraActor, hpos, rotation=hrot, label="HeroCam%d" % hn)
         try:
-            hcam.get_component_by_class(unreal.CameraComponent).set_field_of_view(float(hfov))
+            _hcc = hcam.get_component_by_class(unreal.CameraComponent)
+            _hcc.set_field_of_view(float(hfov))
+            # ---- THE POST-PROCESS HAS TO LIVE ON THE CAMERA ---------------
+            #
+            # MEASURED: the level PostProcessVolume does not reach this render
+            # path. Task 1 put depth of field on it, and the skyline at 25-80 km
+            # came back RAZOR SHARP — every merlon and every flag crisp, which
+            # is a frame with no DoF at all. The same path already proved
+            # r.AutoExposure.Bias inert at six stops, and an older comment in
+            # this file records "PostProcessVolume/camera grade did NOT reach
+            # the stream". The volumetric fog and the sun properties DID land,
+            # because those live on the fog component and the light rather than
+            # in post.
+            #
+            # -CinematicView pins the view to THIS actor, so its own
+            # PostProcessSettings are the ones the capture is looking through.
+            # PostProcessBlendWeight 1.0 makes them apply outright rather than
+            # blending with a volume that is not reaching either.
+            _pp = _hcc.get_editor_property("post_process_settings")
+            for _n, _v in (("override_depth_of_field_focal_distance", True),
+                           ("depth_of_field_focal_distance", float(LOOK["dofFocalDistance"])),
+                           ("override_depth_of_field_fstop", True),
+                           ("depth_of_field_fstop", float(LOOK["dofFStop"])),
+                           ("override_depth_of_field_focal_region", True),
+                           ("depth_of_field_focal_region", float(LOOK["dofFocalRegion"])),
+                           ("override_bloom_intensity", True),
+                           ("bloom_intensity", float(LOOK["bloomIntensity"])),
+                           ("override_bloom_threshold", True),
+                           ("bloom_threshold", float(LOOK["bloomThreshold"])),
+                           ("override_color_saturation", True),
+                           ("color_saturation", unreal.Vector4(*(LOOK["saturation"] + (1.0,)))),
+                           ("override_color_contrast", True),
+                           ("color_contrast", unreal.Vector4(*(LOOK["contrast"] + (1.0,)))),
+                           ("override_color_gain", True),
+                           ("color_gain", unreal.Vector4(*(LOOK["gain"] + (1.0,))))):
+                try:
+                    _pp.set_editor_property(_n, _v)
+                except Exception:
+                    pass          # name varies by engine build; the next one still applies
+            _hcc.set_editor_property("post_process_settings", _pp)
+            _hcc.set_editor_property("post_process_blend_weight", 1.0)
         except Exception as _hce:
-            unreal.log_warning("hero cam %d fov skipped: %s" % (hn, _hce))
+            unreal.log_warning("hero cam %d camera post-process skipped: %s" % (hn, _hce))
         set_prop(hcam, "tags", [unreal.Name("HeroCam%d" % hn)])
     unreal.log("HERO CAMS placed: %d" % len(hero_shots))
 
