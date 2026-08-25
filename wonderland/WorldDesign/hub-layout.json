@@ -828,19 +828,19 @@
       "name": "Heart Topiary",
       "mesh": "topiary",
       "location": [
-        340,
-        540,
-        150
+        720,
+        1400,
+        350
       ],
       "scale": [
-        3,
-        1.2,
-        3
+        7.6,
+        1.9,
+        7.0
       ],
       "dimensionsUu": [
-        300,
-        120,
-        300
+        760,
+        190,
+        700
       ],
       "elevationUu": 0,
       "tier": "secondary",
@@ -849,7 +849,8 @@
       "streamGroup": "core_plaza",
       "occlusionGroup": "core",
       "asset": "custom",
-      "note": "Heart-shaped hedge, left-inboard midground accent behind Heart Plaza."
+      "note": "Heart-shaped hedge, left-inboard midground accent behind Heart Plaza.",
+      "_note": "REPOSITIONED AND RESIZED 2026-08-25. The reference's heart is a signature landmark at about a third of frame height, right of centre in the midground behind the teacups. At (340,540) x 300 uu it was a shrub beside the path. Mirrored at build time, so authored +X lands screen-right."
     },
     {
       "id": "rose_arch",

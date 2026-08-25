@@ -5354,6 +5354,62 @@ def build(layout):
                 _part("sphere", hx + sx * 12.0 * s, hy, 92.0 * s, 0.16 * s, 0.06 * s, 0.16 * s,
                       "rose", "%s_heart%d_%d" % (label, k, sx))
 
+    def kit_voxel_heart(cx, cy, s, label, width=760.0, depth=190.0):
+        """The heart topiary as the reference draws it: a SOLID heart of clipped
+        foliage, thick enough to cast its own shadow, with roses on its face.
+
+        WHAT IT REPLACES. The `heart_topiary` landmark carried mesh "topiary",
+        and kit_dispatch routes "topiary" to kit_tree -- so the founder's
+        signature landmark has been built as a small round tree for as long as
+        this generator has existed, declared 300 uu tall. kit_heart_topiary
+        (below) was only ever reached by the ornament pockets and the agent
+        garden, at 0.85 scale: three rings of forty FLAT SPHERES on a heart
+        curve, about 3 m tall, a wire outline of a heart with gaps you see the
+        sky through.
+
+        THE FORM. The implicit heart (x^2 + z^2 - 1)^3 - x^2 z^3 <= 0, sampled
+        on a cube grid and extruded through three layers in Y, so the heart is
+        a solid voxel mass -- which is exactly the visual language the reference
+        uses for everything organic. Three greens by layer and by parity so the
+        surface is faceted rather than flat; roses as small cubes on the front
+        face; a short thick trunk. Reads as vegetation forming a heart, not as a
+        green primitive shaped approximately like one, which is the brief's own
+        words for the difference."""
+        _c = width / 15.0                      # cube size: about 15 across
+        _greens = ("foliage", "foliage_hi", "foliage_deep")
+        _zc = 60.0 * s + width * 0.62          # heart centre height
+        _part("cylinder", cx, cy, 30.0 * s, 0.55 * s, 0.55 * s, 0.60 * s,
+              "trunk", "%s_trunk" % label)
+        _n = 0
+        for _ly, _yo in enumerate((-1.0, 0.0, 1.0)):
+            _py = cy + _yo * depth * 0.33
+            for _gx in range(-8, 9):
+                for _gz in range(-8, 9):
+                    _x = _gx / 6.4
+                    _z = (_gz / 6.4) + 0.12
+                    _f = (_x * _x + _z * _z - 1.0) ** 3 - _x * _x * _z ** 3
+                    if _f > 0.0:
+                        continue
+                    _n += 1
+                    _part("cube", cx + _gx * _c, _py, _zc + _gz * _c,
+                          _c / 100.0 * 1.02, depth * 0.34 / 100.0, _c / 100.0 * 1.02,
+                          _greens[(_gx + _gz + _ly) % 3], "%s_v%d_%d_%d" % (label, _ly, _gx + 8, _gz + 8),
+                          rot=(0.0, float((_gx * 7 + _gz * 13) % 9) - 4.0, 0.0))
+        # roses on the FRONT face (toward the camera, which looks along +Y, so
+        # the front is the -Y side), pushed a little proud of the foliage
+        for _r in range(16):
+            _ra = _r * 2.39996
+            _rr = 0.30 + 0.55 * ((_r * 37) % 10) / 10.0
+            _x = math.cos(_ra) * _rr * 0.95
+            _z = math.sin(_ra) * _rr * 0.95 + 0.12
+            if (_x * _x + _z * _z - 1.0) ** 3 - _x * _x * _z ** 3 > -0.02:
+                continue
+            _part("cube", cx + _x * 6.4 * _c, cy - depth * 0.33 - _c * 0.55,
+                  _zc + (_z - 0.12) * 6.4 * _c, _c * 0.42 / 100.0, _c * 0.42 / 100.0, _c * 0.42 / 100.0,
+                  "rose" if _r % 3 else "rose_pink", "%s_rose%d" % (label, _r),
+                  rot=(0.0, float((_r * 29) % 45), 0.0))
+        unreal.log_warning("VOXEL HEART %s: %d cubes, %.0f uu wide" % (label, _n, width))
+
     def kit_heart_topiary(cx, cy, base_z, s, label):
         # A hedge trimmed into a HEART, studded with roses, on a short trunk — the
         # reference's rose-heart topiary. Built in an upright plane facing the plaza.
@@ -7839,6 +7895,11 @@ def build(layout):
         elif "framing_tree" in mid:
             if not in_camera_lap(x, y, 600.0):
                 kit_tree(x, y, _kit_scale(m, "tree_giant", 1.7), mid, giant=True)
+        elif "heart" in mid:
+            # BEFORE the tree branch. "topiary" in mid matched first and built
+            # the founder's signature landmark as a small round tree.
+            _hd = m.get("dimensionsUu") or (760, 190, 700)
+            kit_voxel_heart(x, y, norm, mid, width=float(_hd[0]), depth=float(_hd[1]))
         elif mesh == "tree" or "tree" in mid or "topiary" in mid:
             kit_tree(x, y, norm, mid)
         elif mesh == "mushroom" or "mushroom" in mid:
