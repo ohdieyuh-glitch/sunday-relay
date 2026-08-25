@@ -843,6 +843,41 @@ def main():
         print("    WHAT COVERS THE BOTTOM THIRD:")
         for _k, _v in _bown.most_common(16):
             print("      %-22s %6.2f%% of the band" % (_k, 100.0 * _v / _bt))
+        # THE MIDGROUND BAND, WHICH IS WHERE THE COMPOSITION LIVES.
+        #
+        # The reference's middle band carries THREE big shapes with air between
+        # them — a gate, an arch and a heart topiary — and the eye travels
+        # between them. Ours carries the same three landmarks and reads as a
+        # wall, which means the difference is not what is there but what is
+        # BETWEEN it. That is a question about the size distribution of the
+        # small stuff, and it needs its own tally: the bottom-third numbers say
+        # nothing about it because almost none of it is in the bottom third.
+        _m0, _m1 = int(H * 0.42), int(H * 0.62)
+        _mown = _cv.Counter()
+        _msize = _cv.Counter()
+        for _k in range(_m0 * W, _m1 * W):
+            _o = owner[_k]
+            if _o < 0:
+                continue
+            _lbl = blobs[_o][7]
+            _stem = _lbl.rstrip("0123456789_")
+            _stem = _stem.split("_")[0][:20] if "_" in _lbl else _stem[:20]
+            _mown[_stem] += 1
+            _msize[_o] += 1
+        _mt = float(W * (_m1 - _m0)) or 1.0
+        print("    WHAT COVERS THE MIDGROUND BAND (42-62%% of frame height):")
+        for _k, _v in _mown.most_common(12):
+            print("      %-22s %6.2f%% of the band" % (_k, 100.0 * _v / _mt))
+        # SIZE HIERARCHY. A frame reads as composed when a few things are big
+        # and most are small; it reads as a rash when everything is the same
+        # size. Count how much of the band its largest objects carry.
+        _tops = _msize.most_common()
+        _cum = 0.0
+        for _n in (3, 10, 30):
+            _cum = sum(v for _, v in _tops[:_n])
+            print("      top %-3d objects carry %5.1f%% of the band"
+                  % (_n, 100.0 * _cum / _mt))
+        print("      %d distinct objects visible in the band" % len(_tops))
 
     for _probe in [a[5:] for a in sys.argv if a.startswith("--at=")]:
         # WHAT IS THAT THING. Ranked lists answer "what is biggest"; they do not
