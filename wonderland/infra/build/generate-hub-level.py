@@ -1499,22 +1499,45 @@ MATERIAL_SPEC = {
     "cobble":      ((0.31, 0.29, 0.28), 0.0, 0.80, (0, 0, 0), 0.0),
     "cobble2":     ((0.22, 0.21, 0.21), 0.0, 0.82, (0, 0, 0), 0.0),
     "plaza":       ((0.34, 0.33, 0.32), 0.0, 0.76, (0, 0, 0), 0.0),
-    "moss":        ((0.20, 0.40, 0.16), 0.0, 0.72, (0, 0, 0), 0.0),
+    # ---- THE GREENS ARE A SUPPORTING MASS, NOT THE SUBJECT -----------------
+    #
+    # Counted on both frames, over the same box, taking only pixels where green
+    # LEADS both other channels -- which is foliage whatever else is in the box:
+    #
+    #                              colour            luma    share of the box
+    #     reference, left        rgb( 32, 41, 27)    38.1        0.0%
+    #     reference, right       rgb( 30, 38, 27)    35.8        0.3%
+    #     ours, left             rgb(129,174,102)   159.4       52.6%
+    #     ours, foreground       rgb( 57,104, 45)    89.4       24.2%
+    #
+    # Four times the brightness over a hundred and seventy times the area. In
+    # the founder's picture the greens are so dark and so few that they barely
+    # register AS green; ours is half the frame of bright leaf.
+    #
+    # The note beside the tree blossom already says this -- "green measures 0.0%
+    # in the reference ... its greens are dark supporting mass" -- and it was
+    # acted on by adding PINK rather than by darkening the green, so the frame
+    # got a second bright colour instead of a dark one. This is the other half.
+    #
+    # Every green comes down to roughly a third. That is the ratio the two
+    # measurements ask for and it keeps the relationships between them: the
+    # deep/mid/high separation still reads, on a floor the eye can see past.
+    "moss":        ((0.08, 0.15, 0.07), 0.0, 0.72, (0, 0, 0), 0.0),
     "ground":      ((0.17, 0.30, 0.14), 0.0, 0.86, (0, 0, 0), 0.0),
     # A MEADOW IS NOT ONE GREEN. Real turf is patchy: sun-bleached where it is
     # exposed and thin, deeper and bluer where it lies in shade or holds water.
     # Two extra tones either side of `ground` are what let large open areas read
     # as grass rather than as a coloured plane, and they cost two materials.
-    "ground_sun":  ((0.29, 0.40, 0.17), 0.0, 0.88, (0, 0, 0), 0.0),
-    "ground_shade":((0.11, 0.23, 0.15), 0.0, 0.84, (0, 0, 0), 0.0),
+    "ground_sun":  ((0.12, 0.17, 0.08), 0.0, 0.88, (0, 0, 0), 0.0),
+    "ground_shade":((0.05, 0.10, 0.07), 0.0, 0.84, (0, 0, 0), 0.0),
     "trunk":       ((0.38, 0.28, 0.22), 0.0, 0.78, (0, 0, 0), 0.0),
-    "foliage":     ((0.23, 0.46, 0.22), 0.0, 0.72, (0, 0, 0), 0.0),
-    "foliage_hi":  ((0.38, 0.57, 0.38), 0.0, 0.66, (0, 0, 0), 0.0),
+    "foliage":     ((0.09, 0.18, 0.09), 0.0, 0.72, (0, 0, 0), 0.0),
+    "foliage_hi":  ((0.15, 0.23, 0.15), 0.0, 0.66, (0, 0, 0), 0.0),
     # THE RANGE THE ADDENDUM ASKS FOR: deep forest for the shadowed core of
     # a canopy, spring for the sunlit outside. A cluster built from one green
     # is a blob however many spheres it has; built from three it has an
     # inside and an outside, which is what makes it read as leaves.
-    "foliage_deep":((0.09, 0.21, 0.11), 0.0, 0.80, (0, 0, 0), 0.0),
+    "foliage_deep":((0.04, 0.09, 0.05), 0.0, 0.80, (0, 0, 0), 0.0),
     "foliage_spr": ((0.50, 0.72, 0.34), 0.0, 0.62, (0, 0, 0), 0.0),
     "rose":        ((0.72, 0.13, 0.28), 0.0, 0.62, (0.20, 0, 0.03), 0.45),
     "rose_pink":   ((0.96, 0.42, 0.62), 0.0, 0.62, (0.10, 0.0, 0.04), 0.3),
@@ -1617,7 +1640,7 @@ MATERIAL_SPEC = {
     # The far meadow that closes the horizon. Soft lilac-green rather than
     # grass-green: at this distance the height fog tints toward the sky, and a
     # saturated green read as a hard band instead of receding.
-    "meadow_far":  ((0.46, 0.53, 0.45), 0.0, 0.94, (0, 0, 0), 0.0),
+    "meadow_far":  ((0.19, 0.22, 0.19), 0.0, 0.94, (0, 0, 0), 0.0),
     # Distant towers, deliberately pale and low-contrast so the skyline recedes
     # behind the hero landmarks instead of competing with them.
     # ---- THE CASTLE IS THE RIGHT PICTURE IN THE WRONG HUE ------------------
@@ -1680,8 +1703,8 @@ MATERIAL_SPEC = {
     "cloud_warm":  ((1.00, 0.99, 0.99), 0.0, 1.00, (1.00, 0.95, 0.96), 1.30),
     # A leaf card: thin, matte, and a touch deeper than the blob green so
     # the fanned cards read as separate leaves rather than one mass.
-    "leaf":        ((0.30, 0.52, 0.30), 0.0, 0.74, (0, 0, 0), 0.0),
-    "leaf_hi":     ((0.36, 0.56, 0.34), 0.0, 0.70, (0, 0, 0), 0.0),
+    "leaf":        ((0.12, 0.21, 0.12), 0.0, 0.74, (0, 0, 0), 0.0),
+    "leaf_hi":     ((0.14, 0.22, 0.14), 0.0, 0.70, (0, 0, 0), 0.0),
 }
 
 
@@ -2142,9 +2165,15 @@ def build_leaf_material(texs):
         return {}
 
     out = {}
-    for nm, tint in (("leafcard", (0.88, 0.96, 0.82)),
-                     ("leafcard_hi", (1.10, 1.14, 0.92)),
-                     ("leafcard_deep", (0.52, 0.68, 0.52))):
+    # THE CARDS ARE THE SILHOUETTE, SO THEY ARE MOST OF THE GREEN IN THE FRAME,
+    # and their tints ran at and ABOVE 1.0 -- leafcard_hi multiplied the leaf
+    # texture UP. Measured against the founder's picture, whose foliage sits at
+    # luma 36 while ours reaches 159 over half the box, these come down with the
+    # solid greens in MATERIAL_SPEC and by the same ratio, so a card and the
+    # blob it wraps stay the same plant.
+    for nm, tint in (("leafcard", (0.34, 0.38, 0.31)),
+                     ("leafcard_hi", (0.43, 0.45, 0.36)),
+                     ("leafcard_deep", (0.20, 0.27, 0.20))):
         ip = pkg + "/MI_" + nm
         try:
             if eal.does_asset_exist(ip):
