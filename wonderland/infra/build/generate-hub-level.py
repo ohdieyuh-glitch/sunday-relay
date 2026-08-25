@@ -7540,7 +7540,20 @@ def build(layout):
         elif "clock" in mid:
             kit_clock(x, y, max(240.0, z), mid)
         else:
-            static_mesh(mesh, loc, sc, mid)  # materialed primitive (respects its z)
+            # `loc` IS THE AUTHORED LIST AND x, y ARE THE STAGED ONES. Every
+            # branch above this takes x and y -- the position after the arrival
+            # keep-out and after _off_sight_line -- and this one reached past
+            # both of them for the raw layout value. So any landmark WITHOUT a
+            # dedicated kit was exempt from the two rules that exist to keep the
+            # hero frame legible, silently, because it looks like it is using
+            # the same data.
+            #
+            # brain_pool_rim is exactly that: mesh "pool_rim" is a plain
+            # cylinder with no kit, so it fell here and stood at x = 0 with a
+            # 156 m2 footprint, 25 m from the lens, while the log line said it
+            # had been moved to -1080. verify-hero-corridor.py found it by
+            # reading the WORLD instead of the rule.
+            static_mesh(mesh, [x, y, loc[2]], sc, mid)  # staged x/y, authored z
 
     # ROBUST REGENERATION. new_level(path) REFUSES when the asset already exists,
     # so after the first-ever generation every re-run spawned into a throwaway
@@ -10467,6 +10480,15 @@ def build(layout):
         #
         # Same shape as the corridor rule guarding nine scatter passes and no
         # landmarks: a rule applied to one collection and not its sibling.
+        # AND MY OWN FIX HAD THE SAME BUG IN IT. The first version moved the
+        # water PLANE and then, eleven lines down, did `_wc = w["center"]` --
+        # putting the rim, the foam, the four ripple rings and the lilies back
+        # at the unmoved centre. One surface off the axis and its five
+        # companions left on it. Exactly the defect this comment describes,
+        # committed inside the commit that describes it.
+        #
+        # So the centre is resolved ONCE, here, and nothing below reads
+        # w["center"] again.
         _wc = list(w["center"])
         _wc[0], _wc[1] = _off_sight_line("brain_pool_rim" if "brain" in w["id"] else w["id"],
                                          float(_wc[0]), float(_wc[1]),
@@ -10475,7 +10497,6 @@ def build(layout):
         # STILL WATER IS A MIRROR. What makes a pool read as water is the
         # disturbance at its edge: a stone rim, foam where it meets the stone,
         # and ripple rings spreading across the surface.
-        _wc = w["center"]
         _wr = float(w.get("radiusUu", 100))
         for _i in range(30):
             _a = _i * (2.0 * math.pi / 30.0)
