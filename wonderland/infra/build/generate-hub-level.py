@@ -6838,6 +6838,12 @@ def build(layout):
         finial(x, y, 178.0, 0.72, "gold", "%s_fin" % label, glow="gold_glow")
 
     def kit_arch(x, y, s, label):
+        # ---- VOXEL, LIKE EVERYTHING ORGANIC IN THE REFERENCE --------------------
+        # This arch was 6 spheres -- the foliage on the piers, the roses, the
+        # leaf clusters on the span -- and on the axis of every frame it read
+        # as a ring of pink dots. Same rule as the trees and the heart: the
+        # reference builds leaf mass and blossom from small cubes, so these
+        # are cubes now at the same sizes and positions.
         # A rose-wrapped SEE-THROUGH archway: two vine posts + a top beam you look
         # through (a foreground frame that adds depth), never a solid wall.
         # TALLER AND THINNER. At 5 uu radius in solid green these posts read as
@@ -6863,13 +6869,13 @@ def build(layout):
                 aa = t * 7.2 + sx
                 for c in range(3):
                     ca = aa + c * 2.094
-                    _part("sphere", x + sx * 330.0 * s + math.cos(ca) * 22.0 * s,
+                    _part("cube", x + sx * 330.0 * s + math.cos(ca) * 22.0 * s,
                           y + math.sin(ca) * 22.0 * s, 30.0 * s + t * (h - 70.0 * s),
                           0.19 * s, 0.19 * s, 0.16 * s,
                           ("foliage", "foliage_hi", "foliage_deep")[(k + c) % 3],
                           "%s_pvine%d_%d_%d" % (label, sx, k, c))
                 if k % 3 == 1:
-                    _part("sphere", x + sx * 330.0 * s + math.cos(aa) * 28.0 * s,
+                    _part("cube", x + sx * 330.0 * s + math.cos(aa) * 28.0 * s,
                           y + math.sin(aa) * 28.0 * s, 30.0 * s + t * (h - 70.0 * s),
                           0.15 * s, 0.15 * s, 0.15 * s, "rose" if k % 2 else "rose_pink",
                           "%s_prose%d_%d" % (label, sx, k))
@@ -6892,22 +6898,22 @@ def build(layout):
             # so the curve read as a wire with beads on it. The ivy comes first
             # and the blooms sit IN it, which is the order the eye reads.
             for c in range(3):
-                _part("sphere", ax, y + (c - 1) * 22.0 * s, az + 8.0 * s,
+                _part("cube", ax, y + (c - 1) * 22.0 * s, az + 8.0 * s,
                       0.30 * s, 0.26 * s, 0.24 * s,
                       ("foliage", "foliage_deep", "foliage_hi")[(i + c) % 3],
                       "%s_ivy%d_%d" % (label, i, c))
             # roses and leaves ON the curve, both faces
             if i % 2 == 0:
-                _part("sphere", ax, y + 30.0 * s, az + 14.0 * s, 0.40 * s, 0.40 * s, 0.40 * s,
+                _part("cube", ax, y + 30.0 * s, az + 14.0 * s, 0.40 * s, 0.40 * s, 0.40 * s,
                       "rose" if i % 3 else "rose_pink", "%s_rose%d" % (label, i))
-                _part("sphere", ax, y - 30.0 * s, az + 10.0 * s, 0.30 * s, 0.30 * s, 0.30 * s,
+                _part("cube", ax, y - 30.0 * s, az + 10.0 * s, 0.30 * s, 0.30 * s, 0.30 * s,
                       "petal_pink", "%s_roseb%d" % (label, i))
             # blossom hanging BELOW the span. The reference's arch drips — it is
             # what tells you the thing is planted rather than painted, and it
             # softens the hard inner edge of the opening.
             if i % 3 == 1:
                 for d in range(3):
-                    _part("sphere", ax + (d - 1) * 10.0 * s, y - 6.0 * s,
+                    _part("cube", ax + (d - 1) * 10.0 * s, y - 6.0 * s,
                           az - 28.0 * s - d * 20.0 * s,
                           (0.20 - 0.04 * d) * s, (0.20 - 0.04 * d) * s,
                           (0.23 - 0.04 * d) * s,
