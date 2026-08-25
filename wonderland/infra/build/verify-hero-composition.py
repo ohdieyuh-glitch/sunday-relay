@@ -549,7 +549,21 @@ def main():
     for _bi, (z, x0, y0, x1, y1, mesh, mat, lb, _za, _zb, _zc) in enumerate(blobs):
         col = shade(mat, z, mesh, lb)
         cr, cg, cb = int(col[0] * 255), int(col[1] * 255), int(col[2] * 255)
-        rnd = mesh in ROUND
+        # A LEAF CARD IS ALPHA-MASKED, AND A SOLID RECTANGLE IS NOT ITS
+        # SILHOUETTE.
+        #
+        # Every leafcard in the world is a `cube` wearing a leaf material whose
+        # master samples LeafMask and clips on it. This tracer has no alpha, so
+        # it filled the full rectangle — and the foreground read as a band of
+        # dark green BOXES across the bottom of the hero frame. Probed, they
+        # were tuft and shrub cards, which in a cooked build are masked foliage.
+        # That is the cone-drawn-as-an-egg mistake again: the instrument's own
+        # simplification being read as a fault in the world.
+        #
+        # An ellipse is not the true mask either, but it is strictly closer to a
+        # leaf cluster than a rectangle is, and it stops the tracer inventing
+        # hard corners the render does not have.
+        rnd = mesh in ROUND or (mat or "").startswith("leaf")
         cone = mesh in CONE
         ex, ey = (x1 - x0) * 0.5, (y1 - y0) * 0.5
         mx, my = (x0 + x1) * 0.5, (y0 + y1) * 0.5

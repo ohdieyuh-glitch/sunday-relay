@@ -4770,6 +4770,11 @@ def build(layout):
         # here rests on.
         _BED_SCALE = 13.4
         _BED_RADIUS = _BED_SCALE * 50.0        # 670 uu
+        # DEFINED HERE, BESIDE THE BED, BECAUSE THE INTERSTITIAL FILL CULLS TO
+        # IT AND RUNS FIRST. It used to live 60 lines further down, next to the
+        # course it governs, and the fill carried its own `_BED_RADIUS * 2.0`
+        # copy of the number instead — which is how the two came to disagree.
+        _PAVING_RADIUS = _BED_RADIUS * 3.6     # 2,412 uu — reaches past the arch
         _part("cylinder", x, y, 1.6, _BED_SCALE, _BED_SCALE, 0.04,
               "stone" if "stone" in MATS else "plaza", "PlazaBed")
         # THE BED IS THE MOST VISIBLE SURFACE IN THE HERO FRAME.
@@ -4786,15 +4791,20 @@ def build(layout):
         # exactly the density the surface needs. An offset half-step grid drops
         # a smaller sett into each gap, sitting slightly lower so the courses
         # still read.
-        for igx in range(-8, 9):
-            for igy in range(-8, 9):
+        for igx in range(-13, 14):
+            for igy in range(-13, 14):
                 ih = ((igx * 2654435761) ^ (igy * 40503)) & 0x7FFFFFFF
                 ix = x + (igx + 0.5) * tile
                 iy = y + (igy + 0.5) * tile
                 # The same paving radius as the main course, by name. A second
                 # literal here is a second thing to get wrong: this one and the
                 # main cull were both `13.4 * 100.0`, which is not the bed.
-                if math.hypot(ix - x, iy - y) > _BED_RADIUS * 2.0:
+                # THE SAME RADIUS AS THE COURSE, BY NAME. This was
+                # `_BED_RADIUS * 2.0` — a second literal for the paving extent,
+                # which would have stayed at 1,340 when the course widened,
+                # leaving a ring of bare mortar at exactly the radius this fill
+                # exists to remove.
+                if math.hypot(ix - x, iy - y) > _PAVING_RADIUS:
                     continue
                 isz = tile / 100.0 * (0.40 + (ih % 7) * 0.028)
                 _part("cube", ix + ((ih >> 5) % 5 - 2) * 3.0,
@@ -4826,10 +4836,25 @@ def build(layout):
         # founder rather than an arithmetic correction made in passing. What
         # changes here is that the number stops calling itself the bed's radius:
         # the paving deliberately reaches twice as far as the mortar under it.
-        _PAVING_RADIUS = _BED_RADIUS * 2.0        # 1,340 uu — unchanged
+        # THE FLOOR OF THE ARRIVAL DISTRICT REACHES THE ARCH.
+        #
+        # 1,340 uu was the number, and measured against the hero camera it is
+        # why the plaza never read however much was cleared off it. HeroCam6
+        # sits 430 uu up and pitches +5 degrees, so the visible ground begins
+        # 1,292 uu out: the paving started essentially at the bottom edge of the
+        # frame and ended 48 uu later. Everything above that in the bottom third
+        # — which spans 1,292 to 8,790 uu of depth — was GARDEN, and no amount
+        # of pushing planting aside could turn garden into stone. Two passes
+        # were spent measuring "walkable surface in the bottom third" and moving
+        # it by tenths of a percent, because the answer was never in that band.
+        #
+        # In the founder's reference the cobble runs from the viewer's feet all
+        # the way back to the ivy arch, with the garden either side of it. The
+        # arch stands at 2,051 uu from this camera, so the stone has to reach
+        # about 2,400 — and then the district has a FLOOR rather than a disc.
         _bed_r = _PAVING_RADIUS
-        for gx in range(-8, 9):
-            for gy in range(-8, 9):
+        for gx in range(-13, 14):
+            for gy in range(-13, 14):
                 if math.hypot(gx * tile, gy * tile) > _bed_r + tile * 0.55:
                     continue
                 hsh = (gx * 73856093) ^ (gy * 19349663)
@@ -5729,9 +5754,69 @@ def build(layout):
         """The plaza and the boulevard are STONE. Nothing that grows out of soil
         may be scattered onto them — that single rule is most of the difference
         between a planted courtyard and a rash."""
-        if math.hypot(gx, gy) < 1180.0:
+        # 2,300, matching the paving course that now reaches 2,412 uu. It was
+        # 1,180 against a 1,340 uu course, so a 160 uu ring of stone was fair
+        # game for planting even before the floor was widened.
+        if math.hypot(gx, gy) < 2300.0:
             return True
         return abs(gx) < 300.0 and -1150.0 < gy < 1250.0
+
+    def _off_paving(gx, gy, h=0):
+        """The same rule, applied by MOVING rather than by rejecting.
+
+        `_on_paving` was written to keep planting off the stone and three passes
+        ask it. The FOREGROUND PLANTING pass — 96 beds, their shrubs and their
+        mushroom clumps, the densest planting in the world and the only planting
+        the hero camera sees close up — never did. So the courtyard the
+        reference is a third made of was under a bed of flowers, and every
+        attempt to make the plaza read failed because the plaza was never the
+        thing in the way.
+
+        Rejecting them would empty the near field, which is the other half of
+        the same mistake: a rule that prevents the wrong thing does not produce
+        the right one. The reference banks its flowers at the LEFT AND RIGHT
+        EDGES of the stone and leaves the middle open, so this pushes each
+        placement out along its own bearing to just past the paving, with a
+        hash-derived margin so the result is a verge and not a ring."""
+        if not _on_paving(gx, gy):
+            return gx, gy
+        margin = 40.0 + ((h >> 5) % 420)
+        r = math.hypot(gx, gy)
+        if r > 1.0 and math.hypot(gx, gy) < 2300.0:
+            f = (2300.0 + margin) / r
+            gx, gy = gx * f, gy * f
+        # the boulevard is a straight band, so leaving it is a sideways move
+        if abs(gx) < 300.0 and -1150.0 < gy < 1250.0:
+            gx = math.copysign(320.0 + margin * 0.5, gx if gx else 1.0)
+        return gx, gy
+
+    def _off_paving_lateral(gx, gy, h=0):
+        """Off the stone SIDEWAYS, holding depth.
+
+        `_off_paving` pushes along the bearing from the plaza centre, which is
+        right for a landmark — it preserves the authored arrangement and only
+        changes the distance. It is wrong for a SCATTER. Applied to the 96
+        foreground beds it moved every one of them to very nearly the same
+        radius, and a hundred beds at one radius is the barricade the ornament
+        rings were just rebuilt to stop being: the near field grew a hedge band
+        straight across the bottom of the hero frame.
+
+        A verge follows the edge of the paving at EVERY depth. Holding gy and
+        moving gx outward does exactly that — the planting keeps the depth
+        spread it was given, banks to the left and right of the walk, and
+        leaves the middle of the stone open, which is the reference's
+        arrangement."""
+        if not _on_paving(gx, gy):
+            return gx, gy
+        margin = 30.0 + ((h >> 5) % 340)
+        side = 1.0 if gx >= 0.0 else -1.0
+        need = 0.0
+        if abs(gy) < 2300.0:
+            need = math.sqrt(2300.0 * 2300.0 - gy * gy)
+        gx = side * (max(abs(gx), need) + margin)
+        if abs(gx) < 300.0 and -1150.0 < gy < 1250.0:
+            gx = side * (320.0 + margin)
+        return gx, gy
 
     def scatter(cx, cy, count, radius, fn, keep_clear=0.0, clear_at=(0.0, 0.0)):
         # Deterministic phyllotaxis spread (golden angle) — no RNG, so regen is
@@ -7451,7 +7536,11 @@ def build(layout):
     _FG_BEDS = 0
     _FG_CAPS = 0
     _FG_SHRUBS = 0
-    for _i in range(96 if int(LOOK["foregroundPlanting"]) else 0):
+    # 56, NOT 96. Each bed is bigger in frame now that the planting sits at the
+    # plaza's verge rather than scattered across it, and the founder's note is
+    # explicit that visible quality per object beats object count. Fewer beds,
+    # each one readable, with stone between them.
+    for _i in range(56 if int(LOOK["foregroundPlanting"]) else 0):
         _h = (_i * 2654435761) & 0xFFFFFFFF
         _t = (_i % 32) / 31.0
         # INSIDE THE FRAME. The first version spanned 3,062 uu where the frame is
@@ -7469,6 +7558,12 @@ def build(layout):
         # travels to the Dog.
         _u = math.copysign(0.52 + 0.48 * abs(_u), _u if _u else 1.0)
         _fx = _u * _half_w
+        # AND NEVER ON THE STONE. This pass is the reason the plaza could not be
+        # seen: it is the densest planting in the world, it is the planting the
+        # hero camera looks straight at, and it was the one pass that never
+        # asked _on_paving. Pushed to the verge rather than dropped, so the
+        # near field stays dense exactly where the reference puts its density.
+        _fx, _fy = _off_paving_lateral(_fx, _fy, _h)
         # Never on the arcane circle, and never on top of the hero Dog.
         if math.hypot(_fx - HERO_DOG[0], _fy - HERO_DOG[1]) < 420.0:
             continue
@@ -8317,11 +8412,14 @@ def build(layout):
     # and gave the foreground a rash of identical caps — clutter, which the brief
     # names as the thing to avoid. Half as many, each one a family of three to
     # five around a dominant cap, and none of them on stone.
+    # `_on_stone` USED TO BE A SECOND COPY OF `_on_paving`, character for
+    # character including its 1,180 literal. Two definitions of one rule that
+    # must agree and can drift apart independently — the same per-call-site
+    # duplication `_push_out_of_lens` opens its docstring by naming, and it
+    # would have kept fungus growing on 1,120 uu of newly laid stone the moment
+    # the plaza widened. Delegated, so there is one rule again.
     def _on_stone(gx, gy):
-        # the paved plaza, and the boulevard corridor running north
-        if math.hypot(gx, gy) < 1180.0:
-            return True
-        return abs(gx) < 300.0 and -1150.0 < gy < 1250.0
+        return _on_paving(gx, gy)
 
     def mushroom_family(gx, gy, i):
         if _on_stone(gx, gy) or _in_corridor(gx, gy) or _on_stage(gx, gy):
