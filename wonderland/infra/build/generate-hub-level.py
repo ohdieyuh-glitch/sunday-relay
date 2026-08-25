@@ -228,14 +228,32 @@ LOOK = {
     # scene is 106 now with 6.5% of it in shadow, which is the condition
     # volumetrics need to read as god rays rather than as milk.
     "volFogEnabled": 1,
-    "volFogExtinction": 0.55,
+    # 0.55 -> 0.22 and the distance 42,000 -> 14,000, MEASURED on the first
+    # frame that had volumetrics at all. They work — there are god rays and real
+    # ground shadows — and at that strength the fog REPAINTED THE SKY: the dome
+    # went from blue with white cloud to a muddy purple-grey, and mean
+    # saturation climbed to 0.49 against the reference's 0.43.
+    #
+    # That is the failure the height-fog comment two blocks down already
+    # records — "any density strong enough to haze a tower also repaints the
+    # sky" — arrived at from the volumetric side. The fix is the same shape:
+    # let the fog own the NEAR and MID air, and leave the far sky to the
+    # SkyAtmosphere's aerial perspective, which is set to 11.0 for exactly that
+    # job. 14,000 uu covers the garden and the near town and stops well short of
+    # the 25-80 km skyline.
+    "volFogExtinction": 0.22,
     "volFogAlbedo": (0.74, 0.62, 0.92),      # the reference's lavender haze
     "volFogEmissive": (0.055, 0.030, 0.085),
-    "volFogDistance": 42000.0,
+    "volFogDistance": 14000.0,
     "volScatterSun": 2.4,                    # god rays through the gate and trees
     "contactShadowLength": 0.035,
     "sunTemperatureK": 4500.0,
     "lensFlare": 0.35,
+    # ---- TASK 2.2: the arcane circle as line work --------------------------
+    # radius in uu; the rune texture reads to its own edge, so this is the
+    # circle's radius and the plane's half-side.
+    "runeRadius": 560.0,
+    "runeGlow": 2.4,
     "selfColour": 0.06,
     # 1 = the master renders UNLIT, so a surface shows exactly its palette and
     # no lighting path can grey it. 0 restores DefaultLit in one cook.
@@ -1666,6 +1684,11 @@ def build_textures():
     eal = unreal.EditorAssetLibrary
     names = ["flat_white", "flat_normal", "flat_grey",
              "leafcard_a", "leafcard_n", "leafcard_m"]
+    # "runes_a" is NOT listed here on purpose. The family loop below derives
+    # every name from gen-textures.py's FAMILIES tuple precisely so a new family
+    # cannot be forgotten, and the comment beside it records the five that WERE
+    # forgotten when this list was maintained by hand. Adding runes here would
+    # have re-created that habit on the same day the comment was read.
     # EVERY FAMILY gen-textures.py PRODUCES, not a list retyped beside it.
     #
     # This was six names — cobble, ashlar, sward, bark, plaster, roof — while
@@ -3039,6 +3062,142 @@ def build_material_library(texs=None):
     return mats
 
 
+def build_rune_material(texs):
+    """TASK 2.2 — the magic circle as a rotating, pulsing additive plane.
+
+    The founder's brief: "Build a Material Blueprint / Decal for the purple
+    magic circle at the player's feet. Implement UV Panner nodes to slowly
+    rotate outer rune rings in opposing directions. Add a Time-based Sine Wave
+    to generate a soft pulsing glow effect."
+
+    WHY THIS REPLACES GEOMETRY. The circle was built from concentric rings of
+    tangent cubes, and five passes went into making that version bigger,
+    thinner, brighter and dimmer without ever getting near the reference —
+    because the reference's circle is engraved LINE WORK: tick marks, rune
+    bars, dotted orbits, a central sigil, all at a fineness no mesh reaches at
+    a sane instance count. That is a texture's job.
+
+    ADDITIVE, not masked. The texture is drawn on black, so additive blending
+    makes the black free — no opacity mask, no sorting, and the cobble
+    underneath shows through untouched, which is what makes it read as light ON
+    stone rather than as a decal stuck over it.
+
+    Two samples with opposing Rotators and a radial mask between them, so the
+    outer orbit turns one way and the inner sigil the other. That
+    counter-rotation is most of what makes a magic circle read as ALIVE, and it
+    costs one extra sample.
+    """
+    tex = texs.get("runes_a")
+    if tex is None:
+        unreal.log_warning("RUNE CIRCLE: no runes texture; the circle keeps its "
+                           "geometry rings")
+        return None
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+    mel = unreal.MaterialEditingLibrary
+    eal = unreal.EditorAssetLibrary
+    pkg = "/Game/Wonderland/Materials"
+    path = pkg + "/M_WLRunes"
+    try:
+        if eal.does_asset_exist(path):
+            eal.delete_asset(path)
+        mat = tools.create_asset("M_WLRunes", pkg, unreal.Material,
+                                 unreal.MaterialFactoryNew())
+        mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_SURFACE)
+        mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+        mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+        set_prop(mat, "TwoSided", False)
+        set_prop(mat, "bUsedWithInstancedStaticMeshes", True)
+
+        def node(cls, x, y):
+            return mel.create_material_expression(mat, cls, x, y)
+
+        # ---- the two counter-rotating samples --------------------------
+        tc = node(unreal.MaterialExpressionTextureCoordinate, -1200, 0)
+        tnode = node(unreal.MaterialExpressionTime, -1200, 200)
+        samples = []
+        for _i, _speed in ((0, 0.018), (1, -0.031)):
+            rot = node(unreal.MaterialExpressionRotator, -1000, _i * 260)
+            set_prop(rot, "CenterX", 0.5)
+            set_prop(rot, "CenterY", 0.5)
+            set_prop(rot, "Speed", _speed)
+            mel.connect_material_expressions(tc, "", rot, "Coordinate")
+            mel.connect_material_expressions(tnode, "", rot, "Time")
+            smp = node(unreal.MaterialExpressionTextureSample, -800, _i * 260)
+            smp.set_editor_property("texture", tex)
+            mel.connect_material_expressions(rot, "", smp, "UVs")
+            samples.append(smp)
+
+        # ---- radial mask: outer sample outside, inner sample inside -----
+        sub = node(unreal.MaterialExpressionSubtract, -1000, 560)
+        mel.connect_material_expressions(tc, "", sub, "A")
+        half = node(unreal.MaterialExpressionConstant2Vector, -1160, 620)
+        half.set_editor_property("constant", unreal.LinearColor(0.5, 0.5, 0.0, 0.0))
+        mel.connect_material_expressions(half, "", sub, "B")
+        ln = node(unreal.MaterialExpressionDistance, -860, 560)
+        zero2 = node(unreal.MaterialExpressionConstant2Vector, -1000, 700)
+        zero2.set_editor_property("constant", unreal.LinearColor(0.0, 0.0, 0.0, 0.0))
+        mel.connect_material_expressions(sub, "", ln, "A")
+        mel.connect_material_expressions(zero2, "", ln, "B")
+        edge = node(unreal.MaterialExpressionSmoothStep, -700, 560)
+        set_prop(edge, "ConstMin", 0.28)
+        set_prop(edge, "ConstMax", 0.36)
+        mel.connect_material_expressions(ln, "", edge, "Value")
+        blend = node(unreal.MaterialExpressionLinearInterpolate, -520, 130)
+        mel.connect_material_expressions(samples[1], "", blend, "A")
+        mel.connect_material_expressions(samples[0], "", blend, "B")
+        mel.connect_material_expressions(edge, "", blend, "Alpha")
+
+        # ---- the pulse: 0.72 + 0.28 * sin(Time * speed) ------------------
+        pspd = node(unreal.MaterialExpressionScalarParameter, -1000, 900)
+        pspd.set_editor_property("parameter_name", "PulseSpeed")
+        pspd.set_editor_property("default_value", 1.15)
+        pmul = node(unreal.MaterialExpressionMultiply, -860, 900)
+        mel.connect_material_expressions(tnode, "", pmul, "A")
+        mel.connect_material_expressions(pspd, "", pmul, "B")
+        psin = node(unreal.MaterialExpressionSine, -720, 900)
+        mel.connect_material_expressions(pmul, "", psin, "")
+        pamp = node(unreal.MaterialExpressionScalarParameter, -860, 1020)
+        pamp.set_editor_property("parameter_name", "PulseDepth")
+        pamp.set_editor_property("default_value", 0.28)
+        pm2 = node(unreal.MaterialExpressionMultiply, -580, 940)
+        mel.connect_material_expressions(psin, "", pm2, "A")
+        mel.connect_material_expressions(pamp, "", pm2, "B")
+        pbase = node(unreal.MaterialExpressionScalarParameter, -580, 1060)
+        pbase.set_editor_property("parameter_name", "PulseBase")
+        pbase.set_editor_property("default_value", 0.72)
+        padd = node(unreal.MaterialExpressionAdd, -420, 980)
+        mel.connect_material_expressions(pm2, "", padd, "A")
+        mel.connect_material_expressions(pbase, "", padd, "B")
+
+        # ---- tint * glow * pulse -> emissive ------------------------------
+        tint = node(unreal.MaterialExpressionVectorParameter, -520, 340)
+        tint.set_editor_property("parameter_name", "RuneTint")
+        tint.set_editor_property("default_value", unreal.LinearColor(0.72, 0.34, 1.0, 1.0))
+        m1 = node(unreal.MaterialExpressionMultiply, -320, 200)
+        mel.connect_material_expressions(blend, "", m1, "A")
+        mel.connect_material_expressions(tint, "", m1, "B")
+        glow = node(unreal.MaterialExpressionScalarParameter, -320, 420)
+        glow.set_editor_property("parameter_name", "RuneGlow")
+        glow.set_editor_property("default_value", float(LOOK["runeGlow"]))
+        m2 = node(unreal.MaterialExpressionMultiply, -160, 260)
+        mel.connect_material_expressions(m1, "", m2, "A")
+        mel.connect_material_expressions(glow, "", m2, "B")
+        m3 = node(unreal.MaterialExpressionMultiply, -20, 320)
+        mel.connect_material_expressions(m2, "", m3, "A")
+        mel.connect_material_expressions(padd, "", m3, "B")
+        mel.connect_material_property(m3, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+        mel.recompile_material(mat)
+        eal.save_asset(mat.get_path_name())
+    except Exception as _e:
+        unreal.log_error("RUNE CIRCLE MATERIAL FAILED (%s): the circle falls back "
+                         "to its geometry rings" % _e)
+        return None
+
+    unreal.log_warning("RUNE MATERIAL built: additive, unlit, two counter-"
+                       "rotating layers, pulsing 0.72 +/- 0.28")
+    return mat
+
+
 def build_input_assets():
     """Create the Enhanced Input assets the player pawn loads by path: IMC_Wonderland
     + IA_Move (Axis2D) + IA_Look (Axis2D), with WASD/arrows -> planar move and mouse
@@ -3131,6 +3290,12 @@ def build(layout):
     _LEAF = build_leaf_material(TEXS)
     MATS.update(_LEAF)
     _REPORT["leafcards"] = len(_LEAF)
+    # TASK 2.2. Folded in under "runes" so the circle is placed with the same
+    # _part call as everything else; absent if the texture or the material did
+    # not build, and every call site falls back to the geometry rings.
+    _RUNE = build_rune_material(TEXS)
+    if _RUNE is not None:
+        MATS["runes"] = _RUNE
     _REPORT["materials"] = len(MATS)
     unreal.log("MATLIB %d materials ready" % len(MATS))
     # Enhanced Input is now built in C++ at runtime (WonderlandDogPawn) — no .uasset
@@ -5299,7 +5464,23 @@ def build(layout):
         #
         # 72 segments a ring at 520 uu is one every 45 uu, short enough that the
         # chord does not read as a polygon.
-        _ARC_SEGS = 72
+        # ---- TASK 2.2: THE TEXTURE REPLACES THE GEOMETRY ------------------
+        #
+        # When the rune material built, one additive plane carries the whole
+        # circle — rings, tick marks, sixteen rune glyphs, a dotted orbit, the
+        # radial spokes and the central sigil — with two counter-rotating layers
+        # and a sine pulse. 504 cubes of ring geometry become 1 plane, and the
+        # result is line work at a fineness the cubes never reached.
+        #
+        # The geometry rings stay as the FALLBACK and only as that. If the
+        # texture or the material did not build, the circle is still there.
+        _RUNE_PLANE = "runes" in MATS
+        if _RUNE_PLANE:
+            _rr = float(LOOK["runeRadius"])
+            _part("plane", ccx, ccy, 6.0,
+                  _rr * 2.0 / 100.0, _rr * 2.0 / 100.0, 1.0,
+                  "runes", "RuneCircle")
+        _ARC_SEGS = 0 if _RUNE_PLANE else 72
         for j, (rz, rr) in enumerate(((9.0, 10.4), (10.4, 9.0), (11.8, 7.6),
                                       (13.2, 6.2), (14.6, 4.8), (16.0, 3.4),
                                       (17.4, 2.0))):
@@ -5313,8 +5494,9 @@ def build(layout):
                       _seglen / 100.0, 0.09, 0.030,
                       "arcane", "ArcaneRing%d_%d" % (j, _k),
                       rot=(0.0, math.degrees(_a) + 90.0, 0.0))
-        # radiating rune spokes (thin emissive bars from centre to rim)
-        for i in range(12):
+        # The spokes and the glyph studs are IN the texture now; keeping the
+        # geometry versions would double them.
+        for i in range(0 if _RUNE_PLANE else 12):
             a = (i / 12.0) * 2.0 * math.pi
             # The spokes and studs ride the ring, so they scale with it. Left
             # at 190 and 300 they would have sat inside the second band with the

@@ -786,6 +786,109 @@ def make_petal(size):
     return alb, height_to_normal(hgt, size, 0.8), rgh
 
 
+def make_runes(size):
+    """The arcane circle, as GLYPH WORK rather than geometry.
+
+    Wonderland built its magic circle out of concentric rings of tangent cubes,
+    and no count of segments gets near the reference: that circle carries
+    engraved runes, tick marks, dotted orbits and radial spokes, all at a
+    fineness that is a TEXTURE's job and not a mesh's. Five passes were spent
+    making the geometry version bigger, thinner, brighter and dimmer before the
+    obvious point landed — the founder's note says it plainly, "the textures
+    you're using... everything has to change".
+
+    Drawn on black so the material can add it as pure emission: the albedo IS
+    the emissive mask, and where it is black the stone underneath shows through
+    untouched. Every line is antialiased by a distance falloff rather than a
+    hard test, because at a grazing camera angle a hard-edged ring aliases into
+    a dashed one.
+
+    Returns the family's usual (albedo, normal, roughness) so it drops straight
+    into the existing pipeline; the normal is flat and the roughness unused —
+    this is light, not a surface.
+    """
+    alb = bytearray(size * size * 3)
+    nrm = bytearray(size * size * 3)
+    rgh = bytearray(size * size)
+    inv = 2.0 / size
+    # violet, warmed slightly toward magenta the way the reference's is
+    TINT = (0.66, 0.30, 1.00)
+
+    def line(d, w):
+        """Antialiased brightness for a feature of half-width w at distance d."""
+        a = 1.0 - min(1.0, abs(d) / max(1e-6, w))
+        return a * a * (3.0 - 2.0 * a)          # smoothstep, so it has a shoulder
+
+    RINGS = ((0.955, 0.006), (0.925, 0.0022), (0.870, 0.0035), (0.796, 0.0022),
+             (0.660, 0.0045), (0.628, 0.0018), (0.470, 0.0032), (0.432, 0.0016),
+             (0.300, 0.0040), (0.150, 0.0022))
+    for y in range(size):
+        py = (y + 0.5) * inv - 1.0
+        for x in range(size):
+            px = (x + 0.5) * inv - 1.0
+            r = math.sqrt(px * px + py * py)
+            if r > 1.02:
+                continue
+            th = math.atan2(py, px)
+            v = 0.0
+            for rr, w in RINGS:
+                v = max(v, line(r - rr, w))
+            # TICKS around the outer orbit: 120 of them, every third one long.
+            if 0.870 < r < 0.955:
+                k = th * 120.0 / (2.0 * math.pi)
+                frac = abs(k - round(k)) / 120.0 * 2.0 * math.pi * r
+                long_tick = int(round(k)) % 3 == 0
+                if r < (0.925 if long_tick else 0.900):
+                    v = max(v, line(frac, 0.0022))
+            # RUNE BAND: sixteen glyphs, each a stack of short arcs and a bar.
+            if 0.660 < r < 0.796:
+                seg = th * 16.0 / (2.0 * math.pi)
+                idx = int(math.floor(seg)) % 16
+                local = (seg - math.floor(seg)) - 0.5          # -0.5..0.5
+                lx = local * (2.0 * math.pi / 16.0) * r        # arc-length offset
+                mid = (0.660 + 0.796) * 0.5
+                # each glyph is a deterministic little bar code
+                bits = (idx * 2654435761) & 0xFFFF
+                for b in range(3):
+                    if not (bits >> (b * 3)) & 1:
+                        continue
+                    rr = mid + (b - 1) * 0.030
+                    if abs(lx) < 0.026:
+                        v = max(v, line(r - rr, 0.0035))
+                if (bits >> 9) & 1:
+                    v = max(v, line(lx, 0.0030) * line(r - mid, 0.052))
+            # DOTTED ORBIT between the rune band and the inner rings
+            if 0.560 < r < 0.600:
+                k = th * 72.0 / (2.0 * math.pi)
+                frac = abs(k - round(k)) / 72.0 * 2.0 * math.pi * r
+                v = max(v, line(frac, 0.0032) * line(r - 0.580, 0.014))
+            # RADIAL SPOKES from the inner ring out to the rune band
+            if 0.300 < r < 0.628:
+                k = th * 24.0 / (2.0 * math.pi)
+                frac = abs(k - round(k)) / 24.0 * 2.0 * math.pi * r
+                v = max(v, line(frac, 0.0020) * 0.85)
+            # the sigil at the middle: a six-pointed interlace
+            if r < 0.300:
+                for a6 in range(6):
+                    ang = a6 * (math.pi / 3.0)
+                    dx = px * math.cos(ang) + py * math.sin(ang)
+                    if abs(dx) < 0.0026 and r > 0.05:
+                        v = max(v, line(dx, 0.0026))
+                v = max(v, line(r - 0.088, 0.0030))
+            if v <= 0.002:
+                continue
+            i = (y * size + x) * 3
+            alb[i] = _b(TINT[0] * v * 255.0)
+            alb[i + 1] = _b(TINT[1] * v * 255.0)
+            alb[i + 2] = _b(TINT[2] * v * 255.0)
+    for i in range(size * size):
+        nrm[i * 3] = 128
+        nrm[i * 3 + 1] = 128
+        nrm[i * 3 + 2] = 255
+        rgh[i] = 128
+    return alb, nrm, rgh
+
+
 FAMILIES = (
     ("cobble", make_cobble, 512),
     ("ashlar", make_ashlar, 512),
@@ -798,6 +901,9 @@ FAMILIES = (
     ("cap", make_cap, 256),
     ("ripple", make_ripple, 256),
     ("petal", make_petal, 256),
+    # 1024, because this one is READ as line work rather than as a surface: at
+    # 512 the tick marks and the rune bars alias into dashes.
+    ("runes", make_runes, 1024),
 )
 
 
