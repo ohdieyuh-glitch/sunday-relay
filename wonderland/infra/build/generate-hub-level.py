@@ -9104,12 +9104,39 @@ def build(layout):
         # and never let the west arc of the hedge cross the hero sight-line
         if _GX + math.cos(_a) * 560.0 < 460.0:
             continue
-        _part("cube", _GX + math.cos(_a) * 560.0, _GY + math.sin(_a) * 560.0, 92.0,
-              0.95, 0.62, 1.80, "foliage_deep", "GardenHedge%d" % _i,
-              rot=(0.0, math.degrees(_a) + 90.0, 0.0))
-        _part("cube", _GX + math.cos(_a) * 560.0, _GY + math.sin(_a) * 560.0, 176.0,
-              0.99, 0.68, 0.28, "foliage_spr", "GardenHedgeTop%d" % _i,
-              rot=(0.0, math.degrees(_a) + 90.0, 0.0))
+        # ---- TASK 4: A CLIPPED HEDGE, NOT A GREEN BOX --------------------
+        #
+        # This was one cube 95 x 62 x 180 in flat dark green, and the founder's
+        # list names "sculpted hedges" as a thing the reference has and this
+        # does not. A clipped hedge reads from two cues and neither is the box:
+        # the flat TOP and crisp shoulders that say it was cut, and the broken
+        # leafy face underneath that says it is alive.
+        #
+        # The box stays as the interior mass — it is what makes the hedge solid
+        # and what casts the shadow — and it shrinks inside a skin of leaf
+        # cards. The cards are alpha-masked, so the silhouette they give is
+        # leaves rather than a rectangle.
+        _hb = math.degrees(_a) + 90.0
+        _hx = _GX + math.cos(_a) * 560.0
+        _hy = _GY + math.sin(_a) * 560.0
+        _part("cube", _hx, _hy, 92.0, 0.80, 0.46, 1.72, "foliage_deep",
+              "GardenHedge%d" % _i, rot=(0.0, _hb, 0.0))
+        _hm = (("leafcard_deep", "leafcard", "leafcard_hi") if "leafcard" in MATS
+               else ("foliage_deep", "foliage", "foliage_hi"))
+        for _hc in range(9):
+            _hu = (_hc % 3) - 1.0                       # along the segment
+            _hv = -1.0 if _hc < 3 else (1.0 if _hc < 6 else 0.0)
+            _hz = 46.0 + 62.0 * (_hc // 3)
+            _ox = math.cos(_a) * _hv * 30.0 - math.sin(_a) * _hu * 34.0
+            _oy = math.sin(_a) * _hv * 30.0 + math.cos(_a) * _hu * 34.0
+            _part("cube", _hx + _ox, _hy + _oy, _hz,
+                  0.34, 0.035, 0.30, _hm[_hc % 3],
+                  "GardenHedgeLeaf%d_%d" % (_i, _hc),
+                  rot=(18.0 * ((_hc % 2) * 2 - 1), _hb + 90.0 * _hv,
+                       -12.0 + 24.0 * ((_hc % 3) / 2.0)))
+        # the clipped top: a crisp bright band, which is the cut itself
+        _part("cube", _hx, _hy, 176.0, 0.99, 0.68, 0.22, "foliage_spr",
+              "GardenHedgeTop%d" % _i, rot=(0.0, _hb, 0.0))
         if _i % 4 == 0:
             _part("sphere", _GX + math.cos(_a) * 585.0, _GY + math.sin(_a) * 585.0, 150.0,
                   0.20, 0.20, 0.20, "rose" if _i % 8 else "rose_pink", "GardenHedgeRose%d" % _i)

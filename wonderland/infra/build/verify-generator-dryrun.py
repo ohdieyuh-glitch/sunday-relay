@@ -311,6 +311,28 @@ def main():
               "no decoration would pass an actor ceiling perfectly.")
         budget_bad = True
 
+    # WHICH BRANCH DID THIS ACTUALLY RUN?
+    #
+    # The generator behaves differently depending on whether the procedural
+    # textures exist: with them, the rune circle is one additive plane and the
+    # leaf cards are masked; without them, both fall back. This laptop cannot
+    # write to /opt/wonderland, so for the whole life of this gate it has ONLY
+    # ever run the fallback branch — and a ZeroDivisionError sat in the other
+    # one until it took down seven gates and two builds on the real host.
+    #
+    # A gate that cannot reach half the code must say which half it read.
+    # WONDERLAND_TEXTURE_DIR points at a synthesised set; make one with
+    #
+    #   python3 -c "ns={'__name__':'t'};exec(open('gen-textures.py').read(),ns);ns['generate']('/tmp/wl-tex')"
+    #
+    _texdir = os.environ.get("WONDERLAND_TEXTURE_DIR", "/opt/wonderland/textures")
+    if os.path.isfile(os.path.join(_texdir, "T_cobble_a.png")):
+        print("  branch: TEXTURES PRESENT (%s) — the masked and rune paths ran"
+              % _texdir)
+    else:
+        print("  branch: TEXTURES ABSENT — every texture-dependent path took its "
+              "FALLBACK and was NOT checked. Set WONDERLAND_TEXTURE_DIR to a "
+              "synthesised set to exercise the branch the real build takes.")
     print("  generator warnings: %d" % len(warnings))
     _show = len(warnings) if "--all-warnings" in sys.argv else 12
     for w in warnings[:_show]:
