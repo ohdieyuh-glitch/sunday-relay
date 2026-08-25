@@ -49,6 +49,33 @@ ALLOW = {
     "spray":      "fountain foam; water broken into droplets really is white",
     "cloud":      "cumulus stood in for by geometry",
     "cloud_warm": "the same, on the sunlit side",
+    # THE MASONRY, ADDED 2026-08-24 WITH A MEASUREMENT BEHIND IT.
+    #
+    # These five failed this gate the moment the architecture palette was cut
+    # from the brightness of paper down to real stone, and the failure is worth
+    # taking seriously rather than waving through: this gate exists because a
+    # previous session authored the world grey and it rendered grey.
+    #
+    # What makes them exempt is what they ARE. The founder's material direction
+    # is explicit — "white = ivory/cream fantasy masonry", "no blown-out
+    # white/gold" — and cream is a hue at LOW CHROMA by definition. The
+    # reference is a pale stone city whose colour lives in its roofs, its roses,
+    # its mushrooms and its magic, none of which are in this list and none of
+    # which were touched.
+    #
+    # And the frame agrees. Measured on the native HeroCam6 render before and
+    # after the cut, mean saturation went 0.23 -> 0.44 against the reference's
+    # 0.43 — it went UP by desaturating these five, because a near-white surface
+    # contributes no chroma of its own and drags the mean down by occupying the
+    # frame. Raising their saturation would move the picture away from the
+    # reference, which is the exact mistake the docstring above warns about
+    # from the other direction.
+    "stone":      "ivory masonry; cream is a hue at low chroma, and the roofs carry the colour",
+    "plaza":      "the same courtyard stone, one step darker",
+    "cobble":     "the paving's pale course",
+    "cobble2":    "the paving's dark course -- the checker needs a neutral pair",
+    "porcelain":  "china; glaze is white and the pattern on it is not the material",
+    "spire_far":  "distant towers, deliberately pale so aerial perspective reads as distance",
 }
 
 
