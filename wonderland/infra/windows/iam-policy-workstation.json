@@ -1,0 +1,60 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ResolveTheWindowsAMI",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameters", "ssm:GetParameter"],
+      "Resource": "arn:aws:ssm:*::parameter/aws/service/ami-windows-latest/*"
+    },
+    {
+      "Sid": "CreateAndRunTheWorkstation",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:RunInstances", "ec2:CreateTags", "ec2:DescribeImages",
+        "ec2:DescribeInstances", "ec2:DescribeInstanceTypes",
+        "ec2:DescribeInstanceTypeOfferings", "ec2:DescribeInstanceStatus",
+        "ec2:StartInstances", "ec2:StopInstances", "ec2:TerminateInstances",
+        "ec2:ModifyInstanceAttribute",
+        "ec2:CreateSecurityGroup", "ec2:DescribeSecurityGroups",
+        "ec2:AuthorizeSecurityGroupIngress", "ec2:RevokeSecurityGroupIngress",
+        "ec2:DescribeVpcs", "ec2:DescribeSubnets",
+        "ec2:DescribeVolumes", "ec2:CreateVolume", "ec2:ModifyVolume",
+        "ec2:CreateSnapshot", "ec2:DescribeSnapshots"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "TheInstanceRoleThatLetsTheBoxFetchItsFreeDriverAndDcvLicence",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:GetRole", "iam:ListRoles",
+        "iam:AttachRolePolicy", "iam:ListAttachedRolePolicies",
+        "iam:CreateInstanceProfile", "iam:GetInstanceProfile",
+        "iam:AddRoleToInstanceProfile", "iam:PassRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::503718465749:role/wonderland-aura-workstation-role",
+        "arn:aws:iam::503718465749:instance-profile/wonderland-aura-workstation-profile"
+      ]
+    },
+    {
+      "Sid": "AskForTheGpuQuotaWithoutTheConsole",
+      "Effect": "Allow",
+      "Action": [
+        "servicequotas:GetServiceQuota",
+        "servicequotas:RequestServiceQuotaIncrease",
+        "servicequotas:GetRequestedServiceQuotaChange",
+        "servicequotas:ListRequestedServiceQuotaChangeHistory"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BreakGlassWithoutOpeningRdp",
+      "Effect": "Allow",
+      "Action": ["ssm:StartSession", "ssm:SendCommand", "ssm:GetCommandInvocation",
+                 "ssm:DescribeInstanceInformation", "ssm:ListCommandInvocations"],
+      "Resource": "*"
+    }
+  ]
+}
