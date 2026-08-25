@@ -800,6 +800,28 @@ def main():
         for _k, _v in _bown.most_common(16):
             print("      %-22s %6.2f%% of the band" % (_k, 100.0 * _v / _bt))
 
+    for _probe in [a[5:] for a in sys.argv if a.startswith("--at=")]:
+        # WHAT IS THAT THING. Ranked lists answer "what is biggest"; they do not
+        # answer "what is the dark slab at four-fifths across", which is the
+        # question you actually have while looking at the picture. Coordinates
+        # are FRACTIONS of the frame so they survive a resolution change.
+        try:
+            _fx, _fy = (float(v) for v in _probe.split(","))
+        except ValueError:
+            print("  AT  %s is not fx,fy" % _probe)
+            continue
+        _px, _py = int(_fx * W), int(_fy * H)
+        _px = max(0, min(W - 1, _px)); _py = max(0, min(H - 1, _py))
+        _o = owner[_py * W + _px]
+        if _o < 0:
+            print("  AT  %.2f,%.2f (px %d,%d) : nothing — sky or bare ground" % (_fx, _fy, _px, _py))
+            continue
+        _z, _x0, _y0, _x1, _y1, _mesh, _mat, _lb, _a, _b, _c = blobs[_o]
+        print("  AT  %.2f,%.2f (px %d,%d) : %s  mesh=%s mat=%s  z=%.0f  "
+              "box x[%d %d] y[%d %d]  owns %.2f%% of frame"
+              % (_fx, _fy, _px, _py, _lb, _mesh, _mat, _z, _x0, _x1, _y0, _y1,
+                 100.0 * _vis.get(_o, 0) / float(W * H)))
+
     big = [(blobs[_i], _n) for _i, _n in _vis.most_common(18)]
     print("  MOST VISIBLE (pixels actually owned after occlusion, %% of frame):")
     _tot = float(W * H)

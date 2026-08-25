@@ -3693,15 +3693,37 @@ def build(layout):
             _part("cube", px, y, ph * 0.52, 0.86 * s, 0.86 * s, ph * 0.86 / 100.0,
                   "spire" if "spire" in MATS else "gold",
                   "%s_pillar%d" % (label, sx))
-            # fluting: shallow reeds down each visible face, with the shadow
-            # between them carried by aged brass rather than by a shadow that
-            # this lighting will never actually cast at that scale
-            for f in range(5):
-                fo = (f - 2) * 0.30 * s * 55.0
+            # FLUTING IS A REED WITH A GROOVE BESIDE IT, NOT A DARK BAR.
+            #
+            # This drew five cubes per face in `brass_deep` — a 0.42/0.30/0.13
+            # brown — each 9 s wide on a face 88 s across, so 68% of every
+            # visible face of both piers was dark brown. Probed on the hero
+            # frame after the gate was moved into shot, the flutes merged into a
+            # single brown COLUMN 100 px wide and 230 px tall in the right
+            # third: the largest dark mass in the picture, on the one landmark
+            # the district is named for. The comment called them "shallow reeds
+            # ... with the shadow between them" and the code built the reeds
+            # themselves out of shadow.
+            #
+            # Inverted, which is also how a fluted pier is actually made: the
+            # REED stands proud in the pier's own dressed stone, and only the
+            # narrow groove between two reeds is dark. Four reeds and three
+            # grooves per face, and the grooves are a third the width they were,
+            # so at any distance the pier reads pale with fine dark lines.
+            for f in range(4):
+                fo = (f - 1.5) * 0.30 * s * 55.0
                 for fx_, fy_ in ((0.0, -1.0), (0.0, 1.0), (-1.0, 0.0), (1.0, 0.0)):
-                    _part("cube", px + fx_ * 44.0 * s + (fo if fx_ == 0 else 0.0),
-                          y + fy_ * 44.0 * s + (fo if fy_ == 0 else 0.0), ph * 0.52,
-                          0.09 * s, 0.09 * s, ph * 0.80 / 100.0,
+                    _part("cube", px + fx_ * 45.0 * s + (fo if fx_ == 0 else 0.0),
+                          y + fy_ * 45.0 * s + (fo if fy_ == 0 else 0.0), ph * 0.52,
+                          0.10 * s, 0.10 * s, ph * 0.80 / 100.0,
+                          "spire" if "spire" in MATS else "gold",
+                          "%s_reed%d_%d_%d" % (label, sx, f, int(fx_ * 2 + fy_)))
+            for f in range(3):
+                fo = (f - 1.0) * 0.30 * s * 55.0
+                for fx_, fy_ in ((0.0, -1.0), (0.0, 1.0), (-1.0, 0.0), (1.0, 0.0)):
+                    _part("cube", px + fx_ * 46.0 * s + (fo if fx_ == 0 else 0.0),
+                          y + fy_ * 46.0 * s + (fo if fy_ == 0 else 0.0), ph * 0.52,
+                          0.03 * s, 0.03 * s, ph * 0.78 / 100.0,
                           "brass_deep" if "brass_deep" in MATS else "gold",
                           "%s_flute%d_%d_%d" % (label, sx, f, int(fx_ * 2 + fy_)))
             _part("cube", px, y, ph * 0.90, 1.02 * s, 1.02 * s, 0.16 * s, "gold",
@@ -5800,13 +5822,74 @@ def build(layout):
                   "rockb_%d" % i, rot=(14.0, (i * 31) % 360, 0.0))
 
     def kit_vine(x, y, top_z, drop, label, i=0):
-        # A hanging rose-vine strand: thin foliage stem + leaves + a bloom at the tip.
-        _part("cylinder", x, y, top_z - drop * 0.5, 0.08, 0.08, drop / 100.0, "foliage", "%s_stem" % label)
-        for k in range(4):
-            zz = top_z - drop * (0.18 + k * 0.22)
-            _part("sphere", x + (13.0 if k % 2 else -13.0), y + 6.0, zz, 0.22, 0.22, 0.22,
-                  "foliage_hi", "%s_leaf%d" % (label, k))
-        _part("sphere", x, y, top_z - drop, 0.3, 0.3, 0.3,
+        """A hanging wisteria-and-rose cascade.
+
+        WHAT IT WAS: one cylinder of radius 4 uu running the whole drop, four
+        22 uu leaves and a single bloom at the tip. Measured in the hero frame,
+        two of these were among the most visible objects in the world — 28 px
+        wide and 584 px tall, a bare dark POLE standing 65% of the frame's
+        height. That is the "prototype geometry" the art direction asks to have
+        replaced, and no amount of material work rescues a wire.
+
+        A real cascade is dense at the top where it springs from its host and
+        thins to a point, it CURVES rather than hanging plumb, and its flowers
+        are strung along it rather than tied to the end. So: overlapping leaf
+        clusters on a drifting centre-line, in three greens so the strand has an
+        inside and an outside, blossom trusses at intervals, and side tendrils.
+        The stem survives but is thin and buried, which is what a stem does."""
+        # NODE SPACING DECIDES WHETHER IT IS FOLIAGE OR A STRING OF BEADS.
+        # The first rebuild used 9 nodes over a 520 uu drop — 65 uu apart, with
+        # clusters 30-46 uu across — so the gaps between them were bigger than
+        # the leaves and the strand read as a column of stacked discs. Sixteen
+        # nodes at 35 uu with clusters half again as large overlap, and overlap
+        # is the whole difference.
+        n = 16
+        # a lazy curve, deterministic per strand, so no two hang the same way
+        sway_x = 26.0 + 16.0 * ((i * 7) % 3)
+        sway_y = 14.0 * (1 if i % 2 else -1)
+        prev = None
+        for k in range(n):
+            t = k / float(n - 1)
+            # dense at the shoulder, tapering to a point: a cascade is a wedge
+            grow = 1.0 - 0.62 * t
+            zz = top_z - drop * t
+            cx = x + math.sin(t * 2.4 + i) * sway_x * t
+            cy = y + math.cos(t * 1.7 + i) * sway_y * t
+            # the strand itself, a short segment leaning toward the next node
+            if prev is not None:
+                _part("cylinder", (cx + prev[0]) * 0.5, (cy + prev[1]) * 0.5,
+                      (zz + prev[2]) * 0.5, 0.05, 0.05, drop / 100.0 / (n - 1) * 1.3,
+                      "trunk" if "trunk" in MATS else "foliage",
+                      "%s_stem%d" % (label, k))
+            prev = (cx, cy, zz)
+            # three clusters per node, offset around the strand, in three greens
+            for c in range(3):
+                a = c * 2.094 + t * 3.1 + i
+                rr = (0.50 + 0.22 * (c % 2)) * grow
+                _part("sphere", cx + math.cos(a) * 24.0 * grow,
+                      cy + math.sin(a) * 24.0 * grow, zz - 6.0 * c,
+                      rr, rr * 0.92, rr * 0.74,
+                      ("foliage", "foliage_hi", "foliage_deep")[(k + c) % 3],
+                      "%s_leaf%d_%d" % (label, k, c))
+            # blossom trusses strung ALONG the strand, hanging below their node
+            if k % 3 == 1:
+                for b in range(3):
+                    _part("sphere", cx + (b - 1) * 12.0, cy + 5.0,
+                          zz - 22.0 - b * 15.0,
+                          (0.22 - 0.05 * b) * grow, (0.22 - 0.05 * b) * grow,
+                          (0.26 - 0.05 * b) * grow,
+                          ("petal_violet", "rose_pink", "petal_pink")[(i + b) % 3],
+                          "%s_truss%d_%d" % (label, k, b))
+            # a tendril curling off, which is what stops a cascade reading as a
+            # column of beads
+            if k % 4 == 2:
+                for tdl in range(3):
+                    _part("sphere", cx + 30.0 + tdl * 15.0,
+                          cy - 8.0 * tdl, zz - 10.0 - tdl * 16.0,
+                          0.14 * grow, 0.14 * grow, 0.12 * grow,
+                          "foliage_spr", "%s_tendril%d_%d" % (label, k, tdl))
+        # the terminal bloom, still there, now the end of something
+        _part("sphere", prev[0], prev[1], prev[2] - 14.0, 0.26, 0.26, 0.30,
               "rose" if i % 2 else "petal_pink", "%s_bloom" % label)
 
     # ---- THE LAYOUT DECLARES A HEIGHT. HONOUR IT. ------------------------
@@ -7416,7 +7499,19 @@ def build(layout):
             # One dominant cap and two to four subordinates. The hierarchy is
             # the whole read: five equal caps is a mat again at any count.
             _sizes = (1.05, 0.62, 0.50, 0.36, 0.29)[: 3 + ((_h >> 19) % 3)]
+            # A MUSHROOM'S SIZE IS AN ANGLE, NOT A NUMBER.
+            #
+            # The clump scales were absolute, so a clump that landed 1,300 uu
+            # from the lens drew its dominant cap more than twice the frame
+            # share of an identical clump at 3,000 uu. Three clumps ended up
+            # owning 9.8% of the bottom third between them — bigger than every
+            # cap in the founder's reference. The frame is 0.8632 x distance
+            # tall at any depth, so holding the cap to a constant SHARE of the
+            # frame means scaling it with its own distance.
+            _cd = math.hypot(_cx - ARRIVAL_CAM[0], _cy - ARRIVAL_CAM[1])
+            _cscale = max(0.42, min(1.0, _cd / 2600.0))
             for _k, _sz in enumerate(_sizes):
+                _sz *= _cscale
                 _ca = (((_h >> (5 + _k)) % 360) + _k * 97) * math.pi / 180.0
                 _cr = 0.0 if _k == 0 else 74.0 + _k * 30.0
                 _mx = _cx + math.cos(_ca) * _cr
@@ -7491,17 +7586,45 @@ def build(layout):
     #
     # Three rows, starting at 78% of half-width: same framing device, and the
     # ground the founder's reference is a third made of can be seen again.
+    # AND THE TWO SIDES WERE EXACT MIRRORS OF EACH OTHER.
+    #
+    # `for _side in (-1.0, 1.0)` over one row table put an identical cap at an
+    # identical depth and an identical scale on both sides of the frame, three
+    # times. The same loop shape does it for the lamps, the cypresses and the
+    # clocks, and the result is a shot with a mirror line down the middle —
+    # which is a strong "generated" cue and is nothing like the reference, where
+    # the gate is on the left, the great tree is on the right, and no two edges
+    # agree.
+    #
+    # The scale expression was dead as well: `1.5 + 0.5 * ((_r * 3) % 3) / 2.0`
+    # — (_r * 3) % 3 is 0 for every _r, so all six caps were 1.5 and the
+    # variation the line describes never existed.
+    #
+    # Each side now has its own rows: different depths, different distances out
+    # from the axis, different sizes, different counts.
+    _HERO_ROWS = {
+        -1.0: ((250.0, 0.80, 1.85, "mush_red"), (980.0, 0.86, 1.15, "mush_purple"),
+               (1760.0, 0.74, 1.55, "mush_red")),
+        1.0: ((520.0, 0.88, 1.35, "mush_red"), (1420.0, 0.78, 2.05, "mush_purple")),
+    }
     _HERO_CAPS = 0
-    for _side in (-1.0, 1.0):
-        for _r in range(3):
-            _my = _FG_START + 220.0 + 620.0 * _r
+    for _side, _rows in _HERO_ROWS.items():
+        for _r, (_dy, _frac, _sz, _cm) in enumerate(_rows):
+            _my = _FG_START + _dy
             _half = (_my - ARRIVAL_CAM[1]) * math.tan(math.radians(75.0 * 0.5))
-            _mx = _side * (_half * (0.78 + 0.06 * _r))
+            _mx = _side * (_half * _frac)
             if math.hypot(_mx - HERO_DOG[0], _my - HERO_DOG[1]) < 420.0:
                 continue
-            kit_mushroom(_mx, _my, 1.5 + 0.5 * ((_r * 3) % 3) / 2.0,
-                         "HeroCap%d_%d" % (int(_side), _r),
-                         ("mush_red", "mush_purple", "mush_red")[_r % 3])
+            # SIZE IS AN ANGLE HERE TOO. Measured after the rows were split,
+            # the 2.05 cap at 1,347 uu drew 33% of the frame's HEIGHT and a
+            # quarter of its width — the biggest cap in the founder's reference
+            # is nearer a tenth of the frame. It was also mush_white, so a
+            # quarter of the frame's width was a blank pale dome. The reference's
+            # big caps are RED with white flecks; white is for the small ones
+            # tucked under planting, where the flecks are what you read.
+            _hd = math.hypot(_mx - ARRIVAL_CAM[0], _my - ARRIVAL_CAM[1])
+            kit_mushroom(_mx, _my, _sz * max(0.40, min(1.0, _hd / 3000.0)),
+                         "HeroCap%d_%d" % (int(_side), _r), _cm)
             _HERO_CAPS += 1
     unreal.log_warning("HERO MUSHROOMS placed %d flanking caps" % _HERO_CAPS)
 
@@ -7810,48 +7933,87 @@ def build(layout):
     # arches, teacups, topiary, lanterns and beds all the way out to the
     # skyline, so there is no band of empty ground between the flowers at the
     # camera's feet and the city on the horizon.
-    for _ring, (_rad, _count, _sc) in enumerate(((1750.0, 22, 0.85),
-                                                 (2450.0, 26, 1.05),
-                                                 (3200.0, 30, 1.30),
-                                                 (4100.0, 34, 1.60),
-                                                 (5200.0, 38, 1.95),
-                                                 (6600.0, 42, 2.40))):
-        for _i in range(_count):
-            _a = (_i / float(_count)) * 2.0 * math.pi + _ring * 0.31
-            _ox = math.cos(_a) * _rad
-            _oy = NEAR_Y + 500.0 + math.sin(_a) * _rad * 0.72
+    # GARDEN ROOMS, NOT SIX EVENLY SPACED RINGS.
+    #
+    # What was here: six concentric rings, 22 to 42 ornaments each, placed at
+    # `(_i / _count) * 2*pi` — EXACTLY even angular spacing — cycling through
+    # seven kinds by `(_i + _ring) % 7`. 192 full kits and 960 mushrooms at
+    # their feet, 24,759 instanced pieces. Two things follow from that
+    # construction and both are visible in the hero frame:
+    #
+    #   * Even spacing at even radii is a GRID in polar coordinates. It is what
+    #     produces the row of identical gold lanterns marching across the shot
+    #     at one height, and the identical cypress cones between them. The art
+    #     direction's word for it is "procedural city look", and its rule is
+    #     "DENSITY != RANDOM SCATTER... decorative props occupy intentional
+    #     pockets".
+    #
+    #   * One kind in seven was `kit_gate`, so Wonderland had 27 golden gates
+    #     standing in the flowerbeds. A gate is a THRESHOLD — it is the thing
+    #     the district is named for and the reference's single most recognisable
+    #     object. Twenty-seven of them in the shrubbery is the surest way to
+    #     make the real one read as garden furniture. There is now exactly one.
+    #
+    # Replaced with composed pockets: a bearing, a depth, and three to five
+    # RELATED props gathered tightly enough to read as one arrangement, with
+    # open ground between the pockets. Bearings are chosen, not stepped — they
+    # avoid the hero corridor, alternate sides irregularly, and the depths do
+    # not line up. About 50 ornaments where there were 192.
+    #
+    # Bearing 0 is +X (screen LEFT, looking up +Y); pi is screen right.
+    _POCKETS = (
+        # bearing, radius, scale, contents
+        (0.20, 1950.0, 0.95, ("teacup", "topiary", "lantern")),
+        (2.92, 2150.0, 1.00, ("heart", "bed", "lantern", "topiary")),
+        (0.66, 2900.0, 1.25, ("arch", "bed", "topiary")),
+        (2.44, 3150.0, 1.30, ("teacup", "lantern", "topiary", "bed")),
+        (1.02, 4050.0, 1.55, ("arch", "topiary", "heart")),
+        (2.08, 4400.0, 1.60, ("arch", "lantern", "topiary")),
+        (0.34, 5350.0, 1.95, ("topiary", "topiary", "bed")),
+        (2.76, 5700.0, 2.00, ("teacup", "topiary", "lantern")),
+        (1.57, 6700.0, 2.40, ("arch", "arch")),          # closes the walk
+        (0.88, 7300.0, 2.40, ("topiary", "heart")),
+        (2.30, 7500.0, 2.40, ("arch", "topiary")),
+    )
+    for _pi, (_pa, _rad, _sc, _kinds) in enumerate(_POCKETS):
+        for _i, _kind in enumerate(_kinds):
+            # tight cluster: the members of a pocket are one arrangement, so
+            # they sit within a couple of metres of each other and turn to face
+            # slightly different ways.
+            _jh = (_pi * 2654435761 + _i * 40503) & 0xFFFFFFFF
+            _ja = _pa + (((_jh >> 3) % 100) / 100.0 - 0.5) * 0.13
+            _jr = _rad + (((_jh >> 11) % 100) / 100.0 - 0.5) * 520.0
+            _ox = math.cos(_ja) * _jr
+            _oy = NEAR_Y + 500.0 + math.sin(_ja) * _jr * 0.72
             if in_camera_lap(_ox, _oy, 300.0):
                 continue
             if not _clear_of_dogs(_ox, _oy, 700.0):
                 continue
-            _kind = (_i + _ring) % 7
-            _lb = "Orn%d_%d" % (_ring, _i)
-            if _kind == 0:
+            _lb = "Orn%d_%d" % (_pi, _i)
+            if _kind == "arch":
                 kit_arch(_ox, _oy, 0.80 * _sc, _lb)
-            elif _kind == 1:
+            elif _kind == "heart":
                 kit_heart_topiary(_ox, _oy, 0.0, 0.85 * _sc, _lb)
-            elif _kind == 2:
+            elif _kind == "teacup":
                 kit_teacup(_ox, _oy, 0.75 * _sc, _lb)
-            elif _kind == 3:
+            elif _kind == "topiary":
                 kit_topiary_form(_ox, _oy, 0.95 * _sc, _lb,
-                                 form=("cone", "ball", "spiral")[_i % 3])
-            elif _kind == 4:
+                                 form=("cone", "ball", "spiral")[(_pi + _i) % 3])
+            elif _kind == "lantern":
                 kit_lantern(_ox, _oy, 0.90 * _sc, _lb)
-            elif _kind == 5:
+            else:
                 kit_bed(_ox, _oy, 150.0 * _sc, _lb,
                         palette=("petal_violet", "rose_pink", "petal_pink"))
-            else:
-                kit_gate(_ox, _oy, 0.62 * _sc, _lb)
             _ORN += 1
-            # a cluster of caps at the foot of every ornament, so nothing stands
-            # on bare ground
-            for _c in range(5):
-                _ca = _c * 1.257 + _i
+            # Caps at the foot of the DOMINANT member only, so a pocket has one
+            # base of planting rather than five competing rings of it.
+            for _c in range(3 if _i == 0 else 0):
+                _ca = _c * 2.094 + _pi
                 kit_mushroom(_ox + math.cos(_ca) * 150.0 * _sc,
                              _oy + math.sin(_ca) * 150.0 * _sc,
                              0.34 + 0.20 * (_c % 3) / 2.0,
                              "%s_cap%d" % (_lb, _c),
-                             ("mush_red", "mush_purple", "mush_white")[(_i + _c) % 3])
+                             ("mush_red", "mush_purple", "mush_white")[(_pi + _c) % 3])
     # ---- FLOWER CARPET -------------------------------------------------
     # The reference has NO bare ground anywhere -- every square metre carries
     # planting. Between the ornament rings there was still open floor, and open
@@ -8050,9 +8212,22 @@ def build(layout):
         a = math.radians(i * 137.508)
         r = 900.0 + 1150.0 * ((i + 0.5) / 26.0)
         rock(math.cos(a) * r, 320.0 + math.sin(a) * r, i)
+    # A CASCADE HANGS FROM SOMETHING.
+    #
+    # Two of these were at (+-250, -300) with a top at z=660 — open ground 850 uu
+    # in front of the arrival camera, with nothing above them. So the two most
+    # visible strands in the hero frame sprang out of thin air at eye height,
+    # which is why they read as poles however good the foliage on them became:
+    # a hanging plant with no host is not a hanging plant.
+    #
+    # Every strand now springs from a structure that is actually there — the
+    # gate piers, the rose arch, the pergola and the great framing tree's
+    # canopy, which is where the reference drapes its wisteria.
     for i, (vx, vy, vt, vd) in enumerate([(-1290, 400, 740, 520), (-810, 400, 740, 520),
-                                          (-250, -300, 660, 470), (250, -300, 660, 470),
-                                          (670, 460, 610, 420), (970, 460, 610, 420)]):
+                                          (-230, 820, 430, 330), (230, 820, 430, 330),
+                                          (670, 460, 610, 420), (970, 460, 610, 420),
+                                          (1160, 560, 980, 600), (1430, 420, 940, 560),
+                                          (1300, 660, 1010, 640)]):
         kit_vine(vx, vy, vt, vd, "Vine%d" % i, i)
 
     # LUSH GROUND COVER — the reference world is densely PLANTED, so carpet the whole

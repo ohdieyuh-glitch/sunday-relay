@@ -741,19 +741,19 @@
       "name": "Golden Build Gate",
       "mesh": "gate",
       "location": [
-        -1050,
-        400,
+        -880,
+        1180,
         320
       ],
       "scale": [
-        7,
+        9,
         2.2,
-        6.4
+        8.2
       ],
       "dimensionsUu": [
-        700,
+        900,
         220,
-        640
+        820
       ],
       "elevationUu": 0,
       "tier": "primary",
@@ -763,7 +763,7 @@
       "occlusionGroup": "west",
       "asset": "custom_relay",
       "sightlineHero": true,
-      "note": "The Start-Building product landmark: ornate heart-finialed ivy gate, ~6.4 m tall, left repoussoir of the arrival frame. Custom Relay art (identity-critical). Frames the left edge per WONDERLAND_VISUAL_ACCEPTANCE.md \u00a73."
+      "note": "The Start-Building product landmark: ornate heart-finialed ivy gate, ~8.2 m tall, the arrival frame's architectural threshold. Custom Relay art (identity-critical). MOVED 2026-08-24 from (-1050, 400) and enlarged from 640 uu. Two things were wrong with the old entry. It was 736 uu inside the arrival keep-out, so the generator pushed it outward at build time and it landed HALF OFF the right edge of the hero frame -- measured at x[1317..1737] of 1600, with the ornament this kit carries (fluted piers, dentilled capitals, paired volutes, a grille and heart crest) cropped away where nobody could read it. And this note called it the LEFT repoussoir: screen-right is world -X when looking up +Y, verified against the streamed frames, so it has always been on the right. It now stands at 2,491 uu -- outside the keep-out, so nothing moves it -- and reads at 30% of frame height in the right third with air around it. The reference puts its gate on the left; this composition is its mirror, with the great framing tree opposite."
     },
     {
       "id": "framing_tree",
