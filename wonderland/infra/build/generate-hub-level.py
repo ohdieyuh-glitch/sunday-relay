@@ -7161,7 +7161,20 @@ def build(layout):
     # pushed landmarks at the plaza RIM, which is exactly where the reference
     # puts its planting: flowers and caps gathered at the edge of the stone,
     # open floor in the middle with the Dog standing on it.
-    ARRIVAL_KEEP_OUT = 2050.0
+    # DERIVED FROM THE HERO, NOT A LITERAL. 2050 was chosen when the hero stood
+    # 1,600 uu from the lens, so it put companions 450 uu BEHIND the subject.
+    # The hero moved to 1,930 (so its circle would clear the frame's bottom
+    # edge) and this number did not move with it: companions now landed 120 uu
+    # behind the hero, at 61% of its apparent size, just under the 65% cap --
+    # and the material tally shows dog_body going from 3.19% of the frame to
+    # 5.90%. Two subjects again, on a Dog that had just been staged clearly.
+    #
+    # Same class as _PAVING_TOP_Z and the six landmark copies: a number that
+    # describes a relationship, written as a constant, going stale when the
+    # thing it relates to moves. The relationship IS "well behind the hero",
+    # so that is what it says now. 500 uu is about a Dog-length of clear air.
+    ARRIVAL_KEEP_OUT = math.hypot(HERO_DOG[0] - ARRIVAL_CAM[0],
+                                  HERO_DOG[1] - ARRIVAL_CAM[1]) + 500.0
     # 560 -> 860. The reference's Dog stands in CALM: a clear apron of stone
     # around it and the circle, with the planting banked beyond. Ours was
     # standing at the edge of its own keep-clear with mushroom caps and tufts
@@ -7595,12 +7608,22 @@ def build(layout):
         Shared with landmark_xy so a thing placed to sit WITH a landmark goes
         through the same staging the landmark does, from the same code.
         """
-        if mid in _CORRIDOR_EXEMPT or not _in_corridor(x, y, y1=6000.0):
+        if mid in _CORRIDOR_EXEMPT:
             return x, y
         try:                           # its own footprint, so the gap is real
             half_w = max(float(dims[0]), float(dims[1])) * 0.5
         except Exception:
             half_w = 200.0
+        # TEST THE EDGE, NOT THE CENTRE. This knew the object's half-width --
+        # it used it to decide how far to push -- and then asked whether the
+        # CENTRE was in the corridor. heart_topiary's centre landed at x=-479,
+        # outside 430, and its 150 uu half-width put its canopy at -329, well
+        # inside. verify-hero-corridor caught it on the first run after the
+        # keep-out grew. The question is whether any part of the thing
+        # overlaps the sight line, and that is |x| - half_w.
+        if not _in_corridor(max(0.0, abs(x) - half_w) * (1.0 if x >= 0 else -1.0),
+                            y, y1=6000.0):
+            return x, y
         want = 430.0 + half_w
         # HASH THE FAMILY, NOT THE PIECE. `brain_landmark` and `brain_pool_rim`
         # are one landmark -- a building and the reflecting pool in front of it
