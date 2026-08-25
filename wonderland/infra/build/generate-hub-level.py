@@ -5108,23 +5108,40 @@ def build(layout):
         # Many THIN concentric rings rather than six fat bands: the reference's
         # circle reads as engraved light, and thickness is what made ours read
         # as painted vinyl.
-        rings = [(9.0, 6.4, "arcane"), (9.6, 6.05, "plaza"), (10.2, 5.7, "arcane"),
-                 (10.8, 5.45, "plaza"), (12.0, 5.1, "arcane"), (12.6, 4.85, "plaza"),
-                 (14.0, 4.3, "arcane"), (14.6, 4.05, "plaza"), (16.0, 3.4, "arcane"),
-                 (16.6, 3.15, "plaza"), (18.0, 2.5, "arcane"), (18.6, 2.25, "plaza"),
-                 (20.0, 1.5, "arcane")]
+        # BIGGER, AND THE BANDS WIDE ENOUGH TO SEE.
+        #
+        # Held against the founder reference side by side, the arcane circle is
+        # the single most striking thing in its foreground — a bold violet disc
+        # of engraved light about two and a half Dog-lengths across, with rings
+        # you can read individually. Ours was 320 uu at its outermost with each
+        # visible band about 18 uu wide, which at 1,400 uu from the lens is
+        # under one percent of the frame's height per ring. It read as a faint
+        # scratch on the paving.
+        #
+        # The construction is right and stays: solid discs stacked smallest-and-
+        # highest, so each one covers the centre of the one below and what
+        # survives is an annulus. Only the numbers change — 520 uu outermost,
+        # and the arcane bands widened to 45 uu so a ring is a ring.
+        rings = [(9.0, 10.4, "arcane"), (9.6, 9.5, "plaza"), (10.2, 9.0, "arcane"),
+                 (10.8, 8.1, "plaza"), (12.0, 7.6, "arcane"), (12.6, 6.7, "plaza"),
+                 (14.0, 6.2, "arcane"), (14.6, 5.3, "plaza"), (16.0, 4.8, "arcane"),
+                 (16.6, 3.9, "plaza"), (18.0, 3.4, "arcane"), (18.6, 2.5, "plaza"),
+                 (20.0, 2.0, "arcane")]
         for j, (rz, rr, mat) in enumerate(rings):
             _part("cylinder", ccx, ccy, rz, rr, rr, 0.10, mat, "ArcaneRing%d" % j)
         # radiating rune spokes (thin emissive bars from centre to rim)
         for i in range(12):
             a = (i / 12.0) * 2.0 * math.pi
-            _part("cube", ccx + math.cos(a) * 190.0, ccy + math.sin(a) * 190.0, 7.5,
-                  3.8, 0.12, 0.06, "arcane", "Rune%d" % i, rot=(0.0, math.degrees(a), 0.0))
+            # The spokes and studs ride the ring, so they scale with it. Left
+            # at 190 and 300 they would have sat inside the second band with the
+            # outer half of the circle bare.
+            _part("cube", ccx + math.cos(a) * 310.0, ccy + math.sin(a) * 310.0, 7.5,
+                  6.2, 0.14, 0.06, "arcane", "Rune%d" % i, rot=(0.0, math.degrees(a), 0.0))
         # gold glyph studs around the rim
         for i in range(8):
             a = (i / 8.0) * 2.0 * math.pi + 0.26
-            _part("cylinder", ccx + math.cos(a) * 300.0, ccy + math.sin(a) * 300.0, 20.0,
-                  0.26, 0.26, 0.42, "magic_gold", "Glyph%d" % i)
+            _part("cylinder", ccx + math.cos(a) * 490.0, ccy + math.sin(a) * 490.0, 20.0,
+                  0.30, 0.30, 0.48, "magic_gold", "Glyph%d" % i)
         # DRIFTING CROSS-SPARKS. Small emissive plus-signs hovering over the
         # ring, on the Bob world-position-offset so they rise and fall. In the
         # reference these are what make the circle feel ALIVE rather than
@@ -5961,7 +5978,12 @@ def build(layout):
     # puts its planting: flowers and caps gathered at the edge of the stone,
     # open floor in the middle with the Dog standing on it.
     ARRIVAL_KEEP_OUT = 2050.0
-    DOG_STAGE = (HERO_DOG[0], HERO_DOG[1], 560.0)
+    # 560 -> 860. The reference's Dog stands in CALM: a clear apron of stone
+    # around it and the circle, with the planting banked beyond. Ours was
+    # standing at the edge of its own keep-clear with mushroom caps and tufts
+    # starting 560 uu out — inside the arcane circle's new 520 uu rim. A subject
+    # is staged by what is NOT next to it.
+    DOG_STAGE = (HERO_DOG[0], HERO_DOG[1], 860.0)
 
     def _on_stage(gx, gy):
         return math.hypot(gx - DOG_STAGE[0], gy - DOG_STAGE[1]) < DOG_STAGE[2]

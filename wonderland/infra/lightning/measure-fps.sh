@@ -27,8 +27,12 @@ CAM="${WL_HERO_CAM:-6}"
 FRAMES="${WL_FPS_FRAMES:-600}"
 RES_X="${WL_RES_X:-1920}"
 RES_Y="${WL_RES_Y:-1080}"
-APP="$WL_OUT/packaged/Linux/Wonderland.sh"
-[ -x "$APP" ] || wl_die "no packaged build at $APP"
+# WL_OUT IS ALREADY THE PACKAGED DIRECTORY. common.sh sets it to
+# $WL_ROOT/packaged, so "$WL_OUT/packaged/..." looks for it one level too deep.
+# Resolved the same way native-shot.sh does, which also survives the staged
+# directory moving.
+APP="$(wl_find_first "$WL_OUT/Linux" -maxdepth 3 -name 'Wonderland.sh' -type f)"
+[ -n "$APP" ] && [ -x "$APP" ] || wl_die "no packaged build under $WL_OUT/Linux"
 
 SHA_FILE="$WL_OUT/logs/packaged.sha"
 [ -f "$SHA_FILE" ] || SHA_FILE="$WL_OUT/logs/compiled.sha"
@@ -36,7 +40,7 @@ SHA_FILE="$WL_OUT/logs/packaged.sha"
 BUILD_SHA="$(tr -d '[:space:]' < "$SHA_FILE")"
 SHORT="${BUILD_SHA:0:7}"
 
-CSV_DIR="$WL_OUT/packaged/Linux/Wonderland/Saved/Profiling/CSV"
+CSV_DIR="$(dirname "$APP")/Wonderland/Saved/Profiling/CSV"
 rm -rf "$CSV_DIR" 2>/dev/null || true
 
 wl_say "frame timing: HeroCam6=$CAM, $FRAMES frames, build $SHORT, no encoder in the path"
