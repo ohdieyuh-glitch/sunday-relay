@@ -860,8 +860,8 @@
       "name": "Heart Topiary",
       "mesh": "topiary",
       "location": [
-        780,
-        1850,
+        820,
+        4300,
         350
       ],
       "scale": [
@@ -870,9 +870,9 @@
         5.2
       ],
       "dimensionsUu": [
-        560,
-        150,
-        520
+        900,
+        200,
+        840
       ],
       "elevationUu": 0,
       "tier": "secondary",
@@ -883,7 +883,8 @@
       "asset": "custom",
       "note": "Heart-shaped hedge, left-inboard midground accent behind Heart Plaza.",
       "_note": "REPOSITIONED AND RESIZED 2026-08-25. The reference's heart is a signature landmark at about a third of frame height, right of centre in the midground behind the teacups. At (340,540) x 300 uu it was a shrub beside the path. Mirrored at build time, so authored +X lands screen-right.",
-      "_note_hd": "RESIZED AND STEPPED BACK 2026-08-25: at 760 wide and 2,430 uu out it measured 22% of frame width and 33% of frame height in the offline trace; the reference's heart is ~13% x 22%. 560 wide at 3,050 uu is ~11% x 21%. It is a WREATH now (hd_topiary_heart), open in the middle."
+      "_note_hd": "RESIZED AND STEPPED BACK 2026-08-25: at 760 wide and 2,430 uu out it measured 22% of frame width and 33% of frame height in the offline trace; the reference's heart is ~13% x 22%. 560 wide at 3,050 uu is ~11% x 21%. It is a WREATH now (hd_topiary_heart), open in the middle.",
+      "_note_reset": "RE-AUTHORED 2026-08-25 for the Arrival District reset: position and size taken from the founder's HD reference, built by hd/arrival.py; the old kit's output is dropped inside the district."
     },
     {
       "id": "rose_arch",
@@ -891,7 +892,7 @@
       "mesh": "arch",
       "location": [
         0,
-        980,
+        4000,
         220
       ],
       "scale": [
@@ -900,9 +901,9 @@
         7.6
       ],
       "dimensionsUu": [
-        940,
-        100,
-        760
+        1000,
+        120,
+        900
       ],
       "elevationUu": 0,
       "tier": "secondary",
@@ -912,15 +913,16 @@
       "occlusionGroup": "open_south",
       "asset": "megascans_or_custom",
       "note": "Rose-wrapped arch over the boulevard between Arrival and Heart Plaza; a foreground frame the player walks through, adding depth to the first shot.",
-      "_note": " MOVED from y=-300: at 23 m from the hero camera the uprights blocked the sight-line they were meant to frame; at 34 m the Observatory reads through the opening."
+      "_note": " MOVED from y=-300: at 23 m from the hero camera the uprights blocked the sight-line they were meant to frame; at 34 m the Observatory reads through the opening.",
+      "_note_reset": "RE-AUTHORED 2026-08-25 for the Arrival District reset: position and size taken from the founder's HD reference, built by hd/arrival.py; the old kit's output is dropped inside the district."
     },
     {
       "id": "stacked_teacup_a",
       "name": "Stacked Teacups (east)",
       "mesh": "teacup",
       "location": [
-        660,
-        120,
+        -700,
+        1900,
         130
       ],
       "scale": [
@@ -929,9 +931,9 @@
         2.6
       ],
       "dimensionsUu": [
-        240,
-        240,
-        260
+        300,
+        300,
+        420
       ],
       "elevationUu": 0,
       "tier": "tertiary",
@@ -940,15 +942,16 @@
       "streamGroup": "core_plaza",
       "occlusionGroup": "east",
       "asset": "custom",
-      "note": "Heart-patterned porcelain stack, right-inboard landmark."
+      "note": "Heart-patterned porcelain stack, right-inboard landmark.",
+      "_note_reset": "RE-AUTHORED 2026-08-25 for the Arrival District reset: position and size taken from the founder's HD reference, built by hd/arrival.py; the old kit's output is dropped inside the district."
     },
     {
       "id": "stacked_teacup_b",
       "name": "Toppled Teacup (garden)",
       "mesh": "teacup",
       "location": [
-        980,
-        520,
+        -1050,
+        2150,
         90
       ],
       "scale": [
@@ -957,9 +960,9 @@
         1.4
       ],
       "dimensionsUu": [
-        180,
-        180,
-        140
+        220,
+        220,
+        300
       ],
       "elevationUu": 30,
       "tier": "tertiary",
@@ -968,15 +971,16 @@
       "streamGroup": "east_garden",
       "occlusionGroup": "east",
       "asset": "custom",
-      "note": "A smaller tipped cup in the Agent Garden, a rest-ledge read."
+      "note": "A smaller tipped cup in the Agent Garden, a rest-ledge read.",
+      "_note_reset": "RE-AUTHORED 2026-08-25 for the Arrival District reset: position and size taken from the founder's HD reference, built by hd/arrival.py; the old kit's output is dropped inside the district."
     },
     {
       "id": "clock_tower",
       "name": "Ornate Clock Tower",
       "mesh": "clock",
       "location": [
-        -1180,
-        720,
+        1500,
+        5200,
         300
       ],
       "scale": [
@@ -985,9 +989,9 @@
         6
       ],
       "dimensionsUu": [
-        140,
-        140,
-        600
+        280,
+        280,
+        1200
       ],
       "elevationUu": 0,
       "tier": "secondary",
@@ -996,7 +1000,8 @@
       "streamGroup": "west_gate",
       "occlusionGroup": "west",
       "asset": "custom",
-      "note": "Freestanding ornate clock behind the gate court; whimsy vertical on the west."
+      "note": "Freestanding ornate clock behind the gate court; whimsy vertical on the west.",
+      "_note_reset": "RE-AUTHORED 2026-08-25 for the Arrival District reset: position and size taken from the founder's HD reference, built by hd/arrival.py; the old kit's output is dropped inside the district."
     },
     {
       "id": "playing_card_sign",
@@ -1032,9 +1037,9 @@
       "name": "Giant Red Mushroom (arrival)",
       "mesh": "mushroom",
       "location": [
-        -380,
-        -520,
-        180
+        -1900,
+        4400,
+        0
       ],
       "scale": [
         3.6,
@@ -1042,9 +1047,9 @@
         3.6
       ],
       "dimensionsUu": [
-        360,
-        360,
-        360
+        900,
+        900,
+        1400
       ],
       "elevationUu": 0,
       "tier": "secondary",
@@ -1052,16 +1057,17 @@
       "collision": "blocking",
       "streamGroup": "south_arrival",
       "occlusionGroup": "open_south",
-      "note": "Near red/white-spotted cap breaking the bottom-left of the arrival frame; foreground scale anchor."
+      "note": "Near red/white-spotted cap breaking the bottom-left of the arrival frame; foreground scale anchor.",
+      "_note_reset": "RE-AUTHORED 2026-08-25 for the Arrival District reset: position and size taken from the founder's HD reference, built by hd/arrival.py; the old kit's output is dropped inside the district."
     },
     {
       "id": "mushroom_red_b",
       "name": "Giant Red Mushroom (garden)",
       "mesh": "mushroom",
       "location": [
-        1040,
-        220,
-        200
+        2300,
+        5800,
+        0
       ],
       "scale": [
         4,
@@ -1069,9 +1075,9 @@
         4
       ],
       "dimensionsUu": [
-        400,
-        400,
-        400
+        1000,
+        1000,
+        1500
       ],
       "elevationUu": 30,
       "tier": "secondary",
@@ -1079,16 +1085,17 @@
       "collision": "blocking",
       "streamGroup": "east_garden",
       "occlusionGroup": "east",
-      "note": "Largest hero cap (~4 m) in the Agent Garden; the Dog reads ~1/3 its height."
+      "note": "Largest hero cap (~4 m) in the Agent Garden; the Dog reads ~1/3 its height.",
+      "_note_reset": "RE-AUTHORED 2026-08-25 for the Arrival District reset: position and size taken from the founder's HD reference, built by hd/arrival.py; the old kit's output is dropped inside the district."
     },
     {
       "id": "mushroom_purple_a",
       "name": "Purple Mushroom Cluster (west)",
       "mesh": "mushroom",
       "location": [
-        -760,
-        -40,
-        120
+        -1300,
+        3300,
+        0
       ],
       "scale": [
         2.2,
@@ -1096,9 +1103,9 @@
         2.2
       ],
       "dimensionsUu": [
-        220,
-        220,
-        220
+        260,
+        260,
+        380
       ],
       "elevationUu": 0,
       "tier": "tertiary",
@@ -1106,7 +1113,8 @@
       "collision": "blocking",
       "streamGroup": "west_field",
       "occlusionGroup": "west",
-      "note": "Mid-scale purple caps giving the west a second mushroom scale."
+      "note": "Mid-scale purple caps giving the west a second mushroom scale.",
+      "_note_reset": "RE-AUTHORED 2026-08-25 for the Arrival District reset: position and size taken from the founder's HD reference, built by hd/arrival.py; the old kit's output is dropped inside the district."
     },
     {
       "id": "mushroom_purple_b",

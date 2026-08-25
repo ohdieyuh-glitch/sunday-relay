@@ -8,9 +8,12 @@
 > 24 gates). **Nothing here has been rendered.** The one thing no offline tool
 > can answer is whether authored geometry READS under the real light.
 >
-> **What changed, in one line:** every visible thing was one of five engine
-> primitives; now 58 authored meshes with LOD chains replace the roofs,
-> towers, canopies, trunks, mushrooms, gate, flagstones, heart, arch and props.
+> **What changed, in two lines:** every visible thing was one of five engine
+> primitives; now 58 authored meshes with LOD chains (`hd/`). AND the
+> arrival district STARTS OVER: inside y -1500..9000 every old placement is
+> dropped at `static_mesh()` and `hd/arrival.py` authors the district from the
+> founder's reference (log lines `ARRIVAL RESET: dropped N` and `ARRIVAL
+> DISTRICT: ...`). `WONDERLAND_LOOK=arrivalReset=0` restores the old world.
 > See `hd/HD-PIPELINE.md`.
 >
 > **GPU OFF for all of this** (compile, generate, cook, package are CPU):

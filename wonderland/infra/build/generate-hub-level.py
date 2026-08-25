@@ -357,7 +357,8 @@ LOOK = {
     "mirrorX": 1,
     # ---- HOW MANY RELAY DOGS STAND IN THE ARRIVAL FRAME -------------------
     #
-    # 0 = none, 1 = the hero only, 2 = hero + companions + upright Dogs.
+    # 0 = the player's pawn only, 1 = + the strolling hero, 2 = + companions
+    # and the upright Dogs.
     #
     # The founder's directive for this phase is explicit: "Do not spend this
     # phase populating the reference with multiple Relay Dogs. The environment
@@ -372,11 +373,25 @@ LOOK = {
     # eleven others are set dressing this phase was told not to spend itself
     # on. Nothing is deleted — every Dog system, coat, gait and upright variant
     # is untouched and one env var brings them all back.
-    "arrivalDogs": 1,
+    # 0 rather than 1 now: the trace showed TWO Dogs on the circle at 1 -- the
+    # player's own WonderlandDogPawn at the spawn point (gameplay, always
+    # present) AND the strolling "RelayDog" set dressing standing on the same
+    # spot. The reference has no Dog at all; the player's pawn is the one that
+    # must stay, so the strolling hero goes with the companions.
+    "arrivalDogs": 0,
     # Phase V: the sky keys and the teapot as AWonderlandHoverProp actors with
     # a UWonderlandHoverComponent each — bounded, asynchronous, one sine per
     # prop. 0 puts them back in the instanced batches on the Bob WPO.
     "hoverActors": 1,
+    # ---- THE ARRIVAL DISTRICT STARTS OVER -----------------------------------
+    #
+    # 1 = inside the district (y -1500..9000, |x| < 7000) every placement the
+    # old generator makes is DROPPED at static_mesh(), and hd/arrival.py
+    # authors the district from the founder's reference instead. What
+    # survives from the old world inside the region: the plaza and its
+    # arcane circle, the ground, the sky, the hero mushroom kit, the central
+    # path's setts, the far castle. 0 = the old world, all of it.
+    "arrivalReset": 1,
     # Phase S/T: the boulevard laid by the spline tool (running-bond setts
     # aligned to the curve, no overlap by construction) and its three-band
     # border. 0 restores the segment-by-segment flags and no border.
@@ -4243,6 +4258,22 @@ def build(layout):
     else:
         unreal.log_warning("HD: disabled by WONDERLAND_HD=0; fallbacks only")
 
+    # The reset region and its allow-list. y from behind the camera to where
+    # the palace district begins; the far castle (22 km) and the skyline bands
+    # are outside it and untouched. Prefixes: the plaza and circle, the
+    # ground and sky, the hero mushroom kit, the central path's setts (not its
+    # kerbs -- the reference's path has none), the Dog proxies.
+    _AR_RESET = int(LOOK["arrivalReset"]) != 0 and hd_assets is not None
+    _AR_Y0, _AR_Y1, _AR_XMAX = -1500.0, 9000.0, 7000.0
+    _AR_ALLOW = ("Plaza", "Tile", "Rune", "Arcane", "Spark", "Roll", "Hill", "Ground",
+                 "Meadow", "FarMeadow", "Marble", "Sky", "Cloud", "Bird", "PrimaryCastle",
+                 "hero_mushroom", "PATH_sett", "DOG", "Dog")
+    _AR_DROPPED = {}
+
+    def _ar_allowed(label):
+        lb = str(label or "")
+        return "HDAR_" in lb or any(lb.startswith(a) for a in _AR_ALLOW)
+
     _HOVER_CLS = [None]
 
     def hover_prop(mesh_key, location, scale, label, mat, amp=9.0, period=6.5, sway=2.5):
@@ -4330,6 +4361,23 @@ def build(layout):
         _cast_shadow = not (mat in NO_SHADOW_MATS
                             or any(_lb.startswith(_p) for _p in NO_SHADOW_PREFIX))
 
+        # ---- THE ARRIVAL RESET: THE OLD WORLD IS NOT IN THE DISTRICT --------
+        #
+        # The founder said start over, and the first HD pass had not: it kept
+        # the old layout and swapped meshes into it, so the frame was the same
+        # frame. This is the one choke point every piece passes through, so it
+        # is where the old world stops. Inside the district anything that is
+        # not the authored district (HDAR_), the plaza/circle, the ground, the
+        # sky or the hero mushroom kit is dropped BEFORE the analysis hook, so
+        # the offline trace sees the reset world too. What was dropped is
+        # counted and logged by family -- that list is the "what was deleted"
+        # the founder asked for.
+        if _AR_RESET and _AR_Y0 <= float(location[1]) <= _AR_Y1 \
+                and abs(float(location[0])) <= _AR_XMAX and not _ar_allowed(label):
+            _stem = (label or "?").rstrip("0123456789")
+            _stem = _stem.rsplit("_", 1)[0] if "_" in _stem else _stem
+            _AR_DROPPED[_stem] = _AR_DROPPED.get(_stem, 0) + 1
+            return None
         # THE ANALYSIS HOOK, on every path. The offline harnesses replace this to
         # capture the world with no engine; whether the piece then becomes an
         # instance or an actor is invisible to them, which is what keeps the
@@ -7997,7 +8045,16 @@ def build(layout):
     # Functional systems survive: the Brain's ZONE marker and interaction
     # anchor are placed by a different loop and untouched, so gameplay that
     # looks for the Brain still finds its location. Only the ART is gone.
-    _HERO_EXCLUDE = frozenset(("brain_landmark", "brain_pool_rim", "agent_pergola"))
+    # The reset removes six more from the district: the card sign, the old
+    # floating teapot (the hovering SkyTeapot replaces it), the overlook
+    # terrace, the standing stones, the portrait frame and the second purple
+    # mushroom -- none of them is in the founder's reference, and the brief's
+    # first priority is removing what conflicts with it. verify-landmark-scale
+    # reads this set and reports them DELETED rather than missing.
+    _HERO_EXCLUDE = frozenset(("brain_landmark", "brain_pool_rim", "agent_pergola",
+                               "playing_card_sign", "floating_teapot", "overlook_terrace",
+                               "project_standing_stones", "portrait_frame",
+                               "mushroom_purple_b"))
 
     def _on_paving(gx, gy):
         """The plaza and the boulevard are STONE. Nothing that grows out of soil
@@ -12168,6 +12225,25 @@ def build(layout):
     _batches_placed = 0
     _pieces_placed = 0
     if BATCH_VISUALS:
+        # ---- THE AUTHORED ARRIVAL DISTRICT ------------------------------
+        # After every kit has run (so the plaza, the circle, the lights and
+        # the landmark positions exist) and before the batches are emitted.
+        if _AR_RESET:
+            try:
+                from hd import arrival as _hd_arrival
+                _ar_counts = _hd_arrival.build_district({
+                    "part": lambda mesh, x, y, z, sx, sy, sz, mat, label, rot=(0.0, 0.0, 0.0):
+                        _part(mesh, x, y, z, sx, sy, sz, mat, label, rot=rot),
+                    "landmark_xy": landmark_xy, "hd_ok": hd_ok,
+                    "has_mat": lambda nm: nm in MATS, "near_y": NEAR_Y,
+                    "hero_dog": HERO_DOG, "log": unreal.log_warning})
+            except Exception as _are:
+                unreal.log_error("ARRIVAL DISTRICT failed to build (%s) -- the district is "
+                                 "EMPTY, which is wrong and must not ship" % _are)
+            _top = sorted(_AR_DROPPED.items(), key=lambda kv: -kv[1])[:14]
+            unreal.log_warning("ARRIVAL RESET: dropped %d old pieces inside the district: %s"
+                               % (sum(_AR_DROPPED.values()),
+                                  ", ".join("%s x%d" % kv for kv in _top)))
         _batches_placed = emit_batches()
         _pieces_placed = sum(len(b["xf"]) // 9 for b in _BATCHES.values())
         if _BATCHES and _batches_placed == 0:
