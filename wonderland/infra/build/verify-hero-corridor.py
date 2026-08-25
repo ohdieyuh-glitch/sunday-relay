@@ -102,6 +102,57 @@ def main():
         raise SystemExit("verify-hero-corridor: the generator placed NOTHING. "
                          "An empty world passes every check, so this is a failure.")
 
+    # ---- WHAT LIES ON THE PAVING MUST CLEAR THE PAVING -------------------
+    #
+    # The arcane circle is a plane authored at z = 6.0 to sit ON the plaza. The
+    # plaza's setts are centred at 3.0-5.4 with heights up to 7.9 uu, so their
+    # tops reach 9.35 -- the circle was INSIDE the cobbles, invisible, for the
+    # whole sprint. Raising its glow and rebuilding its texture both changed
+    # nothing, because neither was the problem.
+    #
+    # Nothing else checks this. A decal buried in the floor is not an error at
+    # any layer: it binds, it draws, it is simply behind something.
+    # BY LABEL, NOT BY MATERIAL. The first version matched on the stone family
+    # and got a "paving top" of 518 uu, because `stone` is also the piers, the
+    # cornices and the kerb walls. What a decal has to clear is the FLOOR, and
+    # the floor is placed under known labels.
+    _DECALS = ("RuneCircle",)
+    _PAVE_LABELS = ("Tile", "PlazaFill", "PlazaBed", "PlazaCap")
+    # WITHIN ITS OWN FOOTPRINT. Taking the max over the whole plaza gave 39 uu,
+    # which is the PlazaCap kerb ring at the rim -- a piece the circle in the
+    # middle of the courtyard never has to clear. What a decal must sit above is
+    # the floor it actually lies on.
+    _decals, _pave = {}, []
+    for mesh_key, location, scale, mat, label in records:
+        try:
+            x, y, z = (float(v) for v in location[:3])
+            sx, sz = abs(float(scale[0])) * 100.0, abs(float(scale[2])) * 100.0
+        except (TypeError, ValueError, IndexError):
+            continue
+        if str(label) in _DECALS:
+            _decals[str(label)] = (x, y, z, sx * 0.5)
+        elif any(str(label).startswith(_f) for _f in _PAVE_LABELS):
+            _pave.append((x, y, z + sz * 0.5))
+    _buried = []
+    for _n, (_x, _y, _z, _r) in _decals.items():
+        _top = 0.0
+        for _px, _py, _pt in _pave:
+            if (_px - _x) ** 2 + (_py - _y) ** 2 <= _r * _r:
+                _top = max(_top, _pt)
+        if _z <= _top:
+            _buried.append((_n, _z, _top, _r))
+        else:
+            print("  ground decal %s clears its floor: z=%.1f over paving at z=%.1f "
+                  "(within its own %.0f uu radius)" % (_n, _z, _top, _r))
+    if _buried:
+        print("verify-hero-corridor FAILED — a ground decal is BURIED in the paving:\n")
+        for _n, _z, _top, _r in _buried:
+            print("  %-14s sits at z=%.2f while the paving inside its own %.0f uu "
+                  "radius reaches z=%.2f" % (_n, _z, _r, _top))
+        print("\n  It will bind, draw and report success while being invisible.\n"
+              "  FIX: place it above the tallest sett underneath it.")
+        return 1
+
     hits = {}
     for mesh, loc, scale, mat, label in records:
         try:

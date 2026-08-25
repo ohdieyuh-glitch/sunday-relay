@@ -6111,7 +6111,31 @@ def build(layout):
         _RUNE_PLANE = "runes" in MATS
         if _RUNE_PLANE:
             _rr = float(LOOK["runeRadius"])
-            _part("plane", ccx, ccy, 6.0,
+            # ---- THE CIRCLE WAS UNDER THE COBBLES -------------------------
+            #
+            # z = 6.0, and the paving it is supposed to sit ON reaches higher
+            # than that. Working it out from the code that lays the setts rather
+            # than from the eye:
+            #
+            #     tile centre  jz = 3.0 + (hsh % 5) * 0.6      -> up to  5.40
+            #     tile height  sz = 0.055 + (hsh % 3) * 0.012  -> up to  7.90 uu
+            #     so the tallest sett's TOP is 5.40 + 3.95     =        9.35 uu
+            #
+            # The rune plane sat at 6.0, INSIDE that. The founder's most
+            # identifying element has been buried in the courtyard for every
+            # capture of this sprint, which is why raising arcaneGlow and
+            # rebuilding the rune texture both changed nothing visible: the
+            # material was never the problem, the Z was.
+            #
+            # It also explains the measurement that sent me looking -- 90,642
+            # violet pixels in the reference's lower frame against our 25,699.
+            # Ours was the scattered cross-sparks and the wisteria; the ring
+            # itself was contributing none of it.
+            #
+            # 12.0 clears the tallest sett by 2.65 uu and the plaza moss at 7.0,
+            # and 12 cm above the stone reads as light lying ON it rather than
+            # as a floating decal.
+            _part("plane", ccx, ccy, 12.0,
                   _rr * 2.0 / 100.0, _rr * 2.0 / 100.0, 1.0,
                   "runes", "RuneCircle")
         # SKIPPED WITH AN `if`, NOT WITH A ZERO COUNT.
@@ -8886,7 +8910,19 @@ def build(layout):
     # A CEREMONIAL EDGE. The plaza was a paved disc lying on grass with a hard
     # boundary; the reference's arrival space is HELD — a raised kerb all the way
     # round, steps down at each approach, and planting tight against the stone.
-    _PR = 1230.0
+    # 1230 -> 1480, AND THIS IS A REGRESSION THE GATE CAUGHT ON MY OWN CHANGE.
+    #
+    # The ceremonial kerb ring sits at _PR from the plaza centre. Moving the
+    # hero Dog from y=450 to y=780 (so the arcane circle's near rim came inside
+    # the frame) carried the circle with it, and the circle's far edge now
+    # reaches 780 + 560 = 1,340 uu from the origin. A ring at 1,230 runs
+    # straight THROUGH it -- kerb, cap and pier standing inside the founder's
+    # most identifying element. At y=450 it cleared by 220 uu, which is why this
+    # was fine until an hour ago.
+    #
+    # 1,480 clears the circle's edge by 140 uu, and the paving course runs to
+    # 2,412 so the ring is still well inside its own floor.
+    _PR = 1480.0
     for i in range(64):
         a = i * (2.0 * math.pi / 64.0)
         kx, ky = math.cos(a) * _PR, math.sin(a) * _PR
