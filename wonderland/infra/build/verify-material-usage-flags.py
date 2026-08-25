@@ -52,7 +52,15 @@ GEN = os.path.join(HERE, "generate-hub-level.py")
 
 # Every master this generator builds. A new one must be added here, and the
 # check below fails if the generator creates a master this list does not name.
-MASTERS = ("M_WLMaster", "M_WLLeaf")
+# M_WLRunes added 2026-08-25. THIS GATE ALREADY CAUGHT IT AND NOBODY RAN IT.
+# The arcane circle drew as engine grey for a whole sprint -- three passes went
+# into its brightness, its texture and its Z before the packaged log gave it
+# away -- and this validator was failing the entire time with exactly the right
+# message: "the generator creates master material(s) this validator does not
+# know about: M_WLRunes". It is not in prepare.sh's gate list, so it was never
+# run. A gate that is right and unrun is worth nothing, and that is the lesson
+# rather than the material.
+MASTERS = ("M_WLMaster", "M_WLLeaf", "M_WLRunes")
 
 
 def check_source():
@@ -74,12 +82,29 @@ def check_source():
         return 1
 
     calls = re.findall(r'wl_allow_instanced_use\(\s*\w+\s*,\s*"([^"]+)"', src)
+
+    # A MASTER THAT DELETES ITSELF FIRST HAS NO CACHED PATH, and demanding one
+    # makes this gate fail on correct code. M_WLRunes does
+    # `if does_asset_exist(path): delete_asset(path)` and then creates -- there
+    # is exactly one path through it, so exactly one call is required.
+    #
+    # This matters more than it looks. This validator was ALREADY failing,
+    # correctly, on M_WLRunes being unknown to it, and was not in prepare.sh's
+    # list, so nobody ran it while the arcane circle drew as engine grey for a
+    # whole sprint. A gate that cries wolf on correct code is a gate that gets
+    # dropped from the list, and that is how the last one was lost.
+    def _recreates(name):
+        m = re.search(r'path\s*=\s*pkg\s*\+\s*"/%s"(.{0,400})' % re.escape(name),
+                      src, re.S)
+        return bool(m) and "delete_asset(path)" in m.group(1)
+
     missing = []
     for m in MASTERS:
         named = [c for c in calls if c.startswith(m)]
-        # Both paths: the freshly created one and the cached one.
         if not any(c == m for c in named):
             missing.append("%s (created path)" % m)
+        if _recreates(m):
+            continue           # deletes any existing asset; no cached path exists
         if not any("cached" in c for c in named):
             missing.append("%s (cached path)" % m)
     if missing:

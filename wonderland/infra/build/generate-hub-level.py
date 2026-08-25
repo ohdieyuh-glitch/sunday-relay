@@ -6166,7 +6166,35 @@ def build(layout):
         # rune material never builds here, so this branch is never taken and the
         # dry run has never once executed the line that crashed.
         _ARC_SEGS = 72
-        for j, (rz, rr) in enumerate(() if _RUNE_PLANE else
+        # ---- THE RINGS COME BACK, AND THE PLANE STAYS ---------------------
+        #
+        # `_RUNE_PLANE` switched the geometry rings OFF on the assumption the
+        # texture plane replaces them. Measured on three consecutive builds --
+        # counting violet pixels inside the circle's own projected footprint --
+        # the plane contributes NOTHING:
+        #
+        #     before raising it out of the cobbles   2,992 px
+        #     after raising it to z=12               3,080 px
+        #     after the instanced-usage flag         3,094 px
+        #
+        # All three numbers are the cross-sparks and the wisteria. So on the
+        # Studio, where the texture exists and this switch is therefore TRUE,
+        # the rings were off and the plane was invisible: no circle at all. The
+        # local dry run hid it, because texture synthesis fails on the laptop,
+        # `_RUNE_PLANE` is False there, and the rings render -- the fallback
+        # looked like the real thing.
+        #
+        # Why the plane does not draw is not yet established. It is additive and
+        # unlit, so it sits in the translucency pass with no depth write, 3 uu
+        # above cobbles that stand up to 9.35 and are viewed at -12 degrees --
+        # each sett occludes about 43 uu of the ground behind it. That is a
+        # candidate and not a finding, and I am not going to spend another build
+        # confirming it while the founder has no circle.
+        #
+        # The rings are PROVEN to render (the trace has Rune8 and Rune10 owning
+        # 0.62% of frame). They go back regardless of the plane, so the circle
+        # exists either way and the plane's glyph work is a bonus when it works.
+        for j, (rz, rr) in enumerate(
                                      ((9.0, 10.4), (10.4, 9.0), (11.8, 7.6),
                                       (13.2, 6.2), (14.6, 4.8), (16.0, 3.4),
                                       (17.4, 2.0))):
@@ -6182,7 +6210,10 @@ def build(layout):
                       rot=(0.0, math.degrees(_a) + 90.0, 0.0))
         # The spokes and the glyph studs are IN the texture now; keeping the
         # geometry versions would double them.
-        for i in range(0 if _RUNE_PLANE else 12):
+        # The gold studs come back with the rings, for the same reason: the
+        # plane contributes no measurable pixels, so anything switched off in
+        # its favour was switched off for nothing.
+        for i in range(12):
             a = (i / 12.0) * 2.0 * math.pi
             # The spokes and studs ride the ring, so they scale with it. Left
             # at 190 and 300 they would have sat inside the second band with the
