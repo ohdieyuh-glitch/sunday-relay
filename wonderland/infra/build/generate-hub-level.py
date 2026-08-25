@@ -196,7 +196,13 @@ LOOK = {
     # WONDERLAND_LOOK=arcaneGlow=7 now costs one build instead of one edit plus
     # one build, and the value that wins can be written down with a frame behind
     # it. CHOSEN at 5.0 as the midpoint of the two that were measured wrong.
-    "arcaneGlow": 5.0,
+    # 5.0 -> 2.0. With the practical no longer flooding the stone, the ring does
+    # not have to shout over it — and 5.0 puts the blue channel at 5.0 in linear
+    # light, four stops past where the ACES shoulder starts pulling the three
+    # channels together. The most violet pixel measurable anywhere in the plaza
+    # band was (105, 0, 173), so the hue IS in there; it survives only where the
+    # ring is dimmest. 2.0 keeps the whole ring in that range.
+    "arcaneGlow": 2.0,
     # Aerial perspective, the atmosphere's depth cue. See the SkyAtmosphere
     # block. CHOSEN at 11.0 — roughly 3.4 km of air on the skyline by that
     # block's arithmetic — after 4.0 was measured to leave 80 km of distance as
@@ -725,7 +731,26 @@ LOOK = {
     # 5200 the per-light scales give 5200 / 4420 / 2860, all under the ceiling.
     # Same cut, same reason: a hero practical at 5,200 lm beside a 3,600 lux sun
     # is a second key placed at the subject.
-    "heroLightLumens": 1100.0,
+    # 1100 -> 380, MEASURED off the cycle-12 render and this is the actual
+    # reason the arcane circle has never read as violet.
+    #
+    # Sampled on the plaza either side of a ring:
+    #
+    #     stone between the rings   rgb (227, 193, 225)   sat 0.15
+    #     stone away from circle    rgb (128, 116, 110)   sat 0.14
+    #
+    # The courtyard under the circle is EIGHTY LUMA BRIGHTER than the same
+    # material six metres away, and tinted lilac. That is this practical: a
+    # violet point light sitting on the circle, flooding the stone it is meant
+    # to sit on. So the rings were being drawn bright-on-bright, and no amount
+    # of emissive fixes that — pushing the rings harder only climbs the ACES
+    # shoulder and turns them white, which is exactly what happened at 11 and
+    # again at 5.
+    #
+    # The reference's circle is light on DARK stone. The contrast comes from the
+    # surround being dim, not from the glyphs being loud. 380 lm accents the
+    # ring without lighting the courtyard.
+    "heroLightLumens": 380.0,
     "heroLightRadius": 900.0,
 }
 
