@@ -1311,7 +1311,14 @@ MATERIAL_SPEC = {
     "arcane_dim":  ((0.60, 0.34, 0.92), 0.0, 0.62, (0.52, 0.24, 0.90), 3.2),
     "arcane_faint":((0.44, 0.30, 0.62), 0.0, 0.62, (0.20, 0.09, 0.34), 1.1),
     "crystal":     ((0.65, 0.40, 0.95), 0.1, 0.20, (0.40, 0.20, 0.80), 1.5),
-    "dog_body":    ((0.985, 0.985, 0.995), 0.0, 0.34, (0.02, 0.02, 0.03), 0.10),
+    # 0.985 IS BRIGHTER THAN ANY WHITE THAT EXISTS. Titanium-white paint sits
+    # near 0.85 and fresh snow at 0.90; this was authored above both, with an
+    # emissive on top. The canonical Relay Dog is white and stays white — but at
+    # 0.985 every one of its cubes clipped to the same 255 and the silhouette
+    # went featureless, which is exactly how it came back in the first native
+    # render: a white blob with the black visor barely readable. 0.88 keeps it
+    # the brightest thing in the frame and leaves the facets somewhere to go.
+    "dog_body":    ((0.88, 0.88, 0.89), 0.0, 0.34, (0.0, 0.0, 0.0), 0.0),
     "dog_visor":   ((0.02, 0.02, 0.03), 0.1, 0.12, (0, 0, 0), 0.0),
     "dog_eye":     ((1.00, 0.80, 0.22), 0.0, 0.62, (1.00, 0.74, 0.18), 5.0),
     # THE CITY IS PASTEL, NOT GREY -- and a third of this frame was specified
@@ -1712,7 +1719,13 @@ def build_leaf_material(texs):
                 ra = mel.create_material_expression(
                     master, unreal.MaterialExpressionScalarParameter, -700, 640)
                 ra.set_editor_property("parameter_name", "RimAmp")
-                ra.set_editor_property("default_value", 0.55)
+                # 0.55 BY DEFAULT, ON EVERY LEAF CARD IN THE WORLD, wired to
+                # emissive in a chartreuse (0.72, 0.98, 0.44). Nothing had to
+                # opt in and nothing could opt out, which is how a canopy
+                # authored in three greens came back as one pale mint. Zero: a
+                # leaf's translucent edge is what the subsurface term above is
+                # for, and that one responds to the light behind it.
+                ra.set_editor_property("default_value", 0.0)
                 rc = mel.create_material_expression(
                     master, unreal.MaterialExpressionVectorParameter, -700, 720)
                 rc.set_editor_property("parameter_name", "RimColor")
@@ -2630,21 +2643,36 @@ def build_material_library(texs=None):
                 eal.save_asset(mi.get_path_name())
             except Exception as _e:
                 unreal.log_warning("texture binding on %s skipped: %s" % (nm, _e))
-    # WHO CATCHES LIGHT ON ITS EDGES. Gold and brass most of all — that edge
-    # highlight is the difference between metal and yellow paint. Foliage next,
-    # in a green-gold so leaf edges look sun-through rather than outlined.
-    # Ceramic a little, for glaze. Everything else stays at zero.
-    rim = {"gold": (1.05, (1.00, 0.84, 0.50)), "gold_glow": (0.90, (1.00, 0.86, 0.54)),
+    # THE RIM IS EMISSIVE, AND TWENTY MATERIALS WERE WEARING IT.
+    #
+    # The comment this replaces says "that edge highlight is the difference
+    # between metal and yellow paint", and it is right about metal. What it does
+    # not say is that RimAmp feeds MP_EMISSIVE_COLOR — so a rim is not a
+    # highlight the lighting produces, it is light the SURFACE EMITS. Two things
+    # follow, and both are visible in the native render:
+    #
+    #   A Fresnel term is largest at GLANCING angles, and on the rounded
+    #   geometry this world is built from — spheres, cylinders, foliage clusters
+    #   — most of the visible surface IS glancing. So the "edge" covered the
+    #   object. foliage is authored at (0.23, 0.46, 0.22), a deep green, and
+    #   renders as PALE MINT. That is the rim, not the albedo.
+    #
+    #   Emission does not respond to light, so a surface carrying it cannot
+    #   shade, cannot take a contact shadow, and cannot be exposed down. It is
+    #   why cutting 4,392 lux of shadowless fill moved the frame 33 luma and
+    #   every cut after it moved single digits: a large part of the frame's
+    #   brightness was never coming from the lights at all.
+    #
+    # The founder's rule is one line: "Do not use emissive to fake material
+    # quality." The rim now belongs to the things that genuinely emit — the
+    # glows, the crystal, the Dog's gold eyes — and to METAL, where a travelling
+    # edge highlight really is the read. Everything matte goes to zero and takes
+    # its edges from the key light, which is what the new key ratio exists to
+    # provide.
+    rim = {"gold": (0.85, (1.00, 0.84, 0.50)), "gold_glow": (0.90, (1.00, 0.86, 0.54)),
            "float_glow": (0.85, (1.00, 0.86, 0.54)), "magic_gold": (0.70, (1.00, 0.88, 0.60)),
-           "foliage": (0.60, (0.62, 0.92, 0.38)), "foliage_hi": (0.72, (0.72, 0.98, 0.44)),
-           "foliage_deep": (0.40, (0.48, 0.78, 0.30)),
-           "leaf": (0.66, (0.68, 0.96, 0.42)), "leaf_hi": (0.78, (0.78, 1.00, 0.48)),
-           "porcelain": (0.34, (1.00, 0.97, 0.92)), "crystal": (0.80, (0.80, 0.60, 1.00)),
-           "water": (0.55, (0.72, 0.92, 1.00)), "rose": (0.34, (1.00, 0.60, 0.70)),
-           "rose_pink": (0.38, (1.00, 0.72, 0.82)), "mush_red": (0.30, (1.00, 0.62, 0.56)),
-           "spire": (0.22, (1.00, 0.94, 0.86)), "spire_pink": (0.24, (1.00, 0.90, 0.92)),
-           "stone": (0.16, (1.00, 0.96, 0.88)),
-           "dog_body": (0.42, (0.92, 0.96, 1.00)), "dog_eye": (0.90, (1.00, 0.90, 0.40))}
+           "crystal": (0.80, (0.80, 0.60, 1.00)),
+           "dog_eye": (0.90, (1.00, 0.90, 0.40))}
     for _nm, (_ra, _rc) in rim.items():
         if _nm in mats:
             try:
