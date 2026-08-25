@@ -2750,7 +2750,23 @@ def build_material_library(texs=None):
         # hairline network in the glaze, too fine to see as lines but enough to
         # break the highlight into something fired rather than moulded.
         "porcelain":  ("glaze",   0.0130, (1.00, 1.00, 1.00)),
-        "dog_body":   ("glaze",   0.0150, (1.00, 1.00, 1.00)),
+        # TASK 3. dog_body was bound to GLAZE — the crazing network of fired
+        # porcelain — so the canonical Relay Dog has been wearing fine china.
+        # Every creature in the founder's reference is built of small visible
+        # cubes with readable seams and a lit edge on each. The Dog's SHAPE is
+        # already right and is identity-critical, so nothing about it moves; the
+        # voxel texture is what makes one big box read as many small cubes.
+        #
+        # 0.0069 puts eight cubes across 144 uu, so each reads about 18 uu —
+        # the reference's cube size against a Dog of this height.
+        "dog_body":   ("voxel",   0.0069, (1.00, 1.00, 1.00)),
+        # The companions were bound to NOTHING and rendered as flat coats. Same
+        # grid, tinted by their own palette entry.
+        "dog_pink":   ("voxel",   0.0069, (1.00, 1.00, 1.00)),
+        "dog_gray":   ("voxel",   0.0069, (1.00, 1.00, 1.00)),
+        "dog_tan":    ("voxel",   0.0069, (1.00, 1.00, 1.00)),
+        "dog_brown":  ("voxel",   0.0069, (1.00, 1.00, 1.00)),
+        "dog_bone":   ("voxel",   0.0069, (1.00, 1.00, 1.00)),
         # The mushroom cap is the LARGEST single visible object in the hero
         # frame by pixels actually owned, and it was a smooth dome of flat red —
         # the reddest possible way to look like plastic.

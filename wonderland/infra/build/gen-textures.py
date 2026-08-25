@@ -889,6 +889,73 @@ def make_runes(size):
     return alb, nrm, rgh
 
 
+def make_voxel(size):
+    """A grid of little cubes, for the Relay Dogs and their companions.
+
+    TASK 3, and it starts from a material-language mistake: dog_body has been
+    bound to the GLAZE texture — the crazing network of fired porcelain — so the
+    canonical Relay Dog has been wearing fine china. The founder's reference is
+    unambiguous about what it is instead: every creature in that picture is
+    built of small visible cubes with readable seams and a lit edge on each one,
+    and the brief asks for "a textured voxel mesh ... with subtle edge
+    highlights".
+
+    Wonderland's Dog is already the right SHAPE — blocky, visored, gold-eyed,
+    and identity-critical, so none of that is touched. What it lacks is the
+    surface that says a big box is many small cubes, and that is exactly what a
+    texture can add without moving a single vertex.
+
+    Eight cubes across the tile. Each carries its own slight tone so the grid
+    never reads as printed, a groove at the seam, and a bevel — bright on the
+    top-left arris, dark on the bottom-right — which is where the "subtle edge
+    highlight" actually lives. The bevel goes into the height map too, so the
+    normal gives every cube a real lit edge rather than a painted one.
+    """
+    alb = bytearray(size * size * 3)
+    rgh = bytearray(size * size)
+    hgt = [0.0] * (size * size)
+    N = 8                      # cubes across the tile
+    cell = size / float(N)
+    seam = max(1.5, cell * 0.055)
+    bev = max(2.0, cell * 0.16)
+    for y in range(size):
+        cy = y / cell
+        jy = int(cy)
+        fy = (cy - jy) * cell          # position within the cube, in texels
+        for x in range(size):
+            cx = x / cell
+            jx = int(cx)
+            fx = (cx - jx) * cell
+            # per-cube tone: a plastic brick is moulded, not painted, so the
+            # variation is small and cool rather than dirty
+            h = ((jx * 73856093) ^ (jy * 19349663)) & 0x7FFFFFFF
+            tone = 0.94 + ((h >> 5) % 100) / 100.0 * 0.06
+            # the seam between cubes
+            d_edge = min(fx, fy, cell - fx, cell - fy)
+            if d_edge < seam:
+                tone *= 0.62 + 0.30 * (d_edge / seam)
+                depth = -0.55 * (1.0 - d_edge / seam)
+            else:
+                # bevel: lit on the top-left arris, shaded on the bottom-right
+                lit = clamp01((bev - min(fx, fy)) / bev)
+                shd = clamp01((bev - min(cell - fx, cell - fy)) / bev)
+                tone *= 1.0 + 0.10 * lit - 0.09 * shd
+                depth = 0.28 * lit - 0.22 * shd
+            # a faint moulding grain, so a flat face is not a flat colour
+            tone *= 0.985 + 0.03 * fbm(x / float(size), y / float(size), 90, 90, 3,
+                                       SEED + 911)
+            t = clamp01(tone)
+            i = (y * size + x) * 3
+            alb[i] = _b(t * 255.0)
+            alb[i + 1] = _b(t * 255.0)
+            alb[i + 2] = _b(t * 255.0)
+            # the seam is a touch rougher than the face — moulded plastic is
+            # glossy where the tool polished it and dull where it parted
+            rgh[y * size + x] = _b(clamp01(0.34 + (0.26 if d_edge < seam else 0.0)) * 255.0)
+            hgt[y * size + x] = depth
+    return alb, height_to_normal(hgt, size, 2.6), rgh
+
+
 FAMILIES = (
     ("cobble", make_cobble, 512),
     ("ashlar", make_ashlar, 512),
@@ -904,6 +971,7 @@ FAMILIES = (
     # 1024, because this one is READ as line work rather than as a surface: at
     # 512 the tick marks and the rune bars alias into dashes.
     ("runes", make_runes, 1024),
+    ("voxel", make_voxel, 256),
 )
 
 
