@@ -179,6 +179,24 @@ LOOK = {
     # A colour FLOOR, kept: it costs nothing and it guarantees a surface can
     # never fall to grey even if some other path fails. Not a flood -- the lit
     # response still does the visible work.
+    # MEASUREMENT ONLY, default 0. Restores the world-wide heartbeat so its cost
+    # can be measured against the static world rather than asserted. See the
+    # branch in build_material_library. UNTESTED as an art value because it is
+    # not one.
+    "animateEnvironment": 0,
+    # THE CIRCLE'S GLOW, SWEEPABLE, BECAUSE GUESSING IT HAS NOW COST TWO BUILDS.
+    #
+    # At 11.0 it clipped through the ACES shoulder and rendered WHITE — the hue
+    # was pushed so hard the three channels converged. At 2.6 it is dimmer than
+    # the sunlit plaza it sits on and reads as a pale scratch. The right value
+    # is between them and depends on the scene's exposure, which has moved four
+    # times tonight; a literal buried in MATERIAL_SPEC cannot be swept without a
+    # code edit and a full cook each time.
+    #
+    # WONDERLAND_LOOK=arcaneGlow=7 now costs one build instead of one edit plus
+    # one build, and the value that wins can be written down with a frame behind
+    # it. CHOSEN at 5.0 as the midpoint of the two that were measured wrong.
+    "arcaneGlow": 5.0,
     "selfColour": 0.06,
     # 1 = the master renders UNLIT, so a surface shows exactly its palette and
     # no lighting path can grey it. 0 restores DefaultLit in one cook.
@@ -1351,7 +1369,7 @@ MATERIAL_SPEC = {
     # a value set when the scene around it was twice as bright, never revisited
     # when the scene came down. At 2.6 the ring is still clearly the brightest
     # thing on the plaza and it is still violet.
-    "arcane":      ((0.66, 0.36, 1.00), 0.0, 0.62, (0.62, 0.28, 1.00), 2.6),
+    "arcane":      ((0.66, 0.36, 1.00), 0.0, 0.62, (0.62, 0.28, 1.00), 2.6),   # overridden by LOOK["arcaneGlow"]
     # The SPILL, not the source. Light leaking out of the arcane circle into
     # the paving has to fall off; at the ring's own radiance it stops reading
     # as a spill and becomes 78 more light sources in the near foreground.
@@ -2479,6 +2497,16 @@ def build_material_library(texs=None):
                              "primitive for shadows and raster" % _e)
         mel.recompile_material(master)
         eal.save_asset(master.get_path_name())
+    # THE CIRCLE'S GLOW COMES FROM THE LOOK TABLE, NOT THE SPEC LITERAL, so it
+    # can be swept with WONDERLAND_LOOK instead of edited and re-cooked.
+    try:
+        _ag = float(LOOK["arcaneGlow"])
+        if "arcane" in MATERIAL_SPEC and _ag > 0.0:
+            _a = MATERIAL_SPEC["arcane"]
+            MATERIAL_SPEC["arcane"] = (_a[0], _a[1], _a[2], _a[3], _ag)
+            unreal.log_warning("ARCANE GLOW %.2f (spec literal was %.2f)" % (_ag, _a[4]))
+    except (KeyError, TypeError, ValueError) as _e:
+        unreal.log_warning("arcaneGlow not applied (%s); the circle keeps the spec literal" % _e)
     mats = {}
     _SELFCOLOUR = [0]
     for name, (rgb, met, rough, emi, es) in MATERIAL_SPEC.items():
@@ -2852,6 +2880,35 @@ def build_material_library(texs=None):
     # object rather than as a breath.
     breathe = {"dog_body": 6.5, "dog_pink": 6.0, "dog_gray": 6.0, "dog_tan": 6.0,
                "dog_brown": 6.0}
+    # THE HEARTBEAT, PUT BACK ON PURPOSE, SO IT CAN BE MEASURED.
+    #
+    # The goal asks for the frame rate before and after removing the world-wide
+    # pulse. "After" is easy — it is what builds by default. "Before" was not
+    # measurable at all: the motion was removed in the first commit of the
+    # session, before any render of this world existed, so there is no earlier
+    # frame to compare against and no honest way to state a delta.
+    #
+    # WONDERLAND_LOOK=animateEnvironment=1 restores exactly the ten ROOTED
+    # materials that used to carry it, at exactly their old amplitudes, so a
+    # build with the knob on is the world as it was for this one property and
+    # identical in every other. That is what an A/B needs and what a
+    # recollection cannot give.
+    #
+    # Default 0. verify-static-environment reads the table below, not this
+    # branch, and a knob nobody sets does not change what ships.
+    # LOOK["..."], not LOOK.get(...): verify-look-table scans for the subscript
+    # form and reported this key as "declared but never read - an override for
+    # it would silently do nothing". It was right about the shape even though
+    # the branch worked, and a knob the gate cannot see is a knob that can rot.
+    if int(LOOK["animateEnvironment"]):
+        breathe.update({"foliage": 3.0, "foliage_hi": 3.5, "foliage_deep": 2.4,
+                        "foliage_spr": 4.0, "leaf": 3.6, "leaf_hi": 4.2,
+                        "petal_pink": 2.5, "petal_violet": 2.5,
+                        "rose_pink": 2.2, "rose": 2.0})
+        unreal.log_warning(
+            "ANIMATE ENVIRONMENT: the world-wide heartbeat is BACK ON for "
+            "measurement — 22,794 rooted instances animated. This is not a "
+            "shipping configuration.")
     bob = {"float_glow": 24.0, "petal_air": 22.0, "magic_cyan": 16.0,
            "water": 5.0, "spray": 19.0}
     phase_spread = {"dog_body": 0.0, "dog_pink": 0.0, "dog_gray": 0.0,
