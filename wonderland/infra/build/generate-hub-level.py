@@ -4892,6 +4892,42 @@ def build(layout):
             cornice(x, y, bh * 0.60, br * 1.06 / 50.0, br * 1.06 / 50.0,
                     roof_mat, "%s_corn" % label, dentils=8)
         # windows: two tiers of four, the scale cue
+        # ---- A SECOND TIER, WHICH IS WHAT MAKES A FAIRY-TALE TOWER ------------
+        #
+        # The founder's towers are STACKED: a wide drum, a balcony, a narrower
+        # drum above it with its own smaller balcony, and only then the cone.
+        # That step in the silhouette is the single strongest cue separating
+        # "castle turret" from "cylinder with a cone on it", and every tower
+        # here had one drum. All the trim below -- plinth, corbel, merlons,
+        # windows -- decorates a shape whose OUTLINE still says primitive, and
+        # at skyline distance outline is all that survives.
+        #
+        # Everything above this point (eave, cone, ribs, dormers, lantern,
+        # finial, flag) sits on _top rather than bh, so the roof rides up with
+        # the tier and nothing ends up inside anything else -- which is how the
+        # finial literals went wrong once before.
+        _tier = 0.42 * bh
+        _top = bh + _tier
+        _ur = br * 0.70                                    # upper drum radius
+        _part("cylinder", x, y, bh + 62.0 * s + _tier * 0.5, _ur / 50.0, _ur / 50.0,
+              _tier / 100.0, body_mat, "%s_upper" % label)
+        # its own eave/balcony ring, overhanging the upper drum like the first
+        # balcony overhangs the shaft, in the roof material so the two rings
+        # read as one family of trim
+        _part("cylinder", x, y, _top + 30.0 * s, _ur * 1.30 / 50.0, _ur * 1.30 / 50.0,
+              0.16 * s, roof_mat, "%s_upperring" % label)
+        if detail >= 1:
+            for i in range(6):
+                a = i * (2.0 * math.pi / 6.0) + 0.5
+                _part("cube", x + math.cos(a) * _ur * 1.22, y + math.sin(a) * _ur * 1.22,
+                      _top + 50.0 * s, 0.13 * s, 0.13 * s, 0.22 * s, body_mat,
+                      "%s_umerlon%d" % (label, i), rot=(0.0, math.degrees(a), 0.0))
+            # one window tier on the upper drum, so it reads as a room
+            for i in range(3):
+                a = i * (2.0 * math.pi / 3.0) + 0.9
+                window(x + math.cos(a) * _ur * 0.99, y + math.sin(a) * _ur * 0.99,
+                       bh + 62.0 * s + _tier * 0.5, 0.16 * s, 0.28 * s,
+                       math.degrees(a) + 90.0, body_mat, "%s_uw%d" % (label, i))
         for tier, tz in enumerate((bh * 0.34, bh * 0.66)):
             for i in range(4):
                 a = i * (math.pi / 2.0) + tier * 0.4
@@ -4904,7 +4940,7 @@ def build(layout):
                           0.10 * s, 0.20 * s, 0.34 * s, "dog_visor",
                           "%s_win%d_%d" % (label, tier, i), rot=(0.0, math.degrees(a), 0.0))
         # roof with an EAVE lip, then the spire proper
-        _part("cylinder", x, y, bh + 76.0 * s, br * 1.30 / 50.0, br * 1.30 / 50.0, 0.14 * s,
+        _part("cylinder", x, y, _top + 76.0 * s, _ur * 1.42 / 50.0, _ur * 1.42 / 50.0, 0.14 * s,
               roof_mat, "%s_eave" % label)
         # THE ROOF IS THE SILHOUETTE, AND IT WAS SQUAT.
         #
@@ -4921,7 +4957,7 @@ def build(layout):
         # not shrink below the eave it sits on (br * 1.30 / 50 = 1.87 s), or the
         # roof stops covering its own drum — which is why the width moved a
         # little and the height moved a lot.
-        _part("cone", x, y, bh + 210.0 * s, roof_w * s, roof_w * s, roof_h * s,
+        _part("cone", x, y, _top + 210.0 * s, roof_w * s, roof_w * s, roof_h * s,
               roof_mat, "%s_roof" % label)
         # ---- WHAT ACTUALLY READS ON A ROOF AT THIS DISTANCE -----------------
         #
@@ -4975,7 +5011,7 @@ def build(layout):
         # A KNOB, BECAUSE THE FIRST VERSION OF THIS COST A BUILD AND MADE THE
         # FRAME WORSE. WONDERLAND_LOOK=roofRibs=0 takes them out in one cook.
         _rib_n = int(LOOK["roofRibs"]) and 8
-        _cz = bh + 210.0 * s                       # cone centre
+        _cz = _top + 210.0 * s                       # cone centre
         _ch = roof_h * 50.0 * s                    # cone half-height
         _cr = roof_w * 50.0 * s                    # cone base radius
         for _r in range(_rib_n):
@@ -4992,7 +5028,7 @@ def build(layout):
         # boxes to be a cone with bumps on it.
         if detail >= 1 and roof_h >= 3.0:
             for _d in (-1, 1):
-                _dz = bh + 210.0 * s + roof_h * 16.0 * s
+                _dz = _top + 210.0 * s + roof_h * 16.0 * s
                 _dr = roof_w * 34.0 * s
                 _da = 0.55 * _d
                 _part("cube", x + math.cos(_da) * _dr, y + math.sin(_da) * _dr, _dz,
@@ -5008,7 +5044,7 @@ def build(layout):
         # literals — 306, 336, 400, 470 — measured off a roof whose half-height
         # was 2.9. With a taller roof they would have sat INSIDE the cone, and a
         # finial buried in its own spire is invisible in a way nothing reports.
-        _apex = bh + 210.0 * s + roof_h * 50.0 * s
+        _apex = _top + 210.0 * s + roof_h * 50.0 * s
         _part("cylinder", x, y, _apex + 6.0 * s, 0.26 * s, 0.26 * s, 0.30 * s, "gold", "%s_lantern" % label)
         _part("sphere", x, y, _apex + 36.0 * s, 0.32 * s, 0.32 * s, 0.32 * s, "gold_glow", "%s_finial" % label)
         if flag:
