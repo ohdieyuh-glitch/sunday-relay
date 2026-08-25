@@ -223,6 +223,11 @@ LOOK = {
     # contrast. That is what "background reduced contrast through atmosphere"
     # means, and it is the only atmospheric depth this path can be given.
     "aerialScale": 26.0,
+    # The distance haze itself. 0.0004 was chosen when fog would have been
+    # hiding a bad surface; 0.0016 hazes the 25-80 km skyline while
+    # StartDistance keeps the first 32 m clear. Sweepable, because this is the
+    # third mechanism tried for the same job and the first two did nothing.
+    "hazeDensity": 0.0016,
     # ---- TASK 1: CINEMATIC DEPTH -------------------------------------------
     # The founder's brief, verbatim where it is a number: "Cinematic Bokeh DoF
     # focused on the foreground character", "Bloom (Intensity 1.5, threshold
@@ -7382,7 +7387,32 @@ def build(layout):
                 "VOLUMETRIC FOG on: extinction %.2f, lavender albedo %s, %.0f uu"
                 % (float(LOOK["volFogExtinction"]), str(_va),
                    float(LOOK["volFogDistance"])))
-        set_prop(fog_comp, "FogDensity", 0.0004)
+        # ---- DISTANCE HAZE, THROUGH THE ONE THING THAT DEMONSTRABLY WORKS --
+        #
+        # 0.0004 is "minimal haze, by the founder's instruction" — and that
+        # instruction was given about a frame with no shadows and a blown
+        # foreground, where fog would only have hidden a bad surface. The
+        # founder's CURRENT list asks three times for the opposite:
+        # "atmospheric haze/fog", "distance haze", "background reduced contrast
+        # through atmosphere".
+        #
+        # And the frame has none. Cropped at two depths, the skyline at 25-80 km
+        # is as sharp, as saturated and as contrasty as the gate at 2 km.
+        #
+        # Aerial perspective was the obvious lever and it is NOT the one. It
+        # applies — Unreal's own property name carries a typo,
+        # "AerialPespectiveViewDistanceScale", and the loop above tries that
+        # spelling first, so only the correct spelling warns — but at 26x it
+        # moved the sky band 4 luma and the towers not at all. The LUT is 16
+        # depth slices over the whole atmosphere; at 80 km there is nothing left
+        # to resolve.
+        #
+        # Height fog is a COMPONENT, which is the family that reaches this
+        # render: the volumetric fog, the sun's temperature and the contact
+        # shadows all landed and every post-process setting did not. StartDistance
+        # keeps the garden clear, so this only ever touches the distance it is
+        # meant to.
+        set_prop(fog_comp, "FogDensity", float(LOOK["hazeDensity"]))
         set_prop(fog_comp, "FogHeightFalloff", 0.09)
         set_prop(fog_comp, "StartDistance", 3200.0)
         # UE5 renamed both of these to *Luminance; the old names silently do
