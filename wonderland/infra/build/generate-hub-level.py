@@ -508,7 +508,17 @@ LOOK = {
     # and now SHADOWING -- so it can carry warmth without carrying hue through
     # walls, which is the property that made 14,000 a cast rather than the
     # brightness.
-    "lampLumens": 4600.0,
+    # MEASURED 2026-08-24, 4600 -> 1600. The lamps are SHADOWLESS ground-side
+    # light and there are 25 of them; the sun is 3,600 lux and lights the sky as
+    # well as the ground. That asymmetry is why the first native render came
+    # back with the SKY BAND DARKER THAN THE GROUND BAND by 43.5 luma, which
+    # does not happen outdoors in daylight and is the loudest wrong note in the
+    # picture. The sky is lit by the atmosphere alone; the ground was lit by the
+    # sun AND the fill AND the bounce AND the skylight AND twenty-five lamps.
+    # Cutting the ground-only sources is what inverts that relationship back.
+    #
+    # This is the third time the practicals have been found acting as the key.
+    "lampLumens": 1600.0,
     # How close to the arrival camera a lantern has to be to earn its shadows.
     #
     # AT 2600 THIS CURRENTLY EXCLUDES NOTHING -- all twelve lanterns are inside
@@ -638,7 +648,9 @@ LOOK = {
     # It can afford to come down because the KEY went up -- sunLux 340 -> 780 --
     # so the hero practicals no longer have to carry the scene to be seen. At
     # 5200 the per-light scales give 5200 / 4420 / 2860, all under the ceiling.
-    "heroLightLumens": 5200.0,
+    # Same cut, same reason: a hero practical at 5,200 lm beside a 3,600 lux sun
+    # is a second key placed at the subject.
+    "heroLightLumens": 2400.0,
     "heroLightRadius": 900.0,
 }
 
