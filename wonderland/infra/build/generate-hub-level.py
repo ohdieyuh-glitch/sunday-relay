@@ -8445,13 +8445,31 @@ def build(layout):
     # floor is what makes a world read as a level under construction. This is a
     # deterministic scatter of small beds and caps across the whole visible
     # plate, thinning with distance so the near field stays richest.
+    #
+    # AND IT NEVER ASKED THE PAVING RULE. `_on_paving` exists so that nothing
+    # which grows out of soil is scattered onto stone, and five passes ask it.
+    # This one — 560 mushrooms, beds, shrubs and topiary spread over the whole
+    # plate — checked the camera lap and the Dogs and nothing else, so it sowed
+    # the plaza. In the native render the foreground is a carpet of pink and
+    # violet caps with the cobble showing through in patches, where the
+    # reference has an open stone courtyard with the Dog standing on it.
+    #
+    # The sentence at the top of this block is the reason it happened. "No bare
+    # ground anywhere" is true of the reference's PLANTING BEDS and false of its
+    # PLAZA, and a rule written from the first half covers the second.
+    #
+    # Pushed to the verge rather than dropped — `_off_paving_lateral` holds the
+    # depth and moves outward, so the density lands along the edge of the stone
+    # where the reference banks its flowers. 320 rather than 560, because each
+    # one is more visible once it is not competing with the others.
     _CARPET = 0
-    for _c in range(560):
+    for _c in range(320):
         _h = (_c * 2654435761) & 0xFFFFFFFF
         _ca = (_h % 3600) / 3600.0 * 2.0 * math.pi
         _cr = 620.0 + ((_h >> 12) % 6200)
         _cx = math.cos(_ca) * _cr
         _cy = NEAR_Y + 300.0 + math.sin(_ca) * _cr * 0.78
+        _cx, _cy = _off_paving_lateral(_cx, _cy, _h)
         if in_camera_lap(_cx, _cy, 220.0):
             continue
         if not _clear_of_dogs(_cx, _cy, 520.0):
@@ -8703,6 +8721,17 @@ def build(layout):
                   "petal_air" if i % 12 else "petal_violet", "mat%d_b" % i)
 
     def ground_cover(gx, gy, i):
+        # THE THIRD PASS THAT SOWED THE PLAZA. `_on_paving` exists so nothing
+        # growing out of soil is scattered onto stone, and this one — the tufts
+        # and flowers, over a thousand of each — checked the arcane circle and
+        # the Dog's stage and nothing else. Grass does not grow through
+        # cobblestone, and in the native render the courtyard reads as a lawn
+        # with paving showing through it.
+        #
+        # Moved to the verge rather than dropped, so the near field keeps its
+        # density exactly where the reference puts it: banked along the edge of
+        # the stone, with the stone itself open.
+        gx, gy = _off_paving_lateral(gx, gy, (i * 2654435761) & 0xFFFFFFFF)
         if math.hypot(gx, gy - 40.0) < 320.0:      # keep the Dog's arcane circle clear
             return
         if _on_stage(gx, gy):
