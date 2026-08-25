@@ -267,7 +267,48 @@ LOOK = {
     "volFogDistance": 14000.0,
     "volScatterSun": 2.4,                    # god rays through the gate and trees
     "contactShadowLength": 0.035,
-    "sunTemperatureK": 4500.0,
+    # 4500 -> 5400. THE BRIEF ASKED FOR 4500K AND THE REFERENCE DISAGREES WITH
+    # IT. Measured on the delivered frame, hue by depth band, against the
+    # founder's own picture:
+    #
+    #                        ours          reference
+    #     upper sky        hue 348          hue 268   (violet)
+    #     horizon/towers   hue  14          hue 351
+    #     midground        hue  28          hue 356
+    #     foreground       hue  39          hue 321   (pink)
+    #
+    # EVERY lit band of ours is 20-45 degrees warmer than the same band of the
+    # reference. That is not four faults, it is one warm key light, and at
+    # 4500K this one is (1.300, 0.910, 0.591) -- red is 2.2x blue.
+    #
+    # The loudest place it shows is the clouds, because a cloud is white and
+    # takes the colour of whatever lights it, and almost the only thing lighting
+    # one is the sun. Splitting the sky band by brightness so cloud and open sky
+    # are measured apart instead of averaged together:
+    #
+    #     open sky (mid 40-60%)      ours hue 240   reference hue 278
+    #     cloud (brightest 20%)      ours hue  37   reference hue 287
+    #
+    # Our SKY is already blue. Our CLOUDS are orange and the reference's are
+    # violet, and the band mean was reporting the average of the two.
+    #
+    # 5400K is where two independent populations both point. Clouds need their
+    # delivered B/R to go 0.833 -> 1.035 (x1.24); the midground needs 0.605 ->
+    # 0.711 (x1.18); the sun's own B/R goes 0.455 -> 0.660 across this change,
+    # and the sun is most but not all of either light budget.
+    #
+    # SAFE TO MOVE WITHOUT REDOING THE LUMA WORK. UE normalises a colour
+    # temperature to CONSTANT LUMINANCE (Y=1), so this is 0.2% of brightness
+    # across 4500-7000K -- it changes hue and nothing else. Still warm at 5400K
+    # (B/R 0.66 against 1.0 for neutral daylight), so it remains a golden-hour
+    # key; it is no longer a deep-sunset one.
+    "sunTemperatureK": 5400.0,
+    # ---- THE ARRIVAL FRAME IS MIRRORED. See _mirror_layout_x. --------------
+    # 1 reflects the authored layout through x = 0 so the gold gate is the LEFT
+    # repoussoir and the framing tree the RIGHT, which is the founder
+    # reference's arrangement and the opposite of what this world has always
+    # built. WONDERLAND_LOOK=mirrorX=0 restores it.
+    "mirrorX": 1,
     "lensFlare": 0.35,
     # ---- TASK 2.2: the arcane circle as line work --------------------------
     # radius in uu; the rune texture reads to its own edge, so this is the
@@ -3354,7 +3395,110 @@ def mat_name_for(mesh_key, label):
     return "plaza"
 
 
+def _mirror_layout_x(layout):
+    """Reflect every authored position in the layout through the x = 0 plane.
+
+    Walks the whole document rather than a list of known keys, because the
+    layout has nineteen top-level collections carrying coordinates and the
+    per-call-site version of this is what put the corridor rule on nine
+    scatter passes and none of the landmarks.
+
+    THREE THINGS ARE REFLECTED AND NOTHING ELSE IS:
+
+      * `location`, `min`/`max`, `vertices`, `points`, `from`/`to`, and any
+        other 2- or 3-number list that reads as a position -- element 0 negated;
+      * YAW-BEARING fields, sent to 180 - yaw. NOT negated: negation is the
+        reflection through y = 0, and this is the reflection through x = 0.
+        A direction (cos t, sin t) becomes (-cos t, sin t), which is the
+        bearing 180 - t. The check that catches the difference is
+        playerFacingYawDeg, authored 90 to face along +Y into the world: an
+        x-mirror must LEAVE IT AT 90, and negation would spin the player
+        around to face the camera;
+      * nothing under a `dimensionsUu`, `scale`, `extent` or `size` key, which
+        are magnitudes and must not change sign.
+
+    Returns a NEW document. The file on disk is the authored world and stays
+    the authored world -- this is a view of it.
+    """
+    import copy
+
+    POS_KEYS = ("location", "min", "max", "center", "centre", "from", "to",
+                "start", "end", "anchor", "target", "lookAt", "position")
+    LIST_OF_POS_KEYS = ("vertices", "points", "waypoints")
+    MAG_KEYS = ("dimensionsUu", "scale", "extent", "size", "radiusUu", "boomLengthUu")
+    YAW_KEYS = ("yawDeg", "playerFacingYawDeg", "rotationYawDeg", "sunAzimuthDeg",
+                "bearingDeg", "headingDeg")
+
+    def _is_pos(v):
+        return (isinstance(v, list) and 2 <= len(v) <= 3
+                and all(isinstance(c, (int, float)) and not isinstance(c, bool)
+                        for c in v))
+
+    def _flip_pos(v):
+        out = list(v)
+        out[0] = -out[0]
+        return out
+
+    def walk(node, key=None):
+        if isinstance(node, dict):
+            return dict((k, walk(v, k)) for k, v in node.items())
+        if isinstance(node, list):
+            if key in MAG_KEYS:
+                return list(node)
+            if key in LIST_OF_POS_KEYS:
+                return [_flip_pos(v) if _is_pos(v) else walk(v) for v in node]
+            if key in POS_KEYS and _is_pos(node):
+                return _flip_pos(node)
+            return [walk(v, key) for v in node]
+        if key in YAW_KEYS and isinstance(node, (int, float)) and not isinstance(node, bool):
+            return 180.0 - float(node)
+        return node
+
+    mirrored = walk(copy.deepcopy(layout))
+    try:
+        _n = len(mirrored.get("landmarks") or ())
+        unreal.log_warning(
+            "MIRROR X applied to the layout: %d landmarks reflected. Screen-right "
+            "is -X, so the gold gate is now the LEFT repoussoir and the framing "
+            "tree the RIGHT, which is the founder reference's arrangement." % _n)
+    except Exception:
+        pass
+    return mirrored
+
+
 def build(layout):
+    # ---- THE ARRIVAL FRAME WAS MIRRORED, AND IT HAD BEEN ALL ALONG ---------
+    #
+    # Screen handedness, DERIVED AND THEN CONFIRMED AGAINST A TRACE rather than
+    # reasoned about once: the arrival camera sits at (0, -1150) and looks along
+    # +Y, so its yaw is +90 and its right-hand vector is -X. SCREEN-RIGHT IS
+    # NEGATIVE X. verify-hero-composition agrees -- framing_tree, authored at
+    # x = +1300, renders at preview x[-227 131], hard against the LEFT edge.
+    #
+    # Against the founder's reference, every framing element of ours is on the
+    # wrong side:
+    #
+    #     element          authored x    renders    reference wants
+    #     golden_gate            -880      RIGHT             LEFT
+    #     framing_tree          +1300       LEFT            RIGHT
+    #     heart_topiary          +340       LEFT            RIGHT
+    #     stacked_teacup_a       +660       LEFT            RIGHT
+    #     playing_card_sign      -620      RIGHT             LEFT
+    #
+    # Five for five. That is not five placement mistakes, it is one reflection,
+    # and it is why the frame has never read like the reference however much of
+    # the light and the palette moved: a mirrored composition is a different
+    # picture of the same world.
+    #
+    # Mirroring the LAYOUT rather than the five landmarks keeps everything that
+    # derives from it -- paths, beds, zones, silhouettes, sightlines, anchors --
+    # in agreement with the landmarks. Anything the generator places
+    # procedurally is radially symmetric about the same axis and is unaffected.
+    #
+    # A knob, because it is a large change and reversible has to mean reversible:
+    # WONDERLAND_LOOK=mirrorX=0 restores the frame this replaces.
+    if int(LOOK["mirrorX"]):
+        layout = _mirror_layout_x(layout)
     level_editor = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     actors = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
     asset_lib = unreal.EditorAssetLibrary
@@ -4649,8 +4793,22 @@ def build(layout):
             _part("cube", x + math.cos(a) * 195.0 * s, y + math.sin(a) * 195.0 * s,
                   520.0 * s, 0.5 * s, 0.5 * s, 0.62 * s, "spire_far",
                   "%s_kmerl%d" % (label, i))
+        # THE DONJON ROOF IS THE BIGGEST CONE ON EVERY TOWER AND ALL OF THEM
+        # WERE ONE COLOUR. Everything else on this castle already varies by
+        # `variant` -- corner towers, hall roofs, the dome's ribs -- and the one
+        # roof that dominates the skyline was pinned to roof_rose. Traced on the
+        # hero frame, the three most visible skyline objects in the whole shot
+        # are SkyCity0_9, SkyCity1_10 and SkyCity0_7 donjon roofs, and all three
+        # come back roof_rose. That is the forest of identical pink cones, and
+        # it is the "obviously procedural" look the brief names by name.
+        #
+        # The founder's reference has pink AND blue roofs over ivory masonry,
+        # which is what the other two rows here have always been able to build.
         kit_spire(x, y, s * _dj, "%s_donjon" % label, body_mat="spire_far",
-                  roof_mat="roof_rose", flag=True, roof_w=_rw, roof_h=_rh)
+                  roof_mat=(("roof_rose", "roof_blue", "roof_pink")[variant % 3]
+                            if "roof_blue" in MATS
+                            else ("roof_rose" if variant % 2 else "roof_pink")),
+                  flag=True, roof_w=_rw, roof_h=_rh)
         # a great dome beside the donjon, so the mass is not all cones — on the
         # variants that have one. A dome on every castle is a repetition too.
         if _dm > 0.0:
@@ -6530,7 +6688,19 @@ def build(layout):
     # standing at the edge of its own keep-clear with mushroom caps and tufts
     # starting 560 uu out — inside the arcane circle's new 520 uu rim. A subject
     # is staged by what is NOT next to it.
-    DOG_STAGE = (HERO_DOG[0], HERO_DOG[1], 860.0)
+    # 860 -> 1600, AND THE OLD NUMBER WAS MEASURED AGAINST A BROKEN INSTRUMENT.
+    #
+    # The note above is right about the intent and 860 does not deliver it. The
+    # circle's own radius is LOOK["runeRadius"] = 560, so an 860 uu apron is 300
+    # uu of clear stone past the rim -- half a circle-width. The reference gives
+    # the Dog two to three circle-radii of empty cobble before anything grows.
+    #
+    # What made this hard to see: verify-hero-composition reported the bottom
+    # third as "8.4% walkable surface" by counting any pixel whose MATERIAL was
+    # stone -- balustrade rails, kerbs and piers included. Counting FLOOR you
+    # could actually stand on, the same frame is 2.6%. The instrument had been
+    # flattering the plaza by a factor of three.
+    DOG_STAGE = (HERO_DOG[0], HERO_DOG[1], 1600.0)
 
     def _on_stage(gx, gy):
         return math.hypot(gx - DOG_STAGE[0], gy - DOG_STAGE[1]) < DOG_STAGE[2]
@@ -6540,6 +6710,11 @@ def build(layout):
         Dog -> path -> landmarks -> skyline, and every step of that only works if
         the step behind it is visible. Nothing tall gets to stand in here."""
         return abs(gx) < half and y0 < gy < y1
+
+    # Named exemptions to the corridor rule above. An ARCH is the reference's
+    # own way of putting something on the axis without closing it, and the path
+    # is the axis. Everything else that lands in the sight line gets moved.
+    _CORRIDOR_EXEMPT = frozenset(("rose_arch",))
 
     def _on_paving(gx, gy):
         """The plaza and the boulevard are STONE. Nothing that grows out of soil
@@ -6901,6 +7076,78 @@ def build(layout):
         f = ARRIVAL_KEEP_OUT / r
         return ARRIVAL_CAM[0] + dx * f, ARRIVAL_CAM[1] + dy * f, True
 
+    def _off_sight_line(mid, x, y, dims=None):
+        """Move a landmark laterally out of the hero corridor.
+
+        The radial keep-out cannot do this job. It pushes along the object's own
+        bearing, and the bearing of something authored at x = 0 points straight
+        DOWN the corridor, so pushing it "out" moves it further along the sight
+        line and never off it. brain_pool_rim is the case: the trace put it 18.9
+        m from the lens owning the middle of the plaza, and the frame's
+        turquoise centre IS that reflecting pool.
+
+        Shared with landmark_xy so a thing placed to sit WITH a landmark goes
+        through the same staging the landmark does, from the same code.
+        """
+        if mid in _CORRIDOR_EXEMPT or not _in_corridor(x, y, y1=6000.0):
+            return x, y
+        try:                           # its own footprint, so the gap is real
+            half_w = max(float(dims[0]), float(dims[1])) * 0.5
+        except Exception:
+            half_w = 200.0
+        want = 430.0 + half_w
+        # HASH THE FAMILY, NOT THE PIECE. `brain_landmark` and `brain_pool_rim`
+        # are one landmark -- a building and the reflecting pool in front of it
+        # -- and hashing the full id sent the building left and its own pool
+        # right, which is worse than leaving both on the axis. Everything up to
+        # the first underscore is the family. Python's hash() is salted per
+        # process and would reshuffle the world between builds; this does not.
+        fam = mid.split("_", 1)[0] or mid
+        idh = 0
+        for ch in fam:
+            idh = (idh * 131 + ord(ch)) & 0xFFFFFFFF
+        side = 1.0 if x > 1.0 else (-1.0 if x < -1.0 else (1.0 if (idh & 1) else -1.0))
+        newx = side * want
+        unreal.log_warning(
+            "SIGHT LINE: %s stood at x=%.0f INSIDE the hero corridor and was moved "
+            "to x=%.0f (own half-width %.0f) so the avenue to the castle opens"
+            % (mid, x, newx, half_w))
+        return newx, y
+
+    _LM_BY_ID = dict((m.get("id"), m) for m in layout.get("landmarks", ())
+                     if isinstance(m, dict))
+    # For LOCAL OFFSETS from a landmark. landmark_xy gives the landmark's final
+    # position; something authored as "240 uu to its left" must flip that offset
+    # under the mirror as well, or a pair of gate piers swaps sides around its
+    # own gate.
+    _MSX = -1.0 if int(LOOK["mirrorX"]) else 1.0
+
+    def landmark_xy(mid, fallback):
+        """WHERE A LANDMARK ACTUALLY ENDS UP, asked for by name.
+
+        Several things in this generator are positioned to sit WITH a landmark
+        -- a practical inside the gate, the great tree's roots, a hero camera
+        framing it -- and every one of them carried a COPY of the landmark's
+        coordinates. A copy goes stale in silence: golden_gate was moved from
+        (-1050, 400) to (-880, 1180) in an earlier pass and HeroLight_Gate
+        stayed behind, 800 uu from the gate it is named after, lighting lawn.
+        That was true before the layout mirror and would have been true after
+        it for a different reason.
+
+        So ask by name, and put the answer through the same two staging rules
+        the landmark itself goes through, in the same order, from the same
+        functions.
+        """
+        m = _LM_BY_ID.get(mid)
+        if not isinstance(m, dict) or "location" not in m:
+            unreal.log_warning(
+                "landmark_xy: no landmark '%s' in the layout; falling back to the "
+                "authored literal %s" % (mid, str(tuple(fallback))))
+            return float(fallback[0]), float(fallback[1])
+        x, y = float(m["location"][0]), float(m["location"][1])
+        x, y, _ = _push_out_of_lens(x, y, mid)
+        return _off_sight_line(mid, x, y, m.get("dimensionsUu"))
+
     def kit_dispatch(m):
         # The kitbash builders already produce sensibly-sized forms (in uu) at s=1;
         # the layout's authored scales (3-5x, tuned for a single 100uu primitive)
@@ -6916,6 +7163,37 @@ def build(layout):
             unreal.log_warning(
                 "LANDMARK KEEP-OUT: %s was inside the %.0f uu arrival keep-out "
                 "and was pushed out along its own bearing" % (mid, ARRIVAL_KEEP_OUT))
+        # ---- THE SIGHT LINE, APPLIED TO LANDMARKS TOO ---------------------
+        #
+        # `_in_corridor` says of itself "Nothing tall gets to stand in here",
+        # and it guards NINE scatter passes and NOT ONE LANDMARK -- which is
+        # precisely the per-call-site failure `_push_out_of_lens` opens its own
+        # docstring by naming, committed again one function away.
+        #
+        # What it costs, measured on the delivered hero frame: `brain_landmark`
+        # and `brain_pool_rim` are authored at x = 0, and the trace puts the
+        # pool rim 18.9 m from the lens owning the centre of the plaza. The
+        # frame's turquoise middle IS that reflecting pool, and the ivory mass
+        # above it is the landmark. The goal names the eye path Dog -> gate /
+        # garden -> castle; a solid box at 19 m ends it at the first step.
+        #
+        # The radial rule cannot fix this. It pushes along the object's own
+        # bearing, and the bearing of something at x = 0 points straight down
+        # the corridor -- so pushing it "out" moves it FURTHER ALONG the sight
+        # line and never off it.
+        #
+        # AN ARCH IS NOT AN OCCLUDER. The reference has something on the axis
+        # too: a rose arch you see the avenue through. Exempting it by name is
+        # the whole exception list.
+        # THE CORRIDOR'S OWN y1 IS 1500 AND THE BLOCKER IS AT 1560. `_in_corridor`
+        # is authored for SCATTER, which is all near the camera; brain_landmark
+        # sits 60 uu past the end of the rule that exists to move it, which is a
+        # boundary that lets exactly the worst case through. For landmarks the
+        # sight line runs as far as landmarks are authored -- the furthest is
+        # 1560 -- so 6000 covers them all with room and stops well short of the
+        # background silhouette ring at 195 m, which is the CASTLE and belongs
+        # dead centre.
+        x, y = _off_sight_line(mid, x, y, m.get("dimensionsUu"))
         sc = m.get("scale", [1, 1, 1])
         raw = max(0.6, (float(sc[0]) + float(sc[1])) / 2.0) if isinstance(sc, list) else 1.0
         norm = min(1.6, max(0.75, raw / 3.2))
@@ -7133,6 +7411,12 @@ def build(layout):
     # turns them off, so the A/B is one cook rather than two branches.
     if LOOK["heroLights"]:
         _lum, _rad = LOOK["heroLightLumens"], LOOK["heroLightRadius"]
+        # BY NAME, NOT BY COPY. See landmark_xy. The gate practical was authored
+        # at (-1050, 400) and the gate now stands at (-880, 1180) -- 800 uu of
+        # drift that predates the mirror and put the one light named after the
+        # gate out on the lawn beside it.
+        _gate_x, _gate_y = landmark_xy("golden_gate", (-1050.0, 400.0))
+        _arch_x, _arch_y = landmark_xy("rose_arch", (0.0, 820.0))
         for _hx, _hy, _hz, _hcol, _hs, _hlabel in (
             # the circle the Dog stands on — violet, low, throwing UP onto it.
             # HERO_DOG, not (0, 0): the light was at the plaza centre while the
@@ -7140,9 +7424,9 @@ def build(layout):
             # put violet on the hero was pooling on empty paving.
             (HERO_DOG[0], HERO_DOG[1], 150.0, (176, 108, 255), 1.00, "HeroLight_Arcane"),
             # the Golden Build Gate — warm gold, at the height of the arch
-            (-1050.0, 400.0, 420.0, (255, 206, 138), 0.85, "HeroLight_Gate"),
+            (_gate_x, _gate_y, 420.0, (255, 206, 138), 0.85, "HeroLight_Gate"),
             # the rose arch on the sight line — a soft warm pink under the span
-            (0.0, 820.0, 230.0, (255, 178, 196), 0.55, "HeroLight_Arch"),
+            (_arch_x, _arch_y, 230.0, (255, 178, 196), 0.55, "HeroLight_Arch"),
         ):
             try:
                 _hl = spawn(unreal.PointLight, (_hx, _hy, _hz), label=_hlabel)
@@ -7916,7 +8200,7 @@ def build(layout):
     # the frame. Buttress roots break the ground it stands in, and one long
     # branch arcs across the top of the hero view carrying canopy, hanging vines
     # and a clock — the repoussoir the composition has been missing.
-    _TX, _TY = 1300.0, 470.0
+    _TX, _TY = landmark_xy("framing_tree", (1300.0, 470.0))
     for _i in range(9):
         _a = _i * (2.0 * math.pi / 9.0) + 0.3
         kit_root(_TX, _TY, _a, 430.0 + 190.0 * ((_i * 7) % 4) / 4.0,
@@ -8189,8 +8473,18 @@ def build(layout):
                      yaw=math.degrees(a), trim="plaza")
             finial(kx, ky, 104.0, 0.85, "gold", "PlazaPierFin%d" % i, glow="gold_glow")
             _a2 = (i + 8) * (2.0 * math.pi / 64.0)
-            railing(kx, ky, math.cos(_a2) * _PR, math.sin(_a2) * _PR, 34.0,
-                    "plaza", "PlazaBal%d" % i, n=5, h=62.0, rail_mat="stone")
+            _kx2, _ky2 = math.cos(_a2) * _PR, math.sin(_a2) * _PR
+            # NOT ACROSS THE AVENUE. The ring's far arc puts a stone rail
+            # horizontally through the middle of the hero frame, directly behind
+            # the Dog -- the trace has PlazaBal8_rail96 spanning a third of the
+            # frame width at 19.8 m. A ceremonial edge on the flanks is the
+            # intent; a fence across the eye path is not, and the reference has
+            # open stone there running back to the garden.
+            if _in_corridor((kx + _kx2) * 0.5, (ky + _ky2) * 0.5, half=560.0):
+                pass
+            else:
+                railing(kx, ky, _kx2, _ky2, 34.0,
+                        "plaza", "PlazaBal%d" % i, n=5, h=62.0, rail_mat="stone")
         if i % 3 == 0:                                  # moss at the transition
             _part("sphere", math.cos(a) * (_PR + 34.0), math.sin(a) * (_PR + 34.0), 7.0,
                   0.30, 0.30, 0.09, "moss", "PlazaMoss%d" % i)
@@ -8313,8 +8607,13 @@ def build(layout):
     # Cobblestone boulevard (N-S) + radial paths from the plaza to the gate and the
     # great tree — the premium walkable spine of the district.
     kit_path(0, -1450, 0, 1250, 470, "BLVD")
-    kit_path(0, 0, -1050, 400, 340, "PATH_gate")
-    kit_path(0, 0, 1300, 470, 340, "PATH_tree")
+    # BY NAME. Both of these led to a COPY: PATH_gate ran to (-1050, 400), which
+    # is where the gate stood two moves ago -- the path stopped 800 uu short of
+    # the gate it is named after, exactly like HeroLight_Gate did.
+    _pgx, _pgy = landmark_xy("golden_gate", (-1050.0, 400.0))
+    _ptx, _pty = landmark_xy("framing_tree", (1300.0, 470.0))
+    kit_path(0, 0, _pgx, _pgy, 340, "PATH_gate")
+    kit_path(0, 0, _ptx, _pty, 340, "PATH_tree")
     kit_path(-1150, 0, 1150, 0, 300, "PATH_cross")
     # The Wandering Relay Dog, on the arcane circle, facing the arrival camera.
     # THE DOG IS THE SUBJECT. At the world origin it stands 26 m from the hero
@@ -8350,7 +8649,12 @@ def build(layout):
     #
     # These are placed by hand rather than scattered, because "the founder can
     # see them" is a composition requirement and composition is not a scatter.
-    stroll_dog(-980.0, 1180.0, "UprightReviewer", s=1.95, roam=140.0,
+    _gdx, _gdy = landmark_xy("golden_gate", (-880.0, 1180.0))
+    # 100 uu FURTHER OUT than the gate, not 100 uu more negative: the authored
+    # pair was (-980) beside a gate at (-880), which is outward on that side and
+    # inward on the mirrored one.
+    stroll_dog(_gdx + math.copysign(100.0, _gdx or 1.0), _gdy,
+               "UprightReviewer", s=1.95, roam=140.0,
                upright=2, accessory="none")
     stroll_dog(980.0, 1240.0, "UprightBuilder", s=1.95, roam=140.0,
                upright=2, accessory="none")
@@ -8388,15 +8692,24 @@ def build(layout):
     # hero axis with the nearest pair 16 m from the camera — they fenced the
     # boulevard instead of framing it. Pushed to the verges, shrunk, and the
     # nearest pair deleted entirely so the first thing the eye meets is the Dog.
-    _lamp_y = (-520.0, 40.0, 620.0, 1200.0)
+    # 660 -> 1180, AND THE TWO NEAREST PAIRS DELETED. The note above says the
+    # posts were moved off the axis once already, from 430 to 660, and measured
+    # on the delivered frame they still carry 4.74% of the bottom third with
+    # their garlands adding 5.13% -- 9.87% of street furniture against 8.4% of
+    # visible stone. The reference's plaza has no lamp posts on it whatsoever.
+    #
+    # They keep their job -- vertical rhythm and warm light in the MIDDLE
+    # distance -- by lining the avenue where the avenue starts, past the plaza,
+    # instead of fencing the apron the Dog stands on.
+    _lamp_y = (620.0, 1200.0, 1780.0, 2360.0)
     for _e in (-1, 1):
         for _i, _ly in enumerate(_lamp_y):
-            kit_lantern(_e * 660.0, _ly, 0.82, "Lamp%d_%d" % (_e, _i))
+            kit_lantern(_e * 1180.0, _ly, 0.82, "Lamp%d_%d" % (_e, _i))
             # garlands on alternate spans only: strung between every pair they
             # read as one continuous band of confetti across the middle of the
             # frame rather than as bunting
             if _i and _i % 2 == 1:
-                kit_garland(_e * 660.0, _lamp_y[_i - 1], _e * 660.0, _ly, 352.0,
+                kit_garland(_e * 1180.0, _lamp_y[_i - 1], _e * 1180.0, _ly, 352.0,
                             "Garl%d_%d" % (_e, _i), sag=78.0)
     # BUTTERFLIES over the planting, BIRDS in the sky. Both ride the bob offset,
     # so they live in the stream and vanish in a still — ambient life, never a
@@ -9301,7 +9614,7 @@ def build(layout):
     # teapot — the storybook furniture of the reference.
     # THE AGENT GARDEN AS A DESTINATION. Terrace, clipped hedge walls, a rose
     # walk leading in, and the C.A.R.D. pedestal as the thing it is all about.
-    _GX, _GY = 820.0, 360.0
+    _GX, _GY = landmark_xy("agent_pergola", (820.0, 360.0))
     for _k, (_rr, _hh, _mt) in enumerate(((5.6, 0.34, "stone"), (5.1, 0.30, "plaza"))):
         _part("cylinder", _GX, _GY, 18.0 + _k * 22.0, _rr, _rr, _hh, _mt, "GardenTerr%d" % _k)
     for _i in range(40):
@@ -9482,11 +9795,25 @@ def build(layout):
     # Every strand now springs from a structure that is actually there — the
     # gate piers, the rose arch, the pergola and the great framing tree's
     # canopy, which is where the reference drapes its wisteria.
-    for i, (vx, vy, vt, vd) in enumerate([(-1290, 400, 740, 520), (-810, 400, 740, 520),
-                                          (-230, 820, 430, 330), (230, 820, 430, 330),
-                                          (670, 460, 610, 420), (970, 460, 610, 420),
-                                          (1160, 560, 980, 600), (1430, 420, 940, 560),
-                                          (1300, 660, 1010, 640)]):
+    # THESE WERE NINE COPIES AND EVERY ONE OF THEM WAS ALREADY WRONG. The two
+    # gate strands were authored at x = -1290 and -810, flanking a gate at
+    # -1050 -- the gate's position two moves ago. It has been at (-880, 1180)
+    # since, so both strands have been hanging in open air, and the comment
+    # above ("springs from a structure that is actually there") has been false
+    # for as long as it has been written down.
+    #
+    # Anchors are now the LANDMARK plus a local offset, and the offset's x
+    # carries _MSX so a pair straddling a structure keeps straddling it.
+    _vg = landmark_xy("golden_gate", (-1050.0, 400.0))
+    _va = landmark_xy("rose_arch", (0.0, 820.0))
+    _vp = landmark_xy("agent_pergola", (820.0, 460.0))
+    _vt = landmark_xy("framing_tree", (1300.0, 470.0))
+    for i, (vx, vy, vt, vd) in enumerate([
+            (_vg[0] - _MSX * 240, _vg[1], 740, 520), (_vg[0] + _MSX * 240, _vg[1], 740, 520),
+            (_va[0] - _MSX * 230, _va[1], 430, 330), (_va[0] + _MSX * 230, _va[1], 430, 330),
+            (_vp[0] - _MSX * 150, _vp[1], 610, 420), (_vp[0] + _MSX * 150, _vp[1], 610, 420),
+            (_vt[0] - _MSX * 140, _vt[1] + 90, 980, 600), (_vt[0] + _MSX * 130, _vt[1] - 50, 940, 560),
+            (_vt[0], _vt[1] + 190, 1010, 640)]):
         kit_vine(vx, vy, vt, vd, "Vine%d" % i, i)
 
     # LUSH GROUND COVER — the reference world is densely PLANTED, so carpet the whole
@@ -9702,7 +10029,8 @@ def build(layout):
     # the frame can actually see rather than under it.
     for i, (bx, _byo, bs) in enumerate(((-1250.0, 40.0, 1.5), (-1620.0, 300.0, 1.1),
                                         (1300.0, 20.0, 1.4), (1680.0, 330.0, 1.0),
-                                        (-880.0, 480.0, 0.9), (980.0, 520.0, 1.2))):
+                                        (-880.0, 480.0, 0.9),
+                                        (980.0, 520.0, 1.2))):  # not-a-landmark-copy: boulder scatter, symmetric pairs
         by = NEAR_Y + _byo
         for k in range(4):
             a = k * 1.9 + i
@@ -9833,10 +10161,34 @@ def build(layout):
                       "petal_air" if _i % 4 else "petal_violet", "%s_lily%d" % (w["id"], _i))
 
     # --- Benches (dressing; placeholder cube, facing baked from data) -----
+    # BENCHES ARE STREET FURNITURE AND THE HERO PLAZA HAS NONE. Measured on the
+    # delivered frame, benches carry 2.91% of the bottom third against 8.4% for
+    # every walkable surface in it -- a third as much stone as bench. The
+    # reference's plaza is open cobble with the Dog, the circle and the
+    # companions standing on it, and nothing else at all.
+    #
+    # bench_arrival is authored 480 uu from the lens: half a metre of bench
+    # across the bottom of the arrival shot. It never asked the keep-out that
+    # exists for exactly this, because that rule is applied at call sites rather
+    # than owned by a place -- the same failure as the landmarks.
+    _benches_moved = 0
     for b in layout.get("benchPoints", []):
         _bl = b["location"]
-        kit_bench(float(_bl[0]), float(_bl[1]), float(b.get("facingYawDeg", 0.0)),
+        _bx, _by = float(_bl[0]), float(_bl[1])
+        _bx, _by, _bmv = _push_out_of_lens(_bx, _by, "BENCH_%s" % b["id"])
+        if _on_stage(_bx, _by):        # never on the Dog's apron
+            _ba = math.atan2(_by - DOG_STAGE[1], _bx - DOG_STAGE[0])
+            _bx = DOG_STAGE[0] + math.cos(_ba) * (DOG_STAGE[2] + 220.0)
+            _by = DOG_STAGE[1] + math.sin(_ba) * (DOG_STAGE[2] + 220.0)
+            _bmv = True
+        if _bmv:
+            _benches_moved += 1
+        kit_bench(_bx, _by, float(b.get("facingYawDeg", 0.0)),
                   "BENCH_%s" % b["id"])
+    if _benches_moved:
+        unreal.log_warning("BENCHES  %d of %d were in the arrival lens or on the "
+                           "Dog's apron and were moved out"
+                           % (_benches_moved, len(layout.get("benchPoints", []))))
 
     # --- Hub zones: tagged empties at each centre -------------------------
     # Tag by kind + the world section it presents (or 'presents_none'), so a
@@ -10049,12 +10401,17 @@ def build(layout):
     # Aimed for the six founder hero shots and selected at launch by the player
     # controller under -CinematicView -HeroCam=N (relaunch per shot; no re-cook).
     # Positions/targets derive from the real landmark coordinates in this layout.
+    # The two shots that frame a LANDMARK ask where it is rather than restating
+    # it -- see landmark_xy. HeroCam3 is the giant tree's portrait, and the tree
+    # moves with the mirror.
+    _t3x, _t3y = landmark_xy("framing_tree", (1300.0, 470.0))
+    _t4x, _t4y = landmark_xy("overlook_terrace", (560.0, -280.0))
     hero_shots = [
         (0, ARRIVAL_CAM, (0.0, 120.0, 170.0), 62.0),                  # ARRIVAL_HERO — plaza onto circle + tree
         (1, (300.0, -430.0, 205.0), (0.0, 60.0, 190.0), 52.0),        # DOG_CLOSEUP — the hero Dog's visor + gold eyes
         (2, (-250.0, -380.0, 430.0), (-1010.0, 360.0, 300.0), 52.0),  # GOLDEN_GATE — ornate heart-crest gate
-        (3, (1300.0, -360.0, 540.0), (1300.0, 470.0, 680.0), 64.0),   # GIANT_TREE — the great framing tree
-        (4, (560.0, -980.0, 380.0), (540.0, -250.0, 150.0), 58.0),    # MISSION_OVERLOOK — overlook terrace
+        (3, (_t3x, _t3y - 830.0, 540.0), (_t3x, _t3y, 680.0), 64.0),  # GIANT_TREE — the great framing tree
+        (4, (_t4x, _t4y - 700.0, 380.0), (_t4x - 20.0, _t4y + 30.0, 150.0), 58.0),  # MISSION_OVERLOOK — overlook terrace
         (5, (760.0, -180.0, 340.0), (795.0, 410.0, 150.0), 56.0),     # AGENT_GARDEN — agent_config + pergola + flowers
         # ARRIVAL_WIDE. Same POSITION as HeroCam0 on purpose: the Marble
         # backdrop is anchored at that exact point, so every ray from it is

@@ -814,15 +814,35 @@ def main():
         # The reference's strongest production signal is an authored plaza
         # filling that band; a band that is 0% paving is a band of clutter
         # however many pieces are in it.
-        _paving = 0
+        # FLOOR IS NOT A MATERIAL, IT IS A SURFACE YOU CAN STAND ON.
+        #
+        # This counted any pixel whose MATERIAL was cobble/stone/ground, which
+        # made a vertical balustrade rail score exactly like a paving slab. It
+        # produced a real false reading: deleting the stone rails that fenced
+        # the hero avenue moved "walkable surface" DOWN, 8.4% to 6.7%, and the
+        # frame had strictly more open floor in it than before.
+        #
+        # The floor of this world is placed with known labels, so ask for them
+        # by name. WHAT IT CANNOT SEE: a floor built under some other label,
+        # and moss or grass lying flat on the plaza, which is ground you can
+        # walk on and is not counted here.
+        _FLOOR = ("Tile", "PlazaFill", "PlazaBed", "PATH_", "Roll", "Hill",
+                  "PlazaCap", "Step", "Ground", "Terr")
+        _paving = _stonepix = 0
         for _k in range(_band * W, W * H):
             _o = owner[_k]
-            if _o >= 0 and blobs[_o][6] in ("cobble", "stone", "paving", "ground", "path"):
+            if _o < 0:
+                continue
+            if blobs[_o][6] in ("cobble", "stone", "paving", "ground", "path"):
+                _stonepix += 1
+            _lb = blobs[_o][7] or ""
+            if any(_lb.startswith(_f) for _f in _FLOOR):
                 _paving += 1
         _bt = float(W * (H - _band))
-        print("    BOTTOM THIRD  %.1f%% covered by objects, %.1f%% is walkable "
-              "surface (cobble/stone/ground)" % (100.0 * _bandpix / _bt,
-                                                 100.0 * _paving / _bt))
+        print("    BOTTOM THIRD  %.1f%% covered by objects, %.1f%% is FLOOR you "
+              "could stand on (%.1f%% is stone-family material, rails and piers "
+              "included)" % (100.0 * _bandpix / _bt, 100.0 * _paving / _bt,
+                             100.0 * _stonepix / _bt))
         # WHO IS STANDING ON THE PLAZA. The whole-frame tally above answers
         # "what is near"; this answers "what is covering the floor", and they
         # are different questions with different answers — the framing tree is
