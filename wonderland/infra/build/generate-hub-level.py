@@ -6179,15 +6179,42 @@ def build(layout):
                       "trunk" if "trunk" in MATS else "foliage",
                       "%s_stem%d" % (label, k))
             prev = (cx, cy, zz)
-            # three clusters per node, offset around the strand, in three greens
-            for c in range(3):
-                a = c * 2.094 + t * 3.1 + i
-                rr = (0.50 + 0.22 * (c % 2)) * grow
-                _part("sphere", cx + math.cos(a) * 24.0 * grow,
-                      cy + math.sin(a) * 24.0 * grow, zz - 6.0 * c,
-                      rr, rr * 0.92, rr * 0.74,
-                      ("foliage", "foliage_hi", "foliage_deep")[(k + c) % 3],
-                      "%s_leaf%d_%d" % (label, k, c))
+            # LEAF CARDS, NOT BEADS.
+            #
+            # This was three spheres in a rosette at every node, and in the
+            # native render it reads exactly like what it is: a stack of pale
+            # ellipsoids, a string of beads hanging in the air. The art
+            # direction's word for that is "toy-like", and no material or light
+            # rescues a form that is wrong — a leaf is FLAT and hangs at its own
+            # angle, and a hundred flat things at a hundred angles is what makes
+            # a cascade read as foliage.
+            #
+            # The leaf materials are alpha-masked (the leaf master samples
+            # LeafMask and clips on it), so a thin card is a leaf-shaped hole in
+            # a rectangle rather than a rectangle. Four per node, each yawed to
+            # its own bearing and pitched to droop, with a small dark core so
+            # the strand keeps mass where the cards overlap.
+            #
+            # The rotation tuple is (pitch, yaw, roll) — the order
+            # WonderlandInstancedBatch reads and the one the clocks were built
+            # against wrongly today. Yaw is the second slot.
+            _leafmats = (("leafcard", "leafcard_hi", "leafcard_deep")
+                         if "leafcard" in MATS
+                         else ("foliage", "foliage_hi", "foliage_deep"))
+            _part("sphere", cx, cy, zz, 0.17 * grow, 0.17 * grow, 0.15 * grow,
+                  "foliage_deep", "%s_core%d" % (label, k))
+            for c in range(4):
+                a = c * 1.5708 + t * 3.1 + i
+                _part("cube",
+                      cx + math.cos(a) * 26.0 * grow,
+                      cy + math.sin(a) * 26.0 * grow,
+                      zz - 5.0 * c,
+                      (0.36 + 0.11 * (c % 2)) * grow,
+                      0.035 * grow,
+                      (0.27 + 0.09 * ((c + k) % 2)) * grow,
+                      _leafmats[(k + c) % 3],
+                      "%s_leaf%d_%d" % (label, k, c),
+                      rot=(16.0 + 15.0 * (c % 3), math.degrees(a), 0.0))
             # blossom trusses strung ALONG the strand, hanging below their node
             if k % 3 == 1:
                 for b in range(3):
