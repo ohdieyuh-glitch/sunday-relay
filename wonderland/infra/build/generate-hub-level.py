@@ -518,7 +518,7 @@ LOOK = {
     # Cutting the ground-only sources is what inverts that relationship back.
     #
     # This is the third time the practicals have been found acting as the key.
-    "lampLumens": 1600.0,
+    "lampLumens": 600.0,
     # How close to the arrival camera a lantern has to be to earn its shadows.
     #
     # AT 2600 THIS CURRENTLY EXCLUDES NOTHING -- all twelve lanterns are inside
@@ -650,7 +650,7 @@ LOOK = {
     # 5200 the per-light scales give 5200 / 4420 / 2860, all under the ceiling.
     # Same cut, same reason: a hero practical at 5,200 lm beside a 3,600 lux sun
     # is a second key placed at the subject.
-    "heroLightLumens": 2400.0,
+    "heroLightLumens": 1100.0,
     "heroLightRadius": 900.0,
 }
 
@@ -1239,9 +1239,21 @@ MATERIAL_SPEC = {
     # rubbed; one flat tone across every face is the "toy" read.
     "brass_deep":  ((0.42, 0.30, 0.13), 0.55, 0.52, (0.05, 0.03, 0.00), 0.10),
     "float_glow":  ((1.00, 0.80, 0.40), 0.45, 0.24, (1.00, 0.72, 0.28), 1.9),
-    "cobble":      ((0.79, 0.75, 0.71), 0.0, 0.80, (0, 0, 0), 0.0),
-    "cobble2":     ((0.58, 0.55, 0.52), 0.0, 0.82, (0, 0, 0), 0.0),
-    "plaza":       ((0.87, 0.83, 0.78), 0.0, 0.76, (0, 0, 0), 0.0),
+    # ALBEDO CUT 2026-08-24, MEASURED. Cream is a HUE, not a brightness, and
+    # these were authored at the brightness of fresh snow. Real dressed
+    # limestone reflects about 0.55-0.65; 0.87 is paper. Measured against the
+    # founder reference the whole frame sits at mean luma 159 where the
+    # reference is 83, and the sky band reads 24.7 DARKER than the ground band
+    # — which cannot happen outdoors and does not need more sky, it needs a
+    # ground that stops reflecting more than the sky emits.
+    #
+    # The hue is untouched; only the level moves. Dropping the NEUTRALS and
+    # leaving every chromatic material alone should also close the saturation
+    # gap (0.31 against the reference's 0.43) rather than widen it, because a
+    # near-white surface has no chroma to contribute in the first place.
+    "cobble":      ((0.62, 0.59, 0.55), 0.0, 0.80, (0, 0, 0), 0.0),
+    "cobble2":     ((0.44, 0.42, 0.40), 0.0, 0.82, (0, 0, 0), 0.0),
+    "plaza":       ((0.68, 0.65, 0.61), 0.0, 0.76, (0, 0, 0), 0.0),
     "moss":        ((0.20, 0.40, 0.16), 0.0, 0.72, (0, 0, 0), 0.0),
     "ground":      ((0.17, 0.30, 0.14), 0.0, 0.86, (0, 0, 0), 0.0),
     # A MEADOW IS NOT ONE GREEN. Real turf is patchy: sun-bleached where it is
@@ -1274,7 +1286,7 @@ MATERIAL_SPEC = {
     # Roughness 0.10 is a mirror, and a mirror reflecting a dark scene is
     # dark: attribute-dark.py measured porcelain at 1.47% of the frame in
     # shadow. Real glaze has a broad highlight, not a point one.
-    "porcelain":   ((0.97, 0.93, 0.88), 0.0, 0.26, (0, 0, 0), 0.0),
+    "porcelain":   ((0.88, 0.85, 0.80), 0.0, 0.26, (0, 0, 0), 0.0),
     "water":       ((0.16, 0.42, 0.56), 0.0, 0.05, (0.01, 0.04, 0.07), 0.15),
     # Spray and foam: near-white, barely self-lit so it stays bright against
     # the dark of a basin, and it BOBS — a jet of beads that does not move is
@@ -1315,7 +1327,7 @@ MATERIAL_SPEC = {
     # AUTHORED, and it is the one part that can be fixed with certainty.
     # (cloud and dog_body stay white on purpose: clouds are white and the
     # canonical Relay Dog's coat is its identity.)
-    "stone":       ((0.91, 0.87, 0.82), 0.0, 0.90, (0, 0, 0), 0.0),
+    "stone":       ((0.74, 0.70, 0.65), 0.0, 0.90, (0, 0, 0), 0.0),
     "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
     # SKELETON FLAME, the founder's legendary variant. It is a SKIN: the same
     # canonical body, the same proportions, the same visor band. What changes is
@@ -1340,7 +1352,7 @@ MATERIAL_SPEC = {
     "meadow_far":  ((0.46, 0.53, 0.45), 0.0, 0.94, (0, 0, 0), 0.0),
     # Distant towers, deliberately pale and low-contrast so the skyline recedes
     # behind the hero landmarks instead of competing with them.
-    "spire_far":   ((0.80, 0.80, 0.86), 0.0, 0.62, (0, 0, 0), 0.0),
+    "spire_far":   ((0.70, 0.71, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
     # Rose and pink rooflines — the reference's skyline is warm, not gold.
     "roof_rose":   ((0.78, 0.38, 0.44), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
     "roof_pink":   ((0.92, 0.46, 0.62), 0.0, 0.62, (0, 0, 0), 0.0),
