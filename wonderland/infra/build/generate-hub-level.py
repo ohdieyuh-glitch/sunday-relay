@@ -208,6 +208,34 @@ LOOK = {
     # block's arithmetic — after 4.0 was measured to leave 80 km of distance as
     # crisp as 2 km. Sweepable with WONDERLAND_LOOK=aerialScale=.
     "aerialScale": 11.0,
+    # ---- TASK 1: CINEMATIC DEPTH -------------------------------------------
+    # The founder's brief, verbatim where it is a number: "Cinematic Bokeh DoF
+    # focused on the foreground character", "Bloom (Intensity 1.5, threshold
+    # 0.8)", "Volumetric Fog: Set high density with a soft purple/pink tint in
+    # the background, making distant castles recede in haze", "golden hour
+    # (warm ~4500K)".
+    #
+    # The hero Dog stands 1,600 uu from the arrival lens, so that is the focal
+    # plane. f/6 rather than a wide-open stop: this is an ESTABLISHING shot and
+    # the castle city is the thing it exists to present — the background should
+    # go soft, not illegible.
+    "dofFocalDistance": 1600.0,
+    "dofFStop": 6.0,
+    "dofFocalRegion": 900.0,
+    "dofBlurAmount": 0.42,
+    # Volumetric fog was tried once and "flooded the frame to min-luma 226" —
+    # on a frame whose ground measured 193 and had no shade in it at all. The
+    # scene is 106 now with 6.5% of it in shadow, which is the condition
+    # volumetrics need to read as god rays rather than as milk.
+    "volFogEnabled": 1,
+    "volFogExtinction": 0.55,
+    "volFogAlbedo": (0.74, 0.62, 0.92),      # the reference's lavender haze
+    "volFogEmissive": (0.055, 0.030, 0.085),
+    "volFogDistance": 42000.0,
+    "volScatterSun": 2.4,                    # god rays through the gate and trees
+    "contactShadowLength": 0.035,
+    "sunTemperatureK": 4500.0,
+    "lensFlare": 0.35,
     "selfColour": 0.06,
     # 1 = the master renders UNLIT, so a surface shows exactly its palette and
     # no lighting path can grey it. 0 restores DefaultLit in one cook.
@@ -632,8 +660,14 @@ LOOK = {
     # which is nothing. Bloom was not the additive white term. It goes back
     # because a thresholded glow on gold and emissive is wanted for its own
     # sake, and it is now known to cost no colour.
-    "bloomIntensity": 0.5,
-    "bloomThreshold": 1.5,
+    # The brief gives these two as numbers: "Bloom (Intensity 1.5, threshold
+    # 0.8)". 0.5/1.5 was a threshold high enough that only true highlights
+    # bloomed, which was the right call when every midtone was blown to white
+    # and any bloom on them read as milk. With 0.00% of the frame clipped there
+    # is nothing left to protect, and 0.8 is where the reference's gold and
+    # magic actually glow.
+    "bloomIntensity": 1.5,
+    "bloomThreshold": 0.8,
     # --- grade (runs AFTER metering; this is the real brightness lever)
     # MEASURED AGAIN, ON A DELIVERED FRAME. 0.60/0.60/0.64 was measured against
     # a wash, and it does stop one — but the streamed frame came back with 46.2%
@@ -6655,6 +6689,27 @@ def build(layout):
     except Exception:
         pass
     set_prop(sun_comp, "bAtmosphereSunLight", True)
+    # ---- TASK 1: A GOLDEN-HOUR KEY THAT THROWS RAYS AND TOUCHES DOWN --------
+    #
+    # Three properties this light has never had, each answering a line of the
+    # brief and each visible in the reference:
+    #
+    #   TEMPERATURE — "golden hour (warm ~4500K tint)". A colour multiplier was
+    #     doing this job approximately; the temperature control does it in
+    #     Kelvin and drives the atmosphere's sun disc with it.
+    #   VOLUMETRIC SCATTERING — the shafts of light through the gate and the
+    #     tree canopy. Without it the volumetric fog below is a flat wash; this
+    #     is what makes it a god ray.
+    #   CONTACT SHADOWS — "readable contact shadows", asked for twice. A
+    #     screen-space trace that puts a Dog's paws ON the stone rather than
+    #     hovering a pixel above it. Cheap, and it is the single cue that most
+    #     reads as "grounded".
+    set_prop(sun_comp, "bUseTemperature", True)
+    set_prop(sun_comp, "Temperature", float(LOOK["sunTemperatureK"]))
+    set_prop(sun_comp, "VolumetricScatteringIntensity", float(LOOK["volScatterSun"]))
+    set_prop(sun_comp, "ContactShadowLength", float(LOOK["contactShadowLength"]))
+    set_prop(sun_comp, "bCastVolumetricShadow", True)
+    set_prop(sun_comp, "DynamicShadowDistanceMovableLight", 30000.0)
 
     # FILL light from the opposite side, no shadows. Guarantees EVERY surface gets
     # direct light (each faces toward the key or the fill), independent of skylight
@@ -6946,6 +7001,39 @@ def build(layout):
         # still recedes, the sky stays sky.
         # MINIMAL HAZE, by the founder's instruction. Fog is not allowed to be
         # the thing that hides a bad surface, and the reference's air is clear.
+        # ---- TASK 1: VOLUMETRIC FOG, WITH THE CONDITION IT NEEDED ---------
+        #
+        # This was tried once and the note above records the result honestly:
+        # "volumetric in-scatter previously flooded the frame to min-luma 226".
+        # That was measured on a frame whose ground read 193 and which had
+        # 0.06% of itself in shadow — in-scatter has nothing to scatter THROUGH
+        # when every surface is already at the top of the range, so it can only
+        # add. The scene is 106 now with 6.5% in shadow and a key that throws
+        # rays, which is the condition volumetrics need to read as god rays
+        # rather than as milk.
+        #
+        # The brief asks for "high density with a soft purple/pink tint in the
+        # background, making distant castles recede in haze", and the reference
+        # has exactly that: its far castles sit in lavender air.
+        if int(LOOK["volFogEnabled"]):
+            set_prop(fog_comp, "bEnableVolumetricFog", True)
+            set_prop(fog_comp, "VolumetricFogExtinctionScale",
+                     float(LOOK["volFogExtinction"]))
+            _va = LOOK["volFogAlbedo"]
+            set_prop(fog_comp, "VolumetricFogAlbedo",
+                     unreal.Color(int(_va[0] * 255), int(_va[1] * 255),
+                                  int(_va[2] * 255), 255))
+            _ve = LOOK["volFogEmissive"]
+            set_prop(fog_comp, "VolumetricFogEmissive",
+                     unreal.LinearColor(_ve[0], _ve[1], _ve[2], 1.0))
+            set_prop(fog_comp, "VolumetricFogDistance", float(LOOK["volFogDistance"]))
+            # Forward-biased scattering: light carries ON through the medium
+            # toward the viewer, which is what makes a shaft a shaft.
+            set_prop(fog_comp, "VolumetricFogScatteringDistribution", 0.55)
+            unreal.log_warning(
+                "VOLUMETRIC FOG on: extinction %.2f, lavender albedo %s, %.0f uu"
+                % (float(LOOK["volFogExtinction"]), str(_va),
+                   float(LOOK["volFogDistance"])))
         set_prop(fog_comp, "FogDensity", 0.0004)
         set_prop(fog_comp, "FogHeightFalloff", 0.09)
         set_prop(fog_comp, "StartDistance", 3200.0)
@@ -7010,6 +7098,43 @@ def build(layout):
         sset("ColorGainHighlights", "color_gain_highlights", unreal.Vector4(*(LOOK["gainHighlights"] + (1.0,))))
         sset("ColorGainShadows", "color_gain_shadows", unreal.Vector4(*(LOOK["gainShadows"] + (1.0,))))
         sset("ColorGamma", "color_gamma", unreal.Vector4(*(LOOK["gamma"] + (1.0,))))
+        # ---- TASK 1: LUMEN, DEPTH OF FIELD, LENS FLARE --------------------
+        #
+        # None of these were set. The frame has had no depth of field at all,
+        # which is most of why a 1920x1080 render of a garden reads as a
+        # diagram: every blade of grass at 80 metres is as sharp as the Dog's
+        # visor at sixteen, and no photograph and no rendered reference looks
+        # like that.
+        #
+        # The hero Dog is 1,600 uu from the lens, so that is the focal plane.
+        # f/6 rather than wide open on purpose: this is the ESTABLISHING shot
+        # and the castle city is what it exists to present, so the background
+        # should go soft and stay legible.
+        try:
+            sset("DynamicGlobalIlluminationMethod", "dynamic_global_illumination_method",
+                 unreal.DynamicGlobalIlluminationMethod.LUMEN)
+            sset("ReflectionMethod", "reflection_method", unreal.ReflectionMethod.LUMEN)
+        except Exception as _le:
+            unreal.log_warning("Lumen method override unavailable (%s); the project "
+                               "default decides GI and reflections" % _le)
+        sset("LumenFinalGatherQuality", "lumen_final_gather_quality", 2.0)
+        sset("LumenSceneLightingQuality", "lumen_scene_lighting_quality", 2.0)
+        sset("DepthOfFieldFocalDistance", "depth_of_field_focal_distance",
+             float(LOOK["dofFocalDistance"]))
+        sset("DepthOfFieldFstop", "depth_of_field_fstop", float(LOOK["dofFStop"]))
+        sset("DepthOfFieldFocalRegion", "depth_of_field_focal_region",
+             float(LOOK["dofFocalRegion"]))
+        sset("DepthOfFieldDepthBlurAmount", "depth_of_field_depth_blur_amount",
+             float(LOOK["dofBlurAmount"]))
+        # The brief asks for "subtle Lens Flare for glowing magical elements" —
+        # subtle being the operative word, and the reason this is 0.35 and not
+        # the engine default.
+        sset("LensFlareIntensity", "lens_flare_intensity", float(LOOK["lensFlare"]))
+        unreal.log_warning(
+            "CINEMATIC DEPTH: Lumen GI + reflections, DoF f/%.1f focused at "
+            "%.0f uu (the hero Dog), lens flare %.2f"
+            % (float(LOOK["dofFStop"]), float(LOOK["dofFocalDistance"]),
+               float(LOOK["lensFlare"])))
         sset("WhiteTemp", "white_temp", LOOK["whiteTemp"])
         sset("VignetteIntensity", "vignette_intensity", LOOK["vignette"])
         ppv.set_editor_property("settings", pps)
