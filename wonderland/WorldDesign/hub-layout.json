@@ -857,18 +857,18 @@
       "mesh": "arch",
       "location": [
         0,
-        820,
+        980,
         220
       ],
       "scale": [
-        5.5,
+        9.4,
         1,
-        4.4
+        7.6
       ],
       "dimensionsUu": [
-        550,
+        940,
         100,
-        440
+        760
       ],
       "elevationUu": 0,
       "tier": "secondary",

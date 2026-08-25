@@ -5293,17 +5293,25 @@ def build(layout):
         for sx in (-1, 1):
             _part("cylinder", x + sx * 330.0 * s, y, h * 0.5, 0.19 * s, 0.19 * s, h / 100.0,
                   "trunk", "%s_post%d" % (label, sx))
-            for k in range(9):
-                t = k / 8.0
+            # SMOTHERED, WHICH IS THE WORD THE SPAN'S OWN COMMENT USES.
+            # Nine 15 uu spheres up a 430 uu post is a spiral of beads with the
+            # post showing between them; the reference's arch is a solid mass of
+            # ivy with the structure barely visible through it. Twenty nodes,
+            # three clusters each, in three greens.
+            for k in range(20):
+                t = k / 19.0
                 aa = t * 7.2 + sx
-                _part("sphere", x + sx * 330.0 * s + math.cos(aa) * 21.0 * s,
-                      y + math.sin(aa) * 21.0 * s, 30.0 * s + t * (h - 70.0 * s),
-                      0.15 * s, 0.15 * s, 0.15 * s, "foliage" if k % 2 else "foliage_hi",
-                      "%s_pvine%d_%d" % (label, sx, k))
+                for c in range(3):
+                    ca = aa + c * 2.094
+                    _part("sphere", x + sx * 330.0 * s + math.cos(ca) * 22.0 * s,
+                          y + math.sin(ca) * 22.0 * s, 30.0 * s + t * (h - 70.0 * s),
+                          0.19 * s, 0.19 * s, 0.16 * s,
+                          ("foliage", "foliage_hi", "foliage_deep")[(k + c) % 3],
+                          "%s_pvine%d_%d_%d" % (label, sx, k, c))
                 if k % 3 == 1:
-                    _part("sphere", x + sx * 330.0 * s + math.cos(aa) * 27.0 * s,
-                          y + math.sin(aa) * 27.0 * s, 30.0 * s + t * (h - 70.0 * s),
-                          0.13 * s, 0.13 * s, 0.13 * s, "rose" if k % 2 else "rose_pink",
+                    _part("sphere", x + sx * 330.0 * s + math.cos(aa) * 28.0 * s,
+                          y + math.sin(aa) * 28.0 * s, 30.0 * s + t * (h - 70.0 * s),
+                          0.15 * s, 0.15 * s, 0.15 * s, "rose" if k % 2 else "rose_pink",
                           "%s_prose%d_%d" % (label, sx, k))
         # AN ARCH IS A CURVE. Two posts and a straight beam is a doorframe, and
         # the curve is the entire reason the shape reads as a garden arch. The
@@ -5319,12 +5327,32 @@ def build(layout):
                                               math.sin(math.pi - ang) * span))
             _part("cube", ax, y, az, 0.30 * s, 0.24 * s, 0.20 * s, "trunk",
                   "%s_arc%d" % (label, i), rot=(0.0, tangent, 0.0))
+            # A CONTINUOUS BED OF IVY ALONG THE CURVE, then flowers in it.
+            # The arc was a bare 30 uu timber with a rose every other segment,
+            # so the curve read as a wire with beads on it. The ivy comes first
+            # and the blooms sit IN it, which is the order the eye reads.
+            for c in range(3):
+                _part("sphere", ax, y + (c - 1) * 22.0 * s, az + 8.0 * s,
+                      0.30 * s, 0.26 * s, 0.24 * s,
+                      ("foliage", "foliage_deep", "foliage_hi")[(i + c) % 3],
+                      "%s_ivy%d_%d" % (label, i, c))
             # roses and leaves ON the curve, both faces
             if i % 2 == 0:
                 _part("sphere", ax, y + 30.0 * s, az + 14.0 * s, 0.40 * s, 0.40 * s, 0.40 * s,
                       "rose" if i % 3 else "rose_pink", "%s_rose%d" % (label, i))
                 _part("sphere", ax, y - 30.0 * s, az + 10.0 * s, 0.30 * s, 0.30 * s, 0.30 * s,
                       "petal_pink", "%s_roseb%d" % (label, i))
+            # blossom hanging BELOW the span. The reference's arch drips — it is
+            # what tells you the thing is planted rather than painted, and it
+            # softens the hard inner edge of the opening.
+            if i % 3 == 1:
+                for d in range(3):
+                    _part("sphere", ax + (d - 1) * 10.0 * s, y - 6.0 * s,
+                          az - 28.0 * s - d * 20.0 * s,
+                          (0.20 - 0.04 * d) * s, (0.20 - 0.04 * d) * s,
+                          (0.23 - 0.04 * d) * s,
+                          ("petal_violet", "rose_pink", "petal_pink")[(i + d) % 3],
+                          "%s_drip%d_%d" % (label, i, d))
             _part("cube", ax, y + 20.0 * s, az - 12.0 * s, 0.34 * s, 0.06 * s, 0.40 * s,
                   "leaf", "%s_leaf%d" % (label, i), rot=(24.0, tangent + 40.0, 0.0))
 
