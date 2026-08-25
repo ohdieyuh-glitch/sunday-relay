@@ -7269,7 +7269,11 @@ def build(layout):
             _leafmats = (("leafcard", "leafcard_hi", "leafcard_deep")
                          if "leafcard" in MATS
                          else ("foliage", "foliage_hi", "foliage_deep"))
-            _part("sphere", cx, cy, zz, 0.17 * grow, 0.17 * grow, 0.15 * grow,
+            # 0.17 -> 0.09. The core exists to keep mass where the cards
+            # overlap; at 17 uu radius on 32 uu node spacing the cores TOUCH
+            # each other and form a continuous rope of spheres down the middle
+            # of the strand, which is the bead the cards were meant to hide.
+            _part("sphere", cx, cy, zz, 0.09 * grow, 0.09 * grow, 0.08 * grow,
                   "foliage_deep", "%s_core%d" % (label, k))
             for c in range(4):
                 a = c * 1.5708 + t * 3.1 + i
@@ -7288,18 +7292,41 @@ def build(layout):
                 for b in range(3):
                     _part("sphere", cx + (b - 1) * 12.0, cy + 5.0,
                           zz - 22.0 - b * 15.0,
-                          (0.22 - 0.05 * b) * grow, (0.22 - 0.05 * b) * grow,
-                          (0.26 - 0.05 * b) * grow,
+                          # a wisteria truss is many small florets, not three
+                          # graded balls; halved so it reads as blossom rather
+                          # than as more beads on the same string
+                          (0.11 - 0.025 * b) * grow, (0.11 - 0.025 * b) * grow,
+                          (0.13 - 0.025 * b) * grow,
                           ("petal_violet", "rose_pink", "petal_pink")[(i + b) % 3],
                           "%s_truss%d_%d" % (label, k, b))
             # a tendril curling off, which is what stops a cascade reading as a
             # column of beads
+            #
+            # -- AND THE TENDRIL WAS THREE BEADS. The line above states the job
+            # exactly right and then does it with spheres, which is the form it
+            # exists to break. Counted per strand: 16 core spheres, about 15
+            # blossom spheres and 12 tendril spheres against 64 leaf cards --
+            # 43 balls threaded on a vertical line at 32 uu spacing, which is a
+            # bead curtain, and it is what the delivered frame shows hanging all
+            # over the midground.
+            #
+            # A tendril is a thin curling STEM with a leaf or two on it. Two
+            # slim segments, each leaning further out and down, with one card at
+            # the tip: same silhouette job, no beads.
             if k % 4 == 2:
-                for tdl in range(3):
-                    _part("sphere", cx + 30.0 + tdl * 15.0,
-                          cy - 8.0 * tdl, zz - 10.0 - tdl * 16.0,
-                          0.14 * grow, 0.14 * grow, 0.12 * grow,
-                          "foliage_spr", "%s_tendril%d_%d" % (label, k, tdl))
+                for tdl in range(2):
+                    _tx = cx + 22.0 * grow + tdl * 17.0 * grow
+                    _ty = cy - 7.0 * grow * tdl
+                    _tz = zz - 9.0 - tdl * 15.0
+                    _part("cylinder", _tx, _ty, _tz,
+                          0.035 * grow, 0.035 * grow, 0.16 * grow,
+                          "trunk" if "trunk" in MATS else "foliage_deep",
+                          "%s_tendril%d_%d" % (label, k, tdl),
+                          rot=(52.0 + 14.0 * tdl, math.degrees(a) + 40.0, 0.0))
+                _part("cube", cx + 56.0 * grow, cy - 14.0 * grow, zz - 40.0,
+                      0.30 * grow, 0.03 * grow, 0.22 * grow,
+                      _leafmats[(k + 1) % 3], "%s_tendrilleaf%d" % (label, k),
+                      rot=(34.0, math.degrees(a) + 40.0, 0.0))
         # the terminal bloom, still there, now the end of something
         _part("sphere", prev[0], prev[1], prev[2] - 14.0, 0.26, 0.26, 0.30,
               "rose" if i % 2 else "petal_pink", "%s_bloom" % label)
