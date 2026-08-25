@@ -78,11 +78,45 @@ wl_say "native capture: HeroCam$CAM at ${RES_X}x${RES_Y}, build $SHORT, NO strea
 # Wrapped with env(1) around this process alone, never exported, for the same
 # reason run-stream.sh gives: a global VK_DRIVER_FILES on a shared machine
 # redirects every other GPU program on it.
+# THE RENDERING PROFILE, WHICH THIS SCRIPT DID NOT APPLY.
+#
+# The -ExecCmds below used to carry the screenshot commands and nothing else,
+# so every native frame was rendered at the ENGINE'S DEFAULT EXPOSURE with the
+# LOOK table's r.AutoExposure.Bias never reaching it. That is the exact defect
+# run-stream.sh was repaired for — its comment block says "every frame streamed
+# from Lightning has been rendered at the engine's default exposure" — and the
+# repair was made there and not here.
+#
+# It matters more here than there, because this is the frame the reference
+# comparison is measured on. The first native render of Wonderland came back at
+# mean luma 193 with 8.15% pure-white pixels, and that number was taken through
+# an instrument missing the project's own exposure control. A capture that does
+# not apply the render settings is not a capture of the build.
+#
+# Same resolver, same profile, same WL_EXEC_CMDS override as the stream, so the
+# two paths differ only in the encoder — which is the entire reason this script
+# exists.
+_render_dir="$HERE/../../rendering"
+_profile="${WL_RENDER_PROFILE:-BALANCED}"
+_profile_cmds=""
+if [ -r "$_render_dir/render-profile.py" ]; then
+  if [ -n "${WL_EXEC_CMDS:-}" ]; then
+    _profile_cmds="$WL_EXEC_CMDS"
+    wl_say "native: -ExecCmds from WL_EXEC_CMDS (profile bypassed)"
+  else
+    _profile_cmds="$(python3 "$_render_dir/render-profile.py" emit "$_profile")" \
+      || wl_die "rendering profile $_profile did not resolve"
+    wl_say "native: profile $_profile applied to the capture"
+  fi
+else
+  wl_warn "no rendering profile resolver at $_render_dir — capturing at engine defaults"
+fi
+
 setsid nohup env $(wl_vulkan_env_pairs) "$APP" \
   -RenderOffscreen -ForceRes "-ResX=$RES_X" "-ResY=$RES_Y" \
   -Unattended -stdout -FullStdOutLogOutput \
   -CinematicView "-HeroCam=$CAM" \
-  "-ExecCmds=${WL_EXTRA_EXEC:+$WL_EXTRA_EXEC, }r.HighResScreenshotDelay 180, HighResShot ${RES_X}x${RES_Y}" \
+  "-ExecCmds=${WL_EXTRA_EXEC:+$WL_EXTRA_EXEC, }${_profile_cmds:+$_profile_cmds, }r.HighResScreenshotDelay 180, HighResShot ${RES_X}x${RES_Y}" \
   >"$WL_LOG/native-$CAM.log" 2>&1 </dev/null &
 APP_PID=$!
 
