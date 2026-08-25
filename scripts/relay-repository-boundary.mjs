@@ -11,12 +11,32 @@
  * Exit 0 = clean, exit 1 = findings.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, openSync, readSync, closeSync } from 'node:fs';
 
 const files = execFileSync('git', ['ls-files'], { encoding: 'utf8' })
   .split('\n')
   .filter(Boolean);
 
+// BINARY CONTENT IS NOT SCANNED FOR SECRETS.
+//
+// The secret and PSP scans below read EVERY tracked file as UTF-8 and run
+// regexes over it. The repository is about to hold Unreal source assets
+// (.uasset/.umap, tracked through Git LFS -- see .gitattributes and
+// wonderland/GAUNTLET.md). In a checkout those are real binaries, and a regex
+// over binary noise produces exactly the false positive this file already
+// warns about: `sk-` matching inside unrelated bytes. A file with a NUL byte in
+// its first 8 KB is binary; it is skipped. LFS POINTER files (what git stores)
+// are small text and are scanned like anything else.
+const isBinary = (f) => {
+  try {
+    const fd = openSync(f, 'r');
+    try {
+      const buf = Buffer.alloc(8192);
+      const n = readSync(fd, buf, 0, 8192, 0);
+      return buf.subarray(0, n).includes(0);
+    } finally { closeSync(fd); }
+  } catch { return false; }
+};
 const findings = [];
 const add = (rule, detail) => findings.push({ rule, detail });
 
@@ -343,6 +363,7 @@ function* occurrences(content, pattern) {
 }
 
 for (const f of files) {
+  if (isBinary(f)) continue;
   let content;
   try { content = readFileSync(f, 'utf8'); } catch { continue; }
   for (const [pattern, why] of SECRET_PATTERNS) {
@@ -372,6 +393,7 @@ const PSP_PATTERNS = [
   /\bPSP-[A-Z0-9]{6,}\b/g,
 ];
 for (const f of files) {
+  if (isBinary(f)) continue;
   let content;
   try { content = readFileSync(f, 'utf8'); } catch { continue; }
   for (const pattern of PSP_PATTERNS) {
