@@ -9475,7 +9475,11 @@ def build(layout):
     # 100 uu FURTHER OUT than the gate, not 100 uu more negative: the authored
     # pair was (-980) beside a gate at (-880), which is outward on that side and
     # inward on the mirrored one.
-    stroll_dog(_gdx + math.copysign(100.0, _gdx or 1.0), _gdy,
+    # 100 -> 620 uu OUTWARD. At 100 the upright Dog stood in the gate's
+    # opening and the first rebuild render shows it square across the lower
+    # half of the gate; the reference's gate is open to its base. 620 puts it
+    # beside the outer pillar, still attending the gate, no longer in it.
+    stroll_dog(_gdx + math.copysign(620.0, _gdx or 1.0), _gdy,
                "UprightReviewer", s=1.95, roam=140.0,
                upright=2, accessory="none")
     stroll_dog(980.0, 1240.0, "UprightBuilder", s=1.95, roam=140.0,
@@ -10579,7 +10583,11 @@ def build(layout):
     kit_fountain(900, -560, "Fountain")
     # The teapot floats in the reference's SKY, top-centre, far above the
     # rooflines. At z=600 ours hung at eye level inside the sight line.
-    kit_teapot(-380, 760, 1350, "SkyTeapot")
+    # x -380 -> +320: at -380 it hung on screen directly in front of the new
+    # heart topiary (heart crop of the first rebuild render). The reference's
+    # teapot floats top-centre over the castle; +320 is left of the axis,
+    # above the arch, in clear sky.
+    kit_teapot(320, 760, 1350, "SkyTeapot")
 
     # AGENT GARDEN — where a new C.A.R.D. is configured (the agent_config anchor). Read
     # it as a distinct, tended garden: a glowing gold pedestal + orb on a small arcane
