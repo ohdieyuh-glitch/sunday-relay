@@ -282,7 +282,17 @@ LOOK = {
     # backdrop (it rendered black) and every shadow in the world while fixing
     # nothing. Lit shading comes back now the real cause is known.
     "unlit": 0,
-    "skyLavender": 0.55,
+    # 0.55 -> 0.14. This blends the Rayleigh scattering coefficients toward
+    # near-parity in R and G, which is what makes a sky lavender instead of
+    # blue — and with the clouds finally lit white, that is now the loudest
+    # thing separating this sky from the reference's. The founder's picture has
+    # a BLUE sky with white cumulus; the violet in it lives in the arcane
+    # circle, the wisteria and the mushrooms, all of which are untouched.
+    #
+    # Not zero: the note this replaces is right that a little lavender is
+    # Wonderland's own, and 0.14 keeps a trace of it at the horizon without
+    # repainting the dome.
+    "skyLavender": 0.14,
     # NEUTRALISE THE FILL. LightColor tints the SkyLight's whole captured-scene
     # contribution, and this world's captured sky is blue, so every surface the
     # sun misses was being painted with blue light and nothing else. That is the
@@ -7182,7 +7192,12 @@ def build(layout):
         # exactly that lever: it changes what the atmosphere sends the camera
         # without changing what the sun sends the plaza. Same reasoning that
         # took the sky from black earlier, applied to the same knob.
-        set_prop(sac, "RayleighScatteringScale", 0.20)
+        # 0.20 OVERSHOT. Measured across the change: the sky band went 90.8 ->
+        # 117.8 against the reference's 99.2, and the whole frame with it,
+        # 99.7 -> 115.6. 0.145 is the interpolation between the two measurements
+        # for a target of 99, which is what having two real data points buys
+        # over a third guess.
+        set_prop(sac, "RayleighScatteringScale", 0.145)
         # Multiple scattering is what makes a real sky bright away from the sun
         # and fills shade with blue. At the default it contributes almost
         # nothing here for the same reason.
@@ -7190,7 +7205,7 @@ def build(layout):
         # side of a cloud and the sky away from the sun; a volumetric cumulus
         # with too little of it is a grey lump rather than a white one, which is
         # what the frame came back with.
-        set_prop(sac, "MultiScatteringFactor", 3.4)
+        set_prop(sac, "MultiScatteringFactor", 2.9)
         # LAVENDER, BY BLEND. See LOOK["skyLavender"]. The physical default is
         # kept as one end of the blend so 0.0 is exactly today's sky, and the
         # TOTAL is held near the default's sum so the sky changes hue without
