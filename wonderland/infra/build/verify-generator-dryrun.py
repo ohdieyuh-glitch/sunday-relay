@@ -229,6 +229,13 @@ from wl_preview_leaf import apply as _wl_leaf_apply  # noqa: E402
 
 
 def main():
+    # EXERCISE THE HD BRANCH, NOT THE FALLBACK. Without this the stub has no
+    # unreal.StaticMesh, the HD asset build registers nothing, every hd_ok()
+    # answers False, and this gate proudly executes the world the rebuild
+    # REPLACED -- cone roofs, voxel canopies, segment flags -- while the spline
+    # path, the border and the hover props never run at all. Same flag the
+    # composition tracer sets; a real cook ignores it.
+    os.environ.setdefault("WONDERLAND_HD_ASSUME", "1")
     stub = make_unreal()
     sys.modules["unreal"] = stub
     src = io.open(GEN, encoding="utf8").read()

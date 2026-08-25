@@ -771,19 +771,19 @@
       "name": "Great Framing Tree",
       "mesh": "tree",
       "location": [
-        1300,
-        470,
+        700,
+        -200,
         560
       ],
       "scale": [
         5,
         5,
-        11
+        13
       ],
       "dimensionsUu": [
         900,
         900,
-        1400
+        1700
       ],
       "elevationUu": 0,
       "tier": "primary",
@@ -793,7 +793,38 @@
       "occlusionGroup": "east",
       "asset": "megascans_or_custom",
       "sightlineHero": true,
-      "note": "The huge gnarled hero tree carrying the oval portrait frame; right repoussoir, canopy overhanging the Agent Garden. Trunk blocks; canopy overlaps. Frames the right edge per \u00a73. This is the 'giant-tree composition'."
+      "note": "The huge gnarled hero tree carrying the oval portrait frame; right repoussoir, canopy overhanging the Agent Garden. Trunk blocks; canopy overlaps. Frames the right edge per \u00a73. This is the 'giant-tree composition'.",
+      "foreground": true,
+      "_note_hd": "MOVED 2026-08-25 to (700,-200) and flagged foreground. The reference's right edge is ONE giant trunk entering from below the frame and leaving above it, 3-5 m from the lens. At (1300,470) the trunk stood 1,380 uu out at a bearing of 43 degrees -- outside the 37.5-degree half-field -- so only its canopy reached the frame, at the top right, and the frame had no repoussoir. From (700,-200), mirrored to screen-right, the trunk is 1,180 uu out at 36 degrees: its base falls just below the bottom ray (-20 vs -18.4 deg) and its crown is 47 degrees up, out the top, exactly the reference's crop. `foreground: true` exempts it from the arrival keep-out and the camera-lap rule, both of which exist to stop ACCIDENTAL foreground; this is authored."
+    },
+    {
+      "id": "hero_mushroom",
+      "name": "Hero Foreground Mushroom",
+      "mesh": "hero_mushroom",
+      "location": [
+        -640,
+        -160,
+        0
+      ],
+      "scale": [
+        2.1,
+        2.1,
+        6.0
+      ],
+      "dimensionsUu": [
+        210,
+        210,
+        600
+      ],
+      "elevationUu": 0,
+      "tier": "primary",
+      "band": "foreground",
+      "collision": "blocking",
+      "streamGroup": "core_plaza",
+      "occlusionGroup": "core",
+      "asset": "custom",
+      "foreground": true,
+      "note": "The reference's LEFT repoussoir: one tall red-capped mushroom whose cap sits just above eye level at the frame edge and whose stem runs out of the bottom of the frame. Authored -X so the mirror puts it screen-LEFT, opposite the framing tree. Tall proportions on purpose -- the stem is 2.4 cap diameters, the reference's is about that; kit_mushroom's amanita is 1.6 and would read as a parasol at this distance. `foreground: true`: authored, not accidental."
     },
     {
       "id": "brain_landmark",
@@ -829,19 +860,19 @@
       "name": "Heart Topiary",
       "mesh": "topiary",
       "location": [
-        720,
-        1400,
+        780,
+        1850,
         350
       ],
       "scale": [
-        7.6,
-        1.9,
-        7.0
+        5.6,
+        1.5,
+        5.2
       ],
       "dimensionsUu": [
-        760,
-        190,
-        700
+        560,
+        150,
+        520
       ],
       "elevationUu": 0,
       "tier": "secondary",
@@ -851,7 +882,8 @@
       "occlusionGroup": "core",
       "asset": "custom",
       "note": "Heart-shaped hedge, left-inboard midground accent behind Heart Plaza.",
-      "_note": "REPOSITIONED AND RESIZED 2026-08-25. The reference's heart is a signature landmark at about a third of frame height, right of centre in the midground behind the teacups. At (340,540) x 300 uu it was a shrub beside the path. Mirrored at build time, so authored +X lands screen-right."
+      "_note": "REPOSITIONED AND RESIZED 2026-08-25. The reference's heart is a signature landmark at about a third of frame height, right of centre in the midground behind the teacups. At (340,540) x 300 uu it was a shrub beside the path. Mirrored at build time, so authored +X lands screen-right.",
+      "_note_hd": "RESIZED AND STEPPED BACK 2026-08-25: at 760 wide and 2,430 uu out it measured 22% of frame width and 33% of frame height in the offline trace; the reference's heart is ~13% x 22%. 560 wide at 3,050 uu is ~11% x 21%. It is a WREATH now (hd_topiary_heart), open in the middle."
     },
     {
       "id": "rose_arch",

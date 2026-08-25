@@ -52,6 +52,12 @@ ALLOW = ("PATH", "BLVD", "Plaza", "Tile", "Roll", "Hill", "Ground", "Rune",
          "Forecourt",          # paving in front of a landmark: also a floor
          "Carpet",             # ground-cover soil discs, 2 cm proud of the turf
          "FarMeadow", "MeadowPatch")
+# NOTE on the arrival arch: "rose_arch" above already admits the one arch that
+# belongs on the sight line (you look THROUGH it to the castle; the reference
+# does exactly that). A broader "_arch" entry was added here for one commit and
+# it also admitted the garden's rose walk, which then stood as two more hoops
+# stacked behind the first. The walk is off the axis now and this list is not
+# wider than it needs to be.
 
 
 def main():

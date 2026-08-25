@@ -26,6 +26,7 @@ import io
 import json
 import math
 import os
+import sys
 
 try:
     import unreal  # resolves ONLY inside the UE 5.8 Editor
@@ -37,6 +38,32 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LAYOUT_PATH = os.path.normpath(os.path.join(HERE, "..", "..", "WorldDesign", "hub-layout.json"))
+
+# ---- THE HD ASSET LIBRARY -------------------------------------------------
+#
+# Until this import, every visible thing in Wonderland was one of five meshes:
+# /Engine/BasicShapes/{Cube, Cylinder, Cone, Sphere, Plane}. There are zero
+# .uasset files in the repository. So the founder's rejection list -- "obvious
+# cubes", "obvious cylinders", "cone roofs", "sphere/blob trees", "crude
+# mushrooms" -- was not a description of a styling problem, it was an exact
+# description of the asset library, and no amount of colour, bloom, density or
+# scatter could move it.
+#
+# hd/ is that missing half: meshkit authors triangles in pure Python, assets
+# declares the library, ue_bridge turns each one into a real UStaticMesh with
+# an LOD chain. sys.path rather than a relative import because this file is
+# EXEC'D as source by the offline harnesses, not imported, so __package__ is
+# empty and `from . import` cannot work.
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+try:
+    from hd import assets as hd_assets
+    from hd import ue_bridge as hd_bridge
+except Exception as _hde:      # pragma: no cover - reported, never fatal here
+    hd_assets = hd_bridge = None
+    _HD_IMPORT_ERROR = _hde
+else:
+    _HD_IMPORT_ERROR = None
 
 # WHERE THE GENERATED ASSETS LIVE. Textures and audio are synthesised on CPU
 # before the engine ever starts and imported from disk here. The directories
@@ -328,6 +355,33 @@ LOOK = {
     # reference's arrangement and the opposite of what this world has always
     # built. WONDERLAND_LOOK=mirrorX=0 restores it.
     "mirrorX": 1,
+    # ---- HOW MANY RELAY DOGS STAND IN THE ARRIVAL FRAME -------------------
+    #
+    # 0 = none, 1 = the hero only, 2 = hero + companions + upright Dogs.
+    #
+    # The founder's directive for this phase is explicit: "Do not spend this
+    # phase populating the reference with multiple Relay Dogs. The environment
+    # must stand on its own." The reference image itself has no Dog in it at
+    # all. Twelve were standing in the arrival frame, eight of them readable,
+    # the nearest owning 1.37% of it dead centre over the arcane circle.
+    #
+    # 1 rather than 0 deliberately, and this is a judgement worth stating: the
+    # hero Dog stands ON the arrival circle, which is the player's spawn point,
+    # and the circle is empty in the reference precisely BECAUSE that is where
+    # the player arrives. Removing the hero would be a gameplay change; the
+    # eleven others are set dressing this phase was told not to spend itself
+    # on. Nothing is deleted — every Dog system, coat, gait and upright variant
+    # is untouched and one env var brings them all back.
+    "arrivalDogs": 1,
+    # Phase V: the sky keys and the teapot as AWonderlandHoverProp actors with
+    # a UWonderlandHoverComponent each — bounded, asynchronous, one sine per
+    # prop. 0 puts them back in the instanced batches on the Bob WPO.
+    "hoverActors": 1,
+    # Phase S/T: the boulevard laid by the spline tool (running-bond setts
+    # aligned to the curve, no overlap by construction) and its three-band
+    # border. 0 restores the segment-by-segment flags and no border.
+    "splinePath": 1,
+    "pathBorder": 1,
     # Standing seams on every spire roof -- see kit_spire. 0 removes them.
     # They exist because the cone is the largest shape in the skyline and one
     # flat colour over it is what makes the whole band read as "cylinder+cone",
@@ -787,6 +841,21 @@ LOOK = {
     # magic actually glow.
     "bloomIntensity": 1.5,
     "bloomThreshold": 0.8,
+    # ---- PHASE Y: THE CINEMATIC GRADE, ON THE CAMERA ----------------------
+    #
+    # Per-range colour GAIN multipliers (shadows / midtones / highlights).
+    # The founder's direction: shadows a subtle purple-magenta, midtones warm,
+    # highlights golden-cream. Applied through the CameraActor's own
+    # PostProcessSettings because the level PostProcessVolume is proven not to
+    # reach this render path (the DoF test: a razor-sharp skyline at 80 km).
+    #
+    # SMALL ON PURPOSE. These multiply the final colour; 1.10 on a channel is
+    # already a visible cast. "Do not destroy material colours, do not crush
+    # blacks, do not make white castle surfaces glow, do not make the whole
+    # image pink" is the brief, and every value here is inside +/-8%.
+    "gradeShadows": (1.03, 0.97, 1.08),
+    "gradeMidtones": (1.03, 1.00, 0.96),
+    "gradeHighlights": (1.04, 1.00, 0.93),
     # --- grade (runs AFTER metering; this is the real brightness lever)
     # MEASURED AGAIN, ON A DELIVERED FRAME. 0.60/0.60/0.64 was measured against
     # a wash, and it does stop one — but the streamed frame came back with 46.2%
@@ -969,6 +1038,43 @@ PLACEHOLDER_MESH = {
     "brain": "/Engine/BasicShapes/Sphere",
     "teapot": "/Engine/BasicShapes/Sphere",
 }
+
+# EVERY HD KEY RESOLVES BEFORE THE EDITOR IS ASKED FOR ANYTHING.
+#
+# The HD assets are built inside build(), which is far too late for a kit that
+# has already asked for "hd_roof". Registering each HD key against its fallback
+# primitive here means a key ALWAYS resolves to some mesh, and build_hd_meshes
+# simply overwrites the entry with the real asset path when it succeeds.
+#
+# The failure mode this buys is the important part. If the bridge cannot build
+# a single mesh, the world comes back looking exactly like the one the founder
+# rejected -- legible, explained by one HD_MESHES log line -- instead of coming
+# back as 40,000 "No placeholder mesh for 'hd_roof'" warnings over a field of
+# default cubes, or not coming back at all.
+if hd_assets is not None:
+    for _hk, _fb in hd_assets.FALLBACK.items():
+        PLACEHOLDER_MESH[_hk] = PLACEHOLDER_MESH[_fb]
+    # ---- WONDERLAND_HD_ASSUME: FOR THE OFFLINE HARNESSES ONLY -------------
+    #
+    # The offline preview is the only free look this project gets at
+    # composition, and without this flag it looks at the WRONG WORLD.
+    #
+    # The harnesses stub `unreal` with an object that answers every attribute.
+    # But a stub module has no `unreal.StaticMesh`, so build_hd_meshes raises
+    # AttributeError on every asset, registers nothing, and every `hd_ok(...)`
+    # in every kit answers False -- so the tracer faithfully rasterises the
+    # fallback world: voxel canopies, the voxel heart, cone roofs. Exactly the
+    # world the founder rejected, drawn by a tool reporting on the world that
+    # replaced it. That is the same class of blindness as an offline dry run
+    # whose texture branch never ran.
+    #
+    # So the flag says out loud what it is: an ASSUMPTION that the editor build
+    # will succeed, made only where nothing can be built. It never affects a
+    # real cook -- there the paths come from build_hd_meshes, and only after
+    # each asset's triangle count has been read back off the finished asset.
+    if os.environ.get("WONDERLAND_HD_ASSUME", "0") != "0" and hd_bridge is not None:
+        for _hk in hd_assets.ASSETS:
+            PLACEHOLDER_MESH[_hk] = hd_bridge.asset_path(_hk)
 
 
 def vec(xyz):
@@ -1506,7 +1612,30 @@ MATERIAL_SPEC = {
     # environment is one real-time SkyLight whose intensity was just cut. 0.90
     # is metal enough to travel a highlight across a hammered face while keeping
     # a floor of albedo if the capture is thin. The emissive goes to zero.
-    "gold":        ((1.00, 0.80, 0.38), 0.90, 0.28, (0.0, 0.0, 0.0), 0.0),
+    # ---- PHASE H, MEASURED AGAINST THE HD REFERENCE BY PIXEL POPULATION ----
+    #
+    # marble/reference/wonderland-reference-hd.png, sampled by population and
+    # never by region mean (a region mean of castle-and-sky reports whichever
+    # covers more pixels). The reference is a LIT frame, so its values are not
+    # albedos; what transfers is the RATIO between channels — the hue and the
+    # chroma — and the ordering of brightness between materials.
+    #
+    #     cream castle walls   sRGB(218,187,204)   1 : 0.86 : 0.94   bright, low chroma
+    #     pink roofs           sRGB(172,110,119)   1 : 0.64 : 0.69
+    #     gate gold            sRGB(178,124, 68)   1 : 0.70 : 0.38
+    #     cobble stones        sRGB(107, 73, 68)   1 : 0.68 : 0.64   WARM brown-grey
+    #     mushroom cap         sRGB(143, 44, 49)   1 : 0.31 : 0.34   a true red, G == B
+    #     foliage mass         sRGB( 48, 31, 35)   near black; green is never dominant
+    #     trunk bark           sRGB( 41, 23, 21)   very dark, warm
+    #
+    # Two of ours were the wrong HUE, not the wrong brightness: `spire` was a
+    # mauve 1 : 0.59 : 1.03 (blue ABOVE red) where the walls are a warm cream
+    # with blue below red, and `cobble` was a neutral 1 : 0.94 : 0.90 where
+    # the road is distinctly warm. Both are corrected as ratios at roughly the
+    # brightness they already had, because the light budget was tuned against
+    # that brightness and re-tuning it is a render-cycle question, not an
+    # albedo one.
+    "gold":        ((1.00, 0.72, 0.36), 0.90, 0.34, (0.0, 0.0, 0.0), 0.0),
     "gold_glow":   ((1.00, 0.80, 0.38), 0.45, 0.24, (1.00, 0.70, 0.25), 1.7),
     # Aged brass for crevices, undersides and the deep parts of ornament.
     # Real gilding is dark where it is sheltered and bright where it is
@@ -1547,9 +1676,20 @@ MATERIAL_SPEC = {
     # Halved rather than matched exactly: these are albedos, the render applies
     # its own light on top, and the far more common failure in this file has
     # been overshooting a value in one move.
-    "cobble":      ((0.31, 0.29, 0.28), 0.0, 0.80, (0, 0, 0), 0.0),
-    "cobble2":     ((0.22, 0.21, 0.21), 0.0, 0.82, (0, 0, 0), 0.0),
-    "plaza":       ((0.34, 0.33, 0.32), 0.0, 0.76, (0, 0, 0), 0.0),
+    "cobble":      ((0.31, 0.22, 0.20), 0.0, 0.80, (0, 0, 0), 0.0),
+    "cobble2":     ((0.22, 0.16, 0.15), 0.0, 0.82, (0, 0, 0), 0.0),
+    "plaza":       ((0.34, 0.25, 0.23), 0.0, 0.76, (0, 0, 0), 0.0),
+    # THE HERO PATH MATERIAL (Phase I). Same cobble sheet as the road, at the
+    # scale that puts one sett at ~29 cm underfoot, warmer and a shade lighter
+    # so the central way reads as the frame's brightest ground exactly as the
+    # reference's does. Exposed through the master's parameters: BaseColor,
+    # Roughness, RoughVary, DetailAmp, TexScale. The cracks / moss / petals /
+    # wetness / magic-mask LAYERS the brief lists are NOT in the master graph
+    # yet -- adding five masked layers to a graph authored from Python is a
+    # render-cycle job (the last graph change that could not be seen offline
+    # took a build down), and it is recorded as the next material step in
+    # hd/HD-PIPELINE.md rather than half-built here.
+    "cobble_hero": ((0.36, 0.27, 0.24), 0.0, 0.74, (0, 0, 0), 0.0),
     # ---- THE GREENS ARE A SUPPORTING MASS, NOT THE SUBJECT -----------------
     #
     # Counted on both frames, over the same box, taking only pixels where green
@@ -1581,9 +1721,13 @@ MATERIAL_SPEC = {
     # as grass rather than as a coloured plane, and they cost two materials.
     "ground_sun":  ((0.12, 0.17, 0.08), 0.0, 0.88, (0, 0, 0), 0.0),
     "ground_shade":((0.05, 0.10, 0.07), 0.0, 0.84, (0, 0, 0), 0.0),
-    "trunk":       ((0.38, 0.28, 0.22), 0.0, 0.78, (0, 0, 0), 0.0),
-    "foliage":     ((0.09, 0.18, 0.09), 0.0, 0.72, (0, 0, 0), 0.0),
-    "foliage_hi":  ((0.15, 0.23, 0.15), 0.0, 0.66, (0, 0, 0), 0.0),
+    "trunk":       ((0.24, 0.15, 0.12), 0.0, 0.78, (0, 0, 0), 0.0),
+    # bark: the HD trunks' own material -- the same bark sheet as trunk, with
+    # a darker, warmer base for the furrowed frame-edge tree, whose whole job
+    # is to be the darkest sixth of the picture (reference right edge: luma 43).
+    "bark":        ((0.19, 0.11, 0.09), 0.0, 0.84, (0, 0, 0), 0.0),
+    "foliage":     ((0.07, 0.14, 0.07), 0.0, 0.72, (0, 0, 0), 0.0),
+    "foliage_hi":  ((0.12, 0.20, 0.12), 0.0, 0.66, (0, 0, 0), 0.0),
     # THE RANGE THE ADDENDUM ASKS FOR: deep forest for the shadowed core of
     # a canopy, spring for the sunlit outside. A cluster built from one green
     # is a blob however many spheres it has; built from three it has an
@@ -1615,8 +1759,10 @@ MATERIAL_SPEC = {
     #
     # Emissive to zero puts the cap on the ordinary SELF-COLOUR path with the
     # other 33 materials rather than carrying its own; a mushroom does not glow.
-    "mush_red":    ((0.50, 0.20, 0.19), 0.0, 0.62, (0.0, 0.0, 0.0), 0.0),
+    "mush_red":    ((0.52, 0.16, 0.17), 0.0, 0.62, (0.0, 0.0, 0.0), 0.0),
     "mush_white":  ((0.98, 0.90, 0.80), 0.0, 0.42, (0, 0, 0), 0.0),
+    "mush_stem":   ((0.90, 0.80, 0.68), 0.0, 0.60, (0, 0, 0), 0.0),
+    "mush_spot":   ((0.98, 0.93, 0.86), 0.0, 0.48, (0, 0, 0), 0.0),
     # Same treatment, same reason: a violet cap in violet light does not need to
     # emit violet as well.
     "mush_purple": ((0.34, 0.19, 0.56), 0.0, 0.62, (0.0, 0.0, 0.0), 0.0),
@@ -1641,7 +1787,11 @@ MATERIAL_SPEC = {
     # So the architecture comes down and dog_body stays at 0.88. Each of these
     # keeps its hue and its relationships -- spire stays the violet masonry,
     # stone stays the neutral ashlar, porcelain stays the pink-leaning ivory.
-    "spire":       ((0.58, 0.34, 0.60), 0.0, 0.40, (0, 0, 0), 0.0),
+    "spire":       ((0.64, 0.54, 0.60), 0.0, 0.40, (0, 0, 0), 0.0),
+    # ivory: Phase H's cream stone -- the gate piers, wall panels and near
+    # architecture. Warm, low chroma, a shade brighter than spire; never white.
+    "ivory":       ((0.70, 0.60, 0.62), 0.0, 0.44, (0, 0, 0), 0.0),
+    "card_white":  ((0.92, 0.88, 0.84), 0.0, 0.50, (0, 0, 0), 0.0),
     # Down with porcelain, same measurement: a tower body at 0.98 red is the
     # brightest thing in the midground and the reference has nothing that loud.
     "spire_pink":  ((0.78, 0.58, 0.70), 0.0, 0.62, (0, 0, 0), 0.0),
@@ -1734,7 +1884,7 @@ MATERIAL_SPEC = {
     # AUTHORED, and it is the one part that can be fixed with certainty.
     # (cloud and dog_body stay white on purpose: clouds are white and the
     # canonical Relay Dog's coat is its identity.)
-    "stone":       ((0.39, 0.37, 0.36), 0.0, 0.90, (0, 0, 0), 0.0),
+    "stone":       ((0.40, 0.35, 0.33), 0.0, 0.90, (0, 0, 0), 0.0),
     "dog_pink":    ((0.95, 0.62, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
     # SKELETON FLAME, the founder's legendary variant. It is a SKIN: the same
     # canonical body, the same proportions, the same visor band. What changes is
@@ -1798,7 +1948,7 @@ MATERIAL_SPEC = {
     # that reads as unpainted plaster. Both tower-body albedos scaled by the
     # measured channel ratios (R 0.96, G 0.84, B 0.93): green comes down most,
     # which is what turns grey into mauve.
-    "spire_far":   ((0.61, 0.49, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
+    "spire_far":   ((0.62, 0.53, 0.70), 0.0, 0.62, (0, 0, 0), 0.0),
     # Rose and pink rooflines — the reference's skyline is warm, not gold.
     # Blue lifted 0.44 -> 0.54 and red eased. The reference's roofs really are
     # pink, so this stays pink -- it just stops being pink with NO blue in it,
@@ -1817,8 +1967,10 @@ MATERIAL_SPEC = {
     # 25% brighter than the reference's brick-rose. Both roof albedos scaled
     # by the measured channel ratios (R 0.77, G 0.83, B 0.70), which warms the
     # hue and drops the saturation and the brightness together.
-    "roof_rose":   ((0.55, 0.32, 0.38), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
-    "roof_pink":   ((0.71, 0.38, 0.43), 0.0, 0.62, (0, 0, 0), 0.0),
+    "roof_rose":   ((0.56, 0.35, 0.39), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
+    "roof_pink":   ((0.70, 0.42, 0.46), 0.0, 0.62, (0, 0, 0), 0.0),
+    # a third coordinated pink, cooler, so three roofs side by side are three
+    "roof_coral":  ((0.66, 0.36, 0.40), 0.0, 0.62, (0, 0, 0), 0.0),
     # THE REFERENCE'S SKYLINE IS NOT ALL PINK. Look at it: white towers with
     # rose and pink cones, and among them a clear run of BLUE and blue-violet
     # roofs, plus gold onion domes. Wonderland's skyline has had exactly two
@@ -3033,6 +3185,10 @@ def build_material_library(texs=None):
         # muted sage it replaced. That surface is carried by tint and by
         # aerial perspective, not by structure the eye can never resolve.
         "trunk":      ("bark",    0.0090, (1.00, 1.00, 1.00)),
+        "bark":       ("bark",    0.0070, (1.00, 0.96, 0.94)),
+        "cobble_hero": ("cobble", 0.0034, (1.08, 1.00, 0.94)),
+        "ivory":      ("plaster", 0.0050, (1.00, 1.00, 1.00)),
+        "roof_coral": ("roof",    0.0070, (1.04, 0.98, 0.98)),
         "moss":       ("sward",   0.0110, (0.80, 1.05, 0.78)),
         "spire":      ("plaster", 0.0055, (1.00, 1.00, 1.00)),
         # spire_far WAS NOT IN THIS TABLE AT ALL. Every tower in the distant
@@ -3271,7 +3427,8 @@ def build_material_library(texs=None):
                   "dog_body": 0.20, "dog_visor": 0.10, "water": 0.12,
                   "spire": 0.55, "spire_pink": 0.55, "spire_blue": 0.55,
                   "spire_teal": 0.55, "spire_far": 0.35,
-                  "roof_rose": 0.60, "roof_pink": 0.60,
+                  "roof_rose": 0.60, "roof_pink": 0.60, "roof_coral": 0.60,
+                  "ivory": 0.50, "bark": 1.00, "cobble_hero": 1.00,
                   "stone": 1.00, "cobble": 1.00, "cobble2": 1.00, "plaza": 0.85,
                   "trunk": 1.00, "foliage": 0.75, "foliage_hi": 0.75}
     for _nm, _dv in relief.items():
@@ -3922,6 +4079,7 @@ def build(layout):
                 % (len(_BATCHES), sum(len(b["xf"]) // 9 for b in _BATCHES.values())))
             return 0
         placed = pieces = 0
+        _DL_COUNT = {}
         for key in _BATCH_ORDER:
             entry = _BATCHES[key]
             count = len(entry["xf"]) // 9
@@ -3950,6 +4108,23 @@ def build(layout):
             if entry.get("mesh_obj") is not None:
                 set_prop(actor, "Mesh", entry["mesh_obj"])
             set_prop(actor, "BatchName", unreal.Name(name))
+            # DATA LAYER PREPARATION. This level is a plain map (no World
+            # Partition), and Data Layer assets need the editor UI or a WP
+            # world, so the classification is written as a TAG and an outliner
+            # FOLDER today. Later automation reads the tag back and makes the
+            # real Data Layer without reclassifying a single batch.
+            if hd_assets is not None:
+                try:
+                    from hd import layout_tools as _lt
+                    _mkey = entry["mesh"].rsplit("/", 1)[-1].split(".")[0]
+                    _mkey = "hd_" + _mkey[3:] if _mkey.startswith("SM_") else _mkey.lower()
+                    _dl = _lt.data_layer_for(name, _mkey, entry["mat"].rsplit("/", 1)[-1])
+                    _lt.tag_actor(unreal, actor, [_dl, "HDBatch"])
+                    _lt.set_folder(unreal, actor, _lt.folder_for(_mkey)
+                                   if _mkey.startswith("hd_") else "Batches/" + _dl)
+                    _DL_COUNT[_dl] = _DL_COUNT.get(_dl, 0) + 1
+                except Exception as _dle:
+                    unreal.log_warning("data-layer tag skipped for %s: %s" % (name, _dle))
             # HIERARCHICAL, SO THE LODs ABOVE ACTUALLY DO SOMETHING.
             #
             # A plain InstancedStaticMeshComponent picks ONE LOD for the entire
@@ -3974,6 +4149,9 @@ def build(layout):
                      if _BATCHES[k].get("collides"))
         unreal.log_warning("BATCHES=%d  INSTANCED_PIECES=%d  COLLIDING_PIECES=%d"
                            % (placed, pieces, _solid))
+        if _DL_COUNT:
+            unreal.log_warning("DATA_LAYER_TAGS " + " ".join(
+                "%s=%d" % (k, v) for k, v in sorted(_DL_COUNT.items())))
         return placed
 
     def _set_float_array(actor, cpp_name, values):
@@ -4032,6 +4210,91 @@ def build(layout):
         except Exception as _nse:
             unreal.log_warning("NANITE: conversion step failed (%s); the world "
                                "keeps the engine primitives" % _nse)
+
+    # ---- THE HD ASSET LIBRARY, BUILT INTO THE PROJECT ---------------------
+    #
+    # Real authored geometry, each mesh carrying its own LOD chain -- the thing
+    # /Engine/BasicShapes cannot supply, and the reason this world submits ~95
+    # million triangles a frame from 50,285 single-LOD Spheres.
+    #
+    # The report is the gate. build_hd_meshes reads each finished asset back
+    # and compares its triangle count against what was authored; anything that
+    # disagrees is REJECTED and never registered, so its key keeps the fallback
+    # primitive. That readback exists because the offline dry run cannot prove
+    # any of this: its `unreal` stub answers every call with an object that
+    # accepts every call, so the bridge "succeeds" offline no matter what the
+    # real UE 5.8 method names turn out to be.
+    _HD_REPORT = None
+    if hd_bridge is not None and os.environ.get("WONDERLAND_HD", "1") != "0":
+        try:
+            _hd_paths, _HD_REPORT = hd_bridge.build_hd_meshes(unreal)
+            PLACEHOLDER_MESH.update(_hd_paths)
+            unreal.log_warning(hd_bridge.format_report(_HD_REPORT))
+            for _bad, _why in _HD_REPORT["rejected"]:
+                unreal.log_warning("HD REJECTED %s -- %s (keeps %s)"
+                                   % (_bad, _why, hd_assets.FALLBACK.get(_bad)))
+        except Exception as _hbe:
+            unreal.log_warning("HD: the asset build failed entirely (%s); every "
+                               "HD key keeps its fallback primitive and the "
+                               "world is the one before this rebuild" % _hbe)
+    elif hd_bridge is None:
+        unreal.log_warning("HD: package did not import (%s); fallbacks only"
+                           % _HD_IMPORT_ERROR)
+    else:
+        unreal.log_warning("HD: disabled by WONDERLAND_HD=0; fallbacks only")
+
+    _HOVER_CLS = [None]
+
+    def hover_prop(mesh_key, location, scale, label, mat, amp=9.0, period=6.5, sway=2.5):
+        """Spawn one floating prop as an actor carrying the hover component.
+
+        Instances cannot carry components, so the three or four things that
+        float are actors. Returns the actor, or None if the class is not in
+        this build — in which case the caller places the batched version and
+        the prop simply does not move, which is visible and honest."""
+        if not int(LOOK["hoverActors"]):
+            return None
+        if _HOVER_CLS[0] is None:
+            _HOVER_CLS[0] = unreal.load_class(None, "/Script/Wonderland.WonderlandHoverProp") or False
+            if not _HOVER_CLS[0]:
+                unreal.log_warning("HOVER: WonderlandHoverProp is not in this build; "
+                                   "floating props stay batched and static")
+        if not _HOVER_CLS[0]:
+            return None
+        path = PLACEHOLDER_MESH.get(mesh_key, UNKNOWN_MESH)
+        m = MATS.get(mat) if isinstance(mat, str) else mat
+        actor = spawn(_HOVER_CLS[0], location, scale=scale, label=label)
+        if actor is None:
+            return None
+        set_prop(actor, "MeshPath", path)
+        set_prop(actor, "MaterialPath", _asset_path_of(m))
+        if m is not None:
+            set_prop(actor, "Material", m)
+        try:
+            set_prop(actor, "Mesh", asset_lib.load_asset(path))
+        except Exception:
+            pass
+        try:
+            hv = actor.get_component_by_class(
+                unreal.load_class(None, "/Script/Wonderland.WonderlandHoverComponent"))
+            if hv is not None:
+                for _nm, _v in (("AmplitudeUu", float(amp)), ("PeriodSeconds", float(period)),
+                                ("SwayDeg", float(sway))):
+                    set_prop(hv, _nm, _v)
+        except Exception as _he:
+            unreal.log_warning("HOVER %s: component not tuned (%s)" % (label, _he))
+        _wl_piece_hook(mesh_key, location, scale, label, (0.0, 0.0, 0.0), mat)
+        return actor
+
+    def hd_ok(key):
+        """Did this HD asset actually build into the project?
+
+        Kits ask before deleting the workaround they used to need. The ribs on
+        the old cone roof are the example: they exist to fake a fluted surface
+        on a smooth cone, and hd_roof has eight real scalloped shingle courses,
+        so keeping both would be decoration over decoration. But if the bridge
+        failed, the cone is back and the ribs must come back with it."""
+        return str(PLACEHOLDER_MESH.get(key, "")).startswith("/Game/Wonderland/HD")
 
     def static_mesh(mesh_key, location, scale, label, rotation=(0.0, 0.0, 0.0), mat=None):
         # A converted mesh if there is one, the original otherwise. Falling back
@@ -4191,7 +4454,11 @@ def build(layout):
                   "%s_rail%d" % (label, int(zz)), rot=(0.0, yaw, 0.0))
         for i in range(n):
             t = (i + 0.5) / n
-            _part("cylinder", x0 + dx * t, y0 + dy * t, z + h * 0.55,
+            # TURNED BALUSTERS. A railing post is a vase, a neck, a ring and a
+            # plinth on a lathe; a cylinder is a dowel. Sixteen silhouette
+            # events per post, and railings run right across the near frame.
+            _part("hd_baluster" if hd_ok("hd_baluster") else "cylinder",
+                  x0 + dx * t, y0 + dy * t, z + h * 0.55,
                   0.055, 0.055, h * 0.9 / 100.0, mat, "%s_bal%d" % (label, i))
             _part("sphere", x0 + dx * t, y0 + dy * t, z + h * 0.55,
                   0.085, 0.085, 0.10, mat, "%s_belly%d" % (label, i))
@@ -4274,7 +4541,10 @@ def build(layout):
         # tree); ordinary trees stay modest. A tapered trunk with a knotted base and a
         # deep, layered crown so it reads as a real canopy, not a lollipop.
         th = 980.0 * s if giant else 240.0 * s
-        tr = 82.0 * s if giant else 28.0 * s
+        # 104, not 82, for the giant: the framing tree is now an authored
+        # foreground element 1,180 uu from the lens, and the reference spends
+        # ~15% of the frame's width on that trunk. At 82 it measured ~9%.
+        tr = 104.0 * s if giant else 28.0 * s
         ground_skirt(x, y, tr * (2.4 if giant else 2.9), label,
                      n=13 if giant else 6)
         if giant:
@@ -4361,16 +4631,29 @@ def build(layout):
             # rather than any large tree.
             kit_clock(x, y - tr * 1.30, th * 0.42, "%s_clock" % label)
         else:
-            _part("cylinder", x, y, th * 0.5, tr / 50.0, tr / 50.0, th / 100.0, "trunk", "%s_trunk" % label)
+            # A TRUNK, NOT A TUBE. hd_trunk is a LOFT: the radius, the lean and
+            # the bark ridges all vary ring by ring, and it flares into six real
+            # roots at the base. hd_trunk_giant is the frame-edge tree — twelve
+            # deep furrows and a heavy lean into frame. The founder's reference
+            # spends its darkest sixth of the picture on exactly that trunk
+            # (right edge luma 43 against our 94), so it is not a background
+            # asset, it is a compositional one.
+            _part("hd_trunk_giant" if giant else "hd_trunk",
+                  x, y, th * 0.5, tr / 50.0, tr / 50.0, th / 100.0,
+                  "trunk", "%s_trunk" % label)
         if giant:
-            # flared roots + a couple of boughs reaching out under the crown
-            for k in range(5):
-                a = k * (2.0 * math.pi / 5.0)
-                _part("cube", x + math.cos(a) * tr * 1.1, y + math.sin(a) * tr * 1.1, tr * 0.5,
-                      0.7 * s, 0.4 * s, 0.7 * s, "trunk", "%s_root%d" % (label, k),
-                      rot=(0.0, math.degrees(a), 24.0))
+            # The root cubes are gone: hd_trunk_giant carries six lofted
+            # buttress roots of its own, and stacking boxes on them was the
+            # "decorate the primitive" move the brief forbids. They return
+            # automatically if the HD mesh did not build.
+            if not hd_ok("hd_trunk_giant"):
+                for k in range(5):
+                    a = k * (2.0 * math.pi / 5.0)
+                    _part("cube", x + math.cos(a) * tr * 1.1, y + math.sin(a) * tr * 1.1, tr * 0.5,
+                          0.7 * s, 0.4 * s, 0.7 * s, "trunk", "%s_root%d" % (label, k),
+                          rot=(0.0, math.degrees(a), 24.0))
             for k, (bx, by, bz) in enumerate([(0.7, 0.2, 0.62), (-0.65, 0.3, 0.68), (0.2, -0.7, 0.58)]):
-                _part("cylinder", x + bx * tr * 2.2, y + by * tr * 2.2, th * bz,
+                _part("hd_branch", x + bx * tr * 2.2, y + by * tr * 2.2, th * bz,
                       0.28 * s, 0.28 * s, 2.6 * s, "trunk", "%s_bough%d" % (label, k),
                       rot=(58.0, math.degrees(math.atan2(by, bx)), 0.0))
         cr = 440.0 * s if giant else 150.0 * s
@@ -4416,9 +4699,29 @@ def build(layout):
             # each turned a little, so the outline is lumpy and the surface is
             # faceted the way a voxel canopy is. The leaf cards still sit on top
             # for the fine silhouette.
-            _part("sphere", bx_, by_, bz_, d * 0.80 / 100.0, d * 0.80 / 100.0,
-                  d * 0.80 / 100.0, "foliage_deep", "%s_dark%d" % (label, i))
-            _nvox = 48 if giant else 26
+            # ---- THE VOXEL SHELL WAS A MISREAD, AND hd_canopy REPLACES IT ---
+            #
+            # The note above reasoned from "the reference is a VOXEL world".
+            # That was true of the reference's DOGS and of nothing else in it.
+            # The founder's HD reference is a smooth stylised render whose
+            # trees are rounded clumped masses — so 26 to 48 cubes per blob was
+            # solving a problem the picture never had, at 34% of the frame.
+            #
+            # hd_canopy is nine interpenetrating noise-displaced lumps. That
+            # matters for one specific reason: a single displaced sphere is
+            # still a sphere in OUTLINE, because noise only ruffles a convex
+            # hull. Nine lumps at four radii give the silhouette deep
+            # re-entrant notches, and that concavity is the entire difference
+            # between a tree and a ball on a stick.
+            if hd_ok("hd_canopy"):
+                _part("hd_canopy" if giant else "hd_canopy_far",
+                      bx_, by_, bz_, d * 0.92 / 100.0, d * 0.92 / 100.0,
+                      d * 0.86 / 100.0, mat, "%s_canopy%d" % (label, i))
+                _nvox = 0
+            else:
+                _part("sphere", bx_, by_, bz_, d * 0.80 / 100.0, d * 0.80 / 100.0,
+                      d * 0.80 / 100.0, "foliage_deep", "%s_dark%d" % (label, i))
+                _nvox = 48 if giant else 26
             _vsz = d * (0.115 if giant else 0.15)
             _greens = ("foliage", "foliage_hi", "foliage_deep", "foliage", "foliage_hi")
             for _v in range(_nvox):
@@ -4465,16 +4768,26 @@ def build(layout):
                 # Same colour, same coverage, a fifth the size and three times
                 # the count, distributed over two rings so they wrap the blob
                 # instead of ringing its equator.
-                _nb = 18 if giant else 11
+                # NOT CUBES. The paragraph above was measured against the
+                # OLD reference; the HD reference's trees are dark green
+                # clumps with a FEW small blossom clusters on them, and in the
+                # offline trace the cubes read as exactly what they were --
+                # pink squares scattered over the canopy, the "confetti" the
+                # brief forbids by name. A cluster is a small rounded lump in a
+                # petal colour (hd_canopy_far in pink), fewer of them, and only
+                # where the HD canopy is in use; the fallback world keeps the
+                # cubes because a cube on a voxel canopy at least matches it.
+                _hdc = hd_ok("hd_canopy_far")
+                _nb = (10 if giant else 6) if _hdc else (18 if giant else 11)
                 for _q in range(_nb):
                     _qa = _q * 2.39996 + i * 0.7          # golden angle, no ring
                     _tilt = -0.25 + 1.05 * ((_q + 0.5) / _nb)
                     _qr = d * 0.46 * math.sqrt(max(0.04, 1.0 - _tilt * _tilt))
-                    _part("cube",
+                    _part("hd_canopy_far" if _hdc else "cube",
                           bx_ + math.cos(_qa) * _qr,
                           by_ + math.sin(_qa) * _qr,
                           bz_ + d * 0.46 * _tilt,
-                          d * 0.09 / 100.0, d * 0.09 / 100.0, d * 0.08 / 100.0,
+                          d * 0.07 / 100.0, d * 0.07 / 100.0, d * 0.06 / 100.0,
                           ("petal_pink", "rose_pink", "petal_violet",
                            "petal_pink")[(_q + i) % 4],
                           "%s_bloom%d_%d" % (label, i, _q))
@@ -4543,7 +4856,9 @@ def build(layout):
         # actually reads is cards.
         _lm = (("leafcard", "leafcard_hi", "leafcard_deep") if "leafcard" in MATS
                else ("foliage", "foliage_hi", "foliage_deep"))
-        _part("sphere", x, y, 30.0 * s, 0.78 * s, 0.72 * s, 0.62 * s,
+        # A BUSH IS FIVE LUMPS AND A RAGGED TOP, not two stacked ellipsoids.
+        _part("hd_shrub" if hd_ok("hd_shrub") else "sphere",
+              x, y, 30.0 * s, 0.78 * s, 0.72 * s, 0.62 * s,
               "foliage_deep", "%s_core" % label)
         _part("sphere", x, y, 54.0 * s, 0.58 * s, 0.54 * s, 0.46 * s,
               "foliage_deep", "%s_core2" % label)
@@ -4576,7 +4891,8 @@ def build(layout):
                 _part("sphere", x + math.cos(a) * 40.0 * s, y + math.sin(a) * 40.0 * s,
                       70.0 * s, 0.20 * s, 0.20 * s, 0.19 * s, bloom, "%s_bloom%d" % (label, k))
         # a woody base, because a shrub grows out of something
-        _part("cylinder", x, y, 10.0 * s, 0.10 * s, 0.10 * s, 0.22 * s, "trunk", "%s_stem" % label)
+        _part("hd_trunk" if hd_ok("hd_trunk") else "cylinder",
+              x, y, 10.0 * s, 0.10 * s, 0.10 * s, 0.22 * s, "trunk", "%s_stem" % label)
 
     def kit_topiary_form(x, y, s, label, form="cone"):
         """Sculpted topiary in a planter. The brief names topiary twice and this
@@ -4661,27 +4977,47 @@ def build(layout):
         # ring in shadow beneath it, and an irregular scatter of white flecks
         # (evenly-spaced dots look printed; these are placed on a drifting angle).
         sh, sr, cap = 150.0 * s, 24.0 * s, 92.0 * s
-        _part("cylinder", x, y, sh * 0.52, sr / 50.0, sr / 50.0, sh / 100.0, "mush_white", "%s_stem" % label)
-        # bulbous volva at the base
-        _part("sphere", x, y, sr * 0.55, sr * 2.1 / 100.0, sr * 2.1 / 100.0, sr * 1.5 / 100.0,
-              "mush_white", "%s_volva" % label)
-        # skirt ring where the veil tore
-        _part("cylinder", x, y, sh * 0.74, sr * 1.9 / 100.0, sr * 1.9 / 100.0, 0.06 * s,
-              "mush_white", "%s_ring" % label)
-        # gills: a darker disc tucked under the cap
-        _part("cylinder", x, y, sh + cap * 0.02, cap * 1.62 / 100.0, cap * 1.62 / 100.0, 0.10 * s,
-              "mush_gill" if "mush_gill" in MATS else "mush_white", "%s_gills" % label)
+        # ---- ONE MESH REPLACES FOUR PRIMITIVES ----------------------------
+        #
+        # The stem, the volva, the veil ring and the gill disc were four
+        # separate primitives approximating one organic form. hd_mush_stem is a
+        # loft that leans, swells at the base and carries its own annulus;
+        # hd_mush_cap has forty real gills radiating under it. So three of the
+        # four pieces below are not improved, they are DELETED — which is the
+        # brief's instruction, not a shortcut.
+        _hd_mush = hd_ok("hd_mush_cap") and hd_ok("hd_mush_stem")
+        _part("hd_mush_stem" if _hd_mush else "cylinder",
+              x, y, sh * 0.52, sr * (1.9 if _hd_mush else 1.0) / 50.0,
+              sr * (1.9 if _hd_mush else 1.0) / 50.0, sh / 100.0,
+              "mush_stem" if "mush_stem" in MATS else "mush_white", "%s_stem" % label)
+        if not _hd_mush:
+            # bulbous volva at the base
+            _part("sphere", x, y, sr * 0.55, sr * 2.1 / 100.0, sr * 2.1 / 100.0, sr * 1.5 / 100.0,
+                  "mush_white", "%s_volva" % label)
+            # skirt ring where the veil tore
+            _part("cylinder", x, y, sh * 0.74, sr * 1.9 / 100.0, sr * 1.9 / 100.0, 0.06 * s,
+                  "mush_white", "%s_ring" % label)
+            # gills: a darker disc tucked under the cap
+            _part("cylinder", x, y, sh + cap * 0.02, cap * 1.62 / 100.0, cap * 1.62 / 100.0, 0.10 * s,
+                  "mush_gill" if "mush_gill" in MATS else "mush_white", "%s_gills" % label)
         # the cap itself, domed and slightly wider than tall
         # A PARASOL, NOT A DOME. The reference's caps are wide and shallow --
         # about 2.4 across for every 1 tall -- with a soft point; ours were a
         # tall dome at 2.05 : 1.30, a bowler hat. Wider, flatter, and the rim
         # sits lower and further out so the cap has an EDGE the eye reads from
         # the plaza, not a rounded roll.
-        _part("sphere", x, y, sh + cap * 0.20, cap * 2.40 / 100.0, cap * 2.40 / 100.0, cap * 0.98 / 100.0,
+        # THE CAP: an ogee crown that tucks UNDER at the edge, a lobed rim from
+        # a scallop wobble, and gills beneath. A sphere has no underside and no
+        # rim; those two absences are most of why the founder's list says
+        # "crude mushrooms".
+        _part("hd_mush_cap" if _hd_mush else "sphere",
+              x, y, sh + cap * 0.20, cap * 2.40 / 100.0, cap * 2.40 / 100.0,
+              cap * (2.20 if _hd_mush else 0.98) / 100.0,
               cap_mat, "%s_cap" % label)
-        # rolled rim so the silhouette is not a bare hemisphere
-        _part("cylinder", x, y, sh + cap * 0.06, cap * 2.36 / 100.0, cap * 2.36 / 100.0, 0.10 * s,
-              cap_mat, "%s_rim" % label)
+        if not _hd_mush:
+            # rolled rim so the silhouette is not a bare hemisphere
+            _part("cylinder", x, y, sh + cap * 0.06, cap * 2.36 / 100.0, cap * 2.36 / 100.0, 0.10 * s,
+                  cap_mat, "%s_rim" % label)
         # white flecks, drifting so they never look stamped on
         import math as _m
         # FEWER, BIGGER, FLATTER — an amanita's spots, not a speckle.
@@ -4694,13 +5030,45 @@ def build(layout):
         for i in range(8):
             a = i * 2.39996 + (x + y) * 0.01
             rr = (0.20 + 0.58 * ((i * 37) % 8) / 8.0)
-            _part("sphere",
+            _part("hd_mush_spot" if _hd_mush else "sphere",
                   x + _m.cos(a) * cap * rr, y + _m.sin(a) * cap * rr,
                   sh + cap * 0.36 - (rr * rr) * cap * 0.16,
                   # spots half again as large: on the reference they are the
                   # first thing read on a cap, not a texture on it
                   (0.50 - 0.14 * rr) * s, (0.50 - 0.14 * rr) * s, (0.10 - 0.025 * rr) * s,
                   "mush_white", "%s_dot%d" % (label, i))
+
+    def kit_hero_mushroom(x, y, height, cap_w, label, cap_mat="mush_red"):
+        """The foreground mushroom: TALL, the cap above eye level.
+
+        Built from the HD parts directly rather than through kit_mushroom,
+        whose amanita proportions (stem 1.6 cap-diameters) are right for a
+        garden and wrong for a repoussoir: the reference's left mushroom is a
+        stem about 2.4 caps tall with the cap just over the camera's eye, so
+        the gills show. `height` is the total; the stem takes 82% of it."""
+        if not (hd_ok("hd_mush_cap") and hd_ok("hd_mush_stem")):
+            kit_mushroom(x, y, height / 214.0, label, cap_mat)
+            return
+        stem_h = height * 0.82
+        # 0.24 of the cap, not 0.36: at 0.36 the trace measured the stem at
+        # 12.5% of frame width against the reference's ~5%, and it read as a
+        # pale egg standing at the left edge rather than a stalk under a cap.
+        stem_w = cap_w * 0.24
+        _part("hd_mush_stem", x, y, stem_h * 0.5, stem_w / 100.0, stem_w / 100.0,
+              stem_h / 100.0, "mush_stem" if "mush_stem" in MATS else "mush_white",
+              "%s_stem" % label)
+        cap_h = height * 0.22
+        _part("hd_mush_cap", x, y, stem_h + cap_h * 0.40, cap_w / 100.0, cap_w / 100.0,
+              cap_h / 100.0, cap_mat, "%s_cap" % label)
+        for i in range(7):
+            a = i * 2.39996 + 0.7
+            rr = 0.22 + 0.55 * ((i * 37) % 7) / 7.0
+            _part("hd_mush_spot", x + math.cos(a) * cap_w * 0.5 * rr,
+                  y + math.sin(a) * cap_w * 0.5 * rr,
+                  stem_h + cap_h * (0.78 - rr * rr * 0.34),
+                  cap_w * 0.0022 * (1.0 - 0.3 * rr), cap_w * 0.0022 * (1.0 - 0.3 * rr),
+                  cap_h * 0.0018, "mush_spot" if "mush_spot" in MATS else "mush_white",
+                  "%s_spot%d" % (label, i))
 
     def kit_portrait(x, y, z, s, label):
         """An ornate framed card, not a gold slab.
@@ -4772,6 +5140,34 @@ def build(layout):
             # Stone plinth, moulded base, fluted shaft, astragal, dentilled
             # capital, cornice — the standard vocabulary, because it is the
             # vocabulary the reference's architecture speaks.
+            # ---- ONE HD PIER REPLACES TWENTY-EIGHT PRIMITIVES -------------
+            #
+            # Everything from here to the ball finial was a plinth, a plinth
+            # cap, a base band, a shaft, sixteen reeds, twelve flutes, an
+            # astragal, eight dentils, a cornice, a ball and a neck: twenty-
+            # eight boxes and spheres assembled into one pier, twice.
+            #
+            # hd_gate_pillar is that pier as authored geometry — stepped
+            # plinth, panelled shaft, moulded cap and ball, all chamfered — and
+            # it deletes the worst measured defect on this landmark with it.
+            # The flutes were drawn as DARK BARS: five per face at 9 s wide on
+            # an 88 s face, 68% of every visible face in brass_deep, which
+            # probed as the largest dark mass in the whole picture standing on
+            # the one landmark the district is named for. The comment beside
+            # them said "shallow reeds with the shadow between them"; the code
+            # built the reeds themselves out of shadow. A recessed panel in
+            # real geometry cannot make that mistake, because the shadow is
+            # cast rather than painted.
+            if hd_ok("hd_gate_pillar"):
+                _pw = 1.34 * s
+                _pz = ph + 96.0 * s
+                _part("hd_gate_pillar", px, y, _pz * 0.5, _pw, _pw, _pz / 100.0,
+                      "ivory" if "ivory" in MATS else "stone",
+                      "%s_pier%d" % (label, sx))
+                _part("hd_finial", px, y, _pz + 30.0 * s,
+                      0.44 * s, 0.44 * s, 0.62 * s, "gold",
+                      "%s_finial%d" % (label, sx))
+                continue
             _part("cube", px, y, 26.0 * s, 1.30 * s, 1.30 * s, 0.52 * s, "stone",
                   "%s_plinth%d" % (label, sx))
             _part("cube", px, y, 58.0 * s, 1.16 * s, 1.16 * s, 0.16 * s, "stone",
@@ -4846,9 +5242,26 @@ def build(layout):
         # thirteen bars at 36 s rather than nine at 52: the opening reads as a
         # grille only when the gaps are narrower than the piers are wide
         _part("cube", x, y, ph * 0.50, 4.9 * s, 0.06 * s, 0.06 * s, "gold", "%s_midrail" % label)
+        # TWISTED BAR, NOT A BOX. hd_gate_bar is a square section lofted
+        # through a 7.2 radian twist with two collars — the thing that makes
+        # wrought iron read as forged rather than extruded. It costs 248
+        # triangles and it is the difference between a grille and a fence.
         for b in range(-6, 7):
-            _part("cube", x + b * 36.0 * s, y, ph * 0.46, 0.055 * s, 0.10 * s, ph * 0.9 / 100.0,
+            _part("hd_gate_bar", x + b * 36.0 * s, y, ph * 0.46,
+                  0.075 * s, 0.075 * s, ph * 0.9 / 100.0,
                   "gold", "%s_bar%d" % (label, b))
+        # SCROLLS AND A HEART, WHICH IS WHAT THE REFERENCE'S GATE ACTUALLY IS.
+        # Four mirrored volutes filling the head of the opening and a heart on
+        # the centre line. Both are swept round bar — a scroll is a
+        # logarithmic spiral of metal, and no arrangement of spheres is one.
+        if hd_ok("hd_scroll"):
+            for _sx in (-1, 1):
+                for _si, (_sh, _sz) in enumerate(((1.05, 0.66), (0.74, 0.50))):
+                    _part("hd_scroll", x + _sx * (78.0 + _si * 66.0) * s, y,
+                          ph * (0.62 + _si * 0.13), _sh * s * _sx, 0.10 * s, _sz * s,
+                          "gold", "%s_scroll%d_%d" % (label, _sx, _si))
+            _part("hd_heart_motif", x, y, ph * 0.70, 1.15 * s, 0.10 * s, 1.05 * s,
+                  "gold", "%s_gateheart" % label)
         # scrollwork curls along the top rail
         # SCROLLWORK, properly. One row of seven blobs is a fence; ornate ironwork
         # is layered curl-work reading at several scales, so this is three rows
@@ -4969,9 +5382,15 @@ def build(layout):
         _part("cylinder", x, y, 16.0 * s, br * 1.24 / 50.0, br * 1.24 / 50.0, 0.34 * s,
               "stone" if "stone" in MATS else body_mat, "%s_plinth" % label)
         # shaft, very slightly tapered by stacking two drums
-        _part("cylinder", x, y, bh * 0.30, br / 50.0, br / 50.0, bh * 0.62 / 100.0,
+        # HD DRUMS. hd_tower carries entasis (a real tower swells; a cylinder
+        # does not), a plinth roll and a string course two thirds up — three
+        # silhouette events per drum where the primitive had none. The near
+        # towers get the 26-sided version, the sixty skyline towers the 14-sided
+        # one, because at 25 km the sides are the only thing that survives.
+        _drum = "hd_tower" if detail >= 1 else "hd_tower_far"
+        _part(_drum, x, y, bh * 0.30, br / 50.0, br / 50.0, bh * 0.62 / 100.0,
               body_mat, "%s_shaft" % label)
-        _part("cylinder", x, y, bh * 0.74, br * 0.92 / 50.0, br * 0.92 / 50.0, bh * 0.52 / 100.0,
+        _part(_drum, x, y, bh * 0.74, br * 0.92 / 50.0, br * 0.92 / 50.0, bh * 0.52 / 100.0,
               body_mat, "%s_shaft2" % label)
         # corbel band + balcony that OVERHANGS the shaft
         _part("cylinder", x, y, bh * 0.60, br * 1.10 / 50.0, br * 1.10 / 50.0, 0.16 * s,
@@ -4981,7 +5400,7 @@ def build(layout):
         # merlons around the balcony rim
         for i in range(8):
             a = i * (2.0 * math.pi / 8.0)
-            _part("cube", x + math.cos(a) * br * 1.10, y + math.sin(a) * br * 1.10,
+            _part("hd_merlon", x + math.cos(a) * br * 1.10, y + math.sin(a) * br * 1.10,
                   bh + 58.0 * s, 0.17 * s, 0.17 * s, 0.30 * s, body_mat,
                   "%s_merlon%d" % (label, i), rot=(0.0, math.degrees(a), 0.0))
         if detail >= 1:
@@ -5013,7 +5432,7 @@ def build(layout):
         _tier = 0.42 * bh
         _top = bh + _tier
         _ur = br * 0.70                                    # upper drum radius
-        _part("cylinder", x, y, bh + 62.0 * s + _tier * 0.5, _ur / 50.0, _ur / 50.0,
+        _part(_drum, x, y, bh + 62.0 * s + _tier * 0.5, _ur / 50.0, _ur / 50.0,
               _tier / 100.0, body_mat, "%s_upper" % label)
         # its own eave/balcony ring, overhanging the upper drum like the first
         # balcony overhangs the shaft, in the roof material so the two rings
@@ -5023,7 +5442,7 @@ def build(layout):
         if detail >= 1:
             for i in range(6):
                 a = i * (2.0 * math.pi / 6.0) + 0.5
-                _part("cube", x + math.cos(a) * _ur * 1.22, y + math.sin(a) * _ur * 1.22,
+                _part("hd_merlon", x + math.cos(a) * _ur * 1.22, y + math.sin(a) * _ur * 1.22,
                       _top + 50.0 * s, 0.13 * s, 0.13 * s, 0.22 * s, body_mat,
                       "%s_umerlon%d" % (label, i), rot=(0.0, math.degrees(a), 0.0))
             # one window tier on the upper drum, so it reads as a room
@@ -5061,7 +5480,21 @@ def build(layout):
         # not shrink below the eave it sits on (br * 1.30 / 50 = 1.87 s), or the
         # roof stops covering its own drum — which is why the width moved a
         # little and the height moved a lot.
-        _part("cone", x, y, _top + 210.0 * s, roof_w * s, roof_w * s, roof_h * s,
+        # THE ROOF IS NO LONGER A CONE.
+        #
+        # hd_roof is an OGEE shell — the S-curve every fairy-tale roof in the
+        # reference has and a cone by definition does not — carried on eight
+        # scalloped shingle courses with an overhanging rolled eave and a turned
+        # finial. Eleven silhouette events against the cone's two, and the
+        # scallops are geometry, so they survive the distance that kills
+        # texture. hd_roof_bell is the onion variant; the skyline gets
+        # hd_roof_far, which keeps the ogee and drops the courses because a
+        # 12 uu shingle at 25 km subtends 0.0007 px.
+        _roof_mesh = ("hd_roof_hero" if detail >= 2 else
+                      "hd_roof" if detail >= 1 else "hd_roof_far")
+        if (int(x) + int(y)) % 5 == 0 and detail >= 1:
+            _roof_mesh = "hd_roof_bell"
+        _part(_roof_mesh, x, y, _top + 210.0 * s, roof_w * s, roof_w * s, roof_h * s,
               roof_mat, "%s_roof" % label)
         # ---- WHAT ACTUALLY READS ON A ROOF AT THIS DISTANCE -----------------
         #
@@ -5114,7 +5547,12 @@ def build(layout):
         # fraction f of the way from base to apex the radius is R * (1 - f).
         # A KNOB, BECAUSE THE FIRST VERSION OF THIS COST A BUILD AND MADE THE
         # FRAME WORSE. WONDERLAND_LOOK=roofRibs=0 takes them out in one cook.
-        _rib_n = int(LOOK["roofRibs"]) and 8
+        # THE RIBS WERE A WORKAROUND FOR A SMOOTH CONE, AND THE CONE IS GONE.
+        # hd_roof has eight real scalloped courses; adding eight fake standing
+        # seams on top of them is decoration over decoration, and the founder's
+        # brief names exactly that. They come back automatically if the HD mesh
+        # did not build, because then the cone is back too.
+        _rib_n = 0 if hd_ok("hd_roof") else (int(LOOK["roofRibs"]) and 8)
         _cz = _top + 210.0 * s                       # cone centre
         _ch = roof_h * 50.0 * s                    # cone half-height
         _cr = roof_w * 50.0 * s                    # cone base radius
@@ -5387,6 +5825,27 @@ def build(layout):
                      rib="roof_rose" if i % 2 else "roof_pink")
 
     def kit_teacup(x, y, s, label):
+        # A CUP AND A SAUCER, LATHED. The reference stands a giant teacup right
+        # of centre; ours was a stack of nine cylinders of decreasing radius
+        # standing in for a curve. A lathe IS the curve — rolled lip, foot
+        # ring, swelling body, torus handle.
+        if hd_ok("hd_teacup"):
+            # SAME FOOTPRINT AS BEFORE, BY THE GATE'S OWN NUMBERS. The first
+            # HD version doubled the landmark (declared 260, built 534) because
+            # I scaled a mesh that already fits a 100 uu box as if it were the
+            # 240 uu saucer it replaced. verify-landmark-scale caught it.
+            _part("hd_saucer", x, y, 10.0 * s, 2.5 * s, 2.5 * s, 0.30 * s,
+                  "porcelain", "%s_saucer" % label)
+            _part("hd_teacup", x, y, 86.0 * s, 1.9 * s, 1.9 * s, 1.15 * s,
+                  "porcelain", "%s_cup" % label)
+            for _k in range(4):
+                _a = _k * (math.pi / 2.0) + 0.4
+                _part("hd_heart_motif",
+                      x + math.cos(_a) * 82.0 * s, y + math.sin(_a) * 82.0 * s,
+                      96.0 * s, 0.34 * s, 0.10 * s, 0.32 * s, "rose",
+                      "%s_heart%d" % (label, _k),
+                      rot=(0.0, 0.0, math.degrees(_a) + 90.0))
+            return
         _part("cylinder", x, y, 8.0 * s, 2.4 * s, 2.4 * s, 0.16 * s, "porcelain", "%s_saucer" % label)
         # A CUP FLARES. One straight cylinder is a mug at best and a tin can at
         # worst; the whole silhouette of fine china is the curve from a narrow
@@ -5455,8 +5914,29 @@ def build(layout):
         _c = width / 15.0                      # cube size: about 15 across
         _greens = ("foliage", "foliage_hi", "foliage_deep")
         _zc = 60.0 * s + width * 0.62          # heart centre height
-        _part("cylinder", cx, cy, 30.0 * s, 0.55 * s, 0.55 * s, 0.60 * s,
+        _part("hd_trunk" if hd_ok("hd_trunk") else "cylinder",
+              cx, cy, 30.0 * s, 0.55 * s, 0.55 * s, 0.60 * s,
               "trunk", "%s_trunk" % label)
+        # ---- THE VOXEL HEART WAS BUILT AGAINST THE WRONG READING ----------
+        #
+        # The docstring below reasons from "the visual language the reference
+        # uses for everything organic" being voxels. That was true of the
+        # reference's DOGS and of nothing else in it, and the founder's HD
+        # reference settles it: its heart is a smooth ivy topiary with roses,
+        # not a cube grid. 289 cubes were solving a problem the picture never
+        # had.
+        #
+        # hd_topiary_heart is the parametric heart curve extruded to real
+        # thickness and then broken with fbm on all three axes, so the clipped
+        # surface is uneven the way box foliage is, with roses studded round
+        # the lobes. One instance, 2,556 triangles, against 289 instances of
+        # 12 — fewer draws AND a form the founder asked for.
+        if hd_ok("hd_topiary_heart"):
+            _part("hd_topiary_heart", cx, cy, _zc,
+                  width / 100.0, depth / 100.0, width * 0.92 / 100.0,
+                  "foliage", "%s_heart" % label)
+            unreal.log_warning("HD HEART %s: one mesh, %.0f uu wide" % (label, width))
+            return
         _n = 0
         for _ly, _yo in enumerate((-1.0, 0.0, 1.0)):
             _py = cy + _yo * depth * 0.33
@@ -5998,7 +6478,8 @@ def build(layout):
                   "%s_rib%d" % (label, i), rot=(0.0, 42.0, math.degrees(a)))
         _part("cylinder", x, y, z + r * 0.94, r / 190.0, r / 190.0, r / 260.0, rib,
               "%s_drum" % label)
-        _part("cone", x, y, z + r * 1.16, r / 150.0, r / 150.0, r / 130.0, rib, "%s_tip" % label)
+        _part("hd_finial" if hd_ok("hd_finial") else "cone",
+              x, y, z + r * 1.16, r / 150.0, r / 150.0, r / 130.0, rib, "%s_tip" % label)
 
     def kit_towerblock(x, y, s, label, body="spire_far", roof="roof_pink"):
         """Four to six towers on a shared podium, linked by bridges, one domed.
@@ -6018,7 +6499,8 @@ def build(layout):
             ts = s * (0.62 + 0.52 * ((i * 7) % 5) / 5.0)
             if i == 1:
                 # one domed hall instead of a spire, for silhouette variety
-                _part("cylinder", tx, ty, 190.0 * ts, 2.3 * ts, 2.3 * ts, 3.4 * ts, body,
+                _part("hd_tower_far" if hd_ok("hd_tower_far") else "cylinder",
+                      tx, ty, 190.0 * ts, 2.3 * ts, 2.3 * ts, 3.4 * ts, body,
                       "%s_hall%d" % (label, i))
                 kit_dome(tx, ty, 360.0 * ts, 220.0 * ts, "%s_dome%d" % (label, i),
                          mat=body, rib=roof)
@@ -6050,7 +6532,8 @@ def build(layout):
             hh = (60.0 + 40.0 * ((k * 5) % 3)) * s
             _part("cube", rx, ry, hh * 0.5 + 90.0 * s, 1.5 * s, 1.1 * s, hh / 100.0, body,
                   "%s_low%d" % (label, k), rot=(0.0, math.degrees(a), 0.0))
-            _part("cone", rx, ry, hh + 130.0 * s, 1.8 * s, 1.35 * s, 1.0 * s,
+            _part("hd_roof_far" if hd_ok("hd_roof_far") else "cone",
+                  rx, ry, hh + 130.0 * s, 1.8 * s, 1.35 * s, 1.0 * s,
                   "roof_rose" if k % 2 else roof, "%s_lowr%d" % (label, k),
                   rot=(0.0, math.degrees(a), 0.0))
 
@@ -6281,7 +6764,19 @@ def build(layout):
                 _wx = tile * (1.98 if _dbl else 1.0)
                 if _dbl:
                     _skip.add((gx + 1, gy))
-                _part("cube", x + gx * tile + ox + (tile * 0.5 if _dbl else 0.0),
+                # A PAVING STONE, NOT A BOX. Three things separate them and
+                # all three are silhouette-scale at the distance the player
+                # stands on this: the plan is an irregular heptagon rather than
+                # a rectangle, the top is domed from wear, and the arris is
+                # chamfered instead of sharp. This is the bottom 40% of the
+                # founder's reference, and it has been reading as a floor
+                # TEXTURE rather than as stone for the whole project.
+                #
+                # hd_flagstone's own outline is irregular, so the hash-driven
+                # yaw below now varies a shape that is already asymmetric
+                # rather than spinning a square.
+                _part("hd_flagstone" if hd_ok("hd_flagstone") else "cube",
+                      x + gx * tile + ox + (tile * 0.5 if _dbl else 0.0),
                       y + gy * tile + oy, jz,
                       _wx / 100.0 * shrink, tile / 100.0 * shrink,
                       _SETT_H_MIN + (hsh % 3) * _SETT_H_STEP,
@@ -6499,6 +6994,16 @@ def build(layout):
         # whole read: a ring bow with a heart at its centre, a collar, a tapered
         # shaft, and a bit with real teeth. Tilted so it never reads as a post.
         tilt = (0.0, 0.0, 22.0)
+        # A KEY IS A BOW, A COLLARED SHAFT AND A CUT BIT. hd_key is all three
+        # as one mesh, with the bow drawn as a heart in round bar — which is
+        # what the reference floats over its castle. What this replaces was a
+        # cylinder, four spheres on an arc, two more spheres for heart lobes, a
+        # cone for the point, a collar and three boxes: eleven primitives
+        # arranged to suggest a key.
+        if hd_ok("hd_key"):
+            _part("hd_key", x, y, z + 12.0 * ks, 0.62 * ks, 0.74 * ks, 1.70 * ks,
+                  "gold", "%s_key" % label, rot=tilt)
+            return
         _part("cylinder", x, y, z, 0.17 * ks, 0.17 * ks, 1.45 * ks, "gold", "%s_shaft" % label, rot=tilt)
         # bow: a ring of small spheres rather than one ball
         import math as _m
@@ -6559,6 +7064,20 @@ def build(layout):
             _part("sphere", x + math.sin(_a) * 148.0, y + 6.0, z + math.cos(_a) * 148.0,
                   0.10, 0.06, 0.10, "gold", "%s_stud%d" % (label, _k))
         finial(x, y - 4.0, z + 158.0, 0.66, "gold", "%s_crown" % label, glow="gold_glow")
+        # THE CLOCK CASE. hd_clock is a moulded BEZEL PROFILE with a recessed
+        # dial, twelve markers and four corner volutes. The reference hangs two
+        # of these on the tree at the right frame edge, close to camera, and a
+        # cylinder with a lighter cylinder on it is what the founder's list
+        # means by "crude clocks".
+        if hd_ok("hd_clock"):
+            # 150 across, 18 deep, the size of the cylinder case it replaces.
+            # hd_clock is authored upright facing -Y, so no rotation here.
+            _part("hd_clock", x, y, z, 1.5, 0.18, 1.5, "gold", "%s_case" % label)
+            _part("hd_clock_hand", x, y - 14, z + 30, 0.12, 0.05, 0.62,
+                  "dog_visor", "%s_min" % label)
+            _part("hd_clock_hand", x + 22, y - 14, z, 0.12, 0.05, 0.46,
+                  "dog_visor", "%s_hr" % label, rot=(90.0, 0.0, 0.0))
+            return
         _part("cylinder", x, y, z, 1.5, 1.5, 0.16, "gold", "%s_case" % label, rot=(0, 0, 90))
         _part("cylinder", x, y - 10, z, 1.2, 1.2, 0.10, "porcelain", "%s_face" % label, rot=(0, 0, 90))
         _part("cube", x, y - 18, z + 34, 0.07, 0.07, 0.66, "dog_visor", "%s_min" % label)
@@ -6573,6 +7092,17 @@ def build(layout):
 
     def kit_teapot(x, y, z, label):
         # Original teapot prop: porcelain body + spout + handle + gold lid & knob.
+        # A TEAPOT IS ITS SPOUT AND ITS HANDLE. hd_teapot is a lathed body with
+        # a lid, a knob, a swept spout and a torus handle — the whole
+        # silhouette, in one mesh. A sphere is not a teapot however much gold
+        # banding is added to it, which is what the rest of this kit was doing.
+        if hd_ok("hd_teapot"):
+            # 1.6 wide, the size of the sphere it replaces (declared 140 uu;
+            # the first HD pass built it at 270 and the scale gate said so).
+            _part("hd_teapot", x, y, z, 1.6, 1.4, 1.45, "porcelain", "%s_body" % label)
+            _part("hd_finial", x, y, z + 62, 0.20, 0.20, 0.26, "gold_glow",
+                  "%s_knob" % label)
+            return
         _part("sphere", x, y, z, 1.6, 1.6, 1.28, "porcelain", "%s_body" % label)
         # A SPOUT CURVES and a handle LOOPS. Straight cylinder plus solid slab
         # is the pot every prototype has; the S of the spout and the hole in the
@@ -6894,6 +7424,32 @@ def build(layout):
         # than the Observatory it is meant to frame. A garden arch is roughly as
         # wide as it is high.
         h = 430.0 * s
+        # ---- THE ARCH IS AN ARCH NOW, NOT A LINTEL ------------------------
+        #
+        # The span below is a horizontal beam between two posts. Every arch in
+        # the founder's reference is a real semicircular hoop of vine, and the
+        # difference is the whole reason to put one on a sightline: a hoop
+        # frames the view through it, a lintel caps it.
+        #
+        # hd_floral_arch is the tier-S landmark of this library — a structural
+        # hoop of bar, four wrapping vine strands that wobble independently,
+        # seventeen roses at hash-driven positions and eleven leaf sprays. The
+        # roses are deliberately UNEVEN: an even distribution is the tell that
+        # a loop placed them, and that tell is on every ornament this project
+        # has built.
+        if hd_ok("hd_floral_arch"):
+            _part("hd_floral_arch", x, y, h * 0.62,
+                  760.0 * s / 100.0, 190.0 * s / 100.0, h * 1.15 / 100.0,
+                  "foliage", "%s_arch" % label)
+            # Posts only. The first HD pass stood an urn at each foot; at
+            # 130 uu across it was 1.7 m2 of porcelain standing 173 uu tall
+            # inside the hero sight corridor, and verify-hero-corridor said
+            # so. The reference's arch springs straight from the planting.
+            for sx in (-1, 1):
+                _part("hd_trunk", x + sx * 330.0 * s, y, h * 0.30,
+                      0.42 * s, 0.42 * s, h * 0.62 / 100.0,
+                      "trunk", "%s_post%d" % (label, sx))
+            return
         for sx in (-1, 1):
             _part("cylinder", x + sx * 330.0 * s, y, h * 0.5, 0.19 * s, 0.19 * s, h / 100.0,
                   "trunk", "%s_post%d" % (label, sx))
@@ -7265,7 +7821,9 @@ def build(layout):
 
         LATERAL POSITION DECIDES AS MUCH AS DEPTH, and testing only `py` cost
         the frame its authored right-edge repoussoir. The Great Framing Tree
-        is a PRIMARY, sightlineHero landmark at (1300, 470) -- but 470 is
+        WAS a PRIMARY, sightlineHero landmark at (1300, 470) -- it is now
+        authored at (700, -200) with `foreground: true`, which exempts it from
+        this test entirely (kit_dispatch) -- but 470 was
         inside NEAR_Y + 600, so a Y-only test suppressed it and the layout's
         declared "giant-tree composition" was never built at all. At its own
         depth the frame is 1052 uu wide to each side and the tree stands at
@@ -7928,7 +8486,19 @@ def build(layout):
         mesh = m.get("mesh", "")
         loc = m["location"]
         x, y, z = float(loc[0]), float(loc[1]), float(loc[2])
-        x, y, _moved = _push_out_of_lens(x, y, mid)
+        # AUTHORED FOREGROUND. `_push_out_of_lens` and `in_camera_lap` exist
+        # to stop ACCIDENTAL foreground -- a landmark that fell into the near
+        # field and blocked the Dog. The reference's frame is MADE of deliberate
+        # foreground: a trunk at the right edge, a mushroom at the left, both
+        # nearer than the keep-out and both cropped by the frame on purpose.
+        # A landmark that says `"foreground": true` in the layout is placed
+        # where it was authored; the hero sight corridor (verify-hero-corridor)
+        # still guards the centre, so this can frame the shot but never block it.
+        _fg = bool(m.get("foreground"))
+        if _fg:
+            _moved = False
+        else:
+            x, y, _moved = _push_out_of_lens(x, y, mid)
         if _moved:
             unreal.log_warning(
                 "LANDMARK KEEP-OUT: %s was inside the %.0f uu arrival keep-out "
@@ -7992,8 +8562,12 @@ def build(layout):
                 % (mid, _target_h, _gs, 710.0 * 1.4))
             kit_gate(x, y, _gs, mid)
         elif "framing_tree" in mid:
-            if not in_camera_lap(x, y, 600.0):
+            if _fg or not in_camera_lap(x, y, 600.0):
                 kit_tree(x, y, _kit_scale(m, "tree_giant", 1.7), mid, giant=True)
+        elif mesh == "hero_mushroom" or "hero_mushroom" in mid:
+            _dims = m.get("dimensionsUu") or []
+            kit_hero_mushroom(x, y, float(_dims[2]) if len(_dims) >= 3 else 620.0,
+                              float(_dims[0]) if _dims else 260.0, mid)
         elif "heart" in mid:
             # BEFORE the tree branch. "topiary" in mid matched first and built
             # the founder's signature landmark as a small round tree.
@@ -9010,7 +9584,7 @@ def build(layout):
     # the frame. Buttress roots break the ground it stands in, and one long
     # branch arcs across the top of the hero view carrying canopy, hanging vines
     # and a clock — the repoussoir the composition has been missing.
-    _TX, _TY = landmark_xy("framing_tree", (1300.0, 470.0))
+    _TX, _TY = landmark_xy("framing_tree", (700.0, -200.0))
     for _i in range(9):
         _a = _i * (2.0 * math.pi / 9.0) + 0.3
         kit_root(_TX, _TY, _a, 430.0 + 190.0 * ((_i * 7) % 4) / 4.0,
@@ -9433,7 +10007,7 @@ def build(layout):
     # is where the gate stood two moves ago -- the path stopped 800 uu short of
     # the gate it is named after, exactly like HeroLight_Gate did.
     _pgx, _pgy = landmark_xy("golden_gate", (-1050.0, 400.0))
-    _ptx, _pty = landmark_xy("framing_tree", (1300.0, 470.0))
+    _ptx, _pty = landmark_xy("framing_tree", (700.0, -200.0))
     kit_path(0, 0, _pgx, _pgy, 340, "PATH_gate")
     kit_path(0, 0, _ptx, _pty, 340, "PATH_tree")
     kit_path(-1150, 0, 1150, 0, 300, "PATH_cross")
@@ -9454,8 +10028,9 @@ def build(layout):
     # way -- so the one Dog the camera is aimed at is the one carrying the
     # standing body plan. Everything about its identity is unchanged: same
     # white blocky body, same black visor, same gold eyes, same tail.
-    stroll_dog(HERO_DOG[0], HERO_DOG[1], "RelayDog", s=HERO_DOG_SCALE,
-               is_hero=True, roam=230.0, upright=1)
+    if int(LOOK["arrivalDogs"]) >= 1:
+        stroll_dog(HERO_DOG[0], HERO_DOG[1], "RelayDog", s=HERO_DOG_SCALE,
+                   is_hero=True, roam=230.0, upright=1)
     # ---- THE UPRIGHT DOGS, WHERE THE CAMERA CAN SEE THEM ----------------
     #
     # The founder looked at the live build and said: "I see no relay dogs that
@@ -9479,13 +10054,14 @@ def build(layout):
     # opening and the first rebuild render shows it square across the lower
     # half of the gate; the reference's gate is open to its base. 620 puts it
     # beside the outer pillar, still attending the gate, no longer in it.
-    stroll_dog(_gdx + math.copysign(620.0, _gdx or 1.0), _gdy,
-               "UprightReviewer", s=1.95, roam=140.0,
-               upright=2, accessory="none")
-    stroll_dog(980.0, 1240.0, "UprightBuilder", s=1.95, roam=140.0,
-               upright=2, accessory="none")
-    stroll_dog(-1560.0, 1760.0, "UprightFlame", s=2.05, roam=120.0,
-               upright=4, body="dog_bone", eyes="dog_eye_blue")
+    if int(LOOK["arrivalDogs"]) >= 2:
+        stroll_dog(_gdx + math.copysign(620.0, _gdx or 1.0), _gdy,
+                   "UprightReviewer", s=1.95, roam=140.0,
+                   upright=2, accessory="none")
+        stroll_dog(980.0, 1240.0, "UprightBuilder", s=1.95, roam=140.0,
+                   upright=2, accessory="none")
+        stroll_dog(-1560.0, 1760.0, "UprightFlame", s=2.05, roam=120.0,
+                   upright=4, body="dog_bone", eyes="dog_eye_blue")
 
     # (The travelling arrival ring is gone: with the camera fixed the Dog stands
     # on the real arcane circle, so a second one would only sit inside the first.)
@@ -9507,6 +10083,11 @@ def build(layout):
         kx, ky, _mv = _push_out_of_lens(kx, ky, "FloatKey%d" % i)
         if _mv:
             _keys_moved += 1
+        if hd_ok("hd_key") and hover_prop("hd_key", (kx, ky, kz + 8.0),
+                                          (0.62 * 0.62, 0.62 * 0.74, 0.62 * 1.70),
+                                          "FloatKey%d" % i, "gold",
+                                          amp=10.0, period=5.5 + 0.7 * i) is not None:
+            continue
         kit_float_key(kx, ky, kz, "FloatKey%d" % i, ks=0.62)
     if _keys_moved:
         unreal.log_warning("FLOAT KEYS  %d of 10 were inside the %.0f uu arrival keep-out "
@@ -9674,6 +10255,8 @@ def build(layout):
         # are the featured objects of this world, so they are scaled to be
         # findable in a wide vista.
         _dsc = 1.75 if _upright else 1.05
+        if int(LOOK["arrivalDogs"]) < 2:
+            continue
         stroll_dog(cx, cy, "Companion%d" % i, s=_dsc, body=_coat, roam=1100.0, accessory=acc,
                    keep_out=(ARRIVAL_CAM, ARRIVAL_KEEP_OUT),
                    attends=(_avatar if i in (0, 3) else None),
@@ -9856,13 +10439,20 @@ def build(layout):
             continue
         if in_camera_lap(_ax, _ay, 260.0):
             continue
+        # NO LAMP POSTS ON THIS ARC. Four gold lanterns (MgLamp2/5/8/11)
+        # stood on it flanking the arcane circle, and the offline probe named
+        # them as the four bright gold posts either side of the Dog in every
+        # trace. The reference's arrival court has no lamp posts at all; its
+        # near field is flowers. Lanterns become beds; the benches and the
+        # card pedestals -- Wonderland's own storytelling -- stay.
         _kind = _a % 3
         if _kind == 0:
             kit_bench(_ax, _ay, math.degrees(_ang) + 90.0, "MgBench%d" % _a)
         elif _kind == 1:
             kit_card_pedestal(_ax, _ay, 0.62 + 0.10 * ((_a * 3) % 3), "MgPedestal%d" % _a)
         else:
-            kit_lantern(_ax, _ay, 0.86 + 0.14 * ((_a * 5) % 3) / 2.0, "MgLamp%d" % _a)
+            kit_bed(_ax, _ay, 96.0 + 30.0 * ((_a * 5) % 3) / 2.0, "MgBed%d" % _a,
+                    palette=("petal_violet", "rose_pink", "petal_pink"))
         _ARCH += 1
     unreal.log_warning("LANTERNS: %d shadow-casting (near the arrival camera), "
                        "%d shadowless at a third intensity - shadows cost six "
@@ -10341,13 +10931,21 @@ def build(layout):
         # bearing, radius, scale, contents
         (0.20, 1950.0, 0.95, ("teacup", "topiary", "lantern")),
         (2.92, 2150.0, 1.00, ("heart", "bed", "lantern", "topiary")),
-        (0.66, 2900.0, 1.25, ("arch", "bed", "topiary")),
+        # Pocket 2's arch stood 35 m out just right of the axis, the same
+        # apparent size as the arrival arch beside it: two hoops side by side
+        # in every trace. The reference has one arch. A bed in its place.
+        (0.66, 2900.0, 1.25, ("bed", "bed", "topiary")),
         (2.44, 3150.0, 1.30, ("teacup", "lantern", "topiary", "bed")),
         (1.02, 4050.0, 1.55, ("arch", "topiary", "heart")),
         (2.08, 4400.0, 1.60, ("arch", "lantern", "topiary")),
         (0.34, 5350.0, 1.95, ("topiary", "topiary", "bed")),
         (2.76, 5700.0, 2.00, ("teacup", "topiary", "lantern")),
-        (1.57, 6700.0, 2.40, ("arch", "arch")),          # closes the walk
+        # POCKET 8 SITS ON THE AXIS (1.57 rad) 67 m out. It carried two arches
+        # at scale 1.92 -- 1,460 uu hoops -- and they were the "second arch"
+        # visible THROUGH the arrival arch's opening in every trace. The
+        # reference has one arch on its axis and then stairs and the castle;
+        # the walk closes with low beds now, and the eye goes on to the city.
+        (1.57, 6700.0, 2.40, ("bed", "bed")),
         (0.88, 7300.0, 2.40, ("topiary", "heart")),
         (2.30, 7500.0, 2.40, ("arch", "topiary")),
     )
@@ -10534,8 +11132,14 @@ def build(layout):
         if _i % 4 == 0:
             _part("sphere", _GX + math.cos(_a) * 585.0, _GY + math.sin(_a) * 585.0, 150.0,
                   0.20, 0.20, 0.20, "rose" if _i % 8 else "rose_pink", "GardenHedgeRose%d" % _i)
-    for _k in range(3):                              # the rose walk in, from the
-        kit_arch(_GX + 60.0, _GY - 620.0 - _k * 300.0, 0.62, "GardenArch%d" % _k)
+    # THE ROSE WALK IS DELETED FROM THE HERO DISTRICT. Three arches at
+    # _GX + 60 stood on the hero sight line 11 m from the lens, and the trace
+    # showed them as a second and third hoop stacked behind the arrival arch;
+    # moved 540 uu sideways they simply became a large hoop at left-centre of
+    # the near field (3.6% of the frame). The reference has ONE arch on its
+    # axis, in the middle distance. "Remove unacceptable assets" is the
+    # brief's first priority, so the walk goes; the garden keeps its pedestal,
+    # beds and hedges.
     kit_card_pedestal(_GX, _GY, 1.25, "CardPedestal")
     for _b, _ba in enumerate((0.9, 2.2, 4.1, 5.3)):
         kit_bed(_GX + math.cos(_ba) * 350.0, _GY + math.sin(_ba) * 350.0, 130.0,
@@ -10587,7 +11191,16 @@ def build(layout):
     # heart topiary (heart crop of the first rebuild render). The reference's
     # teapot floats top-centre over the castle; +320 is left of the axis,
     # above the arch, in clear sky.
-    kit_teapot(320, 760, 1350, "SkyTeapot")
+    # FAR AND HIGH. At (320, 760, 1350) the teapot was 1,900 uu from the lens
+    # and the offline trace drew it as a dark planet a tenth of the frame
+    # wide, top centre. The reference's teapot is a small bright thing high
+    # over the castle. 4,600 uu out it subtends about 2% of the width.
+    _tp = (320.0, 3400.0, 2150.0)
+    if not (hd_ok("hd_teapot") and hover_prop("hd_teapot", _tp,
+                                                (1.6, 1.4, 1.45), "SkyTeapot",
+                                                "porcelain", amp=14.0, period=8.0,
+                                                sway=4.0) is not None):
+        kit_teapot(_tp[0], _tp[1], _tp[2], "SkyTeapot")
 
     # AGENT GARDEN — where a new C.A.R.D. is configured (the agent_config anchor). Read
     # it as a distinct, tended garden: a glowing gold pedestal + orb on a small arcane
@@ -10692,7 +11305,7 @@ def build(layout):
     _vg = landmark_xy("golden_gate", (-1050.0, 400.0))
     _va = landmark_xy("rose_arch", (0.0, 820.0))
     _vp = landmark_xy("agent_pergola", (820.0, 460.0))
-    _vt = landmark_xy("framing_tree", (1300.0, 470.0))
+    _vt = landmark_xy("framing_tree", (700.0, -200.0))
     # NINE -> FIVE. The reference hangs vegetation from exactly two things: the
     # gate's pillars (ivy) and the great tree's branch (the wisteria cascade on
     # the right). The four strands on the arch and the pergola were what made
@@ -11192,6 +11805,97 @@ def build(layout):
             marker(pt, "%s_%s_%02d" % (prefix, path.get("id", "path"), i), tags=[path.get("id")])
         if not paved:
             return
+        # ---- PHASE S: THE PATH SPLINE TOOL ---------------------------------
+        #
+        # hd.layout_tools.Spline is a Catmull-Rom through the authored points,
+        # resampled by arc length; lay_stones() walks it laying hd_flagstone
+        # setts in RUNNING BOND — successive rows offset by half a pitch so no
+        # joint runs along the direction of travel — each aligned to the
+        # tangent, each at the curve's own elevation. Overlap is impossible by
+        # construction (pitch = tile / shrink), and lay_stones can be asked to
+        # prove it (overlaps()). The segment-by-segment flags below are kept
+        # for the fallback world and for WONDERLAND_LOOK=splinePath=0.
+        if int(LOOK["splinePath"]) and hd_ok("hd_flagstone") and hd_assets is not None:
+            from hd import layout_tools as _lt
+            _sp = _lt.Spline([(float(q[0]), float(q[1]), 4.5) for q in pts])
+            _tile = 62.0 if width >= 200.0 else 52.0
+            _stones = _lt.lay_stones(_sp, width=width, tile=_tile, shrink=0.86,
+                                     seed=sum(ord(c) for c in prefix))
+            _tones = ("cobble_hero" if "cobble_hero" in MATS else "cobble",
+                      "cobble", "cobble2")
+            _laid = 0
+            for _k, _st in enumerate(_stones):
+                if _st["kind"] == "stone":
+                    _part("hd_flagstone", _st["x"], _st["y"], _st["z"],
+                          _st["sx"], _st["sy"], _st["sz"], _tones[_st["tone"]],
+                          "%s_sett_%d" % (prefix, _k), rot=(0.0, _st["yaw"], 0.0))
+                else:
+                    _part("hd_kerb", _st["x"], _st["y"], _st["z"] + 2.0,
+                          _st["sx"], _st["sy"], _st["sz"],
+                          "stone" if "stone" in MATS else _tones[1],
+                          "%s_kerb_%d" % (prefix, _k), rot=(0.0, _st["yaw"], 0.0))
+                _laid += 1
+            unreal.log_warning("SPLINE PATH %s: %.0f uu, %d setts+kerbs, overlaps=%d"
+                               % (prefix, _sp.length, _laid, _lt.overlaps(_stones)))
+            _lt.make_spline_actor(unreal, actors, _sp, "%s_spline" % prefix)
+            # ---- PHASE T: THE THREE-BAND BORDER ----------------------------
+            #
+            # hd.border.plan_border: an edge band (flowers, moss, petals), a
+            # mid band (blooms, shrubs, mushrooms, roses) and an outer band
+            # (shrubs, topiary, trees) — banked outward the way the reference
+            # banks its planting, never one uniform field. Nothing lands on
+            # the paving, on the plaza, in the camera's blind lap, on the
+            # hero's circle, or — for the tall outer band — inside the hero
+            # sight corridor, which verify-hero-corridor guards.
+            if int(LOOK["pathBorder"]) and prefix in ("PATH", "TRAIL"):
+                from hd import border as _bd
+                _half = width * 0.5 + _tile * 0.7
+                _tall = ("tree", "topiary", "shrub", "mushroom")
+                def _keep_out(px_, py_):
+                    return (_on_paving(px_, py_) or in_camera_lap(px_, py_)
+                            or math.hypot(px_ - HERO_DOG[0], py_ - HERO_DOG[1]) < 720.0
+                            or py_ < NEAR_Y)
+                _bands = (("edge", 0.0, 110.0, (("flower", 5), ("moss", 3), ("petal", 2)), 8.0),
+                          ("mid", 110.0, 300.0, (("flower", 2), ("bloom", 3), ("shrub", 3),
+                                                 ("mushroom", 2), ("rose", 1)), 4.5),
+                          ("outer", 350.0, 560.0, (("shrub", 2), ("topiary", 1),
+                                                   ("tree", 2), ("mushroom", 1)), 1.5))
+                _plan = _bd.plan_border(_sp, _half, seed=17 + len(prefix), bands=_bands,
+                                        keep_out=_keep_out, density=1.4)
+                _placed = 0
+                for _i, _pl in enumerate(_plan):
+                    _fx, _fy, _fam, _sc = _pl["x"], _pl["y"], _pl["family"], _pl["scale"]
+                    if _fam in _tall and _in_corridor(_fx, _fy):
+                        continue
+                    _lb = "Border_%s_%s%d" % (_pl["band"], _fam, _i)
+                    if _fam == "flower":
+                        flower(_fx, _fy, _i)
+                    elif _fam == "moss":
+                        _part("hd_shrub", _fx, _fy, 3.0, 0.5 * _sc, 0.5 * _sc, 0.10 * _sc,
+                              "moss", _lb, rot=(0.0, _pl["yaw"], 0.0))
+                    elif _fam == "petal":
+                        _part("hd_flower", _fx, _fy, 2.0, 0.10 * _sc, 0.10 * _sc, 0.04,
+                              "petal_pink" if _i % 2 else "petal_violet", _lb,
+                              rot=(0.0, _pl["yaw"], 0.0))
+                    elif _fam == "bloom":
+                        kit_bed(_fx, _fy, 40.0 + 40.0 * _sc, _lb)
+                    elif _fam == "rose":
+                        _part("hd_rose", _fx, _fy, 18.0 * _sc, 0.34 * _sc, 0.34 * _sc, 0.30 * _sc,
+                              "rose" if _i % 3 else "rose_pink", _lb, rot=(0.0, _pl["yaw"], 0.0))
+                    elif _fam == "shrub":
+                        kit_shrub(_fx, _fy, 0.45 + 0.45 * _sc, _lb,
+                                  bloom=("rose_pink" if _i % 2 else None))
+                    elif _fam == "mushroom":
+                        kit_mushroom(_fx, _fy, 0.30 + 0.35 * _sc, _lb,
+                                     "mush_red" if _i % 3 else "mush_purple")
+                    elif _fam == "topiary":
+                        kit_topiary_form(_fx, _fy, 0.70 + 0.40 * _sc, _lb, form="cone")
+                    elif _fam == "tree":
+                        kit_tree(_fx, _fy, 0.55 + 0.35 * _sc, _lb)
+                    _placed += 1
+                unreal.log_warning("PATH BORDER: %d placed of %d planned -- %s"
+                                   % (_placed, len(_plan), _bd.summarise(_plan)))
+            return
         # LAY REAL STONE. The paths existed only as invisible locators, so the
         # plaza had no route through it and nothing led the eye toward the city.
         # A paved way running from the foreground into the distance is most of
@@ -11315,7 +12019,7 @@ def build(layout):
     # The two shots that frame a LANDMARK ask where it is rather than restating
     # it -- see landmark_xy. HeroCam3 is the giant tree's portrait, and the tree
     # moves with the mirror.
-    _t3x, _t3y = landmark_xy("framing_tree", (1300.0, 470.0))
+    _t3x, _t3y = landmark_xy("framing_tree", (700.0, -200.0))
     _t4x, _t4y = landmark_xy("overlook_terrace", (560.0, -280.0))
     hero_shots = [
         (0, ARRIVAL_CAM, (0.0, 120.0, 170.0), 62.0),                  # ARRIVAL_HERO — plaza onto circle + tree
@@ -11379,7 +12083,16 @@ def build(layout):
                            ("override_color_contrast", True),
                            ("color_contrast", unreal.Vector4(*(LOOK["contrast"] + (1.0,)))),
                            ("override_color_gain", True),
-                           ("color_gain", unreal.Vector4(*(LOOK["gain"] + (1.0,))))):
+                           ("color_gain", unreal.Vector4(*(LOOK["gain"] + (1.0,)))),
+                           # Phase Y: the per-range grade. Each is a gain in
+                           # its tonal range; the master `gain` above still
+                           # applies on top.
+                           ("override_color_gain_shadows", True),
+                           ("color_gain_shadows", unreal.Vector4(*(LOOK["gradeShadows"] + (1.0,)))),
+                           ("override_color_gain_midtones", True),
+                           ("color_gain_midtones", unreal.Vector4(*(LOOK["gradeMidtones"] + (1.0,)))),
+                           ("override_color_gain_highlights", True),
+                           ("color_gain_highlights", unreal.Vector4(*(LOOK["gradeHighlights"] + (1.0,))))):
                 try:
                     _pp.set_editor_property(_n, _v)
                 except Exception:

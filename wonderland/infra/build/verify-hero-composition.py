@@ -240,6 +240,13 @@ from wl_preview_leaf import apply as _wl_leaf_apply  # noqa: E402
 
 
 def main():
+    # THIS PREVIEW MUST LOOK AT THE HD WORLD, NOT THE FALLBACK ONE.
+    # The stub has no unreal.StaticMesh, so the HD asset build cannot run here
+    # and every kit would take its "the HD mesh did not build" branch --
+    # rasterising cone roofs and voxel canopies while reporting on the rebuild
+    # that removed them. The flag registers the HD asset paths without building
+    # anything; a real cook ignores it entirely.
+    _os.environ.setdefault("WONDERLAND_HD_ASSUME", "1")
     sys.modules["unreal"] = make_unreal()
     src = io.open(GEN, encoding="utf8").read()
     # CAPTURE BY HOOK, NOT BY TEXT INJECTION.
@@ -475,6 +482,39 @@ def main():
     # this), and each time the output still looked plausible. Filling the
     # triangle costs one extra comparison per pixel.
     CONE = ("cone", "spire")
+
+    # ---- THE HD KEYS, TAKEN FROM THE LIBRARY RATHER THAN LISTED HERE -------
+    #
+    # This tracer chooses a fill mask by testing the mesh key against the two
+    # tuples above, and ANYTHING IT DOES NOT RECOGNISE FILLS THE WHOLE
+    # RECTANGLE. So every hd_* key would have drawn as a solid block — a rose
+    # as a box, a canopy as a box, a mushroom cap as a box — and the offline
+    # preview, which is the only free look this project gets at composition,
+    # would have gone quietly wrong in exactly the places the HD rebuild
+    # changed. That is the same shape of failure as the eggs above, and it
+    # would have been read as evidence about the world instead of about the
+    # tool.
+    #
+    # Imported rather than transcribed, because a hand-copied list is a second
+    # place for the truth to live and this file already records what that costs.
+    try:
+        sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+        from hd.assets import SILHOUETTE as _HD_SIL
+    except Exception as _hde:                       # pragma: no cover
+        _HD_SIL = {}
+        sys.stderr.write("preview: HD silhouettes unavailable (%s); hd_* keys "
+                         "will draw as boxes\n" % _hde)
+    ROUND = ROUND + tuple(k for k, v in _HD_SIL.items() if v == "round")
+    CONE = CONE + tuple(k for k, v in _HD_SIL.items() if v == "cone")
+    # OPEN FORMS. A hoop and a wreath are mostly air, and filling their
+    # bounding box drew the floral arch as a 5.8% black slab dead centre and
+    # the heart as a solid 4.6% ellipse -- both then read as "the arch blocks
+    # the castle" and "the heart is a green blob", which is the tool lying
+    # about the world. 'arch' fills the box minus an inner opening; 'ring'
+    # fills the ellipse minus an inner ellipse.
+    ARCH = tuple(k for k, v in _HD_SIL.items() if v == "arch")
+    RING = tuple(k for k, v in _HD_SIL.items() if v == "ring")
+
     drawn = 0
     blobs = []
     def _rotate(px_, py_, pz_, rot):
@@ -595,6 +635,8 @@ def main():
         # hard corners the render does not have.
         rnd = mesh in ROUND or (mat or "").startswith("leaf")
         cone = mesh in CONE
+        arch = mesh in ARCH
+        ring = mesh in RING
         ex, ey = (x1 - x0) * 0.5, (y1 - y0) * 0.5
         mx, my = (x0 + x1) * 0.5, (y0 + y1) * 0.5
         ex = max(ex, 0.5); ey = max(ey, 0.5)
@@ -609,6 +651,18 @@ def main():
             for xx in range(max(0, int(x0)), min(W, int(x1) + 1)):
                 if cone:
                     if xx + 0.5 < _cx0 or xx + 0.5 > _cx1:
+                        continue
+                elif ring:
+                    dx = (xx + 0.5 - mx) / ex
+                    _rr = dx * dx + dy * dy
+                    if _rr > 1.0 or _rr < 0.42:
+                        continue
+                elif arch:
+                    # the opening: 78% of the width, from the bottom to 84%
+                    # of the height -- a hoop's bounding box is mostly air
+                    _ax = abs(xx + 0.5 - mx) / ex
+                    _ay = (y1 - (yy + 0.5)) / (2.0 * ey)
+                    if _ax < 0.78 and _ay < 0.84 and (_ax / 0.78) ** 2 + max(0.0, (_ay - 0.40) / 0.44) ** 2 < 1.0:
                         continue
                 elif rnd:
                     dx = (xx + 0.5 - mx) / ex
@@ -1016,6 +1070,8 @@ def main():
         _stem[_k] = _stem.get(_k, 0) + 1
     _lone_px = 0
     _lone = []
+    _authored_px = 0
+    _authored = []
     for _bi, _n in _vis.items():
         _b = blobs[_bi]
         _lb = _b[7]
@@ -1023,14 +1079,34 @@ def main():
         if "_" in _k:
             _k = _k.rsplit("_", 1)[0]
         _sib = _stem.get(_k, 1)
-        # "alone" is generous on purpose: up to three siblings still counts as
-        # a bare form. A cube with two friends is three cubes.
-        if _sib <= 3 and _n > (W * H) * 0.0015:
+        # AN AUTHORED MESH ALONE IS NOT A PRIMITIVE ALONE, AND CONFLATING THEM
+        # WOULD TURN THIS GATE INTO A LIAR.
+        #
+        # The premise above is exactly right and it is about PRIMITIVES: an
+        # unbroken sphere or cube carrying a large area is what a cube looks
+        # like when it is being a cube. hd_topiary_heart carrying 3.68% of the
+        # frame by itself is the opposite finding — that is one authored heart
+        # replacing 289 cubes, which is the goal, not the defect. Counting it
+        # here would have this gate report the rebuild as a regression, and a
+        # gate that cries wolf gets dropped from the list.
+        #
+        # So HD meshes are excluded from the lone-PRIMITIVE number and reported
+        # on their own line. The gate keeps its teeth: a lone Cube still counts.
+        if str(_b[5]).startswith("hd_"):
+            _authored_px += _n
+            _authored.append((_n, _lb, _b[5], _b[6], _sib))
+        elif _sib <= 3 and _n > (W * H) * 0.0015:
             _lone_px += _n
             _lone.append((_n, _lb, _b[5], _b[6], _sib))
     _lone.sort(reverse=True)
+    _authored.sort(reverse=True)
     print("  PRIMITIVE AUDIT  %.2f%% of the visible frame is carried by LONE forms"
           % (100.0 * _lone_px / _tot))
+    print("    (%.2f%% is carried by AUTHORED HD meshes, which is the target, "
+          "not a finding)" % (100.0 * _authored_px / _tot))
+    for _n, _lb, _mesh, _mt, _sib in _authored[:6]:
+        print("    HD  %-24s %5.2f%%  %-18s %s"
+              % (_lb[:24], 100.0 * _n / _tot, _mesh, _mt))
     for _n, _lb, _mesh, _mt, _sib in _lone[:10]:
         print("    %-28s %5.2f%%  %-9s %-12s (%d part%s)"
               % (_lb[:28], 100.0 * _n / _tot, _mesh, _mt, _sib,

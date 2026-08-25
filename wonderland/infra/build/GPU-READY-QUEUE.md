@@ -1,5 +1,50 @@
 # GPU-ready queue
 
+> **2026-08-25 — THE HD REBUILD IS QUEUED AND UNRENDERED. RUN THIS FIRST.**
+>
+> Branch `relay/wonderland-hd-rebuild`. Everything in this block was built on
+> CPU with the Studio stopped and verified only offline (58-asset validator,
+> asset contact sheet, generator dry run on the HD branch, composition trace,
+> 24 gates). **Nothing here has been rendered.** The one thing no offline tool
+> can answer is whether authored geometry READS under the real light.
+>
+> **What changed, in one line:** every visible thing was one of five engine
+> primitives; now 58 authored meshes with LOD chains replace the roofs,
+> towers, canopies, trunks, mushrooms, gate, flagstones, heart, arch and props.
+> See `hd/HD-PIPELINE.md`.
+>
+> **GPU OFF for all of this** (compile, generate, cook, package are CPU):
+>
+>     bash wonderland/infra/lightning/compile-preflight.sh    # new C++: hover component + prop
+>     SKIP_PREPARE=0 FORCE_REBUILD=1 bash wonderland/infra/lightning/cpu-build-all.sh
+>     grep -E "HD_MESHES|HD REJECTED|SPLINE PATH|PATH BORDER|HOVER|DATA_LAYER_TAGS" <build log>
+>
+> **The first line to read is `HD_MESHES built=58 verified=N rejected=M`.**
+> `verified` must equal `built`. Every rejected asset is named with its reason
+> and keeps its fallback primitive — a rejection is the OLD look coming back
+> in one place, not an empty world. `api=` records which UE 5.8 method names
+> the bridge actually found; if it is non-empty, copy it into ue_bridge.py.
+>
+> **GPU ON only for the capture** (~2 minutes), then GPU OFF:
+>
+>     WL_HERO_CAMS="6" bash wonderland/infra/lightning/capture-hero-shots.sh
+>     bash wonderland/infra/build/compare-before-after.sh renderAT.png <new> \
+>          wonderland/marble/reference/wonderland-reference-hd.png compare.png
+>
+> **Look for, in order:** (1) do the ogee roofs and scalloped courses read on
+> the skyline, or has the LOD chain collapsed them; (2) does the giant trunk at
+> the right edge and the tall mushroom at the left frame the shot; (3) is the
+> heart a wreath with the castle visible through it; (4) does the gate read as
+> open wrought metal on ivory piers; (5) do the flagstones read as stone; (6)
+> the three sky keys and the teapot hover (WonderlandHoverProp) — if they are
+> static, the class did not compile and the log says `HOVER: ... not in this
+> build`. The reference is `marble/reference/wonderland-reference-hd.png`
+> (supplied 2026-08-25; it has NO Dogs — `WONDERLAND_LOOK=arrivalDogs=2`
+> brings the companions back).
+>
+> Previous head `4730030` had rendered through `renderAT.png` (commit 1888326);
+> the eleven commits after it up to this block are ALL unrendered.
+
 > **2026-08-23 — THE DARK-REGION PASS IS QUEUED AND UNVERIFIED.**
 >
 > Everything in this block was authored on CPU while the Studio was stopped.

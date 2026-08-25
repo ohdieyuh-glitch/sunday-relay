@@ -124,6 +124,8 @@ wl_knob_pairs() {
   for name in WONDERLAND_AUDIO_DIR \
               WONDERLAND_BATCH \
               WONDERLAND_COLLIDE \
+              WONDERLAND_HD \
+              WONDERLAND_HD_ASSUME \
               WONDERLAND_HISM \
               WONDERLAND_LODS \
               WONDERLAND_LOOK \
