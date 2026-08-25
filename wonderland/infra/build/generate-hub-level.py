@@ -3936,6 +3936,46 @@ def build(layout):
         (2.10, 0.00, ((1.1, 1.45), (4.3, 1.00)),                                      1.62,  5.20,  2,   0),
     )
 
+    def kit_mushroom_house(x, y, s, label, cap="mush_red"):
+        """A giant mushroom that people live in.
+
+        The founder's reference does not build its skyline out of castles
+        alone: several of the largest silhouettes in it are enormous red-capped
+        MUSHROOMS standing among the spires, at building scale, with windows in
+        the stalk and lit doorways at the foot. They are one of the most
+        recognisable things in the picture and Wonderland had none of them —
+        every distant silhouette was a castle, which is its own kind of
+        repetition however many archetypes the castles have.
+
+        Built on kit_mushroom, which already carries the volva, the skirt ring,
+        the gills and the flecked cap, plus the things that make it a dwelling
+        rather than a fungus: a lit door, two tiers of windows following the
+        stalk's swell, and a lamp over the threshold."""
+        kit_mushroom(x, y, s, label, cap)
+        sh, sr = 150.0 * s, 24.0 * s
+        # door at the foot, facing the camera's side of the world
+        _part("cube", x, y - sr * 1.02, sh * 0.16, 0.16 * s, 0.05 * s, 0.30 * s,
+              "dog_visor", "%s_door" % label)
+        _part("cube", x, y - sr * 1.08, sh * 0.16, 0.20 * s, 0.03 * s, 0.34 * s,
+              "trunk" if "trunk" in MATS else "gold", "%s_doorframe" % label)
+        _part("sphere", x, y - sr * 1.10, sh * 0.34, 0.10 * s, 0.10 * s, 0.10 * s,
+              "gold_glow" if "gold_glow" in MATS else "gold", "%s_doorlamp" % label)
+        # windows in two tiers around the stalk, warm-lit
+        for tier, tz in enumerate((sh * 0.42, sh * 0.62)):
+            for i in range(5):
+                a = i * (2.0 * math.pi / 5.0) + tier * 0.63
+                _part("cube", x + math.cos(a) * sr * 1.02, y + math.sin(a) * sr * 1.02, tz,
+                      0.11 * s, 0.11 * s, 0.15 * s,
+                      "gold_glow" if "gold_glow" in MATS else "gold",
+                      "%s_win%d_%d" % (label, tier, i))
+        # a balcony ring on the skirt, which is what the veil ring becomes once
+        # the thing is a house
+        for i in range(8):
+            a = i * (2.0 * math.pi / 8.0)
+            _part("cube", x + math.cos(a) * sr * 1.95, y + math.sin(a) * sr * 1.95,
+                  sh * 0.78, 0.09 * s, 0.09 * s, 0.14 * s, "gold",
+                  "%s_rail%d" % (label, i))
+
     def kit_castle(x, y, s, label, variant=0, far=False):
         """The hero castle that closes the north axis. One dominant silhouette
         rather than a picket line of identical turrets: a great keep, four corner
@@ -7971,6 +8011,8 @@ def build(layout):
     # row of props. All of it is instanced through the same batching path, so
     # the piece count costs draw calls it does not have.
     _SKY_CITY = 0
+    _SKY_BANDS = 0
+    _SKY_VARIANTS = {}
     # THE SKYLINE HAS TO OCCUPY THE SKY, not sit under it.
     #
     # environment_density is coverage.objects_pct and it stalled at 81.9 while
@@ -8001,10 +8043,24 @@ def build(layout):
             (42000.0, 5.2, 17, 2.45),
             (56000.0, 5.0, 21, 2.75),
             (82000.0, 3.8, 25, 3.05))):   # far band, a serrated horizon
+        _SKY_BANDS = _band + 1
         for _i in range(_n):
             _a = (_i / float(_n - 1) - 0.5) * _spread + 1.5708
             # jitter so the band is not an arc of evenly spaced identical towers
-            _h = (_band * 7919 + _i * 104729) & 0xFFFF
+            # 32 BITS, BECAUSE THE PICK READS BIT 17.
+            #
+            # This was `& 0xFFFF`. Sixteen bits, and the archetype below selects
+            # with `(_h >> 17) % 10` — which is ZERO for every tower in the
+            # world. So the four castle archetypes added to give the skyline
+            # silhouette hierarchy were never built: all 76 towers took row 1,
+            # and the mushroom hamlets never appeared at all. The frame still
+            # improved, because row 1's slender roofs are a large gain over what
+            # was there, which is exactly why nothing caught it.
+            #
+            # Same shape as `1.5 + 0.5 * ((_r * 3) % 3) / 2.0` on the hero
+            # mushrooms — an expression that reads as variation and evaluates to
+            # a constant. The build now counts what it actually made and says so.
+            _h = (_band * 7919 + _i * 104729) & 0xFFFFFFFF
             _r = _dist * (0.88 + 0.24 * ((_h >> 3) % 100) / 100.0)
             _cx = math.cos(_a) * _r
             _cy = math.sin(_a) * _r
@@ -8018,12 +8074,30 @@ def build(layout):
             # ARCHETYPE, not scale. Weighted so spire clusters dominate (the
             # reference's commonest shape), palaces punctuate, and the twin-
             # tower-and-bridge form is rare enough to stay a landmark.
-            _var = (1, 1, 0, 1, 2, 1, 0, 3, 1, 2)[(_h >> 17) % 10]
+            # 4 is not a castle at all — it is a cluster of giant mushroom
+            # houses, which the reference stands among its spires. Two in ten,
+            # so they punctuate the skyline rather than colonising it.
+            _var = (1, 4, 0, 1, 2, 1, 4, 3, 1, 2)[(_h >> 17) % 10]
             # Past about four kilometres, merlons, bridge parapets and secondary
             # domes are a fraction of a pixel each. The near band keeps them
             # because it is the one that rises into the frame.
-            kit_castle(_cx, _cy, _cs, "SkyCity%d_%d" % (_band, _i),
-                       variant=_var, far=(_band >= 1))
+            if _var == 4:
+                # a hamlet of them, unequal, with a small tower for scale
+                for _m, (_mo, _ms, _mc) in enumerate(((0.0, 1.00, "mush_red"),
+                                                      (1.9, 0.62, "mush_purple"),
+                                                      (3.6, 0.78, "mush_red"),
+                                                      (5.1, 0.45, "mush_white"))):
+                    kit_mushroom_house(_cx + math.cos(_mo) * 900.0 * _cs,
+                                       _cy + math.sin(_mo) * 900.0 * _cs,
+                                       _cs * 0.62 * _ms,
+                                       "SkyMush%d_%d_%d" % (_band, _i, _m), _mc)
+                kit_spire(_cx, _cy, _cs * 0.55, "SkyMushTow%d_%d" % (_band, _i),
+                          body_mat="spire_far", roof_mat="roof_pink",
+                          flag=True, roof_w=1.52, roof_h=5.2)
+            else:
+                kit_castle(_cx, _cy, _cs, "SkyCity%d_%d" % (_band, _i),
+                           variant=_var, far=(_band >= 1))
+            _SKY_VARIANTS[_var] = _SKY_VARIANTS.get(_var, 0) + 1
             _SKY_CITY += 1
     # ---- THE ORNAMENTAL MIDGROUND -----------------------------------------
     #
@@ -8175,13 +8249,38 @@ def build(layout):
                        "the whole visible plate - the reference has no bare "
                        "ground anywhere" % _CARPET)
 
-    unreal.log_warning("ORNAMENTAL MIDGROUND: %d gates, arches, teacups, "
-                       "topiary, lanterns and beds on three rings - the storey "
-                       "between the flowers and the skyline was empty" % _ORN)
+    # No gates, and no rings. The rings became composed pockets and kit_gate
+    # left this pass entirely, because a threshold is not garden furniture.
+    unreal.log_warning("ORNAMENTAL MIDGROUND: %d arches, teacups, topiary, "
+                       "lanterns and beds in %d composed pockets - the storey "
+                       "between the flowers and the skyline was empty"
+                       % (_ORN, len(_POCKETS)))
 
-    unreal.log_warning("SKYLINE CITY: %d castles across three depth bands - the "
-                       "founder asked for an enormous fantasy city skyline and the "
-                       "horizon held two" % _SKY_CITY)
+    # "castles across three depth bands" was true when it was written and is
+    # now two errors: there are FOUR bands, and a seventh of the sites are
+    # mushroom hamlets rather than castles. The line below reports what the loop
+    # actually did instead of describing what it was written to do.
+    unreal.log_warning("SKYLINE CITY: %d sites across %d depth bands - the "
+                       "founder asked for an enormous fantasy city skyline and "
+                       "the horizon held two" % (_SKY_CITY, _SKY_BANDS))
+    # WHAT WAS ACTUALLY BUILT, NOT WHAT WAS ASKED FOR.
+    #
+    # The archetype table sat in this file for a whole pass selecting nothing,
+    # because the hash it reads was masked to sixteen bits and the pick shifts
+    # by seventeen. Nothing downstream could notice: the tower count was right,
+    # the frame looked better, and the only wrong thing was that every silhouette
+    # was the same one. So the generator now COUNTS the archetypes it emitted and
+    # fails loudly if the skyline collapsed back onto one shape — an assertion
+    # about the world, made by the thing that built it.
+    unreal.log_warning("SKYLINE VARIANTS %s across %d sites"
+                       % (sorted(_SKY_VARIANTS.items()), _SKY_CITY))
+    if _SKY_CITY and len(_SKY_VARIANTS) < 3:
+        unreal.log_error(
+            "SKYLINE COLLAPSED TO %d ARCHETYPE(S) %s: the variant pick is not "
+            "selecting. The skyline is meant to carry spire clusters, citadels, "
+            "palaces, twin-tower spans and mushroom hamlets; one shape repeated "
+            "76 times is the procedural-city look the art direction forbids."
+            % (len(_SKY_VARIANTS), sorted(_SKY_VARIANTS)))
     # Gentle rolling terrain: large low ground mounds sunk into the plane so only
     # their crowns show, breaking the dead-flat floor at the district edges.
     for i, (mx, my, mr) in enumerate([(-1650, -650, 8.0), (1750, -450, 7.0), (-2050, 1500, 9.0),

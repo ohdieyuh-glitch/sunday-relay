@@ -26,6 +26,7 @@ LAYOUT = _os.path.join(_WL, "WorldDesign", "hub-layout.json")
 
 spawned = collections.Counter()
 warnings = []
+errors = []
 
 
 class V:
@@ -82,9 +83,20 @@ def make_unreal():
     def log_warning(m):
         warnings.append(str(m))
 
+    def log_error(m):
+        errors.append(str(m))
+
     u.log = log
     u.log_warning = log_warning
-    u.log_error = log_warning
+    # ERRORS ARE NOT WARNINGS, AND THIS GATE USED TO TREAT THEM AS THE SAME
+    # THING. `u.log_error = log_warning` merged them into one list which is then
+    # printed TRUNCATED AT TWELVE — so a generator that shouted "NO-GREY FAILED"
+    # or "BREATHE WPO GATE FAILED" or "SKYLINE COLLAPSED TO 1 ARCHETYPE" could
+    # say so and still be the thirteenth line, dropped, with the run reported
+    # DRY RUN OK. Every one of those messages exists because the failure it
+    # names is invisible in the output; hiding them behind a slice gave them
+    # back the invisibility they were written to remove.
+    u.log_error = log_error
     u.Vector = V
     u.Rotator = lambda *a, **kw: Any("Rotator")
     u.LinearColor = lambda *a, **kw: Any("LinearColor")
@@ -300,8 +312,17 @@ def main():
         budget_bad = True
 
     print("  generator warnings: %d" % len(warnings))
-    for w in warnings[:12]:
-        print("    ! %s" % w[:150])
+    _show = len(warnings) if "--all-warnings" in sys.argv else 12
+    for w in warnings[:_show]:
+        print("    ! %s" % w[:200])
+    if len(warnings) > _show:
+        print("    ... %d more, --all-warnings shows them (ERRORS are never truncated)"
+              % (len(warnings) - _show))
+    if errors:
+        print("  GENERATOR ERRORS: %d — the build said these itself" % len(errors))
+        for e in errors:
+            print("    !! %s" % e)
+        return 1
     if budget_bad:
         return 1
     return 0
