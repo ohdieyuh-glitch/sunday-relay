@@ -1620,9 +1620,37 @@ MATERIAL_SPEC = {
     "meadow_far":  ((0.46, 0.53, 0.45), 0.0, 0.94, (0, 0, 0), 0.0),
     # Distant towers, deliberately pale and low-contrast so the skyline recedes
     # behind the hero landmarks instead of competing with them.
-    "spire_far":   ((0.70, 0.71, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
+    # ---- THE CASTLE IS THE RIGHT PICTURE IN THE WRONG HUE ------------------
+    #
+    # Measured with ONE instrument on both frames -- the brightest third of the
+    # castle band, which for towers against sky is the towers:
+    #
+    #                       luma    rgb              hue    sat
+    #     ours             170.9    (198, 162, 178)  333    0.240
+    #     reference        165.2    (176, 159, 196)  268    0.236
+    #
+    # Brightness and saturation are already there. What is wrong is the CHANNEL
+    # ORDER: ours runs R > B > G and the reference runs B > R > G, so R-B is
+    # +20 where it should be -20. Our skyline is PINK and the founder's is
+    # LAVENDER, and that is the whole of the difference -- 65 degrees of hue on
+    # an otherwise correct band. It also means the skyline is NOT too far away
+    # and NOT too dim, which is what I had assumed from its distance.
+    #
+    # spire_far is the tower BODIES and the largest area in that band, so it is
+    # the lever. (0.70, 0.71, 0.78) is a pale blue-grey with R and G equal --
+    # not lavender at all. This was moved OFF lavender, from (0.68, 0.50, 0.95),
+    # on my reading that the reference's sky is blue. The sky is; the MASONRY is
+    # not: the founder's central castle measures rgb(136, 123, 176), which is
+    # violet by 40 points of blue over red.
+    #
+    # Less far than the old (0.68, 0.50, 0.95), which drove G down to half of R
+    # and read as a purple plastic rather than a stone in violet light.
+    "spire_far":   ((0.64, 0.58, 0.84), 0.0, 0.62, (0, 0, 0), 0.0),
     # Rose and pink rooflines — the reference's skyline is warm, not gold.
-    "roof_rose":   ((0.78, 0.38, 0.44), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
+    # Blue lifted 0.44 -> 0.54 and red eased. The reference's roofs really are
+    # pink, so this stays pink -- it just stops being pink with NO blue in it,
+    # which is what pinned the band's channel order to R > B.
+    "roof_rose":   ((0.72, 0.38, 0.54), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
     "roof_pink":   ((0.92, 0.46, 0.62), 0.0, 0.62, (0, 0, 0), 0.0),
     # THE REFERENCE'S SKYLINE IS NOT ALL PINK. Look at it: white towers with
     # rose and pink cones, and among them a clear run of BLUE and blue-violet
