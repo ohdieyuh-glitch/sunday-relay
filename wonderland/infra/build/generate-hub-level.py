@@ -197,6 +197,11 @@ LOOK = {
     # one build, and the value that wins can be written down with a frame behind
     # it. CHOSEN at 5.0 as the midpoint of the two that were measured wrong.
     "arcaneGlow": 5.0,
+    # Aerial perspective, the atmosphere's depth cue. See the SkyAtmosphere
+    # block. CHOSEN at 11.0 — roughly 3.4 km of air on the skyline by that
+    # block's arithmetic — after 4.0 was measured to leave 80 km of distance as
+    # crisp as 2 km. Sweepable with WONDERLAND_LOOK=aerialScale=.
+    "aerialScale": 11.0,
     "selfColour": 0.06,
     # 1 = the master renders UNLIT, so a surface shows exactly its palette and
     # no lighting path can grey it. 0 restores DefaultLit in one cook.
@@ -6778,9 +6783,27 @@ def build(layout):
         # At 45x the skyline at 310 m behaves like roughly 14 km of atmosphere,
         # so the towers are fully faded into the sky. At 4x it is about 1.2 km:
         # distance still recedes and colour still survives the journey.
+        # 4.0 -> LOOK["aerialScale"], default 11.0.
+        #
+        # 4.0 was chosen when the sky rendered as a dark navy band and the
+        # towers were already washing out into it; more haze then meant losing
+        # the skyline entirely, and the note above is an honest record of that.
+        # The sky is blue now and the frame is exposed two stops lower, so the
+        # constraint that set this number no longer exists.
+        #
+        # The founder's list asks for "atmospheric haze/fog", "distance haze"
+        # and "background reduced contrast through atmosphere", and the
+        # reference has all three plainly: its far castles are paler and softer
+        # than its near ones, which is most of why it reads DEEP. Ours are as
+        # crisp at 80 km as the gate is at 2 km.
+        #
+        # By this block's own arithmetic the skyline behaves like 1.2 km of air
+        # at 4x; 11x makes it about 3.4 km. Sweepable, because every other
+        # atmosphere value tonight has needed a second look once the exposure
+        # moved under it.
         for _nm in ("AerialPespectiveViewDistanceScale",
                     "AerialPerspectiveViewDistanceScale"):
-            set_prop(sac, _nm, 4.0)
+            set_prop(sac, _nm, float(LOOK["aerialScale"]))
         # a little more Mie puts warm haze along the horizon where the land meets
         # the sky, which is what softens the join
         set_prop(sac, "MieScatteringScale", 0.0075)
