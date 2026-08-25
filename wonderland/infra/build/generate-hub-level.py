@@ -4807,11 +4807,14 @@ def build(layout):
                   "%s_ball%d" % (label, sx))
             _part("cylinder", px, y, ph + 78.0 * s, 0.30 * s, 0.30 * s, 0.16 * s, "gold",
                   "%s_neck%d" % (label, sx))
-            _part("cone", px, y, ph + 118.0 * s, 0.58 * s, 0.58 * s, 1.4 * s, "gold_glow",
-                  "%s_finial%d" % (label, sx))
+            # (gold_glow cone finial deleted; the gold ball above is the finial)
+
         # grille of slender vertical bars
-        for b in range(-4, 5):
-            _part("cube", x + b * 52.0 * s, y, ph * 0.46, 0.08 * s, 0.14 * s, ph * 0.9 / 100.0,
+        # thirteen bars at 36 s rather than nine at 52: the opening reads as a
+        # grille only when the gaps are narrower than the piers are wide
+        _part("cube", x, y, ph * 0.50, 4.9 * s, 0.06 * s, 0.06 * s, "gold", "%s_midrail" % label)
+        for b in range(-6, 7):
+            _part("cube", x + b * 36.0 * s, y, ph * 0.46, 0.055 * s, 0.10 * s, ph * 0.9 / 100.0,
                   "gold", "%s_bar%d" % (label, b))
         # scrollwork curls along the top rail
         # SCROLLWORK, properly. One row of seven blobs is a fence; ornate ironwork
@@ -4833,12 +4836,16 @@ def build(layout):
                    "gold", "%s_scrollP%d" % (label, sx), flip=float(sx))
         # CLIMBING ROSES on the posts — the reference's gate is planted, not bare.
         for sx in (-1, 1):
-            for k in range(9):
-                t = k / 8.0
-                a = t * 6.0 + (0.0 if sx < 0 else 1.7)
-                _part("sphere", x + sx * 250.0 * s + math.cos(a) * 34.0 * s,
-                      y + math.sin(a) * 30.0 * s, 40.0 * s + t * ph * 0.92,
-                      0.30 * s, 0.30 * s, 0.30 * s, "foliage", "%s_ivy%d_%d" % (label, sx, k))
+            for k in range(18):
+                t = k / 17.0
+                a = t * 11.0 + (0.0 if sx < 0 else 1.7)
+                # ivy as small CUBES, the reference's own language for leaf mass
+                _part("cube", x + sx * 250.0 * s + math.cos(a) * 36.0 * s,
+                      y + math.sin(a) * 32.0 * s, 40.0 * s + t * ph * 0.92,
+                      0.17 * s, 0.17 * s, 0.15 * s,
+                      ("foliage", "foliage_deep", "foliage_hi")[k % 3],
+                      "%s_ivy%d_%d" % (label, sx, k),
+                      rot=(0.0, float((k * 47) % 90), 0.0))
                 if k % 3 == 0:
                     _part("sphere", x + sx * 250.0 * s + math.cos(a + 0.6) * 40.0 * s,
                           y + math.sin(a + 0.6) * 34.0 * s, 46.0 * s + t * ph * 0.92,
@@ -4854,25 +4861,50 @@ def build(layout):
         # depth is most of why it looks ornate rather than blocked. The
         # activation now reads as a few slender vertical shimmer bars instead,
         # which say "threshold" without walling the view off.
-        for v in range(-3, 4):
-            _part("cube", x + v * 62.0 * s, y + 3.0 * s, ph * 0.46,
-                  0.10 * s, 0.05 * s, ph * 0.80 / 100.0, "arcane", "%s_shimmer%d" % (label, v))
-        for k in range(-2, 3):
-            _part("sphere", x + k * 92.0 * s, y - 10.0 * s, ph * (0.34 + 0.14 * (k % 2)),
-                  0.16 * s, 0.16 * s, 0.16 * s, "float_glow", "%s_glyph%d" % (label, k))
+        # (arcane shimmer bars deleted -- see the note on the beam)
+
+        # (float_glow glyphs deleted -- see the note on the beam)
+
         _part("cylinder", x, y, 5.0, 3.1 * s, 3.1 * s, 0.04, "magic_gold", "%s_threshold" % label)
         # The lintel was a solid gold slab spanning the entire portal. A
         # wrought gate carries its span on a slender rail with the ornament
         # ABOVE it, so the opening stays an opening.
-        _part("cube", x, y, ph + 45.0 * s, 6.2 * s, 0.62 * s, 0.34 * s, "gold", "%s_beam" % label)
-        _part("cube", x, y, ph + 68.0 * s, 6.0 * s, 0.30 * s, 0.16 * s, "gold", "%s_beamtrim" % label)
+        # ---- WHY THE GATE READ AS A GOLD SLAB -------------------------------
+        #
+        # Its opening was FULL: seven vertical bars of the arcane material,
+        # which is emissive violet, five float_glow spheres, a solid gold beam
+        # 6.2 s wide and 0.34 s thick across the top, a gold_glow keystone and
+        # a gold_glow cone on each pier. Emissive gold and violet packed into
+        # 22% x 44% of the frame is a glowing rectangle whatever its parts are
+        # called. The reference gate is OPEN wrought metal -- you see the
+        # garden and the arch through it -- on two stone piers with gold balls.
+        #
+        # The shimmer, the glyphs and the cone finials are gone. The beam is
+        # now an ARCH of thin segments on a semicircle between the piers, so
+        # the top is a curve of metal with sky behind it, not a bar.
+        _ar = 250.0 * s
+        _seg = 11
+        for _i in range(_seg):
+            _t0 = math.pi * _i / _seg
+            _t1 = math.pi * (_i + 1) / _seg
+            _mx = math.cos((_t0 + _t1) * 0.5) * _ar
+            _mz = ph + 20.0 * s + math.sin((_t0 + _t1) * 0.5) * 110.0 * s
+            _ln = math.hypot(math.cos(_t1) - math.cos(_t0), (math.sin(_t1) - math.sin(_t0)) * 0.44) * _ar
+            _ang = math.degrees(math.atan2((math.sin(_t1) - math.sin(_t0)) * 110.0 * s,
+                                           (math.cos(_t1) - math.cos(_t0)) * _ar))
+            _part("cube", x + _mx, y, _mz, _ln / 100.0 * 1.06, 0.10 * s, 0.12 * s,
+                  "gold", "%s_arch%d" % (label, _i), rot=(-_ang, 0.0, 0.0))
+            if _i % 2 == 1:                        # a small gold bead on the curve
+                _part("sphere", x + _mx, y, _mz + 8.0 * s, 0.11 * s, 0.11 * s, 0.11 * s,
+                      "gold", "%s_archbead%d" % (label, _i))
         # a glowing heart crest: two lobes + a point below the keystone
         for sx in (-1, 1):
             _part("sphere", x + sx * 44.0 * s, y, ph + 150.0 * s, 0.5 * s, 0.3 * s, 0.5 * s,
                   "rose", "%s_heartlobe%d" % (label, sx))
         _part("cube", x, y, ph + 108.0 * s, 0.62 * s, 0.3 * s, 0.62 * s, "rose", "%s_heartpt" % label,
               rot=(0.0, 45.0, 0.0))
-        _part("cube", x, y, ph + 120.0 * s, 1.4 * s, 1.35 * s, 1.0 * s, "gold_glow", "%s_keystone" % label)
+        _part("cube", x, y, ph + 132.0 * s, 0.62 * s, 0.34 * s, 0.62 * s, "gold", "%s_keystone" % label,
+              rot=(0.0, 45.0, 0.0))
 
     def kit_spire(x, y, s, label, body_mat="spire", roof_mat="gold", flag=True,
                   detail=0, roof_w=1.75, roof_h=4.4):
@@ -6344,8 +6376,8 @@ def build(layout):
         # The rings are PROVEN to render (the trace has Rune8 and Rune10 owning
         # 0.62% of frame). They go back regardless of the plane, so the circle
         # exists either way and the plane's glyph work is a bonus when it works.
-        for j, (rz, rr) in enumerate(
-                                     ((9.0, 10.4), (10.4, 9.0), (11.8, 7.6),
+        # (kept on one line: verify-hero-motif parses `enumerate((` literally)
+        for j, (rz, rr) in enumerate(((9.0, 10.4), (10.4, 9.0), (11.8, 7.6),
                                       (13.2, 6.2), (14.6, 4.8), (16.0, 3.4),
                                       (17.4, 2.0))):
             # WIDER AND HIGHER, for two measured reasons.
