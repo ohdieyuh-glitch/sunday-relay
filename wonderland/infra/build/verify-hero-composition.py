@@ -596,6 +596,105 @@ def main():
         for k, v in tally.most_common(22):
             print("    %-24s %6d  %4.1f%%" % (k, v, 100.0 * v / tot))
 
+    if "--motion-budget" in sys.argv:
+        # WHAT MOVES, AND WHAT IT COSTS THE VIEWER.
+        #
+        # The founder's report was that the whole world "pulses like a
+        # heartbeat", which is a claim about how many pieces move, how much of
+        # the frame they own, and whether they move TOGETHER. All three are
+        # measurable here and nowhere else offline: the generator's allow-list
+        # names the materials, the dry run says how many instances wear each
+        # one, and the raster above says how much of the HERO FRAME each owns.
+        #
+        # The tables are read STATICALLY out of the generator rather than
+        # retyped, because a motion budget quoting its own copy of the numbers
+        # stops being a measurement the first time the generator changes. Same
+        # reason hero_shots.py reads the shot table.
+        #
+        # IT MUST ALSO SEE DEFAULTS. The first version of this block read only
+        # the override tables and reported a clean world -- while the LEAF
+        # master carried a BreatheAmp DEFAULT of 4.5, so every leaf card swayed
+        # without being named anywhere. A budget that can only see what was
+        # asked for cannot see what was inherited, which is the harder half.
+        import ast as _ast
+        import re as _re
+        _src = io.open(GEN, encoding="utf8").read()
+        _tables = {"BreatheAmp": {}, "BobAmp": {}}
+        for _n in _ast.walk(_ast.parse(_src, GEN)):
+            if not isinstance(_n, _ast.Assign):
+                continue
+            _names = [t.id for t in _n.targets if isinstance(t, _ast.Name)]
+            _key = ("BreatheAmp" if "breathe" in _names else
+                    "BobAmp" if "bob" in _names else None)
+            if _key is None or not isinstance(_n.value, _ast.Dict):
+                continue
+            try:
+                _tables[_key] = _ast.literal_eval(_n.value)
+            except (ValueError, SyntaxError):
+                pass
+        # The leaf family and its inherited amplitude, both read from source.
+        # Fail closed: an unparsed default would be reported as "does not move".
+        _leafm = _re.search(r'amp\.set_editor_property\("parameter_name", "BreatheAmp"\)\s*\n'
+                           r'\s*amp\.set_editor_property\("default_value", ([0-9.]+)\)', _src)
+        if not _leafm:
+            print("  MOTION BUDGET  CANNOT MEASURE: the leaf master's BreatheAmp "
+                  "default is not where this gate looks for it")
+            return 1
+        _leafdef = float(_leafm.group(1))
+        _leaffam = _re.findall(r'"(leafcard(?:_\w+)?)", \(', _src)
+        # `Animated` is the static switch that decides whether a WPO output
+        # exists at all, so the allow-list -- not the amplitude -- is what says
+        # a material moves.
+        _allow = set(_tables["BreatheAmp"]) | set(_tables["BobAmp"])
+        _eff = {}
+        for _mt, _a in _tables["BreatheAmp"].items():
+            if _a:
+                _eff.setdefault(_mt, []).append(("breathe", _a))
+        for _mt, _a in _tables["BobAmp"].items():
+            if _a:
+                _eff.setdefault(_mt, []).append(("bob", _a))
+        for _mt in _leaffam:
+            if _leafdef and _mt in _allow:
+                _eff.setdefault(_mt, []).append(("sway", _leafdef))
+        _inst = _cv.Counter()
+        for _m, _l, _sc, _mt, _lb, _r in records:
+            _inst[_mt] += 1
+        _pix = _cv.Counter()
+        for _i, _n in _vis.items():
+            _pix[blobs[_i][6]] += _n
+        _totinst = float(sum(_inst.values())) or 1.0
+        _totpix = float(W * H)
+        print("  MOTION BUDGET  (a WPO output moves EVERY instance wearing that material)")
+        _mv = {"CHARACTER": [0, 0], "AIRBORNE": [0, 0], "ROOTED": [0, 0]}
+        for _mt, _terms in sorted(_eff.items(), key=lambda kv: -_inst.get(kv[0], 0)):
+            _c, _p = _inst.get(_mt, 0), _pix.get(_mt, 0)
+            # A Dog is a character and is SUPPOSED to be alive. Airborne and
+            # liquid things look broken when still. Anything ROOTED in the
+            # ground that moves is the defect the founder reported.
+            _kind = ("CHARACTER" if _mt.startswith("dog_") else
+                     "AIRBORNE" if _mt in ("float_glow", "petal_air", "magic_cyan",
+                                           "water", "spray") else "ROOTED")
+            _mv[_kind][0] += _c
+            _mv[_kind][1] += _p
+            print("    %-9s %-14s amp %5.1f  %6d inst (%5.2f%% of world)  "
+                  "%5.2f%% of hero frame  %s"
+                  % ("+".join(t[0] for t in _terms), _mt,
+                     max(t[1] for t in _terms), _c, 100.0 * _c / _totinst,
+                     100.0 * _p / _totpix, _kind))
+        for _k in ("CHARACTER", "AIRBORNE", "ROOTED"):
+            print("    ---- %-9s %6d instances (%5.2f%% of world), %5.2f%% of hero frame"
+                  % (_k, _mv[_k][0], 100.0 * _mv[_k][0] / _totinst,
+                     100.0 * _mv[_k][1] / _totpix))
+        _mvtot = sum(v[0] for v in _mv.values())
+        print("    ---- MOVING   %6d of %d world instances (%.2f%%); %d are STATIC"
+              % (_mvtot, int(_totinst), 100.0 * _mvtot / _totinst,
+                 int(_totinst) - _mvtot))
+        print("    ---- PHASE    per-instance random x PhaseSpread, so scattered "
+              "props never reach their extreme together (Dogs set 0: one body)")
+        if _mv["ROOTED"][0]:
+            print("    ---- HEARTBEAT: %d ROOTED instances move. Static "
+                  "environment must stay static." % _mv["ROOTED"][0])
+
     big = [(blobs[_i], _n) for _i, _n in _vis.most_common(18)]
     print("  MOST VISIBLE (pixels actually owned after occlusion, %% of frame):")
     _tot = float(W * H)

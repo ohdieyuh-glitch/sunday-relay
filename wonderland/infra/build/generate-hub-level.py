@@ -1626,27 +1626,92 @@ def build_leaf_material(texs):
             except Exception as _e:
                 unreal.log_warning("leaf rim skipped: %s" % _e)
 
-            # SWAY. Foliage motion is one of the goal's named items and it costs
-            # four nodes: vertices ride a sine along their own normal.
+            # SWAY -- OFF BY DEFAULT, AND PHASE-SPREAD WHEN ON.
+            #
+            # This used to be four nodes wired straight into WPO with a
+            # BreatheAmp DEFAULT OF 4.5, which meant every leaf card in the
+            # world swayed whether or not anything asked it to, all of them
+            # reaching the top of the same sine on the same frame. The founder
+            # saw the result and described it exactly: the world "pulses like a
+            # heartbeat". Two separate defects produced that, and a zero
+            # amplitude fixes NEITHER of them:
+            #
+            #   1. LOCKSTEP. One global sin(Time) with no per-instance term is
+            #      a metronome. Thousands of pieces breathing together read as
+            #      ONE organism; the same pieces with random phase read as a
+            #      breeze. `PerInstanceRandom` is the fix and it is free -- the
+            #      world is already 137k ISM instances, which is what that node
+            #      needs. `PhaseSpread` scales it so a multi-part object whose
+            #      parts must move as ONE body can set 0 and keep them locked.
+            #
+            #   2. COST. A material with a live WPO output is not merely doing
+            #      a little vertex maths: the renderer must treat every
+            #      primitive wearing it as moving, so its virtual-shadow-map
+            #      pages cannot stay cached and are re-rasterised every frame,
+            #      and Nanite must take the programmable-raster path. Setting
+            #      BreatheAmp to 0 leaves the output CONNECTED, so the primitive
+            #      keeps paying all of that to move by zero. Only a STATIC
+            #      SWITCH removes it: with `Animated` false the branch folds to
+            #      a constant at compile time, the permutation has no WPO at
+            #      all, and the primitive is static again.
+            #
+            # So the switch is the load-bearing part and the amplitude is only
+            # the look. Default false: a material moves when it is named in
+            # ANIMATED_MATERIALS and never by inheriting a default.
             try:
                 tn = mel.create_material_expression(master, unreal.MaterialExpressionTime, -900, 860)
-                sn = mel.create_material_expression(master, unreal.MaterialExpressionSine, -700, 860)
-                mel.connect_material_expressions(tn, "", sn, "")
+                spd = mel.create_material_expression(
+                    master, unreal.MaterialExpressionScalarParameter, -900, 780)
+                spd.set_editor_property("parameter_name", "SwaySpeed")
+                spd.set_editor_property("default_value", 0.9)
+                tsp = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -760, 820)
+                mel.connect_material_expressions(tn, "", tsp, "A")
+                mel.connect_material_expressions(spd, "", tsp, "B")
+                pir = mel.create_material_expression(
+                    master, unreal.MaterialExpressionPerInstanceRandom, -900, 700)
+                psp = mel.create_material_expression(
+                    master, unreal.MaterialExpressionScalarParameter, -900, 620)
+                psp.set_editor_property("parameter_name", "PhaseSpread")
+                psp.set_editor_property("default_value", 6.283185)
+                pmul = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -760, 660)
+                mel.connect_material_expressions(pir, "", pmul, "A")
+                mel.connect_material_expressions(psp, "", pmul, "B")
+                tph = mel.create_material_expression(master, unreal.MaterialExpressionAdd, -620, 780)
+                mel.connect_material_expressions(tsp, "", tph, "A")
+                mel.connect_material_expressions(pmul, "", tph, "B")
+                sn = mel.create_material_expression(master, unreal.MaterialExpressionSine, -500, 860)
+                mel.connect_material_expressions(tph, "", sn, "")
                 vn = mel.create_material_expression(
                     master, unreal.MaterialExpressionVertexNormalWS, -900, 960)
                 amp = mel.create_material_expression(
                     master, unreal.MaterialExpressionScalarParameter, -900, 1040)
                 amp.set_editor_property("parameter_name", "BreatheAmp")
-                amp.set_editor_property("default_value", 4.5)
+                amp.set_editor_property("default_value", 0.0)
                 w1 = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -460, 900)
                 mel.connect_material_expressions(vn, "", w1, "A")
                 mel.connect_material_expressions(sn, "", w1, "B")
                 w2 = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -300, 920)
                 mel.connect_material_expressions(w1, "", w2, "A")
                 mel.connect_material_expressions(amp, "", w2, "B")
-                mel.connect_material_property(w2, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+                still = mel.create_material_expression(
+                    master, unreal.MaterialExpressionConstant3Vector, -300, 1100)
+                still.set_editor_property("constant", unreal.LinearColor(0.0, 0.0, 0.0, 1.0))
+                sw = mel.create_material_expression(
+                    master, unreal.MaterialExpressionStaticSwitchParameter, -150, 960)
+                sw.set_editor_property("parameter_name", "Animated")
+                sw.set_editor_property("default_value", False)
+                mel.connect_material_expressions(w2, "", sw, "True")
+                mel.connect_material_expressions(still, "", sw, "False")
+                mel.connect_material_property(sw, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
             except Exception as _e:
-                unreal.log_warning("leaf sway skipped: %s" % _e)
+                # NAME THE CONSEQUENCE. Without the switch the leaf master keeps
+                # a live WPO output, so every leaf card stays a moving primitive
+                # even at zero amplitude -- silent, and the exact regression
+                # this block exists to prevent.
+                unreal.log_error("LEAF SWAY GATE FAILED (%s): the leaf master has "
+                                 "no Animated switch, so leaf cards remain "
+                                 "WPO-animated primitives and keep their shadow "
+                                 "and raster cost" % _e)
 
             mel.recompile_material(master)
             eal.save_asset(master.get_path_name())
@@ -2138,18 +2203,55 @@ def build_material_library(texs=None):
                     "and the world will render grey again.")
         except Exception as _e:
             unreal.log_warning("rim light skipped (%s); no edge response" % _e)
-        # BREATHING via World-Position-Offset: vertices pulse along their normal on a
-        # Time->Sine wave, scaled by a per-instance BreatheAmp (default 0 = static).
-        # The Dogs (and foliage) get amp>0 so they are ALIVE with no skeletal rig —
-        # "Dogs must BREATHE; breathing is ambient life." Live motion, not a still.
+        # BREATHING via World-Position-Offset, GATED BY A STATIC SWITCH.
+        #
+        # Vertices ride a Time->Sine along their own normal, scaled by
+        # BreatheAmp. The Dogs get amp>0 so they are ALIVE with no skeletal rig
+        # — "Dogs must BREATHE; breathing is ambient life."
+        #
+        # What changed, and why a zero amplitude was never the fix. The founder
+        # reported the whole world "pulsing like a heartbeat". It was, and this
+        # graph is where it came from: the breathe table named ten VEGETATION
+        # materials, and 22,794 instances — 16.5% of the world, 15.2% of the
+        # hero frame — inflated and deflated together on ONE global sine with no
+        # per-instance phase. That is a metronome, not a garden.
+        #
+        # Two independent defects, and each needs its own repair:
+        #
+        #   LOCKSTEP -> `PerInstanceRandom * PhaseSpread` added to the sine's
+        #   argument. The world is already instanced, so this costs nothing and
+        #   turns one organism breathing into a breeze. PhaseSpread is a
+        #   PARAMETER because a Dog is many instanced parts of ONE body: it sets
+        #   0 and its parts stay locked to each other, while scattered props set
+        #   the full turn and never agree.
+        #
+        #   COST -> `Animated`, a STATIC SWITCH, default FALSE. A live WPO
+        #   output makes the renderer treat the primitive as moving: its
+        #   virtual-shadow-map pages cannot stay cached and are re-rasterised
+        #   every frame, and Nanite must take programmable raster. An amplitude
+        #   of 0 leaves the output connected, so the primitive pays all of that
+        #   to move by zero — which is why "set BreatheAmp = 0" would have
+        #   removed the wobble and none of the cost. With the switch false the
+        #   branch folds at compile time and the permutation has NO WPO at all.
+        #
+        # A material therefore moves only by being named in ANIMATED_MATERIALS.
         try:
             tnode = mel.create_material_expression(master, unreal.MaterialExpressionTime, -720, 720)
             spd = param(unreal.MaterialExpressionScalarParameter, "BreatheSpeed", 880, 1.6)
             tmul = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -540, 740)
             mel.connect_material_expressions(tnode, "", tmul, "A")
             mel.connect_material_expressions(spd, "", tmul, "B")
+            pir = mel.create_material_expression(
+                master, unreal.MaterialExpressionPerInstanceRandom, -720, 600)
+            psp = param(unreal.MaterialExpressionScalarParameter, "PhaseSpread", 1370, 6.283185)
+            pmul = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -540, 620)
+            mel.connect_material_expressions(pir, "", pmul, "A")
+            mel.connect_material_expressions(psp, "", pmul, "B")
+            tph = mel.create_material_expression(master, unreal.MaterialExpressionAdd, -470, 700)
+            mel.connect_material_expressions(tmul, "", tph, "A")
+            mel.connect_material_expressions(pmul, "", tph, "B")
             sine = mel.create_material_expression(master, unreal.MaterialExpressionSine, -400, 740)
-            mel.connect_material_expressions(tmul, "", sine, "")
+            mel.connect_material_expressions(tph, "", sine, "")
             nrm = mel.create_material_expression(master, unreal.MaterialExpressionVertexNormalWS, -540, 860)
             amp = param(unreal.MaterialExpressionScalarParameter, "BreatheAmp", 1010, 0.0)
             b1 = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -240, 780)
@@ -2165,8 +2267,15 @@ def build_material_library(texs=None):
             bmul = mel.create_material_expression(master, unreal.MaterialExpressionMultiply, -540, 1000)
             mel.connect_material_expressions(tnode, "", bmul, "A")
             mel.connect_material_expressions(bspd, "", bmul, "B")
+            # The bob rides the SAME per-instance phase. It has its own speed,
+            # so sharing the offset does not correlate the two terms — and a
+            # second random would make one prop's own bob and breathe disagree,
+            # which reads as a broken object rather than as life.
+            btph = mel.create_material_expression(master, unreal.MaterialExpressionAdd, -470, 960)
+            mel.connect_material_expressions(bmul, "", btph, "A")
+            mel.connect_material_expressions(pmul, "", btph, "B")
             bsine = mel.create_material_expression(master, unreal.MaterialExpressionSine, -400, 1000)
-            mel.connect_material_expressions(bmul, "", bsine, "")
+            mel.connect_material_expressions(btph, "", bsine, "")
             up = mel.create_material_expression(master, unreal.MaterialExpressionConstant3Vector, -540, 1120)
             up.set_editor_property("constant", unreal.LinearColor(0.0, 0.0, 1.0, 1.0))
             bamp = param(unreal.MaterialExpressionScalarParameter, "BobAmp", 1240, 0.0)
@@ -2179,9 +2288,25 @@ def build_material_library(texs=None):
             wsum = mel.create_material_expression(master, unreal.MaterialExpressionAdd, 40, 900)
             mel.connect_material_expressions(b2, "", wsum, "A")
             mel.connect_material_expressions(bv2, "", wsum, "B")
-            mel.connect_material_property(wsum, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+            still = mel.create_material_expression(
+                master, unreal.MaterialExpressionConstant3Vector, 40, 1120)
+            still.set_editor_property("constant", unreal.LinearColor(0.0, 0.0, 0.0, 1.0))
+            gate = mel.create_material_expression(
+                master, unreal.MaterialExpressionStaticSwitchParameter, 190, 960)
+            gate.set_editor_property("parameter_name", "Animated")
+            gate.set_editor_property("default_value", False)
+            mel.connect_material_expressions(wsum, "", gate, "True")
+            mel.connect_material_expressions(still, "", gate, "False")
+            mel.connect_material_property(gate, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
         except Exception as _e:
-            unreal.log_warning("breathe WPO skipped: %s" % _e)
+            # An ERROR, not a warning. If the switch is missing the master keeps
+            # a live WPO output on EVERY material in the world and the whole
+            # world is a moving primitive again — the exact condition this
+            # block was written to end, and one nothing downstream can see.
+            unreal.log_error("BREATHE WPO GATE FAILED (%s): the master has no "
+                             "Animated switch, so every material in the world "
+                             "keeps a live WPO output and stays a moving "
+                             "primitive for shadows and raster" % _e)
         mel.recompile_material(master)
         eal.save_asset(master.get_path_name())
     mats = {}
@@ -2496,35 +2621,84 @@ def build_material_library(texs=None):
                 eal.save_asset(mats[_nm].get_path_name())
             except Exception as _e:
                 unreal.log_warning("rough vary on %s skipped: %s" % (_nm, _e))
-    # Bring the Dogs alive (clear breathe) + a gentle foliage sway; everything else
-    # keeps BreatheAmp 0 (static). Live motion in the stream, invisible in a still.
+    # ------------------------------------------------------------------ MOTION
+    # THE COMPLETE LIST OF THINGS IN WONDERLAND THAT MOVE.
+    #
+    # Read this as an allow-list, not as a tuning table. `Animated` is a static
+    # switch defaulting to FALSE on both masters, so a material that is not
+    # named here compiles to a permutation with no world-position-offset output
+    # at all: it is a static primitive, its shadow-map pages stay cached, and
+    # Nanite keeps the fixed-function raster path. Adding a name here is a
+    # decision to pay for motion, and it should be made object by object.
+    #
+    # WHY IT SHRANK. `breathe` used to name ten vegetation materials as well as
+    # the Dogs. Measured: 22,794 instances -- 16.5% of the world and 15.2% of
+    # the hero frame -- swelling and shrinking on ONE sine with no per-instance
+    # phase. Every hedge, rose, petal and leaf in Wonderland reached its widest
+    # on the same frame. The founder's words for it were that the world "pulses
+    # like a heartbeat", and that is a fair description of what the code did.
+    #
+    # The rule now is the one the founder gave: STATIC ENVIRONMENT STAYS STATIC,
+    # and motion is spent where motion means something.
+    #
+    #   * The Dogs breathe. They are the characters and the whole point.
+    #   * Things that are AIRBORNE or LIQUID drift, because a petal hanging
+    #     motionless in mid-air or a still fountain is the thing that looks
+    #     broken. There are 717 of these in the world -- half a percent of it.
+    #   * Nothing that is rooted in the ground moves. Not hedges, not roses,
+    #     not flowerbeds, not topiary, not the tree canopies.
+    #
+    # PhaseSpread is the second half of the repair. Scattered props take the
+    # full turn so no two agree; a Dog takes ZERO, because a Dog is many
+    # instanced parts of one body and parts that disagree read as a broken
+    # object rather than as a breath.
     breathe = {"dog_body": 6.5, "dog_pink": 6.0, "dog_gray": 6.0, "dog_tan": 6.0,
-               "dog_brown": 6.0, "foliage": 3.0, "foliage_hi": 3.5,
-               "foliage_deep": 2.4, "foliage_spr": 4.0, "leaf": 3.6, "leaf_hi": 4.2,
-               "petal_pink": 2.5,
-               "petal_violet": 2.5, "rose_pink": 2.2, "rose": 2.0}
+               "dog_brown": 6.0}
+    bob = {"float_glow": 24.0, "petal_air": 22.0, "magic_cyan": 16.0,
+           "water": 5.0, "spray": 19.0}
+    phase_spread = {"dog_body": 0.0, "dog_pink": 0.0, "dog_gray": 0.0,
+                    "dog_tan": 0.0, "dog_brown": 0.0}
+    animated = set(breathe) | set(bob)
     for nm, ampv in breathe.items():
         if nm in mats:
             try:
                 mel.set_material_instance_scalar_parameter_value(mats[nm], "BreatheAmp", ampv)
-                eal.save_asset(mats[nm].get_path_name())
             except Exception as _e:
                 unreal.log_warning("BreatheAmp on %s skipped: %s" % (nm, _e))
-    # WORLD LIFE — things that DRIFT up/down on the Bob WPO: the magical keys, the
-    # air's drifting petals, and the Project-Brain lobes (so the Brain slowly
-    # "thinks"). Static gold accents (dog tags, gate keystone) keep BobAmp 0 and stay put.
-    # Water is the one surface whose whole character is movement, and it had
-    # none. Small on the pools (a swell, not a trampoline), large on the jets
-    # and spray, where the eye reads it as flow.
-    bob = {"float_glow": 24.0, "petal_air": 22.0, "magic_cyan": 16.0,
-           "water": 5.0, "spray": 19.0}
     for nm, amp in bob.items():
         if nm in mats:
             try:
                 mel.set_material_instance_scalar_parameter_value(mats[nm], "BobAmp", float(amp))
-                eal.save_asset(mats[nm].get_path_name())
             except Exception as _e:
                 unreal.log_warning("BobAmp on %s skipped: %s" % (nm, _e))
+    for nm, spread in phase_spread.items():
+        if nm in mats:
+            try:
+                mel.set_material_instance_scalar_parameter_value(mats[nm], "PhaseSpread", float(spread))
+            except Exception as _e:
+                unreal.log_warning("PhaseSpread on %s skipped: %s" % (nm, _e))
+    # The switch LAST, and only on the allow-list. Everything else keeps the
+    # master's default of false and therefore has no WPO output to evaluate.
+    _moved = 0
+    for nm in sorted(animated):
+        if nm in mats:
+            try:
+                mel.set_material_instance_static_switch_parameter_value(mats[nm], "Animated", True)
+                _moved += 1
+            except Exception as _e:
+                # If this fails the material keeps the FALSE branch, so it goes
+                # still rather than staying stuck in motion. Wrong, but wrong in
+                # the safe direction, and said out loud.
+                unreal.log_error("ANIMATED switch on %s failed (%s): it will be "
+                                 "STATIC in this build" % (nm, _e))
+    for nm in mats:
+        try:
+            eal.save_asset(mats[nm].get_path_name())
+        except Exception:
+            pass
+    unreal.log_warning("MOTION: %d of %d materials animated; the rest compile "
+                       "their WPO out and are static primitives"
+                       % (_moved, len(mats)))
     return mats
 
 
