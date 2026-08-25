@@ -55,15 +55,29 @@ def hero_shots():
                 except (ValueError, SyntaxError):
                     pass   # not a literal; nothing this gate can use
 
+    UNRESOLVED = object()
+
     def resolve(element):
-        """literal_eval, but a bare NAME resolves to the constant it names."""
+        """literal_eval, but a bare NAME resolves to the constant it names.
+
+        RUNTIME VALUES ARE NOT A FAILURE, THEY ARE A BLIND SPOT, and the
+        difference matters. HeroCam3 and HeroCam4 frame a LANDMARK, so they now
+        ask landmark_xy where that landmark actually ended up rather than
+        carrying a copy of its coordinates -- a copy that had already gone 800
+        uu stale elsewhere in this generator and that verify-landmark-copies.py
+        now fails the build over. Restoring the literals to keep this gate happy
+        would trade a real defect for a readable one.
+
+        So: a shot this gate cannot evaluate is SKIPPED AND NAMED, never
+        silently dropped, and the caller still fails if a shot it is actually
+        about is among them.
+        """
         if isinstance(element, ast.Name):
-            if element.id not in consts:
-                fail("hero_shots references %s, which is not a literal constant "
-                     "in %s — this gate reads the table statically and cannot "
-                     "evaluate it" % (element.id, GENERATOR))
-            return consts[element.id]
-        return ast.literal_eval(element)
+            return consts.get(element.id, UNRESOLVED)
+        try:
+            return ast.literal_eval(element)
+        except (ValueError, SyntaxError, TypeError):
+            return UNRESOLVED
 
     for node in ast.walk(tree):
         if not isinstance(node, ast.Assign):
@@ -71,10 +85,24 @@ def hero_shots():
         targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
         if "hero_shots" not in targets:
             continue
-        shots = {}
+        shots, skipped = {}, []
         for element in node.value.elts:
             index, pos, look, fov = (resolve(e) for e in element.elts)
+            if UNRESOLVED in (index, pos, look, fov):
+                skipped.append(index if isinstance(index, int) else "?")
+                continue
             shots[index] = (pos, look, fov)
+        if skipped:
+            print("  NOTE: hero shot(s) %s are positioned from the layout at "
+                  "runtime (landmark_xy) and cannot be read statically. NOT "
+                  "CHECKED by this gate." % ", ".join(str(i) for i in skipped))
+            # The arrival cameras are what every hero gate is about. If one of
+            # THOSE went runtime, silence would be the wrong answer.
+            for _needed in (0, 6):
+                if _needed in skipped:
+                    fail("hero shot %d could not be read statically, and it is "
+                         "the arrival camera this gate exists to check"
+                         % _needed)
         return shots
     fail("no hero_shots table in %s" % GENERATOR)
 

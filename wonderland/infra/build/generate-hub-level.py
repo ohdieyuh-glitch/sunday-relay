@@ -2913,6 +2913,18 @@ def build_material_library(texs=None):
         "trunk":      ("bark",    0.0090, (1.00, 1.00, 1.00)),
         "moss":       ("sward",   0.0110, (0.80, 1.05, 0.78)),
         "spire":      ("plaster", 0.0055, (1.00, 1.00, 1.00)),
+        # spire_far WAS NOT IN THIS TABLE AT ALL. Every tower in the distant
+        # skyline -- the largest single band of architecture in the hero frame --
+        # was flat untextured colour, which is most of why it reads as smooth
+        # plastic. It is not in the table by oversight rather than by decision:
+        # meadow_far IS deliberately absent and says so in a comment right here,
+        # and spire_far was simply never added.
+        #
+        # A coarser scale than the near spires on purpose. The map cannot
+        # deliver courses at 250 m (see the rib note in kit_spire -- 0.7 px),
+        # but it does deliver ROUGHNESS VARIATION, which breaks the single
+        # travelling highlight that makes a smooth cylinder look turned.
+        "spire_far":  ("plaster", 0.0032, (1.00, 1.00, 1.00)),
         "spire_pink": ("plaster", 0.0055, (1.02, 0.80, 0.86)),
         "spire_blue": ("plaster", 0.0055, (0.80, 0.88, 1.04)),
         "spire_teal": ("plaster", 0.0055, (0.72, 1.00, 0.96)),
@@ -4804,6 +4816,60 @@ def build(layout):
         # little and the height moved a lot.
         _part("cone", x, y, bh + 210.0 * s, roof_w * s, roof_w * s, roof_h * s,
               roof_mat, "%s_roof" % label)
+        # ---- WHAT ACTUALLY READS ON A ROOF AT THIS DISTANCE -----------------
+        #
+        # The shaft under this cone has a plinth, two tapered drums, a corbel
+        # band, an overhanging balcony, eight merlons and two tiers of windows.
+        # The delivered frame still reads "cylinder + cone", and the reason is
+        # that the CONE is the biggest single shape in the skyline and it is one
+        # smooth untextured colour from eave to finial.
+        #
+        # Texture cannot fix it. The towers stand 250-350 m out; at 1920 px
+        # across a 75 degree frame one pixel is 0.00068 rad, so a masonry course
+        # of 12 uu at 25,000 uu subtends 0.7 px. Sub-pixel detail averages to
+        # flat colour, which is exactly what the meadow_far note above records
+        # learning the hard way.
+        #
+        # What survives at that distance is SILHOUETTE and VALUE. Both of these
+        # are geometry:
+        #
+        #   RIBS — thin raised seams from eave to apex. On a cone of revolution
+        #     they catch the key light on one side and shade on the other, so a
+        #     single flat pink becomes a fluted surface with a light and a dark
+        #     face. This is how a real spire's standing seams read from a
+        #     distance, and it costs eight boxes.
+        #   DORMERS — a small gabled window part-way up, which BREAKS THE
+        #     OUTLINE. An unbroken cone is the single strongest "primitive" cue
+        #     a skyline can carry; two bumps on it stop being a cone.
+        #
+        # Both scale with the roof, so a squat roof gets short ribs and a tall
+        # one gets long ones, and neither can outgrow the cone the way the
+        # finial literals once did.
+        _rib_n = 8
+        _rib_mid = bh + 210.0 * s + roof_h * 22.0 * s          # halfway up the cone
+        for _r in range(_rib_n):
+            _ra = _r * (2.0 * math.pi / _rib_n) + 0.19
+            _rr = roof_w * 26.0 * s                             # mid-cone radius
+            _part("cube", x + math.cos(_ra) * _rr, y + math.sin(_ra) * _rr, _rib_mid,
+                  0.05 * s, roof_w * 0.30 * s, roof_h * 0.52 * s,
+                  roof_mat, "%s_rib%d" % (label, _r),
+                  rot=(0.0, math.degrees(_ra), 0.0))
+        # Dormers only where there is roof enough to carry them, and only on the
+        # detailed towers -- sixty far silhouettes do not each need two more
+        # boxes to be a cone with bumps on it.
+        if detail >= 1 and roof_h >= 3.0:
+            for _d in (-1, 1):
+                _dz = bh + 210.0 * s + roof_h * 16.0 * s
+                _dr = roof_w * 34.0 * s
+                _da = 0.55 * _d
+                _part("cube", x + math.cos(_da) * _dr, y + math.sin(_da) * _dr, _dz,
+                      roof_w * 0.22 * s, roof_w * 0.26 * s, roof_h * 0.20 * s,
+                      body_mat, "%s_dorm%d" % (label, _d),
+                      rot=(0.0, math.degrees(_da), 0.0))
+                _part("cube", x + math.cos(_da) * _dr * 1.02, y + math.sin(_da) * _dr * 1.02,
+                      _dz, roof_w * 0.10 * s, roof_w * 0.13 * s, roof_h * 0.10 * s,
+                      "dog_visor", "%s_dormw%d" % (label, _d),
+                      rot=(0.0, math.degrees(_da), 0.0))
         # lantern under the finial
         # THE FINIAL RIDES THE APEX, WHICH IS NOW A VARIABLE. These were three
         # literals — 306, 336, 400, 470 — measured off a roof whose half-height
