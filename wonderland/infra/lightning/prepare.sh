@@ -72,14 +72,51 @@ fi
 #
 # Now: a branch change has to be asked for, and the resulting commit is verified
 # against the branch head before anything is compiled.
+# WL_BUNDLE — HOW SOURCE REACHES A STUDIO THAT HOLDS NO CREDENTIAL.
+#
+# sunday-relay is private and a fresh Studio has no GitHub credential, so the
+# fetch below dies with "could not read Username for https://github.com" and
+# nothing can be staged at all. The workaround people reach for is to copy the
+# working tree in over SSH, and it is the wrong one: the files change while the
+# checkout's sha does not, so every gate downstream — wl_verify_source, the
+# COMPILING <sha> line, the sha quoted in the report — goes on describing a
+# commit that is not what compiled. That is precisely the failure that cost an
+# L4 session.
+#
+# A git BUNDLE keeps git honest. `git bundle create wl.bundle <base>..<branch>`
+# on the development machine, scp it here, and the fetch below reads it exactly
+# as it would read a remote: the checkout really is at the commit the bundle
+# carries, and every sha gate afterwards is unchanged and still means what it
+# says.
+#
+#   git bundle create wl.bundle <studio-sha>..relay/wonderland-marble
+#   scp wl.bundle <studio>:/teamspace/studios/this_studio/wonderland/
+#   WL_BUNDLE=$WL_ROOT/wl.bundle bash .../prepare.sh
 wl_require_source_branch
 if [ -d "$WL_SRC/.git" ]; then
   wl_say "updating $WL_BRANCH"
-  git -C "$WL_SRC" fetch --depth 50 origin "$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1 \
-    || wl_die "fetch of origin/$WL_BRANCH failed; see $WL_LOG/git.log"
-  git -C "$WL_SRC" checkout -q "$WL_BRANCH" 2>>"$WL_LOG/git.log" || \
-    git -C "$WL_SRC" checkout -qb "$WL_BRANCH" "origin/$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1
-  git -C "$WL_SRC" reset --hard "origin/$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1
+  if [ -n "${WL_BUNDLE:-}" ]; then
+    [ -f "$WL_BUNDLE" ] || wl_die "WL_BUNDLE=$WL_BUNDLE does not exist"
+    wl_say "fetching from bundle $WL_BUNDLE (no GitHub credential needed)"
+    git -C "$WL_SRC" fetch "$WL_BUNDLE" "$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1 \
+      || wl_die "fetch from $WL_BUNDLE failed; see $WL_LOG/git.log"
+    git -C "$WL_SRC" reset --hard FETCH_HEAD >>"$WL_LOG/git.log" 2>&1
+  elif git -C "$WL_SRC" fetch --depth 50 origin "$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1; then
+    git -C "$WL_SRC" checkout -q "$WL_BRANCH" 2>>"$WL_LOG/git.log" || \
+      git -C "$WL_SRC" checkout -qb "$WL_BRANCH" "origin/$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1
+    git -C "$WL_SRC" reset --hard "origin/$WL_BRANCH" >>"$WL_LOG/git.log" 2>&1
+  elif [ -n "$WL_REQUIRE_SHA" ] && [ "$(wl_source_sha)" = "$WL_REQUIRE_SHA" ]; then
+    # Origin is unreachable, but the operator pinned an exact commit and the
+    # checkout already IS that commit. Nothing is being guessed at, so this
+    # proceeds — loudly, because an unreachable origin is worth knowing about.
+    wl_warn "origin unreachable; the checkout is already pinned at $WL_REQUIRE_SHA, continuing"
+  else
+    wl_die "fetch of origin/$WL_BRANCH failed and no WL_BUNDLE was given; see $WL_LOG/git.log.
+A private repo needs a credential in the Studio, or ship the commits as a bundle:
+  git bundle create wl.bundle <studio-sha>..$WL_BRANCH   # on the dev machine
+  scp wl.bundle <studio>:$WL_ROOT/
+  WL_BUNDLE=$WL_ROOT/wl.bundle bash \$0"
+  fi
 else
   wl_say "cloning $WL_BRANCH"
   git clone --depth 50 --branch "$WL_BRANCH" "$WL_REPO" "$WL_SRC" >>"$WL_LOG/git.log" 2>&1 \
