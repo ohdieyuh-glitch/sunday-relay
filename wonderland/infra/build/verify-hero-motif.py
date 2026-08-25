@@ -49,10 +49,33 @@ def hero_dog(src):
 
 
 def ring_radius(src):
-    """The outermost arcane ring, from the rings table itself."""
+    """The outermost arcane ring, from the ring table itself.
+
+    THE RINGS STOPPED BEING DISCS AND THIS GATE STOPPED CHECKING ANYTHING.
+    They used to be solid cylinders stacked smallest-and-highest, in a table
+    named `rings` whose second element was a cylinder SCALE. They are segmented
+    annuli now — tangent cubes around a radius — because the old construction's
+    stone-coloured gap discs paved over the cobble the moment the circle was
+    made big enough to read.
+
+    The gate said so rather than passing quietly ("no ring scales parsed.
+    Nothing was checked."), which is the only reason this was caught in the same
+    minute rather than a week later. Reading the new table, and keeping the old
+    shape as a fallback so a revert does not silently blind it either.
+    """
+    seg = re.search(r"for\s+j,\s*\(rz,\s*rr\)\s*in\s+enumerate\(\((.*?)\)\):",
+                    src, re.S)
+    if seg:
+        radii = [float(r) for r in
+                 re.findall(r"\(\s*[\d.]+\s*,\s*([\d.]+)\s*\)", seg.group(1))]
+        if not radii:
+            raise SystemExit("the segmented ring table parsed to nothing. "
+                             "Nothing was checked.")
+        return max(radii) * CYLINDER_RADIUS_PER_SCALE
     match = re.search(r"rings\s*=\s*\[(.*?)\]", src, re.S)
     if not match:
-        raise SystemExit("the arcane rings table not found. Nothing was checked.")
+        raise SystemExit("no arcane ring table found in either shape. "
+                         "Nothing was checked.")
     scales = [float(s) for s in re.findall(r"\(\s*[\d.]+\s*,\s*([\d.]+)\s*,", match.group(1))]
     if not scales:
         raise SystemExit("no ring scales parsed. Nothing was checked.")

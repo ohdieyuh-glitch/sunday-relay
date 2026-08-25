@@ -5203,27 +5203,39 @@ def build(layout):
         # Many THIN concentric rings rather than six fat bands: the reference's
         # circle reads as engraved light, and thickness is what made ours read
         # as painted vinyl.
-        # BIGGER, AND THE BANDS WIDE ENOUGH TO SEE.
+        # ENGRAVED LIGHT ON VISIBLE STONE, NOT A STACK OF PLATES.
         #
-        # Held against the founder reference side by side, the arcane circle is
-        # the single most striking thing in its foreground — a bold violet disc
-        # of engraved light about two and a half Dog-lengths across, with rings
-        # you can read individually. Ours was 320 uu at its outermost with each
-        # visible band about 18 uu wide, which at 1,400 uu from the lens is
-        # under one percent of the frame's height per ring. It read as a faint
-        # scratch on the paving.
+        # The circle was built from solid discs stacked smallest-and-highest, so
+        # each one covered the centre of the one below and what survived was an
+        # annulus. That works, and it has a cost that only showed once the
+        # circle was made big enough to read: the "gap" rings are `plaza`
+        # discs — opaque, stone-coloured, sitting 5 to 19 uu ABOVE the paving —
+        # so enlarging the circle paved over the cobble checker with flat
+        # lavender plates. The close-up is unambiguous: the plaza around the Dog
+        # reads as painted lilac, not as laid stone with light on it.
         #
-        # The construction is right and stays: solid discs stacked smallest-and-
-        # highest, so each one covers the centre of the one below and what
-        # survives is an annulus. Only the numbers change — 520 uu outermost,
-        # and the arcane bands widened to 45 uu so a ring is a ring.
-        rings = [(9.0, 10.4, "arcane"), (9.6, 9.5, "plaza"), (10.2, 9.0, "arcane"),
-                 (10.8, 8.1, "plaza"), (12.0, 7.6, "arcane"), (12.6, 6.7, "plaza"),
-                 (14.0, 6.2, "arcane"), (14.6, 5.3, "plaza"), (16.0, 4.8, "arcane"),
-                 (16.6, 3.9, "plaza"), (18.0, 3.4, "arcane"), (18.6, 2.5, "plaza"),
-                 (20.0, 2.0, "arcane")]
-        for j, (rz, rr, mat) in enumerate(rings):
-            _part("cylinder", ccx, ccy, rz, rr, rr, 0.10, mat, "ArcaneRing%d" % j)
+        # The reference's circle is line-work: glowing rings with the courtyard
+        # visible between them, and the stone is what the light is drawn ON.
+        # So the rings are annuli made of tangent segments now, and there are no
+        # gap discs at all — the gap is simply where no segment is, which is the
+        # only kind of gap that shows what is underneath.
+        #
+        # 72 segments a ring at 520 uu is one every 45 uu, short enough that the
+        # chord does not read as a polygon.
+        _ARC_SEGS = 72
+        for j, (rz, rr) in enumerate(((9.0, 10.4), (10.4, 9.0), (11.8, 7.6),
+                                      (13.2, 6.2), (14.6, 4.8), (16.0, 3.4),
+                                      (17.4, 2.0))):
+            _radius = rr * 50.0
+            _seglen = (2.0 * math.pi * _radius) / _ARC_SEGS * 1.28
+            for _k in range(_ARC_SEGS):
+                _a = _k * (2.0 * math.pi / _ARC_SEGS)
+                _part("cube",
+                      ccx + math.cos(_a) * _radius,
+                      ccy + math.sin(_a) * _radius, rz,
+                      _seglen / 100.0, 0.09, 0.030,
+                      "arcane", "ArcaneRing%d_%d" % (j, _k),
+                      rot=(0.0, math.degrees(_a) + 90.0, 0.0))
         # radiating rune spokes (thin emissive bars from centre to rim)
         for i in range(12):
             a = (i / 12.0) * 2.0 * math.pi
