@@ -1544,9 +1544,31 @@ MATERIAL_SPEC = {
     "petal_pink":  ((0.94, 0.40, 0.66), 0.0, 0.62, (0, 0, 0), 0.0),
     "petal_violet":((0.52, 0.28, 0.86), 0.0, 0.62, (0.09, 0.02, 0.20), 0.35),
     "petal_air":   ((0.98, 0.62, 0.82), 0.0, 0.62, (0.10, 0.02, 0.06), 0.2),
-    "mush_red":    ((0.74, 0.16, 0.26), 0.0, 0.62, (0.14, 0, 0), 0.3),
+    # ---- THE CAPS WERE SELF-LIT, AND MAGENTA ------------------------------
+    #
+    # Taking only pixels where red leads clearly, so the cap is measured and not
+    # its surround:
+    #
+    #                      colour           luma    sat
+    #     reference      rgb(119, 54, 55)   68.3    0.372
+    #     reference      rgb(119, 74, 74)   83.7    0.236
+    #     ours           rgb(179, 61, 75)   87.1    0.491
+    #     ours           rgb(143, 51, 69)   71.6    0.479
+    #
+    # Brightness is close. Saturation is half again too high, and the CHANNELS
+    # are wrong in a specific way: the reference's caps have GREEN AND BLUE
+    # EQUAL, which is a true red, while ours run blue above green, which is a
+    # magenta. Both come from this line -- albedo blue at 0.26 against green at
+    # 0.16, and an EMISSIVE (0.14, 0, 0) at strength 0.3 on top, so the caps
+    # were adding red light of their own on a frame the brief wants matte.
+    #
+    # Emissive to zero puts the cap on the ordinary SELF-COLOUR path with the
+    # other 33 materials rather than carrying its own; a mushroom does not glow.
+    "mush_red":    ((0.50, 0.20, 0.19), 0.0, 0.62, (0.0, 0.0, 0.0), 0.0),
     "mush_white":  ((0.98, 0.90, 0.80), 0.0, 0.42, (0, 0, 0), 0.0),
-    "mush_purple": ((0.44, 0.20, 0.76), 0.0, 0.62, (0.13, 0.02, 0.22), 0.35),
+    # Same treatment, same reason: a violet cap in violet light does not need to
+    # emit violet as well.
+    "mush_purple": ((0.34, 0.19, 0.56), 0.0, 0.62, (0.0, 0.0, 0.0), 0.0),
     "spire":       ((0.86, 0.58, 0.90), 0.0, 0.40, (0, 0, 0), 0.0),
     "spire_pink":  ((0.98, 0.74, 0.82), 0.0, 0.62, (0, 0, 0), 0.0),
     "spire_blue":  ((0.76, 0.68, 0.98), 0.0, 0.62, (0, 0, 0), 0.0),
@@ -3040,7 +3062,26 @@ def build_material_library(texs=None):
     # edge highlight really is the read. Everything matte goes to zero and takes
     # its edges from the key light, which is what the new key ratio exists to
     # provide.
-    rim = {"gold": (0.85, (1.00, 0.84, 0.50)), "gold_glow": (0.90, (1.00, 0.86, 0.54)),
+    # GOLD 0.85 -> 0.18, AND THE REASONING ABOVE IS WHY, APPLIED ONE STEP
+    # FURTHER. "A travelling edge highlight really is the read" for metal is
+    # true of a broad metal surface. Wonderland's gold is ORNAMENT: gate
+    # filigree, garland links, clock bezels, finials -- thin bars a few tens of
+    # uu across, where there is no face at all, only edge. Fresnel is largest at
+    # glancing angles, so a rim on a thin bar covers the WHOLE bar, and RimAmp
+    # feeds MP_EMISSIVE_COLOR rather than specular. Every gold thing in the
+    # frame was therefore self-lit along its entire length, which is precisely
+    # the granular glitter the delivered frame shows and precisely what the
+    # brief forbids by name: "metallic ornamental gold, not yellow plastic /
+    # emissive".
+    #
+    # Metallic 0.90 at roughness 0.28 is what should be selling this, and it
+    # cannot while an emissive term sits on top of it. 0.18 keeps a hint on the
+    # broad pieces -- the gate's plates and the clock faces -- without lighting
+    # the filigree from inside.
+    #
+    # dog_eye, crystal and the glows keep theirs: those genuinely emit, and the
+    # Dog's gold eyes are canonical.
+    rim = {"gold": (0.18, (1.00, 0.84, 0.50)), "gold_glow": (0.34, (1.00, 0.86, 0.54)),
            "float_glow": (0.85, (1.00, 0.86, 0.54)), "magic_gold": (0.70, (1.00, 0.88, 0.60)),
            "crystal": (0.80, (0.80, 0.60, 1.00)),
            "dog_eye": (0.90, (1.00, 0.90, 0.40))}
