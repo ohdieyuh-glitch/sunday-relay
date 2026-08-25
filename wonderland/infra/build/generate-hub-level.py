@@ -6093,7 +6093,11 @@ def build(layout):
         # fill is dropped to pay for it: smaller tiles pack tighter, so the bed
         # no longer shows between them and the fill course that existed to hide
         # it is not needed.
-        tile = 90.0
+        # 90 -> 150. The reference's courtyard is laid in LARGE irregular
+        # flagstones -- about a metre and a half across, with grass and moss in
+        # wide joints -- and a subtle checker. 90 uu setts read as gravel from
+        # the hero camera; at 150 each stone is a shape the eye can count.
+        tile = 150.0
         # Warm irregular COBBLESTONE (the reference is a mossy stone courtyard, not a
         # chessboard): three close warm-stone tones chosen by a deterministic hash,
         # each tile slightly inset with a hair of height jitter so the seams read as
@@ -6199,8 +6203,11 @@ def build(layout):
         # arch stands at 2,051 uu from this camera, so the stone has to reach
         # about 2,400 — and then the district has a FLOOR rather than a disc.
         _bed_r = _PAVING_RADIUS
-        for gx in range(-28, 29):
-            for gy in range(-28, 29):
+        _skip = set()                      # cells eaten by a double slab
+        for gx in range(-17, 18):          # -28..29 at 90 uu == -17..18 at 150
+            for gy in range(-17, 18):
+                if (gx, gy) in _skip:
+                    continue
                 if math.hypot(gx * tile, gy * tile) > _bed_r + tile * 0.55:
                     continue
                 hsh = (gx * 73856093) ^ (gy * 19349663)
@@ -6224,12 +6231,21 @@ def build(layout):
                 # z DERIVED FROM _SETT_Z_MAX / _SETT_H_MAX so the constant and
                 # the geometry cannot drift. See the note beside them.
                 jz = _SETT_Z_MIN + (hsh % 5) * _SETT_Z_STEP
-                shrink = 0.86 + ((hsh >> 3) % 9) * 0.014
-                yaw = ((hsh >> 7) % 9) - 4.0
-                ox = (((hsh >> 11) % 7) - 3) * 2.6
-                oy = (((hsh >> 15) % 7) - 3) * 2.6
-                _part("cube", x + gx * tile + ox, y + gy * tile + oy, jz,
-                      tile / 100.0 * shrink, tile / 100.0 * shrink,
+                # joints wider and more varied (0.72-0.96), yaw to +/-9, jitter
+                # 4 uu: the reference's flags are laid, not tiled
+                shrink = 0.72 + ((hsh >> 3) % 9) * 0.03
+                yaw = ((hsh >> 7) % 19) - 9.0
+                ox = (((hsh >> 11) % 7) - 3) * 4.0
+                oy = (((hsh >> 15) % 7) - 3) * 4.0
+                # every fifth stone is a DOUBLE slab spanning its neighbour, so
+                # the courtyard stops being a grid the eye can count
+                _dbl = (hsh >> 19) % 5 == 0 and (gx + 1, gy) not in _skip
+                _wx = tile * (1.98 if _dbl else 1.0)
+                if _dbl:
+                    _skip.add((gx + 1, gy))
+                _part("cube", x + gx * tile + ox + (tile * 0.5 if _dbl else 0.0),
+                      y + gy * tile + oy, jz,
+                      _wx / 100.0 * shrink, tile / 100.0 * shrink,
                       _SETT_H_MIN + (hsh % 3) * _SETT_H_STEP,
                       mat, "Tile%d_%d" % (gx, gy), rot=(0.0, yaw, 0.0))
                 # moss in roughly half the joints, in clumps rather than dots
@@ -10088,6 +10104,22 @@ def build(layout):
     # build: a dominant keep with a dome beside it, every merlon, every bridge.
     # A skyline reads as a city because it has a subject.
     kit_castle(9000.0, 66000.0, 12.0, "GreatCastle", variant=0)
+    # ---- THE PRIMARY MASS: one castle the skyline is ABOUT --------------------
+    #
+    # The founder's brief: "Primary castle masses. Secondary towers. Tertiary
+    # structures." and "the skyline must stop reading as many similar pink
+    # towers". Ours had 76 near-equal towers in four bands and a GreatCastle
+    # 66 km out, 8 degrees off the axis and hazed to a silhouette. Nothing was
+    # first.
+    #
+    # The reference's central castle sits DEAD ON THE AXIS, about 40% of frame
+    # height, cream with pink roofs, tiers stacked on tiers, with the avenue and
+    # the arch leading the eye straight to it. This is that: the citadel variant
+    # at 8.0 on the axis at 22 km, which the camera geometry puts at about 28% of
+    # frame height -- the tallest thing in the sky by a clear margin, and the
+    # thing the path points at. far=False keeps its full detail; the band loop
+    # skips a zone around it so no lesser tower stands in front.
+    kit_castle(0.0, 22000.0, 8.0, "PrimaryCastle", variant=0, far=False)
     kit_castle(-30000.0, 36000.0, 8.5, "WestCastle", variant=2)
 
     # ---- THE ENORMOUS FANTASY CITY SKYLINE --------------------------------
@@ -10160,6 +10192,8 @@ def build(layout):
             # never in front of the great castle, which is the subject
             if abs(_cx - 9000.0) < 6000.0 and abs(_cy - 66000.0) < 9000.0:
                 continue
+            if abs(_cx) < 5200.0 and abs(_cy - 22000.0) < 7000.0:
+                continue                      # the PrimaryCastle's own ground
             # HEIGHT VARIES MORE THAN IT DID. 0.78-1.22 is a 1.56x spread, and
             # at four kilometres that reads as one height with noise on it. A
             # skyline steps: some towers are half their neighbour.
