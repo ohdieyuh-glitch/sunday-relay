@@ -6978,8 +6978,29 @@ def build(layout):
     # visible in front of it. Depth 1600 and scale 1.40 put it at about 35% of
     # frame height and open the plaza between the camera and the Dog, which is
     # the ground the frame has never had -- 0.1% of it was bare.
-    HERO_DOG = (-40.0, 450.0)
-    HERO_DOG_SCALE = 1.40
+    # ---- THE CIRCLE'S FRONT HALF WAS BELOW THE FRAME -----------------------
+    #
+    # Derived from the camera rather than eyeballed. HeroCam6 sits at z=430
+    # pitched +5.00 with a vertical half-angle of 23.35, so its bottom ray
+    # leaves at -18.35 and meets the ground 1,296 uu from the lens. Anything
+    # nearer than that is not in the shot.
+    #
+    # The Dog stood 1,600 uu out with a 560 uu arcane circle around it, so the
+    # circle's near rim was at 1,040 uu -- 256 uu BELOW the bottom of the frame.
+    # The single most identifying element of the founder's reference, and its
+    # front third has been cropped off in every capture of this sprint. It does
+    # not read as a ring because it is not one; it is an arc.
+    #
+    # This is the same class as the note further down about foreground staging
+    # vanishing under the bottom edge, and it was missed for the same reason:
+    # the Dog itself framed fine, so nothing looked wrong.
+    #
+    # 450 -> 780 puts the near rim at 1,370 uu, inside the frame with 74 uu to
+    # spare. The Dog is then 330 uu further away, so 1.40 -> 1.63 holds its
+    # apparent size: 31.5% of frame height against 32.4% before, and the
+    # reference's is about 35%.
+    HERO_DOG = (-40.0, 780.0)
+    HERO_DOG_SCALE = 1.63
     # WHERE THE WORLD OPENS FROM. HeroCam0 and HeroCam6 both stand here — the
     # Marble backdrop is anchored at this exact point, which is why the wide
     # arrival shares the position and changes only the aim. Named once because
