@@ -7168,11 +7168,29 @@ def build(layout):
         # to the camera without changing how much the sun sends to the ground.
         # Raising the sun instead would blow the ground back out, which is the
         # loop this has already been round twice.
-        set_prop(sac, "RayleighScatteringScale", 0.115)
+        # 0.115 -> 0.20, MEASURED after the geometry clouds came out.
+        #
+        # Those 528 spheres carried the cloud material at emissive 1.30 — they
+        # were SELF-LIT, and removing them took a fake brightness out of the top
+        # of the frame along with them. Measured across that change: the sky
+        # band fell 108.6 -> 90.8 against the reference's 99.2, and the dome now
+        # reads as dusk with grey cumulus in it.
+        #
+        # The real clouds are lit by the sun, which is 980 lux, so the honest
+        # fix is more light in the sky and NOT more light on the ground — the
+        # ground is already 100 against the reference's 90. Scattering scale is
+        # exactly that lever: it changes what the atmosphere sends the camera
+        # without changing what the sun sends the plaza. Same reasoning that
+        # took the sky from black earlier, applied to the same knob.
+        set_prop(sac, "RayleighScatteringScale", 0.20)
         # Multiple scattering is what makes a real sky bright away from the sun
         # and fills shade with blue. At the default it contributes almost
         # nothing here for the same reason.
-        set_prop(sac, "MultiScatteringFactor", 2.4)
+        # 2.4 -> 3.4 with it. Multiple scattering is what lights the SHADED
+        # side of a cloud and the sky away from the sun; a volumetric cumulus
+        # with too little of it is a grey lump rather than a white one, which is
+        # what the frame came back with.
+        set_prop(sac, "MultiScatteringFactor", 3.4)
         # LAVENDER, BY BLEND. See LOOK["skyLavender"]. The physical default is
         # kept as one end of the blend so 0.0 is exactly today's sky, and the
         # TOTAL is held near the default's sum so the sky changes hue without
