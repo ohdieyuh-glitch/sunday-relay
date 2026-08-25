@@ -1,0 +1,18 @@
+# Git LFS policy for Unreal binary SOURCE assets. See wonderland/GAUNTLET.md.
+#
+# WHY THESE AND NOT MORE. This repository tracked no binary asset until Aura
+# (the in-editor agent on the Windows workstation) began producing them.
+# Unreal's editable source assets are .uasset and .umap -- large, opaque, and
+# unmergeable, which is the case Git LFS exists for. They are also `lockable`:
+# two agents editing one asset cannot be merged, so the lock is the merge.
+#
+# Deliberately NOT here: cooked output (.ubulk, .uexp, .pak -- never
+# committed; Binaries/, Intermediate/, DerivedDataCache/, Saved/ are ignored),
+# and the small text/PNG textures the generator synthesises at build time
+# (produced on the build host, never committed). If the pipeline later imports
+# .fbx / .glb source meshes, add them here BEFORE the first commit, not after.
+#
+# Text history is untouched: these rules apply to NEW paths going forward
+# (`git lfs track`), never `git lfs migrate`.
+*.uasset filter=lfs diff=lfs merge=lfs -text lockable
+*.umap   filter=lfs diff=lfs merge=lfs -text lockable
