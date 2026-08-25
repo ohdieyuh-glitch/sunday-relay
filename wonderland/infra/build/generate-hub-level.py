@@ -5530,8 +5530,18 @@ def build(layout):
             _part("plane", ccx, ccy, 6.0,
                   _rr * 2.0 / 100.0, _rr * 2.0 / 100.0, 1.0,
                   "runes", "RuneCircle")
-        _ARC_SEGS = 0 if _RUNE_PLANE else 72
-        for j, (rz, rr) in enumerate(((9.0, 10.4), (10.4, 9.0), (11.8, 7.6),
+        # SKIPPED WITH AN `if`, NOT WITH A ZERO COUNT.
+        #
+        # This read `_ARC_SEGS = 0 if _RUNE_PLANE else 72`, and two lines below
+        # divides the circumference BY it — outside the inner loop, so a count of
+        # zero is not "run no segments", it is a ZeroDivisionError before the
+        # loop is even reached. Seven gates went red on the build host and none
+        # locally, because the local machine cannot synthesise textures: the
+        # rune material never builds here, so this branch is never taken and the
+        # dry run has never once executed the line that crashed.
+        _ARC_SEGS = 72
+        for j, (rz, rr) in enumerate(() if _RUNE_PLANE else
+                                     ((9.0, 10.4), (10.4, 9.0), (11.8, 7.6),
                                       (13.2, 6.2), (14.6, 4.8), (16.0, 3.4),
                                       (17.4, 2.0))):
             _radius = rr * 50.0
