@@ -10119,7 +10119,11 @@ def build(layout):
     # frame height -- the tallest thing in the sky by a clear margin, and the
     # thing the path points at. far=False keeps its full detail; the band loop
     # skips a zone around it so no lesser tower stands in front.
-    kit_castle(0.0, 22000.0, 8.0, "PrimaryCastle", variant=0, far=False)
+    # 8.0 -> 4.6, MEASURED: at 8.0 the tracer put it at 79.5% of frame height,
+    # breaking the top edge -- the citadel variant stacks tiers on its donjon and
+    # my 28% estimate counted one. 4.6 lands it near 45%, the reference's ~40%
+    # with a little room, and still the tallest thing in the sky by a wide margin.
+    kit_castle(0.0, 22000.0, 4.6, "PrimaryCastle", variant=0, far=False)
     kit_castle(-30000.0, 36000.0, 8.5, "WestCastle", variant=2)
 
     # ---- THE ENORMOUS FANTASY CITY SKYLINE --------------------------------
