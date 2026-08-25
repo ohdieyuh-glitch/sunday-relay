@@ -477,10 +477,36 @@ def main():
     CONE = ("cone", "spire")
     drawn = 0
     blobs = []
+    def _rotate(px_, py_, pz_, rot):
+        """Apply an FRotator to an offset. Unreal composes Rz(yaw)Ry(pitch)Rx(roll),
+        and `rot` is (pitch, yaw, roll) — the order WonderlandInstancedBatch reads.
+
+        THIS TOOL DID NOT ROTATE ANYTHING. It built every bounding box from
+        `loc +- scale * 50` with the rotation unpacked and then never used, so
+        every object in Wonderland was measured axis-aligned. That is not a
+        rounding error, it is a whole class of defect the harness could not
+        see — and it hid a real one for as long as it existed: every clock in
+        the world carried pitch 90 where it needed roll 90, so the arrival
+        camera saw the faces EDGE-ON as filled rectangles, twice in the hero
+        frame, and the preview drew them as tidy discs throughout.
+
+        Fourth time a harness here has been confidently wrong about geometry it
+        never built, after planes given thickness, the invented Dog proxy, and
+        cones filled as ellipses. The pattern is always the same shape: the
+        output still looks plausible, so nothing prompts the check."""
+        p_, y_, r_ = (math.radians(v) for v in rot)
+        cr, sr = math.cos(r_), math.sin(r_)
+        y1, z1 = py_ * cr - pz_ * sr, py_ * sr + pz_ * cr
+        cp, sp = math.cos(p_), math.sin(p_)
+        x2, z2 = px_ * cp + z1 * sp, -px_ * sp + z1 * cp
+        cy_, sy_ = math.cos(y_), math.sin(y_)
+        return (x2 * cy_ - y1 * sy_, x2 * sy_ + y1 * cy_, z2)
+
     for mesh, loc, sc, mat, lb, _rt in records:
         if mesh in ("plane", "water_plane"):
             continue
         hx, hy, hz = abs(sc[0]) * 50.0, abs(sc[1]) * 50.0, abs(sc[2]) * 50.0
+        _spin = (_rt[0] or _rt[1] or _rt[2])
         minx = miny = 1e18
         maxx = maxy = -1e18
         minz = 1e18
@@ -489,7 +515,11 @@ def main():
         for cx in (-1, 1):
             for cy in (-1, 1):
                 for cz in (-1, 1):
-                    q = project((loc[0] + cx * hx, loc[1] + cy * hy, loc[2] + cz * hz))
+                    if _spin:
+                        _o = _rotate(cx * hx, cy * hy, cz * hz, _rt)
+                        q = project((loc[0] + _o[0], loc[1] + _o[1], loc[2] + _o[2]))
+                    else:
+                        q = project((loc[0] + cx * hx, loc[1] + cy * hy, loc[2] + cz * hz))
                     if q is None:
                         continue
                     ok = True
