@@ -4063,6 +4063,33 @@ def build(layout):
         if in_camera_lap(x, y, 250.0):
             return
 
+        # ---- TASK 4: A CLIPPED FORM IS STILL MADE OF LEAVES ---------------
+        #
+        # Every shape here is a stack of spheres, and the docstring is right
+        # that clipped cones and spirals read as DESIGNED — but a topiary reads
+        # as designed BECAUSE a leafy mass has been cut to a shape, and with no
+        # leaves there is no cut, only the shape. That is the difference between
+        # sculpted box and a green cone.
+        #
+        # The sphere stack stays as the mass and the silhouette it defines; a
+        # skin of alpha-masked cards is laid over whatever form the mass makes,
+        # so the same helper works for the cone, the spiral and the standard
+        # without any of them knowing about it.
+        _tm = (("leafcard_deep", "leafcard", "leafcard_hi") if "leafcard" in MATS
+               else ("foliage_deep", "foliage", "foliage_hi"))
+
+        def _skin(cx_, cy_, cz_, rad_, n_, tag_):
+            for _q in range(n_):
+                _qa = _q * 2.39996 + (cx_ + cz_) * 0.02
+                _qt = (_q + 0.5) / n_
+                _qz = cz_ + (_qt - 0.5) * rad_ * 1.5
+                _qr = rad_ * math.sqrt(max(0.05, 1.0 - (_qt - 0.5) ** 2 * 3.2))
+                _part("cube", cx_ + math.cos(_qa) * _qr, cy_ + math.sin(_qa) * _qr, _qz,
+                      rad_ * 0.011, 0.030 * s, rad_ * 0.009,
+                      _tm[_q % 3], "%s_lf%d" % (tag_, _q),
+                      rot=(20.0 + 22.0 * ((_q % 3) / 2.0), math.degrees(_qa),
+                           -16.0 + 32.0 * ((_q % 4) / 3.0)))
+
         # planter first: moulded, trimmed, with a soil line
         _part("cylinder", x, y, 14.0 * s, 0.62 * s, 0.62 * s, 0.28 * s, "stone", "%s_pot" % label)
         _part("cylinder", x, y, 30.0 * s, 0.70 * s, 0.70 * s, 0.10 * s, "plaza", "%s_potlip" % label)
@@ -4074,6 +4101,8 @@ def build(layout):
                       (0.78 - 0.62 * t) * s, (0.78 - 0.62 * t) * s, 0.42 * s,
                       "foliage_deep" if k % 3 == 0 else ("foliage" if k % 2 else "foliage_hi"),
                       "%s_c%d" % (label, k))
+                _skin(x, y, 46.0 * s + t * 150.0 * s, (0.78 - 0.62 * t) * s * 50.0,
+                      7, "%s_c%d" % (label, k))
         elif form == "spiral":
             for k in range(14):
                 t = k / 13.0
@@ -4082,10 +4111,13 @@ def build(layout):
                 _part("sphere", x + math.cos(a) * r, y + math.sin(a) * r,
                       46.0 * s + t * 168.0 * s, 0.34 * s, 0.34 * s, 0.30 * s,
                       "foliage" if k % 2 else "foliage_hi", "%s_s%d" % (label, k))
+                _skin(x + math.cos(a) * r, y + math.sin(a) * r,
+                      46.0 * s + t * 168.0 * s, 0.34 * s * 50.0, 5, "%s_s%d" % (label, k))
             _part("cylinder", x, y, 130.0 * s, 0.08 * s, 0.08 * s, 1.7 * s, "trunk", "%s_spine" % label)
         else:                                    # standard: a ball on a clear stem
             _part("cylinder", x, y, 92.0 * s, 0.09 * s, 0.09 * s, 1.2 * s, "trunk", "%s_stem" % label)
-            _part("sphere", x, y, 176.0 * s, 0.86 * s, 0.86 * s, 0.80 * s, "foliage_deep", "%s_ball" % label)
+            _part("sphere", x, y, 176.0 * s, 0.80 * s, 0.80 * s, 0.74 * s, "foliage_deep", "%s_ball" % label)
+            _skin(x, y, 176.0 * s, 0.86 * s * 50.0, 22, "%s_ball" % label)
             for k in range(6):
                 a = k * 1.047
                 _part("sphere", x + math.cos(a) * 34.0 * s, y + math.sin(a) * 34.0 * s,
