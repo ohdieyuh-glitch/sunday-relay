@@ -1531,6 +1531,14 @@ MATERIAL_SPEC = {
     # Rose and pink rooflines — the reference's skyline is warm, not gold.
     "roof_rose":   ((0.78, 0.38, 0.44), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
     "roof_pink":   ((0.92, 0.46, 0.62), 0.0, 0.62, (0, 0, 0), 0.0),
+    # THE REFERENCE'S SKYLINE IS NOT ALL PINK. Look at it: white towers with
+    # rose and pink cones, and among them a clear run of BLUE and blue-violet
+    # roofs, plus gold onion domes. Wonderland's skyline has had exactly two
+    # roof colours since it was built, alternating, which is a large part of why
+    # 76 castles read as one castle repeated however many archetypes they carry.
+    # A third hue is the cheapest silhouette variety there is — it costs one
+    # material and no geometry at all.
+    "roof_blue":   ((0.34, 0.48, 0.84), 0.0, 0.62, (0, 0, 0), 0.0),
     # Gills under a mushroom cap: warm shadow, never black.
     "mush_gill":   ((0.80, 0.66, 0.58), 0.0, 0.70, (0, 0, 0), 0.0),
     # Cumulus. Slightly self-lit so the shaded undersides stay soft and
@@ -2737,6 +2745,7 @@ def build_material_library(texs=None):
         "spire_blue": ("plaster", 0.0055, (0.80, 0.88, 1.04)),
         "spire_teal": ("plaster", 0.0055, (0.72, 1.00, 0.96)),
         "roof_rose":  ("roof",    0.0070, (1.00, 1.00, 1.00)),
+        "roof_blue":  ("roof",    0.0070, (0.94, 1.02, 1.10)),
         "roof_pink":  ("roof",    0.0070, (1.12, 1.05, 1.05)),
         # GOLD MUST NOT READ AS FLAT YELLOW — the art direction says so, and a
         # bare base colour gives exactly that however well it is lit. The metal
@@ -4592,8 +4601,10 @@ def build(layout):
         for i, (ca, cs) in enumerate(_ct):
             kit_spire(x + math.cos(ca) * wall_r, y + math.sin(ca) * wall_r, s * cs,
                       "%s_ctow%d" % (label, i), body_mat="spire_far",
-                      roof_mat="roof_rose" if i % 2 else "roof_pink", flag=(i % 2 == 0),
-                      roof_w=_rw, roof_h=_rh)
+                      roof_mat=("roof_rose", "roof_pink", "roof_blue")[
+                          (i + variant) % 3] if "roof_blue" in MATS
+                      else ("roof_rose" if i % 2 else "roof_pink"),
+                      flag=(i % 2 == 0), roof_w=_rw, roof_h=_rh)
         # gatehouse facing the plaza
         for k in (-1, 1):
             kit_spire(x + k * 190.0 * s, y - wall_r, s * 0.85, "%s_gate%d" % (label, k),
@@ -4623,7 +4634,9 @@ def build(layout):
             _part("cube", bx, by, 120.0 * s, hs * s, hs * 0.7 * s, 2.4 * s, "spire_far",
                   "%s_hall%d" % (label, k))
             _part("cone", bx, by, 330.0 * s, hs * 1.15 * s, hs * 0.85 * s, 1.5 * s,
-                  "roof_rose" if k % 2 else "roof_pink", "%s_hallroof%d" % (label, k))
+                  ("roof_rose", "roof_blue", "roof_pink")[(k + variant) % 3]
+                  if "roof_blue" in MATS else ("roof_rose" if k % 2 else "roof_pink"),
+                  "%s_hallroof%d" % (label, k))
 
         # ---- WHAT MAKES A SKYLINE A CITY --------------------------------
         # The mass was all here — keep, dome, corner towers, halls — and it
