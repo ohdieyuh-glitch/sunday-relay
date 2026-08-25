@@ -1784,8 +1784,22 @@ MATERIAL_SPEC = {
     # Blue lifted 0.44 -> 0.54 and red eased. The reference's roofs really are
     # pink, so this stays pink -- it just stops being pink with NO blue in it,
     # which is what pinned the band's channel order to R > B.
-    "roof_rose":   ((0.72, 0.38, 0.54), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
-    "roof_pink":   ((0.92, 0.46, 0.62), 0.0, 0.62, (0, 0, 0), 0.0),
+    # ---- ROOFS: MUTED WARM BRICK-ROSE, NOT SATURATED COOL PINK ---------------
+    #
+    # Counting red-dominant pixels in the skyline band of the last render
+    # against the reference, so the roofs are measured and not the sky:
+    #
+    #                   share    colour            hue    sat    luma
+    #     ours          10.0%    (202, 116, 135)   347    0.44   135
+    #     reference     12.0%    (156,  96,  95)     1    0.24   108
+    #
+    # Coverage is already right. The COLOUR is what makes the composite read
+    # as a wall of magenta cones: ours is half again as saturated, bluer, and
+    # 25% brighter than the reference's brick-rose. Both roof albedos scaled
+    # by the measured channel ratios (R 0.77, G 0.83, B 0.70), which warms the
+    # hue and drops the saturation and the brightness together.
+    "roof_rose":   ((0.55, 0.32, 0.38), 0.0, 0.62, (0.04, 0.0, 0.01), 0.10),
+    "roof_pink":   ((0.71, 0.38, 0.43), 0.0, 0.62, (0, 0, 0), 0.0),
     # THE REFERENCE'S SKYLINE IS NOT ALL PINK. Look at it: white towers with
     # rose and pink cones, and among them a clear run of BLUE and blue-violet
     # roofs, plus gold onion domes. Wonderland's skyline has had exactly two
