@@ -3787,7 +3787,7 @@ def build(layout):
         _part("cube", x, y, ph + 120.0 * s, 1.4 * s, 1.35 * s, 1.0 * s, "gold_glow", "%s_keystone" % label)
 
     def kit_spire(x, y, s, label, body_mat="spire", roof_mat="gold", flag=True,
-                  detail=0):
+                  detail=0, roof_w=1.75, roof_h=4.4):
         """detail: 0 = silhouette (the far skyline bands, sixty of them),
         1 = trimmed with a railed balcony and proper windows (near towers).
         The brief asks for near detail and far silhouette; this is where that
@@ -3852,20 +3852,81 @@ def build(layout):
         # roof with an EAVE lip, then the spire proper
         _part("cylinder", x, y, bh + 76.0 * s, br * 1.30 / 50.0, br * 1.30 / 50.0, 0.14 * s,
               roof_mat, "%s_eave" % label)
-        _part("cone", x, y, bh + 210.0 * s, 1.9 * s, 1.9 * s, 2.9 * s, roof_mat, "%s_roof" % label)
+        # THE ROOF IS THE SILHOUETTE, AND IT WAS SQUAT.
+        #
+        # It was fixed at radius 1.9 and half-height 2.9 — 190 uu across a cone
+        # 290 uu tall, so 1:1.53, on a shaft 144 uu wide. A fairy-tale spire is
+        # nothing like that ratio: the reference's towers carry TALL, NARROW
+        # cones, roughly 1:2.5 and steeper, and the roof is more than half the
+        # tower's height. Squat cones on many towers is most of what makes a
+        # skyline read as "cylinder + cone, repeated", which the art direction
+        # names as the thing not to do.
+        #
+        # The defaults are the new proportion; both are parameters so the
+        # skyline can carry SEVERAL tower shapes rather than one. The cone must
+        # not shrink below the eave it sits on (br * 1.30 / 50 = 1.87 s), or the
+        # roof stops covering its own drum — which is why the width moved a
+        # little and the height moved a lot.
+        _part("cone", x, y, bh + 210.0 * s, roof_w * s, roof_w * s, roof_h * s,
+              roof_mat, "%s_roof" % label)
         # lantern under the finial
-        _part("cylinder", x, y, bh + 306.0 * s, 0.26 * s, 0.26 * s, 0.30 * s, "gold", "%s_lantern" % label)
-        _part("sphere", x, y, bh + 336.0 * s, 0.32 * s, 0.32 * s, 0.32 * s, "gold_glow", "%s_finial" % label)
+        # THE FINIAL RIDES THE APEX, WHICH IS NOW A VARIABLE. These were three
+        # literals — 306, 336, 400, 470 — measured off a roof whose half-height
+        # was 2.9. With a taller roof they would have sat INSIDE the cone, and a
+        # finial buried in its own spire is invisible in a way nothing reports.
+        _apex = bh + 210.0 * s + roof_h * 50.0 * s
+        _part("cylinder", x, y, _apex + 6.0 * s, 0.26 * s, 0.26 * s, 0.30 * s, "gold", "%s_lantern" % label)
+        _part("sphere", x, y, _apex + 36.0 * s, 0.32 * s, 0.32 * s, 0.32 * s, "gold_glow", "%s_finial" % label)
         if flag:
-            _part("cylinder", x, y, bh + 400.0 * s, 0.05 * s, 0.05 * s, 1.1 * s, "gold", "%s_pole" % label)
-            _part("cube", x + 24.0 * s, y, bh + 470.0 * s, 0.02 * s, 0.42 * s, 0.28 * s, roof_mat, "%s_flag" % label)
+            _part("cylinder", x, y, _apex + 100.0 * s, 0.05 * s, 0.05 * s, 1.1 * s, "gold", "%s_pole" % label)
+            _part("cube", x + 24.0 * s, y, _apex + 170.0 * s, 0.02 * s, 0.42 * s, 0.28 * s, roof_mat, "%s_flag" % label)
 
-    def kit_castle(x, y, s, label):
+    # FOUR CASTLES, NOT ONE CASTLE SEVENTY-SIX TIMES.
+    #
+    # kit_castle took (x, y, s, label) and the skyline called it 76 times. Scale
+    # was the ONLY thing that varied, so every silhouette on the horizon was the
+    # same silhouette at a different size — which is precisely the "procedural
+    # city" the art direction rules out:
+    #
+    #     "Do not solve the castle by repeating cylinder + cone, cylinder +
+    #      cone... Create silhouette hierarchy. Towers need recognizable
+    #      silhouettes: narrow spires, broad palace towers, turret clusters,
+    #      domes, clock towers, bridge-connected towers."
+    #
+    # Each row is one archetype, and they differ in the things that survive four
+    # kilometres — the height of the dominant mass, whether there is a dome at
+    # all, how many towers and how they step, and how steep the roofs are.
+    # Surface detail does not survive that distance and is not what varies.
+    #
+    #        donjon  dome   corner towers (bearing, scale)                            roof_w roof_h halls dome2
+    _CASTLE_VARIANT = (
+        # 0 CITADEL — the original: a dominant keep with a dome beside it.
+        (1.85, 1.00, ((0.6, 1.30), (2.0, 1.05), (3.5, 1.22), (5.1, 0.95)),            1.75,  4.40,  4,   3),
+        # 1 SPIRE CLUSTER — no dome, a very tall donjon and six stepped turrets
+        #   of markedly unequal height. This is the reference's commonest shape.
+        (2.55, 0.00, ((0.4, 1.35), (1.5, 0.90), (2.6, 1.22), (3.7, 0.78),
+                      (4.8, 1.08), (5.8, 0.66)),                                      1.52,  5.80,  3,   0),
+        # 2 PALACE — broad and low, a wide dome dominating, roofs shallow. The
+        #   counterweight: a skyline of nothing but spires is its own repetition.
+        (1.10, 1.55, ((0.9, 0.86), (2.4, 0.94), (4.1, 0.80)),                         2.15,  3.20,  5,   4),
+        # 3 TWIN TOWERS — two unequal masses with the bridges between them, and
+        #   sky underneath. Negative space is what separates towers at distance.
+        (2.10, 0.00, ((1.1, 1.45), (4.3, 1.00)),                                      1.62,  5.20,  2,   0),
+    )
+
+    def kit_castle(x, y, s, label, variant=0, far=False):
         """The hero castle that closes the north axis. One dominant silhouette
         rather than a picket line of identical turrets: a great keep, four corner
         towers stepped in height, a curtain wall with merlons and a gatehouse.
         The reference's skyline reads as a CITY because it has a subject; a ring
-        of equal towers reads as a fence."""
+        of equal towers reads as a fence.
+
+        `variant` picks a row of _CASTLE_VARIANT. `far` drops the ornament that
+        cannot resolve past about four kilometres — merlons, buttress caps,
+        bridges, secondary domes — which is roughly two thirds of the parts for
+        none of the silhouette. The skyline's 76 castles were carrying the full
+        hero build at up to 82 km."""
+        _dj, _dm, _ct, _rw, _rh, _nh, _nd2 = _CASTLE_VARIANT[variant % len(_CASTLE_VARIANT)]
         wall_r = 620.0 * s
         # curtain wall: 20 segments around a circle, with merlons on top
         for i in range(20):
@@ -3875,16 +3936,17 @@ def build(layout):
                   "%s_wall%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
             _part("cube", wx, wy, 320.0 * s, 2.1 * s, 0.74 * s, 0.34 * s, "spire_far",
                   "%s_walk%d" % (label, i), rot=(0.0, 0.0, math.degrees(a) + 90.0))
-            for k in (-1, 1):
+            for k in ((-1, 1) if not far else ()):
                 _part("cube", wx + math.cos(a + 1.5708) * 46.0 * s * k,
                       wy + math.sin(a + 1.5708) * 46.0 * s * k, 360.0 * s,
                       0.42 * s, 0.42 * s, 0.5 * s, "spire_far",
                       "%s_merl%d_%d" % (label, i, k))
-        # four corner towers, stepped so the mass is not symmetrical
-        for i, (ca, cs) in enumerate(((0.6, 1.30), (2.0, 1.05), (3.5, 1.22), (5.1, 0.95))):
+        # corner towers, stepped so the mass is not symmetrical
+        for i, (ca, cs) in enumerate(_ct):
             kit_spire(x + math.cos(ca) * wall_r, y + math.sin(ca) * wall_r, s * cs,
                       "%s_ctow%d" % (label, i), body_mat="spire_far",
-                      roof_mat="roof_rose" if i % 2 else "roof_pink", flag=(i % 2 == 0))
+                      roof_mat="roof_rose" if i % 2 else "roof_pink", flag=(i % 2 == 0),
+                      roof_w=_rw, roof_h=_rh)
         # gatehouse facing the plaza
         for k in (-1, 1):
             kit_spire(x + k * 190.0 * s, y - wall_r, s * 0.85, "%s_gate%d" % (label, k),
@@ -3894,19 +3956,22 @@ def build(layout):
               "%s_keep" % label)
         _part("cylinder", x, y, 470.0 * s, 4.1 * s, 4.1 * s, 0.42 * s, "spire_far",
               "%s_machic" % label)
-        for i in range(16):
+        for i in range(16 if not far else 0):
             a = i * (2.0 * math.pi / 16.0)
             _part("cube", x + math.cos(a) * 195.0 * s, y + math.sin(a) * 195.0 * s,
                   520.0 * s, 0.5 * s, 0.5 * s, 0.62 * s, "spire_far",
                   "%s_kmerl%d" % (label, i))
-        kit_spire(x, y, s * 1.85, "%s_donjon" % label, body_mat="spire_far",
-                  roof_mat="roof_rose", flag=True)
-        # a great dome beside the donjon, so the mass is not all cones
-        kit_dome(x - 300.0 * s, y + 210.0 * s, 460.0 * s, 300.0 * s, "%s_dome" % label,
-                 mat="spire_far", rib="roof_pink")
+        kit_spire(x, y, s * _dj, "%s_donjon" % label, body_mat="spire_far",
+                  roof_mat="roof_rose", flag=True, roof_w=_rw, roof_h=_rh)
+        # a great dome beside the donjon, so the mass is not all cones — on the
+        # variants that have one. A dome on every castle is a repetition too.
+        if _dm > 0.0:
+            kit_dome(x - 300.0 * s, y + 210.0 * s, 460.0 * s, 300.0 * s * _dm,
+                     "%s_dome" % label, mat="spire_far", rib="roof_pink")
         # flanking halls so the base is a MASS, not a stick
-        for k, (hx, hy, hs, hr) in enumerate(((-1.0, -0.35, 1.6, 0.0), (1.0, -0.15, 1.9, 0.0),
-                                              (-0.55, 0.75, 1.4, 0.0), (0.7, 0.8, 1.5, 0.0))):
+        for k, (hx, hy, hs, hr) in enumerate((((-1.0, -0.35, 1.6, 0.0), (1.0, -0.15, 1.9, 0.0),
+                                               (-0.55, 0.75, 1.4, 0.0), (0.7, 0.8, 1.5, 0.0),
+                                               (0.15, -0.95, 2.2, 0.0))[:_nh])):
             bx, by = x + hx * 380.0 * s, y + hy * 380.0 * s
             _part("cube", bx, by, 120.0 * s, hs * s, hs * 0.7 * s, 2.4 * s, "spire_far",
                   "%s_hall%d" % (label, k))
@@ -3926,8 +3991,14 @@ def build(layout):
         # parapet along the top. Built from the corner towers inward to the
         # keep so they cross at different heights and read as a tangle rather
         # than a wheel.
-        for i, (ca, bh, sag) in enumerate(((0.6, 400.0, 0.30), (2.0, 330.0, 0.22),
-                                           (3.5, 470.0, 0.34), (5.1, 290.0, 0.18))):
+        _spans = ((0.6, 400.0, 0.30), (2.0, 330.0, 0.22),
+                  (3.5, 470.0, 0.34), (5.1, 290.0, 0.18))
+        # Variant 3 IS its bridges — they are its silhouette, not its ornament —
+        # so it keeps them at any distance. Everything else drops them far out,
+        # where a 20 uu parapet is a fifth of a pixel.
+        if far and variant != 3:
+            _spans = ()
+        for i, (ca, bh, sag) in enumerate(_spans):
             ax_, ay_ = x + math.cos(ca) * wall_r, y + math.sin(ca) * wall_r
             # UNSCALED span. wall_r already carries s, so using it inside an
             # expression that is multiplied by s again applies the scale twice.
@@ -3965,8 +4036,8 @@ def build(layout):
         # silo; the vertical rhythm of buttresses is what gives a keep its
         # weight, and it survives distance because it is a silhouette break
         # rather than a surface treatment.
-        for i in range(10):
-            a = i * (2.0 * math.pi / 10.0)
+        for i in range(10 if not far else 5):
+            a = i * (2.0 * math.pi / (10.0 if not far else 5.0))
             _part("cube", x + math.cos(a) * 350.0 * s, y + math.sin(a) * 350.0 * s,
                   200.0 * s, 0.46 * s, 0.92 * s, 4.0 * s, "spire_far",
                   "%s_butt%d" % (label, i), rot=(0.0, 0.0, math.degrees(a)))
@@ -3976,9 +4047,9 @@ def build(layout):
 
         # SECONDARY DOMES at other heights, so the roofline steps rather than
         # jumping straight from halls to donjon.
-        for i, (dx_, dy_, dz_, dr_) in enumerate(((0.62, -0.48, 300.0, 175.0),
-                                                  (-0.72, 0.22, 355.0, 205.0),
-                                                  (0.18, 0.82, 265.0, 150.0))):
+        _d2 = ((0.62, -0.48, 300.0, 175.0), (-0.72, 0.22, 355.0, 205.0),
+               (0.18, 0.82, 265.0, 150.0), (-0.30, -0.80, 240.0, 230.0))[:(0 if far else _nd2)]
+        for i, (dx_, dy_, dz_, dr_) in enumerate(_d2):
             kit_dome(x + dx_ * 430.0 * s, y + dy_ * 430.0 * s, dz_ * s, dr_ * s,
                      "%s_dome2_%d" % (label, i), mat="spire_far",
                      rib="roof_rose" if i % 2 else "roof_pink")
@@ -7634,8 +7705,11 @@ def build(layout):
     # THE SUBJECT. One great castle closing the north axis, slightly off centre
     # so the composition is not a bullseye, at a distance that makes it 130 m of
     # architecture rather than another turret.
-    kit_castle(9000.0, 66000.0, 12.0, "GreatCastle")
-    kit_castle(-30000.0, 36000.0, 8.5, "WestCastle")
+    # The two that close the axis are the SUBJECT and keep the full citadel
+    # build: a dominant keep with a dome beside it, every merlon, every bridge.
+    # A skyline reads as a city because it has a subject.
+    kit_castle(9000.0, 66000.0, 12.0, "GreatCastle", variant=0)
+    kit_castle(-30000.0, 36000.0, 8.5, "WestCastle", variant=2)
 
     # ---- THE ENORMOUS FANTASY CITY SKYLINE --------------------------------
     #
@@ -7665,10 +7739,22 @@ def build(layout):
     # behind everything. This serves the metric and the founder's "deeper
     # skyline" with the same geometry.
     for _band, (_dist, _scale, _n, _spread) in enumerate((
-            (31000.0, 8.0, 13, 2.10),     # NEAR band: tall enough to rise into the frame
-            (42000.0, 7.0, 17, 2.45),
-            (56000.0, 6.5, 21, 2.75),
-            (82000.0, 4.6, 25, 3.05))):   # far band, a serrated horizon
+            # SCALES CUT ~30% WHEN THE SPIRES GOT TALLER.
+            #
+            # The variant table raised the dominant mass (donjon 1.85 -> 2.55 on
+            # the commonest archetype) and the roof half-height with it (2.9 ->
+            # 5.8), which is a 1.39x taller tower from the same `s`. At the old
+            # scales the skyline closed over the frame: SKY fell to 6.7% and the
+            # top third to 19.1% sky, with three donjons owning 24% of that band
+            # between them. The reference is a castle city UNDER a blue sky with
+            # cumulus — the sky is one of its elements, not what is left over.
+            #
+            # Cutting the scale rather than the proportion keeps the silhouette
+            # that was just won and gives the sky back.
+            (31000.0, 5.8, 13, 2.10),     # NEAR band: tall enough to rise into the frame
+            (42000.0, 5.2, 17, 2.45),
+            (56000.0, 5.0, 21, 2.75),
+            (82000.0, 3.8, 25, 3.05))):   # far band, a serrated horizon
         for _i in range(_n):
             _a = (_i / float(_n - 1) - 0.5) * _spread + 1.5708
             # jitter so the band is not an arc of evenly spaced identical towers
@@ -7679,8 +7765,19 @@ def build(layout):
             # never in front of the great castle, which is the subject
             if abs(_cx - 9000.0) < 6000.0 and abs(_cy - 66000.0) < 9000.0:
                 continue
-            _cs = _scale * (0.78 + 0.44 * ((_h >> 9) % 100) / 100.0)
-            kit_castle(_cx, _cy, _cs, "SkyCity%d_%d" % (_band, _i))
+            # HEIGHT VARIES MORE THAN IT DID. 0.78-1.22 is a 1.56x spread, and
+            # at four kilometres that reads as one height with noise on it. A
+            # skyline steps: some towers are half their neighbour.
+            _cs = _scale * (0.62 + 0.86 * ((_h >> 9) % 100) / 100.0)
+            # ARCHETYPE, not scale. Weighted so spire clusters dominate (the
+            # reference's commonest shape), palaces punctuate, and the twin-
+            # tower-and-bridge form is rare enough to stay a landmark.
+            _var = (1, 1, 0, 1, 2, 1, 0, 3, 1, 2)[(_h >> 17) % 10]
+            # Past about four kilometres, merlons, bridge parapets and secondary
+            # domes are a fraction of a pixel each. The near band keeps them
+            # because it is the one that rises into the frame.
+            kit_castle(_cx, _cy, _cs, "SkyCity%d_%d" % (_band, _i),
+                       variant=_var, far=(_band >= 1))
             _SKY_CITY += 1
     # ---- THE ORNAMENTAL MIDGROUND -----------------------------------------
     #
