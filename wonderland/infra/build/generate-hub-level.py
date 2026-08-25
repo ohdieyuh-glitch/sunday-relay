@@ -315,10 +315,30 @@ LOOK = {
     "sunPitchMin": 25.0,                   # PROVEN. Flatter than this and
                                            # the long shadows swallow the plaza.
     # --- fill ------------------------------------------------------
+    # MEASURED 2026-08-24, 0.50 -> 0.12. The note below is still true and it
+    # was still the wrong size, which is the whole finding.
+    #
     # PROVEN. A second directional at the reciprocal azimuth, shadowless.
     # Skylight and Lumen ambient do NOT reliably contribute in headless
     # -RenderOffscreen, so without this some surfaces face nothing at all.
-    "fillRatio": 0.50,
+    #
+    # WHAT THE FIRST NATIVE RENDER OF THIS WORLD SHOWED. At 0.50 the fill is
+    # 1,800 lux and the ground bounce another 2,592, against a 3,600 lux key:
+    # 4,392 lux of SHADOWLESS directional light against 3,600 that casts. The
+    # fill is 122% of the key, so every shadow the sun throws is filled back in
+    # by more light than the sun provides. Measured on the frame: 0.06% of it
+    # below luma 18. There are no shadows in Wonderland, and it is not a shadow
+    # setting — the scene is lit so that nothing can be in shade.
+    #
+    # The comment above says so out loud: "Guarantees EVERY surface gets direct
+    # light." That guarantee was written against a real problem and became the
+    # thing destroying the image. It is the same failure as the lamp posts
+    # becoming the key light, in a new place: the FILL became the key.
+    #
+    # 0.12 puts the key:fill ratio at 8:1, which is a cinematic key. Surfaces
+    # facing away still receive light; they just stop receiving as much as the
+    # ones facing the sun.
+    "fillRatio": 0.12,
     "fillYawOffset": 160.0,
     "fillPitch": -45.0,
     # --- ground bounce ---------------------------------------------
@@ -383,7 +403,13 @@ LOOK = {
     # 0.40 -> 0.72. Replaces, in warm light, the ambient taken off skyIntensity
     # above, so the frame keeps its level while its shade stops being blue. At
     # sunLux 1150 that is 460 -> 828 lux.
-    "bounceRatio": 0.72,
+    #
+    # MEASURED 2026-08-24, 0.72 -> 0.10. sunLux is 3,600 now, not 1,150, so
+    # 0.72 is 2,592 lux — a shadowless upward-facing light SEVENTY-TWO PERCENT
+    # as strong as the key. The paragraph above sized it against a sun three
+    # times dimmer and the ratio was never revisited when the sun moved. A hint
+    # of light off the paving is 0.10; 0.72 is a second key aimed at the sky.
+    "bounceRatio": 0.10,
     "bounceWarm": (1.00, 0.97, 0.94),  # near-neutral: the SKY tints the shade now
     "bounceEnabled": 1,
     # Was hardcoded at 1.60 beside the SkyLight. It is the instrument that
@@ -446,7 +472,15 @@ LOOK = {
     # runtime line now proves are bound correctly on all 147 batches).
     # A bright sky fills the shade with pastel rather than leaving it black,
     # which is how the reference's shadows stay colourful instead of dead.
-    "skyIntensity": 4.2,
+    #
+    # MEASURED 2026-08-24, 4.2 -> 1.5. True in principle and the third term in
+    # a scene that already had no shade to fill. A SkyLight is omnidirectional,
+    # so all of it is shadow-fill: stacked on 4,392 lux of shadowless
+    # directional it is why the frame came back with 8.15% pure-white pixels
+    # and 44% of itself above luma 224 despite -3.4 stops of exposure bias.
+    # Cut with the fill and the bounce, as one change to one thing — the total
+    # shadowless budget — rather than four separate tweaks.
+    "skyIntensity": 1.5,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -572,7 +606,14 @@ LOOK = {
     # not the source. The LIFT is kept -- it is there to keep shadows out of the
     # crush, which is real -- and the tint is dropped, because a shadow's colour
     # should come from what lights it.
-    "gainShadows":     (1.12, 1.10, 1.10),
+    # MEASURED 2026-08-24, (1.12,1.10,1.10) -> (0.94,0.94,0.98). The lift was
+    # "there to keep shadows out of the crush, which is real" — and there was
+    # nothing anywhere near the crush to keep out of it: 0.06% of the frame sat
+    # below luma 18. A lift applied to a scene with no shadows only removes the
+    # last of the contrast. It comes back below 1.0 so the shade the new key
+    # ratio creates is allowed to BE shade, with a faint cool bias because
+    # skylight is what fills it.
+    "gainShadows":     (0.94, 0.94, 0.98),
     "gamma":           (1.0, 1.0, 1.02),    # CHOSEN.
     "whiteTemp": 6000.0,                    # CHOSEN.
     # 0.44 was CHOSEN, never measured, and a vignette that strong is pure
