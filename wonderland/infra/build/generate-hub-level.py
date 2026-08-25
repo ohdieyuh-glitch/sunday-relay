@@ -550,7 +550,12 @@ LOOK = {
     # 0.12 puts the key:fill ratio at 8:1, which is a cinematic key. Surfaces
     # facing away still receive light; they just stop receiving as much as the
     # ones facing the sun.
-    "fillRatio": 0.12,
+    # 0.12 -> 0.08 with the sun lowered to 30 degrees: the reference's shade
+    # is genuinely dark (bottom corners at luma 62 and 43), and a shadowless
+    # fill is what keeps ours from ever getting there. Not lower: below-18
+    # already measures 10.8% against the reference's 8.6% and the brief says
+    # do not crush blacks.
+    "fillRatio": 0.08,
     "fillYawOffset": 160.0,
     "fillPitch": -45.0,
     # --- ground bounce ---------------------------------------------
@@ -1636,7 +1641,7 @@ MATERIAL_SPEC = {
     # So the architecture comes down and dog_body stays at 0.88. Each of these
     # keeps its hue and its relationships -- spire stays the violet masonry,
     # stone stays the neutral ashlar, porcelain stays the pink-leaning ivory.
-    "spire":       ((0.60, 0.41, 0.64), 0.0, 0.40, (0, 0, 0), 0.0),
+    "spire":       ((0.58, 0.34, 0.60), 0.0, 0.40, (0, 0, 0), 0.0),
     # Down with porcelain, same measurement: a tower body at 0.98 red is the
     # brightest thing in the midground and the reference has nothing that loud.
     "spire_pink":  ((0.78, 0.58, 0.70), 0.0, 0.62, (0, 0, 0), 0.0),
@@ -1779,7 +1784,21 @@ MATERIAL_SPEC = {
     #
     # Less far than the old (0.68, 0.50, 0.95), which drove G down to half of R
     # and read as a purple plastic rather than a stone in violet light.
-    "spire_far":   ((0.64, 0.58, 0.84), 0.0, 0.62, (0, 0, 0), 0.0),
+    # ---- CASTLE MASONRY: WARM MAUVE-CREAM, MEASURED ----------------------------
+    #
+    # Bright, low-saturation, non-sky pixels in the centre half of the castle
+    # band, the first render of the rebuild against the reference:
+    #
+    #                   share    colour            hue    sat    luma
+    #     ours          23.4%    (189, 182, 190)   291    0.06   184
+    #     reference     17.1%    (181, 153, 177)   308    0.16   161
+    #
+    # The reference's masonry is not white. It is a warm mauve-cream, a sixth
+    # saturated, and 13% darker than ours -- and ours is a neutral pale grey
+    # that reads as unpainted plaster. Both tower-body albedos scaled by the
+    # measured channel ratios (R 0.96, G 0.84, B 0.93): green comes down most,
+    # which is what turns grey into mauve.
+    "spire_far":   ((0.61, 0.49, 0.78), 0.0, 0.62, (0, 0, 0), 0.0),
     # Rose and pink rooflines — the reference's skyline is warm, not gold.
     # Blue lifted 0.44 -> 0.54 and red eased. The reference's roofs really are
     # pink, so this stays pink -- it just stops being pink with NO blue in it,
@@ -4920,8 +4939,13 @@ def build(layout):
         _part("cube", x, y, ph + 132.0 * s, 0.62 * s, 0.34 * s, 0.62 * s, "gold", "%s_keystone" % label,
               rot=(0.0, 45.0, 0.0))
 
+    # roof_h 4.4 -> 3.4. With the second tier the body is 42% taller, and a
+    # 4.4 cone on top of it made the CONE the dominant shape of every tower
+    # again -- the side-by-side reads as a wall of pink cones over white necks.
+    # The reference's towers are mostly masonry with a modest cap; 3.4 keeps
+    # the fairy-tale point and lets the body carry the silhouette.
     def kit_spire(x, y, s, label, body_mat="spire", roof_mat="gold", flag=True,
-                  detail=0, roof_w=1.75, roof_h=4.4):
+                  detail=0, roof_w=1.75, roof_h=3.4):
         """detail: 0 = silhouette (the far skyline bands, sixty of them),
         1 = trimmed with a railed balcony and proper windows (near towers).
         The brief asks for near detail and far silhouette; this is where that

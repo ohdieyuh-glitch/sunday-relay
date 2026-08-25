@@ -6,7 +6,7 @@
   "_designNote": "This is a TIGHT, DENSE vertical slice, not a large world. The walkable footprint is deliberately smaller than a sprawling map; quality comes from composition density and sight-lines, not acreage. Distant silhouettes sit OUTSIDE the nav bounds as pure background.",
   "level": "/Game/Wonderland/Maps/WonderlandHub",
   "atmosphere": {
-    "sunElevationDeg": 52,
+    "sunElevationDeg": 30,
     "sunAzimuthDeg": 138,
     "sunIntensity": 7.0,
     "skyAtmosphere": true,
@@ -17,7 +17,8 @@
     "_note": "DESIGN INTENT targeting WONDERLAND_VISUAL_ACCEPTANCE.md \u00a76 (sun elevation 22-38\u00b0 above horizon, warm golden key ~4400-5200K) and \u00a77 (fog density 0.015-0.040, lavender haze). sunElevationDeg is elevation ABOVE horizon; the generator negates it into a downward light pitch.",
     "volumetricCloud": true,
     "_visualPass1": "Sun raised 30 -> 52 deg and volumetric cloud enabled: the reference is a bright midday garden city, and the low golden-hour key was reading as dusk.",
-    "_sunAzimuth": "Moved 34 -> 205: the hero view looks north, so the old sun sat in frame and washed the sky to cream. Behind the camera front-lights the plaza and leaves blue sky in view."
+    "_sunAzimuth": "Moved 34 -> 205: the hero view looks north, so the old sun sat in frame and washed the sky to cream. Behind the camera front-lights the plaza and leaves blue sky in view.",
+    "_visualPass2": "Sun 52 -> 30 deg, 2026-08-25. The 52 came from reading the reference as a bright midday garden. Side by side at the same scale it is GOLDEN HOUR: long warm light, deep shade in both bottom corners (luma 62 and 43 against our 94 and 52), a warm/cool split on every surface. 30 is inside this note's own design intent of 22-38, above the generator's sunPitchMin floor of 25, and puts the long shadows across the plaza that make it read as a place rather than a diagram."
   },
   "camera": {
     "boomLengthUu": 760,
