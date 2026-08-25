@@ -507,7 +507,14 @@ LOOK = {
     # and 44% of itself above luma 224 despite -3.4 stops of exposure bias.
     # Cut with the fill and the bounce, as one change to one thing — the total
     # shadowless budget — rather than four separate tweaks.
-    "skyIntensity": 0.85,
+    # MEASURED 2026-08-24, 0.85 -> 1.70. The sun cut landed the frame at mean
+    # luma 94 against the reference's 83 and saturation 0.48 against 0.43 —
+    # both close — but it OVERSHOT the shadows: 23.2% of the frame below luma
+    # 18 where the reference has 8.6%. The directional-off control says why: with
+    # the sun gone the ground band sits at 18 luma, so anything the key does not
+    # reach is nearly black. A shadow in the reference is a colour, not a hole.
+    # This is the term that fills them, and it is the one that was cut furthest.
+    "skyIntensity": 1.70,
     # --- foreground planting ---------------------------------------
     # Sweepable for the same reason the bounce is: an art change nobody can A/B
     # is an art change nobody can evaluate. WONDERLAND_LOOK=foregroundPlanting=0
@@ -5181,8 +5188,19 @@ def build(layout):
         # (x + sin*R, z + cos*R), a ring in the X-Z plane, which is the plane of
         # a face pointing along Y. The dial was built for roll and the case was
         # given pitch.
+        # AND THE SCALE HAD TO MOVE WITH THE ROTATION. Rolling to (0,0,90) was
+        # right and changing only the rotation made it worse: the scale was
+        # (r, d, r) — thin on the mesh's LOCAL Y — and roll sends local Y to
+        # world Z, so the disc came back as a flat horizontal BAR instead of an
+        # edge-on rectangle. One defect traded for another, which is this
+        # project's most reliable way to lose an afternoon.
+        #
+        # /Engine/BasicShapes/Cylinder is a circle in local XY extruded along
+        # local Z. For a face pointing at a camera that looks up +Y, the thin
+        # axis must be the one roll puts there — local Z. So (r, r, d): a full
+        # circle of radius r, thin along its own axis, rolled to face the lens.
         for _b, (_r, _d) in enumerate(((1.62, 0.10), (1.54, 0.14), (1.44, 0.18))):
-            _part("cylinder", x, y + _b * 4.0, z, _r, _d, _r,
+            _part("cylinder", x, y + _b * 4.0, z, _r, _r, _d,
                   "gold" if _b % 2 == 0 else ("brass_deep" if "brass_deep" in MATS else "gold"),
                   "%s_bezel%d" % (label, _b), rot=(0, 0, 90))
         for _k in range(12):
@@ -5190,8 +5208,8 @@ def build(layout):
             _part("sphere", x + math.sin(_a) * 148.0, y + 6.0, z + math.cos(_a) * 148.0,
                   0.10, 0.06, 0.10, "gold", "%s_stud%d" % (label, _k))
         finial(x, y - 4.0, z + 158.0, 0.66, "gold", "%s_crown" % label, glow="gold_glow")
-        _part("cylinder", x, y, z, 1.5, 0.16, 1.5, "gold", "%s_case" % label, rot=(0, 0, 90))
-        _part("cylinder", x, y - 10, z, 1.2, 0.10, 1.2, "porcelain", "%s_face" % label, rot=(0, 0, 90))
+        _part("cylinder", x, y, z, 1.5, 1.5, 0.16, "gold", "%s_case" % label, rot=(0, 0, 90))
+        _part("cylinder", x, y - 10, z, 1.2, 1.2, 0.10, "porcelain", "%s_face" % label, rot=(0, 0, 90))
         _part("cube", x, y - 18, z + 34, 0.07, 0.07, 0.66, "dog_visor", "%s_min" % label)
         _part("cube", x + 26, y - 18, z + 4, 0.5, 0.07, 0.07, "dog_visor", "%s_hr" % label)
         _part("sphere", x, y - 20, z, 0.14, 0.1, 0.14, "gold_glow", "%s_hub" % label)
@@ -6555,7 +6573,26 @@ def build(layout):
         # with a warm Mie haze near the sun for a golden horizon. The pink/purple of
         # Wonderland lives in the DISTANCE fog, the flowers and the castles — NOT the
         # whole sky. (An earlier violet Rayleigh made it a dark twilight.)
-        set_prop(sac, "RayleighScatteringScale", 0.0331)
+        # THE SKY WENT BLACK WHEN THE SUN CAME DOWN, and 0.0331 is why.
+        #
+        # It is Unreal's physical default, and a physical default is calibrated
+        # for a physical sun — around 100,000 lux — with an auto-exposure that
+        # adapts to it. This scene has neither: the exposure is FIXED (proven
+        # today, six stops of r.AutoExposure.Bias move the frame 0.03 luma) and
+        # the sun is now 1,150 lux. At that illuminance the atmosphere scatters
+        # about a hundredth of what it would at noon, so the dome renders very
+        # nearly black and the frame reads as NIGHT with the ground lit.
+        #
+        # Scattering scale is the right lever precisely because it is the ONE
+        # that separates the two: it changes how much light the atmosphere sends
+        # to the camera without changing how much the sun sends to the ground.
+        # Raising the sun instead would blow the ground back out, which is the
+        # loop this has already been round twice.
+        set_prop(sac, "RayleighScatteringScale", 0.115)
+        # Multiple scattering is what makes a real sky bright away from the sun
+        # and fills shade with blue. At the default it contributes almost
+        # nothing here for the same reason.
+        set_prop(sac, "MultiScatteringFactor", 2.4)
         # LAVENDER, BY BLEND. See LOOK["skyLavender"]. The physical default is
         # kept as one end of the blend so 0.0 is exactly today's sky, and the
         # TOTAL is held near the default's sum so the sky changes hue without
