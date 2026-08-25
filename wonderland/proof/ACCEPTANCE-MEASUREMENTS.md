@@ -183,3 +183,29 @@ and the Marble presence/absence result (+40%, confirmed by VRAM 1,806 ->
 1,505 MiB). The ones that reported "no change" are the least affected, since a
 contaminated measurement biases DOWNWARD and they showed no movement either
 way.
+
+
+## RESOLVED: the backdrop was DOUBLE-SIDED
+
+    renderer 18.6 fps  ->  28.8 fps      (+55%)
+    frame delta 6.02 / 255, saturation 0.361 vs 0.364 — the look is unchanged
+    the backdrop is STILL THERE; the stated risk did not materialise
+
+The GLB declares `doubleSided: true`. On a 592,580-triangle shell wrapped
+around the camera that disables backface culling, so both faces of every
+triangle rasterise and none of it can be culled. Setting the material
+single-sided was the last untested property, and it is the one that mattered.
+
+Everything else had already been eliminated by measurement:
+
+    triangle count      r.ForceLOD 2 and 3        no change
+    screen-size LOD     its own reduction LODs    no change (a shell's screen
+                                                  size is always ~1.0)
+    texture resolution  capped 4,096              VRAM -44 MiB, no frames
+    overdraw shading    full Z-prepass            no change
+    presence            backdrop removed          +40%
+
+The lesson: the +40% from removing it was real, and every mechanism I proposed
+for it was wrong -- geometry, then LOD, then texture, then overdraw. The answer
+was a one-word flag in the asset's own manifest, and reading that manifest cost
+nothing and came last.
