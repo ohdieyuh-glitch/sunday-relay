@@ -4639,10 +4639,15 @@ def build(layout):
         _part("cylinder", x, y, sh + cap * 0.02, cap * 1.62 / 100.0, cap * 1.62 / 100.0, 0.10 * s,
               "mush_gill" if "mush_gill" in MATS else "mush_white", "%s_gills" % label)
         # the cap itself, domed and slightly wider than tall
-        _part("sphere", x, y, sh + cap * 0.24, cap * 2.05 / 100.0, cap * 2.05 / 100.0, cap * 1.30 / 100.0,
+        # A PARASOL, NOT A DOME. The reference's caps are wide and shallow --
+        # about 2.4 across for every 1 tall -- with a soft point; ours were a
+        # tall dome at 2.05 : 1.30, a bowler hat. Wider, flatter, and the rim
+        # sits lower and further out so the cap has an EDGE the eye reads from
+        # the plaza, not a rounded roll.
+        _part("sphere", x, y, sh + cap * 0.20, cap * 2.40 / 100.0, cap * 2.40 / 100.0, cap * 0.98 / 100.0,
               cap_mat, "%s_cap" % label)
         # rolled rim so the silhouette is not a bare hemisphere
-        _part("cylinder", x, y, sh + cap * 0.10, cap * 1.92 / 100.0, cap * 1.92 / 100.0, 0.16 * s,
+        _part("cylinder", x, y, sh + cap * 0.06, cap * 2.36 / 100.0, cap * 2.36 / 100.0, 0.10 * s,
               cap_mat, "%s_rim" % label)
         # white flecks, drifting so they never look stamped on
         import math as _m
@@ -4658,8 +4663,10 @@ def build(layout):
             rr = (0.20 + 0.58 * ((i * 37) % 8) / 8.0)
             _part("sphere",
                   x + _m.cos(a) * cap * rr, y + _m.sin(a) * cap * rr,
-                  sh + cap * 0.46 - (rr * rr) * cap * 0.20,
-                  (0.34 - 0.11 * rr) * s, (0.34 - 0.11 * rr) * s, (0.09 - 0.025 * rr) * s,
+                  sh + cap * 0.36 - (rr * rr) * cap * 0.16,
+                  # spots half again as large: on the reference they are the
+                  # first thing read on a cap, not a texture on it
+                  (0.50 - 0.14 * rr) * s, (0.50 - 0.14 * rr) * s, (0.10 - 0.025 * rr) * s,
                   "mush_white", "%s_dot%d" % (label, i))
 
     def kit_portrait(x, y, z, s, label):
@@ -10443,15 +10450,22 @@ def build(layout):
                            % (_bx, _by))
     kit_belvedere(_bx, _by, 0.72, "OverlookBelvedere")
 
-    kit_heart_topiary(1180, 1150, 70.0, 1.5, "HeartTopiaryR")
-    kit_heart_topiary(-1240, 1200, 70.0, 1.35, "HeartTopiaryL")
-    # further back and smaller: at 35% of the frame it was competing with
-    # the Observatory that closes the axis
+    # DELETED: HeartTopiaryR and HeartTopiaryL, the two wire-outline hearts of
+    # flat spheres at 1.5 and 1.35 scale, standing at the same depth as the new
+    # solid voxel heart and reading as its cheap cousins beside it. One heart,
+    # the landmark, is the reference's arrangement.
+    #
+    # DELETED: Clock0 and Clock1, two FREE-FLOATING clocks at hardcoded world
+    # positions -- (-540, 300, 610) hung in the air in front of the heart, and
+    # (700, 560, 680) in front of the gate, which is why every render showed a
+    # clock face stuck onto each landmark. The reference has no floating
+    # clocks: its clocks are the tower behind the arch and the one hanging in
+    # the great tree, and this world has both (clock_tower, BranchClock).
     kit_teacup(1760, 900, 1.85, "GiantTeacup")
     kit_fountain(900, -560, "Fountain")
-    for i, (cx, cy, cz) in enumerate([(-540, 300, 610), (700, 560, 680)]):
-        kit_clock(cx, cy, cz, "Clock%d" % i)
-    kit_teapot(-380, 760, 600, "SkyTeapot")
+    # The teapot floats in the reference's SKY, top-centre, far above the
+    # rooflines. At z=600 ours hung at eye level inside the sight line.
+    kit_teapot(-380, 760, 1350, "SkyTeapot")
 
     # AGENT GARDEN — where a new C.A.R.D. is configured (the agent_config anchor). Read
     # it as a distinct, tended garden: a glowing gold pedestal + orb on a small arcane
