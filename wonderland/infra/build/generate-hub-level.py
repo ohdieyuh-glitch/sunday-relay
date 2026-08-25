@@ -5320,7 +5320,22 @@ def build(layout):
         # emissive rings (each a bright disc capped by a plaza disc to leave a ring)
         # with radiating rune spokes + gold glyph studs — it should genuinely radiate.
         # Checkered cobblestone plaza floor (the reference's iconic stone checker).
-        tile = 190.0
+        #
+        # TILE SIZE, MEASURED AGAINST THE TEXTURE AND THE REFERENCE.
+        #
+        # 190 uu is a 1.9 METRE flag, and it put a second stone scale into the
+        # frame that the reference does not have. The cobble texture is a 9x9
+        # voronoi at a UV scale whose repeat spans 263 uu, so its stones are 29
+        # cm — a real sett — and each 190 uu geometry tile was carrying about
+        # six and a half of them. Two grids at once, one of them wrong.
+        #
+        # In the founder's reference the visible stone unit is a flag roughly a
+        # third of the Dog's body length, so about 65 uu, and there is no larger
+        # grid over it. 90 uu is as close as this can get while the interstitial
+        # fill is dropped to pay for it: smaller tiles pack tighter, so the bed
+        # no longer shows between them and the fill course that existed to hide
+        # it is not needed.
+        tile = 90.0
         # Warm irregular COBBLESTONE (the reference is a mossy stone courtyard, not a
         # chessboard): three close warm-stone tones chosen by a deterministic hash,
         # each tile slightly inset with a hair of height jitter so the seams read as
@@ -5361,8 +5376,11 @@ def build(layout):
         # exactly the density the surface needs. An offset half-step grid drops
         # a smaller sett into each gap, sitting slightly lower so the courses
         # still read.
-        for igx in range(-13, 14):
-            for igy in range(-13, 14):
+        # THE INTERSTITIAL FILL IS OFF. It existed because 190 uu setts left the
+        # mortar bed showing between them; at 90 uu they do not, and keeping it
+        # would double a course that is now four times as numerous.
+        for igx in range(0):
+            for igy in range(0):
                 ih = ((igx * 2654435761) ^ (igy * 40503)) & 0x7FFFFFFF
                 ix = x + (igx + 0.5) * tile
                 iy = y + (igy + 0.5) * tile
@@ -5423,8 +5441,8 @@ def build(layout):
         # arch stands at 2,051 uu from this camera, so the stone has to reach
         # about 2,400 — and then the district has a FLOOR rather than a disc.
         _bed_r = _PAVING_RADIUS
-        for gx in range(-13, 14):
-            for gy in range(-13, 14):
+        for gx in range(-28, 29):
+            for gy in range(-28, 29):
                 if math.hypot(gx * tile, gy * tile) > _bed_r + tile * 0.55:
                     continue
                 hsh = (gx * 73856093) ^ (gy * 19349663)
@@ -5454,8 +5472,13 @@ def build(layout):
                       tile / 100.0 * shrink, tile / 100.0 * shrink, 0.055 + (hsh % 3) * 0.012,
                       mat, "Tile%d_%d" % (gx, gy), rot=(0.0, yaw, 0.0))
                 # moss in roughly half the joints, in clumps rather than dots
-                if hsh % 2 == 0:
-                    for m in range(2 + (hsh % 3)):
+                # Moss in a QUARTER of the joints rather than half, and one
+                # clump rather than two to four. The tile count went from about
+                # 730 to about 2,300 when the flags shrank, and keeping the old
+                # frequency would have put nine thousand moss spheres on the
+                # plaza — which is the rash this whole session has been undoing.
+                if hsh % 4 == 0:
+                    for m in range(1):
                         _part("sphere",
                               x + gx * tile + ox + (((hsh >> (m + 2)) % 11) - 5) * 12.0,
                               y + gy * tile + oy + (((hsh >> (m + 5)) % 11) - 5) * 12.0,
