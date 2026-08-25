@@ -7519,7 +7519,26 @@ def build(layout):
     # up and half a kilometre to two kilometres away; at that remove the eye
     # reads scale before it reads geometry. More puffs per cluster, heavily
     # overlapped, so the silhouette stops showing which spheres it is made of.
-    for i in range(44):
+    # ---- TASK 4.3: THE VOLUMETRIC LAYER IS ALREADY THERE ------------------
+    #
+    # The brief says it in one line: "Replace 2D floating cloud models with
+    # Unreal Engine Volumetric Clouds / Sky Atmosphere." Wonderland has been
+    # doing BOTH — a VolumetricCloud actor is spawned above with its layer at
+    # 6-11 km, and it renders (the soft grey cumulus in the upper sky is it) —
+    # and then 44 clusters of 11 to 15 emissive SPHERES were placed in front of
+    # it. Those hard-edged white ellipsoids are the cloud shapes in every frame
+    # capture, sitting between the camera and a real cloud layer.
+    #
+    # The sphere clusters carry `cloud` at emissive 1.30, so they are also
+    # self-lit: they do not darken at dusk, do not take the sun's colour, and
+    # cannot be shadowed by the towers they float behind. A volumetric layer
+    # does all three for free.
+    #
+    # 528 spheres removed. The kit is left in place — if the volumetric layer is
+    # ever turned off in an atmosphere preset, this is what the sky falls back
+    # to, and a sky with no clouds at all is worse than one with stand-ins.
+    _GEOM_CLOUDS = 0 if atm.get("volumetricCloud", True) else 44
+    for i in range(_GEOM_CLOUDS):
         a = i * 2.39996
         dist = 52000.0 + 168000.0 * (((i * 23) % 9) / 9.0)
         cx0 = _mc.cos(a) * dist
