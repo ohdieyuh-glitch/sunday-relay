@@ -5052,7 +5052,18 @@ def build(layout):
                 if math.hypot(gx * tile, gy * tile) > _bed_r + tile * 0.55:
                     continue
                 hsh = (gx * 73856093) ^ (gy * 19349663)
-                mat = stones[hsh % 3]
+                # A CHECKER IS A CHECKER. This block opens by calling itself
+                # "Checkered cobblestone plaza floor (the reference's iconic
+                # stone checker)" and then picked the tone with `stones[hsh % 3]`
+                # — a hash, which is noise. Noise at this tile size reads as
+                # gravel; the reference's floor reads as LAID STONE because pale
+                # and dark alternate and the eye can follow the courses.
+                #
+                # (gx + gy) parity is the checker. The third tone stays, on a
+                # sparse hash, as the occasional odd flag that stops a perfect
+                # chessboard reading as lino — which is the failure the
+                # irregularity pass below was already written against.
+                mat = stones[2] if (hsh >> 7) % 9 == 0 else stones[(gx + gy) % 2]
                 # IRREGULARITY IS THE WHOLE READ. Identical size, height and
                 # rotation on every tile is a grid, and a grid is lino. Jittering
                 # all three — and letting the gaps widen unevenly — is what makes
