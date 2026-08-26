@@ -45,10 +45,20 @@ if [ "${1:-}" = "--ship-only" ]; then say "shipped; build not started"; exit 0; 
 
 # Detached so the ssh session dropping does not kill a 40-minute build; the
 # log is the record.
-say "starting v2-build.sh on the Studio (CPU), pinned to $HEAD_SHA"
-ssh "$HOST" "mkdir -p $(dirname "$REMOTE_LOG"); cd /teamspace/studios/this_studio/wonderland/src 2>/dev/null || true; \
+# THE CHECKOUT MUST BE ON THE SHIPPED HEAD BEFORE THE ENTRY SCRIPT RUNS: the
+# fetch inside prepare.sh cannot run a v2-build.sh that the old branch does not
+# have (the first live ship hit exactly this). Local edits on the Studio are
+# saved as a patch in run/, never silently discarded.
+say "moving the Studio checkout to $HEAD_SHA (local edits saved as a patch)"
+ssh "$HOST" "set -e; R=/teamspace/studios/this_studio/wonderland; mkdir -p \$R/run; cd \$R/src; \
+  git diff > \$R/run/studio-local-changes-\$(git rev-parse --short HEAD).patch; git checkout -q -- .; \
+  git fetch -q $REMOTE_BUNDLE $BRANCH; git checkout -q -B $BRANCH FETCH_HEAD; git reset -q --hard FETCH_HEAD; \
+  test \"\$(git rev-parse HEAD)\" = $HEAD_SHA; test -x wonderland/infra/lightning/v2-build.sh; echo checkout-ok" \
+  | grep -q checkout-ok || die "the Studio checkout is not at $HEAD_SHA with v2-build.sh present"
+say "starting v2-build.sh on the Studio, pinned to $HEAD_SHA"
+ssh "$HOST" "mkdir -p $(dirname "$REMOTE_LOG"); cd /teamspace/studios/this_studio/wonderland/src; \
   WL_BUNDLE=$REMOTE_BUNDLE WL_BRANCH=$BRANCH WL_REQUIRE_SHA=$HEAD_SHA \
-  nohup bash /teamspace/studios/this_studio/wonderland/src/wonderland/infra/lightning/v2-build.sh > $REMOTE_LOG 2>&1 < /dev/null & \
+  nohup bash wonderland/infra/lightning/v2-build.sh > $REMOTE_LOG 2>&1 < /dev/null & \
   echo started pid \$!"
 say "log: ssh $HOST tail -f $REMOTE_LOG"
 say "success test: grep -E 'V2 SUMMARY|packaged.sha|wl_die|FAILED' $REMOTE_LOG"
