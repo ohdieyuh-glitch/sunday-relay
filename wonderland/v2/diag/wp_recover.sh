@@ -41,7 +41,8 @@ ue() {  # log-name, then the editor arguments
   # shellcheck disable=SC2086
   docker run --rm $gpuflag -v "$WL_ROOT:$WL_ROOT" \
     -e WLV2_MAP_NAME="$MAPNAME" -e WLV2_PARTITIONED="${WLV2_PARTITIONED:-1}" \
-    -e WLV2_REUSE_ASSETS="${WLV2_REUSE_ASSETS:-1}" -e WLV2_CHECK_MAP="${WLV2_CHECK_MAP:-$MAP}" \
+    -e WLV2_REUSE_ASSETS="${WLV2_REUSE_ASSETS:-1}" -e WLV2_REBUILD="${WLV2_REBUILD:-}" \
+    -e WLV2_ALL_ALWAYS_LOADED="${WLV2_ALL_ALWAYS_LOADED:-}" -e WLV2_CHECK_MAP="${WLV2_CHECK_MAP:-$MAP}" \
     -e WLV2_MARBLE_GLB="${WLV2_MARBLE_GLB:-}" -e WLV2_MARBLE_PANO="${WLV2_MARBLE_PANO:-}" \
     -e WONDERLAND_TEXTURE_DIR="${WONDERLAND_TEXTURE_DIR:-$WL_ROOT/textures}" \
     -e WLV2_MANIFEST="$WL_RUN/wlv2-manifest-$name.json" \
