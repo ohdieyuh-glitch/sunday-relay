@@ -57,10 +57,15 @@ DATA_LAYERS = ("V2_Arrival", "V2_Garden", "V2_Castle", "V2_Skyline",
 # BEHIND the viewpoint (the equirect seam), so two cameras are built and the
 # founder chooses:
 #
-#   HeroCam_V2_MarbleReference  at the viewpoint, 100 deg horizontal -- the
-#       widest a hero frame carries without fisheye; from 1.5 m behind V the
-#       rose cones (+/-47 deg), giant mushroom (-49), clock tree (+45), heart
-#       (+22), steps, path, towers and city sit where the panorama puts them.
+#   HeroCam_V2_MarbleReference  1.5 m behind the viewpoint, 100 deg
+#       horizontal -- the widest a hero frame carries without fisheye. From
+#       there (computed from layout_v2, checked by verify_v2_layout): giant
+#       mushroom centre 60 deg left with its cap's inner edge at 40, clock
+#       tree 45 right (trunk inner edge 40), heart 18 right, steps/path/arch
+#       on the axis; the two rose cones sit at 83 left / 63 right -- OUTSIDE
+#       the frame, exactly as in the panorama (-93 / +72 from the viewpoint).
+#       (An earlier comment here said the cones were at +/-47: a derived
+#       number nobody had computed.)
 #   HeroCam_V2_GateView  5.5 m behind the gate, looking through its open
 #       leaves -- the flattened panorama's framing, with a coherent world.
 #

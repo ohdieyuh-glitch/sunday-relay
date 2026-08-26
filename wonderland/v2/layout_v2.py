@@ -228,14 +228,17 @@ GARDEN_R = _band("V2_Garden", [
     # MEASURED ON THE REPROJECTED cam0 VIEW, not the flat panorama: the clock
     # sits at +45 deg, the trunk spans +42..+52, and the foliage fills the
     # top-right corner -- so the tree is 16 m tall, 28 m out, at +47 deg.
-    A("tree_clock_trunk", -2050, 1900, 0, yaw=200, s=0.8, mat="MI_V2_Bark", label="ClockTree_Trunk"),
-    A("clock_ornate", -1900, 1720, 640, yaw=-25, s=1.0, mat="MI_V2_Gold", label="ClockTree_Clock"),
-    A("canopy_large", -2100, 1950, 1380, yaw=0, s=1.4, mat="MI_V2_LeafMid", label="ClockTree_Canopy0"),
-    A("canopy_large", -1600, 2100, 1260, yaw=140, s=1.1, mat="MI_V2_LeafDark", label="ClockTree_Canopy1"),
-    A("canopy_large", -2550, 1650, 1300, yaw=260, s=1.0, mat="MI_V2_LeafLight", label="ClockTree_Canopy2"),
-    A("canopy_medium", -1700, 1650, 1000, yaw=30, s=1.2, mat="MI_V2_LeafMid", label="ClockTree_Canopy3"),
-    A("vine_hanging", -1880, 1700, 900, s=0.7, mat="MI_V2_LeafMid", label="ClockTree_Vine0"),
-    A("vine_hanging", -2200, 1750, 980, s=0.6, mat="MI_V2_LeafDark", label="ClockTree_Vine1"),
+    # the trunk mesh is 27 m tall at scale 1; 0.6 puts its highest limbs at
+    # 16 m and the crown (canopies at 8-10.5 m + ~6 m radius) tops out at
+    # ~17 m -- the measured ~16 m. (0.8 left bare limbs 5 m above the crown.)
+    A("tree_clock_trunk", -2050, 1900, 0, yaw=200, s=0.6, mat="MI_V2_Bark", label="ClockTree_Trunk"),
+    A("clock_ornate", -1900, 1720, 560, yaw=-25, s=1.0, mat="MI_V2_Gold", label="ClockTree_Clock"),
+    A("canopy_large", -2100, 1950, 1050, yaw=0, s=1.4, mat="MI_V2_LeafMid", label="ClockTree_Canopy0"),
+    A("canopy_large", -1600, 2100, 960, yaw=140, s=1.1, mat="MI_V2_LeafDark", label="ClockTree_Canopy1"),
+    A("canopy_large", -2550, 1650, 990, yaw=260, s=1.0, mat="MI_V2_LeafLight", label="ClockTree_Canopy2"),
+    A("canopy_medium", -1700, 1650, 800, yaw=30, s=1.2, mat="MI_V2_LeafMid", label="ClockTree_Canopy3"),
+    A("vine_hanging", -1880, 1700, 760, s=0.7, mat="MI_V2_LeafMid", label="ClockTree_Vine0"),
+    A("vine_hanging", -2200, 1750, 800, s=0.6, mat="MI_V2_LeafDark", label="ClockTree_Vine1"),
     A("hedge_mass", -1400, 1500, 60, yaw=20, s=1.3, mat="MI_V2_LeafDark", label="Garden_R_Hedge0"),
     A("hedge_mass", -1900, 1300, 0, yaw=200, s=1.2, mat="MI_V2_LeafMid", label="Garden_R_Hedge1"),
     A("hedge_mass", -2300, 2200, 0, yaw=70, s=1.4, mat="MI_V2_LeafDark", label="Garden_R_Hedge2"),
@@ -363,7 +366,9 @@ ALL = FOREGROUND + GARDEN + PALACE + SKY + HOVER
 PATH_SPLINE = [(0.0, 850.0, 0.0), (10.0, 2000.0, 0.0), (0.0, 2940.0, 0.0), (0.0, 3060.0, 60.0),
                (-10.0, 3700.0, 72.0), (0.0, 4450.0, 84.0)]
 PATH_WIDTH_NEAR, PATH_WIDTH_FAR = 440.0, 300.0
-#: The pale plaza: from behind the gate to the front wall, 16 m wide.
+#: The pale plaza: from behind the gate to the front wall, 16 m wall to wall
+#: (retaining walls at x = +/-8 m); the sunken slab field is the 13 m between
+#: the side steps (PLAZA_RECT), the steps and terraces fill the rest.
 PLAZA_RECT = (-650.0, 650.0, -1500.0, 800.0)        # x0, x1, y0, y1 -- the sunken floor between the side steps
 PLAZA_SLAB = 130.0
 PETALS = 36
