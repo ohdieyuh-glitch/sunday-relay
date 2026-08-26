@@ -92,6 +92,11 @@ frame under VULKAN_SM6 (bindless) on this driver, while SM5 rendered
 structured frames on this L4 on 2026-08-22. V2 ships SM5 (`17ed56e`); Nanite
 and VSM are the open SM6 item, Lumen software GI still runs.
 
+- SM5 build 1 (b797e89): 83/83 assets, but the distant ring beyond 200 m was
+  EMPTY (the Marble world ends at ~170 m) and the engine's `LOD 0 has no
+  triangles` error made the generator commandlet exit 1 → build stopped.
+  Guarded (`6aad622`), radius 90 m (`5f2bef1`), rebuilt.
+
 ## Real Unreal renders this session
 
 **None.** The Studio `aquala-wonderland` was stopped for the whole session
