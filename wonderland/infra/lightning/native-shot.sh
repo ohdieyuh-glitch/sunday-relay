@@ -122,7 +122,7 @@ else
   wl_warn "no rendering profile resolver at $_render_dir — capturing at engine defaults"
 fi
 
-setsid nohup env $(wl_vulkan_env_pairs) "$APP" \
+setsid nohup env $(wl_vulkan_env_pairs) "$APP" ${WL_MAP_ARG:-} \
   -RenderOffscreen -ForceRes "-ResX=$RES_X" "-ResY=$RES_Y" \
   -Unattended -stdout -FullStdOutLogOutput \
   -CinematicView "-HeroCam=$CAM" ${WL_EXTRA_ARGS:-} \

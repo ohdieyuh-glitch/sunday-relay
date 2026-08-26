@@ -200,7 +200,7 @@ start_app() {
     cam_args=(-CinematicView "-HeroCam=$WL_HERO_CAM")
   fi
 
-  setsid nohup env $(wl_vulkan_env_pairs) "$APP" \
+  setsid nohup env $(wl_vulkan_env_pairs) "$APP" ${WL_MAP_ARG:-} \
     -PixelStreamingURL="ws://127.0.0.1:$WL_STREAMER_PORT" \
     -RenderOffscreen -ForceRes -ResX="$WL_RES_X" -ResY="$WL_RES_Y" \
     -Unattended -stdout -FullStdOutLogOutput \
