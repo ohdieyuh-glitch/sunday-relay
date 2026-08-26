@@ -488,7 +488,7 @@ if [ "${WL_BUILD_HLOD:-0}" = "1" ] && [ "$LEVEL_OK" = "1" ] && [ -x "$UE_EDITOR_
     # and stamped, and the cook goes on -- the fps line will say HLOD_BUILT=0.
     set +e
     "$UE_EDITOR_CMD" "$PROJECT" "$HLOD_MAP" -run=WorldPartitionBuilderCommandlet \
-      -Builder=WorldPartitionHLODsBuilder -SetupHLODs -BuildHLODs -AllowCommandletRendering -unattended -nop4 \
+      -Builder=WorldPartitionHLODsBuilder -SetupHLODs -BuildHLODs -AllowCommandletRendering -RenderOffscreen -unattended -nop4 \
       2>&1 | tee "$LOG_DIR/build-hlod.log"
     hlod_rc="${PIPESTATUS[0]}"
     set -e

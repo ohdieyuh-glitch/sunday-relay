@@ -166,7 +166,11 @@ run_container() {
   # mounted at the same path inside so every artifact lands on the volume, not
   # in a layer that vanishes with the container.
   local gpuflag=""
-  wl_have_gpu && gpuflag="--gpus all"
+  # NVIDIA_DRIVER_CAPABILITIES=all: the container toolkit injects the Vulkan
+  # ICD and driver libraries only with the graphics capability (the default
+  # is compute,utility), and the World Partition HLOD builder needs an RHI
+  # ("Could not initialize SDL: No available video device", rc=1 without it).
+  wl_have_gpu && gpuflag="--gpus all -e NVIDIA_DRIVER_CAPABILITIES=all"
 
   # MOUNT WHAT THE GENERATOR WILL READ. $WL_ROOT is bound at the same path
   # inside, so anything under it is already visible; an asset directory
