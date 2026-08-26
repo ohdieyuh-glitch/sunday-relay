@@ -143,8 +143,12 @@ LOOK = {
     # Cut-outs are Band A/B landmarks made of generated geometry -- OFF since
     # the 2026-08-26 pipeline correction (kept as an opt-in reference tool).
     "marbleCutouts": 0,
-    # The Band C experiment: the Marble world beyond this radius, visible.
-    "marbleDistant": 1, "marbleDistantRadiusM": 200.0,
+    # The Band C experiment: the Marble world beyond this radius, visible. The
+    # Marble world itself reaches only ~170 m (ANALYSIS: city 90-170 m), so a
+    # 200 m radius left an EMPTY ring and an engine error that failed the build;
+    # 90 m is where the Marble skyline begins -- Band B/C overlap, judged by
+    # the render and removed with marbleDistant=0 if it fails.
+    "marbleDistant": 1, "marbleDistantRadiusM": 90.0,
 }
 
 
