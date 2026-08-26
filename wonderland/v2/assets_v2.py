@@ -17,6 +17,7 @@ draws, and the render is the judge.
 """
 
 import math
+import os
 
 import v2_config as C
 
@@ -910,13 +911,38 @@ RECIPES = {
 COBBLE_VARIANTS = 4
 
 
+#: WLV2_REUSE_ASSETS=1: an asset already saved under the V2 root is used as it
+#: is instead of being rebuilt. The 83 meshes are deterministic and cost ~6
+#: minutes of Geometry Script per run; during the World Partition recovery the
+#: meshes are not what changed.
+REUSE_ASSETS = os.environ.get("WLV2_REUSE_ASSETS", "0") == "1"
+
+
+def _existing_asset(ctx, folder, key):
+    if not REUSE_ASSETS:
+        return None
+    path = F[folder] + "/SM_" + key
+    try:
+        if ctx.unreal.EditorAssetLibrary.does_asset_exist(path):
+            return path
+    except Exception:
+        return None
+    return None
+
+
 def build_assets(ctx, keys=None, log=print):
     """Build and save every recipe (plus the cobble variants). Returns
     key -> asset path for those that saved."""
     out = {}
+    reused = 0
     keys = list(keys) if keys else list(RECIPES)
     for key in keys:
         fn, folder, nanite, collision = RECIPES[key]
+        have = _existing_asset(ctx, folder, key)
+        if have:
+            out[key] = have
+            reused += 1
+            continue
         try:
             mb = fn(ctx)
             path = mb.to_asset(F[folder], key, nanite=nanite and bool(C.LOOK["nanite"]), collision=collision)
@@ -926,7 +952,13 @@ def build_assets(ctx, keys=None, log=print):
                                                         ("  notes: " + "; ".join(mb.notes)) if mb.notes else ""))
         except Exception as exc:
             log("V2 ASSET %-20s FAILED in recipe: %s: %s" % (key, type(exc).__name__, exc))
+    if reused:
+        log("V2 ASSETS: %d recipe(s) REUSED from disk (WLV2_REUSE_ASSETS=1)" % reused)
     for v in range(COBBLE_VARIANTS):
+        have = _existing_asset(ctx, "cobble", "cobble_slab_%d" % v)
+        if have:
+            out["cobble_slab_%d" % v] = have
+            continue
         try:
             mb = cobble_slab(ctx, v)
             path = mb.to_asset(F["cobble"], "cobble_slab_%d" % v, nanite=bool(C.LOOK["nanite"]), collision=True)
@@ -1130,6 +1162,10 @@ _old_build_assets = build_assets
 def build_assets(ctx, keys=None, log=print):
     out = _old_build_assets(ctx, keys, log)
     for v in range(PLAZA_VARIANTS):
+        have = _existing_asset(ctx, "cobble", "plaza_slab_%d" % v)
+        if have:
+            out["plaza_slab_%d" % v] = have
+            continue
         try:
             mb = plaza_slab(ctx, v)
             path = mb.to_asset(F["cobble"], "plaza_slab_%d" % v, nanite=bool(C.LOOK["nanite"]), collision=True)

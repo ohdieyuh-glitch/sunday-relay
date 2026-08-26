@@ -4,7 +4,10 @@ import os
 
 CONTENT_ROOT = "/Game/WonderlandV2"
 MAP_DIR = CONTENT_ROOT + "/Maps"
-MAP_NAME = "WL_V2_GoldenArrival"
+#: WLV2_MAP_NAME builds the same world into another map (the World Partition
+#: recovery builds a classic staging map and converts THAT, leaving the broken
+#: WL_V2_GoldenArrival untouched as a forensic archive).
+MAP_NAME = os.environ.get("WLV2_MAP_NAME", "WL_V2_GoldenArrival")
 MAP_PATH = MAP_DIR + "/" + MAP_NAME
 OPEN_WORLD_TEMPLATE = "/Engine/Maps/Templates/OpenWorld"
 OPEN_WORLD_TEMPLATES = ("/Engine/Maps/Templates/OpenWorld", "/Engine/Maps/Templates/OpenWorld/OpenWorld",

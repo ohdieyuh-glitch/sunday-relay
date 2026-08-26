@@ -1316,7 +1316,13 @@ def main():
 
     phase("save")
     saved = False
-    for saver in (lambda: lsu.save_current_level(), lambda: lsu.save_map(world, C.MAP_PATH)):
+    # A FRESH level has no filename yet: LevelEditorSubsystem.save_current_level
+    # refuses with "Use EditorLoadingAndSavingUtils". save_map names and writes
+    # it (proven on the classic diagnostic map), so it is tried too.
+    _util = unreal.EditorLoadingAndSavingUtils
+    for saver in (lambda: lsu.save_current_level(),
+                  lambda: _util.save_map(unreal.EditorLevelLibrary.get_editor_world(), C.MAP_PATH),
+                  lambda: _util.save_packages([unreal.EditorLevelLibrary.get_editor_world().get_outermost()], False)):
         try:
             if saver():
                 saved = True
