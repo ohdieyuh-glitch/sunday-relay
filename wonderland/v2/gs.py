@@ -386,6 +386,7 @@ _LIBS = {
     "queries": "GeometryScript_MeshQueries",
     "assets": "GeometryScript_AssetUtils",
     "collision": "GeometryScript_CollisionFunctions",
+    "selection": "GeometryScript_MeshSelectionFunctions",
 }
 
 

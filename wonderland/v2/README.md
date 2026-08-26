@@ -34,6 +34,18 @@ migrated selectively; environment art is not.
 Not migrated: `generate-hub-level.py` (the V1 scene), `hub-layout.json`,
 `hd/assets.py` (V1-era library), every V1 material, every V1 actor.
 
+## Guards, gates and tools
+
+| what | where |
+|---|---|
+| V1 write-guard (pre-commit; refuses legacy-path edits on V2 branches) | `../tools/v1_guard.py`, `../V1-LEGACY-MANIFEST.md`, `../tools/install-hooks.sh` |
+| layout gate (recipes/materials resolve, open corridor, clean plaza, landmarks in frame, city variety) | `verify_v2_layout.py` |
+| offline build check (control flow only, both mesh backends) | `verify_v2_dryrun.py`, `WLV2_FORCE_FALLBACK=1` |
+| the reference through a V2 camera (the comparison's right panel) | `tools/reproject_reference.py` |
+| side-by-side render vs reference, same lens | `tools/compare_v2.py` |
+| DIAGNOSTIC composition projector (bounding boxes; never evidence) | `tools/diag_layout_view.py` |
+| secondary dressing with plaza/corridor exclusion | `dressing_v2.py` |
+
 ## Files
 
 | file | role |

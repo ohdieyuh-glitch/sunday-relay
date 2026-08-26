@@ -159,6 +159,19 @@ for g in verify-target-config.py verify-pixelstreaming-plugin.py verify-local-in
     fi
   fi
 done
+# ---- WONDERLAND V2 GATES (relay/wonderland-v2*): the V1 write-guard, the layout
+# gate and the offline build check must pass before Studio time is spent.
+V2_DIR="$WL_SRC/wonderland/v2"
+if [ -d "$V2_DIR" ]; then
+  for g in "$WL_SRC/wonderland/tools/v1_guard.py --since HEAD~1" "$V2_DIR/verify_v2_layout.py" "$V2_DIR/verify_v2_dryrun.py"; do
+    if (cd "$WL_SRC" && python3 $g >>"$WL_LOG/gates.log" 2>&1); then
+      wl_say "V2 gate ok: $(basename "${g%% *}")"
+    else
+      wl_warn "V2 gate $(basename "${g%% *}") FAILED -- see $WL_LOG/gates.log"
+      GATE_FAIL=1
+    fi
+  done
+fi
 [ "$GATE_FAIL" = 0 ] || wl_warn "one or more gates failed; fix before spending GPU time"
 
 # ------------------------------------------------------------ 4. textures + audio

@@ -7,6 +7,8 @@ MAP_DIR = CONTENT_ROOT + "/Maps"
 MAP_NAME = "WL_V2_GoldenArrival"
 MAP_PATH = MAP_DIR + "/" + MAP_NAME
 OPEN_WORLD_TEMPLATE = "/Engine/Maps/Templates/OpenWorld"
+OPEN_WORLD_TEMPLATES = ("/Engine/Maps/Templates/OpenWorld", "/Engine/Maps/Templates/OpenWorld/OpenWorld",
+                        "/Engine/Maps/Templates/Template_Default")
 
 FOLDERS = {
     "castle": CONTENT_ROOT + "/Architecture/Castle",
@@ -107,6 +109,12 @@ LOOK = {
     # Registration from V1's live measurement; scale 2.1145 = true metric.
     "marbleWorld": 1, "marbleVisible": 0, "marbleScale": 2.1145339, "marbleGain": 9000.0,
     "marbleRollDeg": 180.0, "marbleYawDeg": 180.0, "marbleGroundOffsetM": 1.2398534,
+    # MARBLE CUT-OUTS: regions of the Marble mesh cut out in-editor as
+    # standalone meshes and placed VISIBLE where the kit is weakest. For the
+    # hero camera at the reconstruction viewpoint they ARE the reference.
+    # 1 = place them and skip the authored kit versions of those landmarks;
+    # 0 = kit only. Per-landmark boxes are in build_v2.MARBLE_CUTOUTS.
+    "marbleCutouts": 1,
 }
 
 

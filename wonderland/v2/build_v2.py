@@ -112,13 +112,18 @@ def new_map(actors, eal, lsu):
             LOG("V2 MAP: could not delete the old map (%s); continuing" % exc)
     how = None
     world = None
-    if eal.does_asset_exist(C.OPEN_WORLD_TEMPLATE):
+    for tpl in C.OPEN_WORLD_TEMPLATES:
+        if how is not None:
+            break
+        if not eal.does_asset_exist(tpl):
+            LOG("V2 MAP: template %s not present" % tpl)
+            continue
         try:
-            ok = lsu.new_map_from_template(C.OPEN_WORLD_TEMPLATE, C.MAP_PATH)
+            ok = lsu.new_map_from_template(tpl, C.MAP_PATH)
             if ok:
-                how = "open-world-template (World Partition)"
+                how = "template %s (World Partition)" % tpl.rsplit("/", 1)[-1]
         except Exception as exc:
-            LOG("V2 MAP: template path failed (%s)" % exc)
+            LOG("V2 MAP: template %s failed (%s)" % (tpl, exc))
     if how is None:
         try:
             ok = unreal.EditorLevelLibrary.new_level(C.MAP_PATH)
@@ -579,6 +584,140 @@ def marble_world(actors, eal, layers):
 
 
 # ==========================================================================
+# 6c. Marble cut-outs: the reference's own sculpted landmarks, as meshes
+# ==========================================================================
+
+#: label -> (world-space box min, max) in the V2 frame, and the authored
+#: placements it REPLACES. Boxes come from ANALYSIS.md positions with room.
+MARBLE_CUTOUTS = {
+    "GiantMushroom": ((600.0, -200.0, -50.0), (3400.0, 2400.0, 2600.0),
+                      ("GiantMushroom", "GiantMushroom_Base", "GiantMushroom_Clock", "GiantMushroom_Ivy0",
+                       "GiantMushroom_Ivy1", "GiantMushroom_Vine0", "GiantMushroom_Vine1")),
+    "RoseCone_L": ((550.0, -400.0, 40.0), (1250.0, 350.0, 700.0), ("RoseCone_L", "RoseCone_L_Planter")),
+    "RoseCone_R": ((-1250.0, -100.0, 40.0), (-450.0, 650.0, 700.0), ("RoseCone_R", "RoseCone_R_Planter")),
+    "ClockTree": ((-3200.0, 1100.0, -50.0), (-900.0, 3000.0, 2200.0),
+                  ("ClockTree_Trunk", "ClockTree_Clock", "ClockTree_Canopy0", "ClockTree_Canopy1",
+                   "ClockTree_Canopy2", "ClockTree_Canopy3", "ClockTree_Vine0", "ClockTree_Vine1")),
+    "HeartTopiary": ((-1500.0, 2200.0, 0.0), (-300.0, 3200.0, 1200.0),
+                     ("HeartTopiary", "Heart_Terrace", "Heart_Base0", "Heart_Base1")),
+    "GardenGate": ((500.0, 1450.0, -20.0), (1300.0, 1950.0, 900.0),
+                   ("GardenGate_PierL", "GardenGate_PierR", "GardenGate_LeafL", "GardenGate_LeafR",
+                    "GardenGate_FinialL", "GardenGate_FinialR", "GardenGate_IvyL")),
+}
+
+
+def marble_cutouts(marble_actor, actors, eal, layers, gsctx):
+    """Cut each MARBLE_CUTOUTS box out of the imported Marble mesh as its own
+    static mesh, in the MARBLE mesh's own space, then place it with the same
+    actor transform as the scaffold, VISIBLE. Returns the set of authored
+    labels the cut-outs replace (empty if nothing was cut)."""
+    L = C.LOOK
+    replaced = set()
+    if marble_actor is None or not int(L["marbleCutouts"]) or gsctx.backend != gs.Backend.GS:
+        LOG("V2 MARBLE CUTOUTS: skipped (%s)" % ("no Marble mesh" if marble_actor is None else
+                                                  "marbleCutouts=0" if not int(L["marbleCutouts"]) else "no Geometry Script"))
+        return replaced
+    u = unreal
+    try:
+        smc = marble_actor.get_component_by_class(u.StaticMeshComponent)
+        src_mesh = smc.get_static_mesh()
+        xf = marble_actor.get_actor_transform()
+    except Exception as exc:
+        LOG("V2 MARBLE CUTOUTS: cannot read the scaffold (%s)" % exc)
+        return replaced
+    try:
+        inv = xf.inverse() if hasattr(xf, "inverse") else None
+    except Exception:
+        inv = None
+    for label, (lo, hi, replaces) in MARBLE_CUTOUTS.items():
+        try:
+            dm = gsctx.new_dynamic_mesh()
+            gsctx.gs("assets", "copy_mesh_from_static_mesh", src_mesh, dm, u.GeometryScriptCopyMeshFromAssetOptions(),
+                     u.GeometryScriptMeshReadLOD())
+            # world box -> the mesh's local space (the scaffold's transform is
+            # a rotation + uniform scale + translation, so the local box is the
+            # transformed corners' bounds)
+            corners = [(x, y, z) for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])]
+            if inv is not None:
+                lp = [inv.transform_location(u.Vector(*c)) for c in corners]
+                bmin = u.Vector(min(p.x for p in lp), min(p.y for p in lp), min(p.z for p in lp))
+                bmax = u.Vector(max(p.x for p in lp), max(p.y for p in lp), max(p.z for p in lp))
+            else:
+                bmin, bmax = u.Vector(*lo), u.Vector(*hi)
+            box = u.Box(bmin, bmax) if hasattr(u, "Box") else None
+            sel = u.GeometryScriptMeshSelection()
+            gsctx.gs("selection", "select_mesh_elements_in_box", dm, box, sel,
+                     u.GeometryScriptMeshSelectionType.TRIANGLES, False)
+            # delete everything OUTSIDE the box: invert the selection
+            inv_sel = u.GeometryScriptMeshSelection()
+            gsctx.gs("selection", "invert_selection", dm, sel, inv_sel, True)
+            gsctx.gs("edit", "delete_selected_triangles", dm, inv_sel, False)
+            n_tri = gsctx.gs("queries", "get_num_triangles", dm)
+            if not isinstance(n_tri, int) or n_tri < 50:
+                LOG("V2 MARBLE CUTOUT %s: %s triangles in the box; skipped" % (label, n_tri))
+                continue
+            # save as its own asset, keep the Marble material
+            folder = C.CONTENT_ROOT + "/Marble/Cutouts"
+            name = "SM_Marble_" + label
+            path = folder + "/" + name
+            if eal.does_asset_exist(path):
+                eal.delete_asset(path)
+            sm = u.AssetToolsHelpers.get_asset_tools().create_asset(name, folder, u.StaticMesh, u.StaticMeshFactoryNew())
+            opts = u.GeometryScriptCopyMeshToAssetOptions()
+            for prop, val in (("enable_recompute_normals", False), ("emit_transaction", False), ("replace_materials", True)):
+                try:
+                    opts.set_editor_property(prop, val)
+                except Exception:
+                    pass
+            try:
+                mat0 = src_mesh.get_material(0)
+                opts.set_editor_property("new_materials", [mat0])
+            except Exception:
+                pass
+            try:
+                ns = u.GeometryScriptNaniteOptions()
+                ns.set_editor_property("enabled", bool(L["nanite"]))
+                opts.set_editor_property("apply_nanite_settings", True)
+                opts.set_editor_property("nanite_settings", ns)
+            except Exception:
+                pass
+            gsctx.gs("assets", "copy_mesh_to_static_mesh", dm, sm, opts, u.GeometryScriptMeshWriteLOD())
+            eal.save_asset(path, only_if_is_dirty=False)
+            a = actors.spawn_actor_from_class(u.StaticMeshActor, xf.translation if hasattr(xf, "translation") else vec((0, 0, 0)),
+                                              rot(0, 0, 0))
+            if a is None:
+                continue
+            try:
+                a.set_actor_transform(xf, False, False)
+            except Exception:
+                pass
+            comp = a.get_component_by_class(u.StaticMeshComponent)
+            if comp is not None:
+                try:
+                    comp.set_mobility(u.ComponentMobility.MOVABLE)
+                except Exception:
+                    pass
+                comp.set_static_mesh(sm)
+                try:
+                    comp.set_collision_enabled(u.CollisionEnabled.NO_COLLISION)
+                except Exception:
+                    pass
+            a.set_actor_label("V2_MarbleCutout_" + label)
+            try:
+                a.set_folder_path(u.Name("V2/Marble/Cutouts"))
+            except Exception:
+                pass
+            assign_layer(a, "V2_Garden", layers)
+            replaced.update(replaces)
+            LOG("V2 MARBLE CUTOUT %s: %d triangles -> %s, placed VISIBLE; replaces %d authored placements"
+                % (label, n_tri, path, len(replaces)))
+        except Exception as exc:
+            LOG("V2 MARBLE CUTOUT %s: failed (%s); the authored kit stands" % (label, exc))
+    MANIFEST["marble_cutouts"] = sorted(MARBLE_CUTOUTS) if replaced else []
+    return replaced
+
+
+# ==========================================================================
 # 8. light and atmosphere
 # ==========================================================================
 
@@ -796,6 +935,7 @@ def main():
         LOG("V2 GROUND: the template's landscape is the terrain")
     phase("marble")
     marble = marble_world(actors, eal, layers)
+    replaced = marble_cutouts(marble, actors, eal, layers, ctx)
     MANIFEST["actors"]["flagstones"] = lay_ground(placer, actors, eal, asset_paths, mats, layers,
                                                   plaza_only=(marble is not None and int(C.LOOK["marbleVisible"])))
 
@@ -804,9 +944,15 @@ def main():
     if marble is not None and int(C.LOOK["marbleVisible"]):
         bands = [LAYOUT.FOREGROUND]
         LOG("V2 COMPOSITION: Marble world VISIBLE -- only the foreground is placed in front of it")
+    skipped = 0
     for band in bands:
         for item in band:
+            if item.get("label") in replaced:
+                skipped += 1
+                continue
             placer.place(item)
+    if skipped:
+        LOG("V2 COMPOSITION: %d authored placements replaced by Marble cut-outs" % skipped)
     if int(C.LOOK["portal"]) and "portal_disc" in asset_paths:
         r = float(C.LOOK["portalRadius"]) / 630.0
         for key, sc, lb in (("portal_disc", r, "Portal_Runes"), ("portal_ring", r * 1.0, "Portal_RingOuter"),
