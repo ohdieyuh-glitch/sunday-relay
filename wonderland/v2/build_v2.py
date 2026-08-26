@@ -1314,7 +1314,7 @@ def main():
     LOG("V2 SUMMARY: map=%s created_by=%s wp=%s saved=%s assets=%d/%d backend=%s materials=%d actors=%d "
         "flagstones=%s v1_actors=%d data_layers=%s seconds=%.0f"
         % (C.MAP_PATH, how, MANIFEST["world_partition"], saved, len(asset_paths),
-           len(ASSETS.RECIPES) + ASSETS.COBBLE_VARIANTS, ctx.backend, len(mats), len(final),
+           len(ASSETS.RECIPES) + ASSETS.COBBLE_VARIANTS + ASSETS.PLAZA_VARIANTS, ctx.backend, len(mats), len(final),
            MANIFEST["actors"].get("flagstones"), len(v1_in_final), layer_mode, time.time() - t0))
     if not saved:
         unreal.log_error("V2 SAVE FAILED -- the map was not written; nothing to cook")
