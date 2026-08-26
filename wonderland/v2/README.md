@@ -27,7 +27,7 @@ migrated selectively; environment art is not.
 | `WonderlandGameMode` / `WonderlandPlayerController` (`-CinematicView -HeroCam=N`) | camera selection by tag; V2 tags its own camera |
 | `WonderlandInstancedBatch` (C++ ISM batching) | pure instancing; carries MeshPath/MaterialPath, no scene assumptions |
 | `WonderlandHoverComponent` / `WonderlandHoverProp` (C++) | bounded, asynchronous hover for keys/teapot |
-| `infra/build/gen-textures.py` | synthesises PBR texture sets on CPU; V2 imports them under its own root |
+| `infra/build/gen-textures.py` | noise/PNG/normal KERNELS only — `textures_v2.py` builds V2's own NEUTRAL set on them; the V1 set's coloured albedos are not imported (tint × coloured texture rendered cream as brown) |
 | `infra/build/hd/meshkit.py` | geometry kernel, used only as the FALLBACK authoring path when Geometry Script is unavailable, and logged as such |
 | Marble `royal-garden-backdrop` panorama | strategic scenic use: the distant skyline dome behind a 3D midground |
 
@@ -39,10 +39,16 @@ Not migrated: `generate-hub-level.py` (the V1 scene), `hub-layout.json`,
 | what | where |
 |---|---|
 | V1 write-guard (pre-commit; refuses legacy-path edits on V2 branches) | `../tools/v1_guard.py`, `../V1-LEGACY-MANIFEST.md`, `../tools/install-hooks.sh` |
-| layout gate (recipes/materials resolve, open corridor, clean plaza, landmarks in frame, city variety) | `verify_v2_layout.py` |
+| layout gate (recipes/materials/folder keys resolve, open corridor, clean plaza, landmarks in BOTH cameras, gate view clear, city variety) | `verify_v2_layout.py` |
+| texture gate (every family present, albedos neutral — no colour cast, bright enough to correct — sidecar means fresh) | `verify_v2_textures.py` |
+| MEASURED render-vs-reference diff: five largest regional differences with the driving metric | `tools/diff_v2.py` |
+| ship the branch to the Studio (bundle over ssh, md5 checked, build pinned to the shipped head) | `tools/ship_v2.sh`, `tools/ship_v2.test.sh` |
+| pull the latest pass, side-by-side + diff + fps line | `tools/pull_render.sh` |
+| DIAGNOSTIC contact sheets (recipes on the fallback backend; texture albedo/normal tiles) | `tools/sheet_v2.py`, `tools/sheet_textures.py` |
+| the session's evidence: commits, passes, real renders | `SESSION-LOG.md` |
 | offline build check (control flow only, both mesh backends) | `verify_v2_dryrun.py`, `WLV2_FORCE_FALLBACK=1` |
 | the reference through a V2 camera (the comparison's right panel) | `tools/reproject_reference.py` |
-| side-by-side render vs reference, same lens | `tools/compare_v2.py` |
+| side-by-side render vs reference, same lens (labels anything but a `V2_PASS` capture NOT A RENDER) | `tools/compare_v2.py` |
 | DIAGNOSTIC composition projector (bounding boxes; never evidence) | `tools/diag_layout_view.py` |
 | secondary dressing with plaza/corridor exclusion | `dressing_v2.py` |
 
@@ -50,15 +56,16 @@ Not migrated: `generate-hub-level.py` (the V1 scene), `hub-layout.json`,
 
 | file | role |
 |---|---|
-| `v2_config.py` | names, paths, knobs, the locked hero camera |
+| `v2_config.py` | names, paths, knobs, the two locked hero cameras (`HeroCam_V2_MarbleReference`, `HeroCam_V2_GateView`) |
 | `layout_v2.py` | the authored composition, band by band from the reference (pure data) |
 | `gs.py` | Geometry Script wrappers with capability probing and the meshkit fallback |
 | `assets_v2.py` | the V2 asset recipes (gate, trees, heart, mushrooms, flowers, arch, tea, clocks, keys, cobbles, stairs, castle kit, portal, sky dome) |
-| `materials_v2.py` | the V2 master materials and instances (`/Game/WonderlandV2/Materials`) |
-| `build_v2.py` | the editor entry point: map → data layers → materials → assets → composition → light → atmosphere → portal → camera → save → manifest |
+| `materials_v2.py` | the V2 master materials and instances (`/Game/WonderlandV2/Materials`); tints divided by the texture set's recorded means |
+| `textures_v2.py` | the V2 texture set: neutral detail maps (`T_V2_*`), plaza-slab and path-flag families, sidecar `textures_v2.json` |
+| `build_v2.py` | the editor entry point: map → data layers → HLOD layers → materials (textures) → assets → ground → Marble scaffold + cut-outs → composition → dressing → light/atmosphere/portal → cameras → save → manifest (+ `V2 PERFORMANCE`) |
 | `verify_v2_dryrun.py` | offline: the build script executes against a stub engine (syntax/logic only — never visual proof) |
-| `../infra/lightning/v2-build.sh` | CPU: run `build_v2.py` in the editor commandlet, cook and package the V2 map |
-| `../infra/lightning/v2-shot.sh` | GPU: capture `HeroCam_V2_Arrival` from the packaged V2 build |
+| `../infra/lightning/v2-build.sh` | CPU: compile preflight, generate + gate the V2 textures, run `build_v2.py` in the editor commandlet, build World Partition HLODs, cook and package the V2 map |
+| `../infra/lightning/v2-shot.sh` | GPU: capture `HeroCam_V2_MarbleReference` (or `WL_V2_CAM=1` GateView) from the packaged V2 build as a numbered `V2_PASS`, then measure the fps median at that camera |
 
 ## The PRIMARY reference (2026-08-25, second directive)
 
