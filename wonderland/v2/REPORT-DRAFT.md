@@ -31,7 +31,9 @@ WORLD PARTITION: enabled (empty partitioned level; is_spatially_loaded by band; 
 DATA LAYERS: 7 real Data Layer instances (V2_Arrival … V2_VFX).
 LUMEN / ATMOSPHERE: SM6 + Lumen + VSM config; SkyAtmosphere + height fog + volumetric fog + the panorama dome above +8°; sun 60,000 lux 5600 K at −58/−11.
 
-REAL UNREAL RENDERS CREATED: (list of V2_PASS_nnn with camera and what changed)
+REAL UNREAL RENDERS CREATED:
+- SM6 package (479eccf): 3 HighResShot captures (cam0 lit, cam0 unlit, cam0 post-off) and 7 Pixel-Streaming/Chrome captures (cam0, cam1 gate view, cam5 elevated; then cam0 with post-processing off, Lumen+VSM off, unlit, Nanite off) — ALL all-zero frames: the measured SM6 finding (kept as SM6_BLACK_* evidence, not as pictures).
+- SM5 package (b797e89): (passes listed as captured)
 GAUNTLETS COMPLETED: 1. 2. 3. 4. 5. 6. 7. (filled as run)
 MARBLE PERFORMANCE COST / UNREAL PERFORMANCE / FPS / GPU / VRAM: build 479eccf at HeroCam0, 1080p, L4: median 9.05 ms = 110.6 fps, mean 9.64 ms, p95 15.4 ms (CSV profiler, no HLOD proxies built); Marble scaffold hidden (no cost), distant ring not yet placed (fix a4caabc).
 FIVE LARGEST REMAINING DIFFERENCES: (from diff_v2 on the latest pass)
