@@ -29,3 +29,10 @@ if [ -n "$LATEST" ]; then
   wl_say "$PASS -> $DST"
   echo "$PASS $DST" >> "$WL_RUN/v2-render-history.txt"
 fi
+# PERFORMANCE, from the same offscreen path: the CSV profiler's median frame
+# time at this camera. WL_V2_FPS=0 skips it (a capture-only pass).
+if [ "${WL_V2_FPS:-1}" != "0" ] && [ -x "$HERE/measure-fps.sh" ]; then
+  FPS_OUT="$(WL_HERO_CAM="$WL_HERO_CAM" WL_FPS_FRAMES="${WL_FPS_FRAMES:-300}" bash "$HERE/measure-fps.sh" 2>&1 | tail -3 || true)"
+  wl_say "$PASS performance: $(echo "$FPS_OUT" | tr '\n' ' ')"
+  echo "$PASS FPS $(echo "$FPS_OUT" | tr '\n' ' ')" >> "$WL_RUN/v2-render-history.txt"
+fi

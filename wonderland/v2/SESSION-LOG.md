@@ -23,6 +23,8 @@ pass changed, and what remains unverifiable until the Studio runs.
 5. **Marble cut-outs** — the reference's own landmarks cut from the imported mesh; V2 gates in `prepare.sh`; pull-and-compare.
 6. **API verification** — Epic's 5.5 Python docs read; six signature/name mismatches fixed; the empty World Partition level created directly.
 7. **Recipe sheet** — every recipe rendered on the fallback backend; tree limbs and vines corrected from it.
+8. **Ship path** — `ship_v2.sh` (whole-branch bundle over ssh, md5-verified, build pinned to the shipped head) + its fake-ssh test; compile preflight first in `v2-build.sh`.
+9. **Neutral textures** — measured that the shared albedos carry colour (ashlar 0.39/0.34/0.24, roof 0.51/0.11/0.16 linear) and the master multiplies them by the tint, so cream would render brown: `textures_v2.py` (T_V2_*, linear-neutralised, sidecar means, plaza slab + path flag families), `verify_v2_textures.py`, tint/mean correction in `materials_v2.py`, generated and gated in `v2-build.sh`.
 
 ## Real Unreal renders this session
 
