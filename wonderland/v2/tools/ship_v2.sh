@@ -13,7 +13,9 @@
 set -euo pipefail
 HOST="${WL_STUDIO_HOST:-wonderland-l4}"
 BRANCH="${WL_BRANCH:-relay/wonderland-v2}"
-BASE="${WL_STUDIO_BASE:-667fbf9}"        # the last commit the Studio's checkout is known to have
+# No base: the whole branch (19.6 MB) goes, so the fetch can never fail on
+# a prerequisite the Studio's checkout (last on relay/wonderland-marble) lacks.
+BASE="${WL_STUDIO_BASE:-}"
 REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
 SCRATCH="${WL_SCRATCH:-${TMPDIR:-/tmp}}"
 BUNDLE="$SCRATCH/wlv2.bundle"
@@ -24,8 +26,9 @@ say() { printf '\033[1;36m[ship-v2]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[ship-v2] %s\033[0m\n' "$*" >&2; exit 1; }
 
 HEAD_SHA="$(git -C "$REPO" rev-parse "$BRANCH")"
-say "bundling $BASE..$BRANCH ($HEAD_SHA)"
-git -C "$REPO" bundle create "$BUNDLE" "$BASE..$BRANCH" >/dev/null 2>&1 || die "bundle failed (is $BASE an ancestor of $BRANCH?)"
+RANGE="$BRANCH"; [ -n "$BASE" ] && RANGE="$BASE..$BRANCH"
+say "bundling $RANGE ($HEAD_SHA)"
+git -C "$REPO" bundle create "$BUNDLE" "$RANGE" >/dev/null 2>&1 || die "bundle failed for $RANGE"
 git bundle verify "$BUNDLE" >/dev/null 2>&1 || die "bundle does not verify"
 MD5="$(md5sum "$BUNDLE" | cut -d' ' -f1)"
 say "bundle $(du -h "$BUNDLE" | cut -f1) md5 $MD5"
