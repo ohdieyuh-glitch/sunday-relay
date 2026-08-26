@@ -71,7 +71,7 @@ if [ "$STEP" = all ] || [ "$STEP" = convert ]; then
   _umap="$WL_SRC/wonderland/Content/WonderlandV2/Maps/$MAPNAME.umap"
   [ -f "$_umap" ] && cp -f "$_umap" "$WL_RUN/$MAPNAME.umap.classic-backup" && wl_say "staging map backed up to $WL_RUN/$MAPNAME.umap.classic-backup"
   wl_say "3/4 converting $MAPNAME with WorldPartitionConvertCommandlet (in place; the broken map is untouched)"
-  ue convert "-run=WorldPartitionConvertCommandlet" "$MAPNAME" -AllowCommandletRendering -Verbose
+  ue convert "-run=WorldPartitionConvertCommandlet" "$MAPNAME" -AllowCommandletRendering -RenderOffscreen -Verbose
   grep -iE "LogWorldPartitionConvert|converted|actors|error|warning: .*partition" "$WL_LOG/wp-convert.log" | tail -12 | cut -c1-200
 fi
 if [ "$STEP" = all ] || [ "$STEP" = validate-wp ]; then
