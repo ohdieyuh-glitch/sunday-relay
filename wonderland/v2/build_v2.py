@@ -780,7 +780,7 @@ def marble_distant_ring(marble_actor, actors, eal, layers, gsctx):
         return None
     R = float(L.get("marbleDistantRadiusM", 200.0)) * 100.0
     try:
-        dm = gsctx.new_dynamic_mesh("MarbleDistant")
+        dm = gsctx.new_dynamic_mesh()   # no name argument (the stub accepted one; the real class does not)
         gsctx.gs("assets", "copy_mesh_from_static_mesh", src_mesh, dm, u.GeometryScriptCopyMeshFromAssetOptions(),
                  u.GeometryScriptMeshReadLOD())
         n0 = gsctx.gs("queries", "get_num_triangle_i_ds", dm)
