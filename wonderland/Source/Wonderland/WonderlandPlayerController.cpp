@@ -23,6 +23,44 @@ void AWonderlandPlayerController::BeginPlay()
 	// pawn's spring-arm camera — so WASD / mouse-look move a view the player can see.
 	// The cinematic ARRIVAL hero camera is opt-in (-CinematicView) for hero-shot
 	// captures; without it we leave the view on the possessed pawn.
+	// TAG VISIBILITY SWITCHES for captures. One packaged build must be able to
+	// show the Marble reference world alone (the founder's "additional views of
+	// the same world", rendered from the mesh we already own) and, on the next
+	// capture, the authored kit alone -- without a rebuild. `-WLHideTags=a,b`
+	// hides every actor carrying any of those tags; `-WLShowTags=c` un-hides
+	// (hidden-at-placement actors such as the Marble scaffold included). Logged
+	// with counts so a capture can never silently be of the wrong world.
+	{
+		FString ShowList, HideList;
+		FParse::Value(FCommandLine::Get(), TEXT("WLShowTags="), ShowList);
+		FParse::Value(FCommandLine::Get(), TEXT("WLHideTags="), HideList);
+		int32 Shown = 0, Hidden = 0;
+		auto ApplyTags = [this](const FString& List, bool bHide, int32& Count)
+		{
+			TArray<FString> Tags;
+			List.ParseIntoArray(Tags, TEXT(","), true);
+			for (const FString& Tag : Tags)
+			{
+				TArray<AActor*> Found;
+				UGameplayStatics::GetAllActorsWithTag(this, FName(*Tag.TrimStartAndEnd()), Found);
+				for (AActor* A : Found)
+				{
+					if (A != nullptr)
+					{
+						A->SetActorHiddenInGame(bHide);
+						Count++;
+					}
+				}
+			}
+		};
+		if (!HideList.IsEmpty()) { ApplyTags(HideList, true, Hidden); }
+		if (!ShowList.IsEmpty()) { ApplyTags(ShowList, false, Shown); }
+		if (!HideList.IsEmpty() || !ShowList.IsEmpty())
+		{
+			UE_LOG(LogTemp, Display, TEXT("WL_TAG_VISIBILITY hide=[%s] hidden=%d show=[%s] shown=%d"), *HideList, Hidden, *ShowList, Shown);
+		}
+	}
+
 	if (FParse::Param(FCommandLine::Get(), TEXT("CinematicView")))
 	{
 		// Pick a specific hero camera by index for the named hero-shot captures:

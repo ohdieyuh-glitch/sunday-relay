@@ -77,6 +77,23 @@ HERO_CAMS = [
     {"name": "HeroCam_V2_GateView", "location": (0.0, -1460.0, 262.0),
      "rotation": (-3.0, 90.0, 0.0), "fov": 95.0,
      "tags": ("HeroCam_V2_GateView", "HeroCam1")},
+    # ADDITIONAL VIEWS OF THE SAME WORLD (founder, 2026-08-26): rendered in
+    # Unreal from the Marble mesh we already own (WL_EXTRA_ARGS="-WLShowTags=
+    # MARBLE_REFERENCE_ONLY -WLHideTags=UNREAL_PRODUCTION") and, with the kit
+    # visible, from the reconstruction -- zero Marble credits. Yaw 90 = +Y
+    # forward; screen-right is -X, so the LEFT garden is yaw > 90.
+    {"name": "MarbleView_Forward", "location": (0.0, 1500.0, 262.0), "rotation": (-2.0, 90.0, 0.0), "fov": 90.0,
+     "tags": ("MarbleView_Forward", "HeroCam2", "MARBLE_VIEW")},
+    {"name": "MarbleView_LeftGarden", "location": (0.0, -150.0, 262.0), "rotation": (-3.0, 145.0, 0.0), "fov": 90.0,
+     "tags": ("MarbleView_LeftGarden", "HeroCam3", "MARBLE_VIEW")},
+    {"name": "MarbleView_RightGarden", "location": (0.0, -150.0, 262.0), "rotation": (-3.0, 35.0, 0.0), "fov": 90.0,
+     "tags": ("MarbleView_RightGarden", "HeroCam4", "MARBLE_VIEW")},
+    {"name": "MarbleView_Elevated", "location": (0.0, -900.0, 1600.0), "rotation": (-28.0, 90.0, 0.0), "fov": 90.0,
+     "tags": ("MarbleView_Elevated", "HeroCam5", "MARBLE_VIEW")},
+    {"name": "MarbleView_CastleApproach", "location": (0.0, 4200.0, 300.0), "rotation": (-1.0, 90.0, 0.0), "fov": 90.0,
+     "tags": ("MarbleView_CastleApproach", "HeroCam6", "MARBLE_VIEW")},
+    {"name": "MarbleView_Reverse", "location": (0.0, 900.0, 262.0), "rotation": (-2.0, 270.0, 0.0), "fov": 90.0,
+     "tags": ("MarbleView_Reverse", "HeroCam7", "MARBLE_VIEW")},
 ]
 HERO_CAM = HERO_CAMS[0]
 
@@ -123,7 +140,11 @@ LOOK = {
     # hero camera at the reconstruction viewpoint they ARE the reference.
     # 1 = place them and skip the authored kit versions of those landmarks;
     # 0 = kit only. Per-landmark boxes are in build_v2.MARBLE_CUTOUTS.
-    "marbleCutouts": 1,
+    # Cut-outs are Band A/B landmarks made of generated geometry -- OFF since
+    # the 2026-08-26 pipeline correction (kept as an opt-in reference tool).
+    "marbleCutouts": 0,
+    # The Band C experiment: the Marble world beyond this radius, visible.
+    "marbleDistant": 1, "marbleDistantRadiusM": 200.0,
 }
 
 

@@ -360,10 +360,27 @@ def apply_perf(actor, band):
 _HLOD = {}
 
 
+def _band_tag(actor):
+    """BAND_A (< 50 m from the viewpoint), BAND_B (< 200 m), BAND_C beyond --
+    the founder's distance-based responsibility, as a tag on every actor."""
+    try:
+        loc = actor.get_actor_location()
+        d = math.hypot(float(loc.x), float(loc.y))
+    except Exception:
+        return None
+    return "BAND_A" if d < 5000.0 else ("BAND_B" if d < 20000.0 else "BAND_C")
+
+
 def assign_layer(actor, band, layers, sub_cache=[None]):
     try:
         cur = list(actor.get_editor_property("tags") or [])
+        names = [str(t) for t in cur]
         cur.append(unreal.Name(band))
+        if not any(t.startswith("MARBLE_") for t in names):
+            cur.append(unreal.Name("UNREAL_PRODUCTION"))
+            bt = _band_tag(actor)
+            if bt and bt not in names:
+                cur.append(unreal.Name(bt))
         actor.set_editor_property("tags", cur)
     except Exception:
         pass
@@ -652,7 +669,10 @@ def marble_world(actors, eal, layers):
     except Exception as exc:
         LOG("V2 MARBLE: import tool did not load (%s)" % exc)
         return None
-    dest = C.CONTENT_ROOT + "/Marble"
+    # MARBLE GEOMETRY QUARANTINE (founder, 2026-08-26): raw generated geometry
+    # lives under Scenic/Marble, never beside the authored kit, and every
+    # Marble actor is tagged MARBLE_REFERENCE_ONLY or MARBLE_DISTANT_SCENIC.
+    dest = C.CONTENT_ROOT + "/Scenic/Marble"
     try:
         paths = tool.import_glb(glb, dest, "SM_MarbleWorld", True)
     except Exception as exc:
@@ -704,13 +724,20 @@ def marble_world(actors, eal, layers):
     try:
         actor = tool.place(path, mesh, loc, (float(L["marbleRollDeg"]), 0.0, float(L["marbleYawDeg"])), S,
                            "V2_MarbleWorld_Scaffold" if not int(L["marbleVisible"]) else "V2_MarbleWorld",
-                           ["Marble", "V2_Skyline", "NoCollision", "Scaffold" if not int(L["marbleVisible"]) else "Visible"],
+                           ["Marble", "V2_Skyline", "NoCollision", "MARBLE_REFERENCE_ONLY",
+                            "Scaffold" if not int(L["marbleVisible"]) else "Visible"],
                            visible=bool(int(L["marbleVisible"])))
     except Exception as exc:
         LOG("V2 MARBLE: place failed (%s)" % exc)
     if actor is not None:
         try:
-            actor.set_folder_path(unreal.Name("V2/Marble"))
+            actor.set_folder_path(unreal.Name("V2/Scenic/Marble"))
+        except Exception:
+            pass
+        # never collision: the playable world's collision is the kit's
+        try:
+            for comp in actor.get_components_by_class(unreal.PrimitiveComponent):
+                comp.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
         except Exception:
             pass
         assign_layer(actor, "V2_Skyline", layers)
@@ -722,6 +749,106 @@ def marble_world(actors, eal, layers):
         % (path, "as a HIDDEN composition SCAFFOLD (marbleVisible=0)" if not int(L["marbleVisible"]) else "VISIBLE",
            loc, S, L["marbleRollDeg"], L["marbleYawDeg"], L["marbleGain"], repaired))
     return actor
+
+
+# ==========================================================================
+# 6b. Marble DISTANT RING -- the Band C experiment (founder, 2026-08-26)
+# ==========================================================================
+#
+# "Evaluate whether the selected Marble world's distant skyline geometry can
+# serve as V2 Band C scenery." The scaffold minus everything inside a
+# `marbleDistantRadiusM` box around the viewpoint, placed VISIBLE with no
+# collision, tagged MARBLE_DISTANT_SCENIC, HLOD far, Nanite. The renders judge
+# it (quality / performance / lighting / camera robustness); marbleDistant=0
+# removes it and the modular city carries the skyline alone.
+
+
+def marble_distant_ring(marble_actor, actors, eal, layers, gsctx):
+    L = C.LOOK
+    if marble_actor is None or not int(L.get("marbleDistant", 0)) or gsctx is None or gsctx.backend != "geometry-script":
+        LOG("V2 MARBLE DISTANT: skipped (%s)" % ("no Marble mesh" if marble_actor is None else
+                                                  "marbleDistant=0" if not int(L.get("marbleDistant", 0)) else "no Geometry Script"))
+        return None
+    u = unreal
+    try:
+        smc = marble_actor.get_component_by_class(u.StaticMeshComponent)
+        src_mesh = smc.get_editor_property("static_mesh")
+        xf = marble_actor.get_actor_transform()
+        inv = xf.inverse() if hasattr(xf, "inverse") else None
+    except Exception as exc:
+        LOG("V2 MARBLE DISTANT: cannot read the scaffold (%s)" % exc)
+        return None
+    R = float(L.get("marbleDistantRadiusM", 200.0)) * 100.0
+    try:
+        dm = gsctx.new_dynamic_mesh("MarbleDistant")
+        gsctx.gs("assets", "copy_mesh_from_static_mesh", src_mesh, dm, u.GeometryScriptCopyMeshFromAssetOptions(),
+                 u.GeometryScriptMeshReadLOD())
+        n0 = gsctx.gs("queries", "get_num_triangle_i_ds", dm)
+        # the inner box in world space -> the mesh's local space (the scaffold is
+        # scaled, rolled and yawed), as the bounds of its transformed corners
+        corners = [(sx * R, sy * R, z) for sx in (-1, 1) for sy in (-1, 1) for z in (-5000.0, 40000.0)]
+        lp = [inv.transform_location(u.Vector(*c)) for c in corners] if inv is not None else [u.Vector(*c) for c in corners]
+        bmin = u.Vector(min(v.x for v in lp), min(v.y for v in lp), min(v.z for v in lp))
+        bmax = u.Vector(max(v.x for v in lp), max(v.y for v in lp), max(v.z for v in lp))
+        box = u.Box(bmin, bmax)
+        try:
+            box.set_editor_property("is_valid", True)
+        except Exception:
+            pass
+        res = gsctx.gs("selection", "select_mesh_elements_in_box", dm, box, u.GeometryScriptMeshSelectionType.TRIANGLES, False, 1)
+        inside = res[1] if isinstance(res, (tuple, list)) and len(res) > 1 else res
+        if inside is None:
+            LOG("V2 MARBLE DISTANT: selection failed (%s)" % gsctx.caps.errors.get("selection.select_mesh_elements_in_box"))
+            return None
+        gsctx.gs("edit", ("delete_selected_triangles_from_mesh", "delete_selected_triangles"), dm, inside)
+        n1 = gsctx.gs("queries", "get_num_triangle_i_ds", dm)
+        folder = C.CONTENT_ROOT + "/Scenic/Marble"
+        path = folder + "/SM_MarbleDistantRing"
+        if eal.does_asset_exist(path):
+            eal.delete_asset(path)
+        nopts = u.GeometryScriptCreateNewStaticMeshAssetOptions()
+        for prop, val in (("enable_recompute_normals", False), ("enable_recompute_tangents", False),
+                          ("enable_nanite", bool(L["nanite"])), ("enable_collision", False)):
+            try:
+                nopts.set_editor_property(prop, val)
+            except Exception:
+                pass
+        r2 = gsctx.gs("newasset", "create_new_static_mesh_asset_from_mesh", dm, path, nopts)
+        sm = r2[0] if isinstance(r2, (tuple, list)) else r2
+        if sm is None:
+            LOG("V2 MARBLE DISTANT: asset not created (%s)" % gsctx.caps.errors.get("newasset.create_new_static_mesh_asset_from_mesh"))
+            return None
+        # the scaffold's repaired materials (two-sided, unlit gain) carry over
+        try:
+            for slot in range(max(1, int(src_mesh.get_num_sections(0)))):
+                m = src_mesh.get_material(slot)
+                if m is not None:
+                    sm.set_material(slot, m)
+        except Exception:
+            pass
+        eal.save_asset(path, only_if_is_dirty=False)
+        a = actors.spawn_actor_from_class(u.StaticMeshActor, xf.translation, xf.rotation.rotator())
+        a.set_actor_scale3d(xf.scale3d)
+        a.static_mesh_component.set_static_mesh(sm)
+        a.set_actor_label("V2_MarbleDistantRing")
+        a.set_actor_hidden_in_game(False)
+        try:
+            a.static_mesh_component.set_collision_enabled(u.CollisionEnabled.NO_COLLISION)
+        except Exception:
+            pass
+        try:
+            a.set_editor_property("tags", [u.Name(t) for t in ("Marble", "MARBLE_DISTANT_SCENIC", "NoCollision", "BAND_C")])
+            a.set_folder_path(u.Name("V2/Scenic/Marble"))
+        except Exception:
+            pass
+        assign_layer(a, "V2_Skyline", layers)
+        MANIFEST["marble_distant"] = {"asset": path, "radius_m": R / 100.0, "triangles_before": n0, "triangles_after": n1}
+        LOG("V2 MARBLE DISTANT: ring beyond %.0f m placed VISIBLE (%s -> %s triangles), no collision, HLOD far -- the render judges it"
+            % (R / 100.0, n0, n1))
+        return a
+    except Exception as exc:
+        LOG("V2 MARBLE DISTANT: FAILED (%s)" % exc)
+        return None
 
 
 # ==========================================================================
@@ -1088,6 +1215,7 @@ def main():
     phase("marble")
     marble = marble_world(actors, eal, layers)
     replaced = marble_cutouts(marble, actors, eal, layers, ctx)
+    marble_distant_ring(marble, actors, eal, layers, ctx)
     MANIFEST["actors"]["flagstones"] = lay_ground(placer, actors, eal, asset_paths, mats, layers,
                                                   plaza_only=(marble is not None and int(C.LOOK["marbleVisible"])))
 

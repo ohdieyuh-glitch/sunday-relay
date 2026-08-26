@@ -125,7 +125,7 @@ fi
 setsid nohup env $(wl_vulkan_env_pairs) "$APP" \
   -RenderOffscreen -ForceRes "-ResX=$RES_X" "-ResY=$RES_Y" \
   -Unattended -stdout -FullStdOutLogOutput \
-  -CinematicView "-HeroCam=$CAM" \
+  -CinematicView "-HeroCam=$CAM" ${WL_EXTRA_ARGS:-} \
   "-ExecCmds=${WL_EXTRA_EXEC:+$WL_EXTRA_EXEC, }${_profile_cmds:+$_profile_cmds, }r.HighResScreenshotDelay 180, HighResShot ${RES_X}x${RES_Y}" \
   >"$WL_LOG/native-$CAM.log" 2>&1 </dev/null &
 APP_PID=$!
