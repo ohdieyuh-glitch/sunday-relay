@@ -91,6 +91,18 @@ void AWonderlandPlayerController::BeginPlay()
 		{
 			SetViewTarget(HeroCameras[0]);
 
+			// A cinematic capture is a picture of the WORLD. The game mode still
+			// spawns the default pawn (with no PlayerStart it lands at the origin,
+			// 1.5 m in front of the V2 arrival camera), and the founder's V2 rule
+			// is that no character stands in the environment. Hide it, drop its
+			// collision, and say so in the log next to the camera line.
+			if (APawn* CinematicPawn = GetPawn())
+			{
+				CinematicPawn->SetActorHiddenInGame(true);
+				CinematicPawn->SetActorEnableCollision(false);
+				UE_LOG(LogTemp, Display, TEXT("CINEMATIC_PAWN_HIDDEN=1 pawn=%s at=%s"), *CinematicPawn->GetName(), *CinematicPawn->GetActorLocation().ToString());
+			}
+
 			const FVector Where = HeroCameras[0]->GetActorLocation();
 			const FRotator Aim = HeroCameras[0]->GetActorRotation();
 			float FovDeg = -1.0f;
